@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import type { Character, PlaceRef, WorldSnapshot } from "../../../src/world.js";
 import { placeKey } from "../../../src/world.js";
+import type { AvatarLook } from "../../looks.js";
 import { AgentsIcon, BellIcon, CogIcon, ScrollIcon, SignpostIcon } from "./icons.js";
 import { activity, byPlace, byTask, type Group, needsYou, orbCounts, placeName, placesOf } from "./model.js";
 import { type CharacterAction, CharacterRow } from "./rows.js";
@@ -33,6 +34,10 @@ export interface SidePanelProps {
 	travel: (place: PlaceRef) => void;
 	walkGrid: boolean;
 	onWalkGrid: (shown: boolean) => void;
+	/** The theme's avatar looks, the one the snapshot says the operator chose, and choosing another. */
+	avatarLooks: AvatarLook[];
+	avatarLook: string | null | undefined;
+	onAvatarLook: (look: AvatarLook) => void;
 }
 
 export function SidePanel(props: SidePanelProps) {
@@ -210,7 +215,8 @@ function Places({ world, labels, here, travel }: SidePanelProps) {
 	);
 }
 
-function Settings({ walkGrid, onWalkGrid }: SidePanelProps) {
+function Settings({ walkGrid, onWalkGrid, avatarLooks, avatarLook, onAvatarLook }: SidePanelProps) {
+	const worn = avatarLooks.find(({ look }) => look === avatarLook)?.look ?? avatarLooks[0]?.look;
 	return (
 		<div className="aw-settings">
 			<section aria-label="The world">
@@ -242,10 +248,32 @@ function Settings({ walkGrid, onWalkGrid }: SidePanelProps) {
 					<span className="aw-setting-value">Fantasy</span>
 				</div>
 				<p className="aw-note">The tech office and anime school come with theme switching.</p>
-				<div className="aw-setting">
-					<span>Avatar look</span>
-				</div>
-				<p className="aw-note">Choosing your avatar's look comes later.</p>
+				<fieldset className="aw-looks">
+					<legend className="aw-setting">Avatar look</legend>
+					{avatarLooks.map((choice) => (
+						<label
+							key={choice.look}
+							className="aw-look"
+							title={
+								choice.look === worn
+									? `You look like the ${choice.label.toLowerCase()}`
+									: `Look like the ${choice.label.toLowerCase()}`
+							}
+						>
+							<input
+								type="radio"
+								name="aw-avatar-look"
+								value={choice.look}
+								checked={choice.look === worn}
+								onChange={() => onAvatarLook(choice)}
+							/>
+							<span className="aw-look-frame">
+								<img src={choice.portrait} alt="" draggable={false} />
+							</span>
+							<span className="aw-look-name">{choice.label}</span>
+						</label>
+					))}
+				</fieldset>
 			</section>
 			<section aria-label="Controls">
 				<h3>

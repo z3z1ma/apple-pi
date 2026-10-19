@@ -6,7 +6,7 @@ import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { createConnection, type Socket } from "node:net";
 import { DatabaseSync } from "node:sqlite";
-import type { FeedLine, TerminalResult, WorldSnapshot } from "../world.js";
+import type { CommandResult, FeedLine, TerminalResult, WorldSnapshot } from "../world.js";
 import { FACTS_COLUMNS, FACTS_JOINS, type FactsRow, factsOf, taskReader } from "./facts.js";
 import { FEED_SINCE, type FeedLookup, type FeedRow, feedLine } from "./feed.js";
 import { type Projection, projectWorld, type RememberedWings, type SessionRow } from "./projection.js";
@@ -22,6 +22,8 @@ export interface WorldBackend {
 	subscribeFeed(listener: (lines: FeedLine[]) => void): () => void;
 	/** Switch the operator's tmux client to an awake character's pane. */
 	goToTerminal(characterId: string): Promise<TerminalResult>;
+	/** Choose the avatar's look; the snapshot shows it at once, and it resolves once the runtime stored it. */
+	setAvatarLook(look: string): Promise<CommandResult>;
 	close(): void;
 }
 
@@ -36,7 +38,12 @@ const FEED_BACKLOG = 60;
 const FEED_BACKLOG_EVENTS = 5000;
 /** After a failed preference write, wait this long before sending it again. */
 const RETRY_MS = 5000;
-/** The `preferences` key Agent World keeps its choices under: `{ wings: { [coordinator id]: repository[] } }`. */
+/** How long choosing a look waits for the runtime to store it. */
+const STORE_TIMEOUT_MS = 5000;
+/**
+ * The `preferences` key Agent World keeps its choices under:
+ * `{ wings: { [coordinator id]: repository[] }, avatar: look }`.
+ */
 export const PREFERENCE_KEY = "agent-world";
 
 // Every top-level session with what places it: awake while its current incarnation is alive.
@@ -101,7 +108,15 @@ export function openWorldBackend(paths: { db: string; socket: string }): WorldBa
 	// Wings seen in this run, kept until the runtime has stored them, so a wing never blinks out meanwhile.
 	let seen: RememberedWings = {};
 	// The wings last sent and not yet stored or failed, so one change is sent once.
-	let sending: { commandId: string; wings: string } | undefined;
+	let sending: { commandId: string; value: string } | undefined;
+	// The avatar look chosen in this run, until the runtime has stored it; and who waits for it to be stored.
+	let chosenAvatar: string | undefined;
+	let storedAvatar: string | null = null;
+	const avatarWaiters = new Set<(result: CommandResult) => void>();
+	const settleAvatar = (result: CommandResult) => {
+		for (const waiter of avatarWaiters) waiter(result);
+		avatarWaiters.clear();
+	};
 	let retryAt = 0;
 	const readTask = taskReader();
 	let polls = 0;
@@ -137,18 +152,27 @@ export function openWorldBackend(paths: { db: string; socket: string }): WorldBa
 		return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 	};
 
-	/** Send the wings to the runtime when they differ from what it stored, keeping the preference's other keys. */
+	/**
+	 * Send the wings and the chosen avatar look to the runtime when they differ from what it stored, keeping the
+	 * preference's other keys.
+	 */
 	const remember = (stored: Record<string, unknown>, storedWings: RememberedWings, wings: RememberedWings) => {
 		const next = mergeWings(storedWings, wings);
-		const json = JSON.stringify(next);
-		if (json === JSON.stringify(storedWings)) {
+		storedAvatar = typeof stored.avatar === "string" ? stored.avatar : null;
+		if (chosenAvatar !== undefined && chosenAvatar === storedAvatar) {
+			chosenAvatar = undefined;
+			settleAvatar({ ok: true });
+		}
+		if (JSON.stringify(next) === JSON.stringify(storedWings) && chosenAvatar === undefined) {
 			sending = undefined;
 			return;
 		}
-		if (!socket || !socketOpen || json === sending?.wings || Date.now() < retryAt) return;
+		const value = { ...stored, wings: next, ...(chosenAvatar === undefined ? {} : { avatar: chosenAvatar }) };
+		const json = JSON.stringify(value);
+		if (!socket || !socketOpen || json === sending?.value || Date.now() < retryAt) return;
 		const commandId = `agent-world-${randomUUID()}`;
-		sending = { commandId, wings: json };
-		const command = { kind: "set_preference", key: PREFERENCE_KEY, value: { ...stored, wings: next } };
+		sending = { commandId, value: json };
+		const command = { kind: "set_preference", key: PREFERENCE_KEY, value };
 		socket.write(`${JSON.stringify({ type: "command", commandId, sessionId: "agent-world", command })}\n`);
 	};
 
@@ -234,14 +258,16 @@ export function openWorldBackend(paths: { db: string; socket: string }): WorldBa
 			connected: socketOpen && next !== undefined,
 			headquarters: next?.headquarters ?? current.headquarters,
 			characters: next?.characters ?? current.characters,
+			avatarLook: chosenAvatar ?? storedAvatar,
 		});
 	};
 
 	const onLine = (line: string) => {
 		const message = parse<{ type?: string; commandId?: string; stage?: string; reason?: string }>(line);
 		if (message?.type !== "receipt" || message.commandId !== sending?.commandId || message.stage !== "failed") return;
-		console.error(`agent-world: the runtime did not store the wings: ${message.reason ?? "no reason given"}`);
+		console.error(`agent-world: the runtime did not store the preference: ${message.reason ?? "no reason given"}`);
 		sending = undefined;
+		settleAvatar({ ok: false, reason: `The runtime did not store it: ${message.reason ?? "no reason given"}.` });
 		retryAt = Date.now() + RETRY_MS;
 		retry = setTimeout(() => {
 			lastSeq = -1; // read again, which sends again
@@ -299,8 +325,26 @@ export function openWorldBackend(paths: { db: string; socket: string }): WorldBa
 			feedListeners.add(listener);
 			return () => feedListeners.delete(listener);
 		},
+		setAvatarLook(look) {
+			chosenAvatar = look;
+			const stored = new Promise<CommandResult>((resolve) => {
+				const timer = setTimeout(() => {
+					avatarWaiters.delete(done);
+					resolve({ ok: false, reason: "The session runtime did not store it yet; it will when it answers." });
+				}, STORE_TIMEOUT_MS);
+				const done = (result: CommandResult) => {
+					clearTimeout(timer);
+					resolve(result);
+				};
+				avatarWaiters.add(done);
+			});
+			lastSeq = -1; // read again, which sends it
+			poll();
+			return stored;
+		},
 		close() {
 			closed = true;
+			settleAvatar({ ok: false, reason: "Agent World closed before the runtime stored it." });
 			clearInterval(timer);
 			clearTimeout(reconnect);
 			clearTimeout(retry);

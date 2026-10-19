@@ -4,6 +4,7 @@
 // It also carries what the interface and the world say to each other: the minimap the world publishes, and intents
 // the interface sends (travel, go to, talk to, walk to a point) for the world to carry out.
 import type { PlaceRef } from "../src/world.js";
+import type { AvatarLook } from "./looks.js";
 
 export interface Choice {
 	label: string;
@@ -67,6 +68,8 @@ export interface ViewState {
 	walkGrid?: boolean;
 	/** What the theme calls each kind of place (`Theme.labels`), once the theme has loaded. */
 	labels?: Record<string, string>;
+	/** The theme's avatar looks to choose from in Settings, once the theme has loaded. */
+	avatarLooks?: AvatarLook[];
 }
 
 export interface ViewStore {

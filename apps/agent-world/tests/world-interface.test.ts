@@ -55,6 +55,8 @@ async function openWorld(first: WorldSnapshot, backlog: FeedLine[] = []) {
 					w.terminals.push(id);
 					return id === "solo" ? { ok: false, reason: "No terminal is attached to solo's tmux server." } : { ok: true };
 				},
+				conversation: async () => ({ ok: true, entries: [], before: null, missing: 0 }),
+				markSeen: async () => ({ ok: true }),
 			};
 			w.pushSnapshot = (next: unknown) => {
 				current = next as typeof snapshot;
@@ -261,6 +263,9 @@ test("every row offers Talk to, Examine, Go to, and Go to its terminal, which wo
 		]);
 		await shot(page, "row-actions");
 		await actions.getByRole("button", { name: "Talk to ledger" }).click();
+		// Talking opens the conversation over everything; Escape closes it.
+		await page.getByRole("dialog", { name: "Conversation with ledger" }).waitFor({ timeout: 2000 });
+		await page.keyboard.press("Escape");
 		await actions.getByRole("button", { name: "Go to ledger's terminal" }).click();
 		await vi.waitFor(async () => expect(await terminals(page)).toEqual(["ledger"]), { timeout: 2000 });
 		// Nothing so far moved the view: the operator is still in the hall.

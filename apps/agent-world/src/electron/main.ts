@@ -10,6 +10,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { app, BrowserWindow, ipcMain, net, protocol } from "electron";
 import { agentDir, statePaths } from "../../../../components/session-state/src/paths.js";
 import { appFile } from "../app-files.js";
+import { openConversations } from "../backend/conversations.js";
 import { openWorldBackend } from "../backend/world-backend.js";
 
 // This file runs as dist/electron/main.js, two levels below the app directory.
@@ -28,6 +29,7 @@ else app.quit(); // a second /world: the first instance focuses its window
 
 function start() {
 	const world = openWorldBackend(statePaths());
+	const conversations = openConversations(statePaths().socket);
 	let window: BrowserWindow | undefined;
 
 	ipcMain.handle("world:snapshot", () => world.snapshot());
@@ -36,6 +38,19 @@ function start() {
 		typeof characterId === "string"
 			? world.goToTerminal(characterId)
 			: { ok: false, reason: "No character was named." },
+	);
+	ipcMain.handle("world:conversation", (_event, characterId: unknown, before: unknown) =>
+		typeof characterId === "string"
+			? conversations.page(characterId, typeof before === "string" ? before : undefined)
+			: { ok: false, reason: "No character was named." },
+	);
+	ipcMain.handle("world:mark-seen", (_event, characterId: unknown) =>
+		typeof characterId === "string"
+			? conversations.markSeen(characterId)
+			: { ok: false, reason: "No character was named." },
+	);
+	ipcMain.handle("world:avatar-look", (_event, look: unknown) =>
+		typeof look === "string" ? world.setAvatarLook(look) : { ok: false, reason: "No look was named." },
 	);
 	world.subscribe((snapshot) => {
 		if (window && !window.isDestroyed()) window.webContents.send("world:update", snapshot);
@@ -50,7 +65,10 @@ function start() {
 		window.focus();
 	});
 	app.on("window-all-closed", () => app.quit());
-	app.on("will-quit", () => world.close());
+	app.on("will-quit", () => {
+		world.close();
+		conversations.close();
+	});
 
 	void app.whenReady().then(() => {
 		protocol.handle("app", (request) => {

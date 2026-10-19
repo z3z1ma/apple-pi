@@ -100,6 +100,9 @@ export function projectWorld(sessions: SessionRow[], remembered: RememberedWings
 				name: basename(repository) || repository,
 				headcount: workers.filter((worker) => (worker.place as { repository: string }).repository === repository)
 					.length,
+				dormant: sessions.filter(
+					(session) => !session.awake && session.reportsTo === id && session.repository === repository,
+				).length,
 			})),
 		};
 	});

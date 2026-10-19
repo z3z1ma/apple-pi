@@ -177,6 +177,44 @@ test("a wing stays once seen, in first-seen order, boarded when its last agent s
 	world.subscribe((snapshot) => updates.push(snapshot));
 }, 60000);
 
+test("a wing counts its dormant workers, whose door shows closed rather than boarded", async () => {
+	const dormant = () =>
+		Object.fromEntries(
+			latest()
+				.headquarters.find((hq) => hq.id === "coord-1")!
+				.wings.map((wing) => [wing.name, [wing.headcount, wing.dormant]]),
+		);
+	// alpha: two awake and w-gone stopped; beta: its only worker stopped; gamma: one awake.
+	await soon(() => expect(dormant()).toEqual({ alpha: [2, 1], beta: [0, 1], gamma: [1, 0] }));
+}, 10000);
+
+test("the avatar look chosen in Settings is stored through the runtime beside the wings, and outlives the app", async () => {
+	const stored = () => {
+		const [row] = query<{ value: string }>(state.dbPath, "select value from preferences where key = ?", PREFERENCE_KEY);
+		return JSON.parse(row?.value ?? "{}") as { wings?: Record<string, string[]>; avatar?: string };
+	};
+	expect(latest().avatarLook ?? null).toBeNull();
+	const wingsBefore = stored().wings;
+	expect(wingsBefore?.["coord-1"]).toContain("/repos/alpha");
+
+	expect(await world.setAvatarLook("avatar-knight")).toEqual({ ok: true });
+	expect(world.snapshot().avatarLook).toBe("avatar-knight");
+	expect(stored()).toEqual({ wings: wingsBefore, avatar: "avatar-knight" });
+
+	world.close();
+	const restarted = openWorldBackend({ db: state.dbPath, socket: state.socketPath });
+	try {
+		await soon(() => expect(restarted.snapshot().avatarLook).toBe("avatar-knight"));
+		expect(await restarted.setAvatarLook("avatar-bard")).toEqual({ ok: true });
+		expect(stored()).toEqual({ wings: wingsBefore, avatar: "avatar-bard" });
+	} finally {
+		restarted.close();
+	}
+	world = openWorldBackend({ db: state.dbPath, socket: state.socketPath });
+	world.subscribe((snapshot) => updates.push(snapshot));
+	await soon(() => expect(latest().avatarLook).toBe("avatar-bard"));
+}, 30000);
+
 // A scratch tmux server for panes, never the operator's: tempStateDir points TMUX_TMPDIR at its own directory.
 const TMUX_NAME = `aw-${process.pid}`;
 const tmux = (...args: string[]) =>

@@ -42,6 +42,277 @@ function appFile(appDir, pathname) {
 	return join(appDir, "dist", "web", path || "index.html");
 }
 //#endregion
+//#region apps/agent-world/src/world.ts
+/** Longest text of one transcript field sent to the world UI. */
+var TRANSCRIPT_TEXT_MAX = 2e4;
+//#endregion
+//#region apps/agent-world/src/backend/transcript.ts
+/** The custom message type of delivered mail (`components/session-state/src/mail.ts`). */
+var MAIL = "apple-pi.mailbox-message";
+/** The argument a tool call is known by, in the bridge's order (`components/session-state/src/bridge.ts`). */
+var MAIN_ARGS = [
+	"command",
+	"path",
+	"pattern",
+	"query",
+	"description",
+	"task",
+	"name",
+	"code"
+];
+function mainArg(args) {
+	if (!args || typeof args !== "object") return null;
+	for (const key of MAIN_ARGS) {
+		const value = args[key];
+		if (typeof value === "string" && value.trim()) return value.trim().split("\n")[0];
+	}
+	return null;
+}
+function cut(text) {
+	return text.length > 2e4 ? {
+		text: text.slice(0, TRANSCRIPT_TEXT_MAX),
+		cut: true
+	} : {
+		text,
+		cut: false
+	};
+}
+var clip = (text) => cut(text).text;
+/** The text of a message's content (a string, or text and image parts), and how many images it holds. */
+function contentOf(content) {
+	if (typeof content === "string") return {
+		text: content,
+		images: 0
+	};
+	const texts = [];
+	let images = 0;
+	for (const part of Array.isArray(content) ? content : []) if (part?.type === "text" && typeof part.text === "string") texts.push(part.text);
+	else if (part?.type === "image") images++;
+	return {
+		text: texts.join("\n"),
+		images
+	};
+}
+/** The mail's body: from its details, else the text inside the `<mailbox-message>` wrapper. */
+function mailOf(entry) {
+	const details = entry.details;
+	const raw = contentOf(entry.content).text;
+	return {
+		from: typeof details?.from === "string" ? details.from : /from="([^"]*)"/.exec(raw)?.[1] ?? "someone",
+		text: clip(typeof details?.body === "string" ? details.body : raw.replace(/^\s*<mailbox-message[^>]*>\n?/, "").replace(/\n?<\/mailbox-message>\s*$/, ""))
+	};
+}
+function partsOf(content) {
+	const parts = [];
+	for (const part of Array.isArray(content) ? content : []) if (part?.type === "text" && typeof part.text === "string" && part.text.trim()) parts.push({
+		kind: "text",
+		text: clip(part.text)
+	});
+	else if (part?.type === "thinking" && typeof part.thinking === "string" && (part.thinking.trim() || part.redacted)) parts.push({
+		kind: "thinking",
+		text: part.redacted ? "" : clip(part.thinking)
+	});
+	else if (part?.type === "toolCall" && typeof part.name === "string") parts.push({
+		kind: "tool",
+		call: {
+			id: String(part.id ?? ""),
+			name: part.name,
+			arg: mainArg(part.arguments),
+			input: clip(JSON.stringify(part.arguments ?? {}, null, 2))
+		}
+	});
+	return parts;
+}
+/** One transcript entry for the panel; undefined for entries it does not show. */
+function transcriptEntry(raw) {
+	if (!raw || typeof raw !== "object") return void 0;
+	const entry = raw;
+	const id = String(entry.id ?? "");
+	const at = Date.parse(String(entry.timestamp ?? "")) || 0;
+	if (entry.type === "custom_message") {
+		const label = String(entry.customType ?? "message");
+		if (label === MAIL) return {
+			kind: "mail",
+			id,
+			at,
+			...mailOf(entry)
+		};
+		return {
+			kind: "note",
+			id,
+			at,
+			label,
+			text: clip(contentOf(entry.content).text),
+			shown: entry.display !== false
+		};
+	}
+	if (entry.type !== "message") return void 0;
+	const message = entry.message;
+	if (message?.role === "user") {
+		const { text, images } = contentOf(message.content);
+		return {
+			kind: "user",
+			id,
+			at,
+			text: clip(text),
+			images
+		};
+	}
+	if (message?.role === "assistant") return {
+		kind: "assistant",
+		id,
+		at,
+		parts: partsOf(message.content),
+		error: message.stopReason === "error" ? String(message.errorMessage ?? "The reply failed.") : null,
+		aborted: message.stopReason === "aborted"
+	};
+	if (message?.role === "toolResult") {
+		const { text, images } = contentOf(message.content);
+		const shown = cut(images ? `${text}${text ? "\n" : ""}${images === 1 ? "[an image]" : `[${images} images]`}` : text);
+		return {
+			kind: "tool-result",
+			id,
+			at,
+			callId: String(message.toolCallId ?? ""),
+			tool: String(message.toolName ?? "tool"),
+			text: shown.text,
+			isError: message.isError === true,
+			cut: shown.cut
+		};
+	}
+}
+/** A page of a long transcript can take a while to read; a command is answered at once. */
+var PAGE_TIMEOUT_MS = 2e4;
+var COMMAND_TIMEOUT_MS = 5e3;
+var GONE = "The session runtime is not answering.";
+function openConversations(socketPath) {
+	let socket;
+	let connecting;
+	let closed = false;
+	const waiting = /* @__PURE__ */ new Map();
+	const connect = () => {
+		if (socket && !socket.destroyed) return Promise.resolve(socket);
+		connecting ??= new Promise((resolve, reject) => {
+			const next = createConnection(socketPath);
+			let buffer = "";
+			next.on("data", (chunk) => {
+				buffer += chunk.toString();
+				for (let end = buffer.indexOf("\n"); end >= 0; end = buffer.indexOf("\n")) {
+					const line = buffer.slice(0, end);
+					buffer = buffer.slice(end + 1);
+					let reply;
+					try {
+						reply = JSON.parse(line);
+					} catch {
+						continue;
+					}
+					const key = String(reply.requestId ?? reply.commandId ?? "");
+					if (waiting.get(key)?.onReply(reply)) waiting.delete(key);
+				}
+			});
+			next.once("connect", () => {
+				socket = next;
+				connecting = void 0;
+				resolve(next);
+			});
+			next.on("error", (error) => {
+				if (socket !== next) {
+					connecting = void 0;
+					reject(error);
+				}
+			});
+			next.on("close", () => {
+				if (socket === next) socket = void 0;
+				for (const [key, handler] of waiting) {
+					waiting.delete(key);
+					handler.onGone();
+				}
+			});
+		});
+		return connecting;
+	};
+	/** Write `message` and wait for `settle` to turn a reply about `key` into a result. */
+	async function ask(key, message, timeoutMs, settle, failed) {
+		if (closed) return failed(GONE);
+		let open;
+		try {
+			open = await connect();
+		} catch {
+			return failed(GONE);
+		}
+		return new Promise((resolve) => {
+			const timer = setTimeout(() => {
+				waiting.delete(key);
+				resolve(failed(GONE));
+			}, timeoutMs);
+			const done = (result) => {
+				clearTimeout(timer);
+				resolve(result);
+			};
+			waiting.set(key, {
+				onReply(reply) {
+					const result = settle(reply);
+					if (result === void 0) return false;
+					done(result);
+					return true;
+				},
+				onGone: () => done(failed(GONE))
+			});
+			open.write(`${JSON.stringify(message)}\n`);
+		});
+	}
+	return {
+		page(sessionId, before) {
+			const requestId = `agent-world-${randomUUID()}`;
+			return ask(requestId, {
+				type: "read_entries",
+				requestId,
+				sessionId,
+				limit: 50,
+				...before ? { before } : {}
+			}, PAGE_TIMEOUT_MS, (reply) => {
+				if (reply.type !== "entries") return void 0;
+				if (typeof reply.error === "string") return {
+					ok: false,
+					reason: reply.error
+				};
+				return {
+					ok: true,
+					entries: (Array.isArray(reply.entries) ? reply.entries : []).map(transcriptEntry).filter((entry) => entry !== void 0),
+					before: typeof reply.before === "string" ? reply.before : null,
+					missing: Array.isArray(reply.missing) ? reply.missing.length : 0
+				};
+			}, (reason) => ({
+				ok: false,
+				reason
+			}));
+		},
+		markSeen(sessionId) {
+			const commandId = `agent-world-${randomUUID()}`;
+			return ask(commandId, {
+				type: "command",
+				commandId,
+				sessionId,
+				command: { kind: "mark_seen" }
+			}, COMMAND_TIMEOUT_MS, (reply) => {
+				if (reply.type !== "receipt") return void 0;
+				if (reply.stage === "applied") return { ok: true };
+				if (reply.stage === "failed") return {
+					ok: false,
+					reason: String(reply.reason ?? "failed")
+				};
+			}, (reason) => ({
+				ok: false,
+				reason
+			}));
+		},
+		close() {
+			closed = true;
+			socket?.destroy();
+		}
+	};
+}
+//#endregion
 //#region apps/agent-world/src/backend/facts.ts
 /** The facts columns for `select ... from sessions s join incarnations i ...` (the current incarnation). */
 var FACTS_COLUMNS = `s.run_state as runState, s.prompt, s.needs_you_since as needsYouSince, s.seen_at as seenAt,
@@ -306,7 +577,8 @@ function projectWorld(sessions, remembered) {
 				wings: list.map((repository) => ({
 					repository,
 					name: basename(repository) || repository,
-					headcount: workers.filter((worker) => worker.place.repository === repository).length
+					headcount: workers.filter((worker) => worker.place.repository === repository).length,
+					dormant: sessions.filter((session) => !session.awake && session.reportsTo === id && session.repository === repository).length
 				}))
 			};
 		}),
@@ -378,7 +650,12 @@ var TASK_REREAD_POLLS = 10;
 var FEED_BACKLOG_EVENTS = 5e3;
 /** After a failed preference write, wait this long before sending it again. */
 var RETRY_MS = 5e3;
-/** The `preferences` key Agent World keeps its choices under: `{ wings: { [coordinator id]: repository[] } }`. */
+/** How long choosing a look waits for the runtime to store it. */
+var STORE_TIMEOUT_MS = 5e3;
+/**
+* The `preferences` key Agent World keeps its choices under:
+* `{ wings: { [coordinator id]: repository[] }, avatar: look }`.
+*/
 var PREFERENCE_KEY = "agent-world";
 var SESSIONS = `
 select s.id, s.name, s.cwd, s.reports_to as reportsTo, s.git, s.config,
@@ -431,6 +708,13 @@ function openWorldBackend(paths) {
 	let closed = false;
 	let seen = {};
 	let sending;
+	let chosenAvatar;
+	let storedAvatar = null;
+	const avatarWaiters = /* @__PURE__ */ new Set();
+	const settleAvatar = (result) => {
+		for (const waiter of avatarWaiters) waiter(result);
+		avatarWaiters.clear();
+	};
 	let retryAt = 0;
 	const readTask = taskReader();
 	let polls = 0;
@@ -456,27 +740,37 @@ function openWorldBackend(paths) {
 		const value = parse(database.prepare("select value from preferences where key = ?").get(PREFERENCE_KEY)?.value);
 		return value && typeof value === "object" && !Array.isArray(value) ? value : {};
 	};
-	/** Send the wings to the runtime when they differ from what it stored, keeping the preference's other keys. */
+	/**
+	* Send the wings and the chosen avatar look to the runtime when they differ from what it stored, keeping the
+	* preference's other keys.
+	*/
 	const remember = (stored, storedWings, wings) => {
 		const next = mergeWings(storedWings, wings);
-		const json = JSON.stringify(next);
-		if (json === JSON.stringify(storedWings)) {
+		storedAvatar = typeof stored.avatar === "string" ? stored.avatar : null;
+		if (chosenAvatar !== void 0 && chosenAvatar === storedAvatar) {
+			chosenAvatar = void 0;
+			settleAvatar({ ok: true });
+		}
+		if (JSON.stringify(next) === JSON.stringify(storedWings) && chosenAvatar === void 0) {
 			sending = void 0;
 			return;
 		}
-		if (!socket || !socketOpen || json === sending?.wings || Date.now() < retryAt) return;
+		const value = {
+			...stored,
+			wings: next,
+			...chosenAvatar === void 0 ? {} : { avatar: chosenAvatar }
+		};
+		const json = JSON.stringify(value);
+		if (!socket || !socketOpen || json === sending?.value || Date.now() < retryAt) return;
 		const commandId = `agent-world-${randomUUID()}`;
 		sending = {
 			commandId,
-			wings: json
+			value: json
 		};
 		const command = {
 			kind: "set_preference",
 			key: PREFERENCE_KEY,
-			value: {
-				...stored,
-				wings: next
-			}
+			value
 		};
 		socket.write(`${JSON.stringify({
 			type: "command",
@@ -561,14 +855,19 @@ function openWorldBackend(paths) {
 		publish({
 			connected: socketOpen && next !== void 0,
 			headquarters: next?.headquarters ?? current.headquarters,
-			characters: next?.characters ?? current.characters
+			characters: next?.characters ?? current.characters,
+			avatarLook: chosenAvatar ?? storedAvatar
 		});
 	};
 	const onLine = (line) => {
 		const message = parse(line);
 		if (message?.type !== "receipt" || message.commandId !== sending?.commandId || message.stage !== "failed") return;
-		console.error(`agent-world: the runtime did not store the wings: ${message.reason ?? "no reason given"}`);
+		console.error(`agent-world: the runtime did not store the preference: ${message.reason ?? "no reason given"}`);
 		sending = void 0;
+		settleAvatar({
+			ok: false,
+			reason: `The runtime did not store it: ${message.reason ?? "no reason given"}.`
+		});
 		retryAt = Date.now() + RETRY_MS;
 		retry = setTimeout(() => {
 			lastSeq = -1;
@@ -629,8 +928,32 @@ function openWorldBackend(paths) {
 			feedListeners.add(listener);
 			return () => feedListeners.delete(listener);
 		},
+		setAvatarLook(look) {
+			chosenAvatar = look;
+			const stored = new Promise((resolve) => {
+				const timer = setTimeout(() => {
+					avatarWaiters.delete(done);
+					resolve({
+						ok: false,
+						reason: "The session runtime did not store it yet; it will when it answers."
+					});
+				}, STORE_TIMEOUT_MS);
+				const done = (result) => {
+					clearTimeout(timer);
+					resolve(result);
+				};
+				avatarWaiters.add(done);
+			});
+			lastSeq = -1;
+			poll();
+			return stored;
+		},
 		close() {
 			closed = true;
+			settleAvatar({
+				ok: false,
+				reason: "Agent World closed before the runtime stored it."
+			});
 			clearInterval(timer);
 			clearTimeout(reconnect);
 			clearTimeout(retry);
@@ -659,12 +982,25 @@ if (app.requestSingleInstanceLock()) start();
 else app.quit();
 function start() {
 	const world = openWorldBackend(statePaths());
+	const conversations = openConversations(statePaths().socket);
 	let window;
 	ipcMain.handle("world:snapshot", () => world.snapshot());
 	ipcMain.handle("world:feed", () => world.feed());
 	ipcMain.handle("world:terminal", (_event, characterId) => typeof characterId === "string" ? world.goToTerminal(characterId) : {
 		ok: false,
 		reason: "No character was named."
+	});
+	ipcMain.handle("world:conversation", (_event, characterId, before) => typeof characterId === "string" ? conversations.page(characterId, typeof before === "string" ? before : void 0) : {
+		ok: false,
+		reason: "No character was named."
+	});
+	ipcMain.handle("world:mark-seen", (_event, characterId) => typeof characterId === "string" ? conversations.markSeen(characterId) : {
+		ok: false,
+		reason: "No character was named."
+	});
+	ipcMain.handle("world:avatar-look", (_event, look) => typeof look === "string" ? world.setAvatarLook(look) : {
+		ok: false,
+		reason: "No look was named."
 	});
 	world.subscribe((snapshot) => {
 		if (window && !window.isDestroyed()) window.webContents.send("world:update", snapshot);
@@ -679,7 +1015,10 @@ function start() {
 		window.focus();
 	});
 	app.on("window-all-closed", () => app.quit());
-	app.on("will-quit", () => world.close());
+	app.on("will-quit", () => {
+		world.close();
+		conversations.close();
+	});
 	app.whenReady().then(() => {
 		protocol.handle("app", (request) => {
 			const file = appFile(appDir, new URL(request.url).pathname);

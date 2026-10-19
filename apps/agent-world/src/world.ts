@@ -63,8 +63,13 @@ export interface Wing {
 	repository: string;
 	/** What its banner says. */
 	name: string;
-	/** Awake workers in it; 0 means boarded up. */
+	/** Awake workers in it; 0 means its door is shut. */
 	headcount: number;
+	/**
+	 * Its workers whose sessions are stopped (dormant, at the inn). With nobody awake, its door is closed while it has
+	 * some and boarded up while it has none.
+	 */
+	dormant?: number;
 }
 
 /** A coordinator's headquarters: its hall, common room, and gallery of wings. */
@@ -82,6 +87,8 @@ export interface WorldSnapshot {
 	/** In a stable order: the first is where the world opens. */
 	headquarters: Headquarters[];
 	characters: Character[];
+	/** The avatar look the operator chose in Settings; null (or absent) until he chooses one. */
+	avatarLook?: string | null;
 }
 
 /** One string per place, for maps and scene data. */
@@ -108,6 +115,58 @@ export interface FeedLine {
 
 export type TerminalResult = { ok: true } | { ok: false; reason: string };
 
+/** One tool call inside an assistant message, folded to a line: its name and main argument, its input on demand. */
+export interface TranscriptToolCall {
+	id: string;
+	name: string;
+	/** The main argument (command, path, pattern, ...), first line only. */
+	arg: string | null;
+	/** The arguments as indented JSON, cut at `TRANSCRIPT_TEXT_MAX`. */
+	input: string;
+}
+
+/** A piece of an assistant message, in the order the model wrote them. */
+export type TranscriptPart =
+	| { kind: "text"; text: string }
+	| { kind: "thinking"; text: string }
+	| { kind: "tool"; call: TranscriptToolCall };
+
+/**
+ * One entry of a character's conversation, read from its session's transcript and trimmed for the conversation panel.
+ * Long text is cut at `TRANSCRIPT_TEXT_MAX` characters (`cut` says so); the whole is in the session's JSONL.
+ */
+export type TranscriptEntry =
+	| { kind: "user"; id: string; at: number; text: string; images: number }
+	| { kind: "assistant"; id: string; at: number; parts: TranscriptPart[]; error: string | null; aborted: boolean }
+	| {
+			kind: "tool-result";
+			id: string;
+			at: number;
+			callId: string;
+			tool: string;
+			text: string;
+			isError: boolean;
+			cut: boolean;
+	  }
+	/** Mail from another session (or the operator), delivered into the transcript. */
+	| { kind: "mail"; id: string; at: number; from: string; text: string }
+	/** Any other extension's message, such as a reminder or injected context. */
+	| { kind: "note"; id: string; at: number; label: string; text: string; shown: boolean };
+
+/** Longest text of one transcript field sent to the world UI. */
+export const TRANSCRIPT_TEXT_MAX = 20_000;
+
+/**
+ * One page of a conversation, oldest entry first. `before` is the cursor for the page before it, or null at the start
+ * of the history. `missing` counts indexed entries the transcript no longer holds.
+ */
+export type ConversationPage =
+	| { ok: true; entries: TranscriptEntry[]; before: string | null; missing: number }
+	| { ok: false; reason: string };
+
+/** How a command sent to the runtime ended: applied, or failed with the runtime's reason. */
+export type CommandResult = { ok: true } | { ok: false; reason: string };
+
 /** What the preload bridge exposes to the world UI as `window.agentWorld`. */
 export interface AgentWorldApi {
 	snapshot(): Promise<WorldSnapshot>;
@@ -119,4 +178,10 @@ export interface AgentWorldApi {
 	onFeed(listener: (lines: FeedLine[]) => void): () => void;
 	/** Switch the operator's tmux client to the character's pane. */
 	goToTerminal(characterId: string): Promise<TerminalResult>;
+	/** A page of the character's conversation: the newest, or the one just before the cursor `before`. */
+	conversation(characterId: string, before?: string): Promise<ConversationPage>;
+	/** Tell the runtime the operator saw the character (`mark_seen`); resolves with the command's last receipt. */
+	markSeen(characterId: string): Promise<CommandResult>;
+	/** Choose the avatar's look (Settings); kept as a session-state preference across app restarts. */
+	setAvatarLook(look: string): Promise<CommandResult>;
 }

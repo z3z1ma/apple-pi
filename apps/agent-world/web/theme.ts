@@ -28,7 +28,14 @@ export interface PlaceData {
 	/** Keyed by the kind of place you come from; `start` when you come from nowhere. */
 	entries: Record<string, Point>;
 	doors: Door[];
-	overlaySlots: { kind: "fire" | "water" | "glow" | "banner" | "fidget"; at: Point }[];
+	/** The door characters walk in by when they wake, and out by when they stop; the first door when absent. */
+	enterBy?: string;
+	/**
+	 * Furniture that stands in front of whoever is behind it: a rect of the painting (tiles) drawn again over any
+	 * character whose feet are north of `feet`, the line where the piece meets the floor.
+	 */
+	foreground?: { rect: Rect; feet: number }[];
+	overlaySlots: OverlaySlot[];
 	/**
 	 * A place that grows with what it holds (the gallery): the painting's niches, and how to cut it into vertical
 	 * strips for a given number of them. Beyond the largest layout, the `repeat` strip is inserted once per extra
@@ -44,8 +51,25 @@ export interface PlaceData {
 	};
 }
 
+/**
+ * Where an overlay goes over a painting. `fire` stands on the hearth floor at `at` (its bottom centre), `w` tiles
+ * wide; `water` fills the ellipse at `at` with radii `rx`, `ry`, except `hole` (a polygon, such as a fountain's
+ * pillar); `glow` is warm light around a lantern or candle at `at`, `r` tiles across its halo; `banner` hangs its rod
+ * at `at`; `fidget` is a bare spot for something to play with.
+ */
+export interface OverlaySlot {
+	kind: "fire" | "water" | "glow" | "banner" | "fidget";
+	at: Point;
+	w?: number;
+	r?: number;
+	rx?: number;
+	ry?: number;
+	hole?: Point[];
+}
+
 export interface Look {
-	role: "agent" | "coordinator" | "avatar";
+	/** Who wears it: agents, the coordinator, the operator's avatar, townsfolk, or a host such as the innkeeper. */
+	role: "agent" | "coordinator" | "avatar" | "townsfolk" | (string & {});
 	/** One frame of the 16-frame strip, in px. */
 	frame: [width: number, height: number];
 	/** The feet's row in each frame, in px from the top. */
@@ -64,7 +88,20 @@ export interface Theme {
 export const PLACE_FILES = ["headquarters", "common-room", "gallery", "wing-small", "wing-large", "square"] as const;
 
 /** Overlay sprites the world places over paintings. */
-export const OVERLAYS = ["door-closed", "door-boarded", "banner-cream"] as const;
+export const OVERLAYS = [
+	"door-open",
+	"door-closed",
+	"door-boarded",
+	"banner-cream",
+	"fire-0",
+	"fire-1",
+	"fire-2",
+	"fire-3",
+	"water-0",
+	"water-1",
+	"water-2",
+	"water-3",
+] as const;
 
 // The fantasy names until packs carry their own labels (theme pack format, a later ticket).
 const FANTASY_LABELS: Record<string, string> = {

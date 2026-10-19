@@ -1,0 +1,920 @@
+/* The conversation panel in the fantasy theme: an open book over the dimmed world. A tooled leather cover with gilt
+   corners holds two parchment pages over a gilt-edged page block; the left page is the character, the right the
+   transcript. Everything is drawn here in CSS; text stays crisp HTML. */
+
+.aw-conv-veil {
+	--aw-ink: #2b1d12;
+	--aw-ink-soft: #6f5332;
+	--aw-ink-faint: #9a7d55;
+	--aw-oxblood: #7a2a18;
+	--aw-blue-ink: #24476a;
+	--aw-gilt: #d9b45e;
+	--aw-gilt-light: #f7e2a0;
+	--aw-gilt-dark: #8a6424;
+	--aw-serif: "Iowan Old Style", Georgia, serif;
+	--aw-display: "Hoefler Text", "Big Caslon", "Iowan Old Style", Georgia, serif;
+	--aw-mono: ui-monospace, Menlo, monospace;
+	position: absolute;
+	inset: 0;
+	z-index: 10;
+	display: grid;
+	place-items: center;
+	pointer-events: auto;
+	background: radial-gradient(ellipse 70% 65% at 50% 50%, rgb(14 9 18 / 42%), rgb(8 5 10 / 80%)), rgb(10 6 12 / 20%);
+	font-family: var(--aw-serif);
+	color: var(--aw-ink);
+	animation: aw-veil-in 180ms ease-out;
+}
+
+@keyframes aw-veil-in {
+	from {
+		opacity: 0;
+	}
+}
+
+/* The cover */
+
+.aw-book {
+	position: relative;
+	display: grid;
+	grid-template-columns: minmax(290px, 31%) 1fr;
+	width: min(1140px, 93vw);
+	height: min(760px, 90vh);
+	box-sizing: border-box;
+	padding: 24px 26px 30px;
+	border-radius: 14px 14px 16px 16px;
+	background:
+		url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .2 0 0 0 0 .1 0 0 0 0 .05 0 0 0 .55 0'/%3E%3C/filter%3E%3Crect width='220' height='220' filter='url(%23n)'/%3E%3C/svg%3E"),
+		radial-gradient(ellipse 60% 50% at 30% 25%, rgb(140 70 40 / 35%), transparent 70%),
+		radial-gradient(ellipse 50% 60% at 75% 80%, rgb(30 10 5 / 40%), transparent 70%),
+		linear-gradient(160deg, #6a3320, #4a2114 45%, #3a170d);
+	box-shadow:
+		inset 0 0 0 2px #2a0f07,
+		inset 0 0 0 5px rgb(217 180 94 / 0%),
+		inset 0 0 0 6px var(--aw-gilt-dark),
+		inset 0 0 0 7px #2a0f07,
+		inset 0 2px 6px 6px rgb(255 200 150 / 6%),
+		inset 0 -6px 14px rgb(0 0 0 / 45%),
+		0 30px 70px rgb(0 0 0 / 70%),
+		0 6px 14px rgb(0 0 0 / 50%);
+	animation: aw-book-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@keyframes aw-book-in {
+	from {
+		opacity: 0;
+		transform: translateY(14px) scale(0.985);
+	}
+}
+
+/* The page block under the pages: many leaves and a gilt edge, showing below and beside them. */
+.aw-book::before {
+	content: "";
+	position: absolute;
+	inset: 22px 22px 21px;
+	border-radius: 4px 4px 6px 6px;
+	background:
+		linear-gradient(to bottom, transparent calc(100% - 9px), rgb(0 0 0 / 0%) calc(100% - 9px)),
+		repeating-linear-gradient(to bottom, #f1e2bd 0 1px, #c9ad78 1px 2px), #e9d7ac;
+	box-shadow:
+		0 0 0 1px #3a1a0c,
+		0 2px 0 1px var(--aw-gilt),
+		0 3px 0 1px var(--aw-gilt-dark),
+		0 4px 6px 1px rgb(0 0 0 / 50%);
+}
+
+/* The spine's crease between the pages. */
+.aw-book::after {
+	content: "";
+	position: absolute;
+	top: 24px;
+	bottom: 30px;
+	left: calc(26px + max(290px, 31% - 16px));
+	width: 0;
+	box-shadow: 0 0 10px 3px rgb(60 30 10 / 45%);
+	pointer-events: none;
+}
+
+/* Gilt corner pieces on the leather. */
+.aw-book-corner {
+	position: absolute;
+	width: 46px;
+	height: 46px;
+	z-index: 2;
+	pointer-events: none;
+	background:
+		url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 46 46'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23fbe7a6'/%3E%3Cstop offset='.45' stop-color='%23d4aa52'/%3E%3Cstop offset='1' stop-color='%237f5a1d'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath d='M2 2h30c-4 2-8 3-12 3-6 0-9 3-9 9 0 4-1 8-3 12V2z' fill='url(%23g)' stroke='%233a200a' stroke-width='1'/%3E%3Cpath d='M2 2l14 14' stroke='%233a200a' stroke-width='1.2'/%3E%3Ccircle cx='17' cy='17' r='3.2' fill='url(%23g)' stroke='%233a200a'/%3E%3Cpath d='M32 2c4 0 6 2 6 4s-2 3-3 2M2 32c0 4 2 6 4 6s3-2 2-3' fill='none' stroke='url(%23g)' stroke-width='2.2' stroke-linecap='round'/%3E%3C/svg%3E")
+		no-repeat center / contain;
+	filter: drop-shadow(0 1px 1px rgb(0 0 0 / 60%));
+}
+.aw-book-corner.aw-tl {
+	top: 3px;
+	left: 3px;
+}
+.aw-book-corner.aw-tr {
+	top: 3px;
+	right: 3px;
+	transform: scaleX(-1);
+}
+.aw-book-corner.aw-bl {
+	bottom: 3px;
+	left: 3px;
+	transform: scaleY(-1);
+}
+.aw-book-corner.aw-br {
+	right: 3px;
+	bottom: 3px;
+	transform: scale(-1);
+}
+
+/* The pages */
+
+.aw-page {
+	position: relative;
+	z-index: 1;
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+	min-width: 0;
+	background:
+		url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.55' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .45 0 0 0 0 .3 0 0 0 0 .12 0 0 0 .09 0'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)'/%3E%3C/svg%3E"),
+		radial-gradient(ellipse 90% 80% at 50% 40%, #fbf2da, #f1e1b9 65%, #e2c993);
+	box-shadow:
+		inset 0 0 0 1px rgb(120 80 30 / 25%),
+		inset 0 0 50px rgb(150 100 40 / 18%);
+}
+
+.aw-page-left {
+	align-items: center;
+	padding: 22px 30px 20px 24px;
+	border-radius: 6px 2px 2px 8px;
+	text-align: center;
+	box-shadow:
+		inset -26px 0 26px -18px rgb(90 55 20 / 55%),
+		inset -2px 0 2px -1px rgb(70 40 15 / 45%),
+		inset 0 0 0 1px rgb(120 80 30 / 25%),
+		inset 0 0 50px rgb(150 100 40 / 18%);
+}
+
+.aw-page-right {
+	padding: 0;
+	border-radius: 2px 6px 8px 2px;
+	box-shadow:
+		inset 26px 0 26px -18px rgb(90 55 20 / 55%),
+		inset 2px 0 2px -1px rgb(70 40 15 / 45%),
+		inset 0 0 0 1px rgb(120 80 30 / 25%),
+		inset 0 0 50px rgb(150 100 40 / 18%);
+}
+
+/* The left page: the character */
+
+.aw-portrait {
+	position: relative;
+	flex: none;
+	height: min(236px, 30vh);
+	aspect-ratio: 216 / 236;
+	margin-top: 4px;
+	overflow: hidden;
+	border-radius: 50% 50% 10px 10px / 46% 46% 10px 10px;
+	background: radial-gradient(circle at 50% 36%, #f7e3ad 0, #d6a868 26%, #7d6370 62%, #2f2840 100%), #4a3a50;
+	box-shadow:
+		0 0 0 2px #3a200a,
+		0 0 0 4px var(--aw-gilt),
+		0 0 0 5px var(--aw-gilt-light),
+		0 0 0 7px var(--aw-gilt-dark),
+		0 0 0 8px #3a200a,
+		0 8px 18px 8px rgb(80 45 15 / 35%),
+		inset 0 0 22px rgb(60 25 5 / 55%);
+}
+
+.aw-portrait img {
+	position: absolute;
+	left: 50%;
+	bottom: 0;
+	width: 112%;
+	height: auto;
+	transform: translateX(-50%);
+	image-rendering: auto;
+	filter: drop-shadow(0 4px 6px rgb(40 15 0 / 45%));
+}
+
+.aw-conv-title {
+	margin: 22px 0 0;
+	font: 600 30px / 1.1 var(--aw-display);
+	letter-spacing: 0.01em;
+	color: var(--aw-oxblood);
+	text-shadow: 0 1px 0 rgb(255 245 220 / 70%);
+	overflow-wrap: anywhere;
+}
+
+.aw-conv-role {
+	margin: 4px 0 0;
+	font-size: 14px;
+	font-style: italic;
+	color: var(--aw-ink-soft);
+}
+
+/* A flourish under the name. */
+.aw-conv-role::after {
+	content: "";
+	display: block;
+	width: 150px;
+	height: 12px;
+	margin: 10px auto 0;
+	background:
+		url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 150 12'%3E%3Cpath d='M2 6h56M92 6h56' stroke='%23a07a3a' stroke-width='1'/%3E%3Cpath d='M75 1l5 5-5 5-5-5z' fill='%23a07a3a'/%3E%3Ccircle cx='62' cy='6' r='1.6' fill='%23a07a3a'/%3E%3Ccircle cx='88' cy='6' r='1.6' fill='%23a07a3a'/%3E%3C/svg%3E")
+		no-repeat center / contain;
+}
+
+.aw-conv-facts {
+	display: grid;
+	gap: 12px;
+	width: 100%;
+	margin: 14px 0 0;
+	text-align: left;
+}
+
+.aw-conv-facts > div {
+	display: grid;
+	gap: 2px;
+}
+
+.aw-conv-facts dt {
+	font-size: 11px;
+	font-weight: 700;
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	color: var(--aw-ink-faint);
+}
+
+.aw-conv-facts dd {
+	margin: 0;
+	font-size: 15px;
+	line-height: 1.35;
+	color: var(--aw-ink);
+	overflow-wrap: anywhere;
+}
+
+.aw-conv-branch {
+	color: var(--aw-ink-soft);
+	font-style: italic;
+}
+
+.aw-conv-status {
+	display: inline-block;
+	margin-left: 8px;
+	padding: 1px 7px 2px;
+	border: 1px solid rgb(122 42 24 / 45%);
+	border-radius: 3px;
+	font-size: 11px;
+	font-style: normal;
+	letter-spacing: 0.04em;
+	color: var(--aw-oxblood);
+	background: rgb(122 42 24 / 7%);
+	vertical-align: 1px;
+}
+
+.aw-conv-doing dd {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 4px 8px;
+}
+
+.aw-conv-doing-asking dd {
+	font-style: italic;
+	color: var(--aw-oxblood);
+}
+
+.aw-conv-tool-name {
+	font-variant: small-caps;
+	font-weight: 700;
+	letter-spacing: 0.04em;
+	color: var(--aw-oxblood);
+}
+
+.aw-conv-tool-arg {
+	font: 12px / 1.4 var(--aw-mono);
+	color: #4b3520;
+	overflow-wrap: anywhere;
+}
+
+.aw-conv-side-foot {
+	display: grid;
+	justify-items: center;
+	gap: 8px;
+	width: 100%;
+	margin-top: auto;
+	padding-top: 14px;
+}
+
+/* A brass plaque button. */
+.aw-plaque {
+	padding: 9px 22px 10px;
+	border: 1px solid #3a200a;
+	border-radius: 6px;
+	font: 600 15px var(--aw-serif);
+	letter-spacing: 0.02em;
+	color: #2b1608;
+	text-shadow: 0 1px 0 rgb(255 240 200 / 60%);
+	background: linear-gradient(#f7e2a0, #d9b45e 48%, #b78d3c 52%, #d2a957);
+	box-shadow:
+		inset 0 1px 0 rgb(255 250 225 / 80%),
+		inset 0 -2px 0 rgb(90 55 10 / 35%),
+		0 2px 0 #6e4a14,
+		0 4px 8px rgb(60 30 5 / 35%);
+	cursor: pointer;
+}
+
+.aw-plaque:hover {
+	filter: brightness(1.06);
+}
+
+.aw-plaque:active {
+	transform: translateY(1px);
+	box-shadow:
+		inset 0 1px 0 rgb(255 250 225 / 60%),
+		0 1px 0 #6e4a14,
+		0 2px 4px rgb(60 30 5 / 30%);
+}
+
+.aw-plaque:focus-visible {
+	outline: 2px solid var(--aw-blue-ink);
+	outline-offset: 3px;
+}
+
+.aw-plaque-small {
+	padding: 5px 14px 6px;
+	font-size: 13px;
+}
+
+.aw-conv-warn {
+	margin: 0;
+	font-size: 12.5px;
+	font-style: italic;
+	color: var(--aw-oxblood);
+}
+
+/* The right page: the transcript */
+
+.aw-book-close {
+	position: absolute;
+	top: 10px;
+	right: 12px;
+	z-index: 3;
+	width: 30px;
+	height: 30px;
+	border: 0;
+	border-radius: 50%;
+	background:
+		url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3E%3Cdefs%3E%3CradialGradient id='g' cx='.4' cy='.35' r='.7'%3E%3Cstop offset='0' stop-color='%23f8e4a4'/%3E%3Cstop offset='.6' stop-color='%23c99a46'/%3E%3Cstop offset='1' stop-color='%23805516'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='15' cy='15' r='13' fill='url(%23g)' stroke='%233a200a' stroke-width='1.2'/%3E%3Ccircle cx='15' cy='15' r='10' fill='none' stroke='%23805516' stroke-width='.8'/%3E%3Cpath d='M10.5 10.5l9 9M19.5 10.5l-9 9' stroke='%233a200a' stroke-width='2.2' stroke-linecap='round'/%3E%3C/svg%3E")
+		no-repeat center / contain;
+	filter: drop-shadow(0 2px 2px rgb(60 30 5 / 40%));
+	cursor: pointer;
+}
+
+.aw-book-close:hover {
+	filter: drop-shadow(0 2px 2px rgb(60 30 5 / 40%)) brightness(1.08);
+}
+
+/* A silk ribbon marking the page. */
+.aw-ribbon {
+	position: absolute;
+	top: -4px;
+	right: 30px;
+	z-index: 3;
+	width: 16px;
+	height: 62px;
+	background: linear-gradient(90deg, #6d140f, #a8261b 45%, #7d1812);
+	clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 82%, 0 100%);
+	filter: drop-shadow(1px 2px 1px rgb(40 10 0 / 45%));
+	pointer-events: none;
+}
+
+.aw-conv-log {
+	flex: 1;
+	min-height: 0;
+	overflow: auto;
+	overflow-anchor: none;
+	padding: 30px 46px 18px 40px;
+	font-size: 15.5px;
+	line-height: 1.55;
+	mask-image: linear-gradient(transparent, #000 22px, #000 calc(100% - 14px), transparent);
+	scrollbar-width: thin;
+	scrollbar-color: rgb(122 80 30 / 55%) transparent;
+	outline: none;
+}
+
+.aw-conv-log::-webkit-scrollbar {
+	width: 8px;
+}
+
+.aw-conv-log::-webkit-scrollbar-thumb {
+	border-radius: 4px;
+	background: rgb(122 80 30 / 45%);
+}
+
+.aw-conv-log::-webkit-scrollbar-track {
+	background: transparent;
+}
+
+/* Shown over the top of the page, so the transcript under it never moves. */
+.aw-conv-loading {
+	position: absolute;
+	top: 12px;
+	left: 50%;
+	z-index: 2;
+	padding: 4px 14px 5px;
+	border-radius: 12px;
+	transform: translateX(-50%);
+	background: rgb(251 242 218 / 92%);
+	box-shadow:
+		0 0 0 1px rgb(160 122 58 / 45%),
+		0 2px 6px rgb(90 60 20 / 20%);
+	font-size: 13px;
+	font-style: italic;
+	color: var(--aw-ink-soft);
+	pointer-events: none;
+}
+
+.aw-conv-start {
+	margin: 0 0 18px;
+	text-align: center;
+	font-size: 13px;
+	font-style: italic;
+	color: var(--aw-ink-faint);
+}
+
+.aw-conv-start::before,
+.aw-conv-start::after {
+	content: "\2766";
+	margin: 0 10px;
+	font-style: normal;
+	color: #a07a3a;
+}
+
+.aw-conv-empty {
+	margin: 40px auto;
+	max-width: 30em;
+	text-align: center;
+	font-style: italic;
+	color: var(--aw-ink-soft);
+}
+
+.aw-conv-empty p {
+	margin: 0 0 10px;
+}
+
+.aw-conv-day {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	margin: 6px 0 16px;
+	font-size: 11.5px;
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+	color: var(--aw-ink-faint);
+}
+
+.aw-conv-day::before,
+.aw-conv-day::after {
+	content: "";
+	flex: 1;
+	height: 1px;
+	background: linear-gradient(90deg, transparent, rgb(160 122 58 / 60%), transparent);
+}
+
+.aw-conv-entry {
+	margin: 0 0 18px;
+}
+
+.aw-conv-who {
+	display: flex;
+	align-items: baseline;
+	gap: 10px;
+	margin-bottom: 3px;
+}
+
+.aw-conv-name {
+	font: 700 13px var(--aw-serif);
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	color: var(--aw-oxblood);
+}
+
+.aw-conv-who time {
+	font-size: 12px;
+	font-style: italic;
+	color: var(--aw-ink-faint);
+}
+
+/* The operator's turns: in blue ink, set in from a margin rule like a note written into the book. */
+.aw-conv-user {
+	position: relative;
+	margin-left: 18px;
+	padding: 2px 0 2px 16px;
+	color: #1f3a57;
+}
+
+.aw-conv-user::before {
+	content: "";
+	position: absolute;
+	top: 4px;
+	bottom: 4px;
+	left: 0;
+	width: 2px;
+	border-radius: 1px;
+	background: linear-gradient(
+		rgb(36 71 106 / 0%),
+		rgb(36 71 106 / 55%) 18%,
+		rgb(36 71 106 / 55%) 82%,
+		rgb(36 71 106 / 0%)
+	);
+}
+
+.aw-conv-user .aw-conv-name {
+	color: var(--aw-blue-ink);
+}
+
+/* Mail: a letter with a wax seal. */
+.aw-conv-mail {
+	position: relative;
+	margin: 4px 26px 20px 18px;
+	padding: 12px 18px 12px 52px;
+	border: 1px solid rgb(140 100 40 / 35%);
+	border-radius: 3px;
+	background: linear-gradient(#fdf6e2, #f3e6c3);
+	box-shadow:
+		0 2px 5px rgb(90 60 20 / 25%),
+		1px 1px 0 rgb(255 255 255 / 50%) inset;
+	transform: rotate(-0.4deg);
+}
+
+.aw-conv-seal {
+	position: absolute;
+	top: 12px;
+	left: 12px;
+	width: 28px;
+	height: 28px;
+	border-radius: 50%;
+	background: radial-gradient(circle at 38% 34%, #d4473a, #9c1f16 55%, #6a120c);
+	box-shadow:
+		0 0 0 2px rgb(156 31 22 / 40%),
+		0 2px 3px rgb(60 10 0 / 45%);
+}
+
+.aw-conv-seal::after {
+	content: "\2709";
+	position: absolute;
+	inset: 0;
+	display: grid;
+	place-items: center;
+	font-size: 14px;
+	color: rgb(255 220 200 / 75%);
+}
+
+/* Markdown */
+
+.aw-md > :first-child {
+	margin-top: 0;
+}
+
+.aw-md > :last-child {
+	margin-bottom: 0;
+}
+
+.aw-md p,
+.aw-md ul,
+.aw-md ol,
+.aw-md blockquote,
+.aw-md table {
+	margin: 6px 0;
+}
+
+.aw-md ul,
+.aw-md ol {
+	padding-left: 24px;
+}
+
+.aw-md li {
+	margin: 2px 0;
+}
+
+.aw-md li::marker {
+	color: #a07a3a;
+}
+
+.aw-md h1,
+.aw-md h2,
+.aw-md h3,
+.aw-md h4 {
+	margin: 14px 0 4px;
+	font-family: var(--aw-display);
+	font-weight: 700;
+	line-height: 1.25;
+	color: #4a2a12;
+}
+
+.aw-md h1 {
+	font-size: 20px;
+}
+
+.aw-md h2 {
+	font-size: 18px;
+}
+
+.aw-md h3,
+.aw-md h4 {
+	font-size: 16px;
+}
+
+.aw-md strong {
+	color: #22140a;
+}
+
+.aw-md blockquote {
+	padding: 2px 0 2px 14px;
+	border-left: 3px double rgb(160 122 58 / 70%);
+	font-style: italic;
+	color: var(--aw-ink-soft);
+}
+
+.aw-md hr {
+	margin: 14px 20%;
+	border: 0;
+	height: 1px;
+	background: rgb(160 122 58 / 50%);
+}
+
+.aw-md code {
+	padding: 1px 4px;
+	border-radius: 3px;
+	font: 0.84em / 1.3 var(--aw-mono);
+	background: rgb(120 80 30 / 11%);
+	color: #4a2410;
+}
+
+.aw-md-code {
+	position: relative;
+	margin: 10px 0;
+	padding: 12px 14px;
+	overflow: auto;
+	border-radius: 5px;
+	background: linear-gradient(#2d221c, #261c17);
+	box-shadow:
+		0 0 0 1px #140d09,
+		0 0 0 2px rgb(217 180 94 / 35%),
+		inset 0 1px 8px rgb(0 0 0 / 40%);
+	color: #f1e4c4;
+	font: 12.5px / 1.55 var(--aw-mono);
+	white-space: pre;
+}
+
+.aw-md-code code {
+	padding: 0;
+	background: none;
+	color: inherit;
+	font: inherit;
+}
+
+.aw-md-lang {
+	position: absolute;
+	top: 4px;
+	right: 8px;
+	font: 600 10px var(--aw-serif);
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	color: rgb(217 180 94 / 70%);
+}
+
+.aw-md table {
+	border-collapse: collapse;
+	font-size: 14px;
+}
+
+.aw-md th,
+.aw-md td {
+	padding: 3px 10px;
+	border: 1px solid rgb(140 100 40 / 30%);
+}
+
+.aw-md th {
+	background: rgb(160 122 58 / 12%);
+}
+
+.aw-md-link {
+	color: var(--aw-blue-ink);
+	text-decoration: underline;
+	text-decoration-color: rgb(36 71 106 / 40%);
+	text-underline-offset: 2px;
+}
+
+.aw-md-image {
+	font-style: italic;
+	color: var(--aw-ink-faint);
+}
+
+.aw-md-image::before {
+	content: "[image: ";
+}
+
+.aw-md-image::after {
+	content: "]";
+}
+
+/* Folded lines: tool calls, thoughts, and notes */
+
+.aw-conv-reply + .aw-conv-reply {
+	margin-top: 2px;
+}
+
+.aw-conv-fold {
+	margin: 0;
+}
+
+/* A run of tool calls reads as a tight list, set apart from the prose around it. */
+.aw-md + .aw-conv-fold,
+.aw-conv-fold + .aw-md {
+	margin-top: 8px;
+}
+
+.aw-conv-reply:has(> .aw-conv-fold:last-child) + .aw-conv-reply > .aw-md:first-child {
+	margin-top: 8px;
+}
+
+.aw-conv-fold-line {
+	display: flex;
+	align-items: baseline;
+	gap: 7px;
+	max-width: 100%;
+	padding: 2px 10px 2px 6px;
+	border: 0;
+	border-radius: 4px;
+	background: transparent;
+	font: 14px / 1.4 var(--aw-serif);
+	color: var(--aw-ink-soft);
+	text-align: left;
+	cursor: pointer;
+}
+
+.aw-conv-fold-line:hover {
+	background: rgb(160 122 58 / 13%);
+}
+
+.aw-conv-fold-line:focus-visible {
+	outline: 2px solid rgb(36 71 106 / 55%);
+	outline-offset: 1px;
+}
+
+.aw-conv-chevron {
+	flex: none;
+	width: 0;
+	height: 0;
+	border-top: 4.5px solid transparent;
+	border-bottom: 4.5px solid transparent;
+	border-left: 6px solid #a07a3a;
+	transform: translateY(-1px);
+	transition: transform 120ms ease;
+}
+
+.aw-open > .aw-conv-fold-line .aw-conv-chevron {
+	transform: translateY(-1px) rotate(90deg);
+}
+
+.aw-conv-glyph {
+	flex: none;
+	color: #a07a3a;
+}
+
+.aw-conv-fold-label {
+	flex: none;
+	font-variant: small-caps;
+	font-weight: 700;
+	letter-spacing: 0.04em;
+	color: #6a4320;
+}
+
+.aw-conv-thought .aw-conv-fold-line {
+	font-size: 13px;
+}
+
+.aw-conv-thought .aw-conv-fold-label {
+	font-variant: normal;
+	font-weight: 400;
+	font-style: italic;
+	letter-spacing: 0;
+	color: var(--aw-ink-faint);
+}
+
+.aw-conv-fold-arg {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font: 12.5px / 1.4 var(--aw-mono);
+	color: #4b3520;
+}
+
+.aw-conv-state {
+	flex: none;
+	margin-left: 2px;
+	font-weight: 700;
+}
+
+.aw-conv-state-ok {
+	color: #5a7a2a;
+}
+
+.aw-conv-state-error {
+	color: #a8261b;
+}
+
+.aw-conv-state-waiting {
+	color: var(--aw-ink-faint);
+}
+
+.aw-conv-fold-body {
+	margin: 4px 0 10px 19px;
+	padding: 8px 12px 10px;
+	border-left: 2px solid rgb(160 122 58 / 45%);
+	background: rgb(160 122 58 / 7%);
+	border-radius: 0 4px 4px 0;
+}
+
+.aw-conv-io-label {
+	margin: 4px 0 3px;
+	font-size: 10.5px;
+	font-weight: 700;
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+	color: var(--aw-ink-faint);
+}
+
+.aw-conv-io {
+	max-height: 320px;
+	margin: 0 0 6px;
+	padding: 8px 10px;
+	overflow: auto;
+	border-radius: 4px;
+	background: rgb(255 250 235 / 55%);
+	box-shadow: inset 0 0 0 1px rgb(140 100 40 / 25%);
+	font: 12px / 1.5 var(--aw-mono);
+	color: #3a2814;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+.aw-conv-io.aw-conv-error {
+	background: rgb(168 38 27 / 7%);
+	box-shadow: inset 0 0 0 1px rgb(168 38 27 / 30%);
+	color: #6e1a10;
+}
+
+.aw-conv-thought-text {
+	margin: 0;
+	font-style: italic;
+	color: var(--aw-ink-soft);
+	white-space: pre-wrap;
+}
+
+.aw-conv-quiet {
+	margin: 2px 0;
+	font-size: 13px;
+	font-style: italic;
+	color: var(--aw-ink-faint);
+}
+
+.aw-conv-failed {
+	margin: 6px 0;
+	font-size: 14px;
+	font-style: italic;
+	color: #8a2a1a;
+}
+
+.aw-conv-note,
+.aw-conv-orphan {
+	margin-bottom: 10px;
+}
+
+/* Where the reply box goes (ticket 13): a ruled line with a quill. */
+.aw-conv-reply-slot {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	min-height: 64px;
+	margin: 0 40px 0 36px;
+	padding: 8px 0 12px;
+	border-top: 1px solid rgb(140 100 40 / 35%);
+	font-size: 13.5px;
+	font-style: italic;
+	color: var(--aw-ink-faint);
+}
+
+.aw-quill {
+	flex: none;
+	width: 26px;
+	height: 26px;
+	background:
+		url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 26 26'%3E%3Cpath d='M23 2C14 4 8 10 5 19l2 1c1-3 3-6 5-8-1 3-3 6-4 9 7-3 12-9 15-19z' fill='%23b89a66' stroke='%236f5332' stroke-width='.8'/%3E%3Cpath d='M5 19l-2 5' stroke='%236f5332' stroke-width='1.4' stroke-linecap='round'/%3E%3C/svg%3E")
+		no-repeat center / contain;
+}

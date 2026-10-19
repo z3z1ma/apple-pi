@@ -5,7 +5,16 @@ import { createRoot } from "react-dom/client";
 import type { AgentWorldApi } from "../src/world.js";
 import { conversations } from "./game/actions.js";
 import { BootScene } from "./game/boot-scene.js";
-import { type AvatarView, type DoorView, type FigureView, PlaceScene } from "./game/place-scene.js";
+import {
+	type AvatarView,
+	type BannerView,
+	type DoorView,
+	type FigureView,
+	type OverlayView,
+	PlaceScene,
+} from "./game/place-scene.js";
+import { avatarLooks } from "./looks.js";
+import { conversationPanel } from "./overlay/conversation/panel-state.js";
 import { publishMinimap } from "./overlay/interface/world-link.js";
 import { Overlay } from "./overlay/overlay.js";
 import { loadTheme } from "./theme.js";
@@ -21,8 +30,16 @@ declare global {
 			painting(): string | undefined;
 			characters(): string[];
 			figures(): FigureView[];
+			/** Characters walking out because their session stopped or moved elsewhere. */
+			departing(): FigureView[];
+			/** The animated overlays in the place's slots: fire, water, and glows. */
+			overlays(): OverlayView[];
+			/** The banners hung in the place and the names stitched on them. */
+			banners(): BannerView[];
 			doors(): DoorView[];
-			gallery(): { niches: number; wings: { name: string; boarded: boolean }[] } | undefined;
+			gallery():
+				| { niches: number; wings: { name: string; boarded: boolean; door: "open" | "closed" | "boarded" }[] }
+				| undefined;
 			walkGrid(): boolean;
 			lookAt(door: string): boolean;
 			/** The operator's avatar: where it is, its facing and frame, and the rest of its walk. */
@@ -56,7 +73,12 @@ const game = new Phaser.Game({
 });
 
 const talkedTo: string[] = [];
-conversations.subscribe((character) => talkedTo.push(character.id));
+// Talking to a character, from the world or the side panel, opens its conversation panel.
+conversationPanel.connect(window.agentWorld, theme);
+conversations.subscribe((character) => {
+	talkedTo.push(character.id);
+	conversationPanel.open(character);
+});
 
 const active = () => (game.scene.isActive("place") ? place : undefined);
 window.agentWorldView = {
@@ -64,6 +86,9 @@ window.agentWorldView = {
 	painting: () => active()?.painting(),
 	characters: () => active()?.characterNames() ?? [],
 	figures: () => active()?.figureViews() ?? [],
+	departing: () => active()?.departingViews() ?? [],
+	overlays: () => active()?.overlayViews() ?? [],
+	banners: () => active()?.bannerViews() ?? [],
 	doors: () => active()?.doorViews() ?? [],
 	gallery: () => active()?.galleryView(),
 	walkGrid: () => active()?.walkGridShown() ?? false,
@@ -75,7 +100,7 @@ window.agentWorldView = {
 };
 
 // The interface: the minimap follows the scene, and the interface's intents reach the world.
-view.update({ labels: theme.labels });
+view.update({ labels: theme.labels, avatarLooks: avatarLooks(theme) });
 publishMinimap(view, store, theme, active);
 const intents: WorldIntent[] = [];
 window.agentWorldInterface = { intents: () => [...intents] };

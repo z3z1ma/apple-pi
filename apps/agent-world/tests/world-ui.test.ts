@@ -62,7 +62,8 @@ const view = <T>(page: Page, call: string): Promise<T> =>
 	page.evaluate((c) => new Function(`return window.agentWorldView.${c}`)(), call) as Promise<T>;
 const place = (page: Page) => view<string | undefined>(page, "place()");
 const characters = (page: Page) => view<string[]>(page, "characters()");
-const figures = (page: Page) => view<{ id: string; x: number; y: number; look: string }[]>(page, "figures()");
+const figures = (page: Page) =>
+	view<{ id: string; x: number; y: number; look: string; moving: boolean }[]>(page, "figures()");
 const gallery = (page: Page) =>
 	view<{ niches: number; wings: { name: string; boarded: boolean }[] } | undefined>(page, "gallery()");
 
@@ -165,9 +166,9 @@ test("doors travel between the hall, common room, gallery, wings, and square", a
 		expect(await gallery(page)).toEqual({
 			niches: 3,
 			wings: [
-				{ name: "apple-pi", boarded: false },
-				{ name: "legacy-auth", boarded: true },
-				{ name: "billing-service", boarded: false },
+				{ name: "apple-pi", boarded: false, door: "open" },
+				{ name: "legacy-auth", boarded: true, door: "boarded" },
+				{ name: "billing-service", boarded: false, door: "open" },
 			],
 		});
 		await shot(page, "gallery");
@@ -239,6 +240,10 @@ test("a wing with more agents than the small room's spots uses the large room, w
 		const crowd = workers(14, "/r/apple-pi");
 		await push(world([coordinator(), ...crowd], ["/r/apple-pi"]));
 		await vi.waitFor(async () => expect(await characters(page)).toHaveLength(14), { timeout: 3000 });
+		// Newcomers walk in from the door to their spots.
+		await vi.waitFor(async () => expect((await figures(page)).every((f) => !f.moving)).toBe(true), {
+			timeout: 15000,
+		});
 		const placed = await figures(page);
 		expect(new Set(placed.map((f) => `${f.x},${f.y}`)).size).toBe(14);
 		// Several agents at one table: neighbours on the same row, closer than two tables' width.

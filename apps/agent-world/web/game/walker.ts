@@ -1,6 +1,7 @@
-// A character that walks: any figure in a place (the operator's avatar now, agents later) follows a path of straight
+// A character that walks: any figure in a place (the operator's avatar and every agent) follows a path of straight
 // runs at a steady speed, its walk cycle advanced by the distance it covers so the feet never slide, and ends exactly
-// on the path's last point. A new path takes over at once, from wherever the walker is, without a stop.
+// on the path's last point. A new path takes over at once, from wherever the walker is, without a stop. At rest it
+// holds a pose: standing, seated at work (its two seated frames alternating gently), or asking with a raised hand.
 import type * as Phaser from "phaser";
 import { type Look, type Point, TILE } from "../theme.js";
 
@@ -20,8 +21,16 @@ const STAND_FRAME = 14;
 const REST_FRAMES = { down: STAND_FRAME, up: 7, left: 11, right: 11 } as const;
 /** How much more one axis must lead before a diagonal run switches facing, so a 45-degree run does not flicker. */
 const FACING_BIAS = 1.15;
+/** Seated at work, seen from behind with the seat drawn: two frames; and asking with a raised hand. */
+const SEATED_FRAMES = [12, 13] as const;
+const ASKING_FRAME = 15;
+/** How long each seated frame holds at tempo 1 (ms): mostly the first, a shorter beat on the second. */
+const SEATED_BEAT = [1300, 650] as const;
 
 export type Facing = keyof typeof WALK_FRAMES;
+
+/** How a walker holds itself at rest. */
+export type Pose = "standing" | "seated" | "asking";
 
 export interface WalkerView {
 	x: number;
@@ -29,6 +38,7 @@ export interface WalkerView {
 	moving: boolean;
 	facing: Facing;
 	frame: number;
+	pose: Pose;
 	/** The rest of the current walk: where it is now, then each corner, then the goal. */
 	path: Point[];
 }
@@ -39,9 +49,15 @@ export class Walker {
 	x: number;
 	y: number;
 	facing: Facing = "down";
+	/** How it holds itself when not walking. */
+	pose: Pose = "standing";
+	/** How quickly the seated frames alternate (decorative: a busier tool, a quicker beat); 1 is gentle. */
+	tempo = 1;
 	private waypoints: Point[] = [];
 	private travelled = 0;
 	private arrive?: () => void;
+	/** Time (ms) into the seated beat; each walker starts somewhere else in it, so a room does not move as one. */
+	private beat = Math.random() * (SEATED_BEAT[0] + SEATED_BEAT[1]);
 
 	constructor(scene: Phaser.Scene, look: string, { frame, baseline }: Look, [x, y]: Point, facing: Facing = "down") {
 		this.x = x;
@@ -52,6 +68,13 @@ export class Walker {
 			.sprite(0, 0, `look:${look}`, REST_FRAMES[facing])
 			.setOrigin(0.5, baseline / frame[1])
 			.setScale((PERSON_TILES * TILE) / STANDING);
+		this.place();
+	}
+
+	/** Wear another look (the operator chose one in Settings), keeping the pose, facing, and stride. */
+	setLook(look: string, { frame, baseline }: Look) {
+		const shown = Number(this.sprite.frame.name);
+		this.sprite.setTexture(`look:${look}`, shown).setOrigin(0.5, baseline / frame[1]);
 		this.place();
 	}
 
@@ -71,6 +94,15 @@ export class Walker {
 		this.place();
 	}
 
+	/** Stand at a point at once, without walking there. */
+	moveTo([x, y]: Point) {
+		this.waypoints = [];
+		this.arrive = undefined;
+		this.x = x;
+		this.y = y;
+		this.place();
+	}
+
 	/** Stop where it stands, dropping what it was walking to do. */
 	stop() {
 		this.waypoints = [];
@@ -87,8 +119,25 @@ export class Walker {
 		this.place();
 	}
 
+	/** Fade it (arriving through a door or leaving by one); 1 is fully there. */
+	setAlpha(alpha: number) {
+		this.sprite.setAlpha(alpha);
+		this.shadow.setAlpha(alpha);
+	}
+
+	/** Hold a pose at rest (it shows once any walk ends). */
+	setPose(pose: Pose) {
+		if (pose === this.pose) return;
+		this.pose = pose;
+		this.place();
+	}
+
 	update(deltaMs: number) {
-		if (!this.moving) return;
+		if (!this.moving) {
+			if (this.pose !== "seated") return;
+			this.beat = (this.beat + Math.min(deltaMs, 100) * this.tempo) % (SEATED_BEAT[0] + SEATED_BEAT[1]);
+			return this.place();
+		}
 		let budget = (WALK_SPEED * Math.min(deltaMs, 100)) / 1000;
 		this.travelled += budget;
 		while (budget > 0 && this.waypoints.length) {
@@ -120,6 +169,7 @@ export class Walker {
 			moving: this.moving,
 			facing: this.facing,
 			frame: Number(this.sprite.frame.name),
+			pose: this.pose,
 			path: [[this.x, this.y], ...this.waypoints],
 		};
 	}
@@ -154,9 +204,14 @@ export class Walker {
 	private place() {
 		const frame = this.moving
 			? WALK_FRAMES[this.facing] + (Math.floor((this.travelled / STRIDE) * 4) % 4)
-			: REST_FRAMES[this.facing];
+			: this.pose === "seated"
+				? SEATED_FRAMES[this.beat < SEATED_BEAT[0] ? 0 : 1]
+				: this.pose === "asking"
+					? ASKING_FRAME
+					: REST_FRAMES[this.facing];
 		if (Number(this.sprite.frame.name) !== frame) this.sprite.setFrame(frame);
-		this.sprite.setFlipX(this.facing === "right");
+		// Poses are drawn facing one way; only walking and resting sideways mirror.
+		this.sprite.setFlipX(this.facing === "right" && (this.moving || this.pose === "standing"));
 		this.sprite.setPosition(this.x * TILE, this.y * TILE).setDepth(this.y * TILE);
 		this.shadow.setPosition(this.x * TILE, this.y * TILE - 2).setDepth(this.y * TILE - 1);
 	}

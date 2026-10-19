@@ -1,6 +1,7 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import type { ViewStore } from "../view-state.js";
 import type { WorldStore } from "../world-store.js";
+import { ConversationPanel } from "./conversation/conversation-panel.js";
 import { Interface } from "./interface/interface.js";
 import { PointerLayer } from "./pointer/pointer-layer.js";
 
@@ -35,6 +36,7 @@ export function Overlay({ store, view }: { store: WorldStore; view: ViewStore })
 					</button>
 				</div>
 			)}
+			<ConversationPanel store={store} />
 			{snapshot && !snapshot.connected && <DisconnectedNotice />}
 		</>
 	);

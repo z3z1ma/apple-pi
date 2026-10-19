@@ -151,6 +151,16 @@ export function Interface({ store, view }: { store: WorldStore; view: ViewStore 
 				travel={travel}
 				walkGrid={state.walkGrid ?? false}
 				onWalkGrid={(shown) => intend({ kind: "walk-grid", shown })}
+				avatarLooks={state.avatarLooks ?? []}
+				avatarLook={world?.avatarLook}
+				onAvatarLook={(choice) => {
+					say(`You now look like the ${choice.label.toLowerCase()}.`);
+					void store.setAvatarLook(choice.look).then((result) => {
+						if (result.ok) return;
+						say(result.reason);
+						view.notify(result.reason);
+					});
+				}}
 			/>
 			<Chatbox
 				lines={lines}

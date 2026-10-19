@@ -58,6 +58,8 @@ async function openWorld(first: WorldSnapshot) {
 			feed: async () => [],
 			onFeed: () => () => {},
 			goToTerminal: async () => ({ ok: true }),
+			conversation: async () => ({ ok: true, entries: [], before: null, missing: 0 }),
+			markSeen: async () => ({ ok: true }),
 		};
 		// Whether each context menu the page saw was stopped before the browser could show its own.
 		(window as any).contextMenus = [];
@@ -203,8 +205,8 @@ test("a click on furniture walks to the nearest open floor; a second click mid-w
 	const { page, errors } = await openWorld(world());
 	try {
 		const orla = await figure(page, HQ);
-		// The long table at the top of the hall.
-		const table: Point = [15, 5.4];
+		// The long table at the top of the hall, beside Orla seated at it.
+		const table: Point = [13.2, 5.4];
 		const expected = findPath(gridFor(HALL, [[orla.x, orla.y]]), HALL.entries.start, table)!.goal;
 		await clickAt(page, table);
 		await arrived(page);
@@ -315,6 +317,9 @@ test("talking to a character and using a door walk up first; walking past a door
 		const [fx, fy] = [orla.x - by.x, orla.y - by.y];
 		expect(by.facing).toBe(Math.abs(fx) > Math.abs(fy) ? (fx < 0 ? "left" : "right") : fy < 0 ? "up" : "down");
 		await shot(page, "talked");
+		// The conversation opened over the world; Escape closes it.
+		await page.getByRole("dialog", { name: "Conversation with Orla the Wise" }).waitFor({ timeout: 2000 });
+		await page.keyboard.press("Escape");
 
 		// Walk to the archway's stand point and past the door: no travel.
 		const archway = HALL.doors.find((d) => d.name === "Archway to the gallery")!;
@@ -374,9 +379,13 @@ test("the camera follows the avatar across a place larger than the window, and t
 		await arrived(page, 15000);
 		await page.waitForTimeout(1500);
 		const frames = await recorded(page);
-		// Centred on the avatar, as far as the painting's east edge allows.
+		// Centred on the avatar: near the painting's east edge, the view may slide the painting out from under the side
+		// panel, but no further than the panel reaches.
 		const [sx] = await screen(page, [34, 10]);
-		expect(sx).toBeCloseTo(640 + 34 * 48 - (44 * 48 - 640), 0);
+		expect(sx).toBeCloseTo(640, 0);
+		const [east] = await screen(page, [44, 10]);
+		const panel = await page.evaluate(() => document.querySelector(".aw-side")!.getBoundingClientRect().left);
+		expect(east).toBeGreaterThanOrEqual(panel);
 		// The view eased: it never moved more than a walking step's worth of screen in one frame.
 		for (let i = 1; i < frames.length; i++)
 			expect(

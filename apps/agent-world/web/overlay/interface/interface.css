@@ -917,3 +917,92 @@
 	justify-content: start;
 	padding: 0;
 }
+
+/* Settings: the avatar looks, each as its portrait in a brass frame */
+
+.aw-looks {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(62px, 1fr));
+	gap: 8px;
+	margin: 0 5px 10px;
+	padding: 0;
+	border: 0;
+}
+
+.aw-looks legend {
+	float: left;
+	grid-column: 1 / -1;
+	width: 100%;
+	padding: 5px 0 2px;
+}
+
+.aw-look {
+	position: relative;
+	display: grid;
+	justify-items: center;
+	gap: 4px;
+	cursor: pointer;
+}
+
+.aw-look input {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	margin: 0;
+	opacity: 0;
+	pointer-events: none;
+}
+
+.aw-look-frame {
+	display: block;
+	width: 58px;
+	height: 58px;
+	overflow: hidden;
+	border-radius: 6px;
+	background: radial-gradient(circle at 50% 35%, #6b4a2c, #2e1d10);
+	box-shadow:
+		inset 0 0 0 2px var(--aw-brass-dark),
+		0 0 0 1px var(--aw-wood-edge),
+		0 2px 3px rgb(0 0 0 / 35%);
+	transition:
+		box-shadow 120ms ease,
+		transform 120ms ease;
+}
+
+.aw-look-frame img {
+	display: block;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	object-position: 50% 0%;
+}
+
+.aw-look-name {
+	font-size: 12px;
+	font-weight: 600;
+	color: var(--aw-ink-soft);
+}
+
+.aw-look:hover .aw-look-frame {
+	transform: translateY(-1px);
+	box-shadow:
+		inset 0 0 0 2px var(--aw-brass),
+		0 0 0 1px var(--aw-wood-edge),
+		0 3px 5px rgb(0 0 0 / 40%);
+}
+
+.aw-look:has(input:focus-visible) .aw-look-frame {
+	outline: 2px solid var(--aw-brass-light);
+	outline-offset: 2px;
+}
+
+.aw-look:has(input:checked) .aw-look-frame {
+	box-shadow:
+		inset 0 0 0 2px var(--aw-brass-light),
+		0 0 0 2px var(--aw-brass),
+		0 0 10px rgb(240 212 138 / 55%);
+}
+
+.aw-look:has(input:checked) .aw-look-name {
+	color: var(--aw-ink);
+}

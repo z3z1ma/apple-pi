@@ -20,9 +20,50 @@
     [0, 15, 32, 1]
   ],
   "spots": [],
-  "entries": { "start": [2.5, 8.6], "headquarters": [1.2, 8.6] },
-  "doors": [{ "name": "Archway to the hall", "rect": [0, 1, 1.8, 6], "standAt": [1.2, 8.6], "to": "headquarters" }],
-  "overlaySlots": [],
+  "entries": {
+    "start": [2.5, 8.6],
+    "headquarters": [1.2, 8.6]
+  },
+  "doors": [
+    {
+      "name": "Archway to the hall",
+      "rect": [0, 1, 1.8, 6],
+      "standAt": [1.2, 8.6],
+      "to": "headquarters"
+    }
+  ],
+  "overlaySlots": [
+    {
+      "kind": "glow",
+      "at": [2.9, 3.94],
+      "r": 1.0
+    },
+    {
+      "kind": "glow",
+      "at": [8.17, 3.94],
+      "r": 1.0
+    },
+    {
+      "kind": "glow",
+      "at": [13.43, 3.94],
+      "r": 1.0
+    },
+    {
+      "kind": "glow",
+      "at": [18.69, 3.94],
+      "r": 1.0
+    },
+    {
+      "kind": "glow",
+      "at": [23.95, 3.94],
+      "r": 1.0
+    },
+    {
+      "kind": "glow",
+      "at": [29.21, 3.94],
+      "r": 1.0
+    }
+  ],
   "niches": {
     "at": [5.6, 10.82, 16.09, 21.34, 26.61],
     "door": [-1.6, 2.2, 3.2, 4.4],

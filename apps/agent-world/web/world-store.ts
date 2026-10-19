@@ -1,4 +1,4 @@
-import type { AgentWorldApi, FeedLine, TerminalResult, WorldSnapshot } from "../src/world.js";
+import type { AgentWorldApi, CommandResult, FeedLine, TerminalResult, WorldSnapshot } from "../src/world.js";
 
 /** Feed lines the world UI keeps for the chatbox. */
 const FEED_KEPT = 200;
@@ -11,6 +11,8 @@ export interface WorldStore {
 	feed(): FeedLine[];
 	subscribeFeed(listener: () => void): () => void;
 	goToTerminal(characterId: string): Promise<TerminalResult>;
+	/** Choose the avatar's look: the snapshot wears it at once, and the backend keeps it across restarts. */
+	setAvatarLook(look: string): Promise<CommandResult>;
 }
 
 export function worldStore(api: AgentWorldApi): WorldStore {
@@ -55,5 +57,9 @@ export function worldStore(api: AgentWorldApi): WorldStore {
 			return () => feedListeners.delete(listener);
 		},
 		goToTerminal: (characterId) => api.goToTerminal(characterId),
+		setAvatarLook(look) {
+			if (snapshot && snapshot.avatarLook !== look) set({ ...snapshot, avatarLook: look });
+			return api.setAvatarLook(look);
+		},
 	};
 }

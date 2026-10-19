@@ -1,7 +1,14 @@
 // The only way the world UI reaches the backend: a narrow typed API on `window.agentWorld`. Sandboxed preloads run
 // as CommonJS with only a few Electron modules, so this is built to dist/electron/preload.cjs.
 import { contextBridge, ipcRenderer } from "electron";
-import type { AgentWorldApi, FeedLine, TerminalResult, WorldSnapshot } from "../world.js";
+import type {
+	AgentWorldApi,
+	CommandResult,
+	ConversationPage,
+	FeedLine,
+	TerminalResult,
+	WorldSnapshot,
+} from "../world.js";
 
 const api: AgentWorldApi = {
 	snapshot: () => ipcRenderer.invoke("world:snapshot") as Promise<WorldSnapshot>,
@@ -17,6 +24,10 @@ const api: AgentWorldApi = {
 		return () => ipcRenderer.removeListener("world:feed", forward);
 	},
 	goToTerminal: (characterId) => ipcRenderer.invoke("world:terminal", characterId) as Promise<TerminalResult>,
+	conversation: (characterId, before) =>
+		ipcRenderer.invoke("world:conversation", characterId, before) as Promise<ConversationPage>,
+	markSeen: (characterId) => ipcRenderer.invoke("world:mark-seen", characterId) as Promise<CommandResult>,
+	setAvatarLook: (look) => ipcRenderer.invoke("world:avatar-look", look) as Promise<CommandResult>,
 };
 
 contextBridge.exposeInMainWorld("agentWorld", api);

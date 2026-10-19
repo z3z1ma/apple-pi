@@ -5,7 +5,7 @@
   "blocked": [
     [0, 0, 30, 4.5],
     [2.5, 4.5, 4.5, 1.0],
-    [12, 4.5, 6, 2.0],
+    [12.5, 4.5, 5.5, 1.5],
     [1.5, 4.5, 1.0, 2.5],
     [2.5, 4.5, 1.0, 1.5],
     [3, 7.5, 1, 1],
@@ -28,12 +28,128 @@
     [23, 8.5, 4, 2],
     [26, 10.5, 4, 4.5]
   ],
-  "spots": [[18.6, 6.1], [11.5, 6.1], [15, 7.6]],
-  "entries": { "start": [15, 11], "square": [15, 14], "common-room": [1, 7.6], "gallery": [26.3, 7.2] },
+  "spots": [[15, 6.6], [11.3, 6.2], [18.7, 6.2]],
+  "entries": {
+    "start": [15, 11],
+    "square": [15, 14],
+    "common-room": [1, 7.6],
+    "gallery": [26.3, 7.2]
+  },
   "doors": [
-    { "name": "Archway to the common room", "rect": [0, 4.5, 1.5, 3], "standAt": [1, 7.6], "to": "common-room" },
-    { "name": "Archway to the gallery", "rect": [28, 5, 2, 6], "standAt": [26.3, 7.2], "to": "gallery" },
-    { "name": "Hall doors", "rect": [12.5, 15, 5, 3.5], "standAt": [15, 14.5], "to": "square" }
+    {
+      "name": "Archway to the common room",
+      "rect": [0, 4.5, 1.5, 3],
+      "standAt": [1, 7.6],
+      "to": "common-room"
+    },
+    {
+      "name": "Archway to the gallery",
+      "rect": [28, 5, 2, 6],
+      "standAt": [26.3, 7.2],
+      "to": "gallery"
+    },
+    {
+      "name": "Hall doors",
+      "rect": [12.5, 15, 5, 3.5],
+      "standAt": [15, 14.5],
+      "to": "square"
+    }
   ],
-  "overlaySlots": []
+  "overlaySlots": [
+    {
+      "kind": "fire",
+      "at": [4.97, 4.42],
+      "w": 1.15
+    },
+    {
+      "kind": "glow",
+      "at": [12.15, 1.05],
+      "r": 1.0
+    },
+    {
+      "kind": "glow",
+      "at": [18.0, 1.05],
+      "r": 1.0
+    },
+    {
+      "kind": "glow",
+      "at": [21.69, 1.05],
+      "r": 1.0
+    },
+    {
+      "kind": "glow",
+      "at": [13.12, 3.72],
+      "r": 0.7
+    },
+    {
+      "kind": "glow",
+      "at": [17.16, 3.7],
+      "r": 0.7
+    },
+    {
+      "kind": "glow",
+      "at": [10.51, 14.0],
+      "r": 0.65
+    },
+    {
+      "kind": "glow",
+      "at": [11.14, 14.68],
+      "r": 0.65
+    },
+    {
+      "kind": "glow",
+      "at": [19.78, 14.0],
+      "r": 0.65
+    },
+    {
+      "kind": "glow",
+      "at": [19.06, 14.67],
+      "r": 0.65
+    },
+    {
+      "kind": "glow",
+      "at": [9.7, 16.91],
+      "r": 0.65
+    },
+    {
+      "kind": "glow",
+      "at": [20.39, 16.91],
+      "r": 0.65
+    },
+    {
+      "kind": "glow",
+      "at": [4.02, 8.31],
+      "r": 0.65
+    },
+    {
+      "kind": "glow",
+      "at": [1.46, 12.45],
+      "r": 0.65
+    },
+    {
+      "kind": "glow",
+      "at": [26.95, 9.16],
+      "r": 0.65
+    },
+    {
+      "kind": "glow",
+      "at": [27.46, 11.12],
+      "r": 0.65
+    }
+  ],
+  "enterBy": "Hall doors",
+  "foreground": [
+    {
+      "rect": [12.3, 4.1, 5.6, 2.0],
+      "feet": 6.1
+    },
+    {
+      "rect": [3.4, 13.3, 4.2, 1.6],
+      "feet": 14.9
+    },
+    {
+      "rect": [22.1, 13.3, 4.3, 1.6],
+      "feet": 14.9
+    }
+  ]
 }

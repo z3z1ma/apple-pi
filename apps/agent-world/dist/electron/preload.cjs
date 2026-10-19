@@ -13,6 +13,9 @@ electron.contextBridge.exposeInMainWorld("agentWorld", {
 		electron.ipcRenderer.on("world:feed", forward);
 		return () => electron.ipcRenderer.removeListener("world:feed", forward);
 	},
-	goToTerminal: (characterId) => electron.ipcRenderer.invoke("world:terminal", characterId)
+	goToTerminal: (characterId) => electron.ipcRenderer.invoke("world:terminal", characterId),
+	conversation: (characterId, before) => electron.ipcRenderer.invoke("world:conversation", characterId, before),
+	markSeen: (characterId) => electron.ipcRenderer.invoke("world:mark-seen", characterId),
+	setAvatarLook: (look) => electron.ipcRenderer.invoke("world:avatar-look", look)
 });
 //#endregion

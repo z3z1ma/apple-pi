@@ -98,11 +98,21 @@ export function composeStrips(place: PlaceData, strips: Strip[]): PlaceData {
 			if (!at || !stand) return [];
 			return [{ ...door, rect: [at[0] - door.rect[2] / 2, door.rect[1], door.rect[2], door.rect[3]], standAt: stand }];
 		}),
-		overlaySlots: place.overlaySlots.flatMap((slot) => {
-			const at = pointIn(slot.at);
-			return at ? [{ ...slot, at }] : [];
-		}),
+		// Pieces are cut from one painting; a cut painting draws none.
+		foreground: [],
+		// Slots repeat with the strip they are in, so a repeated niche keeps its lantern's glow.
+		overlaySlots: strips.flatMap((strip, i) =>
+			place.overlaySlots
+				.filter((slot) => inStrip(slot.at[0], strip, i === last))
+				.map((slot) => ({ ...slot, at: shift(slot.at, strip) })),
+		),
 	};
+}
+
+/** A wing's door in the gallery: open while agents work there, closed while they sleep, boarded with nobody. */
+export function doorOf(wing: Wing): "open" | "closed" | "boarded" {
+	if (wing.headcount > 0) return "open";
+	return wing.dormant ? "closed" : "boarded";
 }
 
 /** The headquarters a place belongs to, if any. */
@@ -131,7 +141,7 @@ export function layoutFor(ref: PlaceRef, world: WorldSnapshot | undefined, theme
 			base.niches!.at.filter((x) => inStrip(x, strip, i === strips.length - 1)).map((x) => x - strip.from + strip.at),
 		);
 		const niches = hq.wings.slice(0, centres.length).map((wing, i) => ({ wing, x: centres[i] }));
-		const signature = `${key}|${hq.wings.map((w) => `${w.repository}:${w.headcount > 0}`).join("|")}`;
+		const signature = `${key}|${hq.wings.map((w) => `${w.repository}:${doorOf(w)}`).join("|")}`;
 		return { ref, key, data: "gallery", place, title: labels.gallery, subtitle: owner, strips, niches, signature };
 	}
 	if (ref.kind !== "wing") return undefined;
