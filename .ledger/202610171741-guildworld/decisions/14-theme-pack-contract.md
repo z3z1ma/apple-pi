@@ -1,6 +1,6 @@
 Type: interrogation
 Status: open
-Blocked by: 04, 05, 15, 19
+Blocked by: 04, 05, 15, 19, 22, 24
 
 # Theme pack contract
 

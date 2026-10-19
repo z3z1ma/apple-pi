@@ -89,6 +89,9 @@ document.getElementById("controls").addEventListener("click", (event) => {
 });
 document.getElementById("toggle").onclick = () => document.getElementById("controls").classList.toggle("closed");
 
+// The game menu replaces the browser's everywhere, including over the HTML chrome drawn on the canvas.
+document.addEventListener("contextmenu", (event) => event.preventDefault());
+
 recompute();
 const scenes = [new Boot(), new PlaceScene("hall", hall), new PlaceScene("gallery", gallery), new PlaceScene("wing", wing), new PlaceScene("lane", lane)];
 const game = new Phaser.Game({

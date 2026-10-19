@@ -1,5 +1,5 @@
 Type: prototype
-Status: claimed
+Status: resolved
 Blocked by: 05, 18, 19
 
 # How places are built
@@ -38,4 +38,15 @@ Operator, 2026-10-18:
 - The headquarters holds its remembered wings as a gallery of doors, one per wing with its repository's banner; each door opens that wing's own room. The gallery extends as wings are added.
 - Movement and interaction should feel like RuneScape: click a tile to walk there along a path, hover shows the default action, left click does it, right click opens a menu of actions, and the avatar walks up to a character or door before acting.
 
-Prototype (2026-10-18): [prototypes/headquarters/](../prototypes/headquarters/README.md): painted guild hall, gallery of wing doors, wing rooms in two sizes, a tiled lane outside, RuneScape-style movement; verdict pending.
+Prototype (2026-10-18): [prototypes/headquarters/](../prototypes/headquarters/README.md): painted guild hall, gallery of wing doors, wing rooms in two sizes, a tiled lane outside, RuneScape-style movement; verdict below.
+
+## Answer
+
+Decided with the operator, 2026-10-18, from the [headquarters prototype](../prototypes/headquarters/README.md).
+
+- **Interiors are hand-painted scenes,** one per place and theme, in a few sizes for the number of things and characters they hold (the wing room comes small and large); the view moves around a scene bigger than the screen. Larger rooms seat several agents at one painted table before a bigger painting is needed.
+- **Over each painting, by hand:** the walk grid, character spots, door hotspots, entries, and anchors for placed pieces.
+- **Variable parts are placed sprites** cut from sheets on magenta: doors (open, closed, boarded) and banners, set into painted niches, with names drawn as text. A place that grows repeats a painted section (the gallery repeats one niche per extra wing).
+- **Pipeline:** Codex's image tool, with each prompt describing the room on a tile grid and a person's height in tiles so scale comes out usable; scenes quantized to 256 colours; a wide magenta key when cutting sprites. About two minutes of generation for four scenes and a few minutes of authoring per scene.
+- **Exteriors are not tiles as prototyped:** the tiled lane was rejected; how exteriors are built is [How exteriors are built](24-how-exteriors-are-built.md).
+- **Characters and movement** failed in the prototype and get their own tickets: [Characters and portraits](22-characters-and-portraits.md) and [Movement and pathing](23-movement-and-pathing.md).

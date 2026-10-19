@@ -38,6 +38,7 @@ A whole-product spec for Agent World, ready for `/skill:to-spec`: every architec
 - [Purpose and form of the world](decisions/19-purpose-and-form-of-the-world.md): a home base beside the operator's work; every function has its own hand-designed place (mostly interiors) drawn per theme, joined by cozy exteriors; the operator starts in the headquarters with the coordinator and its agents; places follow functions and reporting, not tmux.
 - [Local API access control](decisions/11-local-api-access-control.md): the backend runs in Electron's main process, holds all secrets and external writes, and the renderer reaches it only over typed IPC; no network listener until browser mode, which reuses the browser-pages loopback, per-launch token, and Host/Origin pattern.
 - [What a wing is](decisions/21-what-a-wing-is.md): one wing per repository, remembered once seen (closed when empty); dormant agents rest in the dormant place; agents outside any repository use a shared common room.
+- [How places are built](decisions/15-how-places-are-built.md): interiors are hand-painted scenes per place and theme in a few sizes, with hand-authored walk grids, spots, and hotspots, and placed sprites for doors and banners; tiled exteriors, the borrowed characters, and the pathing failed and became their own tickets.
 
 ## Not yet specified
 
@@ -45,12 +46,13 @@ A whole-product spec for Agent World, ready for `/skill:to-spec`: every architec
 - World-owned state: quests, parties, and interactions start as projections (ledger tasks, linked external items, derived groupings); revisit when a feature needs durable world state.
 - Slack access: revisit the captured browser session from [Source of SaaS work data](decisions/07-source-of-saas-work-data.md) in favour of an officially scoped token before any Slack build.
 - Milestone order and slice boundaries: depends on most tickets; the handoff's M0–M7 is a starting point.
-- Embodied view depth: avatar movement, pathfinding, and room transitions (dialogue itself is [Dialogue with a character](decisions/17-dialogue-with-a-character.md)); includes who the operator's avatar is; sharpens once places are built.
-- Layout of the connective tissue: how the function places are arranged and joined per theme; sharpens with [How places are built](decisions/15-how-places-are-built.md).
+- The operator's avatar: who it is and how it looks; sharpens with [Characters and portraits](decisions/22-characters-and-portraits.md). Movement itself is [Movement and pathing](decisions/23-movement-and-pathing.md).
+- Layout of the connective tissue: how the function places are arranged and joined per theme; sharpens with [How exteriors are built](decisions/24-how-exteriors-are-built.md).
 - PR review flow in the Forge: how a review page opens from Agent World and what the Forge shows; follows the command and SaaS-source decisions.
 - Several tmux servers in one world (each coordinator already gets its own headquarters).
 - Browser mode: whether a browser client may control agents or only view them; decided with the browser-mode milestone.
 - Accessibility, reduced motion, audio, and the performance budget.
+- Things to interact with: many more objects to fidget with in every place ("ADHD paradise"), a polish pass once places, characters, and movement work.
 - Rewards and celebration policy, and the serious-mode override for incidents.
 - First run without Pi, Jira, or GitHub: the demo world and onboarding.
 

@@ -51,4 +51,12 @@ You start in the guild hall. **Left click** walks to a tile, or does the default
 
 ## Verdict
 
-Pending the operator.
+Operator, 2026-10-18: "you are 100% moving in the right direction" for interiors.
+
+- **Painted interiors: confirmed.** The hand-painted scenes are the direction ("amazing").
+- **Characters: rejected.** The borrowed sprites kill the experience. Use somewhat higher-definition sprites that look good, walking that looks better, and a talking portrait beside the dialogue box: a RuneScape-style talking head, or a larger JRPG-style portrait with expressions on the left. Either is fine.
+- **Pathing: subpar,** and bad pathing alone can kill the experience.
+- **Exterior: rejected.** The tiled lane is far from the vision; interiors are on track.
+- **Crowding:** larger rooms can seat several agents at one painted table, so rooms have headroom before a bigger painting is needed.
+- **Polish later:** many more things to interact with and fidget with ("ADHD paradise"); many nits.
+- Fixed after the verdict: right click no longer opens the browser's menu over the HTML chrome.
