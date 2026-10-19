@@ -1,0 +1,51 @@
+{
+  "artificer": {
+    "frame": [
+      83,
+      141
+    ],
+    "portraits": 4
+  },
+  "avatar": {
+    "frame": [
+      75,
+      130
+    ],
+    "portraits": 4
+  },
+  "coordinator": {
+    "frame": [
+      106,
+      141
+    ],
+    "portraits": 4
+  },
+  "engineer": {
+    "frame": [
+      76,
+      140
+    ],
+    "portraits": 4
+  },
+  "mage": {
+    "frame": [
+      82,
+      141
+    ],
+    "portraits": 4
+  },
+  "scholar": {
+    "frame": [
+      75,
+      131
+    ],
+    "portraits": 4
+  },
+  "scout": {
+    "frame": [
+      76,
+      142
+    ],
+    "portraits": 4
+  }
+}

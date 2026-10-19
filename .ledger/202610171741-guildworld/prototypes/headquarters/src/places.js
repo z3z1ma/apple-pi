@@ -4,8 +4,8 @@ import { tileIndex, tilesetCanvas } from "./terrain.js";
 import { hash } from "./util.js";
 
 export const T = 48;
-const AGENT_LOOKS = ["char-a", "char-b", "char-d"];
-const look = (s) => (s.coordinator ? "char-coord" : AGENT_LOOKS[hash(s.id) % AGENT_LOOKS.length]);
+const AGENT_LOOKS = ["artificer", "scholar", "scout", "engineer", "mage"];
+const look = (s) => (s.coordinator ? "coordinator" : AGENT_LOOKS[hash(s.id) % AGENT_LOOKS.length]);
 
 function painted(key, w, h) {
 	return (scene) => scene.add.image(0, 0, key).setOrigin(0).setDisplaySize(w, h).setDepth(0);
@@ -133,7 +133,7 @@ export function wing(scene, world, data) {
 		blocked: room.blocked,
 		entries: { start: room.stand, gallery: room.stand },
 		hotspots: [{ name: "Door to the gallery", rect: room.door, standAt: room.stand, verbs: [{ verb: "Open", run: (sc) => sc.go("gallery", `wing:${w.repo}`) }] }],
-		people: w.agents.slice(0, room.spots.length).map((s, i) => ({ session: s, at: room.spots[i], face: "up", look: look(s) })),
+		people: w.agents.slice(0, room.spots.length).map((s, i) => ({ session: s, at: room.spots[i], pose: "sit", look: look(s) })),
 	};
 }
 

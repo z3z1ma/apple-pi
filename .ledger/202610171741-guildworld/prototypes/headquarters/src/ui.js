@@ -36,13 +36,35 @@ export function openMenu(x, y, actions) {
 
 export const menuOpen = () => !menu.hidden;
 
-export function say(name, line, options = ["Goodbye."]) {
-	chat.innerHTML = `<div class="who">${esc(name)}</div><div class="line">${esc(line)}</div><div class="opts">${options
+let typing;
+
+/** Show a line in the chatbox, typed out, with the speaker's portrait (JRPG-style) beside it when there is one. */
+export function say(name, line, options = ["Goodbye."], portrait = null) {
+	clearInterval(typing);
+	chat.classList.toggle("with-portrait", Boolean(portrait));
+	chat.innerHTML = `${portrait ? `<img class="portrait" src="${esc(portrait)}" alt="">` : ""}<div class="who">${esc(name)}</div><div class="line"></div><div class="opts" hidden>${options
 		.map((o, i) => `<div class="opt" data-i="${i}">${i + 1}. ${esc(o)}</div>`)
 		.join("")}</div>`;
 	chat.hidden = false;
+	const text = chat.querySelector(".line");
+	const opts = chat.querySelector(".opts");
+	const img = chat.querySelector(".portrait");
+	let shown = 0;
+	const finish = () => {
+		clearInterval(typing);
+		text.textContent = line;
+		opts.hidden = false;
+		img?.classList.remove("talking");
+	};
+	img?.classList.add("talking");
+	typing = setInterval(() => {
+		shown += 2;
+		text.textContent = line.slice(0, shown);
+		if (shown >= line.length) finish();
+	}, 22);
 	chat.onclick = (event) => {
-		if (event.target.closest(".opt")) chat.hidden = true;
+		if (!opts.hidden && event.target.closest(".opt")) chat.hidden = true;
+		else finish();
 	};
 }
 

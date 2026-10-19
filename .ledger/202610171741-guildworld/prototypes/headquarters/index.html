@@ -20,6 +20,10 @@ of wings, wing rooms) and a tiled exterior, walked RuneScape-style. Run ./serve.
 	#menu .npc { color: #ffff3a; } #menu .object { color: #2ef2f2; }
 	#chat { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); width: min(620px, 92vw); padding: 12px 16px 10px; background: linear-gradient(#3b2c22, #2a1f18); border: 2px solid #c8a46a; border-radius: 6px; box-shadow: 0 10px 30px rgba(0,0,0,.6), inset 0 0 0 1px #5e4632; font: 15px/1.4 Georgia, serif; z-index: 9; }
 	#chat .who { color: #ffd76b; font-weight: 700; margin-bottom: 4px; } #chat .line { color: #f3e9d2; }
+	#chat.with-portrait { width: min(780px, 94vw); box-sizing: border-box; padding-left: 230px; min-height: 120px; }
+	#chat .portrait { position: absolute; left: -24px; bottom: -6px; height: 250px; filter: drop-shadow(0 6px 10px rgba(0,0,0,.55)); transform-origin: 50% 100%; }
+	#chat .portrait.talking { animation: talk .32s ease-in-out infinite alternate; }
+	@keyframes talk { from { transform: translateY(0) scale(1); } to { transform: translateY(-3px) scale(1.012); } }
 	#chat .opts { margin-top: 8px; display: grid; gap: 2px; } #chat .opt { color: #9fd3ff; cursor: pointer; } #chat .opt:hover { color: #fff; }
 	#controls { position: fixed; left: 10px; bottom: 10px; width: 330px; border-radius: 8px; background: rgba(246,243,238,.95); color: #222; font-size: 12px; box-shadow: 0 8px 24px rgba(0,0,0,.5); z-index: 8; }
 	#controls.closed #body { display: none; }
@@ -44,6 +48,7 @@ of wings, wing rooms) and a tiled exterior, walked RuneScape-style. Run ./serve.
 			<button data-act="agent">+ agent</button>
 			<button data-act="wing">+ remembered wing</button>
 			<button data-act="forget">Forget wings</button>
+			<button data-act="movement" id="movement">Movement: smooth</button>
 		</div>
 		<div id="state"></div>
 		<div id="help">Left click: walk or the default action. Right click: all actions. Wheel: zoom.</div>

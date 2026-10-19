@@ -1,9 +1,9 @@
 // PROTOTYPE: boot the headquarters prototype: load art, build the world from seed or live.json, start in the hall.
-import { makeWalkAnims, PlaceScene } from "./place.js";
+import { makeCharacterAnims, PlaceScene } from "./place.js";
 import { gallery, hall, lane, T, wing } from "./places.js";
 import { derive, loadRemembered, saveRemembered, SEED, SEED_REMEMBERED } from "./world.js";
 
-const WALKERS = { "char-a": [30, 40], "char-b": [26, 40], "char-c": [40, 40], "char-d": [26, 40], "char-coord": [36, 40] };
+const CHARS = await fetch("assets/chars/manifest.json").then((r) => r.json());
 const SCENES = ["hall", "gallery", "wing-small", "wing-large"];
 const IMAGES = ["hall", "gallery", "wing-small", "wing-large", "door-closed", "door-open", "door-boarded", "banner-cream", "banner-red", "hq", "oak", "pine", "blossom", "lamp", "bench", "flowerbed", "signpost", "barrel"];
 
@@ -13,11 +13,10 @@ class Boot extends Phaser.Scene {
 	}
 	preload() {
 		for (const name of IMAGES) this.load.image(name, `${SCENES.includes(name) ? "raw-art" : "assets"}/${name}.png`);
-		for (const [name, [w, h]] of Object.entries(WALKERS)) this.load.spritesheet(name, `assets/${name}.png`, { frameWidth: w, frameHeight: h });
+		for (const [name, { frame }] of Object.entries(CHARS)) this.load.spritesheet(name, `assets/chars/${name}.png`, { frameWidth: frame[0], frameHeight: frame[1] });
 	}
 	create() {
-		for (const name of Object.keys(WALKERS)) this.textures.get(name).setFilter(Phaser.Textures.FilterMode.NEAREST);
-		makeWalkAnims(this, Object.keys(WALKERS));
+		makeCharacterAnims(this, Object.keys(CHARS));
 		this.scene.start("hall", { entry: "start" });
 	}
 }
@@ -26,7 +25,9 @@ const app = {
 	sessions: structuredClone(SEED),
 	source: "seed",
 	remembered: loadRemembered(SEED_REMEMBERED),
-	avatarLook: "char-c",
+	avatarLook: "avatar",
+	chars: CHARS,
+	movement: "smooth",
 	zoom: Math.max(1, Math.min(2.4, innerHeight / (13 * T))),
 	world: null,
 };
@@ -77,6 +78,10 @@ const actions = {
 	wing: () => {
 		app.remembered.push(`project-${++counter}`);
 		restart();
+	},
+	movement: () => {
+		app.movement = app.movement === "smooth" ? "tiles" : "smooth";
+		document.getElementById("movement").textContent = `Movement: ${app.movement}`;
 	},
 	forget: () => {
 		app.remembered = [];

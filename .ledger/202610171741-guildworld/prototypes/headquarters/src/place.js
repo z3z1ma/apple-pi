@@ -1,17 +1,22 @@
 // PROTOTYPE: one place as a Phaser scene: a painted (or tiled) backdrop, a walk grid, characters at their spots,
 // the operator's avatar, and RuneScape-style input (hover action, left-click default, right-click menu).
+// Movement has two modes to compare: "smooth" (a fine grid, string-pulled paths, continuous motion) and "tiles"
+// (RuneScape's tile-by-tile steps on the place's tile grid).
 import { Grid } from "./grid.js";
 import { closeChat, menuOpen, openMenu, say, showHover } from "./ui.js";
 import { lineFor } from "./world.js";
 
-const DIRS = ["down", "left", "right", "up"];
-const STEP_MS = 300;
-const PERSON_TILES = 1.75;
+const FINE = 2; // walk cells per tile in smooth mode
+const PERSON_TILES = 1.8;
+const STANDING = 120; // sprite pixels from head to feet in a standing frame (clean_characters.py HEIGHT)
+const SPEED = { smooth: 175, tiles: 120 }; // world px per second
+const FRAMES = { down: [0, 3], up: [4, 7], side: [8, 11], work: [12, 13] };
+const STILL = { down: 0, up: 4, side: 8, sitA: 12, stand: 14, ask: 15 };
 
 export class PlaceScene extends Phaser.Scene {
 	constructor(key, build) {
 		super(key);
-		this.build = build; // (scene, world) => place description, recomputed on each entry
+		this.build = build; // (scene, world, data) => place description, recomputed on each entry
 	}
 
 	init(data) {
@@ -26,28 +31,32 @@ export class PlaceScene extends Phaser.Scene {
 		this.place = place;
 		const T = place.tile;
 		this.T = T;
-		this.grid = new Grid(place.cols, place.rows);
-		for (const r of place.blocked) this.grid.block(r);
+		this.coarse = new Grid(place.cols, place.rows);
+		this.fine = new Grid(place.cols * FINE, place.rows * FINE);
+		for (const [x, y, w, h] of place.blocked) {
+			this.coarse.block([x, y, w, h]);
+			this.fine.block([x * FINE, y * FINE, w * FINE, h * FINE]);
+		}
+		closeChat();
+		showHover([]);
 		place.drawBackdrop(this);
 		this.hotspots = place.hotspots ?? [];
 		this.people = [];
 		for (const p of place.people) this.addPerson(p);
 		const start = place.entries[this.entry] ?? place.entries.start;
-		this.avatar = this.makeWalker(app.avatarLook, start, "down");
-		this.avatar.tile = [...start];
-		this.cameras.main.startFollow(this.avatar, true, 0.12, 0.12);
+		this.avatar = this.makeCharacter(app.avatarLook, this.tileCenter(start), STILL.up);
+		this.cameras.main.startFollow(this.avatar, true, 0.1, 0.1);
 		this.applyZoom();
 		this.cameras.main.fadeIn(220, 20, 14, 24);
 		this.input.mouse.disableContextMenu();
 		this.input.on("pointermove", (pointer) => showHover(this.actionsAt(pointer)));
 		this.input.on("pointerdown", (pointer) => this.click(pointer));
 		this.input.on("wheel", (_p, _o, _dx, dy) => {
-			app.zoom = Phaser.Math.Clamp(app.zoom * (dy > 0 ? 0.9 : 1.1), 0.6, 3);
+			app.zoom = Phaser.Math.Clamp(app.zoom * (dy > 0 ? 0.9 : 1.1), 0.5, 3);
 			this.applyZoom();
 		});
 		this.scale.on("resize", () => this.applyZoom());
 		document.getElementById("where").textContent = place.title;
-		app.onPlace?.(this);
 	}
 
 	applyZoom() {
@@ -61,29 +70,41 @@ export class PlaceScene extends Phaser.Scene {
 		this.cameras.main.setBounds(Math.min(0, (w - vw) / 2), Math.min(0, (h - vh) / 2), Math.max(w, vw), Math.max(h, vh));
 	}
 
-	center([x, y]) {
-		return [(x + 0.5) * this.T, (y + 0.5) * this.T];
+	tileCenter([x, y]) {
+		return { x: (x + 0.5) * this.T, y: (y + 0.5) * this.T };
 	}
 
-	makeWalker(look, tile, face) {
-		const [x, y] = this.center(tile);
-		const sprite = this.add.sprite(x, y + this.T * 0.45, look, DIRS.indexOf(face) * 4);
-		sprite.setOrigin(0.5, 1);
-		sprite.setScale((PERSON_TILES * this.T) / 40);
-		sprite.setDepth(sprite.y);
+	makeCharacter(look, at, frame) {
+		const shadow = this.add.ellipse(at.x, at.y + this.T * 0.42, this.T * 0.62, this.T * 0.2, 0x000000, 0.28);
+		const sprite = this.add.sprite(at.x, at.y + this.T * 0.45, look, frame).setOrigin(0.5, 1);
+		sprite.setScale((PERSON_TILES * this.T) / STANDING);
 		sprite.look = look;
+		sprite.shadow = shadow;
+		sprite.pos = { x: at.x, y: at.y };
+		sprite.facing = "up";
+		this.settle(sprite);
 		return sprite;
 	}
 
-	addPerson({ session, at, face = "down", look }) {
-		const sprite = this.makeWalker(look, at, face);
-		sprite.session = session;
+	/** Put a character's sprite and shadow at its feet position `pos`, sorted by depth. */
+	settle(sprite) {
+		sprite.setPosition(sprite.pos.x, sprite.pos.y + this.T * 0.45);
+		sprite.shadow.setPosition(sprite.pos.x, sprite.pos.y + this.T * 0.42).setDepth(sprite.y - 1);
+		sprite.setDepth(sprite.y);
+	}
+
+	addPerson({ session, at, look, pose = "stand" }) {
+		const s = session;
+		const frame = pose === "sit" ? (s.status === "waiting" ? STILL.ask : STILL.sitA) : s.status === "waiting" ? STILL.ask : STILL.stand;
+		const sprite = this.makeCharacter(look, this.tileCenter(at), frame);
+		sprite.session = s;
 		sprite.tile = [...at];
-		this.grid.block([at[0], at[1], 1, 1]);
-		const badge = this.add.container(sprite.x, sprite.y - sprite.displayHeight - 6).setDepth(100000);
-		this.drawBadge(badge, session);
-		this.people.push({ sprite, badge, session });
-		if (session.status === "busy") this.tweens.add({ targets: sprite, scaleY: sprite.scaleY * 1.03, yoyo: true, repeat: -1, duration: 650, ease: "Sine.inOut" });
+		this.coarse.block([at[0], at[1], 1, 1]);
+		this.fine.block([at[0] * FINE, at[1] * FINE, FINE, FINE]);
+		if (pose === "sit" && s.status === "busy") sprite.play(`${look}-work`);
+		const badge = this.add.container(sprite.x, sprite.y - sprite.displayHeight - 8).setDepth(100000);
+		this.drawBadge(badge, s);
+		this.people.push({ sprite, badge, session: s });
 	}
 
 	drawBadge(container, s) {
@@ -107,15 +128,15 @@ export class PlaceScene extends Phaser.Scene {
 		}
 	}
 
-	pointerTile(pointer) {
-		const p = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
-		return { world: p, tile: [Math.floor(p.x / this.T), Math.floor(p.y / this.T)] };
+	pointerWorld(pointer) {
+		return this.cameras.main.getWorldPoint(pointer.x, pointer.y);
 	}
 
 	/** Every action under the pointer, the default first, as RuneScape lists them. */
 	actionsAt(pointer) {
 		if (menuOpen()) return [];
-		const { world, tile } = this.pointerTile(pointer);
+		const world = this.pointerWorld(pointer);
+		const tile = [Math.floor(world.x / this.T), Math.floor(world.y / this.T)];
 		const actions = [];
 		const person = this.people.find((p) => p.sprite.getBounds().contains(world.x, world.y));
 		if (person) {
@@ -128,14 +149,13 @@ export class PlaceScene extends Phaser.Scene {
 			if (tile[0] >= x && tile[0] < x + w && tile[1] >= y && tile[1] < y + hh)
 				for (const v of h.verbs) actions.push({ verb: v.verb, target: h.name, run: () => this.approach(h.standAt, () => v.run(this), false, true) });
 		}
-		if (this.grid.free(...tile)) actions.push({ verb: "Walk here", run: () => this.walkTo(tile, world) });
+		actions.push({ verb: "Walk here", run: () => this.walkTo(world) });
 		return actions;
 	}
 
 	click(pointer) {
 		if (menuOpen()) return;
 		const actions = this.actionsAt(pointer);
-		if (!actions.length) return;
 		if (pointer.rightButtonDown()) openMenu(pointer.event.clientX, pointer.event.clientY, actions);
 		else actions[0].run();
 	}
@@ -148,78 +168,113 @@ export class PlaceScene extends Phaser.Scene {
 		this.tweens.add({ targets: g, scale: 0.3, alpha: 0, duration: 420, onComplete: () => g.destroy() });
 	}
 
-	walkTo(tile, world) {
+	/** Walk to a point; on a blocked spot, as close to it as the floor allows (RuneScape does the same). */
+	walkTo(world, then) {
 		closeChat();
 		this.marker(world, false);
-		const path = this.grid.path(this.avatar.tile, tile);
-		if (!path) return;
-		this.follow(path.slice(1));
+		this.route(world, then);
 	}
 
 	/** Walk next to a target, then act: the RuneScape rhythm. */
 	approach(target, act, person, exact) {
 		closeChat();
-		const [cx, cy] = this.center(target);
-		this.marker({ x: cx, y: cy }, true);
-		const stand = exact ? target : this.grid.besideNearest(target, this.avatar.tile);
+		this.marker(this.tileCenter(target), true);
+		const stand = exact ? target : this.coarse.besideNearest(target, this.avatarTile());
 		if (!stand) return;
-		const path = this.grid.path(this.avatar.tile, stand);
-		if (!path) return;
-		this.follow(path.slice(1), () => {
-			if (person) this.face(this.avatar, target);
+		this.route(this.tileCenter(stand), () => {
+			if (person) this.faceToward(this.avatar, this.tileCenter(target));
 			act();
 		});
 	}
 
-	follow(steps, then) {
-		this.walkToken = (this.walkToken ?? 0) + 1;
-		const token = this.walkToken;
-		const next = () => {
-			if (token !== this.walkToken) return;
-			const step = steps.shift();
-			if (!step) {
-				this.avatar.anims.stop();
-				this.avatar.setFrame(DIRS.indexOf(this.avatar.facing ?? "down") * 4);
-				then?.();
-				return;
-			}
-			const diagonal = step[0] !== this.avatar.tile[0] && step[1] !== this.avatar.tile[1];
-			this.face(this.avatar, step, true);
-			this.avatar.tile = step;
-			const [x, y] = this.center(step);
-			this.tweens.add({
-				targets: this.avatar,
-				x,
-				y: y + this.T * 0.45,
-				duration: STEP_MS * (diagonal ? 1.4 : 1),
-				onUpdate: () => this.avatar.setDepth(this.avatar.y),
-				onComplete: next,
-			});
-		};
-		next();
+	avatarTile() {
+		return [Math.floor(this.avatar.pos.x / this.T), Math.floor(this.avatar.pos.y / this.T)];
 	}
 
-	face(sprite, [tx, ty], walking) {
-		const [x, y] = sprite.tile;
-		const dx = tx - x;
-		const dy = ty - y;
-		const dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? "right" : "left") : dy < 0 ? "up" : "down";
-		sprite.facing = dir;
+	route(goal, then) {
+		const mode = this.app.movement;
+		const unit = mode === "smooth" ? this.T / FINE : this.T;
+		const grid = mode === "smooth" ? this.fine : this.coarse;
+		const cell = (p) => [Math.floor(p.x / unit), Math.floor(p.y / unit)];
+		const center = ([x, y]) => ({ x: (x + 0.5) * unit, y: (y + 0.5) * unit });
+		const from = cell(this.avatar.pos);
+		let to = cell(goal);
+		let exactGoal = grid.free(...to);
+		if (!exactGoal) {
+			to = nearestFree(grid, to);
+			if (!to) return;
+		}
+		const path = grid.path(from, to);
+		if (!path) return;
+		let points;
+		if (mode === "smooth") {
+			points = stringPull(grid, path).slice(1).map(center);
+			// Finish exactly on the clicked point when it is open floor, not on the cell's centre.
+			if (exactGoal && points.length) points[points.length - 1] = { x: goal.x, y: goal.y };
+			else if (exactGoal) points = [{ x: goal.x, y: goal.y }];
+		} else points = path.slice(1).map(center);
+		this.walk = { points, then };
+	}
+
+	update(_time, delta) {
+		const walk = this.walk;
+		if (!walk) return;
+		const a = this.avatar;
+		let budget = (SPEED[this.app.movement] * delta) / 1000;
+		while (budget > 0 && walk.points.length) {
+			const target = walk.points[0];
+			const dx = target.x - a.pos.x;
+			const dy = target.y - a.pos.y;
+			const dist = Math.hypot(dx, dy);
+			if (dist > 0.01) this.faceToward(a, target, true);
+			if (dist <= budget) {
+				a.pos = { x: target.x, y: target.y };
+				walk.points.shift();
+				budget -= dist;
+			} else {
+				a.pos = { x: a.pos.x + (dx / dist) * budget, y: a.pos.y + (dy / dist) * budget };
+				budget = 0;
+			}
+		}
+		this.settle(a);
+		if (!walk.points.length) {
+			this.walk = null;
+			a.anims.stop();
+			a.setFrame(STILL[a.facing === "left" || a.facing === "right" ? "side" : a.facing]);
+			walk.then?.();
+		}
+	}
+
+	faceToward(sprite, target, walking) {
+		const dx = target.x - sprite.pos.x;
+		const dy = target.y - sprite.pos.y;
+		const dir = Math.abs(dx) > Math.abs(dy) * 0.9 ? (dx > 0 ? "right" : "left") : dy < 0 ? "up" : "down";
+		sprite.setFlipX(dir === "right");
+		const row = dir === "left" || dir === "right" ? "side" : dir;
 		if (walking) {
-			const key = `${sprite.look}-${dir}`;
-			if (sprite.anims.currentAnim?.key !== key) sprite.play(key);
-		} else sprite.setFrame(DIRS.indexOf(dir) * 4);
+			const key = `${sprite.look}-${row}`;
+			if (sprite.anims.currentAnim?.key !== key || !sprite.anims.isPlaying) sprite.play(key);
+		} else sprite.setFrame(STILL[row]);
+		sprite.facing = dir;
 	}
 
 	talk(s) {
-		say(s.name, lineFor(s), s.status === "waiting" ? ["Show me the question.", "Later."] : ["Tell me more.", "Goodbye."]);
+		say(s.name, lineFor(s), s.status === "waiting" ? ["Show me the question.", "Later."] : ["Tell me more.", "Goodbye."], this.portraitFor(s));
 	}
 
 	examine(s) {
 		const bits = [s.coordinator ? "Coordinator of this guild." : s.repository ? `Works on ${s.repository}.` : "Works without a repository."];
 		if (s.task) bits.push(`Task: ${s.task}.`);
 		bits.push(s.awake ? `Status: ${s.status}${s.needsYou ? ", finished and unseen" : ""}.` : "Dormant.");
-		say(s.name, bits.join(" "));
+		say(s.name, bits.join(" "), ["Goodbye."], this.portraitFor(s));
+	}
+
+	portraitFor(s) {
+		const person = this.people.find((p) => p.session === s);
+		const look = person?.sprite.look;
+		if (!look || !this.app.chars[look]?.portraits) return null;
+		const mood = s.status === "waiting" ? 3 : s.needsYou ? 1 : s.status === "busy" ? 2 : 0;
+		return `assets/chars/${look}-portrait-${mood}.png`;
 	}
 
 	go(key, entry, extra = {}) {
@@ -232,10 +287,43 @@ export class PlaceScene extends Phaser.Scene {
 	}
 }
 
-export function makeWalkAnims(scene, looks) {
+/** The free cell nearest to `cell`, searched ring by ring. */
+function nearestFree(grid, [cx, cy]) {
+	for (let r = 1; r < Math.max(grid.w, grid.h); r++)
+		for (let dy = -r; dy <= r; dy++)
+			for (let dx = -r; dx <= r; dx++) {
+				if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+				if (grid.free(cx + dx, cy + dy)) return [cx + dx, cy + dy];
+			}
+	return null;
+}
+
+/** Drop every waypoint that a straight walk can skip, keeping clear of walls by a little more than a body's width. */
+function stringPull(grid, path) {
+	const clear = (a, b) => {
+		const steps = Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) * 4);
+		for (let i = 0; i <= steps; i++) {
+			const x = a[0] + 0.5 + ((b[0] - a[0]) * i) / steps;
+			const y = a[1] + 0.5 + ((b[1] - a[1]) * i) / steps;
+			for (const [ox, oy] of [[0, 0], [0.35, 0], [-0.35, 0], [0, 0.35], [0, -0.35]]) if (!grid.free(Math.floor(x + ox), Math.floor(y + oy))) return false;
+		}
+		return true;
+	};
+	const out = [path[0]];
+	let i = 0;
+	while (i < path.length - 1) {
+		let j = path.length - 1;
+		while (j > i + 1 && !clear(path[i], path[j])) j--;
+		out.push(path[j]);
+		i = j;
+	}
+	return out;
+}
+
+export function makeCharacterAnims(scene, looks) {
 	for (const look of looks)
-		DIRS.forEach((dir, row) => {
-			const key = `${look}-${dir}`;
-			if (!scene.anims.exists(key)) scene.anims.create({ key, frames: scene.anims.generateFrameNumbers(look, { start: row * 4, end: row * 4 + 3 }), frameRate: 8, repeat: -1 });
-		});
+		for (const [row, [start, end]] of Object.entries(FRAMES)) {
+			const key = `${look}-${row}`;
+			if (!scene.anims.exists(key)) scene.anims.create({ key, frames: scene.anims.generateFrameNumbers(look, { start, end }), frameRate: row === "work" ? 2 : 9, repeat: -1 });
+		}
 }
