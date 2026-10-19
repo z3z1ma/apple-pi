@@ -67,4 +67,31 @@ def test_prompts_state_the_grid_and_walk_phases():
     scene = pipeline.prompt("scene", "fantasy", "A guild hall.", grid="16 squares wide and 16 deep")
     assert "16 squares wide and 16 deep" in scene and "1.5 squares tall" in scene and "no seats" in scene.lower()
     sheet = pipeline.prompt("sheet", "tech-office", "A developer.")
-    assert "contact" in sheet and "passing" in sheet and "an office chair" in sheet
+    assert "contact" in sheet and "passing" in sheet and "an office chair" in sheet and "NO desk" in sheet
+
+
+def test_a_raised_hand_that_closes_the_gap_between_rows_still_gives_sixteen_frames(tmp_path):
+    raw, out = tmp_path / "raw.png", tmp_path / "out.png"
+    generated_sheet(raw, np.random.default_rng(4))
+    img = np.array(Image.open(raw))
+    img[270:440, 335:340] = (90, 60, 40)  # the last frame's raised arm reaches into the row above it
+    Image.fromarray(img).save(raw)
+    pipeline.sheet(raw, out)
+    assert json.loads(out.with_suffix(".json").read_text())["frames"] == 16
+    assert pipeline.problems(out) == []
+
+
+def test_a_piece_cut_to_the_image_edge_loses_its_pink_fringe(tmp_path):
+    raw, out = tmp_path / "raw.png", tmp_path / "pieces"
+    img = np.zeros((80, 200, 3), dtype=np.uint8)
+    img[:] = MAGENTA
+    for x in (20, 120):
+        img[10:70, x : x + 40] = (130, 12, 133)  # a dark blend of the key colour, outside the magenta key
+        img[12:68, x + 2 : x + 38] = (90, 60, 40)
+    Image.fromarray(img).save(raw)
+    pipeline.pieces(raw, out, ["left", "right"])
+    for name in ("left", "right"):
+        piece = np.array(Image.open(out / f"{name}.png").convert("RGBA")).astype(int)
+        opaque = piece[..., 3] > 0
+        pink = opaque & (piece[..., 0] > 110) & (piece[..., 2] > 90) & (piece[..., 1] < 60)
+        assert not pink.any()
