@@ -85,7 +85,8 @@ const actions = {
 	},
 	movement: () => {
 		app.movement = app.movement === "smooth" ? "tiles" : "smooth";
-		for (const el of [document.getElementById("settings-template").content.querySelector("#movement"), document.querySelector("#tab-body #movement")]) if (el) el.textContent = `Movement: ${app.movement}`;
+		document.getElementById("settings-template").content.querySelector("#movement").textContent = `Movement: ${app.movement}`;
+		refreshInterface();
 	},
 	grid: () => {
 		app.showGrid = !app.showGrid;

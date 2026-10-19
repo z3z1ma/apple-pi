@@ -66,7 +66,7 @@ function renderTab() {
 	else if (tab === "places") {
 		const places = [["Guild hall", "hall", "start", {}], ["Gallery of wings", "gallery", "hall", {}], ...app.world.wings.map((w) => [`${w.repo} wing`, "wing", "gallery", { repo: w.repo }]), ["Village square", "square", "hall", {}]];
 		const later = ["Forge", "Library", "Quest office", "Inn", "Rookery"];
-		body.innerHTML = `${places.map(([name, key, entry, extra], i) => `<div class="ui-row place" data-place="${i}"><span class="st idle">\u2302</span><span class="nm">${esc(name)}</span><span class="wh">travel</span></div>`).join("")}${later.map((n) => `<div class="ui-row muted"><span class="st dormant">\u2302</span><span class="nm">${n}</span><span class="wh">not built</span></div>`).join("")}`;
+		body.innerHTML = `${places.map(([name], i) => `<div class="ui-row place" data-place="${i}"><span class="st idle">\u2302</span><span class="nm">${esc(name)}</span><span class="wh">travel</span></div>`).join("")}${later.map((n) => `<div class="ui-row muted"><span class="st dormant">\u2302</span><span class="nm">${n}</span><span class="wh">not built</span></div>`).join("")}`;
 		body.querySelectorAll("[data-place]").forEach((el) => {
 			el.onclick = () => {
 				const [name, key, entry, extra] = places[Number(el.dataset.place)];
@@ -97,7 +97,7 @@ function act(r, verb) {
 	if (verb === "goto" && r.place) {
 		const [key, entry, extra] = r.place;
 		log("game", `You head to ${r.s.name}.`);
-		if (scene.scene.key === key && JSON.stringify(scene.enterData?.repo ?? null) === JSON.stringify(extra.repo ?? null)) scene.walkToPerson(r.s);
+		if (scene.scene.key === key && scene.enterData?.repo === extra.repo) scene.walkToPerson(r.s);
 		else scene.go(key, entry, { ...extra, seek: r.s.id });
 		return;
 	}
