@@ -7,7 +7,7 @@ import { hash } from "./util.js";
 export const T = 48;
 const AGENT_LOOKS = ["artificer", "scholar", "scout", "engineer", "mage"];
 const CHANNEL_LOOKS = ["crier", "merchant", "bard"];
-const look = (s) => (s.coordinator ? "coordinator" : s.channel ? CHANNEL_LOOKS[hash(s.id) % CHANNEL_LOOKS.length] : AGENT_LOOKS[hash(s.id) % AGENT_LOOKS.length]);
+const look = (s) => (s.coordinator ? "coordinator" : AGENT_LOOKS[hash(s.id) % AGENT_LOOKS.length]);
 
 function painted(key, w, h) {
 	return (scene) => scene.add.image(0, 0, key).setOrigin(0).setDisplaySize(w, h).setDepth(0);
