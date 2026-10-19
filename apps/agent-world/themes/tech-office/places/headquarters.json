@@ -55,8 +55,11 @@
     { "kind": "glow", "at": [1.75, 5.3], "r": 0.8 },
     { "kind": "glow", "at": [28.55, 10.6], "r": 0.9 },
     { "kind": "glow", "at": [28.7, 2.05], "r": 0.8 },
-    { "kind": "fidget", "at": [6.5, 4.6] },
-    { "kind": "fidget", "at": [23.5, 4.8] }
+    { "kind": "fidget", "fidget": "pet", "at": [24.0, 15.2], "name": "Bitsy" },
+    { "kind": "fidget", "fidget": "box", "at": [22.0, 8.45] },
+    { "kind": "fidget", "fidget": "spin", "at": [7.6, 8.3] },
+    { "kind": "fidget", "fidget": "sleeper", "at": [28.4, 14.0] },
+    { "kind": "fidget", "fidget": "bell", "at": [16.6, 3.95] }
   ],
   "enterBy": "Front doors",
   "foreground": [

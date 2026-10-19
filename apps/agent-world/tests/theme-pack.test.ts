@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { cpSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import { cpSync, mkdtempSync, readdirSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -43,7 +43,8 @@ describe("the real packs", () => {
 	});
 });
 
-describe("a broken pack names the file and the fault", () => {
+// Each test copies and checks a whole pack: alone well under a second, but slow while the headless suites run.
+describe("a broken pack names the file and the fault", { timeout: 30_000 }, () => {
 	it("a required piece missing: an overlay, a portrait, a place's data, a painting", async () => {
 		const dir = brokenPack((d) => {
 			unlinkSync(join(d, "overlays/door-boarded.png"));
@@ -205,6 +206,72 @@ describe("a broken pack names the file and the fault", () => {
 				`places/headquarters.json: spot 0 [${inside.join(", ")}] is not on open floor`,
 				`places/headquarters.json: entry from start [${inside.join(", ")}] is not on open floor`,
 				`places/headquarters.json: door ${hall.doors[0].name}'s stand point [-1, 3] lies outside its grid`,
+			]),
+		);
+	});
+});
+
+// Fidget objects (ticket 29) are optional pieces: a pack without any passes, but one a place holds is checked.
+describe("fidget objects are optional but checked where a place holds them", { timeout: 30_000 }, () => {
+	const noFidgets = (d: string) => {
+		for (const file of readdirSync(join(d, "places")).filter((f) => f.endsWith(".json")))
+			editJson(join(d, "places", file), (place) => {
+				place.overlaySlots = place.overlaySlots.filter((slot: { kind: string }) => slot.kind !== "fidget");
+			});
+		editJson(join(d, "theme.json"), (theme) => {
+			delete theme.fidgets;
+		});
+	};
+
+	it("every real pack places fidget objects in every place", () => {
+		for (const theme of ["fantasy", "tech-office", "anime-school"])
+			for (const file of readdirSync(join(themesDir, theme, "places")).filter((f) => f.endsWith(".json"))) {
+				const place = JSON.parse(readFileSync(join(themesDir, theme, "places", file), "utf8"));
+				const kinds = place.overlaySlots.filter((slot: { kind: string }) => slot.kind === "fidget");
+				expect(kinds.length, `${theme}/${file}`).toBeGreaterThanOrEqual(2);
+			}
+	});
+
+	it("a pack with no fidget objects and none of their art passes", async () => {
+		const dir = brokenPack((d) => {
+			noFidgets(d);
+			for (const name of ["pet-0", "spin-0", "bell-still", "light-on", "box-open", "cat-sleeping", "tome"])
+				unlinkSync(join(d, `overlays/${name}.png`));
+		});
+		expect(lines(await checkThemePack(dir))).toEqual([]);
+	});
+
+	it("a fidget slot without a known kind, a placed kind without its art or its names, and a half-named kind", async () => {
+		const dir = brokenPack((d) => {
+			noFidgets(d);
+			editJson(join(d, "places/inn.json"), (place) => {
+				place.overlaySlots.push(
+					{ kind: "fidget", at: [12, 7.5] },
+					{ kind: "fidget", fidget: "yo-yo", at: [12, 8] },
+					{ kind: "fidget", fidget: "pet", at: [12, 8.5] },
+					{ kind: "fidget", fidget: "tome", at: [12, 9], w: -1 },
+				);
+			});
+			unlinkSync(join(d, "overlays/pet-2.png"));
+			editJson(join(d, "theme.json"), (theme) => {
+				theme.fidgets = {
+					tome: { name: "Tome", examine: "Old.", verbs: {} },
+					kite: { name: "Kite" },
+					box: { name: "Box", examine: "A box.", verbs: { open: "Open", close: "Close" }, particle: "confetti" },
+				};
+			});
+		});
+		expect(lines(await checkThemePack(dir))).toEqual(
+			expect.arrayContaining([
+				"places/inn.json: a fidget slot at [12, 7.5] names no kind; fidget is one of pet, spin, bell, handbell, light, box, sleeper, candle, tome",
+				'places/inn.json: a fidget slot at [12, 8] names "yo-yo"; fidget is one of pet, spin, bell, handbell, light, box, sleeper, candle, tome',
+				"places/inn.json: a fidget slot at [12, 9] has a width (w) that is not a number of tiles",
+				"overlays/pet-2.png: is missing",
+				"theme.json: has no fidgets.pet, which places/inn.json places",
+				"theme.json: fidgets.tome has no verb for leaf",
+				"theme.json: fidgets.tome has no lines to show when it is leafed through",
+				'theme.json: fidgets names "kite", which is not a kind of fidget (pet, spin, bell, handbell, light, box, sleeper, candle, tome)',
+				"theme.json: fidgets.box.particle is not one of hearts, notes, sparkles, steam, bubbles, smoke, zzz",
 			]),
 		);
 	});

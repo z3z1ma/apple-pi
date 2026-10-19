@@ -135,7 +135,10 @@
       "kind": "glow",
       "at": [27.46, 11.12],
       "r": 0.65
-    }
+    },
+    { "kind": "fidget", "fidget": "pet", "at": [6.4, 6.3], "name": "Ember" },
+    { "kind": "fidget", "fidget": "sleeper", "at": [4.6, 14.25] },
+    { "kind": "fidget", "fidget": "box", "at": [24.6, 14.2] }
   ],
   "enterBy": "Hall doors",
   "foreground": [

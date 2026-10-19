@@ -48,8 +48,11 @@
   "furniture": [{ "name": "Librarian's counter", "rect": [8.4, 2.4, 6.9, 1.65], "use": "librarian" }],
   "overlaySlots": [
     { "kind": "glow", "at": [8.72, 0.9], "r": 1.0 },
-    { "kind": "fidget", "at": [2.9, 4.1] },
-    { "kind": "fidget", "at": [6.6, 3.9] }
+    { "kind": "fidget", "fidget": "sleeper", "at": [5.2, 2.6] },
+    { "kind": "fidget", "fidget": "pet", "at": [6.6, 4.1] },
+    { "kind": "fidget", "fidget": "tome", "at": [6.4, 6.9] },
+    { "kind": "fidget", "fidget": "light", "at": [17.4, 6.7] },
+    { "kind": "fidget", "fidget": "bell", "at": [13.0, 3.4] }
   ],
   "foreground": [
     { "rect": [8.4, 2.4, 6.9, 1.65], "feet": 4.05 },

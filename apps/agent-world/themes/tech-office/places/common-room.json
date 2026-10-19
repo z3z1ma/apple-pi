@@ -49,8 +49,6 @@
     }
   ],
   "overlaySlots": [
-    { "kind": "fidget", "at": [11.14, 2.19] },
-    { "kind": "fidget", "at": [3.08, 9.23] },
     { "kind": "glow", "at": [8.27, 0.68], "r": 1.0 },
     { "kind": "glow", "at": [9.43, 0.96], "r": 1.0 },
     { "kind": "glow", "at": [11.46, 1.23], "r": 1.0 },
@@ -61,7 +59,11 @@
     { "kind": "glow", "at": [12.72, 8.89], "r": 0.7 },
     { "kind": "glow", "at": [16.48, 3.21], "r": 0.8 },
     { "kind": "glow", "at": [17.16, 2.53], "r": 0.7 },
-    { "kind": "glow", "at": [19.72, 7.59], "r": 0.8 }
+    { "kind": "glow", "at": [19.72, 7.59], "r": 0.8 },
+    { "kind": "fidget", "fidget": "sleeper", "at": [5.2, 3.8] },
+    { "kind": "fidget", "fidget": "pet", "at": [3.4, 9.5] },
+    { "kind": "fidget", "fidget": "box", "at": [9.6, 2.95] },
+    { "kind": "fidget", "fidget": "spin", "at": [13.9, 6.9] }
   ],
   "enterBy": "Doorway to the main floor",
   "foreground": [

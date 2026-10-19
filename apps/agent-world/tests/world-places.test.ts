@@ -199,7 +199,8 @@ test("fire, water, and warm lights animate in their slots in every place", async
 		];
 		for (const [data, label, key, name] of places) {
 			if (data !== "headquarters") await travel(page, label, key);
-			const slots = fantasy(data).overlaySlots.filter((slot) => slot.kind !== "banner");
+			// Fidget objects are drawn by their own module and read through `fidgets()` (world-fidgets.test.ts).
+			const slots = fantasy(data).overlaySlots.filter((slot) => slot.kind !== "banner" && slot.kind !== "fidget");
 			const before = await overlays(page);
 			// One overlay per slot (the gallery shows the niches it has room for).
 			const kinds = (list: { kind: string }[]) => list.map((o) => o.kind).sort();

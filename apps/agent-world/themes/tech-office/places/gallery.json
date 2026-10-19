@@ -32,7 +32,9 @@
     { "kind": "glow", "at": [18.72, 3.6], "r": 1.0 },
     { "kind": "glow", "at": [24.08, 3.6], "r": 1.0 },
     { "kind": "glow", "at": [29.4, 3.6], "r": 1.0 },
-    { "kind": "glow", "at": [14.61, 12.45], "r": 0.8 }
+    { "kind": "glow", "at": [14.61, 12.45], "r": 0.8 },
+    { "kind": "fidget", "fidget": "spin", "at": [4.3, 12.35] },
+    { "kind": "fidget", "fidget": "bell", "at": [28.4, 12.35] }
   ],
   "foreground": [
     { "rect": [0, 11.2, 5.3, 3.6], "feet": 14.8 },

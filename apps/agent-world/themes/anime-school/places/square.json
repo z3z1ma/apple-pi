@@ -126,6 +126,9 @@
     { "kind": "glow", "at": [33.29, 5.63], "r": 0.8 },
     { "kind": "glow", "at": [35.08, 5.63], "r": 0.8 },
     { "kind": "glow", "at": [38.29, 6.15], "r": 0.8 },
-    { "kind": "glow", "at": [39.85, 6.15], "r": 0.8 }
+    { "kind": "glow", "at": [39.85, 6.15], "r": 0.8 },
+    { "kind": "fidget", "fidget": "sleeper", "at": [17.6, 17.2] },
+    { "kind": "fidget", "fidget": "pet", "at": [24.0, 16.6] },
+    { "kind": "fidget", "fidget": "bell", "at": [29.6, 13.6] }
   ]
 }

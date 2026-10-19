@@ -188,7 +188,10 @@
       "kind": "glow",
       "at": [2.15, 9.66],
       "r": 0.7
-    }
+    },
+    { "kind": "fidget", "fidget": "pet", "at": [26.8, 7.2] },
+    { "kind": "fidget", "fidget": "sleeper", "at": [3.4, 6.7] },
+    { "kind": "fidget", "fidget": "tome", "at": [5.3, 5.6] }
   ],
   "enterBy": "Door to the gallery",
   "foreground": [

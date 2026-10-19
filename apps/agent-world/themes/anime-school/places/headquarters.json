@@ -59,8 +59,11 @@
     { "kind": "glow", "at": [10.35, 0.35], "r": 1.3 },
     { "kind": "glow", "at": [15, 0.4], "r": 1.3 },
     { "kind": "glow", "at": [19.4, 0.4], "r": 1.3 },
-    { "kind": "fidget", "at": [11.8, 2.6] },
-    { "kind": "fidget", "at": [6.2, 4.6] },
-    { "kind": "fidget", "at": [23.8, 4.9] }
+    { "kind": "fidget", "fidget": "spin", "at": [8.3, 3.0] },
+    { "kind": "fidget", "fidget": "sleeper", "at": [6.8, 5.6] },
+    { "kind": "fidget", "fidget": "bell", "at": [24.4, 3.1] },
+    { "kind": "fidget", "fidget": "pet", "at": [23.8, 5.3], "name": "Mochi" },
+    { "kind": "fidget", "fidget": "light", "at": [25.6, 15.2] },
+    { "kind": "fidget", "fidget": "box", "at": [3.4, 15.0] }
   ]
 }

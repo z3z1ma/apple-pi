@@ -90,7 +90,11 @@
       "kind": "glow",
       "at": [14.6, 8.99],
       "r": 0.7
-    }
+    },
+    { "kind": "fidget", "fidget": "sleeper", "at": [5.3, 2.75] },
+    { "kind": "fidget", "fidget": "pet", "at": [12.9, 4.75], "name": "Marmalade" },
+    { "kind": "fidget", "fidget": "handbell", "at": [21.25, 8.15] },
+    { "kind": "fidget", "fidget": "spin", "at": [15.5, 2.95] }
   ],
   "enterBy": "Archway to the hall",
   "foreground": [

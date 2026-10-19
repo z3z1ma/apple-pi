@@ -73,7 +73,9 @@
   ],
   "overlaySlots": [
     { "kind": "banner", "at": [14.97, 0.1] },
-    { "kind": "fidget", "at": [2.8, 11.5] },
-    { "kind": "fidget", "at": [27.6, 11.8] }
+    { "kind": "fidget", "fidget": "pet", "at": [2.8, 11.5] },
+    { "kind": "fidget", "fidget": "sleeper", "at": [27.6, 11.8] },
+    { "kind": "fidget", "fidget": "spin", "at": [8.6, 3.55] },
+    { "kind": "fidget", "fidget": "box", "at": [10.0, 15.05] }
   ]
 }

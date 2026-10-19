@@ -91,7 +91,11 @@
     { "kind": "glow", "at": [37.95, 10.44], "r": 1.2 },
     { "kind": "glow", "at": [37.95, 15.24], "r": 1.2 },
     { "kind": "glow", "at": [12.27, 5.52], "r": 0.8 },
-    { "kind": "glow", "at": [17.43, 5.9], "r": 0.8 }
+    { "kind": "glow", "at": [17.43, 5.9], "r": 0.8 },
+    { "kind": "fidget", "fidget": "sleeper", "at": [7.0, 18.9] },
+    { "kind": "fidget", "fidget": "pet", "at": [13.6, 15.0] },
+    { "kind": "fidget", "fidget": "box", "at": [31.0, 12.75] },
+    { "kind": "fidget", "fidget": "spin", "at": [9.7, 12.4] }
   ],
   "host": { "look": "crier", "at": [20.0, 17.2] },
   "enterBy": "Cafe lounge",

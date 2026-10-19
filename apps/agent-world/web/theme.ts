@@ -5,6 +5,9 @@
 import {
 	checkPack,
 	describeProblems,
+	FIDGETS,
+	type FidgetKind,
+	type FidgetStyle,
 	fill,
 	type Look,
 	type PackProblem,
@@ -19,6 +22,10 @@ import {
 
 export {
 	type Door,
+	FIDGETS,
+	type FidgetKind,
+	type FidgetParticle,
+	type FidgetStyle,
 	type Look,
 	type OverlaySlot,
 	PLACE_FILES,
@@ -46,6 +53,8 @@ export interface Theme {
 	/** The skin's stylesheet URL. */
 	skin: string;
 	world: WorldStyle;
+	/** How it names and dresses each kind of fidget object its places hold. */
+	fidgets: Partial<Record<FidgetKind, FidgetStyle>>;
 }
 
 export type TextKey = (typeof TEXT_KEYS)[number];
@@ -83,6 +92,14 @@ export const OVERLAYS = [
 	"notice-progress",
 	"notice-done",
 ] as const;
+
+/** The fidget objects' sprites a pack's places use (only kinds it places: the rest are optional and may be absent). */
+export function fidgetArt(theme: Pick<Theme, "places">): string[] {
+	const kinds = new Set<FidgetKind>();
+	for (const place of Object.values(theme.places))
+		for (const slot of place.overlaySlots) if (slot.kind === "fidget" && slot.fidget) kinds.add(slot.fidget);
+	return [...kinds].flatMap((kind) => FIDGETS[kind].art);
+}
 
 /** A pack the world would not switch to, with why: each problem as `file: fault`. */
 export class ThemeProblem extends Error {
@@ -157,6 +174,7 @@ export async function loadTheme(id: string): Promise<Theme> {
 		style: Object.fromEntries(Object.entries(manifest.style).map(([token, css]) => [token, resolveUrls(css, url)])),
 		skin: url + manifest.skin,
 		world: manifest.world,
+		fidgets: manifest.fidgets ?? {},
 	};
 }
 

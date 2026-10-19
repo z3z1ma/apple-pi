@@ -23,6 +23,7 @@ const theme: Theme = {
 	style: manifest.style,
 	skin: "themes/fantasy/interface/skin.css",
 	world: manifest.world,
+	fidgets: {},
 };
 
 const character = (id: string, facts: Partial<CharacterFacts> = {}): Character => ({

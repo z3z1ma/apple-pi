@@ -24,7 +24,10 @@
       "to": "headquarters"
     }
   ],
-  "overlaySlots": [],
+  "overlaySlots": [
+    { "kind": "fidget", "fidget": "sleeper", "at": [31.0, 5.6] },
+    { "kind": "fidget", "fidget": "pet", "at": [5.0, 11.0] }
+  ],
   "niches": {
     "at": [6.864, 11.409, 16.0, 20.573, 25.127],
     "door": [-1.56, 1.95, 3.12, 4.05],

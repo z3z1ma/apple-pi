@@ -105,6 +105,56 @@ export const SLOT_OVERLAYS: Record<string, readonly string[]> = {
 	notice: ["notice-open", "notice-urgent", "notice-progress", "notice-done"],
 };
 
+/**
+ * Fidget objects (decision 27): pure play in a place's `fidget` slots, never work. Each kind names its sprites and its
+ * plays, the first of which is what a left click does (a toggle offers the one that fits its state). A pack that
+ * places a kind draws its sprites and names it in `theme.json`'s `fidgets` (its name, an Examine line, and a verb for
+ * each play); a pack that places none needs neither. `w` is how wide it stands, in tiles, unless the pack or the slot
+ * says otherwise.
+ */
+export const FIDGETS = {
+	/** A cat or a dog: sitting, being petted, stretching, a playful pose. */
+	pet: { art: ["pet-0", "pet-1", "pet-2", "pet-3"], plays: ["pet", "play"], w: 0.95 },
+	/** A globe, a spinner, a goldfish bowl: four frames of one loop. */
+	spin: { art: ["spin-0", "spin-1", "spin-2", "spin-3"], plays: ["spin", "nudge"], w: 0.65 },
+	/** A bell on a stand, still and ringing. */
+	bell: { art: ["bell-still", "bell-ringing"], plays: ["ring", "peal"], w: 0.6 },
+	/** A bell in the hand, rung by swinging it. */
+	handbell: { art: ["bell"], plays: ["ring", "peal"], w: 0.32 },
+	/** A candelabra, a lamp, a lantern: off and on, with a glow. */
+	light: { art: ["light-off", "light-on"], plays: ["on", "off"], w: 0.5 },
+	/** A music box, an espresso machine, a bento: closed and open. */
+	box: { art: ["box-closed", "box-open"], plays: ["open", "close"], w: 0.7 },
+	/** A pet curled up asleep. */
+	sleeper: { art: ["cat-sleeping"], plays: ["pet", "boop"], w: 0.95 },
+	/** A lit candle or lamp that stays lit. */
+	candle: { art: ["candle"], plays: ["blow", "cup"], w: 0.36 },
+	/** A book, a tablet, a notebook: leafed through, it shows a line. */
+	tome: { art: ["tome"], plays: ["leaf"], w: 0.75 },
+} as const satisfies Record<string, { art: readonly string[]; plays: readonly string[]; w: number }>;
+
+export type FidgetKind = keyof typeof FIDGETS;
+
+/** The little drawn things a play gives off. */
+export const FIDGET_PARTICLES = ["hearts", "notes", "sparkles", "steam", "bubbles", "smoke", "zzz"] as const;
+export type FidgetParticle = (typeof FIDGET_PARTICLES)[number];
+
+/** How a pack names and dresses one kind of fidget object (`theme.json`'s `fidgets`). */
+export interface FidgetStyle {
+	/** What it is called in hover text and the menu ("Ginger cat"); a slot's own `name` wins. */
+	name: string;
+	/** What Examine says; `{name}` is filled in. */
+	examine: string;
+	/** The verb for each of the kind's plays ("Pet", "Play with"). */
+	verbs: Record<string, string>;
+	/** Its width in tiles where a slot gives none. */
+	w?: number;
+	/** What its main play gives off, instead of the kind's own. */
+	particle?: FidgetParticle;
+	/** A tome's lines, one shown each time it is leafed through. */
+	lines?: string[];
+}
+
 /** What a place must have beyond the shared format: its host's look role, and slots it cannot do without. */
 export const PLACE_NEEDS: Record<string, { host?: string; slots?: Record<string, string> }> = {
 	forge: { host: "smith", slots: { work: "the forge lays its pull requests on them" } },
@@ -306,6 +356,8 @@ export interface ThemeManifest {
 	/** The skin's stylesheet, relative to the pack. */
 	skin: string;
 	world: WorldStyle;
+	/** Each kind of fidget object its places hold (`FIDGETS`), by kind; optional. */
+	fidgets?: Partial<Record<FidgetKind, FidgetStyle>>;
 }
 
 export type Rect = [x: number, y: number, w: number, h: number];
@@ -366,7 +418,8 @@ export interface PlaceData {
  * Where an overlay goes over a painting. `fire` stands on the hearth floor at `at` (its bottom centre), `w` tiles
  * wide; `water` fills the ellipse at `at` with radii `rx`, `ry`, except `hole` (a polygon, such as a fountain's
  * pillar); `glow` is warm light around a lantern or candle at `at`, `r` tiles across its halo; `banner` hangs its rod
- * at `at`; `fidget` is a bare spot for something to play with; `bed` stands a bed `w` tiles wide with its foot's
+ * at `at`; `fidget` is a bare spot (floor or a furniture top) where a `fidget` object stands, its bottom centre at `at`,
+ * `w` tiles wide; `bed` stands a bed `w` tiles wide with its foot's
  * bottom centre at `at`, in which whoever takes spot `spot` sleeps (the spot is where it climbs in); `window` is where
  * birds fly in and out; `letters` is where a pile of letters (`w` tiles wide) lies while mail waits; `work` is a place
  * on a workbench where a piece of work (a pull request at the forge) lies, `w` tiles wide, its bottom centre at `at`;
@@ -386,8 +439,12 @@ export interface OverlaySlot {
 	 * flatter along its bench; `at` stays the bottom centre of what it covers.
 	 */
 	turn?: number;
-	/** Brief-named slots (a forge's mats, a notice board) carry a name; the world draws only the kinds above. */
+	/** Brief-named slots (a forge's mats, a notice board) carry a name; a fidget's names it ("Biscuit"). */
 	name?: string;
+	/** A `fidget` slot's kind of object (`FIDGETS`): drawn standing with its bottom centre at `at`, `w` tiles wide. */
+	fidget?: FidgetKind;
+	/** A light (or a box) that starts on (or open) when the app starts. */
+	on?: boolean;
 }
 
 export interface Look {
@@ -549,7 +606,54 @@ function checkManifest(value: unknown, id: string, problems: PackProblem[]): The
 	const notice = world.notice;
 	if (notice !== undefined && (!isObject(notice) || !isRect(notice.paper) || !notice.paper.every(isFraction)))
 		fault("world.notice needs paper as fractions [x, y, w, h] of the notice sprites");
+	checkFidgetStyles(value.fidgets, fault);
 	return value as unknown as ThemeManifest;
+}
+
+const isText = (value: unknown): value is string => typeof value === "string" && value.trim().length > 0;
+const isFidget = (kind: unknown): kind is FidgetKind => typeof kind === "string" && Object.hasOwn(FIDGETS, kind);
+
+/** The manifest's `fidgets`, when there: each a known kind with its name, Examine line, and a verb for every play. */
+function checkFidgetStyles(fidgets: unknown, fault: (text: string) => void) {
+	if (fidgets === undefined) return;
+	if (!isObject(fidgets)) return fault("fidgets is not an object of fidget kinds");
+	for (const [kind, style] of Object.entries(fidgets)) {
+		if (!isFidget(kind)) {
+			fault(
+				`fidgets names ${JSON.stringify(kind)}, which is not a kind of fidget (${Object.keys(FIDGETS).join(", ")})`,
+			);
+			continue;
+		}
+		if (!isObject(style)) {
+			fault(`fidgets.${kind} is not an object`);
+			continue;
+		}
+		if (!isText(style.name)) fault(`fidgets.${kind} has no name`);
+		if (!isText(style.examine)) fault(`fidgets.${kind} has no examine line`);
+		const verbs = isObject(style.verbs) ? style.verbs : {};
+		const missing = FIDGETS[kind].plays.filter((play) => !isText(verbs[play]));
+		if (missing.length) fault(`fidgets.${kind} has no verb for ${missing.join(", ")}`);
+		if (style.w !== undefined && !(isNumber(style.w) && style.w > 0))
+			fault(`fidgets.${kind}.w is not a width in tiles`);
+		if (style.particle !== undefined && !FIDGET_PARTICLES.includes(style.particle as FidgetParticle))
+			fault(`fidgets.${kind}.particle is not one of ${FIDGET_PARTICLES.join(", ")}`);
+		if (kind === "tome" && !(Array.isArray(style.lines) && style.lines.length > 0 && style.lines.every(isText)))
+			fault("fidgets.tome has no lines to show when it is leafed through");
+	}
+}
+
+/** A bed names a spot the place has; a `fidget` slot names a known kind, and a width in tiles if it gives one. */
+function checkSlot(slot: OverlaySlot, place: PlaceData, fault: (text: string) => void) {
+	if (slot.kind === "bed" && slot.spot !== undefined && !place.spots[slot.spot])
+		fault(`a bed at ${fmt(slot.at)} names spot ${slot.spot}, which it does not have`);
+	if (slot.kind !== "fidget") return;
+	if (!isFidget(slot.fidget))
+		fault(
+			`a fidget slot at ${fmt(slot.at)} names ${slot.fidget === undefined ? "no kind" : JSON.stringify(slot.fidget)}; ` +
+				`fidget is one of ${Object.keys(FIDGETS).join(", ")}`,
+		);
+	else if (slot.w !== undefined && !(isNumber(slot.w) && slot.w > 0))
+		fault(`a fidget slot at ${fmt(slot.at)} has a width (w) that is not a number of tiles`);
 }
 
 function checkPlace(name: string, value: unknown, painting: PackImage | undefined, problems: PackProblem[]) {
@@ -606,9 +710,7 @@ function checkPlace(name: string, value: unknown, painting: PackImage | undefine
 	if (needs?.host && !isObject(place.host)) fault(`has no host; the ${name} needs its ${needs.host}`);
 	for (const [kind, why] of Object.entries(needs?.slots ?? {}))
 		if (!place.overlaySlots.some((slot) => slot.kind === kind)) fault(`has no ${kind} slots; ${why}`);
-	for (const slot of place.overlaySlots)
-		if (slot.kind === "bed" && slot.spot !== undefined && !place.spots[slot.spot])
-			fault(`a bed at ${fmt(slot.at)} names spot ${slot.spot}, which it does not have`);
+	for (const slot of place.overlaySlots) checkSlot(slot, place, fault);
 	if (place.niches) {
 		const { at, layouts, repeat } = place.niches;
 		if (!Array.isArray(at) || !at.every((x) => isNumber(x) && x >= 0 && x <= place.cols))
@@ -738,6 +840,8 @@ async function checkPlaces(reader: PackReader, problems: PackProblem[]) {
 	/** Each place's host look, by place. */
 	const hostOf: Record<string, string> = {};
 	const slotKinds = new Set<string>();
+	/** The kinds of fidget object placed, and the first place file placing each. */
+	const fidgets = new Map<FidgetKind, string>();
 	for (const name of PLACE_FILES) {
 		const file = `places/${name}.json`;
 		const place = await json(reader, file, problems);
@@ -755,10 +859,13 @@ async function checkPlaces(reader: PackReader, problems: PackProblem[]) {
 			hosts.push(data.host.look);
 			hostOf[name] = data.host.look;
 		}
-		for (const slot of Array.isArray(data.overlaySlots) ? data.overlaySlots : [])
-			if (isObject(slot)) slotKinds.add(String(slot.kind));
+		for (const slot of Array.isArray(data.overlaySlots) ? data.overlaySlots : []) {
+			if (!isObject(slot)) continue;
+			slotKinds.add(String(slot.kind));
+			if (slot.kind === "fidget" && isFidget(slot.fidget) && !fidgets.has(slot.fidget)) fidgets.set(slot.fidget, file);
+		}
 	}
-	return { hosts, hostOf, slotKinds };
+	return { hosts, hostOf, slotKinds, fidgets };
 }
 
 /**
@@ -770,7 +877,7 @@ export async function checkPack(reader: PackReader, id: string, { pixels = true 
 	const problems: PackProblem[] = [];
 	const manifest = checkManifest(await json(reader, "theme.json", problems), id, problems);
 	if (manifest && typeof manifest.skin === "string") await checkSkin(reader, manifest, problems);
-	const { hosts, hostOf, slotKinds } = await checkPlaces(reader, problems);
+	const { hosts, hostOf, slotKinds, fidgets } = await checkPlaces(reader, problems);
 	const looks = await json(reader, "characters/looks.json", problems);
 	if (looks !== undefined) await checkLooks(reader, looks, hosts, pixels, problems);
 	// A function place's host wears a look made for its role (the quest office's clerk, not an agent).
@@ -782,7 +889,17 @@ export async function checkPack(reader: PackReader, id: string, { pixels = true 
 	}
 	if (slotKinds.has("bed") && manifest && isObject(manifest.world) && manifest.world.bed === undefined)
 		problems.push({ file: "theme.json", fault: "has no world.bed, which its places' bed slots need" });
-	const overlays = [...REQUIRED_OVERLAYS, ...[...slotKinds].flatMap((kind) => SLOT_OVERLAYS[kind] ?? [])];
+	// Fidget objects are optional, but one a place holds is drawn and named by the pack.
+	// A manifest that did not read is reported once, not again for every kind its places hold.
+	const styles = manifest && isObject(manifest.fidgets) ? manifest.fidgets : {};
+	for (const [kind, place] of fidgets)
+		if (manifest && !isObject(styles[kind]))
+			problems.push({ file: "theme.json", fault: `has no fidgets.${kind}, which ${place} places` });
+	const overlays = [
+		...REQUIRED_OVERLAYS,
+		...[...slotKinds].flatMap((kind) => SLOT_OVERLAYS[kind] ?? []),
+		...[...fidgets.keys()].flatMap((kind) => FIDGETS[kind].art),
+	];
 	for (const name of overlays) {
 		const file = `overlays/${name}.png`;
 		if (!(await reader.image(file))) problems.push({ file, fault: "is missing" });

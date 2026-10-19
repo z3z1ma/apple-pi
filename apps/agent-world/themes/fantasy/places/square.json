@@ -188,7 +188,10 @@
       "kind": "glow",
       "at": [37.08, 7.74],
       "r": 0.9
-    }
+    },
+    { "kind": "fidget", "fidget": "bell", "at": [17.3, 12.4], "name": "Town bell" },
+    { "kind": "fidget", "fidget": "sleeper", "at": [15.4, 19.9] },
+    { "kind": "fidget", "fidget": "pet", "at": [7.0, 15.0], "name": "Stray tabby" }
   ],
   "host": { "look": "crier", "at": [16.0, 12.3] },
   "enterBy": "Inn",

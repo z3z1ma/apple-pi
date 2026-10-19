@@ -25,6 +25,8 @@ import {
 	poseFor,
 	tempoFor,
 } from "./character-life.js";
+import { floorFidgets } from "./fidget-spots.js";
+import { Fidgets, type FidgetView, type Glow } from "./fidgets.js";
 import { assignSpots, charactersIn, doorOf, type Layout, layoutFor, startPlace, walkGrid } from "./layout.js";
 import { clearanceAt, findPath, type Grid, gridFor, isOpen } from "./pathing.js";
 import { ForgeBenches, type WorkView } from "./places/forge.js";
@@ -268,6 +270,8 @@ export class PlaceScene extends Phaser.Scene {
 	private benches?: ForgeBenches;
 	/** At the quest office: the issues assigned to the operator, pinned on its board. */
 	private questBoard?: QuestBoard;
+	/** Things to fidget with in the place's `fidget` slots: pure play, never work. */
+	private fidgets?: Fidgets;
 	/** At the inn: sleepers beyond its spots, upstairs; one who comes down takes the stairs, not the front door. */
 	private upstairs = new Set<string>();
 	/** Messenger birds carrying mail through the place. */
@@ -342,6 +346,7 @@ export class PlaceScene extends Phaser.Scene {
 		this.square = undefined;
 		this.benches = undefined;
 		this.questBoard = undefined;
+		this.fidgets = undefined;
 		this.upstairs = new Set();
 		this.upstairsTag = undefined;
 		this.window = undefined;
@@ -402,6 +407,19 @@ export class PlaceScene extends Phaser.Scene {
 				pointer: () => (this.pointerAt ? this.toWorld(this.pointerAt) : undefined),
 				uiScale: () => Math.max(1, UI_ZOOM / this.cameras.main.zoom),
 			});
+		this.fidgets = new Fidgets(this, {
+			place: () => this.layout.place,
+			placeKey: () => this.layout.key,
+			walkUp: (stands, at, then) =>
+				this.walkToFirst(stands, (reached, goal) => {
+					this.avatar.face(at);
+					if (reached || dist(goal, at) <= 1.8) then();
+					else this.view.notify("I can't reach that from here.");
+				}),
+			glow: (at, r, level) => this.addGlow({ kind: "glow", at, r }, level, false),
+			notify: (text) => this.view.notify(text),
+			uiScale: () => Math.max(1, UI_ZOOM / this.cameras.main.zoom),
+		});
 		// Characters first, so the avatar arrives clear of where they stand.
 		this.showCharacters(false);
 		this.addAvatar();
@@ -452,6 +470,7 @@ export class PlaceScene extends Phaser.Scene {
 			this.square?.destroy();
 			this.benches?.destroy();
 			this.questBoard?.destroy();
+			this.fidgets?.destroy();
 		});
 	}
 
@@ -472,6 +491,7 @@ export class PlaceScene extends Phaser.Scene {
 		this.square?.update(delta, Math.max(1, UI_ZOOM / this.cameras.main.zoom));
 		this.benches?.update();
 		this.questBoard?.update();
+		this.fidgets?.update(time, delta);
 		this.keepTagsClear(delta);
 		this.birds.update(delta);
 		this.ambientBirds(time);
@@ -597,6 +617,11 @@ export class PlaceScene extends Phaser.Scene {
 	/** At the quest office, the notices pinned on its board. */
 	noticeViews(): NoticeView[] {
 		return this.questBoard?.views() ?? [];
+	}
+
+	/** The place's fidget objects: what each shows and what it is doing. */
+	fidgetViews(): FidgetView[] {
+		return this.fidgets?.views() ?? [];
 	}
 
 	/** In the town square, the townsfolk standing for Slack channels with unread messages. */
@@ -1039,8 +1064,11 @@ export class PlaceScene extends Phaser.Scene {
 		this.overlays.push({ slot, object: below, frame: () => frame });
 	}
 
-	/** Warm light around a lantern or a candle: a soft halo added to what is under it, flickering a little. */
-	private addGlow(slot: OverlaySlot, strength = 0.5) {
+	/**
+	 * Warm light around a lantern or a candle: a soft halo added to what is under it, flickering a little. A fidget's
+	 * light (`listed` false) turns it up and down through the handle; the place's own glows are listed as overlays.
+	 */
+	private addGlow(slot: OverlaySlot, strength = 0.5, listed = true): Glow {
 		const [x, y] = slot.at;
 		const glow = this.add
 			.image(x * TILE, y * TILE, this.glowTexture())
@@ -1049,17 +1077,36 @@ export class PlaceScene extends Phaser.Scene {
 			.setAlpha(strength);
 		const scale = ((slot.r ?? 0.9) * TILE * 2) / glow.width;
 		glow.setScale(scale);
+		// The flicker eases toward a new brightness and size now and then; the level scales it.
+		const light = { level: strength, flicker: 1, size: 1 };
+		const apply = () => glow.setAlpha(light.level * light.flicker).setScale(scale * light.size);
+		let fade: Phaser.Tweens.Tween | undefined;
 		const flicker = () =>
 			this.tweens.add({
-				targets: glow,
-				alpha: strength * Phaser.Math.FloatBetween(0.62, 1),
-				scale: scale * Phaser.Math.FloatBetween(0.97, 1.03),
+				targets: light,
+				flicker: Phaser.Math.FloatBetween(0.62, 1),
+				size: Phaser.Math.FloatBetween(0.97, 1.03),
 				duration: Phaser.Math.Between(140, 420),
 				ease: "Sine.inOut",
-				onComplete: flicker,
+				onUpdate: apply,
+				onComplete: () => {
+					if (glow.active) flicker();
+				},
 			});
 		flicker();
-		this.overlays.push({ slot, object: glow });
+		if (listed) this.overlays.push({ slot, object: glow });
+		return {
+			image: glow,
+			level: (level, ms = 300) => {
+				fade?.remove();
+				if (ms <= 0) {
+					light.level = level;
+					return apply();
+				}
+				fade = this.tweens.add({ targets: light, level, duration: ms, ease: "Sine.inOut", onUpdate: apply });
+			},
+			destroy: () => glow.destroy(),
+		};
 	}
 
 	/** One warm radial light, drawn once and shared by every glow. */
@@ -1344,6 +1391,8 @@ export class PlaceScene extends Phaser.Scene {
 			...this.present().map(({ spot }) => spot!),
 			...(this.host ? [this.host.at] : []),
 			...(this.square?.occupied() ?? []),
+			// A cat on the floor is walked round, as a body is.
+			...floorFidgets(this.layout.place),
 		]);
 		for (const figure of arrivals)
 			this.enter(figure, inn && this.upstairs.has(figure.character.id) ? this.stairs() : undefined);
@@ -1448,7 +1497,7 @@ export class PlaceScene extends Phaser.Scene {
 		const others = this.present()
 			.filter((f) => f !== figure && f.spot)
 			.map(({ spot }) => spot!);
-		const path = findPath(gridFor(this.layout.place, others), from, [to]);
+		const path = findPath(gridFor(this.layout.place, [...others, ...floorFidgets(this.layout.place)]), from, [to]);
 		if (!path) return [from, to];
 		const points = path.points;
 		const last = points.at(-1)!;
@@ -1725,6 +1774,7 @@ export class PlaceScene extends Phaser.Scene {
 			...this.present().map(({ spot }) => spot!),
 			...(this.host ? [this.host.at] : []),
 			...(this.square?.occupied() ?? []),
+			...floorFidgets(this.layout.place),
 		];
 		// Too close: beside them, or in front of them (south) by less than a body's height, where the avatar would cover
 		// them, or just behind them, where they would cover it.
@@ -1773,12 +1823,13 @@ export class PlaceScene extends Phaser.Scene {
 		const townsfolk = this.square?.targetsAt([x, y]) ?? [];
 		const work = this.benches?.targetsAt([x, y]) ?? [];
 		const notices = this.questBoard?.targetsAt([x, y]) ?? [];
+		const fidgets = this.fidgets?.targetsAt([x, y]) ?? [];
 		const doors = this.doors.filter(({ rect }) => inside(rect)).map((door) => this.doorTarget(door));
 		const furniture = (this.layout.place.furniture ?? [])
 			.filter(({ rect }) => inside(rect))
 			.map((piece) => this.furnitureTarget(piece));
 		const banners = this.bannerRects.filter(({ rect }) => inside(rect)).map(({ name }) => this.bannerTarget(name));
-		return [...people, ...townsfolk, ...host, ...work, ...notices, ...doors, ...banners, ...furniture];
+		return [...people, ...townsfolk, ...host, ...work, ...notices, ...fidgets, ...doors, ...banners, ...furniture];
 	}
 
 	/** A banner: its whole name, however short it had to be stitched. */

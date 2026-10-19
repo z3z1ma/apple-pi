@@ -148,5 +148,87 @@
       "pillow": [178, 226],
       "covers": [[60, 352], [118, 318], [350, 190], [589, 290], [589, 627], [0, 627], [0, 382]]
     }
+  },
+  "fidgets": {
+    "pet": {
+      "name": "Ginger cat",
+      "examine": "{name}, the guild's ginger cat. Keeps the mice honest and the hearth warm.",
+      "verbs": {
+        "pet": "Pet",
+        "play": "Play with"
+      }
+    },
+    "sleeper": {
+      "name": "Sleeping cat",
+      "examine": "Curled up tight and dreaming of fish. Best not to wake it. Probably.",
+      "verbs": {
+        "pet": "Stroke",
+        "boop": "Boop"
+      },
+      "particle": "zzz"
+    },
+    "bell": {
+      "name": "Brass bell",
+      "examine": "A bell on a little oak stand. Ring it, and someone ought to come.",
+      "verbs": {
+        "ring": "Ring",
+        "peal": "Ring a peal on"
+      }
+    },
+    "handbell": {
+      "name": "Handbell",
+      "examine": "A small brass handbell with a worn wooden grip.",
+      "verbs": {
+        "ring": "Ring",
+        "peal": "Ring a peal on"
+      }
+    },
+    "light": {
+      "name": "Candelabra",
+      "examine": "Three tall candles on a wrought-iron candelabra.",
+      "verbs": {
+        "on": "Light",
+        "off": "Snuff"
+      }
+    },
+    "box": {
+      "name": "Music box",
+      "examine": "A carved music box. A tiny dancer waits inside for her tune.",
+      "verbs": {
+        "open": "Open",
+        "close": "Close"
+      },
+      "particle": "notes"
+    },
+    "candle": {
+      "name": "Candle",
+      "examine": "A fat candle in a brass holder, burning low and steady.",
+      "verbs": {
+        "blow": "Blow on",
+        "cup": "Cup your hands round"
+      }
+    },
+    "tome": {
+      "name": "Open tome",
+      "examine": "A heavy tome left open, its margins full of someone's notes.",
+      "verbs": {
+        "leaf": "Leaf through"
+      },
+      "lines": [
+        "\"Here be dragons; also, the build passes on the second try.\"",
+        "\"A recipe for honey cakes, and a note: never deploy on a Friday.\"",
+        "\"Chapter IX: Of Merges, and the Conflicts Thereof.\"",
+        "\"The map's edge says only: further work, see ticket.\"",
+        "\"A pressed flower falls out. Somebody's bookmark.\""
+      ]
+    },
+    "spin": {
+      "name": "Desk globe",
+      "examine": "A brass desk globe. Someone has inked a small star over home.",
+      "verbs": {
+        "spin": "Spin",
+        "nudge": "Nudge"
+      }
+    }
   }
 }

@@ -40,5 +40,10 @@
     { "rect": [1.5, 9.6, 6.0, 3.85], "feet": 13.45 },
     { "rect": [10.5, 9.7, 6.1, 3.75], "feet": 13.45 }
   ],
-  "overlaySlots": [{ "kind": "banner", "at": [8.95, 0.05] }, { "kind": "fidget", "at": [15.2, 14.9] }]
+  "overlaySlots": [
+    { "kind": "banner", "at": [8.95, 0.05] },
+    { "kind": "fidget", "fidget": "spin", "at": [8.3, 3.75] },
+    { "kind": "fidget", "fidget": "sleeper", "at": [4.6, 7.4] },
+    { "kind": "fidget", "fidget": "pet", "at": [15.2, 14.6] }
+  ]
 }

@@ -5,6 +5,7 @@ import { createRoot } from "react-dom/client";
 import type { AgentWorldApi, ThemeChoice } from "../src/world.js";
 import { conversations } from "./game/actions.js";
 import { BootScene } from "./game/boot-scene.js";
+import type { FidgetView } from "./game/fidgets.js";
 import {
 	type AvatarView,
 	type BannerView,
@@ -64,6 +65,8 @@ declare global {
 			work(): WorkView[];
 			/** At the quest office, the issues pinned on its board. */
 			notices(): NoticeView[];
+			/** The place's fidget objects: what each shows and what it is doing. */
+			fidgets(): FidgetView[];
 			/** The place's host (the innkeeper), where it stands. */
 			host(): { name: string; look: string; x: number; y: number } | undefined;
 			/** The operator's avatar: where it is, its facing and frame, and the rest of its walk. */
@@ -286,6 +289,7 @@ window.agentWorldView = {
 	townsfolk: () => active()?.townsfolkViews() ?? [],
 	work: () => active()?.workViews() ?? [],
 	notices: () => active()?.noticeViews() ?? [],
+	fidgets: () => active()?.fidgetViews() ?? [],
 	birds: () => active()?.birdViews() ?? [],
 	avatar: () => active()?.avatarView(),
 	toScreen: (x, y) => active()?.toScreen([x, y]),

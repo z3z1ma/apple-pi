@@ -144,5 +144,88 @@
       "hover": [0.02, 0.05, 0.96, 0.9],
       "ink": "#3b2a1a"
     }
+  },
+  "fidgets": {
+    "pet": {
+      "name": "Calico cat",
+      "examine": "{name}, the school's calico. Officially a club member.",
+      "verbs": {
+        "pet": "Pet",
+        "play": "Play with"
+      }
+    },
+    "sleeper": {
+      "name": "Sleeping calico",
+      "examine": "A calico curled up in the sun, purring in its sleep.",
+      "verbs": {
+        "pet": "Stroke",
+        "boop": "Boop"
+      },
+      "particle": "zzz"
+    },
+    "bell": {
+      "name": "School bell",
+      "examine": "A brass bell on a wooden frame, with a red tassel.",
+      "verbs": {
+        "ring": "Ring",
+        "peal": "Ring a peal on"
+      }
+    },
+    "handbell": {
+      "name": "Handbell",
+      "examine": "The teacher's brass handbell.",
+      "verbs": {
+        "ring": "Ring",
+        "peal": "Ring a peal on"
+      }
+    },
+    "light": {
+      "name": "Paper lantern",
+      "examine": "A paper lantern painted with cherry blossoms.",
+      "verbs": {
+        "on": "Light",
+        "off": "Put out"
+      }
+    },
+    "box": {
+      "name": "Bento box",
+      "examine": "A wooden bento tied with a blossom band. Not yours. Probably.",
+      "verbs": {
+        "open": "Peek into",
+        "close": "Close"
+      },
+      "particle": "sparkles"
+    },
+    "candle": {
+      "name": "Desk lamp",
+      "examine": "A green banker's lamp, glowing softly.",
+      "verbs": {
+        "blow": "Flick",
+        "cup": "Tilt the shade of"
+      }
+    },
+    "tome": {
+      "name": "Notebook",
+      "examine": "Someone's class notebook, full of doodles in the margins.",
+      "verbs": {
+        "leaf": "Flip through"
+      },
+      "lines": [
+        "\"Club meeting after school! Bring snacks!!\"",
+        "\"A doodle of the calico, labelled: Club President.\"",
+        "\"Homework: page 42. (Do it on the train.)\"",
+        "\"Festival ideas: takoyaki stand? Haunted house?\"",
+        "\"Senpai said the build is green! ✨\""
+      ]
+    },
+    "spin": {
+      "name": "Goldfish bowl",
+      "examine": "A round goldfish bowl on a little stand. The goldfish is called Kingyo.",
+      "verbs": {
+        "spin": "Tap the glass of",
+        "nudge": "Sprinkle food into"
+      },
+      "particle": "bubbles"
+    }
   }
 }

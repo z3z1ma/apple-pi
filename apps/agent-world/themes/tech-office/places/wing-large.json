@@ -61,8 +61,6 @@
   ],
   "overlaySlots": [
     { "kind": "banner", "at": [15.05, 0.6] },
-    { "kind": "fidget", "at": [5.9, 4.5] },
-    { "kind": "fidget", "at": [25.9, 5.6] },
     { "kind": "glow", "at": [12.9, 0.5], "r": 1.0 },
     { "kind": "glow", "at": [17.1, 0.5], "r": 1.0 },
     { "kind": "glow", "at": [22.95, 2.15], "r": 0.7 },
@@ -78,7 +76,11 @@
     { "kind": "glow", "at": [11.48, 8.54], "r": 0.7 },
     { "kind": "glow", "at": [16.21, 8.54], "r": 0.7 },
     { "kind": "glow", "at": [21.0, 8.54], "r": 0.7 },
-    { "kind": "glow", "at": [29.35, 14.55], "r": 0.9 }
+    { "kind": "glow", "at": [29.35, 14.55], "r": 0.9 },
+    { "kind": "fidget", "fidget": "pet", "at": [5.9, 4.7] },
+    { "kind": "fidget", "fidget": "sleeper", "at": [25.9, 5.9] },
+    { "kind": "fidget", "fidget": "spin", "at": [13.2, 3.7] },
+    { "kind": "fidget", "fidget": "bell", "at": [18.4, 13.6] }
   ],
   "enterBy": "Glass door to the corridor",
   "foreground": [

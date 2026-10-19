@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { fidgetSlots, floorFidgets, standPoints } from "../web/game/fidget-spots.js";
 import { composeStrips, stripsFor } from "../web/game/layout.js";
 import { findPath, gridFor, isOpen } from "../web/game/pathing.js";
 import { PLACE_FILES, type PlaceData, type Point } from "../web/theme.js";
@@ -74,6 +75,34 @@ describe.each(places)("%s", (_name, place) => {
 			for (const door of place.doors) {
 				const path = findPath(full, from, door.standAt);
 				expect(path && near(path.goal, door.standAt), `${way} -> ${door.name}`).toBe(true);
+			}
+		}
+	});
+
+	// Fidget objects (ticket 29): a cat on the floor stands in the way like a small body, so it keeps clear of where
+	// characters stand and come in, and nobody is ever walled in by one; every fidget can be walked up to.
+	it("keeps fidgets on the floor clear of spots, entries, doors, and the host, and lets the avatar reach every fidget", () => {
+		const floor = floorFidgets(place);
+		const keepClear = [
+			...place.spots,
+			...ways.map(([, p]) => p),
+			...place.doors.map((d) => d.standAt),
+			...(place.host ? [place.host.at] : []),
+		];
+		for (const at of floor)
+			for (const other of keepClear)
+				expect(Math.hypot(at[0] - other[0], at[1] - other[1]), `fidget ${at} near ${other}`).toBeGreaterThanOrEqual(1);
+		const crowded = gridFor(place, [...place.spots, ...floor, ...(place.host ? [place.host.at] : [])]);
+		for (const [way, from] of ways) {
+			for (const door of place.doors) {
+				const path = findPath(crowded, from, door.standAt);
+				expect(path && near(path.goal, door.standAt), `${way} -> ${door.name} past the fidgets`).toBe(true);
+			}
+			for (const slot of fidgetSlots(place)) {
+				const stands = standPoints(place, slot, 0.9).flat();
+				const path = findPath(crowded, from, stands);
+				const reached = path && stands.some((stand) => near(path.goal, stand, 0.35));
+				expect(reached, `${way} -> ${slot.fidget} at ${slot.at}`).toBe(true);
 			}
 		}
 	});

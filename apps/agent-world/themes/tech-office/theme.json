@@ -143,5 +143,88 @@
       "hover": [0.24, 0.07, 0.74, 0.9],
       "ink": "#1f2a33"
     }
+  },
+  "fidgets": {
+    "pet": {
+      "name": "Office corgi",
+      "examine": "{name}, the office corgi. Head of morale, reports to nobody.",
+      "verbs": {
+        "pet": "Pet",
+        "play": "Play with"
+      }
+    },
+    "sleeper": {
+      "name": "Napping cat",
+      "examine": "A grey cat asleep somewhere warm. It has commit access to the sofa.",
+      "verbs": {
+        "pet": "Stroke",
+        "boop": "Boop"
+      },
+      "particle": "zzz"
+    },
+    "bell": {
+      "name": "Desk bell",
+      "examine": "A chrome desk bell. Ding for service, ding for joy.",
+      "verbs": {
+        "ring": "Ding",
+        "peal": "Ding-ding-ding"
+      },
+      "particle": "notes"
+    },
+    "handbell": {
+      "name": "Handbell",
+      "examine": "A brass handbell for stand-ups that run long.",
+      "verbs": {
+        "ring": "Ring",
+        "peal": "Ring a peal on"
+      }
+    },
+    "light": {
+      "name": "Desk lamp",
+      "examine": "An adjustable desk lamp in teal, with a warm bulb.",
+      "verbs": {
+        "on": "Switch on",
+        "off": "Switch off"
+      }
+    },
+    "box": {
+      "name": "Espresso machine",
+      "examine": "A tiny espresso machine. The most important server in the building.",
+      "verbs": {
+        "open": "Brew a cup on",
+        "close": "Put away the cup from"
+      },
+      "particle": "steam"
+    },
+    "candle": {
+      "name": "Reading lamp",
+      "examine": "A brushed-steel reading lamp, always on.",
+      "verbs": {
+        "blow": "Flick",
+        "cup": "Tilt the shade of"
+      }
+    },
+    "tome": {
+      "name": "Tablet",
+      "examine": "A tablet with a keyboard cover, still logged in to someone's notes.",
+      "verbs": {
+        "leaf": "Swipe through"
+      },
+      "lines": [
+        "\"TODO: write the TODO list.\"",
+        "\"Retro notes: more snacks, fewer meetings.\"",
+        "\"Idea: a dashboard for the dashboards.\"",
+        "\"Reminder: water the plants (the real ones).\"",
+        "\"It works on my machine. Ship it?\""
+      ]
+    },
+    "spin": {
+      "name": "Fidget spinner",
+      "examine": "A three-armed fidget spinner on a little wooden stand.",
+      "verbs": {
+        "spin": "Spin",
+        "nudge": "Nudge"
+      }
+    }
   }
 }
