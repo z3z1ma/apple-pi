@@ -57,6 +57,5 @@
 - A window that `tmux new-window` opens takes the PATH of the tmux client that ran the command, not the server's. A debug `tmux new-window ... pi` from my shell started the operator's real Pi, which joined his live runtime; test such commands with a fake `pi` first on the PATH of the process that runs tmux.
 - `pi_exec` `agent_run` and `agent` wait for the worker inside the program, so a long builder task hits the program's timeout and is cancelled. Start parallel builder lanes with the `agent` tool and `run_in_background: true`.
 - Headless-Chrome suites run inside the main Vitest run (many Chrome instances) made unrelated suites (pi-exec, theme-pack) time out at 5 s. Keep such suites a separate npm step (`test:world` after `test:unit --exclude 'apps/**'`) so their load never overlaps.
-
 - `npm run typecheck` runs the web half (`tsconfig.web.json`) only after the Node half passes, so web errors hide behind Node errors; rerun it after every fix.
 - Parallel lanes in one checkout: give each its own scratch directory (two tracers sharing `/tmp/aw-trace/` overwrote each other's script), re-read a shared file right before each edit, and never prove a red step by writing `git show HEAD:` over shared files, which silently reverts the other lane's edits.
