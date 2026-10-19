@@ -40,7 +40,7 @@ A whole-product spec for Agent World, ready for `/skill:to-spec`: every architec
 - [What a wing is](decisions/21-what-a-wing-is.md): one wing per repository, remembered once seen (closed when empty); dormant agents rest in the dormant place; agents outside any repository use a shared common room.
 - [How places are built](decisions/15-how-places-are-built.md): interiors are hand-painted scenes per place and theme in a few sizes, with hand-authored walk grids, spots, and hotspots, and placed sprites for doors and banners; tiled exteriors, the borrowed characters, and the pathing failed and became their own tickets.
 - [Characters and portraits](decisions/22-characters-and-portraits.md): HD 16-frame sprite sheets per character with spelled-out walk phases and their own seats; large JRPG portraits with four expressions beside the dialogue box.
-- [Movement and pathing](decisions/23-movement-and-pathing.md): RuneScape's interaction rhythm with smooth string-pulled movement over half-tile walk grids traced by hand; paintings leave room to move and interact.
+- [Movement and pathing](decisions/23-movement-and-pathing.md): RuneScape's interaction rhythm with smooth movement along straightened paths over half-tile walk grids traced by hand; paintings leave room to move and interact.
 
 ## Not yet specified
 

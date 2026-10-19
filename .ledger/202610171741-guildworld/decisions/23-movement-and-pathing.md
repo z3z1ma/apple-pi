@@ -18,6 +18,6 @@ Round 2 verdict (operator, 2026-10-18): continued progress; portraits beside the
 Decided with the operator, 2026-10-18, after three rounds of the [headquarters prototype](../prototypes/headquarters/README.md). A decent baseline; polish comes later.
 
 - **Interaction stays RuneScape's:** hover shows the default action, left click does it, right click opens every action (the browser's menu never appears), and the avatar walks up to a character or door before acting.
-- **Movement is smooth:** an A* path on a walk grid twice as fine as the tiles, string-pulled into straight runs that keep a body's width from furniture, walked continuously and ending where you clicked; a click on furniture walks to the nearest open floor; a new click retargets at once.
+- **Movement is smooth:** an A* path on a walk grid twice as fine as the tiles, straightened into direct runs (dropping every waypoint a straight walk can skip) that keep a body's width from furniture, walked continuously and ending where you clicked; a click on furniture walks to the nearest open floor; a new click retargets at once.
 - **Walk grids are traced by hand over each painting** on a labelled half-tile grid (fractional tiles), so aisles stay open; characters block only their own footprint; door targets cover only the door. An in-app grid view checks the tracing.
 - **Paintings must leave room to move:** aisles at least a body and a half wide between furniture, and open floor wherever characters work, stand, or interact.
