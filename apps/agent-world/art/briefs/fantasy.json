@@ -104,7 +104,7 @@
       "names": ["blade-passing", "blade-failing", "blade-running"]
     },
     "notices": {
-      "brief": "four items, each a parchment notice pinned to a cork board with a brass pin, front facing, about 1 square wide and 1.3 tall, each with scribbled illegible lines (no readable text): 1. a plain cream notice; 2. a notice with a red wax seal (urgent); 3. a notice with a green ribbon (done); 4. a notice with a blue stamp (in progress).",
+      "brief": "four items, each a single loose parchment notice with a brass pin at its top, front facing, drawn on its own with no cork board, frame or background behind it, about 1 square wide and 1.3 tall, each with scribbled illegible lines (no readable text): 1. a plain cream notice; 2. a notice with a red wax seal (urgent); 3. a notice with a green ribbon (done); 4. a notice with a round deep blue ink stamp, clearly blue and not green (in progress).",
       "names": ["notice-open", "notice-urgent", "notice-done", "notice-progress"]
     },
     "props": {
