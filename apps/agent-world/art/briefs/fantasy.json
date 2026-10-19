@@ -1,6 +1,6 @@
 {
   "scenes": {
-    "hall": {
+    "headquarters": {
       "brief": "A wide landscape image (3:2) of the interior of a grand fantasy adventurers' guild hall, the headquarters of a guild. North wall across the top: warm timber and stone with tall arched windows, hanging guild banners and lanterns. Centre-north: a raised two-step wooden dais holding a large carved guildmaster's desk with a world map, candles and a quill, and open floor behind and in front of the desk; the desk has no chair. West wall middle: a wide open timber archway leading into a side room. East wall middle: a wide open stone archway leading into a dim corridor. Centre floor: polished wooden planks with a long woven runner rug from the south door to the dais, benches against the walls, potted plants, a notice board, a weapon rack and a trophy shelf against the walls. South edge centre: a wide wooden double door to the outside. A big stone fireplace on the north-west wall with its hearth empty and dark (a fire is added later). Keep the middle of the floor wide open.",
       "grid": "30 squares wide and 20 deep",
       "slots": "the empty fireplace hearth, three unlit wall lanterns on the north wall, and two bare floor spots beside the fireplace"

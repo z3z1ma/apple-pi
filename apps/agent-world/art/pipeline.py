@@ -112,13 +112,18 @@ def cut(path, rows, cols):
     keep = ~magenta_mask(rgb)
     row_bands = bands(keep.sum(axis=1) > 2, 6, 20)
     if rows and len(row_bands) != rows:
-        sys.exit(f"{Path(path).name}: expected {rows} rows, found {len(row_bands)}")
+        # A pose can reach into the gap (a raised hand), so fall back to the equal cells the sheet was drawn on.
+        h = keep.shape[0] / rows
+        row_bands = [(round(i * h), round((i + 1) * h)) for i in range(rows)]
     found = []
     for y0, y1 in row_bands:
         col_bands = bands(keep[y0:y1].sum(axis=0) > 2, 6, 12)
         if cols and len(col_bands) != cols:
-            sys.exit(f"{Path(path).name}: expected {cols} pieces in a row, found {len(col_bands)}")
+            w = keep.shape[1] / cols
+            col_bands = [(round(i * w), round((i + 1) * w)) for i in range(cols)]
         for x0, x1 in col_bands:
+            if not keep[y0:y1, x0:x1].any():
+                sys.exit(f"{Path(path).name}: an empty cell at {x0},{y0}")
             m = keep[y0:y1, x0:x1]
             ys, xs = np.where(m)
             yy0, yy1, xx0, xx1 = ys.min(), ys.max() + 1, xs.min(), xs.max() + 1
@@ -251,9 +256,14 @@ def build(theme):
         (out / d).mkdir(parents=True, exist_ok=True)
     for name in briefs.get("scenes", {}):
         scene(raw / "places" / f"{name}.png", out / "places" / f"{name}.png")
+    looks = {}
     for name in briefs.get("sheets", {}):
         sheet(raw / "characters" / f"{name}-sheet.png", out / "characters" / f"{name}.png")
         portraits(raw / "characters" / f"{name}-portrait.png", out / "characters" / f"{name}-portrait")
+        meta = json.loads((out / "characters" / f"{name}.json").read_text())
+        role = "avatar" if name.startswith("avatar-") else "coordinator" if name == "coordinator" else "agent"
+        looks[name] = {"role": role, "frame": [meta["frameWidth"], meta["frameHeight"]], "baseline": meta["baseline"]}
+    (out / "characters" / "looks.json").write_text(json.dumps(looks, indent=2) + "\n")
     for name, b in briefs.get("pieces", {}).items():
         pieces(raw / "overlays" / f"{name}.png", out / "overlays", b["names"])
     files = [f for d in ("characters", "overlays") for f in sorted((out / d).glob("*.png"))]

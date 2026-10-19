@@ -1,7 +1,62 @@
 {
-  "artificer": { "frame": [85, 148] },
-  "engineer": { "frame": [85, 148] },
-  "mage": { "frame": [86, 148] },
-  "scholar": { "frame": [77, 150] },
-  "scout": { "frame": [89, 140] }
+  "coordinator": {
+    "role": "coordinator",
+    "frame": [130, 146],
+    "baseline": 144
+  },
+  "artificer": {
+    "role": "agent",
+    "frame": [85, 124],
+    "baseline": 122
+  },
+  "scholar": {
+    "role": "agent",
+    "frame": [113, 147],
+    "baseline": 145
+  },
+  "scout": {
+    "role": "agent",
+    "frame": [83, 134],
+    "baseline": 132
+  },
+  "engineer": {
+    "role": "agent",
+    "frame": [111, 139],
+    "baseline": 137
+  },
+  "mage": {
+    "role": "agent",
+    "frame": [116, 145],
+    "baseline": 143
+  },
+  "alchemist": {
+    "role": "agent",
+    "frame": [107, 130],
+    "baseline": 128
+  },
+  "ranger": {
+    "role": "agent",
+    "frame": [101, 143],
+    "baseline": 141
+  },
+  "cleric": {
+    "role": "agent",
+    "frame": [88, 135],
+    "baseline": 133
+  },
+  "avatar-traveller": {
+    "role": "avatar",
+    "frame": [81, 136],
+    "baseline": 134
+  },
+  "avatar-knight": {
+    "role": "avatar",
+    "frame": [128, 136],
+    "baseline": 134
+  },
+  "avatar-bard": {
+    "role": "avatar",
+    "frame": [93, 140],
+    "baseline": 138
+  }
 }
