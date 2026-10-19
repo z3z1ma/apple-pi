@@ -44,6 +44,7 @@ A whole-product spec for Agent World, ready for `/skill:to-spec`: every architec
 - [How exteriors are built](decisions/24-how-exteriors-are-built.md): exteriors are hand-painted like interiors, with a door per function place on painted building fronts, animation overlaid into spaces the painting leaves empty, and Slack channels as townsfolk.
 - [Dialogue with a character](decisions/17-dialogue-with-a-character.md): talking opens a themed conversation panel with the portrait, the Markdown transcript with folded tool calls and the streaming reply, and state-dependent actions (reply; redirect, tell it after, stop; a themed form for questionnaires); barks over heads for state at a distance.
 - [Coordinator delegation protocol](decisions/12-coordinator-delegation-protocol.md): no protocol of its own: the operator talks to the coordinator in the panel, the coordinator starts workers with its lifecycle tools, and the world observes the outcome; no required link from a worker to a thread.
+- [The interface panel](decisions/26-the-interface-panel.md): Old School RuneScape's layout in each theme's style: minimap with orbs, a tabbed side panel from which every action works anywhere, and a chatbox of world events; walking is for immersion.
 
 ## Not yet specified
 
