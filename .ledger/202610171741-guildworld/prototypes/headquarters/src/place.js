@@ -169,10 +169,10 @@ export class PlaceScene extends Phaser.Scene {
 	}
 
 	/** Walk to a point; on a blocked spot, as close to it as the floor allows (RuneScape does the same). */
-	walkTo(world, then) {
+	walkTo(world) {
 		closeChat();
 		this.marker(world, false);
-		this.route(world, then);
+		this.route(world);
 	}
 
 	/** Walk next to a target, then act: the RuneScape rhythm. */
@@ -198,20 +198,15 @@ export class PlaceScene extends Phaser.Scene {
 		const cell = (p) => [Math.floor(p.x / unit), Math.floor(p.y / unit)];
 		const center = ([x, y]) => ({ x: (x + 0.5) * unit, y: (y + 0.5) * unit });
 		const from = cell(this.avatar.pos);
-		let to = cell(goal);
-		let exactGoal = grid.free(...to);
-		if (!exactGoal) {
-			to = nearestFree(grid, to);
-			if (!to) return;
-		}
-		const path = grid.path(from, to);
+		const open = grid.free(...cell(goal));
+		const to = open ? cell(goal) : nearestFree(grid, cell(goal));
+		const path = to && grid.path(from, to);
 		if (!path) return;
 		let points;
 		if (mode === "smooth") {
 			points = stringPull(grid, path).slice(1).map(center);
 			// Finish exactly on the clicked point when it is open floor, not on the cell's centre.
-			if (exactGoal && points.length) points[points.length - 1] = { x: goal.x, y: goal.y };
-			else if (exactGoal) points = [{ x: goal.x, y: goal.y }];
+			if (open) points = [...points.slice(0, -1), { x: goal.x, y: goal.y }];
 		} else points = path.slice(1).map(center);
 		this.walk = { points, then };
 	}
