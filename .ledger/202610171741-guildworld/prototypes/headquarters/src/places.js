@@ -27,7 +27,7 @@ export function hall(scene, world) {
 	const people = [];
 	if (world.coordinator) people.push({ session: world.coordinator, at: [14.6, 5.3], look: look(world.coordinator) });
 	const commonSpots = [[3.6, 10.4], [8.7, 9.4], [8.6, 11.4], [9.6, 12.6], [10.6, 9.6]];
-	world.common.forEach((s, i) => commonSpots[i] && people.push({ session: s, at: commonSpots[i], face: "left", look: look(s) }));
+	world.common.forEach((s, i) => commonSpots[i] && people.push({ session: s, at: commonSpots[i], look: look(s) }));
 	return {
 		title: "Guild hall",
 		tile: T,

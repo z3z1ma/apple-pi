@@ -53,16 +53,4 @@ export class Grid {
 		}
 		return null;
 	}
-
-	/** The free tile next to (x, y), or (x, y) itself, that is nearest to `from`: where you stand to interact. */
-	besideNearest([x, y], from) {
-		let best = null;
-		for (const [dx, dy] of [[0, 1], [0, -1], [1, 0], [-1, 0], [1, 1], [-1, 1], [1, -1], [-1, -1], [0, 2], [2, 0], [-2, 0], [0, -2]]) {
-			const p = [x + dx, y + dy];
-			if (!this.free(...p)) continue;
-			const d = Math.hypot(p[0] - from[0], p[1] - from[1]);
-			if (!best || d < best.d) best = { p, d };
-		}
-		return best?.p ?? null;
-	}
 }
