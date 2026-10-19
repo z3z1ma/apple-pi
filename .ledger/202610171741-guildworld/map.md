@@ -49,9 +49,11 @@ A whole-product spec for Agent World, ready for `/skill:to-spec`: every architec
 - [Command vocabulary and gates](decisions/13-command-vocabulary-and-gates.md): seven classes; only stopping a busy agent, closing a busy session, and writes outside as yourself ask for confirmation, and outside writes are logged.
 - [Theme pack contract](decisions/14-theme-pack-contract.md): a pack is a manifest (labels, interface and panel style) plus every place hand-designed with a shared data format, character sheets and portraits in shared conventions, and overlays; required pieces are validated; fantasy flagship plus thin tech and anime packs.
 - [Avatar, exteriors, and fidget objects](decisions/27-avatar-exteriors-and-fidget-objects.md): pick an avatar look per theme; one hand-designed exterior per theme in the first version; fidget objects are pure play.
+- [Milestones](decisions/28-milestones.md): 1 living headquarters (read-only, real runtime), 2 talking for real, 3 theme proof, 4 forge, 5 quest office and library, 6 town square, 7 polish.
 
 ## Not yet specified
 
+Nothing: the way is clear.
 
 ## Out of scope
 

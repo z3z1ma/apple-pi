@@ -10,7 +10,7 @@ Find the way to a whole-product spec for Agent World: a cozy, themeable pixel-ar
 
 ## Current State
 
-Charting with the wayfinder skill. The map is `map.md`; decision tickets are under `decisions/`; research and prototypes are under `research/` and `prototypes/`. The shared state model is built (2026-10-18), and the map was reconciled with it and with an operator-supplied architecture assessment (`source/2026-10-18-architecture-assessment.md`): characters can be dormant, Agent World is projection first, and the next ticket is "Purpose and form of the world".
+The map is clear (2026-10-18): every ticket is resolved or out of scope and nothing is left unspecified. The headquarters prototype (`prototypes/headquarters/`) carries the settled art, movement, dialogue, and interface decisions. Next: `/skill:to-spec` writes the whole-product spec from this map.
 
 ## Outcome
 
