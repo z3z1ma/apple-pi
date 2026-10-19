@@ -4,8 +4,8 @@
 
 **Blocked by:** 19 Tech office pack and theme switching
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] The anime school pack passes the check and switches in and out like the tech office pack.
-- [ ] The same fixture world screenshotted in all three themes shows identical characters, states, and actions.
-- [ ] Meets the bar in the polish bar in the [spec](../spec.md#further-notes): judged on captured screenshots and a short recording, not on passing tests alone.
+- [x] The anime school pack passes the check and switches in and out like the tech office pack.
+- [x] The same fixture world screenshotted in all three themes shows identical characters, states, and actions.
+- [x] Meets the bar in the polish bar in the [spec](../spec.md#further-notes): judged on captured screenshots and a short recording, not on passing tests alone.

@@ -4,8 +4,8 @@
 
 **Blocked by:** 11 Headquarters polish pass; 15 The inn; 16 The rookery and mail
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] The fantasy pack passes the check; fixture packs with each kind of fault fail with a message naming the file and fault.
-- [ ] Loading a broken pack still opens the world in the last good theme with a visible notice.
-- [ ] No theme-specific text or style remains in the world UI code outside the pack.
+- [x] The fantasy pack passes the check; fixture packs with each kind of fault fail with a message naming the file and fault.
+- [x] Loading a broken pack still opens the world in the last good theme with a visible notice.
+- [x] No theme-specific text or style remains in the world UI code outside the pack.

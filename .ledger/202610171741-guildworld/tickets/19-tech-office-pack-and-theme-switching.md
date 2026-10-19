@@ -4,9 +4,9 @@
 
 **Blocked by:** 18 Theme pack format and pack check
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] The tech office pack passes the check.
-- [ ] Switching theme keeps the same characters, places, states, open panel, and selection, changing only presentation.
-- [ ] The theme choice persists across app restarts.
-- [ ] Meets the bar in the polish bar in the [spec](../spec.md#further-notes): judged on captured screenshots and a short recording, not on passing tests alone.
+- [x] The tech office pack passes the check.
+- [x] Switching theme keeps the same characters, places, states, open panel, and selection, changing only presentation.
+- [x] The theme choice persists across app restarts.
+- [x] Meets the bar in the polish bar in the [spec](../spec.md#further-notes): judged on captured screenshots and a short recording, not on passing tests alone.
