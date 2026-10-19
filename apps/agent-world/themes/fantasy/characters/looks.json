@@ -1,0 +1,7 @@
+{
+  "artificer": { "frame": [85, 148] },
+  "engineer": { "frame": [85, 148] },
+  "mage": { "frame": [86, 148] },
+  "scholar": { "frame": [77, 150] },
+  "scout": { "frame": [89, 140] }
+}

@@ -2,7 +2,12 @@
   "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
   "files": {
     "ignoreUnknown": true,
-    "includes": ["**", "!components/browser-pages/dist", "!components/tmux-sessions/notch/web/assets"]
+    "includes": [
+      "**",
+      "!components/browser-pages/dist",
+      "!apps/agent-world/dist",
+      "!components/tmux-sessions/notch/web/assets"
+    ]
   },
   "formatter": {
     "enabled": true,

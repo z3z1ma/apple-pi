@@ -179,6 +179,7 @@ try {
 		"stash",
 		"edit-prompt",
 		"inspect-tool",
+		"world",
 	]) {
 		assert(commands.has(command), `missing /${command}`);
 	}
@@ -370,6 +371,14 @@ try {
 		"package manifest omits optional backlog entrypoint",
 	);
 	assert(manifest.files.includes("optional-extensions/backlog/src/"), "package manifest omits optional backlog source");
+	for (const path of ["apps/agent-world/src/", "apps/agent-world/dist/", "apps/agent-world/themes/"])
+		assert(manifest.files.includes(path), `package manifest omits ${path}`);
+	assert(
+		!manifest.files.some(
+			(path) => path.startsWith("apps/agent-world/art") || path === "apps/" || path === "apps/agent-world/",
+		),
+		"Agent World's raw art and generation inputs stay in the repository",
+	);
 	assert(manifest.files.includes("skills/"), "package manifest omits skills");
 	assert(manifest.files.includes("prompts/"), "package manifest omits prompt templates");
 	assert(manifest.files.includes("docs/"), "package manifest omits documentation");

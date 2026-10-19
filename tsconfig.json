@@ -12,6 +12,12 @@
     "noEmit": true,
     "types": ["node"]
   },
-  "include": ["extensions/**/*.ts", "components/**/*.ts", "optional-extensions/**/*.ts", "tests/**/*.ts"],
-  "exclude": ["components/browser-pages/web"]
+  "include": [
+    "apps/**/*.ts",
+    "extensions/**/*.ts",
+    "components/**/*.ts",
+    "optional-extensions/**/*.ts",
+    "tests/**/*.ts"
+  ],
+  "exclude": ["components/browser-pages/web", "apps/agent-world/web", "apps/agent-world/dist"]
 }

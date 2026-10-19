@@ -35,6 +35,7 @@ export default defineConfig({
 			"components/branch-search/tests/**/*.test.ts",
 			"components/browser-pages/tests/**/*.test.ts",
 			"optional-extensions/todos/tests/**/*.test.ts",
+			"apps/agent-world/tests/**/*.test.ts",
 			"tests/**/*.test.ts",
 		],
 	},

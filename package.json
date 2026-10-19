@@ -55,6 +55,9 @@
     "components/branch-search/src/",
     "components/browser-pages/src/",
     "components/browser-pages/dist/",
+    "apps/agent-world/src/",
+    "apps/agent-world/dist/",
+    "apps/agent-world/themes/",
     "extensions/",
     "skills/",
     "prompts/",
@@ -94,7 +97,8 @@
       "./extensions/rtk.ts",
       "./extensions/change-reflection.ts",
       "./extensions/branch-search.ts",
-      "./extensions/browser-pages.ts"
+      "./extensions/browser-pages.ts",
+      "./extensions/agent-world.ts"
     ],
     "skills": [
       "./skills"
@@ -104,14 +108,16 @@
     ]
   },
   "scripts": {
-    "format": "biome format --write components optional-extensions extensions tests scripts docs README.md package.json tsconfig.json vitest.config.ts biome.json tsconfig.web.json",
-    "format:check": "biome format components optional-extensions extensions tests scripts docs README.md package.json tsconfig.json vitest.config.ts biome.json tsconfig.web.json && uvx ruff format --isolated --check --line-length 120 components/tmux-sessions/sidebar",
-    "lint": "biome lint components optional-extensions extensions tests scripts && uvx ruff check --isolated --select E4,E7,E9,F --line-length 120 components/tmux-sessions/sidebar",
+    "format": "biome format --write apps components optional-extensions extensions tests scripts docs README.md package.json tsconfig.json vitest.config.ts biome.json tsconfig.web.json",
+    "format:check": "biome format apps components optional-extensions extensions tests scripts docs README.md package.json tsconfig.json vitest.config.ts biome.json tsconfig.web.json && uvx ruff format --isolated --check --line-length 120 components/tmux-sessions/sidebar apps/agent-world/art",
+    "lint": "biome lint apps components optional-extensions extensions tests scripts && uvx ruff check --isolated --select E4,E7,E9,F --line-length 120 components/tmux-sessions/sidebar apps/agent-world/art",
     "check": "npm run format:check && npm run lint && npm run typecheck",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.web.json",
     "build:web": "vite build --config components/browser-pages/web/vite.config.ts --mode code-review && vite build --config components/browser-pages/web/vite.config.ts --mode markdown-review && vite build --config components/browser-pages/web/vite.config.ts --mode ledger-review && vite build --config components/browser-pages/web/vite.config.ts --mode explain-change && cp node_modules/mermaid/dist/mermaid.min.js components/browser-pages/dist/",
-    "test": "npm run test:unit && npm run test:sidebar && npm run test:pair && npm run test:loader",
+    "build:world": "vite build --config apps/agent-world/web/vite.config.ts && vite build --config apps/agent-world/electron.vite.config.ts --mode main && vite build --config apps/agent-world/electron.vite.config.ts --mode preload",
+    "test": "npm run test:unit && npm run test:art && npm run test:sidebar && npm run test:pair && npm run test:loader",
     "test:unit": "vitest run",
+    "test:art": "PYTHONDONTWRITEBYTECODE=1 uv run -q --no-project --with pytest --with pillow --with numpy pytest -q -p no:cacheprovider apps/agent-world/art/tests",
     "test:sidebar": "PYTHONDONTWRITEBYTECODE=1 uv run -q --no-project --with pytest --with textual==8.2.8 pytest -q -p no:cacheprovider components/tmux-sessions/sidebar/tests",
     "test:pair": "PI_DIST=$PWD/node_modules/@earendil-works/pi-coding-agent/dist node components/pair-programmer/tests/pair.test.mjs",
     "test:loader": "node tests/package-load.mjs",
@@ -138,6 +144,8 @@
     "@vitejs/plugin-react": "^6.1.2",
     "happy-dom": "^21.0.2",
     "mermaid": "^11.17.2",
+    "phaser": "4.2.1",
+    "playwright-core": "^1.64.1",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "typebox": "^1.1.38",

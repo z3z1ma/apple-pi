@@ -1,0 +1,62 @@
+{
+  "scenes": {
+    "hall": {
+      "brief": "A wide landscape image (3:2) of the interior of a grand fantasy adventurers' guild hall, the headquarters of a guild. North wall across the top: warm timber and stone with tall arched windows, hanging guild banners and lanterns. Centre-north: a raised two-step wooden dais holding a large carved guildmaster's desk with a world map, candles and a quill, and open floor behind and in front of the desk; the desk has no chair. West wall middle: a wide open timber archway leading into a side room. East wall middle: a wide open stone archway leading into a dim corridor. Centre floor: polished wooden planks with a long woven runner rug from the south door to the dais, benches against the walls, potted plants, a notice board, a weapon rack and a trophy shelf against the walls. South edge centre: a wide wooden double door to the outside. A big stone fireplace on the north-west wall with its hearth empty and dark (a fire is added later). Keep the middle of the floor wide open.",
+      "grid": "30 squares wide and 20 deep",
+      "slots": "the empty fireplace hearth, three unlit wall lanterns on the north wall, and two bare floor spots beside the fireplace"
+    },
+    "common-room": {
+      "brief": "A landscape image (3:2) of a cozy fantasy guild common room beside the main hall, where adventurers without a project sit and work: a reading nook and study. East wall middle: a wide open timber archway back to the main hall. Two long sturdy wooden study tables with books, candles and maps, and one round table, all standing free on the floor with no chairs or benches at them; bookshelves, a map cabinet, a cozy rug, a small window seat, potted plants and a tea cart against the walls; a small stone hearth on the north wall with its fire empty.",
+      "grid": "20 squares wide and 14 deep",
+      "slots": "the empty hearth, two unlit candle sconces, and one bare spot on the rug"
+    },
+    "gallery": {
+      "brief": "A very wide landscape image (2:1) of a long horizontal guild hall corridor. The north wall runs across the top with five identical, evenly spaced, empty arched stone niches, each niche exactly the same and framed by timber pillars, each niche empty (plain recessed stone, no door, no decoration inside) because doors are placed in them later; above each niche an empty iron rod where a banner hangs later. The west end (left edge) is an open stone archway back into a bright hall; the east end (right edge) is a closed timber wall with a small round window. Floor: polished wooden planks with a long red runner carpet along the corridor, a few benches and potted plants between niches against the wall. The middle three niche sections must look identical so they can be repeated side by side.",
+      "grid": "40 squares wide and 10 deep",
+      "slots": "the five empty niches and their empty banner rods, and a small unlit lantern on each pillar"
+    },
+    "wing-small": {
+      "brief": "A square image of a cozy fantasy guild workshop room: the wing of a guild hall where adventurers work on one project. North wall: timber and stone with a window and an empty iron rod centred high on the wall where a banner will hang (leave the rod empty). Three sturdy wooden workbench desks standing free with scrolls, tools, a candle and a small glowing crystal on each, with no stools, chairs or benches at them, spaced apart with wide open floor around them; shelves of supplies, a chalkboard and a rack of tools on the walls; a door at the south edge centre.",
+      "grid": "16 squares wide and 16 deep",
+      "slots": "the empty banner rod and one bare corner spot"
+    },
+    "wing-large": {
+      "brief": "A wide landscape image (3:2) of a large cozy fantasy guild workshop hall: the wing of a guild hall where a team of adventurers works on one project. North wall: timber and stone with tall windows and an empty iron rod centred high on the wall where a banner will hang (leave the rod empty). Eight sturdy wooden workbench desks standing free in two rows of four, each with scrolls, tools, a candle and a small glowing crystal, with no stools, chairs or benches at them; a central work table with a large map; shelves, a supply rack, a chalkboard and a small stone hearth with its fire empty on the walls; a door at the south edge centre; wide open aisles between desks.",
+      "grid": "30 squares wide and 20 deep",
+      "slots": "the empty banner rod, the empty hearth, and two bare floor spots near the walls"
+    },
+    "square": {
+      "brief": "A very wide landscape image (2:1) of a cozy storybook fantasy village square at dusk, seen from above at a 3/4 angle. Along the north edge, a row of six distinct building fronts facing south, each with one clear front door at ground level and room above it for a hanging sign: left to right, a grand timber-and-stone guild hall with a wide double door (the largest), a blacksmith's forge with an open anvil yard, a quest office with a notice board beside its door, a tall library with arched windows, a cozy inn with a balcony, and a round stone rookery tower with perches. The cobbled square in front is wide open, with a round stone fountain in the middle whose basin is dry and empty (water is added later), a few market stalls, benches, lamp posts, flower planters and trees at the edges, and lanes leaving to the east and west.",
+      "grid": "40 squares wide and 20 deep",
+      "slots": "the dry fountain basin, an empty sign bracket above each of the six doors, and unlit lamp posts"
+    }
+  },
+  "sheets": {
+    "coordinator": "an elderly guildmaster: long silver beard, deep blue robe with gold trim, round spectacles, a wooden staff topped with a small brass lantern",
+    "artificer": "a dwarf artificer: ginger braided beard, rolled sleeves, brown leather apron with tools, brass goggles pushed up on the forehead",
+    "scholar": "an elven scholar: long dark hair, forest green robe with a gold sash, a quill behind one ear, pointed ears",
+    "scout": "a halfling scout: curly brown hair, mustard yellow vest over a white shirt, red scarf, bare feet",
+    "engineer": "a human engineer woman: short black hair, burgundy coat, a single steel shoulder plate, wrench at her belt",
+    "mage": "a young mage: purple hood down over pale blond hair, lavender robe with silver stars, freckles, a small glowing orb at the belt",
+    "alchemist": "a gnome alchemist: wild white hair, round green goggles, a patched teal coat with many vials on a bandolier",
+    "ranger": "an orc ranger woman: sage green skin, dark braided hair, a hooded olive cloak, a longbow on her back, a leather quiver",
+    "cleric": "a human cleric: shaved head, warm brown skin, cream and gold vestments, a small sun pendant",
+    "avatar-traveller": "a young adventurer: auburn hair in a short ponytail, teal travelling cloak over a cream tunic, brown belt and boots, small leather satchel",
+    "avatar-knight": "a young knight: short sandy hair, a light silver breastplate over a deep red tunic, a short cape, a sword at the hip",
+    "avatar-bard": "a cheerful bard: dark curly hair, a sky blue doublet, a lute slung on the back, a jaunty green feathered hat"
+  },
+  "pieces": {
+    "doors": {
+      "brief": "five items, each sized to fill an arched stone niche about 2 squares wide and 3 tall where a person is 1.5 squares tall: 1. a closed arched oak door with iron bands and warm light glowing under it; 2. the same door standing open, revealing a warm glowing workshop interior; 3. the same door closed up: boarded with crossed planks, a little dust and cobweb, unlit; 4. a hanging cloth banner on a short iron rod, plain cream cloth with a simple embroidered border and an empty middle (no emblem, no text); 5. the same banner in deep red cloth.",
+      "names": ["door-closed", "door-open", "door-boarded", "banner-cream", "banner-red"]
+    },
+    "fire": {
+      "brief": "four animation frames of the same crackling hearth fire on burning logs, sized to fill a stone fireplace hearth about 2 squares wide, the flames shifting shape frame to frame for a seamless loop, warm orange and yellow with a few sparks.",
+      "names": ["fire-0", "fire-1", "fire-2", "fire-3"]
+    },
+    "water": {
+      "brief": "four animation frames of the same clear blue water surface filling a round stone fountain basin about 4 squares wide, seen from above at a 3/4 angle, with a small jet in the middle and ripples that move outward frame to frame for a seamless loop; water only, no stone rim.",
+      "names": ["water-0", "water-1", "water-2", "water-3"]
+    }
+  }
+}

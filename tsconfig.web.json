@@ -10,5 +10,10 @@
     "skipLibCheck": true,
     "types": ["vite/client"]
   },
-  "include": ["components/browser-pages/web/**/*.ts", "components/browser-pages/web/**/*.tsx"]
+  "include": [
+    "components/browser-pages/web/**/*.ts",
+    "components/browser-pages/web/**/*.tsx",
+    "apps/agent-world/web/**/*.ts",
+    "apps/agent-world/web/**/*.tsx"
+  ]
 }

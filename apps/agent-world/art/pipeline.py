@@ -15,9 +15,12 @@ apps/agent-world/themes/<theme>/ (shipped). STYLE.md is the standard every comma
   pipeline.py portraits RAW OUTPREFIX                                       cut a 2x2 portrait grid into OUTPREFIX-0..3.png
   pipeline.py pieces RAW OUTDIR NAME...                                     cut a row of pieces into OUTDIR/NAME.png
   pipeline.py check FILE...                                                 fail on magenta fringe or frames off the baseline
+  pipeline.py batch THEME                                                   generate every missing piece in briefs/THEME.json, in parallel
+  pipeline.py build THEME                                                   clean all of raw/THEME into themes/THEME and check it
 """
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 import json
 import subprocess
 import sys
@@ -76,7 +79,14 @@ def generate(out, text):
         )
     if not out.exists():
         sys.exit(f"FAILED {out} (see {log})")
+    shrink(out)
     print(f"made {out}")
+
+
+def shrink(path):
+    # Raw art is kept in the repository, which Pi clones on install, so it is stored at 256 colours.
+    img = Image.open(path).convert("RGB")
+    img.quantize(256, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.FLOYDSTEINBERG).save(path, optimize=True)
 
 
 def bands(filled, min_gap, min_size):
@@ -127,6 +137,11 @@ def hard_alpha(img):
     return Image.fromarray(a)
 
 
+def save_sprite(img, path):
+    # 255 colours plus transparency keeps shipped sprites small without visible loss.
+    img.quantize(255, method=Image.Quantize.FASTOCTREE).save(path, optimize=True)
+
+
 def scene(raw, out):
     img = Image.open(raw).convert("RGB")
     img.quantize(256, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.FLOYDSTEINBERG).save(out, optimize=True)
@@ -147,8 +162,7 @@ def sheet(raw, out):
     strip = Image.new("RGBA", (cw * len(frames), ch))
     for i, f in enumerate(frames):
         strip.paste(f, (i * cw + (cw - f.width) // 2, baseline - f.height), f)
-    strip = hard_alpha(strip)
-    strip.save(out, optimize=True)
+    save_sprite(hard_alpha(strip), out)
     meta = {"frameWidth": cw, "frameHeight": ch, "frames": len(frames), "baseline": baseline}
     Path(out).with_suffix(".json").write_text(json.dumps(meta, indent=2) + "\n")
     print(f"sheet {out} {meta}")
@@ -158,7 +172,7 @@ def portraits(raw, prefix):
     for i, bust in enumerate(cut(raw, 2, 2)):
         s = PORTRAIT_HEIGHT / bust.height
         img = hard_alpha(bust.resize((round(bust.width * s), PORTRAIT_HEIGHT), Image.Resampling.LANCZOS))
-        img.save(f"{prefix}-{i}.png", optimize=True)
+        save_sprite(img, f"{prefix}-{i}.png")
     print(f"portraits {prefix}-0..3.png")
 
 
@@ -168,7 +182,7 @@ def pieces(raw, outdir, names):
         sys.exit(f"{Path(raw).name}: expected {len(names)} pieces, found {len(found)}")
     Path(outdir).mkdir(parents=True, exist_ok=True)
     for name, piece in zip(names, found):
-        hard_alpha(piece).save(Path(outdir) / f"{name}.png", optimize=True)
+        save_sprite(hard_alpha(piece), Path(outdir) / f"{name}.png")
         print(f"piece {name} {piece.size}")
 
 
@@ -195,6 +209,62 @@ def problems(path):
     return found
 
 
+def raw_jobs(theme):
+    briefs = json.loads((HERE / "briefs" / f"{theme}.json").read_text())
+    raw = HERE / "raw" / theme
+    jobs = []
+    for name, b in briefs.get("scenes", {}).items():
+        jobs.append(
+            (raw / "places" / f"{name}.png", prompt("scene", theme, b["brief"], b["grid"], b.get("slots", "none")))
+        )
+    for name, brief in briefs.get("sheets", {}).items():
+        jobs.append((raw / "characters" / f"{name}-sheet.png", prompt("sheet", theme, brief)))
+        jobs.append((raw / "characters" / f"{name}-portrait.png", prompt("portrait", theme, brief)))
+    for name, b in briefs.get("pieces", {}).items():
+        jobs.append((raw / "overlays" / f"{name}.png", prompt("pieces", theme, b["brief"])))
+    return briefs, raw, jobs
+
+
+def batch(theme):
+    _, _, jobs = raw_jobs(theme)
+    missing = [(out, text) for out, text in jobs if not out.exists()]
+    failed = []
+
+    def run(job):
+        try:
+            generate(*job)
+        except SystemExit as e:
+            failed.append(str(e))
+
+    with ThreadPoolExecutor(max_workers=len(missing) or 1) as pool:
+        list(pool.map(run, missing))
+    for f in failed:
+        print(f)
+    if failed:
+        sys.exit(1)
+
+
+def build(theme):
+    briefs, raw, _ = raw_jobs(theme)
+    out = HERE.parent / "themes" / theme
+    for d in ("places", "characters", "overlays"):
+        (out / d).mkdir(parents=True, exist_ok=True)
+    for name in briefs.get("scenes", {}):
+        scene(raw / "places" / f"{name}.png", out / "places" / f"{name}.png")
+    for name in briefs.get("sheets", {}):
+        sheet(raw / "characters" / f"{name}-sheet.png", out / "characters" / f"{name}.png")
+        portraits(raw / "characters" / f"{name}-portrait.png", out / "characters" / f"{name}-portrait")
+    for name, b in briefs.get("pieces", {}).items():
+        pieces(raw / "overlays" / f"{name}.png", out / "overlays", b["names"])
+    files = [f for d in ("characters", "overlays") for f in sorted((out / d).glob("*.png"))]
+    found = [x for f in files for x in problems(f)]
+    for x in found:
+        print(x)
+    if found:
+        sys.exit(1)
+    print(f"built {theme}: {len(files)} sprites checked")
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -218,6 +288,8 @@ def main(argv=None):
     s.add_argument("names", nargs="+")
     s = sub.add_parser("check")
     s.add_argument("files", nargs="+")
+    for name in ("batch", "build"):
+        sub.add_parser(name).add_argument("theme", choices=sorted(LIGHT))
     a = p.parse_args(argv)
     if a.cmd in ("prompt", "generate"):
         text = prompt(a.kind, a.theme, a.brief, a.grid, a.slots, a.seat)
@@ -233,6 +305,10 @@ def main(argv=None):
         portraits(a.raw, a.prefix)
     elif a.cmd == "pieces":
         pieces(a.raw, a.outdir, a.names)
+    elif a.cmd == "batch":
+        batch(a.theme)
+    elif a.cmd == "build":
+        build(a.theme)
     else:
         found = [x for f in a.files for x in problems(f)]
         for x in found:
