@@ -37,3 +37,7 @@ Pending.
 - **06 idle art:** the first idle sheets drew a different person for many looks; all idle sheets were regenerated with the look's own sheet attached as a reference image.
 - **07 wandering:** life is off in headless tests unless a test asks for it; asking and finished-unseen agents stay at their spots so you can find them.
 - **10 recruiting:** the anime courtyard has no painted booth, so its recruiter stands by the left bench.
+- **08 ambient NPCs:** four per pack, placed in the square, the inn, and the new exterior (never in repeating rooms); their lines show in the existing on-screen notice, which now stays up longer for longer lines.
+- **09 second exterior:** the kind is `street` in every pack (Harbour lane, Main street, Shopping street), traced on the square's grid so people keep their size; the square has 14 townsfolk spots (was 10) and the street takes the overflow.
+- **12 rename:** renaming changes the Pi session's name, not the tmux window's.
+- **13 names and intent:** names come from local lists (310 first, 299 family names), no model call; your sessions pick them up on their next start or `/reload`; I restarted your runtime (2026-10-19 15:15) so intents are stored. A forked session keeps its parent's name, so two live sessions can share one.

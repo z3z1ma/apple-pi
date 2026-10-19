@@ -4,9 +4,9 @@
 
 **Blocked by:** 06 Idle animations; 07 Wandering
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Each pack defines its ambient cast in `theme.json` (name, look, place, lines, reactions), validated by the pack check.
-- [ ] Talking to an ambient NPC shows its next line in the small dialogue box; clicking it several times in a row gives its reaction.
-- [ ] Ambient NPCs send no command and make no outside call.
-- [ ] Judged on screenshots in all three themes against `apps/agent-world/art/STYLE.md` and the polish bar in `.ledger/history/202610171741-guildworld/spec.md` (Further Notes).
+- [x] Each pack defines its ambient cast in `theme.json` (name, look, place, lines, reactions), validated by the pack check.
+- [x] Talking to an ambient NPC shows its next line in the small dialogue box; clicking it several times in a row gives its reaction.
+- [x] Ambient NPCs send no command and make no outside call.
+- [x] Judged on screenshots in all three themes against `apps/agent-world/art/STYLE.md` and the polish bar in `.ledger/history/202610171741-guildworld/spec.md` (Further Notes).

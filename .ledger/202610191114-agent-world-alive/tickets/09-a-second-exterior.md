@@ -4,9 +4,9 @@
 
 **Blocked by:** 08 Ambient NPCs
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Each pack has the new exterior's painting and traced data (walk grid, spots, doors both ways, fidget and overlay slots), passing the pack check and the reachability test.
-- [ ] The square has more townsfolk spots than before, and the bound grows with them.
-- [ ] The new exterior appears in the Places tab and on the square's minimap edge, and the avatar can walk there and back.
-- [ ] Judged on screenshots in all three themes against `apps/agent-world/art/STYLE.md` and the polish bar in `.ledger/history/202610171741-guildworld/spec.md` (Further Notes).
+- [x] Each pack has the new exterior's painting and traced data (walk grid, spots, doors both ways, fidget and overlay slots), passing the pack check and the reachability test.
+- [x] The square has more townsfolk spots than before, and the bound grows with them.
+- [x] The new exterior appears in the Places tab and on the square's minimap edge, and the avatar can walk there and back.
+- [x] Judged on screenshots in all three themes against `apps/agent-world/art/STYLE.md` and the polish bar in `.ledger/history/202610171741-guildworld/spec.md` (Further Notes).

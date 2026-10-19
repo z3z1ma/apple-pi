@@ -6,10 +6,10 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] A new unnamed root TUI session is named at start with two parts that come from the name lists, different from every other live session's name (faux-session test).
-- [ ] No session-title model request is made to choose a name; a name set by `/name` is never replaced.
-- [ ] After a settled user turn, the session's `intent` fact holds the quick model's sentence (faux model), is stored by the runtime with an `intent_changed` event, and is unchanged when the model answers that the work has not changed.
-- [ ] Agent World shows the ledger task when there is one and the intent otherwise, in the panel, card, rows, and Work tab; the sidebar does the same.
-- [ ] `docs/context.md` (Session titles) and `docs/session-state.md` describe the new behaviour.
+- [x] A new unnamed root TUI session is named at start with two parts that come from the name lists, different from every other live session's name (faux-session test).
+- [x] No session-title model request is made to choose a name; a name set by `/name` is never replaced.
+- [x] After a settled user turn, the session's `intent` fact holds the quick model's sentence (faux model), is stored by the runtime with an `intent_changed` event, and is unchanged when the model answers that the work has not changed.
+- [x] Agent World shows the ledger task when there is one and the intent otherwise, in the panel, card, rows, and Work tab; the sidebar does the same.
+- [x] `docs/context.md` (Session titles) and `docs/session-state.md` describe the new behaviour.
