@@ -1,6 +1,6 @@
 Type: interrogation
 Status: open
-Blocked by: 05, 12, 17, 18
+Blocked by: 05, 12, 17, 18, 25, 26
 
 # Command vocabulary and gates
 

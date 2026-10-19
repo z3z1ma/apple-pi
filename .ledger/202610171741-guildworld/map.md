@@ -43,24 +43,31 @@ A whole-product spec for Agent World, ready for `/skill:to-spec`: every architec
 - [Movement and pathing](decisions/23-movement-and-pathing.md): RuneScape's interaction rhythm with smooth movement along straightened paths over half-tile walk grids traced by hand; paintings leave room to move and interact.
 - [How exteriors are built](decisions/24-how-exteriors-are-built.md): exteriors are hand-painted like interiors, with a door per function place on painted building fronts, animation overlaid into spaces the painting leaves empty, and Slack channels as townsfolk.
 - [Dialogue with a character](decisions/17-dialogue-with-a-character.md): talking opens a themed conversation panel with the portrait, the Markdown transcript with folded tool calls and the streaming reply, and state-dependent actions (reply; redirect, tell it after, stop; a themed form for questionnaires); barks over heads for state at a distance.
+- [Coordinator delegation protocol](decisions/12-coordinator-delegation-protocol.md): no protocol of its own: the operator talks to the coordinator in the panel, the coordinator starts workers with its lifecycle tools, and the world observes the outcome; no required link from a worker to a thread.
 
 ## Not yet specified
 
-- Character identity beyond the session: whether a character id is separate from its Pi session id, and what a `soul.md` and memories are and where they live. Sharpens once the world's purpose and form are known; dormant characters are decided.
-- World-owned state: quests, parties, and interactions start as projections (ledger tasks, linked external items, derived groupings); revisit when a feature needs durable world state.
-- Slack access: revisit the captured browser session from [Source of SaaS work data](decisions/07-source-of-saas-work-data.md) in favour of an officially scoped token before any Slack build.
 - Milestone order and slice boundaries: depends on most tickets; the handoff's M0–M7 is a starting point.
 - The operator's avatar: who it is and how it looks; sharpens with [Characters and portraits](decisions/22-characters-and-portraits.md). Movement itself is [Movement and pathing](decisions/23-movement-and-pathing.md).
 - Layout of the connective tissue: how the function places are arranged and joined per theme; sharpens with [How exteriors are built](decisions/24-how-exteriors-are-built.md).
-- PR review flow in the Forge: how a review page opens from Agent World and what the Forge shows; follows the command and SaaS-source decisions.
-- Several tmux servers in one world (each coordinator already gets its own headquarters).
-- Browser mode: whether a browser client may control agents or only view them; decided with the browser-mode milestone.
-- Accessibility, reduced motion, audio, and the performance budget.
-- Things to interact with (the painted/overlaid split is decided in [How places are built](decisions/15-how-places-are-built.md)): many more objects to fidget with in every place ("ADHD paradise"), a polish pass once places, characters, and movement work.
-- Rewards and celebration policy, and the serious-mode override for incidents.
-- First run without Pi, Jira, or GitHub: the demo world and onboarding.
+- Things to interact with (the painted/overlaid split is decided in [How places are built](decisions/15-how-places-are-built.md)): many more objects to fidget with in every place ("ADHD paradise"); in the first version (operator, 2026-10-18), designed once places, characters, and movement work.
 
 ## Out of scope
+
+Deferred past the first version (operator, 2026-10-18), logged so the thoughts are kept:
+
+- Character identity beyond the session: a character id separate from its Pi session id, a `soul.md`, and memories (dormant characters are decided).
+- World-owned state (quests, parties, interactions) beyond projections of ledger tasks, linked external items, and derived groupings.
+- Slack access through an officially scoped token instead of the captured browser session of [Source of SaaS work data](decisions/07-source-of-saas-work-data.md), needed before any Slack build.
+- Several tmux servers in one world (each coordinator already gets its own headquarters).
+- Browser mode, and whether a browser client may control agents or only view them.
+- Accessibility, reduced motion, audio, and the performance budget.
+- First run without Pi, Jira, or GitHub: the demo world and onboarding.
+- The serious-mode override for incidents.
+
+Not wanted:
+
+- Rewards and celebrations: not the purpose (operator, 2026-10-18).
 
 - [Service lifetime](decisions/09-service-lifetime.md) and [Persistence](decisions/10-persistence.md): moved to the shared state model task, whose runtime and store Agent World will use.
 - Everything the handoff defers: multiplayer, cloud hosting, distributed agent hosts, AI-generated personalities, executable theme mods, marketplaces, true 3D, VR, combat, productivity-tied rewards, mobile, and automatic remote writes without a permission policy.
