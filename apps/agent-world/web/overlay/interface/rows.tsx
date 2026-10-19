@@ -105,7 +105,11 @@ export function CharacterRow({
 				<span className="aw-row-text">
 					<span className="aw-row-name">{character.name}</span>
 					<span className="aw-sr">, {PIP_LABEL[attention]}: </span>
-					{detail && <span className="aw-row-detail">{detail}</span>}
+					{detail && (
+						<span className="aw-row-detail" title={detail}>
+							{detail}
+						</span>
+					)}
 				</span>
 				{time && <span className="aw-row-time">{time}</span>}
 			</button>

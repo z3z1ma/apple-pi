@@ -300,7 +300,56 @@ function pathFrom(
 	if (cellOf(grid, from) !== startCell) raw.push(centre(grid, startCell));
 	for (const cell of cells.slice(0, -1)) raw.push(centre(grid, cell));
 	raw.push(goal.point);
-	return { points: pull(grid, raw), goal: goal.point };
+	return { points: pull(grid, unjog(grid, pull(grid, raw))), goal: goal.point };
+}
+
+/** A run shorter than this (tiles) between two corners reads as a jog: a sidestep of a cell or so. */
+const JOG = 1;
+/** How much closer to furniture (tiles) the run that replaces a jog may pass than the jog did: a couple of pixels. */
+const JOG_SLACK = 0.05;
+
+/**
+ * Drop the small jogs grid paths take round doorways, corners, and people: a corner with a short run on either side goes
+ * when the straight run that replaces it keeps (within a couple of pixels) as far from furniture as the two runs it
+ * replaces did at their tightest (and passes someone's footprint only where they did). Short runs only, so a long run never grazes a wall at the
+ * width of the narrowest gap on its way.
+ */
+function unjog(grid: Grid, points: Point[]): Point[] {
+	const out = points.slice();
+	for (let changed = true; changed; ) {
+		changed = false;
+		for (let i = 1; i < out.length - 1; i++) {
+			const [a, b, c] = [out[i - 1], out[i], out[i + 1]];
+			if (Math.hypot(b[0] - a[0], b[1] - a[1]) > JOG && Math.hypot(c[0] - b[0], c[1] - b[1]) > JOG) continue;
+			const tight = Math.min(BODY_CLEARANCE, tightest(grid, a, b), tightest(grid, b, c)) - JOG_SLACK;
+			const squeezing = crosses(grid, a, b) || crosses(grid, b, c);
+			if (!clearRun(grid, a, c, tight, tight, squeezing)) continue;
+			out.splice(i, 1);
+			changed = true;
+			break;
+		}
+	}
+	return out;
+}
+
+/** The least clearance from furniture along a straight run. */
+function tightest(grid: Grid, a: Point, b: Point): number {
+	const steps = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / SAMPLE));
+	let least = Number.POSITIVE_INFINITY;
+	for (let i = 0; i <= steps; i++)
+		least = Math.min(
+			least,
+			clearanceAt(grid, [a[0] + ((b[0] - a[0]) * i) / steps, a[1] + ((b[1] - a[1]) * i) / steps]),
+		);
+	return least;
+}
+
+/** Whether a straight run passes through someone's footprint. */
+function crosses(grid: Grid, a: Point, b: Point): boolean {
+	const steps = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / SAMPLE));
+	for (let i = 0; i <= steps; i++)
+		if (pastSomeone(grid, [a[0] + ((b[0] - a[0]) * i) / steps, a[1] + ((b[1] - a[1]) * i) / steps])) return true;
+	return false;
 }
 
 /**

@@ -8,11 +8,14 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalS
 import type { Character, TranscriptEntry, WorldSnapshot } from "../../../src/world.js";
 import { type Expression, portraitFor } from "../../looks.js";
 import type { WorldStore } from "../../world-store.js";
-import { activity, attentionOf, placeName } from "../interface/model.js";
+import { activity, ago, attentionOf, placeName } from "../interface/model.js";
+import { placeActions, placePanels } from "../places/place-panels.js";
 import { Footer } from "./actions.js";
 import "./conversation.css";
 import { useHistory } from "./history.js";
 import { useLiveReplies } from "./live-reply.js";
+import { focusWorld, trapTab } from "../focus.js";
+import { shortArg } from "../tool-line.js";
 import { conversationPanel } from "./panel-state.js";
 import { BlockView, blockAt, blockKey, blocksOf, dayName, WorkingDirectory } from "./transcript.js";
 
@@ -33,6 +36,10 @@ function Book({ opened, world, store }: { opened: Character; world: WorldSnapsho
 	// The character as it is now; if it left the world meanwhile, as it was.
 	const live = world?.characters.find((c) => c.id === opened.id);
 	const character = live ?? opened;
+	// Asleep at the inn (dormant): it can be woken here instead of reached in a terminal it no longer has.
+	const sleeper = live ? undefined : world?.dormant?.find((agent) => agent.id === opened.id);
+	const places = useSyncExternalStore(placePanels.subscribe, placePanels.get);
+	const waking = places.wakes[opened.id];
 	const facts = character.facts;
 	const attention = attentionOf(character);
 
@@ -77,6 +84,12 @@ function Book({ opened, world, store }: { opened: Character; world: WorldSnapsho
 				conversationPanel.escape();
 				return;
 			}
+			// Tab stays in the book (in an open confirmation, in that).
+			const confirm = bookRef.current?.querySelector<HTMLElement>("[role=alertdialog]");
+			if (trapTab(event, confirm ?? bookRef.current)) {
+				event.stopImmediatePropagation();
+				return;
+			}
 			if (event.target instanceof Node && bookRef.current?.contains(event.target)) return;
 			event.stopImmediatePropagation();
 		};
@@ -86,8 +99,20 @@ function Book({ opened, world, store }: { opened: Character; world: WorldSnapsho
 		return () => {
 			window.removeEventListener("keydown", capture, { capture: true });
 			document.removeEventListener("keydown", bubble);
+			// Closed: the world has the keys again.
+			focusWorld();
 		};
 	}, []);
+
+	// Links open in the system browser, through the main process; a refusal or failure shows where Go to does.
+	const openLink = (href: string) => {
+		if (!api?.openLink) return setTerminal("This window cannot open links.");
+		setTerminal(undefined);
+		void Promise.resolve()
+			.then(() => api.openLink!(href))
+			.then((result) => setTerminal(result.ok ? undefined : result.reason))
+			.catch((failure: unknown) => setTerminal(String(failure)));
+	};
 
 	const [terminal, setTerminal] = useState<string>();
 	const goToTerminal = () => {
@@ -155,14 +180,38 @@ function Book({ opened, world, store }: { opened: Character; world: WorldSnapsho
 							</dd>
 						</div>
 						<div className={`aw-conv-doing aw-conv-doing-${attention}`}>
-							<dt>{live ? "Doing now" : "Last seen"}</dt>
-							<dd>{live ? <Doing character={character} text={doing} /> : "No longer running"}</dd>
+							<dt>{live ? "Doing now" : sleeper ? "Now" : "Last seen"}</dt>
+							<dd>
+								{live ? (
+									<Doing character={character} text={doing} />
+								) : sleeper ? (
+									<>Asleep at the inn{sleeper.stoppedAt ? `, for ${ago(sleeper.stoppedAt)}` : ""}</>
+								) : (
+									"No longer running"
+								)}
+							</dd>
 						</div>
 					</dl>
 					<div className="aw-conv-side-foot">
-						<button type="button" className="aw-plaque" onClick={goToTerminal}>
-							Go to its terminal
-						</button>
+						{sleeper ? (
+							<button
+								type="button"
+								className="aw-plaque"
+								disabled={waking?.state === "sending"}
+								onClick={() => void placeActions.wake(sleeper)}
+							>
+								Wake {character.name}
+							</button>
+						) : (
+							<button type="button" className="aw-plaque" onClick={goToTerminal}>
+								Go to its terminal
+							</button>
+						)}
+						{sleeper && waking && (
+							<p className={`aw-conv-wake aw-conv-wake-${waking.state}`} role="status">
+								{waking.text}
+							</p>
+						)}
 						{terminal && (
 							<p className="aw-conv-warn" role="status">
 								{terminal}
@@ -184,7 +233,7 @@ function Book({ opened, world, store }: { opened: Character; world: WorldSnapsho
 						onClick={() => conversationPanel.close()}
 					/>
 					<WorkingDirectory.Provider value={facts?.cwd}>
-						<Transcript history={history} live={streaming} name={character.name} sent={sentCount} />
+						<Transcript history={history} live={streaming} name={character.name} sent={sentCount} onLink={openLink} />
 					</WorkingDirectory.Provider>
 					{live ? (
 						<Footer
@@ -196,7 +245,11 @@ function Book({ opened, world, store }: { opened: Character; world: WorldSnapsho
 					) : (
 						<footer className="aw-conv-reply-slot">
 							<span className="aw-quill" aria-hidden="true" />
-							<span>{character.name} is no longer running, so it cannot be told anything here.</span>
+							<span>
+								{sleeper
+									? `${character.name} is asleep at the inn. Wake it to talk; it opens in a new terminal window.`
+									: `${character.name} is no longer running, so it cannot be told anything here.`}
+							</span>
 						</footer>
 					)}
 				</section>
@@ -218,10 +271,19 @@ function Doing({ character, text }: { character: Character; text: string }) {
 		return (
 			<>
 				<span className="aw-conv-tool-name">{tool.name}</span>
-				{tool.arg && <code className="aw-conv-tool-arg">{tool.arg}</code>}
+				{tool.arg && <code className="aw-conv-tool-arg">{shortArg(tool.arg, character.facts?.cwd)}</code>}
 			</>
 		);
 	return <>{text}</>;
+}
+
+/** A click on a web link in the transcript: the window stays put, and the system browser opens it. */
+function openLinkIn(event: React.MouseEvent, open: (href: string) => void) {
+	const link = event.target instanceof Element ? event.target.closest("a.aw-md-link") : null;
+	if (!link) return;
+	event.preventDefault();
+	const href = link.getAttribute("href");
+	if (href) open(href);
 }
 
 function Transcript({
@@ -229,8 +291,11 @@ function Transcript({
 	live,
 	name,
 	sent,
+	onLink,
 }: {
 	history: ReturnType<typeof useHistory>;
+	/** Open a web link in the system browser. */
+	onLink: (href: string) => void;
 	/** Replies being written, and written ones the history has not read yet, drawn after it. */
 	live: TranscriptEntry[];
 	name: string;
@@ -291,10 +356,27 @@ function Transcript({
 	let day = "";
 	return (
 		<>
-			{/* biome-ignore lint/a11y/noNoninteractiveTabindex: the transcript scrolls with the keyboard */}
-			<div className="aw-conv-log" role="log" aria-label="Transcript" tabIndex={0} ref={log} onScroll={onScroll}>
+			{/* biome-ignore lint/a11y/useKeyWithClickEvents: links are anchors, so Enter on one clicks it and reaches here */}
+			<div
+				className="aw-conv-log"
+				role="log"
+				aria-label="Transcript"
+				// biome-ignore lint/a11y/noNoninteractiveTabindex: the transcript scrolls with the keyboard
+				tabIndex={0}
+				ref={log}
+				onScroll={onScroll}
+				onClick={(event) => openLinkIn(event, onLink)}
+				onAuxClick={(event) => openLinkIn(event, onLink)}
+			>
 				{history.ready && !history.before && blocks.length > 0 && (
 					<div className="aw-conv-start">The beginning of the conversation</div>
+				)}
+				{history.missing > 0 && (
+					<p className="aw-conv-missing" role="note">
+						{history.missing === 1
+							? "One entry is no longer in its transcript file."
+							: `${history.missing} entries are no longer in its transcript file.`}
+					</p>
 				)}
 				{blocks.map((block) => {
 					const at = blockAt(block);

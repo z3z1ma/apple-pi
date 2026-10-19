@@ -7,13 +7,14 @@
 import { writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { app, BrowserWindow, ipcMain, net, protocol } from "electron";
+import { app, BrowserWindow, ipcMain, net, protocol, shell } from "electron";
 import { agentDir, statePaths } from "../../../../components/session-state/src/paths.js";
 import { appFile } from "../app-files.js";
 import { openCommands } from "../backend/commands.js";
 import { openConversations } from "../backend/conversations.js";
 import { instruct } from "../backend/instructions.js";
 import { openLifecycle } from "../backend/lifecycle.js";
+import { openLink } from "../backend/links.js";
 import { openWorldBackend } from "../backend/world-backend.js";
 
 // This file runs as dist/electron/main.js, two levels below the app directory.
@@ -83,6 +84,8 @@ function start() {
 	ipcMain.handle("world:send-mail", (_event, characterId: unknown, body: unknown) =>
 		typeof characterId === "string" && typeof body === "string" ? lifecycle.sendMail(characterId, body) : unnamed,
 	);
+	// Links in transcripts open in the system browser, web links only.
+	ipcMain.handle("world:open-link", (_event, url: unknown) => openLink(url, (href) => shell.openExternal(href)));
 	world.subscribe((snapshot) => {
 		if (window && !window.isDestroyed()) window.webContents.send("world:update", snapshot);
 	});

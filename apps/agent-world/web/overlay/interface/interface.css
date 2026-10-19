@@ -289,11 +289,24 @@
 	flex-direction: column;
 	gap: 6px;
 	width: 262px;
-	height: min(452px, calc(100vh - 214px));
+	/* Taller windows give the list more room; the orbs and the minimap keep theirs above it. */
+	height: min(max(452px, 60vh), calc(100vh - 214px));
 }
 
 .aw-side.aw-folded {
 	height: auto;
+}
+
+.aw-panel-head {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: 8px;
+}
+
+.aw-panel-fold {
+	height: 20px;
+	width: 22px;
 }
 
 .aw-panel-head h2,
@@ -720,27 +733,29 @@
 
 /* Chatbox */
 
+/* Compact by default: five lines of the newest events. Taller on demand, folded to its bar on demand. */
 .aw-chat {
+	--aw-chat-lines: 5;
 	left: 12px;
 	bottom: 12px;
 	display: flex;
 	flex-direction: column;
 	gap: 6px;
-	width: min(548px, calc(100vw - 304px));
-	height: 182px;
+	width: min(520px, calc(100vw - 304px));
 }
 
-.aw-chat.aw-folded {
-	height: auto;
+.aw-chat-tall {
+	--aw-chat-lines: 13;
 }
 
 .aw-chat-log {
-	flex: 1;
-	min-height: 0;
+	box-sizing: border-box;
+	height: calc(var(--aw-chat-lines) * 18px + 10px);
+	max-height: calc(100vh - 260px);
 	overflow: auto;
 	padding: 5px 10px;
 	font-size: 13px;
-	line-height: 1.4;
+	line-height: 18px;
 }
 
 .aw-chat-line {

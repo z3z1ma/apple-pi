@@ -3,6 +3,7 @@
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import type { WorldStore } from "../../world-store.js";
 import { InnkeeperRegister } from "./innkeeper.js";
+import { focusWorld, trapTab } from "../focus.js";
 import { placeActions, placePanels } from "./place-panels.js";
 import "./places.css";
 import { RookeryView } from "./rookery.js";
@@ -25,14 +26,27 @@ export function PlacesOverlay({ store }: { store: WorldStore }) {
  */
 function ConfirmEnd({ id, name, reason }: { id: string; name: string; reason: string }) {
 	const keep = useRef<HTMLButtonElement>(null);
+	const dialog = useRef<HTMLDivElement>(null);
 	useEffect(() => {
+		const before = document.activeElement;
 		keep.current?.focus({ preventScroll: true });
 		const capture = (event: KeyboardEvent) => {
-			event.stopImmediatePropagation();
 			if (event.key === "Escape") placePanels.cancelEnd();
+			// Tab moves between its two buttons; Enter and Space reach the one focused; nothing reaches the world.
+			if (trapTab(event, dialog.current) || event.key === "Escape") return event.stopImmediatePropagation();
+			if (event.target instanceof Node && dialog.current?.contains(event.target)) return;
+			event.stopImmediatePropagation();
 		};
+		const bubble = (event: KeyboardEvent) => event.stopPropagation();
 		window.addEventListener("keydown", capture, { capture: true });
-		return () => window.removeEventListener("keydown", capture, { capture: true });
+		document.addEventListener("keydown", bubble);
+		return () => {
+			window.removeEventListener("keydown", capture, { capture: true });
+			document.removeEventListener("keydown", bubble);
+			// Back to what had the focus (a panel's button), or else the world.
+			if (before instanceof HTMLElement && before.isConnected && before !== document.body) before.focus();
+			else focusWorld();
+		};
 	}, []);
 	return (
 		// biome-ignore lint/a11y/noStaticElementInteractions: clicking the dimmed world lets it work; Escape does from the keyboard
@@ -43,6 +57,7 @@ function ConfirmEnd({ id, name, reason }: { id: string; name: string; reason: st
 			}}
 		>
 			<div
+				ref={dialog}
 				className="aw-frame aw-confirm"
 				role="alertdialog"
 				aria-modal="true"

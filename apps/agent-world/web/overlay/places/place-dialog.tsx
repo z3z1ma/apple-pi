@@ -2,6 +2,7 @@
 // its button, Escape, or a click on the world. While it is open the world's keys rest (typing a search must not walk
 // the view or toggle the walk grid); keys typed inside it reach its fields first.
 import { type ReactNode, useEffect, useRef } from "react";
+import { focusWorld, trapTab } from "../focus.js";
 import { placePanels } from "./place-panels.js";
 
 export function PlaceDialog({ label, className, children }: { label: string; className: string; children: ReactNode }) {
@@ -13,6 +14,10 @@ export function PlaceDialog({ label, className, children }: { label: string; cla
 				placePanels.close();
 				return;
 			}
+			if (trapTab(event, ref.current)) {
+				event.stopImmediatePropagation();
+				return;
+			}
 			if (event.target instanceof Node && ref.current?.contains(event.target)) return;
 			event.stopImmediatePropagation();
 		};
@@ -22,6 +27,8 @@ export function PlaceDialog({ label, className, children }: { label: string; cla
 		return () => {
 			window.removeEventListener("keydown", capture, { capture: true });
 			document.removeEventListener("keydown", bubble);
+			// Closed: the world has the keys again.
+			focusWorld();
 		};
 	}, []);
 	useEffect(() => {

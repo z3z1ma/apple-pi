@@ -1,6 +1,7 @@
 // Agents' replies as HTML: GitHub-flavoured Markdown through `marked`, the parser the repository already ships. A
-// transcript is untrusted text, so raw HTML shows as text, links show their target without navigating (the window
-// opens nothing), and images show as their alt text (the page loads no remote content).
+// transcript is untrusted text, so raw HTML shows as text, web links (http and https) become links the transcript
+// opens in the system browser through the main process (the window itself never navigates), any other link shows its
+// target as a title only, and images show as their alt text (the page loads no remote content).
 import { Marked, type Tokens } from "marked";
 
 const escapeHtml = (s: string) =>
@@ -12,7 +13,10 @@ marked.use({
 		html: (token: Tokens.HTML | Tokens.Tag) => escapeHtml(token.text),
 		link(token: Tokens.Link) {
 			const text = this.parser.parseInline(token.tokens);
-			return `<span class="aw-md-link" title="${escapeHtml(token.href)}">${text}</span>`;
+			const href = escapeHtml(token.href);
+			if (!/^https?:\/\//i.test(token.href))
+				return `<span class="aw-md-link aw-md-link-dead" title="${href}">${text}</span>`;
+			return `<a class="aw-md-link" href="${href}" title="${href}" rel="noreferrer noopener">${text}</a>`;
 		},
 		image: (token: Tokens.Image) => `<span class="aw-md-image">${escapeHtml(token.text || "image")}</span>`,
 		code(token: Tokens.Code) {

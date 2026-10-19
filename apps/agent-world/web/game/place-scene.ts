@@ -10,6 +10,7 @@ import { type Action, action, type Target } from "./actions.js";
 import { Birds, type BirdView, type Perch } from "./birds.js";
 import {
 	type BadgeKind,
+	type BarkShape,
 	badgeFor,
 	barkFor,
 	drawBadge,
@@ -21,7 +22,7 @@ import {
 	tempoFor,
 } from "./character-life.js";
 import { assignSpots, charactersIn, doorOf, type Layout, layoutFor, startPlace, walkGrid } from "./layout.js";
-import { findPath, type Grid, gridFor } from "./pathing.js";
+import { clearanceAt, findPath, type Grid, gridFor, isOpen } from "./pathing.js";
 import { type Facing, PERSON_TILES, type Pose, Walker, type WalkerView } from "./walker.js";
 
 const STANDING = 120; // sprite px from head to feet in a standing frame
@@ -32,7 +33,14 @@ const DRAG_THRESHOLD = 6; // screen px before a press becomes a drag
 const SEAM_PX = 24; // painting px over which two strips of a growing place blend
 const BANNER_TILES = 2.3; // a banner's width; it hangs in front of the door below it
 /** The banner's name, largest first, down to the smallest size that still reads at the default zoom. */
-const BANNER_FONT = [15, 10] as const;
+const BANNER_FONT = [15, 12] as const;
+/** A name stays on one line down to this size before it is broken onto more. */
+const BANNER_ONE_LINE = 13;
+/** Abbreviated words keep at most this many letters; abbreviated names may take this many lines (12 px fits five). */
+const BANNER_ABBREVIATION = 6;
+const BANNER_LINES_SHORT = 5;
+/** The share of the banner's width inside its vine border that the name may take. */
+const BANNER_TEXT_WIDTH = 0.42;
 const INK = "#4a2a14";
 /** How quickly the camera catches up with the avatar (per second); higher is tighter. */
 const FOLLOW_RATE = 4.5;
@@ -64,8 +72,20 @@ const STEP_IN = 0.7;
 const REACH = 0.35;
 /** Over how many tiles a character fades in after coming through a door, or out going through one. */
 const DOOR_FADE = 0.9;
+/** Water: how long each ripple frame takes to flow into the next (ms), and how opaque it lies in its basin. */
+const WATER_FRAME_MS = 700;
+const WATER_ALPHA = 0.92;
+/** Over how many world px the water's edge fades into its basin. */
+const WATER_FEATHER = 5;
 /** Where a badge floats, in tiles above the feet, by pose (a raised hand reaches higher than a head). */
-const BADGE_LIFT: Record<Pose, number> = { standing: 2.12, seated: 2.12, asking: 2.12, dozing: 2.12, "in-bed": 2.12 };
+const BADGE_LIFT: Record<Pose, number> = {
+	standing: 2.12,
+	seated: 2.12,
+	busy: 2.16,
+	asking: 2.12,
+	dozing: 2.12,
+	"in-bed": 2.12,
+};
 /** Where a dozing sleeper's "z" rises from, in tiles above its feet (just over its head at the table). */
 const Z_LIFT = 1.3;
 /** Sleepers are drawn a little dimmer and cooler, as if the lamps did not reach them. */
@@ -93,10 +113,25 @@ const BARK_EVERY_MS = [22_000, 38_000] as const;
 const BARK_MS = 4200;
 /** Below this zoom, badges and barks are drawn larger so they keep this zoom's size on screen. */
 const UI_ZOOM = 1;
+/**
+ * Pixel art stays crisp zoomed in: a texture is drawn with nearest filtering once one of its pixels covers at least this
+ * many screen pixels (sprites and overlays from 1; paintings, which are painted rather than pixel-gridded, from 1.5),
+ * and smoothed below that, so nothing shimmers or loses its outline when drawn smaller than its source.
+ */
+const CRISP_FROM = { sprite: 1, painting: 1.5 } as const;
+/** How often (ms) textures are looked over for the filtering their size on screen needs, besides on every zoom. */
+const REFILTER_EVERY_MS = 500;
 /** How often the interface's panels are measured for how far the painting may slide out from under them. */
 const INSETS_EVERY_MS = 300;
 /** At most this many barks show in a place at once, so a busy room stays calm. */
 const BARKS_AT_ONCE = 2;
+/** How long a bark takes to fade in or out (ms), and how far it rises as it comes (px). */
+const BARK_FADE_MS = 320;
+const BARK_RISE = 5;
+/** Space kept round a bark on screen (CSS px): from other barks and from the interface. */
+const BARK_MARGIN = 6;
+/** A bark that has no room waits this long (ms) before it tries again. */
+const BARK_RETRY_MS = 2500;
 
 /** A character in the place: walking in, at its spot, or walking out after its session stopped. */
 interface Figure {
@@ -110,7 +145,11 @@ interface Figure {
 	/** Fading in from, or out toward, this point in a doorway. */
 	fade?: { at: Point; out: boolean };
 	badge?: { kind: BadgeKind; container: Phaser.GameObjects.Container };
-	bark?: { line: string; container: Phaser.GameObjects.Container; until: number };
+	/**
+	 * Its bark: the line, its shape, when it starts to fade out, how far its bubble slides sideways (px) to keep clear,
+	 * and how much of it shows (eased toward 1 while it has room, toward 0 while it is covered or going).
+	 */
+	bark?: { line: string; shape: BarkShape; until: number; shift: number; shown: number; going: boolean };
 	/** When it barks next (scene time, ms), while it needs the operator. */
 	nextBark?: number;
 	barks: number;
@@ -145,6 +184,8 @@ export interface FigureView {
 	frame: number;
 	badge: BadgeKind | null;
 	bark: string | null;
+	/** Where its bark's bubble is on screen (CSS px) while it shows. */
+	barkBox: Box | null;
 	alpha: number;
 }
 
@@ -165,6 +206,8 @@ export interface BannerView {
 	size: number;
 	/** The text stays inside the cloth. */
 	fits: boolean;
+	/** Some words were cut short to fit (the full name shows on hover). */
+	abbreviated: boolean;
 }
 
 export interface DoorView {
@@ -208,9 +251,13 @@ export class PlaceScene extends Phaser.Scene {
 	private figures = new Map<string, Figure>();
 	/** The banners hung in the place, and how their names were stitched. */
 	private banners: BannerView[] = [];
+	/** Where each banner's cloth is (tiles), answering the pointer with the full name. */
+	private bannerRects: { name: string; rect: Rect }[] = [];
 	/** The overlays drawn in the place's slots, for the tests' view. */
 	private overlays: { slot: OverlaySlot; object: Phaser.GameObjects.Image; frame?: () => number }[] = [];
 	private doors: SceneDoor[] = [];
+	/** The painting's images as drawn (the whole painting, or the strips of a growing place), for the tests' view. */
+	private paintingImages: Phaser.GameObjects.Image[] = [];
 	/** The inn's beds, by the spot whose sleeper lies in each. */
 	private beds = new Map<number, { slot: OverlaySlot; image: Phaser.GameObjects.Image }>();
 	/** The place's host (the innkeeper), standing at its post. */
@@ -235,6 +282,8 @@ export class PlaceScene extends Phaser.Scene {
 	private walkable!: Grid;
 	private avatar!: Walker;
 	private avatarLook = "";
+	/** Coming in through a door: the avatar fades in over its first steps from this point in the doorway. */
+	private avatarFade?: Point;
 	private leaving = false;
 	private drag?: { x: number; y: number; mid: Point; moved: boolean; consumed: boolean };
 	private keys?: Record<"left" | "right" | "up" | "down" | "a" | "d" | "w" | "s", Phaser.Input.Keyboard.Key>;
@@ -247,7 +296,12 @@ export class PlaceScene extends Phaser.Scene {
 	private goTo?: string;
 	/** How far the interface's panels reach in from each edge of the window (CSS px), measured now and then. */
 	private insets: Insets = { top: 0, right: 0, bottom: 0, left: 0 };
+	/** Where the interface's panels, the place's title, and the hover text are on screen (CSS px), measured with them. */
+	private uiBoxes: Box[] = [];
 	private insetsAt = -Infinity;
+	/** Each texture's filtering as last set (true for nearest), and the zoom and time of the last look over them. */
+	private filters = new Map<string, boolean>();
+	private filteredAt = { zoom: 0, time: -Infinity };
 	/** Where the avatar is leaving for, read when the fade ends (a `go-to` may add whom to walk up to). */
 	private departure?: SceneData;
 
@@ -266,8 +320,12 @@ export class PlaceScene extends Phaser.Scene {
 		this.keep = data.keep;
 		this.goTo = data.goTo;
 		this.departure = undefined;
+		this.filters = new Map();
+		this.filteredAt = { zoom: 0, time: -Infinity };
 		this.figures = new Map();
 		this.banners = [];
+		this.paintingImages = [];
+		this.bannerRects = [];
 		this.doors = [];
 		this.beds = new Map();
 		this.host = undefined;
@@ -278,6 +336,7 @@ export class PlaceScene extends Phaser.Scene {
 		this.nextAmbient = 0;
 		this.gridOverlay = undefined;
 		this.pathOverlay = undefined;
+		this.avatarFade = undefined;
 		this.leaving = false;
 		this.drag = undefined;
 		this.freeLook = undefined;
@@ -296,18 +355,19 @@ export class PlaceScene extends Phaser.Scene {
 		this.drawBanners();
 		this.doors.unshift(...this.layout.place.doors);
 		this.addHost();
+		// Characters first, so the avatar arrives clear of where they stand.
+		this.showCharacters(false);
 		this.addAvatar();
 		this.birds = new Birds(this);
 		this.mailSeen = new Set((this.store.get()?.mail ?? []).map((item) => item.id));
 		this.showLetters();
-		this.showCharacters(false);
 		if (showGrid) this.drawGrid();
 
 		const camera = this.cameras.main;
 		this.insets = interfaceInsets();
 		this.zoomTarget = this.clampZoom(chosenZoom.get(this.layout.data) ?? this.defaultZoom());
 		camera.setZoom(this.zoomTarget);
-		this.mid = this.keep?.mid ?? this.clampMid(this.avatarMid(), camera.zoom);
+		this.mid = this.keep?.mid ?? this.followMid(camera.zoom);
 		this.applyCamera();
 		if (!this.keep) camera.fadeIn(FADE_IN_MS, 20, 14, 24);
 
@@ -341,15 +401,59 @@ export class PlaceScene extends Phaser.Scene {
 		if (time - this.insetsAt > INSETS_EVERY_MS) {
 			this.insetsAt = time;
 			this.insets = interfaceInsets();
+			this.uiBoxes = interfaceBoxes();
 		}
 		this.avatar.update(delta);
+		if (this.avatarFade) {
+			const near = dist([this.avatar.x, this.avatar.y], this.avatarFade) / DOOR_FADE;
+			this.avatar.setAlpha(Math.min(1, near));
+			// Through the doorway (or off on another walk): fully here.
+			if (near >= 1) this.avatarFade = undefined;
+		}
 		this.liveCharacters(time, delta);
+		this.keepTagsClear(delta);
 		this.birds.update(delta);
 		this.ambientBirds(time);
 		if (showGrid) this.drawPath();
 		this.lookAround(delta);
 		this.followCamera(delta);
+		this.refilter(time);
 		this.refreshHover();
+	}
+
+	/**
+	 * Nearest filtering for textures drawn at least as large as their own pixels, smoothing for those drawn smaller: each
+	 * texture by the largest of its images on screen. Textures are shared between scenes, so each scene sets them anew.
+	 */
+	private refilter(time: number) {
+		const zoom = this.cameras.main.zoom;
+		if (Math.abs(zoom - this.filteredAt.zoom) < 1e-3 && time - this.filteredAt.time < REFILTER_EVERY_MS) return;
+		this.filteredAt = { zoom, time };
+		const largest = new Map<string, number>();
+		for (const object of this.children.list) {
+			if (!(object instanceof Phaser.GameObjects.Image || object instanceof Phaser.GameObjects.Sprite)) continue;
+			const key = object.texture.key;
+			if (!/^(painting|look|overlay|water|bed):/.test(key)) continue;
+			largest.set(key, Math.max(largest.get(key) ?? 0, Math.abs(object.scaleX)));
+		}
+		for (const [key, scale] of largest) {
+			const nearest = zoom * scale >= (key.startsWith("painting:") ? CRISP_FROM.painting : CRISP_FROM.sprite);
+			if (this.filters.get(key) === nearest) continue;
+			this.filters.set(key, nearest);
+			this.textures
+				.get(key)
+				.setFilter(nearest ? Phaser.Textures.FilterMode.NEAREST : Phaser.Textures.FilterMode.LINEAR);
+		}
+	}
+
+	/** The frames the painting is drawn from: `__BASE` for a whole painting, a strip each for a growing place. */
+	paintingFrames(): string[] {
+		return this.paintingImages.map((image) => String(image.frame.name));
+	}
+
+	/** Each texture's filtering now, for tests: true where its pixels are drawn crisp. */
+	filterView(): Record<string, boolean> {
+		return Object.fromEntries(this.filters);
 	}
 
 	// Read-only hooks for tests and the overlay.
@@ -388,8 +492,23 @@ export class PlaceScene extends Phaser.Scene {
 			moving: view.moving,
 			frame: view.frame,
 			badge: badge?.kind ?? null,
-			bark: bark?.line ?? (sleep ? "z" : null),
+			bark: (bark && !bark.going ? bark.line : null) ?? (sleep ? "z" : null),
+			barkBox: bark && bark.shown > 0 ? this.barkBox(bark) : null,
 			alpha: walker.sprite.alpha,
+		};
+	}
+
+	/** A bark's bubble on screen, from the container as drawn (its tail left out). */
+	private barkBox(bark: NonNullable<Figure["bark"]>): Box {
+		const { container, body, width, height, tail } = bark.shape;
+		const scale = container.scaleX * this.cameras.main.zoom;
+		const [x, y] = this.toScreen([container.x / TILE, container.y / TILE]);
+		const centre = x + body.x * scale;
+		return {
+			left: centre - (width / 2) * scale,
+			top: y - height * scale,
+			right: centre + (width / 2) * scale,
+			bottom: y - tail * scale,
 		};
 	}
 
@@ -493,11 +612,15 @@ export class PlaceScene extends Phaser.Scene {
 		const { place, strips, data } = this.layout;
 		const key = `painting:${data}`;
 		if (!strips) {
-			this.add
-				.image(0, 0, key)
+			this.add;
+			// Its whole image by name: once furniture pieces are cut from it as frames, the texture's default frame is the
+			// first piece, and a later visit would stretch that piece over the place.
+			const whole = this.add
+				.image(0, 0, key, "__BASE")
 				.setOrigin(0)
 				.setDisplaySize(place.cols * TILE, place.rows * TILE)
 				.setDepth(-2);
+			this.paintingImages.push(whole);
 			return;
 		}
 		// A growing place: the painting cut into strips laid side by side, each seam blended over a few pixels.
@@ -511,11 +634,13 @@ export class PlaceScene extends Phaser.Scene {
 			const sw = Math.round(strip.to * ppt) - sx;
 			const frame = `strip:${sx}:${sw}`;
 			if (!texture.has(frame)) texture.add(frame, 0, sx, 0, sw, source.height);
-			this.add
-				.image(strip.at * TILE, 0, key, frame)
-				.setOrigin(0)
-				.setScale(scale)
-				.setDepth(-2);
+			this.paintingImages.push(
+				this.add
+					.image(strip.at * TILE, 0, key, frame)
+					.setOrigin(0)
+					.setScale(scale)
+					.setDepth(-2),
+			);
 			const previous = strips[i - 1];
 			if (previous) {
 				const seam = this.seamTexture(source, Math.round(previous.to * ppt), sx);
@@ -756,37 +881,60 @@ export class PlaceScene extends Phaser.Scene {
 			canvas.width = Math.ceil(rx * 2 * RES);
 			canvas.height = Math.ceil(ry * 2 * RES);
 			const ctx = canvas.getContext("2d")!;
-			ctx.beginPath();
-			ctx.ellipse(rx * RES, ry * RES, rx * RES, ry * RES, 0, 0, Math.PI * 2);
 			if (slot.hole?.length) {
+				// Round anything standing in the water (a fountain's pillar): its edge stays crisp.
+				ctx.beginPath();
+				ctx.rect(0, 0, canvas.width, canvas.height);
 				const [first, ...rest] = slot.hole.map(
 					([hx, hy]): Point => [(hx * TILE - (cx * TILE - rx)) * RES, (hy * TILE - (cy * TILE - ry)) * RES],
 				);
 				ctx.moveTo(...first);
 				for (const point of rest) ctx.lineTo(...point);
 				ctx.closePath();
+				ctx.clip("evenodd");
 			}
-			ctx.clip("evenodd");
 			// The pool's own oval is a little larger than the basin, so its edge tucks under the rim.
 			ctx.drawImage(source, -0.06 * canvas.width, -0.08 * canvas.height, canvas.width * 1.12, canvas.height * 1.16);
+			// The basin's oval, its edge feathered over a few pixels so the water meets the stone softly, not in steps.
+			ctx.globalCompositeOperation = "destination-in";
+			ctx.setTransform(1, 0, 0, ry / rx, rx * RES, ry * RES);
+			const edge = ctx.createRadialGradient(0, 0, 0, 0, 0, rx * RES);
+			edge.addColorStop(0, "rgba(0,0,0,1)");
+			edge.addColorStop(1 - WATER_FEATHER / rx, "rgba(0,0,0,1)");
+			edge.addColorStop(1, "rgba(0,0,0,0)");
+			ctx.fillStyle = edge;
+			ctx.fillRect(-rx * RES, -rx * RES, rx * RES * 2, rx * RES * 2);
 			this.textures.addCanvas(key, canvas);
 			return key;
 		});
-		const water = this.add
+		// Two layers cross-fade from each ripple frame into the next, so the water moves smoothly rather than jumping.
+		const below = this.add
 			.image(cx * TILE, cy * TILE, keys[0])
 			.setScale(1 / RES)
 			.setDepth(-1)
-			.setAlpha(0.92);
+			.setAlpha(WATER_ALPHA);
+		const above = this.add
+			.image(cx * TILE, cy * TILE, keys[1])
+			.setScale(1 / RES)
+			.setDepth(-0.99)
+			.setAlpha(0);
 		let frame = 0;
-		this.time.addEvent({
-			delay: 260,
-			loop: true,
-			callback: () => {
-				frame = (frame + 1) % 4;
-				water.setTexture(keys[frame]);
+		this.tweens.addCounter({
+			from: 0,
+			to: 1,
+			duration: WATER_FRAME_MS,
+			repeat: -1,
+			onUpdate: (tween) => {
+				// Eased so each frame rests a moment before the next one comes in.
+				above.setAlpha(WATER_ALPHA * Phaser.Math.Easing.Sine.InOut(tween.getValue() ?? 0));
+			},
+			onRepeat: () => {
+				frame = (frame + 1) % keys.length;
+				below.setTexture(keys[frame]);
+				above.setTexture(keys[(frame + 1) % keys.length]).setAlpha(0);
 			},
 		});
-		this.overlays.push({ slot, object: water, frame: () => frame });
+		this.overlays.push({ slot, object: below, frame: () => frame });
 	}
 
 	/** Warm light around a lantern or a candle: a soft halo added to what is under it, flickering a little. */
@@ -872,9 +1020,10 @@ export class PlaceScene extends Phaser.Scene {
 	}
 
 	/**
-	 * A cream banner hung with its rod at (x, top), the name stitched on it at the largest size that fits, broken after
-	 * `-`, `_`, `.`, `/`, or a space onto up to four lines; a name that fits nowhere is cut short at the smallest
-	 * legible size.
+	 * A cream banner hung with its rod at (x, top), the name stitched on it at the largest size that fits: on one line,
+	 * else broken after `-`, `_`, `.`, `/`, or a space onto up to four lines, never smaller than legible. A name that still
+	 * does not fit is abbreviated, word by word (`reconciliation` to `reconc.`), and cut short with an ellipsis only as a
+	 * last resort; the banner answers the pointer with the full name.
 	 */
 	private banner(x: number, top: number, name: string) {
 		const image = this.add
@@ -882,8 +1031,9 @@ export class PlaceScene extends Phaser.Scene {
 			.setOrigin(0.5, 0)
 			.setDepth((top + 6) * TILE);
 		image.setScale((BANNER_TILES * TILE) / image.width);
-		// The stitching stays inside the cloth's vine border, above the swallowtail.
-		const width = image.displayWidth * 0.48;
+		// The stitching stays inside the cloth's vine border (x 95..245 of the sprite's 341 px, less a little air), above
+		// the swallowtail.
+		const width = image.displayWidth * BANNER_TEXT_WIDTH;
 		const height = image.displayHeight * 0.48;
 		const text = this.add
 			.text(x * TILE, top * TILE + image.displayHeight * 0.44, "", {
@@ -896,74 +1046,86 @@ export class PlaceScene extends Phaser.Scene {
 			.setOrigin(0.5)
 			.setResolution(4)
 			.setDepth(image.depth + 1);
-		const view: BannerView = { name, text: "", size: 0, fits: false };
+		const view: BannerView = { name, text: "", size: 0, fits: false, abbreviated: false };
 		this.banners.push(view);
-		const done = (size: number) => {
-			const shown = text.text;
+		// The cloth answers the pointer with the whole name, however it is stitched.
+		this.bannerRects.push({
+			name,
+			rect: [
+				x - (image.displayWidth * 0.3) / TILE,
+				top + (image.displayHeight * 0.12) / TILE,
+				(image.displayWidth * 0.6) / TILE,
+				(image.displayHeight * 0.7) / TILE,
+			],
+		});
+		// A separator may hang just past the edge, as punctuation does.
+		const fits = (line: string) => {
+			text.setText(line.trim().replace(/[-_./]$/, ""));
+			return text.width <= width + 0.5;
+		};
+		const done = (size: number, lines: string[]) => {
+			const shown = lines.map((line) => line.trim()).join("\n");
+			text.setFontSize(size);
+			text.setText(shown);
 			view.text = shown;
 			view.size = size;
-			const tall = text.height;
-			// Each line inside the border (a trailing separator may hang past it), and all of them above the tail.
-			view.fits =
-				tall <= height + 0.5 &&
-				shown.split("\n").every((line) => {
-					text.setText(line.replace(/[-_./]$/, ""));
-					return text.width <= width + 0.5;
-				});
+			view.fits = text.height <= height + 0.5 && lines.every((line) => fits(line));
 			text.setText(shown);
 		};
-		// On one line while it reads well (from 12 px), else on as many as it takes at the largest size that fits.
-		for (let size = BANNER_FONT[0]; size >= 12; size--) {
+		const parts = bannerParts(name);
+		// On one line while it reads well, else on as many lines as it takes at the largest size that fits.
+		for (let size = BANNER_FONT[0]; size >= BANNER_ONE_LINE; size--) {
 			text.setFontSize(size);
-			text.setText(name);
-			if (text.width <= width) return done(size);
+			if (fits(name)) return done(size, [name]);
 		}
 		for (let size = BANNER_FONT[0]; size >= BANNER_FONT[1]; size--) {
 			text.setFontSize(size);
-			const lines = bannerLines(name, (line) => {
-				text.setText(line);
-				return text.width <= width;
-			});
+			const lines = bannerLines(parts, fits);
 			if (!lines) continue;
 			text.setText(lines.join("\n"));
-			if (text.height <= height) return done(size);
+			if (text.height <= height) return done(size, lines);
 		}
-		// Nothing fits whole: the smallest legible size, words that are too long broken with a hyphen (‐), on up to
-		// four lines, the last cut short if there is still more.
+		// Too long whole at the smallest legible size: each word that does not fit its line is cut to the longest start
+		// that does, with a full stop ("reconc."), and the words go on as few lines as fit.
 		const size = BANNER_FONT[1];
 		text.setFontSize(size);
-		// A separator may hang just past the edge, as punctuation does.
-		const fitsLine = (candidate: string) => {
-			text.setText(candidate.trim().replace(/[-_./]$/, ""));
-			return text.width <= width;
+		const fitsExactly = (line: string) => {
+			text.setText(line.trim());
+			return text.width <= width + 0.5;
 		};
-		const lines: string[] = [];
-		let line = "";
-		for (let word of name.split(/(?<=[-_./ ])/)) {
-			if (fitsLine(line + word)) {
-				line += word;
-				continue;
+		const short = parts.map((part) => {
+			const sep = /[-_./ ]$/.test(part) ? part.slice(-1) : "";
+			const word = sep ? part.slice(0, -1) : part;
+			if (fits(part)) return part;
+			// A start of up to six letters that fits and ends on a consonant ("custom.", "reconc."), at least three.
+			let n = Math.min(word.length - 1, BANNER_ABBREVIATION);
+			while (n > 3 && (!fitsExactly(`${word.slice(0, n)}.`) || /[aeiouy]/i.test(word[n - 1]))) n--;
+			view.abbreviated = true;
+			// The full stop ends the word; the next one starts after a space, not the separator.
+			return `${word.slice(0, n)}.${sep ? " " : ""}`;
+		});
+		let lines = bannerLines(short, fits, BANNER_LINES_SHORT);
+		if (!lines) {
+			// More words than lines: as many as fit, the last line cut short.
+			lines = [];
+			let line = "";
+			for (const part of short) {
+				if (line && !fits(line + part)) {
+					lines.push(line);
+					line = "";
+				}
+				line += part;
 			}
-			if (line) lines.push(line.trim());
-			line = "";
-			while (word.length > 6 && !fitsLine(word)) {
-				// Never leave fewer than three letters on either side of the break.
-				let n = word.replace(/[-_./ ]$/, "").length - 3;
-				while (n > 3 && !fitsLine(`${word.slice(0, n)}\u2010`)) n--;
-				lines.push(`${word.slice(0, n)}\u2010`);
-				word = word.slice(n);
+			if (line) lines.push(line);
+			if (lines.length > BANNER_LINES_SHORT) {
+				lines = lines.slice(0, BANNER_LINES_SHORT);
+				let last = lines[BANNER_LINES_SHORT - 1].trim();
+				while (last.length > 1 && !fits(`${last}\u2026`)) last = last.slice(0, -1);
+				lines[BANNER_LINES_SHORT - 1] = `${last.replace(/[-_./ ]+$/, "")}\u2026`;
 			}
-			line = word;
+			view.abbreviated = true;
 		}
-		if (line) lines.push(line.trim());
-		const kept = lines.slice(0, 4);
-		if (lines.length > kept.length) {
-			let last = kept.pop()!.replace(/\u2010$/, "");
-			while (last.length > 1 && !fitsLine(`${last}\u2026`)) last = last.slice(0, -1);
-			kept.push(`${last}\u2026`);
-		}
-		text.setText(kept.join("\n"));
-		done(size);
+		done(size, lines);
 	}
 
 	private drawGrid() {
@@ -1092,6 +1254,18 @@ export class PlaceScene extends Phaser.Scene {
 		this.upstairsTag = { count, tag };
 	}
 
+	/** A tag in the world (the inn's upstairs count) fades while a panel or the title covers it, like a bark. */
+	private keepTagsClear(delta: number) {
+		const tag = this.upstairsTag?.tag;
+		if (!tag) return;
+		const bounds = tag.getBounds();
+		const [left, top] = this.toScreen([bounds.left / TILE, bounds.top / TILE]);
+		const [right, bottom] = this.toScreen([bounds.right / TILE, bounds.bottom / TILE]);
+		const covered = this.uiBoxes.some((box) => overlaps({ left, top, right, bottom }, box));
+		const step = Math.min(delta, 100) / BARK_FADE_MS;
+		tag.setAlpha(Phaser.Math.Clamp(tag.alpha + (covered ? -step : step), 0, 1));
+	}
+
 	/** The inn's stairs up to the rooms, where sleepers beyond its spots rest. */
 	private stairs(): Door | undefined {
 		return this.layout.place.doors.find((door) => door.to === "rooms");
@@ -1134,10 +1308,11 @@ export class PlaceScene extends Phaser.Scene {
 		figure.spot = undefined;
 		figure.nextBark = undefined;
 		this.dropBadge(figure);
-		this.dropBark(figure);
+		if (animate) this.hushBark(figure);
 		this.wakeUp(figure);
 		const gone = () => {
 			if (!figure.leaving) return;
+			this.dropBark(figure);
 			figure.walker.destroy();
 			if (this.figures.get(figure.character.id) === figure) this.figures.delete(figure.character.id);
 		};
@@ -1174,11 +1349,16 @@ export class PlaceScene extends Phaser.Scene {
 		figure.walker.face([figure.walker.x, figure.walker.y + 1]);
 	}
 
+	/** Out of doors (the square): no desks, so those at work stand. */
+	private outdoors(): boolean {
+		return this.layout.ref.kind === "square";
+	}
+
 	/** Pose, badge, and the seated beat by the character's state; at the inn, asleep. */
 	private dress(figure: Figure) {
 		if (this.layout.ref.kind === "inn") return this.sleep(figure);
 		const { character, walker } = figure;
-		walker.setPose(poseFor(character));
+		walker.setPose(poseFor(character, this.outdoors()));
 		walker.tempo = tempoFor(character);
 		const kind = badgeFor(character);
 		if (figure.badge?.kind !== kind) {
@@ -1187,7 +1367,7 @@ export class PlaceScene extends Phaser.Scene {
 		}
 		if (!needsYou(character)) {
 			figure.nextBark = undefined;
-			this.dropBark(figure);
+			this.hushBark(figure);
 		}
 	}
 
@@ -1272,13 +1452,17 @@ export class PlaceScene extends Phaser.Scene {
 	}
 
 	private dropBark(figure: Figure) {
-		figure.bark?.container.destroy();
+		figure.bark?.shape.container.destroy();
 		figure.bark = undefined;
+	}
+
+	/** Let a bark go: it fades out, then is gone. */
+	private hushBark(figure: Figure) {
+		if (figure.bark) figure.bark.going = true;
 	}
 
 	/** Every frame: walk, fade in doorways, keep badges and barks over heads, and let those who need you bark. */
 	private liveCharacters(time: number, delta: number) {
-		let barking = [...this.figures.values()].filter((f) => f.bark).length;
 		// Badges and barks keep at least their own size on screen when the view zooms out, so they stay legible.
 		const ui = Math.max(1, UI_ZOOM / this.cameras.main.zoom);
 		for (const figure of this.figures.values()) {
@@ -1305,39 +1489,145 @@ export class PlaceScene extends Phaser.Scene {
 					.setScale(ui);
 			}
 			figure.badge?.container.setPosition(x, top).setDepth(depth).setScale(ui).setAlpha(walker.sprite.alpha);
-			if (figure.bark) {
-				if (time >= figure.bark.until) this.dropBark(figure);
-				else
-					figure.bark.container
-						.setPosition(x, top - (figure.badge ? 14 : 2) * ui)
-						.setDepth(depth + 0.5)
-						.setScale(ui);
-			}
-			if (figure.leaving || !needsYou(figure.character)) continue;
-			figure.nextBark ??= time + Phaser.Math.Between(...FIRST_BARK_MS);
-			if (time < figure.nextBark || figure.bark || walker.moving) continue;
-			if (barking >= BARKS_AT_ONCE) {
-				figure.nextBark = time + 3000;
+		}
+		this.liveBarks(time, delta, ui);
+	}
+
+	/**
+	 * Barks: each over its speaker's head, fading in and out. A bark never covers another bark, the place's title, or
+	 * the interface's panels: its bubble slides sideways over the tail to find room, and with none it fades until room
+	 * returns. A new bark waits its turn when there is no room for it, and at most `BARKS_AT_ONCE` show.
+	 */
+	private liveBarks(time: number, delta: number, ui: number) {
+		const camera = this.cameras.main;
+		const scale = ui * camera.zoom;
+		const placed: Box[] = [];
+		const anchor = (figure: Figure): Point => {
+			const { walker } = figure;
+			return [walker.x, walker.y - BADGE_LIFT[walker.pose] - ((figure.badge ? 14 : 2) * ui) / TILE];
+		};
+		/** The first slide (px) at which the bark's bubble has room on screen, preferring where it already is. */
+		const room = (shape: BarkShape, at: Point, prefer: number): number | undefined => {
+			const [sx, sy] = this.toScreen(at);
+			const slides = [prefer, 0, -shape.slide / 2, shape.slide / 2, -shape.slide, shape.slide];
+			return slides.find((slide) => {
+				const box: Box = {
+					left: sx + (slide - shape.width / 2) * scale - BARK_MARGIN,
+					top: sy - (shape.height + BARK_RISE) * scale - BARK_MARGIN,
+					right: sx + (slide + shape.width / 2) * scale + BARK_MARGIN,
+					bottom: sy + BARK_MARGIN,
+				};
+				if (box.left < 0 || box.top < 0 || box.right > camera.width || box.bottom > camera.height) return false;
+				if ([...this.uiBoxes, ...placed].some((other) => overlaps(box, other))) return false;
+				placed.push(box);
+				return true;
+			});
+		};
+		const step = Math.min(delta, 100) / BARK_FADE_MS;
+		const barking = [...this.figures.values()].filter((figure) => figure.bark);
+		for (const figure of barking) {
+			const bark = figure.bark!;
+			if (time >= bark.until || figure.leaving) bark.going = true;
+			const at = anchor(figure);
+			const slide = bark.going ? undefined : room(bark.shape, at, bark.shift);
+			if (slide !== undefined) bark.shift += (slide - bark.shift) * Math.min(1, step * 2.5);
+			bark.shown = Phaser.Math.Clamp(bark.shown + (slide === undefined ? -step : step), 0, 1);
+			if (bark.going && bark.shown <= 0) {
+				this.dropBark(figure);
 				continue;
 			}
-			const line = barkFor(figure.character, figure.barks++);
+			const eased = Phaser.Math.Easing.Sine.InOut(bark.shown);
+			bark.shape.body.setX(bark.shift);
+			bark.shape.container
+				.setPosition(at[0] * TILE, at[1] * TILE - BARK_RISE * (1 - eased) * ui)
+				.setDepth(1e5 + figure.walker.y + 0.5)
+				.setScale(ui)
+				.setAlpha(eased * figure.walker.sprite.alpha);
+		}
+		let count = barking.filter((figure) => figure.bark && !figure.bark.going).length;
+		for (const figure of this.figures.values()) {
+			if (figure.leaving || figure.sleep || !needsYou(figure.character)) continue;
+			figure.nextBark ??= time + Phaser.Math.Between(...FIRST_BARK_MS);
+			if (time < figure.nextBark || figure.bark || figure.walker.moving) continue;
+			const line = barkFor(figure.character, figure.barks);
 			if (!line) continue;
-			const container = drawBark(this, line).setAlpha(0);
-			this.tweens.add({ targets: container, alpha: 1, duration: 180 });
-			figure.bark = { line, container, until: time + BARK_MS };
+			const shape = drawBark(this, line);
+			const slide = count < BARKS_AT_ONCE ? room(shape, anchor(figure), 0) : undefined;
+			if (slide === undefined) {
+				// No room now (or enough barks already): try again a little later.
+				shape.container.destroy();
+				figure.nextBark = time + BARK_RETRY_MS;
+				continue;
+			}
+			figure.barks++;
+			shape.container.setAlpha(0);
+			figure.bark = { line, shape, until: time + BARK_MS, shift: slide, shown: 0, going: false };
 			figure.nextBark = time + Phaser.Math.Between(...BARK_EVERY_MS);
-			barking++;
+			count++;
 		}
 	}
 
-	/** The operator's avatar, at the entry for where it came from (or where it stood, when the place is laid out again). */
+	/**
+	 * The operator's avatar. Coming through a door, it steps in from the doorway, fading in, and walks on to the entry
+	 * for where it came from (kept clear of anyone standing there), facing into the room; laid out again, it stands
+	 * where it stood.
+	 */
 	private addAvatar() {
 		const name = avatarLookIn(this.theme, this.store.get());
 		this.avatarLook = name;
-		const at = this.keep?.avatar ?? this.arrival();
-		this.avatar = new Walker(this, name, this.theme.looks[name], at, this.keep?.facing ?? this.arrivalFacing(at));
+		if (this.keep) {
+			this.avatar = new Walker(this, name, this.theme.looks[name], this.keep.avatar, this.keep.facing);
+			return;
+		}
+		const at = this.clearOfOthers(this.arrival());
+		const door = this.from ? this.arrivalDoor(this.arrival()) : undefined;
+		if (!door) {
+			this.avatar = new Walker(this, name, this.theme.looks[name], at, "down");
+			return;
+		}
+		const { inside } = this.doorway(door);
+		this.avatar = new Walker(this, name, this.theme.looks[name], inside, this.arrivalFacing(at, door));
+		this.avatar.setAlpha(0);
+		this.avatarFade = inside;
+		const path = findPath(this.walkable, inside, at)?.points ?? [inside, at];
+		this.avatar.walk(
+			[inside, door.standAt, ...path.slice(1)].filter((p, i, all) => i === 0 || dist(p, all[i - 1]) > 1e-6),
+			() => {
+				this.avatarFade = undefined;
+				this.avatar.setAlpha(1);
+			},
+		);
 	}
 
+	/** The door the avatar came in by: the one whose stand point is at (or near) where it arrives. */
+	private arrivalDoor([ax, ay]: Point): SceneDoor | undefined {
+		return this.doors
+			.filter(({ standAt: [x, y] }) => Math.hypot(x - ax, y - ay) < 1.6)
+			.sort((a, b) => dist(a.standAt, [ax, ay]) - dist(b.standAt, [ax, ay]))[0];
+	}
+
+	/** A point near `at` where the avatar stands clear of everyone at their spots (and the host), on open floor. */
+	private clearOfOthers(at: Point): Point {
+		const others = [...this.present().map(({ spot }) => spot!), ...(this.host ? [this.host.at] : [])];
+		// Too close: beside them, or in front of them (south) by less than a body's height, where the avatar would cover
+		// them, or just behind them, where they would cover it.
+		const crowded = ([x, y]: Point) =>
+			others.some(([ox, oy]) => Math.abs(ox - x) < 0.95 && y - oy > -0.9 && y - oy < PERSON_TILES + 0.1);
+		if (!crowded(at)) return at;
+		for (const reach of [0.75, 1.1, 1.5, 2])
+			for (const [dx, dy] of [
+				[1, 0],
+				[-1, 0],
+				[0, 1],
+				[1, 0.5],
+				[-1, 0.5],
+				[0, -1],
+			]) {
+				const point: Point = [at[0] + dx * reach, at[1] + dy * reach];
+				if (isOpen(this.walkable, point) && clearanceAt(this.walkable, point) >= 0.3 && !crowded(point)) return point;
+			}
+		return at;
+	}
 	/** The operator chose another look in Settings: the avatar wears it where it stands. */
 	private dressAvatar() {
 		const name = avatarLookIn(this.theme, this.store.get());
@@ -1367,7 +1657,17 @@ export class PlaceScene extends Phaser.Scene {
 		const furniture = (this.layout.place.furniture ?? [])
 			.filter(({ rect }) => inside(rect))
 			.map((piece) => this.furnitureTarget(piece));
-		return [...people, ...host, ...doors, ...furniture];
+		const banners = this.bannerRects.filter(({ rect }) => inside(rect)).map(({ name }) => this.bannerTarget(name));
+		return [...people, ...host, ...doors, ...banners, ...furniture];
+	}
+
+	/** A banner: its whole name, however short it had to be stitched. */
+	private bannerTarget(name: string): Target {
+		return {
+			name,
+			tone: "object",
+			actions: [action("Read", () => this.view.notify(`The banner reads \u201c${name}\u201d.`), name, "object")],
+		};
 	}
 
 	/** The host: talking to it opens its place's panel (the innkeeper's register). */
@@ -1513,26 +1813,35 @@ export class PlaceScene extends Phaser.Scene {
 		});
 	}
 
-	/** Walk to a door's stand point, step on into it, and go through. */
+	/**
+	 * Walk to a door's stand point and on into it without stopping: going through starts as the avatar reaches the stand
+	 * point, and the view fades while it steps in. A door that leads nowhere yet stops it at the stand point.
+	 */
 	private useDoor(door: SceneDoor) {
-		this.walkTo(door.standAt, (reached) => {
-			if (!reached) return this.view.notify("I can't reach that door from here.");
-			const [x, y, w, h] = door.rect;
-			const inside: Point = [x + w / 2, y + h / 2];
-			this.avatar.face(inside);
-			if (!this.openDoor(door)) return;
-			// Step on toward the door as the view fades.
-			const dx = inside[0] - this.avatar.x;
-			const dy = inside[1] - this.avatar.y;
-			const length = Math.hypot(dx, dy);
-			if (length > 0.05) {
-				const step = Math.min(STEP_IN, length) / length;
-				this.avatar.walk([
-					[this.avatar.x, this.avatar.y],
-					[this.avatar.x + dx * step, this.avatar.y + dy * step],
-				]);
-			}
-		});
+		const from: Point = [this.avatar.x, this.avatar.y];
+		this.freeLook = undefined;
+		const path = findPath(this.walkable, from, [door.standAt]);
+		if (!path) return this.avatar.stop();
+		if (dist(path.goal, door.standAt) > REACH) {
+			this.avatar.walk(path.points, () => this.view.notify("I can't reach that door from here."));
+			return;
+		}
+		const [x, y, w, h] = door.rect;
+		const inside: Point = [x + w / 2, y + h / 2];
+		const [sx, sy] = door.standAt;
+		const length = dist(inside, door.standAt);
+		const step = Math.min(STEP_IN, length) / (length || 1);
+		const through: Point = [sx + (inside[0] - sx) * step, sy + (inside[1] - sy) * step];
+		const points = path.points.length > 1 ? path.points : [from, door.standAt];
+		this.avatar.walk(
+			[...points, through],
+			() => this.avatar.face(inside),
+			() => {
+				if (this.openDoor(door)) return;
+				this.avatar.stop();
+				this.avatar.face(inside);
+			},
+		);
 	}
 
 	// The pointer.
@@ -1697,9 +2006,7 @@ export class PlaceScene extends Phaser.Scene {
 	}
 
 	/** Arriving through a door, the avatar faces away from it, into the room. */
-	private arrivalFacing([ax, ay]: Point): Facing {
-		const door = this.doors.find(({ standAt: [x, y] }) => Math.hypot(x - ax, y - ay) < 0.6);
-		if (!this.from || !door) return "down";
+	private arrivalFacing([ax, ay]: Point, door: Door): Facing {
 		const [x, y, w, h] = door.rect;
 		const dx = ax - (x + w / 2);
 		const dy = ay - (y + h / 2);
@@ -1738,6 +2045,42 @@ export class PlaceScene extends Phaser.Scene {
 		this.cameras.main.setZoom(this.clampZoom(this.cameras.main.zoom));
 		this.mid = this.clampMid(this.mid, this.cameras.main.zoom);
 		this.applyCamera();
+	}
+
+	/**
+	 * Where the view centres to follow the avatar: on it, kept on the painting. Along a side where the whole place fits
+	 * the window, the place stays centred, and slides only as far as it takes to bring the avatar out from under a panel
+	 * (as far as the panel reaches), so a room seen whole does not drift with every step.
+	 */
+	private followMid(zoom: number): Point {
+		const [mx, my] = this.clampMid(this.avatarMid(), zoom);
+		const { cols, rows } = this.layout.place;
+		const { top, right, bottom, left } = this.insets;
+		const { width, height } = this.scale;
+		const reveal = (
+			mid: number,
+			size: number,
+			screen: number,
+			low: number,
+			high: number,
+			near: number,
+			far: number,
+		) => {
+			if (size > screen / zoom) return mid;
+			// The avatar's near and far edges (world px) stay this far (CSS px) inside the uncovered part of the window.
+			const margin = 16;
+			const least = far - (screen / 2 - high - margin) / zoom;
+			const most = near + (screen / 2 - low - margin) / zoom;
+			const wanted = Math.min(Math.max(mid, least), Math.max(most, least));
+			const reach = (edge: number) => Math.max(size / 2, size - screen / zoom / 2 + edge / zoom);
+			return Math.min(reach(high), Math.max(size - reach(low), wanted));
+		};
+		const ax = this.avatar.x * TILE;
+		const ay = this.avatar.y * TILE;
+		return [
+			reveal(mx, cols * TILE, width, left, right, ax - TILE / 2, ax + TILE / 2),
+			reveal(my, rows * TILE, height, top, bottom, ay - PERSON_TILES * TILE, ay + TILE / 4),
+		];
 	}
 
 	private avatarMid(): Point {
@@ -1780,16 +2123,23 @@ export class PlaceScene extends Phaser.Scene {
 		if (Math.abs(camera.zoom - this.zoomTarget) > 1e-4)
 			camera.setZoom(camera.zoom + (this.zoomTarget - camera.zoom) * (1 - Math.exp(-ZOOM_RATE * seconds)));
 		else if (camera.zoom !== this.zoomTarget) camera.setZoom(this.zoomTarget);
-		const [tx, ty] = this.clampMid(this.freeLook ?? this.avatarMid(), camera.zoom);
+		const [tx, ty] = this.freeLook ? this.clampMid(this.freeLook, camera.zoom) : this.followMid(camera.zoom);
 		const ease = this.freeLook ? 1 - Math.exp(-FOLLOW_RATE * 3 * seconds) : 1 - Math.exp(-FOLLOW_RATE * seconds);
 		const [mx, my] = this.clampMid(this.mid, camera.zoom);
 		this.mid = [mx + (tx - mx) * ease, my + (ty - my) * ease];
 		this.applyCamera();
 	}
 
+	/**
+	 * Scroll to `mid`, rounded so the painting lands on whole screen pixels: as the view eases, the picture moves by
+	 * whole pixels instead of being resampled at a new fraction each frame, which made fine pixel art shimmer.
+	 */
 	private applyCamera() {
 		const camera = this.cameras.main;
-		camera.setScroll(this.mid[0] - camera.width / 2, this.mid[1] - camera.height / 2);
+		const { zoom, width, height } = camera;
+		const snap = (mid: number, size: number) => (Math.round(mid * zoom - size / 2) + size / 2) / zoom - size / 2;
+		camera.setScroll(snap(this.mid[0], width), snap(this.mid[1], height));
+		Walker.snap = zoom;
 	}
 }
 
@@ -1798,6 +2148,27 @@ interface Insets {
 	right: number;
 	bottom: number;
 	left: number;
+}
+
+/** A box on screen, in CSS px. */
+export interface Box {
+	left: number;
+	top: number;
+	right: number;
+	bottom: number;
+}
+
+const dist = ([ax, ay]: Point, [bx, by]: Point) => Math.hypot(ax - bx, ay - by);
+
+const overlaps = (a: Box, b: Box) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+
+/** What of the HTML interface covers the world: panels, the place's title, notices, and the hover text. */
+function interfaceBoxes(): Box[] {
+	const selector = ".place-title, .aw-side, .aw-top-right, .aw-chat, .aw-card, .notice, .pointer-hover";
+	return [...document.querySelectorAll(selector)]
+		.map((element) => element.getBoundingClientRect())
+		.filter((r) => r.width && r.height)
+		.map((r) => ({ left: r.left, top: r.top, right: r.right, bottom: r.bottom }));
 }
 
 /**
@@ -1821,17 +2192,22 @@ function interfaceInsets(): Insets {
 	};
 }
 
-/** The name in one to four lines, breaking after `-`, `_`, `.`, `/`, or a space; undefined when none fits. */
-function bannerLines(name: string, fits: (line: string) => boolean): string[] | undefined {
-	if (fits(name)) return [name];
-	// A one- or two-letter piece ("a-") never stands on a line alone; it stays with the piece after it.
+/** A name's pieces, each with the separator after it; a one- or two-letter piece ("a-") stays with the next. */
+function bannerParts(name: string): string[] {
 	const parts: string[] = [];
 	for (const part of name.split(/(?<=[-_./ ])/)) {
 		const last = parts.at(-1);
 		if (last !== undefined && last.trim().length <= 2) parts[parts.length - 1] = last + part;
 		else parts.push(part);
 	}
-	for (let lines = 2; lines <= 4; lines++) {
+	return parts;
+}
+
+/** The pieces on one to `most` lines, broken between pieces; undefined when none fits. */
+function bannerLines(parts: string[], fits: (line: string) => boolean, most = 4): string[] | undefined {
+	const whole = parts.join("");
+	if (fits(whole)) return [whole];
+	for (let lines = 2; lines <= most; lines++) {
 		const split = splitInto(parts, lines, fits);
 		if (split) return split.map((line) => line.trim());
 	}

@@ -34,9 +34,15 @@ body {
 		inset 0 0 0 2px rgb(255 248 225 / 55%),
 		0 6px 18px rgb(0 0 0 / 45%);
 	white-space: nowrap;
+	/* Clear of the orbs and minimap on the right (and as far from the left), however long a wing's name. */
+	box-sizing: border-box;
+	max-width: calc(100vw - 600px);
 }
 
 .place-title strong {
+	max-width: 100%;
+	overflow: hidden;
+	text-overflow: ellipsis;
 	font-size: 17px;
 	letter-spacing: 0.02em;
 }

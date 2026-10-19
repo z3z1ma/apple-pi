@@ -342,11 +342,22 @@ test("talking to a character and using a door walk up first; walking past a door
 		await record(page);
 		await clickAt(page, [dx + dw / 2, dy + dh / 2]);
 		await vi.waitFor(async () => expect(await place(page)).toBe(`gallery:${HQ}`), { timeout: 8000 });
+		// It comes in through the gallery's archway and walks on to its entry from the hall, facing into the room.
+		await arrived(page);
 		const frames = await recorded(page);
 		const lastInHall = frames.filter((f) => f.x > 20).at(-1)!;
 		expect(Math.hypot(lastInHall.x - archway.standAt[0], lastInHall.y - archway.standAt[1])).toBeLessThan(1);
+		// Through the hall's doorway without a stop at its stand point: every frame from there on moves.
+		const throughHall = frames.filter(
+			(f) => f.x > 20 && Math.hypot(f.x - archway.standAt[0], f.y - archway.standAt[1]) < 0.4,
+		);
+		expect(throughHall.every((f) => f.moving)).toBe(true);
+		const gallery = fantasy("gallery");
+		const inDoorway = frames.filter((f) => f.x < 3);
+		expect(inDoorway[0].y).toBeLessThan(gallery.entries.headquarters[1] - 0.5);
 		const inGallery = (await avatar(page))!;
-		expect([inGallery.x, inGallery.y]).toEqual(fantasy("gallery").entries.headquarters);
+		expect([inGallery.x, inGallery.y]).toEqual(gallery.entries.headquarters);
+		expect(inGallery.facing).toBe("down");
 		await page.waitForTimeout(400);
 		await shot(page, "gallery-arrival");
 		expect(errors).toEqual([]);
@@ -365,6 +376,7 @@ test("the camera follows the avatar across a place larger than the window, and t
 		await vi.waitFor(async () => expect(await place(page)).toBe("square"), { timeout: 8000 });
 		await page.waitForTimeout(400);
 		const square = fantasy("square");
+		await arrived(page);
 		const arrival = (await avatar(page))!;
 		expect([arrival.x, arrival.y]).toEqual(square.entries.headquarters);
 		await shot(page, "square-arrival");

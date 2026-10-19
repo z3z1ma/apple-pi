@@ -340,8 +340,22 @@ test("a sleeper's menu reads its last conversation in the conversation panel, or
 		await page.getByRole("dialog", { name: "Conversation with docs-writer" }).waitFor({ timeout: 8000 });
 		await page.getByText("Write the style guide.").waitFor({ timeout: 3000 });
 		expect(await calls(page)).toContainEqual(["conversation", "s-0"]);
+		// Asleep, it has no terminal to go to: the panel offers to wake it instead, and says how it wakes.
+		const panel = page.getByRole("dialog", { name: "Conversation with docs-writer" });
+		await expect(panel.getByRole("button", { name: "Go to its terminal" }).count()).resolves.toBe(0);
+		await expect(panel.textContent()).resolves.toContain("Asleep at the inn");
+		await expect(panel.textContent()).resolves.toContain("Wake it to talk");
 		await shot(page, "aw-15-last-conversation");
+		await panel.getByRole("button", { name: "Wake docs-writer" }).click();
+		await vi.waitFor(async () => expect(await calls(page)).toContainEqual(["wake", "s-0"]), { timeout: 3000 });
+		await panel
+			.getByRole("status")
+			.getByText("Awake in a new window beside your current one.")
+			.waitFor({ timeout: 3000 });
 		await page.keyboard.press("Escape");
+		await page.evaluate(() => {
+			(window as any).calls.length = 0;
+		});
 
 		await page.mouse.click(sx, sy, { button: "right" });
 		await page.getByRole("menuitem", { name: "Wake docs-writer" }).click();

@@ -48,6 +48,7 @@ const api: AgentWorldApi = {
 	endSession: (characterId, confirmed) =>
 		ipcRenderer.invoke("world:end-session", characterId, confirmed) as Promise<CommandReceipt>,
 	sendMail: (characterId, body) => ipcRenderer.invoke("world:send-mail", characterId, body) as Promise<CommandReceipt>,
+	openLink: (url) => ipcRenderer.invoke("world:open-link", url) as Promise<CommandResult>,
 };
 
 contextBridge.exposeInMainWorld("agentWorld", api);

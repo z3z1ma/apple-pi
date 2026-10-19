@@ -3,6 +3,7 @@
 // open prompt; finished means it needs you with no prompt open (a settle not seen yet); working is any run but idle.
 import type { Character, Headquarters, PlaceRef, WorldSnapshot } from "../../../src/world.js";
 import { isOutside, placeKey } from "../../../src/world.js";
+import { shortArg } from "../tool-line.js";
 
 export type Attention = "asking" | "finished" | "working" | "idle";
 
@@ -147,7 +148,10 @@ export function activity(character: Character): string {
 	if (!facts) return "";
 	const attention = attentionOf(character);
 	if (attention === "asking") return facts.asking?.text ? `Asks: ${facts.asking.text}` : "Asks you something";
-	if (facts.tool) return facts.tool.arg ? `${facts.tool.name} \u00b7 ${facts.tool.arg}` : facts.tool.name;
+	if (facts.tool) {
+		const arg = shortArg(facts.tool.arg, facts.cwd);
+		return arg ? `${facts.tool.name} \u00b7 ${arg}` : facts.tool.name;
+	}
 	if (attention === "finished") return "Finished, unseen";
 	if (attention === "working") return facts.run === "compacting" ? "Compacting" : "Working";
 	return "Idle";

@@ -225,6 +225,7 @@ async function openWorld(first: WorldSnapshot, transcripts: Record<string, Trans
 			let current = snapshot as any;
 			const w = window as any;
 			w.terminals = [];
+			w.links = [];
 			w.pages = [];
 			w.append = (id: string, entry: unknown) => (conversations as Record<string, unknown[]>)[id].push(entry);
 			w.push = (next: unknown) => {
@@ -264,8 +265,14 @@ async function openWorld(first: WorldSnapshot, transcripts: Record<string, Trans
 						ok: true,
 						entries: all.slice(start, end),
 						before: start > 0 ? (all[start] as any).id : null,
-						missing: 0,
+						// Entries the runtime indexed that the transcript no longer holds, reported with the newest page.
+						missing: before ? 0 : (w.missing?.[id] ?? 0),
 					};
+				},
+				// Links open in the system browser through the main process; here they are recorded.
+				async openLink(url: string) {
+					w.links.push(url);
+					return { ok: true };
 				},
 				// Instructions answer with the runtime's receipt stages, a moment apart; `refuse` fails the next one at once
 				// (as the backend refuses an unconfirmed Stop), `failNext` after it was delivered.
@@ -984,6 +991,166 @@ test("a dialog only the terminal can answer shows a notice with Go to its termin
 		await shot(page, "terminal-only", "14");
 		await notice.getByRole("button", { name: "Go to its terminal" }).click();
 		await vi.waitFor(async () => expect(await page.evaluate(() => (window as any).terminals)).toEqual(["asker"]));
+		expect(errors).toEqual([]);
+	} finally {
+		await page.close();
+	}
+}, 30000);
+
+/** A real-looking turn: hidden and written thoughts between the agent's words and a tool whose output pads itself. */
+const THINKER: TranscriptEntry[] = [
+	{ kind: "user", id: "t1", at: at(50), text: "Check the [guide](https://example.com/guide) links.", images: 0 },
+	{
+		kind: "assistant",
+		id: "t2",
+		at: at(51),
+		parts: [
+			{ kind: "thinking", text: "" },
+			{ kind: "thinking", text: "Read the guide first." },
+			{ kind: "thinking", text: "  " },
+			{ kind: "thinking", text: "Then list the docs." },
+			{ kind: "text", text: "Reading <https://pi.dev>, the guide, and <file:///etc/hosts>." },
+			{ kind: "thinking", text: "" },
+			{
+				kind: "tool",
+				call: {
+					id: "k1",
+					name: "bash",
+					arg: "cd /Users/op/code/apple-pi && ls /Users/op/code/apple-pi/docs",
+					input: '{\n  "command": "cd /Users/op/code/apple-pi && ls /Users/op/code/apple-pi/docs"\n}',
+				},
+			},
+		],
+		error: null,
+		aborted: false,
+	},
+	{
+		kind: "tool-result",
+		id: "t3",
+		at: at(52),
+		callId: "k1",
+		tool: "bash",
+		text: "\n\n  README.md\n  guide.md\n\n\n",
+		isError: false,
+		cut: false,
+	},
+	{
+		kind: "assistant",
+		id: "t4",
+		at: at(53),
+		parts: [{ kind: "thinking", text: "Both are there." }],
+		error: null,
+		aborted: false,
+	},
+	{
+		kind: "assistant",
+		id: "t5",
+		at: at(54),
+		parts: [
+			{ kind: "thinking", text: "Nothing else to check." },
+			{ kind: "text", text: "Both docs are there." },
+		],
+		error: null,
+		aborted: false,
+	},
+];
+
+test("thoughts read quietly: hidden ones are left out and a run of them folds into one line; tool lines and output are trimmed; missing entries get one note", async () => {
+	const { page, errors } = await openWorld(world(), { "pi-tests": THINKER, ledger: [], asker: [], [HQ]: [] });
+	try {
+		await page.evaluate(() => {
+			(window as any).missing = { "pi-tests": 3 };
+		});
+		await talkTo(page, "pi-tests");
+		await log(page).getByText("Both docs are there.").waitFor({ timeout: 3000 });
+		// Two runs of written thoughts (before the words; after the tool, across two replies), hidden ones dropped.
+		const thoughts = log(page).locator(".aw-conv-thought");
+		await expect(thoughts.count()).resolves.toBe(2);
+		await expect(thoughts.locator(".aw-conv-fold-label").allTextContents()).resolves.toEqual([
+			"Thought it over",
+			"Thought it over",
+		]);
+		await thoughts.first().getByRole("button").click();
+		await expect(thoughts.first().locator(".aw-conv-thought-text").allTextContents()).resolves.toEqual([
+			"Read the guide first.",
+			"Then list the docs.",
+		]);
+		await thoughts.nth(1).getByRole("button").click();
+		await expect(thoughts.nth(1).locator(".aw-conv-thought-text").allTextContents()).resolves.toEqual([
+			"Both are there.",
+			"Nothing else to check.",
+		]);
+		// The tool line leaves out the `cd` into the working directory and the directory itself from paths.
+		const tool = log(page).locator(".aw-conv-tool").filter({ hasText: "bash" });
+		await expect(tool.locator(".aw-conv-fold-arg").textContent()).resolves.toBe("ls docs");
+		await tool.getByRole("button").first().click();
+		// Its output without the blank lines around it (the first line's indent kept).
+		await expect(tool.locator("pre").nth(1).textContent()).resolves.toBe("  README.md\n  guide.md");
+		// One quiet note for the entries the transcript no longer holds.
+		const note = log(page).locator(".aw-conv-missing");
+		await expect(note.count()).resolves.toBe(1);
+		await expect(note.textContent()).resolves.toBe("3 entries are no longer in its transcript file.");
+		await shot(page, "thoughts", "17");
+		expect(errors).toEqual([]);
+	} finally {
+		await page.close();
+	}
+}, 30000);
+
+test("web links in a transcript open in the system browser; the window never navigates, and other links do not open", async () => {
+	const { page, errors } = await openWorld(world(), { "pi-tests": THINKER, ledger: [], asker: [], [HQ]: [] });
+	try {
+		const before = page.url();
+		await talkTo(page, "pi-tests");
+		await log(page).getByText("Both docs are there.").waitFor({ timeout: 3000 });
+		await log(page).getByRole("link", { name: "guide" }).click();
+		await log(page).getByRole("link", { name: "https://pi.dev" }).click();
+		await vi.waitFor(async () =>
+			expect(await page.evaluate(() => (window as any).links)).toEqual(["https://example.com/guide", "https://pi.dev"]),
+		);
+		// A link that is not a web link is no link at all: its target shows on hover only.
+		await expect(log(page).getByRole("link", { name: "file:///etc/hosts" }).count()).resolves.toBe(0);
+		await expect(log(page).locator(".aw-md-link-dead").getAttribute("title")).resolves.toBe("file:///etc/hosts");
+		// The keyboard opens a link too.
+		await log(page).getByRole("link", { name: "guide" }).focus();
+		await page.keyboard.press("Enter");
+		await vi.waitFor(async () => expect(await page.evaluate(() => (window as any).links.length)).toBe(3));
+		expect(page.url()).toBe(before);
+		await expect(book(page).count()).resolves.toBe(1);
+		expect(errors).toEqual([]);
+	} finally {
+		await page.close();
+	}
+}, 30000);
+
+test("Tab keeps to the open book, and Escape gives the keys back to the world", async () => {
+	const { page, errors } = await openWorld(world(), { "pi-tests": SUITE, ledger: [], asker: [], [HQ]: [] });
+	try {
+		await talkTo(page, "pi-tests");
+		await log(page).getByText("Raising the timeouts now.").waitFor({ timeout: 3000 });
+		const inBook = () =>
+			page.evaluate(() => {
+				const dialog = document.querySelector("[role=dialog][aria-label^='Conversation with']");
+				return !!dialog && dialog.contains(document.activeElement);
+			});
+		for (let i = 0; i < 24; i++) {
+			await page.keyboard.press("Tab");
+			expect(await inBook(), `Tab ${i + 1}`).toBe(true);
+		}
+		for (let i = 0; i < 24; i++) {
+			await page.keyboard.press("Shift+Tab");
+			expect(await inBook(), `Shift+Tab ${i + 1}`).toBe(true);
+		}
+		await page.keyboard.press("Escape");
+		await book(page).waitFor({ state: "detached", timeout: 2000 });
+		await expect(page.evaluate(() => document.activeElement?.id)).resolves.toBe("game");
+		// The world's keys work again: G shows the walk grid. (A key pressed within ~150 ms of closing is lost; the cause
+		// is not found yet, so the test leaves a moment.)
+		await page.waitForTimeout(300);
+		await page.keyboard.press("g");
+		await vi.waitFor(async () =>
+			expect(await page.evaluate(() => (window as any).agentWorldView.walkGrid())).toBe(true),
+		);
 		expect(errors).toEqual([]);
 	} finally {
 		await page.close();

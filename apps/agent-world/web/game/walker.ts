@@ -29,11 +29,17 @@ const SEATED_BEAT = [1300, 650] as const;
 
 export type Facing = keyof typeof WALK_FRAMES;
 
+/** Standing at work (outdoors, with no desk): the breath of its beat, as deep as this (a share of its height). */
+const BUSY_BREATH = 0.014;
+/** One breath at tempo 1 (ms); a busier tool breathes a little quicker. */
+const BUSY_BEAT = 2200;
+
 /**
- * How a walker holds itself at rest. Asleep at the inn, it dozes in its seated frame without the beat of work, or lies
- * in a bed (the scene draws it there; the walker itself is hidden).
+ * How a walker holds itself at rest. Busy is standing at work where there is no desk (outdoors): the standing frame,
+ * breathing with the beat of its work. Asleep at the inn, it dozes in its seated frame without the beat of work, or
+ * lies in a bed (the scene draws it there; the walker itself is hidden).
  */
-export type Pose = "standing" | "seated" | "asking" | "dozing" | "in-bed";
+export type Pose = "standing" | "seated" | "busy" | "asking" | "dozing" | "in-bed";
 
 export interface WalkerView {
 	x: number;
@@ -47,6 +53,11 @@ export interface WalkerView {
 }
 
 export class Walker {
+	/**
+	 * The view's zoom: a walking figure is drawn at whole screen pixels, so its pixels do not crawl as it moves. The scene
+	 * sets it with the camera.
+	 */
+	static snap = 1;
 	readonly sprite: Phaser.GameObjects.Sprite;
 	readonly shadow: Phaser.GameObjects.Ellipse;
 	x: number;
@@ -59,8 +70,12 @@ export class Walker {
 	private waypoints: Point[] = [];
 	private travelled = 0;
 	private arrive?: () => void;
+	/** Runs as the walker sets off on its last run (stepping on through a door after reaching it). */
+	private onLastRun?: () => void;
 	/** Time (ms) into the seated beat; each walker starts somewhere else in it, so a room does not move as one. */
 	private beat = Math.random() * (SEATED_BEAT[0] + SEATED_BEAT[1]);
+	/** The sprite's scale when standing still, which a busy breath stretches a little upward from the feet. */
+	private readonly scale: number;
 
 	constructor(scene: Phaser.Scene, look: string, { frame, baseline }: Look, [x, y]: Point, facing: Facing = "down") {
 		this.x = x;
@@ -71,6 +86,7 @@ export class Walker {
 			.sprite(0, 0, `look:${look}`, REST_FRAMES[facing])
 			.setOrigin(0.5, baseline / frame[1])
 			.setScale((PERSON_TILES * TILE) / STANDING);
+		this.scale = this.sprite.scaleX;
 		this.place();
 	}
 
@@ -85,22 +101,28 @@ export class Walker {
 		return this.waypoints.length > 0;
 	}
 
-	/** Walk `path` (its first point is where the walker is now); `then` runs on arrival, unless another walk replaces it. */
-	walk(path: Point[], then?: () => void) {
+	/**
+	 * Walk `path` (its first point is where the walker is now); `then` runs on arrival, unless another walk replaces it,
+	 * and `lastRun` as it sets off on the path's last run, without stopping there.
+	 */
+	walk(path: Point[], then?: () => void, lastRun?: () => void) {
 		const fromRest = !this.moving;
 		this.waypoints = path.slice(1);
 		this.arrive = then;
+		this.onLastRun = lastRun;
 		if (!this.moving) return this.finish();
 		// From rest, start on a passing frame so the first step shows at once; mid-walk, keep the stride going.
 		if (fromRest) this.travelled = STRIDE / 4;
 		this.turnToward(this.waypoints[0]);
 		this.place();
+		if (this.waypoints.length === 1) this.lastRun();
 	}
 
 	/** Stand at a point at once, without walking there. */
 	moveTo([x, y]: Point) {
 		this.waypoints = [];
 		this.arrive = undefined;
+		this.onLastRun = undefined;
 		this.x = x;
 		this.y = y;
 		this.place();
@@ -110,6 +132,7 @@ export class Walker {
 	stop() {
 		this.waypoints = [];
 		this.arrive = undefined;
+		this.onLastRun = undefined;
 		this.place();
 	}
 
@@ -137,8 +160,9 @@ export class Walker {
 
 	update(deltaMs: number) {
 		if (!this.moving) {
-			if (this.pose !== "seated") return;
-			this.beat = (this.beat + Math.min(deltaMs, 100) * this.tempo) % (SEATED_BEAT[0] + SEATED_BEAT[1]);
+			if (this.pose !== "seated" && this.pose !== "busy") return;
+			const cycle = this.pose === "busy" ? BUSY_BEAT : SEATED_BEAT[0] + SEATED_BEAT[1];
+			this.beat = (this.beat + Math.min(deltaMs, 100) * this.tempo) % cycle;
 			return this.place();
 		}
 		let budget = (WALK_SPEED * Math.min(deltaMs, 100)) / 1000;
@@ -155,6 +179,7 @@ export class Walker {
 				budget -= distance;
 				this.waypoints.shift();
 				if (this.waypoints.length) this.turnToward(this.waypoints[0]);
+				if (this.waypoints.length === 1) this.lastRun();
 			} else {
 				this.x += (dx / distance) * budget;
 				this.y += (dy / distance) * budget;
@@ -180,6 +205,12 @@ export class Walker {
 	destroy() {
 		this.sprite.destroy();
 		this.shadow.destroy();
+	}
+
+	private lastRun() {
+		const run = this.onLastRun;
+		this.onLastRun = undefined;
+		run?.();
 	}
 
 	private finish() {
@@ -213,11 +244,22 @@ export class Walker {
 					? SEATED_FRAMES[0]
 					: this.pose === "asking"
 						? ASKING_FRAME
-						: REST_FRAMES[this.facing];
+						: this.pose === "busy"
+							? STAND_FRAME
+							: REST_FRAMES[this.facing];
 		if (Number(this.sprite.frame.name) !== frame) this.sprite.setFrame(frame);
+		// Busy on its feet: a slow breath from the feet up (the feet stay on the floor); otherwise its own height.
+		const breath =
+			!this.moving && this.pose === "busy"
+				? 1 + BUSY_BREATH * (0.5 - 0.5 * Math.cos((2 * Math.PI * this.beat) / BUSY_BEAT))
+				: 1;
+		if (this.sprite.scaleY !== this.scale * breath && this.pose !== "dozing")
+			this.sprite.setScale(this.scale, this.scale * breath);
 		// Poses are drawn facing one way; only walking and resting sideways mirror.
 		this.sprite.setFlipX(this.facing === "right" && (this.moving || this.pose === "standing"));
-		this.sprite.setPosition(this.x * TILE, this.y * TILE).setDepth(this.y * TILE);
+		const zoom = Walker.snap;
+		const at = (v: number) => (this.moving ? Math.round(v * TILE * zoom) / zoom : v * TILE);
+		this.sprite.setPosition(at(this.x), at(this.y)).setDepth(this.y * TILE);
 		this.shadow.setPosition(this.x * TILE, this.y * TILE - 2).setDepth(this.y * TILE - 1);
 		const shown = this.moving || this.pose !== "in-bed";
 		this.sprite.setVisible(shown);

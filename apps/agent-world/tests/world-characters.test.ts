@@ -91,8 +91,15 @@ interface FigureView {
 	frame: number;
 	badge: string | null;
 	bark: string | null;
+	barkBox: Box | null;
 	moving: boolean;
 	alpha: number;
+}
+interface Box {
+	left: number;
+	top: number;
+	right: number;
+	bottom: number;
 }
 
 const view = <T>(page: Page, call: string): Promise<T> =>
@@ -469,6 +476,40 @@ test("a newly started session's character comes in by the door and walks to its 
 	}
 }, 60000);
 
+test("out of doors a working character stands at work with its badge, breathing; indoors it sits at its desk", async () => {
+	const out: Character = {
+		...worker("solo", 1, working()),
+		role: "independent",
+		place: { kind: "square" },
+		facts: facts({ ...working(), reportsTo: null }),
+	};
+	const { page, errors } = await inTheWing(world([ORLA, worker("pi-docs", 2, working()), out]));
+	try {
+		await vi.waitFor(
+			async () => expect(await figure(page, "pi-docs")).toMatchObject({ pose: "seated", badge: "working" }),
+			{
+				timeout: 3000,
+			},
+		);
+		// The Places tab is still open from going to the wing.
+		await page.getByRole("button", { name: /^Village square/ }).click();
+		await vi.waitFor(async () => expect(await view(page, "place()")).toBe("square"), { timeout: 5000 });
+		await vi.waitFor(async () => expect(await figure(page, "solo")).toMatchObject({ pose: "busy", badge: "working" }), {
+			timeout: 3000,
+		});
+		// Standing, not on a stool (the seated frames 12 and 13 bring one), the whole time it works.
+		for (let i = 0; i < 10; i++) {
+			expect((await figure(page, "solo"))!.frame).toBe(14);
+			await page.waitForTimeout(120);
+		}
+		const solo = (await figure(page, "solo"))!;
+		await closeup(page, "aw-17-working-outdoors", solo.x, solo.y);
+		expect(errors).toEqual([]);
+	} finally {
+		await page.close();
+	}
+}, 60000);
+
 test("barks appear now and then, only over characters that need the operator", async () => {
 	const cast = [
 		ORLA,
@@ -482,9 +523,19 @@ test("barks appear now and then, only over characters that need the operator", a
 		await zoomOut(page);
 		const barking = new Map<string, Set<string>>();
 		let shown = false;
+		const ui = await page.$$eval(".place-title, .aw-side, .aw-top-right, .aw-chat", (elements) =>
+			elements.map((e) => e.getBoundingClientRect().toJSON() as Box),
+		);
+		const overlap = (a: Box, b: Box) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
 		for (let i = 0; i < 40; i++) {
 			const now = await figures(page);
 			for (const f of now) if (f.bark) barking.set(f.id, (barking.get(f.id) ?? new Set()).add(f.bark));
+			// A bark never covers another, the place's title, or a panel.
+			const boxes = now.flatMap((f) => (f.barkBox ? [f.barkBox] : []));
+			boxes.forEach((box, j) => {
+				for (const other of [...ui, ...boxes.slice(j + 1)])
+					expect(overlap(box, other), JSON.stringify(box)).toBe(false);
+			});
 			const asker = now.find((f) => f.id === "asker" && f.bark);
 			if (asker && !shown) {
 				shown = true;

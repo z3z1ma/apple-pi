@@ -3,6 +3,7 @@
 // its input and result, mail as a sealed letter, and other extensions' messages folded like tool calls.
 import { createContext, memo, useContext, useState } from "react";
 import type { TranscriptEntry, TranscriptToolCall } from "../../../src/world.js";
+import { shortArg } from "../tool-line.js";
 import { isLive } from "./live-reply.js";
 import { markdownHtml } from "./markdown.js";
 
@@ -115,18 +116,6 @@ const STATE_TITLE = { ok: "Done", error: "Failed", waiting: "No result yet" };
 /** The character's working directory, which tool lines leave out of the paths and commands they show. */
 export const WorkingDirectory = createContext<string | undefined>(undefined);
 
-/** A main argument as the line shows it: without a leading `cd <dir> &&` into the working directory, paths relative. */
-export function shortArg(arg: string | null, cwd: string | undefined): string | null {
-	if (!arg || !cwd) return arg;
-	const dir = cwd.replace(/\/+$/, "");
-	let shown = arg;
-	for (const quote of ["", '"', "'"]) {
-		const prefix = `cd ${quote}${dir}${quote} && `;
-		if (shown.startsWith(prefix)) shown = shown.slice(prefix.length);
-	}
-	return shown.split(`${dir}/`).join("") || arg;
-}
-
 function ToolCall({ call, result }: { call: TranscriptToolCall; result?: ToolResult }) {
 	const cwd = useContext(WorkingDirectory);
 	return (
@@ -145,15 +134,58 @@ function ToolCall({ call, result }: { call: TranscriptToolCall; result?: ToolRes
 	);
 }
 
+/** Text without the blank lines tools print before and after their output (and without trailing space). */
+export function trimBlankLines(text: string): string {
+	return text.replace(/^(?:[ \t]*\r?\n)+/, "").trimEnd();
+}
+
 function ResultText({ result }: { result: ToolResult }) {
 	return (
 		<>
 			<pre className={`aw-conv-io${result.isError ? " aw-conv-error" : ""}`}>
-				{result.text.replace(/^\s*\n/, "").trimEnd() || "(no output)"}
+				{trimBlankLines(result.text) || "(no output)"}
 			</pre>
 			{result.cut && <p className="aw-conv-quiet">Cut short here; the whole output is in its terminal.</p>}
 		</>
 	);
+}
+
+/** What an agent's reply draws, in order: Markdown, one line for each run of thoughts, and folded tool calls. */
+type ReplyItem =
+	| { kind: "text"; key: string; text: string }
+	| { kind: "thoughts"; key: string; texts: string[] }
+	| { kind: "tool"; key: string; call: TranscriptToolCall };
+
+/**
+ * Each reply's items. Thoughts with nothing written in them (hidden thinking) are left out, and a run of thoughts
+ * with nothing else between them (also across replies of one turn) folds into one line, kept with the reply where the
+ * run starts.
+ */
+function replyItems(entries: Assistant[]): Map<string, ReplyItem[]> {
+	const items = new Map<string, ReplyItem[]>();
+	let run: Extract<ReplyItem, { kind: "thoughts" }> | undefined;
+	for (const entry of entries) {
+		const mine: ReplyItem[] = [];
+		items.set(entry.id, mine);
+		entry.parts.forEach((part, index) => {
+			const key = `${entry.id}:${index}`;
+			if (part.kind === "thinking") {
+				const text = trimBlankLines(part.text);
+				if (!text) return;
+				if (run) run.texts.push(text);
+				else {
+					run = { kind: "thoughts", key, texts: [text] };
+					mine.push(run);
+				}
+				return;
+			}
+			if (part.kind === "text" && !part.text.trim()) return;
+			run = undefined;
+			mine.push(part.kind === "text" ? { kind: "text", key, text: part.text } : { kind: "tool", key, call: part.call });
+		});
+		if (entry.error || entry.aborted) run = undefined;
+	}
+	return items;
 }
 
 function AgentBlock({
@@ -165,6 +197,7 @@ function AgentBlock({
 	entries: Assistant[];
 	results: Map<string, ToolResult>;
 }) {
+	const items = replyItems(entries);
 	return (
 		<article className="aw-conv-entry aw-conv-assistant" data-entry={entries[0].id}>
 			<header className="aw-conv-who">
@@ -177,16 +210,20 @@ function AgentBlock({
 					className={`aw-conv-reply${isLive(entry.id) ? " aw-conv-writing" : ""}`}
 					data-entry={entry === entries[0] ? undefined : entry.id}
 				>
-					{entry.parts.map((part, index) => {
-						const key = `${entry.id}:${index}`;
-						if (part.kind === "text") return <Markdown key={key} text={part.text} />;
-						if (part.kind === "thinking")
+					{items.get(entry.id)!.map((item) => {
+						if (item.kind === "text") return <Markdown key={item.key} text={item.text} />;
+						if (item.kind === "thoughts")
 							return (
-								<Fold key={key} className="aw-conv-thought" glyph={"\u2767"} label="Thought it over">
-									<p className="aw-conv-thought-text">{part.text || "The thought is hidden."}</p>
+								<Fold key={item.key} className="aw-conv-thought" glyph={"\u2767"} label="Thought it over">
+									{item.texts.map((text, i) => (
+										// biome-ignore lint/suspicious/noArrayIndexKey: thoughts in a run never reorder
+										<p key={i} className="aw-conv-thought-text">
+											{text}
+										</p>
+									))}
 								</Fold>
 							);
-						return <ToolCall key={key} call={part.call} result={results.get(part.call.id)} />;
+						return <ToolCall key={item.key} call={item.call} result={results.get(item.call.id)} />;
 					})}
 					{entry.error && <p className="aw-conv-failed">The reply failed: {entry.error}</p>}
 					{entry.aborted && <p className="aw-conv-failed">Stopped before it finished.</p>}
@@ -240,7 +277,7 @@ export const BlockView = memo(function BlockView({
 					glyph={"\u2709"}
 					label={block.entry.shown ? block.entry.label : `${block.entry.label} (for the agent only)`}
 				>
-					<pre className="aw-conv-io">{block.entry.text || "(empty)"}</pre>
+					<pre className="aw-conv-io">{trimBlankLines(block.entry.text) || "(empty)"}</pre>
 				</Fold>
 			</div>
 		);

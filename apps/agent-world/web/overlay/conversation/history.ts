@@ -11,6 +11,8 @@ export interface History {
 	before: string | null;
 	/** The first page has arrived. */
 	ready: boolean;
+	/** Entries the runtime indexed that its transcript no longer holds, in the pages read so far. */
+	missing: number;
 	loadingOlder: boolean;
 	error?: string;
 	loadOlder(): void;
@@ -38,6 +40,7 @@ function newer(known: TranscriptEntry[], fresh: TranscriptEntry[]): TranscriptEn
 export function useHistory(api: ConversationApi | undefined, characterId: string, pulse: string): History {
 	const [entries, setEntries] = useState<TranscriptEntry[]>([]);
 	const [before, setBefore] = useState<string | null>(null);
+	const [missing, setMissing] = useState(0);
 	const [ready, setReady] = useState(false);
 	const [loadingOlder, setLoadingOlder] = useState(false);
 	const [error, setError] = useState<string>();
@@ -60,6 +63,7 @@ export function useHistory(api: ConversationApi | undefined, characterId: string
 				setError(undefined);
 				setEntries(page.entries);
 				setBefore(page.before);
+				setMissing(page.missing);
 				setReady(true);
 			})
 			.catch((failure: unknown) => !gone && setError(String((failure as Error)?.message ?? failure)));
@@ -83,6 +87,7 @@ export function useHistory(api: ConversationApi | undefined, characterId: string
 				if (live.current.before !== cursor) return;
 				setEntries((known) => [...page.entries.filter((e) => !known.some((k) => k.id === e.id)), ...known]);
 				setBefore(page.before);
+				setMissing((n) => n + page.missing);
 			})
 			.catch((failure: unknown) => setError(String((failure as Error)?.message ?? failure)))
 			.finally(() => {
@@ -131,6 +136,7 @@ export function useHistory(api: ConversationApi | undefined, characterId: string
 		entries,
 		before,
 		ready,
+		missing,
 		loadingOlder,
 		error,
 		loadOlder,

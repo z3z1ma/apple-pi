@@ -461,3 +461,134 @@ test("the minimap shows the place with a dot for each character and the avatar, 
 		await page.close();
 	}
 }, 30000);
+
+test("the chatbox is compact (five lines), shows more on demand, and folds to its bar; the side panel folds from its header", async () => {
+	const backlog = Array.from({ length: 14 }, (_, i) => line(i + 1, "agents", "pi-docs", `pi-docs line ${i + 1}.`));
+	const { page, errors } = await openWorld(world(), backlog);
+	try {
+		const chatLog = page.getByRole("log", { name: "World events" });
+		await chatLog.getByText("pi-docs line 14.").waitFor({ timeout: 2000 });
+		// Five lines show, the newest at the bottom; the world keeps the rest of the window.
+		const shown = () =>
+			chatLog.evaluate((el) => {
+				const box = el.getBoundingClientRect();
+				return [...el.querySelectorAll(".aw-chat-line")].filter((l) => {
+					const r = l.getBoundingClientRect();
+					return r.top >= box.top - 1 && r.bottom <= box.bottom + 1;
+				}).length;
+			});
+		await expect(shown()).resolves.toBe(5);
+		const compact = (await page.locator(".aw-chat").boundingBox())!.height;
+		expect(compact).toBeLessThan(160);
+		await shot(page, "chat-compact");
+		await page.getByRole("button", { name: "Show more lines" }).click();
+		await expect(shown()).resolves.toBeGreaterThanOrEqual(12);
+		await shot(page, "chat-tall");
+		await page.getByRole("button", { name: "Show fewer lines" }).click();
+		await expect(shown()).resolves.toBe(5);
+		await page.getByRole("button", { name: "Fold the chatbox" }).click();
+		await expect(chatLog.count()).resolves.toBe(0);
+		await page.getByRole("button", { name: "Open the chatbox" }).click();
+		await expect(shown()).resolves.toBe(5);
+
+		// The side panel folds to its tabs from its header; a tab opens it again.
+		await page.getByRole("button", { name: "Fold the side panel" }).click();
+		await expect(page.locator(".aw-panel-body").count()).resolves.toBe(0);
+		await expect(page.getByRole("tab", { name: "Agents", exact: true }).getAttribute("title")).resolves.toBe(
+			"Open Agents",
+		);
+		await shot(page, "folded");
+		await tab(page, "Agents");
+		await expect(page.locator(".aw-panel-body").count()).resolves.toBe(1);
+		expect(errors).toEqual([]);
+	} finally {
+		await page.close();
+	}
+}, 30000);
+
+test("tool lines leave out a leading `cd <dir> &&` and the working directory, in the rows and the examine card alike", async () => {
+	const busy = person("pi-build", wing("/r/apple-pi"), 6, {
+		...working("bash", "cd /Users/op/code/apple-pi && npx vitest run /Users/op/code/apple-pi/tests/a.test.ts"),
+	});
+	const reading = person("pi-read", wing("/r/apple-pi"), 7, working("read", "/Users/op/code/apple-pi/docs/x.md"));
+	const elsewhere = person(
+		"pi-else",
+		wing("/r/apple-pi"),
+		8,
+		working("bash", "cd /tmp/scratch && ls /tmp/scratch/out"),
+	);
+	const { page, errors } = await openWorld(world([...CAST, busy, reading, elsewhere]));
+	try {
+		const detail = (name: string) =>
+			page
+				.getByRole("button", { name: new RegExp(`^${name}`) })
+				.locator(".aw-row-detail")
+				.textContent();
+		await expect(detail("pi-build")).resolves.toBe("bash \u00b7 npx vitest run tests/a.test.ts");
+		await expect(detail("pi-read")).resolves.toBe("read \u00b7 docs/x.md");
+		await expect(detail("pi-else")).resolves.toBe("bash \u00b7 ls out");
+		await page.getByRole("button", { name: /^pi-build/ }).click();
+		await page.getByRole("button", { name: "Examine pi-build" }).click();
+		const card = page.getByRole("dialog", { name: "Examine pi-build" });
+		await expect(card.locator("dd").first().textContent()).resolves.toBe("bash \u00b7 npx vitest run tests/a.test.ts");
+		expect(errors).toEqual([]);
+	} finally {
+		await page.close();
+	}
+}, 30000);
+
+test("the Places tab lists the inn and the rookery as open places, with who sleeps and what mail waits; only the rest are not open yet", async () => {
+	const sleeper = (id: string) => ({
+		id,
+		name: id,
+		role: "worker" as const,
+		reportsTo: HQ,
+		repository: null,
+		cwd: "/r",
+		task: null,
+		stoppedAt: at(10),
+		stopReason: "exited",
+		startedAt: at(1),
+	});
+	const letter = {
+		id: "m1",
+		from: HQ,
+		fromName: "Orla",
+		to: "sleepy",
+		toName: "sleepy",
+		body: "Wake up.",
+		sentAt: at(30),
+		deliveredAt: null,
+		state: "waiting" as const,
+		reason: "asleep",
+	};
+	const { page, errors } = await openWorld({
+		...world(),
+		dormant: [sleeper("sleepy"), sleeper("dozy")],
+		mail: [letter],
+	});
+	try {
+		await tab(page, "Places");
+		const outside = page.getByRole("region", { name: "Outside" });
+		await expect(outside.locator(".aw-row-name").allTextContents()).resolves.toEqual([
+			"Village square",
+			"The inn",
+			"The rookery",
+		]);
+		await expect(outside.getByRole("button", { name: /^The inn/ }).textContent()).resolves.toContain("2 asleep");
+		await expect(outside.getByRole("button", { name: /^The rookery/ }).textContent()).resolves.toContain(
+			"1 letter waits",
+		);
+		const notOpen = page.getByRole("region", { name: "Not open yet" });
+		await expect(notOpen.locator(".aw-row-name").allTextContents()).resolves.toEqual([
+			"The forge",
+			"The quest office",
+			"The library",
+		]);
+		await outside.getByRole("button", { name: /^The rookery/ }).click();
+		await vi.waitFor(async () => expect(await place(page)).toBe("rookery"), { timeout: 3000 });
+		expect(errors).toEqual([]);
+	} finally {
+		await page.close();
+	}
+}, 30000);

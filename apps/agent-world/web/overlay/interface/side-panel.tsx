@@ -6,7 +6,7 @@ import { isOutside, placeKey } from "../../../src/world.js";
 import type { AvatarLook } from "../../looks.js";
 import { MailList } from "../places/mail-list.js";
 import { placePanels } from "../places/place-panels.js";
-import { AgentsIcon, BellIcon, CogIcon, LetterIcon, ScrollIcon, SignpostIcon } from "./icons.js";
+import { AgentsIcon, BellIcon, ChevronIcon, CogIcon, LetterIcon, ScrollIcon, SignpostIcon } from "./icons.js";
 import { activity, byPlace, byTask, type Group, needsYou, OUTSIDE, orbCounts, placeName, placesOf } from "./model.js";
 import { type CharacterAction, CharacterRow } from "./rows.js";
 
@@ -21,8 +21,8 @@ const TABS: { tab: Tab; title: string; icon: ReactNode }[] = [
 	{ tab: "settings", title: "Settings", icon: <CogIcon /> },
 ];
 
-/** Function places that have no painting yet: listed so the operator knows they are coming. */
-const NOT_OPEN = ["forge", "quest-office", "library"];
+/** Every function place the world will have: those not open yet are listed so the operator knows they are coming. */
+const FUNCTION_PLACES = ["forge", "quest-office", "library", "inn", "rookery"];
 
 export interface SidePanelProps {
 	world: WorldSnapshot | undefined;
@@ -31,6 +31,8 @@ export interface SidePanelProps {
 	tab: Tab;
 	folded: boolean;
 	onTab: (tab: Tab) => void;
+	/** Fold the panel down to its tabs; a tab opens it again. */
+	onFold: () => void;
 	selected: string | undefined;
 	onSelect: (id: string | undefined) => void;
 	act: (action: CharacterAction, character: Character) => void;
@@ -44,7 +46,7 @@ export interface SidePanelProps {
 }
 
 export function SidePanel(props: SidePanelProps) {
-	const { tab, folded, onTab, world } = props;
+	const { tab, folded, onTab, onFold, world } = props;
 	const title = TABS.find((t) => t.tab === tab)!.title;
 	const { needsYou: waiting } = orbCounts(world);
 	return (
@@ -53,6 +55,15 @@ export function SidePanel(props: SidePanelProps) {
 				<>
 					<header className="aw-panel-head">
 						<h2>{title}</h2>
+						<button
+							type="button"
+							className="aw-fold aw-panel-fold"
+							aria-label="Fold the side panel"
+							title="Fold the side panel to its tabs"
+							onClick={onFold}
+						>
+							<ChevronIcon open />
+						</button>
 					</header>
 					<div className="aw-panel-body aw-parchment" role="tabpanel" aria-label={title}>
 						<TabBody {...props} />
@@ -67,7 +78,7 @@ export function SidePanel(props: SidePanelProps) {
 						role="tab"
 						aria-selected={key === tab}
 						aria-label={name}
-						title={folded || key !== tab ? name : `${name} (click to fold)`}
+						title={folded ? `Open ${name}` : key !== tab ? name : `${name} (click to fold)`}
 						className="aw-tab"
 						onClick={() => onTab(key)}
 					>
@@ -178,9 +189,20 @@ function Places({ world, labels, here, travel }: SidePanelProps) {
 		})),
 		{ key: "outside", title: "Outside", places: OUTSIDE },
 	];
+	// Open places are listed above, wherever they are; only the rest wait under "Not open yet".
+	const open = new Set(places.map((ref) => ref.kind));
+	const notOpen = FUNCTION_PLACES.filter((kind) => !open.has(kind as PlaceRef["kind"]));
 	const count = (ref: PlaceRef) => world?.characters.filter((c) => placeKey(c.place) === placeKey(ref)).length ?? 0;
 	const detail = (ref: PlaceRef) => {
 		if (placeKey(ref) === here) return "You are here";
+		if (ref.kind === "inn") {
+			const asleep = world?.dormant?.length ?? 0;
+			return asleep ? `${asleep} asleep` : "Nobody asleep";
+		}
+		if (ref.kind === "rookery") {
+			const waiting = world?.mail?.filter((item) => item.state === "waiting").length ?? 0;
+			return waiting ? `${waiting} ${waiting === 1 ? "letter waits" : "letters wait"}` : "";
+		}
 		if (ref.kind === "wing") {
 			const wing = world?.headquarters
 				.find((hq) => hq.id === ref.headquarters)
@@ -202,7 +224,12 @@ function Places({ world, labels, here, travel }: SidePanelProps) {
 							const key = placeKey(ref);
 							return (
 								<li key={key} className={`aw-row aw-place${key === here ? " aw-row-here" : ""}`}>
-									<button type="button" className="aw-row-main" onClick={() => travel(ref)}>
+									<button
+										type="button"
+										className="aw-row-main"
+										title={`Travel to ${placeName(ref, world, labels)}`}
+										onClick={() => travel(ref)}
+									>
 										<span className="aw-pip aw-pip-place" aria-hidden="true" />
 										<span className="aw-row-text">
 											<span className="aw-row-name">{placeName(ref, world, labels)}</span>
@@ -218,23 +245,25 @@ function Places({ world, labels, here, travel }: SidePanelProps) {
 					</ul>
 				</section>
 			))}
-			<section aria-label="Not open yet">
-				<h3>
-					<span>Not open yet</span>
-				</h3>
-				<ul>
-					{NOT_OPEN.map((kind) => (
-						<li key={kind} className="aw-row aw-place aw-row-muted">
-							<div className="aw-row-main">
-								<span className="aw-pip aw-pip-place" aria-hidden="true" />
-								<span className="aw-row-text">
-									<span className="aw-row-name">{labels?.[kind] ?? kind}</span>
-								</span>
-							</div>
-						</li>
-					))}
-				</ul>
-			</section>
+			{notOpen.length > 0 && (
+				<section aria-label="Not open yet">
+					<h3>
+						<span>Not open yet</span>
+					</h3>
+					<ul>
+						{notOpen.map((kind) => (
+							<li key={kind} className="aw-row aw-place aw-row-muted">
+								<div className="aw-row-main">
+									<span className="aw-pip aw-pip-place" aria-hidden="true" />
+									<span className="aw-row-text">
+										<span className="aw-row-name">{labels?.[kind] ?? kind}</span>
+									</span>
+								</div>
+							</li>
+						))}
+					</ul>
+				</section>
+			)}
 		</>
 	);
 }

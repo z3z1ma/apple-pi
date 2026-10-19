@@ -45,6 +45,10 @@ declare module "electron" {
 		handle(channel: string, listener: (event: unknown, ...args: unknown[]) => unknown): void;
 	};
 
+	export const shell: {
+		openExternal(url: string): Promise<void>;
+	};
+
 	export const net: {
 		fetch(url: string): Promise<Response>;
 	};

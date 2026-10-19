@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, normalize, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { BrowserWindow, app, ipcMain, net, protocol } from "electron";
+import { BrowserWindow, app, ipcMain, net, protocol, shell } from "electron";
 import { homedir } from "node:os";
 import { randomUUID } from "node:crypto";
 import { createConnection } from "node:net";
@@ -768,6 +768,38 @@ function openLifecycle(paths, commands, snapshot) {
 			}, MAIL_MS, (stage, reason) => stage === "applied" || stage === "accepted" && reason !== void 0, (stage) => stage === "delivered" ? "Handed over; not in its transcript yet." : "Sent; not delivered yet.");
 		}
 	};
+}
+//#endregion
+//#region apps/agent-world/src/backend/links.ts
+/** The longest link Agent World hands to the browser. */
+var LINK_MAX = 8192;
+/** The link as a full http or https URL, or undefined for anything else. */
+function webLink(url) {
+	if (typeof url !== "string" || !url || url.length > LINK_MAX) return void 0;
+	let parsed;
+	try {
+		parsed = new URL(url);
+	} catch {
+		return;
+	}
+	return parsed.protocol === "http:" || parsed.protocol === "https:" ? parsed.href : void 0;
+}
+/** Open a web link with `open` (Electron's `shell.openExternal`); anything but http and https is refused unopened. */
+async function openLink(url, open) {
+	const href = webLink(url);
+	if (!href) return {
+		ok: false,
+		reason: "Only web links (http and https) open from Agent World."
+	};
+	try {
+		await open(href);
+		return { ok: true };
+	} catch (error) {
+		return {
+			ok: false,
+			reason: `The browser did not open the link: ${String(error?.message ?? error)}`
+		};
+	}
 }
 //#endregion
 //#region apps/agent-world/src/backend/facts.ts
@@ -1565,6 +1597,7 @@ function start() {
 	ipcMain.handle("world:wake", (_event, characterId) => typeof characterId === "string" ? lifecycle.wake(characterId) : unnamed);
 	ipcMain.handle("world:end-session", (_event, characterId, confirmed) => typeof characterId === "string" ? lifecycle.endSession(characterId, confirmed === true) : unnamed);
 	ipcMain.handle("world:send-mail", (_event, characterId, body) => typeof characterId === "string" && typeof body === "string" ? lifecycle.sendMail(characterId, body) : unnamed);
+	ipcMain.handle("world:open-link", (_event, url) => openLink(url, (href) => shell.openExternal(href)));
 	world.subscribe((snapshot) => {
 		if (window && !window.isDestroyed()) window.webContents.send("world:update", snapshot);
 	});

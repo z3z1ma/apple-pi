@@ -1,8 +1,9 @@
 // The chatbox at the bottom left: world events as lines (the runtime's feed, and what the operator did here), with a
-// toggle per kind. It keeps to the newest line unless the operator has scrolled up to read.
+// toggle per kind. It keeps to the newest line unless the operator has scrolled up to read. It is compact by default
+// (about five lines, so the world stays the hero), shows more lines on demand, and folds down to its bar.
 import { useLayoutEffect, useRef } from "react";
 import type { FeedKind } from "../../../src/world.js";
-import { ChevronIcon } from "./icons.js";
+import { ChevronIcon, GrowIcon } from "./icons.js";
 
 export type ChatKind = "game" | FeedKind;
 
@@ -34,6 +35,8 @@ export function Chatbox({
 	onAll,
 	folded,
 	onFold,
+	tall,
+	onTall,
 	awake,
 	onName,
 }: {
@@ -43,6 +46,9 @@ export function Chatbox({
 	onAll: () => void;
 	folded: boolean;
 	onFold: () => void;
+	/** Showing more lines than the compact five. */
+	tall: boolean;
+	onTall: () => void;
 	/** Whether a character is awake, so its name can be examined from a line. */
 	awake: (id: string) => boolean;
 	onName: (id: string) => void;
@@ -53,9 +59,9 @@ export function Chatbox({
 	// biome-ignore lint/correctness/useExhaustiveDependencies: scroll again whenever the shown lines change.
 	useLayoutEffect(() => {
 		if (log.current && pinned.current) log.current.scrollTop = log.current.scrollHeight;
-	}, [shown.length, shown.at(-1)?.key, folded]);
+	}, [shown.length, shown.at(-1)?.key, folded, tall]);
 	return (
-		<section className={`aw-frame aw-chat${folded ? " aw-folded" : ""}`} aria-label="Chatbox">
+		<section className={`aw-frame aw-chat${folded ? " aw-folded" : tall ? " aw-chat-tall" : ""}`} aria-label="Chatbox">
 			{!folded && (
 				<div
 					ref={log}
@@ -97,14 +103,27 @@ export function Chatbox({
 						{title}
 					</button>
 				))}
+				{!folded && (
+					<button
+						type="button"
+						className="aw-fold"
+						aria-label={tall ? "Show fewer lines" : "Show more lines"}
+						title={tall ? "Show fewer lines" : "Show more lines"}
+						aria-pressed={tall}
+						onClick={onTall}
+					>
+						<GrowIcon grown={tall} />
+					</button>
+				)}
 				<button
 					type="button"
 					className="aw-fold"
 					aria-label={folded ? "Open the chatbox" : "Fold the chatbox"}
+					title={folded ? "Open the chatbox" : "Fold the chatbox"}
 					aria-expanded={!folded}
 					onClick={onFold}
 				>
-					<ChevronIcon open={folded} />
+					<ChevronIcon open={!folded} />
 				</button>
 			</div>
 		</section>

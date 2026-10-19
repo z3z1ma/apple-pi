@@ -5,6 +5,14 @@ Why: Phaser's keyboard plugin listens on `window` (bubble phase) and would walk 
 Coupled: apps/agent-world/web/game/place-scene.ts
 Verify: apps/agent-world/tests/world-conversation.test.ts
 
+Tab and Shift+Tab are kept inside the book (inside an open confirmation, if there is one) by `trapTab` from `overlay/focus.ts`, and closing gives the focus to the world's `#game` (`focusWorld`) in the effect's cleanup. The place panels and their confirmations do the same.
+Hazard: a key pressed within about 150 ms of closing is lost by the world (seen with G in the tests); the cause is not yet found, and the focus test leaves 300 ms.
+Coupled: apps/agent-world/web/overlay/focus.ts, apps/agent-world/web/overlay/places/place-dialog.tsx
+Verify: apps/agent-world/tests/world-conversation.test.ts, apps/agent-world/tests/world-rookery.test.ts
+
+A dormant character (its id in `world.dormant`) has no terminal: the left page offers Wake (`placeActions.wake`) where awake ones have Go to its terminal, and the reply slot says how it wakes.
+Verify: apps/agent-world/tests/world-inn.test.ts
+
 `mark_seen` is sent when the panel opens on a character with `needsYouSince`, and again on a later settle only while the window has focus.
 Why: opening is seeing (decision 17); a panel left open in a background window must not swallow "finished" for every other view.
 Verify: apps/agent-world/tests/world-conversation.test.ts

@@ -9,7 +9,7 @@ import type { Theme } from "../../theme.js";
 
 /** Reading the conversation is required; acting and live replies are there once the backend offers them. */
 export type ConversationApi = Pick<AgentWorldApi, "conversation" | "markSeen"> &
-	Partial<Pick<AgentWorldApi, "instruct" | "onReceipt" | "watchReplies" | "onReply">>;
+	Partial<Pick<AgentWorldApi, "instruct" | "onReceipt" | "watchReplies" | "onReply" | "openLink">>;
 
 export interface PanelState {
 	/** The character talked to, as it was when the panel opened; the panel follows its live facts from the store. */

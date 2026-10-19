@@ -109,6 +109,22 @@ export function ChevronIcon({ open }: { open: boolean }) {
 	);
 }
 
+/** Two arrows apart (show more) or together (show less). */
+export function GrowIcon({ grown }: { grown: boolean }) {
+	return (
+		<svg viewBox="0 0 12 12" width="11" height="11" aria-hidden="true">
+			<path
+				d={grown ? "M3.5 1.5 6 4l2.5-2.5M3.5 10.5 6 8l2.5 2.5" : "M3.5 4 6 1.5 8.5 4M3.5 8 6 10.5 8.5 8"}
+				fill="none"
+				stroke="currentColor"
+				strokeWidth="1.6"
+				strokeLinecap="round"
+				strokeLinejoin="round"
+			/>
+		</svg>
+	);
+}
+
 export function CloseIcon() {
 	return (
 		<svg viewBox="0 0 12 12" width="10" height="10" aria-hidden="true">

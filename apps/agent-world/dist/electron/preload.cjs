@@ -31,6 +31,7 @@ electron.contextBridge.exposeInMainWorld("agentWorld", {
 	},
 	wake: (characterId) => electron.ipcRenderer.invoke("world:wake", characterId),
 	endSession: (characterId, confirmed) => electron.ipcRenderer.invoke("world:end-session", characterId, confirmed),
-	sendMail: (characterId, body) => electron.ipcRenderer.invoke("world:send-mail", characterId, body)
+	sendMail: (characterId, body) => electron.ipcRenderer.invoke("world:send-mail", characterId, body),
+	openLink: (url) => electron.ipcRenderer.invoke("world:open-link", url)
 });
 //#endregion

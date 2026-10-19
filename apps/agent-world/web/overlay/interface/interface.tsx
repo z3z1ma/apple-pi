@@ -32,6 +32,7 @@ export function Interface({ store, view }: { store: WorldStore; view: ViewStore 
 	const [examining, setExamining] = useState<string>();
 	const [hidden, setHidden] = useState<Set<ChatKind>>(new Set());
 	const [chatFolded, setChatFolded] = useState(false);
+	const [chatTall, setChatTall] = useState(false);
 	const [game, setGame] = useState<ChatLine[]>([]);
 	const lineCount = useRef(0);
 
@@ -155,6 +156,7 @@ export function Interface({ store, view }: { store: WorldStore; view: ViewStore 
 				tab={tab}
 				folded={folded}
 				onTab={open}
+				onFold={() => setFolded(true)}
 				selected={selected}
 				onSelect={setSelected}
 				act={act}
@@ -185,6 +187,8 @@ export function Interface({ store, view }: { store: WorldStore; view: ViewStore 
 				onAll={() => setHidden(new Set())}
 				folded={chatFolded}
 				onFold={() => setChatFolded((now) => !now)}
+				tall={chatTall}
+				onTall={() => setChatTall((now) => !now)}
 				awake={(id) => !!find(id)}
 				onName={(id) => intend({ kind: "examine", character: id })}
 			/>

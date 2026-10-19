@@ -189,6 +189,29 @@ describe("paths over a walk grid", () => {
 		}
 	});
 
+	it("walks through doorways and round corners without half-tile jogs", () => {
+		// From every entry and door to every door and the place beside every spot, in the painted places: no run between
+		// two corners is a sidestep of a cell or so.
+		for (const name of ["headquarters", "common-room", "square", "inn", "wing-small", "wing-large"]) {
+			const place = fantasy(name);
+			const grid = gridFor(place);
+			const starts: Point[] = [...Object.values(place.entries), ...place.doors.map((door) => door.standAt)];
+			const goals: Point[] = [
+				...place.spots.map(([x, y]): Point => [x + 1.1, y + 0.05]),
+				...place.doors.map((door) => door.standAt),
+			];
+			for (const from of starts)
+				for (const to of goals) {
+					const points = findPath(grid, from, to)?.points ?? [];
+					for (let i = 2; i < points.length - 1; i++)
+						expect(
+							pathLength([points[i - 1], points[i]]),
+							`${name} ${from}->${to}: ${points.join(" | ")}`,
+						).toBeGreaterThanOrEqual(0.6);
+				}
+		}
+	});
+
 	it("finds paths quickly enough to answer a click within a frame", () => {
 		const square = fantasy("square");
 		const grid = gridFor(square);

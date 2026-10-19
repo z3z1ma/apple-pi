@@ -35,6 +35,10 @@ declare global {
 			departing(): FigureView[];
 			/** The animated overlays in the place's slots: fire, water, and glows. */
 			overlays(): OverlayView[];
+			/** The frames the painting is drawn from: `__BASE` for a whole painting, one per strip for the gallery. */
+			paintingFrames(): string[];
+			/** Each texture's filtering now: true where its pixels are drawn crisp (nearest), false where smoothed. */
+			filters(): Record<string, boolean>;
 			/** The banners hung in the place and the names stitched on them. */
 			banners(): BannerView[];
 			doors(): DoorView[];
@@ -95,6 +99,8 @@ window.agentWorldView = {
 	departing: () => active()?.departingViews() ?? [],
 	overlays: () => active()?.overlayViews() ?? [],
 	banners: () => active()?.bannerViews() ?? [],
+	paintingFrames: () => active()?.paintingFrames() ?? [],
+	filters: () => active()?.filterView() ?? {},
 	doors: () => active()?.doorViews() ?? [],
 	gallery: () => active()?.galleryView(),
 	walkGrid: () => active()?.walkGridShown() ?? false,

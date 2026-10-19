@@ -146,6 +146,9 @@
 
 .aw-page-left {
 	align-items: center;
+	/* A short window scrolls the page rather than letting the plaque fall off the book. */
+	overflow-y: auto;
+	scrollbar-width: thin;
 	padding: 22px 30px 20px 24px;
 	border-radius: 6px 2px 2px 8px;
 	text-align: center;
@@ -355,6 +358,18 @@
 	color: var(--aw-oxblood);
 }
 
+.aw-conv-wake {
+	margin: 0;
+	font-size: 12.5px;
+	font-style: italic;
+	text-align: center;
+	color: var(--aw-ink-soft);
+}
+
+.aw-conv-wake-failed {
+	color: var(--aw-oxblood);
+}
+
 /* The right page: the transcript */
 
 .aw-book-close {
@@ -451,6 +466,15 @@
 	margin: 0 10px;
 	font-style: normal;
 	color: #a07a3a;
+}
+
+/* Entries the runtime indexed that the transcript file no longer holds: one quiet line at the top. */
+.aw-conv-missing {
+	margin: -8px 0 16px;
+	text-align: center;
+	font-size: 12.5px;
+	font-style: italic;
+	color: var(--aw-ink-faint);
 }
 
 .aw-conv-empty {
@@ -707,6 +731,26 @@
 	text-decoration: underline;
 	text-decoration-color: rgb(36 71 106 / 40%);
 	text-underline-offset: 2px;
+}
+
+a.aw-md-link {
+	cursor: pointer;
+	overflow-wrap: anywhere;
+}
+
+a.aw-md-link:hover {
+	text-decoration-color: currentColor;
+}
+
+a.aw-md-link:focus-visible {
+	outline: 2px solid var(--aw-blue-ink);
+	outline-offset: 1px;
+	border-radius: 2px;
+}
+
+/* A link the window cannot open (not a web link): its target shows on hover only. */
+.aw-md-link-dead {
+	text-decoration-style: dotted;
 }
 
 .aw-md-image {
@@ -1441,4 +1485,26 @@
 	content: "\2709";
 	margin-right: 6px;
 	font-style: normal;
+}
+
+/* In a short window the portrait and the name give way, so the facts and the plaque still fit the page. */
+@media (max-height: 760px) {
+	.aw-page-left {
+		padding-top: 16px;
+		padding-bottom: 14px;
+	}
+	.aw-portrait {
+		height: min(236px, 25vh);
+	}
+	.aw-conv-title {
+		margin-top: 14px;
+		font-size: 26px;
+	}
+	.aw-conv-facts {
+		gap: 8px;
+		margin-top: 8px;
+	}
+	.aw-conv-side-foot {
+		padding-top: 8px;
+	}
 }

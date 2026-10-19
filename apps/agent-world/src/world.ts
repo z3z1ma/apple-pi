@@ -310,4 +310,6 @@ export interface AgentWorldApi {
 	endSession(characterId: string, confirmed?: boolean): Promise<CommandReceipt>;
 	/** Mail a character as the operator (`mail`, from `OPERATOR`); mail to a dormant one waits until it wakes. */
 	sendMail(characterId: string, body: string): Promise<CommandReceipt>;
+	/** Open a link from a transcript in the system browser: http and https only; the window itself never navigates. */
+	openLink(url: string): Promise<CommandResult>;
 }

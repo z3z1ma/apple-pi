@@ -345,6 +345,18 @@ test("the Mail tab lists the same traffic and writes a letter from anywhere", as
 		const rookery = page.getByRole("dialog", { name: "The rookery" });
 		await rookery.getByRole("combobox", { name: "To" }).waitFor({ timeout: 3000 });
 		expect(await view(page, "place()")).toBe(`headquarters:${HQ}`);
+		// While it is open, Tab and Shift+Tab keep to its own controls; Escape closes it and the world has the keys.
+		const inPanel = () =>
+			page.evaluate(
+				() => !!document.querySelector("[role=dialog][aria-label='The rookery']")?.contains(document.activeElement),
+			);
+		for (const key of [...Array(16).fill("Tab"), ...Array(16).fill("Shift+Tab")]) {
+			await page.keyboard.press(key);
+			expect(await inPanel(), key).toBe(true);
+		}
+		await page.keyboard.press("Escape");
+		await rookery.waitFor({ state: "detached", timeout: 2000 });
+		await expect(page.evaluate(() => document.activeElement?.id)).resolves.toBe("game");
 		expect(errors).toEqual([]);
 	} finally {
 		await page.close();

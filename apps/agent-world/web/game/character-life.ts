@@ -8,9 +8,15 @@ import type { Pose } from "./walker.js";
 /** What the badge over a head says: at work, asking you something, or finished and not seen yet. */
 export type BadgeKind = "working" | "asking" | "unseen";
 
-export function poseFor(character: Character): Pose {
+/**
+ * Indoors a working character sits at its desk (its seated frames bring the stool); outdoors there are no desks, so it
+ * stands at work, busy on its feet, with the same badge.
+ */
+export function poseFor(character: Character, outdoors = false): Pose {
 	const status = character.facts?.status;
-	return status === "asking" ? "asking" : status === "working" ? "seated" : "standing";
+	if (status === "asking") return "asking";
+	if (status === "working") return outdoors ? "busy" : "seated";
+	return "standing";
 }
 
 export function badgeFor(character: Character): BadgeKind | null {
@@ -128,8 +134,20 @@ export function drawBadge(scene: Phaser.Scene, kind: BadgeKind): Phaser.GameObje
 	return scene.add.container(0, 0, [mark]);
 }
 
+/** A bark as drawn: its container (the tail's tip at its (0, 0)), the bubble that can slide sideways, and its size. */
+export interface BarkShape {
+	container: Phaser.GameObjects.Container;
+	/** The bubble and its text, without the tail: slid sideways (local px) to keep clear of others and the interface. */
+	body: Phaser.GameObjects.Container;
+	/** The bubble's width and height, and how far it may slide either way while the tail still meets it. */
+	width: number;
+	height: number;
+	slide: number;
+	tail: number;
+}
+
 /** A speech bubble whose tail's tip is at (0, 0) of its container, the text wrapped to a few words a line. */
-export function drawBark(scene: Phaser.Scene, line: string): Phaser.GameObjects.Container {
+export function drawBark(scene: Phaser.Scene, line: string): BarkShape {
 	const text = scene.add
 		.text(0, 0, line, {
 			fontFamily: SERIF,
@@ -149,15 +167,23 @@ export function drawBark(scene: Phaser.Scene, line: string): Phaser.GameObjects.
 	const w = Math.ceil(text.width + padX * 2);
 	const h = Math.ceil(text.height + padY * 2);
 	const tail = 7;
-	const bubble = scene.add.graphics();
 	const top = -tail - h;
+	const bubble = scene.add.graphics();
 	bubble.fillStyle(0x000000, 0.22).fillRoundedRect(-w / 2 + 1.5, top + 2.5, w, h, 7);
 	bubble.fillStyle(INK, 1).fillRoundedRect(-w / 2 - 1.5, top - 1.5, w + 3, h + 3, 8.5);
-	bubble.fillTriangle(-6.5, -tail - 1, 6.5, -tail - 1, 0, 1.5);
-	bubble.fillStyle(PAPER, 1).fillRoundedRect(-w / 2, top, w, h, 7);
-	bubble.fillTriangle(-4.6, -tail - 1.6, 4.6, -tail - 1.6, 0, -1);
+	const tip = scene.add.graphics();
+	tip.fillStyle(INK, 1).fillTriangle(-6.5, -tail - 1, 6.5, -tail - 1, 0, 1.5);
+	tip.fillStyle(PAPER, 1).fillTriangle(-4.6, -tail - 1.6, 4.6, -tail - 1.6, 0, -1);
+	const paper = scene.add.graphics();
+	paper.fillStyle(PAPER, 1).fillRoundedRect(-w / 2, top, w, h, 7);
 	text.setPosition(0, -tail - padY + 0.5);
-	return scene.add.container(0, 0, [bubble, text]);
+	const body = scene.add.container(0, 0, [bubble, paper, text]);
+	// The tail sits over the bubble's outline and under its paper, so the two read as one shape wherever it slides.
+	const container = scene.add.container(0, 0, [body, tip]);
+	container.bringToTop(tip);
+	body.bringToTop(paper);
+	body.bringToTop(text);
+	return { container, body, width: w + 3, height: h + tail + 3, slide: Math.max(0, w / 2 - 14), tail };
 }
 
 /**

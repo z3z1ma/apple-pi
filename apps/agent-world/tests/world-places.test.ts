@@ -281,17 +281,55 @@ test("banner names fit their banners and stay legible, even for long repository 
 	const { page, errors } = await openWorld(snapshot);
 	try {
 		await travel(page, /^Gallery of wings/, `gallery:${HQ}`);
-		const banners = (await view(page, "banners()")) as { name: string; text: string; size: number; fits: boolean }[];
+		const banners = (await view(page, "banners()")) as {
+			name: string;
+			text: string;
+			size: number;
+			fits: boolean;
+			abbreviated: boolean;
+		}[];
 		expect(banners.map((b) => b.name)).toEqual(names);
 		for (const banner of banners) {
 			expect(banner.fits, banner.name).toBe(true);
-			expect(banner.size, banner.name).toBeGreaterThanOrEqual(10);
-			// What is stitched is the name itself, broken into lines (a long word with a hyphen ‐), or cut short only when
-			// nothing else fits.
-			const stitched = banner.text.replace(/\u2010?\n/g, "");
-			if (!stitched.includes("\u2026")) expect(stitched).toBe(banner.name);
+			// Never smaller than reads at the default zoom.
+			expect(banner.size, banner.name).toBeGreaterThanOrEqual(12);
+			// What is stitched is the name itself, broken into lines, or with words cut short ("repos.") in order, each the
+			// start of the word it stands for.
+			const words = banner.name.split(/[-_./ ]/);
+			if (!banner.abbreviated) expect(banner.text.replace(/\n/g, "")).toBe(banner.name);
+			else {
+				// Word by word: whole, or its first three or more letters and a full stop; at the very end, cut short with
+				// an ellipsis only when nothing else fits.
+				let rest = banner.text.replace(/\n/g, "");
+				for (const word of words) {
+					rest = rest.replace(/^[-_./ ]+/, "");
+					const cut = /^(\w{3,})\./.exec(rest);
+					if (rest.startsWith(word)) rest = rest.slice(word.length);
+					else if (cut && word.startsWith(cut[1])) rest = rest.slice(cut[0].length);
+					else {
+						expect(rest, banner.name).toMatch(/^\w+\u2026$/);
+						expect(word.startsWith(rest.slice(0, -1)), banner.name).toBe(true);
+						rest = "";
+						break;
+					}
+				}
+				expect(rest.replace(/^[-_./ ]+/, ""), banner.name).toBe("");
+			}
 		}
-		expect(banners.find((b) => b.name === "a-very-long-repository-name")!.text).not.toContain("\u2026");
+		// Short names are stitched whole and large: a short word on one line, a short name broken after its separator.
+		expect(banners.find((b) => b.name === "api")).toMatchObject({ text: "api", size: 15 });
+		expect(banners.find((b) => b.name === "apple-pi")).toMatchObject({ text: "apple-\npi", size: 15 });
+		// The cloth answers the pointer with the whole name, however short it was stitched.
+		const long = "customer_identity_and_access_management";
+		expect(banners.find((b) => b.name === long)!.abbreviated).toBe(true);
+		await page.evaluate((name) => (window as any).agentWorldView.lookAt(`${name} wing`), long);
+		await page.waitForTimeout(400);
+		const door = ((await view(page, "doors()")) as { name: string; x: number; y: number }[]).find(
+			(d) => d.name === `${long} wing`,
+		)!;
+		const zoom = ((await view(page, "zoom()")) as { zoom: number }).zoom;
+		await page.mouse.move(door.x, door.y - 2.4 * 48 * zoom);
+		await page.locator(".pointer-hover").getByText(long).waitFor({ timeout: 2000 });
 		await page.evaluate(() => (window as any).agentWorldView.lookAt("a-very-long-repository-name wing"));
 		await page.waitForTimeout(400);
 		await shot(page, "aw-04-banners");
@@ -337,6 +375,49 @@ test("a door at the edge under the interface comes out from under the panels whe
 		await vi.waitFor(async () => expect((await avatar(page))!.moving).toBe(false), { timeout: 10000 });
 		await page.waitForTimeout(1500);
 		expect(await covered("Hall doors")).toBe(false);
+		expect(errors).toEqual([]);
+	} finally {
+		await page.close();
+	}
+}, 60000);
+
+test("coming back to a place draws its whole painting again, not one of the furniture pieces cut from it", async () => {
+	const { page, errors } = await openWorld(world([ORLA]));
+	try {
+		expect(await view(page, "paintingFrames()")).toEqual(["__BASE"]);
+		await travel(page, /^Common room/, `common-room:${HQ}`);
+		await travel(page, /^Guild hall/, `headquarters:${HQ}`);
+		// The hall's furniture pieces are frames of its painting; the painting itself is still drawn whole.
+		expect(await view(page, "paintingFrames()")).toEqual(["__BASE"]);
+		await shot(page, "aw-17-hall-again");
+		expect(errors).toEqual([]);
+	} finally {
+		await page.close();
+	}
+}, 60000);
+
+test("zoomed in, character sprites are drawn crisp; zoomed out, they and the painting are smoothed", async () => {
+	const { page, errors } = await openWorld(world([ORLA]));
+	try {
+		const filters = () => view(page, "filters()") as Promise<Record<string, boolean>>;
+		const zoomTo = async (dy: number) => {
+			await page.mouse.move(500, 300);
+			for (let i = 0; i < 6; i++) await page.mouse.wheel(0, dy);
+			await vi.waitFor(async () => {
+				const { zoom, target } = (await view(page, "zoom()")) as { zoom: number; target: number };
+				expect(Math.abs(zoom - target)).toBeLessThan(1e-3);
+			});
+			await page.waitForTimeout(600);
+		};
+		await zoomTo(-400);
+		const near = await filters();
+		// The avatar's and Orla's sheets: drawn larger than their own pixels, so nearest, never blurred.
+		const sprites = Object.keys(near).filter((key) => key.startsWith("look:"));
+		expect(sprites.length).toBeGreaterThan(1);
+		for (const key of sprites) expect(near[key], key).toBe(true);
+		await zoomTo(400);
+		const far = await filters();
+		for (const key of [...sprites, "painting:headquarters"]) expect(far[key], key).toBe(false);
 		expect(errors).toEqual([]);
 	} finally {
 		await page.close();
