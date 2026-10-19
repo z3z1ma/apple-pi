@@ -4,8 +4,8 @@
 
 **Blocked by:** 15 The inn; 16 The rookery and mail; 21 The forge shows pull requests; 24 Atlassian sign-in and the quest office; 26 The library; 27 Slack sign-in and the town square
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Each place in each pack has fidget objects that respond to hover, left click, and the right-click menu like other things in the world.
-- [ ] Using a fidget object sends no command and makes no outside call (backend API test).
-- [ ] Meets the bar in the polish bar in the [spec](../spec.md#further-notes): judged on captured screenshots and a short recording, not on passing tests alone.
+- [x] Each place in each pack has fidget objects that respond to hover, left click, and the right-click menu like other things in the world.
+- [x] Using a fidget object sends no command and makes no outside call (backend API test).
+- [x] Meets the bar in the polish bar in the [spec](../spec.md#further-notes): judged on captured screenshots and a short recording, not on passing tests alone.
