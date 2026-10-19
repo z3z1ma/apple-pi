@@ -1,0 +1,55 @@
+<!doctype html>
+<!--
+PROTOTYPE (throwaway) for the Agent World ticket "How places are built": painted interiors (guild hall, gallery
+of wings, wing rooms) and a tiled exterior, walked RuneScape-style. Run ./serve.sh and open the printed URL.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="icon" href="data:,">
+<title>PROTOTYPE · Agent World headquarters</title>
+<style>
+	html, body { margin: 0; height: 100%; overflow: hidden; background: #140e18; font: 13px/1.45 -apple-system, system-ui, sans-serif; color: #f3e9d2; }
+	#game { position: fixed; inset: 0; }
+	#hover { position: fixed; top: 8px; left: 10px; font: 600 15px/1.2 Georgia, serif; color: #fff; text-shadow: 1px 1px 0 #000, 0 0 3px #000; pointer-events: none; }
+	#hover .npc { color: #ffff3a; } #hover .object { color: #2ef2f2; } #hover .more { color: #fff; font-weight: 400; }
+	#where { position: fixed; top: 8px; right: 12px; font: italic 15px Georgia, serif; color: #e9d8b0; text-shadow: 1px 1px 0 #000; pointer-events: none; }
+	#menu { position: fixed; min-width: 180px; background: #5d5447; border: 2px solid #000; box-shadow: inset 0 0 0 1px #8a7d68; font: 600 14px/1 Georgia, serif; z-index: 10; }
+	#menu .title { color: #5d5447; background: #000; padding: 4px 6px; } #menu .title { color: #c6b896; }
+	#menu .item { padding: 4px 8px; color: #fff; cursor: pointer; } #menu .item:hover { background: #7a6f5c; }
+	#menu .npc { color: #ffff3a; } #menu .object { color: #2ef2f2; }
+	#chat { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); width: min(620px, 92vw); padding: 12px 16px 10px; background: linear-gradient(#3b2c22, #2a1f18); border: 2px solid #c8a46a; border-radius: 6px; box-shadow: 0 10px 30px rgba(0,0,0,.6), inset 0 0 0 1px #5e4632; font: 15px/1.4 Georgia, serif; z-index: 9; }
+	#chat .who { color: #ffd76b; font-weight: 700; margin-bottom: 4px; } #chat .line { color: #f3e9d2; }
+	#chat .opts { margin-top: 8px; display: grid; gap: 2px; } #chat .opt { color: #9fd3ff; cursor: pointer; } #chat .opt:hover { color: #fff; }
+	#controls { position: fixed; left: 10px; bottom: 10px; width: 330px; border-radius: 8px; background: rgba(246,243,238,.95); color: #222; font-size: 12px; box-shadow: 0 8px 24px rgba(0,0,0,.5); z-index: 8; }
+	#controls.closed #body { display: none; }
+	#toggle { width: 100%; text-align: left; border: 0; background: #e6dfd3; padding: 6px 10px; font-weight: 700; cursor: pointer; border-radius: 8px 8px 0 0; }
+	#body { padding: 8px 10px; } #body .row { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 8px; }
+	#body button { font-size: 11px; cursor: pointer; border: 1px solid #c9c0b0; background: #fff; border-radius: 6px; padding: 2px 7px; }
+	#state div { margin: 2px 0; } #help { color: #6f6555; margin-top: 6px; }
+</style>
+</head>
+<body>
+<div id="game"></div>
+<div id="hover"></div>
+<div id="where"></div>
+<div id="menu" hidden></div>
+<div id="chat" hidden></div>
+<div id="controls" class="closed">
+	<button id="toggle">Prototype controls (not part of the design)</button>
+	<div id="body">
+		<div class="row">
+			<button data-act="seed">Seed world</button>
+			<button data-act="live">Load live.json</button>
+			<button data-act="agent">+ agent</button>
+			<button data-act="wing">+ remembered wing</button>
+			<button data-act="forget">Forget wings</button>
+		</div>
+		<div id="state"></div>
+		<div id="help">Left click: walk or the default action. Right click: all actions. Wheel: zoom.</div>
+	</div>
+</div>
+<script src="vendor/phaser.min.js"></script>
+<script type="module" src="src/main.js"></script>
+</body>
+</html>
