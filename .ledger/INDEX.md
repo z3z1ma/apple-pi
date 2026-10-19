@@ -12,3 +12,4 @@
 
 - `.ledger/202610150034-code-context-evaluation/task.md` — planning — Evaluate code context sidecars on replayed failure tasks — Phase 5 of code-context sidecars: replay 3–5 historical failure tasks under Baseline, Read-only injection, and Full v1 (gate) and compare pre-edit constraint awareness, plan changes after blocks, violation rates, and token overhead.
 
+- `.ledger/202610191114-agent-world-alive/task.md` — in-progress — Agent World: a more alive world — Follow-up to the Agent World build: cursor and click feel, depth and grounding in every place, varied pets and NPCs with idle animations and wandering, fun ambient NPCs, a second exterior per theme, recruiting agents in theme, Slack reading fixes, and an aliveness pass.
