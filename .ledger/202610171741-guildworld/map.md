@@ -48,13 +48,10 @@ A whole-product spec for Agent World, ready for `/skill:to-spec`: every architec
 - [What you do in each function place](decisions/25-what-you-do-in-each-function-place.md): per place, what it shows and what you do as yourself or delegate: forge (PRs, review), quest office (your issues plus search), library (Confluence search), town square (unread channels, bounded, plus the crier), inn (wake dormant agents), rookery (mail); every place opens the real tool.
 - [Command vocabulary and gates](decisions/13-command-vocabulary-and-gates.md): seven classes; only stopping a busy agent, closing a busy session, and writes outside as yourself ask for confirmation, and outside writes are logged.
 - [Theme pack contract](decisions/14-theme-pack-contract.md): a pack is a manifest (labels, interface and panel style) plus every place hand-designed with a shared data format, character sheets and portraits in shared conventions, and overlays; required pieces are validated; fantasy flagship plus thin tech and anime packs.
+- [Avatar, exteriors, and fidget objects](decisions/27-avatar-exteriors-and-fidget-objects.md): pick an avatar look per theme; one hand-designed exterior per theme in the first version; fidget objects are pure play.
 
 ## Not yet specified
 
-- Milestone order and slice boundaries: depends on most tickets; the handoff's M0–M7 is a starting point.
-- The operator's avatar: who it is and how it looks; sharpens with [Characters and portraits](decisions/22-characters-and-portraits.md). Movement itself is [Movement and pathing](decisions/23-movement-and-pathing.md).
-- Layout of the connective tissue: how the function places are arranged and joined per theme; sharpens with [How exteriors are built](decisions/24-how-exteriors-are-built.md).
-- Things to interact with (the painted/overlaid split is decided in [How places are built](decisions/15-how-places-are-built.md)): many more objects to fidget with in every place ("ADHD paradise"); in the first version (operator, 2026-10-18), designed once places, characters, and movement work.
 
 ## Out of scope
 
