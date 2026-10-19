@@ -51,8 +51,7 @@
     { "kind": "glow", "at": [16.6, 11.7], "r": 0.8 },
     { "kind": "glow", "at": [7.15, 16.4], "r": 0.9 },
     { "kind": "glow", "at": [10.8, 16.3], "r": 0.9 },
-    { "kind": "fidget", "fidget": "sleeper", "at": [5.3, 6.2] },
-    { "kind": "fidget", "fidget": "pet", "at": [13.4, 11.0] },
+    { "kind": "fidget", "fidget": "pet", "look": "owl", "at": [13.4, 11.0], "name": "Sage" },
     { "kind": "fidget", "fidget": "candle", "at": [2.9, 12.4] }
   ],
   "foreground": [{ "rect": [5.8, 6.9, 6.5, 3.4], "feet": 10.3 }]

@@ -58,15 +58,14 @@
     { "kind": "glow", "at": [23.6, 9.5], "r": 0.8 },
     { "kind": "glow", "at": [8.6, 13.6], "r": 0.9 },
     { "kind": "glow", "at": [15.2, 13.7], "r": 0.9 },
-    { "kind": "fidget", "fidget": "pet", "at": [8.4, 4.9], "name": "Cinder" },
-    { "kind": "fidget", "fidget": "bell", "at": [14.6, 4.6] },
-    { "kind": "fidget", "fidget": "sleeper", "at": [0.95, 9.65] }
+    { "kind": "fidget", "fidget": "pet", "look": "hound", "at": [8.4, 4.9], "name": "Cinder" },
+    { "kind": "fidget", "fidget": "bell", "at": [14.7, 3.55] }
   ],
   "foreground": [
     { "rect": [10.9, 4.0, 2.3, 2.0], "feet": 6.0 },
     { "rect": [4.9, 6.0, 6, 2.4], "feet": 8.4 },
     { "rect": [13.4, 6.0, 5.9, 2.4], "feet": 8.4 },
-    { "rect": [4.1, 9.1, 6.6, 2.5], "feet": 11.6 },
-    { "rect": [13.3, 9.1, 6.8, 2.5], "feet": 11.6 }
+    { "rect": [4.1, 9.1, 6.6, 2.4], "feet": 11.5 },
+    { "rect": [13.3, 9.1, 6.8, 2.4], "feet": 11.5 }
   ]
 }

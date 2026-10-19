@@ -13,3 +13,10 @@ Townsfolk fade in and out on their spot rather than walking through a door: they
 
 `drawUnreadBadge` centres the count on its ink (`measureText`'s actual bounding box against Phaser's `getTextMetrics().ascent`), not on the line box, so `1` and `88` sit in the middle alike; the prototype's numbers sat off centre. It never pulses (unlike the agents' state badges) so a square of unread channels stays calm; a channel that mentions the operator wears the theme's asking colour.
 Verify: apps/agent-world/tests/world-square.test.ts
+
+## symbol:drawSigns
+
+Every door with a `sign` gets the place's themed label (`signName`: without its article, "The forge" is "Forge") lettered on its board in the pack's `world.sign` style, at the largest size that fits on one line (else two), never below 10 px; then no sign on the street is lettered more than `SIGN_KIN` (1.25×) the smallest, so the signs read as a set ("Inn" on a big board shouted). On a painted board the letters keep 10% of its height and 4 px clear; on a drawn plate they come up to its rim.
+Why: ticket 04 of `.ledger/202610191114-agent-world-alive/` asks for names legible at the default zoom (48 px per tile in the squares at 1280 × 800). The fantasy square paints hanging slates about 0.7 × 0.55 tiles (34 × 26 px; the rookery's is seen side-on, 25 px wide) and none for the guild hall or the quest office, too small for a name at 10 px, so every fantasy sign is a `plate` the world draws (slate and iron colours sampled from the painting) over where the painted slate hangs. The tech plaza's blank light boxes and the anime school's cream boards are lettered as painted. Repainting the fantasy square with larger blank boards (and boards for the guild hall and the quest office) would let its signs drop `plate`.
+Coupled: apps/agent-world/themes/fantasy/places/square.json, apps/agent-world/themes/tech-office/places/square.json, apps/agent-world/themes/anime-school/places/square.json, apps/agent-world/themes/fantasy/theme.json, apps/agent-world/web/game/place-scene.ts
+Verify: apps/agent-world/tests/world-square.test.ts, apps/agent-world/tests/places.test.ts

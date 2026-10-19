@@ -105,23 +105,21 @@
       "at": [1.6, 4.6],
       "r": 1.6
     },
-    { "kind": "fidget", "fidget": "pet", "at": [2.3, 5.3] },
-    { "kind": "fidget", "fidget": "box", "at": [9.4, 3.35], "w": 0.6 },
-    { "kind": "fidget", "fidget": "sleeper", "at": [15.3, 11.4] }
+    { "kind": "fidget", "fidget": "box", "at": [9.4, 3.35], "w": 0.6 }
   ],
   "enterBy": "Door to the gallery",
   "foreground": [
-    {
-      "rect": [2.85, 5.55, 3.65, 2.1],
-      "feet": 7.65
-    },
-    {
-      "rect": [11.4, 5.55, 3.6, 2.1],
-      "feet": 7.65
-    },
+    { "rect": [2.85, 5.55, 3.65, 1.95], "feet": 7.5 },
+    { "rect": [11.4, 5.55, 3.6, 1.95], "feet": 7.5 },
     {
       "rect": [6.65, 8.95, 4.35, 2.5],
       "feet": 11.45
     }
+  ],
+  "interest": [
+    { "name": "the window", "at": [9.0, 4.3], "face": "up" },
+    { "name": "the bookshelves", "at": [5.2, 4.3], "face": "up" },
+    { "name": "the board", "at": [12.3, 4.3], "face": "up" },
+    { "name": "the barrels", "at": [16.5, 9.2], "face": "right" }
   ]
 }

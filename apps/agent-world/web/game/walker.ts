@@ -4,6 +4,7 @@
 // holds a pose: standing, seated at work (its two seated frames alternating gently), or asking with a raised hand.
 import type * as Phaser from "phaser";
 import { type Look, type Point, TILE } from "../theme.js";
+import { IDLES, IdleClock, type IdleName, type IdleStep } from "./character-life.js";
 
 export const PERSON_TILES = 1.8; // a standing character is drawn this many tiles tall
 const STANDING = 120; // sprite px from head to feet in a standing frame
@@ -50,6 +51,9 @@ export interface WalkerView {
 	pose: Pose;
 	/** The rest of the current walk: where it is now, then each corner, then the goal. */
 	path: Point[];
+	/** The idle it is playing (standing about), and the idle sheet's frame shown (-1: its standing frame). */
+	idle: IdleName | null;
+	idleFrame: number;
 }
 
 export class Walker {
@@ -76,11 +80,19 @@ export class Walker {
 	private beat = Math.random() * (SEATED_BEAT[0] + SEATED_BEAT[1]);
 	/** The sprite's scale when standing still, which a busy breath stretches a little upward from the feet. */
 	private readonly scale: number;
+	private look: string;
+	private lookData: Look;
+	/** Standing about, it plays idles on its own rhythm (`live`); and the idle it is playing. */
+	private idles?: IdleClock;
+	private idling?: { name: IdleName; steps: readonly IdleStep[]; step: number; left: number };
 
-	constructor(scene: Phaser.Scene, look: string, { frame, baseline }: Look, [x, y]: Point, facing: Facing = "down") {
+	constructor(scene: Phaser.Scene, look: string, data: Look, [x, y]: Point, facing: Facing = "down") {
+		const { frame, baseline } = data;
 		this.x = x;
 		this.y = y;
 		this.facing = facing;
+		this.look = look;
+		this.lookData = data;
 		this.shadow = scene.add.ellipse(0, 0, TILE * 0.62, TILE * 0.2, 0x000000, 0.28);
 		this.sprite = scene.add
 			.sprite(0, 0, `look:${look}`, REST_FRAMES[facing])
@@ -91,10 +103,65 @@ export class Walker {
 	}
 
 	/** Wear another look (the operator chose one in Settings), keeping the pose, facing, and stride. */
-	setLook(look: string, { frame, baseline }: Look) {
-		const shown = Number(this.sprite.frame.name);
-		this.sprite.setTexture(`look:${look}`, shown).setOrigin(0.5, baseline / frame[1]);
+	setLook(look: string, data: Look) {
+		this.endIdle();
+		const shown = this.sprite.texture.key === `look:${this.look}` ? Number(this.sprite.frame.name) : STAND_FRAME;
+		this.look = look;
+		this.lookData = data;
+		this.sprite.setTexture(`look:${look}`, shown).setOrigin(0.5, data.baseline / data.frame[1]);
 		this.place();
+	}
+
+	/**
+	 * Stand about with a life of its own: now and then, while it stands still facing the room, it plays one of its look's
+	 * idles, on a rhythm seeded by `seed` (its id), so no two characters idle in step.
+	 */
+	live(seed: string) {
+		this.idles = new IdleClock(seed);
+	}
+
+	/** Idles being played, by whom: someone about to start one picks another, so nobody idles in step. */
+	private static playing = new Map<Walker, IdleName>();
+	/** Whether anyone is playing an idle now; walkers whose scene has gone are forgotten. */
+	private static busy = {
+		has(name: IdleName): boolean {
+			let found = false;
+			for (const [walker, playing] of Walker.playing) {
+				if (!walker.sprite.active) Walker.playing.delete(walker);
+				else if (playing === name) found = true;
+			}
+			return found;
+		},
+	};
+
+	private endIdle() {
+		this.idling = undefined;
+		Walker.playing.delete(this);
+	}
+
+	/**
+	 * Play an idle now (or the next its clock picks): only standing still, facing the room, with a look that has an idle
+	 * sheet. Walking, another pose, or turning away ends it. Says whether it plays.
+	 */
+	playIdle(name?: IdleName): boolean {
+		if (!this.canIdle()) return false;
+		const chosen = name ?? this.idles?.pick(Walker.busy) ?? "look-around";
+		const steps = IDLES[chosen];
+		this.idling = { name: chosen, steps, step: 0, left: steps[0][1] };
+		Walker.playing.set(this, chosen);
+		this.place();
+		return true;
+	}
+
+	/** Whether it could play an idle now: standing still, facing the room, and its look has an idle sheet. */
+	private canIdle(): boolean {
+		return (
+			!this.moving &&
+			this.pose === "standing" &&
+			this.facing === "down" &&
+			!!this.lookData.idle &&
+			this.sprite.scene?.textures.exists(`look:${this.look}:idle`) === true
+		);
 	}
 
 	get moving(): boolean {
@@ -107,6 +174,7 @@ export class Walker {
 	 */
 	walk(path: Point[], then?: () => void, lastRun?: () => void) {
 		const fromRest = !this.moving;
+		this.endIdle();
 		this.waypoints = path.slice(1);
 		this.arrive = then;
 		this.onLastRun = lastRun;
@@ -120,6 +188,7 @@ export class Walker {
 
 	/** Stand at a point at once, without walking there. */
 	moveTo([x, y]: Point) {
+		this.endIdle();
 		this.waypoints = [];
 		this.arrive = undefined;
 		this.onLastRun = undefined;
@@ -142,6 +211,7 @@ export class Walker {
 		const dy = y - this.y;
 		if (Math.abs(dx) < 1e-6 && Math.abs(dy) < 1e-6) return;
 		this.facing = Math.abs(dx) > Math.abs(dy) ? (dx < 0 ? "left" : "right") : dy < 0 ? "up" : "down";
+		if (this.facing !== "down") this.endIdle();
 		this.place();
 	}
 
@@ -155,11 +225,13 @@ export class Walker {
 	setPose(pose: Pose) {
 		if (pose === this.pose) return;
 		this.pose = pose;
+		this.endIdle();
 		this.place();
 	}
 
 	update(deltaMs: number) {
 		if (!this.moving) {
+			if (this.pose === "standing") return this.standAbout(deltaMs);
 			if (this.pose !== "seated" && this.pose !== "busy") return;
 			const cycle = this.pose === "busy" ? BUSY_BEAT : SEATED_BEAT[0] + SEATED_BEAT[1];
 			this.beat = (this.beat + Math.min(deltaMs, 100) * this.tempo) % cycle;
@@ -190,19 +262,41 @@ export class Walker {
 		this.place();
 	}
 
+	/** Standing still: an idle plays on, or its clock may start one. */
+	private standAbout(deltaMs: number) {
+		const idle = this.idling;
+		if (idle) {
+			idle.left -= Math.min(deltaMs, 100);
+			while (idle.left <= 0 && this.idling) {
+				idle.step++;
+				if (idle.step >= idle.steps.length) this.endIdle();
+				else idle.left += idle.steps[idle.step][1];
+			}
+			return this.place();
+		}
+		if (!this.idles) return;
+		if (!this.canIdle()) return this.idles.putOff();
+		const name = this.idles.tick(deltaMs, undefined, Walker.busy);
+		if (name) this.playIdle(name);
+	}
+
 	view(): WalkerView {
+		const idle = this.idling;
 		return {
 			x: this.x,
 			y: this.y,
 			moving: this.moving,
 			facing: this.facing,
-			frame: Number(this.sprite.frame.name),
+			frame: this.sprite.texture.key === `look:${this.look}` ? Number(this.sprite.frame.name) : STAND_FRAME,
 			pose: this.pose,
 			path: [[this.x, this.y], ...this.waypoints],
+			idle: idle?.name ?? null,
+			idleFrame: idle ? idle.steps[idle.step][0] : -1,
 		};
 	}
 
 	destroy() {
+		this.endIdle();
 		this.sprite.destroy();
 		this.shadow.destroy();
 	}
@@ -247,7 +341,14 @@ export class Walker {
 						: this.pose === "busy"
 							? STAND_FRAME
 							: REST_FRAMES[this.facing];
-		if (Number(this.sprite.frame.name) !== frame) this.sprite.setFrame(frame);
+		// Playing an idle, a frame of the look's idle sheet stands in for the standing frame, on its own baseline.
+		const idleFrame = this.idling && !this.moving ? this.idling.steps[this.idling.step][0] : -1;
+		const sheet = idleFrame >= 0 ? `look:${this.look}:idle` : `look:${this.look}`;
+		const showing = idleFrame >= 0 ? idleFrame : frame;
+		if (this.sprite.texture.key !== sheet) {
+			const { frame: size, baseline } = idleFrame >= 0 && this.lookData.idle ? this.lookData.idle : this.lookData;
+			this.sprite.setTexture(sheet, showing).setOrigin(0.5, baseline / size[1]);
+		} else if (Number(this.sprite.frame.name) !== showing) this.sprite.setFrame(showing);
 		// Busy on its feet: a slow breath from the feet up (the feet stay on the floor); otherwise its own height.
 		const breath =
 			!this.moving && this.pose === "busy"
@@ -256,7 +357,7 @@ export class Walker {
 		if (this.sprite.scaleY !== this.scale * breath && this.pose !== "dozing")
 			this.sprite.setScale(this.scale, this.scale * breath);
 		// Poses are drawn facing one way; only walking and resting sideways mirror.
-		this.sprite.setFlipX(this.facing === "right" && (this.moving || this.pose === "standing"));
+		this.sprite.setFlipX(this.facing === "right" && idleFrame < 0 && (this.moving || this.pose === "standing"));
 		const zoom = Walker.snap;
 		const at = (v: number) => (this.moving ? Math.round(v * TILE * zoom) / zoom : v * TILE);
 		this.sprite.setPosition(at(this.x), at(this.y)).setDepth(this.y * TILE);

@@ -116,7 +116,13 @@ beforeAll(async () => {
 				return ok({ messages: [{ ts: "1" }], has_more: false });
 			}
 			case "/api/conversations.info":
-				return ok({ channel: { id: params.get("channel"), name: params.get("channel") === "C9" ? "releases" : "x" } });
+				return ok({
+					channel: {
+						id: params.get("channel"),
+						name: params.get("channel") === "C9" ? "releases" : "x",
+						...(params.get("channel") === "C9" ? { last_read: "1700000001.000000" } : {}),
+					},
+				});
 			case "/api/conversations.replies":
 				return ok({
 					messages: [
@@ -126,6 +132,7 @@ beforeAll(async () => {
 							user: "U1",
 							text: "Shipped <@U2>!",
 							reply_count: 1,
+							last_read: "1700000002.000000",
 						},
 						{ ts: "1700000003.000000", thread_ts: "1700000002.000000", user: "U2", text: "Thanks <#C1|deploys>" },
 					],
@@ -137,6 +144,9 @@ beforeAll(async () => {
 			}
 			case "/api/chat.postMessage":
 				return ok({ channel: params.get("channel"), ts: "1700000004.000000" });
+			case "/api/conversations.mark":
+			case "/api/subscriptions.thread.mark":
+				return ok({});
 		}
 		return { json: { ok: false, error: "unknown_method" } };
 	});
@@ -231,6 +241,66 @@ test("a thread reply posts only with its confirmation, then is recorded and anno
 	const record = readFileSync(join(stateDir, "agent-world-outside-writes.jsonl"), "utf8").trim().split("\n");
 	expect(JSON.parse(record.at(-1)!)).toMatchObject({ kind: "slack-reply", text: "On it.", ok: true });
 	expect(announced.map((entry) => entry.line)).toEqual(["You replied in #releases: On it."]);
+});
+
+/** Slack's methods that change what the operator has read. */
+const READ_STATE = ["conversations.mark", "subscriptions.thread.mark"];
+const markCalls = () => slack.seen.filter((request) => READ_STATE.some((method) => request.path === `/api/${method}`));
+
+test("a channel and a thread open with where the operator last read them, and opening them marks nothing read", async () => {
+	slack.seen.length = 0;
+	// A channel in the unread listing: its last read from client.counts, without asking again.
+	const unreadOne = await api.slackChannel("C1");
+	expect(unreadOne.ok && unreadOne.thread.lastRead).toBe("1700000000.000100");
+	expect(calls("conversations.info").filter((request) => form(request).get("channel") === "C1")).toEqual([]);
+	// Any other channel: from conversations.info.
+	const other = await api.slackChannel("C9");
+	expect(other.ok && other.thread.lastRead).toBe("1700000001.000000");
+	// A thread: its parent's last_read (Slack gives it for threads the operator follows).
+	const thread = await api.slackThread("C9", "1700000002.000000");
+	expect(thread.ok && thread.thread.lastRead).toBe("1700000002.000000");
+	expect(markCalls()).toEqual([]);
+});
+
+test("Mark read marks a channel read up to its newest message as the operator, unconfirmed, recorded and announced", async () => {
+	slack.seen.length = 0;
+	announced.length = 0;
+	const marked = await api.slackMarkRead("C9", "1700000002.000000");
+	expect(marked).toMatchObject({
+		ok: true,
+		entry: { kind: "slack-mark-read", what: "Mark read in Slack", where: "#releases", ok: true },
+	});
+	expect(markCalls().map((request) => [request.path, Object.fromEntries(form(request))])).toEqual([
+		["/api/conversations.mark", { token: TOKEN, channel: "C9", ts: "1700000002.000000" }],
+	]);
+	expect(announced.map((entry) => entry.line)).toEqual(["You marked #releases read in Slack."]);
+	const record = readFileSync(join(stateDir, "agent-world-outside-writes.jsonl"), "utf8").trim().split("\n");
+	expect(JSON.parse(record.at(-1)!)).toMatchObject({ kind: "slack-mark-read", where: "#releases", ok: true });
+	// Reopened, the channel has nothing new.
+	const reopened = await api.slackChannel("C9");
+	expect(reopened.ok && reopened.thread.lastRead).toBe("1700000002.000000");
+});
+
+test("Mark read on a thread marks that thread read up to its newest reply", async () => {
+	slack.seen.length = 0;
+	announced.length = 0;
+	const marked = await api.slackMarkRead("C9", "1700000003.000000", "1700000002.000000");
+	expect(marked).toMatchObject({ ok: true, entry: { kind: "slack-mark-read", where: "#releases, in Ann's thread" } });
+	expect(markCalls().map((request) => [request.path, Object.fromEntries(form(request))])).toEqual([
+		[
+			"/api/subscriptions.thread.mark",
+			{ token: TOKEN, channel: "C9", thread_ts: "1700000002.000000", ts: "1700000003.000000", read: "1" },
+		],
+	]);
+	expect(announced.map((entry) => entry.line)).toEqual(["You marked Ann's thread in #releases read in Slack."]);
+});
+
+test("Mark read refuses what is not a channel and a timestamp, and sends nothing", async () => {
+	slack.seen.length = 0;
+	expect(await api.slackMarkRead("C9; drop", "1700000002.000000")).toMatchObject({ ok: false });
+	expect(await api.slackMarkRead("C9", "yesterday")).toMatchObject({ ok: false });
+	expect(await api.slackMarkRead("C9", "1700000002.000000", "nope")).toMatchObject({ ok: false });
+	expect(markCalls()).toEqual([]);
 });
 
 test("a revoked session asks to sign in again", async () => {

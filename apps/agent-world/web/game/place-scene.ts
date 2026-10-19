@@ -4,7 +4,10 @@ import { avatarLookIn, lookFor } from "../looks.js";
 import { atlassian } from "../overlay/places/atlassian-state.js";
 import { forge } from "../overlay/places/forge-state.js";
 import { placeActions, placePanels } from "../overlay/places/place-panels.js";
+import { recruiterLook, recruiting } from "../overlay/places/recruit-state.js";
 import { squarePanels } from "../overlay/places/square-panels.js";
+import { ClickMarks, type MarkView } from "../overlay/pointer/click-marks.js";
+import { type CursorArt, type CursorKind, cursorArt, cursorCss } from "../overlay/pointer/cursor.js";
 import { pointer } from "../overlay/pointer/pointer-state.js";
 import { type Door, type OverlaySlot, type Point, type Rect, say, type Theme, TILE } from "../theme.js";
 import { worn } from "../theme-store.js";
@@ -28,11 +31,12 @@ import {
 import { floorFidgets } from "./fidget-spots.js";
 import { Fidgets, type FidgetView, type Glow } from "./fidgets.js";
 import { assignSpots, charactersIn, doorOf, type Layout, layoutFor, startPlace, walkGrid } from "./layout.js";
-import { clearanceAt, findPath, type Grid, gridFor, isOpen } from "./pathing.js";
+import { cellOf, clearanceAt, findPath, type Grid, gridFor, isOpen } from "./pathing.js";
 import { ForgeBenches, type WorkView } from "./places/forge.js";
 import { type NoticeView, QuestBoard } from "./places/quest-office.js";
-import { SquareLife, type TownsfolkView } from "./places/square.js";
+import { drawSigns, type SignView, SquareLife, type TownsfolkView } from "./places/square.js";
 import { type Facing, PERSON_TILES, type Pose, Walker, type WalkerView } from "./walker.js";
+import { Wander, type WanderView } from "./wander.js";
 
 /** A `#rrggbb` colour as its red, green, and blue. */
 const rgb = (hex: string): [number, number, number] => {
@@ -184,6 +188,10 @@ export interface FigureView {
 	/** Where its bark's bubble is on screen (CSS px) while it shows. */
 	barkBox: Box | null;
 	alpha: number;
+	/** The idle it is playing, and where it is in a wander (tickets 06 and 07). */
+	idle: string | null;
+	wander: WanderView["state"];
+	interest: string | null;
 }
 
 export interface OverlayView {
@@ -270,8 +278,14 @@ export class PlaceScene extends Phaser.Scene {
 	private beds = new Map<number, { slot: OverlaySlot; image: Phaser.GameObjects.Image }>();
 	/** The place's host (the innkeeper), standing at its post. */
 	private host?: { walker: Walker; look: string; name: string; at: Point };
+	/** The square's recruiter at its booth (ticket 10): talking to it recruits an independent agent. */
+	private recruiter?: { walker: Walker; look: string; name: string; at: Point };
 	/** In the town square: the townsfolk who stand for Slack channels with unread messages. */
 	private square?: SquareLife;
+	/** Those standing about wander a little: townsfolk, idle agents, and the host behind its counter (ticket 07). */
+	private wander?: Wander;
+	/** The names lettered on the buildings' sign boards (the square's). */
+	private signs: SignView[] = [];
 	/** At the forge: the open pull requests lying on its workbenches. */
 	private benches?: ForgeBenches;
 	/** At the quest office: the issues assigned to the operator, pinned on its board. */
@@ -309,6 +323,10 @@ export class PlaceScene extends Phaser.Scene {
 	private freeLook?: Point;
 	private zoomTarget = 1;
 	private pointerAt?: Point;
+	/** The cursor over the world (undefined off it) and the CSS last set; the click markers. */
+	private cursor?: { kind: CursorKind; art: CursorArt };
+	private cursorShown = "";
+	private marks!: ClickMarks;
 	private goTo?: string;
 	/** How far the interface's panels reach in from each edge of the window (CSS px), measured now and then. */
 	private insets: Insets = { top: 0, right: 0, bottom: 0, left: 0, panels: [] };
@@ -349,7 +367,10 @@ export class PlaceScene extends Phaser.Scene {
 		this.doors = [];
 		this.beds = new Map();
 		this.host = undefined;
+		this.recruiter = undefined;
 		this.square = undefined;
+		this.wander = undefined;
+		this.signs = [];
 		this.benches = undefined;
 		this.questBoard = undefined;
 		this.fidgets = undefined;
@@ -378,7 +399,14 @@ export class PlaceScene extends Phaser.Scene {
 		this.drawWingDoors();
 		this.drawBanners();
 		this.doors.unshift(...this.layout.place.doors);
+		this.wander = new Wander({
+			place: () => this.layout.place,
+			footprints: () => this.footprints(),
+			avatar: () => this.avatar && { at: [this.avatar.x, this.avatar.y], goal: this.avatar.view().path.at(-1)! },
+		});
 		this.addHost();
+		this.addRecruiter();
+		this.signs = drawSigns(this, this.layout.place.doors, this.theme);
 		if (this.layout.ref.kind === "square")
 			this.square = new SquareLife(this, {
 				place: () => this.layout.place,
@@ -388,6 +416,7 @@ export class PlaceScene extends Phaser.Scene {
 					if (!this.leaving) this.showCharacters(true);
 				},
 				notify: (text) => this.view.notify(text),
+				wander: this.wander,
 			});
 		if (this.layout.ref.kind === "forge")
 			this.benches = new ForgeBenches(this, {
@@ -463,6 +492,8 @@ export class PlaceScene extends Phaser.Scene {
 		this.input.on("pointerup", this.pointerUp, this);
 		this.input.on("wheel", this.wheel, this);
 		this.input.on("gameout", this.pointerOut, this);
+		this.marks = new ClickMarks(this);
+		this.cursorShown = "";
 		const unsubscribe = this.store.subscribe(() => this.worldChanged());
 		const stopIntents = this.view.onIntent((intent) => this.intended(intent));
 		if (this.goTo) {
@@ -494,6 +525,9 @@ export class PlaceScene extends Phaser.Scene {
 			// Through the doorway (or off on another walk): fully here.
 			if (near >= 1) this.avatarFade = undefined;
 		}
+		this.wander?.update(delta);
+		this.host?.walker.update(delta);
+		this.recruiter?.walker.update(delta);
 		this.liveCharacters(time, delta);
 		this.square?.update(delta, Math.max(1, UI_ZOOM / this.cameras.main.zoom));
 		this.benches?.update();
@@ -599,6 +633,8 @@ export class PlaceScene extends Phaser.Scene {
 			bark: (bark && !bark.going ? bark.line : null) ?? (sleep ? "z" : null),
 			barkBox: bark && bark.shown > 0 ? this.barkBox(bark) : null,
 			alpha: walker.sprite.alpha,
+			idle: view.idle,
+			...this.wanderView(character.id),
 		};
 	}
 
@@ -627,6 +663,12 @@ export class PlaceScene extends Phaser.Scene {
 	}
 
 	/** The place's fidget objects: what each shows and what it is doing. */
+	/** The world's cursor (which kind, which sprite, the CSS on the canvas) and the click markers showing. */
+	pointerView(): { cursor: CursorKind | null; art: CursorArt | null; css: string; marks: MarkView[] } {
+		const { kind = null, art = null } = this.cursor ?? {};
+		return { cursor: kind, art, css: this.cursorShown, marks: this.marks.views() };
+	}
+
 	fidgetViews(): FidgetView[] {
 		return this.fidgets?.views() ?? [];
 	}
@@ -636,10 +678,37 @@ export class PlaceScene extends Phaser.Scene {
 		return this.square?.views() ?? [];
 	}
 
-	/** The place's host, where it stands. */
-	hostView(): { name: string; look: string; x: number; y: number } | undefined {
+	/** The buildings' signs and the names lettered on them. */
+	signViews(): SignView[] {
+		return this.signs;
+	}
+
+	/** The place's host, where it stands, and the idle it plays. */
+	hostView(): { name: string; look: string; x: number; y: number; idle: string | null; moving: boolean } | undefined {
 		const host = this.host;
-		return host && { name: host.name, look: host.look, x: host.walker.x, y: host.walker.y };
+		const { idle, moving } = host?.walker.view() ?? {};
+		return (
+			host && {
+				name: host.name,
+				look: host.look,
+				x: host.walker.x,
+				y: host.walker.y,
+				idle: idle ?? null,
+				moving: !!moving,
+			}
+		);
+	}
+
+	/** Where someone is in a wander. */
+	private wanderView(id: string): { wander: WanderView["state"]; interest: string | null } {
+		const view = this.wander?.view(id);
+		return { wander: view?.state ?? "home", interest: view?.interest ?? null };
+	}
+
+	/** The square's recruiter, where it stands. */
+	recruiterView(): { name: string; look: string; x: number; y: number } | undefined {
+		const recruiter = this.recruiter;
+		return recruiter && { name: recruiter.name, look: recruiter.look, x: recruiter.walker.x, y: recruiter.walker.y };
 	}
 
 	private present(): Figure[] {
@@ -963,12 +1032,26 @@ export class PlaceScene extends Phaser.Scene {
 	}
 
 	/** The host at its post (the innkeeper behind the bar), facing the room; it never walks. */
+	/** The square's recruiter at its booth, facing the room; it never walks. */
+	private addRecruiter() {
+		const at = this.layout.place.recruiter?.at;
+		const look = at && recruiterLook(this.theme);
+		if (!at || !look) return;
+		const walker = new Walker(this, look, this.theme.looks[look], at, "down");
+		this.recruiter = { walker, look, name: this.theme.labels.recruiter ?? "Recruiter", at };
+		walker.live(`recruiter:${this.layout.key}`);
+		this.wander?.add("recruiter", "host", walker, () => at);
+	}
+
 	private addHost() {
 		const host = this.layout.place.host;
 		const look = host && this.theme.looks[host.look];
 		if (!host || !look) return;
 		const walker = new Walker(this, host.look, look, host.at, "down");
 		this.host = { walker, look: host.look, name: this.theme.labels[host.look] ?? host.look, at: host.at };
+		// Standing at its post it idles now and then, and shifts a little behind its counter (tickets 06 and 07).
+		walker.live(`host:${this.layout.key}`);
+		this.wander?.add("host", "host", walker, () => host.at);
 	}
 
 	/** A fire standing on the hearth floor: its four frames flicker in a loose rhythm, with warm light around it. */
@@ -1409,6 +1492,7 @@ export class PlaceScene extends Phaser.Scene {
 		this.walkable = gridFor(this.layout.place, [
 			...this.present().map(({ spot }) => spot!),
 			...(this.host ? [this.host.at] : []),
+			...(this.recruiter ? [this.recruiter.at] : []),
 			...(this.square?.occupied() ?? []),
 			// A cat on the floor is walked round, as a body is.
 			...floorFidgets(this.layout.place),
@@ -1457,7 +1541,42 @@ export class PlaceScene extends Phaser.Scene {
 		const walker = new Walker(this, look, this.theme.looks[look], [x, y], "down");
 		const figure: Figure = { character, walker, look, leaving: false, barks: 0 };
 		this.figures.set(character.id, figure);
+		// Standing about, it idles now and then, and an idle agent steps out to somewhere near and back (06, 07).
+		walker.live(character.id);
+		this.wander?.add(
+			character.id,
+			"agent",
+			walker,
+			() => (figure.leaving ? undefined : figure.spot),
+			() => this.mayWander(figure),
+		);
 		return figure;
+	}
+
+	/**
+	 * An agent may step out only while it stands about: not at work or asking, not waiting to show you what it finished
+	 * (you find it at its spot), not coming in or asleep at the inn.
+	 */
+	private mayWander(figure: Figure): boolean {
+		const { character } = figure;
+		return (
+			!figure.leaving &&
+			!figure.fade &&
+			this.layout.ref.kind !== "inn" &&
+			poseFor(character, this.outdoors()) === "standing" &&
+			!needsYou(character)
+		);
+	}
+
+	/** Where others stand (their spots, the host, the recruiter, townsfolk, floor fidgets): walked round by wanderers. */
+	private footprints(): Point[] {
+		return [
+			...this.present().map(({ spot }) => spot!),
+			...(this.host ? [this.host.at] : []),
+			...(this.recruiter ? [this.recruiter.at] : []),
+			...(this.square?.occupied() ?? []),
+			...floorFidgets(this.layout.place),
+		];
 	}
 
 	/** The door characters come in and go out by (or `via`), and a point just inside its doorway where they appear. */
@@ -1486,6 +1605,7 @@ export class PlaceScene extends Phaser.Scene {
 	/** Its session stopped or moved on: it walks to the door and fades through it, then is gone. */
 	private leave(figure: Figure, animate: boolean, via?: Door) {
 		figure.leaving = true;
+		this.wander?.remove(figure.character.id);
 		figure.spot = undefined;
 		figure.nextBark = undefined;
 		this.dropBadge(figure);
@@ -1539,7 +1659,10 @@ export class PlaceScene extends Phaser.Scene {
 	private dress(figure: Figure) {
 		if (this.layout.ref.kind === "inn") return this.sleep(figure);
 		const { character, walker } = figure;
-		walker.setPose(poseFor(character, this.outdoors()));
+		const pose = poseFor(character, this.outdoors());
+		// Called to work (or to ask) while out wandering: it walks back first, and sits or asks at its spot.
+		if (figure.spot && (pose !== "standing" || needsYou(character))) this.wander?.recall(figure.spot);
+		walker.setPose(pose);
 		walker.tempo = tempoFor(character);
 		const kind = badgeFor(character);
 		if (figure.badge?.kind !== kind) {
@@ -1792,6 +1915,7 @@ export class PlaceScene extends Phaser.Scene {
 		const others = [
 			...this.present().map(({ spot }) => spot!),
 			...(this.host ? [this.host.at] : []),
+			...(this.recruiter ? [this.recruiter.at] : []),
 			...(this.square?.occupied() ?? []),
 			...floorFidgets(this.layout.place),
 		];
@@ -1839,13 +1963,15 @@ export class PlaceScene extends Phaser.Scene {
 			.sort((a, b) => b.walker.y - a.walker.y)
 			.map(({ character }) => this.characterTarget(character));
 		const host = this.host && over(this.host.walker) ? [this.hostTarget()] : [];
+		if (this.recruiter && over(this.recruiter.walker)) host.push(this.recruiterTarget());
 		const townsfolk = this.square?.targetsAt([x, y]) ?? [];
 		const work = this.benches?.targetsAt([x, y]) ?? [];
 		const notices = this.questBoard?.targetsAt([x, y]) ?? [];
 		const fidgets = this.fidgets?.targetsAt([x, y]) ?? [];
 		const doors = this.doors.filter(({ rect }) => inside(rect)).map((door) => this.doorTarget(door));
 		const furniture = (this.layout.place.furniture ?? [])
-			.filter(({ rect }) => inside(rect))
+			// Over someone at the recruiting desk, the coordinator's own Recruit says it once.
+			.filter(({ rect, use }) => inside(rect) && !(use === "recruit" && people.length))
 			.map((piece) => this.furnitureTarget(piece));
 		const banners = this.bannerRects.filter(({ rect }) => inside(rect)).map(({ name }) => this.bannerTarget(name));
 		return [...people, ...townsfolk, ...host, ...work, ...notices, ...fidgets, ...doors, ...banners, ...furniture];
@@ -1871,6 +1997,33 @@ export class PlaceScene extends Phaser.Scene {
 		};
 	}
 
+	/** The square's recruiter: talking to it, or asking it at once, opens the form for an independent agent. */
+	private recruiterTarget(): Target {
+		const { name, at } = this.recruiter!;
+		const open = () => recruiting.open({ kind: "independent" });
+		return {
+			name,
+			tone: "character",
+			actions: [
+				action("Talk to", () => this.approach(at, open), name, "character"),
+				action(say(this.theme, "recruit-independent"), () => this.approach(at, open)),
+			],
+		};
+	}
+
+	/** Recruiting a worker for the coordinator of the headquarters the operator is in, while it is awake. */
+	private recruitWorker(): Action[] {
+		const ref = this.layout.ref;
+		const id = isOutside(ref) ? undefined : ref.headquarters;
+		const coordinator = this.store.get()?.characters.find((c) => c.id === id && c.role === "coordinator");
+		if (!coordinator) return [];
+		return [
+			action(say(this.theme, "recruit-worker"), () =>
+				recruiting.open({ kind: "worker", coordinator: { id: coordinator.id, name: coordinator.name } }),
+			),
+		];
+	}
+
 	private openHostPanel() {
 		if (this.layout.ref.kind === "inn") placePanels.open("innkeeper");
 		if (this.layout.ref.kind === "rookery") placePanels.open("rookery");
@@ -1882,6 +2035,8 @@ export class PlaceScene extends Phaser.Scene {
 
 	/** Furniture that answers the pointer: asking at an inn table opens the innkeeper's register at once. */
 	private furnitureTarget(piece: { name: string; rect: Rect; use: string }): Target {
+		// The coordinator's desk recruits a worker (ticket 10).
+		if (piece.use === "recruit") return { name: piece.name, tone: "object", actions: this.recruitWorker() };
 		const actions =
 			piece.use === "innkeeper"
 				? [action(say(this.theme, "ask-host"), () => placePanels.open("innkeeper"))]
@@ -1949,6 +2104,16 @@ export class PlaceScene extends Phaser.Scene {
 					"character",
 				),
 				action("Examine", () => this.view.intend({ kind: "examine", character: character.id }), name, "character"),
+				// A coordinator recruits workers who report to it (ticket 10).
+				...(character.role === "coordinator"
+					? [
+							action(say(this.theme, "recruit-worker"), () =>
+								this.walkUpTo(character, () =>
+									recruiting.open({ kind: "worker", coordinator: { id: character.id, name } }),
+								),
+							),
+						]
+					: []),
 				// Ending its session asks first while it is busy (the interface's confirmation).
 				action("End session of", () => void placeActions.endSession(character), name, "character"),
 			],
@@ -1980,8 +2145,30 @@ export class PlaceScene extends Phaser.Scene {
 
 	private refreshHover() {
 		const at = this.worldPointer();
-		if (!at || this.leaving) return pointer.hover(undefined);
-		pointer.hover(this.actionsAt(at));
+		if (!at || this.leaving) {
+			this.showCursor("walk");
+			this.cursor = undefined;
+			return pointer.hover(undefined);
+		}
+		const actions = this.actionsAt(at);
+		pointer.hover(actions);
+		this.showCursor(actions.length > 1 ? "act" : this.blockedAt(at) ? "blocked" : "walk");
+	}
+
+	/** The pack's hand on the canvas: it taps over something to do, is a fist over walls, and points over floor. */
+	private showCursor(kind: CursorKind) {
+		const art = cursorArt(kind, this.time.now);
+		this.cursor = { kind, art };
+		const css = cursorCss(this.theme.url, art);
+		if (css === this.cursorShown) return;
+		this.cursorShown = css;
+		this.input.setDefaultCursor(css);
+	}
+
+	/** Floor nobody can walk to: furniture, walls, or off the place (someone standing there does not count). */
+	private blockedAt(at: Point): boolean {
+		const cell = cellOf(this.walkable, at);
+		return cell < 0 || this.walkable.blocked[cell] === 1;
 	}
 
 	/**
@@ -2031,6 +2218,8 @@ export class PlaceScene extends Phaser.Scene {
 
 	/** Walk up to whoever stands at `at`, to whichever side is quickest, face them, and then act. */
 	private approach(at: Point, then?: () => void) {
+		// Whoever belongs there and is out wandering comes back to meet the avatar.
+		this.wander?.recall(at);
 		const stands = TALK_OFFSETS.map((group) => group.map(([dx, dy]): Point => [at[0] + dx, at[1] + dy]));
 		this.walkToFirst(stands, (reached, goal) => {
 			this.avatar.face(at);
@@ -2105,7 +2294,13 @@ export class PlaceScene extends Phaser.Scene {
 		const drag = this.drag;
 		this.drag = undefined;
 		if (!drag || drag.moved || drag.consumed || this.leaving || pointerEvent.button !== 0) return;
-		this.actionsAt(this.toWorld([pointerEvent.x, pointerEvent.y]))[0].run();
+		const at = this.toWorld([pointerEvent.x, pointerEvent.y]);
+		const actions = this.actionsAt(at);
+		actions[0].run();
+		// RuneScape's markers: a red X on what it acts on, a yellow X where the avatar is heading.
+		if (actions.length > 1) return this.marks.drop("act", at);
+		const path = this.avatar.view().path;
+		this.marks.drop("walk", this.avatar.moving ? path[path.length - 1] : at);
 	}
 
 	private pointerOut() {

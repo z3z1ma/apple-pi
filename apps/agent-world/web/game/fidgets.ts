@@ -11,15 +11,20 @@ import {
 	type FidgetParticle,
 	type FidgetStyle,
 	type OverlaySlot,
+	PET_FRAME_ORDER,
+	type PetFrame,
 	type PlaceData,
 	type Point,
+	petArt,
 	type Rect,
+	slotStyle,
 	TILE,
 } from "../theme.js";
 import { worn } from "../theme-store.js";
 import { action, type Target } from "./actions.js";
 import { drawTag } from "./character-life.js";
-import { fidgetSlots, onFloor, standPoints, surfaceOf } from "./fidget-spots.js";
+import { fidgetScale, fidgetSlots, onFloor, standPoints, surfaceOf } from "./fidget-spots.js";
+import { PERSON_TILES } from "./walker.js";
 
 /** A soft light the scene draws (its lantern glow), whose brightness a fidget turns up and down. */
 export interface Glow {
@@ -53,6 +58,9 @@ export interface FidgetView {
 	h: number;
 	/** The sprite it shows (`pet-1`, `light-on`). */
 	art: string;
+	/** A pet's look (`hound`), null for the kind's own sprites or another kind; and whether it rests asleep. */
+	look: string | null;
+	asleep: boolean;
 	/** A light on, a box open. */
 	on: boolean;
 	/** The play under way, or null at rest. */
@@ -98,7 +106,12 @@ interface Fidget {
 	style: FidgetStyle;
 	name: string;
 	image: Phaser.GameObjects.Image;
-	/** Px of sprite per world px, from its first frame, so every frame keeps one pixel size. */
+	/** A pet's sprites by what each shows, and the one it shows at rest (a pet asleep, its sleep sprite). */
+	frames: Partial<Record<PetFrame, string>>;
+	rest: string;
+	/** A pet curled up asleep at rest: play wakes it for a while. */
+	asleep: boolean;
+	/** World px per px of sprite, from its first frame, so every frame keeps one pixel size. */
 	scale: number;
 	depth: number;
 	onFloor: boolean;
@@ -132,8 +145,10 @@ export class Fidgets {
 		fidgetSlots(place).forEach((slot, index) => {
 			const kind = slot.fidget!;
 			const style = worn().fidgets[kind];
-			if (!style || !scene.textures.exists(`overlay:${FIDGETS[kind].art[0]}`)) return;
-			this.fidgets.push(this.add(index, slot, kind, style, place));
+			// A pet wears its look's sprites, name, and reactions (`pet-hound-0`, "Hound").
+			const art = kind === "pet" ? petArt(slot.look) : [...FIDGETS[kind].art];
+			if (!style || !scene.textures.exists(`overlay:${art[0]}`)) return;
+			this.fidgets.push(this.add(index, slot, kind, slotStyle(style, slot), art, place));
 		});
 	}
 
@@ -145,19 +160,29 @@ export class Fidgets {
 		return `${worn().id}:${this.host.placeKey()}:${fidget.index}`;
 	}
 
-	private add(index: number, slot: OverlaySlot, kind: FidgetKind, style: FidgetStyle, place: PlaceData): Fidget {
+	private add(
+		index: number,
+		slot: OverlaySlot,
+		kind: FidgetKind,
+		style: FidgetStyle,
+		art: string[],
+		place: PlaceData,
+	): Fidget {
 		const [x, y] = slot.at;
-		const art = FIDGETS[kind].art;
 		const first = this.scene.textures.get(`overlay:${art[0]}`).getSourceImage() as HTMLImageElement;
-		const w = slot.w ?? style.w ?? FIDGETS[kind].w;
-		const scale = (w * TILE) / first.width;
+		// A pet to scale with the characters (a cat about a third of one standing); other things by their width.
+		const scale = fidgetScale(kind, style, slot, first, PERSON_TILES) * TILE;
+		const frames: Fidget["frames"] =
+			kind === "pet" ? Object.fromEntries((style.frames ?? PET_FRAME_ORDER).map((frame, i) => [frame, art[i]])) : {};
+		const asleep = kind === "pet" && !!slot.asleep && !!frames.sleep;
+		const rest = asleep ? frames.sleep! : art[0];
 		// On a piece of furniture it lies just over that piece (which the foreground pass draws again); on the floor it
 		// stands among the characters by its feet.
 		const surface = surfaceOf(place, slot.at);
 		const depth = surface ? surface.feet * TILE + 0.2 : y * TILE;
 		const on = kept.get(`${worn().id}:${this.host.placeKey()}:${index}`) ?? slot.on ?? false;
 		const image = this.scene.add
-			.image(x * TILE, y * TILE, `overlay:${art[0]}`)
+			.image(x * TILE, y * TILE, `overlay:${rest}`)
 			.setOrigin(0.5, 1)
 			.setScale(scale)
 			.setDepth(depth);
@@ -168,6 +193,9 @@ export class Fidgets {
 			style,
 			name: slot.name ?? style.name,
 			image,
+			frames,
+			rest,
+			asleep,
 			scale,
 			depth,
 			onFloor: onFloor(place, slot),
@@ -198,7 +226,7 @@ export class Fidgets {
 			fidget.glow ??= this.host.glow([x, y - h * (kind === "light" ? 0.78 : 0.8)], r, 0);
 			fidget.glow.level(kind === "candle" || fidget.on ? 0.55 : 0, 0);
 		}
-		if (kind === "sleeper")
+		if (kind === "sleeper" || fidget.asleep)
 			fidget.bob = this.scene.tweens.add({
 				targets: image,
 				scaleY: fidget.scale * 0.965,
@@ -213,11 +241,10 @@ export class Fidgets {
 		return fidget.image.displayWidth / TILE;
 	}
 
+	/** Its height at rest, in tiles. */
 	private height(fidget: Fidget) {
-		const first = this.scene.textures
-			.get(`overlay:${FIDGETS[fidget.kind].art[0]}`)
-			.getSourceImage() as HTMLImageElement;
-		return (first.height * fidget.scale) / TILE;
+		const rest = this.scene.textures.get(`overlay:${fidget.rest}`).getSourceImage() as HTMLImageElement;
+		return (rest.height * fidget.scale) / TILE;
 	}
 
 	/** Show one of its sprites, keeping one pixel size across them. */
@@ -300,11 +327,11 @@ export class Fidgets {
 			.setScale(fidget.scale)
 			.setAngle(0)
 			.setX(fidget.slot.at[0] * TILE);
-		if (fidget.kind === "sleeper") {
+		if (fidget.kind === "sleeper" || fidget.asleep) {
 			fidget.bob?.remove();
 			this.dress(fidget);
 		}
-		if (fidget.kind === "pet" || fidget.kind === "bell") this.show(fidget, FIDGETS[fidget.kind].art[0]);
+		if (fidget.kind === "pet" || fidget.kind === "bell") this.show(fidget, fidget.rest);
 		fidget.playing = null;
 	}
 
@@ -329,9 +356,20 @@ export class Fidgets {
 		this.after(fidget, ms, () => this.settle(fidget));
 	}
 
-	/** Petted: it leans into the hand, purring (a little shiver), hearts rise; then it stretches and sits again. */
+	/**
+	 * Petted: it leans into the hand, eyes closed, purring (a little shiver), hearts rise; then it stretches, if it does,
+	 * and sits again. Asleep, it purrs in its sleep and sleeps on.
+	 */
 	private pet(fidget: Fidget, particle: FidgetParticle) {
-		this.show(fidget, "pet-1");
+		const { frames } = fidget;
+		if (fidget.asleep) {
+			const x = fidget.image.x;
+			this.tween(fidget, { targets: fidget.image, x: x + 0.7, duration: 55, yoyo: true, repeat: 11 });
+			this.burst(fidget, particle, 3, 0.6);
+			this.done(fidget, 1500);
+			return;
+		}
+		this.show(fidget, frames.petted!);
 		this.tween(fidget, {
 			targets: fidget.image,
 			scaleY: fidget.scale * 0.96,
@@ -341,25 +379,48 @@ export class Fidgets {
 			ease: "Sine.inOut",
 		});
 		this.burst(fidget, particle, 4, 0.75);
-		this.after(fidget, 1500, () => this.show(fidget, "pet-2"));
-		this.after(fidget, 2300, () => this.show(fidget, "pet-0"));
+		if (!frames.stretch) {
+			this.after(fidget, 1700, () => this.show(fidget, frames.sit!));
+			this.done(fidget, 1800);
+			return;
+		}
+		this.after(fidget, 1500, () => this.show(fidget, frames.stretch!));
+		this.after(fidget, 2300, () => this.show(fidget, frames.sit!));
 		this.done(fidget, 2400);
 	}
 
-	/** Played with: its playful pose, hopping twice, with a sparkle. */
+	/**
+	 * Played with: its playful pose, hopping twice (as high as it is small or big), with a sparkle. Asleep, it wakes
+	 * first (sits up with a start), plays, and curls up again.
+	 */
 	private romp(fidget: Fidget) {
-		this.show(fidget, "pet-3");
+		const { frames } = fidget;
 		const rest = fidget.image.y;
-		this.tween(fidget, {
-			targets: fidget.image,
-			y: rest - 0.2 * TILE,
-			duration: 170,
-			yoyo: true,
-			repeat: 1,
-			ease: "Quad.out",
-		});
-		this.burst(fidget, "sparkles", 3, 0.8);
-		this.done(fidget, 1500);
+		const hop = Math.max(0.08, Math.min(0.2, this.height(fidget) * 0.35));
+		const play = () => {
+			this.show(fidget, frames.play!);
+			this.tween(fidget, {
+				targets: fidget.image,
+				y: rest - hop * TILE,
+				duration: 170,
+				yoyo: true,
+				repeat: 1,
+				ease: "Quad.out",
+			});
+			this.burst(fidget, "sparkles", 3, 0.8);
+		};
+		if (!fidget.asleep) {
+			play();
+			this.done(fidget, 1500);
+			return;
+		}
+		fidget.bob?.remove();
+		fidget.image.setScale(fidget.scale);
+		this.show(fidget, frames.sit!);
+		this.pop(fidget);
+		this.after(fidget, 600, play);
+		this.after(fidget, 1900, () => this.show(fidget, frames.sit!));
+		this.done(fidget, 3200);
 	}
 
 	/** Spun: it turns fast and slows down to rest (`update` turns it). A nudge turns it gently. */
@@ -510,20 +571,29 @@ export class Fidgets {
 				fidget.idleAt = time + Phaser.Math.Between(520, 820);
 				this.burst(fidget, fidget.style.particle ?? PARTICLE.box, 1, 0.9);
 			}
-			if (fidget.kind === "sleeper" && !fidget.playing && time >= fidget.idleAt) {
+			if ((fidget.kind === "sleeper" || fidget.asleep) && !fidget.playing && time >= fidget.idleAt) {
 				fidget.idleAt = time + Phaser.Math.Between(2600, 4200);
 				this.burst(fidget, "zzz", 1, 0.55);
 			}
-			// A pet at rest now and then licks its paw or stretches by itself.
-			if (fidget.kind === "pet" && !fidget.playing && time >= fidget.idleAt) {
-				fidget.idleAt = time + Phaser.Math.Between(8000, 15_000);
-				const art = Math.random() < 0.5 ? "pet-3" : "pet-2";
-				fidget.playing = "idle";
-				this.show(fidget, art);
-				this.done(fidget, art === "pet-3" ? 1300 : 900);
-			}
+			if (fidget.kind === "pet" && !fidget.asleep && !fidget.playing && time >= fidget.idleAt) this.idle(fidget, time);
 			fidget.sign?.tag.setScale(this.host.uiScale());
 		}
+	}
+
+	/** A pet awake now and then plays, stretches, or closes its eyes by itself; one that curls up naps a while. */
+	private idle(fidget: Fidget, time: number) {
+		const { frames } = fidget;
+		fidget.idleAt = time + Phaser.Math.Between(8000, 15_000);
+		const choices = [frames.play, frames.stretch ?? frames.petted, frames.sleep].filter((art) => art !== undefined);
+		const art = choices[Math.floor(Math.random() * choices.length)];
+		fidget.playing = "idle";
+		this.show(fidget, art);
+		if (art === frames.sleep) {
+			this.after(fidget, 700, () => this.burst(fidget, "zzz", 1, 0.55));
+			this.done(fidget, 4200);
+			return;
+		}
+		this.done(fidget, art === frames.play ? 1300 : 900);
 	}
 
 	/** A spinner turns by its speed, slowing to rest on a frame. */
@@ -604,8 +674,11 @@ export class Fidgets {
 			x: fidget.slot.at[0],
 			y: fidget.slot.at[1],
 			w: this.width(fidget),
-			h: this.height(fidget),
+			// What it shows now, at its pixel size (a pet sitting up: its sitting height).
+			h: (fidget.image.height * fidget.scale) / TILE,
 			art: fidget.image.texture.key.replace(/^overlay:/, ""),
+			look: fidget.slot.look ?? null,
+			asleep: fidget.asleep,
 			on: fidget.on,
 			playing: fidget.playing,
 			angle: fidget.image.angle,

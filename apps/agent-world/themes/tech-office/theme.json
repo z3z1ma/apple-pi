@@ -22,7 +22,8 @@
     "clerk": "Project manager",
     "librarian": "Knowledge manager",
     "crier": "Community manager",
-    "townsfolk": "Passer-by"
+    "townsfolk": "Passer-by",
+    "recruiter": "Recruiter"
   },
   "text": {
     "banner-reads": "The sign reads “{name}”.",
@@ -77,7 +78,17 @@
     "forge-empty": "The benches are clear: nothing of yours or your team's is open on GitHub.",
     "forge-loading": "Checking what's on the benches…",
     "ask-smith": "Ask the lab lead",
-    "forge-more": "{count} more in the queue"
+    "forge-more": "{count} more in the queue",
+    "recruit-worker": "Hire an engineer",
+    "recruit-independent": "Hire a freelancer",
+    "recruit-worker-title": "Hiring for {coordinator}'s team",
+    "recruit-independent-title": "Freelancer hiring",
+    "recruit-worker-greeting": "Need another engineer on the team? Give them a name, a repo, and their first ticket.",
+    "recruit-independent-greeting": "Looking for a freelancer? Tell me who, which repo, and the brief. They don't report to anyone.",
+    "recruit-brief": "Their first ticket…",
+    "recruit-send": "Hire",
+    "recruit-sending": "Sending {name} an offer…",
+    "recruit-joined": "{name} accepted the offer and is onboarding."
   },
   "style": {
     "--aw-font-body": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", Inter, \"Helvetica Neue\", Arial, sans-serif",
@@ -139,6 +150,11 @@
       }
     },
     "glow": ["#fff1cf", "#ffd08a", "#ffa552"],
+    "sign": {
+      "font": "-apple-system, BlinkMacSystemFont, \"SF Pro Display\", Inter, \"Helvetica Neue\", Arial, sans-serif",
+      "ink": "#26323d",
+      "upper": true
+    },
     "banner": {
       "tiles": 2.0,
       "text": [0.31, 0.18, 0.62, 0.66],
@@ -149,20 +165,37 @@
   "fidgets": {
     "pet": {
       "name": "Office corgi",
-      "examine": "{name}, the office corgi. Head of morale, reports to nobody.",
-      "verbs": {
-        "pet": "Pet",
-        "play": "Play with"
+      "examine": "{name}, the campus corgi. Head of morale, reports to nobody.",
+      "verbs": { "pet": "Pet", "play": "Play with" },
+      "height": 0.42,
+      "frames": ["sit", "petted", "stretch", "play"],
+      "looks": {
+        "cat-grey": {
+          "name": "Grey cat",
+          "examine": "{name}, a grey cat asleep somewhere warm. It has commit access to the sofa.",
+          "verbs": { "pet": "Stroke", "play": "Wiggle a laser dot for" },
+          "height": 0.33
+        },
+        "parrot": {
+          "name": "Green parrot",
+          "examine": "{name}, the mailroom parrot. Repeats every subject line it hears.",
+          "verbs": { "pet": "Scratch", "play": "Whistle to" },
+          "particle": "notes",
+          "height": 0.44
+        },
+        "hamster": {
+          "name": "Hamster",
+          "examine": "{name}, the library hamster, cheeks full of sunflower seeds and secrets.",
+          "verbs": { "pet": "Pet", "play": "Offer a seed to" },
+          "height": 0.17
+        },
+        "hedgehog": {
+          "name": "Hedgehog",
+          "examine": "{name}, the lab's hedgehog. Curls into a ball whenever a build fails.",
+          "verbs": { "pet": "Gently pet", "play": "Roll a ball to" },
+          "height": 0.19
+        }
       }
-    },
-    "sleeper": {
-      "name": "Napping cat",
-      "examine": "A grey cat asleep somewhere warm. It has commit access to the sofa.",
-      "verbs": {
-        "pet": "Stroke",
-        "boop": "Boop"
-      },
-      "particle": "zzz"
     },
     "bell": {
       "name": "Desk bell",

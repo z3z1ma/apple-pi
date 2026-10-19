@@ -15,6 +15,7 @@ export type SlackApi = Partial<
 		| "slackFindChannels"
 		| "slackChannel"
 		| "slackThread"
+		| "slackMarkRead"
 		| "describeWrite"
 		| "confirmWrite"
 		| "delegate"
@@ -55,6 +56,8 @@ let state: SlackState = { status: "unknown", channels: [], listed: false, refres
 let listedAt = -Infinity;
 let timer: ReturnType<typeof setInterval> | undefined;
 let inFlight: Promise<void> | undefined;
+/** Channels marked read here, up to which message: a listing read before Slack heard of it does not bring them back. */
+const markedRead = new Map<string, number>();
 const listeners = new Set<() => void>();
 
 const update = (change: Partial<SlackState>) => {
@@ -130,8 +133,12 @@ export const slack = {
 			try {
 				const answer = await unread();
 				listedAt = performance.now();
-				if (answer.ok) update({ channels: answer.channels, listed: true, problem: undefined });
-				else if (answer.signIn === "slack") signedOut(answer.reason);
+				if (answer.ok) {
+					const channels = answer.channels.filter(
+						(channel) => !(Number(channel.latest ?? 0) <= (markedRead.get(channel.id) ?? Number.NEGATIVE_INFINITY)),
+					);
+					update({ channels, listed: true, problem: undefined });
+				} else if (answer.signIn === "slack") signedOut(answer.reason);
 				else update({ problem: answer.reason });
 			} catch (error) {
 				update({ problem: failure(error) });
@@ -167,6 +174,34 @@ export const slack = {
 			else update({ signInProblem: answer.reason });
 		} catch (error) {
 			update({ signInProblem: failure(error) });
+		}
+	},
+
+	/**
+	 * Mark a channel read in Slack up to `ts` (its newest message), or with `threadTs` one thread up to its newest
+	 * reply, as the operator. The backend sends it at once (the button is the choice), records it, and announces it to
+	 * the chatbox. A channel marked read leaves the unread listing at once, so its townsperson leaves the square.
+	 */
+	async markRead(
+		channelId: string,
+		ts: string,
+		threadTs?: string,
+	): Promise<{ ok: true } | { ok: false; reason: string }> {
+		const mark = api.slackMarkRead;
+		if (typeof mark !== "function") return { ok: false, reason: "This window cannot mark Slack read." };
+		try {
+			const answer = threadTs ? await mark(channelId, ts, threadTs) : await mark(channelId, ts);
+			if (!answer.ok) {
+				slack.refused(answer);
+				return { ok: false, reason: answer.reason };
+			}
+			if (!threadTs) {
+				markedRead.set(channelId, Number(ts));
+				update({ channels: state.channels.filter((channel) => channel.id !== channelId) });
+			}
+			return { ok: true };
+		} catch (error) {
+			return { ok: false, reason: failure(error) };
 		}
 	},
 

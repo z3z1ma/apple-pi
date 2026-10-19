@@ -115,6 +115,13 @@ function start() {
 	ipcMain.handle("world:send-mail", (_event, characterId: unknown, body: unknown) =>
 		typeof characterId === "string" && typeof body === "string" ? lifecycle.sendMail(characterId, body) : unnamed,
 	);
+	// Recruiting a new agent: a worker at its coordinator's desk, an independent one at the square's recruiter.
+	ipcMain.handle("world:recruit", (_event, request: unknown) => {
+		const { name, cwd, brief, reportsTo } = (request ?? {}) as Record<string, unknown>;
+		if (typeof name !== "string" || typeof cwd !== "string" || typeof brief !== "string")
+			return { ok: false, reason: "The recruit needs a name, a directory, and a brief." };
+		return lifecycle.recruit({ name, cwd, brief, ...(typeof reportsTo === "string" ? { reportsTo } : {}) });
+	});
 	// The function places: GitHub, Jira, Confluence, Slack, the outside-write gate, and delegation.
 	wireIntegrations({ stateDir: statePaths().dir, snapshot: () => world.snapshot(), commands, toWindow });
 	// Links in transcripts open in the system browser, web links only.

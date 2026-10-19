@@ -40,17 +40,22 @@
   ],
   "enterBy": "Doorway to the classroom",
   "foreground": [
-    { "rect": [5.4, 5.8, 7.0, 2.25], "feet": 8.05 },
-    { "rect": [7.1, 8.6, 7.4, 2.45], "feet": 11.05 },
-    { "rect": [14.9, 3.9, 2.6, 1.75], "feet": 5.65 }
+    { "rect": [5.4, 5.8, 7.0, 2.2], "feet": 8.0 },
+    { "rect": [7.1, 8.6, 7.4, 2.4], "feet": 11.0 },
+    { "rect": [14.9, 3.9, 2.6, 1.6], "feet": 5.5 }
   ],
   "overlaySlots": [
     { "kind": "glow", "at": [11.55, 2.35], "r": 0.9 },
     { "kind": "glow", "at": [19.4, 3.8], "r": 0.9 },
     { "kind": "glow", "at": [1.3, 12.6], "r": 0.9 },
     { "kind": "glow", "at": [21.3, 12.6], "r": 0.9 },
-    { "kind": "fidget", "fidget": "pet", "at": [18.2, 5.3] },
     { "kind": "fidget", "fidget": "box", "at": [15.6, 5.0] },
     { "kind": "fidget", "fidget": "spin", "at": [12.15, 3.0] }
+  ],
+  "interest": [
+    { "name": "the vending machine", "at": [4.6, 4.3], "face": "up" },
+    { "name": "the bookshelves", "at": [8.5, 3.9], "face": "up" },
+    { "name": "the whiteboard", "at": [14.5, 3.6], "face": "up" },
+    { "name": "the windows", "at": [2.2, 8.0], "face": "left" }
   ]
 }

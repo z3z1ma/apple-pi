@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { type Browser, chromium, type Page } from "playwright-core";
 import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
 import { appFile, contentType } from "../src/app-files.js";
-import { FIDGETS, type FidgetKind, type ThemeManifest } from "../src/theme-pack.js";
+import { FIDGETS, type FidgetKind, slotStyle, type ThemeManifest } from "../src/theme-pack.js";
 import type { Character, CharacterFacts, WorldSnapshot } from "../src/world.js";
 import type { PlaceData } from "../web/theme.js";
 
@@ -194,7 +194,8 @@ async function closeUp(page: Page, f: FidgetView, name: string) {
 
 /** Whether its default play shows on it (each kind its own way). */
 function playedDefault(kind: FidgetKind, f: FidgetView): boolean {
-	if (kind === "pet") return f.art === "pet-1" && f.particles > 0;
+	// A pet (whichever look) is being petted: its own frame for it, with hearts.
+	if (kind === "pet") return f.playing === "pet" && f.particles > 0;
 	if (kind === "spin") return f.speed > 0;
 	if (kind === "bell") return f.art === "bell-ringing";
 	if (kind === "handbell") return Math.abs(f.angle) > 2;
@@ -229,7 +230,8 @@ describe.each(THEMES)("in the %s theme", (theme) => {
 			const slot = data.overlaySlots.filter((s) => s.kind === "fidget")[index];
 			const key = place === "headquarters" || place === "common-room" ? `${place}:${HQ}` : place;
 			await travel(page, manifest.labels[place], key, errors);
-			const style = manifest.fidgets![kind]!;
+			// A pet wears its look's name and verbs (alive pass, ticket 03).
+			const style = slotStyle(manifest.fidgets![kind]!, slot);
 			const name = slot.name ?? style.name;
 			const before = await fidget(page, index);
 			expect(before, `${kind} in ${place}`).toMatchObject({ kind, name });

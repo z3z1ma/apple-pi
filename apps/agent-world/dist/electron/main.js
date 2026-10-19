@@ -1,5 +1,5 @@
 import { appendFileSync, chmodSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync, writeSync } from "node:fs";
-import { basename, dirname, join, normalize, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, normalize, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { BrowserWindow, app, ipcMain, net, protocol, shell } from "electron";
 import { homedir } from "node:os";
@@ -853,6 +853,15 @@ var WAKE_MS = 3e4;
 /** Mail to an awake session is delivered once its transcript records it, usually within a second or two. */
 var MAIL_MS = 8e3;
 var CLOSE_MS = 1e4;
+/** A directory as the operator typed it: `~` is his home. */
+var expandHome = (path) => path === "~" ? homedir() : path.startsWith("~/") ? join(homedir(), path.slice(2)) : path;
+var isDirectory = (path) => {
+	try {
+		return statSync(path).isDirectory();
+	} catch {
+		return false;
+	}
+};
 /** Send `command` and resolve at the first stage `enough` accepts, or with the last stage reached after `ms`. */
 function follow(commands, sessionId, command, ms, enough, late) {
 	return new Promise((resolve) => {
@@ -939,6 +948,66 @@ function openLifecycle(paths, commands, snapshot) {
 				reason: `${character.name} is in the middle of a turn. Ending its session stops that turn.`
 			};
 			return follow(commands, characterId, { kind: "close" }, CLOSE_MS, (stage) => stage === "applied", () => `${character.name} has not answered yet.`);
+		},
+		async recruit(request) {
+			const name = request.name.replace(/\s+/g, " ").trim();
+			const cwd = expandHome(request.cwd.trim());
+			const brief = request.brief.trim();
+			if (!name) return {
+				ok: false,
+				reason: "Give the new agent a name."
+			};
+			if (!cwd) return {
+				ok: false,
+				reason: "Choose the directory it works in."
+			};
+			if (!isAbsolute(cwd)) return {
+				ok: false,
+				reason: `${cwd} is not a full path to a directory.`
+			};
+			if (!isDirectory(cwd)) return {
+				ok: false,
+				reason: `${cwd} is not a directory.`
+			};
+			if (brief.startsWith("-")) return {
+				ok: false,
+				reason: "The brief cannot start with a dash: Pi would read it as an option."
+			};
+			let pane;
+			if (request.reportsTo) {
+				const coordinator = snapshot().characters.find((character) => character.id === request.reportsTo && character.role === "coordinator");
+				if (!coordinator) return {
+					ok: false,
+					reason: "That coordinator is not running."
+				};
+				const tmux = coordinator.facts?.tmux;
+				if (!tmux) return {
+					ok: false,
+					reason: `${coordinator.name} is not running in tmux, so there is nowhere to open ${name}'s window beside it.`
+				};
+				pane = {
+					socket: tmux.socket,
+					pane: tmux.pane
+				};
+			} else {
+				pane = await operatorPane(servers());
+				if (!pane) return {
+					ok: false,
+					reason: `No terminal is attached to tmux, so there is nowhere to open ${name}'s window.`
+				};
+			}
+			const sessionId = randomUUID();
+			return {
+				...await follow(commands, sessionId, {
+					kind: "start",
+					tmux: pane,
+					cwd,
+					name,
+					...request.reportsTo ? { reportsTo: request.reportsTo } : {},
+					...brief ? { prompt: brief } : {}
+				}, WAKE_MS, (stage) => stage === "applied", () => `Its window opened, but ${name} has not joined yet.`),
+				sessionId
+			};
 		},
 		async sendMail(characterId, body) {
 			const text = body.trim();
@@ -1075,6 +1144,20 @@ function distance(grid, [x, y], people) {
 	}
 	return best;
 }
+/**
+* Frames in a look's idle sheet (`<look>-idle.png`, optional): standing poses played now and then by someone standing
+* about, in this order.
+*/
+var IDLE_POSES = [
+	"look-left",
+	"look-right",
+	"stretch",
+	"wave",
+	"laugh",
+	"shrug",
+	"nod",
+	"yawn"
+];
 /** The four painted expressions every look has, in the order of their files (`<look>-portrait-0..3.png`). */
 var EXPRESSIONS = [
 	"neutral",
@@ -1120,7 +1203,8 @@ var ROLE_LABELS = [
 	"clerk",
 	"librarian",
 	"crier",
-	"townsfolk"
+	"townsfolk",
+	"recruiter"
 ];
 /** Every look role a pack must wear, with how many looks at least (agents need a few to tell apart). */
 var LOOK_ROLES = {
@@ -1135,8 +1219,16 @@ var LOOK_ROLES = {
 	librarian: 1,
 	crier: 1
 };
-/** Overlays every pack draws: doors in three states, the wing banner, and the birds that carry mail. */
+/**
+* Overlays every pack draws: doors in three states, the wing banner, the birds that carry mail, and the pointer's art
+* (the cursor's hand pointing, tapping, and as a fist, and the yellow and red click markers).
+*/
 var REQUIRED_OVERLAYS = [
+	"cursor-point",
+	"cursor-tap",
+	"cursor-blocked",
+	"mark-walk",
+	"mark-act",
 	"door-open",
 	"door-closed",
 	"door-boarded",
@@ -1185,7 +1277,10 @@ var SLOT_OVERLAYS = {
 * says otherwise.
 */
 var FIDGETS = {
-	/** A cat or a dog: sitting, being petted, stretching, a playful pose. */
+	/**
+	* A pet (a cat, a dog, an owl): four poses (`FidgetStyle.frames`). A slot's `look` draws one of the pack's other
+	* pets (`pet-<look>-0..3`) instead of these.
+	*/
 	pet: {
 		art: [
 			"pet-0",
@@ -1260,7 +1355,53 @@ var FIDGET_PARTICLES = [
 	"smoke",
 	"zzz"
 ];
-/** What a place must have beyond the shared format: its host's look role, and slots it cannot do without. */
+/**
+* What a pet's sprites show, one each: sitting (how it rests), petted with its eyes closed, a playful pose, stretching,
+* and curled up asleep. A pet has four, `sit`, `petted`, and `play` among them.
+*/
+var PET_FRAMES = [
+	"sit",
+	"petted",
+	"play",
+	"stretch",
+	"sleep"
+];
+/** The order of a pet's sprites where its style does not say. */
+var PET_FRAME_ORDER = [
+	"sit",
+	"petted",
+	"play",
+	"sleep"
+];
+/** A pet's four sprites: the kind's own (`pet-0..3`), or those of one of the pack's other pets (`pet-<look>-0..3`). */
+var petArt = (look) => look ? [
+	0,
+	1,
+	2,
+	3
+].map((frame) => `pet-${look}-${frame}`) : [...FIDGETS.pet.art];
+/**
+* A fidget slot's style: for a pet with a `look`, that look's own name, Examine line, size, frames, and reactions over
+* the kind's (its verbs fall back to the kind's, play by play).
+*/
+function slotStyle(style, slot) {
+	const own = slot.look ? style.looks?.[slot.look] : void 0;
+	if (!own) return style;
+	return {
+		...style,
+		...own,
+		verbs: {
+			...style.verbs,
+			...own.verbs
+		},
+		frames: own.frames,
+		looks: void 0
+	};
+}
+/**
+* What a place must have beyond the shared format: its host's look role, slots it cannot do without, a recruiter (and
+* why), and furniture by its `use` (and why).
+*/
 var PLACE_NEEDS = {
 	forge: {
 		host: "smith",
@@ -1271,7 +1412,11 @@ var PLACE_NEEDS = {
 		slots: { notice: "the quest office pins the operator's issues on them" }
 	},
 	library: { host: "librarian" },
-	square: { host: "crier" }
+	square: {
+		host: "crier",
+		recruiter: "the square's recruiter recruits independent agents at its booth"
+	},
+	headquarters: { furniture: { recruit: "the coordinator's desk recruits workers there" } }
 };
 /**
 * Theme-flavoured lines the world says, by key; `{name}`, `{count}`, and the like are filled in. Everything else the
@@ -1330,7 +1475,17 @@ var TEXT_KEYS = [
 	"forge-empty",
 	"forge-loading",
 	"ask-smith",
-	"forge-more"
+	"forge-more",
+	"recruit-worker",
+	"recruit-independent",
+	"recruit-worker-title",
+	"recruit-independent-title",
+	"recruit-worker-greeting",
+	"recruit-independent-greeting",
+	"recruit-brief",
+	"recruit-send",
+	"recruit-sending",
+	"recruit-joined"
 ];
 /**
 * Style tokens every pack sets: CSS custom properties put on the page's root, which the pack's skin and the world
@@ -1519,6 +1674,19 @@ function checkManifest(value, id, problems) {
 	if (bed !== void 0 && (!isObject(bed) || !isPoint(bed.pillow) || !Array.isArray(bed.covers) || bed.covers.length < 3 || !bed.covers.every(isPoint))) fault("world.bed needs a pillow point and a covers polygon (px in bed.png)");
 	const notice = world.notice;
 	if (notice !== void 0 && (!isObject(notice) || !isRect(notice.paper) || !notice.paper.every(isFraction))) fault("world.notice needs paper as fractions [x, y, w, h] of the notice sprites");
+	const sign = world.sign;
+	if (sign !== void 0) {
+		if (!isObject(sign)) fault("world.sign is not an object");
+		else {
+			if (!isText(sign.font)) fault("world.sign has no font");
+			colours("sign", sign, ["ink", ...sign.shadow === void 0 ? [] : ["shadow"]]);
+			if (sign.plate !== void 0) colours("sign.plate", sign.plate, [
+				"fill",
+				"rim",
+				"edge"
+			]);
+		}
+	}
 	checkFidgetStyles(value.fidgets, fault);
 	return value;
 }
@@ -1545,7 +1713,93 @@ function checkFidgetStyles(fidgets, fault) {
 		if (style.w !== void 0 && !(isNumber(style.w) && style.w > 0)) fault(`fidgets.${kind}.w is not a width in tiles`);
 		if (style.particle !== void 0 && !FIDGET_PARTICLES.includes(style.particle)) fault(`fidgets.${kind}.particle is not one of ${FIDGET_PARTICLES.join(", ")}`);
 		if (kind === "tome" && !(Array.isArray(style.lines) && style.lines.length > 0 && style.lines.every(isText))) fault("fidgets.tome has no lines to show when it is leafed through");
+		if (kind === "pet") checkPetStyles(style, fault);
 	}
+}
+/** A pet's height and frames, and each of its other looks: a name, an Examine line, and verbs only for its plays. */
+function checkPetStyles(style, fault) {
+	checkPetLook("fidgets.pet", style, fault);
+	if (style.looks === void 0) return;
+	if (!isObject(style.looks)) return fault("fidgets.pet.looks is not an object of looks");
+	for (const [look, own] of Object.entries(style.looks)) {
+		const where = `fidgets.pet.looks.${look}`;
+		if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(look)) fault(`${where} is not a look name (lowercase words joined by -)`);
+		if (!isObject(own)) {
+			fault(`${where} is not an object`);
+			continue;
+		}
+		if (!isText(own.name)) fault(`${where} has no name`);
+		if (!isText(own.examine)) fault(`${where} has no examine line`);
+		if (own.verbs !== void 0) {
+			const verbs = isObject(own.verbs) ? own.verbs : {};
+			const odd = Object.keys(verbs).filter((play) => !FIDGETS.pet.plays.includes(play));
+			if (!isObject(own.verbs) || odd.length || !Object.values(verbs).every(isText)) fault(`${where}.verbs names a verb for each of ${FIDGETS.pet.plays.join(", ")} only`);
+		}
+		if (own.particle !== void 0 && !FIDGET_PARTICLES.includes(own.particle)) fault(`${where}.particle is not one of ${FIDGET_PARTICLES.join(", ")}`);
+		checkPetLook(where, own, fault);
+	}
+}
+/** A pet's height (a share of a standing character's) and its four frames, when given. */
+function checkPetLook(where, style, fault) {
+	if (style.height !== void 0 && !(isNumber(style.height) && style.height > 0 && style.height <= 1.2)) fault(`${where}.height is not a share of a standing character's height (above 0, at most 1.2)`);
+	if (style.frames === void 0) return;
+	const frames = Array.isArray(style.frames) ? style.frames : [];
+	const known = frames.every((frame) => PET_FRAMES.includes(frame));
+	if (frames.length !== 4 || !known || new Set(frames).size !== 4 || ![
+		"sit",
+		"petted",
+		"play"
+	].every((frame) => frames.includes(frame))) fault(`${where}.frames is not four different frames of ${PET_FRAMES.join(", ")}, with sit, petted, and play`);
+}
+/**
+* Fewer pets, each its own: a place holds at most one pet (a curled-up sleeper counts), no two places share a pet's
+* look (nor two hold a sleeper), each look is one the pack names, and an asleep pet has a sleep frame. Returns the
+* sprites the placed looks need.
+*/
+function checkPets(placed, pet, problems) {
+	const style = isObject(pet) ? pet : void 0;
+	const perPlace = /* @__PURE__ */ new Map();
+	const lookAt = /* @__PURE__ */ new Map();
+	const art = [];
+	for (const { file, slot } of placed) {
+		perPlace.set(file, (perPlace.get(file) ?? 0) + 1);
+		if (perPlace.get(file) === 2) problems.push({
+			file,
+			fault: "holds more than one pet (a sleeper counts)"
+		});
+		const look = slot.fidget === "sleeper" ? "a sleeper" : slot.look ? `pet look ${slot.look}` : "the pet's own look";
+		const first = lookAt.get(look);
+		if (first) problems.push({
+			file,
+			fault: `holds ${look}, as ${first} does: no two places share a pet`
+		});
+		else lookAt.set(look, file);
+		if (slot.fidget !== "pet") continue;
+		if (!style) {
+			art.push(...petArt(typeof slot.look === "string" ? slot.look : void 0));
+			continue;
+		}
+		if (slot.look !== void 0 && !(typeof slot.look === "string" && isObject(style.looks?.[slot.look]))) {
+			problems.push({
+				file,
+				fault: `a pet at ${fmt(slot.at)} wears look ${JSON.stringify(slot.look)}, which fidgets.pet.looks does not name`
+			});
+			continue;
+		}
+		const frames = slotStyle(style, slot).frames ?? PET_FRAME_ORDER;
+		if (slot.asleep && !frames.includes("sleep")) problems.push({
+			file,
+			fault: `a pet at ${fmt(slot.at)} is asleep, but its look has no sleep frame`
+		});
+		art.push(...petArt(slot.look));
+	}
+	return art;
+}
+/** A door's sign board, when it has one: a rect inside the grid. */
+function checkSign(door, rectInside, fault) {
+	if (door.sign === void 0) return;
+	if (!isObject(door.sign) || !isRect(door.sign.rect)) fault(`door ${door.name}'s sign has no rect [x, y, w, h]`);
+	else if (!rectInside(door.sign.rect)) fault(`door ${door.name}'s sign ${fmt(door.sign.rect)} lies outside its grid`);
 }
 /** A bed names a spot the place has; a `fidget` slot names a known kind, and a width in tiles if it gives one. */
 function checkSlot(slot, place, fault) {
@@ -1553,6 +1807,19 @@ function checkSlot(slot, place, fault) {
 	if (slot.kind !== "fidget") return;
 	if (!isFidget(slot.fidget)) fault(`a fidget slot at ${fmt(slot.at)} names ${slot.fidget === void 0 ? "no kind" : JSON.stringify(slot.fidget)}; fidget is one of ${Object.keys(FIDGETS).join(", ")}`);
 	else if (slot.w !== void 0 && !(isNumber(slot.w) && slot.w > 0)) fault(`a fidget slot at ${fmt(slot.at)} has a width (w) that is not a number of tiles`);
+	if ((slot.look !== void 0 || slot.asleep !== void 0) && slot.fidget !== "pet") fault(`a fidget slot at ${fmt(slot.at)} gives a look or asleep, which only a pet has`);
+}
+/**
+* Recruiting (ticket 10): a recruiter stands on open floor, and a place that needs one (the square) has it; a place
+* that needs furniture of a `use` (the headquarters' recruiting desk) has a piece of it.
+*/
+function checkRecruiting(place, needs, fault, onFloor) {
+	if (place.recruiter === void 0) {
+		if (needs?.recruiter) fault(`has no recruiter; ${needs.recruiter}`);
+	} else if (!isObject(place.recruiter) || !isPoint(place.recruiter.at)) fault("its recruiter has no place (at)");
+	else onFloor("its recruiter", place.recruiter.at);
+	const furniture = Array.isArray(place.furniture) ? place.furniture : [];
+	for (const [use, why] of Object.entries(needs?.furniture ?? {})) if (!furniture.some((piece) => isObject(piece) && piece.use === use && isRect(piece.rect))) fault(`has no furniture whose use is ${use}; ${why}`);
 }
 function checkPlace(name, value, painting, problems) {
 	const file = `places/${name}.json`;
@@ -1578,7 +1845,10 @@ function checkPlace(name, value, painting, problems) {
 	place.blocked.forEach((rect, i) => {
 		if (!rectInside(rect)) fault(`blocked rect ${i} ${fmt(rect)} lies outside its ${place.cols} x ${place.rows} grid`);
 	});
-	for (const door of place.doors) if (!rectInside(door.rect)) fault(`door ${door.name}'s rect ${fmt(door.rect)} lies outside its grid`);
+	for (const door of place.doors) {
+		if (!rectInside(door.rect)) fault(`door ${door.name}'s rect ${fmt(door.rect)} lies outside its grid`);
+		checkSign(door, rectInside, fault);
+	}
 	place.overlaySlots.forEach((slot, i) => {
 		if (!inside(slot.at)) fault(`overlay slot ${i} (${slot.kind}) at ${fmt(slot.at)} lies outside its grid`);
 	});
@@ -1592,6 +1862,8 @@ function checkPlace(name, value, painting, problems) {
 	for (const [i, spot] of place.spots.entries()) onFloor(`spot ${i}`, spot);
 	for (const [from, point] of Object.entries(place.entries)) onFloor(`entry from ${from}`, point);
 	for (const door of place.doors) onFloor(`door ${door.name}'s stand point`, door.standAt);
+	checkRecruiting(place, PLACE_NEEDS[name], fault, onFloor);
+	checkInterest(place, grid, fault);
 	if (place.enterBy !== void 0 && !place.doors.some((door) => door.name === place.enterBy)) fault(`enterBy names ${JSON.stringify(place.enterBy)}, which is not one of its doors`);
 	const needs = PLACE_NEEDS[name];
 	if (needs?.host && !isObject(place.host)) fault(`has no host; the ${name} needs its ${needs.host}`);
@@ -1601,6 +1873,105 @@ function checkPlace(name, value, painting, problems) {
 		const { at, layouts, repeat } = place.niches;
 		if (!Array.isArray(at) || !at.every((x) => isNumber(x) && x >= 0 && x <= place.cols)) fault("has niches outside its grid");
 		if (![...Object.values(layouts ?? {}).flat(), repeat].every((s) => Array.isArray(s) && s.length === 2 && s[0] >= 0 && s[1] <= place.cols && s[0] < s[1])) fault("cuts its painting into strips outside its grid");
+	}
+}
+/**
+* A look's idle sheet, when looks.json names one: its strip of `IDLE_POSES` frames in the size it gives, each on its
+* baseline (with pixels).
+*/
+async function checkIdle(reader, name, idle, pixels, problems) {
+	const file = `characters/${name}-idle.png`;
+	if (!isObject(idle) || !isPoint(idle.frame) || !isNumber(idle.baseline)) return problems.push({
+		file: "characters/looks.json",
+		fault: `look ${name}'s idle needs a frame [w, h] and a baseline`
+	});
+	const [w, h] = idle.frame;
+	const frames = IDLE_POSES.length;
+	const sheet = await reader.image(file, pixels);
+	if (!sheet) return problems.push({
+		file,
+		fault: "is missing (the idle sheet looks.json names)"
+	});
+	if (sheet.width !== w * frames || sheet.height !== h) return problems.push({
+		file,
+		fault: `is ${sheet.width} x ${sheet.height} px, but ${frames} idle frames of ${w} x ${h} (looks.json) make ${w * frames} x ${h}`
+	});
+	const baseline = idle.baseline;
+	if (baseline <= 0 || baseline > h) return problems.push({
+		file: "characters/looks.json",
+		fault: `look ${name}'s idle baseline ${baseline} lies outside its ${h} px frame`
+	});
+	if (!sheet.alpha) return;
+	const off = feetRows(sheet, w, frames).map((row, frame) => ({
+		frame,
+		row
+	})).filter(({ row }) => Math.abs(row + 1 - baseline) > BASELINE_TOLERANCE);
+	if (off.length) problems.push({
+		file,
+		fault: `idle frames ${off.map((o) => o.frame).join(", ")} stand off the baseline ${baseline} (feet at rows ${off.map((o) => o.row + 1).join(", ")})`
+	});
+}
+/**
+* A place's points of interest: each named, on open floor inside its grid, a tile clear of every door's stand point and
+* every entry (a wanderer never stands in a doorway), and clear of every spot, the host, and the recruiter.
+*/
+function checkInterest(place, grid, fault) {
+	if (place.interest === void 0) return;
+	if (!Array.isArray(place.interest)) return fault("has points of interest that are not a list");
+	const near = (a, b, least) => Math.hypot(a[0] - b[0], a[1] - b[1]) < least;
+	const clear = [
+		...place.doors.map((door) => [
+			`door ${door.name}'s stand point`,
+			door.standAt,
+			1
+		]),
+		...Object.entries(place.entries).map(([from, at]) => [
+			`the entry from ${from}`,
+			at,
+			1
+		]),
+		...place.spots.map((at, i) => [
+			`spot ${i}`,
+			at,
+			.9
+		]),
+		...isObject(place.host) && isPoint(place.host.at) ? [[
+			"its host",
+			place.host.at,
+			.9
+		]] : [],
+		...isObject(place.recruiter) && isPoint(place.recruiter.at) ? [[
+			"its recruiter",
+			place.recruiter.at,
+			.9
+		]] : []
+	];
+	for (const [i, point] of place.interest.entries()) {
+		if (!isObject(point) || !isText(point.name)) {
+			fault(`point of interest ${i} has no name`);
+			continue;
+		}
+		if (!isPoint(point.at)) {
+			fault(`point of interest ${i} has no place (at)`);
+			continue;
+		}
+		const what = `point of interest ${point.name} ${fmt(point.at)}`;
+		const [x, y] = point.at;
+		if (x < 0 || y < 0 || x > place.cols || y > place.rows) {
+			fault(`${what} lies outside its grid`);
+			continue;
+		}
+		if (!isOpen(grid, point.at)) {
+			fault(`${what} is not on open floor`);
+			continue;
+		}
+		if (point.face !== void 0 && ![
+			"up",
+			"down",
+			"left",
+			"right"
+		].includes(point.face)) fault(`${what} faces ${JSON.stringify(point.face)}, not up, down, left, or right`);
+		for (const [other, at, least] of clear) if (near(point.at, at, least)) fault(`${what} is within ${least === 1 ? "a tile" : `${least} tiles`} of ${other}`);
 	}
 }
 /** Where each frame's feet are: the lowest drawn row, per frame. */
@@ -1681,6 +2052,7 @@ async function checkLooks(reader, value, hosts, pixels, problems) {
 				fault: `stands ${standing} px tall in its standing frame (14), not 120`
 			});
 		}
+		if (look.idle !== void 0) await checkIdle(reader, name, look.idle, pixels, problems);
 		for (let i = 0; i < EXPRESSIONS.length; i++) {
 			const portraitFile = `characters/${name}-portrait-${i}.png`;
 			const portrait = await reader.image(portraitFile);
@@ -1734,9 +2106,12 @@ async function checkPlaces(reader, problems) {
 	const hosts = [];
 	/** Each place's host look, by place. */
 	const hostOf = {};
+	/** The look each place's recruiter names, by place. */
+	const recruiterOf = {};
 	const slotKinds = /* @__PURE__ */ new Set();
 	/** The kinds of fidget object placed, and the first place file placing each. */
 	const fidgets = /* @__PURE__ */ new Map();
+	const pets = [];
 	for (const name of PLACE_FILES) {
 		const file = `places/${name}.json`;
 		const place = await json(reader, file, problems);
@@ -1760,17 +2135,27 @@ async function checkPlaces(reader, problems) {
 			hosts.push(data.host.look);
 			hostOf[name] = data.host.look;
 		}
+		if (isObject(data.recruiter) && typeof data.recruiter.look === "string") {
+			hosts.push(data.recruiter.look);
+			recruiterOf[name] = data.recruiter.look;
+		}
 		for (const slot of Array.isArray(data.overlaySlots) ? data.overlaySlots : []) {
 			if (!isObject(slot)) continue;
 			slotKinds.add(String(slot.kind));
 			if (slot.kind === "fidget" && isFidget(slot.fidget) && !fidgets.has(slot.fidget)) fidgets.set(slot.fidget, file);
+			if (slot.kind === "fidget" && (slot.fidget === "pet" || slot.fidget === "sleeper")) pets.push({
+				file,
+				slot
+			});
 		}
 	}
 	return {
 		hosts,
 		hostOf,
+		recruiterOf,
 		slotKinds,
-		fidgets
+		fidgets,
+		pets
 	};
 }
 /**
@@ -1782,7 +2167,7 @@ async function checkPack(reader, id, { pixels = true } = {}) {
 	const problems = [];
 	const manifest = checkManifest(await json(reader, "theme.json", problems), id, problems);
 	if (manifest && typeof manifest.skin === "string") await checkSkin(reader, manifest, problems);
-	const { hosts, hostOf, slotKinds, fidgets } = await checkPlaces(reader, problems);
+	const { hosts, hostOf, recruiterOf, slotKinds, fidgets, pets } = await checkPlaces(reader, problems);
 	const looks = await json(reader, "characters/looks.json", problems);
 	if (looks !== void 0) await checkLooks(reader, looks, hosts, pixels, problems);
 	for (const [place, look] of Object.entries(hostOf)) {
@@ -1791,6 +2176,13 @@ async function checkPack(reader, id, { pixels = true } = {}) {
 		if (role && worn !== void 0 && worn !== role) problems.push({
 			file: `places/${place}.json`,
 			fault: `its host wears ${look}, which is not a ${role} look`
+		});
+	}
+	for (const [place, look] of Object.entries(recruiterOf)) {
+		const worn = isObject(looks) && isObject(looks[look]) ? looks[look].role : void 0;
+		if (worn !== void 0 && worn !== "recruiter") problems.push({
+			file: `places/${place}.json`,
+			fault: `its recruiter wears ${look}, which is not a recruiter look`
 		});
 	}
 	if (slotKinds.has("bed") && manifest && isObject(manifest.world) && manifest.world.bed === void 0) problems.push({
@@ -1805,9 +2197,10 @@ async function checkPack(reader, id, { pixels = true } = {}) {
 	const overlays = [
 		...REQUIRED_OVERLAYS,
 		...[...slotKinds].flatMap((kind) => SLOT_OVERLAYS[kind] ?? []),
-		...[...fidgets.keys()].flatMap((kind) => FIDGETS[kind].art)
+		...[...fidgets.keys()].flatMap((kind) => kind === "pet" ? [] : FIDGETS[kind].art),
+		...checkPets(pets, styles.pet, problems)
 	];
-	for (const name of overlays) {
+	for (const name of new Set(overlays)) {
 		const file = `overlays/${name}.png`;
 		if (!await reader.image(file)) problems.push({
 			file,
@@ -3015,6 +3408,18 @@ function checkIntent(given) {
 				text
 			};
 		}
+		case "slack-mark-read": {
+			const channel = words("channel");
+			const ts = words("ts");
+			const threadTs = words("threadTs");
+			if (!channel || !ts || value.threadTs !== void 0 && !threadTs) return "That is not a Slack channel.";
+			return {
+				kind: "slack-mark-read",
+				channel,
+				ts,
+				...threadTs ? { threadTs } : {}
+			};
+		}
 	}
 	return "Agent World does not write that.";
 }
@@ -3045,8 +3450,18 @@ function writeLine(intent, description, failed) {
 			const where = description.where.split(",")[0];
 			return failed ? `Your reply in ${where} failed: ${failed}` : `You replied in ${where}${said}`;
 		}
+		case "slack-mark-read": {
+			const [place, thread] = description.where.split(", in ");
+			const what = thread ? `${thread} in ${place}` : place;
+			return failed ? `Marking ${what} read failed: ${failed}` : `You marked ${what} read in Slack.`;
+		}
 	}
 }
+/**
+* Writes the operator asks for with a button that says exactly what it does (Mark read), which change nothing anyone
+* else reads: sent without the confirmation, but recorded and announced like every other.
+*/
+var UNCONFIRMED = /* @__PURE__ */ new Set(["slack-mark-read"]);
 function openGate(recordFile, adapters, now = Date.now) {
 	const waiting = /* @__PURE__ */ new Map();
 	const listeners = /* @__PURE__ */ new Set();
@@ -3062,6 +3477,27 @@ function openGate(recordFile, adapters, now = Date.now) {
 		})}\n`, { mode: 384 });
 		if (fresh) chmodSync(recordFile, 384);
 		for (const listener of listeners) listener(entry);
+	};
+	/** Send a write as described, then record and announce it, sent or failed. */
+	const send = async (intent, description) => {
+		const sent = await adapters.send(intent);
+		const { what, where, text } = description;
+		const entry = {
+			at: now(),
+			kind: intent.kind,
+			what,
+			where,
+			text,
+			url: (sent.ok ? sent.url : void 0) ?? description.url,
+			ok: sent.ok,
+			...sent.ok ? {} : { reason: sent.reason },
+			line: writeLine(intent, description, sent.ok ? void 0 : sent.reason)
+		};
+		record(entry);
+		return sent.ok ? {
+			ok: true,
+			entry
+		} : sent;
 	};
 	return {
 		async describe(given) {
@@ -3097,24 +3533,21 @@ function openGate(recordFile, adapters, now = Date.now) {
 				reason: "That was not confirmed as shown, so nothing was sent."
 			};
 			waiting.delete(token);
-			const sent = await adapters.send(intent);
-			const { what, where, text } = held.description;
-			const entry = {
-				at: now(),
-				kind: intent.kind,
-				what,
-				where,
-				text,
-				url: (sent.ok ? sent.url : void 0) ?? held.description.url,
-				ok: sent.ok,
-				...sent.ok ? {} : { reason: sent.reason },
-				line: writeLine(intent, held.description, sent.ok ? void 0 : sent.reason)
+			return send(intent, held.description);
+		},
+		async act(given) {
+			const intent = checkIntent(given);
+			if (typeof intent === "string") return {
+				ok: false,
+				reason: intent
 			};
-			record(entry);
-			return sent.ok ? {
-				ok: true,
-				entry
-			} : sent;
+			if (!UNCONFIRMED.has(intent.kind)) return {
+				ok: false,
+				reason: "That needs your confirmation, so nothing was sent."
+			};
+			const described = await adapters.describe(intent);
+			if (!described.ok) return described;
+			return send(intent, described.description);
 		},
 		recent() {
 			if (!existsSync(recordFile)) return [];
@@ -3777,6 +4210,8 @@ function openSlack(credentials, options = {}) {
 	let members;
 	let everything;
 	const names = /* @__PURE__ */ new Map();
+	/** Where the operator last read each channel, as the last unread listing or Mark read left it. */
+	const lastRead = /* @__PURE__ */ new Map();
 	const call = async (method, params, session = credentials()) => {
 		if (!session) return NOT_SIGNED_IN;
 		const base = options.api ?? (session.url ? `${session.url.replace(/\/?$/, "/")}api/` : "https://slack.com/api/");
@@ -3926,12 +4361,14 @@ function openSlack(credentials, options = {}) {
 				...counts.json.channels ?? [],
 				...counts.json.mpims ?? [],
 				...counts.json.ims ?? []
-			].filter((row) => row.has_unreads);
-			rows.sort((a, b) => (b.mention_count ?? 0) - (a.mention_count ?? 0) || Number(b.latest ?? 0) - Number(a.latest ?? 0));
+			];
+			for (const row of rows) if (row.last_read) lastRead.set(row.id, row.last_read);
+			const unreadRows = rows.filter((row) => row.has_unreads);
+			unreadRows.sort((a, b) => (b.mention_count ?? 0) - (a.mention_count ?? 0) || Number(b.latest ?? 0) - Number(a.latest ?? 0));
 			await memberRows();
 			return {
 				ok: true,
-				channels: await Promise.all(rows.map(async (row, index) => {
+				channels: await Promise.all(unreadRows.map(async (row, index) => {
 					const known = names.get(row.id);
 					let unread = null;
 					let more = false;
@@ -4003,6 +4440,16 @@ function openSlack(credentials, options = {}) {
 			});
 			if (!history.ok) return history;
 			const rows = [...history.json.messages ?? []].reverse();
+			let read = lastRead.get(id);
+			if (read === void 0) {
+				const info = await call("conversations.info", { channel: id });
+				const row = info.ok ? info.json.channel : void 0;
+				if (row) names.set(id, {
+					...names.get(id),
+					...row
+				});
+				read = row?.last_read;
+			}
 			return {
 				ok: true,
 				thread: {
@@ -4011,7 +4458,8 @@ function openSlack(credentials, options = {}) {
 						name: await slack.channelName(id)
 					},
 					messages: await messages(rows),
-					url: slackLink(teamUrl(), id)
+					url: slackLink(teamUrl(), id),
+					lastRead: read && read !== "0000000000.000000" ? read : null
 				}
 			};
 		},
@@ -4023,6 +4471,7 @@ function openSlack(credentials, options = {}) {
 				limit: String(THREAD_MESSAGES)
 			});
 			if (!replies.ok) return replies;
+			const rows = replies.json.messages ?? [];
 			return {
 				ok: true,
 				thread: {
@@ -4030,8 +4479,9 @@ function openSlack(credentials, options = {}) {
 						id,
 						name: await slack.channelName(id)
 					},
-					messages: await messages(replies.json.messages ?? []),
-					url: slackLink(teamUrl(), id, ts)
+					messages: await messages(rows),
+					url: slackLink(teamUrl(), id, ts),
+					lastRead: rows.find((row) => row.ts === ts)?.last_read ?? null
 				}
 			};
 		},
@@ -4048,6 +4498,24 @@ function openSlack(credentials, options = {}) {
 			return {
 				ok: true,
 				url: ts ? `${slackLink(teamUrl(), channel, ts)}?thread_ts=${threadTs}&cid=${channel}` : null
+			};
+		},
+		async markRead(channel, ts, threadTs) {
+			if (!ID.test(channel) || !TS.test(ts) || threadTs !== void 0 && !TS.test(threadTs)) return badChannel;
+			const marked = threadTs ? await call("subscriptions.thread.mark", {
+				channel,
+				thread_ts: threadTs,
+				ts,
+				read: "1"
+			}) : await call("conversations.mark", {
+				channel,
+				ts
+			});
+			if (!marked.ok) return marked;
+			if (!threadTs) lastRead.set(channel, ts);
+			return {
+				ok: true,
+				url: slackLink(teamUrl(), channel, threadTs)
 			};
 		}
 	};
@@ -4073,6 +4541,37 @@ function openIntegrations(options) {
 		now: options.now
 	});
 	const characters = () => options.snapshot().characters;
+	/** Mark read, described for the record: the channel, or the thread by who started it. */
+	const describeMarkRead = async (intent) => {
+		const ts = /^\d+\.\d+$/;
+		if (!/^[A-Z0-9]+$/.test(intent.channel) || !ts.test(intent.ts) || intent.threadTs !== void 0 && !ts.test(intent.threadTs)) return {
+			ok: false,
+			reason: "That is not a Slack channel."
+		};
+		if (!credentials.read().slack) return {
+			ok: false,
+			reason: "Sign in to Slack in Settings first.",
+			signIn: "slack"
+		};
+		const channel = await slack.channelName(intent.channel);
+		const place = /^[CG]/.test(intent.channel) ? `#${channel}` : channel;
+		let where = place;
+		if (intent.threadTs) {
+			const parent = await slack.thread(intent.channel, intent.threadTs);
+			if (!parent.ok) return parent;
+			const first = parent.thread.messages[0];
+			where = `${place}, in ${first ? `${first.name}'s` : "a"} thread`;
+		}
+		return {
+			ok: true,
+			description: {
+				what: "Mark read in Slack",
+				where,
+				text: "",
+				url: null
+			}
+		};
+	};
 	const gate = openGate(files.record, {
 		async describe(intent) {
 			switch (intent.kind) {
@@ -4152,6 +4651,7 @@ function openIntegrations(options) {
 						}
 					};
 				}
+				case "slack-mark-read": return describeMarkRead(intent);
 			}
 		},
 		async send(intent) {
@@ -4160,6 +4660,7 @@ function openIntegrations(options) {
 				case "jira-comment": return jira.comment(intent.key, intent.body);
 				case "jira-transition": return jira.transition(intent.key, intent.transition);
 				case "slack-reply": return slack.reply(intent.channel, intent.threadTs, intent.text);
+				case "slack-mark-read": return slack.markRead(intent.channel, intent.ts, intent.threadTs);
 			}
 		}
 	}, options.now);
@@ -4239,6 +4740,13 @@ function openIntegrations(options) {
 		slackFindChannels: (text) => slack.find(typeof text === "string" ? text : ""),
 		slackChannel: (id) => slack.channel(String(id ?? "")),
 		slackThread: (id, ts) => slack.thread(String(id ?? ""), String(ts ?? "")),
+		/** Mark read: the button is the operator's choice, so the gate sends it unconfirmed but records it. */
+		slackMarkRead: (id, ts, threadTs) => gate.act({
+			kind: "slack-mark-read",
+			channel: id,
+			ts,
+			...threadTs == null ? {} : { threadTs }
+		}),
 		describeWrite: (intent) => gate.describe(intent),
 		confirmWrite: (intent, token) => gate.write(intent, token),
 		outsideWrites: async () => gate.recent(),
@@ -4360,6 +4868,7 @@ function wireIntegrations(options) {
 	handle("slack-find", (text) => integrations.slackFindChannels(text));
 	handle("slack-channel", (id) => integrations.slackChannel(id));
 	handle("slack-thread", (id, ts) => integrations.slackThread(id, ts));
+	handle("slack-mark-read", (id, ts, threadTs) => integrations.slackMarkRead(id, ts, threadTs));
 	handle("describe-write", (intent) => integrations.describeWrite(intent));
 	handle("confirm-write", (intent, token) => integrations.confirmWrite(intent, token));
 	handle("outside-writes", () => integrations.outsideWrites());
@@ -4462,6 +4971,19 @@ function start() {
 	ipcMain.handle("world:wake", (_event, characterId) => typeof characterId === "string" ? lifecycle.wake(characterId) : unnamed);
 	ipcMain.handle("world:end-session", (_event, characterId, confirmed) => typeof characterId === "string" ? lifecycle.endSession(characterId, confirmed === true) : unnamed);
 	ipcMain.handle("world:send-mail", (_event, characterId, body) => typeof characterId === "string" && typeof body === "string" ? lifecycle.sendMail(characterId, body) : unnamed);
+	ipcMain.handle("world:recruit", (_event, request) => {
+		const { name, cwd, brief, reportsTo } = request ?? {};
+		if (typeof name !== "string" || typeof cwd !== "string" || typeof brief !== "string") return {
+			ok: false,
+			reason: "The recruit needs a name, a directory, and a brief."
+		};
+		return lifecycle.recruit({
+			name,
+			cwd,
+			brief,
+			...typeof reportsTo === "string" ? { reportsTo } : {}
+		});
+	});
 	wireIntegrations({
 		stateDir: statePaths().dir,
 		snapshot: () => world.snapshot(),

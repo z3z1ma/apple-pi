@@ -35,16 +35,16 @@
     { "name": "Front desk", "rect": [19.5, 6.05, 4.5, 3.4], "use": "clerk" }
   ],
   "overlaySlots": [
-    { "kind": "notice", "at": [12.4, 1.14], "w": 0.95 },
-    { "kind": "notice", "at": [10.3, 1.14], "w": 0.95 },
-    { "kind": "notice", "at": [14.51, 1.14], "w": 0.95 },
-    { "kind": "notice", "at": [8.19, 1.14], "w": 0.95 },
-    { "kind": "notice", "at": [16.62, 1.14], "w": 0.95 },
-    { "kind": "notice", "at": [12.4, 2.32], "w": 0.95 },
-    { "kind": "notice", "at": [10.3, 2.32], "w": 0.95 },
-    { "kind": "notice", "at": [14.51, 2.32], "w": 0.95 },
-    { "kind": "notice", "at": [8.19, 2.32], "w": 0.95 },
-    { "kind": "notice", "at": [16.62, 2.32], "w": 0.95 },
+    { "kind": "notice", "at": [12.4, 1.24], "w": 0.9 },
+    { "kind": "notice", "at": [10.3, 1.24], "w": 0.9 },
+    { "kind": "notice", "at": [14.51, 1.24], "w": 0.9 },
+    { "kind": "notice", "at": [8.19, 1.24], "w": 0.9 },
+    { "kind": "notice", "at": [16.62, 1.24], "w": 0.9 },
+    { "kind": "notice", "at": [12.4, 2.32], "w": 0.9 },
+    { "kind": "notice", "at": [10.3, 2.32], "w": 0.9 },
+    { "kind": "notice", "at": [14.51, 2.32], "w": 0.9 },
+    { "kind": "notice", "at": [8.19, 2.32], "w": 0.9 },
+    { "kind": "notice", "at": [16.62, 2.32], "w": 0.9 },
     { "kind": "glow", "at": [8.2, 0.5], "r": 1.0 },
     { "kind": "glow", "at": [10.94, 0.5], "r": 1.0 },
     { "kind": "glow", "at": [14.5, 0.5], "r": 1.0 },
@@ -56,12 +56,11 @@
     { "kind": "glow", "at": [14.3, 5.78], "r": 0.7 },
     { "kind": "fidget", "fidget": "bell", "at": [22.4, 7.5] },
     { "kind": "fidget", "fidget": "spin", "at": [7.0, 8.4] },
-    { "kind": "fidget", "fidget": "box", "at": [13.3, 8.5] },
-    { "kind": "fidget", "fidget": "pet", "at": [4.6, 9.8] }
+    { "kind": "fidget", "fidget": "box", "at": [13.3, 8.5] }
   ],
   "foreground": [
-    { "rect": [6.2, 5.5, 3.65, 4.27], "feet": 9.77 },
-    { "rect": [12.65, 5.5, 3.25, 4.27], "feet": 9.77 },
+    { "rect": [6.2, 5.5, 3.65, 4.0], "feet": 9.5 },
+    { "rect": [12.65, 5.5, 3.25, 4.0], "feet": 9.5 },
     { "rect": [19.45, 6.05, 4.55, 3.4], "feet": 9.45 }
   ]
 }

@@ -17,7 +17,7 @@ import {
 } from "./game/place-scene.js";
 import type { WorkView } from "./game/places/forge.js";
 import type { NoticeView } from "./game/places/quest-office.js";
-import type { TownsfolkView } from "./game/places/square.js";
+import type { SignView, TownsfolkView } from "./game/places/square.js";
 import { avatarLooks } from "./looks.js";
 import { conversationPanel } from "./overlay/conversation/panel-state.js";
 import { chatLines } from "./overlay/interface/chat-lines.js";
@@ -26,6 +26,7 @@ import { Overlay } from "./overlay/overlay.js";
 import { atlassian } from "./overlay/places/atlassian-state.js";
 import { forge } from "./overlay/places/forge-state.js";
 import { placePanels } from "./overlay/places/place-panels.js";
+import { recruiting } from "./overlay/places/recruit-state.js";
 import { slack } from "./overlay/places/slack-state.js";
 import { applyTheme, loadTheme, type Theme, ThemeProblem } from "./theme.js";
 import { themeStore } from "./theme-store.js";
@@ -61,14 +62,20 @@ declare global {
 			birds(): { id: string; from: string; to: string; x: number; y: number; frame: number; out: boolean }[];
 			/** In the town square, the townsfolk standing for Slack channels with unread messages. */
 			townsfolk(): TownsfolkView[];
+			/** The names lettered on the buildings' sign boards. */
+			signs(): SignView[];
 			/** At the forge, the pull requests lying on its benches. */
 			work(): WorkView[];
 			/** At the quest office, the issues pinned on its board. */
 			notices(): NoticeView[];
 			/** The place's fidget objects: what each shows and what it is doing. */
 			fidgets(): FidgetView[];
+			/** The world's cursor and the click markers showing (`PlaceScene.pointerView`). */
+			pointer(): ReturnType<PlaceScene["pointerView"]> | undefined;
 			/** The place's host (the innkeeper), where it stands. */
 			host(): { name: string; look: string; x: number; y: number } | undefined;
+			/** The square's recruiter, where it stands. */
+			recruiter(): { name: string; look: string; x: number; y: number } | undefined;
 			/** The operator's avatar: where it is, its facing and frame, and the rest of its walk. */
 			avatar(): AvatarView | undefined;
 			/** A point in tiles, on screen in CSS px. */
@@ -259,6 +266,7 @@ const talkedTo: string[] = [];
 // Talking to a character, from the world or the side panel, opens its conversation panel.
 conversationPanel.connect(window.agentWorld);
 placePanels.connect(window.agentWorld, view);
+recruiting.connect(window.agentWorld, view);
 slack.connect(window.agentWorld);
 forge.connect(window.agentWorld);
 atlassian.connect(window.agentWorld, view);
@@ -286,10 +294,13 @@ window.agentWorldView = {
 	walkGrid: () => active()?.walkGridShown() ?? false,
 	lookAt: (door) => active()?.lookAt(door) ?? false,
 	host: () => active()?.hostView(),
+	recruiter: () => active()?.recruiterView(),
 	townsfolk: () => active()?.townsfolkViews() ?? [],
+	signs: () => active()?.signViews() ?? [],
 	work: () => active()?.workViews() ?? [],
 	notices: () => active()?.noticeViews() ?? [],
 	fidgets: () => active()?.fidgetViews() ?? [],
+	pointer: () => active()?.pointerView(),
 	birds: () => active()?.birdViews() ?? [],
 	avatar: () => active()?.avatarView(),
 	toScreen: (x, y) => active()?.toScreen([x, y]),

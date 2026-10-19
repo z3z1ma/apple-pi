@@ -61,6 +61,125 @@ export function barkFor(character: Character, turn: number): string | undefined 
 	return FINISHED_LINES[turn % FINISHED_LINES.length];
 }
 
+/**
+ * How fast life goes by (ticket 06 and 07): idles and wandering run their timers this many times faster; 0 stops them.
+ * The page may set `window.agentWorldLife = { pace }`; under a driven browser (the headless tests) life is still unless
+ * a test asks for it, so the tests that read where everyone stands and which frame shows stay exact.
+ */
+export function lifePace(): number {
+	const life = (globalThis as { agentWorldLife?: { pace?: number } }).agentWorldLife;
+	if (typeof life?.pace === "number" && Number.isFinite(life.pace)) return Math.max(0, life.pace);
+	return typeof navigator !== "undefined" && navigator.webdriver ? 0 : 1;
+}
+
+/** A string's 32-bit hash, the seed of someone's own rhythm. */
+function hashOf(text: string): number {
+	let h = 2166136261;
+	for (const char of text) h = Math.imul(h ^ char.charCodeAt(0), 16777619) >>> 0;
+	return h;
+}
+
+/** A random source seeded by `seed` (mulberry32): the same character always has the same rhythm, others another. */
+export function seeded(seed: string): () => number {
+	let state = hashOf(seed) || 1;
+	return () => {
+		state = (state + 0x6d2b79f5) >>> 0;
+		let t = state;
+		t = Math.imul(t ^ (t >>> 15), t | 1);
+		t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+		return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+	};
+}
+
+/** A step of an idle: a frame of the look's idle sheet (`IDLE_POSES`), or -1 for the standing frame, held this long (ms). */
+export type IdleStep = readonly [frame: number, ms: number];
+
+/**
+ * The idles someone standing about plays: short held poses that come back to standing. The sheet's frames are, in
+ * order, looking left, looking right, a stretch, a wave, a laugh, a shrug, a nod, and a yawn.
+ */
+export const IDLES = {
+	"look-around": [
+		[0, 1100],
+		[-1, 280],
+		[1, 1100],
+	],
+	stretch: [[2, 1500]],
+	wave: [
+		[3, 520],
+		[-1, 170],
+		[3, 560],
+	],
+	laugh: [
+		[4, 420],
+		[-1, 120],
+		[4, 420],
+		[-1, 120],
+		[4, 460],
+	],
+	shrug: [[5, 1100]],
+	nod: [
+		[6, 340],
+		[-1, 220],
+		[6, 360],
+	],
+	yawn: [[7, 1700]],
+} as const satisfies Record<string, readonly IdleStep[]>;
+
+export type IdleName = keyof typeof IDLES;
+const IDLE_NAMES = Object.keys(IDLES) as IdleName[];
+/** The first idle comes this long after someone stands still (ms), then one every so often: never on a beat. */
+const FIRST_IDLE_MS = [1500, 11_000] as const;
+const IDLE_EVERY_MS = [7000, 21_000] as const;
+
+/**
+ * When someone standing about plays an idle, and which: its own seeded rhythm, so two neighbours never start the same
+ * idle together, and never the same idle twice in a row. `tick` runs with each frame's time while it stands.
+ */
+export class IdleClock {
+	private readonly random: () => number;
+	private wait: number;
+	private last?: IdleName;
+
+	constructor(seed: string) {
+		this.random = seeded(`idle:${seed}`);
+		this.wait = this.between(FIRST_IDLE_MS);
+	}
+
+	/**
+	 * The idle to play now, if its time has come (`deltaMs` of standing has passed since the last call): never one that
+	 * someone else is playing (`playing`), so two neighbours never start the same idle together.
+	 */
+	tick(
+		deltaMs: number,
+		pace = lifePace(),
+		playing: Pick<ReadonlySet<IdleName>, "has"> = new Set(),
+	): IdleName | undefined {
+		if (pace <= 0) return undefined;
+		this.wait -= Math.min(deltaMs, 100) * pace;
+		if (this.wait > 0) return undefined;
+		return this.pick(playing);
+	}
+
+	/** The next idle, now (a wanderer pausing at a point of interest): its clock starts the wait again. */
+	pick(playing: Pick<ReadonlySet<IdleName>, "has"> = new Set()): IdleName {
+		this.wait = this.between(IDLE_EVERY_MS);
+		const fresh = IDLE_NAMES.filter((name) => name !== this.last && !playing.has(name));
+		const choices = fresh.length ? fresh : IDLE_NAMES.filter((name) => name !== this.last);
+		this.last = choices[Math.floor(this.random() * choices.length)];
+		return this.last;
+	}
+
+	/** Something else kept it from playing (it walked, or sat down): the next idle waits a while again. */
+	putOff() {
+		this.wait = Math.max(this.wait, this.between(FIRST_IDLE_MS));
+	}
+
+	private between([least, most]: readonly [number, number]): number {
+		return least + this.random() * (most - least);
+	}
+}
+
 /** A `#rrggbb` colour as a number, for Phaser's fills. */
 const hex = (colour: string) => Number.parseInt(colour.slice(1), 16);
 

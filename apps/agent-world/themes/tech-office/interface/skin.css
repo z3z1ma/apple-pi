@@ -1748,7 +1748,8 @@ a.aw-md-link:focus-visible {
 	text-transform: uppercase;
 }
 
-.aw-letter-to select {
+.aw-letter-to select,
+.aw-letter-to input {
 	letter-spacing: 0;
 	text-transform: none;
 	border: 1px solid var(--t-line-strong);
@@ -1767,7 +1768,8 @@ a.aw-md-link:focus-visible {
 }
 
 .aw-letter-body:focus-visible,
-.aw-letter-to select:focus-visible {
+.aw-letter-to select:focus-visible,
+.aw-letter-to input:focus-visible {
 	outline: none;
 	border-color: var(--t-teal);
 	box-shadow: 0 0 0 3px rgb(31 138 132 / 18%);

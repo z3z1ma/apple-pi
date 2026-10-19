@@ -242,6 +242,20 @@
 	flex: 0 0 12px;
 }
 
+/* Under a thread's replies: its own Mark read, quiet until there is something new to mark. */
+.aw-slack-thread-foot {
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 8px;
+	margin-top: 2px;
+}
+
+.aw-slack-mark-thread:disabled {
+	opacity: 0.45;
+	cursor: default;
+}
+
 /* A thread opened under its first message: replies and what is being written, set in. */
 .aw-slack-thread {
 	margin: 0 0 8px 22px;

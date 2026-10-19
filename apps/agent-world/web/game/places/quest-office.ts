@@ -22,6 +22,8 @@ const SIGN_SUMMARY = 38;
 /** The tag for issues beyond the board: how far below the lowest notices (tiles), whose height is about this × width. */
 const COUNTER_DROP = 0.42;
 const NOTICE_ASPECT = 1.3;
+/** How wide the key's slip may be at most, as a part of the notice's width. */
+const KEY_SLIP = 1.3;
 /** How far a notice tilts at most (radians), by its key, so the board looks pinned by hand. */
 const TILT = 0.045;
 
@@ -31,6 +33,8 @@ export interface NoticeView {
 	/** Its centre, in tiles. */
 	x: number;
 	y: number;
+	/** The paper as drawn, in tiles: its opaque bounds (pins included), unturned and unlifted. */
+	paper: Rect;
 	alpha: number;
 	/** Its sign shows (the pointer is over it). */
 	sign: boolean;
@@ -59,6 +63,9 @@ interface Notice {
 const cut = (text: string, max: number) => (text.length > max ? `${text.slice(0, max - 1).trimEnd()}\u2026` : text);
 const hash = (text: string) => [...text].reduce((h, c) => (h * 31 + c.charCodeAt(0)) | 0, 7);
 
+/** Each notice texture's opaque part, as fractions of it: what shows of the notice on the board. */
+const opaque = new Map<string, Rect>();
+
 /**
  * The notice sprite as pinned: the pack's `world.notice.paper` part of it, with the board around the paper cut away
  * when the pack asks (`cutOut`: whatever touches the part's edge and looks like the board). Made once per pack.
@@ -79,8 +86,24 @@ function noticeTexture(scene: Phaser.Scene, kind: NoticeKind): string {
 	const ctx = canvas.getContext("2d", { willReadFrequently: true })!;
 	ctx.drawImage(source, sx, sy, w, h, 0, 0, w, h);
 	if (notice?.cutOut) cutAway(ctx, w, h);
+	opaque.set(key, opaqueBounds(ctx, w, h));
 	scene.textures.addCanvas(key, canvas);
 	return key;
+}
+
+function opaqueBounds(ctx: CanvasRenderingContext2D, w: number, h: number): Rect {
+	const px = ctx.getImageData(0, 0, w, h).data;
+	let [left, top, right, bottom] = [w, h, -1, -1];
+	for (let y = 0; y < h; y++)
+		for (let x = 0; x < w; x++)
+			if (px[(y * w + x) * 4 + 3] >= 128) {
+				left = Math.min(left, x);
+				right = Math.max(right, x);
+				top = Math.min(top, y);
+				bottom = Math.max(bottom, y);
+			}
+	if (right < 0) return [0, 0, 1, 1];
+	return [left / w, top / h, (right + 1 - left) / w, (bottom + 1 - top) / h];
 }
 
 /**
@@ -229,8 +252,9 @@ export class QuestBoard {
 			.text(0, 0, key, { fontFamily: font, fontSize: "9px", fontStyle: "bold", color: tag.ink })
 			.setResolution(4)
 			.setOrigin(0.5, 0.5);
-		// A key longer than the paper is drawn smaller rather than spilling over it.
-		const room = w * TILE * 0.82 - 6;
+		// A key longer than the paper may stick out a little past its sides, as a slip pinned across it would (notices
+		// sized to their board are too narrow for a legible key); longer than that, it is drawn smaller.
+		const room = w * TILE * KEY_SLIP - 6;
 		if (text.width > room) text.setScale(room / text.width);
 		const width = Math.ceil(text.displayWidth + 6);
 		const height = Math.ceil(text.displayHeight + 2);
@@ -283,7 +307,11 @@ export class QuestBoard {
 		const slots = this.slots();
 		if (!line || !slots.length) return;
 		const xs = slots.map((slot) => slot.at[0]);
-		const bottom = Math.max(...slots.map((slot) => slot.at[1] + ((slot.w ?? 1) * NOTICE_ASPECT) / 2));
+		// Under the notices as drawn (each pack's are their own shape), else under where they would be.
+		const pinned = [...this.notices.values()].filter((notice) => !notice.going);
+		const bottom = pinned.length
+			? Math.max(...pinned.map(({ rect }) => rect[1] + rect[3]))
+			: Math.max(...slots.map((slot) => slot.at[1] + ((slot.w ?? 1) * NOTICE_ASPECT) / 2));
 		const tag = drawTag(this.scene, line);
 		tag.setPosition(((Math.min(...xs) + Math.max(...xs)) / 2) * TILE, (bottom + COUNTER_DROP) * TILE).setDepth(9.6e4);
 		this.counter = { line, tag };
@@ -379,11 +407,19 @@ export class QuestBoard {
 	views(): NoticeView[] {
 		return [...this.notices.values()]
 			.filter((notice) => !notice.going)
-			.map(({ issue, kind, slot, image }) => ({
+			.map(({ issue, kind, slot, image }) => {
+				const w = slot.w ?? 1;
+				const h = (w * image.height) / image.width;
+				const [fx, fy, fw, fh] = opaque.get(image.texture.key) ?? [0, 0, 1, 1];
+				const paper: Rect = [slot.at[0] - w / 2 + fx * w, slot.at[1] - h / 2 + fy * h, fw * w, fh * h];
+				return { issue, kind, slot, image, paper };
+			})
+			.map(({ issue, kind, slot, image, paper }) => ({
 				key: issue.key,
 				kind,
 				x: slot.at[0],
 				y: slot.at[1],
+				paper,
 				alpha: image.alpha,
 				sign: this.sign?.key === issue.key,
 			}));

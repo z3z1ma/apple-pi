@@ -22,7 +22,8 @@
     "clerk": "Council secretary",
     "librarian": "Librarian",
     "crier": "Broadcast club",
-    "townsfolk": "Student"
+    "townsfolk": "Student",
+    "recruiter": "Club recruiter"
   },
   "text": {
     "banner-reads": "The nameplate reads “{name}”.",
@@ -77,7 +78,17 @@
     "forge-empty": "The benches are empty: nothing of yours or your classmates' is open on GitHub.",
     "forge-loading": "Let's see what's on the benches…",
     "ask-smith": "Ask the shop teacher",
-    "forge-more": "{count} more on the shelf"
+    "forge-more": "{count} more on the shelf",
+    "recruit-worker": "Invite a classmate",
+    "recruit-independent": "Invite a transfer student",
+    "recruit-worker-title": "Joining {coordinator}'s class",
+    "recruit-independent-title": "Club sign-up sheet",
+    "recruit-worker-greeting": "A new classmate? Write their name, which club room they'll work in, and their first assignment!",
+    "recruit-independent-greeting": "Inviting a transfer student? Write their name, where they'll work, and what to do first! They don't belong to any class.",
+    "recruit-brief": "Their first assignment…",
+    "recruit-send": "Invite",
+    "recruit-sending": "Running off to find {name}…",
+    "recruit-joined": "{name} has joined! Welcome!"
   },
   "style": {
     "--aw-font-body": "\"Hiragino Maru Gothic ProN\", \"Hiragino Maru Gothic Pro\", \"Avenir Next\", \"Helvetica Neue\", sans-serif",
@@ -140,6 +151,10 @@
     },
     "glow": ["#fff3d6", "#ffd49a", "#ffab6b"],
     "notice": { "paper": [0.16, 0.08, 0.68, 0.78] },
+    "sign": {
+      "font": "\"Hiragino Maru Gothic ProN\", \"Hiragino Maru Gothic Pro\", \"Avenir Next\", sans-serif",
+      "ink": "#5b3b27"
+    },
     "banner": {
       "tiles": 2.8,
       "text": [0.12, 0.17, 0.76, 0.66],
@@ -150,20 +165,37 @@
   "fidgets": {
     "pet": {
       "name": "Calico cat",
-      "examine": "{name}, the school's calico. Officially a club member.",
-      "verbs": {
-        "pet": "Pet",
-        "play": "Play with"
+      "examine": "{name}, the dormitory's calico. Officially a club member.",
+      "verbs": { "pet": "Pet", "play": "Play with" },
+      "height": 0.33,
+      "frames": ["sit", "petted", "stretch", "play"],
+      "looks": {
+        "shiba": {
+          "name": "Shiba",
+          "examine": "{name}, the courtyard shiba. Waits by the gate for whoever has snacks.",
+          "verbs": { "pet": "Pet", "play": "Play fetch with" },
+          "height": 0.47
+        },
+        "rabbit-white": {
+          "name": "White rabbit",
+          "examine": "{name}, the library's rabbit, napping on the quietest shelf.",
+          "verbs": { "pet": "Stroke", "play": "Offer a carrot to" },
+          "height": 0.28
+        },
+        "crow": {
+          "name": "Crow",
+          "examine": "{name}, a crow who delivers nothing but takes an interest in every parcel.",
+          "verbs": { "pet": "Stroke", "play": "Offer a shiny button to" },
+          "particle": "sparkles",
+          "height": 0.27
+        },
+        "tanuki": {
+          "name": "Tanuki",
+          "examine": "{name}, a tanuki who wandered in from the hill and was given a workshop apron.",
+          "verbs": { "pet": "Pet", "play": "Play with" },
+          "height": 0.33
+        }
       }
-    },
-    "sleeper": {
-      "name": "Sleeping calico",
-      "examine": "A calico curled up in the sun, purring in its sleep.",
-      "verbs": {
-        "pet": "Stroke",
-        "boop": "Boop"
-      },
-      "particle": "zzz"
     },
     "bell": {
       "name": "School bell",

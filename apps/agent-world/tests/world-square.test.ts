@@ -110,6 +110,10 @@ interface SlackFixture {
 	signedIn: boolean;
 	unread: SlackChannel[];
 	quiet?: SlackChannel[];
+	/** A channel's messages, instead of `HISTORY`. */
+	history?: Record<string, SlackMessage[]>;
+	/** Where the operator last read each channel, and each thread (by its parent's ts); null when Slack does not say. */
+	lastRead?: Record<string, string | null>;
 }
 
 /** Open the world over a fixture backend; `window.calls` records what it was asked. */
@@ -199,15 +203,46 @@ async function openWorld(first: WorldSnapshot, slack: SlackFixture, viewport = {
 					const found = [...w.slack.unread, ...(w.slack.quiet ?? [])].find((c: any) => c.id === id);
 					return {
 						ok: true,
-						thread: { channel: { id, name: found?.name ?? id }, messages: history, url: found?.url ?? null },
+						thread: {
+							channel: { id, name: found?.name ?? id },
+							messages: w.slack.history?.[id] ?? history,
+							url: found?.url ?? null,
+							lastRead: w.slack.lastRead?.[id] ?? null,
+						},
 					};
 				},
 				slackThread: async (id: string, ts: string) => {
 					w.calls.push(["slackThread", id, ts]);
 					return {
 						ok: true,
-						thread: { channel: { id, name: id }, messages: replies, url: `https://acme.slack.com/archives/${id}/p1` },
+						thread: {
+							channel: { id, name: id },
+							messages: replies,
+							url: `https://acme.slack.com/archives/${id}/p1`,
+							lastRead: w.slack.lastRead?.[ts] ?? null,
+						},
 					};
+				},
+				slackMarkRead: async (id: string, ts: string, threadTs?: string) => {
+					w.calls.push(["slackMarkRead", id, ts, threadTs]);
+					const found = [...w.slack.unread, ...(w.slack.quiet ?? [])].find((c: any) => c.id === id);
+					const where = threadTs ? `#${found?.name}, in Ines's thread` : `#${found?.name}`;
+					// Slack no longer lists it as unread.
+					if (!threadTs) w.slack.unread = w.slack.unread.filter((c: any) => c.id !== id);
+					const entry = {
+						at: Date.now(),
+						kind: "slack-mark-read",
+						what: "Mark read in Slack",
+						where,
+						text: "",
+						url: null,
+						ok: true,
+						line: threadTs
+							? `You marked Ines's thread in #${found?.name} read in Slack.`
+							: `You marked #${found?.name} read in Slack.`,
+					};
+					for (const listener of writes) listener(entry);
+					return { ok: true, entry };
 				},
 				describeWrite: async (intent: any) => {
 					w.calls.push(["describeWrite", intent]);
@@ -616,6 +651,239 @@ test("the square, the crier, and a channel read the same in all three themes", {
 		await panel.getByRole("button", { name: "2 replies" }).click();
 		await counts(panel.getByLabel("Thread of Ines").getByRole("article"), 2);
 		await shot(page, `aw-28-channel-${theme}`);
+		expect(errors).toEqual([]);
+		await page.close();
+	}
+});
+
+interface SignView {
+	door: string;
+	to: string;
+	text: string;
+	/** Its letters' size, px at zoom 1. */
+	size: number;
+	/** The sign board (tiles), and the lettering's box on it. */
+	board: [number, number, number, number];
+	ink: [number, number, number, number];
+	/** The world draws the board too (where the painting has none, or one too small for a name). */
+	plate: boolean;
+}
+/** The smallest letters that read on a sign at the default zoom, in px on screen. */
+const SIGN_LEGIBLE_PX = 10;
+
+test("every building's sign board names its place in the theme's words, fitted inside the board, in all three themes", {
+	timeout: 120_000,
+}, async () => {
+	for (const theme of THEMES) {
+		const place = square(theme);
+		const { labels } = JSON.parse(
+			readFileSync(fileURLToPath(new URL(`../themes/${theme}/theme.json`, import.meta.url)), "utf8"),
+		);
+		const { page, errors } = await openWorld(world([WREN, BRAM], theme), { signedIn: false, unread: [] });
+		const signs = await view<SignView[]>(page, "signs()");
+		expect(signs.map((sign) => sign.door).sort(), theme).toEqual(place.doors.map((door) => door.name).sort());
+		const { zoom } = (await view<{ zoom: number }>(page, "zoom()"))!;
+		for (const sign of signs) {
+			// The place's name as the pack says it, without its article: "The forge" is signed "Forge".
+			const name = labels[sign.to].replace(/^the /i, "");
+			expect(sign.text, `${theme} ${sign.door}`).toBe(name[0].toUpperCase() + name.slice(1));
+			const [bx, by, bw, bh] = sign.board;
+			const [ix, iy, iw, ih] = sign.ink;
+			expect(ix, `${theme} ${sign.door}`).toBeGreaterThanOrEqual(bx);
+			expect(iy, `${theme} ${sign.door}`).toBeGreaterThanOrEqual(by);
+			expect(ix + iw, `${theme} ${sign.door}`).toBeLessThanOrEqual(bx + bw);
+			expect(iy + ih, `${theme} ${sign.door}`).toBeLessThanOrEqual(by + bh);
+			expect(sign.size * zoom, `${theme} ${sign.door}`).toBeGreaterThanOrEqual(SIGN_LEGIBLE_PX);
+		}
+		if (SHOTS)
+			for (const sign of signs) {
+				await view(page, `lookAt(${JSON.stringify(sign.door)})`);
+				await page.waitForTimeout(900);
+				const [bx, by, bw, bh] = sign.board;
+				const [x0, y0] = (await screen(page, bx - 1.5, by - 1))!;
+				const [x1, y1] = (await screen(page, bx + bw + 1.5, by + bh + 1.5))!;
+				mkdirSync(SHOTS, { recursive: true });
+				await page.screenshot({
+					path: join(SHOTS, `aw-04-sign-${theme}-${sign.to}.png`),
+					animations: "disabled",
+					clip: { x: Math.max(0, x0), y: Math.max(0, y0), width: x1 - x0, height: y1 - y0 },
+				});
+			}
+		await shot(page, `aw-04-square-${theme}`);
+		expect(errors).toEqual([]);
+		await page.close();
+	}
+});
+
+// Ticket 05: reading Slack. A long channel: thirty messages, Ines's thread in the middle.
+const LONG: SlackMessage[] = Array.from({ length: 30 }, (_, i) =>
+	msg(
+		200 - i * 5,
+		i % 2 ? "Tomas" : "Maya",
+		`Message ${i + 1}: the release train, the changelog, and who signs off on the notes before three o'clock.`,
+	),
+);
+LONG[10] = { ...PARENT, ts: LONG[10].ts, threadTs: LONG[10].ts, at: LONG[10].at };
+const LONG_PARENT = LONG[10];
+const LONG_REPLIES_READ = REPLIES[1].ts;
+
+/** The log's scroll, and where an element sits in it (px from the log's top edge as shown). */
+async function placeIn(log: Locator, target: Locator) {
+	const box = (await log.boundingBox())!;
+	const item = (await target.boundingBox())!;
+	const scroll = await log.evaluate((el) => ({ top: el.scrollTop, height: el.scrollHeight, client: el.clientHeight }));
+	return { top: item.y - box.y, bottom: item.y + item.height - box.y, box, scroll };
+}
+
+test("a channel opens at its first new message with the New divider just above; read through, it opens at the bottom", {
+	timeout: 60_000,
+}, async () => {
+	const { page, errors } = await openWorld(world(), {
+		signedIn: true,
+		unread: UNREAD,
+		quiet: [QUIET],
+		history: { C0GENERAL: LONG, C0RELEASE: LONG },
+		// #general was read up to its 20th message; #release-notes to its newest.
+		lastRead: { C0GENERAL: LONG[19].ts, C0RELEASE: LONG[29].ts, [LONG_PARENT.ts]: LONG_REPLIES_READ },
+	});
+	await settled(page, 3);
+	const crier = await openCrier(page);
+	await crier.getByRole("button", { name: /^Read #general/ }).click();
+	const panel = page.getByRole("dialog", { name: "#general in Slack" });
+	const log = panel.getByRole("log", { name: "Messages in #general" });
+	await counts(log.getByRole("article"), 30);
+	const first = log.getByRole("article").filter({ hasText: "Message 21:" });
+	const divider = log.locator(".aw-slack-new");
+	await vi.waitFor(async () => {
+		const at = await placeIn(log, first);
+		// The first new message near the top of the view, the divider just above it and in view too.
+		expect(at.scroll.top).toBeGreaterThan(0);
+		expect(at.top).toBeGreaterThan(0);
+		expect(at.top).toBeLessThan(60);
+		const mark = await placeIn(log, divider);
+		expect(mark.top).toBeGreaterThanOrEqual(0);
+		expect(mark.bottom).toBeLessThanOrEqual(at.top + 1);
+	});
+	expect(await divider.count()).toBe(1);
+	await shot(page, "aw-05-first-new");
+
+	// A channel read to its newest message opens at the bottom, with no divider.
+	await panel.getByRole("button", { name: "Other channels" }).click();
+	await page.locator(".aw-crier").getByRole("searchbox").fill("release");
+	await page.locator(".aw-crier").getByRole("button", { name: "Read #release-notes" }).click();
+	const quiet = page.getByRole("dialog", { name: "#release-notes in Slack" });
+	const quietLog = quiet.getByRole("log", { name: "Messages in #release-notes" });
+	await counts(quietLog.getByRole("article"), 30);
+	await vi.waitFor(async () => {
+		const { scroll } = await placeIn(quietLog, quietLog.getByRole("article").last());
+		expect(scroll.top + scroll.client).toBeGreaterThanOrEqual(scroll.height - 2);
+	});
+	expect(await quietLog.locator(".aw-slack-new").count()).toBe(0);
+	await shot(page, "aw-05-nothing-new");
+
+	// A thread opens at its first new reply, with its own divider just above it.
+	await quietLog.getByRole("button", { name: "2 replies" }).click();
+	const thread = quiet.getByLabel("Thread of Ines");
+	await counts(thread.getByRole("article"), 2);
+	const newReply = thread.getByRole("article").filter({ hasText: "Great, thanks." });
+	await vi.waitFor(async () => {
+		const at = await placeIn(quietLog, newReply);
+		expect(at.top).toBeGreaterThan(0);
+		expect(at.top).toBeLessThan(60);
+		const mark = await placeIn(quietLog, thread.locator(".aw-slack-new"));
+		expect(mark.top).toBeGreaterThanOrEqual(0);
+		expect(mark.bottom).toBeLessThanOrEqual(at.top + 1);
+	});
+	await shot(page, "aw-05-thread-first-new");
+
+	// Opening and reading changed nothing in Slack.
+	expect(await called(page, "slackMarkRead")).toEqual([]);
+	expect(await called(page, "describeWrite")).toEqual([]);
+	expect(errors).toEqual([]);
+	await page.close();
+});
+
+test("Mark read marks the channel read in Slack up to its newest message, logs it, and its townsperson leaves", {
+	timeout: 60_000,
+}, async () => {
+	const { page, errors } = await openWorld(world(), {
+		signedIn: true,
+		unread: UNREAD,
+		history: { C0GENERAL: LONG },
+		lastRead: { C0GENERAL: LONG[19].ts, [LONG_PARENT.ts]: LONG_REPLIES_READ },
+	});
+	await settled(page, 3);
+	const general = (await townsfolk(page)).find((f) => f.name === "#general")!;
+	await clickThrough(page);
+	const [gx, gy] = await screen(page, general.x, general.y - 1);
+	await page.mouse.click(gx, gy);
+	const panel = page.getByRole("dialog", { name: "#general in Slack" });
+	await counts(panel.getByRole("log").getByRole("article"), 30);
+	await shot(page, "aw-05-mark-read-button");
+
+	// A thread first: its own Mark read marks only that thread, up to its newest reply.
+	await panel.getByRole("button", { name: "2 replies" }).click();
+	const thread = panel.getByLabel("Thread of Ines");
+	await counts(thread.getByRole("article"), 2);
+	await thread.getByRole("button", { name: "Mark thread read" }).click();
+	await vi.waitFor(async () => expect(await called(page, "slackMarkRead")).toHaveLength(1));
+	expect((await called(page, "slackMarkRead"))[0]).toEqual([
+		"slackMarkRead",
+		"C0GENERAL",
+		REPLIES[2].ts,
+		LONG_PARENT.ts,
+	]);
+	await reads(page.locator(".aw-chat"), "You marked Ines's thread in #general read in Slack.");
+	await hidden(thread.locator(".aw-slack-new"));
+	// Still unread as a channel: the townsperson stays.
+	expect((await townsfolk(page)).some((f) => f.id === "C0GENERAL")).toBe(true);
+
+	// The channel: up to its newest message, at once, with no confirmation to answer.
+	await panel.getByRole("button", { name: "Mark read", exact: true }).click();
+	await vi.waitFor(async () => expect(await called(page, "slackMarkRead")).toHaveLength(2));
+	const [, id, ts, threadTs] = (await called(page, "slackMarkRead"))[1];
+	expect([id, ts, threadTs ?? null]).toEqual(["C0GENERAL", LONG[29].ts, null]);
+	expect(await page.getByRole("alertdialog").count()).toBe(0);
+	await reads(page.locator(".aw-chat"), "You marked #general read in Slack.");
+	await reads(panel.locator(".aw-slack-sub"), "Nothing unread");
+	await hidden(panel.getByRole("log").locator(".aw-slack-new"));
+	await shot(page, "aw-05-marked-read");
+	// Its townsperson leaves the square; the others stay.
+	await vi.waitFor(
+		async () => expect((await townsfolk(page)).map((f) => f.id).sort()).toEqual(["C0DEPLOY", "D0MAYA"]),
+		{ timeout: 8000 },
+	);
+	await page.keyboard.press("Escape");
+	await page.waitForTimeout(900);
+	await shot(page, "aw-05-townsperson-left");
+	expect(errors).toEqual([]);
+	await page.close();
+});
+
+test("the channel panel with its first new message and Mark read, in all three themes", {
+	timeout: 120_000,
+}, async () => {
+	for (const theme of THEMES) {
+		const { page, errors } = await openWorld(world([WREN, BRAM], theme), {
+			signedIn: true,
+			unread: UNREAD,
+			history: { C0GENERAL: LONG },
+			lastRead: { C0GENERAL: LONG[19].ts, [LONG_PARENT.ts]: LONG_REPLIES_READ },
+		});
+		await settled(page, 3);
+		const crier = await openCrier(page);
+		await crier.getByRole("button", { name: /^Read #general/ }).click();
+		const panel = page.getByRole("dialog", { name: "#general in Slack" });
+		await counts(panel.getByRole("log").getByRole("article"), 30);
+		await page.waitForTimeout(300);
+		await shot(page, `aw-05-channel-${theme}`);
+		await panel.getByRole("button", { name: "2 replies" }).click();
+		await counts(panel.getByLabel("Thread of Ines").getByRole("article"), 2);
+		await page.waitForTimeout(300);
+		await shot(page, `aw-05-thread-${theme}`);
+		await panel.getByRole("button", { name: "Mark read", exact: true }).click();
+		await reads(page.locator(".aw-chat"), "You marked #general read in Slack.");
+		await shot(page, `aw-05-marked-${theme}`);
 		expect(errors).toEqual([]);
 		await page.close();
 	}

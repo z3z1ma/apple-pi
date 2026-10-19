@@ -349,6 +349,8 @@ interface NoticeView {
 	kind: string;
 	x: number;
 	y: number;
+	/** The paper as drawn, in tiles: its opaque bounds (pins included), unturned. */
+	paper: [number, number, number, number];
 	alpha: number;
 	sign: boolean;
 }
@@ -764,6 +766,48 @@ describe("the library", () => {
 		expect(errors).toEqual([]);
 		await page.close();
 	});
+});
+
+/**
+ * Each pack's painted board, traced on its quest-office painting (tiles): the cork (fantasy, anime) or the whiteboard
+ * (tech) inside its frame.
+ */
+const BOARDS: Record<string, [number, number, number, number]> = {
+	fantasy: [7.64, 1.06, 8.75, 2.97],
+	"tech-office": [6.59, 0.62, 11.61, 2.32],
+	"anime-school": [7.75, 0.47, 9.81, 2.5],
+};
+/** Board left showing between two notices, and between a notice and the board's edge (tiles). */
+const BOARD_SHOWS = 0.12;
+
+describe("the board in every pack", () => {
+	for (const theme of Object.keys(BOARDS))
+		test(`${theme}: each notice is drawn smaller than its share of the board, so board shows around it`, async () => {
+			const { page, errors } = await openWorld(world(theme), true, MANY);
+			await travel(page, /quest|planning|council/i, "quest-office");
+			await vi.waitFor(async () => expect(await notices(page)).toHaveLength(10));
+			await page.waitForTimeout(500);
+			const pinned = await notices(page);
+			const [bx, by, bw, bh] = BOARDS[theme];
+			for (const { key, paper } of pinned) {
+				const [x, y, w, h] = paper;
+				expect(x, key).toBeGreaterThanOrEqual(bx + BOARD_SHOWS);
+				expect(y, key).toBeGreaterThanOrEqual(by + BOARD_SHOWS);
+				expect(x + w, key).toBeLessThanOrEqual(bx + bw - BOARD_SHOWS);
+				expect(y + h, key).toBeLessThanOrEqual(by + bh - BOARD_SHOWS);
+			}
+			for (const a of pinned)
+				for (const b of pinned) {
+					if (a === b) continue;
+					const [ax, ay, aw, ah] = a.paper;
+					const [cx, cy, cw, ch] = b.paper;
+					const apart = Math.max(cx - (ax + aw), ax - (cx + cw), cy - (ay + ah), ay - (cy + ch));
+					expect(apart, `${a.key} and ${b.key}`).toBeGreaterThanOrEqual(BOARD_SHOWS);
+				}
+			await shot(page, `aw-04-${theme}-board`);
+			expect(errors).toEqual([]);
+			await page.close();
+		});
 });
 
 // The same places in every theme, for judging the art and the skins on screenshots (AGENT_WORLD_SHOTS only).

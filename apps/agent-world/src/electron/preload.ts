@@ -9,6 +9,7 @@ import type {
 	ConversationPage,
 	FeedLine,
 	Receipt,
+	RecruitReceipt,
 	ReplyStreamEvent,
 	TerminalResult,
 	ThemeChoice,
@@ -53,6 +54,7 @@ const api: AgentWorldApi = {
 	endSession: (characterId, confirmed) =>
 		ipcRenderer.invoke("world:end-session", characterId, confirmed) as Promise<CommandReceipt>,
 	sendMail: (characterId, body) => ipcRenderer.invoke("world:send-mail", characterId, body) as Promise<CommandReceipt>,
+	recruit: (request) => ipcRenderer.invoke("world:recruit", request) as Promise<RecruitReceipt>,
 	openLink: (url) => ipcRenderer.invoke("world:open-link", url) as Promise<CommandResult>,
 	...places(),
 };
@@ -84,6 +86,7 @@ function places(): IntegrationsApi {
 		slackFindChannels: call<"slackFindChannels">("slack-find"),
 		slackChannel: call<"slackChannel">("slack-channel"),
 		slackThread: call<"slackThread">("slack-thread"),
+		slackMarkRead: call<"slackMarkRead">("slack-mark-read"),
 		describeWrite: call<"describeWrite">("describe-write"),
 		confirmWrite: call<"confirmWrite">("confirm-write"),
 		outsideWrites: call<"outsideWrites">("outside-writes"),

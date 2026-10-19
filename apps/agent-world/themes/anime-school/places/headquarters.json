@@ -53,17 +53,23 @@
       "to": "square"
     }
   ],
+  "furniture": [{ "name": "Class rep's desk", "rect": [13.4, 3.2, 3.1, 1.95], "use": "recruit" }],
   "enterBy": "Classroom doors",
-  "foreground": [{ "rect": [13.4, 3.2, 3.1, 1.95], "feet": 5.15 }, { "rect": [24.5, 14.4, 4.2, 1.25], "feet": 15.65 }],
+  "foreground": [{ "rect": [13.4, 3.2, 3.1, 1.8], "feet": 5.0 }, { "rect": [24.5, 14.4, 4.2, 1.25], "feet": 15.65 }],
   "overlaySlots": [
     { "kind": "glow", "at": [10.35, 0.35], "r": 1.3 },
     { "kind": "glow", "at": [15, 0.4], "r": 1.3 },
     { "kind": "glow", "at": [19.4, 0.4], "r": 1.3 },
     { "kind": "fidget", "fidget": "spin", "at": [8.3, 3.0] },
-    { "kind": "fidget", "fidget": "sleeper", "at": [6.8, 5.6] },
     { "kind": "fidget", "fidget": "bell", "at": [24.4, 3.1] },
-    { "kind": "fidget", "fidget": "pet", "at": [23.8, 5.3], "name": "Mochi" },
     { "kind": "fidget", "fidget": "light", "at": [25.6, 15.2] },
     { "kind": "fidget", "fidget": "box", "at": [3.4, 15.0] }
+  ],
+  "interest": [
+    { "name": "the blackboard", "at": [11.2, 4.45], "face": "up" },
+    { "name": "the bookshelf", "at": [7.6, 4.0], "face": "up" },
+    { "name": "the lockers", "at": [22.0, 4.7], "face": "up" },
+    { "name": "the windows", "at": [3.8, 10.6], "face": "left" },
+    { "name": "the east windows", "at": [26.4, 11.0], "face": "right" }
   ]
 }

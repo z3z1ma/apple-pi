@@ -27,11 +27,18 @@ export class BootScene extends Phaser.Scene {
 		for (const overlay of OVERLAYS) this.load.image(`overlay:${overlay}`, `${url}overlays/${overlay}.png`);
 		// Fidget objects too, for the kinds its places hold.
 		for (const overlay of fidgetArt(worn())) this.load.image(`overlay:${overlay}`, `${url}overlays/${overlay}.png`);
-		for (const [look, { frame }] of Object.entries(looks))
+		for (const [look, { frame, idle }] of Object.entries(looks)) {
 			this.load.spritesheet(`look:${look}`, `${url}characters/${look}.png`, {
 				frameWidth: frame[0],
 				frameHeight: frame[1],
 			});
+			// Its idle poses, when the look has them (tickets 06 and 07): played now and then by someone standing about.
+			if (idle)
+				this.load.spritesheet(`look:${look}:idle`, `${url}characters/${look}-idle.png`, {
+					frameWidth: idle.frame[0],
+					frameHeight: idle.frame[1],
+				});
+		}
 	}
 
 	create() {

@@ -9,6 +9,7 @@ Hazards found while building Agent World (`apps/agent-world/`, ledger task `2026
 - The interface panels cover parts of the world. A test that clicks world points injects `.aw-interface, .aw-interface * { pointer-events: none !important; }`. After a place panel has opened and closed, `locator.click()` on side-panel buttons can hang; `dispatchEvent("click")` works.
 - Talk to opens the conversation panel's veil: fixtures need `conversation` and `markSeen` stubs, and a test presses Escape before clicking on. Clicking the side-panel tab that is already open folds the panel. Places rows are found by the exact title `Travel to <name>`.
 - Characters who join a place walk in from its `enterBy` door; wait until no figure is `moving` before reading positions.
+- Life (idles, wandering) is still under headless Chrome (`navigator.webdriver`) so positions and frames stay exact; a test of life sets `window.agentWorldLife = { pace }` in its init script (`tests/world-life.test.ts`). Page CSP forbids string evaluation, so Python Playwright's `wait_for_function` fails; poll with `page.evaluate`.
 - To prove a play sends nothing, bridge the built UI to the real backend with `page.exposeFunction` and compare the runtime's `commands`, `events`, and `preferences` rows (`tests/fidgets.test.ts`); a `themes` reply that is not an array crashes the UI.
 - Recordings: Playwright video needs ffmpeg, which is absent; loop JPEG screenshots into a GIF with Pillow.
 

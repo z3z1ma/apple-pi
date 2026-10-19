@@ -91,24 +91,22 @@
       "at": [14.6, 8.99],
       "r": 0.7
     },
-    { "kind": "fidget", "fidget": "sleeper", "at": [5.3, 2.75] },
-    { "kind": "fidget", "fidget": "pet", "at": [12.9, 4.75], "name": "Marmalade" },
     { "kind": "fidget", "fidget": "handbell", "at": [21.25, 8.15] },
     { "kind": "fidget", "fidget": "spin", "at": [15.5, 2.95] }
   ],
   "enterBy": "Archway to the hall",
   "foreground": [
-    {
-      "rect": [3.3, 8.8, 6.3, 2.9],
-      "feet": 11.7
-    },
-    {
-      "rect": [12.7, 8.8, 6.25, 2.9],
-      "feet": 11.7
-    },
+    { "rect": [3.3, 8.8, 6.3, 2.7], "feet": 11.5 },
+    { "rect": [12.7, 8.8, 6.25, 2.7], "feet": 11.5 },
     {
       "rect": [9.85, 5.3, 2.35, 2.1],
       "feet": 7.4
     }
+  ],
+  "interest": [
+    { "name": "the hearth", "at": [10.5, 4.3], "face": "up" },
+    { "name": "the window seat", "at": [5.4, 4.0], "face": "up" },
+    { "name": "the map table", "at": [16.8, 4.7], "face": "up" },
+    { "name": "the side table", "at": [19.3, 8.2], "face": "right" }
   ]
 }

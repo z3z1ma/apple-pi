@@ -205,8 +205,8 @@ test("a click on furniture walks to the nearest open floor; a second click mid-w
 	const { page, errors } = await openWorld(world());
 	try {
 		const orla = await figure(page, HQ);
-		// The long table at the top of the hall, beside Orla seated at it.
-		const table: Point = [13.2, 5.4];
+		// The weapon rack on the east side of the hall (the desk at the top recruits, ticket 10).
+		const table: Point = [25, 9.4];
 		const expected = findPath(gridFor(HALL, [[orla.x, orla.y]]), HALL.entries.start, table)!.goal;
 		await clickAt(page, table);
 		await arrived(page);
@@ -249,7 +249,7 @@ test("hover text names the left-click action; right click lists every action and
 		const orla = await figure(page, HQ);
 		const body: Point = [orla.x, orla.y - 0.9];
 		await pointAt(page, body);
-		await vi.waitFor(async () => expect(await hoverText(page)).toBe("Talk to Orla the Wise / 3 more options"));
+		await vi.waitFor(async () => expect(await hoverText(page)).toBe("Talk to Orla the Wise / 4 more options"));
 		await shot(page, "hover-character");
 		const archway = HALL.doors.find((d) => d.name === "Archway to the gallery")!;
 		const [dx, dy, dw, dh] = archway.rect;
@@ -267,6 +267,7 @@ test("hover text names the left-click action; right click lists every action and
 		expect(await menu.getByRole("menuitem").allTextContents()).toEqual([
 			"Talk to Orla the Wise",
 			"Examine Orla the Wise",
+			"Recruit a guild member",
 			"End session of Orla the Wise",
 			"Walk here",
 			"Cancel",

@@ -178,6 +178,20 @@ export type CommandReceipt =
 	| { ok: true; stage: "accepted" | "delivered" | "applied"; note?: string }
 	| { ok: false; reason: string; confirm?: boolean };
 
+/**
+ * A new agent the operator recruits (ticket 10): its name, the directory it works in, and its opening brief (its first
+ * prompt; empty for none). A worker names the coordinator it reports to; an independent agent names none.
+ */
+export interface RecruitRequest {
+	name: string;
+	cwd: string;
+	brief: string;
+	reportsTo?: string;
+}
+
+/** How a recruit went: a command receipt, with the new session's id once `start` was sent. */
+export type RecruitReceipt = CommandReceipt & { sessionId?: string };
+
 /** A place outside any headquarters: the square, or a place off it. */
 export function isOutside(place: PlaceRef): place is { kind: OutsideKind } {
 	return (OUTSIDE_KINDS as readonly string[]).includes(place.kind);
@@ -350,6 +364,11 @@ export interface AgentWorldApi extends IntegrationsApi {
 	endSession(characterId: string, confirmed?: boolean): Promise<CommandReceipt>;
 	/** Mail a character as the operator (`mail`, from `OPERATOR`); mail to a dormant one waits until it wakes. */
 	sendMail(characterId: string, body: string): Promise<CommandReceipt>;
+	/**
+	 * Recruit a new agent (`start` for a new session id): a worker's window opens after its coordinator's pane, an
+	 * independent agent's after the operator's current one.
+	 */
+	recruit(request: RecruitRequest): Promise<RecruitReceipt>;
 	/** Open a link from a transcript in the system browser: http and https only; the window itself never navigates. */
 	openLink(url: string): Promise<CommandResult>;
 }

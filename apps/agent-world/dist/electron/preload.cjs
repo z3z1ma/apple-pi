@@ -34,6 +34,7 @@ var api = {
 	wake: (characterId) => electron.ipcRenderer.invoke("world:wake", characterId),
 	endSession: (characterId, confirmed) => electron.ipcRenderer.invoke("world:end-session", characterId, confirmed),
 	sendMail: (characterId, body) => electron.ipcRenderer.invoke("world:send-mail", characterId, body),
+	recruit: (request) => electron.ipcRenderer.invoke("world:recruit", request),
 	openLink: (url) => electron.ipcRenderer.invoke("world:open-link", url),
 	...places()
 };
@@ -59,6 +60,7 @@ function places() {
 		slackFindChannels: call("slack-find"),
 		slackChannel: call("slack-channel"),
 		slackThread: call("slack-thread"),
+		slackMarkRead: call("slack-mark-read"),
 		describeWrite: call("describe-write"),
 		confirmWrite: call("confirm-write"),
 		outsideWrites: call("outside-writes"),

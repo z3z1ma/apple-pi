@@ -227,6 +227,29 @@ describe("a broken pack names the file and the fault", { timeout: 30_000 }, () =
 		);
 	});
 
+	it("a door's sign off its grid or without a rect, and a sign style without its ink or font", async () => {
+		const dir = brokenPack((d) => {
+			editJson(join(d, "places/square.json"), (square) => {
+				square.doors[1].sign = { rect: [43.5, 5, 2, 0.5] };
+				square.doors[2].sign = { at: [1, 1] };
+			});
+			editJson(join(d, "theme.json"), (theme) => {
+				theme.world.sign.ink = "gold";
+				delete theme.world.sign.font;
+				theme.world.sign.plate.rim = 7;
+			});
+		});
+		expect(lines(await checkThemePack(dir))).toEqual(
+			expect.arrayContaining([
+				"places/square.json: door Forge's sign [43.5, 5, 2, 0.5] lies outside its grid",
+				"places/square.json: door Quest office's sign has no rect [x, y, w, h]",
+				'theme.json: world.sign.ink is not a #rrggbb colour: "gold"',
+				"theme.json: world.sign has no font",
+				"theme.json: world.sign.plate.rim is not a #rrggbb colour: 7",
+			]),
+		);
+	});
+
 	it("a spot, an entry, and a door's stand point off open floor", async () => {
 		const hall = JSON.parse(readFileSync(join(themesDir, "fantasy/places/headquarters.json"), "utf8"));
 		const [x, y, w, h] = hall.blocked[0];
@@ -260,12 +283,13 @@ describe("fidget objects are optional but checked where a place holds them", { t
 		});
 	};
 
+	// At least one each: with fewer pets (alive pass, ticket 03), a quiet room may hold a single thing to play with.
 	it("every real pack places fidget objects in every place", () => {
 		for (const theme of ["fantasy", "tech-office", "anime-school"])
 			for (const file of readdirSync(join(themesDir, theme, "places")).filter((f) => f.endsWith(".json"))) {
 				const place = JSON.parse(readFileSync(join(themesDir, theme, "places", file), "utf8"));
 				const kinds = place.overlaySlots.filter((slot: { kind: string }) => slot.kind === "fidget");
-				expect(kinds.length, `${theme}/${file}`).toBeGreaterThanOrEqual(2);
+				expect(kinds.length, `${theme}/${file}`).toBeGreaterThanOrEqual(1);
 			}
 	});
 
@@ -338,5 +362,17 @@ describe("the check-theme CLI", () => {
 		);
 		expect(failure?.code).toBe(1);
 		expect(failure?.stdout).toContain(`${dir}/overlays/bed.png: is missing`);
+	});
+});
+
+describe("the pointer's art", { timeout: 30_000 }, () => {
+	it("every pack draws the cursor's hands and the click markers", async () => {
+		const names = ["cursor-point", "cursor-tap", "cursor-blocked", "mark-walk", "mark-act"];
+		const dir = brokenPack((d) => {
+			for (const name of names) unlinkSync(join(d, `overlays/${name}.png`));
+		});
+		expect(lines(await checkThemePack(dir))).toEqual(
+			expect.arrayContaining(names.map((name) => `overlays/${name}.png: is missing`)),
+		);
 	});
 });

@@ -14,6 +14,7 @@ import {
 	type PackReader,
 	PLACE_FILES,
 	type PlaceData,
+	petArt,
 	pngSize,
 	type TEXT_KEYS,
 	type ThemeManifest,
@@ -28,10 +29,14 @@ export {
 	type FidgetStyle,
 	type Look,
 	type OverlaySlot,
+	PET_FRAME_ORDER,
+	type PetFrame,
 	PLACE_FILES,
 	type PlaceData,
 	type Point,
+	petArt,
 	type Rect,
+	slotStyle,
 	TILE,
 	type WorldStyle,
 } from "../src/theme-pack.js";
@@ -91,14 +96,19 @@ export const OVERLAYS = [
 	"notice-urgent",
 	"notice-progress",
 	"notice-done",
+	// The click markers (the cursor's sprites are read as images by `overlay/pointer/cursor.ts`).
+	"mark-walk",
+	"mark-act",
 ] as const;
 
 /** The fidget objects' sprites a pack's places use (only kinds it places: the rest are optional and may be absent). */
 export function fidgetArt(theme: Pick<Theme, "places">): string[] {
-	const kinds = new Set<FidgetKind>();
+	const art = new Set<string>();
 	for (const place of Object.values(theme.places))
-		for (const slot of place.overlaySlots) if (slot.kind === "fidget" && slot.fidget) kinds.add(slot.fidget);
-	return [...kinds].flatMap((kind) => FIDGETS[kind].art);
+		for (const slot of place.overlaySlots)
+			if (slot.kind === "fidget" && slot.fidget)
+				for (const name of slot.fidget === "pet" ? petArt(slot.look) : FIDGETS[slot.fidget].art) art.add(name);
+	return [...art];
 }
 
 /** A pack the world would not switch to, with why: each problem as `file: fault`. */

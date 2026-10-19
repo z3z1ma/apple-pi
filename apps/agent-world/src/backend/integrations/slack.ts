@@ -3,7 +3,8 @@
 // the web client calls it. Unread channels come from `client.counts` (the web client's method), named from
 // `users.conversations`, counted from `conversations.history` since each one's `last_read`; the crier searches
 // `conversations.list`; threads read through `conversations.replies`; a reply posts with `chat.postMessage`, which
-// only the outside-write gate calls. Sources are cited in this file's context file.
+// only the outside-write gate calls, as it does `conversations.mark` and `subscriptions.thread.mark` (Mark read).
+// Reading never marks anything read. Sources are cited in this file's context file.
 import type { Outcome, Refusal, SlackChannel, SlackMessage, SlackThread } from "../../integrations.js";
 import type { Fetch } from "./atlassian.js";
 import type { SlackCredentials } from "./credentials.js";
@@ -50,6 +51,8 @@ interface MessageRow {
 	bot_profile?: { name?: string };
 	text?: string;
 	reply_count?: number;
+	/** On a thread's parent, for a thread the operator follows: the newest reply read. */
+	last_read?: string;
 }
 
 export interface Slack {
@@ -66,6 +69,8 @@ export interface Slack {
 	channelName(id: string): Promise<string>;
 	/** A write: only the gate calls it. */
 	reply(channel: string, threadTs: string, text: string): Promise<Outcome<{ url: string | null }>>;
+	/** Mark a channel read up to `ts`, or with `threadTs` that thread; only the gate calls it. */
+	markRead(channel: string, ts: string, threadTs?: string): Promise<Outcome<{ url: string | null }>>;
 }
 
 const ID = /^[A-Z0-9]+$/;
@@ -87,6 +92,8 @@ export function openSlack(
 	let members: { at: number; rows: ConversationRow[] } | undefined;
 	let everything: { at: number; rows: ConversationRow[] } | undefined;
 	const names = new Map<string, ConversationRow>();
+	/** Where the operator last read each channel, as the last unread listing or Mark read left it. */
+	const lastRead = new Map<string, string>();
 
 	const call = async (
 		method: string,
@@ -223,13 +230,15 @@ export function openSlack(
 				...((counts.json.channels as CountRow[] | undefined) ?? []),
 				...((counts.json.mpims as CountRow[] | undefined) ?? []),
 				...((counts.json.ims as CountRow[] | undefined) ?? []),
-			].filter((row) => row.has_unreads);
-			rows.sort(
+			];
+			for (const row of rows) if (row.last_read) lastRead.set(row.id, row.last_read);
+			const unreadRows = rows.filter((row) => row.has_unreads);
+			unreadRows.sort(
 				(a, b) => (b.mention_count ?? 0) - (a.mention_count ?? 0) || Number(b.latest ?? 0) - Number(a.latest ?? 0),
 			);
 			await memberRows(); // names and kinds, cached; a failure only leaves ids to look up one by one
 			const channels = await Promise.all(
-				rows.map(async (row, index): Promise<SlackChannel> => {
+				unreadRows.map(async (row, index): Promise<SlackChannel> => {
 					const known = names.get(row.id);
 					let unread: number | null = null;
 					let more = false;
@@ -306,12 +315,21 @@ export function openSlack(
 			const history = await call("conversations.history", { channel: id, limit: String(CHANNEL_MESSAGES) });
 			if (!history.ok) return history;
 			const rows = [...((history.json.messages as MessageRow[] | undefined) ?? [])].reverse();
+			// Where it was last read: as the unread listing said, else as conversations.info says (a read-only call).
+			let read = lastRead.get(id);
+			if (read === undefined) {
+				const info = await call("conversations.info", { channel: id });
+				const row = info.ok ? (info.json.channel as (ConversationRow & { last_read?: string }) | undefined) : undefined;
+				if (row) names.set(id, { ...names.get(id), ...row });
+				read = row?.last_read;
+			}
 			return {
 				ok: true,
 				thread: {
 					channel: { id, name: await slack.channelName(id) },
 					messages: await messages(rows),
 					url: slackLink(teamUrl(), id),
+					lastRead: read && read !== "0000000000.000000" ? read : null,
 				},
 			};
 		},
@@ -320,12 +338,14 @@ export function openSlack(
 			if (!ID.test(id) || !TS.test(ts)) return badChannel;
 			const replies = await call("conversations.replies", { channel: id, ts, limit: String(THREAD_MESSAGES) });
 			if (!replies.ok) return replies;
+			const rows = (replies.json.messages as MessageRow[] | undefined) ?? [];
 			return {
 				ok: true,
 				thread: {
 					channel: { id, name: await slack.channelName(id) },
-					messages: await messages((replies.json.messages as MessageRow[] | undefined) ?? []),
+					messages: await messages(rows),
 					url: slackLink(teamUrl(), id, ts),
+					lastRead: rows.find((row) => row.ts === ts)?.last_read ?? null,
 				},
 			};
 		},
@@ -338,6 +358,17 @@ export function openSlack(
 			if (!posted.ok) return posted;
 			const ts = typeof posted.json.ts === "string" ? posted.json.ts : undefined;
 			return { ok: true, url: ts ? `${slackLink(teamUrl(), channel, ts)}?thread_ts=${threadTs}&cid=${channel}` : null };
+		},
+
+		async markRead(channel, ts, threadTs) {
+			if (!ID.test(channel) || !TS.test(ts) || (threadTs !== undefined && !TS.test(threadTs))) return badChannel;
+			// The web client's calls: a thread through its subscription, a channel through conversations.mark.
+			const marked = threadTs
+				? await call("subscriptions.thread.mark", { channel, thread_ts: threadTs, ts, read: "1" })
+				: await call("conversations.mark", { channel, ts });
+			if (!marked.ok) return marked;
+			if (!threadTs) lastRead.set(channel, ts);
+			return { ok: true, url: slackLink(teamUrl(), channel, threadTs) };
 		},
 	};
 	return slack;

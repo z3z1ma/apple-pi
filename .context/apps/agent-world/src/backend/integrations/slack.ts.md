@@ -13,3 +13,14 @@ Sources (read 2026-10-19): docs.slack.dev/reference/methods/{conversations.info,
 
 `invalid_auth`, `not_authed`, `token_revoked`, `token_expired`, and `account_inactive` become a refusal with `signIn: "slack"`.
 Why: a web session ends when the operator signs out of Slack in a browser or the workspace rotates it; the UI then offers sign-in again instead of an error.
+
+## symbol:openSlack
+
+A channel or thread reads with `lastRead`, the newest message the operator has read, so the panel opens at the first new one: for a channel, the `last_read` the last `client.counts` gave (kept in `lastRead` for every row, read or not), else `conversations.info`'s `channel.last_read`; for a thread, the parent's `last_read` in `conversations.replies` (Slack gives it only for threads the operator follows; otherwise null). Reading calls only these read-only methods; nothing is marked read by opening.
+Why: ticket 05 of `.ledger/202610191114-agent-world-alive/` (the operator decided Slack is marked read only by an explicit button). wee-slack reads the same fields (`slack/slack_conversation.py`: `last_read` from `conversations.info`; `slack/slack_message.py`: "Only subscribed threads have the last_read property").
+Verify: apps/agent-world/tests/integrations/slack.test.ts
+
+`markRead` is Mark read, with the web client's calls for an `xoxc` session: a channel through `conversations.mark` (`channel`, `ts` of its newest message), a thread through `subscriptions.thread.mark` (`channel`, `thread_ts`, `ts` of its newest reply, `read=1`; undocumented, the web client's method). Only the gate calls it, through `act`, which needs no confirmation.
+Why: docs.slack.dev/reference/methods/conversations.mark documents the channel call; the Web API has no documented call for a thread's read state. wee-slack, which signs in with the same `xoxc` token and `d` cookie, calls both exactly so (`slack/slack_api.py`: `conversations_mark`, `subscriptions_thread_mark`; read 2026-10-19 from github.com/wee-slack/wee-slack).
+Coupled: apps/agent-world/src/backend/integrations/gate.ts, apps/agent-world/src/backend/integrations/index.ts
+Verify: apps/agent-world/tests/integrations/slack.test.ts

@@ -60,6 +60,13 @@ export function checkIntent(given: unknown): OutsideWriteIntent | string {
 			if (long(text)) return "That is too long to send from here.";
 			return { kind: "slack-reply", channel, threadTs, text };
 		}
+		case "slack-mark-read": {
+			const channel = words("channel");
+			const ts = words("ts");
+			const threadTs = words("threadTs");
+			if (!channel || !ts || (value.threadTs !== undefined && !threadTs)) return "That is not a Slack channel.";
+			return { kind: "slack-mark-read", channel, ts, ...(threadTs ? { threadTs } : {}) };
+		}
 	}
 	return "Agent World does not write that.";
 }
@@ -97,8 +104,20 @@ export function writeLine(intent: OutsideWriteIntent, description: WriteDescript
 			const where = description.where.split(",")[0];
 			return failed ? `Your reply in ${where} failed: ${failed}` : `You replied in ${where}${said}`;
 		}
+		case "slack-mark-read": {
+			// `#releases`, or `#releases, in Ann's thread` for a thread: said as "Ann's thread in #releases".
+			const [place, thread] = description.where.split(", in ");
+			const what = thread ? `${thread} in ${place}` : place;
+			return failed ? `Marking ${what} read failed: ${failed}` : `You marked ${what} read in Slack.`;
+		}
 	}
 }
+
+/**
+ * Writes the operator asks for with a button that says exactly what it does (Mark read), which change nothing anyone
+ * else reads: sent without the confirmation, but recorded and announced like every other.
+ */
+const UNCONFIRMED = new Set<OutsideWriteIntent["kind"]>(["slack-mark-read"]);
 
 export interface GateAdapters {
 	/** What the confirmation shows for an intent, or why it cannot be done (looked up outside where needed). */
@@ -110,6 +129,8 @@ export interface GateAdapters {
 export interface Gate {
 	describe(intent: unknown): Promise<DescribedWrite>;
 	write(intent: unknown, token: unknown): Promise<WriteResult>;
+	/** Send a write that needs no confirmation (`UNCONFIRMED`); refuses every other. */
+	act(intent: unknown): Promise<WriteResult>;
 	recent(): OutsideWriteEntry[];
 	onWrite(listener: (entry: OutsideWriteEntry) => void): () => void;
 }
@@ -126,6 +147,25 @@ export function openGate(recordFile: string, adapters: GateAdapters, now: () => 
 		});
 		if (fresh) chmodSync(recordFile, 0o600);
 		for (const listener of listeners) listener(entry);
+	};
+
+	/** Send a write as described, then record and announce it, sent or failed. */
+	const send = async (intent: OutsideWriteIntent, description: WriteDescription): Promise<WriteResult> => {
+		const sent = await adapters.send(intent);
+		const { what, where, text } = description;
+		const entry: OutsideWriteEntry = {
+			at: now(),
+			kind: intent.kind,
+			what,
+			where,
+			text,
+			url: (sent.ok ? sent.url : undefined) ?? description.url,
+			ok: sent.ok,
+			...(sent.ok ? {} : { reason: sent.reason }),
+			line: writeLine(intent, description, sent.ok ? undefined : sent.reason),
+		};
+		record(entry);
+		return sent.ok ? { ok: true, entry } : sent;
 	};
 
 	return {
@@ -147,21 +187,17 @@ export function openGate(recordFile: string, adapters: GateAdapters, now: () => 
 			if (!held || held.key !== canonical(intent) || held.until <= now())
 				return { ok: false, reason: "That was not confirmed as shown, so nothing was sent." };
 			waiting.delete(token as string);
-			const sent = await adapters.send(intent);
-			const { what, where, text } = held.description;
-			const entry: OutsideWriteEntry = {
-				at: now(),
-				kind: intent.kind,
-				what,
-				where,
-				text,
-				url: (sent.ok ? sent.url : undefined) ?? held.description.url,
-				ok: sent.ok,
-				...(sent.ok ? {} : { reason: sent.reason }),
-				line: writeLine(intent, held.description, sent.ok ? undefined : sent.reason),
-			};
-			record(entry);
-			return sent.ok ? { ok: true, entry } : sent;
+			return send(intent, held.description);
+		},
+
+		async act(given) {
+			const intent = checkIntent(given);
+			if (typeof intent === "string") return { ok: false, reason: intent };
+			if (!UNCONFIRMED.has(intent.kind))
+				return { ok: false, reason: "That needs your confirmation, so nothing was sent." };
+			const described = await adapters.describe(intent);
+			if (!described.ok) return described;
+			return send(intent, described.description);
 		},
 
 		recent() {

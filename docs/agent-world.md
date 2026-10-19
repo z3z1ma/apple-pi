@@ -20,9 +20,9 @@ The world opens in the headquarters of your first coordinator (a session started
 
 | Place | What it shows | What you can do |
 | --- | --- | --- |
-| Headquarters | The coordinator at its desk; a gallery of doors, one per repository its agents have worked in, each with the repository's banner; a common room for agents outside any repository | Talk to the coordinator; walk into a wing. A wing stays once it has had an agent, closed when its agents are asleep and boarded when it has none |
+| Headquarters | The coordinator at its desk; a gallery of doors, one per repository its agents have worked in, each with the repository's banner; a common room for agents outside any repository | Talk to the coordinator; recruit a worker at its desk; walk into a wing. A wing stays once it has had an agent, closed when its agents are asleep and boarded when it has none |
 | Wing | The agents that report to the coordinator and work in that repository, seated at their tables | Talk to them, open their terminal |
-| Town square | Independent agents, and one townsperson for each Slack channel with unread messages (as many as the square has spots; mentions first, then the newest) | Read a channel and its threads; reply in a thread as yourself; ask an agent to look into a thread. The crier reaches any channel, read or unread |
+| Town square | Independent agents, and one townsperson for each Slack channel with unread messages (as many as the square has spots; mentions first, then the newest) | Read a channel and its threads (each opens at its first new message); mark a channel or a thread read; reply in a thread as yourself; ask an agent to look into a thread. The crier reaches any channel, read or unread. The recruiter at its booth recruits an independent agent |
 | Forge | Your open pull requests and those of your agents, laid on the benches by CI state (passing, failing, running); the rest on the rack and in the smith's list | Read a pull request's card (CI checks, review state, the agent on its branch); review its diff and comment, approve, or request changes as yourself; ask the agent that built it to address the review, or the coordinator to get it reviewed |
 | Quest office | The Jira issues assigned to you, pinned on the board | Search every issue; read one in full; comment on it or move it as yourself; hand it to the coordinator |
 | Library | The Confluence pages you read lately | Search all of Confluence; read a page in a panel or open it in the browser; ask an agent to summarise or update it |
@@ -32,6 +32,8 @@ The world opens in the headquarters of your first coordinator (a session started
 Theme packs name the places in their own words (the forge is a hardware lab in the tech office theme), but every theme has the same places and actions. Every place offers to open the real tool (GitHub, Jira, Confluence, Slack) in your browser.
 
 Waking a dormant agent reopens its session in a new tmux window beside your current pane, in its own directory and still reporting to its coordinator. It needs a tmux client attached.
+
+Recruiting starts a new agent, in the theme's words (the guild recruits, the office hires, the club invites). The coordinator's desk, or Recruit on the coordinator itself, recruits a worker who reports to that coordinator; the recruiter in the town square recruits an independent agent. The form asks for a name, a repository (one of the world's wings or awake agents' repositories, or any directory you type), and an opening brief, its first prompt. A worker's window opens right after the coordinator's pane; an independent agent's after your current pane, which needs a tmux client attached. The form shows the receipt, and the new agent walks into its wing or the square.
 
 ### Moving and acting
 
@@ -84,7 +86,9 @@ Both are kept in `~/.pi/agent/state/agent-world-credentials.json`, readable only
 
 A pull request comment, approval, or change request; a Jira comment or move; and a Slack reply are written as you. Each one first shows a confirmation with exactly what is done, where, and the exact text. Nothing is sent until you choose **Send as you**; Don't send, Escape, or a click outside sends nothing. A confirmation is good for that one write only: a changed text needs a new confirmation.
 
-Every write you send, whether the service accepted it or not, is logged in the chatbox and appended to your local record, `~/.pi/agent/state/agent-world-outside-writes.jsonl` (mode `0600`): one JSON line per write with its time, kind, what, where, the text, its link, and whether it succeeded or why not. Agent World never removes or rewrites lines in it.
+Reading a Slack channel or thread changes nothing in Slack. **Mark read** marks the channel (or, under a thread, that thread) read in Slack as you, up to its newest message; the button is the choice, so it asks no confirmation, and the channel's townsperson leaves the square.
+
+Every write you send (a Mark read too), whether the service accepted it or not, is logged in the chatbox and appended to your local record, `~/.pi/agent/state/agent-world-outside-writes.jsonl` (mode `0600`): one JSON line per write with its time, kind, what, where, the text, its link, and whether it succeeded or why not. Agent World never removes or rewrites lines in it.
 
 ## What Agent World keeps
 

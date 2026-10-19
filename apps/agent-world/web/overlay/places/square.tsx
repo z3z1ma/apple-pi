@@ -1,8 +1,9 @@
 // The town square's panels (tickets 27 and 28). The crier reaches any Slack channel, read or unread, by search; a
 // channel reads in a panel with names, times, and messages, its threads expanding. In a thread the operator replies as
 // himself, only through the outside-write gate's confirmation (the exact text and where it goes), or asks an agent to
-// look into it, which is an instruction to the agent and posts nothing to Slack.
-import { type ReactNode, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+// look into it, which is an instruction to the agent and posts nothing to Slack. A channel or thread opens at its first
+// new message (ticket 05 of the aliveness task), and reading changes nothing in Slack: only Mark read does.
+import { type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { SlackChannel, SlackMessage, SlackThread } from "../../../src/integrations.js";
 import type { Character, WorldSnapshot } from "../../../src/world.js";
 import { townsfolkLook } from "../../game/places/square.js";
@@ -293,8 +294,25 @@ interface Opened {
 	loading: boolean;
 	messages?: SlackMessage[];
 	url?: string | null;
+	/** The newest reply the operator has read, when Slack says (threads he follows). */
+	lastRead?: string | null;
 	problem?: string;
 }
+
+/** Where the new messages begin: the first one after `lastRead`, -1 when none is new. */
+function firstAfter(messages: SlackMessage[], lastRead: string | null | undefined): number {
+	if (!lastRead) return -1;
+	return messages.findIndex((message) => Number(message.ts) > Number(lastRead));
+}
+
+/** Scroll `box` so `mark` (the New divider) sits at the top of its view. */
+function scrollToMark(box: HTMLElement, mark: HTMLElement) {
+	const top = mark.getBoundingClientRect().top - box.getBoundingClientRect().top + box.scrollTop;
+	box.scrollTop = Math.max(0, top - 4);
+}
+
+/** A Mark read button's progress: sending, or why it failed. */
+type Marking = { state: "sending" } | { state: "failed"; reason: string } | undefined;
 
 /** What is being written under a thread: a reply as the operator, or a request to an agent. */
 type Writing = { ts: string; mode: "reply" | "ask" };
@@ -314,6 +332,12 @@ function ChannelPanel({
 	const [read, setRead] = useState<{ thread?: SlackThread; problem?: string }>({});
 	const [threads, setThreads] = useState<Record<string, Opened>>({});
 	const [writing, setWriting] = useState<Writing>();
+	/** The thread just opened, to bring into view once its replies show. */
+	const [justOpened, setJustOpened] = useState<string>();
+	/** Marked read here, up to this message (the channel); and its button's progress. */
+	const [markedTs, setMarkedTs] = useState<string>();
+	const [marking, setMarking] = useState<Marking>();
+	const [threadMarking, setThreadMarking] = useState<Record<string, Marking>>({});
 	const api = slack.api();
 	const write = useOutsideWrite(api.describeWrite && api.confirmWrite ? (api as WriteApi) : undefined);
 	const list = useRef<HTMLDivElement>(null);
@@ -343,18 +367,56 @@ function ChannelPanel({
 	}, [channel.id]);
 
 	const messages = read.thread?.messages ?? [];
-	/** Where the unread messages begin: the channel's unread count, from the newest back. */
-	const firstNew =
-		unread > 0 && unread < messages.length ? messages.length - unread : unread >= messages.length ? 0 : -1;
-	// Open at the first unread message (or the newest), as Slack does.
+	/**
+	 * Where the new messages begin: after where Slack says the operator last read (or after what he marked read here);
+	 * when Slack does not say, the listing's unread count from the newest back.
+	 */
+	const lastRead = markedTs ?? read.thread?.lastRead;
+	const firstNew = lastRead ? firstAfter(messages, lastRead) : unread > 0 ? Math.max(0, messages.length - unread) : -1;
+	// Open at the first new message, the New divider just above it, or at the newest when nothing is new.
 	// biome-ignore lint/correctness/useExhaustiveDependencies: scroll once, when the messages first arrive
-	useEffect(() => {
+	useLayoutEffect(() => {
 		const box = list.current;
 		if (!box || !messages.length) return;
-		const mark = box.querySelector<HTMLElement>(".aw-slack-new");
-		if (mark && firstNew > 0) box.scrollTop = Math.max(0, mark.offsetTop - 12);
+		const mark = box.querySelector<HTMLElement>(":scope > .aw-slack-entry > .aw-slack-new");
+		if (mark) scrollToMark(box, mark);
 		else box.scrollTop = box.scrollHeight;
 	}, [read.thread]);
+	// A thread opened: at its first new reply, else down to its newest.
+	useLayoutEffect(() => {
+		const box = list.current;
+		const opened = justOpened && threads[justOpened];
+		if (!box || !opened || opened.loading) return;
+		setJustOpened(undefined);
+		const section = box.querySelector<HTMLElement>(`[data-thread="${CSS.escape(justOpened)}"]`);
+		if (!section) return;
+		const mark = section.querySelector<HTMLElement>(".aw-slack-new");
+		if (mark) return scrollToMark(box, mark);
+		const below = section.getBoundingClientRect().bottom - box.getBoundingClientRect().bottom;
+		if (below > 0) box.scrollTop += below + 8;
+	}, [justOpened, threads]);
+
+	const newest = messages.at(-1);
+	const unreadHere = (!!listed || firstNew >= 0) && !markedTs;
+	const markRead = async () => {
+		if (!newest || marking?.state === "sending") return;
+		setMarking({ state: "sending" });
+		const answer = await slack.markRead(channel.id, newest.ts);
+		if (answer.ok) {
+			setMarkedTs(newest.ts);
+			setMarking(undefined);
+		} else setMarking({ state: "failed", reason: answer.reason });
+	};
+	const markThreadRead = async (ts: string) => {
+		const newestReply = threads[ts]?.messages?.at(-1);
+		if (!newestReply || threadMarking[ts]?.state === "sending") return;
+		setThreadMarking((now) => ({ ...now, [ts]: { state: "sending" } }));
+		const answer = await slack.markRead(channel.id, newestReply.ts, ts);
+		if (answer.ok) {
+			setThreads((now) => ({ ...now, [ts]: { ...now[ts], lastRead: newestReply.ts } }));
+			setThreadMarking(({ [ts]: _done, ...rest }) => rest);
+		} else setThreadMarking((now) => ({ ...now, [ts]: { state: "failed", reason: answer.reason } }));
+	};
 
 	const openThread = async (ts: string) => {
 		const open = slack.api().slackThread;
@@ -365,7 +427,12 @@ function ChannelPanel({
 			if (answer.ok)
 				setThreads((now) => ({
 					...now,
-					[ts]: { loading: false, messages: answer.thread.messages.slice(1), url: answer.thread.url },
+					[ts]: {
+						loading: false,
+						messages: answer.thread.messages.slice(1),
+						url: answer.thread.url,
+						lastRead: answer.thread.lastRead,
+					},
 				}));
 			else {
 				slack.refused(answer);
@@ -379,7 +446,10 @@ function ChannelPanel({
 		if (threads[ts] && !threads[ts].loading && threads[ts].messages) {
 			setThreads(({ [ts]: _closed, ...rest }) => rest);
 			if (writing?.ts === ts) setWriting(undefined);
-		} else void openThread(ts);
+		} else {
+			setJustOpened(ts);
+			void openThread(ts);
+		}
 	};
 	const startWriting = (ts: string, mode: Writing["mode"], replies: number) => {
 		setWriting({ ts, mode });
@@ -393,11 +463,12 @@ function ChannelPanel({
 		if (sent?.intent.kind === "slack-reply") void openThread(sent.intent.threadTs);
 	}, [sent]);
 
-	const subtitle = listed
-		? `${unreadLabel(listed)} unread${listed.mentions ? `, ${listed.mentions} mentioning you` : ""}`
-		: messages.length
-			? "Nothing unread"
-			: "";
+	const subtitle =
+		listed && !markedTs
+			? `${unreadLabel(listed)} unread${listed.mentions ? `, ${listed.mentions} mentioning you` : ""}`
+			: messages.length
+				? "Nothing unread"
+				: "";
 
 	return (
 		<PlaceDialog label={`${title} in Slack`} className="aw-slack-channel" onClose={() => squarePanels.close()}>
@@ -415,6 +486,21 @@ function ChannelPanel({
 						</p>
 					</div>
 					<div className="aw-slack-head-actions">
+						<button
+							type="button"
+							className="aw-button aw-button-strong aw-slack-mark"
+							disabled={!newest || !unreadHere || marking?.state === "sending"}
+							title={
+								marking?.state === "failed"
+									? marking.reason
+									: unreadHere
+										? "Mark this channel read in Slack, as you, up to its newest message"
+										: "Nothing unread"
+							}
+							onClick={() => void markRead()}
+						>
+							{marking?.state === "sending" ? "Marking\u2026" : "Mark read"}
+						</button>
 						<button type="button" className="aw-button" onClick={() => squarePanels.openCrier()}>
 							Other channels
 						</button>
@@ -484,11 +570,36 @@ function ChannelPanel({
 									)}
 								</Message>
 								{(opened || here) && (
-									<section className="aw-slack-thread" aria-label={`Thread of ${message.name}`}>
+									<section className="aw-slack-thread" aria-label={`Thread of ${message.name}`} data-thread={ts}>
 										{opened?.problem && <p className="aw-place-empty">{opened.problem}</p>}
-										{opened?.messages?.map((reply) => (
-											<Message key={reply.ts} message={reply} reply />
+										{opened?.messages?.map((reply, r) => (
+											<div key={reply.ts} className="aw-slack-entry">
+												{r === firstAfter(opened.messages!, opened.lastRead) && (
+													<div className="aw-slack-new">
+														<span>New</span>
+													</div>
+												)}
+												<Message message={reply} reply />
+											</div>
 										))}
+										{opened?.messages?.length ? (
+											<div className="aw-slack-thread-foot">
+												{threadMarking[ts]?.state === "failed" && (
+													<span className="aw-slack-note">{(threadMarking[ts] as { reason: string }).reason}</span>
+												)}
+												<button
+													type="button"
+													className="aw-slack-replies aw-slack-mark-thread"
+													disabled={
+														firstAfter(opened.messages, opened.lastRead) < 0 || threadMarking[ts]?.state === "sending"
+													}
+													title="Mark this thread read in Slack, as you, up to its newest reply"
+													onClick={() => void markThreadRead(ts)}
+												>
+													{threadMarking[ts]?.state === "sending" ? "Marking\u2026" : "Mark thread read"}
+												</button>
+											</div>
+										) : null}
 										{here && writing.mode === "reply" && (
 											<ReplyForm
 												key={`reply:${ts}`}

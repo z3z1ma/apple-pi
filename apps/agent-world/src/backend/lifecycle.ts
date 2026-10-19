@@ -1,11 +1,21 @@
 // What the operator does to a session from the inn, the rookery, and a character's actions: wake a dormant one
-// (`start`), end an awake one (`close`, confirmed only while it is busy, decision 13), and mail anyone as himself
-// (`mail`). Commands go through the command client (`commands.ts`); each resolves with the receipt stage that answers
+// (`start`), end an awake one (`close`, confirmed only while it is busy, decision 13), mail anyone as himself
+// (`mail`), and recruit a new agent (`start` for a new id, ticket 10). Commands go through the command client (`commands.ts`); each resolves with the receipt stage that answers
 // the operator's question (is it awake, is it ended, did the letter arrive or does it wait), not necessarily the last.
-import { existsSync } from "node:fs";
+import { randomUUID } from "node:crypto";
+import { existsSync, statSync } from "node:fs";
+import { homedir } from "node:os";
+import { isAbsolute, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type { Command } from "../../../../components/session-state/src/protocol.js";
-import { type CommandReceipt, OPERATOR, type ReceiptStage, type WorldSnapshot } from "../world.js";
+import {
+	type CommandReceipt,
+	OPERATOR,
+	type ReceiptStage,
+	type RecruitReceipt,
+	type RecruitRequest,
+	type WorldSnapshot,
+} from "../world.js";
 import type { Commands } from "./commands.js";
 import { operatorPane } from "./inn.js";
 
@@ -19,7 +29,20 @@ export interface Lifecycle {
 	wake(characterId: string): Promise<CommandReceipt>;
 	endSession(characterId: string, confirmed?: boolean): Promise<CommandReceipt>;
 	sendMail(characterId: string, body: string): Promise<CommandReceipt>;
+	recruit(request: RecruitRequest): Promise<RecruitReceipt>;
 }
+
+/** A directory as the operator typed it: `~` is his home. */
+const expandHome = (path: string) =>
+	path === "~" ? homedir() : path.startsWith("~/") ? join(homedir(), path.slice(2)) : path;
+
+const isDirectory = (path: string) => {
+	try {
+		return statSync(path).isDirectory();
+	} catch {
+		return false;
+	}
+};
 
 /** Send `command` and resolve at the first stage `enough` accepts, or with the last stage reached after `ms`. */
 function follow(
@@ -120,6 +143,60 @@ export function openLifecycle(paths: { db: string }, commands: Commands, snapsho
 				(stage) => stage === "applied",
 				() => `${character.name} has not answered yet.`,
 			);
+		},
+
+		async recruit(request) {
+			// One line: it is also the tmux window's name.
+			const name = request.name.replace(/\s+/g, " ").trim();
+			const cwd = expandHome(request.cwd.trim());
+			const brief = request.brief.trim();
+			if (!name) return { ok: false, reason: "Give the new agent a name." };
+			if (!cwd) return { ok: false, reason: "Choose the directory it works in." };
+			if (!isAbsolute(cwd)) return { ok: false, reason: `${cwd} is not a full path to a directory.` };
+			if (!isDirectory(cwd)) return { ok: false, reason: `${cwd} is not a directory.` };
+			// The runtime puts the brief on Pi's command line as its first prompt, where a leading dash reads as an option.
+			if (brief.startsWith("-"))
+				return { ok: false, reason: "The brief cannot start with a dash: Pi would read it as an option." };
+			let pane: { socket: string; pane: string } | undefined;
+			if (request.reportsTo) {
+				// A worker's window opens beside its coordinator's, where the coordinator's own new sessions open.
+				const coordinator = snapshot().characters.find(
+					(character) => character.id === request.reportsTo && character.role === "coordinator",
+				);
+				if (!coordinator) return { ok: false, reason: "That coordinator is not running." };
+				const tmux = coordinator.facts?.tmux;
+				if (!tmux)
+					return {
+						ok: false,
+						reason: `${coordinator.name} is not running in tmux, so there is nowhere to open ${name}'s window beside it.`,
+					};
+				pane = { socket: tmux.socket, pane: tmux.pane };
+			} else {
+				pane = await operatorPane(servers());
+				if (!pane)
+					return {
+						ok: false,
+						reason: `No terminal is attached to tmux, so there is nowhere to open ${name}'s window.`,
+					};
+			}
+			const sessionId = randomUUID();
+			const command: Command = {
+				kind: "start",
+				tmux: pane,
+				cwd,
+				name,
+				...(request.reportsTo ? { reportsTo: request.reportsTo } : {}),
+				...(brief ? { prompt: brief } : {}),
+			};
+			const receipt = await follow(
+				commands,
+				sessionId,
+				command,
+				WAKE_MS,
+				(stage) => stage === "applied",
+				() => `Its window opened, but ${name} has not joined yet.`,
+			);
+			return { ...receipt, sessionId };
 		},
 
 		async sendMail(characterId, body) {

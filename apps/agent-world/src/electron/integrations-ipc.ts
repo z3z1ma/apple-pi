@@ -62,6 +62,7 @@ export function wireIntegrations(options: {
 	handle("slack-find", (text) => integrations.slackFindChannels(text));
 	handle("slack-channel", (id) => integrations.slackChannel(id));
 	handle("slack-thread", (id, ts) => integrations.slackThread(id, ts));
+	handle("slack-mark-read", (id, ts, threadTs) => integrations.slackMarkRead(id, ts, threadTs));
 	handle("describe-write", (intent) => integrations.describeWrite(intent));
 	handle("confirm-write", (intent, token) => integrations.confirmWrite(intent, token));
 	handle("outside-writes", () => integrations.outsideWrites());

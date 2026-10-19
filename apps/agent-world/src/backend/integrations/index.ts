@@ -7,6 +7,7 @@ import type {
 	OutsideWriteEntry,
 	OutsideWriteIntent,
 	RecentPage,
+	WriteDescription,
 } from "../../integrations.js";
 import type { Receipt, WorldSnapshot } from "../../world.js";
 import type { Commands } from "../commands.js";
@@ -51,6 +52,30 @@ export function openIntegrations(options: IntegrationOptions) {
 		now: options.now,
 	});
 	const characters = () => options.snapshot().characters;
+
+	/** Mark read, described for the record: the channel, or the thread by who started it. */
+	const describeMarkRead = async (
+		intent: Extract<OutsideWriteIntent, { kind: "slack-mark-read" }>,
+	): Promise<Outcome<{ description: WriteDescription }>> => {
+		const ts = /^\d+\.\d+$/;
+		if (
+			!/^[A-Z0-9]+$/.test(intent.channel) ||
+			!ts.test(intent.ts) ||
+			(intent.threadTs !== undefined && !ts.test(intent.threadTs))
+		)
+			return { ok: false, reason: "That is not a Slack channel." };
+		if (!credentials.read().slack) return { ok: false, reason: "Sign in to Slack in Settings first.", signIn: "slack" };
+		const channel = await slack.channelName(intent.channel);
+		const place = /^[CG]/.test(intent.channel) ? `#${channel}` : channel;
+		let where = place;
+		if (intent.threadTs) {
+			const parent = await slack.thread(intent.channel, intent.threadTs);
+			if (!parent.ok) return parent;
+			const first = parent.thread.messages[0];
+			where = `${place}, in ${first ? `${first.name}'s` : "a"} thread`;
+		}
+		return { ok: true, description: { what: "Mark read in Slack", where, text: "", url: null } };
+	};
 
 	const gate: Gate = openGate(
 		files.record,
@@ -112,6 +137,8 @@ export function openIntegrations(options: IntegrationOptions) {
 							},
 						};
 					}
+					case "slack-mark-read":
+						return describeMarkRead(intent);
 				}
 			},
 			async send(intent: OutsideWriteIntent) {
@@ -124,6 +151,8 @@ export function openIntegrations(options: IntegrationOptions) {
 						return jira.transition(intent.key, intent.transition);
 					case "slack-reply":
 						return slack.reply(intent.channel, intent.threadTs, intent.text);
+					case "slack-mark-read":
+						return slack.markRead(intent.channel, intent.ts, intent.threadTs);
 				}
 			},
 		},
@@ -189,6 +218,9 @@ export function openIntegrations(options: IntegrationOptions) {
 		slackFindChannels: (text: unknown) => slack.find(typeof text === "string" ? text : ""),
 		slackChannel: (id: unknown) => slack.channel(String(id ?? "")),
 		slackThread: (id: unknown, ts: unknown) => slack.thread(String(id ?? ""), String(ts ?? "")),
+		/** Mark read: the button is the operator's choice, so the gate sends it unconfirmed but records it. */
+		slackMarkRead: (id: unknown, ts: unknown, threadTs?: unknown) =>
+			gate.act({ kind: "slack-mark-read", channel: id, ts, ...(threadTs == null ? {} : { threadTs }) }),
 
 		describeWrite: (intent: unknown) => gate.describe(intent),
 		confirmWrite: (intent: unknown, token: unknown) => gate.write(intent, token),

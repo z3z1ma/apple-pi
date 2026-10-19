@@ -1813,7 +1813,8 @@ a.aw-md-link:focus-visible {
 	color: var(--aw-ink-soft);
 }
 
-.aw-letter-to select {
+.aw-letter-to select,
+.aw-letter-to input {
 	border: 1px solid #a07a46;
 	border-radius: 6px;
 	background: rgb(255 251 238 / 75%);
@@ -1835,7 +1836,8 @@ a.aw-md-link:focus-visible {
 }
 
 .aw-letter-body:focus-visible,
-.aw-letter-to select:focus-visible {
+.aw-letter-to select:focus-visible,
+.aw-letter-to input:focus-visible {
 	outline: 2px solid rgb(201 163 90 / 75%);
 	outline-offset: 1px;
 }

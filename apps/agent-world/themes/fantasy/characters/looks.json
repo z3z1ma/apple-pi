@@ -4,8 +4,8 @@
     "frame": [100, 131],
     "baseline": 129,
     "idle": {
-      "frame": [95, 131],
-      "baseline": 129
+      "frame": [105, 129],
+      "baseline": 127
     }
   },
   "artificer": {
@@ -13,8 +13,8 @@
     "frame": [86, 132],
     "baseline": 130,
     "idle": {
-      "frame": [108, 137],
-      "baseline": 135
+      "frame": [130, 135],
+      "baseline": 133
     }
   },
   "scholar": {
@@ -22,8 +22,8 @@
     "frame": [79, 136],
     "baseline": 134,
     "idle": {
-      "frame": [78, 135],
-      "baseline": 133
+      "frame": [90, 131],
+      "baseline": 129
     }
   },
   "scout": {
@@ -31,7 +31,7 @@
     "frame": [71, 129],
     "baseline": 127,
     "idle": {
-      "frame": [87, 132],
+      "frame": [89, 132],
       "baseline": 130
     }
   },
@@ -40,8 +40,8 @@
     "frame": [78, 131],
     "baseline": 129,
     "idle": {
-      "frame": [83, 136],
-      "baseline": 134
+      "frame": [88, 134],
+      "baseline": 132
     }
   },
   "mage": {
@@ -49,8 +49,8 @@
     "frame": [89, 134],
     "baseline": 132,
     "idle": {
-      "frame": [82, 127],
-      "baseline": 125
+      "frame": [82, 129],
+      "baseline": 127
     }
   },
   "alchemist": {
@@ -58,8 +58,8 @@
     "frame": [97, 127],
     "baseline": 125,
     "idle": {
-      "frame": [106, 128],
-      "baseline": 126
+      "frame": [114, 133],
+      "baseline": 131
     }
   },
   "ranger": {
@@ -67,7 +67,7 @@
     "frame": [78, 128],
     "baseline": 126,
     "idle": {
-      "frame": [79, 130],
+      "frame": [75, 130],
       "baseline": 128
     }
   },
@@ -76,8 +76,8 @@
     "frame": [80, 140],
     "baseline": 138,
     "idle": {
-      "frame": [91, 139],
-      "baseline": 137
+      "frame": [102, 137],
+      "baseline": 135
     }
   },
   "avatar-traveller": {
@@ -85,8 +85,8 @@
     "frame": [80, 133],
     "baseline": 131,
     "idle": {
-      "frame": [86, 133],
-      "baseline": 131
+      "frame": [85, 125],
+      "baseline": 123
     }
   },
   "avatar-knight": {
@@ -94,8 +94,8 @@
     "frame": [93, 132],
     "baseline": 130,
     "idle": {
-      "frame": [84, 134],
-      "baseline": 132
+      "frame": [95, 130],
+      "baseline": 128
     }
   },
   "avatar-bard": {
@@ -103,8 +103,8 @@
     "frame": [79, 126],
     "baseline": 124,
     "idle": {
-      "frame": [87, 132],
-      "baseline": 130
+      "frame": [91, 126],
+      "baseline": 124
     }
   },
   "innkeeper": {
@@ -112,8 +112,8 @@
     "frame": [87, 131],
     "baseline": 129,
     "idle": {
-      "frame": [108, 134],
-      "baseline": 132
+      "frame": [113, 127],
+      "baseline": 125
     }
   },
   "smith": {
@@ -121,8 +121,8 @@
     "frame": [74, 128],
     "baseline": 126,
     "idle": {
-      "frame": [94, 135],
-      "baseline": 133
+      "frame": [107, 138],
+      "baseline": 136
     }
   },
   "clerk": {
@@ -130,8 +130,8 @@
     "frame": [74, 132],
     "baseline": 130,
     "idle": {
-      "frame": [96, 138],
-      "baseline": 136
+      "frame": [92, 131],
+      "baseline": 129
     }
   },
   "librarian": {
@@ -139,8 +139,8 @@
     "frame": [87, 125],
     "baseline": 123,
     "idle": {
-      "frame": [66, 130],
-      "baseline": 128
+      "frame": [76, 135],
+      "baseline": 133
     }
   },
   "rookery-keeper": {
@@ -148,8 +148,8 @@
     "frame": [76, 128],
     "baseline": 126,
     "idle": {
-      "frame": [84, 127],
-      "baseline": 125
+      "frame": [87, 126],
+      "baseline": 124
     }
   },
   "crier": {
@@ -157,8 +157,8 @@
     "frame": [95, 127],
     "baseline": 125,
     "idle": {
-      "frame": [112, 131],
-      "baseline": 129
+      "frame": [111, 132],
+      "baseline": 130
     }
   },
   "townsfolk-1": {
@@ -166,8 +166,8 @@
     "frame": [73, 133],
     "baseline": 131,
     "idle": {
-      "frame": [81, 136],
-      "baseline": 134
+      "frame": [81, 131],
+      "baseline": 129
     }
   },
   "townsfolk-2": {
@@ -175,8 +175,8 @@
     "frame": [77, 130],
     "baseline": 128,
     "idle": {
-      "frame": [82, 135],
-      "baseline": 133
+      "frame": [95, 130],
+      "baseline": 128
     }
   },
   "townsfolk-3": {
@@ -184,8 +184,8 @@
     "frame": [88, 125],
     "baseline": 123,
     "idle": {
-      "frame": [82, 133],
-      "baseline": 131
+      "frame": [92, 125],
+      "baseline": 123
     }
   },
   "townsfolk-4": {
@@ -193,8 +193,8 @@
     "frame": [83, 127],
     "baseline": 125,
     "idle": {
-      "frame": [76, 131],
-      "baseline": 129
+      "frame": [78, 129],
+      "baseline": 127
     }
   },
   "townsfolk-5": {
@@ -202,8 +202,8 @@
     "frame": [94, 128],
     "baseline": 126,
     "idle": {
-      "frame": [85, 124],
-      "baseline": 122
+      "frame": [98, 126],
+      "baseline": 124
     }
   },
   "townsfolk-6": {
@@ -211,8 +211,8 @@
     "frame": [67, 126],
     "baseline": 124,
     "idle": {
-      "frame": [74, 131],
-      "baseline": 129
+      "frame": [72, 129],
+      "baseline": 127
     }
   },
   "ambient-bard": {
@@ -220,8 +220,8 @@
     "frame": [85, 126],
     "baseline": 124,
     "idle": {
-      "frame": [82, 129],
-      "baseline": 127
+      "frame": [94, 125],
+      "baseline": 123
     }
   },
   "ambient-guard": {
@@ -229,8 +229,8 @@
     "frame": [69, 127],
     "baseline": 125,
     "idle": {
-      "frame": [81, 126],
-      "baseline": 124
+      "frame": [95, 124],
+      "baseline": 122
     }
   },
   "ambient-baker": {
@@ -238,8 +238,8 @@
     "frame": [95, 131],
     "baseline": 129,
     "idle": {
-      "frame": [93, 131],
-      "baseline": 129
+      "frame": [100, 128],
+      "baseline": 126
     }
   },
   "ambient-tourist": {
@@ -247,8 +247,8 @@
     "frame": [109, 132],
     "baseline": 130,
     "idle": {
-      "frame": [86, 126],
-      "baseline": 124
+      "frame": [88, 125],
+      "baseline": 123
     }
   },
   "recruiter": {

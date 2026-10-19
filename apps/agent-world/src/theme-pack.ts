@@ -20,6 +20,12 @@ export const SHEET_FRAMES = 16;
 /** Portrait px tall, every expression in the same framing. */
 export const PORTRAIT_HEIGHT = 360;
 
+/**
+ * Frames in a look's idle sheet (`<look>-idle.png`, optional): standing poses played now and then by someone standing
+ * about, in this order.
+ */
+export const IDLE_POSES = ["look-left", "look-right", "stretch", "wave", "laugh", "shrug", "nod", "yawn"] as const;
+
 /** The four painted expressions every look has, in the order of their files (`<look>-portrait-0..3.png`). */
 export const EXPRESSIONS = ["neutral", "happy", "thinking", "worried"] as const;
 
@@ -64,6 +70,8 @@ export const ROLE_LABELS = [
 	"librarian",
 	"crier",
 	"townsfolk",
+	/** The square's recruiter, who recruits independent agents at its booth (ticket 10). */
+	"recruiter",
 ] as const;
 
 /** Every look role a pack must wear, with how many looks at least (agents need a few to tell apart). */
@@ -80,8 +88,16 @@ export const LOOK_ROLES: Record<string, number> = {
 	crier: 1,
 };
 
-/** Overlays every pack draws: doors in three states, the wing banner, and the birds that carry mail. */
+/**
+ * Overlays every pack draws: doors in three states, the wing banner, the birds that carry mail, and the pointer's art
+ * (the cursor's hand pointing, tapping, and as a fist, and the yellow and red click markers).
+ */
 export const REQUIRED_OVERLAYS = [
+	"cursor-point",
+	"cursor-tap",
+	"cursor-blocked",
+	"mark-walk",
+	"mark-act",
 	"door-open",
 	"door-closed",
 	"door-boarded",
@@ -113,7 +129,10 @@ export const SLOT_OVERLAYS: Record<string, readonly string[]> = {
  * says otherwise.
  */
 export const FIDGETS = {
-	/** A cat or a dog: sitting, being petted, stretching, a playful pose. */
+	/**
+	 * A pet (a cat, a dog, an owl): four poses (`FidgetStyle.frames`). A slot's `look` draws one of the pack's other
+	 * pets (`pet-<look>-0..3`) instead of these.
+	 */
 	pet: { art: ["pet-0", "pet-1", "pet-2", "pet-3"], plays: ["pet", "play"], w: 0.95 },
 	/** A globe, a spinner, a goldfish bowl: four frames of one loop. */
 	spin: { art: ["spin-0", "spin-1", "spin-2", "spin-3"], plays: ["spin", "nudge"], w: 0.65 },
@@ -139,6 +158,30 @@ export type FidgetKind = keyof typeof FIDGETS;
 export const FIDGET_PARTICLES = ["hearts", "notes", "sparkles", "steam", "bubbles", "smoke", "zzz"] as const;
 export type FidgetParticle = (typeof FIDGET_PARTICLES)[number];
 
+/**
+ * What a pet's sprites show, one each: sitting (how it rests), petted with its eyes closed, a playful pose, stretching,
+ * and curled up asleep. A pet has four, `sit`, `petted`, and `play` among them.
+ */
+export const PET_FRAMES = ["sit", "petted", "play", "stretch", "sleep"] as const;
+export type PetFrame = (typeof PET_FRAMES)[number];
+/** The order of a pet's sprites where its style does not say. */
+export const PET_FRAME_ORDER: readonly PetFrame[] = ["sit", "petted", "play", "sleep"];
+
+/** A pet's four sprites: the kind's own (`pet-0..3`), or those of one of the pack's other pets (`pet-<look>-0..3`). */
+export const petArt = (look?: string): string[] =>
+	look ? [0, 1, 2, 3].map((frame) => `pet-${look}-${frame}`) : [...FIDGETS.pet.art];
+
+/**
+ * A fidget slot's style: for a pet with a `look`, that look's own name, Examine line, size, frames, and reactions over
+ * the kind's (its verbs fall back to the kind's, play by play).
+ */
+export function slotStyle(style: FidgetStyle, slot: Pick<OverlaySlot, "look">): FidgetStyle {
+	const own = slot.look ? style.looks?.[slot.look] : undefined;
+	if (!own) return style;
+	// Its frames are its own sprites' (the kind's describe `pet-0..3`).
+	return { ...style, ...own, verbs: { ...style.verbs, ...own.verbs }, frames: own.frames, looks: undefined };
+}
+
 /** How a pack names and dresses one kind of fidget object (`theme.json`'s `fidgets`). */
 export interface FidgetStyle {
 	/** What it is called in hover text and the menu ("Ginger cat"); a slot's own `name` wins. */
@@ -153,14 +196,38 @@ export interface FidgetStyle {
 	particle?: FidgetParticle;
 	/** A tome's lines, one shown each time it is leafed through. */
 	lines?: string[];
+	/**
+	 * A pet's height sitting (its `sit` sprite), as a share of a standing character's: a cat about a third, a dog about
+	 * half, an owl or a hamster less. It sets the pet's size where a slot gives no width.
+	 */
+	height?: number;
+	/** What each of a pet's four sprites shows, in order (`PET_FRAMES`). Default: sit, petted, play, sleep. */
+	frames?: PetFrame[];
+	/**
+	 * The pack's other pets, by look (`pet-<look>-0..3`): each its own animal or coat, with its own name and Examine
+	 * line, and its own verbs, particle, height, and frames where they differ from the kind's.
+	 */
+	looks?: Record<string, PetLook>;
 }
 
-/** What a place must have beyond the shared format: its host's look role, and slots it cannot do without. */
-export const PLACE_NEEDS: Record<string, { host?: string; slots?: Record<string, string> }> = {
+/** One of a pack's other pets (`FidgetStyle.looks`). */
+export type PetLook = Pick<FidgetStyle, "name" | "examine" | "particle" | "height" | "frames"> & {
+	verbs?: Record<string, string>;
+};
+
+/**
+ * What a place must have beyond the shared format: its host's look role, slots it cannot do without, a recruiter (and
+ * why), and furniture by its `use` (and why).
+ */
+export const PLACE_NEEDS: Record<
+	string,
+	{ host?: string; slots?: Record<string, string>; recruiter?: string; furniture?: Record<string, string> }
+> = {
 	forge: { host: "smith", slots: { work: "the forge lays its pull requests on them" } },
 	"quest-office": { host: "clerk", slots: { notice: "the quest office pins the operator's issues on them" } },
 	library: { host: "librarian" },
-	square: { host: "crier" },
+	square: { host: "crier", recruiter: "the square's recruiter recruits independent agents at its booth" },
+	headquarters: { furniture: { recruit: "the coordinator's desk recruits workers there" } },
 };
 
 /**
@@ -244,6 +311,21 @@ export const TEXT_KEYS = [
 	/** A workbench: asking the forge's host for the list; and the tag for {count} pull requests beyond its benches. */
 	"ask-smith",
 	"forge-more",
+	/**
+	 * Recruiting (ticket 10): the action at the coordinator's desk (a worker) and at the square's recruiter (an
+	 * independent agent); each form's title ({coordinator} names the worker's) and what its host says; the brief's
+	 * placeholder; the send button; while it opens; and once {name} has joined.
+	 */
+	"recruit-worker",
+	"recruit-independent",
+	"recruit-worker-title",
+	"recruit-independent-title",
+	"recruit-worker-greeting",
+	"recruit-independent-greeting",
+	"recruit-brief",
+	"recruit-send",
+	"recruit-sending",
+	"recruit-joined",
 ] as const;
 
 /**
@@ -345,6 +427,18 @@ export interface WorldStyle {
 	 * part (cork or wood touching its edge) is cut away. Absent: the whole sprite is the notice.
 	 */
 	notice?: { paper: [number, number, number, number]; cutOut?: boolean };
+	/**
+	 * The names on the square's building signs (a door's `sign`): their face, `ink`, and an optional `shadow` under the
+	 * letters; `upper` sets them in capitals. `plate` colours the board the world draws where a sign asks for one (its
+	 * `fill`, its `rim`, and the dark `edge` around it). Absent: the small sign's colours (`tag`).
+	 */
+	sign?: {
+		font: string;
+		ink: string;
+		shadow?: string;
+		upper?: boolean;
+		plate?: { fill: string; rim: string; edge: string };
+	};
 }
 
 export interface ThemeManifest {
@@ -377,6 +471,11 @@ export interface Door {
 	standAt: Point;
 	/** The kind of place it leads to. */
 	to: string;
+	/**
+	 * The building's sign board (tiles), where the world letters the place's name. With `plate`, the world draws the
+	 * board as well: where the painting has none, or one too small for a name to read.
+	 */
+	sign?: { rect: Rect; plate?: boolean };
 }
 
 export interface PlaceData {
@@ -403,13 +502,28 @@ export interface PlaceData {
 	 * feet, which may be behind a counter) and facing the room. Talking to the host opens the place's own panel.
 	 */
 	host?: { look: string; at: Point };
-	/** Furniture that answers the pointer, such as the inn's tables: `use` names what the place does with it. */
+	/**
+	 * The square's recruiter (ticket 10), standing at its booth with its feet at `at`, on open floor in sight, facing the
+	 * room: talking to it recruits an independent agent. It wears `look` when given, else the pack's first `recruiter`
+	 * look, else a townsperson's.
+	 */
+	recruiter?: { look?: string; at: Point };
+	/**
+	 * Furniture that answers the pointer, such as the inn's tables: `use` names what the place does with it (`recruit`:
+	 * the coordinator's desk, which recruits a worker).
+	 */
 	furniture?: { name: string; rect: Rect; use: string }[];
 	/**
 	 * A place that grows with what it holds (the gallery): the painting's niches, and how to cut it into vertical
 	 * strips for a given number of them. Beyond the largest layout, the `repeat` strip is inserted once per extra
 	 * niche, just before its right edge. Positions inside a niche are relative to its centre.
 	 */
+	/**
+	 * Points of interest (a stall, the fountain, a bench, a window): where those standing about stroll to and pause,
+	 * facing `face` when given (else the room). Each is open floor, a tile clear of doors' stand points and entries and
+	 * clear of where others stand.
+	 */
+	interest?: { name: string; at: Point; face?: "up" | "down" | "left" | "right" }[];
 	niches?: {
 		at: number[];
 		door: Rect;
@@ -449,6 +563,10 @@ export interface OverlaySlot {
 	name?: string;
 	/** A `fidget` slot's kind of object (`FIDGETS`): drawn standing with its bottom centre at `at`, `w` tiles wide. */
 	fidget?: FidgetKind;
+	/** A pet's look, one of `fidgets.pet.looks` (absent: the kind's own `pet-0..3`). No two places share one. */
+	look?: string;
+	/** A pet curled up asleep at rest (on its `sleep` sprite), which play wakes for a while. */
+	asleep?: boolean;
 	/** A light (or a box) that starts on (or open) when the app starts. */
 	on?: boolean;
 }
@@ -460,6 +578,8 @@ export interface Look {
 	frame: [width: number, height: number];
 	/** The feet's row in each frame, in px from the top. */
 	baseline: number;
+	/** Its idle sheet (`<look>-idle.png`, the `IDLE_POSES` in a strip), when it has one: a frame's size and baseline. */
+	idle?: { frame: [width: number, height: number]; baseline: number };
 }
 
 /** One fault in a pack: the file (relative to the pack) and what is wrong with it. */
@@ -620,6 +740,15 @@ function checkManifest(value: unknown, id: string, problems: PackProblem[]): The
 	const notice = world.notice;
 	if (notice !== undefined && (!isObject(notice) || !isRect(notice.paper) || !notice.paper.every(isFraction)))
 		fault("world.notice needs paper as fractions [x, y, w, h] of the notice sprites");
+	const sign = world.sign;
+	if (sign !== undefined) {
+		if (!isObject(sign)) fault("world.sign is not an object");
+		else {
+			if (!isText(sign.font)) fault("world.sign has no font");
+			colours("sign", sign, ["ink", ...(sign.shadow === undefined ? [] : ["shadow"])]);
+			if (sign.plate !== undefined) colours("sign.plate", sign.plate, ["fill", "rim", "edge"]);
+		}
+	}
 	checkFidgetStyles(value.fidgets, fault);
 	return value as unknown as ThemeManifest;
 }
@@ -653,7 +782,98 @@ function checkFidgetStyles(fidgets: unknown, fault: (text: string) => void) {
 			fault(`fidgets.${kind}.particle is not one of ${FIDGET_PARTICLES.join(", ")}`);
 		if (kind === "tome" && !(Array.isArray(style.lines) && style.lines.length > 0 && style.lines.every(isText)))
 			fault("fidgets.tome has no lines to show when it is leafed through");
+		if (kind === "pet") checkPetStyles(style, fault);
 	}
+}
+
+/** A pet's height and frames, and each of its other looks: a name, an Examine line, and verbs only for its plays. */
+function checkPetStyles(style: Record<string, unknown>, fault: (text: string) => void) {
+	checkPetLook("fidgets.pet", style, fault);
+	if (style.looks === undefined) return;
+	if (!isObject(style.looks)) return fault("fidgets.pet.looks is not an object of looks");
+	for (const [look, own] of Object.entries(style.looks)) {
+		const where = `fidgets.pet.looks.${look}`;
+		if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(look)) fault(`${where} is not a look name (lowercase words joined by -)`);
+		if (!isObject(own)) {
+			fault(`${where} is not an object`);
+			continue;
+		}
+		if (!isText(own.name)) fault(`${where} has no name`);
+		if (!isText(own.examine)) fault(`${where} has no examine line`);
+		if (own.verbs !== undefined) {
+			const verbs = isObject(own.verbs) ? own.verbs : {};
+			const odd = Object.keys(verbs).filter((play) => !(FIDGETS.pet.plays as readonly string[]).includes(play));
+			if (!isObject(own.verbs) || odd.length || !Object.values(verbs).every(isText))
+				fault(`${where}.verbs names a verb for each of ${FIDGETS.pet.plays.join(", ")} only`);
+		}
+		if (own.particle !== undefined && !FIDGET_PARTICLES.includes(own.particle as FidgetParticle))
+			fault(`${where}.particle is not one of ${FIDGET_PARTICLES.join(", ")}`);
+		checkPetLook(where, own, fault);
+	}
+}
+
+/** A pet's height (a share of a standing character's) and its four frames, when given. */
+function checkPetLook(where: string, style: Record<string, unknown>, fault: (text: string) => void) {
+	if (style.height !== undefined && !(isNumber(style.height) && style.height > 0 && style.height <= 1.2))
+		fault(`${where}.height is not a share of a standing character's height (above 0, at most 1.2)`);
+	if (style.frames === undefined) return;
+	const frames = Array.isArray(style.frames) ? style.frames : [];
+	const known = frames.every((frame) => PET_FRAMES.includes(frame as PetFrame));
+	if (
+		frames.length !== 4 ||
+		!known ||
+		new Set(frames).size !== 4 ||
+		!["sit", "petted", "play"].every((frame) => frames.includes(frame))
+	)
+		fault(`${where}.frames is not four different frames of ${PET_FRAMES.join(", ")}, with sit, petted, and play`);
+}
+
+/** Where a pack's pets are: each place's pets (and sleepers), by place file. */
+type PetsPlaced = { file: string; slot: OverlaySlot }[];
+
+/**
+ * Fewer pets, each its own: a place holds at most one pet (a curled-up sleeper counts), no two places share a pet's
+ * look (nor two hold a sleeper), each look is one the pack names, and an asleep pet has a sleep frame. Returns the
+ * sprites the placed looks need.
+ */
+function checkPets(placed: PetsPlaced, pet: unknown, problems: PackProblem[]): string[] {
+	const style = isObject(pet) ? (pet as unknown as FidgetStyle) : undefined;
+	const perPlace = new Map<string, number>();
+	const lookAt = new Map<string, string>();
+	const art: string[] = [];
+	for (const { file, slot } of placed) {
+		perPlace.set(file, (perPlace.get(file) ?? 0) + 1);
+		if (perPlace.get(file) === 2) problems.push({ file, fault: "holds more than one pet (a sleeper counts)" });
+		const look = slot.fidget === "sleeper" ? "a sleeper" : slot.look ? `pet look ${slot.look}` : "the pet's own look";
+		const first = lookAt.get(look);
+		if (first) problems.push({ file, fault: `holds ${look}, as ${first} does: no two places share a pet` });
+		else lookAt.set(look, file);
+		if (slot.fidget !== "pet") continue;
+		// Without the pack's pet names (reported on their own), its sprites are still needed.
+		if (!style) {
+			art.push(...petArt(typeof slot.look === "string" ? slot.look : undefined));
+			continue;
+		}
+		if (slot.look !== undefined && !(typeof slot.look === "string" && isObject(style.looks?.[slot.look]))) {
+			problems.push({
+				file,
+				fault: `a pet at ${fmt(slot.at)} wears look ${JSON.stringify(slot.look)}, which fidgets.pet.looks does not name`,
+			});
+			continue;
+		}
+		const frames = slotStyle(style, slot).frames ?? PET_FRAME_ORDER;
+		if (slot.asleep && !frames.includes("sleep"))
+			problems.push({ file, fault: `a pet at ${fmt(slot.at)} is asleep, but its look has no sleep frame` });
+		art.push(...petArt(slot.look));
+	}
+	return art;
+}
+
+/** A door's sign board, when it has one: a rect inside the grid. */
+function checkSign(door: Door, rectInside: (rect: Rect) => boolean, fault: (text: string) => void) {
+	if (door.sign === undefined) return;
+	if (!isObject(door.sign) || !isRect(door.sign.rect)) fault(`door ${door.name}'s sign has no rect [x, y, w, h]`);
+	else if (!rectInside(door.sign.rect)) fault(`door ${door.name}'s sign ${fmt(door.sign.rect)} lies outside its grid`);
 }
 
 /** A bed names a spot the place has; a `fidget` slot names a known kind, and a width in tiles if it gives one. */
@@ -668,6 +888,28 @@ function checkSlot(slot: OverlaySlot, place: PlaceData, fault: (text: string) =>
 		);
 	else if (slot.w !== undefined && !(isNumber(slot.w) && slot.w > 0))
 		fault(`a fidget slot at ${fmt(slot.at)} has a width (w) that is not a number of tiles`);
+	if ((slot.look !== undefined || slot.asleep !== undefined) && slot.fidget !== "pet")
+		fault(`a fidget slot at ${fmt(slot.at)} gives a look or asleep, which only a pet has`);
+}
+
+/**
+ * Recruiting (ticket 10): a recruiter stands on open floor, and a place that needs one (the square) has it; a place
+ * that needs furniture of a `use` (the headquarters' recruiting desk) has a piece of it.
+ */
+function checkRecruiting(
+	place: PlaceData,
+	needs: (typeof PLACE_NEEDS)[string] | undefined,
+	fault: (text: string) => void,
+	onFloor: (what: string, point: Point) => void,
+) {
+	if (place.recruiter === undefined) {
+		if (needs?.recruiter) fault(`has no recruiter; ${needs.recruiter}`);
+	} else if (!isObject(place.recruiter) || !isPoint(place.recruiter.at)) fault("its recruiter has no place (at)");
+	else onFloor("its recruiter", place.recruiter.at);
+	const furniture = Array.isArray(place.furniture) ? place.furniture : [];
+	for (const [use, why] of Object.entries(needs?.furniture ?? {}))
+		if (!furniture.some((piece) => isObject(piece) && piece.use === use && isRect(piece.rect)))
+			fault(`has no furniture whose use is ${use}; ${why}`);
 }
 
 function checkPlace(name: string, value: unknown, painting: PackImage | undefined, problems: PackProblem[]) {
@@ -699,8 +941,10 @@ function checkPlace(name: string, value: unknown, painting: PackImage | undefine
 	place.blocked.forEach((rect, i) => {
 		if (!rectInside(rect)) fault(`blocked rect ${i} ${fmt(rect)} lies outside its ${place.cols} x ${place.rows} grid`);
 	});
-	for (const door of place.doors)
+	for (const door of place.doors) {
 		if (!rectInside(door.rect)) fault(`door ${door.name}'s rect ${fmt(door.rect)} lies outside its grid`);
+		checkSign(door, rectInside, fault);
+	}
 	place.overlaySlots.forEach((slot, i) => {
 		if (!inside(slot.at)) fault(`overlay slot ${i} (${slot.kind}) at ${fmt(slot.at)} lies outside its grid`);
 	});
@@ -718,6 +962,8 @@ function checkPlace(name: string, value: unknown, painting: PackImage | undefine
 	for (const [i, spot] of place.spots.entries()) onFloor(`spot ${i}`, spot);
 	for (const [from, point] of Object.entries(place.entries)) onFloor(`entry from ${from}`, point);
 	for (const door of place.doors) onFloor(`door ${door.name}'s stand point`, door.standAt);
+	checkRecruiting(place, PLACE_NEEDS[name], fault, onFloor);
+	checkInterest(place, grid, fault);
 	if (place.enterBy !== undefined && !place.doors.some((door) => door.name === place.enterBy))
 		fault(`enterBy names ${JSON.stringify(place.enterBy)}, which is not one of its doors`);
 	const needs = PLACE_NEEDS[name];
@@ -732,6 +978,89 @@ function checkPlace(name: string, value: unknown, painting: PackImage | undefine
 		const strips = [...Object.values(layouts ?? {}).flat(), repeat];
 		if (!strips.every((s) => Array.isArray(s) && s.length === 2 && s[0] >= 0 && s[1] <= place.cols && s[0] < s[1]))
 			fault("cuts its painting into strips outside its grid");
+	}
+}
+
+/**
+ * A look's idle sheet, when looks.json names one: its strip of `IDLE_POSES` frames in the size it gives, each on its
+ * baseline (with pixels).
+ */
+async function checkIdle(reader: PackReader, name: string, idle: unknown, pixels: boolean, problems: PackProblem[]) {
+	const file = `characters/${name}-idle.png`;
+	if (!isObject(idle) || !isPoint(idle.frame) || !isNumber(idle.baseline))
+		return problems.push({
+			file: "characters/looks.json",
+			fault: `look ${name}'s idle needs a frame [w, h] and a baseline`,
+		});
+	const [w, h] = idle.frame;
+	const frames = IDLE_POSES.length;
+	const sheet = await reader.image(file, pixels);
+	if (!sheet) return problems.push({ file, fault: "is missing (the idle sheet looks.json names)" });
+	if (sheet.width !== w * frames || sheet.height !== h)
+		return problems.push({
+			file,
+			fault: `is ${sheet.width} x ${sheet.height} px, but ${frames} idle frames of ${w} x ${h} (looks.json) make ${w * frames} x ${h}`,
+		});
+	const baseline = idle.baseline;
+	if (baseline <= 0 || baseline > h)
+		return problems.push({
+			file: "characters/looks.json",
+			fault: `look ${name}'s idle baseline ${baseline} lies outside its ${h} px frame`,
+		});
+	if (!sheet.alpha) return;
+	const off = feetRows(sheet, w, frames)
+		.map((row, frame) => ({ frame, row }))
+		.filter(({ row }) => Math.abs(row + 1 - baseline) > BASELINE_TOLERANCE);
+	if (off.length)
+		problems.push({
+			file,
+			fault: `idle frames ${off.map((o) => o.frame).join(", ")} stand off the baseline ${baseline} (feet at rows ${off.map((o) => o.row + 1).join(", ")})`,
+		});
+}
+
+/**
+ * A place's points of interest: each named, on open floor inside its grid, a tile clear of every door's stand point and
+ * every entry (a wanderer never stands in a doorway), and clear of every spot, the host, and the recruiter.
+ */
+function checkInterest(place: PlaceData, grid: ReturnType<typeof gridFor>, fault: (text: string) => void) {
+	if (place.interest === undefined) return;
+	if (!Array.isArray(place.interest)) return fault("has points of interest that are not a list");
+	const near = (a: Point, b: Point, least: number) => Math.hypot(a[0] - b[0], a[1] - b[1]) < least;
+	const clear: [string, Point, number][] = [
+		...place.doors.map((door): [string, Point, number] => [`door ${door.name}'s stand point`, door.standAt, 1]),
+		...Object.entries(place.entries).map(([from, at]): [string, Point, number] => [`the entry from ${from}`, at, 1]),
+		...place.spots.map((at, i): [string, Point, number] => [`spot ${i}`, at, 0.9]),
+		...(isObject(place.host) && isPoint(place.host.at)
+			? [["its host", place.host.at, 0.9] as [string, Point, number]]
+			: []),
+		...(isObject(place.recruiter) && isPoint(place.recruiter.at)
+			? [["its recruiter", place.recruiter.at, 0.9] as [string, Point, number]]
+			: []),
+	];
+	for (const [i, point] of place.interest.entries()) {
+		if (!isObject(point) || !isText(point.name)) {
+			fault(`point of interest ${i} has no name`);
+			continue;
+		}
+		if (!isPoint(point.at)) {
+			fault(`point of interest ${i} has no place (at)`);
+			continue;
+		}
+		const what = `point of interest ${point.name} ${fmt(point.at)}`;
+		const [x, y] = point.at;
+		if (x < 0 || y < 0 || x > place.cols || y > place.rows) {
+			fault(`${what} lies outside its grid`);
+			continue;
+		}
+		if (!isOpen(grid, point.at)) {
+			fault(`${what} is not on open floor`);
+			continue;
+		}
+		if (point.face !== undefined && !["up", "down", "left", "right"].includes(point.face))
+			fault(`${what} faces ${JSON.stringify(point.face)}, not up, down, left, or right`);
+		for (const [other, at, least] of clear)
+			if (near(point.at, at, least))
+				fault(`${what} is within ${least === 1 ? "a tile" : `${least} tiles`} of ${other}`);
 	}
 }
 
@@ -810,6 +1139,7 @@ async function checkLooks(
 						fault: `stands ${standing} px tall in its standing frame (14), not ${STANDING_HEIGHT}`,
 					});
 			}
+			if (look.idle !== undefined) await checkIdle(reader, name, look.idle, pixels, problems);
 			for (let i = 0; i < EXPRESSIONS.length; i++) {
 				const portraitFile = `characters/${name}-portrait-${i}.png`;
 				const portrait = await reader.image(portraitFile);
@@ -853,9 +1183,12 @@ async function checkPlaces(reader: PackReader, problems: PackProblem[]) {
 	const hosts: string[] = [];
 	/** Each place's host look, by place. */
 	const hostOf: Record<string, string> = {};
+	/** The look each place's recruiter names, by place. */
+	const recruiterOf: Record<string, string> = {};
 	const slotKinds = new Set<string>();
 	/** The kinds of fidget object placed, and the first place file placing each. */
 	const fidgets = new Map<FidgetKind, string>();
+	const pets: PetsPlaced = [];
 	for (const name of PLACE_FILES) {
 		const file = `places/${name}.json`;
 		const place = await json(reader, file, problems);
@@ -873,13 +1206,19 @@ async function checkPlaces(reader: PackReader, problems: PackProblem[]) {
 			hosts.push(data.host.look);
 			hostOf[name] = data.host.look;
 		}
+		if (isObject(data.recruiter) && typeof data.recruiter.look === "string") {
+			hosts.push(data.recruiter.look);
+			recruiterOf[name] = data.recruiter.look;
+		}
 		for (const slot of Array.isArray(data.overlaySlots) ? data.overlaySlots : []) {
 			if (!isObject(slot)) continue;
 			slotKinds.add(String(slot.kind));
 			if (slot.kind === "fidget" && isFidget(slot.fidget) && !fidgets.has(slot.fidget)) fidgets.set(slot.fidget, file);
+			if (slot.kind === "fidget" && (slot.fidget === "pet" || slot.fidget === "sleeper"))
+				pets.push({ file, slot: slot as unknown as OverlaySlot });
 		}
 	}
-	return { hosts, hostOf, slotKinds, fidgets };
+	return { hosts, hostOf, recruiterOf, slotKinds, fidgets, pets };
 }
 
 /**
@@ -891,7 +1230,7 @@ export async function checkPack(reader: PackReader, id: string, { pixels = true 
 	const problems: PackProblem[] = [];
 	const manifest = checkManifest(await json(reader, "theme.json", problems), id, problems);
 	if (manifest && typeof manifest.skin === "string") await checkSkin(reader, manifest, problems);
-	const { hosts, hostOf, slotKinds, fidgets } = await checkPlaces(reader, problems);
+	const { hosts, hostOf, recruiterOf, slotKinds, fidgets, pets } = await checkPlaces(reader, problems);
 	const looks = await json(reader, "characters/looks.json", problems);
 	if (looks !== undefined) await checkLooks(reader, looks, hosts, pixels, problems);
 	// A function place's host wears a look made for its role (the quest office's clerk, not an agent).
@@ -900,6 +1239,15 @@ export async function checkPack(reader: PackReader, id: string, { pixels = true 
 		const worn = isObject(looks) && isObject(looks[look]) ? looks[look].role : undefined;
 		if (role && worn !== undefined && worn !== role)
 			problems.push({ file: `places/${place}.json`, fault: `its host wears ${look}, which is not a ${role} look` });
+	}
+	// A recruiter named a look wears one made for it; without one it borrows the pack's recruiter or a townsperson.
+	for (const [place, look] of Object.entries(recruiterOf)) {
+		const worn = isObject(looks) && isObject(looks[look]) ? looks[look].role : undefined;
+		if (worn !== undefined && worn !== "recruiter")
+			problems.push({
+				file: `places/${place}.json`,
+				fault: `its recruiter wears ${look}, which is not a recruiter look`,
+			});
 	}
 	if (slotKinds.has("bed") && manifest && isObject(manifest.world) && manifest.world.bed === undefined)
 		problems.push({ file: "theme.json", fault: "has no world.bed, which its places' bed slots need" });
@@ -912,9 +1260,10 @@ export async function checkPack(reader: PackReader, id: string, { pixels = true 
 	const overlays = [
 		...REQUIRED_OVERLAYS,
 		...[...slotKinds].flatMap((kind) => SLOT_OVERLAYS[kind] ?? []),
-		...[...fidgets.keys()].flatMap((kind) => FIDGETS[kind].art),
+		...[...fidgets.keys()].flatMap((kind) => (kind === "pet" ? [] : FIDGETS[kind].art)),
+		...checkPets(pets, styles.pet, problems),
 	];
-	for (const name of overlays) {
+	for (const name of new Set(overlays)) {
 		const file = `overlays/${name}.png`;
 		if (!(await reader.image(file))) problems.push({ file, fault: "is missing" });
 	}

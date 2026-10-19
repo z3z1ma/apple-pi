@@ -184,6 +184,8 @@ export interface SlackThread {
 	channel: { id: string; name: string };
 	messages: SlackMessage[];
 	url: string | null;
+	/** The newest message the operator has read (its `ts`): later ones are new. Null when Slack does not say. */
+	lastRead: string | null;
 }
 
 // The outside-write gate
@@ -199,7 +201,9 @@ export type OutsideWriteIntent =
 	  }
 	| { kind: "jira-comment"; key: string; body: string }
 	| { kind: "jira-transition"; key: string; transition: string }
-	| { kind: "slack-reply"; channel: string; threadTs: string; text: string };
+	| { kind: "slack-reply"; channel: string; threadTs: string; text: string }
+	/** Mark a channel (or one thread in it) read up to `ts`: the operator's explicit choice, so it needs no confirmation. */
+	| { kind: "slack-mark-read"; channel: string; ts: string; threadTs?: string };
 
 /** What the confirmation shows: what is done, where, and the exact text sent. */
 export interface WriteDescription {
@@ -288,6 +292,11 @@ export interface IntegrationsApi {
 	slackChannel(channelId: string): Promise<Outcome<{ thread: SlackThread }>>;
 	/** A thread's messages, the parent first. */
 	slackThread(channelId: string, threadTs: string): Promise<Outcome<{ thread: SlackThread }>>;
+	/**
+	 * Mark a channel read in Slack up to `ts` (its newest message), or with `threadTs` that thread up to its newest reply,
+	 * as the operator. Sent at once (the button is the choice), then recorded and announced like a confirmed write.
+	 */
+	slackMarkRead(channelId: string, ts: string, threadTs?: string): Promise<WriteResult>;
 
 	/** Describe a write outside for the operator to confirm; nothing is sent. */
 	describeWrite(intent: OutsideWriteIntent): Promise<DescribedWrite>;

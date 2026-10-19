@@ -2,7 +2,15 @@
 // hearth), where it also stands in everyone's way like a small body, or on a piece of furniture (a music box on a
 // table), reached from the floor in front of that furniture, else beside or behind it. Pure, so the place data's
 // tests check every pack's fidgets the way the scene uses them.
-import type { OverlaySlot, PlaceData, Point, Rect } from "../theme.js";
+import {
+	FIDGETS,
+	type FidgetKind,
+	type FidgetStyle,
+	type OverlaySlot,
+	type PlaceData,
+	type Point,
+	type Rect,
+} from "../theme.js";
 import { gridFor, isOpen } from "./pathing.js";
 
 /** How far in front of furniture (or beside a floor fidget) the avatar stands, in tiles past its edge. */
@@ -10,6 +18,23 @@ const STAND_OFF = 0.45;
 
 export const fidgetSlots = (place: PlaceData): OverlaySlot[] =>
 	place.overlaySlots.filter((slot) => slot.kind === "fidget" && slot.fidget);
+
+/**
+ * Tiles per sprite px for a fidget, from its first sprite's size, so every frame keeps one pixel size. A slot's width
+ * wins; else a pet stands at its height (a share of a standing character, `person` tiles tall) so it is to scale with
+ * the characters, whatever size its art was drawn; else the pack's width for the kind, else the kind's own.
+ */
+export function fidgetScale(
+	kind: FidgetKind,
+	style: Pick<FidgetStyle, "w" | "height"> | undefined,
+	slot: Pick<OverlaySlot, "w">,
+	first: { width: number; height: number },
+	person: number,
+): number {
+	if (slot.w !== undefined) return slot.w / first.width;
+	if (style?.height !== undefined) return (style.height * person) / first.height;
+	return (style?.w ?? FIDGETS[kind].w) / first.width;
+}
 
 /** Whether the slot stands on open floor (else it sits on furniture). */
 export function onFloor(place: PlaceData, slot: OverlaySlot): boolean {
@@ -39,18 +64,19 @@ export function surfaceOf(place: PlaceData, [x, y]: Point): { rect: Rect; feet: 
 export function standPoints(place: PlaceData, slot: OverlaySlot, width: number): Point[][] {
 	const [x, y] = slot.at;
 	if (onFloor(place, slot)) {
-		const side = width / 2 + STAND_OFF + 0.2;
+		// Beside it, a body's width off, never square in front: there the avatar's figure hides a small pet whole.
+		const side = Math.max(1, width / 2 + STAND_OFF + 0.2);
 		return [
 			[
 				[x - side, y + 0.05],
 				[x + side, y + 0.05],
-				[x, y + 0.75],
 			],
 			[
 				[x - side, y + 0.6],
 				[x + side, y + 0.6],
 				[x, y - 0.6],
 			],
+			[[x, y + 0.75]],
 		];
 	}
 	// The blocked rects under it, as one piece of furniture.

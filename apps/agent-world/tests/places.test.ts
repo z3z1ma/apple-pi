@@ -149,6 +149,20 @@ describe.each(themes)("the %s pack", (theme) => {
 			for (const name of ["headquarters", ...functionPlaces]) expect(to).toContain(name);
 		}
 	});
+
+	it("gives every building in the square a sign board, inside the painting and above its door", () => {
+		if (!has("square")) return;
+		const square = load(theme, "square");
+		for (const door of square.doors) {
+			expect(door.sign, door.name).toBeDefined();
+			const [x, y, w, h] = door.sign!.rect;
+			expect(x >= 0 && y >= 0 && x + w <= square.cols && y + h <= square.rows, door.name).toBe(true);
+			// Over the building's front, near its door, and wide enough for a name.
+			expect(y + h, door.name).toBeLessThanOrEqual(door.standAt[1]);
+			expect(Math.abs(x + w / 2 - (door.rect[0] + door.rect[2] / 2)), door.name).toBeLessThan(3);
+			expect(w, door.name).toBeGreaterThan(h);
+		}
+	});
 });
 
 it("gives the inn a hearth fire, its innkeeper behind the bar, beds whose sleepers climb in from open floor, and stairs", () => {

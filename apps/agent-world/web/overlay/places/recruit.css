@@ -1,0 +1,37 @@
+/* The recruiting form: layout only, on the letter form's fields; the look comes from the theme pack's skin. */
+
+.aw-recruit {
+	width: min(560px, calc(100vw - 48px));
+}
+
+.aw-recruit-sent {
+	gap: 14px;
+}
+
+.aw-recruit-brief {
+	align-items: flex-start;
+}
+
+.aw-recruit-form .aw-letter-to > span {
+	flex: none;
+	width: 92px;
+}
+
+.aw-recruit-form .aw-recruit-brief > span {
+	padding-top: 10px;
+}
+
+.aw-recruit-form .aw-letter-to input,
+.aw-recruit-form .aw-letter-to select {
+	box-sizing: border-box;
+	flex: 1;
+	min-width: 0;
+	padding: 6px 8px;
+}
+
+.aw-recruit-form .aw-recruit-brief textarea {
+	flex: 1;
+	min-width: 0;
+	letter-spacing: normal;
+	text-transform: none;
+}

@@ -1,6 +1,6 @@
 ## file
 
-The read-only methods (`placeKey`, `figureViews`, `avatarView`, `doorViews`, `toScreen`, `toWorld`, `zoomView`, `galleryView`, `overlayViews`, `bannerViews`, `paintingFrames`, `filterView`, `walkGridShown`, `lookAt`, `hostView`, `townsfolkViews`, `workViews`, `fidgetViews`) are the surface the headless tests use through `window.agentWorldView`, and the interface's minimap reads `placeKey`, `figureViews`, `townsfolkViews`, `avatarView`, `toWorld`, and `walkGridShown` through `overlay/interface/world-link.ts`. Renaming one breaks them without a type error, because the tests reach it through `page.evaluate`.
+The read-only methods (`placeKey`, `figureViews`, `avatarView`, `doorViews`, `toScreen`, `toWorld`, `zoomView`, `galleryView`, `overlayViews`, `bannerViews`, `paintingFrames`, `filterView`, `walkGridShown`, `lookAt`, `hostView`, `townsfolkViews`, `signViews`, `noticeViews`, `workViews`, `fidgetViews`, `pointerView`, `recruiterView`) are the surface the headless tests use through `window.agentWorldView`, and the interface's minimap reads `placeKey`, `figureViews`, `townsfolkViews`, `avatarView`, `toWorld`, and `walkGridShown` through `overlay/interface/world-link.ts`. Renaming one breaks them without a type error, because the tests reach it through `page.evaluate`.
 Coupled: apps/agent-world/web/main.tsx, apps/agent-world/web/overlay/interface/world-link.ts
 Verify: apps/agent-world/tests/world-ui.test.ts, apps/agent-world/tests/world-movement.test.ts, apps/agent-world/tests/world-places.test.ts
 
@@ -40,6 +40,13 @@ Verify: apps/agent-world/tests/world-forge.test.ts
 Coupled: apps/agent-world/web/overlay/interface/interface.css
 Verify: apps/agent-world/tests/world-places.test.ts
 
+## symbol:PlaceScene.furnitureTarget
+
+The headquarters' desk (`furniture` with `use: "recruit"`) recruits a worker on a left click, so it is not plain furniture that a click just walks up to. While a character is under the pointer, `targetsAt` leaves the desk out, so the coordinator standing at it lists Recruit once (its own action), not twice.
+Why: the coordinator's sprite overlaps the desk rect in every pack; `world-movement.test.ts` checks the coordinator's exact menu, and clicks the weapon rack rather than the desk to test walking to furniture.
+Coupled: apps/agent-world/themes/fantasy/places/headquarters.json, apps/agent-world/web/overlay/places/recruit-state.ts
+Verify: apps/agent-world/tests/world-movement.test.ts, apps/agent-world/tests/world-recruit.test.ts
+
 ## symbol:PlaceScene.banner
 
 The banner sprite's cloth is only part of the image, so the pack measures where its name goes and where it answers the pointer (`world.banner.text` and `hover`, fractions of the sprite in `theme.json`): in fantasy the vine border bounds the text to about 0.48 of the sprite's width (0.42 leaves a margin), and the swallowtail starts near 0.75 of its height; the tech office's sign plate and the anime school's plaque are wide, short boards with their own text areas. Names go on one line from 15 px down to 13 px, else on as many lines (broken after separators) as fit, from 15 px down to 12 px. A name still too long at 12 px has each word that does not fit cut to at most six letters ending on a consonant, with a full stop ("custom. ident."), on as many lines as the board is tall at 12 px (at most five; the tech office's short plate holds two), an ellipsis as the last resort; `BannerView.abbreviated` says so, and hovering the banner (`bannerRects`) shows the full name.
@@ -56,6 +63,14 @@ Coupled: apps/agent-world/web/main.tsx, apps/agent-world/web/view-state.ts
 ## symbol:PlaceScene.pointerUp
 
 A left click runs the default action only if the press did not become a drag and did not close an open menu. Clicking off an open menu only closes it, as in RuneScape.
+After the default action runs, it drops a click marker (`overlay/pointer/click-marks.ts`): a red X at the click when the point offers more than Walk here, else a yellow X at the end of the avatar's new path (where it is heading, which for a click on furniture is the nearest open floor), or at the click when it did not move.
+Verify: apps/agent-world/tests/world-pointer.test.ts
+
+## symbol:PlaceScene.refreshHover
+
+Every frame it also sets the world's cursor from the same actions: `act` when the point offers more than Walk here, `blocked` when the walk grid's furniture (`blocked`, not someone standing there) or the place's edge is under it, else `walk`. The CSS goes on the canvas through Phaser's `input.setDefaultCursor`, only when it changes, so the HTML panels above keep their own cursors.
+Coupled: apps/agent-world/web/overlay/pointer/cursor.ts
+Verify: apps/agent-world/tests/world-pointer.test.ts
 
 ## symbol:PlaceScene.sleep
 

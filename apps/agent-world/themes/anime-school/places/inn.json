@@ -39,7 +39,7 @@
     }
   ],
   "enterBy": "Door to the courtyard",
-  "host": { "look": "innkeeper", "at": [12.2, 2.5] },
+  "host": { "look": "innkeeper", "at": [15.8, 3.5] },
   "furniture": [
     { "name": "Kotatsu", "rect": [5.8, 4.5, 4.4, 2.3], "use": "innkeeper" },
     { "name": "Kotatsu", "rect": [13.5, 4.5, 4.9, 2.2], "use": "innkeeper" },
@@ -56,16 +56,15 @@
     { "kind": "glow", "at": [22.95, 7.06], "r": 0.9 },
     { "kind": "glow", "at": [2.2, 14.2], "r": 0.9 },
     { "kind": "glow", "at": [21.9, 14.2], "r": 0.9 },
-    { "kind": "fidget", "fidget": "sleeper", "at": [6.9, 5.3] },
     { "kind": "fidget", "fidget": "bell", "at": [14.2, 2.8] },
-    { "kind": "fidget", "fidget": "pet", "at": [12.1, 8.0] },
+    { "kind": "fidget", "fidget": "pet", "at": [12.1, 8.0], "name": "Mochi" },
     { "kind": "fidget", "fidget": "box", "at": [6.6, 9.2] }
   ],
   "foreground": [
     { "rect": [9.1, 1.9, 5.8, 1.95], "feet": 3.85 },
-    { "rect": [5.8, 4.3, 4.4, 2.45], "feet": 6.75 },
-    { "rect": [13.5, 4.2, 4.9, 2.45], "feet": 6.65 },
+    { "rect": [5.8, 4.3, 4.4, 2.2], "feet": 6.5 },
+    { "rect": [13.5, 4.2, 4.9, 2.3], "feet": 6.5 },
     { "rect": [4.8, 7.7, 5.4, 3.25], "feet": 10.95 },
-    { "rect": [13.8, 7.8, 5.3, 3.25], "feet": 11.05 }
+    { "rect": [13.8, 7.8, 5.3, 3.2], "feet": 11.0 }
   ]
 }

@@ -54,13 +54,21 @@ def prompt(kind, theme, brief, grid="30 squares wide and 20 deep", slots="none",
     )
 
 
-def generate(out, text):
+def generate(out, text, reference=None):
     out = Path(out).resolve()
     if out.exists():
         print(f"kept {out}")
         return
     out.parent.mkdir(parents=True, exist_ok=True)
     log = out.with_suffix(".log")
+    attach = []
+    if reference is not None:
+        # Without the look's own sheet beside it, a text brief alone drew a different person.
+        attach = ["-i", str(Path(reference).resolve())]
+        text = (
+            "The attached image is this character's sprite sheet: draw exactly the same character, with the same "
+            f"face, hair, clothes, colours, and proportions. {text}"
+        )
     with log.open("w") as f:
         subprocess.run(
             [
@@ -71,6 +79,8 @@ def generate(out, text):
                 "--skip-git-repo-check",
                 f"Use your image generation tool to create this image, then save the PNG as ./{out.name}. "
                 f"Do not create or edit any other file. Image: {text}",
+                # After the prompt: `-i` takes several files and would swallow a prompt that followed it.
+                *attach,
             ],
             cwd=out.parent,
             stdout=f,
@@ -288,7 +298,13 @@ def raw_jobs(theme):
     for name, brief in briefs.get("sheets", {}).items():
         jobs.append((raw / "characters" / f"{name}-sheet.png", prompt("sheet", theme, brief)))
         jobs.append((raw / "characters" / f"{name}-portrait.png", prompt("portrait", theme, brief)))
-        jobs.append((raw / "characters" / f"{name}-idle.png", prompt("idle", theme, brief)))
+        jobs.append(
+            (
+                raw / "characters" / f"{name}-idle.png",
+                prompt("idle", theme, brief),
+                raw / "characters" / f"{name}-sheet.png",
+            )
+        )
     for name, b in briefs.get("pieces", {}).items():
         jobs.append((raw / "overlays" / f"{name}.png", prompt("pieces", theme, b["brief"])))
     return briefs, raw, jobs
@@ -296,7 +312,7 @@ def raw_jobs(theme):
 
 def batch(theme):
     _, _, jobs = raw_jobs(theme)
-    missing = [(out, text) for out, text in jobs if not out.exists()]
+    missing = [job for job in jobs if not job[0].exists()]
     failed = []
 
     def run(job):

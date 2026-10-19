@@ -22,7 +22,8 @@
     "clerk": "Quest clerk",
     "librarian": "Librarian",
     "crier": "Town crier",
-    "townsfolk": "Villager"
+    "townsfolk": "Villager",
+    "recruiter": "Recruiting sergeant"
   },
   "text": {
     "banner-reads": "The banner reads “{name}”.",
@@ -77,7 +78,17 @@
     "forge-empty": "The benches are bare: nothing of yours or your guild's is open on GitHub.",
     "forge-loading": "Let me see what's on the benches…",
     "ask-smith": "Ask the smith",
-    "forge-more": "{count} more on the rack"
+    "forge-more": "{count} more on the rack",
+    "recruit-worker": "Recruit a guild member",
+    "recruit-independent": "Recruit a wanderer",
+    "recruit-worker-title": "Recruiting for {coordinator}'s guild",
+    "recruit-independent-title": "The recruiting booth",
+    "recruit-worker-greeting": "Another pair of hands for the guild? Give them a name, a repository to work in, and their first quest.",
+    "recruit-independent-greeting": "Seeking a wanderer for a job? Name them, point them to a repository, and tell them the quest. They answer to no guild.",
+    "recruit-brief": "Their first quest…",
+    "recruit-send": "Recruit",
+    "recruit-sending": "A runner sets off to fetch {name}…",
+    "recruit-joined": "{name} has answered the call."
   },
   "style": {
     "--aw-font-body": "\"Iowan Old Style\", Georgia, serif",
@@ -140,6 +151,12 @@
     },
     "glow": ["#ffe2a0", "#ffc46e", "#ff963c"],
     "notice": { "paper": [0.15, 0.15, 0.71, 0.73], "cutOut": true },
+    "sign": {
+      "font": "\"Hoefler Text\", \"Big Caslon\", Georgia, serif",
+      "ink": "#ecc978",
+      "shadow": "#0c0906",
+      "plate": { "fill": "#252433", "rim": "#77727a", "edge": "#17110c" }
+    },
     "banner": {
       "tiles": 2.3,
       "text": [0.29, 0.2, 0.42, 0.48],
@@ -154,20 +171,37 @@
   "fidgets": {
     "pet": {
       "name": "Ginger cat",
-      "examine": "{name}, the guild's ginger cat. Keeps the mice honest and the hearth warm.",
-      "verbs": {
-        "pet": "Pet",
-        "play": "Play with"
+      "examine": "{name}, the inn's ginger cat. Keeps the mice honest and the hearth warm.",
+      "verbs": { "pet": "Pet", "play": "Play with" },
+      "height": 0.33,
+      "frames": ["sit", "petted", "stretch", "play"],
+      "looks": {
+        "cat-black": {
+          "name": "Black cat",
+          "examine": "{name}, the library's black cat, asleep on the warmest shelf. Brings luck, mostly to itself.",
+          "verbs": { "pet": "Stroke", "play": "Dangle a ribbon for" },
+          "height": 0.33
+        },
+        "hound": {
+          "name": "Hound",
+          "examine": "{name}, the smith's hound. Sleeps by the forge and fears only the bellows.",
+          "verbs": { "pet": "Scratch", "play": "Throw a stick for" },
+          "height": 0.5
+        },
+        "owl": {
+          "name": "Barn owl",
+          "examine": "{name}, the rookery's barn owl. It judges every letter that comes in.",
+          "verbs": { "pet": "Stroke", "play": "Hoot at" },
+          "particle": "notes",
+          "height": 0.25
+        },
+        "rabbit": {
+          "name": "Lop rabbit",
+          "examine": "{name}, a lop-eared rabbit who has claimed the square's best patch of clover.",
+          "verbs": { "pet": "Stroke", "play": "Offer a carrot to" },
+          "height": 0.27
+        }
       }
-    },
-    "sleeper": {
-      "name": "Sleeping cat",
-      "examine": "Curled up tight and dreaming of fish. Best not to wake it. Probably.",
-      "verbs": {
-        "pet": "Stroke",
-        "boop": "Boop"
-      },
-      "particle": "zzz"
     },
     "bell": {
       "name": "Brass bell",

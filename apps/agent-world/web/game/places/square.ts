@@ -8,12 +8,13 @@ import * as Phaser from "phaser";
 import type { SlackChannel } from "../../../src/integrations.js";
 import { channelTitle, slack, unreadLabel } from "../../overlay/places/slack-state.js";
 import { squarePanels } from "../../overlay/places/square-panels.js";
-import { type PlaceData, type Point, type Theme, TILE } from "../../theme.js";
+import { type Door, type PlaceData, type Point, type Rect, type Theme, TILE } from "../../theme.js";
 import { worn } from "../../theme-store.js";
 import { type Action, action, type Target } from "../actions.js";
 import { drawTag } from "../character-life.js";
 import { findPath, gridFor } from "../pathing.js";
 import { PERSON_TILES, Walker } from "../walker.js";
+import type { Wander } from "../wander.js";
 
 /** Where the unread badge floats, in tiles above the feet (as an agent's state badge does). */
 const BADGE_LIFT = 1.93;
@@ -133,6 +134,8 @@ export interface TownsfolkView {
 	/** The channel's sign shows (the pointer is over it). */
 	sign: boolean;
 	alpha: number;
+	/** The idle it is playing (ticket 06). */
+	idle: string | null;
 }
 
 interface Folk {
@@ -161,6 +164,8 @@ export interface SquareHooks {
 	/** Slack changed: lay the square out again (the scene calls `arrange` with the spots agents left free). */
 	changed(): void;
 	notify(text: string): void;
+	/** The place's wandering (ticket 07): townsfolk stroll between its points of interest and come back. */
+	wander?: Wander;
 }
 
 /** A `#rrggbb` colour as a number, for Phaser's fills. */
@@ -219,6 +224,150 @@ export function drawUnreadBadge(scene: Phaser.Scene, label: string, mentioned: b
 		Math.round((middle[1] - (ascent + (box.descent - box.ascent) / 2)) * 4) / 4,
 	);
 	return scene.add.container(0, 0, [g, text]);
+}
+
+export interface SignView {
+	/** The door the sign hangs over, and the kind of place it leads to. */
+	door: string;
+	to: string;
+	/** The name lettered on it (before the theme's capitals, if it sets them). */
+	text: string;
+	/** Its letters' size, px at zoom 1. */
+	size: number;
+	/** The sign board (tiles), and the lettering's box on it. */
+	board: Rect;
+	ink: Rect;
+	/** The world draws the board too (the painting has none, or one too small for a name). */
+	plate: boolean;
+}
+
+/** A sign's letters, px at zoom 1: as large as the board takes up to the first, never below the second. */
+const SIGN_FONT = [18, 10] as const;
+/** How much larger than the street's smallest a sign's letters may be. */
+const SIGN_KIN = 1.25;
+/** The board kept clear around the letters, as a fraction of its height (above and below) and px (at the sides). */
+const SIGN_PAD = { y: 0.1, x: 4 };
+/** The rim of a board the world draws, px. */
+const PLATE_RIM = 2.5;
+
+/** A place's name as a sign says it: without its article ("The forge" is signed "Forge"). */
+export function signName(label: string): string {
+	const name = label.replace(/^the\s+/i, "");
+	return name.charAt(0).toUpperCase() + name.slice(1);
+}
+
+/**
+ * Letter each building's name on its sign board over its door (`door.sign`), in the theme's sign style: on one line at
+ * the largest size the board takes, else on two at the largest legible size. Where the sign asks for a plate, the board
+ * is drawn first, in the theme's plate colours (the fantasy square paints boards too small to letter, or none).
+ */
+export function drawSigns(scene: Phaser.Scene, doors: Door[], theme: Theme): SignView[] {
+	const style = theme.world.sign ?? { font: theme.world.font, ink: theme.world.tag.ink, shadow: undefined };
+	const plateStyle = theme.world.sign?.plate ?? {
+		fill: theme.world.tag.plate,
+		rim: theme.world.tag.rim,
+		edge: "#000000",
+	};
+	const views: SignView[] = [];
+	const letters: { door: Door; name: string; text: Phaser.GameObjects.Text; size: number; lines: string }[] = [];
+	for (const door of doors) {
+		if (!door.sign) continue;
+		const [x, y, w, h] = door.sign.rect;
+		const plate = !!door.sign.plate;
+		const name = signName(theme.labels[door.to] ?? door.name);
+		if (plate) drawPlate(scene, door.sign.rect, plateStyle);
+		// On a drawn plate the letters may come up to its rim; on a painted board they keep clear of its frame.
+		const roomW = w * TILE - 2 * (SIGN_PAD.x + (plate ? PLATE_RIM : 0));
+		const roomH = plate ? h * TILE - 2 * (PLATE_RIM + 0.5) : h * TILE * (1 - 2 * SIGN_PAD.y);
+		const text = scene.add
+			.text((x + w / 2) * TILE, (y + h / 2) * TILE, "", {
+				fontFamily: style.font,
+				fontStyle: "bold",
+				color: style.ink,
+				align: "center",
+				lineSpacing: -2,
+			})
+			.setOrigin(0.5)
+			.setResolution(4)
+			.setDepth(-1.1);
+		if (style.shadow) text.setShadow(0, 1, style.shadow, 1, false, true);
+		const shown = theme.world.sign?.upper ? name.toUpperCase() : name;
+		const fits = (lines: string, size: number) => {
+			text.setFontSize(size).setText(lines);
+			return text.width <= roomW && text.height <= roomH;
+		};
+		const words = shown.split(" ");
+		const twoLines =
+			words.length > 1
+				? words
+						.slice(1)
+						.map((_, i) => `${words.slice(0, i + 1).join(" ")}\n${words.slice(i + 1).join(" ")}`)
+						.sort(
+							(a, b) =>
+								Math.max(...a.split("\n").map((l) => l.length)) - Math.max(...b.split("\n").map((l) => l.length)),
+						)[0]
+				: undefined;
+		let size = 0;
+		let lines = shown;
+		for (let s = SIGN_FONT[0]; s >= SIGN_FONT[1] && !size; s -= 0.5) if (fits(shown, s)) size = s;
+		if (!size && twoLines)
+			for (let s = SIGN_FONT[0]; s >= SIGN_FONT[1] && !size; s -= 0.5)
+				if (fits(twoLines, s)) {
+					size = s;
+					lines = twoLines;
+				}
+		if (!size) {
+			// Too long for the board at a legible size: the smallest legible size, drawn narrower to fit.
+			size = SIGN_FONT[1];
+			fits(shown, size);
+			text.setScale(Math.min(1, roomW / text.width), Math.min(1, roomH / text.height));
+		}
+		letters.push({ door, name, text, size, lines });
+	}
+	// One street's signs read as a set: none lettered much larger than the smallest ("Inn" on a board made for
+	// "Library" would shout).
+	const most = Math.min(...letters.map((l) => l.size)) * SIGN_KIN;
+	for (const { door, name, text, size, lines } of letters) {
+		const [x, y, w, h] = door.sign!.rect;
+		text.setFontSize(Math.min(size, most)).setText(lines);
+		const iw = text.displayWidth / TILE;
+		const ih = text.displayHeight / TILE;
+		views.push({
+			door: door.name,
+			to: door.to,
+			text: name,
+			size: Math.min(size, most) * Math.min(text.scaleX, text.scaleY),
+			board: door.sign!.rect,
+			ink: [x + w / 2 - iw / 2, y + h / 2 - ih / 2, iw, ih],
+			plate: !!door.sign!.plate,
+		});
+	}
+	return views;
+}
+
+/** A board where the painting has none fit to letter: a dark edge, a rim, its face, lit a little from above. */
+function drawPlate(scene: Phaser.Scene, [x, y, w, h]: Rect, style: { fill: string; rim: string; edge: string }) {
+	const px = x * TILE;
+	const py = y * TILE;
+	const pw = w * TILE;
+	const ph = h * TILE;
+	const r = Math.min(4, ph / 4);
+	const g = scene.add.graphics().setDepth(-1.2);
+	g.fillStyle(0x000000, 0.35).fillRoundedRect(px + 1, py + 2, pw, ph, r);
+	g.fillStyle(hex(style.edge), 1).fillRoundedRect(px - 1, py - 1, pw + 2, ph + 2, r + 1);
+	g.fillStyle(hex(style.rim), 1).fillRoundedRect(px, py, pw, ph, r);
+	g.fillStyle(0xffffff, 0.18).fillRoundedRect(px + 1, py + 0.5, pw - 2, 1.2, 0.5);
+	const rim = PLATE_RIM;
+	g.fillStyle(hex(style.edge), 1).fillRoundedRect(
+		px + rim - 0.75,
+		py + rim - 0.75,
+		pw - 2 * rim + 1.5,
+		ph - 2 * rim + 1.5,
+		2,
+	);
+	g.fillStyle(hex(style.fill), 1).fillRoundedRect(px + rim, py + rim, pw - 2 * rim, ph - 2 * rim, 1.5);
+	g.fillStyle(0xffffff, 0.06).fillRect(px + rim + 1, py + rim + 1, pw - 2 * rim - 2, (ph - 2 * rim) * 0.4);
+	return g;
 }
 
 /** The townsfolk of the town square and what they do; the scene owns one while it shows the square. */
@@ -295,6 +444,10 @@ export class SquareLife {
 					lookAbout: this.scene.time.now + Phaser.Math.Between(...LOOK_ABOUT_MS),
 				};
 				this.folk.set(id, folk);
+				// Standing about, it idles now and then and strolls to the square's points of interest (06, 07).
+				const standing = folk;
+				walker.live(id);
+				this.hooks.wander?.add(id, "townsfolk", walker, () => (standing.leaving ? undefined : standing.at));
 				if (animate) {
 					walker.setAlpha(0);
 					folk.badge.container.setAlpha(0);
@@ -348,8 +501,8 @@ export class SquareLife {
 				?.setPosition(walker.x * TILE, (walker.y - SIGN_LIFT) * TILE - 6 * (ui - 1))
 				.setDepth(depth + 0.5)
 				.setScale(ui);
-			// Looking about: a glance to the side now and then, and back to the room.
-			if (walker.moving || folk.leaving) continue;
+			// Looking about: a glance to the side now and then, and back to the room (at its spot, not out strolling).
+			if (walker.moving || folk.leaving || Math.hypot(walker.x - folk.at[0], walker.y - folk.at[1]) > 0.05) continue;
 			if (folk.lookBack !== undefined && time >= folk.lookBack) {
 				folk.lookBack = undefined;
 				walker.face([folk.at[0], folk.at[1] + 1]);
@@ -370,6 +523,7 @@ export class SquareLife {
 		return [...this.folk.values()]
 			.filter((folk) => !folk.leaving)
 			.map(({ channel, look, walker, badge, sign }) => ({
+				idle: walker.view().idle,
 				id: channel.id,
 				name: channelTitle(channel),
 				look,

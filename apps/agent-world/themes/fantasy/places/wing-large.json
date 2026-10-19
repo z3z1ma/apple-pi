@@ -189,28 +189,14 @@
       "at": [2.15, 9.66],
       "r": 0.7
     },
-    { "kind": "fidget", "fidget": "pet", "at": [26.8, 7.2] },
-    { "kind": "fidget", "fidget": "sleeper", "at": [3.4, 6.7] },
     { "kind": "fidget", "fidget": "tome", "at": [5.3, 5.6] }
   ],
   "enterBy": "Door to the gallery",
   "foreground": [
-    {
-      "rect": [5.6, 6.7, 3.9, 1.85],
-      "feet": 8.55
-    },
-    {
-      "rect": [10.6, 6.7, 3.7, 1.85],
-      "feet": 8.55
-    },
-    {
-      "rect": [15.9, 6.7, 3.5, 1.85],
-      "feet": 8.55
-    },
-    {
-      "rect": [20.6, 6.7, 3.8, 1.85],
-      "feet": 8.55
-    },
+    { "rect": [5.6, 6.7, 3.9, 1.8], "feet": 8.5 },
+    { "rect": [10.6, 6.7, 3.7, 1.8], "feet": 8.5 },
+    { "rect": [15.9, 6.7, 3.5, 1.8], "feet": 8.5 },
+    { "rect": [20.6, 6.7, 3.8, 1.8], "feet": 8.5 },
     {
       "rect": [12.2, 9.45, 5.7, 3.0],
       "feet": 12.45
@@ -231,5 +217,13 @@
       "rect": [21.6, 13.45, 4.3, 2.05],
       "feet": 15.5
     }
+  ],
+  "interest": [
+    { "name": "the window", "at": [8.0, 5.6], "face": "up" },
+    { "name": "the bookshelves", "at": [13.5, 5.6], "face": "up" },
+    { "name": "the east window", "at": [21.0, 5.6], "face": "up" },
+    { "name": "the hearth", "at": [25.0, 6.4], "face": "up" },
+    { "name": "the scroll racks", "at": [3.2, 11.0], "face": "left" },
+    { "name": "the great map", "at": [15.0, 12.9], "face": "up" }
   ]
 }

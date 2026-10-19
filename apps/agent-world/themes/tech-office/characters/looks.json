@@ -4,8 +4,8 @@
     "frame": [66, 132],
     "baseline": 130,
     "idle": {
-      "frame": [78, 130],
-      "baseline": 128
+      "frame": [89, 134],
+      "baseline": 132
     }
   },
   "frontend": {
@@ -13,8 +13,8 @@
     "frame": [71, 136],
     "baseline": 134,
     "idle": {
-      "frame": [87, 130],
-      "baseline": 128
+      "frame": [81, 127],
+      "baseline": 125
     }
   },
   "backend": {
@@ -22,8 +22,8 @@
     "frame": [79, 133],
     "baseline": 131,
     "idle": {
-      "frame": [73, 135],
-      "baseline": 133
+      "frame": [85, 130],
+      "baseline": 128
     }
   },
   "devops": {
@@ -31,8 +31,8 @@
     "frame": [76, 134],
     "baseline": 132,
     "idle": {
-      "frame": [91, 138],
-      "baseline": 136
+      "frame": [98, 132],
+      "baseline": 130
     }
   },
   "designer": {
@@ -40,8 +40,8 @@
     "frame": [63, 130],
     "baseline": 128,
     "idle": {
-      "frame": [75, 138],
-      "baseline": 136
+      "frame": [82, 132],
+      "baseline": 130
     }
   },
   "data": {
@@ -49,8 +49,8 @@
     "frame": [72, 147],
     "baseline": 145,
     "idle": {
-      "frame": [80, 136],
-      "baseline": 134
+      "frame": [77, 140],
+      "baseline": 138
     }
   },
   "security": {
@@ -58,8 +58,8 @@
     "frame": [71, 137],
     "baseline": 135,
     "idle": {
-      "frame": [74, 135],
-      "baseline": 133
+      "frame": [76, 130],
+      "baseline": 128
     }
   },
   "qa": {
@@ -67,8 +67,8 @@
     "frame": [64, 126],
     "baseline": 124,
     "idle": {
-      "frame": [89, 136],
-      "baseline": 134
+      "frame": [91, 124],
+      "baseline": 122
     }
   },
   "intern": {
@@ -76,8 +76,8 @@
     "frame": [75, 129],
     "baseline": 127,
     "idle": {
-      "frame": [74, 129],
-      "baseline": 127
+      "frame": [76, 124],
+      "baseline": 122
     }
   },
   "avatar-founder": {
@@ -85,8 +85,8 @@
     "frame": [69, 135],
     "baseline": 133,
     "idle": {
-      "frame": [83, 131],
-      "baseline": 129
+      "frame": [80, 133],
+      "baseline": 131
     }
   },
   "avatar-architect": {
@@ -94,8 +94,8 @@
     "frame": [73, 132],
     "baseline": 130,
     "idle": {
-      "frame": [81, 138],
-      "baseline": 136
+      "frame": [91, 130],
+      "baseline": 128
     }
   },
   "avatar-hacker": {
@@ -103,8 +103,8 @@
     "frame": [73, 130],
     "baseline": 128,
     "idle": {
-      "frame": [84, 126],
-      "baseline": 124
+      "frame": [93, 132],
+      "baseline": 130
     }
   },
   "innkeeper": {
@@ -112,8 +112,8 @@
     "frame": [65, 134],
     "baseline": 132,
     "idle": {
-      "frame": [95, 129],
-      "baseline": 127
+      "frame": [90, 135],
+      "baseline": 133
     }
   },
   "smith": {
@@ -121,8 +121,8 @@
     "frame": [74, 126],
     "baseline": 124,
     "idle": {
-      "frame": [87, 135],
-      "baseline": 133
+      "frame": [91, 125],
+      "baseline": 123
     }
   },
   "clerk": {
@@ -130,8 +130,8 @@
     "frame": [69, 126],
     "baseline": 124,
     "idle": {
-      "frame": [91, 133],
-      "baseline": 131
+      "frame": [92, 127],
+      "baseline": 125
     }
   },
   "librarian": {
@@ -139,8 +139,8 @@
     "frame": [73, 126],
     "baseline": 124,
     "idle": {
-      "frame": [83, 135],
-      "baseline": 133
+      "frame": [73, 128],
+      "baseline": 126
     }
   },
   "rookery-keeper": {
@@ -148,8 +148,8 @@
     "frame": [71, 129],
     "baseline": 127,
     "idle": {
-      "frame": [82, 129],
-      "baseline": 127
+      "frame": [94, 132],
+      "baseline": 130
     }
   },
   "crier": {
@@ -157,8 +157,8 @@
     "frame": [74, 135],
     "baseline": 133,
     "idle": {
-      "frame": [74, 127],
-      "baseline": 125
+      "frame": [85, 126],
+      "baseline": 124
     }
   },
   "townsfolk-1": {
@@ -166,8 +166,8 @@
     "frame": [86, 132],
     "baseline": 130,
     "idle": {
-      "frame": [80, 135],
-      "baseline": 133
+      "frame": [84, 132],
+      "baseline": 130
     }
   },
   "townsfolk-2": {
@@ -175,8 +175,8 @@
     "frame": [66, 128],
     "baseline": 126,
     "idle": {
-      "frame": [74, 132],
-      "baseline": 130
+      "frame": [77, 125],
+      "baseline": 123
     }
   },
   "townsfolk-3": {
@@ -184,7 +184,7 @@
     "frame": [74, 131],
     "baseline": 129,
     "idle": {
-      "frame": [79, 129],
+      "frame": [74, 129],
       "baseline": 127
     }
   },
@@ -193,8 +193,8 @@
     "frame": [71, 133],
     "baseline": 131,
     "idle": {
-      "frame": [74, 139],
-      "baseline": 137
+      "frame": [78, 125],
+      "baseline": 123
     }
   },
   "townsfolk-5": {
@@ -202,8 +202,8 @@
     "frame": [72, 125],
     "baseline": 123,
     "idle": {
-      "frame": [89, 125],
-      "baseline": 123
+      "frame": [79, 127],
+      "baseline": 125
     }
   },
   "townsfolk-6": {
@@ -211,7 +211,7 @@
     "frame": [76, 129],
     "baseline": 127,
     "idle": {
-      "frame": [70, 131],
+      "frame": [79, 131],
       "baseline": 129
     }
   },
@@ -220,8 +220,8 @@
     "frame": [75, 127],
     "baseline": 125,
     "idle": {
-      "frame": [83, 135],
-      "baseline": 133
+      "frame": [95, 138],
+      "baseline": 136
     }
   },
   "ambient-facilities": {
@@ -229,8 +229,8 @@
     "frame": [97, 132],
     "baseline": 130,
     "idle": {
-      "frame": [83, 130],
-      "baseline": 128
+      "frame": [80, 127],
+      "baseline": 125
     }
   },
   "ambient-visitor": {
@@ -238,8 +238,8 @@
     "frame": [72, 133],
     "baseline": 131,
     "idle": {
-      "frame": [82, 135],
-      "baseline": 133
+      "frame": [93, 127],
+      "baseline": 125
     }
   },
   "ambient-dogwalker": {
@@ -247,8 +247,8 @@
     "frame": [79, 125],
     "baseline": 123,
     "idle": {
-      "frame": [72, 132],
-      "baseline": 130
+      "frame": [85, 130],
+      "baseline": 128
     }
   },
   "recruiter": {
@@ -256,8 +256,8 @@
     "frame": [70, 130],
     "baseline": 128,
     "idle": {
-      "frame": [82, 134],
-      "baseline": 132
+      "frame": [94, 125],
+      "baseline": 123
     }
   }
 }
