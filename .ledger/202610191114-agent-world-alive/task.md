@@ -27,3 +27,13 @@ Planning: eleven tickets drafted in `tickets/`, awaiting the operator's review.
 ## Outcome
 
 Pending.
+
+## Judgment calls
+
+- **02 depth:** fixed in place data only (about 40 foreground pieces re-cut, furniture footprints moved north, hosts moved onto floor, bells and other fidgets onto surfaces); tall objects (bookshelves, trees) still hide a figure standing right behind them, by design.
+- **03 pets:** five distinct pets per pack, at most one per place, none in repeating rooms (headquarters, common room, wings), so a coordinator's copy never shows the same animal twice.
+- **04 signs:** the fantasy square's painted boards are too small (or absent), so its six signs are drawn plates in colours sampled from the painting; tech and anime letter their painted boards.
+- **05 Slack:** Mark read uses `conversations.mark` for channels and the web client's undocumented `subscriptions.thread.mark` for threads; it is logged but skips the confirmation dialog (the button is the explicit choice).
+- **06 idle art:** the first idle sheets drew a different person for many looks; all idle sheets were regenerated with the look's own sheet attached as a reference image.
+- **07 wandering:** life is off in headless tests unless a test asks for it; asking and finished-unseen agents stay at their spots so you can find them.
+- **10 recruiting:** the anime courtyard has no painted booth, so its recruiter stands by the left bench.

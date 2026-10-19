@@ -4,9 +4,9 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Every look in every pack has an idle sheet that passes the pack check (frame layout and baseline).
-- [ ] A standing character plays an idle animation at irregular intervals; two characters standing side by side do not start the same idle at the same moment.
-- [ ] Working and asking poses are unchanged.
-- [ ] Judged on screenshots in all three themes against `apps/agent-world/art/STYLE.md` and the polish bar in `.ledger/history/202610171741-guildworld/spec.md` (Further Notes).
+- [x] Every look in every pack has an idle sheet that passes the pack check (frame layout and baseline).
+- [x] A standing character plays an idle animation at irregular intervals; two characters standing side by side do not start the same idle at the same moment.
+- [x] Working and asking poses are unchanged.
+- [x] Judged on screenshots in all three themes against `apps/agent-world/art/STYLE.md` and the polish bar in `.ledger/history/202610171741-guildworld/spec.md` (Further Notes).

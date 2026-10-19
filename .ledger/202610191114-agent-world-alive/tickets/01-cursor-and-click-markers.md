@@ -4,9 +4,9 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] The default arrow never shows over the world; HTML panels keep a normal pointer for text and buttons.
-- [ ] Hovering a character, door, fidget, or host shows the animated hand; hovering unwalkable floor with no interaction shows the grey or closed hand; hovering open floor shows the plain hand.
-- [ ] A left click on open floor draws a yellow X at the destination; a click on an interaction draws a red X on the target; each fades within about half a second.
-- [ ] Judged on screenshots in all three themes against `apps/agent-world/art/STYLE.md` and the polish bar in `.ledger/history/202610171741-guildworld/spec.md` (Further Notes).
+- [x] The default arrow never shows over the world; HTML panels keep a normal pointer for text and buttons.
+- [x] Hovering a character, door, fidget, or host shows the animated hand; hovering unwalkable floor with no interaction shows the grey or closed hand; hovering open floor shows the plain hand.
+- [x] A left click on open floor draws a yellow X at the destination; a click on an interaction draws a red X on the target; each fades within about half a second.
+- [x] Judged on screenshots in all three themes against `apps/agent-world/art/STYLE.md` and the polish bar in `.ledger/history/202610171741-guildworld/spec.md` (Further Notes).

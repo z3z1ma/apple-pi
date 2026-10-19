@@ -4,9 +4,9 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] No two pets in one pack use the same look, and no place has more than one pet.
-- [ ] A pet's drawn height relative to a standing character matches its kind (a cat about a third, a dog about half), checked by a test against the drawn sizes.
-- [ ] Each pet still answers hover, left click, and the menu, with its own reactions.
-- [ ] Judged on screenshots in all three themes against `apps/agent-world/art/STYLE.md` and the polish bar in `.ledger/history/202610171741-guildworld/spec.md` (Further Notes).
+- [x] No two pets in one pack use the same look, and no place has more than one pet.
+- [x] A pet's drawn height relative to a standing character matches its kind (a cat about a third, a dog about half), checked by a test against the drawn sizes.
+- [x] Each pet still answers hover, left click, and the menu, with its own reactions.
+- [x] Judged on screenshots in all three themes against `apps/agent-world/art/STYLE.md` and the polish bar in `.ledger/history/202610171741-guildworld/spec.md` (Further Notes).

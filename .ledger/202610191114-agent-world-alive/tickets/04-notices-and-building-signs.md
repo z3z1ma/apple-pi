@@ -4,8 +4,8 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] In every pack a notice's drawn size leaves visible board between notices and around the board's edge.
-- [ ] Every building's sign board in every square shows its place's themed name, legible at the default zoom and fitted inside the board.
-- [ ] Judged on screenshots in all three themes against `apps/agent-world/art/STYLE.md` and the polish bar in `.ledger/history/202610171741-guildworld/spec.md` (Further Notes).
+- [x] In every pack a notice's drawn size leaves visible board between notices and around the board's edge.
+- [x] Every building's sign board in every square shows its place's themed name, legible at the default zoom and fitted inside the board.
+- [x] Judged on screenshots in all three themes against `apps/agent-world/art/STYLE.md` and the polish bar in `.ledger/history/202610171741-guildworld/spec.md` (Further Notes).

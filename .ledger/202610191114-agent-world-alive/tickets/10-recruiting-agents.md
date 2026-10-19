@@ -4,9 +4,9 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Recruiting at the coordinator's desk sends `start` with `reportsTo` the coordinator, a new window opens after the coordinator's pane, and the new worker walks into its wing (a scratch tmux server and fake `pi` in the backend test).
-- [ ] Recruiting at the square's recruiter sends `start` without `reportsTo`, and the new independent agent appears in the square.
-- [ ] Each pack names the action and the recruiter in its own words (`theme.json`), validated by the pack check.
-- [ ] Judged on screenshots in all three themes against `apps/agent-world/art/STYLE.md` and the polish bar in `.ledger/history/202610171741-guildworld/spec.md` (Further Notes).
+- [x] Recruiting at the coordinator's desk sends `start` with `reportsTo` the coordinator, a new window opens after the coordinator's pane, and the new worker walks into its wing (a scratch tmux server and fake `pi` in the backend test).
+- [x] Recruiting at the square's recruiter sends `start` without `reportsTo`, and the new independent agent appears in the square.
+- [x] Each pack names the action and the recruiter in its own words (`theme.json`), validated by the pack check.
+- [x] Judged on screenshots in all three themes against `apps/agent-world/art/STYLE.md` and the polish bar in `.ledger/history/202610171741-guildworld/spec.md` (Further Notes).
