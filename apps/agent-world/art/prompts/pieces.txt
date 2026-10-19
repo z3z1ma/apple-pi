@@ -1,0 +1,1 @@
+A pixel art sprite sheet on a solid flat pure magenta #FF00FF background, items in one row with wide magenta gaps between them, all drawn in the same 3/4 top-down RPG style and lit from the upper left, crisp edges, no anti-aliasing against the magenta, no text: {brief} {style}
