@@ -165,5 +165,11 @@
     { "name": "the notice board", "at": [36.9, 15.1], "face": "down" },
     { "name": "the cherry trees", "at": [8.3, 16.0], "face": "left" }
   ],
-  "ambient": [{ "cast": "monitor", "at": [11.2, 9.9], "stay": true }, { "cast": "gardener", "at": [29.2, 17.4] }]
+  "ambient": [{ "cast": "monitor", "at": [11.2, 9.9], "stay": true }, { "cast": "gardener", "at": [29.2, 17.4] }],
+  "atmosphere": [
+    { "kind": "fall", "what": "petals" },
+    { "kind": "sky", "what": "birds" },
+    { "kind": "shimmer", "rect": [19.22, 11.56, 5.9, 2.24], "count": 8 },
+    { "kind": "lights", "rects": [[3, 0, 38, 8]] }
+  ]
 }

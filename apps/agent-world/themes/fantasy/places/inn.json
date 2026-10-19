@@ -104,5 +104,12 @@
   "interest": [
     { "name": "the hearth", "at": [5.6, 5.4], "face": "left" },
     { "name": "the bar", "at": [15.2, 5.0], "face": "up" }
+  ],
+  "atmosphere": [
+    { "kind": "motes", "rect": [5, 4, 14, 7], "count": 10 },
+    { "kind": "steam", "at": [8.4, 6.05] },
+    { "kind": "steam", "at": [17.05, 9.15] },
+    { "kind": "steam", "at": [13.2, 2.5], "w": 0.2, "count": 3 },
+    { "kind": "sparks", "at": [2.85, 6.1], "w": 1.0, "count": 4 }
   ]
 }

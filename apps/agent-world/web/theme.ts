@@ -23,6 +23,7 @@ import {
 } from "../src/theme-pack.js";
 
 export {
+	type Atmosphere,
 	type Door,
 	FIDGETS,
 	type FidgetKind,

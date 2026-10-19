@@ -71,5 +71,9 @@
     { "name": "the lockers", "at": [22.0, 4.7], "face": "up" },
     { "name": "the windows", "at": [3.8, 10.6], "face": "left" },
     { "name": "the east windows", "at": [26.4, 11.0], "face": "right" }
+  ],
+  "atmosphere": [
+    { "kind": "motes", "rect": [4, 3, 14, 12], "count": 16 },
+    { "kind": "fall", "what": "petals", "rect": [0, 15.5, 30, 4.5], "count": 6 }
   ]
 }

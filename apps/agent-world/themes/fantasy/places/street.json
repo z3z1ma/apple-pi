@@ -98,5 +98,12 @@
     { "name": "the moored boat", "at": [31.5, 13.9], "face": "down" },
     { "name": "the lighthouse", "at": [40.5, 11.0], "face": "up" }
   ],
-  "ambient": [{ "cast": "tourist", "at": [13.5, 10.8] }]
+  "ambient": [{ "cast": "tourist", "at": [13.5, 10.8] }],
+  "atmosphere": [
+    { "kind": "fall", "what": "leaves", "rect": [0, 0, 14, 12], "count": 6 },
+    { "kind": "sky", "what": "birds" },
+    { "kind": "shimmer", "rect": [0, 15.5, 44, 6.5], "count": 16 },
+    { "kind": "shimmer", "rect": [30, 2, 14, 3], "count": 6 },
+    { "kind": "lights", "rects": [[5, 0, 39, 9.5]] }
+  ]
 }

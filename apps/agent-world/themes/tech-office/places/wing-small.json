@@ -58,5 +58,19 @@
     { "name": "the pinboard", "at": [7.7, 3.6], "face": "up" },
     { "name": "the bookcase", "at": [11.0, 3.8], "face": "up" },
     { "name": "the plants", "at": [14.2, 10.2], "face": "right" }
+  ],
+  "atmosphere": [
+    {
+      "kind": "screens",
+      "rects": [
+        [2.5, 5.35, 0.95, 0.6],
+        [3.6, 5.5, 0.6, 0.62],
+        [8.65, 5.55, 0.55, 0.65],
+        [12.48, 5.5, 1.18, 0.58],
+        [13.74, 5.6, 0.44, 0.68]
+      ]
+    },
+    { "kind": "steam", "at": [12.28, 6.3], "w": 0.15, "count": 3 },
+    { "kind": "motes", "rect": [2, 2, 8, 6], "count": 10 }
   ]
 }

@@ -569,6 +569,8 @@ export interface PlaceData {
 	interest?: { name: string; at: Point; face?: "up" | "down" | "left" | "right" }[];
 	/** The pack's ambient characters standing here (ticket 08), each named in `theme.json`'s `ambient`. */
 	ambient?: AmbientPlacement[];
+	/** What moves in the place besides its characters, and its lit windows out of doors (ticket 11): `Atmosphere`. */
+	atmosphere?: Atmosphere[];
 	niches?: {
 		at: number[];
 		door: Rect;
@@ -614,6 +616,45 @@ export interface OverlaySlot {
 	asleep?: boolean;
 	/** A light (or a box) that starts on (or open) when the app starts. */
 	on?: boolean;
+}
+
+/** The kinds of atmosphere a place may have (`Atmosphere`). */
+export const ATMOSPHERE_KINDS = [
+	"motes",
+	"fall",
+	"sky",
+	"steam",
+	"sparks",
+	"blink",
+	"screens",
+	"shimmer",
+	"lights",
+] as const;
+/** What a `fall` lets fall and what crosses a `sky`. */
+export const ATMOSPHERE_WHAT: Partial<Record<(typeof ATMOSPHERE_KINDS)[number], readonly string[]>> = {
+	fall: ["leaves", "petals"],
+	sky: ["birds", "plane"],
+};
+
+/**
+ * Ambient motion that is not a character, drawn by the world in code (ticket 11). `motes`: dust drifting in the light
+ * over `rect` (the whole place without one); `fall`: `what` (leaves or petals) drifting down over the place, or over
+ * `rect`; `sky`: `what` (a flock of birds or a plane) crossing now and then; `steam`: wisps rising from `at` (a cup, a
+ * kettle, a quench trough), `w` tiles wide; `sparks`: embers rising from a fire at `at`; `blink`: small lights blinking
+ * over `rect` (a server rack's LEDs), in `colors`; `screens`: the soft, flickering light of each screen in `rects`;
+ * `shimmer`: glints on the water inside `rect` (only where the painting is water); `lights`: out of doors, the painted
+ * windows and lamps inside `rects` (their bright, warm pixels) lit above the evening and night tint. `count` is how
+ * many at once where that applies.
+ */
+export interface Atmosphere {
+	kind: (typeof ATMOSPHERE_KINDS)[number];
+	rect?: Rect;
+	rects?: Rect[];
+	at?: Point;
+	w?: number;
+	count?: number;
+	what?: string;
+	colors?: string[];
 }
 
 export interface Look {
@@ -1011,6 +1052,7 @@ function checkPlace(name: string, value: unknown, painting: PackImage | undefine
 	checkRecruiting(place, PLACE_NEEDS[name], fault, onFloor);
 	checkInterest(place, grid, fault);
 	checkAmbientPlaces(place, grid, fault);
+	checkAtmosphere(place, rectInside, inside, fault);
 	if (place.enterBy !== undefined && !place.doors.some((door) => door.name === place.enterBy))
 		fault(`enterBy names ${JSON.stringify(place.enterBy)}, which is not one of its doors`);
 	const needs = PLACE_NEEDS[name];
@@ -1025,6 +1067,50 @@ function checkPlace(name: string, value: unknown, painting: PackImage | undefine
 		const strips = [...Object.values(layouts ?? {}).flat(), repeat];
 		if (!strips.every((s) => Array.isArray(s) && s.length === 2 && s[0] >= 0 && s[1] <= place.cols && s[0] < s[1]))
 			fault("cuts its painting into strips outside its grid");
+	}
+}
+
+/** A place's atmosphere (ticket 11): each entry a known kind, inside the grid, naming what it may. */
+function checkAtmosphere(
+	place: PlaceData,
+	rectInside: (rect: Rect) => boolean,
+	inside: (point: Point) => boolean,
+	fault: (text: string) => void,
+) {
+	if (place.atmosphere === undefined) return;
+	if (!Array.isArray(place.atmosphere)) return fault("has an atmosphere that is not a list");
+	for (const [i, effect] of place.atmosphere.entries()) {
+		if (!isObject(effect) || !ATMOSPHERE_KINDS.includes(effect.kind as Atmosphere["kind"])) {
+			fault(
+				`atmosphere ${i} is ${JSON.stringify(isObject(effect) ? effect.kind : effect)}; kind is one of ${ATMOSPHERE_KINDS.join(", ")}`,
+			);
+			continue;
+		}
+		const what = `atmosphere ${i} (${effect.kind})`;
+		const rects = [...(effect.rect === undefined ? [] : [effect.rect]), ...(effect.rects ?? [])];
+		for (const rect of rects)
+			if (!isRect(rect)) fault(`${what} has a rect that is not [x, y, w, h]`);
+			else if (!rectInside(rect)) fault(`${what} ${fmt(rect)} lies outside its grid`);
+		if (
+			(effect.kind === "screens" || effect.kind === "lights") &&
+			!(Array.isArray(effect.rects) && effect.rects.length)
+		)
+			fault(`${what} has no rects [[x, y, w, h], ...]`);
+		if ((effect.kind === "blink" || effect.kind === "shimmer") && effect.rect === undefined)
+			fault(`${what} has no rect [x, y, w, h]`);
+		if (effect.kind === "steam" || effect.kind === "sparks") {
+			if (!isPoint(effect.at)) fault(`${what} has no place (at)`);
+			else if (!inside(effect.at)) fault(`${what} at ${fmt(effect.at)} lies outside its grid`);
+		}
+		const names = ATMOSPHERE_WHAT[effect.kind];
+		if (names && !names.includes(effect.what as string))
+			fault(`${what} names ${JSON.stringify(effect.what)}; what is one of ${names.join(", ")}`);
+		if (effect.count !== undefined && !(isNumber(effect.count) && effect.count > 0))
+			fault(`${what} has a count that is not a positive number`);
+		const colours = effect.colors ?? [];
+		const wrong = Array.isArray(colours) ? colours.filter((c) => !/^#[0-9a-f]{6}$/i.test(String(c))) : [colours];
+		if (wrong.length)
+			fault(`${what} has colours that are not #rrggbb: ${wrong.map((c) => JSON.stringify(c)).join(", ")}`);
 	}
 }
 

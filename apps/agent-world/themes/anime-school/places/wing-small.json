@@ -46,5 +46,9 @@
     { "name": "the trophy cabinet", "at": [3.5, 6.0], "face": "up" },
     { "name": "the whiteboard", "at": [13.5, 6.0], "face": "up" },
     { "name": "the shelves", "at": [16.0, 10.0], "face": "right" }
+  ],
+  "atmosphere": [
+    { "kind": "motes", "rect": [1, 4, 12, 10], "count": 14 },
+    { "kind": "steam", "at": [15.3, 4.85], "w": 0.15, "count": 3 }
   ]
 }

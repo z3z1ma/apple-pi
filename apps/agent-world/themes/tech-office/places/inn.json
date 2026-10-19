@@ -88,5 +88,10 @@
   "interest": [
     { "name": "the windows", "at": [6.2, 5.2], "face": "up" },
     { "name": "the reading nook", "at": [20.0, 9.2], "face": "right" }
+  ],
+  "atmosphere": [
+    { "kind": "motes", "rect": [2, 1.5, 8, 6], "count": 12 },
+    { "kind": "steam", "at": [11.3, 1.75], "w": 0.2, "count": 4 },
+    { "kind": "steam", "at": [13.8, 1.75], "w": 0.2, "count": 4 }
   ]
 }

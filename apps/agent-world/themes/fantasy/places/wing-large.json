@@ -225,5 +225,10 @@
     { "name": "the hearth", "at": [25.0, 6.4], "face": "up" },
     { "name": "the scroll racks", "at": [3.2, 11.0], "face": "left" },
     { "name": "the great map", "at": [15.0, 12.9], "face": "up" }
+  ],
+  "atmosphere": [
+    { "kind": "motes", "rect": [2, 6, 6, 7], "count": 12 },
+    { "kind": "motes", "rect": [17, 4, 6, 5], "count": 8 },
+    { "kind": "sparks", "at": [26.5, 4.9], "w": 0.9, "count": 4 }
   ]
 }

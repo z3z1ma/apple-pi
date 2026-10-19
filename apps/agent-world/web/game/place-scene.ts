@@ -16,6 +16,7 @@ import type { ViewStore, WorldIntent } from "../view-state.js";
 import type { WorldStore } from "../world-store.js";
 import { type Action, action, type Target } from "./actions.js";
 import { AmbientCast, type AmbientView } from "./ambient.js";
+import { AtmosphereLayer, type AtmosphereView } from "./atmosphere.js";
 import { Birds, type BirdView, type Perch } from "./birds.js";
 import {
 	type BadgeKind,
@@ -296,6 +297,11 @@ export class PlaceScene extends Phaser.Scene {
 	private questBoard?: QuestBoard;
 	/** Things to fidget with in the place's `fidget` slots: pure play, never work. */
 	private fidgets?: Fidgets;
+	/** What moves in the place besides its characters, and out of doors the light of the time of day (ticket 11). */
+	private atmosphere?: AtmosphereLayer;
+	/** The place's own lamps (its `glow` slots), which out of doors glow brighter after dark; and their share now. */
+	private lamps: Glow[] = [];
+	private lampShare = 1;
 	/** At the inn: sleepers beyond its spots, upstairs; one who comes down takes the stairs, not the front door. */
 	private upstairs = new Set<string>();
 	/** Messenger birds carrying mail through the place. */
@@ -379,6 +385,9 @@ export class PlaceScene extends Phaser.Scene {
 		this.benches = undefined;
 		this.questBoard = undefined;
 		this.fidgets = undefined;
+		this.atmosphere = undefined;
+		this.lamps = [];
+		this.lampShare = 1;
 		this.upstairs = new Set();
 		this.upstairsTag = undefined;
 		this.window = undefined;
@@ -465,6 +474,7 @@ export class PlaceScene extends Phaser.Scene {
 			notify: (text) => this.view.notify(text),
 			uiScale: () => Math.max(1, UI_ZOOM / this.cameras.main.zoom),
 		});
+		this.addAtmosphere();
 		// Characters first, so the avatar arrives clear of where they stand.
 		this.showCharacters(false);
 		this.addAvatar();
@@ -545,6 +555,7 @@ export class PlaceScene extends Phaser.Scene {
 		this.benches?.update();
 		this.questBoard?.update();
 		this.fidgets?.update(time, delta);
+		this.atmosphere?.update(delta);
 		this.keepTagsClear(delta);
 		this.birds.update(delta);
 		this.ambientBirds(time);
@@ -925,7 +936,7 @@ export class PlaceScene extends Phaser.Scene {
 		for (const slot of this.layout.place.overlaySlots) {
 			if (slot.kind === "fire") this.addFire(slot);
 			if (slot.kind === "water") this.addWater(slot);
-			if (slot.kind === "glow") this.addGlow(slot);
+			if (slot.kind === "glow") this.lamps.push(this.addGlow(slot));
 			if (slot.kind === "bed") this.addBed(slot);
 			if (slot.kind === "window") this.window = slot.at;
 			if (slot.kind === "letters") this.addLetters(slot);
@@ -951,6 +962,30 @@ export class PlaceScene extends Phaser.Scene {
 
 	private showLetters() {
 		this.letters?.setVisible((this.store.get()?.mail ?? []).some((item) => item.state === "waiting"));
+	}
+
+	/** Motes, leaves, birds, steam, and the like, and out of doors the light of the time of day (ticket 11). */
+	private addAtmosphere() {
+		const floor = gridFor(this.layout.place);
+		this.atmosphere = new AtmosphereLayer(this, {
+			place: () => this.layout.place,
+			key: () => this.layout.key,
+			painting: () => `painting:${this.layout.data}`,
+			outdoors: () => this.outdoors(),
+			open: (at) => isOpen(floor, at),
+			lamps: (share) => {
+				if (Math.abs(share - this.lampShare) < 0.01) return;
+				// Eased over a moment the first time too, so arriving after dark the lamps come up as the place fades in.
+				this.lampShare = share;
+				for (const lamp of this.lamps) lamp.level(0.5 * share, 900);
+			},
+			now: () => new Date(),
+		});
+	}
+
+	/** The place's atmosphere and light now, for tests. */
+	atmosphereView(): AtmosphereView | undefined {
+		return this.atmosphere?.view();
 	}
 
 	/** Messenger birds in flight with mail, for tests. */

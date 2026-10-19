@@ -1591,6 +1591,23 @@ var SKIN_CLASSES = [
 	"place-title",
 	"notice"
 ];
+/** The kinds of atmosphere a place may have (`Atmosphere`). */
+var ATMOSPHERE_KINDS = [
+	"motes",
+	"fall",
+	"sky",
+	"steam",
+	"sparks",
+	"blink",
+	"screens",
+	"shimmer",
+	"lights"
+];
+/** What a `fall` lets fall and what crosses a `sky`. */
+var ATMOSPHERE_WHAT = {
+	fall: ["leaves", "petals"],
+	sky: ["birds", "plane"]
+};
 var isObject = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
 var isNumber = (value) => typeof value === "number" && Number.isFinite(value);
 var isPoint = (value) => Array.isArray(value) && value.length === 2 && value.every(isNumber);
@@ -1906,6 +1923,7 @@ function checkPlace(name, value, painting, problems) {
 	checkRecruiting(place, PLACE_NEEDS[name], fault, onFloor);
 	checkInterest(place, grid, fault);
 	checkAmbientPlaces(place, grid, fault);
+	checkAtmosphere(place, rectInside, inside, fault);
 	if (place.enterBy !== void 0 && !place.doors.some((door) => door.name === place.enterBy)) fault(`enterBy names ${JSON.stringify(place.enterBy)}, which is not one of its doors`);
 	const needs = PLACE_NEEDS[name];
 	if (needs?.host && !isObject(place.host)) fault(`has no host; the ${name} needs its ${needs.host}`);
@@ -1915,6 +1933,33 @@ function checkPlace(name, value, painting, problems) {
 		const { at, layouts, repeat } = place.niches;
 		if (!Array.isArray(at) || !at.every((x) => isNumber(x) && x >= 0 && x <= place.cols)) fault("has niches outside its grid");
 		if (![...Object.values(layouts ?? {}).flat(), repeat].every((s) => Array.isArray(s) && s.length === 2 && s[0] >= 0 && s[1] <= place.cols && s[0] < s[1])) fault("cuts its painting into strips outside its grid");
+	}
+}
+/** A place's atmosphere (ticket 11): each entry a known kind, inside the grid, naming what it may. */
+function checkAtmosphere(place, rectInside, inside, fault) {
+	if (place.atmosphere === void 0) return;
+	if (!Array.isArray(place.atmosphere)) return fault("has an atmosphere that is not a list");
+	for (const [i, effect] of place.atmosphere.entries()) {
+		if (!isObject(effect) || !ATMOSPHERE_KINDS.includes(effect.kind)) {
+			fault(`atmosphere ${i} is ${JSON.stringify(isObject(effect) ? effect.kind : effect)}; kind is one of ${ATMOSPHERE_KINDS.join(", ")}`);
+			continue;
+		}
+		const what = `atmosphere ${i} (${effect.kind})`;
+		const rects = [...effect.rect === void 0 ? [] : [effect.rect], ...effect.rects ?? []];
+		for (const rect of rects) if (!isRect(rect)) fault(`${what} has a rect that is not [x, y, w, h]`);
+		else if (!rectInside(rect)) fault(`${what} ${fmt(rect)} lies outside its grid`);
+		if ((effect.kind === "screens" || effect.kind === "lights") && !(Array.isArray(effect.rects) && effect.rects.length)) fault(`${what} has no rects [[x, y, w, h], ...]`);
+		if ((effect.kind === "blink" || effect.kind === "shimmer") && effect.rect === void 0) fault(`${what} has no rect [x, y, w, h]`);
+		if (effect.kind === "steam" || effect.kind === "sparks") {
+			if (!isPoint(effect.at)) fault(`${what} has no place (at)`);
+			else if (!inside(effect.at)) fault(`${what} at ${fmt(effect.at)} lies outside its grid`);
+		}
+		const names = ATMOSPHERE_WHAT[effect.kind];
+		if (names && !names.includes(effect.what)) fault(`${what} names ${JSON.stringify(effect.what)}; what is one of ${names.join(", ")}`);
+		if (effect.count !== void 0 && !(isNumber(effect.count) && effect.count > 0)) fault(`${what} has a count that is not a positive number`);
+		const colours = effect.colors ?? [];
+		const wrong = Array.isArray(colours) ? colours.filter((c) => !/^#[0-9a-f]{6}$/i.test(String(c))) : [colours];
+		if (wrong.length) fault(`${what} has colours that are not #rrggbb: ${wrong.map((c) => JSON.stringify(c)).join(", ")}`);
 	}
 }
 /**

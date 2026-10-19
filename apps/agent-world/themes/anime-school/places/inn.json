@@ -71,5 +71,11 @@
   "interest": [
     { "name": "the window", "at": [3.4, 6.6], "face": "left" },
     { "name": "the futons", "at": [19.6, 5.5], "face": "right" }
+  ],
+  "atmosphere": [
+    { "kind": "motes", "rect": [1, 1, 10, 9], "count": 12 },
+    { "kind": "steam", "at": [8.6, 4.95], "w": 0.15, "count": 4 },
+    { "kind": "steam", "at": [16.4, 8.8], "w": 0.15, "count": 4 },
+    { "kind": "steam", "at": [12.5, 1.5], "w": 0.2, "count": 3 }
   ]
 }

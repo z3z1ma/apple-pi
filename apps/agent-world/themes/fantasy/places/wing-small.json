@@ -121,5 +121,9 @@
     { "name": "the bookshelves", "at": [5.2, 4.3], "face": "up" },
     { "name": "the board", "at": [12.3, 4.3], "face": "up" },
     { "name": "the barrels", "at": [16.5, 9.2], "face": "right" }
+  ],
+  "atmosphere": [
+    { "kind": "motes", "rect": [0.5, 5, 5, 8], "count": 10 },
+    { "kind": "motes", "rect": [7, 3, 4, 5], "count": 8 }
   ]
 }

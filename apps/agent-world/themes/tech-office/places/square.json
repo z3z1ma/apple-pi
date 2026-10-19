@@ -173,5 +173,11 @@
     { "name": "the bench", "at": [6.0, 17.9], "face": "down" },
     { "name": "the flower beds", "at": [12.5, 15.8], "face": "down" }
   ],
-  "ambient": [{ "cast": "facilities", "at": [26.3, 11.8] }, { "cast": "dogwalker", "at": [27.0, 16.2] }]
+  "ambient": [{ "cast": "facilities", "at": [26.3, 11.8] }, { "cast": "dogwalker", "at": [27.0, 16.2] }],
+  "atmosphere": [
+    { "kind": "sky", "what": "plane" },
+    { "kind": "sky", "what": "birds" },
+    { "kind": "shimmer", "rect": [16.1, 11.97, 7.86, 2.56], "count": 8 },
+    { "kind": "lights", "rects": [[3, 1, 36, 7]] }
+  ]
 }

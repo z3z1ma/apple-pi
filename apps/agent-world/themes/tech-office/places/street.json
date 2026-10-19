@@ -117,5 +117,10 @@
     { "name": "the crossing", "at": [13.0, 14.3], "face": "down" },
     { "name": "the bench", "at": [35.6, 15.6], "face": "up" }
   ],
-  "ambient": [{ "cast": "visitor", "at": [10.5, 7.6] }]
+  "ambient": [{ "cast": "visitor", "at": [10.5, 7.6] }],
+  "atmosphere": [
+    { "kind": "sky", "what": "plane" },
+    { "kind": "fall", "what": "leaves", "count": 9, "colors": ["#e8c84a", "#f0d860", "#d4b03c", "#c99a2e"] },
+    { "kind": "lights", "rects": [[8, 1, 32, 7]] }
+  ]
 }

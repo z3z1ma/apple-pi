@@ -73,5 +73,9 @@
     { "name": "the vending machine", "at": [25.0, 11.8], "face": "right" },
     { "name": "the ping-pong table", "at": [6.6, 12.5], "face": "left" },
     { "name": "the lounge", "at": [23.6, 13.2], "face": "down" }
+  ],
+  "atmosphere": [
+    { "kind": "motes", "rect": [4, 3, 22, 10], "count": 18 },
+    { "kind": "steam", "at": [16.44, 3.45], "w": 0.15, "count": 3 }
   ]
 }

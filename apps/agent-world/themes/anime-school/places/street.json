@@ -97,5 +97,10 @@
     { "name": "the cherry tree", "at": [19.0, 17.8], "face": "up" },
     { "name": "the bicycle shelter", "at": [35.0, 12.0], "face": "down" }
   ],
-  "ambient": [{ "cast": "senpai", "at": [27.8, 11.4] }]
+  "ambient": [{ "cast": "senpai", "at": [27.8, 11.4] }],
+  "atmosphere": [
+    { "kind": "fall", "what": "petals" },
+    { "kind": "sky", "what": "birds" },
+    { "kind": "lights", "rects": [[7, 1, 30, 7]] }
+  ]
 }

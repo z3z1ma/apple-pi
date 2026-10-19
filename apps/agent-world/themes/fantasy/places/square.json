@@ -252,5 +252,11 @@
   "ambient": [
     { "cast": "guard", "at": [9.4, 9.9], "stay": true },
     { "cast": "baker", "at": [29.0, 16.5], "face": "down" }
+  ],
+  "atmosphere": [
+    { "kind": "fall", "what": "leaves" },
+    { "kind": "sky", "what": "birds" },
+    { "kind": "shimmer", "rect": [19.15, 12.57, 5.7, 2.1], "count": 8 },
+    { "kind": "lights", "rects": [[0, 0, 44, 9.5]] }
   ]
 }

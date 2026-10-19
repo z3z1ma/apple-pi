@@ -83,5 +83,9 @@
     { "name": "the screen", "at": [15.5, 4.6], "face": "up" },
     { "name": "the beanbags", "at": [6.3, 5.0], "face": "left" },
     { "name": "the shelves", "at": [19.3, 7.5], "face": "right" }
+  ],
+  "atmosphere": [
+    { "kind": "motes", "rect": [1, 1, 8, 7], "count": 12 },
+    { "kind": "steam", "at": [11.25, 6.15], "w": 0.15, "count": 3 }
   ]
 }

@@ -80,5 +80,9 @@
       "rect": [12.8, 10.9, 5.2, 1.6],
       "feet": 12.5
     }
+  ],
+  "atmosphere": [
+    { "kind": "motes", "rect": [3, 3, 8, 8], "count": 12 },
+    { "kind": "fall", "what": "petals", "rect": [0, 13, 18, 5], "count": 5 }
   ]
 }

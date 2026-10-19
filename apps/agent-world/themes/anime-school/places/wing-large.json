@@ -83,5 +83,6 @@
     { "name": "the telescope", "at": [25.5, 4.7], "face": "up" },
     { "name": "the west shelves", "at": [1.9, 9.0], "face": "left" },
     { "name": "the east shelves", "at": [27.4, 9.0], "face": "right" }
-  ]
+  ],
+  "atmosphere": [{ "kind": "motes", "rect": [3, 3, 24, 9], "count": 18 }]
 }

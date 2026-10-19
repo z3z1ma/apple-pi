@@ -86,5 +86,9 @@
     { "name": "Workbench", "rect": [13.15, 4.4, 6.45, 3.25], "use": "smith" },
     { "name": "Workbench", "rect": [3.6, 7.85, 7.5, 3.35], "use": "smith" },
     { "name": "Workbench", "rect": [13.25, 7.75, 7.5, 3.45], "use": "smith" }
+  ],
+  "atmosphere": [
+    { "kind": "blink", "rect": [9.3, 1.0, 8.9, 2.6], "count": 34 },
+    { "kind": "motes", "rect": [0.5, 2, 7, 9], "count": 12 }
   ]
 }

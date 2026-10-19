@@ -84,5 +84,6 @@
       "rect": [10, 5.9, 3.8, 4.5],
       "feet": 10.4
     }
-  ]
+  ],
+  "atmosphere": [{ "kind": "motes", "rect": [0.5, 2, 8, 8], "count": 14 }]
 }

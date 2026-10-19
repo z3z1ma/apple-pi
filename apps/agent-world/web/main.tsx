@@ -80,6 +80,8 @@ declare global {
 			recruiter(): { name: string; look: string; x: number; y: number } | undefined;
 			/** The pack's ambient characters standing here (ticket 08). */
 			ambient(): AmbientView[];
+			/** What moves in the place besides its characters, and out of doors the light of the time of day (ticket 11). */
+			atmosphere(): ReturnType<PlaceScene["atmosphereView"]>;
 			/** The operator's avatar: where it is, its facing and frame, and the rest of its walk. */
 			avatar(): AvatarView | undefined;
 			/** A point in tiles, on screen in CSS px. */
@@ -301,6 +303,7 @@ window.agentWorldView = {
 	host: () => active()?.hostView(),
 	recruiter: () => active()?.recruiterView(),
 	ambient: () => active()?.ambientViews() ?? [],
+	atmosphere: () => active()?.atmosphereView(),
 	townsfolk: () => active()?.townsfolkViews() ?? [],
 	signs: () => active()?.signViews() ?? [],
 	work: () => active()?.workViews() ?? [],
