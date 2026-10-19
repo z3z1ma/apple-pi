@@ -4,10 +4,10 @@
 
 **Blocked by:** 02 Places follow reporting and repositories
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] In headless Chrome on a fixture place, a click across a room produces a path that never enters a blocked cell and has no zig-zag between straight runs.
-- [ ] Clicking on furniture ends the walk on the nearest open cell; a second click mid-walk changes course without stopping first.
-- [ ] Right click lists every action on the target and the browser context menu never appears; hover text names the left-click action.
-- [ ] Talking to a character or using a door walks the avatar to its stand point before acting; walking past a door does not travel.
-- [ ] Meets the bar in the polish bar in the [spec](../spec.md#further-notes): judged on captured screenshots and a short recording, not on passing tests alone.
+- [x] In headless Chrome on a fixture place, a click across a room produces a path that never enters a blocked cell and has no zig-zag between straight runs.
+- [x] Clicking on furniture ends the walk on the nearest open cell; a second click mid-walk changes course without stopping first.
+- [x] Right click lists every action on the target and the browser context menu never appears; hover text names the left-click action.
+- [x] Talking to a character or using a door walks the avatar to its stand point before acting; walking past a door does not travel.
+- [x] Meets the bar in the polish bar in the [spec](../spec.md#further-notes): judged on captured screenshots and a short recording, not on passing tests alone.

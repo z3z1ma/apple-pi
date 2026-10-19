@@ -4,11 +4,11 @@
 
 **Blocked by:** 02 Places follow reporting and repositories
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Needs you lists questions first and finished work next, matching the sidebar's attention for the same sessions.
-- [ ] Work groups agents by ledger task; Agents groups them by place.
-- [ ] Each tab action works on a character in another place without walking.
-- [ ] A runtime event (start, settle, question, stop) appears in the chatbox within a second, and the filters hide and show each kind.
-- [ ] Go to its terminal focuses the right tmux pane.
-- [ ] Meets the bar in the polish bar in the [spec](../spec.md#further-notes): judged on captured screenshots and a short recording, not on passing tests alone.
+- [x] Needs you lists questions first and finished work next, matching the sidebar's attention for the same sessions.
+- [x] Work groups agents by ledger task; Agents groups them by place.
+- [x] Each tab action works on a character in another place without walking.
+- [x] A runtime event (start, settle, question, stop) appears in the chatbox within a second, and the filters hide and show each kind.
+- [x] Go to its terminal focuses the right tmux pane.
+- [x] Meets the bar in the polish bar in the [spec](../spec.md#further-notes): judged on captured screenshots and a short recording, not on passing tests alone.
