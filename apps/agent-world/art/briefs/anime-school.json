@@ -110,6 +110,18 @@
     "props": {
       "brief": "six items: 1. a folded futon with a pillow, in 3/4 view; 2. a small bundle of letters with a ribbon; 3. a small school bell; 4. an open textbook; 5. a desk lamp switched on; 6. a sleepy calico cat curled up.",
       "names": ["bed", "letters", "bell", "tome", "candle", "cat-sleeping"]
+    },
+    "fidget-pet": {
+      "brief": "four animation frames of the same small calico school cat sitting on the floor, about 1 square tall: 1. sitting looking at the viewer; 2. eyes closed, purring, leaning into a pet; 3. stretching; 4. batting a paw at a cherry petal.",
+      "names": ["pet-0", "pet-1", "pet-2", "pet-3"]
+    },
+    "fidget-spin": {
+      "brief": "four animation frames of the same small glass goldfish bowl on a wooden stand, about 1 square tall, with a goldfish swimming to a new position in each frame for a seamless loop.",
+      "names": ["spin-0", "spin-1", "spin-2", "spin-3"]
+    },
+    "fidget-toggles": {
+      "brief": "six items, each about 1 square tall: 1. a small brass school hand bell on a stand, still; 2. the same bell ringing with small motion lines; 3. a paper lantern unlit; 4. the same paper lantern lit and glowing; 5. a closed wooden bento box; 6. the same bento box open showing colourful food.",
+      "names": ["bell-still", "bell-ringing", "light-off", "light-on", "box-closed", "box-open"]
     }
   }
 }

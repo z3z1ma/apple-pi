@@ -110,6 +110,18 @@
     "props": {
       "brief": "six items: 1. a comfy grey sofa bed with a blanket, in 3/4 view; 2. a small stack of envelopes with a rubber band; 3. a desk bell; 4. an open glowing tablet; 5. a small desk lamp switched on; 6. a sleepy grey office cat curled up.",
       "names": ["bed", "letters", "bell", "tome", "candle", "cat-sleeping"]
+    },
+    "fidget-pet": {
+      "brief": "four animation frames of the same friendly corgi office dog sitting on the floor, about 1 square tall: 1. sitting looking at the viewer; 2. eyes closed, happy, leaning into a pet; 3. rolling onto its back; 4. wagging its tail with a little motion line.",
+      "names": ["pet-0", "pet-1", "pet-2", "pet-3"]
+    },
+    "fidget-spin": {
+      "brief": "four animation frames of the same colourful desk fidget spinner on a small round stand, about half a square, turned further in each frame for a seamless spin loop.",
+      "names": ["spin-0", "spin-1", "spin-2", "spin-3"]
+    },
+    "fidget-toggles": {
+      "brief": "six items, each about 1 square tall: 1. a silver desk call bell, still; 2. the same bell being dinged with small motion lines; 3. a modern desk lamp switched off; 4. the same lamp switched on with a warm glow; 5. an espresso machine idle; 6. the same espresso machine brewing with steam and a cup filling.",
+      "names": ["bell-still", "bell-ringing", "light-off", "light-on", "box-closed", "box-open"]
     }
   }
 }

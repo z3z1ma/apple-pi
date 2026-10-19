@@ -110,6 +110,18 @@
     "props": {
       "brief": "six items: 1. a tall wooden bed with a patchwork quilt, seen in 3/4 view; 2. a small pile of rolled letters tied with string; 3. a brass handbell; 4. an open glowing tome; 5. a lit candle on a brass holder; 6. a sleepy orange tabby cat curled up.",
       "names": ["bed", "letters", "bell", "tome", "candle", "cat-sleeping"]
+    },
+    "fidget-pet": {
+      "brief": "four animation frames of the same fluffy orange tabby cat sitting on the floor, about 1 square tall: 1. sitting upright looking at the viewer; 2. eyes closed, purring, leaning into a pet; 3. stretching with its back arched; 4. licking a paw.",
+      "names": ["pet-0", "pet-1", "pet-2", "pet-3"]
+    },
+    "fidget-spin": {
+      "brief": "four animation frames of the same small brass desk globe on a wooden stand, about 1 square tall, the globe turned a quarter further in each frame so it spins in a seamless loop.",
+      "names": ["spin-0", "spin-1", "spin-2", "spin-3"]
+    },
+    "fidget-toggles": {
+      "brief": "six items, each about 1 square tall: 1. a brass hand bell on a small wooden stand, still; 2. the same bell tilted and ringing with small motion lines; 3. a three-branch iron candelabra with unlit candles; 4. the same candelabra with all three candles lit and glowing; 5. a closed wooden music box; 6. the same music box open with a tiny dancer and small music notes floating.",
+      "names": ["bell-still", "bell-ringing", "light-off", "light-on", "box-closed", "box-open"]
     }
   }
 }
