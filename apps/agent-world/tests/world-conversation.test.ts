@@ -11,7 +11,7 @@ import type { Character, CharacterFacts, TranscriptEntry, WorldSnapshot } from "
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const ORIGIN = "http://agent-world.test";
 const appDir = fileURLToPath(new URL("..", import.meta.url));
-// AGENT_WORLD_SHOTS=<dir> saves screenshots of the panel there, as aw-10-*.png.
+// AGENT_WORLD_SHOTS=<dir> saves screenshots of the panel there, as aw-<ticket>-*.png.
 const SHOTS = process.env.AGENT_WORLD_SHOTS;
 /** Entries per page in the fixture backend, as the real one pages them. */
 const PAGE = 50;
@@ -232,6 +232,14 @@ async function openWorld(first: WorldSnapshot, transcripts: Record<string, Trans
 				for (const listener of listeners) listener(current);
 			};
 			w.seen = [];
+			w.commands = [];
+			w.receiptListeners = new Set();
+			w.replyListeners = new Set();
+			w.watched = [];
+			w.stageMs = 60;
+			w.reply = (event: unknown) => {
+				for (const listener of w.replyListeners) listener(event);
+			};
 			w.agentWorld = {
 				snapshot: async () => current,
 				onUpdate(listener: (s: unknown) => void) {
@@ -258,6 +266,46 @@ async function openWorld(first: WorldSnapshot, transcripts: Record<string, Trans
 						before: start > 0 ? (all[start] as any).id : null,
 						missing: 0,
 					};
+				},
+				// Instructions answer with the runtime's receipt stages, a moment apart; `refuse` fails the next one at once
+				// (as the backend refuses an unconfirmed Stop), `failNext` after it was delivered.
+				async instruct(id: string, commandId: string, instruction: unknown) {
+					w.commands.push([id, instruction]);
+					const stage = (name: string, reason?: string) => {
+						for (const listener of w.receiptListeners)
+							listener({ commandId, characterId: id, stage: name, ...(reason ? { reason } : {}) });
+					};
+					const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+					await wait(40);
+					if (w.refuse) {
+						const reason = w.refuse;
+						w.refuse = null;
+						stage("failed", reason);
+						return { ok: false, reason };
+					}
+					stage("accepted");
+					await wait(w.stageMs);
+					stage("delivered");
+					await wait(w.stageMs);
+					if (w.failNext) {
+						const reason = w.failNext;
+						w.failNext = null;
+						stage("failed", reason);
+						return { ok: false, reason };
+					}
+					stage("applied");
+					return { ok: true };
+				},
+				onReceipt(listener: (r: unknown) => void) {
+					w.receiptListeners.add(listener);
+					return () => w.receiptListeners.delete(listener);
+				},
+				async watchReplies(ids: string[]) {
+					w.watched.push(ids);
+				},
+				onReply(listener: (e: unknown) => void) {
+					w.replyListeners.add(listener);
+					return () => w.replyListeners.delete(listener);
 				},
 				async markSeen(id: string) {
 					w.seen.push(id);
@@ -296,11 +344,11 @@ async function talkTo(page: Page, name: string) {
 	await book(page).waitFor({ timeout: 3000 });
 }
 
-async function shot(page: Page, name: string) {
+async function shot(page: Page, name: string, ticket = "10") {
 	if (!SHOTS) return;
 	mkdirSync(SHOTS, { recursive: true });
 	await page.waitForTimeout(300);
-	await page.screenshot({ path: join(SHOTS, `aw-10-${name}.png`), animations: "disabled" });
+	await page.screenshot({ path: join(SHOTS, `aw-${ticket}-${name}.png`), animations: "disabled" });
 }
 
 test("Talk to opens the conversation over the dimmed world: portrait by state, name, repository, ledger task, and what it is doing", async () => {
@@ -525,6 +573,417 @@ test("while the conversation is open, what the character says next appears at th
 		expect(await log(page).locator("[data-entry]").count()).toBe(5);
 		// Seen while the operator watches it finish.
 		await vi.waitFor(async () => expect(await seen(page)).toEqual(["pi-tests"]), { timeout: 2000 });
+		expect(errors).toEqual([]);
+	} finally {
+		await page.close();
+	}
+}, 30000);
+
+// Ticket 13: instructing an agent from the panel.
+
+const commands = (page: Page) => page.evaluate(() => (window as any).commands as [string, Record<string, unknown>][]);
+const box = (page: Page) => book(page).getByRole("textbox");
+const receipts = (page: Page) => book(page).getByRole("list", { name: "Sent" });
+
+test("idle: a Reply box; Enter sends talk, Shift+Enter starts a line, the box keeps the focus, and the receipt's stages show", async () => {
+	const { page, errors } = await openWorld(world(), { ledger: SUITE });
+	try {
+		await talkTo(page, "ledger");
+		const panel = book(page);
+		// Idle: only Reply; no busy actions.
+		await expect(panel.getByRole("button", { name: "Reply", exact: true }).count()).resolves.toBe(1);
+		for (const name of ["Redirect now", "Tell it after this", "Stop"])
+			await expect(panel.getByRole("button", { name, exact: true }).count()).resolves.toBe(0);
+		await expect(box(page).getAttribute("aria-label")).resolves.toBe("Reply to ledger");
+		// The box has the focus on opening, so typing goes there and the world does not walk.
+		await vi.waitFor(async () => expect(await box(page).evaluate((el) => el === document.activeElement)).toBe(true));
+		await page.keyboard.type("Retry the billing job");
+		await page.keyboard.press("Shift+Enter");
+		await page.keyboard.type("with the new timeout.");
+		await expect(box(page).inputValue()).resolves.toBe("Retry the billing job\nwith the new timeout.");
+		await shot(page, "idle-typed", "13");
+		await page.keyboard.press("Enter");
+		await vi.waitFor(async () =>
+			expect(await commands(page)).toEqual([
+				["ledger", { kind: "talk", text: "Retry the billing job\nwith the new timeout." }],
+			]),
+		);
+		await expect(box(page).inputValue()).resolves.toBe("");
+		expect(await box(page).evaluate((el) => el === document.activeElement)).toBe(true);
+		// Its receipt: accepted, delivered, applied.
+		const line = receipts(page).getByRole("listitem");
+		await vi.waitFor(async () => expect(await line.getAttribute("data-stage")).toBe("applied"), { timeout: 3000 });
+		const text = await line.textContent();
+		for (const part of ["Reply", "Retry the billing job with the new timeout.", "Accepted", "Delivered", "Applied"])
+			expect(text).toContain(part);
+		await expect(line.locator(".aw-conv-stage.aw-on").count()).resolves.toBe(3);
+		await shot(page, "idle-sent", "13");
+		// Reply by click; nothing is sent while the box is empty.
+		await expect(panel.getByRole("button", { name: "Reply", exact: true }).isDisabled()).resolves.toBe(true);
+		expect(await commands(page)).toHaveLength(1);
+		await box(page).fill("Thanks.");
+		await panel.getByRole("button", { name: "Reply", exact: true }).click();
+		await vi.waitFor(async () => expect(await commands(page)).toHaveLength(2));
+		expect(await box(page).evaluate((el) => el === document.activeElement)).toBe(true);
+		// The world never walked while the operator typed.
+		expect(await page.evaluate(() => (window as any).agentWorldView.avatar()?.path?.length ?? 0)).toBeLessThan(2);
+		// Nor did "g" in "billing" toggle the walk grid.
+		expect(await page.evaluate(() => (window as any).agentWorldView.walkGrid())).toBe(false);
+		expect(errors).toEqual([]);
+	} finally {
+		await page.close();
+	}
+}, 40000);
+
+test("a draft survives closing and reopening the panel for the same character, and only for it", async () => {
+	const { page, errors } = await openWorld(world(), { ledger: SUITE, [HQ]: [] });
+	try {
+		await talkTo(page, "ledger");
+		await box(page).fill("Half a thought");
+		await page.keyboard.press("Escape");
+		await book(page).waitFor({ state: "detached", timeout: 2000 });
+		await talkTo(page, "Orla");
+		await expect(box(page).inputValue()).resolves.toBe("");
+		await page.keyboard.press("Escape");
+		await book(page).waitFor({ state: "detached", timeout: 2000 });
+		await talkTo(page, "ledger");
+		await expect(box(page).inputValue()).resolves.toBe("Half a thought");
+		expect(await commands(page)).toEqual([]);
+		expect(errors).toEqual([]);
+	} finally {
+		await page.close();
+	}
+}, 30000);
+
+test("busy: Redirect now (Enter), Tell it after this, and Stop, which asks first; declining sends nothing", async () => {
+	const { page, errors } = await openWorld(world(), { "pi-tests": SUITE });
+	try {
+		await talkTo(page, "pi-tests");
+		const panel = book(page);
+		for (const name of ["Redirect now", "Tell it after this", "Stop"])
+			await expect(panel.getByRole("button", { name, exact: true }).count()).resolves.toBe(1);
+		await expect(panel.getByRole("button", { name: "Reply", exact: true }).count()).resolves.toBe(0);
+		await vi.waitFor(async () => expect(await box(page).evaluate((el) => el === document.activeElement)).toBe(true));
+
+		await page.keyboard.type("Skip the flaky test for now.");
+		await page.keyboard.press("Enter");
+		await box(page).fill("Then open a ticket for it.");
+		await panel.getByRole("button", { name: "Tell it after this", exact: true }).click();
+		await vi.waitFor(async () =>
+			expect(await commands(page)).toEqual([
+				["pi-tests", { kind: "steer", text: "Skip the flaky test for now." }],
+				["pi-tests", { kind: "follow_up", text: "Then open a ticket for it." }],
+			]),
+		);
+		expect(await box(page).evaluate((el) => el === document.activeElement)).toBe(true);
+		await vi.waitFor(
+			async () =>
+				expect(
+					await receipts(page)
+						.getByRole("listitem")
+						.evaluateAll((items) => items.map((item) => item.getAttribute("data-stage"))),
+				).toEqual(["applied", "applied"]),
+			{ timeout: 3000 },
+		);
+		await expect(receipts(page).textContent()).resolves.toContain("Redirect");
+		await expect(receipts(page).textContent()).resolves.toContain("After this");
+		await shot(page, "busy-sent", "13");
+
+		// Stop asks first; Let it work (or Escape) sends nothing and leaves the panel open.
+		await panel.getByRole("button", { name: "Stop", exact: true }).click();
+		const confirm = page.getByRole("alertdialog", { name: "Stop pi-tests?" });
+		await confirm.waitFor({ timeout: 2000 });
+		await expect(confirm.textContent()).resolves.toContain("npx vitest run components/session-state");
+		await shot(page, "stop-confirm", "13");
+		await confirm.getByRole("button", { name: "Let it work" }).click();
+		await confirm.waitFor({ state: "detached", timeout: 2000 });
+		await panel.getByRole("button", { name: "Stop", exact: true }).click();
+		await confirm.waitFor({ timeout: 2000 });
+		await page.keyboard.press("Escape");
+		await confirm.waitFor({ state: "detached", timeout: 2000 });
+		await expect(panel.isVisible()).resolves.toBe(true);
+		await page.waitForTimeout(200);
+		expect(await commands(page)).toHaveLength(2);
+
+		// Confirmed: abort, sent as confirmed.
+		await panel.getByRole("button", { name: "Stop", exact: true }).click();
+		await confirm.getByRole("button", { name: "Stop it" }).click();
+		await vi.waitFor(async () =>
+			expect((await commands(page)).at(-1)).toEqual(["pi-tests", { kind: "abort", confirmed: true }]),
+		);
+		await vi.waitFor(
+			async () => expect(await receipts(page).getByRole("listitem").last().getAttribute("data-stage")).toBe("applied"),
+			{ timeout: 3000 },
+		);
+		expect(errors).toEqual([]);
+	} finally {
+		await page.close();
+	}
+}, 40000);
+
+test("a failed instruction says why, in the panel, and gives the words back to the box", async () => {
+	const { page, errors } = await openWorld(world(), { ledger: SUITE });
+	try {
+		await talkTo(page, "ledger");
+		await page.evaluate(() => {
+			(window as any).failNext = "busy: send steer or follow_up while a run is active";
+		});
+		await box(page).fill("Ship it.");
+		await page.keyboard.press("Enter");
+		const line = receipts(page).getByRole("listitem");
+		await vi.waitFor(async () => expect(await line.getAttribute("data-stage")).toBe("failed"), { timeout: 3000 });
+		await expect(line.textContent()).resolves.toContain("Failed: busy: send steer or follow_up while a run is active");
+		await expect(box(page).inputValue()).resolves.toBe("Ship it.");
+		await shot(page, "failed", "13");
+		expect(errors).toEqual([]);
+	} finally {
+		await page.close();
+	}
+}, 30000);
+
+test("the open conversation streams the reply as it is written, then settles on the stored entry without a jump", async () => {
+	const { page, errors } = await openWorld(world(), { "pi-tests": [...SUITE] });
+	try {
+		await talkTo(page, "pi-tests");
+		await log(page).getByText("Raising the timeouts now.").waitFor({ timeout: 3000 });
+		await vi.waitFor(async () => expect(await page.evaluate(() => (window as any).watched)).toEqual([["pi-tests"]]));
+		const words = ["All", " **42**", " pass", " now.", "\n\nThe timeouts", " were the", " only problem."];
+		const delta = (i: number) =>
+			page.evaluate(
+				([text, seq]) =>
+					(window as any).reply({ kind: "delta", characterId: "pi-tests", streamId: "s1", seq, delta: text }),
+				[words[i], i + 1] as const,
+			);
+		// Another character's stream never shows here.
+		await page.evaluate(() =>
+			(window as any).reply({ kind: "delta", characterId: "ledger", streamId: "x", seq: 1, delta: "Not for you." }),
+		);
+		await delta(0);
+		await delta(1);
+		await delta(2);
+		const writing = log(page).locator(".aw-conv-writing");
+		await vi.waitFor(async () => expect((await writing.textContent())?.trim()).toBe("All 42 pass"));
+		// It joins the agent's turn under its heading, at the bottom, in view.
+		await expect(log(page).locator(".aw-conv-assistant").count()).resolves.toBe(2);
+		await shot(page, "streaming", "13");
+		for (let i = 3; i < words.length; i++) await delta(i);
+		await vi.waitFor(async () =>
+			expect((await writing.innerText()).replace(/\s+/g, " ").trim()).toBe(
+				"All 42 pass now. The timeouts were the only problem.",
+			),
+		);
+		await expect(writing.locator("p").count()).resolves.toBe(2);
+		const gap = await log(page).evaluate((el) => el.scrollHeight - el.clientHeight - el.scrollTop);
+		expect(gap).toBeLessThan(4);
+		const before = await writing.locator("p").last().boundingBox();
+
+		// The stream ends with its stored entry (the same words); the history reads it too.
+		const stored: TranscriptEntry = {
+			kind: "assistant",
+			id: "a3",
+			at: at(56),
+			parts: [{ kind: "text", text: words.join("") }],
+			error: null,
+			aborted: false,
+		};
+		await page.evaluate((entry) => (window as any).append("pi-tests", entry), stored);
+		const pagesBefore = (await pages(page)).length;
+		await page.evaluate(
+			(entry) => (window as any).reply({ kind: "end", characterId: "pi-tests", streamId: "s1", entry }),
+			stored,
+		);
+		const settled = log(page).locator('[data-entry="a3"]');
+		await settled.waitFor({ timeout: 2000 });
+		await expect(writing.count()).resolves.toBe(0);
+		const after = await settled.locator("p").last().boundingBox();
+		expect(Math.abs(after!.y - before!.y)).toBeLessThan(2);
+		expect(Math.abs(after!.height - before!.height)).toBeLessThan(2);
+		// Read once more from the history, and drawn once.
+		await vi.waitFor(async () => expect((await pages(page)).length).toBeGreaterThan(pagesBefore));
+		await page.waitForTimeout(300);
+		await expect(log(page).getByText("only problem.").count()).resolves.toBe(1);
+		const again = await log(page).locator('[data-entry="a3"]').locator("p").last().boundingBox();
+		expect(Math.abs(again!.y - before!.y)).toBeLessThan(2);
+		await expect(log(page).getByText("Not for you.").count()).resolves.toBe(0);
+		await shot(page, "settled", "13");
+
+		// Closing stops watching.
+		await page.keyboard.press("Escape");
+		await vi.waitFor(async () =>
+			expect(await page.evaluate(() => (window as any).watched)).toEqual([["pi-tests"], []]),
+		);
+		expect(errors).toEqual([]);
+	} finally {
+		await page.close();
+	}
+}, 40000);
+
+// Ticket 14: answering questions in the world.
+
+const QUESTIONNAIRE = {
+	id: "call-ask-1",
+	questions: [
+		{
+			question: "Which branch should the fix go on?",
+			header: "Branch",
+			multiSelect: false,
+			options: [
+				{ label: "main", description: "Straight onto main; the suite is green there." },
+				{ label: "retry", description: "The open retry branch, reviewed with the rest of it." },
+			],
+		},
+		{
+			question: "What should ship with it?",
+			header: "Extras",
+			multiSelect: true,
+			options: [
+				{ label: "Tests", description: "Behaviour checks for the retry path." },
+				{ label: "Docs", description: "A note in the runbook." },
+				{ label: "Changelog", description: "A line for the release notes." },
+			],
+		},
+		{
+			question: "Anything else before it ships?",
+			header: null,
+			multiSelect: false,
+			options: [
+				{ label: "No", description: "Ship it as it is." },
+				{ label: "Wait", description: "Hold until I say so." },
+			],
+		},
+	],
+};
+
+const asker = (asking: CharacterFacts["asking"], status: CharacterFacts["status"] = "asking") =>
+	world(
+		CAST.map((c) =>
+			c.id === "asker"
+				? {
+						...c,
+						facts: facts({
+							run: "running_tool",
+							status,
+							asking,
+							needsYouSince: asking ? at(50) : null,
+							tool: { name: "ask_user_question", arg: null, since: at(50) },
+							git: null,
+						}),
+					}
+				: c,
+		),
+	);
+const ASKING = asker({
+	kind: "questionnaire",
+	text: QUESTIONNAIRE.questions[0].question,
+	questionnaire: QUESTIONNAIRE,
+});
+const ANSWERED = asker(null, "working");
+const form = (page: Page) => book(page).getByRole("form", { name: /asks you$/ });
+const question = (page: Page, n: number) => form(page).getByRole("group").nth(n);
+
+test("an open questionnaire shows as a themed form: each option with its description, one choice or many, and words of your own", async () => {
+	const { page, errors } = await openWorld(ASKING, { asker: SUITE });
+	try {
+		await talkTo(page, "asker");
+		await form(page).waitFor({ timeout: 3000 });
+		// No reply box while it asks: the form is the way to answer.
+		await expect(book(page).getByRole("textbox", { name: "Reply to asker" }).count()).resolves.toBe(0);
+		await expect(form(page).getByRole("group").count()).resolves.toBe(3);
+		const first = question(page, 0);
+		await expect(first.textContent()).resolves.toContain("Which branch should the fix go on?");
+		await expect(first.textContent()).resolves.toContain("Branch");
+		await expect(first.textContent()).resolves.toContain("Straight onto main; the suite is green there.");
+		await expect(first.getByRole("radio").count()).resolves.toBe(3); // two options and words of your own
+		await expect(question(page, 1).getByRole("checkbox").count()).resolves.toBe(4);
+		await expect(question(page, 1).textContent()).resolves.toContain("A line for the release notes.");
+		const send = form(page).getByRole("button", { name: "Send answer" });
+		await expect(send.isDisabled()).resolves.toBe(true);
+		await shot(page, "form", "14");
+
+		// One choice: a second click moves it.
+		await first.getByRole("radio", { name: /^main/ }).click();
+		await first.getByRole("radio", { name: /^retry/ }).click();
+		await expect(first.getByRole("radio", { name: /^main/ }).isChecked()).resolves.toBe(false);
+		// Many: Tests and Changelog; then words of your own replace the choices, and a choice replaces the words.
+		const extras = question(page, 1);
+		await extras.getByRole("checkbox", { name: /^Tests/ }).click();
+		await extras.getByRole("checkbox", { name: /^Changelog/ }).click();
+		await expect(extras.getByRole("checkbox", { checked: true }).count()).resolves.toBe(2);
+		await extras.getByRole("checkbox", { name: /own words/ }).click();
+		await expect(extras.getByRole("checkbox", { checked: true }).count()).resolves.toBe(1);
+		await extras.getByRole("checkbox", { name: /^Docs/ }).click();
+		await expect(extras.getByRole("checkbox", { name: /own words/ }).isChecked()).resolves.toBe(false);
+		await extras.getByRole("checkbox", { name: /^Tests/ }).click();
+		// Words of your own for the last question.
+		const last = question(page, 2);
+		await last.getByRole("radio", { name: /own words/ }).click();
+		const words = last.getByRole("textbox");
+		await vi.waitFor(async () => expect(await words.evaluate((el) => el === document.activeElement)).toBe(true));
+		await expect(send.isDisabled()).resolves.toBe(true); // words not written yet
+		await page.keyboard.type("Rebase on main first.");
+		await expect(send.isDisabled()).resolves.toBe(false);
+		await shot(page, "form-filled", "14");
+		await send.click();
+		await vi.waitFor(async () =>
+			expect(await commands(page)).toEqual([
+				[
+					"asker",
+					{
+						kind: "answer",
+						questionnaire: "call-ask-1",
+						replies: [{ selected: ["retry"] }, { selected: ["Tests", "Docs"] }, { custom: "Rebase on main first." }],
+					},
+				],
+			]),
+		);
+		const line = receipts(page).getByRole("listitem");
+		await vi.waitFor(async () => expect(await line.getAttribute("data-stage")).toBe("applied"), { timeout: 3000 });
+		await expect(line.textContent()).resolves.toContain("Answer");
+
+		// The question closes in the world: the form gives way to the busy actions, and says it was answered here.
+		await page.evaluate((next) => (window as any).push(next), ANSWERED);
+		await form(page).waitFor({ state: "detached", timeout: 2000 });
+		await expect(book(page).getByRole("button", { name: "Redirect now" }).count()).resolves.toBe(1);
+		await expect(book(page).getByRole("status").filter({ hasText: "You answered" }).count()).resolves.toBe(1);
+		await shot(page, "answered", "14");
+		expect(errors).toEqual([]);
+	} finally {
+		await page.close();
+	}
+}, 40000);
+
+test("when the terminal answers first, the form closes and says it was answered there", async () => {
+	const { page, errors } = await openWorld(ASKING, { asker: SUITE });
+	try {
+		await talkTo(page, "asker");
+		await form(page).waitFor({ timeout: 3000 });
+		await question(page, 0).getByRole("radio", { name: /^main/ }).click();
+		await page.evaluate((next) => (window as any).push(next), ANSWERED);
+		await form(page).waitFor({ state: "detached", timeout: 2000 });
+		const note = book(page).getByRole("status").filter({ hasText: "answered in its terminal" });
+		await note.waitFor({ timeout: 2000 });
+		await expect(note.textContent()).resolves.toContain("asker");
+		expect(await commands(page)).toEqual([]);
+		await shot(page, "answered-elsewhere", "14");
+		expect(errors).toEqual([]);
+	} finally {
+		await page.close();
+	}
+}, 30000);
+
+test("a dialog only the terminal can answer shows a notice with Go to its terminal instead of a form", async () => {
+	const { page, errors } = await openWorld(asker({ kind: "select", text: "Which color?" }), { asker: SUITE });
+	try {
+		await talkTo(page, "asker");
+		const notice = book(page).getByRole("note");
+		await notice.waitFor({ timeout: 3000 });
+		await expect(notice.textContent()).resolves.toContain("Which color?");
+		await expect(notice.textContent()).resolves.toContain("only its terminal can answer");
+		await expect(form(page).count()).resolves.toBe(0);
+		await expect(book(page).getByRole("textbox").count()).resolves.toBe(0);
+		await shot(page, "terminal-only", "14");
+		await notice.getByRole("button", { name: "Go to its terminal" }).click();
+		await vi.waitFor(async () => expect(await page.evaluate(() => (window as any).terminals)).toEqual(["asker"]));
 		expect(errors).toEqual([]);
 	} finally {
 		await page.close();

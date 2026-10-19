@@ -9,10 +9,15 @@ import type { WorldStore } from "../../world-store.js";
 import { CharacterCard } from "./character-card.js";
 import { Chatbox, type ChatKind, type ChatLine } from "./chatbox.js";
 import "./interface.css";
+import { placeActions } from "../places/place-panels.js";
 import { Minimap } from "./minimap.js";
 import { orbCounts, placeName } from "./model.js";
 import type { CharacterAction } from "./rows.js";
 import { SidePanel, type Tab } from "./side-panel.js";
+
+/** A place's name after "in" or "to": "the guild hall", and "the inn" for a name that has its own article. */
+const theName = (name: string) =>
+	/^the /i.test(name) ? `t${name.slice(1)}` : `the ${name.charAt(0).toLowerCase()}${name.slice(1)}`;
 
 /** Lines the interface itself adds to the chatbox (what the operator did here), kept beside the runtime's feed. */
 const GAME_KEPT = 100;
@@ -45,7 +50,7 @@ export function Interface({ store, view }: { store: WorldStore; view: ViewStore 
 	// Where you are, as the world's title says.
 	const placeTitle = state.title;
 	useEffect(() => {
-		if (placeTitle) say(`You are in the ${placeTitle.charAt(0).toLowerCase()}${placeTitle.slice(1)}.`);
+		if (placeTitle) say(`You are in ${theName(placeTitle)}.`);
 	}, [placeTitle, say]);
 
 	// The interface handles examining and the terminal itself, whoever asks (a row here, or the world's own menu).
@@ -74,11 +79,16 @@ export function Interface({ store, view }: { store: WorldStore; view: ViewStore 
 	const act = (action: CharacterAction, character: Character) => {
 		if (action === "go-to") say(`You head to ${character.name}.`);
 		if (action === "talk-to") say(`You talk to ${character.name}.`);
+		if (action === "end-session") {
+			say(`You ask ${character.name} to end its session.`);
+			void placeActions.endSession(character);
+			return;
+		}
 		intend({ kind: action, character: character.id });
 	};
 	const travel = (place: PlaceRef) => {
 		if (placeKey(place) === state.minimap?.place) return;
-		say(`You travel to the ${placeName(place, world, state.labels).replace(/^./, (c) => c.toLowerCase())}.`);
+		say(`You travel to ${theName(placeName(place, world, state.labels))}.`);
 		intend({ kind: "travel", place });
 	};
 

@@ -1,7 +1,7 @@
 // The world projection: who is a character, what role each has, and where each one is. Pure, so the rules read in
 // one place; the backend feeds it rows from the session-state database and the wings it remembers.
 import { basename } from "node:path";
-import type { Character, Headquarters, PlaceRef, Role } from "../world.js";
+import { type Character, type Headquarters, isOutside, type PlaceRef, type Role } from "../world.js";
 
 /** One top-level session as the projection needs it. */
 export interface SessionRow {
@@ -18,6 +18,17 @@ export interface SessionRow {
 	awake: boolean;
 	/** When it first started (ms), or undefined when it never had an incarnation. */
 	firstStartedAt: number | undefined;
+	/** When its current incarnation ended (ms); undefined while it runs or when unknown. */
+	stoppedAt?: number;
+}
+
+/** A stopped session as the projection places it: asleep at the inn. */
+export interface Sleeper {
+	id: string;
+	name: string;
+	role: Role;
+	startedAt: number;
+	stoppedAt: number | null;
 }
 
 /** Remembered wings: repositories by coordinator id, in first-seen order. */
@@ -28,6 +39,8 @@ export interface Projection {
 	characters: Character[];
 	/** Each shown headquarters' wings, remembered ones first, then repositories seen for the first time. */
 	wings: RememberedWings;
+	/** Stopped sessions, asleep at the inn: the most recently stopped first. */
+	dormant: Sleeper[];
 }
 
 const byStart = (a: { firstStartedAt?: number; id: string }, b: { firstStartedAt?: number; id: string }) =>
@@ -38,7 +51,7 @@ const byStart = (a: { firstStartedAt?: number; id: string }, b: { firstStartedAt
  * A coordinator was started with `--coordinator` or has a session reporting to it; a worker reports to one; any
  * other session is independent. Each awake coordinator, and each coordinator with an awake worker, has a
  * headquarters. Workers stand in the wing of their repository, or the common room outside one; independents stand
- * in the square. Dormant sessions are in no awake place.
+ * in the square. Dormant sessions sleep at the inn, the most recently stopped first, each in the role it had.
  */
 export function projectWorld(sessions: SessionRow[], remembered: RememberedWings): Projection {
 	const byId = new Map(sessions.map((session) => [session.id, session]));
@@ -47,6 +60,24 @@ export function projectWorld(sessions: SessionRow[], remembered: RememberedWings
 		if (session.coordinatorFlag) coordinators.add(session.id);
 		if (session.reportsTo && session.reportsTo !== session.id) coordinators.add(session.reportsTo);
 	}
+
+	const roleOf = (session: SessionRow): Role =>
+		coordinators.has(session.id)
+			? "coordinator"
+			: session.reportsTo && coordinators.has(session.reportsTo)
+				? "worker"
+				: "independent";
+	const nameOf = (session: SessionRow) => session.name || basename(session.cwd) || session.id;
+	const dormant: Sleeper[] = sessions
+		.filter((session) => !session.awake)
+		.sort((a, b) => (b.stoppedAt ?? 0) - (a.stoppedAt ?? 0) || byStart(b, a))
+		.map((session) => ({
+			id: session.id,
+			name: nameOf(session),
+			role: roleOf(session),
+			startedAt: session.firstStartedAt ?? 0,
+			stoppedAt: session.stoppedAt ?? null,
+		}));
 
 	const awake = sessions.filter((session) => session.awake).sort(byStart);
 	const characters: Character[] = awake.map((session) => {
@@ -66,7 +97,7 @@ export function projectWorld(sessions: SessionRow[], remembered: RememberedWings
 		}
 		return {
 			id: session.id,
-			name: session.name || basename(session.cwd) || session.id,
+			name: nameOf(session),
 			role,
 			place,
 			startedAt: session.firstStartedAt ?? 0,
@@ -74,7 +105,7 @@ export function projectWorld(sessions: SessionRow[], remembered: RememberedWings
 	});
 
 	const shown = new Set<string>();
-	for (const character of characters) if (character.place.kind !== "square") shown.add(character.place.headquarters);
+	for (const { place } of characters) if (!isOutside(place)) shown.add(place.headquarters);
 	const order = [...shown]
 		.map((id) => ({ id, firstStartedAt: byId.get(id)?.firstStartedAt }))
 		.sort(byStart)
@@ -106,5 +137,5 @@ export function projectWorld(sessions: SessionRow[], remembered: RememberedWings
 			})),
 		};
 	});
-	return { headquarters, characters, wings };
+	return { headquarters, characters, wings, dormant };
 }

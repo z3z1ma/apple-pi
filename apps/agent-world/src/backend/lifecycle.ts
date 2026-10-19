@@ -1,0 +1,140 @@
+// What the operator does to a session from the inn, the rookery, and a character's actions: wake a dormant one
+// (`start`), end an awake one (`close`, confirmed only while it is busy, decision 13), and mail anyone as himself
+// (`mail`). Commands go through the command client (`commands.ts`); each resolves with the receipt stage that answers
+// the operator's question (is it awake, is it ended, did the letter arrive or does it wait), not necessarily the last.
+import { existsSync } from "node:fs";
+import { DatabaseSync } from "node:sqlite";
+import type { Command } from "../../../../components/session-state/src/protocol.js";
+import { type CommandReceipt, OPERATOR, type ReceiptStage, type WorldSnapshot } from "../world.js";
+import type { Commands } from "./commands.js";
+import { operatorPane } from "./inn.js";
+
+/** A woken session joins once Pi has started in its window; a slow start still says the window opened. */
+const WAKE_MS = 30_000;
+/** Mail to an awake session is delivered once its transcript records it, usually within a second or two. */
+const MAIL_MS = 8000;
+const CLOSE_MS = 10_000;
+
+export interface Lifecycle {
+	wake(characterId: string): Promise<CommandReceipt>;
+	endSession(characterId: string, confirmed?: boolean): Promise<CommandReceipt>;
+	sendMail(characterId: string, body: string): Promise<CommandReceipt>;
+}
+
+/** Send `command` and resolve at the first stage `enough` accepts, or with the last stage reached after `ms`. */
+function follow(
+	commands: Commands,
+	sessionId: string,
+	command: Command,
+	ms: number,
+	enough: (stage: ReceiptStage, reason: string | undefined) => boolean,
+	late: (stage: ReceiptStage) => string,
+): Promise<CommandReceipt> {
+	return new Promise((resolve) => {
+		let last: { stage: ReceiptStage; reason?: string } | undefined;
+		let done = false;
+		const settle = (receipt: CommandReceipt) => {
+			if (done) return;
+			done = true;
+			clearTimeout(timer);
+			resolve(receipt);
+		};
+		const timer = setTimeout(() => {
+			if (!last || last.stage === "failed") return; // the send itself settles these
+			settle({ ok: true, stage: last.stage, note: late(last.stage) });
+		}, ms);
+		void commands
+			.send(sessionId, command, {
+				onReceipt(stage, reason) {
+					last = { stage, reason };
+					if (stage !== "failed" && enough(stage, reason))
+						settle({ ok: true, stage, ...(reason ? { note: reason } : {}) });
+				},
+			})
+			.then((result) => settle(result.ok ? { ok: true, stage: "applied" } : { ok: false, reason: result.reason }));
+	});
+}
+
+export function openLifecycle(paths: { db: string }, commands: Commands, snapshot: () => WorldSnapshot): Lifecycle {
+	/** The tmux servers the runtime knows, read from its database. */
+	const servers = (): string[] => {
+		if (!existsSync(paths.db)) return [];
+		const db = new DatabaseSync(paths.db);
+		try {
+			db.exec("pragma query_only = 1");
+			return (db.prepare("select socket from tmux_servers order by updated_at desc").all() as { socket: string }[]).map(
+				(row) => row.socket,
+			);
+		} catch {
+			return [];
+		} finally {
+			db.close();
+		}
+	};
+
+	return {
+		async wake(characterId) {
+			const world = snapshot();
+			const sleeper = world.dormant?.find((agent) => agent.id === characterId);
+			if (!sleeper) {
+				const awake = world.characters.find((character) => character.id === characterId);
+				return { ok: false, reason: awake ? `${awake.name} is already awake.` : "Nobody by that name sleeps here." };
+			}
+			const pane = await operatorPane(servers());
+			if (!pane)
+				return {
+					ok: false,
+					reason: `No terminal is attached to tmux, so there is nowhere to open ${sleeper.name}'s window.`,
+				};
+			const command: Command = {
+				kind: "start",
+				tmux: pane,
+				// Pi gets its coordinator only from the command line, so a worker wakes still reporting to it.
+				...(sleeper.reportsTo ? { reportsTo: sleeper.reportsTo } : {}),
+			};
+			return follow(
+				commands,
+				characterId,
+				command,
+				WAKE_MS,
+				(stage) => stage === "applied",
+				() => `Its window opened, but ${sleeper.name} has not joined yet.`,
+			);
+		},
+
+		async endSession(characterId, confirmed = false) {
+			const character = snapshot().characters.find((c) => c.id === characterId);
+			if (!character) return { ok: false, reason: "That session is not running." };
+			const busy = character.facts !== undefined && character.facts.run !== "idle";
+			if (busy && !confirmed)
+				return {
+					ok: false,
+					confirm: true,
+					reason: `${character.name} is in the middle of a turn. Ending its session stops that turn.`,
+				};
+			return follow(
+				commands,
+				characterId,
+				{ kind: "close" },
+				CLOSE_MS,
+				(stage) => stage === "applied",
+				() => `${character.name} has not answered yet.`,
+			);
+		},
+
+		async sendMail(characterId, body) {
+			const text = body.trim();
+			if (!text) return { ok: false, reason: "The letter is empty." };
+			const command: Command = { kind: "mail", from: OPERATOR, body: text, sentAt: new Date().toISOString() };
+			return follow(
+				commands,
+				characterId,
+				command,
+				MAIL_MS,
+				// Accepted with a reason means it waits for the session to open; applied means its transcript holds it.
+				(stage, reason) => stage === "applied" || (stage === "accepted" && reason !== undefined),
+				(stage) => (stage === "delivered" ? "Handed over; not in its transcript yet." : "Sent; not delivered yet."),
+			);
+		},
+	};
+}

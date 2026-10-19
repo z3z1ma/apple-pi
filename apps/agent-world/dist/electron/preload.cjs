@@ -16,6 +16,21 @@ electron.contextBridge.exposeInMainWorld("agentWorld", {
 	goToTerminal: (characterId) => electron.ipcRenderer.invoke("world:terminal", characterId),
 	conversation: (characterId, before) => electron.ipcRenderer.invoke("world:conversation", characterId, before),
 	markSeen: (characterId) => electron.ipcRenderer.invoke("world:mark-seen", characterId),
-	setAvatarLook: (look) => electron.ipcRenderer.invoke("world:avatar-look", look)
+	setAvatarLook: (look) => electron.ipcRenderer.invoke("world:avatar-look", look),
+	instruct: (characterId, commandId, instruction) => electron.ipcRenderer.invoke("world:instruct", characterId, commandId, instruction),
+	onReceipt(listener) {
+		const forward = (_event, receipt) => listener(receipt);
+		electron.ipcRenderer.on("world:receipt", forward);
+		return () => electron.ipcRenderer.removeListener("world:receipt", forward);
+	},
+	watchReplies: (characterIds) => electron.ipcRenderer.invoke("world:watch-replies", characterIds),
+	onReply(listener) {
+		const forward = (_event, event) => listener(event);
+		electron.ipcRenderer.on("world:reply", forward);
+		return () => electron.ipcRenderer.removeListener("world:reply", forward);
+	},
+	wake: (characterId) => electron.ipcRenderer.invoke("world:wake", characterId),
+	endSession: (characterId, confirmed) => electron.ipcRenderer.invoke("world:end-session", characterId, confirmed),
+	sendMail: (characterId, body) => electron.ipcRenderer.invoke("world:send-mail", characterId, body)
 });
 //#endregion

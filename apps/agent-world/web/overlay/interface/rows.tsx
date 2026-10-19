@@ -4,7 +4,7 @@ import type { Character } from "../../../src/world.js";
 import { CheckIcon, QuestionIcon } from "./icons.js";
 import { type Attention, ago, attentionOf } from "./model.js";
 
-export type CharacterAction = "talk-to" | "examine" | "go-to" | "terminal";
+export type CharacterAction = "talk-to" | "examine" | "go-to" | "terminal" | "end-session";
 
 const PIP_LABEL: Record<Attention, string> = {
 	asking: "Asking you",
@@ -45,6 +45,7 @@ export function ActionButtons({
 		{ action: "examine", text: "Examine", label: `Examine ${name}` },
 		{ action: "go-to", text: "Go to", label: `Go to ${name}` },
 		{ action: "terminal", text: "Terminal", label: `Go to ${name}'s terminal` },
+		{ action: "end-session", text: "End session", label: `End ${name}'s session` },
 	];
 	return (
 		<fieldset className="aw-actions" aria-label={`Actions on ${name}`}>
@@ -54,7 +55,7 @@ export function ActionButtons({
 					<button
 						key={a.action}
 						type="button"
-						className="aw-button"
+						className={a.action === "end-session" ? "aw-button aw-button-end" : "aw-button"}
 						aria-label={a.label}
 						title={a.label}
 						onClick={(event) => {

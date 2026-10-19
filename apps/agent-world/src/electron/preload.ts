@@ -3,9 +3,12 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type {
 	AgentWorldApi,
+	CommandReceipt,
 	CommandResult,
 	ConversationPage,
 	FeedLine,
+	Receipt,
+	ReplyStreamEvent,
 	TerminalResult,
 	WorldSnapshot,
 } from "../world.js";
@@ -28,6 +31,23 @@ const api: AgentWorldApi = {
 		ipcRenderer.invoke("world:conversation", characterId, before) as Promise<ConversationPage>,
 	markSeen: (characterId) => ipcRenderer.invoke("world:mark-seen", characterId) as Promise<CommandResult>,
 	setAvatarLook: (look) => ipcRenderer.invoke("world:avatar-look", look) as Promise<CommandResult>,
+	instruct: (characterId, commandId, instruction) =>
+		ipcRenderer.invoke("world:instruct", characterId, commandId, instruction) as Promise<CommandResult>,
+	onReceipt(listener) {
+		const forward = (_event: unknown, receipt: Receipt) => listener(receipt);
+		ipcRenderer.on("world:receipt", forward);
+		return () => ipcRenderer.removeListener("world:receipt", forward);
+	},
+	watchReplies: (characterIds) => ipcRenderer.invoke("world:watch-replies", characterIds) as Promise<void>,
+	onReply(listener) {
+		const forward = (_event: unknown, event: ReplyStreamEvent) => listener(event);
+		ipcRenderer.on("world:reply", forward);
+		return () => ipcRenderer.removeListener("world:reply", forward);
+	},
+	wake: (characterId) => ipcRenderer.invoke("world:wake", characterId) as Promise<CommandReceipt>,
+	endSession: (characterId, confirmed) =>
+		ipcRenderer.invoke("world:end-session", characterId, confirmed) as Promise<CommandReceipt>,
+	sendMail: (characterId, body) => ipcRenderer.invoke("world:send-mail", characterId, body) as Promise<CommandReceipt>,
 };
 
 contextBridge.exposeInMainWorld("agentWorld", api);

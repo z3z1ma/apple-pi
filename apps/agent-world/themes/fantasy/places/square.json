@@ -54,7 +54,9 @@
   ],
   "entries": {
     "start": [22, 10],
-    "headquarters": [7, 9.2]
+    "headquarters": [7, 9.2],
+    "inn": [32.8, 9.2],
+    "rookery": [40.2, 10.4]
   },
   "doors": [
     {

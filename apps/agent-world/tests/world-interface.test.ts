@@ -260,6 +260,7 @@ test("every row offers Talk to, Examine, Go to, and Go to its terminal, which wo
 			"Examine",
 			"Go to",
 			"Terminal",
+			"End session",
 		]);
 		await shot(page, "row-actions");
 		await actions.getByRole("button", { name: "Talk to ledger" }).click();
@@ -390,8 +391,8 @@ test("Places travels anywhere at once, and Settings toggles the walk grid", asyn
 					"legacy-auth wing",
 				],
 			},
-			{ title: "Outside", names: ["Village square"] },
-			{ title: "Not open yet", names: ["The forge", "The quest office", "The library", "The inn", "The rookery"] },
+			{ title: "Outside", names: ["Village square", "The inn", "The rookery"] },
+			{ title: "Not open yet", names: ["The forge", "The quest office", "The library"] },
 		]);
 		await shot(page, "tab-places");
 		await page.getByRole("button", { name: /^billing-service wing/ }).click();

@@ -39,6 +39,16 @@ export function ScrollIcon() {
 	);
 }
 
+export function LetterIcon() {
+	return (
+		<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+			<rect x="3.5" y="6" width="17" height="12" rx="1.6" {...stroke} />
+			<path d="M4 6.8l8 6.2 8-6.2" {...stroke} />
+			<circle cx="12" cy="14.6" r="1.6" fill="currentColor" />
+		</svg>
+	);
+}
+
 export function SignpostIcon() {
 	return (
 		<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">

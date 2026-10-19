@@ -29,8 +29,11 @@ const SEATED_BEAT = [1300, 650] as const;
 
 export type Facing = keyof typeof WALK_FRAMES;
 
-/** How a walker holds itself at rest. */
-export type Pose = "standing" | "seated" | "asking";
+/**
+ * How a walker holds itself at rest. Asleep at the inn, it dozes in its seated frame without the beat of work, or lies
+ * in a bed (the scene draws it there; the walker itself is hidden).
+ */
+export type Pose = "standing" | "seated" | "asking" | "dozing" | "in-bed";
 
 export interface WalkerView {
 	x: number;
@@ -206,13 +209,18 @@ export class Walker {
 			? WALK_FRAMES[this.facing] + (Math.floor((this.travelled / STRIDE) * 4) % 4)
 			: this.pose === "seated"
 				? SEATED_FRAMES[this.beat < SEATED_BEAT[0] ? 0 : 1]
-				: this.pose === "asking"
-					? ASKING_FRAME
-					: REST_FRAMES[this.facing];
+				: this.pose === "dozing" || this.pose === "in-bed"
+					? SEATED_FRAMES[0]
+					: this.pose === "asking"
+						? ASKING_FRAME
+						: REST_FRAMES[this.facing];
 		if (Number(this.sprite.frame.name) !== frame) this.sprite.setFrame(frame);
 		// Poses are drawn facing one way; only walking and resting sideways mirror.
 		this.sprite.setFlipX(this.facing === "right" && (this.moving || this.pose === "standing"));
 		this.sprite.setPosition(this.x * TILE, this.y * TILE).setDepth(this.y * TILE);
 		this.shadow.setPosition(this.x * TILE, this.y * TILE - 2).setDepth(this.y * TILE - 1);
+		const shown = this.moving || this.pose !== "in-bed";
+		this.sprite.setVisible(shown);
+		this.shadow.setVisible(shown);
 	}
 }

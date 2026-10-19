@@ -10,7 +10,8 @@ export type Role = "coordinator" | "worker" | "independent";
 export type PlaceRef =
 	| { kind: "headquarters" | "common-room" | "gallery"; headquarters: string }
 	| { kind: "wing"; headquarters: string; repository: string }
-	| { kind: "square" };
+	/** Outside: the village square, the inn where dormant agents sleep, and the rookery where mail comes and goes. */
+	| { kind: "square" | "inn" | "rookery" };
 
 /** A session's run state as the runtime records it. */
 export type RunState = "idle" | "thinking" | "writing_reply" | "running_tool" | "compacting";
@@ -22,8 +23,11 @@ export type Status = "asking" | "working" | "idle";
 export interface CharacterFacts {
 	run: RunState;
 	status: Status;
-	/** The open prompt: its kind, and its title or first question. */
-	asking: { kind: string; text: string | null } | null;
+	/**
+	 * The open prompt: its kind, and its title or first question. An `ask_user_question` questionnaire also carries its
+	 * id and questions, so the conversation panel can answer it; any other dialog is answered only in the terminal.
+	 */
+	asking: { kind: string; text: string | null; questionnaire?: Questionnaire } | null;
 	/** Since when it has needed the operator (an open prompt, or a settle not seen yet); null when it does not. */
 	needsYouSince: number | null;
 	/** Finished and unseen: it needs the operator with no prompt open. */
@@ -89,11 +93,69 @@ export interface WorldSnapshot {
 	characters: Character[];
 	/** The avatar look the operator chose in Settings; null (or absent) until he chooses one. */
 	avatarLook?: string | null;
+	/** Every stopped top-level session, asleep at the inn: the most recently stopped first. */
+	dormant?: DormantAgent[];
+	/** Recent mail between sessions (and from the operator), newest first, with every mail still waiting. */
+	mail?: MailItem[];
+}
+
+/** A stopped top-level session (a dormant character): it sleeps at the inn until it is woken. */
+export interface DormantAgent {
+	id: string;
+	name: string;
+	/** What it was while awake; a dormant coordinator keeps its look. */
+	role: Role;
+	reportsTo: string | null;
+	/** Its git repository's directory, or null outside one. */
+	repository: string | null;
+	cwd: string;
+	/** The ledger task it touched last. */
+	task: { title: string; status: string | null; bundle: string } | null;
+	/** When its last incarnation ended (ms), and why (`exited`, `lost`, ...); null when unknown. */
+	stoppedAt: number | null;
+	stopReason: string | null;
+	startedAt: number;
+}
+
+/** The label mail from the operator carries as its sender (`from`), so agents can tell it from mail between them. */
+export const OPERATOR = "operator";
+
+/** One mail, as the runtime's `mail` view records it. */
+export interface MailItem {
+	id: string;
+	/** The sender's session id, or a label such as `operator` for mail from outside Pi. */
+	from: string;
+	fromName: string;
+	to: string;
+	toName: string;
+	/** The letter, cut at `MAIL_BODY_MAX` characters. */
+	body: string;
+	sentAt: number;
+	deliveredAt: number | null;
+	/** Delivered once the receiver's transcript records it; waiting until then (as for a dormant receiver). */
+	state: "delivered" | "waiting" | "failed";
+	reason: string | null;
+}
+
+export const MAIL_BODY_MAX = 4000;
+
+/**
+ * How far a command the operator sent from a place got: the runtime's last receipt stage (with its note, such as why
+ * mail waits), or why it failed. `confirm` asks the operator to confirm first (ending a busy session); nothing was
+ * sent then.
+ */
+export type CommandReceipt =
+	| { ok: true; stage: "accepted" | "delivered" | "applied"; note?: string }
+	| { ok: false; reason: string; confirm?: boolean };
+
+/** A place outside any headquarters: the square, the inn, or the rookery. */
+export function isOutside(place: PlaceRef): place is { kind: "square" | "inn" | "rookery" } {
+	return place.kind === "square" || place.kind === "inn" || place.kind === "rookery";
 }
 
 /** One string per place, for maps and scene data. */
 export function placeKey(place: PlaceRef): string {
-	if (place.kind === "square") return "square";
+	if (isOutside(place)) return place.kind;
 	if (place.kind === "wing") return `wing:${place.headquarters}:${place.repository}`;
 	return `${place.kind}:${place.headquarters}`;
 }
@@ -167,6 +229,53 @@ export type ConversationPage =
 /** How a command sent to the runtime ended: applied, or failed with the runtime's reason. */
 export type CommandResult = { ok: true } | { ok: false; reason: string };
 
+/** How far a command got, as the runtime reports it (`docs/session-state.md`, Commands). */
+export type ReceiptStage = "accepted" | "delivered" | "applied" | "failed";
+
+/** One stage of a command the world UI sent, by the id it chose. `reason` comes with `failed`. */
+export interface Receipt {
+	commandId: string;
+	characterId: string;
+	stage: ReceiptStage;
+	reason?: string;
+}
+
+/** One question of an open `ask_user_question` questionnaire, as the tool was called with it. */
+export interface Question {
+	question: string;
+	header: string | null;
+	options: { label: string; description: string }[];
+	multiSelect: boolean;
+}
+
+export interface Questionnaire {
+	/** The prompt's id, which the `answer` command names. */
+	id: string;
+	questions: Question[];
+}
+
+/** One answer per question, in order: the chosen option labels, or free text. */
+export type QuestionnaireReply = { selected: string[] } | { custom: string };
+
+/**
+ * What the conversation panel asks an agent to do (decision 13): reply to it idle (`talk`), redirect it now (`steer`),
+ * tell it after this turn (`follow_up`), stop it (`abort`, which needs `confirmed` while it is busy), or answer its
+ * questionnaire.
+ */
+export type Instruction =
+	| { kind: "talk" | "steer" | "follow_up"; text: string }
+	| { kind: "abort"; confirmed?: boolean }
+	| { kind: "answer"; questionnaire: string; replies: QuestionnaireReply[] };
+
+/**
+ * A watched character's reply as it is written: each piece of text (`delta`, in order within its `streamId`), then
+ * its end, with the stored transcript entry that replaces the streamed text (null when none was recorded, as for an
+ * aborted reply). An end also closes every earlier stream of that character.
+ */
+export type ReplyStreamEvent =
+	| { kind: "delta"; characterId: string; streamId: string; seq: number; delta: string }
+	| { kind: "end"; characterId: string; streamId: string; entry: TranscriptEntry | null };
+
 /** What the preload bridge exposes to the world UI as `window.agentWorld`. */
 export interface AgentWorldApi {
 	snapshot(): Promise<WorldSnapshot>;
@@ -184,4 +293,21 @@ export interface AgentWorldApi {
 	markSeen(characterId: string): Promise<CommandResult>;
 	/** Choose the avatar's look (Settings); kept as a session-state preference across app restarts. */
 	setAvatarLook(look: string): Promise<CommandResult>;
+	/**
+	 * Send an instruction from the conversation panel as its session-state command, under the id the UI chose; each
+	 * receipt stage reaches `onReceipt` listeners, and it resolves once the command is applied or has failed.
+	 */
+	instruct(characterId: string, commandId: string, instruction: Instruction): Promise<CommandResult>;
+	/** Called with every receipt stage of instructions sent; returns a function that stops the calls. */
+	onReceipt(listener: (receipt: Receipt) => void): () => void;
+	/** Stream these characters' replies as they are written (an empty list stops); resolves once the runtime agreed. */
+	watchReplies(characterIds: string[]): Promise<void>;
+	/** Called with each piece of a watched reply and its end; returns a function that stops the calls. */
+	onReply(listener: (event: ReplyStreamEvent) => void): () => void;
+	/** Wake a dormant character (`start`): its session opens in a new tmux window after the operator's current pane. */
+	wake(characterId: string): Promise<CommandReceipt>;
+	/** End an awake character's session (`close`); a busy one asks for `confirmed` first. */
+	endSession(characterId: string, confirmed?: boolean): Promise<CommandReceipt>;
+	/** Mail a character as the operator (`mail`, from `OPERATOR`); mail to a dormant one waits until it wakes. */
+	sendMail(characterId: string, body: string): Promise<CommandReceipt>;
 }

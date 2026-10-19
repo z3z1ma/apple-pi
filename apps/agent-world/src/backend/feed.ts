@@ -2,7 +2,7 @@
 // Only what the operator follows is a line: sessions starting and stopping, runs settling, questions opening and
 // closing, mail, and commands with their failures. Tools, facts, tmux, and the views' own bookkeeping are not.
 import { basename } from "node:path";
-import type { FeedLine } from "../world.js";
+import { type FeedLine, OPERATOR } from "../world.js";
 
 /** The event types that can become lines; others are skipped in the query. */
 export const FEED_TYPES = [
@@ -116,7 +116,13 @@ export function feedLine(row: FeedRow, lookup: FeedLookup): FeedLine | undefined
 		case "command_accepted": {
 			const command = (data.command ?? {}) as Record<string, unknown>;
 			if (command.kind === "mail") {
-				const from = typeof command.from === "string" ? (lookup.name(command.from) ?? command.from) : "someone";
+				// The operator's own letters (from the rookery) read as his.
+				const from =
+					command.from === OPERATOR
+						? "you"
+						: typeof command.from === "string"
+							? (lookup.name(command.from) ?? command.from)
+							: "someone";
 				return line("mail", `Mail from ${from} to ${name}: ${preview(command.body)}`);
 			}
 			const label = LABELS[String(command.kind)];

@@ -159,3 +159,66 @@ export function drawBark(scene: Phaser.Scene, line: string): Phaser.GameObjects.
 	text.setPosition(0, -tail - padY + 0.5);
 	return scene.add.container(0, 0, [bubble, text]);
 }
+
+/**
+ * A sleeper's "z": small letters that rise and fade above its head one after another, slowly, so a room of sleepers
+ * breathes rather than flickers. Its container's (0, 0) is where the first letter starts.
+ */
+export function drawZzz(scene: Phaser.Scene): Phaser.GameObjects.Container {
+	const container = scene.add.container(0, 0);
+	const delay = Math.random() * 1800;
+	[13, 16, 19].forEach((size, i) => {
+		const z = scene.add
+			.text(0, 0, "z", {
+				fontFamily: SERIF,
+				fontStyle: "bold italic",
+				fontSize: `${size}px`,
+				color: "#fdf1d4",
+				stroke: "#3a2412",
+				strokeThickness: 2.5,
+				shadow: { offsetX: 0, offsetY: 1, color: "#000000", blur: 3, fill: true, stroke: true },
+			})
+			.setOrigin(0.5, 1)
+			.setResolution(4)
+			.setAlpha(0);
+		container.add(z);
+		const timing = { delay: delay + i * 700, repeat: -1, repeatDelay: 1500 };
+		scene.tweens.add({
+			targets: z,
+			x: { from: i * 2, to: 6 + i * 4 },
+			y: { from: -i * 3, to: -14 - i * 4 },
+			duration: 1900,
+			ease: "Sine.out",
+			...timing,
+		});
+		scene.tweens.add({
+			targets: z,
+			alpha: { from: 0, to: 0.95 },
+			duration: 950,
+			yoyo: true,
+			ease: "Sine.inOut",
+			...timing,
+		});
+	});
+	return container;
+}
+
+/** A small wooden tag (the inn's stairs: how many more sleep upstairs), its bottom centre at (0, 0). */
+export function drawTag(scene: Phaser.Scene, line: string): Phaser.GameObjects.Container {
+	const text = scene.add
+		.text(0, 0, line, { fontFamily: SERIF, fontSize: "12px", fontStyle: "bold italic", color: "#f6e3b4" })
+		.setResolution(4)
+		.setOrigin(0.5, 1);
+	const w = Math.ceil(text.width + 18);
+	const h = Math.ceil(text.height + 9);
+	const plate = scene.add.graphics();
+	plate.fillStyle(0x000000, 0.3).fillRoundedRect(-w / 2 + 1.5, -h + 2, w, h, 5);
+	plate.fillStyle(0xc9a35a, 1).fillRoundedRect(-w / 2 - 1.5, -h - 1.5, w + 3, h + 3, 6);
+	plate.fillStyle(0x4a2e18, 1).fillRoundedRect(-w / 2, -h, w, h, 5);
+	plate
+		.fillStyle(0xf0d48a, 1)
+		.fillCircle(-w / 2 + 5, -h / 2, 1.6)
+		.fillCircle(w / 2 - 5, -h / 2, 1.6);
+	text.setPosition(0, -4);
+	return scene.add.container(0, 0, [plate, text]);
+}

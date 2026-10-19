@@ -1,7 +1,7 @@
 // Where things go in a place: which painting and data a place uses, the gallery cut to its number of wings, the walk
 // grid, and which spot each character stands on. Pure, so the scene only draws.
-import type { Character, Headquarters, PlaceRef, Wing, WorldSnapshot } from "../../src/world.js";
-import { placeKey } from "../../src/world.js";
+import type { Character, DormantAgent, Headquarters, PlaceRef, Wing, WorldSnapshot } from "../../src/world.js";
+import { isOutside, placeKey } from "../../src/world.js";
 import type { PlaceData, Point, Rect, Theme } from "../theme.js";
 
 /** A vertical strip of the painting, in tiles: source columns `from`..`to`, drawn starting at `at`. */
@@ -117,15 +117,17 @@ export function doorOf(wing: Wing): "open" | "closed" | "boarded" {
 
 /** The headquarters a place belongs to, if any. */
 export function headquartersOf(ref: PlaceRef, world: WorldSnapshot | undefined): Headquarters | undefined {
-	return ref.kind === "square" ? undefined : world?.headquarters.find((hq) => hq.id === ref.headquarters);
+	return isOutside(ref) ? undefined : world?.headquarters.find((hq) => hq.id === ref.headquarters);
 }
 
 /** How to draw `ref` now; undefined when it no longer exists (its headquarters closed). */
 export function layoutFor(ref: PlaceRef, world: WorldSnapshot | undefined, theme: Theme): Layout | undefined {
 	const key = placeKey(ref);
 	const labels = theme.labels;
-	if (ref.kind === "square")
-		return { ref, key, data: "square", place: theme.places.square, title: labels.square, signature: "square" };
+	if (isOutside(ref)) {
+		const place = theme.places[ref.kind];
+		return place ? { ref, key, data: ref.kind, place, title: labels[ref.kind], signature: ref.kind } : undefined;
+	}
 	const hq = headquartersOf(ref, world);
 	if (!hq) return undefined;
 	const owner = `${hq.name}'s headquarters`;
@@ -165,8 +167,43 @@ export function startPlace(world: WorldSnapshot | undefined): PlaceRef {
 	return first ? { kind: "headquarters", headquarters: first.id } : { kind: "square" };
 }
 
-/** The characters in a place, in the snapshot's order (by session start). */
-export function charactersIn(ref: PlaceRef, world: WorldSnapshot | undefined): Character[] {
+/** A dormant agent as the inn shows it: a character asleep there. */
+export function sleeperCharacter(agent: DormantAgent): Character {
+	return {
+		id: agent.id,
+		name: agent.name,
+		role: agent.role,
+		place: { kind: "inn" },
+		startedAt: agent.startedAt,
+		// What the conversation panel shows of it: where it worked and its last task. Asleep, it needs nobody.
+		facts: {
+			run: "idle",
+			status: "idle",
+			asking: null,
+			needsYouSince: null,
+			unseen: false,
+			seenAt: null,
+			settledAt: agent.stoppedAt,
+			tool: null,
+			task: agent.task,
+			git: agent.repository ? { repository: agent.repository, worktree: agent.repository, branch: "" } : null,
+			cwd: agent.cwd,
+			reportsTo: agent.reportsTo,
+			model: null,
+			contextTokens: null,
+			contextWindow: null,
+			cost: 0,
+			tmux: null,
+		},
+	};
+}
+
+/**
+ * The characters in a place, in the snapshot's order (by session start). At the inn, the dormant agents who sleep
+ * there visibly, the most recently stopped first, as many as it has spots (`room`); the rest are upstairs.
+ */
+export function charactersIn(ref: PlaceRef, world: WorldSnapshot | undefined, room = Infinity): Character[] {
+	if (ref.kind === "inn") return (world?.dormant ?? []).slice(0, room).map(sleeperCharacter);
 	const key = placeKey(ref);
 	return (world?.characters ?? []).filter((character) => placeKey(character.place) === key);
 }

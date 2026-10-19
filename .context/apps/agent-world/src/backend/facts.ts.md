@@ -10,3 +10,10 @@ Verify: apps/agent-world/tests/backend.test.ts
 A task's title and status are read from the bundle's `task.md` as the sidebar's `ledger_task` reads them (first `# ` heading, first `Status:` line), falling back to the task id; files are reread only when their mtime changes.
 Why: the runtime records only the bundle path in `current_task`; an archived bundle moves under `.ledger/history/`, and the sidebar shows the task id then too.
 Coupled: components/tmux-sessions/sidebar/model.py
+
+## symbol:asking
+
+Only a prompt of kind `questionnaire` whose `id` and every question parse (text, at least one option, each with a label) carries `questionnaire`; anything else is shown as a dialog answered in its terminal.
+Why: the `answer` command names the prompt's `id` and must give one reply per question in order, so a half-read questionnaire would send answers the tool refuses; the panel then points to the terminal instead of showing a form it cannot send.
+Coupled: components/session-state/src/bridge.ts, apps/agent-world/web/overlay/conversation/question-form.tsx
+Verify: apps/agent-world/tests/instruct.test.ts

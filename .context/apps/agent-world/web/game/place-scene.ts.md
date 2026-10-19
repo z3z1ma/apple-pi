@@ -1,6 +1,6 @@
 ## file
 
-The read-only methods (`placeKey`, `figureViews`, `avatarView`, `doorViews`, `toScreen`, `toWorld`, `zoomView`, `galleryView`, `overlayViews`, `bannerViews`, `walkGridShown`, `lookAt`) are the surface the headless tests use through `window.agentWorldView`, and the interface's minimap reads `placeKey`, `figureViews`, `avatarView`, `toWorld`, and `walkGridShown` through `overlay/interface/world-link.ts`. Renaming one breaks them without a type error, because the tests reach it through `page.evaluate`.
+The read-only methods (`placeKey`, `figureViews`, `avatarView`, `doorViews`, `toScreen`, `toWorld`, `zoomView`, `galleryView`, `overlayViews`, `bannerViews`, `walkGridShown`, `lookAt`, `hostView`) are the surface the headless tests use through `window.agentWorldView`, and the interface's minimap reads `placeKey`, `figureViews`, `avatarView`, `toWorld`, and `walkGridShown` through `overlay/interface/world-link.ts`. Renaming one breaks them without a type error, because the tests reach it through `page.evaluate`.
 Coupled: apps/agent-world/web/main.tsx, apps/agent-world/web/overlay/interface/world-link.ts
 Verify: apps/agent-world/tests/world-ui.test.ts, apps/agent-world/tests/world-movement.test.ts, apps/agent-world/tests/world-places.test.ts
 
@@ -33,3 +33,17 @@ Coupled: apps/agent-world/web/main.tsx, apps/agent-world/web/view-state.ts
 ## symbol:PlaceScene.pointerUp
 
 A left click runs the default action only if the press did not become a drag and did not close an open menu. Clicking off an open menu only closes it, as in RuneScape.
+
+## symbol:PlaceScene.sleep
+
+At the inn the figures are the newest dormant agents (`charactersIn` with the inn's spot count), not awake characters: each dozes in its seated frame (`dozing`) or, on a spot a `bed` overlay slot names, lies in that bed (`in-bed`: the walker is hidden at rest and a head cut from frame 14 is drawn on the pillow under a quilt cut from the bed sprite along `BED_SHEET`). A sleeper that is still dormant but pushed past the spots leaves by the stairs (the door whose `to` is `rooms`); one that woke leaves by the front door; one coming down from upstairs enters by the stairs.
+Why: the ticket shows only as many sleepers as the painting holds, newest first, and the rest "upstairs"; `BED_PILLOW` and `BED_SHEET` are pixel positions in `overlays/bed.png`, so a repainted bed needs them measured again.
+Coupled: apps/agent-world/themes/fantasy/places/inn.json, apps/agent-world/themes/fantasy/overlays/bed.png, apps/agent-world/web/game/layout.ts
+Verify: apps/agent-world/tests/world-inn.test.ts
+
+## symbol:PlaceScene.flyNewMail
+
+Only mail whose id was not in the snapshot when the scene was created, and sent within the last two minutes, flies as a bird; the scene restarts on every travel or layout change, so mail is "new" relative to the current visit. Sender and receiver are looked up among figures present (or the avatar for `operator`); one side missing makes the bird use the `enterBy` door; in the rookery every new letter comes in by the `window` slot to the host.
+Why: a reconnect or the first snapshot would otherwise launch a flock for old mail; the ticket shows traffic between characters in the current place, or out by the door when the receiver is elsewhere.
+Coupled: apps/agent-world/web/game/birds.ts, apps/agent-world/src/backend/mail.ts
+Verify: apps/agent-world/tests/world-rookery.test.ts

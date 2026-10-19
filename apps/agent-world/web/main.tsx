@@ -17,6 +17,7 @@ import { avatarLooks } from "./looks.js";
 import { conversationPanel } from "./overlay/conversation/panel-state.js";
 import { publishMinimap } from "./overlay/interface/world-link.js";
 import { Overlay } from "./overlay/overlay.js";
+import { placePanels } from "./overlay/places/place-panels.js";
 import { loadTheme } from "./theme.js";
 import { viewStore, type WorldIntent } from "./view-state.js";
 import { worldStore } from "./world-store.js";
@@ -42,6 +43,10 @@ declare global {
 				| undefined;
 			walkGrid(): boolean;
 			lookAt(door: string): boolean;
+			/** Messenger birds in flight with mail: which letter, from whom to whom, where, and its wing frame. */
+			birds(): { id: string; from: string; to: string; x: number; y: number; frame: number; out: boolean }[];
+			/** The place's host (the innkeeper), where it stands. */
+			host(): { name: string; look: string; x: number; y: number } | undefined;
 			/** The operator's avatar: where it is, its facing and frame, and the rest of its walk. */
 			avatar(): AvatarView | undefined;
 			/** A point in tiles, on screen in CSS px. */
@@ -75,6 +80,7 @@ const game = new Phaser.Game({
 const talkedTo: string[] = [];
 // Talking to a character, from the world or the side panel, opens its conversation panel.
 conversationPanel.connect(window.agentWorld, theme);
+placePanels.connect(window.agentWorld, theme, view);
 conversations.subscribe((character) => {
 	talkedTo.push(character.id);
 	conversationPanel.open(character);
@@ -93,6 +99,8 @@ window.agentWorldView = {
 	gallery: () => active()?.galleryView(),
 	walkGrid: () => active()?.walkGridShown() ?? false,
 	lookAt: (door) => active()?.lookAt(door) ?? false,
+	host: () => active()?.hostView(),
+	birds: () => active()?.birdViews() ?? [],
 	avatar: () => active()?.avatarView(),
 	toScreen: (x, y) => active()?.toScreen([x, y]),
 	zoom: () => active()?.zoomView(),

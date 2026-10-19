@@ -6,9 +6,11 @@ import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { createConnection, type Socket } from "node:net";
 import { DatabaseSync } from "node:sqlite";
-import type { CommandResult, FeedLine, TerminalResult, WorldSnapshot } from "../world.js";
+import type { CommandResult, DormantAgent, FeedLine, MailItem, TerminalResult, WorldSnapshot } from "../world.js";
 import { FACTS_COLUMNS, FACTS_JOINS, type FactsRow, factsOf, taskReader } from "./facts.js";
 import { FEED_SINCE, type FeedLookup, type FeedRow, feedLine } from "./feed.js";
+import { dormantAgents } from "./inn.js";
+import { readMail } from "./mail.js";
 import { type Projection, projectWorld, type RememberedWings, type SessionRow } from "./projection.js";
 import { switchToPane } from "./terminal.js";
 
@@ -51,6 +53,7 @@ const SESSIONS = `
 select s.id, s.name, s.cwd, s.reports_to as reportsTo, s.git, s.config,
 	(select min(f.started_at) from incarnations f where f.session_id = s.id) as firstStartedAt,
 	coalesce(i.ended_at is null and i.process_state in ('alive', 'alive_bridge_lost'), 0) as awake,
+	i.ended_at as stoppedAt, i.end_reason as stopReason,
 	${FACTS_COLUMNS}
 from sessions s
 ${FACTS_JOINS}
@@ -62,6 +65,8 @@ interface Row extends FactsRow {
 	config: string | null;
 	firstStartedAt: number | null;
 	awake: number;
+	stoppedAt: number | null;
+	stopReason: string | null;
 }
 
 function parse<T>(json: string | null | undefined): T | undefined {
@@ -85,6 +90,7 @@ function sessionRow(row: Row): SessionRow {
 		coordinatorFlag: Array.isArray(config?.flags) && config.flags.includes("coordinator"),
 		awake: row.awake === 1,
 		firstStartedAt: row.firstStartedAt ?? undefined,
+		stoppedAt: row.stoppedAt ?? undefined,
 	};
 }
 
@@ -100,6 +106,9 @@ export function openWorldBackend(paths: { db: string; socket: string }): WorldBa
 	const listeners = new Set<(snapshot: WorldSnapshot) => void>();
 	let current: WorldSnapshot = { connected: false, headquarters: [], characters: [] };
 	let world: Projection | undefined;
+	// The inn's sleepers and the rookery's mail, read with the world.
+	let dormant: DormantAgent[] = [];
+	let mail: MailItem[] = [];
 	let db: DatabaseSync | undefined;
 	let socket: Socket | undefined;
 	let socketOpen = false;
@@ -195,6 +204,8 @@ export function openWorldBackend(paths: { db: string; socket: string }): WorldBa
 					facts: factsOf(byId.get(character.id)!, readTask),
 				})),
 			};
+			dormant = dormantAgents(world.dormant, byId, readTask);
+			mail = readMail(db);
 			seen = mergeWings(seen, world.wings);
 			remember(stored, storedWings, world.wings);
 			return world;
@@ -259,6 +270,8 @@ export function openWorldBackend(paths: { db: string; socket: string }): WorldBa
 			headquarters: next?.headquarters ?? current.headquarters,
 			characters: next?.characters ?? current.characters,
 			avatarLook: chosenAvatar ?? storedAvatar,
+			dormant,
+			mail,
 		});
 	};
 

@@ -2,24 +2,27 @@
 // ledger task, every place to travel to, and settings. Clicking the open tab folds the panel down to its tabs.
 import type { ReactNode } from "react";
 import type { Character, PlaceRef, WorldSnapshot } from "../../../src/world.js";
-import { placeKey } from "../../../src/world.js";
+import { isOutside, placeKey } from "../../../src/world.js";
 import type { AvatarLook } from "../../looks.js";
-import { AgentsIcon, BellIcon, CogIcon, ScrollIcon, SignpostIcon } from "./icons.js";
-import { activity, byPlace, byTask, type Group, needsYou, orbCounts, placeName, placesOf } from "./model.js";
+import { MailList } from "../places/mail-list.js";
+import { placePanels } from "../places/place-panels.js";
+import { AgentsIcon, BellIcon, CogIcon, LetterIcon, ScrollIcon, SignpostIcon } from "./icons.js";
+import { activity, byPlace, byTask, type Group, needsYou, OUTSIDE, orbCounts, placeName, placesOf } from "./model.js";
 import { type CharacterAction, CharacterRow } from "./rows.js";
 
-export type Tab = "agents" | "needs-you" | "work" | "places" | "settings";
+export type Tab = "agents" | "needs-you" | "work" | "mail" | "places" | "settings";
 
 const TABS: { tab: Tab; title: string; icon: ReactNode }[] = [
 	{ tab: "agents", title: "Agents", icon: <AgentsIcon /> },
 	{ tab: "needs-you", title: "Needs you", icon: <BellIcon /> },
 	{ tab: "work", title: "Work", icon: <ScrollIcon /> },
+	{ tab: "mail", title: "Mail", icon: <LetterIcon /> },
 	{ tab: "places", title: "Places", icon: <SignpostIcon /> },
 	{ tab: "settings", title: "Settings", icon: <CogIcon /> },
 ];
 
 /** Function places that have no painting yet: listed so the operator knows they are coming. */
-const NOT_OPEN = ["forge", "quest-office", "library", "inn", "rookery"];
+const NOT_OPEN = ["forge", "quest-office", "library"];
 
 export interface SidePanelProps {
 	world: WorldSnapshot | undefined;
@@ -85,6 +88,7 @@ function TabBody(props: SidePanelProps) {
 	const { world, labels, tab } = props;
 	if (tab === "places") return <Places {...props} />;
 	if (tab === "settings") return <Settings {...props} />;
+	if (tab === "mail") return <Mail {...props} />;
 	if (!world?.characters.length) return <p className="aw-empty">Nobody is awake.</p>;
 	if (tab === "agents") return <Groups {...props} groups={byPlace(world, labels)} detail={activity} />;
 	if (tab === "work")
@@ -144,15 +148,35 @@ function Groups({
 	);
 }
 
+/** The Mail tab: the rookery's traffic, newest first, and a letter to write from anywhere. */
+function Mail({ world }: SidePanelProps) {
+	const mail = world?.mail ?? [];
+	return (
+		<section aria-label="Mail">
+			<h3 className="aw-mail-head">
+				<span>Recent mail</span>
+				<button
+					type="button"
+					className="aw-button aw-mail-write"
+					onClick={() => placePanels.open("rookery", { write: true })}
+				>
+					Write a letter
+				</button>
+			</h3>
+			{mail.length ? <MailList mail={mail} label="Recent mail" compact /> : <p className="aw-empty">No mail yet.</p>}
+		</section>
+	);
+}
+
 function Places({ world, labels, here, travel }: SidePanelProps) {
 	const places = placesOf(world);
 	const sections: { key: string; title: string; places: PlaceRef[] }[] = [
 		...(world?.headquarters ?? []).map((hq) => ({
 			key: hq.id,
 			title: `${hq.name}'s headquarters`,
-			places: places.filter((ref) => ref.kind !== "square" && ref.headquarters === hq.id),
+			places: places.filter((ref) => !isOutside(ref) && ref.headquarters === hq.id),
 		})),
-		{ key: "outside", title: "Outside", places: [{ kind: "square" }] },
+		{ key: "outside", title: "Outside", places: OUTSIDE },
 	];
 	const count = (ref: PlaceRef) => world?.characters.filter((c) => placeKey(c.place) === placeKey(ref)).length ?? 0;
 	const detail = (ref: PlaceRef) => {

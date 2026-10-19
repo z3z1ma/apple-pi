@@ -10,7 +10,10 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { app, BrowserWindow, ipcMain, net, protocol } from "electron";
 import { agentDir, statePaths } from "../../../../components/session-state/src/paths.js";
 import { appFile } from "../app-files.js";
+import { openCommands } from "../backend/commands.js";
 import { openConversations } from "../backend/conversations.js";
+import { instruct } from "../backend/instructions.js";
+import { openLifecycle } from "../backend/lifecycle.js";
 import { openWorldBackend } from "../backend/world-backend.js";
 
 // This file runs as dist/electron/main.js, two levels below the app directory.
@@ -30,7 +33,11 @@ else app.quit(); // a second /world: the first instance focuses its window
 function start() {
 	const world = openWorldBackend(statePaths());
 	const conversations = openConversations(statePaths().socket);
+	const commands = openCommands(statePaths().socket);
 	let window: BrowserWindow | undefined;
+	const toWindow = (channel: string, message: unknown) => {
+		if (window && !window.isDestroyed()) window.webContents.send(channel, message);
+	};
 
 	ipcMain.handle("world:snapshot", () => world.snapshot());
 	ipcMain.handle("world:feed", () => world.feed());
@@ -52,6 +59,30 @@ function start() {
 	ipcMain.handle("world:avatar-look", (_event, look: unknown) =>
 		typeof look === "string" ? world.setAvatarLook(look) : { ok: false, reason: "No look was named." },
 	);
+	ipcMain.handle("world:instruct", (_event, characterId: unknown, commandId: unknown, instruction: unknown) => {
+		if (typeof characterId !== "string" || typeof commandId !== "string" || !commandId)
+			return { ok: false, reason: "No character was named." };
+		const character = world.snapshot().characters.find((c) => c.id === characterId);
+		return instruct(commands, character, commandId, instruction, (stage, reason) =>
+			toWindow("world:receipt", { commandId, characterId, stage, ...(reason ? { reason } : {}) }),
+		);
+	});
+	ipcMain.handle("world:watch-replies", (_event, characterIds: unknown) =>
+		conversations.watch(Array.isArray(characterIds) ? characterIds.filter((id) => typeof id === "string") : []),
+	);
+	conversations.onReply((event) => toWindow("world:reply", event));
+	// The inn, the rookery, and ending a session.
+	const lifecycle = openLifecycle(statePaths(), commands, () => world.snapshot());
+	const unnamed = { ok: false, reason: "No character was named." };
+	ipcMain.handle("world:wake", (_event, characterId: unknown) =>
+		typeof characterId === "string" ? lifecycle.wake(characterId) : unnamed,
+	);
+	ipcMain.handle("world:end-session", (_event, characterId: unknown, confirmed: unknown) =>
+		typeof characterId === "string" ? lifecycle.endSession(characterId, confirmed === true) : unnamed,
+	);
+	ipcMain.handle("world:send-mail", (_event, characterId: unknown, body: unknown) =>
+		typeof characterId === "string" && typeof body === "string" ? lifecycle.sendMail(characterId, body) : unnamed,
+	);
 	world.subscribe((snapshot) => {
 		if (window && !window.isDestroyed()) window.webContents.send("world:update", snapshot);
 	});
@@ -68,6 +99,7 @@ function start() {
 	app.on("will-quit", () => {
 		world.close();
 		conversations.close();
+		commands.close();
 	});
 
 	void app.whenReady().then(() => {

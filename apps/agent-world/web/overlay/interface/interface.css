@@ -357,7 +357,8 @@
 
 .aw-tabs {
 	display: grid;
-	grid-template-columns: repeat(5, 1fr);
+	grid-auto-flow: column;
+	grid-auto-columns: 1fr;
 	gap: 4px;
 }
 
@@ -910,6 +911,16 @@
 	font-size: 12.5px;
 	text-overflow: ellipsis;
 	white-space: nowrap;
+}
+
+/* Ending a session is set apart, at the end of its own row, in the ink of a warning. */
+.aw-actions .aw-button-end {
+	grid-column: 3 / span 2;
+	color: #7a2a18;
+}
+
+.aw-card .aw-actions .aw-button-end {
+	grid-column: auto;
 }
 
 .aw-card .aw-actions {

@@ -918,3 +918,527 @@
 		url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 26 26'%3E%3Cpath d='M23 2C14 4 8 10 5 19l2 1c1-3 3-6 5-8-1 3-3 6-4 9 7-3 12-9 15-19z' fill='%23b89a66' stroke='%236f5332' stroke-width='.8'/%3E%3Cpath d='M5 19l-2 5' stroke='%236f5332' stroke-width='1.4' stroke-linecap='round'/%3E%3C/svg%3E")
 		no-repeat center / contain;
 }
+
+/* The foot of the right page: what the operator can do (ticket 13). A ruled line, the receipts of what was sent, the
+   reply box with its quill, and the actions by state. */
+.aw-conv-act {
+	position: relative;
+	display: grid;
+	gap: 7px;
+	margin: 0 40px 0 36px;
+	padding: 10px 0 14px;
+	border-top: 1px solid rgb(140 100 40 / 35%);
+}
+
+.aw-conv-box {
+	display: flex;
+	align-items: flex-start;
+	gap: 10px;
+}
+
+.aw-conv-box .aw-quill {
+	margin-top: 6px;
+}
+
+.aw-conv-input {
+	flex: 1;
+	min-width: 0;
+	box-sizing: border-box;
+	margin: 0;
+	padding: 6px 11px 7px;
+	resize: none;
+	border: 1px solid rgb(140 100 40 / 38%);
+	border-radius: 5px;
+	font: 15px / 1.5 var(--aw-serif);
+	color: var(--aw-ink);
+	background:
+		repeating-linear-gradient(to bottom, transparent 0 calc(1.5em - 1px), rgb(36 71 106 / 10%) calc(1.5em - 1px) 1.5em)
+		0 6px / 100% 1.5em,
+		rgb(255 251 238 / 62%);
+	background-attachment: local;
+	box-shadow: inset 0 1px 3px rgb(90 60 20 / 18%);
+	scrollbar-width: thin;
+	scrollbar-color: rgb(122 80 30 / 55%) transparent;
+}
+
+.aw-conv-input::placeholder {
+	font-style: italic;
+	color: var(--aw-ink-faint);
+}
+
+.aw-conv-input:focus {
+	outline: none;
+	border-color: rgb(138 100 36 / 75%);
+	box-shadow:
+		inset 0 1px 3px rgb(90 60 20 / 18%),
+		0 0 0 2px rgb(217 180 94 / 45%);
+}
+
+.aw-conv-act-bar {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding-left: 36px;
+}
+
+.aw-conv-hint {
+	margin-right: auto;
+	font-size: 12px;
+	font-style: italic;
+	color: var(--aw-ink-faint);
+}
+
+.aw-conv-hint kbd {
+	padding: 0 4px 1px;
+	border: 1px solid rgb(140 100 40 / 40%);
+	border-radius: 3px;
+	font: 600 10.5px var(--aw-serif);
+	font-style: normal;
+	color: var(--aw-ink-soft);
+	background: rgb(255 251 238 / 70%);
+	box-shadow: 0 1px 0 rgb(140 100 40 / 35%);
+}
+
+.aw-plaque:disabled {
+	cursor: default;
+	filter: saturate(0.5) brightness(0.97);
+	opacity: 0.55;
+	transform: none;
+}
+
+/* A quieter leather-and-parchment button beside the brass one. */
+.aw-plaque-quiet {
+	color: var(--aw-ink);
+	background: linear-gradient(#fdf5df, #ecd9ab 55%, #e1c88f);
+	box-shadow:
+		inset 0 1px 0 rgb(255 255 245 / 85%),
+		inset 0 -2px 0 rgb(120 80 30 / 18%),
+		0 2px 0 #9a7a44,
+		0 4px 8px rgb(60 30 5 / 22%);
+}
+
+/* Red sealing wax, for Stop. */
+.aw-plaque-wax {
+	border-color: #3a0d05;
+	color: #fdebd2;
+	text-shadow: 0 1px 0 rgb(40 5 0 / 60%);
+	background: linear-gradient(#c4513a, #9c2f1c 50%, #84220f 52%, #9a3220);
+	box-shadow:
+		inset 0 1px 0 rgb(255 200 170 / 45%),
+		inset 0 -2px 0 rgb(40 5 0 / 35%),
+		0 2px 0 #4d1206,
+		0 4px 8px rgb(60 10 5 / 35%);
+}
+
+/* What was sent, and how far it got. */
+.aw-conv-receipts {
+	display: grid;
+	gap: 2px;
+	margin: 0;
+	padding: 0 0 0 36px;
+	list-style: none;
+	font-size: 12.5px;
+	color: var(--aw-ink-soft);
+}
+
+.aw-conv-receipt {
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
+	min-width: 0;
+}
+
+.aw-conv-receipt-what {
+	flex: none;
+	font-variant: small-caps;
+	font-weight: 600;
+	letter-spacing: 0.04em;
+	color: var(--aw-oxblood);
+}
+
+.aw-conv-receipt-text {
+	flex: 0 1 auto;
+	min-width: 4em;
+	overflow: hidden;
+	font-style: italic;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+
+.aw-conv-stages {
+	display: flex;
+	flex: none;
+	gap: 9px;
+	margin-left: auto;
+}
+
+.aw-conv-stage {
+	color: rgb(154 125 85 / 70%);
+}
+
+.aw-conv-stage::before {
+	content: "\25CB";
+	margin-right: 3px;
+	font-size: 10px;
+}
+
+.aw-conv-stage.aw-on {
+	color: #3f6a2c;
+}
+
+.aw-conv-stage.aw-on::before {
+	content: "\2713";
+	font-size: 11px;
+}
+
+.aw-conv-receipt-failed {
+	flex: 1 1 auto;
+	min-width: 0;
+	font-style: italic;
+	color: var(--aw-oxblood);
+}
+
+/* Stop asks first: a slip of parchment over the foot of the page, closed with a wax seal. */
+.aw-conv-confirm {
+	position: absolute;
+	right: -8px;
+	bottom: calc(100% + 10px);
+	z-index: 4;
+	width: min(380px, 100%);
+	box-sizing: border-box;
+	padding: 16px 20px 14px 22px;
+	border-radius: 4px;
+	background: radial-gradient(ellipse 90% 80% at 50% 40%, #fffaea, #f3e4bf 70%, #e7d09d);
+	box-shadow:
+		0 0 0 1px rgb(120 80 30 / 45%),
+		0 0 0 4px rgb(251 242 218 / 90%),
+		0 0 0 5px rgb(138 100 36 / 55%),
+		0 14px 30px rgb(50 25 5 / 40%);
+	animation: aw-confirm-in 140ms ease-out;
+}
+
+@keyframes aw-confirm-in {
+	from {
+		opacity: 0;
+		transform: translateY(6px);
+	}
+}
+
+.aw-conv-confirm-seal {
+	position: absolute;
+	top: -12px;
+	right: 18px;
+	width: 26px;
+	height: 26px;
+	border-radius: 50%;
+	background: radial-gradient(circle at 38% 34%, #d8604a, #9c2f1c 55%, #6e1a0c);
+	box-shadow:
+		0 0 0 2px rgb(156 47 28 / 45%),
+		0 2px 3px rgb(40 5 0 / 45%);
+}
+
+.aw-conv-confirm-title {
+	margin: 0 0 4px;
+	font: 600 18px / 1.2 var(--aw-display);
+	color: var(--aw-oxblood);
+}
+
+.aw-conv-confirm-text {
+	margin: 0 0 12px;
+	font-size: 13.5px;
+	line-height: 1.45;
+	color: var(--aw-ink);
+}
+
+.aw-conv-confirm-bar {
+	display: flex;
+	justify-content: flex-end;
+	gap: 8px;
+}
+
+/* The reply being written: a nib that blinks after the last word. */
+.aw-conv-writing .aw-md > :last-child::after {
+	content: "";
+	display: inline-block;
+	width: 7px;
+	height: 0.95em;
+	margin-left: 3px;
+	vertical-align: -0.1em;
+	border-radius: 1px 1px 3px 3px;
+	background: var(--aw-ink-soft);
+	animation: aw-nib 1s steps(2, jump-none) infinite;
+}
+
+@keyframes aw-nib {
+	to {
+		opacity: 0.15;
+	}
+}
+
+/* An open question (ticket 14): a letter of questions laid over the foot of the page, sealed in wax. */
+.aw-conv-form,
+.aw-conv-terminal-only {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	flex: none;
+	max-height: 66%;
+	min-height: 0;
+	margin: 0 30px 14px 28px;
+	border-radius: 4px;
+	background: radial-gradient(ellipse 100% 90% at 50% 30%, #fffbee, #f6e9c8 70%, #ecd8a8);
+	box-shadow:
+		0 0 0 1px rgb(120 80 30 / 40%),
+		0 0 0 4px rgb(251 242 218 / 92%),
+		0 0 0 5px rgb(138 100 36 / 50%),
+		0 -10px 24px rgb(90 60 20 / 18%);
+}
+
+.aw-conv-terminal-only {
+	gap: 4px;
+	padding: 16px 22px 14px;
+}
+
+.aw-conv-form-head {
+	display: grid;
+	gap: 1px;
+	padding: 14px 22px 8px;
+	border-bottom: 1px solid rgb(140 100 40 / 25%);
+}
+
+.aw-conv-form-seal {
+	position: absolute;
+	top: -11px;
+	left: 20px;
+	width: 24px;
+	height: 24px;
+	border-radius: 50%;
+	background: radial-gradient(circle at 38% 34%, #6f8fb3, #2f557c 55%, #1d3653);
+	box-shadow:
+		0 0 0 2px rgb(36 71 106 / 40%),
+		0 2px 3px rgb(10 20 40 / 45%);
+}
+
+.aw-conv-form-title {
+	margin: 0;
+	font: 600 18px / 1.2 var(--aw-display);
+	color: var(--aw-blue-ink);
+}
+
+.aw-conv-form-sub {
+	font-size: 12.5px;
+	font-style: italic;
+	color: var(--aw-ink-faint);
+}
+
+.aw-conv-form-body {
+	flex: 1;
+	min-height: 0;
+	overflow: auto;
+	padding: 4px 22px 6px;
+	scrollbar-width: thin;
+	scrollbar-color: rgb(122 80 30 / 55%) transparent;
+}
+
+.aw-conv-q {
+	min-width: 0;
+	margin: 0;
+	padding: 10px 0 10px;
+	border: 0;
+}
+
+.aw-conv-q + .aw-conv-q {
+	border-top: 1px dashed rgb(140 100 40 / 28%);
+}
+
+.aw-conv-q-legend {
+	display: flex;
+	align-items: baseline;
+	gap: 10px;
+	padding: 0;
+	font-size: 15.5px;
+	line-height: 1.35;
+	color: var(--aw-ink);
+}
+
+.aw-conv-q-header {
+	flex: none;
+	padding: 1px 7px 2px;
+	border-radius: 3px;
+	font-size: 11px;
+	font-variant: small-caps;
+	font-weight: 600;
+	letter-spacing: 0.05em;
+	color: #fbf2da;
+	background: var(--aw-blue-ink);
+}
+
+.aw-conv-q-text {
+	font-weight: 600;
+}
+
+.aw-conv-q-how {
+	margin: 2px 0 6px;
+	font-size: 12px;
+	font-style: italic;
+	color: var(--aw-ink-faint);
+}
+
+.aw-conv-opts {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+	gap: 6px;
+}
+
+.aw-conv-opt {
+	position: relative;
+	display: grid;
+	grid-template-columns: auto 1fr;
+	column-gap: 9px;
+	align-content: start;
+	align-items: baseline;
+	padding: 7px 11px 8px 10px;
+	border: 1px solid rgb(140 100 40 / 32%);
+	border-radius: 5px;
+	background: rgb(255 252 242 / 70%);
+	cursor: pointer;
+	transition:
+		background 120ms,
+		border-color 120ms,
+		box-shadow 120ms;
+}
+
+.aw-conv-opt:hover {
+	border-color: rgb(138 100 36 / 65%);
+	background: rgb(255 252 242 / 95%);
+}
+
+.aw-conv-opt.aw-on {
+	border-color: var(--aw-blue-ink);
+	background: #fffdf5;
+	box-shadow:
+		0 0 0 1px var(--aw-blue-ink),
+		0 2px 6px rgb(36 71 106 / 18%);
+}
+
+.aw-conv-opt-label {
+	font-weight: 600;
+	font-size: 14.5px;
+	color: var(--aw-ink);
+}
+
+.aw-conv-opt-desc {
+	grid-column: 2;
+	font-size: 12.5px;
+	line-height: 1.4;
+	color: var(--aw-ink-soft);
+}
+
+.aw-conv-opt-own .aw-conv-opt-label {
+	font-style: italic;
+}
+
+.aw-conv-own {
+	grid-column: 1 / -1;
+}
+
+/* Hand-drawn marks: an inked ring for one choice, a ruled box for many. */
+.aw-conv-mark {
+	appearance: none;
+	position: relative;
+	top: 2px;
+	width: 15px;
+	height: 15px;
+	margin: 0;
+	border: 1.5px solid var(--aw-ink-soft);
+	background: #fffdf6;
+	cursor: pointer;
+}
+
+.aw-conv-mark-radio {
+	border-radius: 50%;
+}
+
+.aw-conv-mark-checkbox {
+	border-radius: 3px;
+}
+
+.aw-conv-mark:checked {
+	border-color: var(--aw-blue-ink);
+}
+
+.aw-conv-mark-radio:checked::after {
+	content: "";
+	position: absolute;
+	inset: 2.5px;
+	border-radius: 50%;
+	background: var(--aw-blue-ink);
+}
+
+.aw-conv-mark-checkbox:checked::after {
+	content: "";
+	position: absolute;
+	top: 1px;
+	left: 4px;
+	width: 3.5px;
+	height: 7.5px;
+	border: solid var(--aw-blue-ink);
+	border-width: 0 2px 2px 0;
+	transform: rotate(45deg);
+}
+
+.aw-conv-mark:focus-visible {
+	outline: 2px solid rgb(217 180 94 / 90%);
+	outline-offset: 2px;
+}
+
+.aw-conv-q:disabled .aw-conv-opt {
+	cursor: default;
+	opacity: 0.7;
+}
+
+.aw-conv-form-foot {
+	display: grid;
+	gap: 6px;
+	padding: 8px 22px 12px;
+	border-top: 1px solid rgb(140 100 40 / 25%);
+}
+
+.aw-conv-form-foot .aw-conv-act-bar,
+.aw-conv-form-foot .aw-conv-receipts,
+.aw-conv-terminal-only .aw-conv-act-bar {
+	padding-left: 0;
+}
+
+.aw-conv-asked {
+	margin: 4px 0 0;
+	font-size: 16px;
+	font-weight: 600;
+	color: var(--aw-ink);
+}
+
+.aw-conv-terminal-why {
+	margin: 0 0 8px;
+	font-size: 13.5px;
+	font-style: italic;
+	color: var(--aw-ink-soft);
+}
+
+.aw-conv-terminal-only .aw-conv-act-bar {
+	justify-content: flex-end;
+}
+
+/* Who answered the question that just closed. */
+.aw-conv-closed {
+	margin: 0;
+	padding-left: 36px;
+	font-size: 13px;
+	font-style: italic;
+	color: var(--aw-blue-ink);
+}
+
+.aw-conv-closed::before {
+	content: "\2709";
+	margin-right: 6px;
+	font-style: normal;
+}

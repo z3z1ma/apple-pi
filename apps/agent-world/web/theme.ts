@@ -37,6 +37,13 @@ export interface PlaceData {
 	foreground?: { rect: Rect; feet: number }[];
 	overlaySlots: OverlaySlot[];
 	/**
+	 * The place's host (the innkeeper, the rookery keeper): a theme look whose `role` names it, standing at `at` (its
+	 * feet, which may be behind a counter) and facing the room. Talking to the host opens the place's own panel.
+	 */
+	host?: { look: string; at: Point };
+	/** Furniture that answers the pointer, such as the inn's tables: `use` names what the place does with it. */
+	furniture?: { name: string; rect: Rect; use: string }[];
+	/**
 	 * A place that grows with what it holds (the gallery): the painting's niches, and how to cut it into vertical
 	 * strips for a given number of them. Beyond the largest layout, the `repeat` strip is inserted once per extra
 	 * niche, just before its right edge. Positions inside a niche are relative to its centre.
@@ -55,11 +62,14 @@ export interface PlaceData {
  * Where an overlay goes over a painting. `fire` stands on the hearth floor at `at` (its bottom centre), `w` tiles
  * wide; `water` fills the ellipse at `at` with radii `rx`, `ry`, except `hole` (a polygon, such as a fountain's
  * pillar); `glow` is warm light around a lantern or candle at `at`, `r` tiles across its halo; `banner` hangs its rod
- * at `at`; `fidget` is a bare spot for something to play with.
+ * at `at`; `fidget` is a bare spot for something to play with; `bed` stands a bed `w` tiles wide with its foot's
+ * bottom centre at `at`, in which whoever takes spot `spot` sleeps (the spot is where it climbs in); `window` is where
+ * birds fly in and out; `letters` is where a pile of letters (`w` tiles wide) lies while mail waits.
  */
 export interface OverlaySlot {
-	kind: "fire" | "water" | "glow" | "banner" | "fidget";
+	kind: "fire" | "water" | "glow" | "banner" | "fidget" | "bed" | "window" | "letters";
 	at: Point;
+	spot?: number;
 	w?: number;
 	r?: number;
 	rx?: number;
@@ -85,7 +95,16 @@ export interface Theme {
 }
 
 /** Every painted place of a pack, by data file. */
-export const PLACE_FILES = ["headquarters", "common-room", "gallery", "wing-small", "wing-large", "square"] as const;
+export const PLACE_FILES = [
+	"headquarters",
+	"common-room",
+	"gallery",
+	"wing-small",
+	"wing-large",
+	"square",
+	"inn",
+	"rookery",
+] as const;
 
 /** Overlay sprites the world places over paintings. */
 export const OVERLAYS = [
@@ -101,6 +120,12 @@ export const OVERLAYS = [
 	"water-1",
 	"water-2",
 	"water-3",
+	"bed",
+	"bird-0",
+	"bird-1",
+	"bird-2",
+	"bird-3",
+	"letters",
 ] as const;
 
 // The fantasy names until packs carry their own labels (theme pack format, a later ticket).
@@ -115,6 +140,8 @@ const FANTASY_LABELS: Record<string, string> = {
 	library: "The library",
 	inn: "The inn",
 	rookery: "The rookery",
+	innkeeper: "Innkeeper",
+	"rookery-keeper": "Rookery keeper",
 };
 
 export async function loadTheme(id: string): Promise<Theme> {

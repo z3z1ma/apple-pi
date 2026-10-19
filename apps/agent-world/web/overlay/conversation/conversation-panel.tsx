@@ -2,14 +2,17 @@
 // theme as an open book. The left page holds the character's large portrait (its expression follows its state), name,
 // role and place, repository, ledger task, what it is doing now, and Go to its terminal; the right page holds the
 // transcript, newest at the bottom, with older pages loading as the operator scrolls up. Opening it marks the character
-// seen. The reply box (a later ticket) has its place at the foot of the right page.
+// seen. The foot of the right page holds what the operator can do by its state (`actions.tsx`), and the reply being
+// written streams in at the bottom of the transcript (`live-reply.ts`).
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import type { Character, WorldSnapshot } from "../../../src/world.js";
+import type { Character, TranscriptEntry, WorldSnapshot } from "../../../src/world.js";
 import { type Expression, portraitFor } from "../../looks.js";
 import type { WorldStore } from "../../world-store.js";
 import { activity, attentionOf, placeName } from "../interface/model.js";
+import { Footer } from "./actions.js";
 import "./conversation.css";
 import { useHistory } from "./history.js";
+import { useLiveReplies } from "./live-reply.js";
 import { conversationPanel } from "./panel-state.js";
 import { BlockView, blockAt, blockKey, blocksOf, dayName, WorkingDirectory } from "./transcript.js";
 
@@ -60,16 +63,30 @@ function Book({ opened, world, store }: { opened: Character; world: WorldSnapsho
 
 	const pulse = `${facts?.run}:${facts?.settledAt}:${facts?.tool?.since}:${facts?.needsYouSince}`;
 	const history = useHistory(api, opened.id, pulse);
+	const streaming = useLiveReplies(api, opened.id, history.entries, history.refresh);
+	const [sentCount, setSentCount] = useState(0);
 
-	// Escape closes; while open, the world's keys (walking, the walk grid) rest. Key releases still reach it, so no key
-	// stays held down.
+	// Escape closes (a confirmation first); while open, the world's keys (walking, the walk grid) rest. Keys typed in
+	// the book reach its fields and buttons, then stop at the document before the world's listener on the window. Key
+	// releases still reach the world, so no key stays held down.
+	const bookRef = useRef<HTMLDivElement>(null);
 	useEffect(() => {
-		const onKey = (event: KeyboardEvent) => {
+		const capture = (event: KeyboardEvent) => {
+			if (event.key === "Escape") {
+				event.stopImmediatePropagation();
+				conversationPanel.escape();
+				return;
+			}
+			if (event.target instanceof Node && bookRef.current?.contains(event.target)) return;
 			event.stopImmediatePropagation();
-			if (event.key === "Escape") conversationPanel.close();
 		};
-		window.addEventListener("keydown", onKey, { capture: true });
-		return () => window.removeEventListener("keydown", onKey, { capture: true });
+		const bubble = (event: KeyboardEvent) => event.stopPropagation();
+		window.addEventListener("keydown", capture, { capture: true });
+		document.addEventListener("keydown", bubble);
+		return () => {
+			window.removeEventListener("keydown", capture, { capture: true });
+			document.removeEventListener("keydown", bubble);
+		};
 	}, []);
 
 	const [terminal, setTerminal] = useState<string>();
@@ -94,7 +111,13 @@ function Book({ opened, world, store }: { opened: Character; world: WorldSnapsho
 				if (event.target === event.currentTarget) conversationPanel.close();
 			}}
 		>
-			<div className="aw-book" role="dialog" aria-modal="true" aria-label={`Conversation with ${character.name}`}>
+			<div
+				ref={bookRef}
+				className="aw-book"
+				role="dialog"
+				aria-modal="true"
+				aria-label={`Conversation with ${character.name}`}
+			>
 				<span className="aw-book-corner aw-tl" aria-hidden="true" />
 				<span className="aw-book-corner aw-tr" aria-hidden="true" />
 				<span className="aw-book-corner aw-bl" aria-hidden="true" />
@@ -161,12 +184,21 @@ function Book({ opened, world, store }: { opened: Character; world: WorldSnapsho
 						onClick={() => conversationPanel.close()}
 					/>
 					<WorkingDirectory.Provider value={facts?.cwd}>
-						<Transcript history={history} name={character.name} />
+						<Transcript history={history} live={streaming} name={character.name} sent={sentCount} />
 					</WorkingDirectory.Provider>
-					<footer className="aw-conv-reply-slot">
-						<span className="aw-quill" aria-hidden="true" />
-						<span>Replying from here comes soon; for now, answer in its terminal.</span>
-					</footer>
+					{live ? (
+						<Footer
+							character={character}
+							onSend={() => setSentCount((n) => n + 1)}
+							goToTerminal={goToTerminal}
+							terminalProblem={terminal}
+						/>
+					) : (
+						<footer className="aw-conv-reply-slot">
+							<span className="aw-quill" aria-hidden="true" />
+							<span>{character.name} is no longer running, so it cannot be told anything here.</span>
+						</footer>
+					)}
 				</section>
 			</div>
 		</div>
@@ -192,19 +224,35 @@ function Doing({ character, text }: { character: Character; text: string }) {
 	return <>{text}</>;
 }
 
-function Transcript({ history, name }: { history: ReturnType<typeof useHistory>; name: string }) {
+function Transcript({
+	history,
+	live,
+	name,
+	sent,
+}: {
+	history: ReturnType<typeof useHistory>;
+	/** Replies being written, and written ones the history has not read yet, drawn after it. */
+	live: TranscriptEntry[];
+	name: string;
+	/** Counts instructions sent; each one brings the view back to the bottom. */
+	sent: number;
+}) {
 	const log = useRef<HTMLDivElement>(null);
-	const { blocks, results } = useMemo(() => blocksOf(history.entries), [history.entries]);
+	const entries = useMemo(
+		() => (live.length ? [...history.entries, ...live] : history.entries),
+		[history.entries, live],
+	);
+	const { blocks, results } = useMemo(() => blocksOf(entries), [entries]);
 	const firstKey = blocks.length ? blockKey(blocks[0]) : undefined;
-	const lastEntry = history.entries.at(-1)?.id;
-	const layout = useRef<{ height: number; first?: string; last?: string; stuck: boolean; placed: boolean }>({
+	const layout = useRef<{ height: number; first?: string; sent: number; stuck: boolean; placed: boolean }>({
 		height: 0,
+		sent,
 		stuck: true,
 		placed: false,
 	});
 
-	// Keep the view still when older pages arrive above it, and at the bottom when new entries arrive below while the
-	// operator is at the bottom.
+	// Keep the view still when older pages arrive above it, and at the bottom while the operator is there as entries
+	// arrive or a reply grows below; sending brings it back to the bottom.
 	useLayoutEffect(() => {
 		const el = log.current;
 		if (!el) return;
@@ -214,12 +262,13 @@ function Transcript({ history, name }: { history: ReturnType<typeof useHistory>;
 			was.placed = true;
 		} else if (was.first !== undefined && firstKey !== was.first) {
 			el.scrollTop += el.scrollHeight - was.height;
-		} else if (was.last !== lastEntry && was.stuck) {
+		} else if (was.sent !== sent || (was.stuck && el.scrollHeight !== was.height)) {
 			el.scrollTop = el.scrollHeight;
+			was.stuck = true;
 		}
 		was.height = el.scrollHeight;
 		was.first = firstKey;
-		was.last = lastEntry;
+		was.sent = sent;
 	});
 
 	// A first page that does not fill the page loads the one before at once.

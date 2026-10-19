@@ -1,17 +1,21 @@
 import * as Phaser from "phaser";
-import { type Character, type PlaceRef, placeKey } from "../../src/world.js";
+import { type Character, isOutside, type MailItem, OPERATOR, type PlaceRef, placeKey } from "../../src/world.js";
 import { avatarLookIn, lookFor } from "../looks.js";
+import { placeActions, placePanels } from "../overlay/places/place-panels.js";
 import { pointer } from "../overlay/pointer/pointer-state.js";
-import { type Door, type OverlaySlot, type Point, type Theme, TILE } from "../theme.js";
+import { type Door, type OverlaySlot, type Point, type Rect, type Theme, TILE } from "../theme.js";
 import type { ViewStore, WorldIntent } from "../view-state.js";
 import type { WorldStore } from "../world-store.js";
 import { type Action, action, type Target } from "./actions.js";
+import { Birds, type BirdView, type Perch } from "./birds.js";
 import {
 	type BadgeKind,
 	badgeFor,
 	barkFor,
 	drawBadge,
 	drawBark,
+	drawTag,
+	drawZzz,
 	needsYou,
 	poseFor,
 	tempoFor,
@@ -61,7 +65,28 @@ const REACH = 0.35;
 /** Over how many tiles a character fades in after coming through a door, or out going through one. */
 const DOOR_FADE = 0.9;
 /** Where a badge floats, in tiles above the feet, by pose (a raised hand reaches higher than a head). */
-const BADGE_LIFT: Record<Pose, number> = { standing: 2.12, seated: 2.12, asking: 2.12 };
+const BADGE_LIFT: Record<Pose, number> = { standing: 2.12, seated: 2.12, asking: 2.12, dozing: 2.12, "in-bed": 2.12 };
+/** Where a dozing sleeper's "z" rises from, in tiles above its feet (just over its head at the table). */
+const Z_LIFT = 1.3;
+/** Sleepers are drawn a little dimmer and cooler, as if the lamps did not reach them. */
+const SLEEP_TINT = 0xd2c8dc;
+/**
+ * In the bed sprite (px): the pillow's middle, where a sleeper's head rests, and the edge of the turned-down sheet,
+ * below which the quilt covers it.
+ */
+const BED_PILLOW: Point = [178, 226];
+const BED_SHEET: Point[] = [
+	[60, 352],
+	[118, 318],
+	[350, 190],
+	[589, 290],
+	[589, 627],
+	[0, 627],
+	[0, 382],
+];
+/** A sleeper's head and shoulders, cut from its standing frame: from this far above its feet (sheet px), this tall. */
+const HEAD_CUT = [124, 50] as const;
+const HEAD_SCALE = 0.84;
 /** A character that needs the operator barks this long after it starts to, then every so often; each bark lasts. */
 const FIRST_BARK_MS = [1200, 2200] as const;
 const BARK_EVERY_MS = [22_000, 38_000] as const;
@@ -89,6 +114,18 @@ interface Figure {
 	/** When it barks next (scene time, ms), while it needs the operator. */
 	nextBark?: number;
 	barks: number;
+	/** The index of the spot it holds. */
+	spotIndex?: number;
+	/** Asleep at the inn: its rising "z", and in a bed, its head on the pillow under the quilt. */
+	sleep?: { z: Phaser.GameObjects.Container; bed?: InBed; breath?: Phaser.Tweens.Tween };
+}
+
+/** A sleeper in a bed: its head on the pillow, the quilt drawn over it, and the bed (tiles) that answers the pointer. */
+interface InBed {
+	head: Phaser.GameObjects.Image;
+	quilt: Phaser.GameObjects.Image;
+	rect: Rect;
+	pillow: Point;
 }
 
 /** A door as the scene uses it: a painted door from the place data, or a wing door placed in the gallery. */
@@ -174,6 +211,24 @@ export class PlaceScene extends Phaser.Scene {
 	/** The overlays drawn in the place's slots, for the tests' view. */
 	private overlays: { slot: OverlaySlot; object: Phaser.GameObjects.Image; frame?: () => number }[] = [];
 	private doors: SceneDoor[] = [];
+	/** The inn's beds, by the spot whose sleeper lies in each. */
+	private beds = new Map<number, { slot: OverlaySlot; image: Phaser.GameObjects.Image }>();
+	/** The place's host (the innkeeper), standing at its post. */
+	private host?: { walker: Walker; look: string; name: string; at: Point };
+	/** At the inn: sleepers beyond its spots, upstairs; one who comes down takes the stairs, not the front door. */
+	private upstairs = new Set<string>();
+	/** Messenger birds carrying mail through the place. */
+	private birds!: Birds;
+	/** Mail already known: only mail sent while the operator is here flies as a bird. */
+	private mailSeen = new Set<string>();
+	/** The rookery's open window, where its own birds come and go; and when the next one does. */
+	private window?: Point;
+	private nextAmbient = 0;
+	private ambientCount = 0;
+	/** The pile of letters on the rookery's desk, shown while mail waits. */
+	private letters?: Phaser.GameObjects.Image;
+	/** The tag on the inn's stairs that says how many more sleep upstairs. */
+	private upstairsTag?: { count: number; tag: Phaser.GameObjects.Container };
 	private gridOverlay?: Phaser.GameObjects.Graphics;
 	/** With the walk grid shown, the avatar's walk: its straight runs and corners. */
 	private pathOverlay?: Phaser.GameObjects.Graphics;
@@ -214,13 +269,20 @@ export class PlaceScene extends Phaser.Scene {
 		this.figures = new Map();
 		this.banners = [];
 		this.doors = [];
+		this.beds = new Map();
+		this.host = undefined;
+		this.upstairs = new Set();
+		this.upstairsTag = undefined;
+		this.window = undefined;
+		this.letters = undefined;
+		this.nextAmbient = 0;
 		this.gridOverlay = undefined;
 		this.pathOverlay = undefined;
 		this.leaving = false;
 		this.drag = undefined;
 		this.freeLook = undefined;
 		this.pointerAt = undefined;
-		if (this.layout.ref.kind !== "square") lastHeadquarters = this.layout.ref.headquarters;
+		if (!isOutside(this.layout.ref)) lastHeadquarters = this.layout.ref.headquarters;
 	}
 
 	create() {
@@ -233,7 +295,11 @@ export class PlaceScene extends Phaser.Scene {
 		this.drawWingDoors();
 		this.drawBanners();
 		this.doors.unshift(...this.layout.place.doors);
+		this.addHost();
 		this.addAvatar();
+		this.birds = new Birds(this);
+		this.mailSeen = new Set((this.store.get()?.mail ?? []).map((item) => item.id));
+		this.showLetters();
 		this.showCharacters(false);
 		if (showGrid) this.drawGrid();
 
@@ -278,6 +344,8 @@ export class PlaceScene extends Phaser.Scene {
 		}
 		this.avatar.update(delta);
 		this.liveCharacters(time, delta);
+		this.birds.update(delta);
+		this.ambientBirds(time);
 		if (showGrid) this.drawPath();
 		this.lookAround(delta);
 		this.followCamera(delta);
@@ -308,7 +376,7 @@ export class PlaceScene extends Phaser.Scene {
 		return [...this.figures.values()].filter((f) => f.leaving).map((figure) => this.figureView(figure));
 	}
 
-	private figureView({ character, walker, look, badge, bark }: Figure): FigureView {
+	private figureView({ character, walker, look, badge, bark, sleep }: Figure): FigureView {
 		const view = walker.view();
 		return {
 			id: character.id,
@@ -320,9 +388,15 @@ export class PlaceScene extends Phaser.Scene {
 			moving: view.moving,
 			frame: view.frame,
 			badge: badge?.kind ?? null,
-			bark: bark?.line ?? null,
+			bark: bark?.line ?? (sleep ? "z" : null),
 			alpha: walker.sprite.alpha,
 		};
+	}
+
+	/** The place's host, where it stands. */
+	hostView(): { name: string; look: string; x: number; y: number } | undefined {
+		const host = this.host;
+		return host && { name: host.name, look: host.look, x: host.walker.x, y: host.walker.y };
 	}
 
 	private present(): Figure[] {
@@ -387,13 +461,15 @@ export class PlaceScene extends Phaser.Scene {
 
 	/** What animates over the painting: each overlay's kind, place (tiles), and the frame or brightness it shows. */
 	overlayViews(): OverlayView[] {
-		return this.overlays.map(({ slot, frame, object }) => ({
-			kind: slot.kind,
-			x: slot.at[0],
-			y: slot.at[1],
-			frame: frame?.() ?? 0,
-			alpha: object.alpha,
-		}));
+		return this.overlays
+			.filter(({ object }) => object.visible)
+			.map(({ slot, frame, object }) => ({
+				kind: slot.kind,
+				x: slot.at[0],
+				y: slot.at[1],
+				frame: frame?.() ?? 0,
+				alpha: object.alpha,
+			}));
 	}
 
 	walkGridShown(): boolean {
@@ -515,7 +591,131 @@ export class PlaceScene extends Phaser.Scene {
 			if (slot.kind === "fire") this.addFire(slot);
 			if (slot.kind === "water") this.addWater(slot);
 			if (slot.kind === "glow") this.addGlow(slot);
+			if (slot.kind === "bed") this.addBed(slot);
+			if (slot.kind === "window") this.window = slot.at;
+			if (slot.kind === "letters") this.addLetters(slot);
 		}
+	}
+
+	/** Letters waiting on the rookery's desk: drawn while any mail waits (for a sleeper, mostly). */
+	private addLetters(slot: OverlaySlot) {
+		const [x, y] = slot.at;
+		// On the desk: drawn over the desk's own foreground piece, as anything lying on it is.
+		const desk = this.layout.place.foreground?.find(
+			({ rect: [rx, ry, rw, rh] }) => x >= rx && x <= rx + rw && y >= ry && y <= ry + rh,
+		);
+		const image = this.add
+			.image(x * TILE, y * TILE, "overlay:letters")
+			.setOrigin(0.5, 1)
+			.setDepth((desk ? desk.feet : y) * TILE + 0.1)
+			.setVisible(false);
+		image.setScale(((slot.w ?? 1) * TILE) / image.width);
+		this.letters = image;
+		this.overlays.push({ slot, object: image });
+	}
+
+	private showLetters() {
+		this.letters?.setVisible((this.store.get()?.mail ?? []).some((item) => item.state === "waiting"));
+	}
+
+	/** Messenger birds in flight with mail, for tests. */
+	birdViews(): BirdView[] {
+		return this.birds?.views() ?? [];
+	}
+
+	/**
+	 * New mail flies as a bird: between two characters here from one to the other, out by the door to someone elsewhere,
+	 * in by it from someone elsewhere; the operator's own letters leave from the avatar. In the rookery every letter
+	 * comes in by its window to the keeper.
+	 */
+	private flyNewMail() {
+		for (const item of this.store.get()?.mail ?? []) {
+			if (this.mailSeen.has(item.id)) continue;
+			this.mailSeen.add(item.id);
+			// Mail sent long ago that only now shows (a reconnect) is not news.
+			if (Date.now() - item.sentAt > 120_000) continue;
+			this.flyLetter(item);
+		}
+	}
+
+	private flyLetter(item: MailItem) {
+		const { door } = this.doorway();
+		const [dx, dy, dw, dh] = door.rect;
+		// The doorway, at the height of the door's middle above the floor in front of it.
+		const doorway: Perch = { at: [dx + dw / 2, door.standAt[1]], lift: Math.max(0.6, door.standAt[1] - (dy + dh / 2)) };
+		if (this.layout.ref.kind === "rookery" && this.window && this.host) {
+			const [wx, wy] = this.window;
+			const keeper: Perch = { at: [this.host.at[0] - 0.5, this.host.at[1]], lift: 1.25 };
+			return this.birds.fly(item.id, item.from, item.to, { at: [wx, 5.2], lift: 5.2 - wy }, keeper);
+		}
+		const sender = this.perchOf(item.from);
+		const receiver = this.perchOf(item.to);
+		if (sender && receiver) this.birds.fly(item.id, item.from, item.to, sender, receiver);
+		else if (sender) this.birds.fly(item.id, item.from, item.to, sender, doorway, { out: true });
+		else if (receiver) this.birds.fly(item.id, item.from, item.to, doorway, receiver);
+	}
+
+	/** Where a bird takes off from or lands by a character here (its shoulder), or the avatar for the operator. */
+	private perchOf(id: string): Perch | undefined {
+		if (id === OPERATOR) return { at: [this.avatar.x, this.avatar.y], lift: 1.3 };
+		const figure = this.figures.get(id);
+		if (!figure || figure.leaving) return undefined;
+		return { at: [figure.walker.x, figure.walker.y], lift: figure.walker.pose === "seated" ? 1.05 : 1.3 };
+	}
+
+	/** The rookery's own birds: now and then one comes in by the window and goes out by the door, or the other way. */
+	private ambientBirds(time: number) {
+		if (!this.window) return;
+		if (!this.nextAmbient) this.nextAmbient = time + Phaser.Math.Between(2500, 5000);
+		if (time < this.nextAmbient || this.birds.count(true) > 1) return;
+		this.nextAmbient = time + Phaser.Math.Between(7000, 14_000);
+		const [wx, wy] = this.window;
+		const { door } = this.doorway();
+		const high: Perch = { at: [wx + Phaser.Math.FloatBetween(-1, 1), 5.2], lift: 5.2 - wy };
+		const low: Perch = { at: [door.rect[0] + door.rect[2] / 2, door.standAt[1]], lift: 1.2 };
+		const id = `ambient:${++this.ambientCount}`;
+		if (this.ambientCount % 2) this.birds.fly(id, "window", "door", high, low, { out: true, ambient: true });
+		else this.birds.fly(id, "door", "window", low, high, { out: true, ambient: true });
+	}
+
+	/** A bed standing on the floor, its foot's bottom centre at the slot; whoever holds its spot sleeps in it. */
+	private addBed(slot: OverlaySlot) {
+		const [x, y] = slot.at;
+		const image = this.add
+			.image(x * TILE, y * TILE, "overlay:bed")
+			.setOrigin(0.5, 1)
+			.setDepth(y * TILE);
+		image.setScale(((slot.w ?? 2.2) * TILE) / image.width);
+		if (slot.spot !== undefined) this.beds.set(slot.spot, { slot, image });
+	}
+
+	/** The bed's quilt and sheet alone, cut along the turned-down sheet, to draw over a sleeper's shoulders. */
+	private quiltTexture(): string {
+		const key = "bed:quilt";
+		if (this.textures.exists(key)) return key;
+		const source = this.textures.get("overlay:bed").getSourceImage() as HTMLImageElement;
+		const canvas = document.createElement("canvas");
+		canvas.width = source.width;
+		canvas.height = source.height;
+		const ctx = canvas.getContext("2d")!;
+		ctx.beginPath();
+		const [first, ...rest] = BED_SHEET;
+		ctx.moveTo(...first);
+		for (const point of rest) ctx.lineTo(...point);
+		ctx.closePath();
+		ctx.clip();
+		ctx.drawImage(source, 0, 0);
+		this.textures.addCanvas(key, canvas);
+		return key;
+	}
+
+	/** The host at its post (the innkeeper behind the bar), facing the room; it never walks. */
+	private addHost() {
+		const host = this.layout.place.host;
+		const look = host && this.theme.looks[host.look];
+		if (!host || !look) return;
+		const walker = new Walker(this, host.look, look, host.at, "down");
+		this.host = { walker, look: host.look, name: this.theme.labels[host.look] ?? host.look, at: host.at };
 	}
 
 	/** A fire standing on the hearth floor: its four frames flicker in a loose rhythm, with warm light around it. */
@@ -831,10 +1031,16 @@ export class PlaceScene extends Phaser.Scene {
 	 * door to its spot, and one whose session left walks out by it; otherwise they are simply there.
 	 */
 	private showCharacters(animate: boolean) {
-		const characters = charactersIn(this.layout.ref, this.store.get());
+		const world = this.store.get();
+		const room = this.layout.place.spots.length;
+		const characters = charactersIn(this.layout.ref, world, room);
 		const ids = new Set(characters.map((character) => character.id));
+		// At the inn, a sleeper still asleep but no longer among the newest goes upstairs; one who woke goes out.
+		const stillAsleep = new Set((world?.dormant ?? []).map((agent) => agent.id));
+		const inn = this.layout.ref.kind === "inn";
 		for (const figure of this.figures.values())
-			if (!ids.has(figure.character.id) && !figure.leaving) this.leave(figure, animate);
+			if (!ids.has(figure.character.id) && !figure.leaving)
+				this.leave(figure, animate, inn && stillAsleep.has(figure.character.id) ? this.stairs() : undefined);
 		const { spots, positions } = assignSpots(
 			this.layout.place,
 			characters,
@@ -852,18 +1058,43 @@ export class PlaceScene extends Phaser.Scene {
 			const returning = figure.leaving;
 			figure.leaving = false;
 			figure.character = character;
+			figure.spotIndex = spots.get(character.id);
 			const moved = !figure.spot || figure.spot[0] !== spot[0] || figure.spot[1] !== spot[1];
 			figure.spot = spot;
 			if (returning || (moved && (animate || figure.walker.moving))) this.walkToSpot(figure);
 			else if (moved) figure.walker.moveTo(spot);
 			this.dress(figure);
 		}
-		// Characters block only their own footprint, at the spot they stand on or are walking to.
-		this.walkable = gridFor(
-			this.layout.place,
-			this.present().map(({ spot }) => spot!),
-		);
-		for (const figure of arrivals) this.enter(figure);
+		// Characters block only their own footprint, at the spot they stand on or are walking to; so does the host.
+		this.walkable = gridFor(this.layout.place, [
+			...this.present().map(({ spot }) => spot!),
+			...(this.host ? [this.host.at] : []),
+		]);
+		for (const figure of arrivals)
+			this.enter(figure, inn && this.upstairs.has(figure.character.id) ? this.stairs() : undefined);
+		if (inn) {
+			this.upstairs = new Set((world?.dormant ?? []).slice(room).map((agent) => agent.id));
+			this.tagUpstairs(this.upstairs.size);
+		}
+	}
+
+	/** On the stairs, how many more sleep upstairs than the inn below has spots for. */
+	private tagUpstairs(count: number) {
+		if (this.upstairsTag?.count === count) return;
+		this.upstairsTag?.tag.destroy();
+		this.upstairsTag = undefined;
+		const stairs = this.stairs();
+		if (!count || !stairs) return;
+		const [x, , w] = stairs.rect;
+		const tag = drawTag(this, `${count} more asleep upstairs`)
+			.setPosition((x + w / 2) * TILE, (stairs.standAt[1] - 0.55) * TILE)
+			.setDepth(9e4 + 1);
+		this.upstairsTag = { count, tag };
+	}
+
+	/** The inn's stairs up to the rooms, where sleepers beyond its spots rest. */
+	private stairs(): Door | undefined {
+		return this.layout.place.doors.find((door) => door.to === "rooms");
 	}
 
 	private addFigure(character: Character, [x, y]: Point): Figure {
@@ -874,10 +1105,10 @@ export class PlaceScene extends Phaser.Scene {
 		return figure;
 	}
 
-	/** The door characters come in and go out by, and a point just inside its doorway where they appear. */
-	private doorway(): { door: Door; inside: Point } {
+	/** The door characters come in and go out by (or `via`), and a point just inside its doorway where they appear. */
+	private doorway(via?: Door): { door: Door; inside: Point } {
 		const { place } = this.layout;
-		const door = place.doors.find((d) => d.name === place.enterBy) ?? place.doors[0];
+		const door = via ?? place.doors.find((d) => d.name === place.enterBy) ?? place.doors[0];
 		const [x, y, w, h] = door.rect;
 		const [sx, sy] = door.standAt;
 		// From the stand point, a short step into the door's rect, toward its middle.
@@ -888,8 +1119,9 @@ export class PlaceScene extends Phaser.Scene {
 	}
 
 	/** A newcomer comes through the door, fading in on the threshold, and walks to its spot. */
-	private enter(figure: Figure) {
-		const { door, inside } = this.doorway();
+	private enter(figure: Figure, via?: Door) {
+		const { door, inside } = this.doorway(via);
+		figure.walker.moveTo(inside);
 		figure.walker.setAlpha(0);
 		figure.fade = { at: inside, out: false };
 		const onward = this.pathFor(figure, door.standAt, figure.spot!);
@@ -897,19 +1129,20 @@ export class PlaceScene extends Phaser.Scene {
 	}
 
 	/** Its session stopped or moved on: it walks to the door and fades through it, then is gone. */
-	private leave(figure: Figure, animate: boolean) {
+	private leave(figure: Figure, animate: boolean, via?: Door) {
 		figure.leaving = true;
 		figure.spot = undefined;
 		figure.nextBark = undefined;
 		this.dropBadge(figure);
 		this.dropBark(figure);
+		this.wakeUp(figure);
 		const gone = () => {
 			if (!figure.leaving) return;
 			figure.walker.destroy();
 			if (this.figures.get(figure.character.id) === figure) this.figures.delete(figure.character.id);
 		};
 		if (!animate) return gone();
-		const { door, inside } = this.doorway();
+		const { door, inside } = this.doorway(via);
 		const from: Point = [figure.walker.x, figure.walker.y];
 		const way = this.pathFor(figure, from, door.standAt);
 		figure.fade = { at: inside, out: true };
@@ -941,8 +1174,9 @@ export class PlaceScene extends Phaser.Scene {
 		figure.walker.face([figure.walker.x, figure.walker.y + 1]);
 	}
 
-	/** Pose, badge, and the seated beat by the character's state. */
+	/** Pose, badge, and the seated beat by the character's state; at the inn, asleep. */
 	private dress(figure: Figure) {
+		if (this.layout.ref.kind === "inn") return this.sleep(figure);
 		const { character, walker } = figure;
 		walker.setPose(poseFor(character));
 		walker.tempo = tempoFor(character);
@@ -955,6 +1189,81 @@ export class PlaceScene extends Phaser.Scene {
 			figure.nextBark = undefined;
 			this.dropBark(figure);
 		}
+	}
+
+	/**
+	 * A sleeper dozes at its table (the seated frame, still) or lies in the bed whose spot it holds, with a "z" rising.
+	 * Both show once it has walked to its spot; the walker itself is hidden while it lies in bed.
+	 */
+	private sleep(figure: Figure) {
+		const bed = figure.spotIndex === undefined ? undefined : this.beds.get(figure.spotIndex);
+		figure.walker.setPose(bed ? "in-bed" : "dozing");
+		figure.walker.tempo = 1;
+		if (figure.sleep && !!figure.sleep.bed !== !!bed) this.wakeUp(figure);
+		if (figure.sleep) return;
+		const sprite = figure.walker.sprite.setTint(SLEEP_TINT);
+		// Breathing: the dozing figure rises and settles a touch, slowly.
+		const breath = bed
+			? undefined
+			: this.tweens.add({
+					targets: sprite,
+					scaleY: sprite.scaleY * 0.982,
+					duration: 1700 + Math.random() * 500,
+					yoyo: true,
+					repeat: -1,
+					ease: "Sine.inOut",
+				});
+		figure.sleep = {
+			z: drawZzz(this).setVisible(false),
+			bed: bed && this.inBed(figure, bed.slot, bed.image),
+			breath,
+		};
+	}
+
+	/** The sleeper's head on the bed's pillow, tucked in under the quilt. */
+	private inBed(figure: Figure, slot: OverlaySlot, bed: Phaser.GameObjects.Image): InBed {
+		const { frame, baseline } = this.theme.looks[figure.look];
+		const scale = bed.scaleX;
+		const toTiles = ([px, py]: Point): Point => [
+			(bed.x + (px - bed.width / 2) * scale) / TILE,
+			(bed.y + (py - bed.height) * scale) / TILE,
+		];
+		const pillow = toTiles(BED_PILLOW);
+		const headScale = ((PERSON_TILES * TILE) / STANDING) * HEAD_SCALE;
+		const [above, tall] = HEAD_CUT;
+		const top = Math.max(0, baseline - above);
+		// The face looks out of the pillow: the cut's middle sits on the pillow's middle.
+		const head = this.add
+			.image(pillow[0] * TILE, pillow[1] * TILE, `look:${figure.look}`, 14)
+			.setCrop(0, top, frame[0], tall)
+			.setOrigin(0.5, (top + tall * 0.62) / frame[1])
+			.setScale(headScale)
+			.setAngle(-14)
+			.setTint(SLEEP_TINT)
+			.setDepth(bed.depth + 0.1)
+			.setVisible(false);
+		const quilt = this.add
+			.image(bed.x, bed.y, this.quiltTexture())
+			.setOrigin(0.5, 1)
+			.setScale(scale)
+			.setDepth(bed.depth + 0.2)
+			.setVisible(false);
+		const w = slot.w ?? 2.2;
+		const h = (bed.height * scale) / TILE;
+		return { head, quilt, pillow, rect: [slot.at[0] - w / 2, slot.at[1] - h * 0.8, w, h * 0.8] };
+	}
+
+	/** Out of bed and no longer asleep: its "z" and its place in bed go. */
+	private wakeUp(figure: Figure) {
+		if (figure.sleep?.breath) {
+			figure.sleep.breath.remove();
+			figure.walker.sprite.setScale(figure.walker.sprite.scaleX);
+		}
+		if (figure.sleep) figure.walker.sprite.clearTint();
+		figure.sleep?.z.destroy();
+		figure.sleep?.bed?.head.destroy();
+		figure.sleep?.bed?.quilt.destroy();
+		figure.sleep = undefined;
 	}
 
 	private dropBadge(figure: Figure) {
@@ -983,6 +1292,18 @@ export class PlaceScene extends Phaser.Scene {
 			const x = walker.x * TILE;
 			const top = (walker.y - BADGE_LIFT[walker.pose]) * TILE;
 			const depth = 1e5 + walker.y;
+			if (figure.sleep) {
+				const resting = !walker.moving && !figure.leaving;
+				const bed = figure.sleep.bed;
+				bed?.head.setVisible(resting);
+				bed?.quilt.setVisible(resting);
+				const [zx, zy] = bed ? [bed.pillow[0] + 0.2, bed.pillow[1] - 0.35] : [walker.x + 0.32, walker.y - Z_LIFT];
+				figure.sleep.z
+					.setVisible(resting)
+					.setPosition(zx * TILE, zy * TILE)
+					.setDepth(depth)
+					.setScale(ui);
+			}
 			figure.badge?.container.setPosition(x, top).setDepth(depth).setScale(ui).setAlpha(walker.sprite.alpha);
 			if (figure.bark) {
 				if (time >= figure.bark.until) this.dropBark(figure);
@@ -1030,20 +1351,80 @@ export class PlaceScene extends Phaser.Scene {
 	/** Characters under a point (front first), then doors whose rect holds it. Doors answer only over the door. */
 	private targetsAt([x, y]: Point): Target[] {
 		const scale = (PERSON_TILES * TILE) / STANDING / TILE;
+		const over = (walker: Walker) => {
+			const half = Math.min(0.42, (walker.sprite.width * scale) / 2);
+			return Math.abs(x - walker.x) <= half && y >= walker.y - PERSON_TILES * 0.97 && y <= walker.y + 0.15;
+		};
+		const inside = ([rx, ry, rw, rh]: Rect) => x >= rx && x < rx + rw && y >= ry && y < ry + rh;
 		const people = this.present()
-			.filter(({ walker }) => {
-				const half = Math.min(0.42, (walker.sprite.width * scale) / 2);
-				return Math.abs(x - walker.x) <= half && y >= walker.y - PERSON_TILES * 0.97 && y <= walker.y + 0.15;
-			})
+			.filter(({ walker, sleep }) =>
+				sleep?.bed && !walker.moving ? inside(sleep.bed.rect) : walker.sprite.visible && over(walker),
+			)
 			.sort((a, b) => b.walker.y - a.walker.y)
 			.map(({ character }) => this.characterTarget(character));
-		const doors = this.doors
-			.filter(({ rect: [dx, dy, dw, dh] }) => x >= dx && x < dx + dw && y >= dy && y < dy + dh)
-			.map((door) => this.doorTarget(door));
-		return [...people, ...doors];
+		const host = this.host && over(this.host.walker) ? [this.hostTarget()] : [];
+		const doors = this.doors.filter(({ rect }) => inside(rect)).map((door) => this.doorTarget(door));
+		const furniture = (this.layout.place.furniture ?? [])
+			.filter(({ rect }) => inside(rect))
+			.map((piece) => this.furnitureTarget(piece));
+		return [...people, ...host, ...doors, ...furniture];
+	}
+
+	/** The host: talking to it opens its place's panel (the innkeeper's register). */
+	private hostTarget(): Target {
+		const host = this.host!;
+		const open = () => this.openHostPanel();
+		return {
+			name: host.name,
+			tone: "character",
+			actions: [action("Talk to", () => this.approach(host.at, open), host.name, "character")],
+		};
+	}
+
+	private openHostPanel() {
+		if (this.layout.ref.kind === "inn") placePanels.open("innkeeper");
+		if (this.layout.ref.kind === "rookery") placePanels.open("rookery");
+	}
+
+	/** Furniture that answers the pointer: asking at an inn table opens the innkeeper's register at once. */
+	private furnitureTarget(piece: { name: string; use: string }): Target {
+		const actions =
+			piece.use === "innkeeper"
+				? [action("Ask the innkeeper", () => placePanels.open("innkeeper"))]
+				: piece.use === "rookery"
+					? [
+							action("Read the mail", () => placePanels.open("rookery")),
+							action("Write a letter", () => placePanels.open("rookery", { write: true })),
+						]
+					: [];
+		return { name: piece.name, tone: "object", actions };
+	}
+
+	/** A sleeper at the inn: read its last conversation (the default), or wake it. */
+	private sleeperTarget(character: Character): Target {
+		const name = character.name;
+		const agent = () => this.store.get()?.dormant?.find((sleeper) => sleeper.id === character.id);
+		return {
+			name,
+			tone: "character",
+			actions: [
+				action(
+					"Read last talk with",
+					() => {
+						const sleeper = agent();
+						if (sleeper) placeActions.readConversation(sleeper);
+					},
+					name,
+					"character",
+				),
+				action("Wake", () => void placeActions.wake(character), name, "character"),
+				action("Look up", () => placePanels.open("innkeeper"), name, "character"),
+			],
+		};
 	}
 
 	private characterTarget(character: Character): Target {
+		if (this.layout.ref.kind === "inn") return this.sleeperTarget(character);
 		const name = character.name;
 		return {
 			name,
@@ -1057,11 +1438,20 @@ export class PlaceScene extends Phaser.Scene {
 					"character",
 				),
 				action("Examine", () => this.view.intend({ kind: "examine", character: character.id }), name, "character"),
+				// Ending its session asks first while it is busy (the interface's confirmation).
+				action("End session of", () => void placeActions.endSession(character), name, "character"),
 			],
 		};
 	}
 
 	private doorTarget(door: SceneDoor): Target {
+		// The inn's stairs lead to the rooms of sleepers beyond its spots: the innkeeper keeps their list.
+		if (door.to === "rooms")
+			return {
+				name: door.name,
+				tone: "object",
+				actions: [action("Ask who sleeps up", () => placePanels.open("innkeeper"), door.name, "object")],
+			};
 		return {
 			name: door.name,
 			tone: "object",
@@ -1110,7 +1500,11 @@ export class PlaceScene extends Phaser.Scene {
 	private walkUpTo(character: Character, then?: () => void) {
 		const figure = this.figures.get(character.id);
 		if (!figure || figure.leaving) return;
-		const at: Point = figure.spot ?? [figure.walker.x, figure.walker.y];
+		this.approach(figure.spot ?? [figure.walker.x, figure.walker.y], then);
+	}
+
+	/** Walk up to whoever stands at `at`, to whichever side is quickest, face them, and then act. */
+	private approach(at: Point, then?: () => void) {
 		const stands = TALK_OFFSETS.map((group) => group.map(([dx, dy]): Point => [at[0] + dx, at[1] + dy]));
 		this.walkToFirst(stands, (reached, goal) => {
 			this.avatar.face(at);
@@ -1229,6 +1623,8 @@ export class PlaceScene extends Phaser.Scene {
 		}
 		this.layout = next;
 		this.showCharacters(true);
+		this.showLetters();
+		this.flyNewMail();
 	}
 
 	// Travel.
@@ -1236,10 +1632,12 @@ export class PlaceScene extends Phaser.Scene {
 	/** Go through a door; false when it leads nowhere yet. */
 	private openDoor(door: SceneDoor): boolean {
 		const here = this.layout.ref;
-		const headquarters = here.kind === "square" ? lastHeadquarters : here.headquarters;
+		const headquarters = isOutside(here) ? lastHeadquarters : here.headquarters;
 		const world = this.store.get();
 		if (door.to === "square") return this.travel({ kind: "square" });
-		if (door.to === "wing" && door.repository && here.kind !== "square")
+		if ((door.to === "inn" || door.to === "rookery") && this.theme.places[door.to])
+			return this.travel({ kind: door.to });
+		if (door.to === "wing" && door.repository && !isOutside(here))
 			return this.travel({ kind: "wing", headquarters: here.headquarters, repository: door.repository });
 		if (door.to === "headquarters" && here.kind === "square") {
 			const all = world?.headquarters ?? [];

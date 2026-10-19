@@ -2,7 +2,7 @@
 // counts, and the names of places. Pure, so the views only draw. Attention matches the tmux sidebar: asking means an
 // open prompt; finished means it needs you with no prompt open (a settle not seen yet); working is any run but idle.
 import type { Character, Headquarters, PlaceRef, WorldSnapshot } from "../../../src/world.js";
-import { placeKey } from "../../../src/world.js";
+import { isOutside, placeKey } from "../../../src/world.js";
 
 export type Attention = "asking" | "finished" | "working" | "idle";
 
@@ -47,7 +47,7 @@ const label = (labels: Record<string, string> | undefined, kind: string) =>
 	labels?.[kind] ?? DEFAULT_LABELS[kind] ?? kind;
 
 function headquartersOf(ref: PlaceRef, world: WorldSnapshot | undefined): Headquarters | undefined {
-	return ref.kind === "square" ? undefined : world?.headquarters.find((hq) => hq.id === ref.headquarters);
+	return isOutside(ref) ? undefined : world?.headquarters.find((hq) => hq.id === ref.headquarters);
 }
 
 /** A place's name, such as "Guild hall" or "apple-pi wing". */
@@ -61,10 +61,13 @@ export function placeName(ref: PlaceRef, world: WorldSnapshot | undefined, label
 
 /** Whose headquarters a place belongs to, when there is more than one to tell apart. */
 export function placeOwner(ref: PlaceRef, world: WorldSnapshot | undefined): string | undefined {
-	if (ref.kind === "square" || (world?.headquarters.length ?? 0) < 2) return undefined;
+	if (isOutside(ref) || (world?.headquarters.length ?? 0) < 2) return undefined;
 	const hq = headquartersOf(ref, world);
 	return hq ? `${hq.name}'s` : undefined;
 }
+
+/** The places outside any headquarters, in the order the Places tab lists them. */
+export const OUTSIDE: PlaceRef[] = [{ kind: "square" }, { kind: "inn" }, { kind: "rookery" }];
 
 /** Every place that exists now, in the order the world opens them: each headquarters' rooms and wings, then the square. */
 export function placesOf(world: WorldSnapshot | undefined): PlaceRef[] {
@@ -75,7 +78,7 @@ export function placesOf(world: WorldSnapshot | undefined): PlaceRef[] {
 		places.push({ kind: "gallery", headquarters: hq.id });
 		for (const wing of hq.wings) places.push({ kind: "wing", headquarters: hq.id, repository: wing.repository });
 	}
-	places.push({ kind: "square" });
+	places.push(...OUTSIDE);
 	return places;
 }
 

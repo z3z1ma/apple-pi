@@ -14,6 +14,8 @@ export interface History {
 	loadingOlder: boolean;
 	error?: string;
 	loadOlder(): void;
+	/** Read the newest page again and append what is new, as when a reply has just been stored. */
+	refresh(): void;
 	retry(): void;
 }
 
@@ -132,6 +134,7 @@ export function useHistory(api: ConversationApi | undefined, characterId: string
 		loadingOlder,
 		error,
 		loadOlder,
+		refresh,
 		retry: () => {
 			setError(undefined);
 			setAttempt((n) => n + 1);

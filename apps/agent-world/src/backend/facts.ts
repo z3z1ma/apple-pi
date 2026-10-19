@@ -2,7 +2,7 @@
 // (`components/tmux-sessions/sidebar/model.py`), so every view agrees on who is asking, working, or finished.
 import { readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import type { CharacterFacts, RunState } from "../world.js";
+import type { CharacterFacts, Question, RunState } from "../world.js";
 
 /** The `sessions` columns, with its current pane, that the facts come from. */
 export interface FactsRow {
@@ -53,12 +53,37 @@ function parse<T>(json: string | null): T | undefined {
 
 const text = (value: unknown) => (typeof value === "string" && value.trim() ? value.trim() : null);
 
-/** The open prompt's kind and what it asks: its title, or else its first question. */
+/** The questions of an `ask_user_question` prompt, as the panel's form needs them; undefined when they do not parse. */
+function questionsOf(value: unknown): Question[] | undefined {
+	if (!Array.isArray(value) || !value.length) return undefined;
+	const questions: Question[] = [];
+	for (const raw of value as Record<string, unknown>[]) {
+		const question = text(raw?.question);
+		const options = Array.isArray(raw?.options)
+			? (raw.options as Record<string, unknown>[]).map((option) => ({
+					label: typeof option?.label === "string" ? option.label : "",
+					description: typeof option?.description === "string" ? option.description : "",
+				}))
+			: [];
+		if (!question || !options.length || options.some((option) => !option.label)) return undefined;
+		questions.push({ question, header: text(raw.header), options, multiSelect: raw.multiSelect === true });
+	}
+	return questions;
+}
+
+/**
+ * The open prompt's kind and what it asks: its title, or else its first question. A questionnaire also carries its id
+ * and questions, so the conversation panel can answer it.
+ */
 function asking(prompt: string | null): CharacterFacts["asking"] {
 	if (prompt === null) return null;
-	const open = parse<{ kind?: unknown; title?: unknown; questions?: unknown }>(prompt);
+	const open = parse<{ kind?: unknown; id?: unknown; title?: unknown; questions?: unknown }>(prompt);
 	const first = Array.isArray(open?.questions) ? (open.questions[0] as { question?: unknown } | undefined) : undefined;
-	return { kind: text(open?.kind) ?? "dialog", text: text(open?.title) ?? text(first?.question) };
+	const kind = text(open?.kind) ?? "dialog";
+	const shown = { kind, text: text(open?.title) ?? text(first?.question) };
+	const questions = kind === "questionnaire" ? questionsOf(open?.questions) : undefined;
+	const id = text(open?.id);
+	return questions && id ? { ...shown, questionnaire: { id, questions } } : shown;
 }
 
 /** Reads ledger tasks' `task.md`, again only when the file changed. */

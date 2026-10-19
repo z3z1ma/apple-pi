@@ -3,6 +3,7 @@ import type { ViewStore } from "../view-state.js";
 import type { WorldStore } from "../world-store.js";
 import { ConversationPanel } from "./conversation/conversation-panel.js";
 import { Interface } from "./interface/interface.js";
+import { PlacesOverlay } from "./places/places-overlay.js";
 import { PointerLayer } from "./pointer/pointer-layer.js";
 
 const NOTICE_MS = 2600;
@@ -36,6 +37,7 @@ export function Overlay({ store, view }: { store: WorldStore; view: ViewStore })
 					</button>
 				</div>
 			)}
+			<PlacesOverlay store={store} />
 			<ConversationPanel store={store} />
 			{snapshot && !snapshot.connected && <DisconnectedNotice />}
 		</>

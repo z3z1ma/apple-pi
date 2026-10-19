@@ -3,6 +3,7 @@
 // its input and result, mail as a sealed letter, and other extensions' messages folded like tool calls.
 import { createContext, memo, useContext, useState } from "react";
 import type { TranscriptEntry, TranscriptToolCall } from "../../../src/world.js";
+import { isLive } from "./live-reply.js";
 import { markdownHtml } from "./markdown.js";
 
 type ToolResult = Extract<TranscriptEntry, { kind: "tool-result" }>;
@@ -171,7 +172,11 @@ function AgentBlock({
 				<time>{clock(entries[0].at)}</time>
 			</header>
 			{entries.map((entry) => (
-				<div key={entry.id} className="aw-conv-reply" data-entry={entry === entries[0] ? undefined : entry.id}>
+				<div
+					key={entry.id}
+					className={`aw-conv-reply${isLive(entry.id) ? " aw-conv-writing" : ""}`}
+					data-entry={entry === entries[0] ? undefined : entry.id}
+				>
 					{entry.parts.map((part, index) => {
 						const key = `${entry.id}:${index}`;
 						if (part.kind === "text") return <Markdown key={key} text={part.text} />;

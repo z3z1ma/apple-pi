@@ -8,3 +8,8 @@ Verify: apps/agent-world/tests/conversation.test.ts
 Replies are matched by `requestId` (pages) or `commandId` (receipts); `markSeen` settles on `applied` or `failed` and ignores `accepted`.
 Why: the runtime answers both on the same connection, one line each, in any order.
 Verify: apps/agent-world/tests/conversation.test.ts
+
+Live replies use a third connection that only subscribes (`watch` replaces the list; an empty list ends it) and resubscribes a second after it closes while anything is watched; each `reply_end` naming an entry is read back with `read_entry` on the main connection before its `end` event goes out.
+Why: the runtime replaces a connection's subscription on every `subscribe`, and streamed text is lost with its connection, so the stream must not share the reader's connection or depend on a page read finishing; the panel needs the stored entry itself to swap it in without a jump.
+Coupled: components/session-state/src/runtime.ts, apps/agent-world/web/overlay/conversation/live-reply.ts
+Verify: apps/agent-world/tests/instruct.test.ts

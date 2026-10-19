@@ -42,13 +42,130 @@ function appFile(appDir, pathname) {
 	return join(appDir, "dist", "web", path || "index.html");
 }
 //#endregion
+//#region apps/agent-world/src/backend/commands.ts
+/** The runtime answers `accepted` at once; without it this soon, it is not answering. */
+var ACCEPT_TIMEOUT_MS = 5e3;
+var GONE$1 = "The session runtime is not answering.";
+var LOST = "The session runtime went away before the command finished; it may still have been applied.";
+function openCommands(socketPath) {
+	let socket;
+	let connecting;
+	let closed = false;
+	const waiting = /* @__PURE__ */ new Map();
+	const connect = () => {
+		if (socket && !socket.destroyed) return Promise.resolve(socket);
+		connecting ??= new Promise((resolve, reject) => {
+			const next = createConnection(socketPath);
+			let buffer = "";
+			next.on("data", (chunk) => {
+				buffer += chunk.toString();
+				for (let end = buffer.indexOf("\n"); end >= 0; end = buffer.indexOf("\n")) {
+					const line = buffer.slice(0, end);
+					buffer = buffer.slice(end + 1);
+					let reply;
+					try {
+						reply = JSON.parse(line);
+					} catch {
+						continue;
+					}
+					if (reply.type !== "receipt" || typeof reply.commandId !== "string") continue;
+					const handler = waiting.get(reply.commandId);
+					if (!handler) continue;
+					const stage = reply.stage;
+					const reason = typeof reply.reason === "string" ? reply.reason : void 0;
+					if (stage === "accepted") handler.accepted = true;
+					handler.onReceipt(stage, stage === "failed" ? reason ?? "failed" : reason);
+					if (stage === "applied") handler.settle({ ok: true });
+					else if (stage === "failed") handler.settle({
+						ok: false,
+						reason: reason ?? "failed"
+					});
+				}
+			});
+			next.once("connect", () => {
+				socket = next;
+				connecting = void 0;
+				resolve(next);
+			});
+			next.on("error", (error) => {
+				if (socket !== next) {
+					connecting = void 0;
+					reject(error);
+				}
+			});
+			next.on("close", () => {
+				if (socket === next) socket = void 0;
+				for (const handler of [...waiting.values()]) handler.settle({
+					ok: false,
+					reason: handler.accepted ? LOST : GONE$1
+				});
+			});
+		});
+		return connecting;
+	};
+	return {
+		async send(sessionId, command, options = {}) {
+			if (closed) return {
+				ok: false,
+				reason: GONE$1
+			};
+			let open;
+			try {
+				open = await connect();
+			} catch {
+				return {
+					ok: false,
+					reason: GONE$1
+				};
+			}
+			const commandId = options.commandId ?? `agent-world-${randomUUID()}`;
+			return new Promise((resolve) => {
+				const timer = setTimeout(() => {
+					if (!handler.accepted) handler.settle({
+						ok: false,
+						reason: GONE$1
+					});
+				}, ACCEPT_TIMEOUT_MS);
+				const handler = {
+					accepted: false,
+					onReceipt: (stage, reason) => options.onReceipt?.(stage, reason),
+					settle(result) {
+						if (waiting.get(commandId) !== handler) return;
+						waiting.delete(commandId);
+						clearTimeout(timer);
+						resolve(result);
+					}
+				};
+				waiting.set(commandId, handler);
+				open.write(`${JSON.stringify({
+					type: "command",
+					commandId,
+					sessionId,
+					command
+				})}\n`);
+			});
+		},
+		close() {
+			closed = true;
+			socket?.destroy();
+		}
+	};
+}
+//#endregion
 //#region apps/agent-world/src/world.ts
+/** The label mail from the operator carries as its sender (`from`), so agents can tell it from mail between them. */
+var OPERATOR = "operator";
+var MAIL_BODY_MAX = 4e3;
+/** A place outside any headquarters: the square, the inn, or the rookery. */
+function isOutside(place) {
+	return place.kind === "square" || place.kind === "inn" || place.kind === "rookery";
+}
 /** Longest text of one transcript field sent to the world UI. */
 var TRANSCRIPT_TEXT_MAX = 2e4;
 //#endregion
 //#region apps/agent-world/src/backend/transcript.ts
 /** The custom message type of delivered mail (`components/session-state/src/mail.ts`). */
-var MAIL = "apple-pi.mailbox-message";
+var MAIL$1 = "apple-pi.mailbox-message";
 /** The argument a tool call is known by, in the bridge's order (`components/session-state/src/bridge.ts`). */
 var MAIN_ARGS = [
 	"command",
@@ -131,7 +248,7 @@ function transcriptEntry(raw) {
 	const at = Date.parse(String(entry.timestamp ?? "")) || 0;
 	if (entry.type === "custom_message") {
 		const label = String(entry.customType ?? "message");
-		if (label === MAIL) return {
+		if (label === MAIL$1) return {
 			kind: "mail",
 			id,
 			at,
@@ -185,6 +302,9 @@ function transcriptEntry(raw) {
 var PAGE_TIMEOUT_MS = 2e4;
 var COMMAND_TIMEOUT_MS = 5e3;
 var GONE = "The session runtime is not answering.";
+/** How long a subscription waits for the runtime to confirm it, and how soon a lost one is made again. */
+var SUBSCRIBE_TIMEOUT_MS = 3e3;
+var RESUBSCRIBE_MS = 1e3;
 function openConversations(socketPath) {
 	let socket;
 	let connecting;
@@ -261,6 +381,100 @@ function openConversations(socketPath) {
 			open.write(`${JSON.stringify(message)}\n`);
 		});
 	}
+	/** The stored entry a stream's end names, shaped for the panel; null when it cannot be read. */
+	const readEntry = (sessionId, entryId) => {
+		const requestId = `agent-world-${randomUUID()}`;
+		return ask(requestId, {
+			type: "read_entry",
+			requestId,
+			sessionId,
+			entryId
+		}, PAGE_TIMEOUT_MS, (reply) => reply.type !== "entry" ? void 0 : transcriptEntry(reply.entry) ?? null, () => null);
+	};
+	const replyListeners = /* @__PURE__ */ new Set();
+	const emit = (event) => {
+		for (const listener of replyListeners) listener(event);
+	};
+	let watched = [];
+	let streams;
+	let resubscribe;
+	let confirmed;
+	const onStreamLine = (reply) => {
+		if (reply.type === "subscribed") {
+			if (confirmed && JSON.stringify(reply.sessionIds) === confirmed.ids) confirmed.done();
+			return;
+		}
+		const sessionId = typeof reply.sessionId === "string" ? reply.sessionId : void 0;
+		const streamId = typeof reply.streamId === "string" ? reply.streamId : void 0;
+		if (!sessionId || !streamId) return;
+		if (reply.type === "reply_delta" && typeof reply.delta === "string") emit({
+			kind: "delta",
+			characterId: sessionId,
+			streamId,
+			seq: Number(reply.seq) || 0,
+			delta: reply.delta
+		});
+		else if (reply.type === "reply_end") {
+			const entryId = typeof reply.messageEntryId === "string" ? reply.messageEntryId : void 0;
+			if (!entryId) emit({
+				kind: "end",
+				characterId: sessionId,
+				streamId,
+				entry: null
+			});
+			else readEntry(sessionId, entryId).then((entry) => emit({
+				kind: "end",
+				characterId: sessionId,
+				streamId,
+				entry
+			}));
+		}
+	};
+	/** Open the streams connection if needed, and send it the watched list. */
+	const subscribe = () => new Promise((resolve) => {
+		const ids = JSON.stringify(watched);
+		const timer = setTimeout(() => finish(), SUBSCRIBE_TIMEOUT_MS);
+		const finish = () => {
+			clearTimeout(timer);
+			if (confirmed?.done === finish) confirmed = void 0;
+			resolve();
+		};
+		confirmed?.done();
+		confirmed = {
+			ids,
+			done: finish
+		};
+		const send = (socket) => socket.write(`${JSON.stringify({
+			type: "subscribe",
+			sessionIds: watched
+		})}\n`);
+		if (streams && !streams.destroyed) {
+			send(streams);
+			return;
+		}
+		if (closed || !watched.length) return finish();
+		const next = createConnection(socketPath);
+		streams = next;
+		let buffer = "";
+		next.on("data", (chunk) => {
+			buffer += chunk.toString();
+			for (let end = buffer.indexOf("\n"); end >= 0; end = buffer.indexOf("\n")) {
+				const line = buffer.slice(0, end);
+				buffer = buffer.slice(end + 1);
+				try {
+					onStreamLine(JSON.parse(line));
+				} catch {}
+			}
+		});
+		next.once("connect", () => send(next));
+		next.on("error", () => {});
+		next.on("close", () => {
+			if (streams !== next) return;
+			streams = void 0;
+			clearTimeout(resubscribe);
+			if (!closed && watched.length) resubscribe = setTimeout(() => void subscribe(), RESUBSCRIBE_MS).unref();
+		});
+	});
 	return {
 		page(sessionId, before) {
 			const requestId = `agent-world-${randomUUID()}`;
@@ -306,9 +520,252 @@ function openConversations(socketPath) {
 				reason
 			}));
 		},
+		watch(sessionIds) {
+			watched = [...new Set(sessionIds)];
+			return subscribe();
+		},
+		onReply(listener) {
+			replyListeners.add(listener);
+			return () => replyListeners.delete(listener);
+		},
 		close() {
 			closed = true;
+			clearTimeout(resubscribe);
+			confirmed?.done();
 			socket?.destroy();
+			streams?.destroy();
+			replyListeners.clear();
+		}
+	};
+}
+//#endregion
+//#region apps/agent-world/src/backend/instructions.ts
+/** The longest text an instruction may carry; Pi takes any, but the panel is for messages, not files. */
+var TEXT_MAX = 1e5;
+var reply = (value) => {
+	if (!value || typeof value !== "object") return void 0;
+	const { selected, custom } = value;
+	if (typeof custom === "string") return { custom };
+	if (Array.isArray(selected) && selected.every((label) => typeof label === "string")) return { selected };
+};
+/** The command an instruction sends to `character`, or why it is refused (and nothing is sent). */
+function instructionCommand(character, instruction) {
+	if (!character) return { refused: "No such character is awake." };
+	const given = instruction ?? {};
+	switch (given.kind) {
+		case "talk":
+		case "steer":
+		case "follow_up": {
+			const text = given.text;
+			if (typeof text !== "string" || !text.trim()) return { refused: "There is nothing to send." };
+			if (text.length > TEXT_MAX) return { refused: "That message is too long to send from here." };
+			return { command: {
+				kind: given.kind,
+				text
+			} };
+		}
+		case "abort":
+			if ((character.facts?.run ?? "idle") !== "idle" && given.confirmed !== true) return { refused: `${character.name} is busy; stopping it needs your confirmation.` };
+			return { command: { kind: "abort" } };
+		case "answer": {
+			const replies = Array.isArray(given.replies) ? given.replies.map(reply) : void 0;
+			if (typeof given.questionnaire !== "string" || !replies?.length || replies.some((r) => r === void 0)) return { refused: "That answer does not fit the questions." };
+			return { command: {
+				kind: "answer",
+				questionnaire: given.questionnaire,
+				replies
+			} };
+		}
+	}
+	return { refused: "The conversation panel cannot send that." };
+}
+/**
+* Send an instruction to an awake character through `commands`, reporting each receipt stage. A refused instruction
+* reports `failed` with its reason and sends nothing.
+*/
+async function instruct(commands, character, commandId, instruction, onReceipt) {
+	const made = instructionCommand(character, instruction);
+	if ("refused" in made) {
+		onReceipt("failed", made.refused);
+		return {
+			ok: false,
+			reason: made.refused
+		};
+	}
+	let failed = false;
+	const result = await commands.send(character.id, made.command, {
+		commandId,
+		onReceipt(stage, reason) {
+			if (stage === "failed") failed = true;
+			onReceipt(stage, reason);
+		}
+	});
+	if (!result.ok && !failed) onReceipt("failed", result.reason);
+	return result;
+}
+//#endregion
+//#region apps/agent-world/src/backend/inn.ts
+var run$1 = promisify(execFile);
+var TMUX_TIMEOUT_MS$1 = 2e3;
+/** The inn's sleepers with their observed facts, the most recently stopped first. */
+function dormantAgents(sleepers, rows, readTask) {
+	return sleepers.map((sleeper) => {
+		const row = rows.get(sleeper.id);
+		let repository = null;
+		try {
+			const git = JSON.parse(row?.git ?? "null");
+			if (typeof git?.repository === "string") repository = git.repository;
+		} catch {}
+		return {
+			...sleeper,
+			reportsTo: row?.reportsTo ?? null,
+			repository,
+			cwd: row?.cwd ?? "",
+			task: readTask(row?.currentTask ?? null),
+			stopReason: row?.stopReason ?? null
+		};
+	});
+}
+/**
+* The pane of the operator's most recently active tmux client, across the servers the runtime knows. Undefined when
+* no terminal is attached to any of them.
+*/
+async function operatorPane(sockets) {
+	const latest = (await Promise.all(sockets.map(async (socket) => {
+		try {
+			const { stdout } = await run$1("tmux", [
+				"-S",
+				socket,
+				"list-clients",
+				"-F",
+				"#{client_activity}	#{pane_id}"
+			], {
+				timeout: TMUX_TIMEOUT_MS$1,
+				encoding: "utf8"
+			});
+			return stdout.split("\n").filter(Boolean).map((line) => {
+				const [activity, pane] = line.split("	");
+				return {
+					socket,
+					pane,
+					activity: Number(activity) || 0
+				};
+			}).filter((client) => client.pane);
+		} catch {
+			return [];
+		}
+	}))).flat().sort((a, b) => b.activity - a.activity)[0];
+	return latest ? {
+		socket: latest.socket,
+		pane: latest.pane
+	} : void 0;
+}
+//#endregion
+//#region apps/agent-world/src/backend/lifecycle.ts
+/** A woken session joins once Pi has started in its window; a slow start still says the window opened. */
+var WAKE_MS = 3e4;
+/** Mail to an awake session is delivered once its transcript records it, usually within a second or two. */
+var MAIL_MS = 8e3;
+var CLOSE_MS = 1e4;
+/** Send `command` and resolve at the first stage `enough` accepts, or with the last stage reached after `ms`. */
+function follow(commands, sessionId, command, ms, enough, late) {
+	return new Promise((resolve) => {
+		let last;
+		let done = false;
+		const settle = (receipt) => {
+			if (done) return;
+			done = true;
+			clearTimeout(timer);
+			resolve(receipt);
+		};
+		const timer = setTimeout(() => {
+			if (!last || last.stage === "failed") return;
+			settle({
+				ok: true,
+				stage: last.stage,
+				note: late(last.stage)
+			});
+		}, ms);
+		commands.send(sessionId, command, { onReceipt(stage, reason) {
+			last = {
+				stage,
+				reason
+			};
+			if (stage !== "failed" && enough(stage, reason)) settle({
+				ok: true,
+				stage,
+				...reason ? { note: reason } : {}
+			});
+		} }).then((result) => settle(result.ok ? {
+			ok: true,
+			stage: "applied"
+		} : {
+			ok: false,
+			reason: result.reason
+		}));
+	});
+}
+function openLifecycle(paths, commands, snapshot) {
+	/** The tmux servers the runtime knows, read from its database. */
+	const servers = () => {
+		if (!existsSync(paths.db)) return [];
+		const db = new DatabaseSync(paths.db);
+		try {
+			db.exec("pragma query_only = 1");
+			return db.prepare("select socket from tmux_servers order by updated_at desc").all().map((row) => row.socket);
+		} catch {
+			return [];
+		} finally {
+			db.close();
+		}
+	};
+	return {
+		async wake(characterId) {
+			const world = snapshot();
+			const sleeper = world.dormant?.find((agent) => agent.id === characterId);
+			if (!sleeper) {
+				const awake = world.characters.find((character) => character.id === characterId);
+				return {
+					ok: false,
+					reason: awake ? `${awake.name} is already awake.` : "Nobody by that name sleeps here."
+				};
+			}
+			const pane = await operatorPane(servers());
+			if (!pane) return {
+				ok: false,
+				reason: `No terminal is attached to tmux, so there is nowhere to open ${sleeper.name}'s window.`
+			};
+			return follow(commands, characterId, {
+				kind: "start",
+				tmux: pane,
+				...sleeper.reportsTo ? { reportsTo: sleeper.reportsTo } : {}
+			}, WAKE_MS, (stage) => stage === "applied", () => `Its window opened, but ${sleeper.name} has not joined yet.`);
+		},
+		async endSession(characterId, confirmed = false) {
+			const character = snapshot().characters.find((c) => c.id === characterId);
+			if (!character) return {
+				ok: false,
+				reason: "That session is not running."
+			};
+			if (character.facts !== void 0 && character.facts.run !== "idle" && !confirmed) return {
+				ok: false,
+				confirm: true,
+				reason: `${character.name} is in the middle of a turn. Ending its session stops that turn.`
+			};
+			return follow(commands, characterId, { kind: "close" }, CLOSE_MS, (stage) => stage === "applied", () => `${character.name} has not answered yet.`);
+		},
+		async sendMail(characterId, body) {
+			const text = body.trim();
+			if (!text) return {
+				ok: false,
+				reason: "The letter is empty."
+			};
+			return follow(commands, characterId, {
+				kind: "mail",
+				from: OPERATOR,
+				body: text,
+				sentAt: (/* @__PURE__ */ new Date()).toISOString()
+			}, MAIL_MS, (stage, reason) => stage === "applied" || stage === "accepted" && reason !== void 0, (stage) => stage === "delivered" ? "Handed over; not in its transcript yet." : "Sent; not delivered yet.");
 		}
 	};
 }
@@ -335,15 +792,48 @@ function parse$2(json) {
 	}
 }
 var text = (value) => typeof value === "string" && value.trim() ? value.trim() : null;
-/** The open prompt's kind and what it asks: its title, or else its first question. */
+/** The questions of an `ask_user_question` prompt, as the panel's form needs them; undefined when they do not parse. */
+function questionsOf(value) {
+	if (!Array.isArray(value) || !value.length) return void 0;
+	const questions = [];
+	for (const raw of value) {
+		const question = text(raw?.question);
+		const options = Array.isArray(raw?.options) ? raw.options.map((option) => ({
+			label: typeof option?.label === "string" ? option.label : "",
+			description: typeof option?.description === "string" ? option.description : ""
+		})) : [];
+		if (!question || !options.length || options.some((option) => !option.label)) return void 0;
+		questions.push({
+			question,
+			header: text(raw.header),
+			options,
+			multiSelect: raw.multiSelect === true
+		});
+	}
+	return questions;
+}
+/**
+* The open prompt's kind and what it asks: its title, or else its first question. A questionnaire also carries its id
+* and questions, so the conversation panel can answer it.
+*/
 function asking(prompt) {
 	if (prompt === null) return null;
 	const open = parse$2(prompt);
 	const first = Array.isArray(open?.questions) ? open.questions[0] : void 0;
-	return {
-		kind: text(open?.kind) ?? "dialog",
+	const kind = text(open?.kind) ?? "dialog";
+	const shown = {
+		kind,
 		text: text(open?.title) ?? text(first?.question)
 	};
+	const questions = kind === "questionnaire" ? questionsOf(open?.questions) : void 0;
+	const id = text(open?.id);
+	return questions && id ? {
+		...shown,
+		questionnaire: {
+			id,
+			questions
+		}
+	} : shown;
 }
 /** Reads ledger tasks' `task.md`, again only when the file changed. */
 function taskReader() {
@@ -491,7 +981,7 @@ function feedLine(row, lookup) {
 		case "prompt_closed": return line("agents", `${name}'s question was answered.`);
 		case "command_accepted": {
 			const command = data.command ?? {};
-			if (command.kind === "mail") return line("mail", `Mail from ${typeof command.from === "string" ? lookup.name(command.from) ?? command.from : "someone"} to ${name}: ${preview(command.body)}`);
+			if (command.kind === "mail") return line("mail", `Mail from ${command.from === "operator" ? "you" : typeof command.from === "string" ? lookup.name(command.from) ?? command.from : "someone"} to ${name}: ${preview(command.body)}`);
 			const label = LABELS[String(command.kind)];
 			if (!label) return void 0;
 			const said = detail(command);
@@ -507,6 +997,34 @@ function feedLine(row, lookup) {
 		}
 	}
 }
+var MAIL = `select m.id, m.sender, m.receiver, m.body, m.sent_at as sentAt, m.delivered_at as deliveredAt, m.stage,
+	m.reason, fs.name as fromName, fs.cwd as fromCwd, ts.name as toName, ts.cwd as toCwd
+from mail m
+left join sessions fs on fs.id = m.sender
+left join sessions ts on ts.id = m.receiver
+where m.id in (select id from mail order by sent_at desc limit 120)
+	or m.stage in ('accepted', 'delivered')
+order by m.sent_at desc, m.id`;
+var nameOf = (id, name, cwd) => name || (cwd ? cwd.split("/").filter(Boolean).pop() : void 0) || id;
+/** The mail the world shows now. */
+function readMail(db) {
+	return db.prepare(MAIL).all().map((row) => {
+		const from = row.sender ?? "someone";
+		const body = row.body ?? "";
+		return {
+			id: row.id,
+			from,
+			fromName: from === "operator" ? "You" : nameOf(from, row.fromName, row.fromCwd),
+			to: row.receiver,
+			toName: nameOf(row.receiver, row.toName, row.toCwd),
+			body: body.length > 4e3 ? `${body.slice(0, MAIL_BODY_MAX - 1)}\u2026` : body,
+			sentAt: row.sentAt,
+			deliveredAt: row.deliveredAt,
+			state: row.stage === "applied" ? "delivered" : row.stage === "failed" ? "failed" : "waiting",
+			reason: row.reason
+		};
+	});
+}
 //#endregion
 //#region apps/agent-world/src/backend/projection.ts
 var byStart = (a, b) => (a.firstStartedAt ?? Number.MAX_SAFE_INTEGER) - (b.firstStartedAt ?? Number.MAX_SAFE_INTEGER) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
@@ -514,7 +1032,7 @@ var byStart = (a, b) => (a.firstStartedAt ?? Number.MAX_SAFE_INTEGER) - (b.first
 * A coordinator was started with `--coordinator` or has a session reporting to it; a worker reports to one; any
 * other session is independent. Each awake coordinator, and each coordinator with an awake worker, has a
 * headquarters. Workers stand in the wing of their repository, or the common room outside one; independents stand
-* in the square. Dormant sessions are in no awake place.
+* in the square. Dormant sessions sleep at the inn, the most recently stopped first, each in the role it had.
 */
 function projectWorld(sessions, remembered) {
 	const byId = new Map(sessions.map((session) => [session.id, session]));
@@ -523,6 +1041,15 @@ function projectWorld(sessions, remembered) {
 		if (session.coordinatorFlag) coordinators.add(session.id);
 		if (session.reportsTo && session.reportsTo !== session.id) coordinators.add(session.reportsTo);
 	}
+	const roleOf = (session) => coordinators.has(session.id) ? "coordinator" : session.reportsTo && coordinators.has(session.reportsTo) ? "worker" : "independent";
+	const nameOf = (session) => session.name || basename(session.cwd) || session.id;
+	const dormant = sessions.filter((session) => !session.awake).sort((a, b) => (b.stoppedAt ?? 0) - (a.stoppedAt ?? 0) || byStart(b, a)).map((session) => ({
+		id: session.id,
+		name: nameOf(session),
+		role: roleOf(session),
+		startedAt: session.firstStartedAt ?? 0,
+		stoppedAt: session.stoppedAt ?? null
+	}));
 	const characters = sessions.filter((session) => session.awake).sort(byStart).map((session) => {
 		let role;
 		let place;
@@ -548,14 +1075,14 @@ function projectWorld(sessions, remembered) {
 		}
 		return {
 			id: session.id,
-			name: session.name || basename(session.cwd) || session.id,
+			name: nameOf(session),
 			role,
 			place,
 			startedAt: session.firstStartedAt ?? 0
 		};
 	});
 	const shown = /* @__PURE__ */ new Set();
-	for (const character of characters) if (character.place.kind !== "square") shown.add(character.place.headquarters);
+	for (const { place } of characters) if (!isOutside(place)) shown.add(place.headquarters);
 	const order = [...shown].map((id) => ({
 		id,
 		firstStartedAt: byId.get(id)?.firstStartedAt
@@ -583,7 +1110,8 @@ function projectWorld(sessions, remembered) {
 			};
 		}),
 		characters,
-		wings
+		wings,
+		dormant
 	};
 }
 //#endregion
@@ -661,6 +1189,7 @@ var SESSIONS = `
 select s.id, s.name, s.cwd, s.reports_to as reportsTo, s.git, s.config,
 	(select min(f.started_at) from incarnations f where f.session_id = s.id) as firstStartedAt,
 	coalesce(i.ended_at is null and i.process_state in ('alive', 'alive_bridge_lost'), 0) as awake,
+	i.ended_at as stoppedAt, i.end_reason as stopReason,
 	${FACTS_COLUMNS}
 from sessions s
 ${FACTS_JOINS}
@@ -684,7 +1213,8 @@ function sessionRow(row) {
 		repository: typeof git?.repository === "string" ? git.repository : null,
 		coordinatorFlag: Array.isArray(config?.flags) && config.flags.includes("coordinator"),
 		awake: row.awake === 1,
-		firstStartedAt: row.firstStartedAt ?? void 0
+		firstStartedAt: row.firstStartedAt ?? void 0,
+		stoppedAt: row.stoppedAt ?? void 0
 	};
 }
 /** Each coordinator's wings: those in `first`, then any in `then` not among them, in order. */
@@ -701,6 +1231,8 @@ function openWorldBackend(paths) {
 		characters: []
 	};
 	let world;
+	let dormant = [];
+	let mail = [];
 	let db;
 	let socket;
 	let socketOpen = false;
@@ -798,6 +1330,8 @@ function openWorldBackend(paths) {
 					facts: factsOf(byId.get(character.id), readTask)
 				}))
 			};
+			dormant = dormantAgents(world.dormant, byId, readTask);
+			mail = readMail(db);
 			seen = mergeWings(seen, world.wings);
 			remember(stored, storedWings, world.wings);
 			return world;
@@ -856,7 +1390,9 @@ function openWorldBackend(paths) {
 			connected: socketOpen && next !== void 0,
 			headquarters: next?.headquarters ?? current.headquarters,
 			characters: next?.characters ?? current.characters,
-			avatarLook: chosenAvatar ?? storedAvatar
+			avatarLook: chosenAvatar ?? storedAvatar,
+			dormant,
+			mail
 		});
 	};
 	const onLine = (line) => {
@@ -983,7 +1519,11 @@ else app.quit();
 function start() {
 	const world = openWorldBackend(statePaths());
 	const conversations = openConversations(statePaths().socket);
+	const commands = openCommands(statePaths().socket);
 	let window;
+	const toWindow = (channel, message) => {
+		if (window && !window.isDestroyed()) window.webContents.send(channel, message);
+	};
 	ipcMain.handle("world:snapshot", () => world.snapshot());
 	ipcMain.handle("world:feed", () => world.feed());
 	ipcMain.handle("world:terminal", (_event, characterId) => typeof characterId === "string" ? world.goToTerminal(characterId) : {
@@ -1002,6 +1542,29 @@ function start() {
 		ok: false,
 		reason: "No look was named."
 	});
+	ipcMain.handle("world:instruct", (_event, characterId, commandId, instruction) => {
+		if (typeof characterId !== "string" || typeof commandId !== "string" || !commandId) return {
+			ok: false,
+			reason: "No character was named."
+		};
+		const character = world.snapshot().characters.find((c) => c.id === characterId);
+		return instruct(commands, character, commandId, instruction, (stage, reason) => toWindow("world:receipt", {
+			commandId,
+			characterId,
+			stage,
+			...reason ? { reason } : {}
+		}));
+	});
+	ipcMain.handle("world:watch-replies", (_event, characterIds) => conversations.watch(Array.isArray(characterIds) ? characterIds.filter((id) => typeof id === "string") : []));
+	conversations.onReply((event) => toWindow("world:reply", event));
+	const lifecycle = openLifecycle(statePaths(), commands, () => world.snapshot());
+	const unnamed = {
+		ok: false,
+		reason: "No character was named."
+	};
+	ipcMain.handle("world:wake", (_event, characterId) => typeof characterId === "string" ? lifecycle.wake(characterId) : unnamed);
+	ipcMain.handle("world:end-session", (_event, characterId, confirmed) => typeof characterId === "string" ? lifecycle.endSession(characterId, confirmed === true) : unnamed);
+	ipcMain.handle("world:send-mail", (_event, characterId, body) => typeof characterId === "string" && typeof body === "string" ? lifecycle.sendMail(characterId, body) : unnamed);
 	world.subscribe((snapshot) => {
 		if (window && !window.isDestroyed()) window.webContents.send("world:update", snapshot);
 	});
@@ -1018,6 +1581,7 @@ function start() {
 	app.on("will-quit", () => {
 		world.close();
 		conversations.close();
+		commands.close();
 	});
 	app.whenReady().then(() => {
 		protocol.handle("app", (request) => {
