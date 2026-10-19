@@ -4,9 +4,9 @@
 
 **Blocked by:** 02 Places follow reporting and repositories; 03 Art bible and art pipeline
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Every place opens with the 'show walk grid' view lined up with the painted furniture, and the avatar can reach every spot and door.
-- [ ] No painted seat is at a work place; fire, water, and glows animate in their slots.
-- [ ] Banner text fits its banner for long repository names.
-- [ ] Meets the bar in the polish bar in the [spec](../spec.md#further-notes): judged on captured screenshots and a short recording, not on passing tests alone.
+- [x] Every place opens with the 'show walk grid' view lined up with the painted furniture, and the avatar can reach every spot and door.
+- [x] No painted seat is at a work place; fire, water, and glows animate in their slots.
+- [x] Banner text fits its banner for long repository names.
+- [x] Meets the bar in the polish bar in the [spec](../spec.md#further-notes): judged on captured screenshots and a short recording, not on passing tests alone.
