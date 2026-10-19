@@ -37,3 +37,5 @@ Operator, 2026-10-18:
 - The aesthetic must be very, very polished.
 - The headquarters holds its remembered wings as a gallery of doors, one per wing with its repository's banner; each door opens that wing's own room. The gallery extends as wings are added.
 - Movement and interaction should feel like RuneScape: click a tile to walk there along a path, hover shows the default action, left click does it, right click opens a menu of actions, and the avatar walks up to a character or door before acting.
+
+Prototype (2026-10-18): [prototypes/headquarters/](../prototypes/headquarters/README.md): painted guild hall, gallery of wing doors, wing rooms in two sizes, a tiled lane outside, RuneScape-style movement; verdict pending.
