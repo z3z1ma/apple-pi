@@ -13,6 +13,9 @@ declare -A LOOK=(
 	[scout]="a halfling scout: curly brown hair, mustard yellow vest over a white shirt, red scarf, bare feet"
 	[engineer]="a human engineer woman: short black hair, burgundy coat, a single steel shoulder plate, wrench at her belt"
 	[mage]="a young mage: purple hood down over pale blond hair, lavender robe with silver stars, freckles, a small glowing orb at the belt"
+	[crier]="a town crier: plump, red and gold tabard, feathered cap, holding a brass handbell"
+	[merchant]="a market merchant woman: olive headscarf, mustard shawl over a brown dress, a basket of apples on one arm"
+	[bard]="a wandering bard: sandy hair, sky blue doublet, a lute slung on his back, a jaunty green hat"
 )
 
 gen() {

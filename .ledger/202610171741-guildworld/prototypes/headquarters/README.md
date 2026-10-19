@@ -1,6 +1,6 @@
 # PROTOTYPE: the Agent World headquarters
 
-Throwaway prototype for [How places are built](../../decisions/15-how-places-are-built.md) (round 1), then [Characters and portraits](../../decisions/22-characters-and-portraits.md) and [Movement and pathing](../../decisions/23-movement-and-pathing.md) (round 2), built after [Purpose and form of the world](../../decisions/19-purpose-and-form-of-the-world.md) and [What a wing is](../../decisions/21-what-a-wing-is.md). Fantasy theme only. It shares nothing with the notch or the rejected Guild Hall room; from the town it borrows only exterior props and code-drawn ground tiles.
+Throwaway prototype for [How places are built](../../decisions/15-how-places-are-built.md) (round 1), then [Characters and portraits](../../decisions/22-characters-and-portraits.md) and [Movement and pathing](../../decisions/23-movement-and-pathing.md) (round 2), and [How exteriors are built](../../decisions/24-how-exteriors-are-built.md) (round 4), built after [Purpose and form of the world](../../decisions/19-purpose-and-form-of-the-world.md) and [What a wing is](../../decisions/21-what-a-wing-is.md). Fantasy theme only. It shares nothing with the notch, the rejected Guild Hall room, or the town.
 
 ## Question
 
@@ -32,13 +32,22 @@ After the operator's verdict on round 2 (side walk stiff, pathing still poor, ch
 - **Door targets traced to the door itself**, and stand points moved onto open floor.
 - **Asking agents stand beside their stool.**
 
+## Round 4: a painted exterior
+
+The tiled lane was rejected, so the hall doors now open onto **the village square**, a painted exterior made like the interiors (32 x 21 tiles, bigger than the screen) and following the rule that paintings leave room for sprites and overlays:
+
+- **Painted:** building fronts with a door for each function place: the guild hall (enters the hall), the forge (GitHub), the library (Confluence), the quest office (Jira), the inn (dormant agents), and the rookery (mail); the other doors say they are not built yet.
+- **Left open in the painting and overlaid:** the fountain basin was painted dry and gets animated water (a surface, a moving shine, a spout of particles); the lanterns were painted unlit and get flickering glows; a cat to pet sits on the inn steps.
+- **Slack channels as townsfolk:** `#incidents`, `#eng-data`, and `#random` (seed data, no Slack connection) stand in the square as a merchant, a crier, and a bard, each with an unread badge; talking shows the channel's latest message and offers to reply as yourself or to ask an agent (not wired). Independent agents stand around the square.
+- New art: one Codex painting, three townsfolk sheets with portraits, and a cat sheet, about 70 seconds in parallel.
+
 ## What to try
 
 1. **The hall:** talk to Orla, the coordinator, at the head desk (portrait and typed line); examine the agent in the common room (an agent outside any repository). Walk around the furniture and click on it; switch **Movement** between smooth and tiles and compare.
 2. **The gallery:** walk through the east archway. Each remembered wing is a door with its repository's banner; `legacy-auth` is closed up (boarded) because nobody works there now.
 3. **A wing:** enter `apple-pi` (three agents, the small room) or `billing-service`; add agents with **+ agent** until a wing holds more than three, and it opens in the large room with eight desks. Status shows over heads: dots (working), `!` (asking you), a tick (finished, unseen).
 4. **Growth:** **+ remembered wing** a few times, then revisit the gallery: it lengthens by repeating one niche section of the painting.
-5. **Outside:** open the hall doors to the lane, a tiled exterior at dusk where an independent agent stands; enter the hall again.
+5. **Outside:** open the hall doors to the village square: talk to the townsfolk (Slack channels), pet the cat, try the other doors, and go back into the hall.
 6. **Live:** run `python3 snapshot.py`, then **Load live.json** to place your real sessions (a coordinator needs `pi --coordinator` or a session reporting to it).
 
 ## How it is built
@@ -48,7 +57,7 @@ After the operator's verdict on round 2 (side walk stiff, pathing still poor, ch
 - **Hand-authored over the paintings (`src/places.js`):** blocked tiles, character spots (desks), door hotspots, entry tiles, banner positions, all in tiles of 48 px. Authoring one scene took a few minutes of reading the painting.
 - **Placed pieces:** doors (closed, open, boarded) and banners are separate sprites cut from one magenta sheet (`clean.py`), placed into the painted niches, so the gallery shows any set of wings. Repository names are drawn as text.
 - **Growth:** the gallery repeats its fourth niche section once per wing beyond five; a wing chooses the small or large painting by headcount.
-- **Exterior:** the lane is a tile map (code-drawn grass and cobbles from the town prototype) with the town's hall sprite and props, under a dusk wash with lamp glows to match the interiors.
+- **Exterior (round 1, since replaced):** the lane was a tile map of code-drawn grass and cobbles with the town prototype's hall sprite and props under a dusk wash; round 4 replaced it with the painted square.
 - **Movement (round 1):** an 8-direction A* path over each scene's tile grid, one tile per 0.3 s; replaced in round 2 (above). Click crosses (yellow walk, red action); scenes change with a short fade.
 - **World:** `src/world.js` derives the places from sessions: the coordinator in the hall, its awake agents in the wings of their repositories (wings remembered in `localStorage`), agents without a repository in the common room, dormant agents absent (their place, the inn, is not built), independent agents outside.
 

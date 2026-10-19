@@ -43,6 +43,7 @@ export class PlaceScene extends Phaser.Scene {
 		this.hotspots = place.hotspots ?? [];
 		this.people = [];
 		for (const p of place.people) this.addPerson(p);
+		this.props = (place.props ?? []).map((p) => this.addProp(p));
 		const start = place.entries[this.entry] ?? place.entries.start;
 		this.avatar = this.makeCharacter(app.avatarLook, this.pt(start), STILL.up);
 		if (app.showGrid) this.drawGrid();
@@ -126,10 +127,31 @@ export class PlaceScene extends Phaser.Scene {
 		this.people.push({ sprite, badge, session: s });
 	}
 
+	/** An overlaid thing to interact with, drawn over the painting at its feet position. */
+	addProp({ key, at, frame = 0, name, verbs }) {
+		const { x, y } = this.pt(at);
+		const sprite = this.add.sprite(x, y, key, frame).setOrigin(0.5, 1).setDepth(y);
+		sprite.prop = { name, verbs };
+		sprite.pos = { x, y };
+		this.fine.block(cells([at[0] - 0.3, at[1] - 0.25, 0.6, 0.4], FINE));
+		return sprite;
+	}
+
+	purr(sprite) {
+		sprite.setFrame(3);
+		const heart = this.add.text(sprite.x, sprite.y - sprite.displayHeight, "\u2665", { fontSize: "20px", color: "#ff7aa8" }).setOrigin(0.5).setDepth(100000);
+		this.tweens.add({ targets: heart, y: heart.y - 30, alpha: 0, duration: 1100, onComplete: () => heart.destroy() });
+		this.time.delayedCall(1300, () => sprite.setFrame(Math.random() < 0.5 ? 1 : 2));
+	}
+
 	drawBadge(container, s) {
 		const g = this.add.graphics();
 		const label = (text, color) => this.add.text(0, 0, text, { fontFamily: "Georgia, serif", fontSize: "15px", fontStyle: "bold", color }).setOrigin(0.5);
-		if (s.status === "waiting") {
+		if (s.channel) {
+			if (!s.unread) return;
+			g.fillStyle(0x4a90d9).fillCircle(0, 0, 11).lineStyle(2, 0x1b2a40).strokeCircle(0, 0, 11);
+			container.add([g, label(String(s.unread), "#ffffff")]);
+		} else if (s.status === "waiting") {
 			g.fillStyle(0xf2c14e).fillCircle(0, 0, 11).lineStyle(2, 0x2b2238).strokeCircle(0, 0, 11);
 			container.add([g, label("!", "#2b2238")]);
 			this.tweens.add({ targets: container, y: container.y - 5, yoyo: true, repeat: -1, duration: 520, ease: "Sine.inOut" });
@@ -164,6 +186,8 @@ export class PlaceScene extends Phaser.Scene {
 			actions.push({ verb: "Talk-to", target: s.name, kind: "npc", run: () => this.approach(person.sprite.pos, () => this.talk(s), true) });
 			actions.push({ verb: "Examine", target: s.name, kind: "npc", run: () => this.examine(s) });
 		}
+		const prop = this.props.find((p) => p.getBounds().contains(world.x, world.y));
+		if (prop) for (const v of prop.prop.verbs) actions.push({ verb: v.verb, target: prop.prop.name, run: () => this.approach(prop.pos, () => v.run(this, prop), true) });
 		for (const h of this.hotspots) {
 			const [x, y, w, hh] = h.rect;
 			if (tx >= x && tx < x + w && ty >= y && ty < y + hh)
@@ -286,10 +310,18 @@ export class PlaceScene extends Phaser.Scene {
 	}
 
 	talk(s) {
+		if (s.channel) {
+			say(s.name, lineFor(s), ["Reply as myself (not in this prototype).", "Ask an agent to look into it (not in this prototype).", "Goodbye."], this.portraitFor(s));
+			return;
+		}
 		say(s.name, lineFor(s), s.status === "waiting" ? ["Show me the question.", "Later."] : ["Tell me more.", "Goodbye."], this.portraitFor(s));
 	}
 
 	examine(s) {
+		if (s.channel) {
+			say(s.name, `A Slack channel${s.unread ? `, ${s.unread} unread` : ""}. Seed data: this prototype has no Slack connection.`, ["Goodbye."], this.portraitFor(s));
+			return;
+		}
 		const bits = [s.coordinator ? "Coordinator of this guild." : s.repository ? `Works on ${s.repository}.` : "Works without a repository."];
 		if (s.task) bits.push(`Task: ${s.task}.`);
 		bits.push(s.awake ? `Status: ${s.status}${s.needsYou ? ", finished and unseen" : ""}.` : "Dormant.");

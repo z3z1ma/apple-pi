@@ -1,13 +1,13 @@
 // PROTOTYPE: the hand-authored places: painted interiors (hall, gallery, wing rooms) and one tiled exterior
-// (the lane outside). Walk grids, spots, and doors are written by hand over each painting, in tiles of T px.
+// (the village square). Walk grids, spots, and doors are written by hand over each painting, in tiles of T px.
 // Coordinates are in tiles and may be fractional: blocked areas are [x, y, w, h] traced around furniture over a
 // half-tile grid, and spots, entries, and stand points are the feet position of a character.
-import { tileIndex, tilesetCanvas } from "./terrain.js";
 import { hash } from "./util.js";
 
 export const T = 48;
 const AGENT_LOOKS = ["artificer", "scholar", "scout", "engineer", "mage"];
-const look = (s) => (s.coordinator ? "coordinator" : AGENT_LOOKS[hash(s.id) % AGENT_LOOKS.length]);
+const CHANNEL_LOOKS = ["crier", "merchant", "bard"];
+const look = (s) => (s.coordinator ? "coordinator" : s.channel ? CHANNEL_LOOKS[hash(s.id) % CHANNEL_LOOKS.length] : AGENT_LOOKS[hash(s.id) % AGENT_LOOKS.length]);
 
 function painted(key, w, h) {
 	return (scene) => scene.add.image(0, 0, key).setOrigin(0).setDisplaySize(w, h).setDepth(0);
@@ -39,10 +39,10 @@ export function hall(scene, world) {
 			[6.3, 5.8, 3.5, 2.2], [2.4, 7.3, 1.6, 1.7], [4.9, 7.6, 2.1, 1.1], [5.6, 8.4, 2, 1.5], [2.2, 11, 4.8, 3],
 			[0, 14.6, 30, 5.4], [23, 4, 3, 4], [26, 4, 4, 11],
 		],
-		entries: { start: [15, 12.5], lane: [15, 14.2], gallery: [25.4, 9] },
+		entries: { start: [15, 12.5], square: [15, 14.2], gallery: [25.4, 9] },
 		hotspots: [
 			{ name: "Archway to the wings", rect: [26.1, 4.5, 1.8, 6.5], standAt: [25.4, 9], verbs: [{ verb: "Walk-through", run: (sc) => sc.go("gallery", "hall") }] },
-			{ name: "Hall doors", rect: [13, 15, 4.2, 3.6], standAt: [15, 14.2], verbs: [{ verb: "Open", run: (sc) => sc.go("lane", "hall") }] },
+			{ name: "Hall doors", rect: [13, 15, 4.2, 3.6], standAt: [15, 14.2], verbs: [{ verb: "Open", run: (sc) => sc.go("square", "hall") }] },
 		],
 		people,
 	};
@@ -145,56 +145,95 @@ export function wing(scene, world, data) {
 	};
 }
 
-export function lane(scene, world) {
-	const cols = 26;
-	const rows = 17;
-	const g = Array.from({ length: rows }, () => new Array(cols).fill(0));
-	for (let x = 0; x < cols; x++) for (const y of [12, 13]) g[y][x] = 1;
-	for (let y = 9; y < 12; y++) for (const x of [12, 13]) g[y][x] = 1;
-	for (let y = 8; y < 10; y++) for (let x = 10; x < 16; x++) g[y][x] = 2;
-	const decor = [
-		["oak", 3, 4], ["pine", 1, 8], ["blossom", 21, 4], ["oak", 23, 8], ["pine", 19, 15], ["blossom", 4, 15],
-		["lamp", 10, 11], ["lamp", 16, 11], ["lamp", 6, 14], ["lamp", 20, 14], ["bench", 7, 11], ["bench", 18, 11],
-		["flowerbed", 9, 9], ["flowerbed", 16, 9], ["signpost", 14, 15], ["barrel", 17, 7],
-	];
-	const independentSpots = [[8.5, 13.5], [20.5, 12.5], [22.5, 13.5]];
+const notBuilt = (place) => ({ verb: "Enter", run: (sc) => sc.note(`${place}: not built yet in this prototype.`) });
+
+/** Glows drawn over painted lanterns: warm light the painting leaves unlit so it can flicker. */
+function glow(sc, x, y, r) {
+	if (!sc.textures.exists("glow")) {
+		const c = document.createElement("canvas");
+		c.width = c.height = 256;
+		const ctx = c.getContext("2d");
+		const g = ctx.createRadialGradient(128, 128, 0, 128, 128, 128);
+		g.addColorStop(0, "rgba(255,210,130,0.95)");
+		g.addColorStop(0.35, "rgba(255,170,80,0.35)");
+		g.addColorStop(1, "rgba(255,150,60,0)");
+		ctx.fillStyle = g;
+		ctx.fillRect(0, 0, 256, 256);
+		sc.textures.addCanvas("glow", c);
+	}
+	const image = sc.add.image(x * T, y * T, "glow").setDisplaySize(r * 2 * T, r * 2 * T).setAlpha(0.9).setDepth(50001).setBlendMode(Phaser.BlendModes.ADD);
+	sc.tweens.add({ targets: image, alpha: 0.65, yoyo: true, repeat: -1, duration: 900 + Math.random() * 900, ease: "Sine.inOut" });
+}
+
+/** The fountain's water: the painting leaves the basin dry so the water can move. */
+function fountainWater(sc) {
+	const surface = sc.add.ellipse(15.5 * T, 10.55 * T, 4.9 * T, 1.75 * T, 0x3d7fb0, 0.78).setDepth(10.9 * T);
+	const shine = sc.add.ellipse(15.1 * T, 10.35 * T, 2.6 * T, 0.5 * T, 0xbfe6ff, 0.35).setDepth(10.91 * T);
+	sc.tweens.add({ targets: shine, x: 15.9 * T, alpha: 0.15, yoyo: true, repeat: -1, duration: 2300, ease: "Sine.inOut" });
+	sc.tweens.add({ targets: surface, alpha: 0.4, scaleX: 1.015, yoyo: true, repeat: -1, duration: 1600, ease: "Sine.inOut" });
+	if (!sc.textures.exists("drop")) {
+		const g = sc.make.graphics({ x: 0, y: 0 }, false);
+		g.fillStyle(0xcfeaff, 1).fillCircle(3, 3, 3);
+		g.generateTexture("drop", 6, 6);
+		g.destroy();
+	}
+	sc.add
+		.particles(15.45 * T, 8.35 * T, "drop", {
+			speedX: { min: -70, max: 70 },
+			speedY: { min: -170, max: -110 },
+			gravityY: 320,
+			lifespan: 900,
+			scale: { start: 0.9, end: 0.4 },
+			alpha: { start: 0.9, end: 0.2 },
+			frequency: 28,
+			quantity: 2,
+		})
+		.setDepth(10.95 * T);
+}
+
+export function square(scene, world) {
+	const lamps = [[10.9, 6.2], [10.0, 11.6], [20.5, 6.5], [21.6, 11.9]];
+	const channelSpots = [[7, 9.6], [23, 9.6], [18.6, 14], [12.5, 13.9]];
+	const independentSpots = [[25.4, 12.2], [5.8, 11.2], [24.5, 7.4]];
 	return {
-		title: "The lane outside",
+		title: "The village square",
 		tile: T,
-		cols,
-		rows,
+		cols: 32,
+		rows: 21,
 		drawBackdrop: (sc) => {
-			if (!sc.textures.exists("terrain")) sc.textures.addCanvas("terrain", tilesetCanvas());
-			const map = sc.make.tilemap({ tileWidth: 32, tileHeight: 32, width: cols, height: rows });
-			const set = map.addTilesetImage("terrain", "terrain", 32, 32, 0, 0);
-			const layer = map.createBlankLayer("ground", set, 0, 0).setScale(T / 32);
-			for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) layer.putTileAt(tileIndex(g, x, y), x, y);
-			sc.add.image(13 * T, 8.6 * T, "hq").setOrigin(0.5, 1).setScale(1.5).setDepth(8.6 * T);
-			for (const [key, x, y] of decor) sc.add.image((x + 0.5) * T, (y + 0.9) * T, key).setOrigin(0.5, 1).setScale(1.5).setDepth((y + 0.9) * T);
-			// Evening, to match the lantern-lit interiors: a dusk wash, then warm pools under the lamps and the hall door.
-			sc.add.rectangle(0, 0, cols * T, rows * T, 0x241a4a, 0.42).setOrigin(0).setDepth(50000);
-			const glows = decor.filter(([key]) => key === "lamp").map(([, x, y]) => [(x + 0.5) * T, (y - 0.6) * T, 150]);
-			glows.push([13 * T, 7.4 * T, 220]);
-			if (!sc.textures.exists("glow")) {
-				const c = document.createElement("canvas");
-				c.width = c.height = 256;
-				const ctx = c.getContext("2d");
-				const g = ctx.createRadialGradient(128, 128, 0, 128, 128, 128);
-				g.addColorStop(0, "rgba(255,200,120,0.9)");
-				g.addColorStop(0.4, "rgba(255,170,80,0.35)");
-				g.addColorStop(1, "rgba(255,150,60,0)");
-				ctx.fillStyle = g;
-				ctx.fillRect(0, 0, 256, 256);
-				sc.textures.addCanvas("glow", c);
-			}
-			for (const [x, y, r] of glows) {
-				const glow = sc.add.image(x, y, "glow").setDisplaySize(r * 2, r * 2).setAlpha(0.4).setDepth(50001).setBlendMode(Phaser.BlendModes.ADD);
-				sc.tweens.add({ targets: glow, alpha: 0.28, yoyo: true, repeat: -1, duration: 1800 + r * 4, ease: "Sine.inOut" });
-			}
+			painted("square", 32 * T, 21 * T)(sc);
+			fountainWater(sc);
+			for (const [x, y] of lamps) glow(sc, x, y, 1.6);
 		},
-		blocked: [[8, 1, 10, 7], ...decor.map(([key, x, y]) => (["oak", "blossom"].includes(key) ? [x - 1, y, 3, 1] : [x, y, 1, 1]))],
-		entries: { start: [13, 10.5], hall: [13, 9.2] },
-		hotspots: [{ name: "Guild hall", rect: [12.4, 6.6, 1.3, 1.5], standAt: [13, 8.6], verbs: [{ verb: "Enter", run: (sc) => sc.go("hall", "lane") }] }],
-		people: world.independent.slice(0, independentSpots.length).map((s, i) => ({ session: s, at: independentSpots[i], look: look(s) })),
+		blocked: [
+			[0, 0, 25.4, 5.6], [25.4, 0, 3.4, 4.6], [28.8, 0, 3.2, 5.6], [0, 5.6, 5.3, 3.4], [4.4, 7.4, 1.2, 1.9],
+			[12.2, 9.3, 6.9, 3.3], [13, 8.8, 5, 0.6], [13, 12.5, 5.2, 0.4],
+			[10.6, 7.7, 0.6, 0.6], [9.7, 13.1, 0.6, 0.6], [20.2, 7.2, 0.6, 0.6], [21.3, 13.1, 0.6, 0.6],
+			[0, 10.6, 5.2, 4.6], [5, 13.2, 4, 1.4], [21.8, 13.6, 3.2, 1],
+			[27.2, 5.6, 4.8, 6], [27.2, 11.6, 2.3, 2], [30.7, 11.6, 1.3, 2], [26.5, 6, 1, 2.6],
+			[0, 14.6, 13.6, 6.4], [19.6, 14.5, 7.6, 6.5], [18.6, 16.2, 1, 1.4], [31.3, 14.2, 0.7, 6.8], [29.5, 17.3, 1.2, 1.4],
+		],
+		entries: { start: [15.6, 6.8], hall: [15.6, 6.8] },
+		hotspots: [
+			{ name: "Guild hall doors", rect: [14.6, 2.8, 2.1, 2.3], standAt: [15.6, 6.2], verbs: [{ verb: "Enter", run: (sc) => sc.go("hall", "square") }] },
+			{ name: "Forge", rect: [7.7, 4, 2.2, 1.9], standAt: [8.8, 6.4], verbs: [notBuilt("The forge (GitHub)")] },
+			{ name: "Library", rect: [20.9, 3.6, 1.6, 1.5], standAt: [21.7, 6], verbs: [notBuilt("The library (Confluence)")] },
+			{ name: "Quest office", rect: [1.9, 7, 1.3, 2], standAt: [2.6, 9.9], verbs: [notBuilt("The quest office (Jira)")] },
+			{ name: "Inn", rect: [29.5, 11.6, 1.2, 1.8], standAt: [30.1, 14.1], verbs: [notBuilt("The inn (dormant agents)")] },
+			{ name: "Rookery", rect: [26.5, 3.6, 1, 1], standAt: [27, 5.1], verbs: [notBuilt("The rookery (mail)")] },
+		],
+		props: [
+			{
+				key: "cat", at: [28.4, 14.3], frame: 0, name: "Cat",
+				verbs: [
+					{ verb: "Pet", run: (sc, sprite) => sc.purr(sprite) },
+					{ verb: "Examine", run: (sc) => sc.note("A grey tabby who owns the square.") },
+				],
+			},
+		],
+		people: [
+			...world.channels.slice(0, channelSpots.length).map((s, i) => ({ session: s, at: channelSpots[i], look: CHANNEL_LOOKS[i % CHANNEL_LOOKS.length] })),
+			...world.independent.slice(0, independentSpots.length).map((s, i) => ({ session: s, at: independentSpots[i], look: look(s) })),
+		],
 	};
 }

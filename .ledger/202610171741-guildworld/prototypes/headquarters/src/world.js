@@ -16,6 +16,13 @@ export const SEED = [
 
 export const SEED_REMEMBERED = ["apple-pi", "legacy-auth", "billing-service"];
 
+/** Slack channels, as townsfolk in the square. Seed data: the prototype has no Slack connection. */
+export const SEED_CHANNELS = [
+	{ id: "#incidents", name: "#incidents", channel: true, unread: 3, lastAuthor: "pagerbot", lastText: "Ingest lag over 15 minutes on pipeline-prod." },
+	{ id: "#eng-data", name: "#eng-data", channel: true, unread: 1, lastAuthor: "Priya", lastText: "Has anyone looked at the backfill job since the schema change?" },
+	{ id: "#random", name: "#random", channel: true, unread: 0, lastAuthor: "Sam", lastText: "Cake in the kitchen, first come first served." },
+];
+
 export function loadRemembered(fallback) {
 	try {
 		return JSON.parse(localStorage.getItem(MEMORY)) ?? fallback;
@@ -29,7 +36,7 @@ export function saveRemembered(list) {
 }
 
 /** Places and who is in them. A coordinator's awake agents stand in their repository's wing. */
-export function derive(sessions, remembered) {
+export function derive(sessions, remembered, channels = SEED_CHANNELS) {
 	const coordinator = sessions.find((s) => s.coordinator && s.awake) ?? null;
 	const mine = sessions.filter((s) => coordinator && s.reportsTo === coordinator.id);
 	const awake = mine.filter((s) => s.awake);
@@ -42,11 +49,13 @@ export function derive(sessions, remembered) {
 		dormant: mine.filter((s) => !s.awake),
 		independent: sessions.filter((s) => s.awake && !s.coordinator && !(coordinator && s.reportsTo === coordinator.id)),
 		remembered: wingNames,
+		channels,
 	};
 }
 
 /** What a character says when you talk to it: its real state, in the voice of the setting. */
 export function lineFor(s) {
+	if (s.channel) return `${s.lastAuthor}: “${s.lastText}”`;
 	if (s.coordinator) return "Welcome back to the hall. The wings are through the east arch; I keep the board of everyone's work.";
 	if (!s.awake) return "(sound asleep; reopen the session to wake them)";
 	if (s.status === "waiting") return "I have a question for you before I can go on.";

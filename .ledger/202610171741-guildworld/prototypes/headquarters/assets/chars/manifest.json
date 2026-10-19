@@ -13,10 +13,24 @@
     ],
     "portraits": 4
   },
+  "bard": {
+    "frame": [
+      84,
+      136
+    ],
+    "portraits": 4
+  },
   "coordinator": {
     "frame": [
       105,
       136
+    ],
+    "portraits": 4
+  },
+  "crier": {
+    "frame": [
+      103,
+      135
     ],
     "portraits": 4
   },
@@ -31,6 +45,13 @@
     "frame": [
       86,
       148
+    ],
+    "portraits": 4
+  },
+  "merchant": {
+    "frame": [
+      87,
+      142
     ],
     "portraits": 4
   },

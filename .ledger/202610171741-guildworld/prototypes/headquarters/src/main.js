@@ -1,11 +1,11 @@
 // PROTOTYPE: boot the headquarters prototype: load art, build the world from seed or live.json, start in the hall.
 import { makeCharacterAnims, PlaceScene } from "./place.js";
-import { gallery, hall, lane, T, wing } from "./places.js";
+import { gallery, hall, square, T, wing } from "./places.js";
 import { derive, loadRemembered, saveRemembered, SEED, SEED_REMEMBERED } from "./world.js";
 
 const CHARS = await fetch("assets/chars/manifest.json").then((r) => r.json());
-const SCENES = ["hall", "gallery", "wing-small", "wing-large"];
-const IMAGES = ["hall", "gallery", "wing-small", "wing-large", "door-closed", "door-open", "door-boarded", "banner-cream", "banner-red", "hq", "oak", "pine", "blossom", "lamp", "bench", "flowerbed", "signpost", "barrel"];
+const SCENES = ["hall", "gallery", "wing-small", "wing-large", "square"];
+const IMAGES = [...SCENES, "door-closed", "door-open", "door-boarded", "banner-cream", "banner-red"];
 
 class Boot extends Phaser.Scene {
 	constructor() {
@@ -13,6 +13,7 @@ class Boot extends Phaser.Scene {
 	}
 	preload() {
 		for (const name of IMAGES) this.load.image(name, `${SCENES.includes(name) ? "raw-art" : "assets"}/${name}.png`);
+		this.load.spritesheet("cat", "assets/cat.png", { frameWidth: 41, frameHeight: 58 });
 		for (const [name, { frame }] of Object.entries(CHARS)) this.load.spritesheet(name, `assets/chars/${name}.png`, { frameWidth: frame[0], frameHeight: frame[1] });
 	}
 	create() {
@@ -102,7 +103,7 @@ document.getElementById("toggle").onclick = () => document.getElementById("contr
 document.addEventListener("contextmenu", (event) => event.preventDefault());
 
 recompute();
-const scenes = [new Boot(), new PlaceScene("hall", hall), new PlaceScene("gallery", gallery), new PlaceScene("wing", wing), new PlaceScene("lane", lane)];
+const scenes = [new Boot(), new PlaceScene("hall", hall), new PlaceScene("gallery", gallery), new PlaceScene("wing", wing), new PlaceScene("square", square)];
 const game = new Phaser.Game({
 	type: Phaser.AUTO,
 	parent: "game",
