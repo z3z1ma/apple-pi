@@ -8,15 +8,19 @@ import {
 	type BridgeMessage,
 	type Command,
 	type CommandRequest,
+	type EntriesReply,
 	type EntryReply,
 	type Facts,
 	type Hello,
 	type IndexRow,
 	lineReader,
 	type ProcessState,
+	type ReadEntries,
 	type ReadEntry,
 	type Receipt,
 	type ReceiptStage,
+	type ReplyDelta,
+	type ReplyEnd,
 	type RunState,
 	SILENCE_MS,
 	type Tool,
@@ -102,6 +106,13 @@ interface Connection {
 	generation?: number;
 	lastSeen: number;
 	shutdown: boolean;
+	/** The sessions whose live replies this client subscribed to. */
+	subscriptions?: Set<string>;
+	/**
+	 * Stream messages held back while the client's socket needs draining, per session: the last end, and the newest
+	 * stream's text coalesced into one delta.
+	 */
+	held?: Map<string, { end?: ReplyEnd; delta?: ReplyDelta }>;
 }
 
 interface IncarnationRow {
@@ -278,8 +289,27 @@ export class Runtime {
 			);
 			return;
 		}
+		if (message.type === "subscribe") {
+			const ids = Array.isArray(message.sessionIds)
+				? message.sessionIds.filter((id): id is string => typeof id === "string")
+				: [];
+			connection.subscriptions = new Set(ids);
+			connection.socket.write(`${JSON.stringify({ type: "subscribed", sessionIds: ids })}\n`);
+			return;
+		}
+		if (message.type === "read_entries") {
+			this.readEntries(connection, message).catch((error) =>
+				console.error(`read_entries failed: ${(error as Error).stack ?? error}`),
+			);
+			return;
+		}
 		const { sessionId, generation } = connection;
 		if (sessionId === undefined || generation === undefined) return;
+		if (message.type === "reply_delta" || message.type === "reply_end") {
+			// Transient: relayed to subscribers of the current generation, never written to the database.
+			if (this.isCurrent(sessionId, generation)) this.relay({ ...message, sessionId } as ReplyDelta | ReplyEnd);
+			return;
+		}
 		if (message.type === "run") this.setRunState(sessionId, generation, message.run);
 		else if (message.type === "index") this.index(sessionId, generation, message.rows);
 		else if (message.type === "task_link" && this.isCurrent(sessionId, generation)) {
@@ -687,6 +717,100 @@ export class Runtime {
 			} catch {}
 		}
 		reply({ error: "entry not found" });
+	}
+
+	/**
+	 * Send a stream message to every subscriber without ever waiting on one. A client whose socket needs draining gets
+	 * nothing more written until it drains; meanwhile, per session, its deltas are coalesced into one and only the last
+	 * end is kept. When a newer stream starts, the older stream's held text is dropped (its end, if any, stays), so what
+	 * is held per session is at most one reply's text and one end.
+	 */
+	private relay(message: ReplyDelta | ReplyEnd): void {
+		for (const client of this.connections) {
+			if (!client.subscriptions?.has(message.sessionId)) continue;
+			if (!client.held && !client.socket.writableNeedDrain) {
+				client.socket.write(`${JSON.stringify(message)}\n`);
+				continue;
+			}
+			if (!client.held) {
+				client.held = new Map();
+				client.socket.once("drain", () => this.flushHeld(client));
+			}
+			const held = client.held.get(message.sessionId) ?? {};
+			client.held.set(message.sessionId, held);
+			if (message.type === "reply_end") {
+				held.end = message; // it also ends every earlier stream of the session
+				if (held.delta && held.delta.streamId !== message.streamId) held.delta = undefined;
+			} else if (held.delta?.streamId === message.streamId)
+				held.delta = { ...held.delta, seq: message.seq, delta: held.delta.delta + message.delta };
+			else held.delta = message;
+		}
+	}
+
+	/** Write what a client's drained socket was held back from, in stream order. */
+	private flushHeld(client: Connection): void {
+		const held = client.held;
+		client.held = undefined;
+		if (!held || client.socket.destroyed) return;
+		const write = (message: ReplyDelta | ReplyEnd | undefined) =>
+			message && client.socket.write(`${JSON.stringify(message)}\n`);
+		for (const { end, delta } of held.values()) {
+			// An end of the held stream comes after its text; an end of an older stream comes first.
+			if (end && delta?.streamId === end.streamId) {
+				write(delta);
+				write(end);
+			} else {
+				write(end);
+				write(delta);
+			}
+		}
+	}
+
+	/** A page of a session's entries, in the order its `messages` index holds them, newest page first. */
+	private async readEntries(connection: Connection, request: ReadEntries): Promise<void> {
+		const reply = (body: Omit<EntriesReply, "type" | "requestId">) =>
+			connection.socket.write(
+				`${JSON.stringify({ type: "entries", requestId: request.requestId, ...body } as EntriesReply)}\n`,
+			);
+		const db = this.db;
+		if (!db) return;
+		const row = db.prepare("select session_file from sessions where id = ?").get(request.sessionId) as
+			| { session_file: string | null }
+			| undefined;
+		if (!row) return void reply({ error: "unknown session" });
+		if (!row.session_file) return void reply({ error: "session has no transcript file" });
+		const limit = Number.isInteger(request.limit) && request.limit! > 0 ? request.limit! : 50;
+		const ids = (
+			db
+				.prepare("select entry_id from messages where session_id = ? and part = '' order by at, rowid")
+				.all(request.sessionId) as { entry_id: string }[]
+		).map((r) => r.entry_id);
+		const end = request.before === undefined ? ids.length : ids.indexOf(request.before);
+		if (end < 0) return void reply({ error: "unknown cursor" });
+		const start = Math.max(0, end - limit);
+		const page = ids.slice(start, end);
+		// One read of the transcript per page, however many entries it holds.
+		let text: string;
+		try {
+			text = await readFile(row.session_file, "utf8");
+		} catch (error) {
+			return void reply({ error: `cannot read transcript: ${(error as Error).message}` });
+		}
+		const wanted = new Set(page);
+		const found = new Map<string, unknown>();
+		for (const line of text.split("\n")) {
+			if (!line) continue;
+			try {
+				const entry = JSON.parse(line);
+				if (wanted.has(entry?.id) && !found.has(entry.id)) found.set(entry.id, entry);
+			} catch {}
+		}
+		const missing = page.filter((id) => !found.has(id));
+		reply({
+			entries: page.filter((id) => found.has(id)).map((id) => found.get(id)),
+			before: start > 0 ? ids[start] : null,
+			...(missing.length ? { missing } : {}),
+		});
 	}
 
 	/**

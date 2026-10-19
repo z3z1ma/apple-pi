@@ -81,6 +81,18 @@ export interface ReadEntry {
 	entryId: string;
 }
 
+/**
+ * Any client may ask for a page of a session's transcript entries, keyed by the ordered ids in its `messages` index:
+ * the newest `limit` entries, or those just before the entry `before`. The runtime answers with `EntriesReply`.
+ */
+export interface ReadEntries {
+	type: "read_entries";
+	requestId: string;
+	sessionId: string;
+	before?: string;
+	limit?: number;
+}
+
 /** What a client can ask a session to do. */
 export type Command =
 	| { kind: "talk"; text: string }
@@ -146,6 +158,53 @@ export type EntryReply =
 	| { type: "entry"; requestId: string; entry: unknown }
 	| { type: "entry"; requestId: string; error: string };
 
+/**
+ * A page of entries in transcript order. `before` is the cursor for the page before (the first entry's id), or null
+ * when the page starts at the session's first indexed entry. `missing` lists indexed ids the transcript no longer holds.
+ */
+export type EntriesReply =
+	| { type: "entries"; requestId: string; entries: unknown[]; before: string | null; missing?: string[] }
+	| { type: "entries"; requestId: string; error: string };
+
+/**
+ * A client asks for the live reply streams of `sessionIds` (children are sessions of their own and are named
+ * explicitly). Each subscribe replaces the connection's earlier one; an empty list ends it. The runtime confirms with
+ * `Subscribed` before relaying anything.
+ */
+export interface Subscribe {
+	type: "subscribe";
+	sessionIds: string[];
+}
+
+export interface Subscribed {
+	type: "subscribed";
+	sessionIds: string[];
+}
+
+/**
+ * Transient reply text, relayed to subscribers and never stored. `seq` counts the stream's deltas from 1; a delta that
+ * several were coalesced into carries the last one's `seq` and all their text, so `seq` may skip but no text is lost.
+ */
+export interface ReplyDelta {
+	type: "reply_delta";
+	sessionId: string;
+	streamId: string;
+	seq: number;
+	delta: string;
+}
+
+/**
+ * A reply stream is over. `messageEntryId` names the stored transcript entry (from Pi's `turn_end`) that replaces
+ * the streamed text; it is absent when Pi recorded none (an aborted or failed reply). Every earlier unfinished stream
+ * of the session is over too.
+ */
+export interface ReplyEnd {
+	type: "reply_end";
+	sessionId: string;
+	streamId: string;
+	messageEntryId?: string;
+}
+
 export interface Hello {
 	type: "hello";
 	/** A child is a subagent session; `spawnedBy` is the session that started it. */
@@ -171,6 +230,11 @@ export type BridgeMessage =
 	/** A bridge reporting how far a command it was given got. */
 	| { type: "command_progress"; commandId: string; stage: "delivered" | "applied" | "failed"; reason?: string }
 	| ReadEntry
+	| ReadEntries
+	| Subscribe
+	/** The bridge's own session is implied by its connection. */
+	| Omit<ReplyDelta, "sessionId">
+	| Omit<ReplyEnd, "sessionId">
 	| { type: "shutdown"; reason: string };
 
 /** A bridge sends a heartbeat this often; the runtime treats a bridge silent for SILENCE_MS as lost. */

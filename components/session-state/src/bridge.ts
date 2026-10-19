@@ -37,6 +37,8 @@ class StateLink {
 	readonly hello: Hello;
 	/** Every conversation row indexed so far; all are sent again on reconnect, and the runtime ignores repeats. */
 	private readonly rows: IndexRow[] = [];
+	private heldDelta?: { type: "reply_delta"; streamId: string; seq: number; delta: string };
+	private awaitingDrain = false;
 	private readonly warn: (message: string) => void;
 	private readonly onCommand: (link: StateLink, commandId: string, command: Command, replay: boolean) => void;
 
@@ -88,6 +90,37 @@ class StateLink {
 		if (rows.length === 0) return;
 		this.rows.push(...rows);
 		this.send({ type: "index", rows });
+	}
+
+	/**
+	 * Transient reply text: not kept for a reconnect, and dropped while the runtime is away. While the socket needs
+	 * draining, deltas are coalesced into one held delta instead of queueing a line each, so Pi's stream never waits.
+	 */
+	replyDelta(streamId: string, seq: number, delta: string): void {
+		if (!this.connected || !this.socket) return;
+		const held = this.heldDelta;
+		if (held?.streamId === streamId) {
+			this.heldDelta = { ...held, seq, delta: held.delta + delta };
+			return;
+		}
+		if (held) this.flushDelta(); // a new stream: the old one's text goes first
+		if (this.socket.writableNeedDrain) {
+			this.heldDelta = { type: "reply_delta", streamId, seq, delta };
+			if (!this.awaitingDrain) {
+				// One listener per stall: a heartbeat may flush the held delta before the drain, and the next delta holds again.
+				this.awaitingDrain = true;
+				this.socket.once("drain", () => {
+					this.awaitingDrain = false;
+					this.flushDelta();
+				});
+			}
+			return;
+		}
+		this.send({ type: "reply_delta", streamId, seq, delta });
+	}
+
+	replyEnd(streamId: string, messageEntryId: string | undefined): void {
+		this.send({ type: "reply_end", streamId, ...(messageEntryId ? { messageEntryId } : {}) });
 	}
 
 	toolStart(tool: Tool): void {
@@ -143,6 +176,8 @@ class StateLink {
 		socket.on("error", () => {});
 		socket.on("close", () => {
 			this.connected = false;
+			this.heldDelta = undefined;
+			this.awaitingDrain = false;
 			clearInterval(this.heartbeat);
 			if (this.closed) return;
 			if (!this.spawned) {
@@ -155,7 +190,16 @@ class StateLink {
 		socket.unref();
 	}
 
+	/** Write the held delta, if any. */
+	private flushDelta(): void {
+		const held = this.heldDelta;
+		this.heldDelta = undefined;
+		if (held) this.send(held);
+	}
+
 	private send(message: BridgeMessage): void {
+		// Held reply text goes before anything sent after it, such as the reply's end.
+		if (this.heldDelta) this.flushDelta();
 		if (this.connected && this.socket) this.socket.write(`${JSON.stringify(message)}\n`);
 	}
 }
@@ -455,6 +499,12 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 		}
 		recorded.clear();
 	};
+	// The assistant reply streaming now, from its first text delta until its turn ends.
+	let stream: { id: string; seq: number } | undefined;
+	const endStream = (messageEntryId?: string) => {
+		if (stream) link?.replyEnd(stream.id, messageEntryId);
+		stream = undefined;
+	};
 	// Until its first run, a process that just started takes mail with the next turn (see `deliverMail`).
 	let startingUp = false;
 	const stop = () => {
@@ -554,6 +604,7 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 		queued = { steers: 0, followUps: 0 };
 		tools = new Map();
 		indexed = 0;
+		stream = undefined;
 		let warned = false;
 		const warn = (message: string) => {
 			if (warned) return;
@@ -624,8 +675,11 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 		}
 	});
 	pi.on("message_update", (event) => {
-		const type = event.assistantMessageEvent?.type;
-		if (type === "text_start" || type === "text_delta") link?.run("writing_reply");
+		const update = event.assistantMessageEvent;
+		if (update?.type === "text_start" || update?.type === "text_delta") link?.run("writing_reply");
+		if (update?.type !== "text_delta" || !update.delta || !link) return;
+		stream ??= { id: randomUUID(), seq: 0 };
+		link.replyDelta(stream.id, ++stream.seq, update.delta);
 	});
 	pi.on("message_end", (event) => {
 		const message = event.message;
@@ -636,10 +690,12 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 		});
 	});
 	// Context use is read after Pi has saved the turn; at message_end the reply is not in the session yet.
-	pi.on("turn_end", (_event, ctx) => {
+	pi.on("turn_end", (event, ctx) => {
 		link?.facts(contextUsage(ctx));
 		reportQueue(ctx);
 		indexNew(ctx);
+		// After the index, so a client told the entry id can read it.
+		endStream(event.messageEntryId);
 	});
 
 	pi.on("tool_execution_start", (event) => {
@@ -686,6 +742,7 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 		for (const resolve of settledWaiters.splice(0)) resolve();
 		refreshGit(ctx);
 		indexNew(ctx);
+		endStream(); // a stream whose turn never ended (normally `turn_end` ended it)
 		if (!ctx.hasPendingMessages()) queued = { steers: 0, followUps: 0 };
 		reportQueue(ctx);
 		link?.facts({
