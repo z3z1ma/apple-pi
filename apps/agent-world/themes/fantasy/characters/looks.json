@@ -1,122 +1,122 @@
 {
   "coordinator": {
     "role": "coordinator",
-    "frame": [130, 146],
-    "baseline": 144
+    "frame": [100, 131],
+    "baseline": 129
   },
   "artificer": {
     "role": "agent",
-    "frame": [101, 127],
-    "baseline": 125
+    "frame": [86, 132],
+    "baseline": 130
   },
   "scholar": {
     "role": "agent",
-    "frame": [113, 147],
-    "baseline": 145
+    "frame": [79, 136],
+    "baseline": 134
   },
   "scout": {
     "role": "agent",
-    "frame": [83, 134],
-    "baseline": 132
+    "frame": [71, 129],
+    "baseline": 127
   },
   "engineer": {
     "role": "agent",
-    "frame": [111, 139],
-    "baseline": 137
+    "frame": [78, 131],
+    "baseline": 129
   },
   "mage": {
     "role": "agent",
-    "frame": [116, 145],
-    "baseline": 143
+    "frame": [89, 134],
+    "baseline": 132
   },
   "alchemist": {
     "role": "agent",
-    "frame": [107, 130],
-    "baseline": 128
+    "frame": [97, 127],
+    "baseline": 125
   },
   "ranger": {
     "role": "agent",
-    "frame": [101, 143],
-    "baseline": 141
+    "frame": [78, 128],
+    "baseline": 126
   },
   "cleric": {
     "role": "agent",
-    "frame": [88, 135],
-    "baseline": 133
+    "frame": [80, 140],
+    "baseline": 138
   },
   "avatar-traveller": {
     "role": "avatar",
-    "frame": [81, 136],
-    "baseline": 134
+    "frame": [80, 133],
+    "baseline": 131
   },
   "avatar-knight": {
     "role": "avatar",
-    "frame": [128, 136],
-    "baseline": 134
+    "frame": [93, 132],
+    "baseline": 130
   },
   "avatar-bard": {
     "role": "avatar",
-    "frame": [93, 140],
-    "baseline": 138
+    "frame": [79, 126],
+    "baseline": 124
   },
   "innkeeper": {
     "role": "innkeeper",
-    "frame": [96, 145],
-    "baseline": 143
+    "frame": [87, 131],
+    "baseline": 129
   },
   "smith": {
     "role": "smith",
-    "frame": [98, 153],
-    "baseline": 151
+    "frame": [74, 128],
+    "baseline": 126
   },
   "clerk": {
     "role": "clerk",
-    "frame": [83, 156],
-    "baseline": 154
+    "frame": [74, 132],
+    "baseline": 130
   },
   "librarian": {
     "role": "librarian",
-    "frame": [85, 147],
-    "baseline": 145
+    "frame": [87, 125],
+    "baseline": 123
   },
   "rookery-keeper": {
     "role": "rookery-keeper",
-    "frame": [93, 133],
-    "baseline": 131
+    "frame": [76, 128],
+    "baseline": 126
   },
   "crier": {
     "role": "crier",
-    "frame": [106, 145],
-    "baseline": 143
+    "frame": [95, 127],
+    "baseline": 125
   },
   "townsfolk-1": {
     "role": "townsfolk",
-    "frame": [84, 136],
-    "baseline": 134
+    "frame": [73, 133],
+    "baseline": 131
   },
   "townsfolk-2": {
     "role": "townsfolk",
-    "frame": [113, 140],
-    "baseline": 138
+    "frame": [77, 130],
+    "baseline": 128
   },
   "townsfolk-3": {
     "role": "townsfolk",
-    "frame": [97, 134],
-    "baseline": 132
+    "frame": [88, 125],
+    "baseline": 123
   },
   "townsfolk-4": {
     "role": "townsfolk",
-    "frame": [96, 144],
-    "baseline": 142
+    "frame": [83, 127],
+    "baseline": 125
   },
   "townsfolk-5": {
     "role": "townsfolk",
-    "frame": [104, 137],
-    "baseline": 135
+    "frame": [94, 128],
+    "baseline": 126
   },
   "townsfolk-6": {
     "role": "townsfolk",
-    "frame": [86, 130],
-    "baseline": 128
+    "frame": [67, 126],
+    "baseline": 124
   }
 }

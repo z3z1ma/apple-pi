@@ -180,11 +180,14 @@ def scene(raw, out):
 
 def sheet(raw, out):
     frames = cut(raw, 4, 4, body=True)
-    standing = float(np.median([f.height for f in frames[:12]]))
-    scale = STANDING_HEIGHT / standing
+    # Codex draws each row at its own scale, so each row is scaled on its own: a walking row by its median height, the
+    # last row (seated, seated, standing, asking) by its standing frame. Otherwise a figure changes size as it sits.
+    scales = [STANDING_HEIGHT / float(np.median([f.height for f in frames[r * 4 : r * 4 + 4]])) for r in range(3)]
+    scales.append(STANDING_HEIGHT / frames[14].height)
     frames = [
-        f.resize((max(1, round(f.width * scale)), max(1, round(f.height * scale))), Image.Resampling.LANCZOS)
-        for f in frames
+        f.resize((max(1, round(f.width * s)), max(1, round(f.height * s))), Image.Resampling.LANCZOS)
+        for i, f in enumerate(frames)
+        for s in [scales[i // 4]]
     ]
     # Clean each frame before placing it, so its feet sit exactly on the baseline.
     frames = [hard_alpha(f) for f in frames]

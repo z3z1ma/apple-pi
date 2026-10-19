@@ -30,7 +30,7 @@ The painting is architecture and static decoration. Sprites and overlays bring e
 
 ## Sprites and overlays
 
-- **Character sheets:** 16 frames: walking down, up, and left in a four-phase cycle (contact, passing with one knee lifted, contact with the other leg, passing with the other knee), sitting at work seen from behind (two frames, the seat drawn), standing, and asking with one hand raised high. Walking right is walking left mirrored.
+- **Character sheets:** 16 frames: walking down, up, and left in a four-phase cycle (contact, passing with one knee lifted, contact with the other leg, passing with the other knee), sitting at work seen from behind (two frames, the seat drawn, no desk: desks are painted), standing, and asking with one hand raised high. Walking right is walking left mirrored.
 - **Portraits:** four expressions in the same framing: neutral, happy, thinking, worried.
 - **Overlays:** doors (closed, open, boarded), banners, animated fire, water, glows, and fidget objects, in the same style and light as the painting they sit in.
 - **Source background:** sprites are generated on flat magenta (`#FF00FF`) with wide gaps between frames, then cut with a wide colour key so no purple fringe remains.
