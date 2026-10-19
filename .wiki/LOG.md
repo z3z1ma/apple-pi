@@ -24,3 +24,4 @@ Append-only. One entry per completed knowledge change.
 - 2026-10-18: Updated [[agent-world-language]]: Slack is a fourth hub [Town Square], per ticket "Source of SaaS work data" in ledger task `202610171741-guildworld`. Wiki lint passed.
 - 2026-10-18: Added a "Session state" section to [[domain-language]] (session state model, incarnation, bridge, supervision, lineage, needs you) from ticket "The state model" in ledger task `202610172354-session-state-model`, and aligned "Needs you" in [[agent-world-language]]. Wiki lint passed.
 - 2026-10-19: Added [[agent-world-development]] from the overnight Agent World build (ledger task `202610171741-guildworld`): test, code, place-data, art, and performance hazards; updated `INDEX.md`.
+- 2026-10-19: Added "Aliveness work" to [[agent-world-development]] from ledger task `202610191114-agent-world-alive`.

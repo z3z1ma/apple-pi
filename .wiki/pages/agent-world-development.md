@@ -34,3 +34,21 @@ Hazards found while building Agent World (`apps/agent-world/`, ledger task `2026
 - A transcript can exceed V8's longest string (a 390 MB session); the runtime streams JSONL line by line. Measurements and the profiling harness (`performance.eventLoopUtilization`, `node:inspector` profiles) are in the task's `research/ticket-30-measurements/`.
 - World updates leave out unchanged sleepers and mail (`unchanged: ["dormant", "mail"]`); fixtures that push whole snapshots still work.
 - Testing the runtime: count transcript reads by serving the session file as a FIFO; faux sessions emit a reply's deltas in one burst, so test back-pressure with separate `reply_delta` lines from `fakeBridge`.
+
+## Aliveness work (2026-10-19)
+
+- **Cursor screenshots:** headless screenshots never include the CSS cursor; draw its data URL as an image at the pointer minus the hotspot (`tests/world-pointer.test.ts` `shot`). Chrome serialises an `image-set` cursor with the hotspot at the end of the string. Python Playwright's `wait_for_function` fails under the world's CSP; poll with `page.evaluate`.
+- **Time in tests:** `page.clock.setFixedTime` freezes Phaser tweens (they measure with `Date.now()`); use `setSystemTime` with a UTC `timezoneId`.
+- **Wait for the world:** the side panel draws before `main.tsx` finishes loading the theme; wait for `agentWorldView.place()` before clicking Talk to, or the intent is lost.
+- **A theme that will not load** in a headless test usually means a pack fails the pack check (often another lane mid-change); read the `.notice-lasting` text and run `check-theme.ts` first.
+- **Identity drift:** generated idle sheets passed the pack check but drew different people until the look's own sheet was attached as a reference image; compare standing frame and new frames on one contact sheet.
+- **Depth:** a rectangular foreground piece over a table or tree draws floor over the legs of anyone behind it; cut it into narrow column strips that follow the painted top edge, and push furniture footprints north until about a third of a figure behind shows.
+- **Fidget walk-up:** `standPoints` treats every blocked rect under a fidget as one piece, so a fidget on the edge of a big rect needs its own small rect; small pets need a stand point beside them, not in front, or the avatar hides them. Run `world-fidgets` after any fidget move.
+- **Pet looks** keep their own frame order (sit, petted, play, sleep); a look must not inherit the kind's `frames`.
+- **Forms on `.aw-letter`:** give the grid `minmax(0, 1fr)` columns and rows `min-width: 0`, or a select's longest option pushes fields off the dialog. The runtime's `rename` renames the Pi session, not the tmux window.
+- **Exteriors:** trace a new exterior at its square's pixels per tile (painting width / cols), so figures keep their size between places.
+- **Pack-check messages** print numbers normalised (`41`, not `41.0`); grep the place file before a text replace keyed on a message.
+- **Biome complexity:** `checkPlace` in `src/theme-pack.ts` and the gate's `describe` switch are near the limit; add a helper instead of another inline branch.
+- **Hover text** counts Walk here among the options ("Talk to X / 2 more options").
+- **Dark band at a painting's edge** in walkthrough shots is `followMid` sliding the painting out from under the interface, not a missing clamp.
+- **Cost:** atmosphere effects cost about 0.01 to 0.02 ms per frame; with 120 characters in the square frames average about 20 ms with or without effects, so frame time there comes from characters. `test:world` runs with a 30 s hook timeout because Chrome start-up under heavy load passed 10 s.
