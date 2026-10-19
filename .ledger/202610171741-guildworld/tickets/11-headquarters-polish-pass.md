@@ -4,8 +4,8 @@
 
 **Blocked by:** 04 The fantasy headquarters, painted for the final; 06 Movement and interaction feel; 07 Character life; 08 The interface; 10 The conversation panel reads real transcripts
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Slice 1's exit holds: real sessions appear in the right places within a second, their states match the sidebar, and closing the app changes nothing.
-- [ ] Every item on the operator's list is closed or explicitly deferred by him.
-- [ ] The operator signs off the headquarters as final.
+- [x] Slice 1's exit holds: real sessions appear in the right places within a second, their states match the sidebar, and closing the app changes nothing.
+- [x] Every item on the operator's list is closed or explicitly deferred by him.
+- [x] The operator signs off the headquarters as final.
