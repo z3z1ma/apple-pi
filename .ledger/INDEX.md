@@ -12,5 +12,3 @@
 
 - `.ledger/202610150034-code-context-evaluation/task.md` — planning — Evaluate code context sidecars on replayed failure tasks — Phase 5 of code-context sidecars: replay 3–5 historical failure tasks under Baseline, Read-only injection, and Full v1 (gate) and compare pre-edit constraint awareness, plan changes after blocks, violation rates, and token overhead.
 
-- `.ledger/202610171741-guildworld/task.md` — ready — Agent World: themeable living work-world over real Pi sessions — Wayfinder map toward a whole-product spec for Agent World, a cozy themeable pixel-art world app inside apple-pi that renders real Pi/tmux sessions, coordinator delegation, and Jira/GitHub/Slack/Confluence work as characters, places, and quests. Source: ~/Downloads/guildworld_handoff.
-
