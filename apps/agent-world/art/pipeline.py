@@ -208,6 +208,28 @@ def sheet(raw, out):
     print(f"sheet {out} {meta}")
 
 
+def idle(raw, out):
+    # Eight standing idle poses (look left, look right, stretch, wave, laugh, shrug, nod, yawn), scaled together by
+    # their median height so the figure keeps its size from pose to pose.
+    frames = cut(raw, 2, 4, body=True)
+    s = STANDING_HEIGHT / float(np.median([f.height for f in frames]))
+    frames = [
+        f.resize((max(1, round(f.width * s)), max(1, round(f.height * s))), Image.Resampling.LANCZOS) for f in frames
+    ]
+    frames = [hard_alpha(f) for f in frames]
+    frames = [f.crop(f.getbbox()) for f in frames]
+    cw = max(f.width for f in frames) + 4
+    ch = max(f.height for f in frames) + 4
+    baseline = ch - 2
+    strip = Image.new("RGBA", (cw * len(frames), ch))
+    for i, f in enumerate(frames):
+        strip.paste(f, (i * cw + (cw - f.width) // 2, baseline - f.height), f)
+    save_sprite(strip, out)
+    meta = {"frameWidth": cw, "frameHeight": ch, "frames": len(frames), "baseline": baseline}
+    Path(out).with_suffix(".json").write_text(json.dumps(meta, indent=2) + "\n")
+    print(f"idle {out} {meta}")
+
+
 def portraits(raw, prefix):
     for i, bust in enumerate(cut(raw, 2, 2)):
         s = PORTRAIT_HEIGHT / bust.height
@@ -266,6 +288,7 @@ def raw_jobs(theme):
     for name, brief in briefs.get("sheets", {}).items():
         jobs.append((raw / "characters" / f"{name}-sheet.png", prompt("sheet", theme, brief)))
         jobs.append((raw / "characters" / f"{name}-portrait.png", prompt("portrait", theme, brief)))
+        jobs.append((raw / "characters" / f"{name}-idle.png", prompt("idle", theme, brief)))
     for name, b in briefs.get("pieces", {}).items():
         jobs.append((raw / "overlays" / f"{name}.png", prompt("pieces", theme, b["brief"])))
     return briefs, raw, jobs
@@ -290,7 +313,7 @@ def batch(theme):
         sys.exit(1)
 
 
-HOSTS = {"innkeeper", "smith", "clerk", "librarian", "rookery-keeper", "crier"}
+HOSTS = {"innkeeper", "smith", "clerk", "librarian", "rookery-keeper", "crier", "recruiter"}
 
 
 def role_of(look):
@@ -298,6 +321,8 @@ def role_of(look):
         return "avatar"
     if look.startswith("townsfolk-"):
         return "townsfolk"
+    if look.startswith("ambient-"):
+        return "ambient"
     if look in HOSTS:
         return look
     return "coordinator" if look == "coordinator" else "agent"
@@ -317,6 +342,10 @@ def build(theme):
         meta = json.loads((out / "characters" / f"{name}.json").read_text())
         role = role_of(name)
         looks[name] = {"role": role, "frame": [meta["frameWidth"], meta["frameHeight"]], "baseline": meta["baseline"]}
+        if (raw / "characters" / f"{name}-idle.png").exists():
+            idle(raw / "characters" / f"{name}-idle.png", out / "characters" / f"{name}-idle.png")
+            meta = json.loads((out / "characters" / f"{name}-idle.json").read_text())
+            looks[name]["idle"] = {"frame": [meta["frameWidth"], meta["frameHeight"]], "baseline": meta["baseline"]}
     (out / "characters" / "looks.json").write_text(json.dumps(looks, indent=2) + "\n")
     for name, b in briefs.get("pieces", {}).items():
         pieces(raw / "overlays" / f"{name}.png", out / "overlays", b["names"])
@@ -334,7 +363,7 @@ def main(argv=None):
     sub = p.add_subparsers(dest="cmd", required=True)
     for name in ("prompt", "generate"):
         s = sub.add_parser(name)
-        s.add_argument("kind", choices=["scene", "sheet", "portrait", "pieces"])
+        s.add_argument("kind", choices=["scene", "sheet", "portrait", "pieces", "idle"])
         s.add_argument("theme", choices=sorted(LIGHT))
         if name == "generate":
             s.add_argument("out")

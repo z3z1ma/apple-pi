@@ -2,121 +2,262 @@
   "coordinator": {
     "role": "coordinator",
     "frame": [100, 131],
-    "baseline": 129
+    "baseline": 129,
+    "idle": {
+      "frame": [95, 131],
+      "baseline": 129
+    }
   },
   "artificer": {
     "role": "agent",
     "frame": [86, 132],
-    "baseline": 130
+    "baseline": 130,
+    "idle": {
+      "frame": [108, 137],
+      "baseline": 135
+    }
   },
   "scholar": {
     "role": "agent",
     "frame": [79, 136],
-    "baseline": 134
+    "baseline": 134,
+    "idle": {
+      "frame": [78, 135],
+      "baseline": 133
+    }
   },
   "scout": {
     "role": "agent",
     "frame": [71, 129],
-    "baseline": 127
+    "baseline": 127,
+    "idle": {
+      "frame": [87, 132],
+      "baseline": 130
+    }
   },
   "engineer": {
     "role": "agent",
     "frame": [78, 131],
-    "baseline": 129
+    "baseline": 129,
+    "idle": {
+      "frame": [83, 136],
+      "baseline": 134
+    }
   },
   "mage": {
     "role": "agent",
     "frame": [89, 134],
-    "baseline": 132
+    "baseline": 132,
+    "idle": {
+      "frame": [82, 127],
+      "baseline": 125
+    }
   },
   "alchemist": {
     "role": "agent",
     "frame": [97, 127],
-    "baseline": 125
+    "baseline": 125,
+    "idle": {
+      "frame": [106, 128],
+      "baseline": 126
+    }
   },
   "ranger": {
     "role": "agent",
     "frame": [78, 128],
-    "baseline": 126
+    "baseline": 126,
+    "idle": {
+      "frame": [79, 130],
+      "baseline": 128
+    }
   },
   "cleric": {
     "role": "agent",
     "frame": [80, 140],
-    "baseline": 138
+    "baseline": 138,
+    "idle": {
+      "frame": [91, 139],
+      "baseline": 137
+    }
   },
   "avatar-traveller": {
     "role": "avatar",
     "frame": [80, 133],
-    "baseline": 131
+    "baseline": 131,
+    "idle": {
+      "frame": [86, 133],
+      "baseline": 131
+    }
   },
   "avatar-knight": {
     "role": "avatar",
     "frame": [93, 132],
-    "baseline": 130
+    "baseline": 130,
+    "idle": {
+      "frame": [84, 134],
+      "baseline": 132
+    }
   },
   "avatar-bard": {
     "role": "avatar",
     "frame": [79, 126],
-    "baseline": 124
+    "baseline": 124,
+    "idle": {
+      "frame": [87, 132],
+      "baseline": 130
+    }
   },
   "innkeeper": {
     "role": "innkeeper",
     "frame": [87, 131],
-    "baseline": 129
+    "baseline": 129,
+    "idle": {
+      "frame": [108, 134],
+      "baseline": 132
+    }
   },
   "smith": {
     "role": "smith",
     "frame": [74, 128],
-    "baseline": 126
+    "baseline": 126,
+    "idle": {
+      "frame": [94, 135],
+      "baseline": 133
+    }
   },
   "clerk": {
     "role": "clerk",
     "frame": [74, 132],
-    "baseline": 130
+    "baseline": 130,
+    "idle": {
+      "frame": [96, 138],
+      "baseline": 136
+    }
   },
   "librarian": {
     "role": "librarian",
     "frame": [87, 125],
-    "baseline": 123
+    "baseline": 123,
+    "idle": {
+      "frame": [66, 130],
+      "baseline": 128
+    }
   },
   "rookery-keeper": {
     "role": "rookery-keeper",
     "frame": [76, 128],
-    "baseline": 126
+    "baseline": 126,
+    "idle": {
+      "frame": [84, 127],
+      "baseline": 125
+    }
   },
   "crier": {
     "role": "crier",
     "frame": [95, 127],
-    "baseline": 125
+    "baseline": 125,
+    "idle": {
+      "frame": [112, 131],
+      "baseline": 129
+    }
   },
   "townsfolk-1": {
     "role": "townsfolk",
     "frame": [73, 133],
-    "baseline": 131
+    "baseline": 131,
+    "idle": {
+      "frame": [81, 136],
+      "baseline": 134
+    }
   },
   "townsfolk-2": {
     "role": "townsfolk",
     "frame": [77, 130],
-    "baseline": 128
+    "baseline": 128,
+    "idle": {
+      "frame": [82, 135],
+      "baseline": 133
+    }
   },
   "townsfolk-3": {
     "role": "townsfolk",
     "frame": [88, 125],
-    "baseline": 123
+    "baseline": 123,
+    "idle": {
+      "frame": [82, 133],
+      "baseline": 131
+    }
   },
   "townsfolk-4": {
     "role": "townsfolk",
     "frame": [83, 127],
-    "baseline": 125
+    "baseline": 125,
+    "idle": {
+      "frame": [76, 131],
+      "baseline": 129
+    }
   },
   "townsfolk-5": {
     "role": "townsfolk",
     "frame": [94, 128],
-    "baseline": 126
+    "baseline": 126,
+    "idle": {
+      "frame": [85, 124],
+      "baseline": 122
+    }
   },
   "townsfolk-6": {
     "role": "townsfolk",
     "frame": [67, 126],
-    "baseline": 124
+    "baseline": 124,
+    "idle": {
+      "frame": [74, 131],
+      "baseline": 129
+    }
+  },
+  "ambient-bard": {
+    "role": "ambient",
+    "frame": [85, 126],
+    "baseline": 124,
+    "idle": {
+      "frame": [82, 129],
+      "baseline": 127
+    }
+  },
+  "ambient-guard": {
+    "role": "ambient",
+    "frame": [69, 127],
+    "baseline": 125,
+    "idle": {
+      "frame": [81, 126],
+      "baseline": 124
+    }
+  },
+  "ambient-baker": {
+    "role": "ambient",
+    "frame": [95, 131],
+    "baseline": 129,
+    "idle": {
+      "frame": [93, 131],
+      "baseline": 129
+    }
+  },
+  "ambient-tourist": {
+    "role": "ambient",
+    "frame": [109, 132],
+    "baseline": 130,
+    "idle": {
+      "frame": [86, 126],
+      "baseline": 124
+    }
+  },
+  "recruiter": {
+    "role": "recruiter",
+    "frame": [74, 135],
+    "baseline": 133,
+    "idle": {
+      "frame": [82, 132],
+      "baseline": 130
+    }
   }
 }

@@ -54,6 +54,11 @@
       "brief": "A landscape image (3:2) of a Japanese high school library: tall wooden bookshelves along the walls and in two rows, a librarian's counter on the north side with open floor behind it, reading tables standing free with no chairs at them, a cozy reading corner by sunny windows, a globe, plants; a sliding door at the south edge centre.",
       "grid": "24 squares wide and 16 deep",
       "slots": "open floor behind the librarian's counter and two bare spots on the reading rug"
+    },
+    "shopping-street": {
+      "brief": "A very wide landscape image (2:1) of a cozy Japanese shopping street in spring afternoon light, seen from above at a 3/4 angle: along the north, a row of small shop fronts (a bakery, a stationery shop, a ramen stand, a game arcade) with cloth noren curtains and paper lanterns, a red post box, vending machines, a small shrine gate at the east end, cherry blossom trees, benches and bicycles; the west edge is an open path back to the school courtyard.",
+      "grid": "40 squares wide and 20 deep",
+      "slots": "the west path back to the courtyard, unlit paper lanterns, and bare spots by the shops"
     }
   },
   "sheets": {
@@ -80,7 +85,12 @@
     "townsfolk-3": "a baker with a tray of melon bread",
     "townsfolk-4": "an old woman with a cat",
     "townsfolk-5": "a delivery boy with a bento crate",
-    "townsfolk-6": "a little kid with a balloon"
+    "townsfolk-6": "a little kid with a balloon",
+    "ambient-monitor": "a strict hall monitor girl: a neat black bob, glasses, a navy uniform with a yellow armband, a clipboard",
+    "ambient-senpai": "a relaxed club senpai: a tall boy with messy blond hair, an open blazer, a guitar case",
+    "ambient-lunchlady": "a kind lunch lady: a plump woman in a white apron and cap, holding a ladle",
+    "ambient-gardener": "an old school gardener: a straw hat, a green work jacket, a watering can",
+    "recruiter": "a club recruiter: an energetic girl with a high pink ponytail, a navy uniform, holding a flyer and a megaphone"
   },
   "pieces": {
     "doors": {
@@ -122,6 +132,26 @@
     "fidget-toggles": {
       "brief": "six items, each about 1 square tall: 1. a small brass school hand bell on a stand, still; 2. the same bell ringing with small motion lines; 3. a paper lantern unlit; 4. the same paper lantern lit and glowing; 5. a closed wooden bento box; 6. the same bento box open showing colourful food.",
       "names": ["bell-still", "bell-ringing", "light-off", "light-on", "box-closed", "box-open"]
+    },
+    "pet-shiba": {
+      "brief": "four animation frames of the same a smiling shiba inu dog on the floor, about 1 square tall: 1. sitting calmly looking at the viewer; 2. happy, leaning into a pet with eyes closed; 3. a playful pose; 4. curled up asleep.",
+      "names": ["pet-shiba-0", "pet-shiba-1", "pet-shiba-2", "pet-shiba-3"]
+    },
+    "pet-rabbit-white": {
+      "brief": "four animation frames of the same a white rabbit with pink ears on the floor, about 1 square tall: 1. sitting calmly looking at the viewer; 2. happy, leaning into a pet with eyes closed; 3. a playful pose; 4. curled up asleep.",
+      "names": ["pet-rabbit-white-0", "pet-rabbit-white-1", "pet-rabbit-white-2", "pet-rabbit-white-3"]
+    },
+    "pet-crow": {
+      "brief": "four animation frames of the same a clever black crow on the floor, about 1 square tall: 1. sitting calmly looking at the viewer; 2. happy, leaning into a pet with eyes closed; 3. a playful pose; 4. curled up asleep.",
+      "names": ["pet-crow-0", "pet-crow-1", "pet-crow-2", "pet-crow-3"]
+    },
+    "pet-tanuki": {
+      "brief": "four animation frames of the same a small round tanuki on the floor, about 1 square tall: 1. sitting calmly looking at the viewer; 2. happy, leaning into a pet with eyes closed; 3. a playful pose; 4. curled up asleep.",
+      "names": ["pet-tanuki-0", "pet-tanuki-1", "pet-tanuki-2", "pet-tanuki-3"]
+    },
+    "cursor": {
+      "brief": "five small user interface icons drawn in a cute anime school style (cream, pink, navy) about 32 pixels each in pixel art: 1. a hand pointing up-left with the index finger extended; 2. the same hand tapping, finger bent slightly down; 3. the same hand closed into a grey fist; 4. a small bright yellow X mark made of two crossed strokes; 5. a small bright red X mark made of two crossed strokes.",
+      "names": ["cursor-point", "cursor-tap", "cursor-blocked", "mark-walk", "mark-act"]
     }
   }
 }

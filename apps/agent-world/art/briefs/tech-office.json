@@ -54,6 +54,11 @@
       "brief": "A landscape image (3:2) of a modern company library and knowledge centre: tall light-wood bookshelves along the walls and in two rows, a reading desk with a tablet, a help desk on the north side with open floor behind it, cozy reading nook with beanbags, big windows, plants; reading tables standing free with no chairs at them; a door at the south edge centre.",
       "grid": "24 squares wide and 16 deep",
       "slots": "open floor behind the help desk and two bare spots on the reading rug"
+    },
+    "street": {
+      "brief": "A very wide landscape image (2:1) of a cozy modern city street with shops at golden hour, seen from above at a 3/4 angle: along the north, a row of small shop fronts (a bookshop, a ramen bar, a bike repair shop, a plant shop) with awnings, a wide pavement with benches, bike racks, street trees and planters, a crosswalk and a parked delivery scooter, cafe tables; the west edge is an open path back to the campus plaza.",
+      "grid": "40 squares wide and 20 deep",
+      "slots": "the west path back to the plaza, unlit street lamps, and bare spots on the pavement"
     }
   },
   "sheets": {
@@ -80,7 +85,12 @@
     "townsfolk-3": "a visitor in a smart coat with a coffee",
     "townsfolk-4": "a jogger in running gear",
     "townsfolk-5": "a food truck chef in whites",
-    "townsfolk-6": "a student with a laptop and a scarf"
+    "townsfolk-6": "a student with a laptop and a scarf",
+    "ambient-barista": "a friendly barista: a man with a man bun, a black apron, a coffee cup in hand",
+    "ambient-facilities": "a facilities person: a woman in grey overalls, a tool belt, a ladder over the shoulder",
+    "ambient-visitor": "a visitor: a man in a smart beige coat, a visitor badge, looking around curiously",
+    "ambient-dogwalker": "an office dog walker: a sporty woman in a teal windbreaker holding a leash",
+    "recruiter": "a tech recruiter: a cheerful man with neat dark hair, a navy quarter-zip sweater, a tablet with a job offer"
   },
   "pieces": {
     "doors": {
@@ -122,6 +132,26 @@
     "fidget-toggles": {
       "brief": "six items, each about 1 square tall: 1. a silver desk call bell, still; 2. the same bell being dinged with small motion lines; 3. a modern desk lamp switched off; 4. the same lamp switched on with a warm glow; 5. an espresso machine idle; 6. the same espresso machine brewing with steam and a cup filling.",
       "names": ["bell-still", "bell-ringing", "light-off", "light-on", "box-closed", "box-open"]
+    },
+    "pet-cat-grey": {
+      "brief": "four animation frames of the same a fluffy grey office cat with yellow eyes on the floor, about 1 square tall: 1. sitting calmly looking at the viewer; 2. happy, leaning into a pet with eyes closed; 3. a playful pose; 4. curled up asleep.",
+      "names": ["pet-cat-grey-0", "pet-cat-grey-1", "pet-cat-grey-2", "pet-cat-grey-3"]
+    },
+    "pet-parrot": {
+      "brief": "four animation frames of the same a bright green parrot on a small perch stand on the floor, about 1 square tall: 1. sitting calmly looking at the viewer; 2. happy, leaning into a pet with eyes closed; 3. a playful pose; 4. curled up asleep.",
+      "names": ["pet-parrot-0", "pet-parrot-1", "pet-parrot-2", "pet-parrot-3"]
+    },
+    "pet-hamster": {
+      "brief": "four animation frames of the same a small golden hamster on the floor, about 1 square tall: 1. sitting calmly looking at the viewer; 2. happy, leaning into a pet with eyes closed; 3. a playful pose; 4. curled up asleep.",
+      "names": ["pet-hamster-0", "pet-hamster-1", "pet-hamster-2", "pet-hamster-3"]
+    },
+    "pet-hedgehog": {
+      "brief": "four animation frames of the same a tiny brown hedgehog on the floor, about 1 square tall: 1. sitting calmly looking at the viewer; 2. happy, leaning into a pet with eyes closed; 3. a playful pose; 4. curled up asleep.",
+      "names": ["pet-hedgehog-0", "pet-hedgehog-1", "pet-hedgehog-2", "pet-hedgehog-3"]
+    },
+    "cursor": {
+      "brief": "five small user interface icons drawn in a clean modern flat style (white, slate grey, soft teal) about 32 pixels each in pixel art: 1. a hand pointing up-left with the index finger extended; 2. the same hand tapping, finger bent slightly down; 3. the same hand closed into a grey fist; 4. a small bright yellow X mark made of two crossed strokes; 5. a small bright red X mark made of two crossed strokes.",
+      "names": ["cursor-point", "cursor-tap", "cursor-blocked", "mark-walk", "mark-act"]
     }
   }
 }

@@ -54,6 +54,11 @@
       "brief": "A landscape image (3:2) of the interior of a grand fantasy library: tall carved bookshelves full of books along the walls and in two free-standing rows, a rolling ladder, a central reading desk with a large open tome and candles, a librarian's desk on the north side with open floor behind it, a globe, a cozy reading corner, star charts, tall arched windows with moonlight; reading tables standing free with no chairs at them; a door at the south edge centre.",
       "grid": "24 squares wide and 16 deep",
       "slots": "open floor behind the librarian's desk, and two bare spots on the reading rug"
+    },
+    "harbour": {
+      "brief": "A very wide landscape image (2:1) of a cozy storybook fantasy harbour market lane at dusk, seen from above at a 3/4 angle: along the north, a row of small shop fronts (a fishmonger, a sail maker, a tavern with a lantern), a wooden quay along the south edge with moored boats and gulls' perches, stacked crates and barrels, market stalls, a small lighthouse at the east end, cobbles, lamp posts, flower boxes; the west edge is an open lane back to the village square.",
+      "grid": "40 squares wide and 20 deep",
+      "slots": "the west lane back to the square, unlit lamp posts, and bare spots on the quay and by the stalls"
     }
   },
   "sheets": {
@@ -80,7 +85,12 @@
     "townsfolk-3": "a farmer: straw hat, freckles, blue overalls, a pitchfork",
     "townsfolk-4": "a noblewoman: an elegant emerald gown, auburn hair in an updo, a lace fan",
     "townsfolk-5": "a fisherman: grey beard, a yellow oilskin coat, a fishing rod and a basket",
-    "townsfolk-6": "a young flower seller: a pink dress, a white apron, a basket of colourful flowers"
+    "townsfolk-6": "a young flower seller: a pink dress, a white apron, a basket of colourful flowers",
+    "ambient-bard": "a cheerful travelling bard: curly red hair, a green feathered cap, a patched purple doublet, a small lute",
+    "ambient-guard": "a sleepy town guard: a dented steel helmet too big for him, a blue tabard, a long spear, droopy eyes",
+    "ambient-baker": "a gossiping baker woman: rosy cheeks, a flour-dusted apron, a white kerchief, a basket of bread",
+    "ambient-tourist": "a lost tourist: a wide straw hat, a big unfolded map, a striped travel cloak, a huge backpack",
+    "recruiter": "a guild recruiter: a confident woman with short silver hair, a smart red coat with brass buttons, a quill and a rolled contract"
   },
   "pieces": {
     "doors": {
@@ -122,6 +132,26 @@
     "fidget-toggles": {
       "brief": "six items, each about 1 square tall: 1. a brass hand bell on a small wooden stand, still; 2. the same bell tilted and ringing with small motion lines; 3. a three-branch iron candelabra with unlit candles; 4. the same candelabra with all three candles lit and glowing; 5. a closed wooden music box; 6. the same music box open with a tiny dancer and small music notes floating.",
       "names": ["bell-still", "bell-ringing", "light-off", "light-on", "box-closed", "box-open"]
+    },
+    "pet-cat-black": {
+      "brief": "four animation frames of the same a sleek black cat with green eyes on the floor, about 1 square tall: 1. sitting calmly looking at the viewer; 2. happy, leaning into a pet with eyes closed; 3. a playful pose; 4. curled up asleep.",
+      "names": ["pet-cat-black-0", "pet-cat-black-1", "pet-cat-black-2", "pet-cat-black-3"]
+    },
+    "pet-hound": {
+      "brief": "four animation frames of the same a scruffy brown hound dog with floppy ears on the floor, about 1 square tall: 1. sitting calmly looking at the viewer; 2. happy, leaning into a pet with eyes closed; 3. a playful pose; 4. curled up asleep.",
+      "names": ["pet-hound-0", "pet-hound-1", "pet-hound-2", "pet-hound-3"]
+    },
+    "pet-owl": {
+      "brief": "four animation frames of the same a small round barn owl on the floor, about 1 square tall: 1. sitting calmly looking at the viewer; 2. happy, leaning into a pet with eyes closed; 3. a playful pose; 4. curled up asleep.",
+      "names": ["pet-owl-0", "pet-owl-1", "pet-owl-2", "pet-owl-3"]
+    },
+    "pet-rabbit": {
+      "brief": "four animation frames of the same a fluffy white rabbit with grey ears on the floor, about 1 square tall: 1. sitting calmly looking at the viewer; 2. happy, leaning into a pet with eyes closed; 3. a playful pose; 4. curled up asleep.",
+      "names": ["pet-rabbit-0", "pet-rabbit-1", "pet-rabbit-2", "pet-rabbit-3"]
+    },
+    "cursor": {
+      "brief": "five small user interface icons drawn in the fantasy style (brass, warm leather, parchment colours) about 32 pixels each in pixel art: 1. a gloved hand pointing up-left with the index finger extended; 2. the same hand tapping, finger bent slightly down; 3. the same hand closed into a grey fist; 4. a small bright yellow X mark made of two crossed strokes; 5. a small bright red X mark made of two crossed strokes.",
+      "names": ["cursor-point", "cursor-tap", "cursor-blocked", "mark-walk", "mark-act"]
     }
   }
 }
