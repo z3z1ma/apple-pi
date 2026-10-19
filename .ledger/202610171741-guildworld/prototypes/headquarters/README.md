@@ -70,15 +70,15 @@ The tiled lane was rejected, so the hall doors now open onto **the village squar
 
 ## Known gaps
 
-- Round 4 verdict (operator, 2026-10-18): the painted square is directionally right; the fountain water overlay is janky and the unread badges need a better design (numbers sit off centre).
-
 - The sitting frames draw their own stool over the painted one; no occlusion of the avatar by furniture.
 - Walk cycles are four frames from one image, so steps are approximate; there is no diagonal facing.
 - Banner text can overflow a cream banner in the large wing.
 - No inn, no other function places, no dialogue beyond a status line, no second theme.
 - Wing memory is the browser's `localStorage`, not Agent World's store.
 
-## Verdict
+## Verdicts
+
+### Round 1
 
 Operator, 2026-10-18: "you are 100% moving in the right direction" for interiors.
 
@@ -89,3 +89,11 @@ Operator, 2026-10-18: "you are 100% moving in the right direction" for interiors
 - **Crowding:** larger rooms can seat several agents at one painted table, so rooms have headroom before a bigger painting is needed.
 - **Polish later:** many more things to interact with and fidget with ("ADHD paradise"); many nits.
 - Fixed after the verdict: right click no longer opens the browser's menu over the HTML chrome.
+
+### Rounds 2 and 3
+
+Characters and movement reached a decent baseline after round 3; the decisions are in [Characters and portraits](../../decisions/22-characters-and-portraits.md) and [Movement and pathing](../../decisions/23-movement-and-pathing.md). Sprites keep their own seats, and paintings leave the floor open for them.
+
+### Round 4
+
+Operator, 2026-10-18: the painted square is directionally right and replaces the tiled lane ([How exteriors are built](../../decisions/24-how-exteriors-are-built.md)). Polish noted: the fountain water overlay is janky, and the unread badges need a better design (numbers sit off centre).
