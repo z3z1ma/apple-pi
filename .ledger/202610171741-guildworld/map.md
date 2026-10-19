@@ -47,6 +47,7 @@ A whole-product spec for Agent World, ready for `/skill:to-spec`: every architec
 - [The interface panel](decisions/26-the-interface-panel.md): Old School RuneScape's layout in each theme's style: minimap with orbs, a tabbed side panel from which every action works anywhere, and a chatbox of world events; walking is for immersion.
 - [What you do in each function place](decisions/25-what-you-do-in-each-function-place.md): per place, what it shows and what you do as yourself or delegate: forge (PRs, review), quest office (your issues plus search), library (Confluence search), town square (unread channels, bounded, plus the crier), inn (wake dormant agents), rookery (mail); every place opens the real tool.
 - [Command vocabulary and gates](decisions/13-command-vocabulary-and-gates.md): seven classes; only stopping a busy agent, closing a busy session, and writes outside as yourself ask for confirmation, and outside writes are logged.
+- [Theme pack contract](decisions/14-theme-pack-contract.md): a pack is a manifest (labels, interface and panel style) plus every place hand-designed with a shared data format, character sheets and portraits in shared conventions, and overlays; required pieces are validated; fantasy flagship plus thin tech and anime packs.
 
 ## Not yet specified
 
