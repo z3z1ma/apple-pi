@@ -50,6 +50,12 @@ export function livePeers(self: string | null): Peer[] {
 
 /** `list_peer_sessions` for the model and `/pi-sessions` for the operator, in root sessions. */
 export function installPeers(pi: ExtensionAPI): void {
+	const activate = () => {
+		const active = pi.getActiveTools();
+		if (!active.includes("list_peer_sessions")) pi.setActiveTools([...active, "list_peer_sessions"]);
+	};
+	pi.on("session_start", activate);
+	pi.on("before_agent_start", activate);
 	pi.registerCommand("pi-sessions", {
 		description: "List the live top-level Pi sessions on this machine",
 		handler: async (_args, ctx) => {

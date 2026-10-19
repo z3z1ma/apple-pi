@@ -269,9 +269,9 @@ try {
 				extension.path.endsWith("session-state.ts") &&
 				extension.tools.has("mailbox_send") &&
 				extension.tools.has("list_peer_sessions") &&
-				extension.tools.has("start_session") &&
-				extension.tools.has("reopen_session") &&
-				extension.tools.has("close_session"),
+				extension.tools.has("start_peer_session") &&
+				extension.tools.has("reopen_peer_session") &&
+				extension.tools.has("close_peer_session"),
 		),
 		"session-state extension must own the mail, peer, and coordinator tools",
 	);

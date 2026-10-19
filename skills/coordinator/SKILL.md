@@ -29,7 +29,7 @@ A worker is a top-level Pi session in its own tmux window, so the operator can o
 
 1. Choose the directory the work needs (an existing checkout, a new worktree, a scratch directory), or the one the operator named.
 2. Choose a unique session id and a short name. Write the brief to a file in your home. The brief gives the goal, the context, and what done looks like, and ends with: keep a ledger task in your repository current, and when you finish or are blocked, send a short summary with `mailbox_send` to <your session id>. A repository that does not use the ledger gets a private `.ledger` listed in `.git/info/exclude`.
-3. Start it with `start_session`: the directory, the name, the session id, and `@<brief file>` as the prompt. It opens a tmux window next to yours and returns once the worker runs; the worker reports to you, so `list_peer_sessions` shows you as its supervisor and it mails you when it closes.
+3. Start it with `start_peer_session`: the directory, the name, the session id, and `@<brief file>` as the prompt. It opens a tmux window next to yours and returns once the worker runs; the worker reports to you, so `list_peer_sessions` shows you as its supervisor and it mails you when it closes.
 4. Record the id, directory and brief in the thread.
 
 Worker reports arrive as `<mailbox-message>` with the worker's id in `from`. Summarize them for the operator and act on them. To redirect a worker, `mailbox_send` to its id. When the result says the receiver is not running, the message waits until the session opens; reopen the worker if it must act now.
@@ -47,11 +47,11 @@ When a worker closes, its `--reports-to` notice arrives from its id: `Session "<
 - Not in the list, its work unreported, or closed while `busy`: it stopped mid-work. Reopen it when the work is still needed, or tell the operator.
 - In the list with `reportsTo` set to you, but in no thread: adopt it into a thread, or close it.
 
-Reopen a worker with `reopen_session` and its id. It keeps its directory and full history; give it new work by mail or a new brief, not its first brief again.
+Reopen a worker with `reopen_peer_session` and its id. It keeps its directory and full history; give it new work by mail or a new brief, not its first brief again.
 
 ## Close what you do not use
 
-A stopped worker costs nothing and reopens with its history, so keep only the windows you use. Close a worker with `close_session` when it is `idle` and the operator has replied to your summary of its report. Close windows named after your workers that hold only a shell. Leave `busy` and `waiting` workers open.
+A stopped worker costs nothing and reopens with its history, so keep only the windows you use. Close a worker with `close_peer_session` when it is `idle` and the operator has replied to your summary of its report. Close windows named after your workers that hold only a shell. Leave `busy` and `waiting` workers open.
 
 ## Sweep
 

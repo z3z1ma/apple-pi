@@ -94,7 +94,7 @@ The runtime keeps, per session, `seen_at` (when the operator last saw it), `sett
 
 ## Coordinator tools
 
-A root session started with `pi --coordinator` gets three more tools, which send the commands above with that session's pane and id: `start_session` (`cwd`, `name`, optional `prompt` such as `@brief.md`, optional `session_id`) starts a peer session that reports to it, `reopen_session` reopens a stopped one by id, and `close_session` closes a running one. Every root session registers them, so it can read the flag, but only a coordinator keeps them active. The [coordinator skill](../skills/coordinator/SKILL.md) uses them.
+A root session started with `pi --coordinator` gets three more tools, which send the commands above with that session's pane and id: `start_peer_session` (`cwd`, `name`, optional `prompt` such as `@brief.md`, optional `session_id`) starts a peer session that reports to it, `reopen_peer_session` reopens a stopped one by id, and `close_peer_session` closes a running one. Every root session registers them, so it can read the flag, but only a coordinator keeps them active. Root-session lifecycle hooks restore `list_peer_sessions` for every root and the three lifecycle tools for coordinators, including when Pi resumes an older transcript whose saved tool set lacks them. The [coordinator skill](../skills/coordinator/SKILL.md) uses them.
 
 ## Reading a transcript entry
 

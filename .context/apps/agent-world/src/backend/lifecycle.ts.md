@@ -10,7 +10,7 @@ Why: decision 13 confirms interrupting a busy agent and nothing else; the comman
 Coupled: apps/agent-world/src/backend/commands.ts, apps/agent-world/web/overlay/places/place-panels.ts
 Verify: apps/agent-world/tests/inn.test.ts
 
-Recruiting (`recruit`, ticket 10) sends `start` for a fresh `randomUUID` session id with `cwd`, `name`, and the brief as `prompt`. A worker's window opens after its coordinator's own pane (`facts.tmux`), where the coordinator's `start_session` tool opens its peers, and carries `reportsTo`; an independent agent's opens after the operator's most recently active client pane, as waking does, with no `reportsTo`. A brief that starts with `-` is refused before anything is sent.
+Recruiting (`recruit`, ticket 10) sends `start` for a fresh `randomUUID` session id with `cwd`, `name`, and the brief as `prompt`. A worker's window opens after its coordinator's own pane (`facts.tmux`), where the coordinator's `start_peer_session` tool opens its peers, and carries `reportsTo`; an independent agent's opens after the operator's most recently active client pane, as waking does, with no `reportsTo`. A brief that starts with `-` is refused before anything is sent.
 Why: the runtime puts the prompt on Pi's command line after the flags (`pi --session-id <id> --name <n> [--reports-to <c>] <prompt>`), and Pi's argument parser reads a leading dash as an option; the runtime offers no `--` separator.
 Coupled: components/session-state/src/runtime.ts, components/session-state/src/coordinator.ts, apps/agent-world/web/overlay/places/recruit-state.ts
 Verify: apps/agent-world/tests/recruit.test.ts

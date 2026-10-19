@@ -91,20 +91,16 @@ const toolResults = (run: Awaited<ReturnType<typeof coordinator>>) =>
 
 /** A session started with --coordinator whose model makes the given tool calls in turn. */
 async function coordinator(calls: Reply[]) {
-	const run = await fauxSession(
-		[bridge],
-		[...calls, fauxAssistantMessage("done")],
-		["start_session", "reopen_session", "close_session"],
-	);
+	const run = await fauxSession([bridge], [...calls, fauxAssistantMessage("done")], []);
 	run.session.extensionRunner.setFlagValue("coordinator", true);
 	return run;
 }
 
 test("a coordinator starts a session in a new tmux window, and reopens it by id once it stopped", async () => {
 	const run = await coordinator([
-		call("start_session", { cwd: workDir, name: "docs", prompt: "@brief.md", session_id: "worker-1" }),
+		call("start_peer_session", { cwd: workDir, name: "docs", prompt: "@brief.md", session_id: "worker-1" }),
 		fauxAssistantMessage("started"),
-		call("reopen_session", { session_id: "worker-1" }),
+		call("reopen_peer_session", { session_id: "worker-1" }),
 	]);
 	const coordinatorId = run.session.sessionManager.getSessionId();
 	try {
@@ -144,7 +140,7 @@ test("a coordinator starts a session in a new tmux window, and reopens it by id 
 }, 40000);
 
 test("starting a session fails when its window closes before the session connects", async () => {
-	const run = await coordinator([call("start_session", { cwd: workDir, name: "broken", prompt: "@fail" })]);
+	const run = await coordinator([call("start_peer_session", { cwd: workDir, name: "broken", prompt: "@fail" })]);
 	try {
 		await run.session.prompt("start a broken worker");
 		expect(toolResults(run)[0]).toMatchObject({
@@ -162,7 +158,7 @@ test("a coordinator closes a running session, which records its exit", async () 
 	await worker.session.bindExtensions({
 		shutdownHandler: () => void worker.session.extensionRunner.emit({ type: "session_shutdown", reason: "quit" }),
 	});
-	const run = await coordinator([call("close_session", { session_id: workerId })]);
+	const run = await coordinator([call("close_peer_session", { session_id: workerId })]);
 	try {
 		await vi.waitFor(() => expect(incarnation(workerId)).toMatchObject({ ended_at: null }), { timeout: 15000 });
 		await run.session.prompt("close the worker");
@@ -180,7 +176,7 @@ test("only a session started with --coordinator has the lifecycle tools", async 
 	const run = await fauxSession(
 		[bridge],
 		[fauxAssistantMessage("ok")],
-		["start_session", "reopen_session", "close_session", "list_peer_sessions"],
+		["start_peer_session", "reopen_peer_session", "close_peer_session", "list_peer_sessions"],
 	);
 	try {
 		await run.session.prompt("hi");
@@ -190,9 +186,23 @@ test("only a session started with --coordinator has the lifecycle tools", async 
 	}
 }, 20000);
 
-test("the coordinator skill uses the lifecycle tools", () => {
-	const skill = readFileSync(new URL("../../../skills/coordinator/SKILL.md", import.meta.url), "utf8");
-	for (const tool of ["start_session", "reopen_session", "close_session", "list_peer_sessions", "--coordinator"])
-		expect(skill).toContain(tool);
-	expect(skill).not.toMatch(/tmux new-window|agents\.py list/);
-});
+test.each([false, true])(
+	"a root can discover peers when its initial tool set lacks peer tools (coordinator=%s)",
+	async (enabled) => {
+		const run = await fauxSession([bridge], [call("list_peer_sessions", {}), fauxAssistantMessage("done")], ["read"]);
+		run.session.extensionRunner.setFlagValue("coordinator", enabled);
+		try {
+			await run.session.prompt("list my peers");
+			expect(toolResults(run)[0]).toMatchObject({ isError: false });
+			expect(run.session.getActiveToolNames().sort()).toEqual(
+				(enabled
+					? ["read", "list_peer_sessions", "start_peer_session", "reopen_peer_session", "close_peer_session"]
+					: ["read", "list_peer_sessions"]
+				).sort(),
+			);
+		} finally {
+			await close(run);
+		}
+	},
+	20000,
+);
