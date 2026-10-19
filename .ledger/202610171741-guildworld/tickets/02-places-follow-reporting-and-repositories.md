@@ -4,10 +4,10 @@
 
 **Blocked by:** 01 Agent World opens over the real runtime
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] In the backend API test, a worker reporting to a coordinator from repository A is in wing A, a session without a repository is in the common room, an independent session is in the exterior, and a stopped session is in no awake place.
-- [ ] A wing that has had an agent stays in the gallery after its last agent stops, boarded, and still appears after the app restarts.
-- [ ] Wings keep first-seen order, and the gallery repeats its painted niche for each extra wing.
-- [ ] A wing with more agents than the small room's spots uses the large room; a crowded room seats several agents at one table.
-- [ ] Two coordinators each get their own headquarters.
+- [x] In the backend API test, a worker reporting to a coordinator from repository A is in wing A, a session without a repository is in the common room, an independent session is in the exterior, and a stopped session is in no awake place.
+- [x] A wing that has had an agent stays in the gallery after its last agent stops, boarded, and still appears after the app restarts.
+- [x] Wings keep first-seen order, and the gallery repeats its painted niche for each extra wing.
+- [x] A wing with more agents than the small room's spots uses the large room; a crowded room seats several agents at one table.
+- [x] Two coordinators each get their own headquarters.
