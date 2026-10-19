@@ -353,7 +353,10 @@ export class PlaceScene extends Phaser.Scene {
 				if (person.sprite.lift !== undefined && changed.status === "busy") person.sprite.play(`${person.sprite.look}-work`);
 				else if (person.sprite.lift !== undefined) person.sprite.anims.stop();
 			},
-			terminal: () => closeTalk() || this.note(`Would switch tmux to ${s.name}'s pane (prototype: not wired).`),
+			terminal: () => {
+				closeTalk();
+				this.note(`Would switch tmux to ${s.name}'s pane (prototype: not wired).`);
+			},
 		});
 	}
 
