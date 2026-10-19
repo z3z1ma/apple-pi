@@ -69,7 +69,7 @@ export function gallery(scene, world) {
 			for (const d of doors) {
 				if (!d.wing) continue;
 				const occupied = d.wing.agents.length > 0;
-				const door = sc.add.image(d.x, 296, occupied ? "door-closed" : "door-boarded").setOrigin(0.5, 1).setScale(0.36).setDepth(1);
+				sc.add.image(d.x, 296, occupied ? "door-closed" : "door-boarded").setOrigin(0.5, 1).setScale(0.36).setDepth(1);
 				const banner = sc.add.image(d.x, 36, hash(d.wing.repo) % 2 ? "banner-red" : "banner-cream").setOrigin(0.5, 0).setScale(0.17).setDepth(2);
 				sc.add
 					.text(d.x, 36 + banner.displayHeight + 4, d.wing.repo, { fontFamily: "Georgia, serif", fontSize: "13px", color: "#f3e2b8", stroke: "#2b1d12", strokeThickness: 4 })
@@ -79,7 +79,6 @@ export function gallery(scene, world) {
 					const glow = sc.add.ellipse(d.x, 300, 70, 14, 0xffc06a, 0.35).setDepth(1);
 					sc.tweens.add({ targets: glow, alpha: 0.15, yoyo: true, repeat: -1, duration: 1400, ease: "Sine.inOut" });
 				}
-				door.wing = d.wing;
 			}
 		},
 		blocked: [[0, 0, cols, 7], [0, 12, cols, 2]],
@@ -92,10 +91,10 @@ export function gallery(scene, world) {
 					name: `${d.wing.repo} wing`,
 					rect: [d.col - 1, 2, 3, 5],
 					standAt: [d.col, 7],
-					verbs:
-						d.wing.agents.length > 0
-							? [{ verb: "Enter", run: (sc) => sc.go("wing", "gallery", { repo: d.wing.repo }) }]
-							: [{ verb: "Enter", run: (sc) => sc.go("wing", "gallery", { repo: d.wing.repo }) }, { verb: "Examine", run: (sc) => sc.note(`${d.wing.repo}: closed up; nobody works here now.`) }],
+					verbs: [
+						{ verb: "Enter", run: (sc) => sc.go("wing", "gallery", { repo: d.wing.repo }) },
+						...(d.wing.agents.length ? [] : [{ verb: "Examine", run: (sc) => sc.note(`${d.wing.repo}: closed up; nobody works here now.`) }]),
+					],
 				})),
 		],
 		people: [],

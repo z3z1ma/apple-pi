@@ -148,12 +148,12 @@ export class PlaceScene extends Phaser.Scene {
 		this.tweens.add({ targets: g, scale: 0.3, alpha: 0, duration: 420, onComplete: () => g.destroy() });
 	}
 
-	walkTo(tile, world, then) {
+	walkTo(tile, world) {
 		closeChat();
-		if (world) this.marker(world, false);
+		this.marker(world, false);
 		const path = this.grid.path(this.avatar.tile, tile);
 		if (!path) return;
-		this.follow(path.slice(1), then);
+		this.follow(path.slice(1));
 	}
 
 	/** Walk next to a target, then act: the RuneScape rhythm. */
