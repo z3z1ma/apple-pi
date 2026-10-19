@@ -141,7 +141,7 @@ export function Actions({ character, note, onSend }: { character: Character; not
 			)}
 			<Receipts characterId={character.id} />
 			<div className="aw-conv-box">
-				<span className="aw-quill" aria-hidden="true" />
+				<span className="aw-conv-pen" aria-hidden="true" />
 				<textarea
 					ref={box}
 					className="aw-conv-input"
@@ -169,7 +169,7 @@ export function Actions({ character, note, onSend }: { character: Character; not
 					<>
 						<button
 							type="button"
-							className="aw-plaque aw-plaque-small aw-plaque-wax"
+							className="aw-cta aw-cta-small aw-cta-danger"
 							onMouseDown={keepFocus}
 							onClick={() => setConfirming(true)}
 						>
@@ -177,7 +177,7 @@ export function Actions({ character, note, onSend }: { character: Character; not
 						</button>
 						<button
 							type="button"
-							className="aw-plaque aw-plaque-small aw-plaque-quiet"
+							className="aw-cta aw-cta-small aw-cta-quiet"
 							disabled={empty}
 							onMouseDown={keepFocus}
 							onClick={() => send("follow_up")}
@@ -186,7 +186,7 @@ export function Actions({ character, note, onSend }: { character: Character; not
 						</button>
 						<button
 							type="button"
-							className="aw-plaque aw-plaque-small"
+							className="aw-cta aw-cta-small"
 							disabled={empty}
 							onMouseDown={keepFocus}
 							onClick={() => send("steer")}
@@ -197,7 +197,7 @@ export function Actions({ character, note, onSend }: { character: Character; not
 				) : (
 					<button
 						type="button"
-						className="aw-plaque aw-plaque-small"
+						className="aw-cta aw-cta-small"
 						disabled={empty}
 						onMouseDown={keepFocus}
 						onClick={() => send("talk")}
@@ -232,17 +232,17 @@ function ConfirmStop({ character, onStop, onKeep }: { character: Character; onSt
 	const doing = activity(character);
 	return (
 		<div className="aw-conv-confirm" role="alertdialog" aria-modal="true" aria-label={`Stop ${character.name}?`}>
-			<span className="aw-conv-confirm-seal" aria-hidden="true" />
+			<span className="aw-conv-confirm-mark" aria-hidden="true" />
 			<p className="aw-conv-confirm-title">Stop {character.name}?</p>
 			<p className="aw-conv-confirm-text">
 				It is busy{doing && doing !== "Working" ? <> &mdash; {doing}</> : null}. Its turn ends where it stands; what it
 				has written so far stays in the transcript.
 			</p>
 			<div className="aw-conv-confirm-bar">
-				<button ref={keep} type="button" className="aw-plaque aw-plaque-small aw-plaque-quiet" onClick={onKeep}>
+				<button ref={keep} type="button" className="aw-cta aw-cta-small aw-cta-quiet" onClick={onKeep}>
 					Let it work
 				</button>
-				<button type="button" className="aw-plaque aw-plaque-small aw-plaque-wax" onClick={onStop}>
+				<button type="button" className="aw-cta aw-cta-small aw-cta-danger" onClick={onStop}>
 					Stop it
 				</button>
 			</div>

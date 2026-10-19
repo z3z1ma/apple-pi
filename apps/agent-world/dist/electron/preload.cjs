@@ -1,6 +1,6 @@
 let electron = require("electron");
 //#region apps/agent-world/src/electron/preload.ts
-electron.contextBridge.exposeInMainWorld("agentWorld", {
+var api = {
 	snapshot: () => electron.ipcRenderer.invoke("world:snapshot"),
 	onUpdate(listener) {
 		const forward = (_event, snapshot) => listener(snapshot);
@@ -17,6 +17,8 @@ electron.contextBridge.exposeInMainWorld("agentWorld", {
 	conversation: (characterId, before) => electron.ipcRenderer.invoke("world:conversation", characterId, before),
 	markSeen: (characterId) => electron.ipcRenderer.invoke("world:mark-seen", characterId),
 	setAvatarLook: (look) => electron.ipcRenderer.invoke("world:avatar-look", look),
+	themes: () => electron.ipcRenderer.invoke("world:themes"),
+	setTheme: (id) => electron.ipcRenderer.invoke("world:set-theme", id),
 	instruct: (characterId, commandId, instruction) => electron.ipcRenderer.invoke("world:instruct", characterId, commandId, instruction),
 	onReceipt(listener) {
 		const forward = (_event, receipt) => listener(receipt);
@@ -32,6 +34,41 @@ electron.contextBridge.exposeInMainWorld("agentWorld", {
 	wake: (characterId) => electron.ipcRenderer.invoke("world:wake", characterId),
 	endSession: (characterId, confirmed) => electron.ipcRenderer.invoke("world:end-session", characterId, confirmed),
 	sendMail: (characterId, body) => electron.ipcRenderer.invoke("world:send-mail", characterId, body),
-	openLink: (url) => electron.ipcRenderer.invoke("world:open-link", url)
-});
+	openLink: (url) => electron.ipcRenderer.invoke("world:open-link", url),
+	...places()
+};
+/** The function places' calls: each `places:<name>` channel, typed by `IntegrationsApi`. */
+function places() {
+	const call = (channel) => (...args) => electron.ipcRenderer.invoke(`places:${channel}`, ...args);
+	return {
+		credentialStatus: call("credential-status"),
+		signInAtlassian: call("sign-in-atlassian"),
+		signOutAtlassian: call("sign-out-atlassian"),
+		signInSlack: call("sign-in-slack"),
+		signOutSlack: call("sign-out-slack"),
+		pullRequests: call("pull-requests"),
+		pullRequest: call("pull-request"),
+		jiraAssigned: call("jira-assigned"),
+		jiraSearch: call("jira-search"),
+		jiraIssue: call("jira-issue"),
+		jiraTransitions: call("jira-transitions"),
+		confluenceSearch: call("confluence-search"),
+		confluencePage: call("confluence-page"),
+		libraryRecent: call("library-recent"),
+		slackUnread: call("slack-unread"),
+		slackFindChannels: call("slack-find"),
+		slackChannel: call("slack-channel"),
+		slackThread: call("slack-thread"),
+		describeWrite: call("describe-write"),
+		confirmWrite: call("confirm-write"),
+		outsideWrites: call("outside-writes"),
+		onOutsideWrite(listener) {
+			const forward = (_event, entry) => listener(entry);
+			electron.ipcRenderer.on("places:outside-write", forward);
+			return () => electron.ipcRenderer.removeListener("places:outside-write", forward);
+		},
+		delegate: call("delegate")
+	};
+}
+electron.contextBridge.exposeInMainWorld("agentWorld", api);
 //#endregion

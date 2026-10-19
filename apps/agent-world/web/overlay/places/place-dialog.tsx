@@ -60,7 +60,7 @@ export function PlaceDialog({ label, className, children }: { label: string; cla
 					title="Close (Esc)"
 					onClick={() => placePanels.close()}
 				/>
-				<div className="aw-place-body aw-parchment">{children}</div>
+				<div className="aw-place-body aw-surface">{children}</div>
 			</div>
 		</div>
 	);

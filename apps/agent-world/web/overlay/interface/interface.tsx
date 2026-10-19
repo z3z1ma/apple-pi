@@ -4,6 +4,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { Character, PlaceRef } from "../../../src/world.js";
 import { placeKey } from "../../../src/world.js";
+import { say as themeLine } from "../../theme.js";
+import { useTheme } from "../../theme-store.js";
 import type { ViewStore, WorldIntent } from "../../view-state.js";
 import type { WorldStore } from "../../world-store.js";
 import { CharacterCard } from "./character-card.js";
@@ -26,6 +28,7 @@ export function Interface({ store, view }: { store: WorldStore; view: ViewStore 
 	const world = useSyncExternalStore(store.subscribe, store.get);
 	const state = useSyncExternalStore(view.subscribe, view.get);
 	const feed = useSyncExternalStore(store.subscribeFeed, store.feed);
+	const theme = useTheme();
 	const [tab, setTab] = useState<Tab>("agents");
 	const [folded, setFolded] = useState(false);
 	const [selected, setSelected] = useState<string>();
@@ -47,6 +50,15 @@ export function Interface({ store, view }: { store: WorldStore; view: ViewStore 
 		};
 		setGame((lines) => [...lines, line].slice(-GAME_KEPT));
 	}, []);
+
+	// The world in another theme: say so once it wears it (not when it first opens).
+	const themeName = theme?.name;
+	const lastTheme = useRef(themeName);
+	useEffect(() => {
+		if (themeName && lastTheme.current && themeName !== lastTheme.current)
+			say(`The world now wears the ${themeName} theme.`);
+		lastTheme.current = themeName;
+	}, [themeName, say]);
 
 	// Where you are, as the world's title says.
 	const placeTitle = state.title;
@@ -142,7 +154,7 @@ export function Interface({ store, view }: { store: WorldStore; view: ViewStore 
 						</span>
 						<span className="aw-orb-label">Working</span>
 					</button>
-					<div className="aw-orb aw-orb-slack" title="Slack joins with the town square">
+					<div className="aw-orb aw-orb-slack" title={themeLine(theme, "slack-later")}>
 						<span className="aw-orb-glass" />
 						<span className="aw-orb-label">Slack</span>
 					</div>
@@ -164,6 +176,9 @@ export function Interface({ store, view }: { store: WorldStore; view: ViewStore 
 				walkGrid={state.walkGrid ?? false}
 				onWalkGrid={(shown) => intend({ kind: "walk-grid", shown })}
 				avatarLooks={state.avatarLooks ?? []}
+				themes={state.themes ?? []}
+				theme={state.theme}
+				onTheme={(id) => intend({ kind: "choose-theme", theme: id })}
 				avatarLook={world?.avatarLook}
 				onAvatarLook={(choice) => {
 					say(`You now look like the ${choice.label.toLowerCase()}.`);

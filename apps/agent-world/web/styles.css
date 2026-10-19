@@ -1,10 +1,11 @@
+/* The page and the world's own HTML (the place's title, notices, the chooser, the disconnected veil): layout only.
+   How they look (colours, type, borders, backgrounds) comes from the theme pack's skin (themes/<theme>/interface/). */
+
 html,
 body {
 	margin: 0;
 	height: 100%;
 	overflow: hidden;
-	background: #140e18;
-	font-family: Georgia, "Iowan Old Style", serif;
 }
 
 #game,
@@ -26,13 +27,6 @@ body {
 	justify-items: center;
 	gap: 1px;
 	padding: 7px 22px 8px;
-	border: 2px solid #6b4a2a;
-	border-radius: 8px;
-	background: linear-gradient(#f6e7c1, #e9d29f);
-	color: #2b1d12;
-	box-shadow:
-		inset 0 0 0 2px rgb(255 248 225 / 55%),
-		0 6px 18px rgb(0 0 0 / 45%);
 	white-space: nowrap;
 	/* Clear of the orbs and minimap on the right (and as far from the left), however long a wing's name. */
 	box-sizing: border-box;
@@ -44,13 +38,10 @@ body {
 	overflow: hidden;
 	text-overflow: ellipsis;
 	font-size: 17px;
-	letter-spacing: 0.02em;
 }
 
 .place-title span {
 	font-size: 12px;
-	font-style: italic;
-	color: #6b4a2a;
 }
 
 .notice {
@@ -59,12 +50,31 @@ body {
 	left: 50%;
 	transform: translateX(-50%);
 	padding: 8px 16px;
-	border: 2px solid #6b4a2a;
-	border-radius: 8px;
-	background: #2b1d12e6;
-	color: #f3e2b8;
 	font-size: 14px;
 	animation: notice-in 160ms ease-out;
+}
+
+/* A notice that stays until dismissed (a broken theme pack), below the passing ones. */
+.notice-lasting {
+	top: 120px;
+	display: grid;
+	gap: 6px;
+	max-width: min(620px, calc(100vw - 600px));
+	pointer-events: auto;
+}
+
+.notice-lasting ul {
+	margin: 0;
+	padding-left: 18px;
+	font-size: 12.5px;
+	overflow-wrap: anywhere;
+}
+
+.notice-lasting button {
+	justify-self: end;
+	padding: 3px 12px;
+	font-size: 13px;
+	cursor: pointer;
 }
 
 @keyframes notice-in {
@@ -83,11 +93,6 @@ body {
 	gap: 8px;
 	min-width: 260px;
 	padding: 16px 18px;
-	border: 2px solid #6b4a2a;
-	border-radius: 10px;
-	background: linear-gradient(#f6e7c1, #e9d29f);
-	color: #2b1d12;
-	box-shadow: 0 10px 30px rgb(0 0 0 / 50%);
 	pointer-events: auto;
 }
 
@@ -102,31 +107,15 @@ body {
 	align-items: baseline;
 	gap: 16px;
 	padding: 8px 12px;
-	border: 1px solid #8a6538;
-	border-radius: 6px;
-	background: #fbf1d6;
 	color: inherit;
 	font: inherit;
 	font-size: 15px;
 	cursor: pointer;
 }
 
-.chooser button:hover {
-	background: #fff8e4;
-	border-color: #6b4a2a;
-}
-
-.chooser small {
-	color: #6b4a2a;
-	font-style: italic;
-}
-
 .chooser .chooser-cancel {
 	justify-content: center;
-	background: transparent;
-	border-color: transparent;
 	font-size: 13px;
-	color: #6b4a2a;
 }
 
 .disconnected-veil {
@@ -134,7 +123,6 @@ body {
 	inset: 0;
 	display: grid;
 	place-items: center;
-	background: rgb(10 6 14 / 55%);
 }
 
 .disconnected {
@@ -142,12 +130,7 @@ body {
 	gap: 6px;
 	max-width: 360px;
 	padding: 16px 22px;
-	border: 2px solid #6b4a2a;
-	border-radius: 10px;
-	background: #f3e2b8;
-	color: #2b1d12;
 	text-align: center;
-	box-shadow: 0 10px 30px rgb(0 0 0 / 45%);
 }
 
 .disconnected strong {

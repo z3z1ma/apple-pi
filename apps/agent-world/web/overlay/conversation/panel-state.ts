@@ -1,11 +1,9 @@
-// Which conversation is open, and what the panel needs from outside React: the backend's conversation API and the
-// theme (for portraits and place names). `main.tsx` connects them and opens the panel when the world or the side panel
-// asks to talk to a character. Each change replaces the state object, as useSyncExternalStore needs.
+// Which conversation is open, and what the panel needs from outside React: the backend's conversation API. `main.tsx`
+// connects it and opens the panel when the world or the side panel asks to talk to a character. Each change replaces the state object, as useSyncExternalStore needs.
 //
 // It also keeps what outlives one opening of the panel: each character's unsent draft, and the instructions sent to it
 // with the receipt stages they reached.
 import type { AgentWorldApi, Character, Instruction, ReceiptStage } from "../../../src/world.js";
-import type { Theme } from "../../theme.js";
 
 /** Reading the conversation is required; acting and live replies are there once the backend offers them. */
 export type ConversationApi = Pick<AgentWorldApi, "conversation" | "markSeen"> &
@@ -17,7 +15,6 @@ export interface PanelState {
 	/** Counts each opening, so talking to the same character again starts afresh. */
 	opening: number;
 	api?: ConversationApi;
-	theme?: Theme;
 }
 
 /** One instruction sent from the panel, with the receipt stages it has reached. */
@@ -80,10 +77,10 @@ export const conversationPanel = {
 		listeners.add(listener);
 		return () => listeners.delete(listener);
 	},
-	connect(api: ConversationApi, theme: Theme) {
+	connect(api: ConversationApi) {
 		stopReceipts?.();
 		stopReceipts = api.onReceipt?.((receipt) => reached(receipt.commandId, receipt.stage, receipt.reason));
-		update({ api, theme });
+		update({ api });
 	},
 	open(character: Character) {
 		update({ character, opening: state.opening + 1 });

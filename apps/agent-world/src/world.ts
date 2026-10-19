@@ -1,4 +1,5 @@
 // The world as the backend reports it to the world UI. Shared by the backend, the preload bridge, and the renderer.
+import type { IntegrationsApi } from "./integrations.js";
 
 /**
  * A coordinator keeps a headquarters; a worker reports to a coordinator; an independent session reports to none
@@ -93,6 +94,8 @@ export interface WorldSnapshot {
 	characters: Character[];
 	/** The avatar look the operator chose in Settings; null (or absent) until he chooses one. */
 	avatarLook?: string | null;
+	/** The theme the operator chose in Settings; null (or absent) until he chooses one. */
+	theme?: string | null;
 	/** Every stopped top-level session, asleep at the inn: the most recently stopped first. */
 	dormant?: DormantAgent[];
 	/** Recent mail between sessions (and from the operator), newest first, with every mail still waiting. */
@@ -119,6 +122,15 @@ export interface DormantAgent {
 
 /** The label mail from the operator carries as its sender (`from`), so agents can tell it from mail between them. */
 export const OPERATOR = "operator";
+
+/** A theme pack the operator can choose in Settings, and what is wrong with it (nothing for a good one). */
+export interface ThemeChoice {
+	id: string;
+	name: string;
+	description: string | null;
+	/** Each fault the pack check found: the file in the pack, and what is wrong with it. */
+	problems: { file: string; fault: string }[];
+}
 
 /** One mail, as the runtime's `mail` view records it. */
 export interface MailItem {
@@ -276,8 +288,11 @@ export type ReplyStreamEvent =
 	| { kind: "delta"; characterId: string; streamId: string; seq: number; delta: string }
 	| { kind: "end"; characterId: string; streamId: string; entry: TranscriptEntry | null };
 
-/** What the preload bridge exposes to the world UI as `window.agentWorld`. */
-export interface AgentWorldApi {
+/**
+ * What the preload bridge exposes to the world UI as `window.agentWorld`; the function places' part (GitHub, Jira,
+ * Confluence, Slack, the outside-write gate, delegation) is in `integrations.ts`.
+ */
+export interface AgentWorldApi extends IntegrationsApi {
 	snapshot(): Promise<WorldSnapshot>;
 	/** Called with the whole new snapshot after every change; returns a function that stops the calls. */
 	onUpdate(listener: (snapshot: WorldSnapshot) => void): () => void;
@@ -293,6 +308,10 @@ export interface AgentWorldApi {
 	markSeen(characterId: string): Promise<CommandResult>;
 	/** Choose the avatar's look (Settings); kept as a session-state preference across app restarts. */
 	setAvatarLook(look: string): Promise<CommandResult>;
+	/** The theme packs installed, each checked. */
+	themes(): Promise<ThemeChoice[]>;
+	/** Choose the theme (Settings); kept as a session-state preference across app restarts. */
+	setTheme(id: string): Promise<CommandResult>;
 	/**
 	 * Send an instruction from the conversation panel as its session-state command, under the id the UI chose; each
 	 * receipt stage reaches `onReceipt` listeners, and it resolves once the command is applied or has failed.

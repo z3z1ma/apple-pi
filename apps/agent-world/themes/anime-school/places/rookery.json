@@ -36,16 +36,50 @@
     }
   ],
   "enterBy": "Door to the courtyard",
-  "host": { "look": "rookery-keeper", "at": [12.7, 9.6] },
+  "host": {
+    "look": "rookery-keeper",
+    "at": [12.7, 9.6]
+  },
   "furniture": [
-    { "name": "Sorting table", "rect": [6, 6.2, 5.8, 4.15], "use": "rookery-keeper" },
-    { "name": "Counter", "rect": [10.3, 3.6, 6, 2], "use": "rookery-keeper" },
-    { "name": "Post box", "rect": [15.1, 8.2, 1.4, 3.15], "use": "rookery-keeper" }
+    {
+      "name": "Sorting table",
+      "rect": [6, 6.2, 5.8, 4.15],
+      "use": "rookery"
+    },
+    {
+      "name": "Counter",
+      "rect": [10.3, 3.6, 6, 2],
+      "use": "rookery"
+    },
+    {
+      "name": "Post box",
+      "rect": [15.1, 8.2, 1.4, 3.15],
+      "use": "rookery"
+    }
   ],
-  "overlaySlots": [{ "kind": "fidget", "at": [2.35, 1.25] }, { "kind": "glow", "at": [10.3, 1.65], "r": 1.0 }],
+  "overlaySlots": [
+    {
+      "kind": "fidget",
+      "at": [2.35, 1.25]
+    },
+    {
+      "kind": "glow",
+      "at": [10.3, 1.65],
+      "r": 1.0
+    }
+  ],
   "foreground": [
-    { "rect": [6, 6.2, 5.8, 4.15], "feet": 10.35 },
-    { "rect": [15.1, 8.2, 1.4, 3.15], "feet": 11.35 },
-    { "rect": [12.8, 10.9, 5.2, 1.6], "feet": 12.5 }
+    {
+      "rect": [6, 6.2, 5.8, 4.15],
+      "feet": 10.35
+    },
+    {
+      "rect": [15.1, 8.2, 1.4, 3.15],
+      "feet": 11.35
+    },
+    {
+      "rect": [12.8, 10.9, 5.2, 1.6],
+      "feet": 12.5
+    }
   ]
 }

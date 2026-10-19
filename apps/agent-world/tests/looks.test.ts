@@ -9,7 +9,21 @@ import type { Look, Theme } from "../web/theme.js";
 const looks: Record<string, Look> = JSON.parse(
 	readFileSync(fileURLToPath(new URL("../themes/fantasy/characters/looks.json", import.meta.url)), "utf8"),
 );
-const theme: Theme = { url: "themes/fantasy/", places: {}, looks, labels: {} };
+const manifest = JSON.parse(
+	readFileSync(fileURLToPath(new URL("../themes/fantasy/theme.json", import.meta.url)), "utf8"),
+);
+const theme: Theme = {
+	id: "fantasy",
+	name: "Fantasy",
+	url: "themes/fantasy/",
+	places: {},
+	looks,
+	labels: manifest.labels,
+	text: manifest.text,
+	style: manifest.style,
+	skin: "themes/fantasy/interface/skin.css",
+	world: manifest.world,
+};
 
 const character = (id: string, facts: Partial<CharacterFacts> = {}): Character => ({
 	id,

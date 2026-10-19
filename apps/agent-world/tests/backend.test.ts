@@ -215,6 +215,35 @@ test("the avatar look chosen in Settings is stored through the runtime beside th
 	await soon(() => expect(latest().avatarLook).toBe("avatar-bard"));
 }, 30000);
 
+test("the theme chosen in Settings is stored through the runtime, keeping the wings and the avatar, and outlives the app", async () => {
+	const stored = () => {
+		const [row] = query<{ value: string }>(state.dbPath, "select value from preferences where key = ?", PREFERENCE_KEY);
+		return JSON.parse(row?.value ?? "{}") as Record<string, unknown>;
+	};
+	const before = stored();
+	expect(before).toMatchObject({ avatar: "avatar-bard" });
+	expect(latest().theme ?? null).toBeNull();
+
+	expect(await world.setTheme("tech-office")).toEqual({ ok: true });
+	expect(world.snapshot().theme).toBe("tech-office");
+	expect(stored()).toEqual({ ...before, theme: "tech-office" });
+
+	world.close();
+	const restarted = openWorldBackend({ db: state.dbPath, socket: state.socketPath });
+	try {
+		await soon(() => expect(restarted.snapshot().theme).toBe("tech-office"));
+		// Choosing the look afterwards keeps the theme, and the other way round.
+		expect(await restarted.setAvatarLook("avatar-knight")).toEqual({ ok: true });
+		expect(await restarted.setTheme("anime-school")).toEqual({ ok: true });
+		expect(stored()).toEqual({ ...before, avatar: "avatar-knight", theme: "anime-school" });
+	} finally {
+		restarted.close();
+	}
+	world = openWorldBackend({ db: state.dbPath, socket: state.socketPath });
+	world.subscribe((snapshot) => updates.push(snapshot));
+	await soon(() => expect(latest().theme).toBe("anime-school"));
+}, 30000);
+
 // A scratch tmux server for panes, never the operator's: tempStateDir points TMUX_TMPDIR at its own directory.
 const TMUX_NAME = `aw-${process.pid}`;
 const tmux = (...args: string[]) =>

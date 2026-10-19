@@ -71,7 +71,7 @@ export function QuestionForm({ character, questionnaire }: { character: Characte
 			}}
 		>
 			<header className="aw-conv-form-head">
-				<span className="aw-conv-form-seal" aria-hidden="true" />
+				<span className="aw-conv-form-mark" aria-hidden="true" />
 				<span className="aw-conv-form-title">{character.name} asks you</span>
 				<span className="aw-conv-form-sub">Answer here, or in its terminal; whichever comes first counts.</span>
 			</header>
@@ -102,7 +102,7 @@ export function QuestionForm({ character, questionnaire }: { character: Characte
 					<span className="aw-conv-hint">
 						{complete ? "Every question has an answer." : "Answer every question to send."}
 					</span>
-					<button type="submit" className="aw-plaque aw-plaque-small" disabled={!complete || sending}>
+					<button type="submit" className="aw-cta aw-cta-small" disabled={!complete || sending}>
 						Send answer
 					</button>
 				</div>
@@ -218,7 +218,7 @@ export function TerminalOnly({
 }) {
 	return (
 		<div className="aw-conv-terminal-only" role="note">
-			<span className="aw-conv-form-seal" aria-hidden="true" />
+			<span className="aw-conv-form-mark" aria-hidden="true" />
 			<p className="aw-conv-form-title">{character.name} is asking in its terminal</p>
 			{asking.text && <p className="aw-conv-asked">&ldquo;{asking.text}&rdquo;</p>}
 			<p className="aw-conv-terminal-why">
@@ -227,7 +227,7 @@ export function TerminalOnly({
 			</p>
 			<div className="aw-conv-act-bar">
 				{problem && <span className="aw-conv-warn">{problem}</span>}
-				<button type="button" className="aw-plaque aw-plaque-small" onClick={goToTerminal}>
+				<button type="button" className="aw-cta aw-cta-small" onClick={goToTerminal}>
 					Go to its terminal
 				</button>
 			</div>

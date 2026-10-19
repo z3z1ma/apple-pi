@@ -3,6 +3,7 @@
 // seated beat following the last tool is decorative.
 import type * as Phaser from "phaser";
 import type { Character } from "../../src/world.js";
+import { worn } from "../theme-store.js";
 import type { Pose } from "./walker.js";
 
 /** What the badge over a head says: at work, asking you something, or finished and not seen yet. */
@@ -60,37 +61,29 @@ export function barkFor(character: Character, turn: number): string | undefined 
 	return FINISHED_LINES[turn % FINISHED_LINES.length];
 }
 
-const INK = 0x3a2412;
-const PAPER = 0xfbf0d2;
-const SERIF = 'Georgia, "Iowan Old Style", serif';
+/** A `#rrggbb` colour as a number, for Phaser's fills. */
+const hex = (colour: string) => Number.parseInt(colour.slice(1), 16);
 
-/**
- * The badge as drawn: a small enamelled disc with a brass rim and a centred mark, in the colours of the interface's
- * state pips, so the world and the side panel speak one language: a question, a tick, or three working dots.
- */
-const BADGE_STYLE: Record<BadgeKind, { fill: number; light: number; ink: number }> = {
-	asking: { fill: 0xe0a422, light: 0xffe08a, ink: 0x3a2405 },
-	unseen: { fill: 0x6fb658, light: 0xc8f0b0, ink: 0x183312 },
-	working: { fill: 0x2e2238, light: 0x5a456c, ink: 0xf3e9d2 },
-};
 export const BADGE_RADIUS = 11.5;
 
 /** A badge, centred on (0, 0) of its container. Working shows three dots that pulse in turn. */
 export function drawBadge(scene: Phaser.Scene, kind: BadgeKind): Phaser.GameObjects.Container {
-	const { fill, light, ink } = BADGE_STYLE[kind];
+	const { world } = worn();
+	const style = world.badge[kind === "unseen" ? "unseen" : kind];
+	const [fill, light, ink] = [hex(style.fill), hex(style.light), hex(style.ink)];
 	const r = BADGE_RADIUS;
 	const disc = scene.add.graphics();
 	disc.fillStyle(0x000000, 0.3).fillCircle(0.8, 1.6, r + 1.6);
-	disc.fillStyle(0x4a3214, 1).fillCircle(0, 0, r + 1.6);
-	disc.fillStyle(0xe9c773, 1).fillCircle(0, 0, r + 0.5);
+	disc.fillStyle(hex(world.badge.edge), 1).fillCircle(0, 0, r + 1.6);
+	disc.fillStyle(hex(world.badge.rim), 1).fillCircle(0, 0, r + 0.5);
 	disc.fillStyle(fill, 1).fillCircle(0, 0, r - 1);
 	disc.fillStyle(light, 0.95).fillCircle(-1.6, -2.2, r - 3.2);
 	disc.fillStyle(fill, 0.55).fillCircle(0.8, 1.2, r - 3.6);
 	const mark = scene.add.container(0, 0, [disc]);
-	const inkCss = `#${ink.toString(16).padStart(6, "0")}`;
+	const inkCss = style.ink;
 	if (kind === "asking") {
 		const text = scene.add
-			.text(0, 0, "?", { fontFamily: SERIF, fontStyle: "bold", fontSize: "16px", color: inkCss })
+			.text(0, 0, "?", { fontFamily: world.font, fontStyle: "bold", fontSize: "16px", color: inkCss })
 			.setOrigin(0.5)
 			.setResolution(4);
 		// Centre the glyph's ink, not its line box: Georgia's line box sits low under "?".
@@ -148,12 +141,14 @@ export interface BarkShape {
 
 /** A speech bubble whose tail's tip is at (0, 0) of its container, the text wrapped to a few words a line. */
 export function drawBark(scene: Phaser.Scene, line: string): BarkShape {
+	const { font, bark } = worn().world;
+	const [INK, PAPER] = [hex(bark.outline), hex(bark.paper)];
 	const text = scene.add
 		.text(0, 0, line, {
-			fontFamily: SERIF,
+			fontFamily: font,
 			fontSize: "13px",
 			fontStyle: "bold",
-			color: "#3a2412",
+			color: bark.ink,
 			align: "center",
 			lineSpacing: 1,
 		})
@@ -191,16 +186,17 @@ export function drawBark(scene: Phaser.Scene, line: string): BarkShape {
  * breathes rather than flickers. Its container's (0, 0) is where the first letter starts.
  */
 export function drawZzz(scene: Phaser.Scene): Phaser.GameObjects.Container {
+	const { font, sleep } = worn().world;
 	const container = scene.add.container(0, 0);
 	const delay = Math.random() * 1800;
 	[13, 16, 19].forEach((size, i) => {
 		const z = scene.add
 			.text(0, 0, "z", {
-				fontFamily: SERIF,
+				fontFamily: font,
 				fontStyle: "bold italic",
 				fontSize: `${size}px`,
-				color: "#fdf1d4",
-				stroke: "#3a2412",
+				color: sleep.fill,
+				stroke: sleep.stroke,
 				strokeThickness: 2.5,
 				shadow: { offsetX: 0, offsetY: 1, color: "#000000", blur: 3, fill: true, stroke: true },
 			})
@@ -231,18 +227,19 @@ export function drawZzz(scene: Phaser.Scene): Phaser.GameObjects.Container {
 
 /** A small wooden tag (the inn's stairs: how many more sleep upstairs), its bottom centre at (0, 0). */
 export function drawTag(scene: Phaser.Scene, line: string): Phaser.GameObjects.Container {
+	const { font, tag } = worn().world;
 	const text = scene.add
-		.text(0, 0, line, { fontFamily: SERIF, fontSize: "12px", fontStyle: "bold italic", color: "#f6e3b4" })
+		.text(0, 0, line, { fontFamily: font, fontSize: "12px", fontStyle: "bold italic", color: tag.ink })
 		.setResolution(4)
 		.setOrigin(0.5, 1);
 	const w = Math.ceil(text.width + 18);
 	const h = Math.ceil(text.height + 9);
 	const plate = scene.add.graphics();
 	plate.fillStyle(0x000000, 0.3).fillRoundedRect(-w / 2 + 1.5, -h + 2, w, h, 5);
-	plate.fillStyle(0xc9a35a, 1).fillRoundedRect(-w / 2 - 1.5, -h - 1.5, w + 3, h + 3, 6);
-	plate.fillStyle(0x4a2e18, 1).fillRoundedRect(-w / 2, -h, w, h, 5);
+	plate.fillStyle(hex(tag.rim), 1).fillRoundedRect(-w / 2 - 1.5, -h - 1.5, w + 3, h + 3, 6);
+	plate.fillStyle(hex(tag.plate), 1).fillRoundedRect(-w / 2, -h, w, h, 5);
 	plate
-		.fillStyle(0xf0d48a, 1)
+		.fillStyle(hex(tag.rivet), 1)
 		.fillCircle(-w / 2 + 5, -h / 2, 1.6)
 		.fillCircle(w / 2 - 5, -h / 2, 1.6);
 	text.setPosition(0, -4);

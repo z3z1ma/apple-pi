@@ -1,0 +1,1900 @@
+/* The fantasy theme's skin: how the world's HTML looks. The world UI's own CSS lays everything out; this sheet gives
+   it the guild's look: carved wood frames with brass inlay around warm parchment, and the conversation panel as an
+   open book. Loaded after the UI's CSS, so its rules win over layout at equal specificity. Tokens (`theme.json`
+   `style`) are set on the root element. */
+
+/* ---- styles ---- */
+
+html,
+body {
+	background: var(--aw-backdrop);
+	font-family: var(--aw-font-body);
+}
+
+.place-title {
+	border: 2px solid #6b4a2a;
+	border-radius: 8px;
+	background: linear-gradient(#f6e7c1, #e9d29f);
+	color: #2b1d12;
+	box-shadow:
+		inset 0 0 0 2px rgb(255 248 225 / 55%),
+		0 6px 18px rgb(0 0 0 / 45%);
+}
+
+.place-title strong {
+	letter-spacing: 0.02em;
+}
+
+.place-title span {
+	font-style: italic;
+	color: #6b4a2a;
+}
+
+.notice {
+	border: 2px solid #6b4a2a;
+	border-radius: 8px;
+	background: #2b1d12e6;
+	color: #f3e2b8;
+}
+
+/* A broken theme pack: the same dark slate, edged in warning red, with a brass button to dismiss it. */
+.notice-lasting {
+	border-color: #8a3a22;
+	box-shadow: 0 8px 22px rgb(0 0 0 / 50%);
+}
+
+.notice-lasting ul {
+	color: #e6cf9c;
+	font-family: var(--aw-font-mono);
+}
+
+.notice-lasting button {
+	border: 1px solid #6b4422;
+	border-radius: 5px;
+	background: linear-gradient(#fff7e0, #e8d09c);
+	box-shadow: inset 0 1px 0 #fffdf5;
+	color: #3a2414;
+	font: 600 12px var(--aw-font-body);
+}
+
+.notice-lasting button:hover {
+	background: linear-gradient(#fffbef, #f0dcae);
+}
+
+.chooser {
+	border: 2px solid #6b4a2a;
+	border-radius: 10px;
+	background: linear-gradient(#f6e7c1, #e9d29f);
+	color: #2b1d12;
+	box-shadow: 0 10px 30px rgb(0 0 0 / 50%);
+}
+
+.chooser button {
+	border: 1px solid #8a6538;
+	border-radius: 6px;
+	background: #fbf1d6;
+}
+
+.chooser button:hover {
+	background: #fff8e4;
+	border-color: #6b4a2a;
+}
+
+.chooser small {
+	color: #6b4a2a;
+	font-style: italic;
+}
+
+.chooser .chooser-cancel {
+	background: transparent;
+	border-color: transparent;
+	color: #6b4a2a;
+}
+
+.disconnected-veil {
+	background: rgb(10 6 14 / 55%);
+}
+
+.disconnected {
+	border: 2px solid #6b4a2a;
+	border-radius: 10px;
+	background: #f3e2b8;
+	color: #2b1d12;
+	box-shadow: 0 10px 30px rgb(0 0 0 / 45%);
+}
+
+/* ---- interface ---- */
+
+/* The interface in the fantasy theme's style: carved wood frames with brass inlay and rivets around warm parchment.
+   Text stays crisp HTML. Numbers use a face with lining figures and are trimmed to their cap height, so they sit in
+   the centre of their orbs and badges (Georgia's old-style figures rode low or high). */
+.aw-interface {
+	--aw-brass: var(--aw-accent);
+	--aw-brass-light: var(--aw-accent-light);
+	--aw-brass-dark: #8a6a2e;
+	--aw-wood-edge: #1c110a;
+	--aw-gold-text: #f6dfa6;
+	--aw-serif: var(--aw-font-body);
+	--aw-figures: var(--aw-font-figures);
+	font-family: var(--aw-serif);
+	color: var(--aw-ink);
+}
+
+.aw-num,
+.aw-badge > span {
+	font-family: var(--aw-figures);
+}
+
+/* Frames */
+.aw-frame {
+	border: 1px solid var(--aw-wood-edge);
+	border-radius: 10px;
+	background: var(--aw-frame-background);
+	box-shadow: var(--aw-frame-shadow);
+}
+
+.aw-surface {
+	border-radius: 5px;
+	background: var(--aw-surface-background);
+	color: var(--aw-ink);
+	box-shadow:
+		inset 0 0 0 1px rgb(80 50 25 / 60%),
+		inset 0 2px 7px rgb(90 55 20 / 30%);
+	scrollbar-color: #a07a46 transparent;
+}
+
+.aw-empty {
+	color: var(--aw-ink-soft);
+	font-style: italic;
+}
+
+.aw-minimap-map {
+	border-radius: 6px;
+	background: radial-gradient(ellipse at 50% 40%, #2c2016, #160f0a);
+	box-shadow:
+		inset 0 0 0 1px #0f0905,
+		0 0 0 1px rgb(240 212 138 / 35%);
+}
+
+.aw-minimap-map:focus-visible {
+	outline: 2px solid var(--aw-brass-light);
+	outline-offset: 1px;
+}
+
+.aw-minimap-place {
+	filter: saturate(0.85) contrast(1.05);
+}
+
+.aw-minimap-strip {
+	background-repeat: no-repeat;
+}
+
+.aw-minimap-view {
+	border: 1px solid rgb(255 244 214 / 75%);
+	border-radius: 2px;
+	box-shadow: 0 0 0 1px rgb(0 0 0 / 35%);
+}
+
+.aw-dot {
+	border-radius: 50%;
+	background: #ffd84a;
+	box-shadow: 0 0 0 1px #3b2606;
+}
+
+.aw-dot-townsfolk {
+	background: #6fb4ff;
+	box-shadow: 0 0 0 1px #0e2a4a;
+}
+
+.aw-dot-avatar {
+	background: #fff;
+	box-shadow: 0 0 0 1px #000;
+}
+
+.aw-dot-calling::after {
+	border-radius: 50%;
+	border: 1.5px solid #ffcf5a;
+}
+
+.aw-orb-glass {
+	border-radius: 50%;
+	box-shadow:
+		inset 0 0 0 2px #2a1a0f,
+		inset 0 0 0 3.5px var(--aw-brass),
+		inset 0 -6px 10px rgb(0 0 0 / 30%),
+		0 0 0 1px var(--aw-wood-edge),
+		0 3px 7px rgb(0 0 0 / 50%);
+}
+
+.aw-orb-need .aw-orb-glass {
+	background:
+		radial-gradient(circle at 34% 26%, rgb(255 255 240 / 85%) 0 2.5px, transparent 8px),
+		radial-gradient(circle at 50% 62%, #f7cf5c, #b77a12 72%);
+}
+
+.aw-orb-work .aw-orb-glass {
+	background:
+		radial-gradient(circle at 34% 26%, rgb(255 255 255 / 80%) 0 2.5px, transparent 8px),
+		radial-gradient(circle at 50% 62%, #d99bd0, #7d3d70 72%);
+}
+
+.aw-orb-slack .aw-orb-glass {
+	background:
+		radial-gradient(circle at 34% 26%, rgb(255 255 255 / 25%) 0 2px, transparent 7px),
+		radial-gradient(circle at 50% 62%, #3a4656, #1c232c 72%);
+}
+
+.aw-orb .aw-num {
+	color: #fff;
+	text-shadow:
+		0 1px 0 #2a1608,
+		0 0 4px rgb(0 0 0 / 55%);
+}
+
+.aw-orb-label {
+	border-radius: 4px;
+	background: rgb(28 17 10 / 72%);
+	color: var(--aw-gold-text);
+	letter-spacing: 0.02em;
+}
+
+.aw-orb-slack .aw-orb-label {
+	color: #b9a888;
+}
+
+.aw-orb:hover .aw-orb-glass {
+	filter: brightness(1.08);
+}
+
+.aw-orb:focus-visible .aw-orb-glass {
+	outline: 2px solid var(--aw-brass-light);
+	outline-offset: 2px;
+}
+
+.aw-panel-head h2,
+.aw-card-head h2 {
+	color: var(--aw-gold-text);
+	letter-spacing: 0.04em;
+	text-shadow: 0 1px 0 #000;
+}
+
+.aw-panel-body h3 {
+	border-bottom: 1px solid rgb(122 74 34 / 24%);
+	color: #7a4420;
+	letter-spacing: 0.09em;
+	text-transform: uppercase;
+}
+
+.aw-panel-body h3 small {
+	color: var(--aw-ink-soft);
+	font-style: italic;
+	letter-spacing: 0;
+	text-transform: none;
+}
+
+.aw-tab {
+	border: 1px solid var(--aw-wood-edge);
+	border-radius: 6px;
+	background: linear-gradient(#6b4528, #4a2e1b);
+	box-shadow:
+		inset 0 1px 0 rgb(255 220 160 / 20%),
+		inset 0 -2px 0 rgb(0 0 0 / 25%);
+	color: #d9bf8a;
+}
+
+.aw-tab:hover {
+	color: #f6dfa6;
+	background: linear-gradient(#77502f, #52331e);
+}
+
+.aw-tab[aria-selected="true"] {
+	background: linear-gradient(#a2703c, #6d4421);
+	box-shadow:
+		inset 0 0 0 1px var(--aw-brass-light),
+		inset 0 1px 0 rgb(255 240 200 / 45%);
+	color: #fff4d4;
+}
+
+.aw-folded .aw-tab[aria-selected="true"] {
+	background: linear-gradient(#6b4528, #4a2e1b);
+	box-shadow: inset 0 0 0 1px var(--aw-brass-dark);
+}
+
+.aw-tab:focus-visible {
+	outline: 2px solid var(--aw-brass-light);
+	outline-offset: 1px;
+}
+
+.aw-badge {
+	border-radius: 9px;
+	background: radial-gradient(circle at 40% 30%, #e05a3e, #a3241a);
+	box-shadow:
+		0 0 0 1.5px #2a160c,
+		0 1px 3px rgb(0 0 0 / 50%);
+	color: #fff;
+}
+
+/* Rows */
+.aw-row-main {
+	border-radius: 5px;
+}
+
+.aw-row-main:hover {
+	background: rgb(160 110 50 / 15%);
+}
+
+.aw-row-main:focus-visible {
+	outline: 2px solid #a8742e;
+	outline-offset: -2px;
+}
+
+.aw-row-selected {
+	border-radius: 6px;
+	background: rgb(160 110 50 / 17%);
+	box-shadow: inset 0 0 0 1px rgb(122 74 34 / 30%);
+}
+
+.aw-row-selected .aw-row-main:hover {
+	background: transparent;
+}
+
+.aw-row-here .aw-row-main {
+	background: rgb(201 163 90 / 22%);
+}
+
+.aw-row-muted .aw-row-main:hover {
+	background: transparent;
+}
+
+.aw-row-detail {
+	color: var(--aw-ink-soft);
+}
+
+.aw-row-asking .aw-row-detail {
+	color: #8a4d08;
+}
+
+.aw-row-time,
+.aw-row-go {
+	color: var(--aw-ink-soft);
+	font-family: var(--aw-figures);
+}
+
+.aw-row-go {
+	font-family: var(--aw-serif);
+	font-style: italic;
+}
+
+.aw-pip {
+	border-radius: 50%;
+	box-shadow:
+		inset 0 0 0 1px rgb(0 0 0 / 28%),
+		inset 0 1px 0 rgb(255 255 255 / 45%);
+}
+
+.aw-pip-asking {
+	background: radial-gradient(circle at 40% 30%, #ffe08a, #e0a422);
+	color: #3a2405;
+}
+
+.aw-pip-finished {
+	background: radial-gradient(circle at 40% 30%, #c8f0b0, #6fb658);
+	color: #183312;
+}
+
+.aw-pip-working {
+	background: radial-gradient(circle at 40% 30%, #5a456c, #2e2238);
+	color: #f3e9d2;
+}
+
+.aw-pip-idle {
+	background: #d9c9a6;
+}
+
+.aw-pip-idle::after {
+	border-radius: 50%;
+	background: #8a7552;
+}
+
+.aw-pip-place {
+	border-radius: 2px;
+	background: #b98a46;
+}
+
+.aw-dots i {
+	border-radius: 50%;
+	background: currentColor;
+}
+
+.aw-actions {
+	border: 0;
+}
+
+.aw-button {
+	border: 1px solid #6b4422;
+	border-radius: 5px;
+	background: linear-gradient(#fff7e0, #e8d09c);
+	box-shadow:
+		inset 0 1px 0 #fffdf5,
+		0 1px 0 rgb(60 35 15 / 20%);
+	color: #3a2414;
+}
+
+.aw-button:hover {
+	background: linear-gradient(#fffbef, #f0dcae);
+	border-color: #4a2d16;
+}
+
+.aw-button:active {
+	box-shadow: inset 0 1px 2px rgb(60 35 15 / 25%);
+}
+
+.aw-button:focus-visible {
+	outline: 2px solid #a8742e;
+	outline-offset: 1px;
+}
+
+/* Settings */
+.aw-switch-row {
+	border-radius: 5px;
+}
+
+.aw-switch-row:hover {
+	background: rgb(160 110 50 / 15%);
+}
+
+.aw-switch-hint,
+.aw-note {
+	color: var(--aw-ink-soft);
+}
+
+.aw-note {
+	font-style: italic;
+}
+
+.aw-switch {
+	border-radius: 9px;
+	background: linear-gradient(#5a3a22, #7a5434);
+	box-shadow:
+		inset 0 1px 3px rgb(0 0 0 / 50%),
+		0 0 0 1px #3a2414;
+}
+
+.aw-switch i {
+	border-radius: 50%;
+	background: radial-gradient(circle at 40% 30%, #fff6d8, #c9a35a);
+	box-shadow: 0 1px 2px rgb(0 0 0 / 50%);
+}
+
+[aria-checked="true"] > .aw-switch {
+	background: linear-gradient(#5d7a2e, #86a94a);
+}
+
+.aw-setting-value {
+	color: var(--aw-ink-soft);
+	font-style: italic;
+}
+
+.aw-chat-line time {
+	color: #9a8462;
+	font-family: var(--aw-figures);
+}
+
+.aw-chat-game {
+	color: var(--aw-ink);
+}
+
+.aw-chat-agents {
+	color: #4b2a7a;
+}
+
+.aw-chat-mail {
+	color: #85420c;
+}
+
+.aw-chat-commands {
+	color: #1d4c66;
+}
+
+.aw-chat-name:hover {
+	text-decoration: underline;
+	text-underline-offset: 2px;
+}
+
+.aw-filter,
+.aw-fold {
+	border: 1px solid var(--aw-wood-edge);
+	border-radius: 5px;
+	background: linear-gradient(#5e3c23, #432a18);
+	box-shadow: inset 0 1px 0 rgb(255 220 160 / 14%);
+	color: #a88f66;
+}
+
+.aw-filter[aria-pressed="true"] {
+	background: linear-gradient(#80552f, #5a3820);
+	color: var(--aw-gold-text);
+	box-shadow:
+		inset 0 1px 0 rgb(255 230 180 / 28%),
+		inset 0 -2px 0 var(--aw-brass-dark);
+}
+
+.aw-filter:hover,
+.aw-fold:hover {
+	color: #fff2cc;
+}
+
+.aw-filter:focus-visible,
+.aw-fold:focus-visible {
+	outline: 2px solid var(--aw-brass-light);
+	outline-offset: 1px;
+}
+
+.aw-card-head p {
+	color: #d9c08a;
+	font-style: italic;
+}
+
+.aw-card blockquote {
+	border-left: 3px solid #d29a2c;
+	border-radius: 0 4px 4px 0;
+	background: rgb(255 244 210 / 70%);
+	font-style: italic;
+}
+
+.aw-card dl > div {
+	border-bottom: 1px dotted rgb(122 74 34 / 28%);
+}
+
+.aw-card dt {
+	color: var(--aw-ink-soft);
+}
+
+/* Ending a session is set apart, at the end of its own row, in the ink of a warning. */
+.aw-actions .aw-button-end {
+	color: #7a2a18;
+}
+
+/* Settings: the avatar looks, each as its portrait in a brass frame */
+.aw-looks {
+	border: 0;
+}
+
+.aw-look-frame {
+	border-radius: 6px;
+	background: radial-gradient(circle at 50% 35%, #6b4a2c, #2e1d10);
+	box-shadow:
+		inset 0 0 0 2px var(--aw-brass-dark),
+		0 0 0 1px var(--aw-wood-edge),
+		0 2px 3px rgb(0 0 0 / 35%);
+}
+
+.aw-look-name {
+	color: var(--aw-ink-soft);
+}
+
+.aw-look:hover .aw-look-frame {
+	box-shadow:
+		inset 0 0 0 2px var(--aw-brass),
+		0 0 0 1px var(--aw-wood-edge),
+		0 3px 5px rgb(0 0 0 / 40%);
+}
+
+.aw-look:has(input:focus-visible) .aw-look-frame {
+	outline: 2px solid var(--aw-brass-light);
+	outline-offset: 2px;
+}
+
+.aw-look:has(input:checked) .aw-look-frame {
+	box-shadow:
+		inset 0 0 0 2px var(--aw-brass-light),
+		0 0 0 2px var(--aw-brass),
+		0 0 10px rgb(240 212 138 / 55%);
+}
+
+.aw-look:has(input:checked) .aw-look-name {
+	color: var(--aw-ink);
+}
+
+/* Settings: each theme a row with a brass ring that fills when worn. */
+.aw-theme {
+	border-radius: 5px;
+}
+
+.aw-theme:hover {
+	background: rgb(160 110 50 / 15%);
+}
+
+.aw-theme:has(input:checked) {
+	background: rgb(201 163 90 / 22%);
+	box-shadow: inset 0 0 0 1px rgb(122 74 34 / 30%);
+}
+
+.aw-theme:has(input:focus-visible) {
+	outline: 2px solid #a8742e;
+	outline-offset: -2px;
+}
+
+.aw-theme-mark {
+	border-radius: 50%;
+	background: radial-gradient(circle at 40% 30%, #fff6d8, #e8d09c);
+	box-shadow:
+		inset 0 0 0 1.5px #7b5a26,
+		0 1px 0 rgb(255 250 230 / 60%);
+}
+
+.aw-theme:has(input:checked) .aw-theme-mark::after {
+	content: "";
+	position: absolute;
+	inset: 3.5px;
+	border-radius: 50%;
+	background: radial-gradient(circle at 40% 30%, #f6dc96, #8a6a2e);
+}
+
+.aw-theme-line {
+	color: var(--aw-ink-soft);
+	font-style: italic;
+}
+
+.aw-theme-broken .aw-theme-line {
+	color: var(--aw-danger);
+}
+
+/* ---- conversation ---- */
+
+/* The conversation panel in the fantasy theme: an open book over the dimmed world. A tooled leather cover with gilt
+   corners holds two parchment pages over a gilt-edged page block; the left page is the character, the right the
+   transcript. Everything is drawn here in CSS; text stays crisp HTML. */
+.aw-conv-veil {
+	--aw-ink-soft: #6f5332;
+	--aw-oxblood: var(--aw-danger);
+	--aw-blue-ink: #24476a;
+	--aw-gilt: #d9b45e;
+	--aw-gilt-light: #f7e2a0;
+	--aw-gilt-dark: #8a6424;
+	--aw-serif: var(--aw-font-body);
+	--aw-display: var(--aw-font-display);
+	--aw-mono: var(--aw-font-mono);
+	background: var(--aw-veil);
+	font-family: var(--aw-serif);
+	color: var(--aw-ink);
+}
+
+/* The cover */
+.aw-conv-panel {
+	border-radius: 14px 14px 16px 16px;
+	background: var(--aw-panel-cover);
+	box-shadow:
+		inset 0 0 0 2px #2a0f07,
+		inset 0 0 0 5px rgb(217 180 94 / 0%),
+		inset 0 0 0 6px var(--aw-gilt-dark),
+		inset 0 0 0 7px #2a0f07,
+		inset 0 2px 6px 6px rgb(255 200 150 / 6%),
+		inset 0 -6px 14px rgb(0 0 0 / 45%),
+		0 30px 70px rgb(0 0 0 / 70%),
+		0 6px 14px rgb(0 0 0 / 50%);
+}
+
+/* The page block under the pages: many leaves and a gilt edge, showing below and beside them. */
+.aw-conv-panel::before {
+	border-radius: 4px 4px 6px 6px;
+	background:
+		linear-gradient(to bottom, transparent calc(100% - 9px), rgb(0 0 0 / 0%) calc(100% - 9px)),
+		repeating-linear-gradient(to bottom, #f1e2bd 0 1px, #c9ad78 1px 2px), #e9d7ac;
+	box-shadow:
+		0 0 0 1px #3a1a0c,
+		0 2px 0 1px var(--aw-gilt),
+		0 3px 0 1px var(--aw-gilt-dark),
+		0 4px 6px 1px rgb(0 0 0 / 50%);
+}
+
+/* The spine's crease between the pages. */
+.aw-conv-panel::after {
+	box-shadow: 0 0 10px 3px rgb(60 30 10 / 45%);
+}
+
+/* Gilt corner pieces on the leather. */
+.aw-conv-ornament {
+	background:
+		url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 46 46'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23fbe7a6'/%3E%3Cstop offset='.45' stop-color='%23d4aa52'/%3E%3Cstop offset='1' stop-color='%237f5a1d'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath d='M2 2h30c-4 2-8 3-12 3-6 0-9 3-9 9 0 4-1 8-3 12V2z' fill='url(%23g)' stroke='%233a200a' stroke-width='1'/%3E%3Cpath d='M2 2l14 14' stroke='%233a200a' stroke-width='1.2'/%3E%3Ccircle cx='17' cy='17' r='3.2' fill='url(%23g)' stroke='%233a200a'/%3E%3Cpath d='M32 2c4 0 6 2 6 4s-2 3-3 2M2 32c0 4 2 6 4 6s3-2 2-3' fill='none' stroke='url(%23g)' stroke-width='2.2' stroke-linecap='round'/%3E%3C/svg%3E")
+		no-repeat center / contain;
+	filter: drop-shadow(0 1px 1px rgb(0 0 0 / 60%));
+}
+
+/* The pages */
+.aw-conv-pane {
+	background: var(--aw-panel-page);
+	box-shadow:
+		inset 0 0 0 1px rgb(120 80 30 / 25%),
+		inset 0 0 50px rgb(150 100 40 / 18%);
+}
+
+.aw-conv-side {
+	border-radius: 6px 2px 2px 8px;
+	box-shadow:
+		inset -26px 0 26px -18px rgb(90 55 20 / 55%),
+		inset -2px 0 2px -1px rgb(70 40 15 / 45%),
+		inset 0 0 0 1px rgb(120 80 30 / 25%),
+		inset 0 0 50px rgb(150 100 40 / 18%);
+}
+
+.aw-conv-main {
+	border-radius: 2px 6px 8px 2px;
+	box-shadow:
+		inset 26px 0 26px -18px rgb(90 55 20 / 55%),
+		inset 2px 0 2px -1px rgb(70 40 15 / 45%),
+		inset 0 0 0 1px rgb(120 80 30 / 25%),
+		inset 0 0 50px rgb(150 100 40 / 18%);
+}
+
+/* The left page: the character */
+.aw-portrait {
+	border-radius: 50% 50% 10px 10px / 46% 46% 10px 10px;
+	background: radial-gradient(circle at 50% 36%, #f7e3ad 0, #d6a868 26%, #7d6370 62%, #2f2840 100%), #4a3a50;
+	box-shadow:
+		0 0 0 2px #3a200a,
+		0 0 0 4px var(--aw-gilt),
+		0 0 0 5px var(--aw-gilt-light),
+		0 0 0 7px var(--aw-gilt-dark),
+		0 0 0 8px #3a200a,
+		0 8px 18px 8px rgb(80 45 15 / 35%),
+		inset 0 0 22px rgb(60 25 5 / 55%);
+}
+
+.aw-portrait img {
+	filter: drop-shadow(0 4px 6px rgb(40 15 0 / 45%));
+}
+
+.aw-conv-title {
+	font: 600 30px / 1.1 var(--aw-display);
+	letter-spacing: 0.01em;
+	color: var(--aw-oxblood);
+	text-shadow: 0 1px 0 rgb(255 245 220 / 70%);
+}
+
+.aw-conv-role {
+	font-style: italic;
+	color: var(--aw-ink-soft);
+}
+
+/* A flourish under the name. */
+.aw-conv-role::after {
+	background:
+		url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 150 12'%3E%3Cpath d='M2 6h56M92 6h56' stroke='%23a07a3a' stroke-width='1'/%3E%3Cpath d='M75 1l5 5-5 5-5-5z' fill='%23a07a3a'/%3E%3Ccircle cx='62' cy='6' r='1.6' fill='%23a07a3a'/%3E%3Ccircle cx='88' cy='6' r='1.6' fill='%23a07a3a'/%3E%3C/svg%3E")
+		no-repeat center / contain;
+}
+
+.aw-conv-facts dt {
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	color: var(--aw-ink-faint);
+}
+
+.aw-conv-facts dd {
+	color: var(--aw-ink);
+}
+
+.aw-conv-branch {
+	color: var(--aw-ink-soft);
+	font-style: italic;
+}
+
+.aw-conv-status {
+	border: 1px solid rgb(122 42 24 / 45%);
+	border-radius: 3px;
+	font-style: normal;
+	letter-spacing: 0.04em;
+	color: var(--aw-oxblood);
+	background: rgb(122 42 24 / 7%);
+}
+
+.aw-conv-doing-asking dd {
+	font-style: italic;
+	color: var(--aw-oxblood);
+}
+
+.aw-conv-tool-name {
+	font-variant: small-caps;
+	letter-spacing: 0.04em;
+	color: var(--aw-oxblood);
+}
+
+.aw-conv-tool-arg {
+	font: 12px / 1.4 var(--aw-mono);
+	color: #4b3520;
+}
+
+/* A brass plaque button. */
+.aw-cta {
+	border: 1px solid #3a200a;
+	border-radius: 6px;
+	font: 600 15px var(--aw-serif);
+	letter-spacing: 0.02em;
+	color: #2b1608;
+	text-shadow: 0 1px 0 rgb(255 240 200 / 60%);
+	background: linear-gradient(#f7e2a0, #d9b45e 48%, #b78d3c 52%, #d2a957);
+	box-shadow:
+		inset 0 1px 0 rgb(255 250 225 / 80%),
+		inset 0 -2px 0 rgb(90 55 10 / 35%),
+		0 2px 0 #6e4a14,
+		0 4px 8px rgb(60 30 5 / 35%);
+}
+
+.aw-cta:hover {
+	filter: brightness(1.06);
+}
+
+.aw-cta:active {
+	box-shadow:
+		inset 0 1px 0 rgb(255 250 225 / 60%),
+		0 1px 0 #6e4a14,
+		0 2px 4px rgb(60 30 5 / 30%);
+}
+
+.aw-cta:focus-visible {
+	outline: 2px solid var(--aw-blue-ink);
+	outline-offset: 3px;
+}
+
+.aw-conv-warn {
+	font-style: italic;
+	color: var(--aw-oxblood);
+}
+
+.aw-conv-wake {
+	font-style: italic;
+	color: var(--aw-ink-soft);
+}
+
+.aw-conv-wake-failed {
+	color: var(--aw-oxblood);
+}
+
+/* The right page: the transcript */
+.aw-conv-close {
+	border: 0;
+	border-radius: 50%;
+	background:
+		url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3E%3Cdefs%3E%3CradialGradient id='g' cx='.4' cy='.35' r='.7'%3E%3Cstop offset='0' stop-color='%23f8e4a4'/%3E%3Cstop offset='.6' stop-color='%23c99a46'/%3E%3Cstop offset='1' stop-color='%23805516'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='15' cy='15' r='13' fill='url(%23g)' stroke='%233a200a' stroke-width='1.2'/%3E%3Ccircle cx='15' cy='15' r='10' fill='none' stroke='%23805516' stroke-width='.8'/%3E%3Cpath d='M10.5 10.5l9 9M19.5 10.5l-9 9' stroke='%233a200a' stroke-width='2.2' stroke-linecap='round'/%3E%3C/svg%3E")
+		no-repeat center / contain;
+	filter: drop-shadow(0 2px 2px rgb(60 30 5 / 40%));
+}
+
+.aw-conv-close:hover {
+	filter: drop-shadow(0 2px 2px rgb(60 30 5 / 40%)) brightness(1.08);
+}
+
+/* A silk ribbon marking the page. */
+.aw-conv-marker {
+	background: linear-gradient(90deg, #6d140f, #a8261b 45%, #7d1812);
+	filter: drop-shadow(1px 2px 1px rgb(40 10 0 / 45%));
+}
+
+.aw-conv-log {
+	mask-image: linear-gradient(transparent, #000 22px, #000 calc(100% - 14px), transparent);
+	scrollbar-color: rgb(122 80 30 / 55%) transparent;
+}
+
+.aw-conv-log::-webkit-scrollbar-thumb {
+	border-radius: 4px;
+	background: rgb(122 80 30 / 45%);
+}
+
+.aw-conv-log::-webkit-scrollbar-track {
+	background: transparent;
+}
+
+/* Shown over the top of the page, so the transcript under it never moves. */
+.aw-conv-loading {
+	border-radius: 12px;
+	background: rgb(251 242 218 / 92%);
+	box-shadow:
+		0 0 0 1px rgb(160 122 58 / 45%),
+		0 2px 6px rgb(90 60 20 / 20%);
+	font-style: italic;
+	color: var(--aw-ink-soft);
+}
+
+.aw-conv-start {
+	font-style: italic;
+	color: var(--aw-ink-faint);
+}
+
+.aw-conv-start::before,
+.aw-conv-start::after {
+	content: "\2766";
+	font-style: normal;
+	color: #a07a3a;
+}
+
+/* Entries the runtime indexed that the transcript file no longer holds: one quiet line at the top. */
+.aw-conv-missing {
+	font-style: italic;
+	color: var(--aw-ink-faint);
+}
+
+.aw-conv-empty {
+	font-style: italic;
+	color: var(--aw-ink-soft);
+}
+
+.aw-conv-day {
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+	color: var(--aw-ink-faint);
+}
+
+.aw-conv-day::before,
+.aw-conv-day::after {
+	background: linear-gradient(90deg, transparent, rgb(160 122 58 / 60%), transparent);
+}
+
+.aw-conv-name {
+	font: 700 13px var(--aw-serif);
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	color: var(--aw-oxblood);
+}
+
+.aw-conv-who time {
+	font-style: italic;
+	color: var(--aw-ink-faint);
+}
+
+/* The operator's turns: in blue ink, set in from a margin rule like a note written into the book. */
+.aw-conv-user {
+	color: #1f3a57;
+}
+
+.aw-conv-user::before {
+	border-radius: 1px;
+	background: linear-gradient(
+		rgb(36 71 106 / 0%),
+		rgb(36 71 106 / 55%) 18%,
+		rgb(36 71 106 / 55%) 82%,
+		rgb(36 71 106 / 0%)
+	);
+}
+
+.aw-conv-user .aw-conv-name {
+	color: var(--aw-blue-ink);
+}
+
+/* Mail: a letter with a wax seal. */
+.aw-conv-mail {
+	border: 1px solid rgb(140 100 40 / 35%);
+	border-radius: 3px;
+	background: linear-gradient(#fdf6e2, #f3e6c3);
+	box-shadow:
+		0 2px 5px rgb(90 60 20 / 25%),
+		1px 1px 0 rgb(255 255 255 / 50%) inset;
+}
+
+.aw-conv-mail-mark {
+	border-radius: 50%;
+	background: radial-gradient(circle at 38% 34%, #d4473a, #9c1f16 55%, #6a120c);
+	box-shadow:
+		0 0 0 2px rgb(156 31 22 / 40%),
+		0 2px 3px rgb(60 10 0 / 45%);
+}
+
+.aw-conv-mail-mark::after {
+	content: "\2709";
+	color: rgb(255 220 200 / 75%);
+}
+
+.aw-md li::marker {
+	color: #a07a3a;
+}
+
+.aw-md h1,
+.aw-md h2,
+.aw-md h3,
+.aw-md h4 {
+	font-family: var(--aw-display);
+	color: #4a2a12;
+}
+
+.aw-md strong {
+	color: #22140a;
+}
+
+.aw-md blockquote {
+	border-left: 3px double rgb(160 122 58 / 70%);
+	font-style: italic;
+	color: var(--aw-ink-soft);
+}
+
+.aw-md hr {
+	border: 0;
+	background: rgb(160 122 58 / 50%);
+}
+
+.aw-md code {
+	border-radius: 3px;
+	font: 0.84em / 1.3 var(--aw-mono);
+	background: rgb(120 80 30 / 11%);
+	color: #4a2410;
+}
+
+.aw-md-code {
+	border-radius: 5px;
+	background: linear-gradient(#2d221c, #261c17);
+	box-shadow:
+		0 0 0 1px #140d09,
+		0 0 0 2px rgb(217 180 94 / 35%),
+		inset 0 1px 8px rgb(0 0 0 / 40%);
+	color: #f1e4c4;
+	font: 12.5px / 1.55 var(--aw-mono);
+}
+
+.aw-md-code code {
+	background: none;
+	color: inherit;
+	font: inherit;
+}
+
+.aw-md-lang {
+	font: 600 10px var(--aw-serif);
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	color: rgb(217 180 94 / 70%);
+}
+
+.aw-md th,
+.aw-md td {
+	border: 1px solid rgb(140 100 40 / 30%);
+}
+
+.aw-md th {
+	background: rgb(160 122 58 / 12%);
+}
+
+.aw-md-link {
+	color: var(--aw-blue-ink);
+	text-decoration: underline;
+	text-decoration-color: rgb(36 71 106 / 40%);
+	text-underline-offset: 2px;
+}
+
+a.aw-md-link:hover {
+	text-decoration-color: currentColor;
+}
+
+a.aw-md-link:focus-visible {
+	outline: 2px solid var(--aw-blue-ink);
+	outline-offset: 1px;
+	border-radius: 2px;
+}
+
+/* A link the window cannot open (not a web link): its target shows on hover only. */
+.aw-md-link-dead {
+	text-decoration-style: dotted;
+}
+
+.aw-md-image {
+	font-style: italic;
+	color: var(--aw-ink-faint);
+}
+
+.aw-md-image::before {
+	content: "[image: ";
+}
+
+.aw-md-image::after {
+	content: "]";
+}
+
+.aw-conv-fold-line {
+	border: 0;
+	border-radius: 4px;
+	background: transparent;
+	font: 14px / 1.4 var(--aw-serif);
+	color: var(--aw-ink-soft);
+}
+
+.aw-conv-fold-line:hover {
+	background: rgb(160 122 58 / 13%);
+}
+
+.aw-conv-fold-line:focus-visible {
+	outline: 2px solid rgb(36 71 106 / 55%);
+	outline-offset: 1px;
+}
+
+.aw-conv-chevron {
+	border-top: 4.5px solid transparent;
+	border-bottom: 4.5px solid transparent;
+	border-left: 6px solid #a07a3a;
+}
+
+.aw-conv-glyph {
+	color: #a07a3a;
+}
+
+.aw-conv-glyph-tool::before {
+	content: "\2692";
+}
+
+.aw-conv-glyph-thought::before {
+	content: "\2767";
+}
+
+.aw-conv-glyph-note::before {
+	content: "\2709";
+}
+
+.aw-conv-fold-label {
+	font-variant: small-caps;
+	letter-spacing: 0.04em;
+	color: #6a4320;
+}
+
+.aw-conv-thought .aw-conv-fold-label {
+	font-variant: normal;
+	font-style: italic;
+	letter-spacing: 0;
+	color: var(--aw-ink-faint);
+}
+
+.aw-conv-fold-arg {
+	font: 12.5px / 1.4 var(--aw-mono);
+	color: #4b3520;
+}
+
+.aw-conv-state-ok {
+	color: #5a7a2a;
+}
+
+.aw-conv-state-error {
+	color: #a8261b;
+}
+
+.aw-conv-state-waiting {
+	color: var(--aw-ink-faint);
+}
+
+.aw-conv-fold-body {
+	border-left: 2px solid rgb(160 122 58 / 45%);
+	background: rgb(160 122 58 / 7%);
+	border-radius: 0 4px 4px 0;
+}
+
+.aw-conv-io-label {
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+	color: var(--aw-ink-faint);
+}
+
+.aw-conv-io {
+	border-radius: 4px;
+	background: rgb(255 250 235 / 55%);
+	box-shadow: inset 0 0 0 1px rgb(140 100 40 / 25%);
+	font: 12px / 1.5 var(--aw-mono);
+	color: #3a2814;
+}
+
+.aw-conv-io.aw-conv-error {
+	background: rgb(168 38 27 / 7%);
+	box-shadow: inset 0 0 0 1px rgb(168 38 27 / 30%);
+	color: #6e1a10;
+}
+
+.aw-conv-thought-text {
+	font-style: italic;
+	color: var(--aw-ink-soft);
+}
+
+.aw-conv-quiet {
+	font-style: italic;
+	color: var(--aw-ink-faint);
+}
+
+.aw-conv-failed {
+	font-style: italic;
+	color: #8a2a1a;
+}
+
+/* Where the reply box goes (ticket 13): a ruled line with a quill. */
+.aw-conv-reply-slot {
+	border-top: 1px solid rgb(140 100 40 / 35%);
+	font-style: italic;
+	color: var(--aw-ink-faint);
+}
+
+.aw-conv-pen {
+	background:
+		url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 26 26'%3E%3Cpath d='M23 2C14 4 8 10 5 19l2 1c1-3 3-6 5-8-1 3-3 6-4 9 7-3 12-9 15-19z' fill='%23b89a66' stroke='%236f5332' stroke-width='.8'/%3E%3Cpath d='M5 19l-2 5' stroke='%236f5332' stroke-width='1.4' stroke-linecap='round'/%3E%3C/svg%3E")
+		no-repeat center / contain;
+}
+
+/* The foot of the right page: what the operator can do (ticket 13). A ruled line, the receipts of what was sent, the
+   reply box with its quill, and the actions by state. */
+.aw-conv-act {
+	border-top: 1px solid rgb(140 100 40 / 35%);
+}
+
+.aw-conv-input {
+	border: 1px solid rgb(140 100 40 / 38%);
+	border-radius: 5px;
+	font: 15px / 1.5 var(--aw-serif);
+	color: var(--aw-ink);
+	background:
+		repeating-linear-gradient(to bottom, transparent 0 calc(1.5em - 1px), rgb(36 71 106 / 10%) calc(1.5em - 1px) 1.5em)
+		0 6px / 100% 1.5em,
+		rgb(255 251 238 / 62%);
+	background-attachment: local;
+	box-shadow: inset 0 1px 3px rgb(90 60 20 / 18%);
+	scrollbar-color: rgb(122 80 30 / 55%) transparent;
+}
+
+.aw-conv-input::placeholder {
+	font-style: italic;
+	color: var(--aw-ink-faint);
+}
+
+.aw-conv-input:focus {
+	border-color: rgb(138 100 36 / 75%);
+	box-shadow:
+		inset 0 1px 3px rgb(90 60 20 / 18%),
+		0 0 0 2px rgb(217 180 94 / 45%);
+}
+
+.aw-conv-hint {
+	font-style: italic;
+	color: var(--aw-ink-faint);
+}
+
+.aw-conv-hint kbd {
+	border: 1px solid rgb(140 100 40 / 40%);
+	border-radius: 3px;
+	font: 600 10.5px var(--aw-serif);
+	font-style: normal;
+	color: var(--aw-ink-soft);
+	background: rgb(255 251 238 / 70%);
+	box-shadow: 0 1px 0 rgb(140 100 40 / 35%);
+}
+
+.aw-cta:disabled {
+	filter: saturate(0.5) brightness(0.97);
+}
+
+/* A quieter leather-and-parchment button beside the brass one. */
+.aw-cta-quiet {
+	color: var(--aw-ink);
+	background: linear-gradient(#fdf5df, #ecd9ab 55%, #e1c88f);
+	box-shadow:
+		inset 0 1px 0 rgb(255 255 245 / 85%),
+		inset 0 -2px 0 rgb(120 80 30 / 18%),
+		0 2px 0 #9a7a44,
+		0 4px 8px rgb(60 30 5 / 22%);
+}
+
+/* Red sealing wax, for Stop. */
+.aw-cta-danger {
+	border-color: #3a0d05;
+	color: #fdebd2;
+	text-shadow: 0 1px 0 rgb(40 5 0 / 60%);
+	background: linear-gradient(#c4513a, #9c2f1c 50%, #84220f 52%, #9a3220);
+	box-shadow:
+		inset 0 1px 0 rgb(255 200 170 / 45%),
+		inset 0 -2px 0 rgb(40 5 0 / 35%),
+		0 2px 0 #4d1206,
+		0 4px 8px rgb(60 10 5 / 35%);
+}
+
+/* What was sent, and how far it got. */
+.aw-conv-receipts {
+	color: var(--aw-ink-soft);
+}
+
+.aw-conv-receipt-what {
+	font-variant: small-caps;
+	letter-spacing: 0.04em;
+	color: var(--aw-oxblood);
+}
+
+.aw-conv-receipt-text {
+	font-style: italic;
+}
+
+.aw-conv-stage {
+	color: rgb(154 125 85 / 70%);
+}
+
+.aw-conv-stage::before {
+	content: "\25CB";
+}
+
+.aw-conv-stage.aw-on {
+	color: #3f6a2c;
+}
+
+.aw-conv-stage.aw-on::before {
+	content: "\2713";
+}
+
+.aw-conv-receipt-failed {
+	font-style: italic;
+	color: var(--aw-oxblood);
+}
+
+/* Stop asks first: a slip of parchment over the foot of the page, closed with a wax seal. */
+.aw-conv-confirm {
+	border-radius: 4px;
+	background: radial-gradient(ellipse 90% 80% at 50% 40%, #fffaea, #f3e4bf 70%, #e7d09d);
+	box-shadow:
+		0 0 0 1px rgb(120 80 30 / 45%),
+		0 0 0 4px rgb(251 242 218 / 90%),
+		0 0 0 5px rgb(138 100 36 / 55%),
+		0 14px 30px rgb(50 25 5 / 40%);
+}
+
+.aw-conv-confirm-mark {
+	border-radius: 50%;
+	background: radial-gradient(circle at 38% 34%, #d8604a, #9c2f1c 55%, #6e1a0c);
+	box-shadow:
+		0 0 0 2px rgb(156 47 28 / 45%),
+		0 2px 3px rgb(40 5 0 / 45%);
+}
+
+.aw-conv-confirm-title {
+	font: 600 18px / 1.2 var(--aw-display);
+	color: var(--aw-oxblood);
+}
+
+.aw-conv-confirm-text {
+	color: var(--aw-ink);
+}
+
+/* The reply being written: a nib that blinks after the last word. */
+.aw-conv-writing .aw-md > :last-child::after {
+	border-radius: 1px 1px 3px 3px;
+	background: var(--aw-ink-soft);
+}
+
+/* An open question (ticket 14): a letter of questions laid over the foot of the page, sealed in wax. */
+.aw-conv-form,
+.aw-conv-terminal-only {
+	border-radius: 4px;
+	background: radial-gradient(ellipse 100% 90% at 50% 30%, #fffbee, #f6e9c8 70%, #ecd8a8);
+	box-shadow:
+		0 0 0 1px rgb(120 80 30 / 40%),
+		0 0 0 4px rgb(251 242 218 / 92%),
+		0 0 0 5px rgb(138 100 36 / 50%),
+		0 -10px 24px rgb(90 60 20 / 18%);
+}
+
+.aw-conv-form-head {
+	border-bottom: 1px solid rgb(140 100 40 / 25%);
+}
+
+.aw-conv-form-mark {
+	border-radius: 50%;
+	background: radial-gradient(circle at 38% 34%, #6f8fb3, #2f557c 55%, #1d3653);
+	box-shadow:
+		0 0 0 2px rgb(36 71 106 / 40%),
+		0 2px 3px rgb(10 20 40 / 45%);
+}
+
+.aw-conv-form-title {
+	font: 600 18px / 1.2 var(--aw-display);
+	color: var(--aw-blue-ink);
+}
+
+.aw-conv-form-sub {
+	font-style: italic;
+	color: var(--aw-ink-faint);
+}
+
+.aw-conv-form-body {
+	scrollbar-color: rgb(122 80 30 / 55%) transparent;
+}
+
+.aw-conv-q {
+	border: 0;
+}
+
+.aw-conv-q + .aw-conv-q {
+	border-top: 1px dashed rgb(140 100 40 / 28%);
+}
+
+.aw-conv-q-legend {
+	color: var(--aw-ink);
+}
+
+.aw-conv-q-header {
+	border-radius: 3px;
+	font-variant: small-caps;
+	letter-spacing: 0.05em;
+	color: #fbf2da;
+	background: var(--aw-blue-ink);
+}
+
+.aw-conv-q-how {
+	font-style: italic;
+	color: var(--aw-ink-faint);
+}
+
+.aw-conv-opt {
+	border: 1px solid rgb(140 100 40 / 32%);
+	border-radius: 5px;
+	background: rgb(255 252 242 / 70%);
+}
+
+.aw-conv-opt:hover {
+	border-color: rgb(138 100 36 / 65%);
+	background: rgb(255 252 242 / 95%);
+}
+
+.aw-conv-opt.aw-on {
+	border-color: var(--aw-blue-ink);
+	background: #fffdf5;
+	box-shadow:
+		0 0 0 1px var(--aw-blue-ink),
+		0 2px 6px rgb(36 71 106 / 18%);
+}
+
+.aw-conv-opt-label {
+	color: var(--aw-ink);
+}
+
+.aw-conv-opt-desc {
+	color: var(--aw-ink-soft);
+}
+
+.aw-conv-opt-own .aw-conv-opt-label {
+	font-style: italic;
+}
+
+/* Hand-drawn marks: an inked ring for one choice, a ruled box for many. */
+.aw-conv-mark {
+	border: 1.5px solid var(--aw-ink-soft);
+	background: #fffdf6;
+}
+
+.aw-conv-mark-radio {
+	border-radius: 50%;
+}
+
+.aw-conv-mark-checkbox {
+	border-radius: 3px;
+}
+
+.aw-conv-mark:checked {
+	border-color: var(--aw-blue-ink);
+}
+
+.aw-conv-mark-radio:checked::after {
+	border-radius: 50%;
+	background: var(--aw-blue-ink);
+}
+
+.aw-conv-mark-checkbox:checked::after {
+	border: solid var(--aw-blue-ink);
+}
+
+.aw-conv-mark:focus-visible {
+	outline: 2px solid rgb(217 180 94 / 90%);
+	outline-offset: 2px;
+}
+
+.aw-conv-form-foot {
+	border-top: 1px solid rgb(140 100 40 / 25%);
+}
+
+.aw-conv-asked {
+	color: var(--aw-ink);
+}
+
+.aw-conv-terminal-why {
+	font-style: italic;
+	color: var(--aw-ink-soft);
+}
+
+/* Who answered the question that just closed. */
+.aw-conv-closed {
+	font-style: italic;
+	color: var(--aw-blue-ink);
+}
+
+.aw-conv-closed::before {
+	content: "\2709";
+	font-style: normal;
+}
+
+/* ---- places ---- */
+
+/* The function places' panels in the fantasy theme: the innkeeper's register and the rookery are ledgers of warm
+   parchment in the interface's carved wood frame, with the host's portrait in a brass-rimmed medallion at the head.
+   The veil dims the world less than the conversation book does: these are errands at a counter, not a long read. */
+.aw-places {
+	--aw-oxblood: var(--aw-danger);
+	--aw-moss: #3f6a2c;
+	--aw-display: var(--aw-font-display);
+}
+
+.aw-place-veil {
+	background: radial-gradient(ellipse 75% 70% at 50% 48%, rgb(14 9 18 / 30%), rgb(8 5 10 / 68%));
+}
+
+.aw-place-close {
+	border: 0;
+	border-radius: 50%;
+	background:
+		url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3E%3Cdefs%3E%3CradialGradient id='g' cx='.4' cy='.35' r='.7'%3E%3Cstop offset='0' stop-color='%23f8e4a4'/%3E%3Cstop offset='.6' stop-color='%23c99a46'/%3E%3Cstop offset='1' stop-color='%23805516'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='15' cy='15' r='13' fill='url(%23g)' stroke='%233a200a' stroke-width='1.2'/%3E%3Ccircle cx='15' cy='15' r='10' fill='none' stroke='%23805516' stroke-width='.8'/%3E%3Cpath d='M10.5 10.5l9 9M19.5 10.5l-9 9' stroke='%233a200a' stroke-width='2.2' stroke-linecap='round'/%3E%3C/svg%3E")
+		no-repeat center / contain;
+	filter: drop-shadow(0 2px 2px rgb(30 15 5 / 55%));
+}
+
+.aw-place-close:hover {
+	filter: drop-shadow(0 2px 2px rgb(30 15 5 / 55%)) brightness(1.08);
+}
+
+.aw-place-close:focus-visible {
+	outline: 2px solid var(--aw-brass-light);
+	outline-offset: 2px;
+}
+
+/* The head: the host in a medallion, the panel's name, and what the host says. */
+.aw-place-head {
+	border-bottom: 1px solid rgb(122 90 50 / 35%);
+	box-shadow: 0 1px 0 rgb(255 250 230 / 70%);
+}
+
+.aw-place-portrait {
+	border-radius: 50%;
+	background: radial-gradient(circle at 50% 35%, #7a5432, #3a2414);
+	box-shadow:
+		0 0 0 2px #3a2414,
+		0 0 0 4px var(--aw-brass),
+		0 0 0 5px #3a2414,
+		0 4px 10px rgb(60 30 10 / 45%);
+}
+
+.aw-place-heading h2 {
+	font-family: var(--aw-display);
+	letter-spacing: 0.01em;
+	color: #3a2010;
+}
+
+.aw-place-says {
+	font-style: italic;
+	color: var(--aw-ink-soft);
+}
+
+.aw-place-search {
+	border: 1px solid #a07a46;
+	border-radius: 6px;
+	background:
+		url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='6.5' cy='6.5' r='4.5' fill='none' stroke='%237a5a32' stroke-width='1.6'/%3E%3Cpath d='M10 10l4 4' stroke='%237a5a32' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E")
+		no-repeat 10px center / 13px,
+		rgb(255 251 238 / 70%);
+	box-shadow: inset 0 1px 3px rgb(90 55 20 / 20%);
+	color: var(--aw-ink);
+}
+
+.aw-place-search::placeholder {
+	color: #9a7d55;
+	font-style: italic;
+}
+
+.aw-place-search:focus-visible {
+	border-color: #6b4422;
+	box-shadow:
+		inset 0 1px 3px rgb(90 55 20 / 20%),
+		0 0 0 2px rgb(201 163 90 / 55%);
+}
+
+.aw-place-list {
+	scrollbar-color: #a07a46 transparent;
+}
+
+.aw-place-empty {
+	color: var(--aw-ink-soft);
+	font-style: italic;
+}
+
+/* The register's rows: a face, who and what, and the two things to do. */
+.aw-register-row {
+	border-bottom: 1px dashed rgb(122 90 50 / 30%);
+}
+
+.aw-register-row:last-child {
+	border-bottom: 0;
+}
+
+.aw-register-face {
+	border-radius: 7px;
+	background: linear-gradient(#5d3f26, #3a2414);
+	box-shadow:
+		0 0 0 1px #3a2414,
+		inset 0 0 0 1px rgb(240 212 138 / 30%);
+}
+
+.aw-register-face img {
+	filter: saturate(0.8) brightness(0.92);
+}
+
+.aw-register-name {
+	color: #2b1d12;
+}
+
+.aw-register-where {
+	border-radius: 8px;
+	background: rgb(122 90 50 / 14%);
+	font-style: italic;
+	color: var(--aw-ink-soft);
+}
+
+.aw-register-where.aw-upstairs {
+	background: rgb(60 70 110 / 13%);
+	color: #3d4a72;
+}
+
+.aw-register-detail {
+	color: #4a3420;
+}
+
+.aw-register-status {
+	border: 1px solid rgb(122 90 50 / 45%);
+	border-radius: 4px;
+	color: var(--aw-ink-soft);
+}
+
+.aw-register-quiet {
+	font-style: italic;
+	color: #8a6d48;
+}
+
+.aw-register-time {
+	font-style: italic;
+	color: #8a6d48;
+}
+
+.aw-places .aw-button-strong {
+	border-color: #3d2a12;
+	background: linear-gradient(#f3d488, #d3a64e);
+	box-shadow:
+		inset 0 1px 0 #fff0c2,
+		0 1px 0 rgb(60 35 15 / 25%);
+}
+
+.aw-places .aw-button-strong:hover {
+	background: linear-gradient(#f8de9c, #dcb15c);
+}
+
+/* A receipt where the operator asked: sending, done, or failed with why. */
+.aw-progress {
+	font-style: italic;
+}
+
+.aw-progress::before {
+	border-radius: 50%;
+}
+
+.aw-progress-sending {
+	color: #6b5a3a;
+}
+
+.aw-progress-sending::before {
+	background: #c9a35a;
+}
+
+.aw-progress-done {
+	color: var(--aw-moss);
+}
+
+.aw-progress-done::before {
+	background: #6fb658;
+	box-shadow: 0 0 0 1px #2c4d1f;
+}
+
+.aw-progress-failed {
+	color: var(--aw-oxblood);
+	font-style: normal;
+}
+
+.aw-progress-failed::before {
+	background: #c4452a;
+	box-shadow: 0 0 0 1px #5a1a0c;
+}
+
+/* Ending a busy session: a small sealed note. */
+.aw-confirm-veil {
+	background: rgb(8 5 10 / 45%);
+}
+
+.aw-confirm-mark {
+	border-radius: 50%;
+	background: radial-gradient(circle at 40% 35%, #d65a3c, #8a2414 60%, #5a140a);
+	box-shadow:
+		0 0 0 2px #4a1008,
+		0 2px 4px rgb(0 0 0 / 40%);
+}
+
+.aw-confirm h2 {
+	font-family: var(--aw-display);
+	color: #3a2010;
+}
+
+.aw-confirm .aw-confirm-after {
+	font-style: italic;
+	color: var(--aw-ink-soft);
+}
+
+.aw-places .aw-button-danger {
+	border-color: #4a1008;
+	background: linear-gradient(#d8674a, #a5361f);
+	box-shadow:
+		inset 0 1px 0 #f09a80,
+		0 1px 0 rgb(60 15 5 / 30%);
+	color: #fff4e4;
+}
+
+.aw-places .aw-button-danger:hover {
+	background: linear-gradient(#e0735a, #b23f26);
+}
+
+.aw-place-scroll {
+	scrollbar-color: #a07a46 transparent;
+}
+
+.aw-place-section h3 {
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	color: var(--aw-ink-soft);
+}
+
+.aw-mail-row {
+	border-bottom: 1px dashed rgb(122 90 50 / 30%);
+}
+
+.aw-mail-row:last-child {
+	border-bottom: 0;
+}
+
+.aw-mail-main {
+	border-radius: 5px;
+}
+
+.aw-mail-main:hover {
+	background: rgb(160 110 50 / 12%);
+}
+
+.aw-mail-main:focus-visible {
+	outline: 2px solid #a8742e;
+	outline-offset: -1px;
+}
+
+.aw-mail-who {
+	color: #2b1d12;
+}
+
+.aw-mail-you {
+	font-style: italic;
+	color: #24476a;
+}
+
+.aw-mail-arrow {
+	color: #9a7d55;
+}
+
+.aw-mail-meta {
+	color: #8a6d48;
+}
+
+.aw-mail-state {
+	border-radius: 8px;
+	font-style: italic;
+}
+
+.aw-mail-state-delivered {
+	background: rgb(111 182 88 / 20%);
+	color: #2f5a22;
+}
+
+.aw-mail-state-waiting {
+	background: rgb(224 164 34 / 22%);
+	color: #6b4a08;
+}
+
+.aw-mail-state-failed {
+	background: rgb(196 69 42 / 18%);
+	color: var(--aw-oxblood);
+}
+
+.aw-mail-body {
+	color: #4a3420;
+}
+
+.aw-letter-to {
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--aw-ink-soft);
+}
+
+.aw-letter-to select {
+	border: 1px solid #a07a46;
+	border-radius: 6px;
+	background: rgb(255 251 238 / 75%);
+	font: 15px var(--aw-serif);
+	letter-spacing: 0;
+	text-transform: none;
+	color: var(--aw-ink);
+}
+
+.aw-letter-body {
+	border: 1px solid #a07a46;
+	border-radius: 6px;
+	background:
+		repeating-linear-gradient(transparent 0 23px, rgb(122 90 50 / 18%) 23px 24px) 0 11px / 100% 24px,
+		rgb(255 251 238 / 75%);
+	box-shadow: inset 0 1px 3px rgb(90 55 20 / 18%);
+	font: italic 15px / 24px var(--aw-serif);
+	color: #24476a;
+}
+
+.aw-letter-body:focus-visible,
+.aw-letter-to select:focus-visible {
+	outline: 2px solid rgb(201 163 90 / 75%);
+	outline-offset: 1px;
+}
+
+.aw-letter-note {
+	font-style: italic;
+	color: #8a6d48;
+}
+
+.aw-panel-body .aw-mail-write {
+	letter-spacing: 0;
+	text-transform: none;
+}
+
+/* ---- pointer ---- */
+
+/* RuneScape's pointer chrome in the fantasy palette: hover text and the right-click menu. */
+.pointer-hover {
+	border-radius: 6px;
+	background: linear-gradient(90deg, rgb(20 12 8 / 62%), rgb(20 12 8 / 38%) 80%, rgb(20 12 8 / 0%));
+	color: #f6ead0;
+	letter-spacing: 0.01em;
+	text-shadow:
+		1px 1px 0 #000,
+		0 0 3px rgb(0 0 0 / 70%);
+}
+
+.pointer-character {
+	color: #ffd95a;
+}
+
+.pointer-object {
+	color: #7fdcf0;
+}
+
+.pointer-more {
+	color: #d8c9a8;
+}
+
+.pointer-menu {
+	border: 2px solid #6b4a2a;
+	border-radius: 6px;
+	background: #2b1d12f2;
+	box-shadow: 0 8px 22px rgb(0 0 0 / 55%);
+}
+
+.pointer-menu-title {
+	border-radius: 3px 3px 0 0;
+	background: linear-gradient(#e9d29f, #d7bb7e);
+	color: #2b1d12;
+}
+
+.pointer-menu button {
+	border: 0;
+	background: transparent;
+	color: #f6ead0;
+	text-shadow: 1px 1px 0 #000;
+}
+
+.pointer-menu button:hover {
+	background: #6b4a2a;
+}

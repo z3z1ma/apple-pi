@@ -65,7 +65,7 @@ export function Chatbox({
 			{!folded && (
 				<div
 					ref={log}
-					className="aw-chat-log aw-parchment"
+					className="aw-chat-log aw-surface"
 					role="log"
 					aria-label="World events"
 					onScroll={(event) => {

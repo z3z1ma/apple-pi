@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, chmodSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync, writeSync } from "node:fs";
 import { basename, dirname, join, normalize, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { BrowserWindow, app, ipcMain, net, protocol, shell } from "electron";
@@ -8,6 +8,7 @@ import { createConnection } from "node:net";
 import { DatabaseSync } from "node:sqlite";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { inflateSync } from "node:zlib";
 //#region components/session-state/src/paths.ts
 /** Pi's own rule for `PI_CODING_AGENT_DIR`: a leading `~` means the home directory. */
 function agentDir() {
@@ -541,7 +542,7 @@ function openConversations(socketPath) {
 //#endregion
 //#region apps/agent-world/src/backend/instructions.ts
 /** The longest text an instruction may carry; Pi takes any, but the panel is for messages, not files. */
-var TEXT_MAX = 1e5;
+var TEXT_MAX$1 = 1e5;
 var reply = (value) => {
 	if (!value || typeof value !== "object") return void 0;
 	const { selected, custom } = value;
@@ -558,7 +559,7 @@ function instructionCommand(character, instruction) {
 		case "follow_up": {
 			const text = given.text;
 			if (typeof text !== "string" || !text.trim()) return { refused: "There is nothing to send." };
-			if (text.length > TEXT_MAX) return { refused: "That message is too long to send from here." };
+			if (text.length > TEXT_MAX$1) return { refused: "That message is too long to send from here." };
 			return { command: {
 				kind: given.kind,
 				text
@@ -802,6 +803,758 @@ async function openLink(url, open) {
 	}
 }
 //#endregion
+//#region apps/agent-world/web/game/layout.ts
+/** The walk grid: half-tile cells, true where blocked. A cell is blocked when its centre is inside a blocked rect. */
+function walkGrid(place) {
+	const cols = Math.round(place.cols * 2);
+	const rows = Math.round(place.rows * 2);
+	const blocked = new Array(cols * rows).fill(false);
+	for (const [x, y, w, h] of place.blocked) for (let row = Math.max(0, Math.floor(y * 2)); row < Math.min(rows, Math.ceil((y + h) * 2)); row++) for (let col = Math.max(0, Math.floor(x * 2)); col < Math.min(cols, Math.ceil((x + w) * 2)); col++) {
+		const cx = (col + .5) / 2;
+		const cy = (row + .5) / 2;
+		if (cx >= x && cx < x + w && cy >= y && cy < y + h) blocked[row * cols + col] = true;
+	}
+	return {
+		cols,
+		rows,
+		blocked
+	};
+}
+//#endregion
+//#region apps/agent-world/web/game/pathing.ts
+/** Cells per tile: the walk grid is twice as fine as the tiles. */
+var CELLS = 2;
+var CELL = 1 / CELLS;
+/** Clearance is measured only this far; beyond it, the floor is simply open. */
+var CLEARANCE_CAP = 1.5;
+/** A place's walk grid, with other characters standing at `occupants` (their feet), each covering its own footprint. */
+function gridFor(place, occupants = []) {
+	const base = walkGrid(place);
+	const blocked = Uint8Array.from(base.blocked, (b) => b ? 1 : 0);
+	const occupied = new Uint8Array(blocked.length);
+	for (const [x, y] of occupants) for (const cell of footprint(x, y, base.cols, base.rows)) occupied[cell] = blocked[cell] ? 0 : 1;
+	return withClearance({
+		cols: base.cols,
+		rows: base.rows,
+		blocked,
+		occupied,
+		clearance: /* @__PURE__ */ new Float32Array(0)
+	});
+}
+/** The cells a standing character's feet cover: those whose centres lie within half a tile across, a third deep. */
+function footprint(x, y, cols, rows) {
+	const cells = [];
+	for (let row = Math.floor((y - .35) * CELLS); row <= Math.floor((y + .35) * CELLS); row++) for (let col = Math.floor((x - .5) * CELLS); col <= Math.floor((x + .5) * CELLS); col++) {
+		if (row < 0 || col < 0 || row >= rows || col >= cols) continue;
+		const cx = (col + .5) * CELL;
+		const cy = (row + .5) * CELL;
+		if (Math.abs(cx - x) < .45 && Math.abs(cy - y) < .3) cells.push(row * cols + col);
+	}
+	return cells;
+}
+function withClearance(grid) {
+	const clearance = new Float32Array(grid.cols * grid.rows);
+	for (let row = 0; row < grid.rows; row++) for (let col = 0; col < grid.cols; col++) clearance[row * grid.cols + col] = taken(grid, row * grid.cols + col) ? 0 : distance(grid, [(col + .5) * CELL, (row + .5) * CELL], true);
+	grid.clearance = clearance;
+	return grid;
+}
+var cellOf = (grid, [x, y]) => {
+	const col = Math.floor(x * CELLS);
+	const row = Math.floor(y * CELLS);
+	return col < 0 || row < 0 || col >= grid.cols || row >= grid.rows ? -1 : row * grid.cols + col;
+};
+/** Whether a cell has furniture or someone standing on it. */
+var taken = (grid, cell) => grid.blocked[cell] === 1 || grid.occupied[cell] === 1;
+/** Open floor: no furniture, and nobody standing there. */
+var isOpen = (grid, point) => {
+	const cell = cellOf(grid, point);
+	return cell >= 0 && !taken(grid, cell);
+};
+/** Distance in tiles from `point` to the nearest furniture (and with `people`, footprint) or the edge, capped. */
+function distance(grid, [x, y], people) {
+	let best = Math.min(CLEARANCE_CAP, x, y, grid.cols * CELL - x, grid.rows * CELL - y);
+	if (best <= 0) return 0;
+	const reach = Math.ceil(best * CELLS);
+	const col0 = Math.floor(x * CELLS);
+	const row0 = Math.floor(y * CELLS);
+	for (let row = Math.max(0, row0 - reach); row <= Math.min(grid.rows - 1, row0 + reach); row++) for (let col = Math.max(0, col0 - reach); col <= Math.min(grid.cols - 1, col0 + reach); col++) {
+		const cell = row * grid.cols + col;
+		if (!grid.blocked[cell] && !(people && grid.occupied[cell])) continue;
+		const dx = Math.max(col * CELL - x, 0, x - (col + 1) * CELL);
+		const dy = Math.max(row * CELL - y, 0, y - (row + 1) * CELL);
+		const d = Math.hypot(dx, dy);
+		if (d < best) {
+			best = d;
+			if (best === 0) return 0;
+		}
+	}
+	return best;
+}
+/** The four painted expressions every look has, in the order of their files (`<look>-portrait-0..3.png`). */
+var EXPRESSIONS = [
+	"neutral",
+	"happy",
+	"thinking",
+	"worried"
+];
+/** Every place a pack paints, by data file. */
+var PLACE_FILES = [
+	"headquarters",
+	"common-room",
+	"gallery",
+	"wing-small",
+	"wing-large",
+	"square",
+	"inn",
+	"rookery",
+	"forge",
+	"quest-office",
+	"library"
+];
+/** What the world calls each kind of place: every pack names them all (`wing` follows a repository's name). */
+var PLACE_LABELS = [
+	"headquarters",
+	"common-room",
+	"gallery",
+	"wing",
+	"square",
+	"forge",
+	"quest-office",
+	"library",
+	"inn",
+	"rookery"
+];
+/** Roles every pack names: the three kinds of character, and each place's host and the townsfolk. */
+var ROLE_LABELS = [
+	"coordinator",
+	"worker",
+	"independent",
+	"innkeeper",
+	"rookery-keeper",
+	"smith",
+	"clerk",
+	"librarian",
+	"crier",
+	"townsfolk"
+];
+/** Every look role a pack must wear, with how many looks at least (agents need a few to tell apart). */
+var LOOK_ROLES = {
+	agent: 3,
+	coordinator: 1,
+	avatar: 1,
+	townsfolk: 1,
+	innkeeper: 1,
+	"rookery-keeper": 1,
+	smith: 1,
+	clerk: 1,
+	librarian: 1,
+	crier: 1
+};
+/** Overlays every pack draws: doors in three states, the wing banner, and the birds that carry mail. */
+var REQUIRED_OVERLAYS = [
+	"door-open",
+	"door-closed",
+	"door-boarded",
+	"banner-cream",
+	"bird-0",
+	"bird-1",
+	"bird-2",
+	"bird-3"
+];
+/**
+* Overlays a pack needs only when one of its places has a slot of that kind: ambient animation is optional, and an inn
+* may seat its sleepers at tables rather than in beds.
+*/
+var SLOT_OVERLAYS = {
+	fire: [
+		"fire-0",
+		"fire-1",
+		"fire-2",
+		"fire-3"
+	],
+	water: [
+		"water-0",
+		"water-1",
+		"water-2",
+		"water-3"
+	],
+	bed: ["bed"],
+	letters: ["letters"]
+};
+/**
+* Theme-flavoured lines the world says, by key; `{name}`, `{count}`, and the like are filled in. Everything else the
+* world says is plain and the same in every theme.
+*/
+var TEXT_KEYS = [
+	"banner-reads",
+	"headquarters-empty",
+	"ask-host",
+	"ask-upstairs",
+	"upstairs-count",
+	"asleep-here",
+	"asleep-count",
+	"nobody-asleep",
+	"register-title",
+	"register-greeting",
+	"register-upstairs",
+	"register-empty",
+	"register-search",
+	"sleeper-upstairs",
+	"sleeper-bed",
+	"sleeper-table",
+	"letter",
+	"letter-placeholder",
+	"letter-for-sleeper",
+	"write-letter",
+	"letter-waits",
+	"letters-wait",
+	"rookery-greeting",
+	"rookery-waiting",
+	"rookery-empty",
+	"waiting-for-sleepers",
+	"letter-sending",
+	"letter-reached",
+	"end-session-after",
+	"session-ended",
+	"conversation-opening",
+	"conversation-older",
+	"conversation-asleep",
+	"slack-later"
+];
+/**
+* Style tokens every pack sets: CSS custom properties put on the page's root, which the pack's skin and the world
+* UI's own CSS read. Fonts, the inks, the accent, and the main surfaces of the interface frame and the conversation
+* panel. A value may name a file in the pack with `url(...)`, relative to the pack.
+*/
+var STYLE_TOKENS = [
+	"--aw-font-body",
+	"--aw-font-display",
+	"--aw-font-figures",
+	"--aw-font-mono",
+	"--aw-backdrop",
+	"--aw-ink",
+	"--aw-ink-soft",
+	"--aw-ink-faint",
+	"--aw-accent",
+	"--aw-accent-light",
+	"--aw-danger",
+	"--aw-frame-background",
+	"--aw-frame-shadow",
+	"--aw-surface-background",
+	"--aw-panel-cover",
+	"--aw-panel-page",
+	"--aw-veil"
+];
+/**
+* Classes a skin must style: the interface's frames and surfaces, its tabs and buttons, the conversation panel and
+* its panes, the places' panels, and the pointer's menu. A skin that leaves one out draws a bare browser widget.
+*/
+var SKIN_CLASSES = [
+	"aw-interface",
+	"aw-frame",
+	"aw-surface",
+	"aw-tab",
+	"aw-button",
+	"aw-orb-glass",
+	"aw-pip",
+	"aw-filter",
+	"aw-conv-veil",
+	"aw-conv-panel",
+	"aw-conv-pane",
+	"aw-conv-close",
+	"aw-cta",
+	"aw-conv-input",
+	"aw-md-code",
+	"aw-place-veil",
+	"aw-place-close",
+	"aw-mail-row",
+	"pointer-menu",
+	"place-title",
+	"notice"
+];
+var isObject = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
+var isNumber = (value) => typeof value === "number" && Number.isFinite(value);
+var isPoint = (value) => Array.isArray(value) && value.length === 2 && value.every(isNumber);
+var isRect = (value) => Array.isArray(value) && value.length === 4 && value.every(isNumber);
+var isColour = (value) => typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value);
+var isFraction = (value) => isNumber(value) && value >= 0 && value <= 1;
+var fmt = (p) => `[${p.join(", ")}]`;
+/** How far an image's sides may stray from the place's tile grid before the grid no longer lies on the painting. */
+var ASPECT_TOLERANCE = .02;
+/** How far a frame's feet may be from the look's baseline, and its standing height from `STANDING_HEIGHT` (px). */
+var BASELINE_TOLERANCE = 1;
+var HEIGHT_TOLERANCE = 3;
+/** Alpha at or above this counts as drawn. */
+var OPAQUE = 128;
+async function json(reader, file, problems) {
+	const text = await reader.text(file);
+	if (text === void 0) {
+		problems.push({
+			file,
+			fault: "is missing"
+		});
+		return;
+	}
+	try {
+		return JSON.parse(text);
+	} catch (error) {
+		problems.push({
+			file,
+			fault: `is not valid JSON (${error.message})`
+		});
+		return;
+	}
+}
+/** Files a CSS value names with `url(...)`, other than data URLs, relative to where the value lives. */
+function urls(css) {
+	const found = [];
+	const plain = css.replace(/url\(\s*(["'])data:.*?\1\s*\)/gs, "");
+	for (const match of plain.matchAll(/url\(\s*(['"]?)([^'")]+)\1\s*\)/g)) {
+		const url = match[2].trim();
+		if (!/^(data:|https?:|#)/i.test(url)) found.push(url);
+	}
+	return found;
+}
+/** A path inside the pack, from `dir` (pack-relative, '' for its root) and a relative reference. */
+function within(dir, ref) {
+	const parts = dir ? dir.split("/") : [];
+	for (const part of ref.split("/")) if (part === "..") {
+		if (!parts.length) return void 0;
+		parts.pop();
+	} else if (part && part !== ".") parts.push(part);
+	return parts.join("/");
+}
+function checkManifest(value, id, problems) {
+	const file = "theme.json";
+	if (!isObject(value)) {
+		problems.push({
+			file,
+			fault: "is not an object"
+		});
+		return;
+	}
+	const fault = (text) => problems.push({
+		file,
+		fault: text
+	});
+	if (value.id !== id) fault(`names the theme ${JSON.stringify(value.id)}, but its directory is ${id}`);
+	if (typeof value.name !== "string" || !value.name.trim()) fault("has no name");
+	const table = (key, names, what) => {
+		const entries = value[key];
+		if (!isObject(entries)) return fault(`has no ${key}`);
+		const missing = names.filter((name) => typeof entries[name] !== "string" || !entries[name].trim());
+		if (missing.length) fault(`has no ${what} for ${missing.join(", ")}`);
+	};
+	table("labels", [...PLACE_LABELS, ...ROLE_LABELS], "label");
+	table("text", TEXT_KEYS, "line");
+	table("style", STYLE_TOKENS, "style token");
+	if (typeof value.skin !== "string" || !value.skin.endsWith(".css")) fault("names no skin stylesheet (skin: *.css)");
+	const world = value.world;
+	if (!isObject(world)) {
+		fault("has no world style");
+		return value;
+	}
+	const colours = (path, object, keys) => {
+		if (!isObject(object)) return fault(`has no world.${path}`);
+		for (const key of keys) if (!isColour(object[key])) fault(`world.${path}.${key} is not a #rrggbb colour: ${JSON.stringify(object[key])}`);
+	};
+	if (!isColour(world.backdrop)) fault(`world.backdrop is not a #rrggbb colour: ${JSON.stringify(world.backdrop)}`);
+	if (typeof world.font !== "string" || !world.font.trim()) fault("has no world.font");
+	colours("bark", world.bark, [
+		"paper",
+		"ink",
+		"outline"
+	]);
+	colours("tag", world.tag, [
+		"plate",
+		"rim",
+		"rivet",
+		"ink"
+	]);
+	colours("sleep", world.sleep, ["fill", "stroke"]);
+	colours("badge", world.badge, ["rim", "edge"]);
+	for (const kind of [
+		"asking",
+		"unseen",
+		"working"
+	]) colours(`badge.${kind}`, isObject(world.badge) ? world.badge[kind] : void 0, [
+		"fill",
+		"light",
+		"ink"
+	]);
+	if (!Array.isArray(world.glow) || world.glow.length !== 3 || !world.glow.every(isColour)) fault("world.glow is not three #rrggbb colours");
+	const banner = world.banner;
+	if (!isObject(banner) || !isNumber(banner.tiles) || banner.tiles <= 0 || !isRect(banner.text) || !banner.text.every(isFraction) || !isRect(banner.hover) || !banner.hover.every(isFraction) || !isColour(banner.ink)) fault("world.banner needs tiles, text and hover as fractions [x, y, w, h], and a #rrggbb ink");
+	const bed = world.bed;
+	if (bed !== void 0 && (!isObject(bed) || !isPoint(bed.pillow) || !Array.isArray(bed.covers) || bed.covers.length < 3 || !bed.covers.every(isPoint))) fault("world.bed needs a pillow point and a covers polygon (px in bed.png)");
+	return value;
+}
+function checkPlace(name, value, painting, problems) {
+	const file = `places/${name}.json`;
+	const fault = (text) => problems.push({
+		file,
+		fault: text
+	});
+	if (!isObject(value)) return fault("is not an object");
+	const place = value;
+	if (!isNumber(place.cols) || !isNumber(place.rows) || place.cols <= 0 || place.rows <= 0) return fault("has no grid size (cols, rows)");
+	if (!Array.isArray(place.blocked) || !place.blocked.every(isRect)) return fault("has no blocked rects [x, y, w, h]");
+	if (!Array.isArray(place.spots) || !place.spots.every(isPoint)) return fault("has no spots [x, y]");
+	if (!isObject(place.entries) || !Object.values(place.entries).every(isPoint)) return fault("has no entries");
+	if (!Array.isArray(place.doors) || !place.doors.every((d) => isObject(d) && isRect(d.rect) && isPoint(d.standAt))) return fault("has doors without a rect or a stand point");
+	if (!Array.isArray(place.overlaySlots) || !place.overlaySlots.every((s) => isObject(s) && isPoint(s.at))) return fault("has overlay slots without a place (at)");
+	if (painting) {
+		const across = painting.width / place.cols;
+		const down = painting.height / place.rows;
+		if (Math.abs(across / down - 1) > ASPECT_TOLERANCE) fault(`grid of ${place.cols} x ${place.rows} tiles does not fit its painting (${painting.width} x ${painting.height} px): ${across.toFixed(1)} px per tile across but ${down.toFixed(1)} down`);
+	}
+	const inside = ([x, y]) => x >= 0 && y >= 0 && x <= place.cols && y <= place.rows;
+	const rectInside = ([x, y, w, h]) => w >= 0 && h >= 0 && inside([x, y]) && inside([x + w, y + h]);
+	place.blocked.forEach((rect, i) => {
+		if (!rectInside(rect)) fault(`blocked rect ${i} ${fmt(rect)} lies outside its ${place.cols} x ${place.rows} grid`);
+	});
+	for (const door of place.doors) if (!rectInside(door.rect)) fault(`door ${door.name}'s rect ${fmt(door.rect)} lies outside its grid`);
+	place.overlaySlots.forEach((slot, i) => {
+		if (!inside(slot.at)) fault(`overlay slot ${i} (${slot.kind}) at ${fmt(slot.at)} lies outside its grid`);
+	});
+	for (const piece of place.foreground ?? []) if (!isRect(piece.rect) || !rectInside(piece.rect)) fault(`foreground piece ${fmt(piece.rect ?? [])} lies outside its grid`);
+	if (place.host && !inside(place.host.at)) fault(`its host stands at ${fmt(place.host.at)}, outside its grid`);
+	const grid = gridFor(place);
+	const onFloor = (what, point) => {
+		if (!inside(point)) fault(`${what} ${fmt(point)} lies outside its grid`);
+		else if (!isOpen(grid, point)) fault(`${what} ${fmt(point)} is not on open floor`);
+	};
+	for (const [i, spot] of place.spots.entries()) onFloor(`spot ${i}`, spot);
+	for (const [from, point] of Object.entries(place.entries)) onFloor(`entry from ${from}`, point);
+	for (const door of place.doors) onFloor(`door ${door.name}'s stand point`, door.standAt);
+	if (place.enterBy !== void 0 && !place.doors.some((door) => door.name === place.enterBy)) fault(`enterBy names ${JSON.stringify(place.enterBy)}, which is not one of its doors`);
+	for (const slot of place.overlaySlots) if (slot.kind === "bed" && slot.spot !== void 0 && !place.spots[slot.spot]) fault(`a bed at ${fmt(slot.at)} names spot ${slot.spot}, which it does not have`);
+	if (place.niches) {
+		const { at, layouts, repeat } = place.niches;
+		if (!Array.isArray(at) || !at.every((x) => isNumber(x) && x >= 0 && x <= place.cols)) fault("has niches outside its grid");
+		if (![...Object.values(layouts ?? {}).flat(), repeat].every((s) => Array.isArray(s) && s.length === 2 && s[0] >= 0 && s[1] <= place.cols && s[0] < s[1])) fault("cuts its painting into strips outside its grid");
+	}
+}
+/** Where each frame's feet are: the lowest drawn row, per frame. */
+function feetRows(image, frameWidth, frames) {
+	const alpha = image.alpha;
+	const rows = [];
+	for (let f = 0; f < frames; f++) {
+		let lowest = -1;
+		for (let y = image.height - 1; y >= 0 && lowest < 0; y--) {
+			const row = y * image.width;
+			for (let x = f * frameWidth; x < (f + 1) * frameWidth; x++) if (alpha[row + x] >= OPAQUE) {
+				lowest = y;
+				break;
+			}
+		}
+		rows.push(lowest);
+	}
+	return rows;
+}
+function topRow(image, frameWidth, frame) {
+	const alpha = image.alpha;
+	for (let y = 0; y < image.height; y++) {
+		const row = y * image.width;
+		for (let x = frame * frameWidth; x < (frame + 1) * frameWidth; x++) if (alpha[row + x] >= OPAQUE) return y;
+	}
+	return -1;
+}
+async function checkLooks(reader, value, hosts, pixels, problems) {
+	const file = "characters/looks.json";
+	if (!isObject(value)) return problems.push({
+		file,
+		fault: "is not an object"
+	});
+	const looks = value;
+	for (const [role, least] of Object.entries(LOOK_ROLES)) {
+		const count = Object.values(looks).filter((look) => isObject(look) && look.role === role).length;
+		if (count < least) problems.push({
+			file,
+			fault: `has ${count} ${role} looks; a pack needs at least ${least}`
+		});
+	}
+	for (const host of hosts) if (!looks[host]) problems.push({
+		file,
+		fault: `has no look ${host}, which a place's host wears`
+	});
+	await Promise.all(Object.entries(looks).map(async ([name, look]) => {
+		if (!isObject(look) || typeof look.role !== "string" || !isPoint(look.frame) || !isNumber(look.baseline)) return problems.push({
+			file,
+			fault: `look ${name} needs a role, a frame [w, h], and a baseline`
+		});
+		const [w, h] = look.frame;
+		const sheetFile = `characters/${name}.png`;
+		const sheet = await reader.image(sheetFile, pixels);
+		if (!sheet) problems.push({
+			file: sheetFile,
+			fault: "is missing"
+		});
+		else if (sheet.width !== w * 16 || sheet.height !== h) problems.push({
+			file: sheetFile,
+			fault: `is ${sheet.width} x ${sheet.height} px, but 16 frames of ${w} x ${h} (looks.json) make ${w * 16} x ${h}`
+		});
+		else if (look.baseline <= 0 || look.baseline > h) problems.push({
+			file,
+			fault: `look ${name}'s baseline ${look.baseline} lies outside its ${h} px frame`
+		});
+		else if (sheet.alpha) {
+			const off = feetRows(sheet, w, 16).map((row, frame) => ({
+				frame,
+				row
+			})).filter(({ row }) => Math.abs(row + 1 - look.baseline) > BASELINE_TOLERANCE);
+			if (off.length) problems.push({
+				file: sheetFile,
+				fault: `frames ${off.map((o) => o.frame).join(", ")} stand off the baseline ${look.baseline} (feet at rows ${off.map((o) => o.row + 1).join(", ")})`
+			});
+			const standing = look.baseline - topRow(sheet, w, 14);
+			if (Math.abs(standing - 120) > HEIGHT_TOLERANCE) problems.push({
+				file: sheetFile,
+				fault: `stands ${standing} px tall in its standing frame (14), not 120`
+			});
+		}
+		for (let i = 0; i < EXPRESSIONS.length; i++) {
+			const portraitFile = `characters/${name}-portrait-${i}.png`;
+			const portrait = await reader.image(portraitFile);
+			if (!portrait) problems.push({
+				file: portraitFile,
+				fault: `is missing (the ${EXPRESSIONS[i]} portrait)`
+			});
+			else if (portrait.height !== 360) problems.push({
+				file: portraitFile,
+				fault: `is ${portrait.height} px tall, not 360`
+			});
+		}
+	}));
+}
+/**
+* Check the pack `id` read through `reader`: its manifest and skin, every place over its painting, every look's sheet
+* and portraits, and the overlays it needs. `pixels` also checks each sheet's frames stand on its baseline at the
+* standing height (it reads every sheet's pixels). Returns every problem found, in a stable order; none means good.
+*/
+/** The skin's stylesheet: there, styling every class a skin must, and naming only files the pack has. */
+async function checkSkin(reader, manifest, problems) {
+	const skin = within("", manifest.skin);
+	const css = skin && await reader.text(skin);
+	if (!skin || css === void 0) return problems.push({
+		file: manifest.skin,
+		fault: "is missing (the skin)"
+	});
+	const dir = skin.split("/").slice(0, -1).join("/");
+	const unstyled = SKIN_CLASSES.filter((name) => !new RegExp(`\\.${name}(?![\\w-])`).test(css));
+	if (unstyled.length) problems.push({
+		file: skin,
+		fault: `does not style ${unstyled.map((c) => `.${c}`).join(", ")}`
+	});
+	for (const ref of urls(css)) {
+		const asset = within(dir, ref);
+		if (!asset || await reader.text(asset) === void 0) problems.push({
+			file: skin,
+			fault: `names ${ref}, which is not in the pack`
+		});
+	}
+	for (const [token, value] of Object.entries(isObject(manifest.style) ? manifest.style : {})) for (const ref of typeof value === "string" ? urls(value) : []) {
+		const asset = within("", ref);
+		if (!asset || await reader.text(asset) === void 0) problems.push({
+			file: "theme.json",
+			fault: `style ${token} names ${ref}, which is not in the pack`
+		});
+	}
+}
+/** Every place over its painting; returns the looks its hosts wear and the kinds of overlay slot it has. */
+async function checkPlaces(reader, problems) {
+	const hosts = [];
+	const slotKinds = /* @__PURE__ */ new Set();
+	for (const name of PLACE_FILES) {
+		const file = `places/${name}.json`;
+		const place = await json(reader, file, problems);
+		if (place === void 0) continue;
+		if (!isObject(place) || typeof place.painting !== "string") {
+			problems.push({
+				file,
+				fault: "names no painting"
+			});
+			checkPlace(name, place, void 0, problems);
+			continue;
+		}
+		const painting = await reader.image(`places/${place.painting}`);
+		if (!painting) problems.push({
+			file: `places/${place.painting}`,
+			fault: `is missing (the painting of ${name})`
+		});
+		checkPlace(name, place, painting, problems);
+		const data = place;
+		if (isObject(data.host) && typeof data.host.look === "string") hosts.push(data.host.look);
+		for (const slot of Array.isArray(data.overlaySlots) ? data.overlaySlots : []) if (isObject(slot)) slotKinds.add(String(slot.kind));
+	}
+	return {
+		hosts,
+		slotKinds
+	};
+}
+/**
+* Check the pack `id` read through `reader`: its manifest and skin, every place over its painting, every look's sheet
+* and portraits, and the overlays it needs. `pixels` also checks each sheet's frames stand on its baseline at the
+* standing height (it reads every sheet's pixels). Returns every problem found, in a stable order; none means good.
+*/
+async function checkPack(reader, id, { pixels = true } = {}) {
+	const problems = [];
+	const manifest = checkManifest(await json(reader, "theme.json", problems), id, problems);
+	if (manifest && typeof manifest.skin === "string") await checkSkin(reader, manifest, problems);
+	const { hosts, slotKinds } = await checkPlaces(reader, problems);
+	const looks = await json(reader, "characters/looks.json", problems);
+	if (looks !== void 0) await checkLooks(reader, looks, hosts, pixels, problems);
+	if (slotKinds.has("bed") && manifest && isObject(manifest.world) && manifest.world.bed === void 0) problems.push({
+		file: "theme.json",
+		fault: "has no world.bed, which its places' bed slots need"
+	});
+	const overlays = [...REQUIRED_OVERLAYS, ...[...slotKinds].flatMap((kind) => SLOT_OVERLAYS[kind] ?? [])];
+	for (const name of overlays) {
+		const file = `overlays/${name}.png`;
+		if (!await reader.image(file)) problems.push({
+			file,
+			fault: "is missing"
+		});
+	}
+	return problems.sort((a, b) => a.file.localeCompare(b.file) || a.fault.localeCompare(b.fault));
+}
+//#endregion
+//#region apps/agent-world/src/backend/theme-packs.ts
+var SIGNATURE = Buffer.from([
+	137,
+	80,
+	78,
+	71,
+	13,
+	10,
+	26,
+	10
+]);
+function paeth(a, b, c) {
+	const p = a + b - c;
+	const pa = Math.abs(p - a);
+	const pb = Math.abs(p - b);
+	const pc = Math.abs(p - c);
+	return pa <= pb && pa <= pc ? a : pb <= pc ? b : c;
+}
+/** Undo each scanline's PNG filter, handing every row of samples to `row` in order. */
+function unfilter(raw, width, height, channels, row) {
+	const stride = width * channels;
+	const current = new Uint8Array(stride);
+	let previous = new Uint8Array(stride);
+	for (let y = 0; y < height; y++) {
+		const filter = raw[y * (stride + 1)];
+		const line = raw.subarray(y * (stride + 1) + 1, (y + 1) * (stride + 1));
+		for (let i = 0; i < stride; i++) {
+			const left = i >= channels ? current[i - channels] : 0;
+			const up = previous[i];
+			const corner = i >= channels ? previous[i - channels] : 0;
+			const predicted = filter === 1 ? left : filter === 2 ? up : filter === 3 ? left + up >> 1 : filter === 4 ? paeth(left, up, corner) : 0;
+			current[i] = line[i] + predicted;
+		}
+		row(y, current);
+		previous = Uint8Array.from(current);
+	}
+}
+/** A PNG's size, and with `pixels` its alpha channel; undefined when the file is not a PNG it can read. */
+function readPng(data, pixels = false) {
+	if (data.length < 33 || !data.subarray(0, 8).equals(SIGNATURE) || data.toString("latin1", 12, 16) !== "IHDR") return void 0;
+	const width = data.readUInt32BE(16);
+	const height = data.readUInt32BE(20);
+	if (!pixels) return {
+		width,
+		height
+	};
+	const depth = data[24];
+	const colour = data[25];
+	const interlaced = data[28] !== 0;
+	const channels = {
+		0: 1,
+		2: 3,
+		3: 1,
+		4: 2,
+		6: 4
+	}[colour];
+	if (depth !== 8 || interlaced || channels === void 0) return void 0;
+	const idat = [];
+	let transparency;
+	for (let at = 8; at + 8 <= data.length;) {
+		const length = data.readUInt32BE(at);
+		const type = data.toString("latin1", at + 4, at + 8);
+		const body = data.subarray(at + 8, at + 8 + length);
+		if (type === "IDAT") idat.push(body);
+		if (type === "tRNS") transparency = body;
+		if (type === "IEND") break;
+		at += 12 + length;
+	}
+	let raw;
+	try {
+		raw = inflateSync(Buffer.concat(idat));
+	} catch {
+		return;
+	}
+	const stride = width * channels;
+	if (raw.length < height * (stride + 1)) return void 0;
+	const alpha = new Uint8Array(width * height);
+	unfilter(raw, width, height, channels, (y, line) => {
+		for (let x = 0; x < width; x++) {
+			const index = y * width + x;
+			if (colour === 6) alpha[index] = line[x * 4 + 3];
+			else if (colour === 4) alpha[index] = line[x * 2 + 1];
+			else if (colour === 3) alpha[index] = transparency?.[line[x]] ?? 255;
+			else alpha[index] = 255;
+		}
+	});
+	return {
+		width,
+		height,
+		alpha
+	};
+}
+/** A reader over a pack's directory: paths stay inside it. */
+function packReader(dir) {
+	const file = (path) => {
+		const full = normalize(join(dir, path));
+		if (!full.startsWith(normalize(dir) + sep) || !existsSync(full) || !statSync(full).isFile()) return void 0;
+		return full;
+	};
+	return {
+		async text(path) {
+			const full = file(path);
+			return full ? readFileSync(full, "utf8") : void 0;
+		},
+		async image(path, pixels) {
+			const full = file(path);
+			return full ? readPng(readFileSync(full), pixels) : void 0;
+		}
+	};
+}
+/** Check the pack in `dir`, named by its directory. */
+function checkThemePack(dir, options) {
+	const id = normalize(dir).split(sep).filter(Boolean).pop() ?? "";
+	return checkPack(packReader(dir), id, options);
+}
+/** Every pack under `themesDir` (a directory with a theme.json), checked, in name order with fantasy first. */
+async function listThemes(themesDir, options) {
+	const ids = existsSync(themesDir) ? readdirSync(themesDir, { withFileTypes: true }).filter((entry) => entry.isDirectory() && existsSync(join(themesDir, entry.name, "theme.json"))).map((entry) => entry.name).sort((a, b) => a === "fantasy" ? -1 : b === "fantasy" ? 1 : a.localeCompare(b)) : [];
+	return Promise.all(ids.map(async (id) => {
+		const problems = await checkThemePack(join(themesDir, id), options);
+		let name = id;
+		let description = null;
+		try {
+			const manifest = JSON.parse(readFileSync(join(themesDir, id, "theme.json"), "utf8"));
+			if (typeof manifest.name === "string") name = manifest.name;
+			if (typeof manifest.description === "string") description = manifest.description;
+		} catch {}
+		return {
+			id,
+			name,
+			description,
+			problems
+		};
+	}));
+}
+//#endregion
 //#region apps/agent-world/src/backend/facts.ts
 /** The facts columns for `select ... from sessions s join incarnations i ...` (the current incarnation). */
 var FACTS_COLUMNS = `s.run_state as runState, s.prompt, s.needs_you_since as needsYouSince, s.seen_at as seenAt,
@@ -815,7 +1568,7 @@ var FACTS_COLUMNS = `s.run_state as runState, s.prompt, s.needs_you_since as nee
 /** Joins for `FACTS_COLUMNS`: the session's current incarnation `i` and its pane `p`. */
 var FACTS_JOINS = `left join incarnations i on i.session_id = s.id and i.generation = s.generation
 left join tmux_panes p on p.socket = i.tmux_socket and p.id = i.pane_id`;
-function parse$2(json) {
+function parse$3(json) {
 	if (!json) return void 0;
 	try {
 		return JSON.parse(json);
@@ -823,13 +1576,13 @@ function parse$2(json) {
 		return;
 	}
 }
-var text = (value) => typeof value === "string" && value.trim() ? value.trim() : null;
+var text$1 = (value) => typeof value === "string" && value.trim() ? value.trim() : null;
 /** The questions of an `ask_user_question` prompt, as the panel's form needs them; undefined when they do not parse. */
 function questionsOf(value) {
 	if (!Array.isArray(value) || !value.length) return void 0;
 	const questions = [];
 	for (const raw of value) {
-		const question = text(raw?.question);
+		const question = text$1(raw?.question);
 		const options = Array.isArray(raw?.options) ? raw.options.map((option) => ({
 			label: typeof option?.label === "string" ? option.label : "",
 			description: typeof option?.description === "string" ? option.description : ""
@@ -837,7 +1590,7 @@ function questionsOf(value) {
 		if (!question || !options.length || options.some((option) => !option.label)) return void 0;
 		questions.push({
 			question,
-			header: text(raw.header),
+			header: text$1(raw.header),
 			options,
 			multiSelect: raw.multiSelect === true
 		});
@@ -850,15 +1603,15 @@ function questionsOf(value) {
 */
 function asking(prompt) {
 	if (prompt === null) return null;
-	const open = parse$2(prompt);
+	const open = parse$3(prompt);
 	const first = Array.isArray(open?.questions) ? open.questions[0] : void 0;
-	const kind = text(open?.kind) ?? "dialog";
+	const kind = text$1(open?.kind) ?? "dialog";
 	const shown = {
 		kind,
-		text: text(open?.title) ?? text(first?.question)
+		text: text$1(open?.title) ?? text$1(first?.question)
 	};
 	const questions = kind === "questionnaire" ? questionsOf(open?.questions) : void 0;
-	const id = text(open?.id);
+	const id = text$1(open?.id);
 	return questions && id ? {
 		...shown,
 		questionnaire: {
@@ -871,7 +1624,7 @@ function asking(prompt) {
 function taskReader() {
 	const cache = /* @__PURE__ */ new Map();
 	return (currentTask) => {
-		const task = parse$2(currentTask);
+		const task = parse$3(currentTask);
 		if (typeof task?.bundle !== "string" || typeof task.taskId !== "string") return null;
 		const file = join(task.bundle, "task.md");
 		let read = cache.get(file);
@@ -902,7 +1655,7 @@ function taskReader() {
 }
 function factsOf(row, readTask) {
 	const open = asking(row.prompt);
-	const git = parse$2(row.git);
+	const git = parse$3(row.git);
 	return {
 		run: row.runState,
 		status: open ? "asking" : row.runState !== "idle" ? "working" : "idle",
@@ -964,12 +1717,12 @@ var LABELS = {
 	set_thinking: "Thinking change",
 	start: "Start"
 };
-var PREVIEW = 120;
-function preview(text) {
+var PREVIEW$2 = 120;
+function preview$2(text) {
 	const flat = typeof text === "string" ? text.replace(/\s+/g, " ").trim() : "";
-	return flat.length > PREVIEW ? `${flat.slice(0, 119)}\u2026` : flat;
+	return flat.length > PREVIEW$2 ? `${flat.slice(0, 119)}\u2026` : flat;
 }
-function parse$1(json) {
+function parse$2(json) {
 	if (!json) return {};
 	try {
 		const value = JSON.parse(json);
@@ -980,16 +1733,16 @@ function parse$1(json) {
 }
 /** What a command says beyond its label: the text it carries. */
 function detail(command) {
-	if (command.kind === "rename") return preview(command.name);
-	if (command.kind === "set_model") return preview(command.id);
-	if (command.kind === "set_thinking") return preview(command.level);
-	return preview(command.text ?? command.prompt);
+	if (command.kind === "rename") return preview$2(command.name);
+	if (command.kind === "set_model") return preview$2(command.id);
+	if (command.kind === "set_thinking") return preview$2(command.level);
+	return preview$2(command.text ?? command.prompt);
 }
 /** The line for one event, or undefined when it is not one the operator follows. */
 function feedLine(row, lookup) {
 	if (row.sessionKind === "child") return void 0;
 	const name = row.name || (row.cwd ? basename(row.cwd) : null) || row.sessionId;
-	const data = parse$1(row.data);
+	const data = parse$2(row.data);
 	const line = (kind, text) => ({
 		seq: row.seq,
 		at: row.at,
@@ -1007,13 +1760,13 @@ function feedLine(row, lookup) {
 		case "prompt_opened": {
 			const prompt = data.to ?? {};
 			const first = Array.isArray(prompt.questions) ? prompt.questions[0] : void 0;
-			const asks = preview(prompt.title ?? first?.question);
+			const asks = preview$2(prompt.title ?? first?.question);
 			return line("agents", asks ? `${name} asks: ${asks}` : `${name} asks you something.`);
 		}
 		case "prompt_closed": return line("agents", `${name}'s question was answered.`);
 		case "command_accepted": {
 			const command = data.command ?? {};
-			if (command.kind === "mail") return line("mail", `Mail from ${command.from === "operator" ? "you" : typeof command.from === "string" ? lookup.name(command.from) ?? command.from : "someone"} to ${name}: ${preview(command.body)}`);
+			if (command.kind === "mail") return line("mail", `Mail from ${command.from === "operator" ? "you" : typeof command.from === "string" ? lookup.name(command.from) ?? command.from : "someone"} to ${name}: ${preview$2(command.body)}`);
 			const label = LABELS[String(command.kind)];
 			if (!label) return void 0;
 			const said = detail(command);
@@ -1024,7 +1777,7 @@ function feedLine(row, lookup) {
 			const command = typeof data.commandId === "string" ? lookup.command(data.commandId) : void 0;
 			const label = command ? LABELS[command.kind] : void 0;
 			if (!label) return void 0;
-			if (row.type === "command_failed") return line("commands", `${label} for ${name} failed: ${preview(data.reason) || "no reason given"}.`);
+			if (row.type === "command_failed") return line("commands", `${label} for ${name} failed: ${preview$2(data.reason) || "no reason given"}.`);
 			return command?.kind === "start" ? void 0 : line("commands", `${name} took the ${label.toLowerCase()}.`);
 		}
 	}
@@ -1203,7 +1956,7 @@ async function switchToPane(socket, pane, name) {
 //#endregion
 //#region apps/agent-world/src/backend/world-backend.ts
 /** How often new `events` rows are looked for; updates must reach the world within a second. */
-var POLL_MS = 200;
+var POLL_MS$1 = 200;
 var RECONNECT_MS = 1e3;
 /** Polls between rereads of the world while no event arrives, so edited `task.md` files show. */
 var TASK_REREAD_POLLS = 10;
@@ -1214,7 +1967,7 @@ var RETRY_MS = 5e3;
 var STORE_TIMEOUT_MS = 5e3;
 /**
 * The `preferences` key Agent World keeps its choices under:
-* `{ wings: { [coordinator id]: repository[] }, avatar: look }`.
+* `{ wings: { [coordinator id]: repository[] }, avatar: look, theme: id }`.
 */
 var PREFERENCE_KEY = "agent-world";
 var SESSIONS = `
@@ -1226,7 +1979,7 @@ select s.id, s.name, s.cwd, s.reports_to as reportsTo, s.git, s.config,
 from sessions s
 ${FACTS_JOINS}
 where s.kind = 'root'`;
-function parse(json) {
+function parse$1(json) {
 	if (!json) return void 0;
 	try {
 		return JSON.parse(json);
@@ -1235,8 +1988,8 @@ function parse(json) {
 	}
 }
 function sessionRow(row) {
-	const git = parse(row.git);
-	const config = parse(row.config);
+	const git = parse$1(row.git);
+	const config = parse$1(row.config);
 	return {
 		id: row.id,
 		name: row.name,
@@ -1255,6 +2008,8 @@ function mergeWings(first, then) {
 	for (const id of /* @__PURE__ */ new Set([...Object.keys(first), ...Object.keys(then)])) merged[id] = [.../* @__PURE__ */ new Set([...first[id] ?? [], ...then[id] ?? []])];
 	return merged;
 }
+/** The operator's choices kept in the preference beside the wings. */
+var CHOICES = ["avatar", "theme"];
 function openWorldBackend(paths) {
 	const listeners = /* @__PURE__ */ new Set();
 	let current = {
@@ -1272,12 +2027,17 @@ function openWorldBackend(paths) {
 	let closed = false;
 	let seen = {};
 	let sending;
-	let chosenAvatar;
-	let storedAvatar = null;
-	const avatarWaiters = /* @__PURE__ */ new Set();
-	const settleAvatar = (result) => {
-		for (const waiter of avatarWaiters) waiter(result);
-		avatarWaiters.clear();
+	const chosen = {};
+	const stored = {
+		avatar: null,
+		theme: null
+	};
+	const waiters = /* @__PURE__ */ new Set();
+	const settle = (key, result) => {
+		for (const waiter of waiters) if (key === void 0 || waiter.key === key) {
+			waiter.done(result);
+			waiters.delete(waiter);
+		}
 	};
 	let retryAt = 0;
 	const readTask = taskReader();
@@ -1301,28 +2061,31 @@ function openWorldBackend(paths) {
 		db = void 0;
 	};
 	const storedPreference = (database) => {
-		const value = parse(database.prepare("select value from preferences where key = ?").get(PREFERENCE_KEY)?.value);
+		const value = parse$1(database.prepare("select value from preferences where key = ?").get(PREFERENCE_KEY)?.value);
 		return value && typeof value === "object" && !Array.isArray(value) ? value : {};
 	};
 	/**
-	* Send the wings and the chosen avatar look to the runtime when they differ from what it stored, keeping the
-	* preference's other keys.
+	* Send the wings, the chosen avatar look, and the chosen theme to the runtime when they differ from what it stored,
+	* keeping the preference's other keys.
 	*/
-	const remember = (stored, storedWings, wings) => {
+	const remember = (preference, storedWings, wings) => {
 		const next = mergeWings(storedWings, wings);
-		storedAvatar = typeof stored.avatar === "string" ? stored.avatar : null;
-		if (chosenAvatar !== void 0 && chosenAvatar === storedAvatar) {
-			chosenAvatar = void 0;
-			settleAvatar({ ok: true });
+		for (const key of CHOICES) {
+			const value = preference[key];
+			stored[key] = typeof value === "string" ? value : null;
+			if (chosen[key] !== void 0 && chosen[key] === stored[key]) {
+				delete chosen[key];
+				settle(key, { ok: true });
+			}
 		}
-		if (JSON.stringify(next) === JSON.stringify(storedWings) && chosenAvatar === void 0) {
+		if (JSON.stringify(next) === JSON.stringify(storedWings) && !Object.keys(chosen).length) {
 			sending = void 0;
 			return;
 		}
 		const value = {
-			...stored,
+			...preference,
 			wings: next,
-			...chosenAvatar === void 0 ? {} : { avatar: chosenAvatar }
+			...chosen
 		};
 		const json = JSON.stringify(value);
 		if (!socket || !socketOpen || json === sending?.value || Date.now() < retryAt) return;
@@ -1351,8 +2114,8 @@ function openWorldBackend(paths) {
 			if (seq === lastSeq && world) return world;
 			lastSeq = seq;
 			const rows = db.prepare(SESSIONS).all();
-			const stored = storedPreference(db);
-			const storedWings = stored.wings && typeof stored.wings === "object" ? stored.wings : {};
+			const preference = storedPreference(db);
+			const storedWings = preference.wings && typeof preference.wings === "object" ? preference.wings : {};
 			const projected = projectWorld(rows.map(sessionRow), mergeWings(storedWings, seen));
 			const byId = new Map(rows.map((row) => [row.id, row]));
 			world = {
@@ -1365,7 +2128,7 @@ function openWorldBackend(paths) {
 			dormant = dormantAgents(world.dormant, byId, readTask);
 			mail = readMail(db);
 			seen = mergeWings(seen, world.wings);
-			remember(stored, storedWings, world.wings);
+			remember(preference, storedWings, world.wings);
 			return world;
 		} catch {
 			dropDb();
@@ -1385,7 +2148,7 @@ function openWorldBackend(paths) {
 					const row = database.prepare("select kind, command from commands where command_id = ?").get(commandId);
 					return row ? {
 						kind: row.kind,
-						command: parse(row.command) ?? {}
+						command: parse$1(row.command) ?? {}
 					} : void 0;
 				},
 				name(sessionId) {
@@ -1422,17 +2185,18 @@ function openWorldBackend(paths) {
 			connected: socketOpen && next !== void 0,
 			headquarters: next?.headquarters ?? current.headquarters,
 			characters: next?.characters ?? current.characters,
-			avatarLook: chosenAvatar ?? storedAvatar,
+			avatarLook: chosen.avatar ?? stored.avatar,
+			theme: chosen.theme ?? stored.theme,
 			dormant,
 			mail
 		});
 	};
 	const onLine = (line) => {
-		const message = parse(line);
+		const message = parse$1(line);
 		if (message?.type !== "receipt" || message.commandId !== sending?.commandId || message.stage !== "failed") return;
 		console.error(`agent-world: the runtime did not store the preference: ${message.reason ?? "no reason given"}`);
 		sending = void 0;
-		settleAvatar({
+		settle(void 0, {
 			ok: false,
 			reason: `The runtime did not store it: ${message.reason ?? "no reason given"}.`
 		});
@@ -1470,8 +2234,33 @@ function openWorldBackend(paths) {
 		});
 	};
 	connect();
-	const timer = setInterval(poll, POLL_MS).unref();
+	const timer = setInterval(poll, POLL_MS$1).unref();
 	poll();
+	/** Keep a choice: the snapshot shows it at once; resolves once the runtime stored it (or why not). */
+	const choose = (key, value) => {
+		chosen[key] = value;
+		const storing = new Promise((resolve) => {
+			let timer;
+			const waiter = {
+				key,
+				done(result) {
+					clearTimeout(timer);
+					resolve(result);
+				}
+			};
+			timer = setTimeout(() => {
+				waiters.delete(waiter);
+				resolve({
+					ok: false,
+					reason: "The session runtime did not store it yet; it will when it answers."
+				});
+			}, STORE_TIMEOUT_MS);
+			waiters.add(waiter);
+		});
+		lastSeq = -1;
+		poll();
+		return storing;
+	};
 	return {
 		snapshot: () => current,
 		subscribe(listener) {
@@ -1496,29 +2285,11 @@ function openWorldBackend(paths) {
 			feedListeners.add(listener);
 			return () => feedListeners.delete(listener);
 		},
-		setAvatarLook(look) {
-			chosenAvatar = look;
-			const stored = new Promise((resolve) => {
-				const timer = setTimeout(() => {
-					avatarWaiters.delete(done);
-					resolve({
-						ok: false,
-						reason: "The session runtime did not store it yet; it will when it answers."
-					});
-				}, STORE_TIMEOUT_MS);
-				const done = (result) => {
-					clearTimeout(timer);
-					resolve(result);
-				};
-				avatarWaiters.add(done);
-			});
-			lastSeq = -1;
-			poll();
-			return stored;
-		},
+		setAvatarLook: (look) => choose("avatar", look),
+		setTheme: (id) => choose("theme", id),
 		close() {
 			closed = true;
-			settleAvatar({
+			settle(void 0, {
 				ok: false,
 				reason: "Agent World closed before the runtime stored it."
 			});
@@ -1531,6 +2302,1743 @@ function openWorldBackend(paths) {
 			feedListeners.clear();
 		}
 	};
+}
+//#endregion
+//#region apps/agent-world/src/backend/integrations/atlassian.ts
+var TIMEOUT_MS$2 = 2e4;
+/**
+* The site's origin from what the operator typed: `acme`, `acme.atlassian.net`, or a full address. Plain http is
+* allowed only on loopback (the tests' fake servers); undefined when it is no usable address.
+*/
+function atlassianSite(site) {
+	let text = site.trim().replace(/\/+$/, "");
+	if (!text) return void 0;
+	if (!/^[a-z]+:\/\//i.test(text)) text = text.includes(".") ? `https://${text}` : `https://${text}.atlassian.net`;
+	let url;
+	try {
+		url = new URL(text);
+	} catch {
+		return;
+	}
+	const loopback = url.hostname === "127.0.0.1" || url.hostname === "localhost" || url.hostname === "[::1]";
+	if (url.protocol !== "https:" && !(url.protocol === "http:" && loopback)) return void 0;
+	return url.origin;
+}
+var NOT_SIGNED_IN$1 = {
+	ok: false,
+	reason: "Sign in to Atlassian in Settings first.",
+	signIn: "atlassian"
+};
+/** Call `path` on the site; non-2xx answers become a refusal that says what went wrong in plain words. */
+async function atlassianRequest(credentials, path, options = {}) {
+	if (!credentials) return NOT_SIGNED_IN$1;
+	const auth = Buffer.from(`${credentials.email}:${credentials.token}`).toString("base64");
+	let response;
+	try {
+		response = await (options.fetch ?? fetch)(`${credentials.site}${path}`, {
+			method: options.method ?? "GET",
+			headers: {
+				Authorization: `Basic ${auth}`,
+				Accept: "application/json",
+				...options.body === void 0 ? {} : { "Content-Type": "application/json" }
+			},
+			body: options.body === void 0 ? void 0 : JSON.stringify(options.body),
+			signal: AbortSignal.timeout(TIMEOUT_MS$2)
+		});
+	} catch {
+		return {
+			ok: false,
+			reason: `Could not reach ${new URL(credentials.site).host}.`
+		};
+	}
+	const text = await response.text();
+	let json = null;
+	try {
+		json = text ? JSON.parse(text) : null;
+	} catch {
+		json = null;
+	}
+	if (response.ok) return {
+		ok: true,
+		status: response.status,
+		json
+	};
+	if (response.status === 401) return {
+		ok: false,
+		reason: "Atlassian did not accept the email and API token; sign in again in Settings.",
+		signIn: "atlassian"
+	};
+	return {
+		ok: false,
+		reason: atlassianError(response.status, json)
+	};
+}
+/** Jira and Confluence error bodies (`errorMessages`, `errors`, `message`) as one sentence. */
+function atlassianError(status, json) {
+	const body = json ?? {};
+	const messages = [
+		...Array.isArray(body.errorMessages) ? body.errorMessages : [],
+		...body.errors && typeof body.errors === "object" ? Object.values(body.errors) : [],
+		...typeof body.message === "string" ? [body.message] : []
+	].filter((message) => typeof message === "string" && message.length > 0);
+	if (messages.length) return messages.join(" ");
+	if (status === 403) return "Atlassian says you may not do that.";
+	if (status === 404) return "Atlassian found nothing there.";
+	return `Atlassian answered ${status}.`;
+}
+/** Quote text for a JQL or CQL string: Lucene's operators become spaces, quotes and backslashes are escaped. */
+function queryText(text) {
+	return text.replace(/[+\-&|!(){}[\]^~*?:/]/g, " ").replace(/[\\"]/g, "\\$&").replace(/\s+/g, " ").trim();
+}
+/** Plain text from HTML: tags dropped, common entities decoded, whitespace folded. */
+function htmlText(html) {
+	return html.replace(/<(br|\/p|\/div|\/li|\/h\d)[^>]*>/gi, "\n").replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, "\"").replace(/&#39;/g, "'").replace(/&amp;/g, "&").replace(/[ \t]+/g, " ").replace(/\n\s*\n\s*/g, "\n\n").trim();
+}
+//#endregion
+//#region apps/agent-world/src/backend/integrations/credentials.ts
+/** The files Agent World keeps beside the runtime's state. */
+function integrationFiles(stateDir) {
+	return {
+		credentials: join(stateDir, "agent-world-credentials.json"),
+		record: join(stateDir, "agent-world-outside-writes.jsonl"),
+		recentPages: join(stateDir, "agent-world-library-recent.json")
+	};
+}
+/** Write `text` to `file` readable by its owner only, replacing it whole. */
+function writePrivate(file, text) {
+	mkdirSync(dirname(file), {
+		recursive: true,
+		mode: 448
+	});
+	const temporary = `${file}.${process.pid}.tmp`;
+	const fd = openSync(temporary, "w", 384);
+	try {
+		writeSync(fd, text);
+	} finally {
+		closeSync(fd);
+	}
+	chmodSync(temporary, 384);
+	renameSync(temporary, file);
+}
+function openCredentials(file) {
+	const read = () => {
+		if (!existsSync(file)) return {};
+		if ((statSync(file).mode & 63) !== 0) chmodSync(file, 384);
+		try {
+			const value = JSON.parse(readFileSync(file, "utf8"));
+			return value && typeof value === "object" ? value : {};
+		} catch {
+			return {};
+		}
+	};
+	return {
+		read,
+		set(account, value) {
+			const next = {
+				...read(),
+				[account]: value
+			};
+			if (value === void 0) delete next[account];
+			if (!next.atlassian && !next.slack) {
+				rmSync(file, { force: true });
+				return;
+			}
+			writePrivate(file, `${JSON.stringify(next, null, "	")}\n`);
+		},
+		status() {
+			const { atlassian, slack } = read();
+			return {
+				atlassian: atlassian ? {
+					site: atlassian.site,
+					email: atlassian.email
+				} : null,
+				slack: slack ? {
+					team: slack.team ?? null,
+					url: slack.url ?? null,
+					user: slack.user ?? null
+				} : null
+			};
+		}
+	};
+}
+//#endregion
+//#region apps/agent-world/src/backend/integrations/confluence.ts
+var SEARCH_MAX = 25;
+var RECENT_MAX = 30;
+function openConfluence(credentials, recentFile, fetchImpl, now = Date.now) {
+	const request = (path) => atlassianRequest(credentials(), path, { fetch: fetchImpl });
+	const wiki = () => `${credentials()?.site ?? ""}/wiki`;
+	const spaceNames = /* @__PURE__ */ new Map();
+	const recent = () => {
+		if (!existsSync(recentFile)) return [];
+		try {
+			const value = JSON.parse(readFileSync(recentFile, "utf8"));
+			return Array.isArray(value) ? value : [];
+		} catch {
+			return [];
+		}
+	};
+	return {
+		async search(text) {
+			const words = queryText(text);
+			if (!words) return {
+				ok: true,
+				pages: []
+			};
+			const cql = `siteSearch ~ "${words}" and type in (page, blogpost) order by lastmodified desc`;
+			const answer = await request(`/wiki/rest/api/search?cql=${encodeURIComponent(cql)}&limit=${SEARCH_MAX}`);
+			if (!answer.ok) return answer;
+			const body = answer.json ?? {};
+			const base = body._links?.base ?? wiki();
+			return {
+				ok: true,
+				pages: (body.results ?? []).flatMap((raw) => {
+					const result = raw;
+					const id = result.content?.id;
+					if (!id) return [];
+					return [{
+						id: String(id),
+						title: htmlText(result.content?.title ?? result.title ?? ""),
+						space: result.resultGlobalContainer?.title ?? null,
+						url: `${base}${result.content?._links?.webui ?? result.url ?? ""}`,
+						excerpt: htmlText((result.excerpt ?? "").replace(/@@@(end)?hl@@@/g, "")),
+						lastModified: result.lastModified ?? null
+					}];
+				})
+			};
+		},
+		async page(given) {
+			const id = String(given ?? "").trim();
+			if (!/^\d+$/.test(id)) return {
+				ok: false,
+				reason: "That is not a Confluence page id."
+			};
+			const answer = await request(`/wiki/api/v2/pages/${id}?body-format=view`);
+			if (!answer.ok) return answer;
+			const raw = answer.json ?? {};
+			let space = null;
+			if (raw.spaceId) {
+				if (!spaceNames.has(raw.spaceId)) {
+					const found = await request(`/wiki/api/v2/spaces/${encodeURIComponent(raw.spaceId)}`);
+					const spaceName = found.ok ? found.json?.name : void 0;
+					if (typeof spaceName === "string") spaceNames.set(raw.spaceId, spaceName);
+				}
+				space = spaceNames.get(raw.spaceId) ?? null;
+			}
+			const ref = {
+				id,
+				title: raw.title ?? "",
+				space,
+				url: `${raw._links?.base ?? wiki()}${raw._links?.webui ?? `/pages/viewpage.action?pageId=${id}`}`
+			};
+			writePrivate(recentFile, `${JSON.stringify([{
+				...ref,
+				openedAt: now()
+			}, ...recent().filter((page) => page.id !== id)].slice(0, RECENT_MAX))}\n`);
+			return {
+				ok: true,
+				page: {
+					page: ref,
+					html: raw.body?.view?.value ?? ""
+				}
+			};
+		},
+		recent
+	};
+}
+//#endregion
+//#region apps/agent-world/src/backend/integrations/delegation.ts
+var NOTE_MAX = 4e3;
+/** The awake character a delegation goes to: a named one, or `coordinator` (the one `near` reports to, else the first). */
+function delegationTarget(snapshot, to, near) {
+	const awake = (id) => id ? snapshot.characters.find((c) => c.id === id) : void 0;
+	if (to !== "coordinator") return awake(to);
+	const theirs = awake(near ? awake(near)?.facts?.reportsTo : void 0);
+	if (theirs?.role === "coordinator") return theirs;
+	for (const headquarters of snapshot.headquarters) {
+		const coordinator = awake(headquarters.id);
+		if (coordinator) return coordinator;
+	}
+	return snapshot.characters.find((c) => c.role === "coordinator");
+}
+var quoted = (text) => `"${text.replace(/\s+/g, " ").trim()}"`;
+function itemName(item) {
+	switch (item.kind) {
+		case "pull-request": return `pull request ${item.repo}#${item.number} ${quoted(item.title)}: ${item.url}`;
+		case "issue": return `Jira issue ${item.key} ${quoted(item.summary)}: ${item.url}`;
+		case "page": return `the Confluence page ${quoted(item.title)}: ${item.url}`;
+		case "thread": return `this Slack thread in #${item.channelName}${item.preview ? ` (${quoted(item.preview)})` : ""}: ${item.url ?? `channel ${item.channel}, thread ${item.ts}`}`;
+	}
+}
+/** The instruction's words: what is asked, the item with its address, then the operator's own note. */
+function delegationText(delegation) {
+	const { item, ask } = delegation;
+	const name = itemName(item);
+	return `${{
+		"address-review": `Please address the review on ${name}`,
+		"get-reviewed": `Please get ${name} reviewed`,
+		"start-work": `Please start work on ${name}`,
+		summarise: `Please read ${name}\nSummarise it for me here.`,
+		update: `Please update ${name}`,
+		"look-into": `Please look into ${name}`
+	}[ask]}${item.kind === "thread" ? "\nReport back to me here; do not post in Slack." : ""}${delegation.note?.trim() ? `\n\n${delegation.note.trim().slice(0, NOTE_MAX)}` : ""}`;
+}
+var ASKS = /* @__PURE__ */ new Set([
+	"address-review",
+	"get-reviewed",
+	"start-work",
+	"summarise",
+	"update",
+	"look-into"
+]);
+var text = (value) => typeof value === "string" && value.length > 0 && value.length < 2e3;
+/** The delegation as given over IPC, checked field by field; undefined when it is not one. */
+function checkDelegation(given) {
+	const value = given ?? {};
+	if (!text(value.to) || !ASKS.has(String(value.ask)) || !value.item) return void 0;
+	if (value.near !== void 0 && !text(value.near)) return void 0;
+	if (value.note !== void 0 && typeof value.note !== "string") return void 0;
+	const item = value.item;
+	return item.kind === "pull-request" && text(item.repo) && Number.isSafeInteger(item.number) && typeof item.title === "string" && text(item.url) || item.kind === "issue" && text(item.key) && typeof item.summary === "string" && text(item.url) || item.kind === "page" && text(item.id) && typeof item.title === "string" && text(item.url) || item.kind === "thread" && text(item.channel) && typeof item.channelName === "string" && text(item.ts) && (item.url === null || text(item.url)) && (item.preview === void 0 || typeof item.preview === "string") ? value : void 0;
+}
+/** Send a delegation; receipts reach `onReceipt` with the character they are for. */
+async function delegate(commands, snapshot, commandId, given, onReceipt) {
+	const delegation = checkDelegation(given);
+	if (!delegation) return {
+		ok: false,
+		reason: "That request does not name what to work on."
+	};
+	const target = delegationTarget(snapshot, delegation.to, delegation.near);
+	if (!target) return {
+		ok: false,
+		reason: delegation.to === "coordinator" ? "No coordinator is awake." : "That agent is not awake."
+	};
+	const command = (target.facts?.run ?? "idle") === "idle" ? "talk" : "follow_up";
+	const result = await instruct(commands, target, commandId, {
+		kind: command,
+		text: delegationText(delegation)
+	}, (stage, reason) => onReceipt(target.id, stage, reason));
+	return result.ok ? {
+		ok: true,
+		to: target.id,
+		command
+	} : result;
+}
+//#endregion
+//#region apps/agent-world/src/backend/integrations/gate.ts
+/** How long a description stays good for confirming. */
+var TOKEN_TTL_MS = 9e5;
+/** Longest text one write may carry. */
+var TEXT_MAX = 3e4;
+var PREVIEW$1 = 100;
+/** The intent as given over IPC, checked and trimmed of anything else; a reason when it is not one. */
+function checkIntent(given) {
+	const value = given ?? {};
+	const words = (key) => typeof value[key] === "string" ? value[key] : void 0;
+	const long = (text) => text !== void 0 && text.length > TEXT_MAX;
+	switch (value.kind) {
+		case "github-review": {
+			const { repo, number, event } = value;
+			const body = words("body") ?? "";
+			if (typeof repo !== "string" || !Number.isSafeInteger(number)) return "That is not a pull request.";
+			if (event !== "comment" && event !== "approve" && event !== "request-changes") return "That is not a review.";
+			if (event !== "approve" && !body.trim()) return "Write what to say first.";
+			if (long(body)) return "That is too long to send from here.";
+			return {
+				kind: "github-review",
+				repo,
+				number,
+				event,
+				body
+			};
+		}
+		case "jira-comment": {
+			const key = words("key");
+			const body = words("body");
+			if (!key) return "That is not a Jira issue.";
+			if (!body?.trim()) return "Write what to say first.";
+			if (long(body)) return "That is too long to send from here.";
+			return {
+				kind: "jira-comment",
+				key,
+				body
+			};
+		}
+		case "jira-transition": {
+			const key = words("key");
+			const transition = words("transition");
+			if (!key || !transition) return "That is not a move Jira offers.";
+			return {
+				kind: "jira-transition",
+				key,
+				transition
+			};
+		}
+		case "slack-reply": {
+			const channel = words("channel");
+			const threadTs = words("threadTs");
+			const text = words("text");
+			if (!channel || !threadTs) return "That is not a Slack thread.";
+			if (!text?.trim()) return "Write what to say first.";
+			if (long(text)) return "That is too long to send from here.";
+			return {
+				kind: "slack-reply",
+				channel,
+				threadTs,
+				text
+			};
+		}
+	}
+	return "Agent World does not write that.";
+}
+/** One string per intent, the same for the same write whatever order its keys came in. */
+var canonical = (intent) => JSON.stringify(Object.fromEntries(Object.entries(intent).sort(([a], [b]) => a.localeCompare(b))));
+var preview$1 = (text) => {
+	const flat = text.replace(/\s+/g, " ").trim();
+	return flat.length > PREVIEW$1 ? `${flat.slice(0, 99)}\u2026` : flat;
+};
+/** The chatbox line for a write: what the operator did, or that it failed. */
+function writeLine(intent, description, failed) {
+	const said = description.text ? `: ${preview$1(description.text)}` : "";
+	switch (intent.kind) {
+		case "github-review": {
+			const ref = `${intent.repo}#${intent.number}`;
+			if (failed) return `Your ${{
+				approve: "approval of",
+				comment: "comment on",
+				"request-changes": "change request on"
+			}[intent.event]} ${ref} failed: ${failed}`;
+			if (intent.event === "approve") return `You approved ${ref}${said}.`;
+			if (intent.event === "comment") return `You commented on ${ref}${said}`;
+			return `You requested changes on ${ref}${said}`;
+		}
+		case "jira-comment": return failed ? `Your comment on ${intent.key} failed: ${failed}` : `You commented on ${intent.key}${said}`;
+		case "jira-transition": return failed ? `Moving ${intent.key} failed: ${failed}` : `You moved ${intent.key}${said}.`;
+		case "slack-reply": {
+			const where = description.where.split(",")[0];
+			return failed ? `Your reply in ${where} failed: ${failed}` : `You replied in ${where}${said}`;
+		}
+	}
+}
+function openGate(recordFile, adapters, now = Date.now) {
+	const waiting = /* @__PURE__ */ new Map();
+	const listeners = /* @__PURE__ */ new Set();
+	const record = (entry) => {
+		mkdirSync(dirname(recordFile), {
+			recursive: true,
+			mode: 448
+		});
+		const fresh = !existsSync(recordFile);
+		appendFileSync(recordFile, `${JSON.stringify({
+			...entry,
+			at: new Date(entry.at).toISOString()
+		})}\n`, { mode: 384 });
+		if (fresh) chmodSync(recordFile, 384);
+		for (const listener of listeners) listener(entry);
+	};
+	return {
+		async describe(given) {
+			const intent = checkIntent(given);
+			if (typeof intent === "string") return {
+				ok: false,
+				reason: intent
+			};
+			const described = await adapters.describe(intent);
+			if (!described.ok) return described;
+			for (const [token, held] of waiting) if (held.until <= now()) waiting.delete(token);
+			const token = randomUUID();
+			waiting.set(token, {
+				key: canonical(intent),
+				description: described.description,
+				until: now() + TOKEN_TTL_MS
+			});
+			return {
+				ok: true,
+				token,
+				description: described.description
+			};
+		},
+		async write(given, token) {
+			const intent = checkIntent(given);
+			if (typeof intent === "string") return {
+				ok: false,
+				reason: intent
+			};
+			const held = typeof token === "string" ? waiting.get(token) : void 0;
+			if (!held || held.key !== canonical(intent) || held.until <= now()) return {
+				ok: false,
+				reason: "That was not confirmed as shown, so nothing was sent."
+			};
+			waiting.delete(token);
+			const sent = await adapters.send(intent);
+			const { what, where, text } = held.description;
+			const entry = {
+				at: now(),
+				kind: intent.kind,
+				what,
+				where,
+				text,
+				url: (sent.ok ? sent.url : void 0) ?? held.description.url,
+				ok: sent.ok,
+				...sent.ok ? {} : { reason: sent.reason },
+				line: writeLine(intent, held.description, sent.ok ? void 0 : sent.reason)
+			};
+			record(entry);
+			return sent.ok ? {
+				ok: true,
+				entry
+			} : sent;
+		},
+		recent() {
+			if (!existsSync(recordFile)) return [];
+			return readFileSync(recordFile, "utf8").split("\n").filter(Boolean).slice(-100).flatMap((line) => {
+				try {
+					const entry = JSON.parse(line);
+					return [{
+						...entry,
+						at: typeof entry.at === "string" ? Date.parse(entry.at) : entry.at
+					}];
+				} catch {
+					return [];
+				}
+			});
+		},
+		onWrite(listener) {
+			listeners.add(listener);
+			return () => listeners.delete(listener);
+		}
+	};
+}
+//#endregion
+//#region apps/agent-world/src/integrations.ts
+var DIFF_LINES_MAX = 2e4;
+//#endregion
+//#region apps/agent-world/src/backend/integrations/github.ts
+var TIMEOUT_MS$1 = 3e4;
+var LIST_MAX$1 = 50;
+/** `gh pr view` calls in flight at once while filling in searched pull requests. */
+var PARALLEL = 4;
+var REPO = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
+var ROLLUP_FIELDS = "headRefName,statusCheckRollup,reviewDecision";
+var LIST_FIELDS = `number,title,url,isDraft,updatedAt,author,${ROLLUP_FIELDS}`;
+function runner(env) {
+	return (args, cwd) => new Promise((resolve) => {
+		execFile("gh", args, {
+			cwd,
+			env: env ?? process.env,
+			timeout: TIMEOUT_MS$1,
+			maxBuffer: 67108864
+		}, (error, stdout, stderr) => {
+			if (!error) return resolve({
+				ok: true,
+				stdout
+			});
+			if (error.code === "ENOENT") return resolve({
+				ok: false,
+				reason: "The GitHub CLI (gh) is not installed.",
+				signIn: "github"
+			});
+			const said = String(stderr).trim();
+			if (/gh auth login|not logged in|authentication/i.test(said)) return resolve({
+				ok: false,
+				reason: "Sign in to GitHub with `gh auth login` first.",
+				signIn: "github"
+			});
+			resolve({
+				ok: false,
+				reason: said.split("\n").slice(-3).join(" ") || error.message
+			});
+		});
+	});
+}
+var parse = (text) => {
+	try {
+		return JSON.parse(text);
+	} catch {
+		return;
+	}
+};
+/** One entry of `statusCheckRollup`: a check run (status and conclusion) or a commit status (state). */
+function checkState(check) {
+	const { status, conclusion, state } = check ?? {};
+	if (typeof state === "string") {
+		if (state === "SUCCESS") return "passing";
+		if (state === "FAILURE" || state === "ERROR") return "failing";
+		return "running";
+	}
+	if (status !== "COMPLETED") return "running";
+	switch (conclusion) {
+		case "SUCCESS": return "passing";
+		case "NEUTRAL":
+		case "SKIPPED":
+		case "STALE": return "skipped";
+		default: return "failing";
+	}
+}
+/** A pull request's checks rolled up: any failed is failing, else any unfinished is running, else passing. */
+function ciRollup(rollup) {
+	const states = (Array.isArray(rollup) ? rollup : []).map(checkState);
+	const count = (state) => states.filter((one) => one === state).length;
+	const checks = {
+		passing: count("passing"),
+		failing: count("failing"),
+		running: count("running"),
+		total: states.length
+	};
+	return {
+		ci: checks.failing ? "failing" : checks.running ? "running" : states.length ? "passing" : "none",
+		checks
+	};
+}
+/** Link each pull request to the agent whose repository and branch it comes from (repository names ignore case). */
+function linkPullRequests(pullRequests, agents) {
+	return pullRequests.map((pr) => {
+		const agent = agents.find((one) => one.branch === pr.branch && one.repo.toLowerCase() === pr.repo.toLowerCase());
+		return {
+			...pr,
+			agent: agent ? {
+				id: agent.id,
+				name: agent.name
+			} : null
+		};
+	});
+}
+var unquote = (path) => path.replace(/^"(.*)"$/, "$1");
+/** Read one line of a file's extended header (before its first hunk) into `file`. */
+function fileHeader(file, line) {
+	if (line.startsWith("new file mode")) file.status = "added";
+	else if (line.startsWith("deleted file mode")) file.status = "deleted";
+	else if (line.startsWith("rename from ")) {
+		file.oldPath = line.slice(12);
+		file.status = "renamed";
+	} else if (line.startsWith("rename to ")) file.path = line.slice(10);
+	else if (line.startsWith("Binary files ")) file.binary = true;
+	else if (line.startsWith("--- ") && line !== "--- /dev/null") file.oldPath = unquote(line.slice(4).replace(/^a\//, ""));
+	else if (line.startsWith("+++ ") && line !== "+++ /dev/null") file.path = unquote(line.slice(4).replace(/^b\//, ""));
+}
+/** A unified diff (`gh pr diff`) as files and hunks with line numbers on both sides; cut after `max` lines. */
+function parseDiff(patch, max = DIFF_LINES_MAX) {
+	const files = [];
+	let file;
+	let hunk;
+	let oldLine = 0;
+	let newLine = 0;
+	let lines = 0;
+	let cut = false;
+	for (const line of patch.split("\n")) {
+		if (line.startsWith("diff --git ")) {
+			const paths = /^diff --git a\/(.*) b\/(.*)$/.exec(line);
+			const path = unquote(paths?.[2] ?? "");
+			file = {
+				path,
+				oldPath: unquote(paths?.[1] ?? path),
+				status: "modified",
+				binary: false,
+				additions: 0,
+				deletions: 0,
+				hunks: []
+			};
+			files.push(file);
+			hunk = void 0;
+			continue;
+		}
+		if (!file) continue;
+		if (!hunk) fileHeader(file, line);
+		const header = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(line);
+		if (header) {
+			oldLine = Number(header[1]);
+			newLine = Number(header[2]);
+			hunk = {
+				header: line,
+				lines: []
+			};
+			file.hunks.push(hunk);
+			continue;
+		}
+		if (!hunk || line.startsWith("\\")) continue;
+		const mark = line[0];
+		if (mark !== "+" && mark !== "-" && mark !== " ") continue;
+		if (mark === "+") file.additions++;
+		if (mark === "-") file.deletions++;
+		if (lines >= max) {
+			cut = true;
+			continue;
+		}
+		lines++;
+		const text = line.slice(1);
+		if (mark === "+") hunk.lines.push({
+			kind: "add",
+			old: null,
+			new: newLine++,
+			text
+		});
+		else if (mark === "-") hunk.lines.push({
+			kind: "del",
+			old: oldLine++,
+			new: null,
+			text
+		});
+		else hunk.lines.push({
+			kind: "context",
+			old: oldLine++,
+			new: newLine++,
+			text
+		});
+	}
+	return {
+		files,
+		cut
+	};
+}
+/** The `owner/name` in a pull request's address. */
+var repoOf = (url) => /github\.com\/([^/]+\/[^/]+)\/pull\//.exec(url)?.[1] ?? "";
+function toPullRequest(raw, involvesYou) {
+	const { ci, checks } = ciRollup(raw.statusCheckRollup);
+	return {
+		repo: raw.repository?.nameWithOwner ?? repoOf(raw.url),
+		number: raw.number,
+		title: raw.title ?? "",
+		url: raw.url,
+		author: raw.author?.login ?? null,
+		draft: raw.isDraft === true,
+		branch: raw.headRefName ?? null,
+		updatedAt: raw.updatedAt ?? null,
+		ci,
+		checks,
+		reviewDecision: raw.reviewDecision || null,
+		involvesYou
+	};
+}
+function validPullRequest(repo, number) {
+	return typeof repo === "string" && REPO.test(repo) && Number.isSafeInteger(number) && number > 0;
+}
+function openGitHub(env) {
+	const gh = runner(env);
+	const repos = /* @__PURE__ */ new Map();
+	const repoAt = (directory) => {
+		let known = repos.get(directory);
+		if (!known) {
+			known = gh([
+				"repo",
+				"view",
+				"--json",
+				"nameWithOwner,defaultBranchRef"
+			], directory).then((answer) => {
+				if (!answer.ok) {
+					repos.delete(directory);
+					return;
+				}
+				const value = parse(answer.stdout);
+				return value?.nameWithOwner ? {
+					repo: value.nameWithOwner,
+					defaultBranch: value.defaultBranchRef?.name ?? null
+				} : void 0;
+			});
+			repos.set(directory, known);
+		}
+		return known;
+	};
+	/** The awake agents on a branch of a GitHub repository other than its default branch. */
+	const agentBranches = async (characters) => {
+		return (await Promise.all(characters.map(async (character) => {
+			const git = character.facts?.git;
+			if (!git?.branch || git.branch === "HEAD") return void 0;
+			const repo = await repoAt(git.repository);
+			if (!repo || git.branch === repo.defaultBranch) return void 0;
+			return {
+				id: character.id,
+				name: character.name,
+				repo: repo.repo,
+				branch: git.branch
+			};
+		}))).filter((agent) => agent !== void 0);
+	};
+	/** Run `work` over `items`, `PARALLEL` at a time. */
+	const inParallel = async (items, work) => {
+		const results = new Array(items.length);
+		let next = 0;
+		await Promise.all(Array.from({ length: Math.min(PARALLEL, items.length) }, async () => {
+			while (next < items.length) {
+				const index = next++;
+				results[index] = await work(items[index]);
+			}
+		}));
+		return results;
+	};
+	return {
+		async pullRequests(characters) {
+			const [searched, agents] = await Promise.all([gh([
+				"search",
+				"prs",
+				"--involves",
+				"@me",
+				"--state",
+				"open",
+				"--limit",
+				String(LIST_MAX$1),
+				"--json",
+				"number,title,url,repository,author,isDraft,updatedAt"
+			]), agentBranches(characters)]);
+			if (!searched.ok) return searched;
+			const branchKeys = [...new Map(agents.map((agent) => [`${agent.repo}\n${agent.branch}`, agent])).values()];
+			const fromBranches = (await inParallel(branchKeys, (agent) => gh([
+				"pr",
+				"list",
+				"-R",
+				agent.repo,
+				"--head",
+				agent.branch,
+				"--state",
+				"open",
+				"--json",
+				LIST_FIELDS
+			]))).flatMap((answer) => answer.ok ? parse(answer.stdout) ?? [] : []);
+			const mine = parse(searched.stdout) ?? [];
+			const byUrl = new Map(fromBranches.map((raw) => [raw.url, raw]));
+			const filled = await inParallel(mine, async (raw) => {
+				const listed = byUrl.get(raw.url);
+				if (listed) return {
+					...listed,
+					...raw,
+					headRefName: listed.headRefName
+				};
+				const repo = raw.repository?.nameWithOwner ?? repoOf(raw.url);
+				const answer = await gh([
+					"pr",
+					"view",
+					String(raw.number),
+					"-R",
+					repo,
+					"--json",
+					ROLLUP_FIELDS
+				]);
+				return answer.ok ? {
+					...raw,
+					...parse(answer.stdout)
+				} : raw;
+			});
+			const mineUrls = new Set(mine.map((raw) => raw.url));
+			const all = [...filled.map((raw) => toPullRequest(raw, true)), ...fromBranches.filter((raw) => !mineUrls.has(raw.url)).map((raw) => toPullRequest(raw, false))];
+			const unique = [...new Map(all.map((pr) => [pr.url, pr])).values()];
+			unique.sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""));
+			return {
+				ok: true,
+				pullRequests: linkPullRequests(unique, agents)
+			};
+		},
+		async pullRequest(repo, number, characters) {
+			if (!validPullRequest(repo, number)) return {
+				ok: false,
+				reason: "That is not a pull request."
+			};
+			const [viewed, diffed, agents] = await Promise.all([
+				gh([
+					"pr",
+					"view",
+					String(number),
+					"-R",
+					repo,
+					"--json",
+					`number,title,body,url,author,isDraft,state,updatedAt,baseRefName,${ROLLUP_FIELDS}`
+				]),
+				gh([
+					"pr",
+					"diff",
+					String(number),
+					"-R",
+					repo
+				]),
+				agentBranches(characters)
+			]);
+			if (!viewed.ok) return viewed;
+			if (!diffed.ok) return diffed;
+			const raw = parse(viewed.stdout);
+			if (!raw) return {
+				ok: false,
+				reason: "gh answered something that is not JSON."
+			};
+			const [pullRequest] = linkPullRequests([toPullRequest({
+				...raw,
+				repository: { nameWithOwner: repo }
+			}, false)], agents);
+			const { files, cut } = parseDiff(diffed.stdout);
+			const checks = (Array.isArray(raw.statusCheckRollup) ? raw.statusCheckRollup : []).map((check) => {
+				const named = check;
+				return {
+					name: named.name ?? named.context ?? "check",
+					state: checkState(check)
+				};
+			});
+			return {
+				ok: true,
+				detail: {
+					pullRequest,
+					body: raw.body ?? "",
+					baseBranch: raw.baseRefName ?? null,
+					state: raw.state ?? "OPEN",
+					checks,
+					files,
+					cut
+				}
+			};
+		},
+		async review(repo, number, event, body) {
+			if (!validPullRequest(repo, number)) return {
+				ok: false,
+				reason: "That is not a pull request."
+			};
+			const args = [
+				"pr",
+				"review",
+				String(number),
+				"-R",
+				repo,
+				event === "approve" ? "--approve" : event === "comment" ? "--comment" : "--request-changes",
+				...body ? ["--body", body] : []
+			];
+			const answer = await gh(args);
+			return answer.ok ? { ok: true } : answer;
+		}
+	};
+}
+//#endregion
+//#region apps/agent-world/src/backend/integrations/jira.ts
+var FIELDS = [
+	"summary",
+	"status",
+	"issuetype",
+	"priority",
+	"project",
+	"assignee",
+	"updated"
+];
+var LIST_MAX = 50;
+var ASSIGNED_JQL = "assignee = currentUser() AND statusCategory != Done ORDER BY updated DESC";
+var KEY = /^[A-Z][A-Z0-9_]*-\d+$/;
+function issueKey(text) {
+	if (typeof text !== "string") return void 0;
+	const key = text.trim().toUpperCase();
+	return KEY.test(key) ? key : void 0;
+}
+var name = (value, field = "name") => {
+	const named = value;
+	return named && typeof named[field] === "string" ? named[field] : null;
+};
+function toIssue(site, raw) {
+	const issue = raw;
+	const fields = issue.fields ?? {};
+	const status = fields.status;
+	return {
+		key: issue.key,
+		summary: typeof fields.summary === "string" ? fields.summary : "",
+		status: name(status),
+		statusCategory: status?.statusCategory?.key ?? null,
+		type: name(fields.issuetype),
+		priority: name(fields.priority),
+		project: name(fields.project, "key"),
+		assignee: name(fields.assignee, "displayName"),
+		updated: typeof fields.updated === "string" ? fields.updated : null,
+		url: `${site}/browse/${issue.key}`
+	};
+}
+/** Atlassian Document Format to plain text: paragraphs and list items on their own lines. */
+function adfText(node) {
+	const walk = (value) => {
+		if (!value || typeof value !== "object") return "";
+		const { type, text, attrs, content } = value;
+		const inner = Array.isArray(content) ? content.map(walk).join("") : "";
+		switch (type) {
+			case "text": return text ?? "";
+			case "hardBreak": return "\n";
+			case "mention": return typeof attrs?.text === "string" ? attrs.text : "@someone";
+			case "emoji": return typeof attrs?.shortName === "string" ? attrs.shortName : "";
+			case "inlineCard":
+			case "blockCard": return typeof attrs?.url === "string" ? attrs.url : "";
+			case "listItem": return `- ${inner.trim()}\n`;
+			case "paragraph":
+			case "heading":
+			case "codeBlock":
+			case "blockquote":
+			case "rule": return `${inner}\n\n`;
+			default: return inner;
+		}
+	};
+	return walk(node).replace(/\n{3,}/g, "\n\n").trim();
+}
+/** Plain text as an ADF document: blank lines part paragraphs, single newlines become hard breaks. */
+function textAdf(text) {
+	return {
+		type: "doc",
+		version: 1,
+		content: text.replace(/\r\n/g, "\n").split(/\n\s*\n/).filter((part) => part.trim()).map((paragraph) => ({
+			type: "paragraph",
+			content: paragraph.split("\n").flatMap((line, index) => [...index > 0 ? [{ type: "hardBreak" }] : [], ...line ? [{
+				type: "text",
+				text: line
+			}] : []])
+		}))
+	};
+}
+function openJira(credentials, fetchImpl) {
+	const request = (path, options = {}) => atlassianRequest(credentials(), path, {
+		...options,
+		fetch: fetchImpl
+	});
+	const site = () => credentials()?.site ?? "";
+	const badKey = {
+		ok: false,
+		reason: "That is not a Jira issue key."
+	};
+	const jql = async (query) => {
+		const answer = await request("/rest/api/3/search/jql", {
+			method: "POST",
+			body: {
+				jql: query,
+				fields: FIELDS,
+				maxResults: LIST_MAX
+			}
+		});
+		if (!answer.ok) return answer;
+		return {
+			ok: true,
+			issues: (answer.json?.issues ?? []).map((issue) => toIssue(site(), issue))
+		};
+	};
+	return {
+		async myself() {
+			const answer = await request("/rest/api/3/myself");
+			if (!answer.ok) return answer;
+			return {
+				ok: true,
+				name: name(answer.json, "displayName")
+			};
+		},
+		assigned: () => jql(ASSIGNED_JQL),
+		async search(text) {
+			const words = queryText(text);
+			if (!words) return {
+				ok: true,
+				issues: []
+			};
+			const found = await jql(`text ~ "${words}" ORDER BY updated DESC`);
+			const key = issueKey(text);
+			if (!key || !found.ok) return found;
+			const exact = await request(`/rest/api/3/issue/${key}?fields=${FIELDS.join(",")}`);
+			if (!exact.ok) return found;
+			const issue = toIssue(site(), exact.json);
+			return {
+				ok: true,
+				issues: [issue, ...found.issues.filter((other) => other.key !== issue.key)]
+			};
+		},
+		async issue(given) {
+			const key = issueKey(given);
+			if (!key) return badKey;
+			const fields = [
+				...FIELDS,
+				"description",
+				"comment",
+				"reporter",
+				"created"
+			].join(",");
+			const answer = await request(`/rest/api/3/issue/${key}?fields=${fields}&expand=renderedFields`);
+			if (!answer.ok) return answer;
+			const raw = answer.json;
+			const fields_ = raw.fields ?? {};
+			const rendered = raw.renderedFields ?? {};
+			const comments = fields_.comment?.comments ?? [];
+			const renderedComments = rendered.comment?.comments ?? [];
+			const htmlOf = new Map(renderedComments.map((comment) => [comment.id, comment.body]));
+			const descriptionHtml = typeof rendered.description === "string" ? rendered.description : null;
+			return {
+				ok: true,
+				detail: {
+					issue: toIssue(site(), raw),
+					reporter: name(fields_.reporter, "displayName"),
+					created: typeof fields_.created === "string" ? fields_.created : null,
+					descriptionHtml,
+					descriptionText: fields_.description ? adfText(fields_.description) : descriptionHtml ? htmlText(descriptionHtml) : "",
+					comments: comments.map((comment) => {
+						const html = htmlOf.get(comment.id);
+						return {
+							id: comment.id,
+							author: name(comment.author, "displayName"),
+							created: comment.created ?? null,
+							html: typeof html === "string" ? html : null,
+							text: comment.body ? adfText(comment.body) : typeof html === "string" ? htmlText(html) : ""
+						};
+					})
+				}
+			};
+		},
+		async transitions(given) {
+			const key = issueKey(given);
+			if (!key) return badKey;
+			const answer = await request(`/rest/api/3/issue/${key}/transitions`);
+			if (!answer.ok) return answer;
+			return {
+				ok: true,
+				transitions: (answer.json?.transitions ?? []).filter((transition) => transition.isAvailable !== false).map((transition) => ({
+					id: String(transition.id),
+					name: transition.name,
+					to: transition.to?.name ?? null,
+					toCategory: transition.to?.statusCategory?.key ?? null
+				}))
+			};
+		},
+		async comment(given, body) {
+			const key = issueKey(given);
+			if (!key) return badKey;
+			const answer = await request(`/rest/api/3/issue/${key}/comment`, {
+				method: "POST",
+				body: { body: textAdf(body) }
+			});
+			if (!answer.ok) return answer;
+			const id = answer.json?.id;
+			return {
+				ok: true,
+				url: `${site()}/browse/${key}${typeof id === "string" ? `?focusedCommentId=${id}` : ""}`
+			};
+		},
+		async transition(given, transitionId) {
+			const key = issueKey(given);
+			if (!key) return badKey;
+			const answer = await request(`/rest/api/3/issue/${key}/transitions`, {
+				method: "POST",
+				body: { transition: { id: transitionId } }
+			});
+			if (!answer.ok) return answer;
+			return {
+				ok: true,
+				url: `${site()}/browse/${key}`
+			};
+		}
+	};
+}
+//#endregion
+//#region apps/agent-world/src/backend/integrations/slack.ts
+var TIMEOUT_MS = 2e4;
+/** Most messages counted per channel; beyond it `more` is set. */
+var COUNT_LIMIT = 100;
+var CHANNEL_MESSAGES = 50;
+var THREAD_MESSAGES = 200;
+var FOUND_MAX = 50;
+/** How long the lists of channels are kept before they are read again. */
+var LIST_TTL_MS = 6e5;
+var SIGN_IN_ERRORS = /* @__PURE__ */ new Set([
+	"invalid_auth",
+	"not_authed",
+	"token_revoked",
+	"token_expired",
+	"account_inactive"
+]);
+var NOT_SIGNED_IN = {
+	ok: false,
+	reason: "Sign in to Slack in Settings first.",
+	signIn: "slack"
+};
+var ID = /^[A-Z0-9]+$/;
+var TS = /^\d+\.\d+$/;
+/** A message link in the workspace: `<url>archives/<channel>/p<ts without the dot>`. */
+function slackLink(base, channel, ts) {
+	if (!base) return null;
+	return `${base.endsWith("/") ? base : `${base}/`}archives/${channel}${ts ? `/p${ts.replace(".", "")}` : ""}`;
+}
+function openSlack(credentials, options = {}) {
+	const now = options.now ?? Date.now;
+	const users = /* @__PURE__ */ new Map();
+	let members;
+	let everything;
+	const names = /* @__PURE__ */ new Map();
+	const call = async (method, params, session = credentials()) => {
+		if (!session) return NOT_SIGNED_IN;
+		const base = options.api ?? (session.url ? `${session.url.replace(/\/?$/, "/")}api/` : "https://slack.com/api/");
+		let response;
+		try {
+			response = await (options.fetch ?? fetch)(`${base}${method}`, {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/x-www-form-urlencoded",
+					Cookie: `d=${session.cookie}`
+				},
+				body: new URLSearchParams({
+					token: session.token,
+					...params
+				}).toString(),
+				signal: AbortSignal.timeout(TIMEOUT_MS)
+			});
+		} catch {
+			return {
+				ok: false,
+				reason: "Could not reach Slack."
+			};
+		}
+		if (response.status === 429) return {
+			ok: false,
+			reason: "Slack asks to slow down; try again in a minute."
+		};
+		let json;
+		try {
+			json = await response.json();
+		} catch {
+			return {
+				ok: false,
+				reason: `Slack answered ${response.status}.`
+			};
+		}
+		if (json.ok === true) return {
+			ok: true,
+			json
+		};
+		const error = typeof json.error === "string" ? json.error : `status ${response.status}`;
+		if (SIGN_IN_ERRORS.has(error)) return {
+			ok: false,
+			reason: "Slack signed you out; sign in again in Settings.",
+			signIn: "slack"
+		};
+		return {
+			ok: false,
+			reason: `Slack said ${error}.`
+		};
+	};
+	/** Every page of a cursor-paged list method. */
+	const pages = async (method, params) => {
+		const rows = [];
+		let cursor = "";
+		for (let page = 0; page < 50; page++) {
+			const answer = await call(method, {
+				...params,
+				limit: "1000",
+				...cursor ? { cursor } : {}
+			});
+			if (!answer.ok) return answer;
+			rows.push(...answer.json.channels ?? []);
+			cursor = answer.json.response_metadata?.next_cursor ?? "";
+			if (!cursor) break;
+		}
+		for (const row of rows) names.set(row.id, row);
+		return {
+			ok: true,
+			rows
+		};
+	};
+	const memberRows = async () => {
+		if (members && now() - members.at < LIST_TTL_MS) return {
+			ok: true,
+			rows: members.rows
+		};
+		const listed = await pages("users.conversations", {
+			types: "public_channel,private_channel,mpim,im",
+			exclude_archived: "true"
+		});
+		if (listed.ok) members = {
+			at: now(),
+			rows: listed.rows
+		};
+		return listed;
+	};
+	const userName = async (id) => {
+		const known = users.get(id);
+		if (known) return known;
+		const answer = await call("users.info", { user: id });
+		const user = answer.ok ? answer.json.user : void 0;
+		const name = user?.profile?.display_name || user?.profile?.real_name || user?.real_name || user?.name || id;
+		if (answer.ok) users.set(id, name);
+		return name;
+	};
+	const kindOf = (row) => row?.is_im ? "dm" : row?.is_mpim ? "group" : row?.is_private || row?.is_group ? "private" : "channel";
+	const nameOf = async (row, id) => {
+		if (row?.is_im && row.user) return userName(row.user);
+		if (row?.name) return row.name;
+		const answer = await call("conversations.info", { channel: id });
+		const info = answer.ok ? answer.json.channel : void 0;
+		if (info) names.set(id, info);
+		if (info?.is_im && info.user) return userName(info.user);
+		return info?.name ?? id;
+	};
+	/** Slack's message markup as plain text: people, channels, and links by name; entities decoded. */
+	const plain = async (text) => {
+		const mentioned = [...new Set([...text.matchAll(/<@([A-Z0-9]+)(?:\|[^>]*)?>/g)].map((match) => match[1]))];
+		for (const id of mentioned) await userName(id);
+		return text.replace(/<@([A-Z0-9]+)(?:\|[^>]*)?>/g, (_all, id) => `@${users.get(id) ?? id}`).replace(/<#([A-Z0-9]+)\|([^>]*)>/g, (_all, id, name) => `#${name || names.get(id)?.name || id}`).replace(/<!(here|channel|everyone)[^>]*>/g, "@$1").replace(/<([^|>]+)\|([^>]+)>/g, "$2 ($1)").replace(/<([^>]+)>/g, "$1").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+	};
+	const messages = async (rows) => Promise.all(rows.map(async (row) => ({
+		ts: row.ts,
+		threadTs: row.thread_ts ?? null,
+		user: row.user ?? null,
+		name: row.user ? await userName(row.user) : row.username ?? row.bot_profile?.name ?? "someone",
+		text: await plain(row.text ?? ""),
+		replies: row.reply_count ?? 0,
+		at: Math.round(Number(row.ts) * 1e3)
+	})));
+	const teamUrl = () => credentials()?.url ?? null;
+	const badChannel = {
+		ok: false,
+		reason: "That is not a Slack channel."
+	};
+	const slack = {
+		async check(session) {
+			const answer = await call("auth.test", {}, session);
+			if (!answer.ok) return answer;
+			const text = (key) => typeof answer.json[key] === "string" ? answer.json[key] : null;
+			return {
+				ok: true,
+				team: text("team"),
+				url: text("url"),
+				user: text("user")
+			};
+		},
+		async unread() {
+			const counts = await call("client.counts", {
+				thread_counts_by_channel: "true",
+				org_wide_aware: "true",
+				include_file_channels: "true"
+			});
+			if (!counts.ok) return counts;
+			const rows = [
+				...counts.json.channels ?? [],
+				...counts.json.mpims ?? [],
+				...counts.json.ims ?? []
+			].filter((row) => row.has_unreads);
+			rows.sort((a, b) => (b.mention_count ?? 0) - (a.mention_count ?? 0) || Number(b.latest ?? 0) - Number(a.latest ?? 0));
+			await memberRows();
+			return {
+				ok: true,
+				channels: await Promise.all(rows.map(async (row, index) => {
+					const known = names.get(row.id);
+					let unread = null;
+					let more = false;
+					if (index < 30) {
+						const history = await call("conversations.history", {
+							channel: row.id,
+							limit: String(COUNT_LIMIT),
+							...row.last_read && row.last_read !== "0000000000.000000" ? { oldest: row.last_read } : {}
+						});
+						if (history.ok) {
+							unread = (history.json.messages ?? []).length;
+							more = history.json.has_more === true;
+						}
+					}
+					return {
+						id: row.id,
+						name: await nameOf(known, row.id),
+						kind: kindOf(names.get(row.id)),
+						unread,
+						more,
+						mentions: row.mention_count ?? 0,
+						latest: row.latest ?? null,
+						url: slackLink(teamUrl(), row.id)
+					};
+				}))
+			};
+		},
+		async find(text) {
+			const wanted = text.trim().replace(/^#/, "").toLowerCase();
+			if (!wanted) return {
+				ok: true,
+				channels: []
+			};
+			if (!everything || now() - everything.at >= LIST_TTL_MS) {
+				const listed = await pages("conversations.list", {
+					types: "public_channel,private_channel",
+					exclude_archived: "true"
+				});
+				if (!listed.ok) return listed;
+				everything = {
+					at: now(),
+					rows: listed.rows
+				};
+			}
+			const mine = await memberRows();
+			const rows = [...new Map([...everything.rows, ...mine.ok ? mine.rows : []].map((row) => [row.id, row])).values()];
+			return {
+				ok: true,
+				channels: (await Promise.all(rows.map(async (row) => ({
+					row,
+					name: row.is_im && row.user ? users.get(row.user) ?? "" : row.name ?? ""
+				})))).filter(({ name }) => name.toLowerCase().includes(wanted)).sort((a, b) => Number(!a.name.toLowerCase().startsWith(wanted)) - Number(!b.name.toLowerCase().startsWith(wanted))).slice(0, FOUND_MAX).map(({ row, name }) => ({
+					id: row.id,
+					name,
+					kind: kindOf(row),
+					unread: null,
+					more: false,
+					mentions: 0,
+					latest: null,
+					url: slackLink(teamUrl(), row.id)
+				}))
+			};
+		},
+		async channel(id) {
+			if (!ID.test(id)) return badChannel;
+			const history = await call("conversations.history", {
+				channel: id,
+				limit: String(CHANNEL_MESSAGES)
+			});
+			if (!history.ok) return history;
+			const rows = [...history.json.messages ?? []].reverse();
+			return {
+				ok: true,
+				thread: {
+					channel: {
+						id,
+						name: await slack.channelName(id)
+					},
+					messages: await messages(rows),
+					url: slackLink(teamUrl(), id)
+				}
+			};
+		},
+		async thread(id, ts) {
+			if (!ID.test(id) || !TS.test(ts)) return badChannel;
+			const replies = await call("conversations.replies", {
+				channel: id,
+				ts,
+				limit: String(THREAD_MESSAGES)
+			});
+			if (!replies.ok) return replies;
+			return {
+				ok: true,
+				thread: {
+					channel: {
+						id,
+						name: await slack.channelName(id)
+					},
+					messages: await messages(replies.json.messages ?? []),
+					url: slackLink(teamUrl(), id, ts)
+				}
+			};
+		},
+		channelName: (id) => nameOf(names.get(id), id),
+		async reply(channel, threadTs, text) {
+			if (!ID.test(channel) || !TS.test(threadTs)) return badChannel;
+			const posted = await call("chat.postMessage", {
+				channel,
+				thread_ts: threadTs,
+				text
+			});
+			if (!posted.ok) return posted;
+			const ts = typeof posted.json.ts === "string" ? posted.json.ts : void 0;
+			return {
+				ok: true,
+				url: ts ? `${slackLink(teamUrl(), channel, ts)}?thread_ts=${threadTs}&cid=${channel}` : null
+			};
+		}
+	};
+	return slack;
+}
+//#endregion
+//#region apps/agent-world/src/backend/integrations/index.ts
+var PREVIEW = 80;
+var preview = (text) => {
+	const flat = text.replace(/\s+/g, " ").trim();
+	return flat.length > PREVIEW ? `${flat.slice(0, 79)}\u2026` : flat;
+};
+function openIntegrations(options) {
+	const files = integrationFiles(options.stateDir);
+	const credentials = openCredentials(files.credentials);
+	const atlassian = () => credentials.read().atlassian;
+	const github = openGitHub(options.env);
+	const jira = openJira(atlassian, options.fetch);
+	const confluence = openConfluence(atlassian, files.recentPages, options.fetch, options.now);
+	const slack = openSlack(() => credentials.read().slack, {
+		api: options.slackApi,
+		fetch: options.fetch,
+		now: options.now
+	});
+	const characters = () => options.snapshot().characters;
+	const gate = openGate(files.record, {
+		async describe(intent) {
+			switch (intent.kind) {
+				case "github-review":
+					if (!validPullRequest(intent.repo, intent.number)) return {
+						ok: false,
+						reason: "That is not a pull request."
+					};
+					return {
+						ok: true,
+						description: {
+							what: {
+								approve: "Approve pull request",
+								comment: "Comment on pull request",
+								"request-changes": "Request changes on pull request"
+							}[intent.event],
+							where: `${intent.repo}#${intent.number} on GitHub`,
+							text: intent.body,
+							url: `https://github.com/${intent.repo}/pull/${intent.number}`
+						}
+					};
+				case "jira-comment":
+				case "jira-transition": {
+					const signedIn = atlassian();
+					if (!signedIn) return NOT_SIGNED_IN$1;
+					const key = issueKey(intent.key);
+					if (!key) return {
+						ok: false,
+						reason: "That is not a Jira issue key."
+					};
+					const where = `${key} on ${new URL(signedIn.site).hostname}`;
+					const url = `${signedIn.site}/browse/${key}`;
+					if (intent.kind === "jira-comment") return {
+						ok: true,
+						description: {
+							what: "Comment on Jira issue",
+							where,
+							text: intent.body,
+							url
+						}
+					};
+					const allowed = await jira.transitions(key);
+					if (!allowed.ok) return allowed;
+					const move = allowed.transitions.find((transition) => transition.id === intent.transition);
+					if (!move) return {
+						ok: false,
+						reason: `Jira does not offer that move for ${key} now.`
+					};
+					return {
+						ok: true,
+						description: {
+							what: "Move Jira issue",
+							where,
+							text: move.to && move.to !== move.name ? `${move.name} (to ${move.to})` : move.name,
+							url
+						}
+					};
+				}
+				case "slack-reply": {
+					if (!credentials.read().slack) return {
+						ok: false,
+						reason: "Sign in to Slack in Settings first.",
+						signIn: "slack"
+					};
+					const parent = await slack.thread(intent.channel, intent.threadTs);
+					if (!parent.ok) return parent;
+					const first = parent.thread.messages[0];
+					const channel = await slack.channelName(intent.channel);
+					const place = /^[CG]/.test(intent.channel) ? `#${channel}` : channel;
+					return {
+						ok: true,
+						description: {
+							what: "Reply in a Slack thread",
+							where: first ? `${place}, in ${first.name}'s thread: ${preview(first.text)}` : place,
+							text: intent.text,
+							url: parent.thread.url
+						}
+					};
+				}
+			}
+		},
+		async send(intent) {
+			switch (intent.kind) {
+				case "github-review": return github.review(intent.repo, intent.number, intent.event, intent.body);
+				case "jira-comment": return jira.comment(intent.key, intent.body);
+				case "jira-transition": return jira.transition(intent.key, intent.transition);
+				case "slack-reply": return slack.reply(intent.channel, intent.threadTs, intent.text);
+			}
+		}
+	}, options.now);
+	return {
+		credentialStatus: () => credentials.status(),
+		async signInAtlassian(site, email, token) {
+			const origin = typeof site === "string" ? atlassianSite(site) : void 0;
+			if (!origin) return {
+				ok: false,
+				reason: "That is not an Atlassian site address."
+			};
+			if (typeof email !== "string" || !email.includes("@")) return {
+				ok: false,
+				reason: "That is not an email address."
+			};
+			if (typeof token !== "string" || !token.trim()) return {
+				ok: false,
+				reason: "Paste the API token first."
+			};
+			const trying = {
+				site: origin,
+				email: email.trim(),
+				token: token.trim()
+			};
+			const me = await openJira(() => trying, options.fetch).myself();
+			if (!me.ok) return me;
+			credentials.set("atlassian", trying);
+			return {
+				ok: true,
+				name: me.name
+			};
+		},
+		async signOutAtlassian() {
+			credentials.set("atlassian", void 0);
+			return { ok: true };
+		},
+		/** Keep a Slack session captured from the sign-in window, once `auth.test` accepts it. */
+		async storeSlackSession(session) {
+			if (!session.token.startsWith("xoxc-") || !session.cookie) return {
+				ok: false,
+				reason: "Slack's sign-in did not finish."
+			};
+			const checked = await slack.check(session);
+			if (!checked.ok) return {
+				ok: false,
+				reason: "Slack did not accept the captured session."
+			};
+			credentials.set("slack", {
+				token: session.token,
+				cookie: session.cookie,
+				team: checked.team,
+				url: checked.url,
+				user: checked.user
+			});
+			return {
+				ok: true,
+				team: checked.team
+			};
+		},
+		async signOutSlack() {
+			credentials.set("slack", void 0);
+			return { ok: true };
+		},
+		pullRequests: () => github.pullRequests(characters()),
+		pullRequest: (repo, number) => validPullRequest(repo, number) ? github.pullRequest(repo, number, characters()) : Promise.resolve({
+			ok: false,
+			reason: "That is not a pull request."
+		}),
+		jiraAssigned: () => jira.assigned(),
+		jiraSearch: (text) => jira.search(typeof text === "string" ? text : ""),
+		jiraIssue: (key) => jira.issue(String(key ?? "")),
+		jiraTransitions: (key) => jira.transitions(String(key ?? "")),
+		confluenceSearch: (text) => confluence.search(typeof text === "string" ? text : ""),
+		confluencePage: (id) => confluence.page(String(id ?? "")),
+		libraryRecent: () => confluence.recent(),
+		slackUnread: () => slack.unread(),
+		slackFindChannels: (text) => slack.find(typeof text === "string" ? text : ""),
+		slackChannel: (id) => slack.channel(String(id ?? "")),
+		slackThread: (id, ts) => slack.thread(String(id ?? ""), String(ts ?? "")),
+		describeWrite: (intent) => gate.describe(intent),
+		confirmWrite: (intent, token) => gate.write(intent, token),
+		outsideWrites: async () => gate.recent(),
+		onOutsideWrite: (listener) => gate.onWrite(listener),
+		/** Delegate an item to an agent; each receipt stage reaches `onReceipt`. */
+		delegate: (commandId, delegation, onReceipt = () => {}) => typeof commandId === "string" && commandId ? delegate(options.commands, options.snapshot(), commandId, delegation, (characterId, stage, reason) => onReceipt({
+			commandId,
+			characterId,
+			stage,
+			...reason ? { reason } : {}
+		})) : Promise.resolve({
+			ok: false,
+			reason: "No command id was given."
+		}),
+		close() {}
+	};
+}
+//#endregion
+//#region apps/agent-world/src/backend/integrations/slack-sign-in.ts
+var SLACK_SIGN_IN_URL = "https://app.slack.com/";
+var POLL_MS = 1e3;
+/** The operator has this long to finish signing in (SSO and two-factor included). */
+var SIGN_IN_MS = 9e5;
+/** Runs in the Slack page: the current team's token from the web client's local configuration, or null. */
+var READ_TOKEN = `(() => {
+	try {
+		const config = JSON.parse(localStorage.getItem("localConfig_v2") || "null");
+		if (!config || !config.teams) return null;
+		const match = location.pathname.match(/^\\/client\\/([A-Z0-9]+)/);
+		const id = (match && match[1]) || config.lastActiveTeamId || Object.keys(config.teams)[0];
+		const team = id && config.teams[id];
+		return team && typeof team.token === "string" && team.token.startsWith("xoxc-") ? team.token : null;
+	} catch {
+		return null;
+	}
+})()`;
+/**
+* Wait until the window holds a signed-in Slack web session, then close it and resolve with the token and `d`
+* cookie; undefined when the operator closed the window first or the time ran out.
+*/
+function captureSlackSession(window) {
+	return new Promise((resolve) => {
+		let done = false;
+		const finish = (session) => {
+			if (done) return;
+			done = true;
+			clearInterval(timer);
+			clearTimeout(limit);
+			if (!window.isDestroyed()) window.close();
+			resolve(session);
+		};
+		const look = async () => {
+			if (done || window.isDestroyed()) return;
+			try {
+				const token = await window.webContents.executeJavaScript(READ_TOKEN);
+				if (typeof token !== "string") return;
+				const [cookie] = await window.webContents.session.cookies.get({
+					url: SLACK_SIGN_IN_URL,
+					name: "d"
+				});
+				if (cookie?.value) finish({
+					token,
+					cookie: cookie.value
+				});
+			} catch {}
+		};
+		const timer = setInterval(() => void look(), POLL_MS);
+		const limit = setTimeout(() => finish(void 0), SIGN_IN_MS);
+		window.once("closed", () => finish(void 0));
+	});
+}
+//#endregion
+//#region apps/agent-world/src/electron/integrations-ipc.ts
+function wireIntegrations(options) {
+	const integrations = openIntegrations(options);
+	const handle = (channel, listener) => ipcMain.handle(`places:${channel}`, (_event, ...args) => listener(...args));
+	handle("credential-status", () => integrations.credentialStatus());
+	handle("sign-in-atlassian", (site, email, token) => integrations.signInAtlassian(site, email, token));
+	handle("sign-out-atlassian", () => integrations.signOutAtlassian());
+	let signingIn;
+	handle("sign-in-slack", () => {
+		signingIn ??= (async () => {
+			const window = new BrowserWindow({
+				width: 1e3,
+				height: 760,
+				title: "Sign in to Slack",
+				backgroundColor: "#ffffff",
+				webPreferences: {
+					partition: "persist:agent-world-slack",
+					contextIsolation: true,
+					sandbox: true,
+					nodeIntegration: false
+				}
+			});
+			window.webContents.setUserAgent(window.webContents.getUserAgent().replace(/ (Electron|Agent ?World)\/\S+/gi, ""));
+			window.loadURL(SLACK_SIGN_IN_URL);
+			const session = await captureSlackSession(window);
+			if (!session) return {
+				ok: false,
+				reason: "Slack's sign-in window closed before you signed in."
+			};
+			return integrations.storeSlackSession(session);
+		})().finally(() => {
+			signingIn = void 0;
+		});
+		return signingIn;
+	});
+	handle("sign-out-slack", () => integrations.signOutSlack());
+	handle("pull-requests", () => integrations.pullRequests());
+	handle("pull-request", (repo, number) => integrations.pullRequest(repo, number));
+	handle("jira-assigned", () => integrations.jiraAssigned());
+	handle("jira-search", (text) => integrations.jiraSearch(text));
+	handle("jira-issue", (key) => integrations.jiraIssue(key));
+	handle("jira-transitions", (key) => integrations.jiraTransitions(key));
+	handle("confluence-search", (text) => integrations.confluenceSearch(text));
+	handle("confluence-page", (id) => integrations.confluencePage(id));
+	handle("library-recent", () => integrations.libraryRecent());
+	handle("slack-unread", () => integrations.slackUnread());
+	handle("slack-find", (text) => integrations.slackFindChannels(text));
+	handle("slack-channel", (id) => integrations.slackChannel(id));
+	handle("slack-thread", (id, ts) => integrations.slackThread(id, ts));
+	handle("describe-write", (intent) => integrations.describeWrite(intent));
+	handle("confirm-write", (intent, token) => integrations.confirmWrite(intent, token));
+	handle("outside-writes", () => integrations.outsideWrites());
+	integrations.onOutsideWrite((entry) => options.toWindow("places:outside-write", entry));
+	handle("delegate", (commandId, delegation) => integrations.delegate(commandId, delegation, (receipt) => options.toWindow("world:receipt", receipt)));
+	return integrations;
 }
 //#endregion
 //#region apps/agent-world/src/electron/main.ts
@@ -1574,6 +4082,11 @@ function start() {
 		ok: false,
 		reason: "No look was named."
 	});
+	ipcMain.handle("world:themes", () => listThemes(join(appDir, "themes")));
+	ipcMain.handle("world:set-theme", (_event, id) => typeof id === "string" ? world.setTheme(id) : {
+		ok: false,
+		reason: "No theme was named."
+	});
 	ipcMain.handle("world:instruct", (_event, characterId, commandId, instruction) => {
 		if (typeof characterId !== "string" || typeof commandId !== "string" || !commandId) return {
 			ok: false,
@@ -1597,6 +4110,12 @@ function start() {
 	ipcMain.handle("world:wake", (_event, characterId) => typeof characterId === "string" ? lifecycle.wake(characterId) : unnamed);
 	ipcMain.handle("world:end-session", (_event, characterId, confirmed) => typeof characterId === "string" ? lifecycle.endSession(characterId, confirmed === true) : unnamed);
 	ipcMain.handle("world:send-mail", (_event, characterId, body) => typeof characterId === "string" && typeof body === "string" ? lifecycle.sendMail(characterId, body) : unnamed);
+	wireIntegrations({
+		stateDir: statePaths().dir,
+		snapshot: () => world.snapshot(),
+		commands,
+		toWindow
+	});
 	ipcMain.handle("world:open-link", (_event, url) => openLink(url, (href) => shell.openExternal(href)));
 	world.subscribe((snapshot) => {
 		if (window && !window.isDestroyed()) window.webContents.send("world:update", snapshot);

@@ -15,7 +15,9 @@ import { openConversations } from "../backend/conversations.js";
 import { instruct } from "../backend/instructions.js";
 import { openLifecycle } from "../backend/lifecycle.js";
 import { openLink } from "../backend/links.js";
+import { listThemes } from "../backend/theme-packs.js";
 import { openWorldBackend } from "../backend/world-backend.js";
+import { wireIntegrations } from "./integrations-ipc.js";
 
 // This file runs as dist/electron/main.js, two levels below the app directory.
 const appDir = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -60,6 +62,11 @@ function start() {
 	ipcMain.handle("world:avatar-look", (_event, look: unknown) =>
 		typeof look === "string" ? world.setAvatarLook(look) : { ok: false, reason: "No look was named." },
 	);
+	// Settings: the theme packs, each checked as the window asks, and the one chosen.
+	ipcMain.handle("world:themes", () => listThemes(join(appDir, "themes")));
+	ipcMain.handle("world:set-theme", (_event, id: unknown) =>
+		typeof id === "string" ? world.setTheme(id) : { ok: false, reason: "No theme was named." },
+	);
 	ipcMain.handle("world:instruct", (_event, characterId: unknown, commandId: unknown, instruction: unknown) => {
 		if (typeof characterId !== "string" || typeof commandId !== "string" || !commandId)
 			return { ok: false, reason: "No character was named." };
@@ -84,6 +91,8 @@ function start() {
 	ipcMain.handle("world:send-mail", (_event, characterId: unknown, body: unknown) =>
 		typeof characterId === "string" && typeof body === "string" ? lifecycle.sendMail(characterId, body) : unnamed,
 	);
+	// The function places: GitHub, Jira, Confluence, Slack, the outside-write gate, and delegation.
+	wireIntegrations({ stateDir: statePaths().dir, snapshot: () => world.snapshot(), commands, toWindow });
 	// Links in transcripts open in the system browser, web links only.
 	ipcMain.handle("world:open-link", (_event, url: unknown) => openLink(url, (href) => shell.openExternal(href)));
 	world.subscribe((snapshot) => {

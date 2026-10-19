@@ -13,6 +13,8 @@ export interface WorldStore {
 	goToTerminal(characterId: string): Promise<TerminalResult>;
 	/** Choose the avatar's look: the snapshot wears it at once, and the backend keeps it across restarts. */
 	setAvatarLook(look: string): Promise<CommandResult>;
+	/** Choose the theme: the snapshot names it at once (the world switches), and the backend keeps it across restarts. */
+	setTheme(id: string): Promise<CommandResult>;
 }
 
 export function worldStore(api: AgentWorldApi): WorldStore {
@@ -60,6 +62,12 @@ export function worldStore(api: AgentWorldApi): WorldStore {
 		setAvatarLook(look) {
 			if (snapshot && snapshot.avatarLook !== look) set({ ...snapshot, avatarLook: look });
 			return api.setAvatarLook(look);
+		},
+		setTheme(id) {
+			if (snapshot && snapshot.theme !== id) set({ ...snapshot, theme: id });
+			return typeof api.setTheme === "function"
+				? api.setTheme(id)
+				: Promise.resolve({ ok: false, reason: "This window cannot keep the theme." });
 		},
 	};
 }

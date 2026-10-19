@@ -26,6 +26,8 @@ export interface WorldBackend {
 	goToTerminal(characterId: string): Promise<TerminalResult>;
 	/** Choose the avatar's look; the snapshot shows it at once, and it resolves once the runtime stored it. */
 	setAvatarLook(look: string): Promise<CommandResult>;
+	/** Choose the theme; the snapshot shows it at once, and it resolves once the runtime stored it. */
+	setTheme(id: string): Promise<CommandResult>;
 	close(): void;
 }
 
@@ -44,7 +46,7 @@ const RETRY_MS = 5000;
 const STORE_TIMEOUT_MS = 5000;
 /**
  * The `preferences` key Agent World keeps its choices under:
- * `{ wings: { [coordinator id]: repository[] }, avatar: look }`.
+ * `{ wings: { [coordinator id]: repository[] }, avatar: look, theme: id }`.
  */
 export const PREFERENCE_KEY = "agent-world";
 
@@ -102,6 +104,10 @@ function mergeWings(first: RememberedWings, then: RememberedWings): RememberedWi
 	return merged;
 }
 
+/** The operator's choices kept in the preference beside the wings. */
+const CHOICES = ["avatar", "theme"] as const;
+type Choice = (typeof CHOICES)[number];
+
 export function openWorldBackend(paths: { db: string; socket: string }): WorldBackend {
 	const listeners = new Set<(snapshot: WorldSnapshot) => void>();
 	let current: WorldSnapshot = { connected: false, headquarters: [], characters: [] };
@@ -118,13 +124,16 @@ export function openWorldBackend(paths: { db: string; socket: string }): WorldBa
 	let seen: RememberedWings = {};
 	// The wings last sent and not yet stored or failed, so one change is sent once.
 	let sending: { commandId: string; value: string } | undefined;
-	// The avatar look chosen in this run, until the runtime has stored it; and who waits for it to be stored.
-	let chosenAvatar: string | undefined;
-	let storedAvatar: string | null = null;
-	const avatarWaiters = new Set<(result: CommandResult) => void>();
-	const settleAvatar = (result: CommandResult) => {
-		for (const waiter of avatarWaiters) waiter(result);
-		avatarWaiters.clear();
+	// The avatar look and the theme chosen in this run, until the runtime has stored them; and who waits for that.
+	const chosen: Partial<Record<Choice, string>> = {};
+	const stored: Record<Choice, string | null> = { avatar: null, theme: null };
+	const waiters = new Set<{ key: Choice; done: (result: CommandResult) => void }>();
+	const settle = (key: Choice | undefined, result: CommandResult) => {
+		for (const waiter of waiters)
+			if (key === undefined || waiter.key === key) {
+				waiter.done(result);
+				waiters.delete(waiter);
+			}
 	};
 	let retryAt = 0;
 	const readTask = taskReader();
@@ -162,21 +171,24 @@ export function openWorldBackend(paths: { db: string; socket: string }): WorldBa
 	};
 
 	/**
-	 * Send the wings and the chosen avatar look to the runtime when they differ from what it stored, keeping the
-	 * preference's other keys.
+	 * Send the wings, the chosen avatar look, and the chosen theme to the runtime when they differ from what it stored,
+	 * keeping the preference's other keys.
 	 */
-	const remember = (stored: Record<string, unknown>, storedWings: RememberedWings, wings: RememberedWings) => {
+	const remember = (preference: Record<string, unknown>, storedWings: RememberedWings, wings: RememberedWings) => {
 		const next = mergeWings(storedWings, wings);
-		storedAvatar = typeof stored.avatar === "string" ? stored.avatar : null;
-		if (chosenAvatar !== undefined && chosenAvatar === storedAvatar) {
-			chosenAvatar = undefined;
-			settleAvatar({ ok: true });
+		for (const key of CHOICES) {
+			const value = preference[key];
+			stored[key] = typeof value === "string" ? value : null;
+			if (chosen[key] !== undefined && chosen[key] === stored[key]) {
+				delete chosen[key];
+				settle(key, { ok: true });
+			}
 		}
-		if (JSON.stringify(next) === JSON.stringify(storedWings) && chosenAvatar === undefined) {
+		if (JSON.stringify(next) === JSON.stringify(storedWings) && !Object.keys(chosen).length) {
 			sending = undefined;
 			return;
 		}
-		const value = { ...stored, wings: next, ...(chosenAvatar === undefined ? {} : { avatar: chosenAvatar }) };
+		const value = { ...preference, wings: next, ...chosen };
 		const json = JSON.stringify(value);
 		if (!socket || !socketOpen || json === sending?.value || Date.now() < retryAt) return;
 		const commandId = `agent-world-${randomUUID()}`;
@@ -193,8 +205,10 @@ export function openWorldBackend(paths: { db: string; socket: string }): WorldBa
 			if (seq === lastSeq && world) return world;
 			lastSeq = seq;
 			const rows = db.prepare(SESSIONS).all() as unknown as Row[];
-			const stored = storedPreference(db);
-			const storedWings = (stored.wings && typeof stored.wings === "object" ? stored.wings : {}) as RememberedWings;
+			const preference = storedPreference(db);
+			const storedWings = (
+				preference.wings && typeof preference.wings === "object" ? preference.wings : {}
+			) as RememberedWings;
 			const projected = projectWorld(rows.map(sessionRow), mergeWings(storedWings, seen));
 			const byId = new Map(rows.map((row) => [row.id, row]));
 			world = {
@@ -207,7 +221,7 @@ export function openWorldBackend(paths: { db: string; socket: string }): WorldBa
 			dormant = dormantAgents(world.dormant, byId, readTask);
 			mail = readMail(db);
 			seen = mergeWings(seen, world.wings);
-			remember(stored, storedWings, world.wings);
+			remember(preference, storedWings, world.wings);
 			return world;
 		} catch {
 			dropDb();
@@ -269,7 +283,8 @@ export function openWorldBackend(paths: { db: string; socket: string }): WorldBa
 			connected: socketOpen && next !== undefined,
 			headquarters: next?.headquarters ?? current.headquarters,
 			characters: next?.characters ?? current.characters,
-			avatarLook: chosenAvatar ?? storedAvatar,
+			avatarLook: chosen.avatar ?? stored.avatar,
+			theme: chosen.theme ?? stored.theme,
 			dormant,
 			mail,
 		});
@@ -280,7 +295,7 @@ export function openWorldBackend(paths: { db: string; socket: string }): WorldBa
 		if (message?.type !== "receipt" || message.commandId !== sending?.commandId || message.stage !== "failed") return;
 		console.error(`agent-world: the runtime did not store the preference: ${message.reason ?? "no reason given"}`);
 		sending = undefined;
-		settleAvatar({ ok: false, reason: `The runtime did not store it: ${message.reason ?? "no reason given"}.` });
+		settle(undefined, { ok: false, reason: `The runtime did not store it: ${message.reason ?? "no reason given"}.` });
 		retryAt = Date.now() + RETRY_MS;
 		retry = setTimeout(() => {
 			lastSeq = -1; // read again, which sends again
@@ -320,6 +335,29 @@ export function openWorldBackend(paths: { db: string; socket: string }): WorldBa
 	const timer = setInterval(poll, POLL_MS).unref();
 	poll();
 
+	/** Keep a choice: the snapshot shows it at once; resolves once the runtime stored it (or why not). */
+	const choose = (key: Choice, value: string): Promise<CommandResult> => {
+		chosen[key] = value;
+		const storing = new Promise<CommandResult>((resolve) => {
+			let timer: NodeJS.Timeout | undefined;
+			const waiter = {
+				key,
+				done(result: CommandResult) {
+					clearTimeout(timer);
+					resolve(result);
+				},
+			};
+			timer = setTimeout(() => {
+				waiters.delete(waiter);
+				resolve({ ok: false, reason: "The session runtime did not store it yet; it will when it answers." });
+			}, STORE_TIMEOUT_MS);
+			waiters.add(waiter);
+		});
+		lastSeq = -1; // read again, which sends it
+		poll();
+		return storing;
+	};
+
 	return {
 		snapshot: () => current,
 		subscribe(listener) {
@@ -338,26 +376,11 @@ export function openWorldBackend(paths: { db: string; socket: string }): WorldBa
 			feedListeners.add(listener);
 			return () => feedListeners.delete(listener);
 		},
-		setAvatarLook(look) {
-			chosenAvatar = look;
-			const stored = new Promise<CommandResult>((resolve) => {
-				const timer = setTimeout(() => {
-					avatarWaiters.delete(done);
-					resolve({ ok: false, reason: "The session runtime did not store it yet; it will when it answers." });
-				}, STORE_TIMEOUT_MS);
-				const done = (result: CommandResult) => {
-					clearTimeout(timer);
-					resolve(result);
-				};
-				avatarWaiters.add(done);
-			});
-			lastSeq = -1; // read again, which sends it
-			poll();
-			return stored;
-		},
+		setAvatarLook: (look) => choose("avatar", look),
+		setTheme: (id) => choose("theme", id),
 		close() {
 			closed = true;
-			settleAvatar({ ok: false, reason: "Agent World closed before the runtime stored it." });
+			settle(undefined, { ok: false, reason: "Agent World closed before the runtime stored it." });
 			clearInterval(timer);
 			clearTimeout(reconnect);
 			clearTimeout(retry);

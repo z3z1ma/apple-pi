@@ -5,6 +5,10 @@ Why: ticket 06 owned the game while ticket 08 built the interface; the intents k
 Coupled: apps/agent-world/web/main.tsx, apps/agent-world/web/overlay/interface/interface.tsx
 Verify: apps/agent-world/tests/world-interface.test.ts
 
+`choose-theme` (Settings) is carried out by `main.tsx`: it checks the pack, switches live, and only then keeps the choice through `store.setTheme`, so a broken pack is never stored as the operator's theme. A snapshot whose `theme` differs from the one worn (chosen elsewhere) switches too, except to a pack already found broken in this window.
+Coupled: apps/agent-world/web/main.tsx, apps/agent-world/web/world-store.ts
+Verify: apps/agent-world/tests/world-themes.test.ts
+
 ## symbol:MinimapView
 
 The minimap is published by `publishMinimap` (`overlay/interface/world-link.ts`) from the scene's read-only views every 150 ms, only when it changes; positions are in the place's tiles, and a growing place (the gallery) sends its strips so the minimap draws the same cut painting.

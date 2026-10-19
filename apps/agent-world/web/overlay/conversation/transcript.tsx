@@ -83,7 +83,8 @@ function Fold({
 	children,
 }: {
 	className: string;
-	glyph: string;
+	/** Which mark the theme's skin draws before the label. */
+	glyph: "tool" | "thought" | "note";
 	label: string;
 	arg?: string | null;
 	state?: "ok" | "error" | "waiting";
@@ -94,9 +95,7 @@ function Fold({
 		<div className={`aw-conv-fold ${className}${open ? " aw-open" : ""}`}>
 			<button type="button" className="aw-conv-fold-line" aria-expanded={open} onClick={() => setOpen(!open)}>
 				<span className="aw-conv-chevron" aria-hidden="true" />
-				<span className="aw-conv-glyph" aria-hidden="true">
-					{glyph}
-				</span>
+				<span className={`aw-conv-glyph aw-conv-glyph-${glyph}`} aria-hidden="true" />
 				<span className="aw-conv-fold-label">{label}</span>
 				{arg && <code className="aw-conv-fold-arg">{arg}</code>}
 				{state && (
@@ -121,7 +120,7 @@ function ToolCall({ call, result }: { call: TranscriptToolCall; result?: ToolRes
 	return (
 		<Fold
 			className="aw-conv-tool"
-			glyph={"\u2692"}
+			glyph="tool"
 			label={call.name}
 			arg={shortArg(call.arg, cwd)}
 			state={result ? (result.isError ? "error" : "ok") : "waiting"}
@@ -214,7 +213,7 @@ function AgentBlock({
 						if (item.kind === "text") return <Markdown key={item.key} text={item.text} />;
 						if (item.kind === "thoughts")
 							return (
-								<Fold key={item.key} className="aw-conv-thought" glyph={"\u2767"} label="Thought it over">
+								<Fold key={item.key} className="aw-conv-thought" glyph="thought" label="Thought it over">
 									{item.texts.map((text, i) => (
 										// biome-ignore lint/suspicious/noArrayIndexKey: thoughts in a run never reorder
 										<p key={i} className="aw-conv-thought-text">
@@ -261,7 +260,7 @@ export const BlockView = memo(function BlockView({
 	if (block.kind === "mail")
 		return (
 			<article className="aw-conv-entry aw-conv-mail" data-entry={block.entry.id}>
-				<span className="aw-conv-seal" aria-hidden="true" />
+				<span className="aw-conv-mail-mark" aria-hidden="true" />
 				<header className="aw-conv-who">
 					<span className="aw-conv-name">Mail from {block.entry.from}</span>
 					<time>{clock(block.entry.at)}</time>
@@ -274,7 +273,7 @@ export const BlockView = memo(function BlockView({
 			<div className="aw-conv-entry aw-conv-note" data-entry={block.entry.id}>
 				<Fold
 					className="aw-conv-tool"
-					glyph={"\u2709"}
+					glyph="note"
 					label={block.entry.shown ? block.entry.label : `${block.entry.label} (for the agent only)`}
 				>
 					<pre className="aw-conv-io">{trimBlankLines(block.entry.text) || "(empty)"}</pre>
@@ -285,7 +284,7 @@ export const BlockView = memo(function BlockView({
 		<div className="aw-conv-entry aw-conv-orphan" data-entry={block.entry.id}>
 			<Fold
 				className="aw-conv-tool"
-				glyph={"\u2692"}
+				glyph="tool"
 				label={`${block.entry.tool} result`}
 				state={block.entry.isError ? "error" : "ok"}
 			>

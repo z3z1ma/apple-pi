@@ -1,9 +1,11 @@
-// The innkeeper's register (ticket 15): every dormant agent, the most recently stopped first, with its repository, its
+// The innkeeper's register (ticket 15), in the theme's words: every dormant agent, the most recently stopped first, with its repository, its
 // last ledger task, how long it has slept, and where (at a table, in a bed, or upstairs once the inn's spots are full).
 // From a row the operator reads its last conversation or wakes it; the wake's receipt shows on the row.
 import { useMemo, useState } from "react";
 import type { DormantAgent, WorldSnapshot } from "../../../src/world.js";
 import { lookFor, portraitOf } from "../../looks.js";
+import { say, type Theme } from "../../theme.js";
+import { useTheme } from "../../theme-store.js";
 import { ago } from "../interface/model.js";
 import { PlaceDialog } from "./place-dialog.js";
 import { placeActions, placePanels } from "./place-panels.js";
@@ -11,12 +13,16 @@ import { placeActions, placePanels } from "./place-panels.js";
 const base = (path: string | null) => (path ? (path.split("/").filter(Boolean).pop() ?? path) : null);
 
 /** Where each sleeper is: at a table, in a bed, or upstairs (more sleepers than the inn has spots). */
-function wherePlaces(spots: number, beds: Set<number>) {
-	return (index: number) => (index >= spots ? "Upstairs" : beds.has(index) ? "In a bed" : "At a table");
+function wherePlaces(theme: Theme | undefined, spots: number, beds: Set<number>) {
+	return (index: number) => ({
+		upstairs: index >= spots,
+		text: say(theme, index >= spots ? "sleeper-upstairs" : beds.has(index) ? "sleeper-bed" : "sleeper-table"),
+	});
 }
 
 export function InnkeeperRegister({ world }: { world: WorldSnapshot | undefined }) {
-	const { theme, wakes } = placePanels.get();
+	const { wakes } = placePanels.get();
+	const theme = useTheme();
 	const [search, setSearch] = useState("");
 	const dormant = world?.dormant ?? [];
 	const inn = theme?.places.inn;
@@ -25,7 +31,7 @@ export function InnkeeperRegister({ world }: { world: WorldSnapshot | undefined 
 		() => new Set((inn?.overlaySlots ?? []).filter((slot) => slot.kind === "bed").map((slot) => slot.spot)),
 		[inn],
 	) as Set<number>;
-	const where = wherePlaces(spots, beds);
+	const where = wherePlaces(theme, spots, beds);
 	const here = Math.min(spots, dormant.length);
 	const upstairs = dormant.length - here;
 
@@ -40,15 +46,21 @@ export function InnkeeperRegister({ world }: { world: WorldSnapshot | undefined 
 
 	const host = theme ? portraitOf(theme, "innkeeper", dormant.length ? "happy" : "neutral") : undefined;
 	const greeting = dormant.length
-		? `${here} asleep here${upstairs ? `, ${upstairs} upstairs` : ""}. Whom shall I wake?`
-		: "Every bed is made and every table free: nobody sleeps here tonight.";
+		? say(theme, "register-greeting", {
+				here,
+				upstairs: upstairs ? say(theme, "register-upstairs", { count: upstairs }) : "",
+			})
+		: say(theme, "register-empty");
+	const title = say(theme, "register-title");
 
 	return (
-		<PlaceDialog label="The innkeeper's register" className="aw-register">
+		<PlaceDialog label={title} className="aw-register">
 			<header className="aw-place-head">
-				<div className="aw-place-portrait">{host && <img src={host} alt="The innkeeper" draggable={false} />}</div>
+				<div className="aw-place-portrait">
+					{host && <img src={host} alt={theme?.labels.innkeeper} draggable={false} />}
+				</div>
 				<div className="aw-place-heading">
-					<h2>The innkeeper&rsquo;s register</h2>
+					<h2>{title.replace(/'/g, "\u2019")}</h2>
 					<p className="aw-place-says">&ldquo;{greeting}&rdquo;</p>
 				</div>
 			</header>
@@ -57,12 +69,12 @@ export function InnkeeperRegister({ world }: { world: WorldSnapshot | undefined 
 					type="search"
 					className="aw-place-search"
 					placeholder="Search by name, repository, or task"
-					aria-label="Search the register"
+					aria-label={say(theme, "register-search")}
 					value={search}
 					onChange={(event) => setSearch(event.target.value)}
 				/>
 			)}
-			<ul className="aw-place-list aw-register-list" aria-label="Asleep at the inn">
+			<ul className="aw-place-list aw-register-list" aria-label={say(theme, "asleep-here")}>
 				{rows.map(({ agent, index }) => (
 					<SleeperRow key={agent.id} agent={agent} where={where(index)} progress={wakes[agent.id]} />
 				))}
@@ -78,10 +90,10 @@ function SleeperRow({
 	progress,
 }: {
 	agent: DormantAgent;
-	where: string;
+	where: { upstairs: boolean; text: string };
 	progress: ReturnType<typeof placePanels.get>["wakes"][string] | undefined;
 }) {
-	const { theme } = placePanels.get();
+	const theme = useTheme();
 	const portrait = theme ? portraitOf(theme, lookFor(theme, agent)) : undefined;
 	const repository = base(agent.repository);
 	const slept = ago(agent.stoppedAt);
@@ -91,9 +103,7 @@ function SleeperRow({
 			<span className="aw-register-text">
 				<span className="aw-register-name">
 					{agent.name}
-					<small className={where === "Upstairs" ? "aw-register-where aw-upstairs" : "aw-register-where"}>
-						{where}
-					</small>
+					<small className={where.upstairs ? "aw-register-where aw-upstairs" : "aw-register-where"}>{where.text}</small>
 				</span>
 				<span className="aw-register-detail">
 					{repository ?? base(agent.cwd) ?? "No repository"}

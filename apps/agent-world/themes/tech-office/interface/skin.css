@@ -1,0 +1,1835 @@
+/* The tech office theme's skin: a clean, modern desktop UI over a warm golden-hour office. Frames are graphite glass
+   with a hairline edge; what they hold sits on paper-white cards in a crisp sans; teal is the accent, coral the
+   warning. The conversation panel is a document window: a title bar, an inspector on the left with the character, and
+   the transcript as the document. Tokens come from theme.json; the shades below are this sheet's own. */
+
+:root {
+	--t-glass: rgb(22 26 31 / 88%);
+	--t-glass-edge: rgb(255 255 255 / 9%);
+	--t-glass-text: #e9edf1;
+	--t-glass-soft: #9aa4ae;
+	--t-card: #fbfaf8;
+	--t-card-alt: #f3f4f6;
+	--t-line: #e3e6ea;
+	--t-line-strong: #cfd5db;
+	--t-teal: #1f8a84;
+	--t-teal-soft: rgb(31 138 132 / 12%);
+	--t-teal-ring: rgb(31 138 132 / 38%);
+	--t-amber: #f2b33d;
+	--t-green: #35a877;
+	--t-violet: #6f5ce6;
+	--t-coral: #d6573e;
+	--t-blue: #2f6fd6;
+	--t-shadow: 0 14px 34px rgb(8 10 14 / 38%), 0 2px 6px rgb(8 10 14 / 22%);
+}
+
+/* ---- the page ---- */
+
+html,
+body {
+	background: var(--aw-backdrop);
+	font-family: var(--aw-font-body);
+	-webkit-font-smoothing: antialiased;
+}
+
+.place-title {
+	padding: 6px 18px 7px;
+	border: 1px solid var(--t-glass-edge);
+	border-radius: 11px;
+	background: var(--t-glass);
+	backdrop-filter: blur(12px) saturate(1.2);
+	color: var(--t-glass-text);
+	box-shadow: var(--t-shadow);
+}
+
+.place-title strong {
+	font: 600 15px / 1.25 var(--aw-font-display);
+	letter-spacing: -0.005em;
+}
+
+.place-title span {
+	color: var(--t-glass-soft);
+	font-size: 11.5px;
+}
+
+.notice {
+	border: 1px solid var(--t-glass-edge);
+	border-radius: 10px;
+	background: var(--t-glass);
+	backdrop-filter: blur(12px);
+	color: var(--t-glass-text);
+	box-shadow: var(--t-shadow);
+	font-size: 13.5px;
+}
+
+.notice-lasting {
+	border-color: rgb(214 87 62 / 55%);
+	box-shadow:
+		inset 3px 0 0 var(--t-coral),
+		var(--t-shadow);
+}
+
+.notice-lasting strong {
+	font-weight: 600;
+}
+
+.notice-lasting ul {
+	color: #ffc9bc;
+	font-family: var(--aw-font-mono);
+	font-size: 12px;
+}
+
+.notice-lasting button {
+	border: 0;
+	border-radius: 7px;
+	background: rgb(255 255 255 / 12%);
+	color: var(--t-glass-text);
+	font: 600 12.5px var(--aw-font-body);
+}
+
+.notice-lasting button:hover {
+	background: rgb(255 255 255 / 20%);
+}
+
+.chooser {
+	border: 1px solid var(--t-line);
+	border-radius: 14px;
+	background: var(--t-card);
+	color: var(--aw-ink);
+	box-shadow: var(--t-shadow);
+}
+
+.chooser strong {
+	font: 600 16px var(--aw-font-display);
+}
+
+.chooser button {
+	border: 1px solid var(--t-line);
+	border-radius: 9px;
+	background: #fff;
+}
+
+.chooser button:hover {
+	border-color: var(--t-teal-ring);
+	background: #f4fbfa;
+}
+
+.chooser small {
+	color: var(--aw-ink-soft);
+}
+
+.chooser .chooser-cancel {
+	border-color: transparent;
+	background: transparent;
+	color: var(--aw-ink-soft);
+}
+
+.disconnected-veil {
+	background: rgb(8 10 14 / 55%);
+	backdrop-filter: grayscale(0.6);
+}
+
+.disconnected {
+	border: 1px solid var(--t-line);
+	border-radius: 14px;
+	background: var(--t-card);
+	color: var(--aw-ink);
+	box-shadow: var(--t-shadow);
+}
+
+.disconnected strong {
+	font: 600 17px var(--aw-font-display);
+	color: var(--t-coral);
+}
+
+/* ---- the interface ---- */
+
+.aw-interface {
+	font-family: var(--aw-font-body);
+	color: var(--aw-ink);
+	-webkit-font-smoothing: antialiased;
+}
+
+.aw-num,
+.aw-badge > span {
+	font-family: var(--aw-font-figures);
+	font-weight: 600;
+}
+
+.aw-frame {
+	border: 1px solid var(--t-glass-edge);
+	border-radius: 14px;
+	background: var(--aw-frame-background);
+	backdrop-filter: blur(14px) saturate(1.25);
+	box-shadow: var(--aw-frame-shadow);
+}
+
+.aw-surface {
+	border-radius: 9px;
+	background: var(--aw-surface-background);
+	color: var(--aw-ink);
+	box-shadow: inset 0 0 0 1px rgb(0 0 0 / 6%);
+	scrollbar-color: #c3cad1 transparent;
+}
+
+.aw-empty {
+	color: var(--aw-ink-faint);
+}
+
+/* Minimap and orbs */
+
+.aw-minimap-map {
+	border-radius: 9px;
+	background: #0e1115;
+	box-shadow: inset 0 0 0 1px rgb(255 255 255 / 8%);
+}
+
+.aw-minimap-map:focus-visible {
+	outline: 2px solid var(--aw-accent-light);
+	outline-offset: 2px;
+}
+
+.aw-minimap-place {
+	filter: saturate(0.9);
+}
+
+.aw-minimap-view {
+	border: 1.5px solid rgb(255 255 255 / 85%);
+	border-radius: 3px;
+	box-shadow: 0 0 0 1px rgb(0 0 0 / 30%);
+}
+
+.aw-dot {
+	border-radius: 50%;
+	background: var(--t-amber);
+	box-shadow: 0 0 0 1.5px #1b1f24;
+}
+
+.aw-dot-townsfolk {
+	background: #5fb7ff;
+}
+
+.aw-dot-avatar {
+	background: #fff;
+	box-shadow:
+		0 0 0 1.5px var(--t-teal),
+		0 0 0 3px rgb(0 0 0 / 40%);
+}
+
+.aw-dot-calling::after {
+	border: 1.5px solid var(--t-amber);
+	border-radius: 50%;
+}
+
+.aw-orb-glass {
+	border-radius: 50%;
+	box-shadow:
+		inset 0 0 0 1px rgb(255 255 255 / 22%),
+		0 0 0 2px rgb(22 26 31 / 85%),
+		0 4px 10px rgb(0 0 0 / 40%);
+}
+
+.aw-orb-need .aw-orb-glass {
+	background: linear-gradient(160deg, #ffd27a, #e79a1e);
+}
+
+.aw-orb-work .aw-orb-glass {
+	background: linear-gradient(160deg, #9b8cff, #5a46d8);
+}
+
+.aw-orb-slack .aw-orb-glass {
+	background: linear-gradient(160deg, #4a535e, #2a3038);
+}
+
+.aw-orb .aw-num {
+	color: #fff;
+	font-size: 16px;
+	text-shadow: 0 1px 2px rgb(0 0 0 / 35%);
+}
+
+.aw-orb-label {
+	border-radius: 6px;
+	background: var(--t-glass);
+	color: var(--t-glass-text);
+	font-size: 10px;
+	font-weight: 500;
+	letter-spacing: 0.01em;
+}
+
+.aw-orb-slack .aw-orb-label {
+	color: var(--t-glass-soft);
+}
+
+.aw-orb:hover .aw-orb-glass {
+	filter: brightness(1.08);
+}
+
+.aw-orb:focus-visible .aw-orb-glass {
+	outline: 2px solid var(--aw-accent-light);
+	outline-offset: 2px;
+}
+
+/* Side panel */
+
+.aw-panel-head h2,
+.aw-card-head h2 {
+	color: var(--t-glass-text);
+	font: 600 13px var(--aw-font-display);
+	letter-spacing: 0.01em;
+}
+
+.aw-card-head h2 {
+	font-size: 15px;
+}
+
+.aw-panel-body h3 {
+	border-bottom: 1px solid var(--t-line);
+	color: #6b7580;
+	font-size: 10.5px;
+	font-weight: 600;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+}
+
+.aw-panel-body h3 small {
+	color: var(--aw-ink-faint);
+	font-size: 11px;
+}
+
+.aw-tab {
+	border: 0;
+	border-radius: 9px;
+	background: rgb(255 255 255 / 4%);
+	color: #9aa4ae;
+}
+
+.aw-tab:hover {
+	background: rgb(255 255 255 / 9%);
+	color: #dfe5ea;
+}
+
+.aw-tab[aria-selected="true"] {
+	background: rgb(31 138 132 / 30%);
+	box-shadow: inset 0 0 0 1px rgb(127 214 207 / 45%);
+	color: #e6fffb;
+}
+
+.aw-folded .aw-tab[aria-selected="true"] {
+	background: rgb(255 255 255 / 4%);
+	box-shadow: inset 0 0 0 1px rgb(255 255 255 / 10%);
+	color: #c9d1d8;
+}
+
+.aw-tab:focus-visible {
+	outline: 2px solid var(--aw-accent-light);
+	outline-offset: 1px;
+}
+
+.aw-badge {
+	border-radius: 9px;
+	background: #e5484d;
+	box-shadow: 0 0 0 2px #1b1f24;
+	color: #fff;
+}
+
+/* Rows */
+
+.aw-row-main {
+	border-radius: 7px;
+}
+
+.aw-row-main:hover {
+	background: var(--t-teal-soft);
+}
+
+.aw-row-main:focus-visible {
+	outline: 2px solid var(--t-teal);
+	outline-offset: -2px;
+}
+
+.aw-row-selected {
+	border-radius: 8px;
+	background: rgb(31 138 132 / 10%);
+	box-shadow: inset 0 0 0 1px var(--t-teal-ring);
+}
+
+.aw-row-here .aw-row-main {
+	background: rgb(242 179 61 / 16%);
+}
+
+.aw-row-name {
+	font-weight: 600;
+}
+
+.aw-row-detail {
+	color: var(--aw-ink-soft);
+}
+
+.aw-row-asking .aw-row-detail {
+	color: #a8620a;
+}
+
+.aw-row-time,
+.aw-row-go {
+	color: var(--aw-ink-faint);
+	font-family: var(--aw-font-figures);
+}
+
+.aw-row-go {
+	color: var(--t-teal);
+	font-family: var(--aw-font-body);
+	font-weight: 600;
+}
+
+.aw-pip {
+	border-radius: 50%;
+}
+
+.aw-pip-asking {
+	background: var(--t-amber);
+	color: #3d2a00;
+}
+
+.aw-pip-finished {
+	background: var(--t-green);
+	color: #fff;
+}
+
+.aw-pip-working {
+	background: var(--t-violet);
+	color: #fff;
+}
+
+.aw-pip-idle {
+	background: #e3e7eb;
+}
+
+.aw-pip-idle::after {
+	border-radius: 50%;
+	background: #8b949c;
+}
+
+.aw-pip-place {
+	border-radius: 3px;
+	background: var(--t-teal);
+}
+
+.aw-dots i {
+	border-radius: 50%;
+	background: currentColor;
+}
+
+.aw-actions {
+	border: 0;
+}
+
+.aw-button {
+	border: 1px solid var(--t-line-strong);
+	border-radius: 7px;
+	background: #fff;
+	box-shadow: 0 1px 1px rgb(0 0 0 / 5%);
+	color: var(--aw-ink);
+	font-size: 11px;
+	font-weight: 600;
+}
+
+.aw-button:hover {
+	border-color: #b9c1c9;
+	background: #f4f6f8;
+}
+
+.aw-button:active {
+	background: #eceff2;
+	box-shadow: none;
+}
+
+.aw-button:focus-visible {
+	outline: 2px solid var(--t-teal);
+	outline-offset: 1px;
+}
+
+.aw-actions .aw-button-end {
+	color: var(--t-coral);
+}
+
+/* Settings */
+
+.aw-switch-row {
+	border-radius: 7px;
+}
+
+.aw-switch-row:hover {
+	background: var(--t-teal-soft);
+}
+
+.aw-switch-hint,
+.aw-note {
+	color: var(--aw-ink-soft);
+}
+
+.aw-switch {
+	border-radius: 9px;
+	background: #cfd5db;
+	box-shadow: inset 0 1px 2px rgb(0 0 0 / 15%);
+}
+
+.aw-switch i {
+	border-radius: 50%;
+	background: #fff;
+	box-shadow: 0 1px 3px rgb(0 0 0 / 30%);
+}
+
+[aria-checked="true"] > .aw-switch {
+	background: var(--t-teal);
+}
+
+.aw-setting-value {
+	color: var(--aw-ink-soft);
+}
+
+.aw-looks {
+	border: 0;
+}
+
+.aw-look-frame {
+	border-radius: 12px;
+	background: linear-gradient(160deg, #e9eef2, #cfd8df);
+	box-shadow: 0 0 0 1px rgb(0 0 0 / 8%);
+}
+
+.aw-look-name {
+	color: var(--aw-ink-soft);
+}
+
+.aw-look:hover .aw-look-frame {
+	box-shadow:
+		0 0 0 1px rgb(0 0 0 / 10%),
+		0 4px 10px rgb(0 0 0 / 14%);
+}
+
+.aw-look:has(input:focus-visible) .aw-look-frame {
+	outline: 2px solid var(--t-teal);
+	outline-offset: 2px;
+}
+
+.aw-look:has(input:checked) .aw-look-frame {
+	box-shadow:
+		0 0 0 2px var(--t-teal),
+		0 4px 12px rgb(31 138 132 / 30%);
+}
+
+.aw-look:has(input:checked) .aw-look-name {
+	color: var(--aw-ink);
+}
+
+.aw-themes {
+	border: 0;
+}
+
+.aw-theme {
+	border: 1px solid var(--t-line);
+	border-radius: 9px;
+	background: #fff;
+}
+
+.aw-theme:hover {
+	border-color: var(--t-line-strong);
+}
+
+.aw-theme:has(input:checked) {
+	border-color: var(--t-teal-ring);
+	background: #f2faf9;
+	box-shadow: inset 3px 0 0 var(--t-teal);
+}
+
+.aw-theme:has(input:focus-visible) {
+	outline: 2px solid var(--t-teal);
+	outline-offset: 1px;
+}
+
+.aw-theme-mark {
+	border: 1.5px solid #b9c1c9;
+	border-radius: 50%;
+	background: #fff;
+}
+
+.aw-theme:has(input:checked) .aw-theme-mark {
+	border: 4.5px solid var(--t-teal);
+}
+
+.aw-theme-line {
+	color: var(--aw-ink-soft);
+}
+
+.aw-theme-broken .aw-theme-line {
+	color: var(--t-coral);
+}
+
+/* Chatbox */
+
+.aw-chat-line time {
+	color: var(--aw-ink-faint);
+	font-family: var(--aw-font-mono);
+	font-size: 10.5px;
+}
+
+.aw-chat-game {
+	color: var(--aw-ink);
+}
+
+.aw-chat-agents {
+	color: #5a46c8;
+}
+
+.aw-chat-mail {
+	color: #b4482c;
+}
+
+.aw-chat-commands {
+	color: #16716c;
+}
+
+.aw-chat-name:hover {
+	text-decoration: underline;
+	text-underline-offset: 2px;
+}
+
+.aw-filter,
+.aw-fold {
+	border: 0;
+	border-radius: 7px;
+	background: transparent;
+	color: #7d8791;
+	font-weight: 500;
+}
+
+.aw-filter[aria-pressed="true"] {
+	background: rgb(255 255 255 / 9%);
+	box-shadow: inset 0 -2px 0 var(--aw-accent-light);
+	color: #f1f4f6;
+}
+
+.aw-fold {
+	background: rgb(255 255 255 / 5%);
+}
+
+.aw-filter:hover,
+.aw-fold:hover {
+	color: #fff;
+}
+
+.aw-filter:focus-visible,
+.aw-fold:focus-visible {
+	outline: 2px solid var(--aw-accent-light);
+	outline-offset: 1px;
+}
+
+/* Examine card */
+
+.aw-card-head p {
+	color: var(--t-glass-soft);
+}
+
+.aw-card blockquote {
+	border-left: 3px solid var(--t-amber);
+	border-radius: 0 6px 6px 0;
+	background: #fff7e6;
+}
+
+.aw-card dl > div {
+	border-bottom: 1px solid var(--t-line);
+}
+
+.aw-card dt {
+	color: var(--aw-ink-faint);
+}
+
+/* ---- the conversation panel: a document window ---- */
+
+.aw-conv-veil {
+	--aw-blue-ink: var(--t-blue);
+	background: var(--aw-veil);
+	backdrop-filter: blur(3px) saturate(0.9);
+	font-family: var(--aw-font-body);
+	color: var(--aw-ink);
+}
+
+.aw-conv-panel {
+	padding: 40px 0 0;
+	overflow: hidden;
+	border-radius: 14px;
+	background: var(--aw-panel-cover);
+	box-shadow:
+		0 0 0 1px rgb(0 0 0 / 22%),
+		0 30px 70px rgb(0 0 0 / 55%),
+		0 8px 20px rgb(0 0 0 / 30%);
+}
+
+/* The title bar, with the window's three buttons and its title (the dialog's own label). */
+.aw-conv-panel::before {
+	content: attr(aria-label);
+	inset: 0 0 auto;
+	height: 40px;
+	box-sizing: border-box;
+	padding: 0 120px;
+	border-bottom: 1px solid #dfe3e7;
+	background:
+		radial-gradient(circle at 22px 20px, #ff6b57 0 5.5px, rgb(0 0 0 / 12%) 6px, transparent 6.6px),
+		radial-gradient(circle at 42px 20px, #f6be3f 0 5.5px, rgb(0 0 0 / 12%) 6px, transparent 6.6px),
+		radial-gradient(circle at 62px 20px, #2fbf93 0 5.5px, rgb(0 0 0 / 12%) 6px, transparent 6.6px),
+		linear-gradient(#f8f9fa, #eceef1);
+	color: #4d5660;
+	font: 600 13px / 40px var(--aw-font-display);
+	text-align: center;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.aw-conv-panel::after {
+	display: none;
+}
+
+.aw-conv-ornament,
+.aw-conv-marker {
+	display: none;
+}
+
+.aw-conv-pane {
+	background: var(--aw-panel-page);
+}
+
+/* The inspector: the character's card. */
+.aw-conv-side {
+	padding: 26px 24px 20px;
+	border-right: 1px solid #e1e5e9;
+	background: #f4f5f7;
+}
+
+.aw-conv-main {
+	background: #fff;
+}
+
+.aw-portrait {
+	height: min(210px, 27vh);
+	aspect-ratio: 1;
+	border-radius: 22px;
+	background: linear-gradient(160deg, #cfe7e4, #8fb9c4 55%, #5d7f95);
+	box-shadow:
+		0 0 0 1px rgb(0 0 0 / 8%),
+		0 10px 24px rgb(29 35 41 / 18%);
+}
+
+.aw-portrait img {
+	width: 104%;
+	filter: drop-shadow(0 4px 8px rgb(20 30 40 / 25%));
+}
+
+.aw-portrait-asking {
+	box-shadow:
+		0 0 0 3px var(--t-amber),
+		0 10px 24px rgb(29 35 41 / 18%);
+}
+
+.aw-conv-title {
+	font: 700 26px / 1.15 var(--aw-font-display);
+	letter-spacing: -0.015em;
+	color: var(--aw-ink);
+}
+
+.aw-conv-role {
+	color: var(--aw-ink-soft);
+	font-size: 13.5px;
+}
+
+.aw-conv-role::after {
+	width: 36px;
+	height: 3px;
+	margin-top: 14px;
+	border-radius: 2px;
+	background: var(--t-teal);
+}
+
+.aw-conv-facts dt {
+	color: var(--aw-ink-faint);
+	font-size: 10.5px;
+	font-weight: 600;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+}
+
+.aw-conv-facts dd {
+	color: var(--aw-ink);
+	font-size: 14px;
+}
+
+.aw-conv-branch {
+	color: var(--aw-ink-soft);
+}
+
+.aw-conv-status {
+	border: 0;
+	border-radius: 10px;
+	background: rgb(31 138 132 / 12%);
+	color: #16716c;
+	font-size: 11px;
+	font-weight: 600;
+}
+
+.aw-conv-doing-asking dd {
+	color: #a8620a;
+	font-weight: 500;
+}
+
+.aw-conv-tool-name {
+	color: var(--t-violet);
+	font: 600 12px var(--aw-font-mono);
+}
+
+.aw-conv-tool-arg {
+	color: #4d5660;
+	font: 12px / 1.4 var(--aw-font-mono);
+}
+
+/* Buttons: teal for the main action, white for the quiet one, coral for Stop. */
+.aw-cta {
+	padding: 8px 18px 9px;
+	border: 1px solid #187670;
+	border-radius: 9px;
+	background: linear-gradient(#26a098, #1d8780);
+	box-shadow:
+		inset 0 1px 0 rgb(255 255 255 / 22%),
+		0 1px 2px rgb(0 0 0 / 15%);
+	color: #fff;
+	font: 600 14px var(--aw-font-body);
+	cursor: pointer;
+}
+
+.aw-cta:hover {
+	filter: brightness(1.06);
+}
+
+.aw-cta:active {
+	transform: translateY(1px);
+}
+
+.aw-cta:focus-visible {
+	outline: 2px solid var(--t-teal-ring);
+	outline-offset: 2px;
+}
+
+.aw-cta-small {
+	padding: 5px 13px 6px;
+	font-size: 13px;
+}
+
+.aw-cta:disabled {
+	cursor: default;
+	opacity: 0.5;
+	filter: saturate(0.4);
+	transform: none;
+}
+
+.aw-cta-quiet {
+	border-color: var(--t-line-strong);
+	background: #fff;
+	box-shadow: 0 1px 2px rgb(0 0 0 / 6%);
+	color: var(--aw-ink);
+}
+
+.aw-cta-danger {
+	border-color: #b8442d;
+	background: linear-gradient(#e2694f, #cf5038);
+	color: #fff;
+}
+
+.aw-conv-warn,
+.aw-conv-wake-failed {
+	color: var(--t-coral);
+}
+
+.aw-conv-wake {
+	color: var(--aw-ink-soft);
+}
+
+.aw-conv-close {
+	top: 12px;
+	right: 14px;
+	width: 26px;
+	height: 26px;
+	border: 0;
+	border-radius: 7px;
+	background:
+		url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 26 26'%3E%3Cpath d='M8.5 8.5l9 9M17.5 8.5l-9 9' stroke='%234d5660' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E")
+		center / 26px no-repeat,
+		#eef0f3;
+	cursor: pointer;
+}
+
+.aw-conv-close:hover {
+	background-color: #e1e5e9;
+}
+
+/* The document */
+
+.aw-conv-log {
+	padding: 26px 56px 18px 44px;
+	color: #262c32;
+	font-size: 15px;
+	line-height: 1.6;
+	mask-image: linear-gradient(transparent, #000 18px, #000 calc(100% - 12px), transparent);
+	scrollbar-color: #c3cad1 transparent;
+}
+
+.aw-conv-log::-webkit-scrollbar-thumb {
+	border-radius: 4px;
+	background: #c3cad1;
+}
+
+.aw-conv-loading {
+	border-radius: 12px;
+	background: rgb(255 255 255 / 95%);
+	box-shadow:
+		0 0 0 1px var(--t-line),
+		0 2px 8px rgb(0 0 0 / 10%);
+	color: var(--aw-ink-soft);
+	font-size: 12.5px;
+}
+
+.aw-conv-start {
+	color: var(--aw-ink-faint);
+	font-size: 12.5px;
+}
+
+.aw-conv-start::before,
+.aw-conv-start::after {
+	content: "\2014";
+	margin: 0 10px;
+	color: #c3cad1;
+}
+
+.aw-conv-missing,
+.aw-conv-empty {
+	color: var(--aw-ink-faint);
+}
+
+.aw-conv-day {
+	color: var(--aw-ink-faint);
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: 0.1em;
+}
+
+.aw-conv-day::before,
+.aw-conv-day::after {
+	background: var(--t-line);
+}
+
+.aw-conv-name {
+	color: var(--t-teal);
+	font: 700 12.5px var(--aw-font-body);
+	letter-spacing: 0.01em;
+}
+
+.aw-conv-who time {
+	color: var(--aw-ink-faint);
+	font-size: 11.5px;
+}
+
+/* The operator's turns: a soft blue card. */
+.aw-conv-user {
+	padding: 9px 14px 10px 14px;
+	border-radius: 10px;
+	background: #eef4fd;
+	color: #1d3557;
+}
+
+.aw-conv-user::before {
+	display: none;
+}
+
+.aw-conv-user .aw-conv-name {
+	color: var(--t-blue);
+}
+
+/* Mail: a message card with an envelope badge. */
+.aw-conv-mail {
+	border: 1px solid var(--t-line);
+	border-radius: 10px;
+	background: #fffaf2;
+	box-shadow: 0 2px 6px rgb(0 0 0 / 6%);
+	transform: none;
+}
+
+.aw-conv-mail-mark {
+	border-radius: 9px;
+	background: #fde3d8;
+}
+
+.aw-conv-mail-mark::after {
+	content: "\2709";
+	color: var(--t-coral);
+	font-size: 15px;
+}
+
+.aw-conv-mail .aw-conv-name {
+	color: #b4482c;
+}
+
+/* Markdown */
+
+.aw-md li::marker {
+	color: var(--t-teal);
+}
+
+.aw-md h1,
+.aw-md h2,
+.aw-md h3,
+.aw-md h4 {
+	color: #1d2329;
+	font-family: var(--aw-font-display);
+	letter-spacing: -0.01em;
+}
+
+.aw-md strong {
+	color: #11161b;
+}
+
+.aw-md blockquote {
+	border-left: 3px solid var(--t-line-strong);
+	color: var(--aw-ink-soft);
+}
+
+.aw-md hr {
+	border: 0;
+	background: var(--t-line);
+}
+
+.aw-md code {
+	border-radius: 5px;
+	background: #f0f2f5;
+	color: #b4432c;
+	font: 0.85em / 1.3 var(--aw-font-mono);
+}
+
+.aw-md-code {
+	border-radius: 10px;
+	background: #1c2128;
+	box-shadow: 0 0 0 1px rgb(0 0 0 / 30%);
+	color: #e4e9ee;
+	font: 12.5px / 1.6 var(--aw-font-mono);
+}
+
+.aw-md-code code {
+	background: none;
+	color: inherit;
+	font: inherit;
+}
+
+.aw-md-lang {
+	color: #7f8b96;
+	font: 600 10px var(--aw-font-mono);
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+}
+
+.aw-md th,
+.aw-md td {
+	border: 1px solid var(--t-line);
+}
+
+.aw-md th {
+	background: var(--t-card-alt);
+}
+
+.aw-md-link {
+	color: var(--t-blue);
+	text-decoration: underline;
+	text-decoration-color: rgb(47 111 214 / 35%);
+	text-underline-offset: 2px;
+}
+
+a.aw-md-link:hover {
+	text-decoration-color: currentColor;
+}
+
+a.aw-md-link:focus-visible {
+	outline: 2px solid var(--t-blue);
+	outline-offset: 1px;
+	border-radius: 2px;
+}
+
+.aw-md-link-dead {
+	text-decoration-style: dotted;
+}
+
+.aw-md-image {
+	color: var(--aw-ink-faint);
+}
+
+.aw-md-image::before {
+	content: "[image: ";
+}
+
+.aw-md-image::after {
+	content: "]";
+}
+
+/* Folded lines: tool calls, thoughts, and notes */
+
+.aw-conv-fold-line {
+	border: 0;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--aw-ink-soft);
+	font: 13.5px / 1.4 var(--aw-font-body);
+}
+
+.aw-conv-fold-line:hover {
+	background: #f1f3f5;
+}
+
+.aw-conv-fold-line:focus-visible {
+	outline: 2px solid var(--t-teal-ring);
+	outline-offset: 1px;
+}
+
+.aw-conv-chevron {
+	border-top: 4.5px solid transparent;
+	border-bottom: 4.5px solid transparent;
+	border-left: 6px solid #9aa4ae;
+}
+
+.aw-conv-glyph {
+	color: #9aa4ae;
+}
+
+.aw-conv-glyph-tool::before {
+	content: "\2699";
+}
+
+.aw-conv-glyph-thought::before {
+	content: "\2026";
+}
+
+.aw-conv-glyph-note::before {
+	content: "\2709";
+}
+
+.aw-conv-fold-label {
+	color: var(--t-violet);
+	font: 600 12px var(--aw-font-mono);
+}
+
+.aw-conv-thought .aw-conv-fold-label {
+	color: var(--aw-ink-faint);
+	font: italic 400 13px var(--aw-font-body);
+}
+
+.aw-conv-fold-arg {
+	color: #4d5660;
+	font: 12.5px / 1.4 var(--aw-font-mono);
+}
+
+.aw-conv-state-ok {
+	color: var(--t-green);
+}
+
+.aw-conv-state-error {
+	color: var(--t-coral);
+}
+
+.aw-conv-state-waiting {
+	color: var(--aw-ink-faint);
+}
+
+.aw-conv-fold-body {
+	border-left: 2px solid var(--t-line);
+	border-radius: 0 8px 8px 0;
+	background: #f7f8fa;
+}
+
+.aw-conv-io-label {
+	color: var(--aw-ink-faint);
+	font-size: 10.5px;
+	font-weight: 600;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+}
+
+.aw-conv-io {
+	border-radius: 7px;
+	background: #1c2128;
+	color: #dfe5ea;
+	font: 12px / 1.5 var(--aw-font-mono);
+}
+
+.aw-conv-io.aw-conv-error {
+	background: #2a1714;
+	box-shadow: inset 3px 0 0 var(--t-coral);
+	color: #ffc9bc;
+}
+
+.aw-conv-thought-text {
+	color: var(--aw-ink-soft);
+	font-style: italic;
+}
+
+.aw-conv-quiet {
+	color: var(--aw-ink-faint);
+}
+
+.aw-conv-failed {
+	color: var(--t-coral);
+}
+
+/* The foot of the document: the reply box and its actions. */
+
+.aw-conv-reply-slot {
+	border-top: 1px solid var(--t-line);
+	color: var(--aw-ink-soft);
+	font-size: 13.5px;
+}
+
+.aw-conv-pen {
+	border-radius: 7px;
+	background:
+		url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 26 26'%3E%3Cpath d='M6 20l2-6 9.5-9.5a2.1 2.1 0 013 3L11 17l-5 3z' fill='none' stroke='%231f8a84' stroke-width='1.7' stroke-linejoin='round'/%3E%3Cpath d='M15.5 6.5l4 4' stroke='%231f8a84' stroke-width='1.7'/%3E%3C/svg%3E")
+		center / 22px no-repeat,
+		#e8f4f3;
+}
+
+.aw-conv-act {
+	border-top: 1px solid var(--t-line);
+}
+
+.aw-conv-input {
+	border: 1px solid var(--t-line-strong);
+	border-radius: 10px;
+	background: #fff;
+	box-shadow: inset 0 1px 2px rgb(0 0 0 / 5%);
+	color: var(--aw-ink);
+	font: 14.5px / 1.5 var(--aw-font-body);
+	scrollbar-color: #c3cad1 transparent;
+}
+
+.aw-conv-input::placeholder {
+	color: var(--aw-ink-faint);
+}
+
+.aw-conv-input:focus {
+	outline: none;
+	border-color: var(--t-teal);
+	box-shadow: 0 0 0 3px rgb(31 138 132 / 18%);
+}
+
+.aw-conv-hint {
+	color: var(--aw-ink-faint);
+	font-size: 11.5px;
+}
+
+.aw-conv-hint kbd {
+	border: 1px solid var(--t-line-strong);
+	border-radius: 4px;
+	background: #f6f7f9;
+	box-shadow: 0 1px 0 var(--t-line-strong);
+	color: #4d5660;
+	font: 600 10.5px var(--aw-font-body);
+}
+
+.aw-conv-receipts {
+	color: var(--aw-ink-soft);
+}
+
+.aw-conv-receipt-what {
+	color: var(--t-teal);
+	font-weight: 600;
+}
+
+.aw-conv-receipt-text {
+	color: var(--aw-ink-soft);
+}
+
+.aw-conv-stage {
+	color: #b6bec6;
+}
+
+.aw-conv-stage::before {
+	content: "\25CB";
+}
+
+.aw-conv-stage.aw-on {
+	color: var(--t-green);
+}
+
+.aw-conv-stage.aw-on::before {
+	content: "\2713";
+}
+
+.aw-conv-receipt-failed {
+	color: var(--t-coral);
+}
+
+/* Stop asks first: a popover. */
+.aw-conv-confirm {
+	border-radius: 12px;
+	background: #fff;
+	box-shadow:
+		0 0 0 1px var(--t-line),
+		0 16px 36px rgb(0 0 0 / 22%);
+}
+
+.aw-conv-confirm-mark {
+	top: 16px;
+	right: 18px;
+	width: 10px;
+	height: 10px;
+	border-radius: 50%;
+	background: var(--t-coral);
+	box-shadow: 0 0 0 4px rgb(214 87 62 / 18%);
+}
+
+.aw-conv-confirm-title {
+	color: var(--aw-ink);
+	font: 600 16px / 1.25 var(--aw-font-display);
+}
+
+.aw-conv-confirm-text {
+	color: var(--aw-ink-soft);
+}
+
+/* The reply being written: a caret after the last word. */
+.aw-conv-writing .aw-md > :last-child::after {
+	width: 2px;
+	border-radius: 1px;
+	background: var(--t-teal);
+}
+
+/* An open question: a form sheet over the foot of the document. */
+.aw-conv-form,
+.aw-conv-terminal-only {
+	border-radius: 12px;
+	background: #fff;
+	box-shadow:
+		0 0 0 1px var(--t-line),
+		0 -12px 30px rgb(0 0 0 / 10%);
+}
+
+.aw-conv-form-head {
+	border-bottom: 1px solid var(--t-line);
+}
+
+.aw-conv-form-mark {
+	top: 18px;
+	left: auto;
+	right: 22px;
+	width: 10px;
+	height: 10px;
+	border-radius: 50%;
+	background: var(--t-amber);
+	box-shadow: 0 0 0 4px rgb(242 179 61 / 22%);
+}
+
+.aw-conv-form-title {
+	color: var(--aw-ink);
+	font: 600 16px / 1.25 var(--aw-font-display);
+}
+
+.aw-conv-form-sub {
+	color: var(--aw-ink-faint);
+}
+
+.aw-conv-form-body {
+	scrollbar-color: #c3cad1 transparent;
+}
+
+.aw-conv-q {
+	border: 0;
+}
+
+.aw-conv-q + .aw-conv-q {
+	border-top: 1px solid var(--t-line);
+}
+
+.aw-conv-q-legend {
+	color: var(--aw-ink);
+	font-size: 15px;
+}
+
+.aw-conv-q-header {
+	border-radius: 5px;
+	background: rgb(31 138 132 / 12%);
+	color: #16716c;
+	font-size: 11px;
+	font-weight: 600;
+}
+
+.aw-conv-q-how {
+	color: var(--aw-ink-faint);
+}
+
+.aw-conv-opt {
+	border: 1px solid var(--t-line-strong);
+	border-radius: 9px;
+	background: #fff;
+}
+
+.aw-conv-opt:hover {
+	border-color: #aeb7c0;
+	background: #fafbfc;
+}
+
+.aw-conv-opt.aw-on {
+	border-color: var(--t-teal);
+	background: #f2faf9;
+	box-shadow: 0 0 0 1px var(--t-teal);
+}
+
+.aw-conv-opt-label {
+	color: var(--aw-ink);
+	font-size: 14px;
+	font-weight: 600;
+}
+
+.aw-conv-opt-desc {
+	color: var(--aw-ink-soft);
+}
+
+.aw-conv-mark {
+	border: 1.5px solid #aeb7c0;
+	background: #fff;
+}
+
+.aw-conv-mark-radio {
+	border-radius: 50%;
+}
+
+.aw-conv-mark-checkbox {
+	border-radius: 4px;
+}
+
+.aw-conv-mark:checked {
+	border-color: var(--t-teal);
+}
+
+.aw-conv-mark-radio:checked::after {
+	border-radius: 50%;
+	background: var(--t-teal);
+}
+
+.aw-conv-mark-checkbox:checked::after {
+	border: solid var(--t-teal);
+	border-width: 0 2px 2px 0;
+}
+
+.aw-conv-mark:focus-visible {
+	outline: 2px solid var(--t-teal-ring);
+	outline-offset: 2px;
+}
+
+.aw-conv-form-foot {
+	border-top: 1px solid var(--t-line);
+}
+
+.aw-conv-asked {
+	color: var(--aw-ink);
+}
+
+.aw-conv-terminal-why {
+	color: var(--aw-ink-soft);
+}
+
+.aw-conv-closed {
+	color: var(--t-blue);
+}
+
+.aw-conv-closed::before {
+	content: "\2713";
+}
+
+/* ---- the places' panels ---- */
+
+.aw-places {
+	--aw-oxblood: var(--aw-danger);
+	--aw-moss: #23855a;
+	--aw-display: var(--aw-font-display);
+}
+
+.aw-place-veil {
+	background: var(--aw-veil);
+	backdrop-filter: blur(2px);
+}
+
+.aw-place-close {
+	width: 26px;
+	height: 26px;
+	border: 0;
+	border-radius: 7px;
+	background:
+		url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 26 26'%3E%3Cpath d='M8.5 8.5l9 9M17.5 8.5l-9 9' stroke='%23e9edf1' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E")
+		center / 26px no-repeat,
+		rgb(255 255 255 / 10%);
+	cursor: pointer;
+}
+
+.aw-place-close:hover {
+	background-color: rgb(255 255 255 / 18%);
+}
+
+.aw-place-close:focus-visible {
+	outline: 2px solid var(--aw-accent-light);
+	outline-offset: 2px;
+}
+
+/* The place panels are windows too: a title bar with the panel's name, and the close button in it. */
+.aw-place-panel {
+	padding: 40px 8px 8px;
+}
+
+.aw-place-panel::before {
+	content: attr(aria-label);
+	position: absolute;
+	top: 0;
+	left: 0;
+	right: 0;
+	height: 38px;
+	padding: 0 52px;
+	color: var(--t-glass-soft);
+	font: 600 12.5px / 38px var(--aw-font-display);
+	letter-spacing: 0.01em;
+	text-align: center;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.aw-place-close {
+	top: 6px;
+	right: 8px;
+}
+
+.aw-place-head {
+	border-bottom: 1px solid var(--t-line);
+}
+
+.aw-place-portrait {
+	border-radius: 18px;
+	background: linear-gradient(160deg, #cfe7e4, #8fb9c4 55%, #5d7f95);
+	box-shadow: 0 0 0 1px rgb(0 0 0 / 8%);
+}
+
+.aw-place-heading h2 {
+	color: var(--aw-ink);
+	font: 700 21px var(--aw-font-display);
+	letter-spacing: -0.01em;
+}
+
+.aw-place-says {
+	color: var(--aw-ink-soft);
+	font-size: 13.5px;
+}
+
+.aw-place-search {
+	border: 1px solid var(--t-line-strong);
+	border-radius: 9px;
+	background:
+		url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='6.5' cy='6.5' r='4.5' fill='none' stroke='%238b949c' stroke-width='1.6'/%3E%3Cpath d='M10 10l4 4' stroke='%238b949c' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E")
+		no-repeat 10px center / 13px,
+		#fff;
+	color: var(--aw-ink);
+}
+
+.aw-place-search::placeholder {
+	color: var(--aw-ink-faint);
+}
+
+.aw-place-search:focus-visible {
+	border-color: var(--t-teal);
+	box-shadow: 0 0 0 3px rgb(31 138 132 / 18%);
+}
+
+.aw-place-list,
+.aw-place-scroll {
+	scrollbar-color: #c3cad1 transparent;
+}
+
+.aw-place-empty {
+	color: var(--aw-ink-faint);
+}
+
+.aw-register-row {
+	border-bottom: 1px solid var(--t-line);
+}
+
+.aw-register-row:last-child {
+	border-bottom: 0;
+}
+
+.aw-register-face {
+	border-radius: 11px;
+	background: linear-gradient(160deg, #dfe6ea, #b7c4cc);
+}
+
+.aw-register-face img {
+	filter: saturate(0.85);
+}
+
+.aw-register-name {
+	color: var(--aw-ink);
+}
+
+.aw-register-where {
+	border-radius: 9px;
+	background: #eef0f3;
+	color: var(--aw-ink-soft);
+}
+
+.aw-register-where.aw-upstairs {
+	background: #e8ecfb;
+	color: #3d4fa0;
+}
+
+.aw-register-detail {
+	color: #4d5660;
+}
+
+.aw-register-status {
+	border: 1px solid var(--t-line-strong);
+	border-radius: 9px;
+	color: var(--aw-ink-soft);
+}
+
+.aw-register-quiet,
+.aw-register-time {
+	color: var(--aw-ink-faint);
+}
+
+.aw-places .aw-button-strong {
+	border-color: #187670;
+	background: linear-gradient(#26a098, #1d8780);
+	color: #fff;
+}
+
+.aw-places .aw-button-strong:hover {
+	background: linear-gradient(#2aaba2, #1f8f88);
+}
+
+.aw-places .aw-button-danger {
+	border-color: #b8442d;
+	background: linear-gradient(#e2694f, #cf5038);
+	color: #fff;
+}
+
+.aw-places .aw-button-danger:hover {
+	background: linear-gradient(#e8765d, #d65a42);
+}
+
+.aw-progress::before {
+	border-radius: 50%;
+}
+
+.aw-progress-sending {
+	color: var(--aw-ink-soft);
+}
+
+.aw-progress-sending::before {
+	background: var(--t-amber);
+}
+
+.aw-progress-done {
+	color: var(--aw-moss);
+}
+
+.aw-progress-done::before {
+	background: var(--t-green);
+}
+
+.aw-progress-failed {
+	color: var(--t-coral);
+}
+
+.aw-progress-failed::before {
+	background: var(--t-coral);
+}
+
+.aw-confirm-veil {
+	background: rgb(8 10 14 / 45%);
+}
+
+.aw-confirm-mark {
+	top: 18px;
+	width: 10px;
+	height: 10px;
+	border-radius: 50%;
+	background: var(--t-coral);
+	box-shadow: 0 0 0 4px rgb(214 87 62 / 20%);
+}
+
+.aw-confirm h2 {
+	color: var(--aw-ink);
+	font: 600 18px var(--aw-font-display);
+}
+
+.aw-confirm .aw-confirm-after {
+	color: var(--aw-ink-soft);
+}
+
+.aw-place-section h3 {
+	color: #6b7580;
+	font-size: 10.5px;
+	font-weight: 600;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+}
+
+.aw-mail-row {
+	border-bottom: 1px solid var(--t-line);
+}
+
+.aw-mail-row:last-child {
+	border-bottom: 0;
+}
+
+.aw-mail-main {
+	border-radius: 7px;
+}
+
+.aw-mail-main:hover {
+	background: var(--t-teal-soft);
+}
+
+.aw-mail-main:focus-visible {
+	outline: 2px solid var(--t-teal);
+	outline-offset: -1px;
+}
+
+.aw-mail-who {
+	color: var(--aw-ink);
+}
+
+.aw-mail-you {
+	color: var(--t-blue);
+}
+
+.aw-mail-arrow,
+.aw-mail-meta {
+	color: var(--aw-ink-faint);
+}
+
+.aw-mail-state {
+	border-radius: 9px;
+	font-weight: 600;
+}
+
+.aw-mail-state-delivered {
+	background: rgb(53 168 119 / 14%);
+	color: #1d7a52;
+}
+
+.aw-mail-state-waiting {
+	background: rgb(242 179 61 / 20%);
+	color: #8a5a06;
+}
+
+.aw-mail-state-failed {
+	background: rgb(214 87 62 / 14%);
+	color: var(--t-coral);
+}
+
+.aw-mail-body {
+	color: #4d5660;
+}
+
+.aw-letter-to {
+	color: var(--aw-ink-faint);
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+}
+
+.aw-letter-to select {
+	letter-spacing: 0;
+	text-transform: none;
+	border: 1px solid var(--t-line-strong);
+	border-radius: 9px;
+	background: #fff;
+	color: var(--aw-ink);
+	font: 14px var(--aw-font-body);
+}
+
+.aw-letter-body {
+	border: 1px solid var(--t-line-strong);
+	border-radius: 10px;
+	background: #fff;
+	color: var(--aw-ink);
+	font: 14.5px / 1.55 var(--aw-font-body);
+}
+
+.aw-letter-body:focus-visible,
+.aw-letter-to select:focus-visible {
+	outline: none;
+	border-color: var(--t-teal);
+	box-shadow: 0 0 0 3px rgb(31 138 132 / 18%);
+}
+
+.aw-letter-note {
+	color: var(--aw-ink-faint);
+}
+
+/* ---- the pointer ---- */
+
+.pointer-hover {
+	border-radius: 8px;
+	background: linear-gradient(90deg, rgb(14 17 21 / 72%), rgb(14 17 21 / 45%) 80%, rgb(14 17 21 / 0%));
+	color: #f4f6f8;
+	font: 600 15px var(--aw-font-body);
+	text-shadow: 0 1px 2px rgb(0 0 0 / 70%);
+}
+
+.pointer-character {
+	color: #ffd166;
+}
+
+.pointer-object {
+	color: #7fe0ea;
+}
+
+.pointer-more {
+	color: #c9d1d8;
+	font-weight: 400;
+}
+
+.pointer-menu {
+	border: 1px solid var(--t-line);
+	border-radius: 11px;
+	background: rgb(251 250 248 / 97%);
+	box-shadow: 0 12px 28px rgb(0 0 0 / 35%);
+	overflow: hidden;
+}
+
+.pointer-menu-title {
+	border-radius: 0;
+	background: #1c2128;
+	color: #e9edf1;
+	font-size: 12px;
+	font-weight: 600;
+}
+
+.pointer-menu button {
+	border: 0;
+	background: transparent;
+	color: var(--aw-ink);
+	font: 500 14px var(--aw-font-body);
+	text-shadow: none;
+}
+
+.pointer-menu button:hover {
+	background: #e8f4f3;
+	color: #0f5f5a;
+}
+
+.aw-panel-body .aw-mail-write {
+	letter-spacing: 0;
+	text-transform: none;
+}

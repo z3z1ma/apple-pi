@@ -5,12 +5,6 @@ import { CloseIcon } from "./icons.js";
 import { activity, ago, attentionOf, placeName } from "./model.js";
 import { ActionButtons, type CharacterAction, Pip } from "./rows.js";
 
-const ROLE: Record<Character["role"], string> = {
-	coordinator: "Coordinator",
-	worker: "Worker",
-	independent: "Independent",
-};
-
 const STATUS = { asking: "Asking you", finished: "Finished, unseen", working: "Working", idle: "Idle" };
 
 const tokens = (n: number) => (n >= 1000 ? `${Math.round(n / 1000)}k` : String(n));
@@ -76,14 +70,14 @@ export function CharacterCard({
 				<div>
 					<h2>{character.name}</h2>
 					<p>
-						{ROLE[character.role]} &middot; {placeName(character.place, world, labels)}
+						{labels?.[character.role] ?? character.role} &middot; {placeName(character.place, world, labels)}
 					</p>
 				</div>
 				<button type="button" className="aw-fold" aria-label="Close" onClick={onClose}>
 					<CloseIcon />
 				</button>
 			</header>
-			<div className="aw-card-body aw-parchment">
+			<div className="aw-card-body aw-surface">
 				<p className={`aw-card-status aw-row-${attention}`}>
 					<Pip attention={attention} />
 					<span>{STATUS[attention]}</span>

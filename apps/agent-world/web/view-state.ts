@@ -55,7 +55,17 @@ export type WorldIntent =
 	/** Switch the operator's tmux client to the character's pane (the interface asks the backend). */
 	| { kind: "terminal"; character: string }
 	/** Settings: show or hide the walk grid. */
-	| { kind: "walk-grid"; shown: boolean };
+	| { kind: "walk-grid"; shown: boolean }
+	/** Settings: wear another theme (`main.tsx` checks its pack, switches, and keeps the choice). */
+	| { kind: "choose-theme"; theme: string };
+
+/** A theme in Settings: its name and line, and why it cannot be worn when its pack is broken. */
+export interface ThemeOption {
+	id: string;
+	name: string;
+	description: string | null;
+	broken?: string;
+}
 
 export interface ViewState {
 	title?: string;
@@ -70,6 +80,14 @@ export interface ViewState {
 	labels?: Record<string, string>;
 	/** The theme's avatar looks to choose from in Settings, once the theme has loaded. */
 	avatarLooks?: AvatarLook[];
+	/**
+	 * A theme the world could not wear, shown until dismissed: which, what it wears instead, and why (each problem as
+	 * `file: fault`).
+	 */
+	themeProblem?: { theme: string; showing: string; problems: string[]; switching?: boolean };
+	/** The themes to choose from in Settings, and the one worn. */
+	themes?: ThemeOption[];
+	theme?: string;
 }
 
 export interface ViewStore {

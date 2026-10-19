@@ -1,21 +1,24 @@
-// The conversation panel (decision 17): talking to a character opens it over the dimmed world, drawn in the fantasy
-// theme as an open book. The left page holds the character's large portrait (its expression follows its state), name,
-// role and place, repository, ledger task, what it is doing now, and Go to its terminal; the right page holds the
+// The conversation panel (decision 17): talking to a character opens it over the dimmed world, drawn by the theme's
+// skin (an open book in fantasy, a document window in the tech office, a notebook in the anime school). The side pane
+// holds the character's large portrait (its expression follows its state), name,
+// role and place, repository, ledger task, what it is doing now, and Go to its terminal; the main pane holds the
 // transcript, newest at the bottom, with older pages loading as the operator scrolls up. Opening it marks the character
-// seen. The foot of the right page holds what the operator can do by its state (`actions.tsx`), and the reply being
+// seen. The foot of the main pane holds what the operator can do by its state (`actions.tsx`), and the reply being
 // written streams in at the bottom of the transcript (`live-reply.ts`).
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { Character, TranscriptEntry, WorldSnapshot } from "../../../src/world.js";
 import { type Expression, portraitFor } from "../../looks.js";
+import { say } from "../../theme.js";
+import { useTheme } from "../../theme-store.js";
 import type { WorldStore } from "../../world-store.js";
 import { activity, ago, attentionOf, placeName } from "../interface/model.js";
 import { placeActions, placePanels } from "../places/place-panels.js";
 import { Footer } from "./actions.js";
 import "./conversation.css";
-import { useHistory } from "./history.js";
-import { useLiveReplies } from "./live-reply.js";
 import { focusWorld, trapTab } from "../focus.js";
 import { shortArg } from "../tool-line.js";
+import { useHistory } from "./history.js";
+import { useLiveReplies } from "./live-reply.js";
 import { conversationPanel } from "./panel-state.js";
 import { BlockView, blockAt, blockKey, blocksOf, dayName, WorkingDirectory } from "./transcript.js";
 
@@ -28,11 +31,12 @@ export function ConversationPanel({ store }: { store: WorldStore }) {
 	const panel = useSyncExternalStore(conversationPanel.subscribe, conversationPanel.get);
 	const world = useSyncExternalStore(store.subscribe, store.get);
 	if (!panel.character) return null;
-	return <Book key={`${panel.opening}:${panel.character.id}`} opened={panel.character} world={world} store={store} />;
+	return <Panel key={`${panel.opening}:${panel.character.id}`} opened={panel.character} world={world} store={store} />;
 }
 
-function Book({ opened, world, store }: { opened: Character; world: WorldSnapshot | undefined; store: WorldStore }) {
-	const { api, theme } = conversationPanel.get();
+function Panel({ opened, world, store }: { opened: Character; world: WorldSnapshot | undefined; store: WorldStore }) {
+	const { api } = conversationPanel.get();
+	const theme = useTheme();
 	// The character as it is now; if it left the world meanwhile, as it was.
 	const live = world?.characters.find((c) => c.id === opened.id);
 	const character = live ?? opened;
@@ -76,7 +80,7 @@ function Book({ opened, world, store }: { opened: Character; world: WorldSnapsho
 	// Escape closes (a confirmation first); while open, the world's keys (walking, the walk grid) rest. Keys typed in
 	// the book reach its fields and buttons, then stop at the document before the world's listener on the window. Key
 	// releases still reach the world, so no key stays held down.
-	const bookRef = useRef<HTMLDivElement>(null);
+	const panelRef = useRef<HTMLDivElement>(null);
 	useEffect(() => {
 		const capture = (event: KeyboardEvent) => {
 			if (event.key === "Escape") {
@@ -85,12 +89,12 @@ function Book({ opened, world, store }: { opened: Character; world: WorldSnapsho
 				return;
 			}
 			// Tab stays in the book (in an open confirmation, in that).
-			const confirm = bookRef.current?.querySelector<HTMLElement>("[role=alertdialog]");
-			if (trapTab(event, confirm ?? bookRef.current)) {
+			const confirm = panelRef.current?.querySelector<HTMLElement>("[role=alertdialog]");
+			if (trapTab(event, confirm ?? panelRef.current)) {
 				event.stopImmediatePropagation();
 				return;
 			}
-			if (event.target instanceof Node && bookRef.current?.contains(event.target)) return;
+			if (event.target instanceof Node && panelRef.current?.contains(event.target)) return;
 			event.stopImmediatePropagation();
 		};
 		const bubble = (event: KeyboardEvent) => event.stopPropagation();
@@ -129,7 +133,7 @@ function Book({ opened, world, store }: { opened: Character; world: WorldSnapsho
 	const portrait = theme ? portraitFor(theme, character, expression) : undefined;
 
 	return (
-		// biome-ignore lint/a11y/noStaticElementInteractions: clicking the dimmed world closes the book; Escape does from the keyboard
+		// biome-ignore lint/a11y/noStaticElementInteractions: clicking the dimmed world closes the panel; Escape does from the keyboard
 		<div
 			className="aw-conv-veil"
 			onMouseDown={(event) => {
@@ -137,24 +141,24 @@ function Book({ opened, world, store }: { opened: Character; world: WorldSnapsho
 			}}
 		>
 			<div
-				ref={bookRef}
-				className="aw-book"
+				ref={panelRef}
+				className="aw-conv-panel"
 				role="dialog"
 				aria-modal="true"
 				aria-label={`Conversation with ${character.name}`}
 			>
-				<span className="aw-book-corner aw-tl" aria-hidden="true" />
-				<span className="aw-book-corner aw-tr" aria-hidden="true" />
-				<span className="aw-book-corner aw-bl" aria-hidden="true" />
-				<span className="aw-book-corner aw-br" aria-hidden="true" />
-				<aside className="aw-page aw-page-left">
-					<span className="aw-ribbon" aria-hidden="true" />
+				<span className="aw-conv-ornament aw-tl" aria-hidden="true" />
+				<span className="aw-conv-ornament aw-tr" aria-hidden="true" />
+				<span className="aw-conv-ornament aw-bl" aria-hidden="true" />
+				<span className="aw-conv-ornament aw-br" aria-hidden="true" />
+				<aside className="aw-conv-pane aw-conv-side">
+					<span className="aw-conv-marker" aria-hidden="true" />
 					<div className={`aw-portrait aw-portrait-${attention}`}>
 						{portrait && <img src={portrait} alt={`${character.name}'s portrait`} draggable={false} />}
 					</div>
 					<h2 className="aw-conv-title">{character.name}</h2>
 					<p className="aw-conv-role">
-						{ROLE[character.role]} &middot; {place}
+						{theme?.labels[character.role]} &middot; {place}
 					</p>
 					<dl className="aw-conv-facts">
 						{repository && (
@@ -185,7 +189,10 @@ function Book({ opened, world, store }: { opened: Character; world: WorldSnapsho
 								{live ? (
 									<Doing character={character} text={doing} />
 								) : sleeper ? (
-									<>Asleep at the inn{sleeper.stoppedAt ? `, for ${ago(sleeper.stoppedAt)}` : ""}</>
+									<>
+										{say(theme, "asleep-here")}
+										{sleeper.stoppedAt ? `, for ${ago(sleeper.stoppedAt)}` : ""}
+									</>
 								) : (
 									"No longer running"
 								)}
@@ -196,14 +203,14 @@ function Book({ opened, world, store }: { opened: Character; world: WorldSnapsho
 						{sleeper ? (
 							<button
 								type="button"
-								className="aw-plaque"
+								className="aw-cta"
 								disabled={waking?.state === "sending"}
 								onClick={() => void placeActions.wake(sleeper)}
 							>
 								Wake {character.name}
 							</button>
 						) : (
-							<button type="button" className="aw-plaque" onClick={goToTerminal}>
+							<button type="button" className="aw-cta" onClick={goToTerminal}>
 								Go to its terminal
 							</button>
 						)}
@@ -224,10 +231,10 @@ function Book({ opened, world, store }: { opened: Character; world: WorldSnapsho
 						)}
 					</div>
 				</aside>
-				<section className="aw-page aw-page-right">
+				<section className="aw-conv-pane aw-conv-main">
 					<button
 						type="button"
-						className="aw-book-close"
+						className="aw-conv-close"
 						aria-label="Close"
 						title="Close (Esc)"
 						onClick={() => conversationPanel.close()}
@@ -244,10 +251,10 @@ function Book({ opened, world, store }: { opened: Character; world: WorldSnapsho
 						/>
 					) : (
 						<footer className="aw-conv-reply-slot">
-							<span className="aw-quill" aria-hidden="true" />
+							<span className="aw-conv-pen" aria-hidden="true" />
 							<span>
 								{sleeper
-									? `${character.name} is asleep at the inn. Wake it to talk; it opens in a new terminal window.`
+									? say(theme, "conversation-asleep", { name: character.name })
 									: `${character.name} is no longer running, so it cannot be told anything here.`}
 							</span>
 						</footer>
@@ -257,12 +264,6 @@ function Book({ opened, world, store }: { opened: Character; world: WorldSnapsho
 		</div>
 	);
 }
-
-const ROLE: Record<Character["role"], string> = {
-	coordinator: "Coordinator",
-	worker: "Worker",
-	independent: "Independent",
-};
 
 /** What it is doing: a tool and its argument set apart, or the plain state. */
 function Doing({ character, text }: { character: Character; text: string }) {
@@ -302,6 +303,7 @@ function Transcript({
 	/** Counts instructions sent; each one brings the view back to the bottom. */
 	sent: number;
 }) {
+	const theme = useTheme();
 	const log = useRef<HTMLDivElement>(null);
 	const entries = useMemo(
 		() => (live.length ? [...history.entries, ...live] : history.entries),
@@ -397,11 +399,11 @@ function Transcript({
 				{history.ready && blocks.length === 0 && !history.error && (
 					<p className="aw-conv-empty">Nothing has been said yet.</p>
 				)}
-				{!history.ready && !history.error && <p className="aw-conv-empty">Opening the book&hellip;</p>}
+				{!history.ready && !history.error && <p className="aw-conv-empty">{say(theme, "conversation-opening")}</p>}
 				{history.error && (
 					<div className="aw-conv-empty">
 						<p>Could not read the conversation: {history.error}</p>
-						<button type="button" className="aw-plaque aw-plaque-small" onClick={history.retry}>
+						<button type="button" className="aw-cta aw-cta-small" onClick={history.retry}>
 							Try again
 						</button>
 					</div>
@@ -409,7 +411,7 @@ function Transcript({
 			</div>
 			{history.loadingOlder && (
 				<div className="aw-conv-loading" role="status">
-					Turning back the pages&hellip;
+					{say(theme, "conversation-older")}
 				</div>
 			)}
 		</>

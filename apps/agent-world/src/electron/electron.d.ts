@@ -12,6 +12,12 @@ declare module "electron" {
 		on(event: "will-navigate", listener: (event: { preventDefault(): void }) => void): this;
 		once(event: "did-finish-load", listener: () => void): this;
 		capturePage(): Promise<NativeImage>;
+		executeJavaScript(code: string): Promise<unknown>;
+		getUserAgent(): string;
+		setUserAgent(userAgent: string): void;
+		readonly session: {
+			readonly cookies: { get(filter: { url?: string; name?: string }): Promise<{ name: string; value: string }[]> };
+		};
 	}
 
 	export class BrowserWindow {
@@ -20,7 +26,13 @@ declare module "electron" {
 			height: number;
 			title: string;
 			backgroundColor: string;
-			webPreferences: { preload: string; contextIsolation: boolean; sandbox: boolean; nodeIntegration: boolean };
+			webPreferences: {
+				preload?: string;
+				partition?: string;
+				contextIsolation: boolean;
+				sandbox: boolean;
+				nodeIntegration: boolean;
+			};
 		});
 		readonly webContents: WebContents;
 		loadURL(url: string): Promise<void>;
@@ -30,6 +42,8 @@ declare module "electron" {
 		show(): void;
 		focus(): void;
 		on(event: "closed", listener: () => void): this;
+		once(event: "closed", listener: () => void): this;
+		close(): void;
 	}
 
 	export const app: {

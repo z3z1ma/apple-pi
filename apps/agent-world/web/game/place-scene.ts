@@ -3,7 +3,8 @@ import { type Character, isOutside, type MailItem, OPERATOR, type PlaceRef, plac
 import { avatarLookIn, lookFor } from "../looks.js";
 import { placeActions, placePanels } from "../overlay/places/place-panels.js";
 import { pointer } from "../overlay/pointer/pointer-state.js";
-import { type Door, type OverlaySlot, type Point, type Rect, type Theme, TILE } from "../theme.js";
+import { type Door, type OverlaySlot, type Point, type Rect, say, type Theme, TILE } from "../theme.js";
+import { worn } from "../theme-store.js";
 import type { ViewStore, WorldIntent } from "../view-state.js";
 import type { WorldStore } from "../world-store.js";
 import { type Action, action, type Target } from "./actions.js";
@@ -25,13 +26,18 @@ import { assignSpots, charactersIn, doorOf, type Layout, layoutFor, startPlace, 
 import { clearanceAt, findPath, type Grid, gridFor, isOpen } from "./pathing.js";
 import { type Facing, PERSON_TILES, type Pose, Walker, type WalkerView } from "./walker.js";
 
+/** A `#rrggbb` colour as its red, green, and blue. */
+const rgb = (hex: string): [number, number, number] => {
+	const n = Number.parseInt(hex.slice(1), 16);
+	return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+};
+
 const STANDING = 120; // sprite px from head to feet in a standing frame
 const FADE_OUT_MS = 240;
 const FADE_IN_MS = 320;
 const PAN_SPEED = 900; // world px per second with the arrow keys
 const DRAG_THRESHOLD = 6; // screen px before a press becomes a drag
 const SEAM_PX = 24; // painting px over which two strips of a growing place blend
-const BANNER_TILES = 2.3; // a banner's width; it hangs in front of the door below it
 /** The banner's name, largest first, down to the smallest size that still reads at the default zoom. */
 const BANNER_FONT = [15, 12] as const;
 /** A name stays on one line down to this size before it is broken onto more. */
@@ -39,9 +45,6 @@ const BANNER_ONE_LINE = 13;
 /** Abbreviated words keep at most this many letters; abbreviated names may take this many lines (12 px fits five). */
 const BANNER_ABBREVIATION = 6;
 const BANNER_LINES_SHORT = 5;
-/** The share of the banner's width inside its vine border that the name may take. */
-const BANNER_TEXT_WIDTH = 0.42;
-const INK = "#4a2a14";
 /** How quickly the camera catches up with the avatar (per second); higher is tighter. */
 const FOLLOW_RATE = 4.5;
 /** How quickly the zoom eases to the wheel's choice (per second). */
@@ -90,20 +93,6 @@ const BADGE_LIFT: Record<Pose, number> = {
 const Z_LIFT = 1.3;
 /** Sleepers are drawn a little dimmer and cooler, as if the lamps did not reach them. */
 const SLEEP_TINT = 0xd2c8dc;
-/**
- * In the bed sprite (px): the pillow's middle, where a sleeper's head rests, and the edge of the turned-down sheet,
- * below which the quilt covers it.
- */
-const BED_PILLOW: Point = [178, 226];
-const BED_SHEET: Point[] = [
-	[60, 352],
-	[118, 318],
-	[350, 190],
-	[589, 290],
-	[589, 627],
-	[0, 627],
-	[0, 382],
-];
 /** A sleeper's head and shoulders, cut from its standing frame: from this far above its feet (sheet px), this tall. */
 const HEAD_CUT = [124, 50] as const;
 const HEAD_SCALE = 0.84;
@@ -226,6 +215,11 @@ export interface AvatarView extends WalkerView {
 // Which spot each character holds, per place, for as long as the app runs; and view choices that outlive a scene.
 const heldSpots = new Map<string, Map<string, number>>();
 let showGrid = false;
+
+/** A new theme lays its places out its own way: who held which spot no longer means anything. */
+export function forgetSpots() {
+	heldSpots.clear();
+}
 let lastHeadquarters: string | undefined;
 /** The zoom the operator chose with the wheel, per painting: each place keeps its own. */
 const chosenZoom = new Map<string, number>();
@@ -242,7 +236,6 @@ interface SceneData {
 
 /** The current place: its painting, the characters at its spots, the operator's avatar, and doors that lead elsewhere. */
 export class PlaceScene extends Phaser.Scene {
-	private readonly theme: Theme;
 	private readonly store: WorldStore;
 	private readonly view: ViewStore;
 	private layout!: Layout;
@@ -305,11 +298,15 @@ export class PlaceScene extends Phaser.Scene {
 	/** Where the avatar is leaving for, read when the fade ends (a `go-to` may add whom to walk up to). */
 	private departure?: SceneData;
 
-	constructor(theme: Theme, store: WorldStore, view: ViewStore) {
+	constructor(store: WorldStore, view: ViewStore) {
 		super("place");
-		this.theme = theme;
 		this.store = store;
 		this.view = view;
+	}
+
+	/** The theme worn now: switching theme reopens the scene in the new one. */
+	private get theme(): Theme {
+		return worn();
 	}
 
 	init(data: SceneData) {
@@ -369,7 +366,8 @@ export class PlaceScene extends Phaser.Scene {
 		camera.setZoom(this.zoomTarget);
 		this.mid = this.keep?.mid ?? this.followMid(camera.zoom);
 		this.applyCamera();
-		if (!this.keep) camera.fadeIn(FADE_IN_MS, 20, 14, 24);
+		camera.setBackgroundColor(this.theme.world.backdrop);
+		if (!this.keep) camera.fadeIn(FADE_IN_MS, ...rgb(this.theme.world.backdrop));
 
 		this.scale.on("resize", this.resized, this);
 		const keyboard = this.input.keyboard!;
@@ -457,6 +455,22 @@ export class PlaceScene extends Phaser.Scene {
 	}
 
 	// Read-only hooks for tests and the overlay.
+
+	/** The place shown now, to reopen it (in another theme). */
+	placeRef(): PlaceRef {
+		return this.layout.ref;
+	}
+
+	/** Fade the view out to the backdrop; resolves once it is dark (or at once when nothing is drawn). */
+	fadeAway(): Promise<void> {
+		const camera = this.cameras?.main;
+		if (!camera || !this.scene.isActive()) return Promise.resolve();
+		return new Promise((resolve) => {
+			camera.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => resolve());
+			camera.fadeOut(FADE_OUT_MS, ...rgb(this.theme.world.backdrop));
+			setTimeout(resolve, FADE_OUT_MS + 200);
+		});
+	}
 
 	placeKey(): string {
 		return this.layout.key;
@@ -824,7 +838,11 @@ export class PlaceScene extends Phaser.Scene {
 		canvas.height = source.height;
 		const ctx = canvas.getContext("2d")!;
 		ctx.beginPath();
-		const [first, ...rest] = BED_SHEET;
+		const [first, ...rest] = this.theme.world.bed?.covers ?? [
+			[0, 0],
+			[source.width, 0],
+			[source.width, source.height],
+		];
 		ctx.moveTo(...first);
 		for (const point of rest) ctx.lineTo(...point);
 		ctx.closePath();
@@ -907,16 +925,22 @@ export class PlaceScene extends Phaser.Scene {
 			this.textures.addCanvas(key, canvas);
 			return key;
 		});
+		// A basin traced as a foreground piece (so characters behind it are hidden) would cover its water: the water lies
+		// just over that piece instead. Nobody stands in a basin, so nobody is under the water either way.
+		const basin = this.layout.place.foreground?.find(
+			({ rect: [x, y, w, h] }) => cx >= x && cx <= x + w && cy >= y && cy <= y + h,
+		);
+		const depth = basin ? basin.feet * TILE - 0.4 : -1;
 		// Two layers cross-fade from each ripple frame into the next, so the water moves smoothly rather than jumping.
 		const below = this.add
 			.image(cx * TILE, cy * TILE, keys[0])
 			.setScale(1 / RES)
-			.setDepth(-1)
+			.setDepth(depth)
 			.setAlpha(WATER_ALPHA);
 		const above = this.add
 			.image(cx * TILE, cy * TILE, keys[1])
 			.setScale(1 / RES)
-			.setDepth(-0.99)
+			.setDepth(depth + 0.01)
 			.setAlpha(0);
 		let frame = 0;
 		this.tweens.addCounter({
@@ -970,10 +994,11 @@ export class PlaceScene extends Phaser.Scene {
 		canvas.height = size;
 		const ctx = canvas.getContext("2d")!;
 		const light = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
-		light.addColorStop(0, "rgba(255, 226, 160, 0.95)");
-		light.addColorStop(0.12, "rgba(255, 196, 110, 0.6)");
-		light.addColorStop(0.4, "rgba(255, 150, 60, 0.18)");
-		light.addColorStop(1, "rgba(255, 120, 40, 0)");
+		const [core, middle, edge] = this.theme.world.glow.map(rgb);
+		light.addColorStop(0, `rgba(${core.join(",")}, 0.95)`);
+		light.addColorStop(0.12, `rgba(${middle.join(",")}, 0.6)`);
+		light.addColorStop(0.4, `rgba(${edge.join(",")}, 0.18)`);
+		light.addColorStop(1, `rgba(${edge.join(",")}, 0)`);
 		ctx.fillStyle = light;
 		ctx.fillRect(0, 0, size, size);
 		this.textures.addCanvas(key, canvas);
@@ -1000,7 +1025,7 @@ export class PlaceScene extends Phaser.Scene {
 			if (door === "open") this.addGlow({ kind: "glow", at: [x + dx + dw / 2, dy + dh - 0.35], r: dw * 0.75 }, 0.32);
 			this.banner(x, template.banner[1], wing.name);
 			this.doors.push({
-				name: `${wing.name} wing`,
+				name: `${wing.name} ${this.theme.labels.wing}`,
 				rect: [x + dx, dy, dw, dh],
 				standAt: [x + template.standAt[0], template.standAt[1]],
 				to: "wing",
@@ -1030,16 +1055,18 @@ export class PlaceScene extends Phaser.Scene {
 			.image(x * TILE, top * TILE, "overlay:banner-cream")
 			.setOrigin(0.5, 0)
 			.setDepth((top + 6) * TILE);
-		image.setScale((BANNER_TILES * TILE) / image.width);
-		// The stitching stays inside the cloth's vine border (x 95..245 of the sprite's 341 px, less a little air), above
-		// the swallowtail.
-		const width = image.displayWidth * BANNER_TEXT_WIDTH;
-		const height = image.displayHeight * 0.48;
+		const style = this.theme.world.banner;
+		image.setScale((style.tiles * TILE) / image.width);
+		// The name stays inside the cloth (the pack measures it: inside the fantasy banner's vine border, above its
+		// swallowtail).
+		const [tx, ty, tw, th] = style.text;
+		const width = image.displayWidth * tw;
+		const height = image.displayHeight * th;
 		const text = this.add
-			.text(x * TILE, top * TILE + image.displayHeight * 0.44, "", {
-				fontFamily: 'Georgia, "Iowan Old Style", serif',
+			.text(x * TILE + (tx + tw / 2 - 0.5) * image.displayWidth, top * TILE + (ty + th / 2) * image.displayHeight, "", {
+				fontFamily: this.theme.world.font,
 				fontStyle: "bold",
-				color: INK,
+				color: style.ink,
 				align: "center",
 				lineSpacing: -2,
 			})
@@ -1052,10 +1079,10 @@ export class PlaceScene extends Phaser.Scene {
 		this.bannerRects.push({
 			name,
 			rect: [
-				x - (image.displayWidth * 0.3) / TILE,
-				top + (image.displayHeight * 0.12) / TILE,
-				(image.displayWidth * 0.6) / TILE,
-				(image.displayHeight * 0.7) / TILE,
+				x + ((style.hover[0] - 0.5) * image.displayWidth) / TILE,
+				top + (style.hover[1] * image.displayHeight) / TILE,
+				(style.hover[2] * image.displayWidth) / TILE,
+				(style.hover[3] * image.displayHeight) / TILE,
 			],
 		});
 		// A separator may hang just past the edge, as punctuation does.
@@ -1248,7 +1275,7 @@ export class PlaceScene extends Phaser.Scene {
 		const stairs = this.stairs();
 		if (!count || !stairs) return;
 		const [x, , w] = stairs.rect;
-		const tag = drawTag(this, `${count} more asleep upstairs`)
+		const tag = drawTag(this, say(this.theme, "upstairs-count", { count }))
 			.setPosition((x + w / 2) * TILE, (stairs.standAt[1] - 0.55) * TILE)
 			.setDepth(9e4 + 1);
 		this.upstairsTag = { count, tag };
@@ -1408,7 +1435,7 @@ export class PlaceScene extends Phaser.Scene {
 			(bed.x + (px - bed.width / 2) * scale) / TILE,
 			(bed.y + (py - bed.height) * scale) / TILE,
 		];
-		const pillow = toTiles(BED_PILLOW);
+		const pillow = toTiles(this.theme.world.bed?.pillow ?? [0, 0]);
 		const headScale = ((PERSON_TILES * TILE) / STANDING) * HEAD_SCALE;
 		const [above, tall] = HEAD_CUT;
 		const top = Math.max(0, baseline - above);
@@ -1666,7 +1693,7 @@ export class PlaceScene extends Phaser.Scene {
 		return {
 			name,
 			tone: "object",
-			actions: [action("Read", () => this.view.notify(`The banner reads \u201c${name}\u201d.`), name, "object")],
+			actions: [action("Read", () => this.view.notify(say(this.theme, "banner-reads", { name })), name, "object")],
 		};
 	}
 
@@ -1690,11 +1717,11 @@ export class PlaceScene extends Phaser.Scene {
 	private furnitureTarget(piece: { name: string; use: string }): Target {
 		const actions =
 			piece.use === "innkeeper"
-				? [action("Ask the innkeeper", () => placePanels.open("innkeeper"))]
+				? [action(say(this.theme, "ask-host"), () => placePanels.open("innkeeper"))]
 				: piece.use === "rookery"
 					? [
 							action("Read the mail", () => placePanels.open("rookery")),
-							action("Write a letter", () => placePanels.open("rookery", { write: true })),
+							action(say(this.theme, "write-letter"), () => placePanels.open("rookery", { write: true })),
 						]
 					: [];
 		return { name: piece.name, tone: "object", actions };
@@ -1750,7 +1777,7 @@ export class PlaceScene extends Phaser.Scene {
 			return {
 				name: door.name,
 				tone: "object",
-				actions: [action("Ask who sleeps up", () => placePanels.open("innkeeper"), door.name, "object")],
+				actions: [action(say(this.theme, "ask-upstairs"), () => placePanels.open("innkeeper"), door.name, "object")],
 			};
 		return {
 			name: door.name,
@@ -1951,7 +1978,7 @@ export class PlaceScene extends Phaser.Scene {
 		if (door.to === "headquarters" && here.kind === "square") {
 			const all = world?.headquarters ?? [];
 			if (all.length === 0) {
-				this.view.notify("The guild hall is empty: no coordinator is running.");
+				this.view.notify(say(this.theme, "headquarters-empty"));
 				return false;
 			}
 			if (all.length === 1) return this.travel({ kind: "headquarters", headquarters: all[0].id });
@@ -1960,7 +1987,7 @@ export class PlaceScene extends Phaser.Scene {
 					title: "Whose headquarters?",
 					choices: all.map((hq) => ({
 						label: hq.name,
-						detail: `${hq.wings.length} ${hq.wings.length === 1 ? "wing" : "wings"}`,
+						detail: `${hq.wings.length} ${this.theme.labels.wing}${hq.wings.length === 1 ? "" : "s"}`,
 						choose: () => this.travel({ kind: "headquarters", headquarters: hq.id }),
 					})),
 				},
@@ -1990,7 +2017,7 @@ export class PlaceScene extends Phaser.Scene {
 		this.departure = { ref, from, goTo };
 		const camera = this.cameras.main;
 		camera.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => this.scene.restart(this.departure));
-		camera.fadeOut(FADE_OUT_MS, 20, 14, 24);
+		camera.fadeOut(FADE_OUT_MS, ...rgb(this.theme.world.backdrop));
 		return true;
 	}
 

@@ -1,0 +1,128 @@
+{
+  "id": "tech-office",
+  "name": "Tech office",
+  "description": "A modern startup campus at golden hour: glass and graphite, and a document window for every conversation.",
+  "labels": {
+    "headquarters": "Office floor",
+    "common-room": "Lounge",
+    "gallery": "Project corridor",
+    "wing": "team room",
+    "square": "Campus plaza",
+    "forge": "The hardware lab",
+    "quest-office": "The planning studio",
+    "library": "The library",
+    "inn": "The cafe lounge",
+    "rookery": "The mailroom",
+    "coordinator": "Lead",
+    "worker": "Engineer",
+    "independent": "Freelancer",
+    "innkeeper": "Lounge host",
+    "rookery-keeper": "Mailroom clerk",
+    "smith": "Lab lead",
+    "clerk": "Project manager",
+    "librarian": "Knowledge manager",
+    "crier": "Community manager",
+    "townsfolk": "Passer-by"
+  },
+  "text": {
+    "banner-reads": "The sign reads “{name}”.",
+    "headquarters-empty": "The office floor is empty: no coordinator is running.",
+    "ask-host": "Ask the lounge host",
+    "ask-upstairs": "Ask who rests upstairs",
+    "upstairs-count": "{count} more resting upstairs",
+    "asleep-here": "Napping in the lounge",
+    "asleep-count": "{count} napping",
+    "nobody-asleep": "Nobody napping",
+    "register-title": "The lounge host's list",
+    "register-greeting": "{here} napping here{upstairs}. Who should I wake?",
+    "register-upstairs": ", {count} upstairs",
+    "register-empty": "Every couch is free: nobody is napping right now.",
+    "register-search": "Search the list",
+    "sleeper-upstairs": "Upstairs",
+    "sleeper-bed": "On a couch",
+    "sleeper-table": "At a table",
+    "letter": "Message",
+    "letter-placeholder": "Hi {name},",
+    "letter-for-sleeper": "{name} is napping in the lounge: the message waits until it wakes.",
+    "write-letter": "Write a message",
+    "letter-waits": "{count} message waits",
+    "letters-wait": "{count} messages wait",
+    "rookery-greeting": "{waiting}Want me to send something for you?",
+    "rookery-waiting": "{letters} for nappers. ",
+    "rookery-empty": "Nothing has gone out yet today. Want me to send something?",
+    "waiting-for-sleepers": "Waiting for nappers",
+    "letter-sending": "Sending to {name}…",
+    "letter-reached": "Your message reached {name}.",
+    "end-session-after": "Its pane closes and it goes to the lounge to nap; you can wake it there.",
+    "session-ended": "{name}'s session ended; it goes to the lounge to nap.",
+    "conversation-opening": "Opening the document…",
+    "conversation-older": "Loading earlier messages…",
+    "conversation-asleep": "{name} is napping in the lounge. Wake it to talk; it opens in a new terminal window.",
+    "slack-later": "Slack joins with the campus plaza"
+  },
+  "style": {
+    "--aw-font-body": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", Inter, \"Helvetica Neue\", Arial, sans-serif",
+    "--aw-font-display": "-apple-system, BlinkMacSystemFont, \"SF Pro Display\", Inter, \"Helvetica Neue\", Arial, sans-serif",
+    "--aw-font-figures": "-apple-system, BlinkMacSystemFont, \"SF Pro Display\", Inter, \"Helvetica Neue\", Arial, sans-serif",
+    "--aw-font-mono": "\"SF Mono\", ui-monospace, Menlo, monospace",
+    "--aw-backdrop": "#0f1216",
+    "--aw-ink": "#1d2329",
+    "--aw-ink-soft": "#5b6670",
+    "--aw-ink-faint": "#8b949c",
+    "--aw-accent": "#1f8a84",
+    "--aw-accent-light": "#7fd6cf",
+    "--aw-danger": "#d6573e",
+    "--aw-frame-background": "linear-gradient(rgb(36 41 48 / 90%), rgb(20 24 29 / 90%))",
+    "--aw-frame-shadow": "inset 0 1px 0 rgb(255 255 255 / 7%), 0 14px 34px rgb(8 10 14 / 40%), 0 2px 6px rgb(8 10 14 / 24%)",
+    "--aw-surface-background": "#fbfaf8",
+    "--aw-panel-cover": "#f4f5f7",
+    "--aw-panel-page": "#ffffff",
+    "--aw-veil": "radial-gradient(ellipse 70% 65% at 50% 50%, rgb(12 15 19 / 32%), rgb(8 10 14 / 70%))"
+  },
+  "skin": "interface/skin.css",
+  "world": {
+    "backdrop": "#0f1216",
+    "font": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", Inter, \"Helvetica Neue\", Arial, sans-serif",
+    "bark": {
+      "paper": "#ffffff",
+      "ink": "#1d2329",
+      "outline": "#2a3038"
+    },
+    "tag": {
+      "plate": "#1f242a",
+      "rim": "#3a424b",
+      "rivet": "#7fd6cf",
+      "ink": "#e9edf1"
+    },
+    "sleep": {
+      "fill": "#e8f1ff",
+      "stroke": "#2a3038"
+    },
+    "badge": {
+      "rim": "#ffffff",
+      "edge": "#1f242a",
+      "asking": {
+        "fill": "#f2b33d",
+        "light": "#ffd98a",
+        "ink": "#3d2a00"
+      },
+      "unseen": {
+        "fill": "#35a877",
+        "light": "#7fd9ae",
+        "ink": "#ffffff"
+      },
+      "working": {
+        "fill": "#6f5ce6",
+        "light": "#a196ff",
+        "ink": "#ffffff"
+      }
+    },
+    "glow": ["#fff1cf", "#ffd08a", "#ffa552"],
+    "banner": {
+      "tiles": 2.1,
+      "text": [0.31, 0.18, 0.62, 0.66],
+      "hover": [0.24, 0.07, 0.74, 0.9],
+      "ink": "#1f2a33"
+    }
+  }
+}

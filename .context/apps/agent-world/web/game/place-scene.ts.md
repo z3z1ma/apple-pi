@@ -14,6 +14,9 @@ Verify: apps/agent-world/tests/world-characters.test.ts
 In the fantasy pack, open floor never lies behind a desk or table: their pieces hide nobody, and the occlusion that shows is tall things with floor behind them, found by walking the avatar to just north of every interior blocked rect.
 Coupled: apps/agent-world/themes/fantasy/places/
 
+The scene reads the theme through a getter (`worn()` from `theme-store.ts`), never a copy: switching theme stops it, removes every texture (cut frames and canvases too, since their keys do not name the theme), loads the new pack in `BootScene`, and starts it again on the same place, so nothing drawn from the old pack survives.
+Coupled: apps/agent-world/web/main.tsx, apps/agent-world/web/game/boot-scene.ts
+
 The painting is added by its `__BASE` frame. Foreground pieces are frames of the same texture, and the texture's default frame is the first one added, so a later visit that added the image without a frame stretched a desk over the whole place.
 Verify: apps/agent-world/tests/world-places.test.ts
 
@@ -30,9 +33,9 @@ Verify: apps/agent-world/tests/world-places.test.ts
 
 ## symbol:PlaceScene.banner
 
-The banner sprite's cloth is only the middle of the image: the vine border bounds the text to about 0.48 of the sprite's width (`BANNER_TEXT_WIDTH` 0.42 leaves a margin), and the swallowtail starts near 0.75 of its height. Names go on one line from 15 px down to 13 px, else on as many lines (broken after separators) as fit, from 15 px down to 12 px. A name still too long at 12 px has each word that does not fit cut to at most six letters ending on a consonant, with a full stop ("custom. ident."), on up to five lines, an ellipsis as the last resort; `BannerView.abbreviated` says so, and hovering the banner (`bannerRects`) shows the full name.
+The banner sprite's cloth is only part of the image, so the pack measures where its name goes and where it answers the pointer (`world.banner.text` and `hover`, fractions of the sprite in `theme.json`): in fantasy the vine border bounds the text to about 0.48 of the sprite's width (0.42 leaves a margin), and the swallowtail starts near 0.75 of its height; the tech office's sign plate and the anime school's plaque are wide, short boards with their own text areas. Names go on one line from 15 px down to 13 px, else on as many lines (broken after separators) as fit, from 15 px down to 12 px. A name still too long at 12 px has each word that does not fit cut to at most six letters ending on a consonant, with a full stop ("custom. ident."), on up to five lines, an ellipsis as the last resort; `BannerView.abbreviated` says so, and hovering the banner (`bannerRects`) shows the full name.
 Why: the polish pass for tickets 11 and 17 (the polish bar in Further Notes of `.ledger/202610171741-guildworld/spec.md`) set 12 px as the smallest size that reads at the default zoom; the old 10 px hyphenated names did not.
-Coupled: apps/agent-world/themes/fantasy/overlays/banner-cream.png
+Coupled: apps/agent-world/themes/fantasy/overlays/banner-cream.png, apps/agent-world/themes/fantasy/theme.json
 Verify: apps/agent-world/tests/world-places.test.ts
 
 ## symbol:PlaceScene.intended
@@ -46,9 +49,9 @@ A left click runs the default action only if the press did not become a drag and
 
 ## symbol:PlaceScene.sleep
 
-At the inn the figures are the newest dormant agents (`charactersIn` with the inn's spot count), not awake characters: each dozes in its seated frame (`dozing`) or, on a spot a `bed` overlay slot names, lies in that bed (`in-bed`: the walker is hidden at rest and a head cut from frame 14 is drawn on the pillow under a quilt cut from the bed sprite along `BED_SHEET`). A sleeper that is still dormant but pushed past the spots leaves by the stairs (the door whose `to` is `rooms`); one that woke leaves by the front door; one coming down from upstairs enters by the stairs.
-Why: the ticket shows only as many sleepers as the painting holds, newest first, and the rest "upstairs"; `BED_PILLOW` and `BED_SHEET` are pixel positions in `overlays/bed.png`, so a repainted bed needs them measured again.
-Coupled: apps/agent-world/themes/fantasy/places/inn.json, apps/agent-world/themes/fantasy/overlays/bed.png, apps/agent-world/web/game/layout.ts
+At the inn the figures are the newest dormant agents (`charactersIn` with the inn's spot count), not awake characters: each dozes in its seated frame (`dozing`) or, on a spot a `bed` overlay slot names, lies in that bed (`in-bed`: the walker is hidden at rest and a head cut from frame 14 is drawn on the pillow under a quilt cut from the bed sprite along the pack's `world.bed.covers` polygon). A sleeper that is still dormant but pushed past the spots leaves by the stairs (the door whose `to` is `rooms`); one that woke leaves by the front door; one coming down from upstairs enters by the stairs.
+Why: the ticket shows only as many sleepers as the painting holds, newest first, and the rest "upstairs"; `world.bed.pillow` and `world.bed.covers` in each pack's `theme.json` are pixel positions in its `overlays/bed.png`, so a repainted bed needs them measured again.
+Coupled: apps/agent-world/themes/fantasy/places/inn.json, apps/agent-world/themes/fantasy/overlays/bed.png, apps/agent-world/themes/fantasy/theme.json, apps/agent-world/web/game/layout.ts
 Verify: apps/agent-world/tests/world-inn.test.ts
 
 ## symbol:PlaceScene.flyNewMail

@@ -1,9 +1,11 @@
 // The function places' panels as drawn over the world: the innkeeper's register, the rookery keeper's mail, and the confirmation
 // before ending a busy session. Mounted once by the overlay; each shows while its state says so.
 import { useEffect, useRef, useSyncExternalStore } from "react";
+import { say } from "../../theme.js";
+import { useTheme } from "../../theme-store.js";
 import type { WorldStore } from "../../world-store.js";
-import { InnkeeperRegister } from "./innkeeper.js";
 import { focusWorld, trapTab } from "../focus.js";
+import { InnkeeperRegister } from "./innkeeper.js";
 import { placeActions, placePanels } from "./place-panels.js";
 import "./places.css";
 import { RookeryView } from "./rookery.js";
@@ -27,6 +29,7 @@ export function PlacesOverlay({ store }: { store: WorldStore }) {
 function ConfirmEnd({ id, name, reason }: { id: string; name: string; reason: string }) {
 	const keep = useRef<HTMLButtonElement>(null);
 	const dialog = useRef<HTMLDivElement>(null);
+	const theme = useTheme();
 	useEffect(() => {
 		const before = document.activeElement;
 		keep.current?.focus({ preventScroll: true });
@@ -64,11 +67,11 @@ function ConfirmEnd({ id, name, reason }: { id: string; name: string; reason: st
 				aria-label={`End ${name}'s session?`}
 				aria-describedby="aw-confirm-reason"
 			>
-				<div className="aw-confirm-body aw-parchment">
-					<span className="aw-confirm-seal" aria-hidden="true" />
+				<div className="aw-confirm-body aw-surface">
+					<span className="aw-confirm-mark" aria-hidden="true" />
 					<h2>End {name}&rsquo;s session?</h2>
 					<p id="aw-confirm-reason">{reason}</p>
-					<p className="aw-confirm-after">Its pane closes and it goes to the inn to sleep; you can wake it there.</p>
+					<p className="aw-confirm-after">{say(theme, "end-session-after")}</p>
 					<div className="aw-confirm-actions">
 						<button ref={keep} type="button" className="aw-button" onClick={() => placePanels.cancelEnd()}>
 							Let it work

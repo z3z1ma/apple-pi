@@ -4,6 +4,9 @@ import type { ReactNode } from "react";
 import type { Character, PlaceRef, WorldSnapshot } from "../../../src/world.js";
 import { isOutside, placeKey } from "../../../src/world.js";
 import type { AvatarLook } from "../../looks.js";
+import { say } from "../../theme.js";
+import { useTheme } from "../../theme-store.js";
+import type { ThemeOption } from "../../view-state.js";
 import { MailList } from "../places/mail-list.js";
 import { placePanels } from "../places/place-panels.js";
 import { AgentsIcon, BellIcon, ChevronIcon, CogIcon, LetterIcon, ScrollIcon, SignpostIcon } from "./icons.js";
@@ -43,6 +46,10 @@ export interface SidePanelProps {
 	avatarLooks: AvatarLook[];
 	avatarLook: string | null | undefined;
 	onAvatarLook: (look: AvatarLook) => void;
+	/** The themes to choose from, the one worn, and wearing another. */
+	themes: ThemeOption[];
+	theme: string | undefined;
+	onTheme: (id: string) => void;
 }
 
 export function SidePanel(props: SidePanelProps) {
@@ -65,7 +72,7 @@ export function SidePanel(props: SidePanelProps) {
 							<ChevronIcon open />
 						</button>
 					</header>
-					<div className="aw-panel-body aw-parchment" role="tabpanel" aria-label={title}>
+					<div className="aw-panel-body aw-surface" role="tabpanel" aria-label={title}>
 						<TabBody {...props} />
 					</div>
 				</>
@@ -162,6 +169,7 @@ function Groups({
 /** The Mail tab: the rookery's traffic, newest first, and a letter to write from anywhere. */
 function Mail({ world }: SidePanelProps) {
 	const mail = world?.mail ?? [];
+	const theme = useTheme();
 	return (
 		<section aria-label="Mail">
 			<h3 className="aw-mail-head">
@@ -171,7 +179,7 @@ function Mail({ world }: SidePanelProps) {
 					className="aw-button aw-mail-write"
 					onClick={() => placePanels.open("rookery", { write: true })}
 				>
-					Write a letter
+					{say(theme, "write-letter")}
 				</button>
 			</h3>
 			{mail.length ? <MailList mail={mail} label="Recent mail" compact /> : <p className="aw-empty">No mail yet.</p>}
@@ -180,6 +188,7 @@ function Mail({ world }: SidePanelProps) {
 }
 
 function Places({ world, labels, here, travel }: SidePanelProps) {
+	const theme = useTheme();
 	const places = placesOf(world);
 	const sections: { key: string; title: string; places: PlaceRef[] }[] = [
 		...(world?.headquarters ?? []).map((hq) => ({
@@ -197,11 +206,11 @@ function Places({ world, labels, here, travel }: SidePanelProps) {
 		if (placeKey(ref) === here) return "You are here";
 		if (ref.kind === "inn") {
 			const asleep = world?.dormant?.length ?? 0;
-			return asleep ? `${asleep} asleep` : "Nobody asleep";
+			return asleep ? say(theme, "asleep-count", { count: asleep }) : say(theme, "nobody-asleep");
 		}
 		if (ref.kind === "rookery") {
 			const waiting = world?.mail?.filter((item) => item.state === "waiting").length ?? 0;
-			return waiting ? `${waiting} ${waiting === 1 ? "letter waits" : "letters wait"}` : "";
+			return waiting ? say(theme, waiting === 1 ? "letter-waits" : "letters-wait", { count: waiting }) : "";
 		}
 		if (ref.kind === "wing") {
 			const wing = world?.headquarters
@@ -268,7 +277,16 @@ function Places({ world, labels, here, travel }: SidePanelProps) {
 	);
 }
 
-function Settings({ walkGrid, onWalkGrid, avatarLooks, avatarLook, onAvatarLook }: SidePanelProps) {
+function Settings({
+	walkGrid,
+	onWalkGrid,
+	avatarLooks,
+	avatarLook,
+	onAvatarLook,
+	themes,
+	theme,
+	onTheme,
+}: SidePanelProps) {
 	const worn = avatarLooks.find(({ look }) => look === avatarLook)?.look ?? avatarLooks[0]?.look;
 	return (
 		<div className="aw-settings">
@@ -296,11 +314,34 @@ function Settings({ walkGrid, onWalkGrid, avatarLooks, avatarLook, onAvatarLook 
 				<h3>
 					<span>Look</span>
 				</h3>
-				<div className="aw-setting">
-					<span>Theme</span>
-					<span className="aw-setting-value">Fantasy</span>
-				</div>
-				<p className="aw-note">The tech office and anime school come with theme switching.</p>
+				<fieldset className="aw-themes">
+					<legend className="aw-setting">Theme</legend>
+					{themes.map((choice) => (
+						<label
+							key={choice.id}
+							className={`aw-theme${choice.broken ? " aw-theme-broken" : ""}`}
+							title={choice.broken ? `Its pack is broken: ${choice.broken}` : undefined}
+						>
+							<input
+								type="radio"
+								name="aw-theme"
+								value={choice.id}
+								checked={choice.id === theme}
+								disabled={!!choice.broken}
+								onChange={() => onTheme(choice.id)}
+							/>
+							<span className="aw-theme-mark" aria-hidden="true" />
+							<span className="aw-theme-text">
+								<span className="aw-theme-name">{choice.name}</span>
+								{(choice.broken ?? choice.description) && (
+									<small className="aw-theme-line">
+										{choice.broken ? `Broken: ${choice.broken}` : choice.description}
+									</small>
+								)}
+							</span>
+						</label>
+					))}
+				</fieldset>
 				<fieldset className="aw-looks">
 					<legend className="aw-setting">Avatar look</legend>
 					{avatarLooks.map((choice) => (
