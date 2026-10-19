@@ -1,0 +1,91 @@
+{
+  "label": "t31-10000",
+  "workers": 40,
+  "dormant": 10000,
+  "charactersDrawn": 40,
+  "rest": {
+    "frames": 150,
+    "fps": 30,
+    "meanMs": 33.33133333333333,
+    "p95Ms": 33.400000000000546,
+    "maxMs": 33.5,
+    "over33": 17,
+    "longTasks": 0,
+    "longTaskMs": 0,
+    "pushes": 0,
+    "pushSyncMs": 0
+  },
+  "fullUpdates": {
+    "frames": 150,
+    "fps": 30,
+    "meanMs": 33.33200000000001,
+    "p95Ms": 33.400000000001455,
+    "maxMs": 33.5,
+    "over33": 10,
+    "longTasks": 0,
+    "longTaskMs": 0,
+    "pushes": 25,
+    "pushSyncMs": 13.083999998569489
+  },
+  "smallUpdates": {
+    "frames": 150,
+    "fps": 30,
+    "meanMs": 33.332666666666675,
+    "p95Ms": 33.400000000001455,
+    "maxMs": 33.400000000001455,
+    "over33": 29,
+    "longTasks": 0,
+    "longTaskMs": 0,
+    "pushes": 25,
+    "pushSyncMs": 4.700000004768372
+  },
+  "leaveOutUpdates": {
+    "frames": 150,
+    "fps": 30,
+    "meanMs": 33.331999999999994,
+    "p95Ms": 33.400000000001455,
+    "maxMs": 33.400000000001455,
+    "over33": 34,
+    "longTasks": 0,
+    "longTaskMs": 0,
+    "pushes": 25,
+    "pushSyncMs": 4.660000002384185
+  },
+  "agentsTabFullUpdates": {
+    "frames": 150,
+    "fps": 30,
+    "meanMs": 33.331999999999994,
+    "p95Ms": 33.400000000001455,
+    "maxMs": 33.400000000001455,
+    "over33": 26,
+    "longTasks": 0,
+    "longTaskMs": 0,
+    "pushes": 25,
+    "pushSyncMs": 12.611999999284745
+  },
+  "agentsTabSmallUpdates": {
+    "frames": 150,
+    "fps": 30,
+    "meanMs": 33.332666666666675,
+    "p95Ms": 33.400000000001455,
+    "maxMs": 33.5,
+    "over33": 44,
+    "longTasks": 0,
+    "longTaskMs": 0,
+    "pushes": 25,
+    "pushSyncMs": 4.603999999761581
+  },
+  "agentsTabLeaveOutUpdates": {
+    "frames": 150,
+    "fps": 30,
+    "meanMs": 33.33200000000002,
+    "p95Ms": 33.400000000001455,
+    "maxMs": 33.400000000001455,
+    "over33": 47,
+    "longTasks": 0,
+    "longTaskMs": 0,
+    "pushes": 25,
+    "pushSyncMs": 4.643999999761581
+  },
+  "errors": []
+}

@@ -4,8 +4,8 @@
 
 **Blocked by:** 17 Talking for real polish pass; 23 Delegating pull request follow-up; 25 Working Jira issues; 28 The town crier and threads; 29 Fidget objects; 30 First run and performance
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Every nit recorded in the resolved characters, movement, exteriors, and interface tickets is closed or explicitly deferred by the operator.
-- [ ] Every item on the operator's walkthrough list is closed or explicitly deferred by him.
-- [ ] The operator signs off Agent World as final.
+- [x] Every nit recorded in the resolved characters, movement, exteriors, and interface tickets is closed or explicitly deferred by the operator.
+- [x] Every item on the operator's walkthrough list is closed or explicitly deferred by him.
+- [x] The operator signs off Agent World as final.

@@ -1,0 +1,55 @@
+{
+  "label": "t31-10000",
+  "dormant": 10000,
+  "awake": 41,
+  "openMs": [
+    71,
+    67.5,
+    64.6,
+    66.9,
+    73.9,
+    67.1,
+    66.3
+  ],
+  "openMedianMs": 67.13604099999975,
+  "snapshotBytes": 3626980,
+  "dormantBytes": 3553463,
+  "mailBytes": 52633,
+  "characters": 41,
+  "dormantCount": 10000,
+  "mailCount": 218,
+  "idle": {
+    "seconds": 6,
+    "busyFraction": 0.02780646188655176,
+    "busyMsPerSecond": 27.807722830741266,
+    "publishes": 0
+  },
+  "busy": {
+    "seconds": 6.000470792,
+    "writes": 59,
+    "busyFraction": 0.06582816049567676,
+    "busyMsPerSecond": 65.82803661696107,
+    "publishes": 29,
+    "publishesPerSecond": 4.832954113977795,
+    "ipcBytesPerSecond": 17529110.072535124
+  },
+  "ipc": {
+    "publishes": 29,
+    "wholeJsonBytesPerSecond": 17529103.239737928,
+    "wholeV8BytesPerSecond": 15947354.352191638,
+    "updateJsonBytesPerSecond": 101064.73658842202,
+    "updateV8BytesPerSecond": 84864.34109118817,
+    "updatesLeavingOutInn": 29,
+    "updatesLeavingOutMail": 29
+  },
+  "partsMedianMs": {
+    "query": 23.36,
+    "project": 13.84,
+    "facts": 0.06,
+    "inn": 37.13,
+    "mail": 1.98,
+    "compareJson": 7.6,
+    "ipcSerialize": 4.16,
+    "innUnchanged": 19.02
+  }
+}

@@ -15,7 +15,7 @@ import { FACTS_COLUMNS, FACTS_JOINS, factsOf, taskReader } from "../src/backend/
 import { dormantAgents } from "../src/backend/inn.js";
 import { readMail } from "../src/backend/mail.js";
 import { projectWorld } from "../src/backend/projection.js";
-import { openWorldBackend } from "../src/backend/world-backend.js";
+import { leaveOutUnchanged, openWorldBackend } from "../src/backend/world-backend.js";
 import type { WorldSnapshot } from "../src/world.js";
 
 // Scratch measurement (ticket 30): a synthetic database with many stopped root sessions, built through the real
@@ -125,9 +125,12 @@ test("measure", async () => {
 	const world = openWorldBackend({ db: state.dbPath, socket: state.socketPath });
 	let publishes = 0;
 	let last: WorldSnapshot | undefined;
+	// Ticket 31: the snapshots published while busy, measured afterwards as the main process sends them.
+	let published: WorldSnapshot[] = [];
 	world.subscribe((snapshot) => {
 		publishes++;
 		last = snapshot;
+		published.push(snapshot);
 	});
 	await vi.waitFor(() => expect(world.snapshot().connected).toBe(true), { timeout: 5000 });
 	const snapshot = world.snapshot();
@@ -153,6 +156,8 @@ test("measure", async () => {
 	const bump = writer.prepare("update sessions set cost = cost + 0.01 where id = ?");
 	const event = writer.prepare("insert into events (at, source, session_id, generation, type, data) values (?, 'bridge', ?, 1, 'cost_changed', '{}')");
 	publishes = 0;
+	const before = world.snapshot();
+	published = [];
 	const { Session } = await import("node:inspector/promises");
 	const inspector = new Session();
 	const PROF = !!process.env.AW_PROF;
@@ -197,6 +202,23 @@ test("measure", async () => {
 		publishesPerSecond: publishes / seconds,
 		ipcBytesPerSecond: (publishes * JSON.stringify(last).length) / seconds,
 	};
+	// Ticket 31: what each publish sends over IPC, whole (as before) and as `leaveOutUnchanged` updates, in JSON
+	// characters and in v8 structured-clone bytes (what Electron's IPC serialises); the window had `before` already.
+	{
+		const toUpdate = leaveOutUnchanged();
+		toUpdate(before);
+		const sum = (values: number[]) => values.reduce((a, b) => a + b, 0);
+		const updates = published.map(toUpdate);
+		out.ipc = {
+			publishes: published.length,
+			wholeJsonBytesPerSecond: sum(published.map((s) => JSON.stringify(s).length)) / seconds,
+			wholeV8BytesPerSecond: sum(published.map((s) => serialize(s).length)) / seconds,
+			updateJsonBytesPerSecond: sum(updates.map((u) => JSON.stringify(u).length)) / seconds,
+			updateV8BytesPerSecond: sum(updates.map((u) => serialize(u).length)) / seconds,
+			updatesLeavingOutInn: updates.filter((u) => u.unchanged?.includes("dormant")).length,
+			updatesLeavingOutMail: updates.filter((u) => u.unchanged?.includes("mail")).length,
+		};
+	}
 	world.close();
 
 	// 4. Where a full read's time goes, part by part (median of 7).

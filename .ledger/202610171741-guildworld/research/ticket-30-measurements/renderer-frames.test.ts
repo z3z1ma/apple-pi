@@ -122,7 +122,7 @@ async function openWorld(first: WorldSnapshot) {
 }
 
 /** Frame deltas over `ms`, while `pushEvery` (ms) pushes the fixture with one character's cost changed. */
-async function frames(page: Page, ms: number, push: "none" | "full" | "small") {
+async function frames(page: Page, ms: number, push: "none" | "full" | "small" | "update") {
 	return page.evaluate(
 		async ([duration, mode]) => {
 			const w = window as any;
@@ -141,13 +141,16 @@ async function frames(page: Page, ms: number, push: "none" | "full" | "small") {
 			let cost = 0;
 			const base = w.fixture;
 			const small = { ...base, dormant: undefined, mail: undefined };
+			// Ticket 31: an update as the main process now sends it, the inn and mail left out and named unchanged.
+			const { dormant: _inn, mail: _mail, ...rest } = base;
+			const update = { ...rest, unchanged: ["dormant", "mail"] };
 			const timer =
 				mode === "none"
 					? undefined
 					: setInterval(() => {
 							const start = performance.now();
 							// A structured clone stands for Electron's IPC deserialising each update.
-							const next = structuredClone(mode === "full" ? base : small);
+							const next = structuredClone(mode === "full" ? base : mode === "update" ? update : small);
 							next.characters[1].facts.cost = (cost += 0.01);
 							if (mode === "small") {
 								next.dormant = base.dormant;
@@ -202,11 +205,13 @@ test("frame times", async () => {
 	out.rest = await frames(page, 5000, "none");
 	out.fullUpdates = await frames(page, 5000, "full");
 	out.smallUpdates = await frames(page, 5000, "small");
+	out.leaveOutUpdates = await frames(page, 5000, "update");
 	// The same in the inn's list: the Agents tab shows every sleeper too.
 	await page.getByRole("tab", { name: "Agents", exact: true }).click();
 	await page.waitForTimeout(1000);
 	out.agentsTabFullUpdates = await frames(page, 5000, "full");
 	out.agentsTabSmallUpdates = await frames(page, 5000, "small");
+	out.agentsTabLeaveOutUpdates = await frames(page, 5000, "update");
 	out.errors = errors;
 	writeFileSync(`/tmp/aw30/frames-${LABEL}.json`, JSON.stringify(out, null, 2));
 	await page.screenshot({ path: `/tmp/aw30/frames-${LABEL}.png`, animations: "disabled" });

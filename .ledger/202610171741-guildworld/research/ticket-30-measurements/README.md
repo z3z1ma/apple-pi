@@ -59,3 +59,35 @@ was left unchanged. Sending the inn on every update costs about 2 ms per update 
 
 Real database on this machine for comparison: 1 root session, 19 child sessions, 28,816 events, 11,523 indexed
 messages, about 3,000 events an hour.
+
+## Ticket 31: the inn and the mail left out of unchanged updates
+
+Measured 2026-10-19 (load average 4 to 6). Every update sent the whole snapshot to the window, the inn's thousands of
+sleepers included, though the inn and the mail seldom change. Now the main process sends each update through
+`leaveOutUnchanged` (`src/backend/world-backend.ts`): while the inn or the mail is the same array as in the update
+before, it is left out and named in `unchanged`, and the renderer's store (`web/world-store.ts`) keeps its own. Both
+harnesses above gained a measurement of this (`out.ipc` in `backend-perf.test.ts`; the `update` mode in
+`renderer-frames.test.ts`); results are in `perf-t31-*.json` and `frames-t31-*.json`.
+
+Backend, one agent working (its cost changing 10 times a second), the window already holding the snapshot:
+
+| Sleepers | Publishes | Whole snapshots (before) | Updates (after) | Updates leaving out the inn and mail |
+| --- | --- | --- | --- | --- |
+| 3,000 | 5.0/s | 5.69 MB/s JSON, 5.17 MB/s v8 | 0.10 MB/s JSON, 0.09 MB/s v8 | 30 of 30 |
+| 10,000 | 4.8/s | 17.5 MB/s JSON, 15.9 MB/s v8 | 0.10 MB/s JSON, 0.08 MB/s v8 | 29 of 29 |
+
+"v8" is the structured-clone size Electron's IPC serialises. Serialising a whole 10,000-sleeper snapshot took 3.8 ms
+(median, above), about 18 ms a second of main-process time while an agent works; an update is now about 17 KB. The
+backend's own busy time was unchanged (32 and 66 ms/s), since `leaveOutUnchanged` runs in `main.ts`, outside it.
+
+Renderer, the same wing with 40 workers, an update 5 times a second (structured clone of what arrives, plus the store
+and its listeners):
+
+| Sleepers | Whole snapshot | Inn and mail kept (ticket 30's stand-in) | Left out, merged by the store (now) |
+| --- | --- | --- | --- |
+| 3,000 | 6.96 ms | 4.49 ms | 4.49 ms |
+| 10,000 | 13.08 ms | 4.70 ms | 4.66 ms |
+
+With the Agents tab open: 6.63, 4.62, 4.51 ms at 3,000 and 12.61, 4.60, 4.64 ms at 10,000. Headless Chrome drew at
+30 fps in this run (60 in ticket 30's), in every mode including at rest, so the frame counts do not compare across
+the two runs; the update cost does.
