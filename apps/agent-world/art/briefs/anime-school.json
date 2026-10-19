@@ -1,0 +1,115 @@
+{
+  "scenes": {
+    "headquarters": {
+      "brief": "A wide landscape image (3:2) of the interior of a big sunny Japanese high school classroom that serves as the class's headquarters: north wall with a long green chalkboard and tall windows with cherry blossom trees outside; centre-north: the class representative's teacher's desk on a low wooden platform with a stack of notebooks, an attendance book and a flower vase, open floor around it, no chair. West wall middle: a wide open sliding doorway into a side room. East wall middle: a wide open sliding doorway into a corridor. Centre floor: honey wood floor kept wide open (the student desks are pushed to the side walls in neat rows, without chairs), lockers at the back, a class notice board, plants on the window sills, a cleaning cupboard. South edge centre: a wide open double sliding door to the courtyard.",
+      "grid": "30 squares wide and 20 deep",
+      "slots": "three unlit ceiling lights, an empty corner of the chalkboard, and two bare floor spots by the windows"
+    },
+    "common-room": {
+      "brief": "A landscape image (3:2) of a cozy Japanese high school student lounge beside the classroom, where students without a club sit and study: two long study tables standing free with textbooks and pencil cases and no chairs at them, one round low table on a tatami mat, a vending machine, bookshelves of manga, plants, a blank whiteboard; east wall middle: a wide open sliding doorway back to the classroom.",
+      "grid": "20 squares wide and 14 deep",
+      "slots": "the blank whiteboard and one bare tatami spot"
+    },
+    "gallery": {
+      "brief": "A very wide landscape image (2:1) of a long horizontal Japanese high school corridor. The north wall runs across the top with five identical, evenly spaced, empty sliding doorway frames (plain wooden frames with no door in them) because doors are placed in them later; above each frame an empty club name plate holder; windows on the south side casting sunlight stripes. The west end (left edge) is an open doorway back to a bright classroom; the east end (right edge) is a wall with a fire extinguisher and a window. Floor: polished linoleum with a long runner, a few plants and a bench against the wall. The middle three sections must look identical so they can be repeated.",
+      "grid": "40 squares wide and 10 deep",
+      "slots": "the five empty door frames and their empty name plate holders"
+    },
+    "wing-small": {
+      "brief": "A square image of a cozy Japanese high school club room where a few students work on one project: north wall with a window and an empty name plate holder centred high; three study tables standing free with laptops, books and snacks, with no chairs at them, spaced apart with open floor; shelves of trophies and club materials, a whiteboard, a kettle; a sliding door at the south edge centre.",
+      "grid": "16 squares wide and 16 deep",
+      "slots": "the empty name plate holder and one bare corner spot"
+    },
+    "wing-large": {
+      "brief": "A wide landscape image (3:2) of a large Japanese high school club room or science room where a whole club works on one project: north wall with tall windows and an empty name plate holder centred high; eight lab tables standing free in two rows of four with books and equipment, with no chairs at them; a central big table with a poster project; shelves, a chalkboard, plants; a sliding door at the south edge centre; open aisles.",
+      "grid": "30 squares wide and 20 deep",
+      "slots": "the empty name plate holder and two bare floor spots near the walls"
+    },
+    "square": {
+      "brief": "A very wide landscape image (2:1) of a sunny Japanese high school courtyard and neighbouring street in spring, seen from above at a 3/4 angle. Along the north edge, a row of six distinct building fronts facing south, each with one clear front door at ground level and an empty sign board above it: left to right, the main school building (the largest, with wide glass doors), a technology and shop class workshop, the student council building with notice boards, the school library, a small cozy dormitory, and a little post office with a red post box. The courtyard in front is wide open paving with a round fountain in the middle whose basin is dry and empty, cherry blossom trees, benches, a bicycle rack, a vending machine and planters, paths leaving east and west.",
+      "grid": "40 squares wide and 20 deep",
+      "slots": "the dry fountain basin, the empty sign boards above the six doors, and unlit lamps"
+    },
+    "inn": {
+      "brief": "A landscape image (3:2) of a cozy Japanese school dormitory common room in the evening where tired students rest: a small kitchen counter with a rice cooker and tea on the north wall with open floor behind it for the dorm mother, four low kotatsu tables standing free with no cushions at them, futons stacked against a wall, a heater with its glow off on the west wall, paper lanterns, plants; a sliding door at the south edge centre.",
+      "grid": "24 squares wide and 16 deep",
+      "slots": "the unlit heater and open floor behind the counter for the dorm mother"
+    },
+    "rookery": {
+      "brief": "A square image of a small Japanese post office interior: walls of wooden mail slots and shoe-locker style letter boxes, a sorting table in the middle standing free with letters and parcels and no chair at it, a red post box, a counter, a window with a pigeon perch; a sliding door at the south edge centre.",
+      "grid": "16 squares wide and 16 deep",
+      "slots": "the empty pigeon perch and open floor beside the sorting table for the postmaster"
+    },
+    "forge": {
+      "brief": "A landscape image (3:2) of a Japanese high school technology and shop class workshop: a robotics competition banner frame left blank on the north wall, four long workbenches standing free in two rows with tools and empty work mats (projects are placed later), with no stools at them, a drill press, toolboxes, shelves of parts; a wide sliding door at the south edge centre.",
+      "grid": "24 squares wide and 16 deep",
+      "slots": "the blank banner frame, the empty workbench mats, and open floor at the front for the shop teacher"
+    },
+    "quest-office": {
+      "brief": "A landscape image (3:2) of a Japanese high school student council room: a huge empty cork notice board covering most of the north wall with nothing pinned on it (notices are placed later), a council desk on the east side with stamps and papers and open floor behind it, two meeting tables standing free with no chairs at them, trophies, a flag; a sliding door at the south edge centre.",
+      "grid": "24 squares wide and 16 deep",
+      "slots": "the empty notice board and open floor behind the council desk for the council secretary"
+    },
+    "library": {
+      "brief": "A landscape image (3:2) of a Japanese high school library: tall wooden bookshelves along the walls and in two rows, a librarian's counter on the north side with open floor behind it, reading tables standing free with no chairs at them, a cozy reading corner by sunny windows, a globe, plants; a sliding door at the south edge centre.",
+      "grid": "24 squares wide and 16 deep",
+      "slots": "open floor behind the librarian's counter and two bare spots on the reading rug"
+    }
+  },
+  "sheets": {
+    "coordinator": "a class representative: a composed girl with long black hair and a red headband, a navy sailor uniform with a red scarf, an armband, holding a clipboard",
+    "student-1": "a cheerful boy with spiky orange hair, a navy school blazer worn open, a loose red tie",
+    "student-2": "a quiet girl with a short lavender bob and round glasses, a navy sailor uniform, a book",
+    "student-3": "a tall boy with neat black hair, a buttoned navy gakuran uniform, headphones",
+    "student-4": "an energetic girl with twin blond pigtails, a navy sailor uniform with a yellow cardigan",
+    "student-5": "a sporty boy with short brown hair, a white gym shirt and navy track pants, a towel around the neck",
+    "student-6": "an artistic girl with long green hair in a braid, a navy blazer with paint smudges, a sketchbook",
+    "student-7": "a shy boy with messy silver hair, an oversized navy cardigan over the uniform",
+    "student-8": "a confident girl with a high brown ponytail, a navy blazer, a kendo sword bag",
+    "avatar-transfer": "a transfer student: a boy with tousled dark blue hair, a navy blazer, a backpack",
+    "avatar-newcomer": "a new student: a girl with a short pink bob, a navy sailor uniform, a school bag",
+    "avatar-senpai": "an upperclassman: a relaxed tall boy with wavy chestnut hair, a navy blazer worn open, hands in pockets",
+    "innkeeper": "a kind dorm mother: a plump woman with a bun of grey hair, a floral apron, holding a ladle",
+    "smith": "a shop class teacher: a burly man with a headband, a grey work jumpsuit, a wrench",
+    "clerk": "a student council secretary: a girl with a neat side braid, glasses, a navy uniform, a stack of papers",
+    "librarian": "a school librarian: a young woman with long wavy hair, a cream sweater, a book cart",
+    "rookery-keeper": "a postmaster: an old man with a white moustache, a green postal uniform and cap",
+    "crier": "a broadcast club student: a girl with a microphone and a headset, a navy uniform with an orange armband",
+    "townsfolk-1": "a teacher in a brown suit with a briefcase",
+    "townsfolk-2": "a student on a bicycle",
+    "townsfolk-3": "a baker with a tray of melon bread",
+    "townsfolk-4": "an old woman with a cat",
+    "townsfolk-5": "a delivery boy with a bento crate",
+    "townsfolk-6": "a little kid with a balloon"
+  },
+  "pieces": {
+    "doors": {
+      "brief": "five items, each sized to fill a doorway about 2 squares wide and 3 tall where a person is 1.5 squares tall: 1. a closed Japanese school sliding door, light wood with frosted glass panes and warm light behind; 2. the same door slid open revealing a bright club room; 3. the same door closed and dim with a rope tied across it, no text; 4. a plain cream wooden name plate with an empty middle (no text); 5. the same name plate painted coral.",
+      "names": ["door-closed", "door-open", "door-boarded", "banner-cream", "banner-red"]
+    },
+    "fire": {
+      "brief": "four animation frames of the same warm orange glow of a Japanese kerosene heater grille, about 2 squares wide, flickering for a seamless loop.",
+      "names": ["fire-0", "fire-1", "fire-2", "fire-3"]
+    },
+    "water": {
+      "brief": "four animation frames of the same clear blue water filling a round courtyard fountain basin about 4 squares wide with a few cherry petals floating, seen from above at a 3/4 angle, ripples moving outward for a seamless loop; water only, no rim.",
+      "names": ["water-0", "water-1", "water-2", "water-3"]
+    },
+    "bird": {
+      "brief": "four animation frames of the same small grey pigeon carrying a letter in its beak, flying to the right, wings up, level, down, level, for a seamless loop, about half a square.",
+      "names": ["bird-0", "bird-1", "bird-2", "bird-3"]
+    },
+    "forge-items": {
+      "brief": "three items, the same small robot project lying on a work mat, seen from above at a 3/4 angle, about 2 squares wide: 1. with its eyes glowing green and a little sparkle (passing); 2. with an arm fallen off and a puff of smoke (failing); 3. with its eyes blinking amber and a spinning wheel (running).",
+      "names": ["blade-passing", "blade-failing", "blade-running"]
+    },
+    "notices": {
+      "brief": "four items, each a paper notice pinned to a cork board with a coloured pushpin, front facing, about 1 square wide and 1.3 tall, each with scribbled illegible lines (no readable text): 1. white; 2. with a red stamp (urgent); 3. with a gold star sticker (done); 4. with a blue paperclip (in progress).",
+      "names": ["notice-open", "notice-urgent", "notice-done", "notice-progress"]
+    },
+    "props": {
+      "brief": "six items: 1. a folded futon with a pillow, in 3/4 view; 2. a small bundle of letters with a ribbon; 3. a small school bell; 4. an open textbook; 5. a desk lamp switched on; 6. a sleepy calico cat curled up.",
+      "names": ["bed", "letters", "bell", "tome", "candle", "cat-sleeping"]
+    }
+  }
+}

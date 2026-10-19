@@ -1,0 +1,115 @@
+{
+  "scenes": {
+    "headquarters": {
+      "brief": "A wide landscape image (3:2) of the interior of a cozy modern tech startup's main office floor, the team's headquarters. North wall: big windows with a city skyline at golden hour, a long whiteboard and a mounted wall screen. Centre-north: the team lead's large standing desk on a low wooden platform with two monitors, a plant and a coffee mug, with open floor around it; the desk has no chair. West wall middle: a wide open doorway into a side lounge. East wall middle: a wide open doorway into a corridor. Centre floor: light oak floor with a long woven runner from the south entrance to the lead's desk, potted fiddle-leaf figs, a ping-pong table against the wall, a bookshelf, a vending machine, a sofa against a wall. South edge centre: wide glass double doors to the outside. Keep the middle of the floor wide open.",
+      "grid": "30 squares wide and 20 deep",
+      "slots": "three unlit pendant lamps, a blank wall screen, and two bare floor spots by the windows"
+    },
+    "common-room": {
+      "brief": "A landscape image (3:2) of a cozy modern tech office lounge and kitchen beside the main floor, where people without a project sit and work: a kitchen counter with an espresso machine, two long shared work tables standing free with laptops and mugs and no chairs or stools at them, one round cafe table, beanbags, bookshelves, plants, a blank wall screen; east wall middle: a wide open doorway back to the main floor.",
+      "grid": "20 squares wide and 14 deep",
+      "slots": "the blank wall screen, the espresso machine's empty drip tray, and one bare rug spot"
+    },
+    "gallery": {
+      "brief": "A very wide landscape image (2:1) of a long horizontal modern office corridor. The north wall runs across the top with five identical, evenly spaced, empty doorway frames (plain recessed openings with a light wood frame, no door in them) because doors are placed in them later; above each frame an empty sign holder; small wall lights between them. The west end (left edge) is an open doorway back to a bright office floor; the east end (right edge) is a wall with a window. Floor: polished concrete with a long grey runner, a few plants and benches against the wall. The middle three sections must look identical so they can be repeated.",
+      "grid": "40 squares wide and 10 deep",
+      "slots": "the five empty door frames and their empty sign holders"
+    },
+    "wing-small": {
+      "brief": "A square image of a cozy modern tech project room where a small team works on one project: north wall with a window, a whiteboard with sticky notes and an empty sign holder centred high on the wall; three long desks standing free, each with monitors, a keyboard and a lamp, with no chairs at them, spaced apart with wide open floor; shelves and plants; a glass door at the south edge centre.",
+      "grid": "16 squares wide and 16 deep",
+      "slots": "the empty sign holder and one bare corner spot"
+    },
+    "wing-large": {
+      "brief": "A wide landscape image (3:2) of a large cozy modern tech project room where a team works on one project: north wall with tall windows and an empty sign holder centred high on the wall; eight desks standing free in two rows of four, each with monitors and a lamp, with no chairs at them; a central standing table with a big printed architecture diagram; a kanban wall, shelves, plants; a glass door at the south edge centre; wide open aisles.",
+      "grid": "30 squares wide and 20 deep",
+      "slots": "the empty sign holder and two bare floor spots near the walls"
+    },
+    "square": {
+      "brief": "A very wide landscape image (2:1) of a cozy modern tech campus plaza at golden hour, seen from above at a 3/4 angle. Along the north edge, a row of six distinct building fronts facing south, each with one clear glass front door at ground level and an empty sign panel above it: left to right, the main office building (the largest, with wide doors), a hardware lab with a roll-up garage door, a project planning studio with a glass front, a tall library and knowledge centre, a cozy cafe-lounge with an awning, and a small post and mailroom kiosk. The plaza in front is wide open paving with a round water feature in the middle whose basin is dry and empty, food trucks, benches, bike racks, planters and trees, and paths leaving east and west.",
+      "grid": "40 squares wide and 20 deep",
+      "slots": "the dry water feature basin, the empty sign panels above the six doors, and unlit lamp posts"
+    },
+    "inn": {
+      "brief": "A landscape image (3:2) of a cozy modern office nap lounge and break room where tired people rest: a snack bar counter with a fridge and coffee on the north wall with open floor behind it for the host, four low tables standing free with no chairs at them, sofas and armchairs along the walls, a gas fireplace with its fire off on the west wall, dim warm lamps, plants; a door at the south edge centre.",
+      "grid": "24 squares wide and 16 deep",
+      "slots": "the unlit fireplace, open floor behind the counter for the host"
+    },
+    "rookery": {
+      "brief": "A square image of a modern office mailroom: walls of numbered mail cubbies and parcel shelves, a sorting table in the middle standing free with envelopes and boxes and no chair at it, a pneumatic tube station, a little delivery robot dock, a high window; a door at the south edge centre.",
+      "grid": "16 squares wide and 16 deep",
+      "slots": "the empty robot dock and open floor beside the sorting table for the mailroom clerk"
+    },
+    "forge": {
+      "brief": "A landscape image (3:2) of a modern hardware and build lab: a wall of server racks with blinking lights on the north wall, a big build status screen left blank, four long workbenches standing free in two rows with tools and empty mats (devices are placed later), with no stools at them, a 3D printer, soldering stations, cable reels; a wide door at the south edge centre.",
+      "grid": "24 squares wide and 16 deep",
+      "slots": "the blank build status screen, the empty workbench mats, and open floor beside the racks for the lab lead"
+    },
+    "quest-office": {
+      "brief": "A landscape image (3:2) of a modern project planning studio: a huge empty kanban wall covering most of the north wall with no sticky notes on it (they are placed later), a front desk on the east side with a laptop and open floor behind it, two planning tables standing free with no chairs at them, a big screen, plants; a door at the south edge centre.",
+      "grid": "24 squares wide and 16 deep",
+      "slots": "the empty kanban wall and open floor behind the desk for the coordinator of the studio"
+    },
+    "library": {
+      "brief": "A landscape image (3:2) of a modern company library and knowledge centre: tall light-wood bookshelves along the walls and in two rows, a reading desk with a tablet, a help desk on the north side with open floor behind it, cozy reading nook with beanbags, big windows, plants; reading tables standing free with no chairs at them; a door at the south edge centre.",
+      "grid": "24 squares wide and 16 deep",
+      "slots": "open floor behind the help desk and two bare spots on the reading rug"
+    }
+  },
+  "sheets": {
+    "coordinator": "a seasoned engineering lead: a woman in her fifties with short grey hair, round glasses, a navy blazer over a striped shirt, a lanyard badge, holding a tablet",
+    "frontend": "a frontend developer: young man with curly black hair, a mustard hoodie, headphones around the neck",
+    "backend": "a backend engineer: a woman with a long dark braid, a teal flannel shirt, a laptop sticker-covered bag",
+    "devops": "a devops engineer: a bearded man with a beanie, a black t-shirt with a small server icon, cargo pants",
+    "designer": "a product designer: a woman with a pink bob haircut, a white turtleneck, round earrings, a sketchbook",
+    "data": "a data scientist: a tall man with neat hair, a light blue oxford shirt, a cardigan, a coffee cup",
+    "security": "a security engineer: a woman with an undercut, a dark green bomber jacket, a small padlock pin",
+    "qa": "a QA engineer: a cheerful man with freckles, an orange polo shirt, a bug-shaped badge",
+    "intern": "an intern: a young woman with a high ponytail, a purple company t-shirt, sneakers, a notebook",
+    "avatar-founder": "a founder: a young person with tousled brown hair, a grey zip hoodie over a white tee, jeans and sneakers, a messenger bag",
+    "avatar-architect": "a software architect: a woman with long auburn hair, a burgundy sweater, smart glasses",
+    "avatar-hacker": "a hacker: a young man with spiky blue hair, a black hoodie with the hood down, a backpack",
+    "innkeeper": "a friendly office host: a man with a warm smile, an apron over a grey company polo, holding a coffee pot",
+    "smith": "a hardware lab lead: a stocky woman with safety goggles on her head, a lab coat over a red shirt, a multimeter",
+    "clerk": "a project manager: a neat man with slicked hair, a light green shirt and tie, a clipboard",
+    "librarian": "a knowledge manager: a tall woman with silver locs, a cream cardigan, reading glasses",
+    "rookery-keeper": "a mailroom clerk: a young man with a cap, a brown delivery uniform, a parcel",
+    "crier": "a community manager: an energetic woman with a megaphone, a bright yellow jacket",
+    "townsfolk-1": "a courier with a bike helmet and a backpack",
+    "townsfolk-2": "a barista in a black apron",
+    "townsfolk-3": "a visitor in a smart coat with a coffee",
+    "townsfolk-4": "a jogger in running gear",
+    "townsfolk-5": "a food truck chef in whites",
+    "townsfolk-6": "a student with a laptop and a scarf"
+  },
+  "pieces": {
+    "doors": {
+      "brief": "five items, each sized to fill a doorway about 2 squares wide and 3 tall where a person is 1.5 squares tall: 1. a closed frosted glass office door with a light wood frame and warm light behind it; 2. the same door standing open revealing a bright project room; 3. the same door closed with a 'closed' look: blinds drawn, dim, a strip of tape across it, no text; 4. a plain cream sign panel on a small bracket with an empty middle (no text); 5. the same sign panel in coral.",
+      "names": ["door-closed", "door-open", "door-boarded", "banner-cream", "banner-red"]
+    },
+    "fire": {
+      "brief": "four animation frames of the same modern gas fireplace flame on a bed of white stones, about 2 squares wide, flames shifting for a seamless loop.",
+      "names": ["fire-0", "fire-1", "fire-2", "fire-3"]
+    },
+    "water": {
+      "brief": "four animation frames of the same clear blue water filling a round modern plaza water feature basin about 4 squares wide, seen from above at a 3/4 angle, with a small jet and ripples moving outward for a seamless loop; water only, no rim.",
+      "names": ["water-0", "water-1", "water-2", "water-3"]
+    },
+    "bird": {
+      "brief": "four animation frames of the same small white paper plane flying to the right, tilting slightly, for a seamless loop, about half a square.",
+      "names": ["bird-0", "bird-1", "bird-2", "bird-3"]
+    },
+    "forge-items": {
+      "brief": "three items, the same small circuit board device lying on an anti-static mat, seen from above at a 3/4 angle, about 2 squares wide: 1. with a green status light glowing (passing); 2. with a red status light and a little smoke (failing); 3. with an amber blinking light and a progress bar (running).",
+      "names": ["blade-passing", "blade-failing", "blade-running"]
+    },
+    "notices": {
+      "brief": "four items, each a square sticky note stuck to a wall, front facing, about 1 square, each with scribbled illegible lines (no readable text): 1. yellow; 2. red with a small exclamation dot (urgent); 3. green with a tick (done); 4. blue (in progress).",
+      "names": ["notice-open", "notice-urgent", "notice-done", "notice-progress"]
+    },
+    "props": {
+      "brief": "six items: 1. a comfy grey sofa bed with a blanket, in 3/4 view; 2. a small stack of envelopes with a rubber band; 3. a desk bell; 4. an open glowing tablet; 5. a small desk lamp switched on; 6. a sleepy grey office cat curled up.",
+      "names": ["bed", "letters", "bell", "tome", "candle", "cat-sleeping"]
+    }
+  }
+}

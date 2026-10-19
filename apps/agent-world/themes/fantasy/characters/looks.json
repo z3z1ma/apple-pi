@@ -6,8 +6,8 @@
   },
   "artificer": {
     "role": "agent",
-    "frame": [85, 124],
-    "baseline": 122
+    "frame": [101, 127],
+    "baseline": 125
   },
   "scholar": {
     "role": "agent",
@@ -58,5 +58,65 @@
     "role": "avatar",
     "frame": [93, 140],
     "baseline": 138
+  },
+  "innkeeper": {
+    "role": "innkeeper",
+    "frame": [96, 145],
+    "baseline": 143
+  },
+  "smith": {
+    "role": "smith",
+    "frame": [98, 153],
+    "baseline": 151
+  },
+  "clerk": {
+    "role": "clerk",
+    "frame": [83, 156],
+    "baseline": 154
+  },
+  "librarian": {
+    "role": "librarian",
+    "frame": [85, 147],
+    "baseline": 145
+  },
+  "rookery-keeper": {
+    "role": "rookery-keeper",
+    "frame": [93, 133],
+    "baseline": 131
+  },
+  "crier": {
+    "role": "crier",
+    "frame": [106, 145],
+    "baseline": 143
+  },
+  "townsfolk-1": {
+    "role": "townsfolk",
+    "frame": [84, 136],
+    "baseline": 134
+  },
+  "townsfolk-2": {
+    "role": "townsfolk",
+    "frame": [113, 140],
+    "baseline": 138
+  },
+  "townsfolk-3": {
+    "role": "townsfolk",
+    "frame": [97, 134],
+    "baseline": 132
+  },
+  "townsfolk-4": {
+    "role": "townsfolk",
+    "frame": [96, 144],
+    "baseline": 142
+  },
+  "townsfolk-5": {
+    "role": "townsfolk",
+    "frame": [104, 137],
+    "baseline": 135
+  },
+  "townsfolk-6": {
+    "role": "townsfolk",
+    "frame": [86, 130],
+    "baseline": 128
   }
 }

@@ -29,6 +29,31 @@
       "brief": "A very wide landscape image (2:1) of a cozy storybook fantasy village square at dusk, seen from above at a 3/4 angle. Along the north edge, a row of six distinct building fronts facing south, each with one clear front door at ground level and room above it for a hanging sign: left to right, a grand timber-and-stone guild hall with a wide double door (the largest), a blacksmith's forge with an open anvil yard, a quest office with a notice board beside its door, a tall library with arched windows, a cozy inn with a balcony, and a round stone rookery tower with perches. The cobbled square in front is wide open, with a round stone fountain in the middle whose basin is dry and empty (water is added later), a few market stalls, benches, lamp posts, flower planters and trees at the edges, and lanes leaving to the east and west.",
       "grid": "40 squares wide and 20 deep",
       "slots": "the dry fountain basin, an empty sign bracket above each of the six doors, and unlit lamp posts"
+    },
+    "inn": {
+      "brief": "A landscape image (3:2) of a cozy fantasy village inn's common room at night, where tired adventurers rest and doze. A long bar counter with tankards, barrels and bottles on the north wall with open floor behind it for the innkeeper; four sturdy wooden tables standing free with no chairs or benches at them; a big stone fireplace on the west wall with its hearth empty; a staircase up to rooms on the east wall; warm rugs, hanging herbs, lanterns; a door at the south edge centre.",
+      "grid": "24 squares wide and 16 deep",
+      "slots": "the empty hearth, open floor behind the bar for the innkeeper, and two bare spots by the fireplace"
+    },
+    "rookery": {
+      "brief": "A square image of the round interior of a fantasy rookery tower where messenger birds carry letters: curved stone walls lined with wooden perches and pigeonholes stuffed with rolled letters, a big sorting desk in the middle standing free with sealing wax, scales and parcels and no chair at it, an open arched window high on the north wall where birds fly in and out, a ladder to an upper loft, sacks of mail, warm lantern light; a door at the south edge centre.",
+      "grid": "16 squares wide and 16 deep",
+      "slots": "the empty perches, open floor beside the sorting desk for the rookery keeper, and the open window"
+    },
+    "forge": {
+      "brief": "A landscape image (3:2) of the interior of a fantasy blacksmith's forge and workshop where weapons are crafted: a big brick forge with its fire pit empty and dark on the north wall, a large anvil, a quench trough of water, four long sturdy workbenches standing free in two rows with tools but nothing being crafted on them (crafted pieces are placed later), with no stools at them, racks of hammers and tongs, a grindstone, a weapon display rack, open floor between benches; a wide door at the south edge centre.",
+      "grid": "24 squares wide and 16 deep",
+      "slots": "the empty forge fire pit, the empty tops of the four workbenches, and open floor behind the anvil for the smith"
+    },
+    "quest-office": {
+      "brief": "A landscape image (3:2) of the interior of a fantasy adventurers' quest office: a huge cork-and-timber quest board covering most of the north wall with no notices pinned on it (notices are placed later), a clerk's counter on the east side with ledgers, stamps and an inkwell and open floor behind it, two reading tables standing free with no chairs at them, filing cabinets and map tubes, a world map, warm lantern light; a door at the south edge centre.",
+      "grid": "24 squares wide and 16 deep",
+      "slots": "the empty quest board, open floor behind the counter for the clerk"
+    },
+    "library": {
+      "brief": "A landscape image (3:2) of the interior of a grand fantasy library: tall carved bookshelves full of books along the walls and in two free-standing rows, a rolling ladder, a central reading desk with a large open tome and candles, a librarian's desk on the north side with open floor behind it, a globe, a cozy reading corner, star charts, tall arched windows with moonlight; reading tables standing free with no chairs at them; a door at the south edge centre.",
+      "grid": "24 squares wide and 16 deep",
+      "slots": "open floor behind the librarian's desk, and two bare spots on the reading rug"
     }
   },
   "sheets": {
@@ -43,7 +68,19 @@
     "cleric": "a human cleric: shaved head, warm brown skin, cream and gold vestments, a small sun pendant",
     "avatar-traveller": "a young adventurer: auburn hair in a short ponytail, teal travelling cloak over a cream tunic, brown belt and boots, small leather satchel",
     "avatar-knight": "a young knight: short sandy hair, a light silver breastplate over a deep red tunic, a short cape, a sword at the hip",
-    "avatar-bard": "a cheerful bard: dark curly hair, a sky blue doublet, a lute slung on the back, a jaunty green feathered hat"
+    "avatar-bard": "a cheerful bard: dark curly hair, a sky blue doublet, a lute slung on the back, a jaunty green feathered hat",
+    "innkeeper": "a jolly innkeeper: stout, rosy cheeks, brown curly hair, a white apron over a green shirt with rolled sleeves, a dish towel over one shoulder",
+    "smith": "a burly blacksmith woman: muscular, short red hair, soot on her cheeks, a heavy leather apron, thick gloves, a hammer at her belt",
+    "clerk": "a quest office clerk: thin elderly man, half-moon spectacles, neat grey hair, a burgundy waistcoat with a pocket watch chain, ink-stained fingers",
+    "librarian": "a librarian: a tall elven woman with silver hair in a bun, a deep purple robe, reading glasses on a chain, a stack of books under one arm",
+    "rookery-keeper": "a rookery keeper: a young freckled boy with messy straw hair, a brown cap, a satchel of letters, a small owl perched on his shoulder",
+    "crier": "a town crier: plump, a red and gold tabard, a feathered cap, holding a brass handbell",
+    "townsfolk-1": "a market merchant woman: olive headscarf, mustard shawl over a brown dress, a basket of apples on one arm",
+    "townsfolk-2": "a wandering minstrel: sandy hair, a sky blue doublet, a lute slung on his back",
+    "townsfolk-3": "a farmer: straw hat, freckles, blue overalls, a pitchfork",
+    "townsfolk-4": "a noblewoman: an elegant emerald gown, auburn hair in an updo, a lace fan",
+    "townsfolk-5": "a fisherman: grey beard, a yellow oilskin coat, a fishing rod and a basket",
+    "townsfolk-6": "a young flower seller: a pink dress, a white apron, a basket of colourful flowers"
   },
   "pieces": {
     "doors": {
@@ -57,6 +94,22 @@
     "water": {
       "brief": "four animation frames of the same clear blue water surface filling a round stone fountain basin about 4 squares wide, seen from above at a 3/4 angle, with a small jet in the middle and ripples that move outward frame to frame for a seamless loop; water only, no stone rim.",
       "names": ["water-0", "water-1", "water-2", "water-3"]
+    },
+    "bird": {
+      "brief": "four animation frames of the same small grey-and-white messenger pigeon flying to the right with a rolled letter tied to one leg, wings up, level, down, level, for a seamless flight loop, sized about half a square.",
+      "names": ["bird-0", "bird-1", "bird-2", "bird-3"]
+    },
+    "forge-items": {
+      "brief": "three items, the same longsword blade lying flat on a workbench, seen from above at a 3/4 angle, about 3 squares long: 1. the blade finished and gleaming steel with a faint cool blue shimmer and a wisp of steam (passing); 2. the same blade cracked with a dark red glowing crack and a little smoke (failing); 3. the same blade glowing bright orange-hot as if just pulled from the fire (running).",
+      "names": ["blade-passing", "blade-failing", "blade-running"]
+    },
+    "notices": {
+      "brief": "four items, each a parchment notice pinned to a cork board with a brass pin, front facing, about 1 square wide and 1.3 tall, each with scribbled illegible lines (no readable text): 1. a plain cream notice; 2. a notice with a red wax seal (urgent); 3. a notice with a green ribbon (done); 4. a notice with a blue stamp (in progress).",
+      "names": ["notice-open", "notice-urgent", "notice-done", "notice-progress"]
+    },
+    "props": {
+      "brief": "six items: 1. a tall wooden bed with a patchwork quilt, seen in 3/4 view; 2. a small pile of rolled letters tied with string; 3. a brass handbell; 4. an open glowing tome; 5. a lit candle on a brass holder; 6. a sleepy orange tabby cat curled up.",
+      "names": ["bed", "letters", "bell", "tome", "candle", "cat-sleeping"]
     }
   }
 }

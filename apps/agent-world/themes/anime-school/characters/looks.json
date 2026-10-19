@@ -1,0 +1,122 @@
+{
+  "coordinator": {
+    "role": "coordinator",
+    "frame": [82, 128],
+    "baseline": 126
+  },
+  "student-1": {
+    "role": "agent",
+    "frame": [87, 152],
+    "baseline": 150
+  },
+  "student-2": {
+    "role": "agent",
+    "frame": [87, 140],
+    "baseline": 138
+  },
+  "student-3": {
+    "role": "agent",
+    "frame": [90, 158],
+    "baseline": 156
+  },
+  "student-4": {
+    "role": "agent",
+    "frame": [85, 142],
+    "baseline": 140
+  },
+  "student-5": {
+    "role": "agent",
+    "frame": [79, 145],
+    "baseline": 143
+  },
+  "student-6": {
+    "role": "agent",
+    "frame": [91, 126],
+    "baseline": 124
+  },
+  "student-7": {
+    "role": "agent",
+    "frame": [80, 143],
+    "baseline": 141
+  },
+  "student-8": {
+    "role": "agent",
+    "frame": [88, 152],
+    "baseline": 150
+  },
+  "avatar-transfer": {
+    "role": "avatar",
+    "frame": [87, 136],
+    "baseline": 134
+  },
+  "avatar-newcomer": {
+    "role": "avatar",
+    "frame": [89, 145],
+    "baseline": 143
+  },
+  "avatar-senpai": {
+    "role": "avatar",
+    "frame": [78, 136],
+    "baseline": 134
+  },
+  "innkeeper": {
+    "role": "innkeeper",
+    "frame": [106, 139],
+    "baseline": 137
+  },
+  "smith": {
+    "role": "smith",
+    "frame": [92, 147],
+    "baseline": 145
+  },
+  "clerk": {
+    "role": "clerk",
+    "frame": [80, 146],
+    "baseline": 144
+  },
+  "librarian": {
+    "role": "librarian",
+    "frame": [119, 134],
+    "baseline": 132
+  },
+  "rookery-keeper": {
+    "role": "rookery-keeper",
+    "frame": [106, 131],
+    "baseline": 129
+  },
+  "crier": {
+    "role": "crier",
+    "frame": [76, 135],
+    "baseline": 133
+  },
+  "townsfolk-1": {
+    "role": "townsfolk",
+    "frame": [112, 149],
+    "baseline": 147
+  },
+  "townsfolk-2": {
+    "role": "townsfolk",
+    "frame": [120, 141],
+    "baseline": 139
+  },
+  "townsfolk-3": {
+    "role": "townsfolk",
+    "frame": [83, 133],
+    "baseline": 131
+  },
+  "townsfolk-4": {
+    "role": "townsfolk",
+    "frame": [126, 142],
+    "baseline": 140
+  },
+  "townsfolk-5": {
+    "role": "townsfolk",
+    "frame": [104, 153],
+    "baseline": 151
+  },
+  "townsfolk-6": {
+    "role": "townsfolk",
+    "frame": [98, 134],
+    "baseline": 132
+  }
+}

@@ -107,7 +107,18 @@ def bands(filled, min_gap, min_size):
     return found
 
 
-def cut(path, rows, cols):
+def main_body(m):
+    # Keep the band of rows holding most of the figure, so a speck from a neighbouring cell cannot lift it off the
+    # baseline.
+    found = bands(m.any(axis=1), 4, 1)
+    y0, y1 = max(found, key=lambda band: m[band[0] : band[1]].sum())
+    m = m.copy()
+    m[:y0] = False
+    m[y1:] = False
+    return m
+
+
+def cut(path, rows, cols, gap=6, body=False):
     rgb = np.array(Image.open(path).convert("RGB")).astype(int)
     keep = ~magenta_mask(rgb)
     row_bands = bands(keep.sum(axis=1) > 2, 6, 20)
@@ -117,14 +128,14 @@ def cut(path, rows, cols):
         row_bands = [(round(i * h), round((i + 1) * h)) for i in range(rows)]
     found = []
     for y0, y1 in row_bands:
-        col_bands = bands(keep[y0:y1].sum(axis=0) > 2, 6, 12)
+        col_bands = bands(keep[y0:y1].sum(axis=0) > 2, gap, 12)
         if cols and len(col_bands) != cols:
             w = keep.shape[1] / cols
             col_bands = [(round(i * w), round((i + 1) * w)) for i in range(cols)]
         for x0, x1 in col_bands:
             if not keep[y0:y1, x0:x1].any():
                 sys.exit(f"{Path(path).name}: an empty cell at {x0},{y0}")
-            m = keep[y0:y1, x0:x1]
+            m = main_body(keep[y0:y1, x0:x1]) if body else keep[y0:y1, x0:x1]
             ys, xs = np.where(m)
             yy0, yy1, xx0, xx1 = ys.min(), ys.max() + 1, xs.min(), xs.max() + 1
             rgba = np.zeros((yy1 - yy0, xx1 - xx0, 4), dtype=np.uint8)
@@ -139,7 +150,21 @@ def hard_alpha(img):
     a = np.array(img.convert("RGBA"))
     a[..., 3] = np.where(a[..., 3] > 110, 255, 0)
     a[magenta_mask(a[..., :3].astype(int)), 3] = 0
-    return Image.fromarray(a)
+    return Image.fromarray(defringe(a))
+
+
+def defringe(a):
+    # Edge pixels blended with the magenta background are pinkish rather than magenta; peel them off the outline.
+    # The blend is at most two pixels deep; peeling further would eat real purple cloth or hair.
+    for _ in range(2):
+        opaque = a[..., 3] > 0
+        edge = opaque & ~(
+            np.roll(opaque, 1, 0) & np.roll(opaque, -1, 0) & np.roll(opaque, 1, 1) & np.roll(opaque, -1, 1)
+        )
+        r, g, b = (a[..., i].astype(int) for i in range(3))
+        pink = (r > 110) & (b > 90) & (g < 0.8 * np.minimum(r, b)) & (b > 0.55 * r)
+        a[edge & pink, 3] = 0
+    return a
 
 
 def save_sprite(img, path):
@@ -154,20 +179,23 @@ def scene(raw, out):
 
 
 def sheet(raw, out):
-    frames = cut(raw, 4, 4)
+    frames = cut(raw, 4, 4, body=True)
     standing = float(np.median([f.height for f in frames[:12]]))
     scale = STANDING_HEIGHT / standing
     frames = [
         f.resize((max(1, round(f.width * scale)), max(1, round(f.height * scale))), Image.Resampling.LANCZOS)
         for f in frames
     ]
+    # Clean each frame before placing it, so its feet sit exactly on the baseline.
+    frames = [hard_alpha(f) for f in frames]
+    frames = [f.crop(f.getbbox()) for f in frames]
     cw = max(f.width for f in frames) + 4
     ch = max(f.height for f in frames) + 4
     baseline = ch - 2
     strip = Image.new("RGBA", (cw * len(frames), ch))
     for i, f in enumerate(frames):
         strip.paste(f, (i * cw + (cw - f.width) // 2, baseline - f.height), f)
-    save_sprite(hard_alpha(strip), out)
+    save_sprite(strip, out)
     meta = {"frameWidth": cw, "frameHeight": ch, "frames": len(frames), "baseline": baseline}
     Path(out).with_suffix(".json").write_text(json.dumps(meta, indent=2) + "\n")
     print(f"sheet {out} {meta}")
@@ -182,7 +210,13 @@ def portraits(raw, prefix):
 
 
 def pieces(raw, outdir, names):
-    found = cut(raw, 0, 0)
+    # Pieces stand in one row, and we know how many there are: widen the gap that separates them until a puff of
+    # smoke or a sparkle stays with its piece.
+    found = []
+    for gap in (6, 12, 20, 32, 48):
+        found = cut(raw, 1, 0, gap=gap)
+        if len(found) <= len(names):
+            break
     if len(found) != len(names):
         sys.exit(f"{Path(raw).name}: expected {len(names)} pieces, found {len(found)}")
     Path(outdir).mkdir(parents=True, exist_ok=True)
@@ -249,6 +283,19 @@ def batch(theme):
         sys.exit(1)
 
 
+HOSTS = {"innkeeper", "smith", "clerk", "librarian", "rookery-keeper", "crier"}
+
+
+def role_of(look):
+    if look.startswith("avatar-"):
+        return "avatar"
+    if look.startswith("townsfolk-"):
+        return "townsfolk"
+    if look in HOSTS:
+        return look
+    return "coordinator" if look == "coordinator" else "agent"
+
+
 def build(theme):
     briefs, raw, _ = raw_jobs(theme)
     out = HERE.parent / "themes" / theme
@@ -261,7 +308,7 @@ def build(theme):
         sheet(raw / "characters" / f"{name}-sheet.png", out / "characters" / f"{name}.png")
         portraits(raw / "characters" / f"{name}-portrait.png", out / "characters" / f"{name}-portrait")
         meta = json.loads((out / "characters" / f"{name}.json").read_text())
-        role = "avatar" if name.startswith("avatar-") else "coordinator" if name == "coordinator" else "agent"
+        role = role_of(name)
         looks[name] = {"role": role, "frame": [meta["frameWidth"], meta["frameHeight"]], "baseline": meta["baseline"]}
     (out / "characters" / "looks.json").write_text(json.dumps(looks, indent=2) + "\n")
     for name, b in briefs.get("pieces", {}).items():

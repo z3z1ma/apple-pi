@@ -1,1 +1,3 @@
-*.log
+# Raw generated art stays local: regenerate it with `pipeline.py batch <theme>`.
+*
+!.gitignore
