@@ -15,3 +15,9 @@ Specified and ticketed (2026-10-19): `spec.md` holds the whole-product specifica
 ## Outcome
 
 Pending: the tickets are built and the operator signs off the final polish pass (ticket 31).
+
+## Morning review
+
+The operator asked (2026-10-19) for the whole task to run end to end without questions. Where a ticket called for his judgment, sign-off, or a choice, I acted on my best judgment, closed the ticket, and noted it here. Reopen the task and the named tickets to change any of these.
+
+- **03 Art bible and art pipeline:** the art bible (`apps/agent-world/art/STYLE.md`) is my reading of the settled decisions and prototype verdicts; not yet agreed by you. Raw art is stored quantized to 256 colours, because Pi clones the whole repository on install.

@@ -4,8 +4,8 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] In the session-state runtime tests, one request returns a page of entries in transcript order, with a cursor to the page before.
-- [ ] A transcript of several thousand entries is read page by page without rescanning the file per entry, which a test shows by counting reads.
-- [ ] Existing single `read_entry` callers keep working.
+- [x] In the session-state runtime tests, one request returns a page of entries in transcript order, with a cursor to the page before.
+- [x] A transcript of several thousand entries is read page by page without rescanning the file per entry, which a test shows by counting reads.
+- [x] Existing single `read_entry` callers keep working.

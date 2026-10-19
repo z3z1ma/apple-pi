@@ -4,9 +4,9 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] In the session-state runtime tests, a subscribed client receives a faux session's reply deltas in order, and an unsubscribed client receives none.
-- [ ] No streamed text is written to `events` or `messages`; the entry named by `turn_end` holds the full reply.
-- [ ] A client that stops reading does not delay the bridge or other clients.
-- [ ] The bridge streams for child sessions too.
+- [x] In the session-state runtime tests, a subscribed client receives a faux session's reply deltas in order, and an unsubscribed client receives none.
+- [x] No streamed text is written to `events` or `messages`; the entry named by `turn_end` holds the full reply.
+- [x] A client that stops reading does not delay the bridge or other clients.
+- [x] The bridge streams for child sessions too.

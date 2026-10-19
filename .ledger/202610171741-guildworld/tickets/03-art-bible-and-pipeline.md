@@ -4,8 +4,8 @@
 
 **Blocked by:** 01 Agent World opens over the real runtime
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Running the tooling on a scene prompt and a sheet prompt produces cleaned assets with no magenta or purple pixels at sprite edges and every frame on one baseline.
-- [ ] The prompt templates state the tile grid and a person's height in tiles for scenes, and each frame's pose and walk phase for sheets.
-- [ ] The art bible is in the repository and the operator agrees it describes the look he wants.
+- [x] Running the tooling on a scene prompt and a sheet prompt produces cleaned assets with no magenta or purple pixels at sprite edges and every frame on one baseline.
+- [x] The prompt templates state the tile grid and a person's height in tiles for scenes, and each frame's pose and walk phase for sheets.
+- [x] The art bible is in the repository and the operator agrees it describes the look he wants.
