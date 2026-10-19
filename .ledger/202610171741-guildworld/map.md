@@ -39,6 +39,8 @@ A whole-product spec for Agent World, ready for `/skill:to-spec`: every architec
 - [Local API access control](decisions/11-local-api-access-control.md): the backend runs in Electron's main process, holds all secrets and external writes, and the renderer reaches it only over typed IPC; no network listener until browser mode, which reuses the browser-pages loopback, per-launch token, and Host/Origin pattern.
 - [What a wing is](decisions/21-what-a-wing-is.md): one wing per repository, remembered once seen (closed when empty); dormant agents rest in the dormant place; agents outside any repository use a shared common room.
 - [How places are built](decisions/15-how-places-are-built.md): interiors are hand-painted scenes per place and theme in a few sizes, with hand-authored walk grids, spots, and hotspots, and placed sprites for doors and banners; tiled exteriors, the borrowed characters, and the pathing failed and became their own tickets.
+- [Characters and portraits](decisions/22-characters-and-portraits.md): HD 16-frame sprite sheets per character with spelled-out walk phases and their own seats; large JRPG portraits with four expressions beside the dialogue box.
+- [Movement and pathing](decisions/23-movement-and-pathing.md): RuneScape's interaction rhythm with smooth string-pulled movement over half-tile walk grids traced by hand; paintings leave room to move and interact.
 
 ## Not yet specified
 
@@ -52,7 +54,7 @@ A whole-product spec for Agent World, ready for `/skill:to-spec`: every architec
 - Several tmux servers in one world (each coordinator already gets its own headquarters).
 - Browser mode: whether a browser client may control agents or only view them; decided with the browser-mode milestone.
 - Accessibility, reduced motion, audio, and the performance budget.
-- Things to interact with: many more objects to fidget with in every place ("ADHD paradise"), a polish pass once places, characters, and movement work.
+- Things to interact with (the painted/overlaid split is decided in [How places are built](decisions/15-how-places-are-built.md)): many more objects to fidget with in every place ("ADHD paradise"), a polish pass once places, characters, and movement work.
 - Rewards and celebration policy, and the serious-mode override for incidents.
 - First run without Pi, Jira, or GitHub: the demo world and onboarding.
 
