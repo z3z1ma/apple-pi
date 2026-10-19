@@ -93,6 +93,7 @@
     { "kind": "glow", "at": [12.27, 5.52], "r": 0.8 },
     { "kind": "glow", "at": [17.43, 5.9], "r": 0.8 }
   ],
+  "host": { "look": "crier", "at": [20.0, 17.2] },
   "enterBy": "Cafe lounge",
   "foreground": [
     { "rect": [2.1, 10.7, 6.6, 4.4], "feet": 15.1 },

@@ -5,6 +5,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import type { DormantAgent } from "../world.js";
+import { parseShared } from "./facts.js";
 import type { Sleeper } from "./projection.js";
 
 const run = promisify(execFile);
@@ -19,28 +20,65 @@ export interface SleeperRow {
 	stopReason: string | null;
 }
 
-/** The inn's sleepers with their observed facts, the most recently stopped first. */
+const sameAgent = (a: DormantAgent, b: DormantAgent) =>
+	(Object.keys(a) as (keyof DormantAgent)[]).every((key) =>
+		key === "task"
+			? a.task === b.task ||
+				(a.task?.title === b.task?.title && a.task?.status === b.task?.status && a.task?.bundle === b.task?.bundle)
+			: a[key] === b[key],
+	);
+
+const sameSleeper = (agent: DormantAgent, sleeper: Sleeper) =>
+	(Object.keys(sleeper) as (keyof Sleeper)[]).every((key) => agent[key] === sleeper[key]);
+
+/** The row each agent was made from, so an agent whose row object is unchanged can be kept as it is. */
+const madeFrom = new WeakMap<DormantAgent, SleeperRow | undefined>();
+
+/**
+ * The inn's sleepers with their observed facts, the most recently stopped first. When nothing changed since
+ * `previous`, returns `previous` itself, so the backend can tell an unchanged inn without comparing it. With `keep`,
+ * an agent made from the same row object as before is kept without reading its task again.
+ */
 export function dormantAgents(
 	sleepers: Sleeper[],
 	rows: Map<string, SleeperRow>,
 	readTask: (currentTask: string | null) => DormantAgent["task"],
+	previous: DormantAgent[] = [],
+	keep = false,
 ): DormantAgent[] {
-	return sleepers.map((sleeper) => {
+	const before = keep ? new Map(previous.map((agent) => [agent.id, agent])) : undefined;
+	const next = sleepers.map((sleeper): DormantAgent => {
 		const row = rows.get(sleeper.id);
-		let repository: string | null = null;
-		try {
-			const git = JSON.parse(row?.git ?? "null") as { repository?: unknown } | null;
-			if (typeof git?.repository === "string") repository = git.repository;
-		} catch {}
-		return {
-			...sleeper,
-			reportsTo: row?.reportsTo ?? null,
-			repository,
-			cwd: row?.cwd ?? "",
-			task: readTask(row?.currentTask ?? null),
-			stopReason: row?.stopReason ?? null,
-		};
+		const kept = before?.get(sleeper.id);
+		if (kept && madeFrom.get(kept) === row && sameSleeper(kept, sleeper)) return kept;
+		return made(sleeper, row, readTask);
 	});
+	if (
+		next.length !== previous.length ||
+		next.some((agent, i) => agent !== previous[i] && !sameAgent(agent, previous[i]))
+	)
+		return next;
+	// Unchanged: keep the previous agents, now made from these rows.
+	for (const [i, agent] of previous.entries()) madeFrom.set(agent, madeFrom.get(next[i]));
+	return previous;
+}
+
+function made(
+	sleeper: Sleeper,
+	row: SleeperRow | undefined,
+	readTask: (currentTask: string | null) => DormantAgent["task"],
+): DormantAgent {
+	const git = parseShared<{ repository?: unknown } | null>(row?.git);
+	const agent: DormantAgent = {
+		...sleeper,
+		reportsTo: row?.reportsTo ?? null,
+		repository: typeof git?.repository === "string" ? git.repository : null,
+		cwd: row?.cwd ?? "",
+		task: readTask(row?.currentTask ?? null),
+		stopReason: row?.stopReason ?? null,
+	};
+	madeFrom.set(agent, row);
+	return agent;
 }
 
 /** A pane to open a woken session's window after, and the tmux server it is on. */

@@ -185,9 +185,8 @@ test("doors travel between the hall, common room, gallery, wings, and square", a
 		await enter(page, "Hall doors", "square");
 		expect(await characters(page)).toEqual(["solo"]);
 		await shot(page, "square");
-		await enter(page, "Forge");
-		await page.getByText("The forge is not open yet.").waitFor({ timeout: 8000 });
-		expect(await place(page)).toBe("square");
+		await enter(page, "Forge", "forge");
+		await enter(page, "Door to the square", "square");
 		await enter(page, "Guild hall", `headquarters:${HQ}`);
 		expect(errors).toEqual([]);
 	} finally {

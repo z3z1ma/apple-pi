@@ -1,6 +1,6 @@
 ## file
 
-The read-only methods (`placeKey`, `figureViews`, `avatarView`, `doorViews`, `toScreen`, `toWorld`, `zoomView`, `galleryView`, `overlayViews`, `bannerViews`, `paintingFrames`, `filterView`, `walkGridShown`, `lookAt`, `hostView`) are the surface the headless tests use through `window.agentWorldView`, and the interface's minimap reads `placeKey`, `figureViews`, `avatarView`, `toWorld`, and `walkGridShown` through `overlay/interface/world-link.ts`. Renaming one breaks them without a type error, because the tests reach it through `page.evaluate`.
+The read-only methods (`placeKey`, `figureViews`, `avatarView`, `doorViews`, `toScreen`, `toWorld`, `zoomView`, `galleryView`, `overlayViews`, `bannerViews`, `paintingFrames`, `filterView`, `walkGridShown`, `lookAt`, `hostView`, `townsfolkViews`, `workViews`) are the surface the headless tests use through `window.agentWorldView`, and the interface's minimap reads `placeKey`, `figureViews`, `townsfolkViews`, `avatarView`, `toWorld`, and `walkGridShown` through `overlay/interface/world-link.ts`. Renaming one breaks them without a type error, because the tests reach it through `page.evaluate`.
 Coupled: apps/agent-world/web/main.tsx, apps/agent-world/web/overlay/interface/world-link.ts
 Verify: apps/agent-world/tests/world-ui.test.ts, apps/agent-world/tests/world-movement.test.ts, apps/agent-world/tests/world-places.test.ts
 
@@ -60,3 +60,8 @@ Only mail whose id was not in the snapshot when the scene was created, and sent 
 Why: a reconnect or the first snapshot would otherwise launch a flock for old mail; the ticket shows traffic between characters in the current place, or out by the door when the receiver is elsewhere.
 Coupled: apps/agent-world/web/game/birds.ts, apps/agent-world/src/backend/mail.ts
 Verify: apps/agent-world/tests/world-rookery.test.ts
+
+## symbol:PlaceScene.create
+
+Arriving in the quest office or the library (not on a relayout), the view starts at the top of the painting (`freeLook`), just below the place's title, and goes back to following the avatar when it walks. The default zoom covers the window, so the entry at the south door left the board (the quest office's whole point) and the librarian's desk cut off under the title.
+Verify: apps/agent-world/tests/world-quest-library.test.ts

@@ -391,8 +391,10 @@ test("Places travels anywhere at once, and Settings toggles the walk grid", asyn
 					"legacy-auth wing",
 				],
 			},
-			{ title: "Outside", names: ["Village square", "The inn", "The rookery"] },
-			{ title: "Not open yet", names: ["The forge", "The quest office", "The library"] },
+			{
+				title: "Outside",
+				names: ["Village square", "The forge", "The quest office", "The library", "The inn", "The rookery"],
+			},
 		]);
 		await shot(page, "tab-places");
 		await page.getByRole("button", { name: /^billing-service wing/ }).click();
@@ -537,7 +539,7 @@ test("tool lines leave out a leading `cd <dir> &&` and the working directory, in
 	}
 }, 30000);
 
-test("the Places tab lists the inn and the rookery as open places, with who sleeps and what mail waits; only the rest are not open yet", async () => {
+test("the Places tab lists every function place as open, the inn with who sleeps and the rookery with what mail waits", async () => {
 	const sleeper = (id: string) => ({
 		id,
 		name: id,
@@ -572,6 +574,9 @@ test("the Places tab lists the inn and the rookery as open places, with who slee
 		const outside = page.getByRole("region", { name: "Outside" });
 		await expect(outside.locator(".aw-row-name").allTextContents()).resolves.toEqual([
 			"Village square",
+			"The forge",
+			"The quest office",
+			"The library",
 			"The inn",
 			"The rookery",
 		]);
@@ -579,12 +584,8 @@ test("the Places tab lists the inn and the rookery as open places, with who slee
 		await expect(outside.getByRole("button", { name: /^The rookery/ }).textContent()).resolves.toContain(
 			"1 letter waits",
 		);
-		const notOpen = page.getByRole("region", { name: "Not open yet" });
-		await expect(notOpen.locator(".aw-row-name").allTextContents()).resolves.toEqual([
-			"The forge",
-			"The quest office",
-			"The library",
-		]);
+		// Every function place is open now: nothing waits under "Not open yet".
+		expect(await page.getByRole("region", { name: "Not open yet" }).count()).toBe(0);
 		await outside.getByRole("button", { name: /^The rookery/ }).click();
 		await vi.waitFor(async () => expect(await place(page)).toBe("rookery"), { timeout: 3000 });
 		expect(errors).toEqual([]);

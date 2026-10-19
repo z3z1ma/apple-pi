@@ -5,13 +5,28 @@ import { type ReactNode, useEffect, useRef } from "react";
 import { focusWorld, trapTab } from "../focus.js";
 import { placePanels } from "./place-panels.js";
 
-export function PlaceDialog({ label, className, children }: { label: string; className: string; children: ReactNode }) {
+export function PlaceDialog({
+	label,
+	className,
+	children,
+	onClose,
+}: {
+	label: string;
+	className: string;
+	children: ReactNode;
+	/** Closing by the button, Escape, or the world: the place's own panels close themselves (else `placePanels`). */
+	onClose?: () => void;
+}) {
 	const ref = useRef<HTMLDivElement>(null);
+	const closeRef = useRef(onClose);
+	closeRef.current = onClose;
+	const close = () => (closeRef.current ?? placePanels.close)();
+	// biome-ignore lint/correctness/useExhaustiveDependencies: `close` reads the latest `onClose` through its ref
 	useEffect(() => {
 		const capture = (event: KeyboardEvent) => {
 			if (event.key === "Escape") {
 				event.stopImmediatePropagation();
-				placePanels.close();
+				close();
 				return;
 			}
 			if (trapTab(event, ref.current)) {
@@ -43,7 +58,7 @@ export function PlaceDialog({ label, className, children }: { label: string; cla
 		<div
 			className="aw-place-veil"
 			onMouseDown={(event) => {
-				if (event.target === event.currentTarget) placePanels.close();
+				if (event.target === event.currentTarget) close();
 			}}
 		>
 			<div
@@ -53,13 +68,7 @@ export function PlaceDialog({ label, className, children }: { label: string; cla
 				aria-modal="true"
 				aria-label={label}
 			>
-				<button
-					type="button"
-					className="aw-place-close"
-					aria-label="Close"
-					title="Close (Esc)"
-					onClick={() => placePanels.close()}
-				/>
+				<button type="button" className="aw-place-close" aria-label="Close" title="Close (Esc)" onClick={close} />
 				<div className="aw-place-body aw-surface">{children}</div>
 			</div>
 		</div>

@@ -21,7 +21,9 @@ import { wireIntegrations } from "./integrations-ipc.js";
 
 // This file runs as dist/electron/main.js, two levels below the app directory.
 const appDir = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-const CAPTURE_DELAY_MS = 3000;
+/** How long the capture waits for a place to draw, and then for its art to settle. */
+const CAPTURE_WAIT_MS = 20_000;
+const CAPTURE_DELAY_MS = 1500;
 
 app.setName("Agent World");
 // Electron's own data stays under Pi's agent directory; the single-instance lock lives there too.
@@ -32,6 +34,26 @@ protocol.registerSchemesAsPrivileged([
 
 if (app.requestSingleInstanceLock()) start();
 else app.quit(); // a second /world: the first instance focuses its window
+
+/**
+ * The capture hook: once a place scene has drawn its painting (or after `CAPTURE_WAIT_MS`), write the window as a
+ * PNG, print which place it shows, and quit.
+ */
+async function captureWhenDrawn(window: BrowserWindow, file: string) {
+	const drawn = `(() => { const v = window.agentWorldView; const p = v && v.place(); return p && v.painting() ? p : ""; })()`;
+	const until = Date.now() + CAPTURE_WAIT_MS;
+	let place = "";
+	while (!window.isDestroyed() && Date.now() < until) {
+		place = String((await window.webContents.executeJavaScript(drawn).catch(() => "")) ?? "");
+		if (place) break;
+		await new Promise((resolve) => setTimeout(resolve, 250));
+	}
+	await new Promise((resolve) => setTimeout(resolve, CAPTURE_DELAY_MS));
+	const image = !window.isDestroyed() ? await window.webContents.capturePage() : undefined;
+	if (image) writeFileSync(file, image.toPNG());
+	console.log(`agent-world capture: ${place ? `place ${place}` : "no place drew"}`);
+	app.quit();
+}
 
 function start() {
 	const world = openWorldBackend(statePaths());
@@ -139,13 +161,6 @@ function start() {
 		void window.loadURL("app://world/index.html");
 
 		const capture = process.env.AGENT_WORLD_CAPTURE;
-		if (capture)
-			window.webContents.once("did-finish-load", () =>
-				setTimeout(async () => {
-					const image = await window?.webContents.capturePage();
-					if (image) writeFileSync(capture, image.toPNG());
-					app.quit();
-				}, CAPTURE_DELAY_MS),
-			);
+		if (capture) window.webContents.once("did-finish-load", () => window && void captureWhenDrawn(window, capture));
 	});
 }

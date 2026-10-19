@@ -1,7 +1,10 @@
 import * as Phaser from "phaser";
 import { type Character, isOutside, type MailItem, OPERATOR, type PlaceRef, placeKey } from "../../src/world.js";
 import { avatarLookIn, lookFor } from "../looks.js";
+import { atlassian } from "../overlay/places/atlassian-state.js";
+import { forge } from "../overlay/places/forge-state.js";
 import { placeActions, placePanels } from "../overlay/places/place-panels.js";
+import { squarePanels } from "../overlay/places/square-panels.js";
 import { pointer } from "../overlay/pointer/pointer-state.js";
 import { type Door, type OverlaySlot, type Point, type Rect, say, type Theme, TILE } from "../theme.js";
 import { worn } from "../theme-store.js";
@@ -24,6 +27,9 @@ import {
 } from "./character-life.js";
 import { assignSpots, charactersIn, doorOf, type Layout, layoutFor, startPlace, walkGrid } from "./layout.js";
 import { clearanceAt, findPath, type Grid, gridFor, isOpen } from "./pathing.js";
+import { ForgeBenches, type WorkView } from "./places/forge.js";
+import { type NoticeView, QuestBoard } from "./places/quest-office.js";
+import { SquareLife, type TownsfolkView } from "./places/square.js";
 import { type Facing, PERSON_TILES, type Pose, Walker, type WalkerView } from "./walker.js";
 
 /** A `#rrggbb` colour as its red, green, and blue. */
@@ -219,6 +225,7 @@ let showGrid = false;
 /** A new theme lays its places out its own way: who held which spot no longer means anything. */
 export function forgetSpots() {
 	heldSpots.clear();
+	SquareLife.forget();
 }
 let lastHeadquarters: string | undefined;
 /** The zoom the operator chose with the wheel, per painting: each place keeps its own. */
@@ -255,6 +262,12 @@ export class PlaceScene extends Phaser.Scene {
 	private beds = new Map<number, { slot: OverlaySlot; image: Phaser.GameObjects.Image }>();
 	/** The place's host (the innkeeper), standing at its post. */
 	private host?: { walker: Walker; look: string; name: string; at: Point };
+	/** In the town square: the townsfolk who stand for Slack channels with unread messages. */
+	private square?: SquareLife;
+	/** At the forge: the open pull requests lying on its workbenches. */
+	private benches?: ForgeBenches;
+	/** At the quest office: the issues assigned to the operator, pinned on its board. */
+	private questBoard?: QuestBoard;
 	/** At the inn: sleepers beyond its spots, upstairs; one who comes down takes the stairs, not the front door. */
 	private upstairs = new Set<string>();
 	/** Messenger birds carrying mail through the place. */
@@ -326,6 +339,9 @@ export class PlaceScene extends Phaser.Scene {
 		this.doors = [];
 		this.beds = new Map();
 		this.host = undefined;
+		this.square = undefined;
+		this.benches = undefined;
+		this.questBoard = undefined;
 		this.upstairs = new Set();
 		this.upstairsTag = undefined;
 		this.window = undefined;
@@ -352,6 +368,40 @@ export class PlaceScene extends Phaser.Scene {
 		this.drawBanners();
 		this.doors.unshift(...this.layout.place.doors);
 		this.addHost();
+		if (this.layout.ref.kind === "square")
+			this.square = new SquareLife(this, {
+				place: () => this.layout.place,
+				approach: (at, then) => this.approach(at, then),
+				pointer: () => (this.pointerAt ? this.toWorld(this.pointerAt) : undefined),
+				changed: () => {
+					if (!this.leaving) this.showCharacters(true);
+				},
+				notify: (text) => this.view.notify(text),
+			});
+		if (this.layout.ref.kind === "forge")
+			this.benches = new ForgeBenches(this, {
+				place: () => this.layout.place,
+				walkUp: (at, then) =>
+					this.walkTo(at, (reached, goal) => {
+						this.avatar.face(at);
+						if (reached || dist(goal, at) <= 1.2) then();
+						else this.view.notify("I can't reach that bench from here.");
+					}),
+				pointer: () => (this.pointerAt ? this.toWorld(this.pointerAt) : undefined),
+				host: () => this.host?.at,
+				uiScale: () => Math.max(1, UI_ZOOM / this.cameras.main.zoom),
+			});
+		if (this.layout.ref.kind === "quest-office")
+			this.questBoard = new QuestBoard(this, {
+				place: () => this.layout.place,
+				walkUp: (at, then) =>
+					this.walkTo(at, () => {
+						this.avatar.face(at);
+						then();
+					}),
+				pointer: () => (this.pointerAt ? this.toWorld(this.pointerAt) : undefined),
+				uiScale: () => Math.max(1, UI_ZOOM / this.cameras.main.zoom),
+			});
 		// Characters first, so the avatar arrives clear of where they stand.
 		this.showCharacters(false);
 		this.addAvatar();
@@ -365,6 +415,13 @@ export class PlaceScene extends Phaser.Scene {
 		this.zoomTarget = this.clampZoom(chosenZoom.get(this.layout.data) ?? this.defaultZoom());
 		camera.setZoom(this.zoomTarget);
 		this.mid = this.keep?.mid ?? this.followMid(camera.zoom);
+		// The quest office's board and the library's desk stand on the north wall: arriving, the view looks there first
+		// (just below the place's title), until the avatar walks.
+		const kind = this.layout.ref.kind;
+		if (!this.keep && (kind === "quest-office" || kind === "library")) {
+			this.freeLook = this.clampMid([this.mid[0], 0], camera.zoom);
+			this.mid = this.freeLook;
+		}
 		this.applyCamera();
 		camera.setBackgroundColor(this.theme.world.backdrop);
 		if (!this.keep) camera.fadeIn(FADE_IN_MS, ...rgb(this.theme.world.backdrop));
@@ -392,6 +449,9 @@ export class PlaceScene extends Phaser.Scene {
 			stopIntents();
 			this.scale.off("resize", this.resized, this);
 			keyboard.off("keydown-G", this.toggleGrid, this);
+			this.square?.destroy();
+			this.benches?.destroy();
+			this.questBoard?.destroy();
 		});
 	}
 
@@ -409,6 +469,9 @@ export class PlaceScene extends Phaser.Scene {
 			if (near >= 1) this.avatarFade = undefined;
 		}
 		this.liveCharacters(time, delta);
+		this.square?.update(delta, Math.max(1, UI_ZOOM / this.cameras.main.zoom));
+		this.benches?.update();
+		this.questBoard?.update();
 		this.keepTagsClear(delta);
 		this.birds.update(delta);
 		this.ambientBirds(time);
@@ -524,6 +587,21 @@ export class PlaceScene extends Phaser.Scene {
 			right: centre + (width / 2) * scale,
 			bottom: y - tail * scale,
 		};
+	}
+
+	/** At the forge, the pull requests lying on its benches. */
+	workViews(): WorkView[] {
+		return this.benches?.views() ?? [];
+	}
+
+	/** At the quest office, the notices pinned on its board. */
+	noticeViews(): NoticeView[] {
+		return this.questBoard?.views() ?? [];
+	}
+
+	/** In the town square, the townsfolk standing for Slack channels with unread messages. */
+	townsfolkViews(): TownsfolkView[] {
+		return this.square?.views() ?? [];
 	}
 
 	/** The place's host, where it stands. */
@@ -1254,10 +1332,18 @@ export class PlaceScene extends Phaser.Scene {
 			else if (moved) figure.walker.moveTo(spot);
 			this.dress(figure);
 		}
-		// Characters block only their own footprint, at the spot they stand on or are walking to; so does the host.
+		// In the square, townsfolk stand on the painted spots agents left free.
+		const held = new Set(spots.values());
+		this.square?.arrange(
+			this.layout.place.spots.map((_, i) => i).filter((i) => !held.has(i)),
+			animate,
+		);
+		// Characters block only their own footprint, at the spot they stand on or are walking to; so do the host and
+		// the townsfolk.
 		this.walkable = gridFor(this.layout.place, [
 			...this.present().map(({ spot }) => spot!),
 			...(this.host ? [this.host.at] : []),
+			...(this.square?.occupied() ?? []),
 		]);
 		for (const figure of arrivals)
 			this.enter(figure, inn && this.upstairs.has(figure.character.id) ? this.stairs() : undefined);
@@ -1635,7 +1721,11 @@ export class PlaceScene extends Phaser.Scene {
 
 	/** A point near `at` where the avatar stands clear of everyone at their spots (and the host), on open floor. */
 	private clearOfOthers(at: Point): Point {
-		const others = [...this.present().map(({ spot }) => spot!), ...(this.host ? [this.host.at] : [])];
+		const others = [
+			...this.present().map(({ spot }) => spot!),
+			...(this.host ? [this.host.at] : []),
+			...(this.square?.occupied() ?? []),
+		];
 		// Too close: beside them, or in front of them (south) by less than a body's height, where the avatar would cover
 		// them, or just behind them, where they would cover it.
 		const crowded = ([x, y]: Point) =>
@@ -1680,12 +1770,15 @@ export class PlaceScene extends Phaser.Scene {
 			.sort((a, b) => b.walker.y - a.walker.y)
 			.map(({ character }) => this.characterTarget(character));
 		const host = this.host && over(this.host.walker) ? [this.hostTarget()] : [];
+		const townsfolk = this.square?.targetsAt([x, y]) ?? [];
+		const work = this.benches?.targetsAt([x, y]) ?? [];
+		const notices = this.questBoard?.targetsAt([x, y]) ?? [];
 		const doors = this.doors.filter(({ rect }) => inside(rect)).map((door) => this.doorTarget(door));
 		const furniture = (this.layout.place.furniture ?? [])
 			.filter(({ rect }) => inside(rect))
 			.map((piece) => this.furnitureTarget(piece));
 		const banners = this.bannerRects.filter(({ rect }) => inside(rect)).map(({ name }) => this.bannerTarget(name));
-		return [...people, ...host, ...doors, ...banners, ...furniture];
+		return [...people, ...townsfolk, ...host, ...work, ...notices, ...doors, ...banners, ...furniture];
 	}
 
 	/** A banner: its whole name, however short it had to be stitched. */
@@ -1711,20 +1804,41 @@ export class PlaceScene extends Phaser.Scene {
 	private openHostPanel() {
 		if (this.layout.ref.kind === "inn") placePanels.open("innkeeper");
 		if (this.layout.ref.kind === "rookery") placePanels.open("rookery");
+		if (this.layout.ref.kind === "square") squarePanels.openCrier();
+		if (this.layout.ref.kind === "forge") forge.open();
+		if (this.layout.ref.kind === "quest-office") atlassian.open({ kind: "clerk" });
+		if (this.layout.ref.kind === "library") atlassian.open({ kind: "librarian" });
 	}
 
 	/** Furniture that answers the pointer: asking at an inn table opens the innkeeper's register at once. */
-	private furnitureTarget(piece: { name: string; use: string }): Target {
+	private furnitureTarget(piece: { name: string; rect: Rect; use: string }): Target {
 		const actions =
 			piece.use === "innkeeper"
 				? [action(say(this.theme, "ask-host"), () => placePanels.open("innkeeper"))]
-				: piece.use === "rookery"
-					? [
-							action("Read the mail", () => placePanels.open("rookery")),
-							action(say(this.theme, "write-letter"), () => placePanels.open("rookery", { write: true })),
-						]
-					: [];
+				: piece.use === "smith"
+					? [action(say(this.theme, "ask-smith"), () => forge.open())]
+					: piece.use === "clerk" || piece.use === "librarian"
+						? this.atlassianFurniture(piece)
+						: piece.use === "rookery"
+							? [
+									action("Read the mail", () => placePanels.open("rookery")),
+									action(say(this.theme, "write-letter"), () => placePanels.open("rookery", { write: true })),
+								]
+							: [];
 		return { name: piece.name, tone: "object", actions };
+	}
+
+	/**
+	 * The quest office's board (the piece holding its notices) reads as the clerk's list; its counter and the library's
+	 * desks ask the host.
+	 */
+	private atlassianFurniture(piece: { name: string; rect: Rect; use: string }) {
+		const [x, y, w, h] = piece.rect;
+		const holdsNotices = this.layout.place.overlaySlots.some(
+			({ kind, at: [sx, sy] }) => kind === "notice" && sx >= x && sx <= x + w && sy >= y && sy <= y + h,
+		);
+		const panel = piece.use === "clerk" ? ({ kind: "clerk" } as const) : ({ kind: "librarian" } as const);
+		return [action(holdsNotices ? "Read" : "Ask at", () => atlassian.open(panel))];
 	}
 
 	/** A sleeper at the inn: read its last conversation (the default), or wake it. */
@@ -1971,7 +2085,14 @@ export class PlaceScene extends Phaser.Scene {
 		const headquarters = isOutside(here) ? lastHeadquarters : here.headquarters;
 		const world = this.store.get();
 		if (door.to === "square") return this.travel({ kind: "square" });
-		if ((door.to === "inn" || door.to === "rookery") && this.theme.places[door.to])
+		if (
+			(door.to === "inn" ||
+				door.to === "rookery" ||
+				door.to === "forge" ||
+				door.to === "quest-office" ||
+				door.to === "library") &&
+			this.theme.places[door.to]
+		)
 			return this.travel({ kind: door.to });
 		if (door.to === "wing" && door.repository && !isOutside(here))
 			return this.travel({ kind: "wing", headquarters: here.headquarters, repository: door.repository });

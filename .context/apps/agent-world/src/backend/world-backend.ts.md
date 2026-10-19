@@ -18,6 +18,11 @@ The world is reread when `max(seq)` of `events` changes, and also every `TASK_RE
 Why: every fact a character shows changes with an event, except a ledger task's title and status, which live in its `task.md` and can be edited with no runtime event.
 Verify: apps/agent-world/tests/backend.test.ts
 
+A reread reads only the session rows that newer events name plus the ones awake at the last read (`CHANGED_SESSIONS`), keeping the other rows from before; every row is read again on the first read, after a reconnect or a new database (its sequence went back), and every `FULL_REREAD_POLLS` polls. Sleepers' task files are checked only on the task rereads, and `dormantAgents` keeps each sleeper made from an unchanged row object, returning the previous array itself when nothing changed, so `publish` compares the inn (and the mail, kept the same way) by reference.
+Why: measured in ticket 30 with 3,000 and 10,000 stopped root sessions, reading and comparing every row on each event was most of the main process's time while one agent worked (123 and 364 ms a second before, 30 and 64 after). It relies on every change to a session's row coming with an event naming that session, as the runtime's facts, run states, incarnations, and tasks do; the full reread bounds the cost of any that does not.
+Coupled: apps/agent-world/src/backend/inn.ts, apps/agent-world/src/backend/facts.ts, components/session-state/src/runtime.ts
+Verify: apps/agent-world/tests/backend.test.ts, apps/agent-world/tests/inn.test.ts
+
 The feed keeps its own sequence cursor, apart from the world's: the first read starts from a short backlog (the last `FEED_BACKLOG` lines within the last `FEED_BACKLOG_EVENTS` events), and a database whose sequence is behind the cursor (a new database) starts again from a backlog.
 Why: the world's read skips when nothing changed, but every line must reach the chatbox once and in order, within a second.
 Coupled: apps/agent-world/src/backend/feed.ts

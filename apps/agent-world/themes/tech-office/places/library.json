@@ -52,6 +52,7 @@
   "doors": [{ "name": "Doors to the plaza", "rect": [10.4, 12.5, 3.2, 2.6], "standAt": [12, 12.6], "to": "square" }],
   "enterBy": "Doors to the plaza",
   "host": { "look": "librarian", "at": [10.9, 2.9] },
+  "furniture": [{ "name": "Help desk", "rect": [9.6, 2.8, 4.7, 1.65], "use": "librarian" }],
   "overlaySlots": [
     { "kind": "fidget", "at": [5.5, 3.9] },
     { "kind": "fidget", "at": [7.6, 3.6] },

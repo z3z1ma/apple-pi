@@ -11,3 +11,7 @@ Coupled: apps/agent-world/electron.vite.config.ts, apps/agent-world/src/app-file
 Why: the renderer shows untrusted text; the main process must not trust the renderer's own check, or a `file:` or custom-scheme link could launch a local handler.
 Coupled: apps/agent-world/src/backend/links.ts, apps/agent-world/src/electron/preload.ts
 Verify: apps/agent-world/tests/links.test.ts
+
+`AGENT_WORLD_CAPTURE` waits until `window.agentWorldView` reports a place with a painting (at most `CAPTURE_WAIT_MS`), then `CAPTURE_DELAY_MS`, writes the PNG, prints `agent-world capture: place <key>` (or `no place drew`), and quits.
+Why: the start-up check (`npm run check:world-start`, apps/agent-world/scripts/startup-check.ts) reads that line and the PNG; a fixed delay captured a half-loaded window on a slow start.
+Coupled: apps/agent-world/scripts/startup-check.ts, apps/agent-world/web/main.tsx

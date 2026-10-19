@@ -75,6 +75,13 @@ export const OVERLAYS = [
 	"bird-2",
 	"bird-3",
 	"letters",
+	"blade-passing",
+	"blade-failing",
+	"blade-running",
+	"notice-open",
+	"notice-urgent",
+	"notice-progress",
+	"notice-done",
 ] as const;
 
 /** A pack the world would not switch to, with why: each problem as `file: fault`. */

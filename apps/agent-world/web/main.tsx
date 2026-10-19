@@ -14,11 +14,18 @@ import {
 	type OverlayView,
 	PlaceScene,
 } from "./game/place-scene.js";
+import type { WorkView } from "./game/places/forge.js";
+import type { NoticeView } from "./game/places/quest-office.js";
+import type { TownsfolkView } from "./game/places/square.js";
 import { avatarLooks } from "./looks.js";
 import { conversationPanel } from "./overlay/conversation/panel-state.js";
+import { chatLines } from "./overlay/interface/chat-lines.js";
 import { publishMinimap } from "./overlay/interface/world-link.js";
 import { Overlay } from "./overlay/overlay.js";
+import { atlassian } from "./overlay/places/atlassian-state.js";
+import { forge } from "./overlay/places/forge-state.js";
 import { placePanels } from "./overlay/places/place-panels.js";
+import { slack } from "./overlay/places/slack-state.js";
 import { applyTheme, loadTheme, type Theme, ThemeProblem } from "./theme.js";
 import { themeStore } from "./theme-store.js";
 import { type ThemeOption, viewStore, type WorldIntent } from "./view-state.js";
@@ -51,6 +58,12 @@ declare global {
 			lookAt(door: string): boolean;
 			/** Messenger birds in flight with mail: which letter, from whom to whom, where, and its wing frame. */
 			birds(): { id: string; from: string; to: string; x: number; y: number; frame: number; out: boolean }[];
+			/** In the town square, the townsfolk standing for Slack channels with unread messages. */
+			townsfolk(): TownsfolkView[];
+			/** At the forge, the pull requests lying on its benches. */
+			work(): WorkView[];
+			/** At the quest office, the issues pinned on its board. */
+			notices(): NoticeView[];
 			/** The place's host (the innkeeper), where it stands. */
 			host(): { name: string; look: string; x: number; y: number } | undefined;
 			/** The operator's avatar: where it is, its facing and frame, and the rest of its walk. */
@@ -243,6 +256,12 @@ const talkedTo: string[] = [];
 // Talking to a character, from the world or the side panel, opens its conversation panel.
 conversationPanel.connect(window.agentWorld);
 placePanels.connect(window.agentWorld, view);
+slack.connect(window.agentWorld);
+forge.connect(window.agentWorld);
+atlassian.connect(window.agentWorld, view);
+void atlassian.refreshStatus();
+// Outside writes as the operator, from any place, reach the chatbox.
+chatLines.connect(window.agentWorld);
 conversations.subscribe((character) => {
 	talkedTo.push(character.id);
 	conversationPanel.open(character);
@@ -264,6 +283,9 @@ window.agentWorldView = {
 	walkGrid: () => active()?.walkGridShown() ?? false,
 	lookAt: (door) => active()?.lookAt(door) ?? false,
 	host: () => active()?.hostView(),
+	townsfolk: () => active()?.townsfolkViews() ?? [],
+	work: () => active()?.workViews() ?? [],
+	notices: () => active()?.noticeViews() ?? [],
 	birds: () => active()?.birdViews() ?? [],
 	avatar: () => active()?.avatarView(),
 	toScreen: (x, y) => active()?.toScreen([x, y]),

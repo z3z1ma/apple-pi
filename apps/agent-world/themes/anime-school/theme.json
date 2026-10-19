@@ -58,7 +58,26 @@
     "conversation-opening": "Opening the notebook…",
     "conversation-older": "Flipping back a few pages…",
     "conversation-asleep": "{name} is asleep in the dormitory. Wake it to talk; it opens in a new terminal window.",
-    "slack-later": "Slack joins with the school courtyard"
+    "quest-greeting": "{count} requests are addressed to you! Pick one, or look through the whole file.",
+    "quest-greeting-one": "One request is addressed to you! Or look through the whole file.",
+    "quest-empty": "No requests for you today. The council file has all the others.",
+    "quest-signed-out": "I can't open the council files without your Atlassian sign-in. You can add it in Settings!",
+    "quest-search": "Search every request by words or key",
+    "quest-more": "{count} more in the file",
+    "library-greeting": "Welcome to the library! What would you like to look up?",
+    "library-signed-out": "Please sign in to Atlassian in Settings first, then I can find any page for you.",
+    "library-search": "Search every page in Confluence",
+    "library-recent": "Borrowed lately",
+    "library-recent-empty": "Pages you read here are noted on your library card.",
+    "crier-greeting": "This is the broadcast club! {count} channels have news. Tell me any channel and I'll read it out!",
+    "crier-quiet": "No news right now! Tell me any channel and I'll read it out.",
+    "crier-signed-out": "The broadcast room isn't tuned in to Slack yet. Sign in and I can read out any channel!",
+    "crier-search": "Which channel?",
+    "forge-greeting": "All of these are yours or your classmates'! Which one shall we look at?",
+    "forge-empty": "The benches are empty: nothing of yours or your classmates' is open on GitHub.",
+    "forge-loading": "Let's see what's on the benches…",
+    "ask-smith": "Ask the shop teacher",
+    "forge-more": "{count} more on the shelf"
   },
   "style": {
     "--aw-font-body": "\"Hiragino Maru Gothic ProN\", \"Hiragino Maru Gothic Pro\", \"Avenir Next\", \"Helvetica Neue\", sans-serif",
@@ -118,6 +137,7 @@
       }
     },
     "glow": ["#fff3d6", "#ffd49a", "#ffab6b"],
+    "notice": { "paper": [0.16, 0.08, 0.68, 0.78] },
     "banner": {
       "tiles": 2.8,
       "text": [0.12, 0.17, 0.76, 0.66],

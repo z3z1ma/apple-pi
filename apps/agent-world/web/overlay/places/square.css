@@ -1,0 +1,341 @@
+/* The town square's panels (the crier, a channel read in a panel) and Slack in the interface (the tab, Settings):
+   layout only; each theme pack's skin gives them their look. */
+
+.aw-crier.aw-place-panel {
+	width: min(560px, calc(100vw - 48px));
+}
+
+/* Listing channels, the crier keeps one height while results come and go. */
+.aw-crier-listing.aw-place-panel {
+	height: min(620px, calc(100vh - 64px));
+}
+
+.aw-slack-channel.aw-place-panel {
+	width: min(760px, calc(100vw - 48px));
+	height: min(760px, calc(100vh - 56px));
+	max-height: none;
+}
+
+.aw-crier-listing .aw-place-body,
+.aw-slack-channel .aw-place-body {
+	flex: 1;
+}
+
+.aw-slack-inert {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	min-height: 0;
+}
+
+.aw-crier-search {
+	display: block;
+}
+
+.aw-crier-caption {
+	margin: 2px 2px 6px;
+	font-size: 12px;
+}
+
+/* A channel in a list: its kind, its name, mentions and unread, and Read on hover. */
+.aw-slack-list {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.aw-slack-row-main {
+	all: unset;
+	box-sizing: border-box;
+	display: grid;
+	grid-template-columns: 18px minmax(0, 1fr) auto auto auto;
+	align-items: center;
+	gap: 8px;
+	width: 100%;
+	padding: 7px 8px;
+	cursor: pointer;
+}
+
+.aw-slack-kind {
+	display: grid;
+	place-items: center;
+	width: 18px;
+	height: 18px;
+}
+
+.aw-slack-kind svg {
+	display: block;
+}
+
+.aw-slack-name {
+	overflow: hidden;
+	font-size: 14px;
+	font-weight: 600;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+
+.aw-slack-mentions,
+.aw-slack-count {
+	display: inline-grid;
+	place-items: center;
+	min-width: 22px;
+	height: 20px;
+	box-sizing: border-box;
+	padding: 0 7px;
+	font-size: 11.5px;
+	font-weight: 700;
+	line-height: 1;
+	font-variant-numeric: tabular-nums;
+}
+
+.aw-slack-go {
+	font-size: 11.5px;
+	opacity: 0;
+}
+
+.aw-slack-row-main:hover .aw-slack-go,
+.aw-slack-row-main:focus-visible .aw-slack-go {
+	opacity: 1;
+}
+
+/* Signing in, wherever Slack is not signed in yet. */
+.aw-slack-signin {
+	display: grid;
+	justify-items: start;
+	gap: 10px;
+	padding: 12px 2px 4px;
+}
+
+.aw-slack-lead {
+	margin: 0;
+	font-size: 14px;
+	line-height: 1.45;
+}
+
+.aw-slack-note {
+	margin: 0;
+	font-size: 12px;
+	line-height: 1.4;
+}
+
+/* A channel: its head, then its messages, newest last. */
+.aw-slack-title {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.aw-slack-title .aw-slack-kind {
+	width: 20px;
+	height: 20px;
+}
+
+.aw-slack-title .aw-slack-kind svg {
+	width: 18px;
+	height: 18px;
+}
+
+.aw-slack-head-actions {
+	display: flex;
+	flex: none;
+	flex-wrap: wrap;
+	justify-content: flex-end;
+	gap: 6px;
+	margin-left: auto;
+	align-self: flex-start;
+}
+
+.aw-slack-messages {
+	flex: 1;
+	min-height: 0;
+	margin: 0 -10px;
+	padding: 4px 10px 10px;
+	overflow-y: auto;
+	scrollbar-width: thin;
+}
+
+.aw-slack-entry {
+	position: relative;
+}
+
+.aw-slack-message {
+	padding: 7px 8px 6px;
+}
+
+.aw-slack-message > header {
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
+	margin-bottom: 1px;
+}
+
+.aw-slack-author {
+	font-size: 14px;
+	font-weight: 700;
+}
+
+.aw-slack-message time {
+	font-size: 11px;
+	font-variant-numeric: tabular-nums;
+}
+
+.aw-slack-text {
+	font-size: 14px;
+	line-height: 1.42;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+.aw-slack-message {
+	position: relative;
+}
+
+.aw-slack-acts {
+	position: absolute;
+	top: 4px;
+	right: 6px;
+	display: flex;
+	gap: 2px;
+	padding: 2px;
+	opacity: 0;
+}
+
+.aw-slack-message:hover > .aw-slack-acts,
+.aw-slack-message:focus-within > .aw-slack-acts,
+.aw-slack-acts:has([aria-pressed="true"]) {
+	opacity: 1;
+}
+
+.aw-slack-act,
+.aw-slack-replies {
+	all: unset;
+	box-sizing: border-box;
+	padding: 2px 8px;
+	font-size: 12px;
+	cursor: pointer;
+}
+
+.aw-slack-replies {
+	margin: 3px 0 0 -6px;
+	padding: 2px 6px;
+	font-weight: 600;
+}
+
+.aw-slack-new {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: 6px 0 2px;
+	font-size: 11px;
+	font-weight: 700;
+}
+
+.aw-slack-new::before,
+.aw-slack-new::after {
+	content: "";
+	flex: 1;
+	height: 1px;
+}
+
+.aw-slack-new::before {
+	flex: 0 0 12px;
+}
+
+/* A thread opened under its first message: replies and what is being written, set in. */
+.aw-slack-thread {
+	margin: 0 0 8px 22px;
+	padding: 2px 0 4px 12px;
+}
+
+.aw-slack-reply {
+	padding-top: 5px;
+}
+
+.aw-slack-reply .aw-slack-author {
+	font-size: 13px;
+}
+
+.aw-slack-reply .aw-slack-text {
+	font-size: 13.5px;
+}
+
+.aw-slack-form {
+	display: grid;
+	gap: 8px;
+	margin: 6px 0 2px;
+	padding: 10px;
+}
+
+.aw-slack-input {
+	box-sizing: border-box;
+	width: 100%;
+	padding: 9px 11px;
+	resize: vertical;
+}
+
+.aw-slack-form-foot {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.aw-slack-form-foot .aw-slack-note {
+	flex: 1;
+}
+
+.aw-slack-done {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px;
+}
+
+.aw-slack-ask-to {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+	font-size: 13px;
+	font-weight: 600;
+}
+
+.aw-slack-ask-to select {
+	padding: 4px 8px;
+	font: inherit;
+}
+
+/* The side panel's Slack tab and Settings' Slack section. */
+.aw-slack-tab .aw-slack-row-main {
+	padding: 6px 6px;
+}
+
+.aw-slack-tab .aw-slack-name {
+	font-size: 13px;
+}
+
+.aw-slack-tab .aw-slack-signin,
+.aw-slack-settings .aw-slack-signin {
+	padding: 4px 0;
+}
+
+.aw-slack-account {
+	display: grid;
+	justify-items: start;
+	gap: 8px;
+}
+
+.aw-slack-account .aw-note {
+	margin: 0;
+}
+
+.aw-slack-url {
+	display: block;
+	margin-top: 2px;
+	font-size: 11px;
+}
+
+/* The unread orb before Slack is signed in: there, but quiet. */
+.aw-orb-off .aw-orb-glass {
+	opacity: 0.75;
+}

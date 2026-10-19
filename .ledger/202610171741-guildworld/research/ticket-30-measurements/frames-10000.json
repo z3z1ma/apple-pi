@@ -1,0 +1,67 @@
+{
+  "label": "10k",
+  "workers": 40,
+  "dormant": 10000,
+  "charactersDrawn": 40,
+  "rest": {
+    "frames": 299,
+    "fps": 59.8,
+    "meanMs": 16.777591973244146,
+    "p95Ms": 16.799999999999272,
+    "maxMs": 33.400000000000546,
+    "over33": 1,
+    "longTasks": 0,
+    "longTaskMs": 0,
+    "pushes": 0,
+    "pushSyncMs": 0
+  },
+  "fullUpdates": {
+    "frames": 291,
+    "fps": 58.2,
+    "meanMs": 17.181443298969075,
+    "p95Ms": 16.80000000000109,
+    "maxMs": 33.399999999999636,
+    "over33": 0,
+    "longTasks": 0,
+    "longTaskMs": 0,
+    "pushes": 25,
+    "pushSyncMs": 13.304000000953675
+  },
+  "smallUpdates": {
+    "frames": 300,
+    "fps": 60,
+    "meanMs": 16.666000000000004,
+    "p95Ms": 16.700000000000728,
+    "maxMs": 16.80000000000291,
+    "over33": 0,
+    "longTasks": 0,
+    "longTaskMs": 0,
+    "pushes": 25,
+    "pushSyncMs": 4.495999999046326
+  },
+  "agentsTabFullUpdates": {
+    "frames": 300,
+    "fps": 60,
+    "meanMs": 16.665999999999997,
+    "p95Ms": 16.799999999999272,
+    "maxMs": 16.80000000000291,
+    "over33": 0,
+    "longTasks": 0,
+    "longTaskMs": 0,
+    "pushes": 25,
+    "pushSyncMs": 12.916000007390975
+  },
+  "agentsTabSmallUpdates": {
+    "frames": 300,
+    "fps": 60,
+    "meanMs": 16.66600000000001,
+    "p95Ms": 16.700000000000728,
+    "maxMs": 16.80000000000291,
+    "over33": 0,
+    "longTasks": 0,
+    "longTaskMs": 0,
+    "pushes": 25,
+    "pushSyncMs": 4.6119999969005585
+  },
+  "errors": []
+}

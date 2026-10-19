@@ -5,10 +5,15 @@ import { say } from "../../theme.js";
 import { useTheme } from "../../theme-store.js";
 import type { WorldStore } from "../../world-store.js";
 import { focusWorld, trapTab } from "../focus.js";
+import "./atlassian.css";
+import { ForgePanels } from "./forge.js";
 import { InnkeeperRegister } from "./innkeeper.js";
+import { LibraryPanels } from "./library.js";
 import { placeActions, placePanels } from "./place-panels.js";
 import "./places.css";
+import { QuestOfficePanels } from "./quest-office.js";
 import { RookeryView } from "./rookery.js";
+import { SquarePanels } from "./square.js";
 
 export function PlacesOverlay({ store }: { store: WorldStore }) {
 	const state = useSyncExternalStore(placePanels.subscribe, placePanels.get);
@@ -17,6 +22,10 @@ export function PlacesOverlay({ store }: { store: WorldStore }) {
 		<div className="aw-interface aw-places">
 			{state.panel === "innkeeper" && <InnkeeperRegister key={state.opening} world={world} />}
 			{state.panel === "rookery" && <RookeryView key={state.opening} world={world} />}
+			{!state.panel && <SquarePanels world={world} />}
+			{!state.panel && <ForgePanels world={world} />}
+			{!state.panel && <QuestOfficePanels world={world} />}
+			{!state.panel && <LibraryPanels world={world} />}
 			{state.confirmEnd && <ConfirmEnd {...state.confirmEnd} />}
 		</div>
 	);

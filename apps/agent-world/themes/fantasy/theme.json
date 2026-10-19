@@ -58,7 +58,26 @@
     "conversation-opening": "Opening the book…",
     "conversation-older": "Turning back the pages…",
     "conversation-asleep": "{name} is asleep at the inn. Wake it to talk; it opens in a new terminal window.",
-    "slack-later": "Slack joins with the town square"
+    "quest-greeting": "{count} quests bear your name. Pick one, or search the archive for any other.",
+    "quest-greeting-one": "One quest bears your name. Or search the archive for any other.",
+    "quest-empty": "No quest bears your name just now. The archive holds every other.",
+    "quest-signed-out": "I pin quests only for a member with a guild seal. Sign in to Atlassian in Settings, and the board fills.",
+    "quest-search": "Search every quest by words or key",
+    "quest-more": "{count} more at the counter",
+    "library-greeting": "Every scroll in Confluence is catalogued here. What do you seek?",
+    "library-signed-out": "The stacks open to readers with a library seal. Sign in to Atlassian in Settings.",
+    "library-search": "Search every scroll in Confluence",
+    "library-recent": "Read lately",
+    "library-recent-empty": "Nothing read yet. Pages you open here are kept on this shelf.",
+    "crier-greeting": "Hear ye! {count} channels have news for you. Name any channel, read or not, and I'll cry it out.",
+    "crier-quiet": "All is quiet in the channels. Name any one, and I'll cry out what was said.",
+    "crier-signed-out": "I can't hear Slack yet, friend. Sign in, and every channel's news is mine to cry.",
+    "crier-search": "Name a channel",
+    "forge-greeting": "Every piece on these benches is yours or your guild's. Which shall we look over?",
+    "forge-empty": "The benches are bare: nothing of yours or your guild's is open on GitHub.",
+    "forge-loading": "Let me see what's on the benches…",
+    "ask-smith": "Ask the smith",
+    "forge-more": "{count} more on the rack"
   },
   "style": {
     "--aw-font-body": "\"Iowan Old Style\", Georgia, serif",
@@ -118,6 +137,7 @@
       }
     },
     "glow": ["#ffe2a0", "#ffc46e", "#ff963c"],
+    "notice": { "paper": [0.15, 0.15, 0.71, 0.73], "cutOut": true },
     "banner": {
       "tiles": 2.3,
       "text": [0.29, 0.2, 0.42, 0.48],

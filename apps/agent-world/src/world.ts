@@ -11,8 +11,15 @@ export type Role = "coordinator" | "worker" | "independent";
 export type PlaceRef =
 	| { kind: "headquarters" | "common-room" | "gallery"; headquarters: string }
 	| { kind: "wing"; headquarters: string; repository: string }
-	/** Outside: the village square, the inn where dormant agents sleep, and the rookery where mail comes and goes. */
-	| { kind: "square" | "inn" | "rookery" };
+	/**
+	 * Outside: the village square, the inn where dormant agents sleep, the rookery where mail comes and goes, and the
+	 * function places off the square (the forge for GitHub, the quest office for Jira, the library for Confluence).
+	 */
+	| { kind: OutsideKind };
+
+/** The places outside any headquarters. */
+export const OUTSIDE_KINDS = ["square", "inn", "rookery", "forge", "quest-office", "library"] as const;
+export type OutsideKind = (typeof OUTSIDE_KINDS)[number];
 
 /** A session's run state as the runtime records it. */
 export type RunState = "idle" | "thinking" | "writing_reply" | "running_tool" | "compacting";
@@ -160,9 +167,9 @@ export type CommandReceipt =
 	| { ok: true; stage: "accepted" | "delivered" | "applied"; note?: string }
 	| { ok: false; reason: string; confirm?: boolean };
 
-/** A place outside any headquarters: the square, the inn, or the rookery. */
-export function isOutside(place: PlaceRef): place is { kind: "square" | "inn" | "rookery" } {
-	return place.kind === "square" || place.kind === "inn" || place.kind === "rookery";
+/** A place outside any headquarters: the square, or a place off it. */
+export function isOutside(place: PlaceRef): place is { kind: OutsideKind } {
+	return (OUTSIDE_KINDS as readonly string[]).includes(place.kind);
 }
 
 /** One string per place, for maps and scene data. */

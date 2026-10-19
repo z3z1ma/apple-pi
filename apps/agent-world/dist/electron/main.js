@@ -154,12 +154,21 @@ function openCommands(socketPath) {
 }
 //#endregion
 //#region apps/agent-world/src/world.ts
+/** The places outside any headquarters. */
+var OUTSIDE_KINDS = [
+	"square",
+	"inn",
+	"rookery",
+	"forge",
+	"quest-office",
+	"library"
+];
 /** The label mail from the operator carries as its sender (`from`), so agents can tell it from mail between them. */
 var OPERATOR = "operator";
 var MAIL_BODY_MAX = 4e3;
-/** A place outside any headquarters: the square, the inn, or the rookery. */
+/** A place outside any headquarters: the square, or a place off it. */
 function isOutside(place) {
-	return place.kind === "square" || place.kind === "inn" || place.kind === "rookery";
+	return OUTSIDE_KINDS.includes(place.kind);
 }
 /** Longest text of one transcript field sent to the world UI. */
 var TRANSCRIPT_TEXT_MAX = 2e4;
@@ -605,27 +614,203 @@ async function instruct(commands, character, commandId, instruction, onReceipt) 
 	return result;
 }
 //#endregion
+//#region apps/agent-world/src/backend/facts.ts
+/** The facts columns for `select ... from sessions s join incarnations i ...` (the current incarnation). */
+var FACTS_COLUMNS = `s.run_state as runState, s.prompt, s.needs_you_since as needsYouSince, s.seen_at as seenAt,
+	s.settled_at as settledAt, s.current_tool as currentTool, s.current_tool_arg as currentToolArg,
+	s.current_tool_since as currentToolSince, s.current_task as currentTask, s.model, s.context_tokens as contextTokens,
+	s.context_window as contextWindow, s.cost, i.tmux_socket as tmuxSocket, i.pane_id as paneId,
+	(select ts.name from tmux_window_links l join tmux_sessions ts on ts.socket = l.socket and ts.id = l.session_id
+		where l.socket = p.socket and l.window_id = p.window_id order by l.window_index limit 1) as tmuxSession,
+	(select l.window_index from tmux_window_links l
+		where l.socket = p.socket and l.window_id = p.window_id order by l.window_index limit 1) as windowIndex`;
+/** Joins for `FACTS_COLUMNS`: the session's current incarnation `i` and its pane `p`. */
+var FACTS_JOINS = `left join incarnations i on i.session_id = s.id and i.generation = s.generation
+left join tmux_panes p on p.socket = i.tmux_socket and p.id = i.pane_id`;
+function parse$3(json) {
+	if (!json) return void 0;
+	try {
+		return JSON.parse(json);
+	} catch {
+		return;
+	}
+}
+var PARSED_KEPT = 2e4;
+var parsed = /* @__PURE__ */ new Map();
+/**
+* `JSON.parse` for column values that repeat from read to read (`git`, `config`, `current_task`), parsed once each.
+* The values are shared between readers: never change one.
+*/
+function parseShared(json) {
+	if (!json) return void 0;
+	if (parsed.has(json)) return parsed.get(json);
+	if (parsed.size >= PARSED_KEPT) parsed.clear();
+	const value = parse$3(json);
+	parsed.set(json, value);
+	return value;
+}
+var text$1 = (value) => typeof value === "string" && value.trim() ? value.trim() : null;
+/** The questions of an `ask_user_question` prompt, as the panel's form needs them; undefined when they do not parse. */
+function questionsOf(value) {
+	if (!Array.isArray(value) || !value.length) return void 0;
+	const questions = [];
+	for (const raw of value) {
+		const question = text$1(raw?.question);
+		const options = Array.isArray(raw?.options) ? raw.options.map((option) => ({
+			label: typeof option?.label === "string" ? option.label : "",
+			description: typeof option?.description === "string" ? option.description : ""
+		})) : [];
+		if (!question || !options.length || options.some((option) => !option.label)) return void 0;
+		questions.push({
+			question,
+			header: text$1(raw.header),
+			options,
+			multiSelect: raw.multiSelect === true
+		});
+	}
+	return questions;
+}
+/**
+* The open prompt's kind and what it asks: its title, or else its first question. A questionnaire also carries its id
+* and questions, so the conversation panel can answer it.
+*/
+function asking(prompt) {
+	if (prompt === null) return null;
+	const open = parse$3(prompt);
+	const first = Array.isArray(open?.questions) ? open.questions[0] : void 0;
+	const kind = text$1(open?.kind) ?? "dialog";
+	const shown = {
+		kind,
+		text: text$1(open?.title) ?? text$1(first?.question)
+	};
+	const questions = kind === "questionnaire" ? questionsOf(open?.questions) : void 0;
+	const id = text$1(open?.id);
+	return questions && id ? {
+		...shown,
+		questionnaire: {
+			id,
+			questions
+		}
+	} : shown;
+}
+/**
+* Reads ledger tasks' `task.md`, again only when the file changed. With `recheck` false, a file read before is not
+* even checked for changes: the inn's thousands of sleepers are checked only on the backend's task rereads.
+*/
+function taskReader() {
+	const cache = /* @__PURE__ */ new Map();
+	return (currentTask, recheck = true) => {
+		const task = parseShared(currentTask);
+		if (typeof task?.bundle !== "string" || typeof task.taskId !== "string") return null;
+		const file = join(task.bundle, "task.md");
+		let read = cache.get(file);
+		if (read && !recheck) return {
+			title: read.title || task.taskId,
+			status: read.status || null,
+			bundle: task.bundle
+		};
+		try {
+			const mtime = statSync(file).mtimeMs;
+			if (read?.mtime !== mtime) {
+				let title = null;
+				let status = null;
+				for (const line of readFileSync(file, "utf8").split("\n")) if (status === null && line.startsWith("Status:")) status = line.slice(7).trim();
+				else if (title === null && line.startsWith("# ")) title = line.slice(2).trim();
+				read = {
+					mtime,
+					title,
+					status
+				};
+				cache.set(file, read);
+			}
+		} catch {
+			read = {
+				mtime: -1,
+				title: null,
+				status: null
+			};
+			cache.set(file, read);
+		}
+		return {
+			title: read?.title || task.taskId,
+			status: read?.status || null,
+			bundle: task.bundle
+		};
+	};
+}
+function factsOf(row, readTask) {
+	const open = asking(row.prompt);
+	const git = parse$3(row.git);
+	return {
+		run: row.runState,
+		status: open ? "asking" : row.runState !== "idle" ? "working" : "idle",
+		asking: open,
+		needsYouSince: row.needsYouSince,
+		unseen: row.needsYouSince !== null && open === null,
+		seenAt: row.seenAt,
+		settledAt: row.settledAt,
+		tool: row.currentTool ? {
+			name: row.currentTool,
+			arg: row.currentToolArg,
+			since: row.currentToolSince
+		} : null,
+		task: readTask(row.currentTask),
+		git: git && typeof git.repository === "string" ? {
+			repository: git.repository,
+			worktree: String(git.worktree ?? ""),
+			branch: String(git.branch ?? "")
+		} : null,
+		cwd: row.cwd,
+		reportsTo: row.reportsTo,
+		model: row.model,
+		contextTokens: row.contextTokens,
+		contextWindow: row.contextWindow,
+		cost: row.cost ?? 0,
+		tmux: row.tmuxSocket && row.paneId ? {
+			socket: row.tmuxSocket,
+			pane: row.paneId,
+			session: row.tmuxSession,
+			window: row.windowIndex
+		} : null
+	};
+}
+//#endregion
 //#region apps/agent-world/src/backend/inn.ts
 var run$1 = promisify(execFile);
 var TMUX_TIMEOUT_MS$1 = 2e3;
-/** The inn's sleepers with their observed facts, the most recently stopped first. */
-function dormantAgents(sleepers, rows, readTask) {
-	return sleepers.map((sleeper) => {
+var sameAgent = (a, b) => Object.keys(a).every((key) => key === "task" ? a.task === b.task || a.task?.title === b.task?.title && a.task?.status === b.task?.status && a.task?.bundle === b.task?.bundle : a[key] === b[key]);
+var sameSleeper = (agent, sleeper) => Object.keys(sleeper).every((key) => agent[key] === sleeper[key]);
+/** The row each agent was made from, so an agent whose row object is unchanged can be kept as it is. */
+var madeFrom = /* @__PURE__ */ new WeakMap();
+/**
+* The inn's sleepers with their observed facts, the most recently stopped first. When nothing changed since
+* `previous`, returns `previous` itself, so the backend can tell an unchanged inn without comparing it. With `keep`,
+* an agent made from the same row object as before is kept without reading its task again.
+*/
+function dormantAgents(sleepers, rows, readTask, previous = [], keep = false) {
+	const before = keep ? new Map(previous.map((agent) => [agent.id, agent])) : void 0;
+	const next = sleepers.map((sleeper) => {
 		const row = rows.get(sleeper.id);
-		let repository = null;
-		try {
-			const git = JSON.parse(row?.git ?? "null");
-			if (typeof git?.repository === "string") repository = git.repository;
-		} catch {}
-		return {
-			...sleeper,
-			reportsTo: row?.reportsTo ?? null,
-			repository,
-			cwd: row?.cwd ?? "",
-			task: readTask(row?.currentTask ?? null),
-			stopReason: row?.stopReason ?? null
-		};
+		const kept = before?.get(sleeper.id);
+		if (kept && madeFrom.get(kept) === row && sameSleeper(kept, sleeper)) return kept;
+		return made(sleeper, row, readTask);
 	});
+	if (next.length !== previous.length || next.some((agent, i) => agent !== previous[i] && !sameAgent(agent, previous[i]))) return next;
+	for (const [i, agent] of previous.entries()) madeFrom.set(agent, madeFrom.get(next[i]));
+	return previous;
+}
+function made(sleeper, row, readTask) {
+	const git = parseShared(row?.git);
+	const agent = {
+		...sleeper,
+		reportsTo: row?.reportsTo ?? null,
+		repository: typeof git?.repository === "string" ? git.repository : null,
+		cwd: row?.cwd ?? "",
+		task: readTask(row?.currentTask ?? null),
+		stopReason: row?.stopReason ?? null
+	};
+	madeFrom.set(agent, row);
+	return agent;
 }
 /**
 * The pane of the operator's most recently active tmux client, across the servers the runtime knows. Undefined when
@@ -979,7 +1164,31 @@ var SLOT_OVERLAYS = {
 		"water-3"
 	],
 	bed: ["bed"],
-	letters: ["letters"]
+	letters: ["letters"],
+	work: [
+		"blade-passing",
+		"blade-failing",
+		"blade-running"
+	],
+	notice: [
+		"notice-open",
+		"notice-urgent",
+		"notice-progress",
+		"notice-done"
+	]
+};
+/** What a place must have beyond the shared format: its host's look role, and slots it cannot do without. */
+var PLACE_NEEDS = {
+	forge: {
+		host: "smith",
+		slots: { work: "the forge lays its pull requests on them" }
+	},
+	"quest-office": {
+		host: "clerk",
+		slots: { notice: "the quest office pins the operator's issues on them" }
+	},
+	library: { host: "librarian" },
+	square: { host: "crier" }
 };
 /**
 * Theme-flavoured lines the world says, by key; `{name}`, `{count}`, and the like are filled in. Everything else the
@@ -1019,7 +1228,26 @@ var TEXT_KEYS = [
 	"conversation-opening",
 	"conversation-older",
 	"conversation-asleep",
-	"slack-later"
+	"quest-greeting",
+	"quest-greeting-one",
+	"quest-empty",
+	"quest-signed-out",
+	"quest-search",
+	"quest-more",
+	"library-greeting",
+	"library-signed-out",
+	"library-search",
+	"library-recent",
+	"library-recent-empty",
+	"crier-greeting",
+	"crier-quiet",
+	"crier-signed-out",
+	"crier-search",
+	"forge-greeting",
+	"forge-empty",
+	"forge-loading",
+	"ask-smith",
+	"forge-more"
 ];
 /**
 * Style tokens every pack sets: CSS custom properties put on the page's root, which the pack's skin and the world
@@ -1187,6 +1415,8 @@ function checkManifest(value, id, problems) {
 	if (!isObject(banner) || !isNumber(banner.tiles) || banner.tiles <= 0 || !isRect(banner.text) || !banner.text.every(isFraction) || !isRect(banner.hover) || !banner.hover.every(isFraction) || !isColour(banner.ink)) fault("world.banner needs tiles, text and hover as fractions [x, y, w, h], and a #rrggbb ink");
 	const bed = world.bed;
 	if (bed !== void 0 && (!isObject(bed) || !isPoint(bed.pillow) || !Array.isArray(bed.covers) || bed.covers.length < 3 || !bed.covers.every(isPoint))) fault("world.bed needs a pillow point and a covers polygon (px in bed.png)");
+	const notice = world.notice;
+	if (notice !== void 0 && (!isObject(notice) || !isRect(notice.paper) || !notice.paper.every(isFraction))) fault("world.notice needs paper as fractions [x, y, w, h] of the notice sprites");
 	return value;
 }
 function checkPlace(name, value, painting, problems) {
@@ -1228,6 +1458,9 @@ function checkPlace(name, value, painting, problems) {
 	for (const [from, point] of Object.entries(place.entries)) onFloor(`entry from ${from}`, point);
 	for (const door of place.doors) onFloor(`door ${door.name}'s stand point`, door.standAt);
 	if (place.enterBy !== void 0 && !place.doors.some((door) => door.name === place.enterBy)) fault(`enterBy names ${JSON.stringify(place.enterBy)}, which is not one of its doors`);
+	const needs = PLACE_NEEDS[name];
+	if (needs?.host && !isObject(place.host)) fault(`has no host; the ${name} needs its ${needs.host}`);
+	for (const [kind, why] of Object.entries(needs?.slots ?? {})) if (!place.overlaySlots.some((slot) => slot.kind === kind)) fault(`has no ${kind} slots; ${why}`);
 	for (const slot of place.overlaySlots) if (slot.kind === "bed" && slot.spot !== void 0 && !place.spots[slot.spot]) fault(`a bed at ${fmt(slot.at)} names spot ${slot.spot}, which it does not have`);
 	if (place.niches) {
 		const { at, layouts, repeat } = place.niches;
@@ -1364,6 +1597,8 @@ async function checkSkin(reader, manifest, problems) {
 /** Every place over its painting; returns the looks its hosts wear and the kinds of overlay slot it has. */
 async function checkPlaces(reader, problems) {
 	const hosts = [];
+	/** Each place's host look, by place. */
+	const hostOf = {};
 	const slotKinds = /* @__PURE__ */ new Set();
 	for (const name of PLACE_FILES) {
 		const file = `places/${name}.json`;
@@ -1384,11 +1619,15 @@ async function checkPlaces(reader, problems) {
 		});
 		checkPlace(name, place, painting, problems);
 		const data = place;
-		if (isObject(data.host) && typeof data.host.look === "string") hosts.push(data.host.look);
+		if (isObject(data.host) && typeof data.host.look === "string") {
+			hosts.push(data.host.look);
+			hostOf[name] = data.host.look;
+		}
 		for (const slot of Array.isArray(data.overlaySlots) ? data.overlaySlots : []) if (isObject(slot)) slotKinds.add(String(slot.kind));
 	}
 	return {
 		hosts,
+		hostOf,
 		slotKinds
 	};
 }
@@ -1401,9 +1640,17 @@ async function checkPack(reader, id, { pixels = true } = {}) {
 	const problems = [];
 	const manifest = checkManifest(await json(reader, "theme.json", problems), id, problems);
 	if (manifest && typeof manifest.skin === "string") await checkSkin(reader, manifest, problems);
-	const { hosts, slotKinds } = await checkPlaces(reader, problems);
+	const { hosts, hostOf, slotKinds } = await checkPlaces(reader, problems);
 	const looks = await json(reader, "characters/looks.json", problems);
 	if (looks !== void 0) await checkLooks(reader, looks, hosts, pixels, problems);
+	for (const [place, look] of Object.entries(hostOf)) {
+		const role = PLACE_NEEDS[place]?.host;
+		const worn = isObject(looks) && isObject(looks[look]) ? looks[look].role : void 0;
+		if (role && worn !== void 0 && worn !== role) problems.push({
+			file: `places/${place}.json`,
+			fault: `its host wears ${look}, which is not a ${role} look`
+		});
+	}
 	if (slotKinds.has("bed") && manifest && isObject(manifest.world) && manifest.world.bed === void 0) problems.push({
 		file: "theme.json",
 		fault: "has no world.bed, which its places' bed slots need"
@@ -1553,141 +1800,6 @@ async function listThemes(themesDir, options) {
 			problems
 		};
 	}));
-}
-//#endregion
-//#region apps/agent-world/src/backend/facts.ts
-/** The facts columns for `select ... from sessions s join incarnations i ...` (the current incarnation). */
-var FACTS_COLUMNS = `s.run_state as runState, s.prompt, s.needs_you_since as needsYouSince, s.seen_at as seenAt,
-	s.settled_at as settledAt, s.current_tool as currentTool, s.current_tool_arg as currentToolArg,
-	s.current_tool_since as currentToolSince, s.current_task as currentTask, s.model, s.context_tokens as contextTokens,
-	s.context_window as contextWindow, s.cost, i.tmux_socket as tmuxSocket, i.pane_id as paneId,
-	(select ts.name from tmux_window_links l join tmux_sessions ts on ts.socket = l.socket and ts.id = l.session_id
-		where l.socket = p.socket and l.window_id = p.window_id order by l.window_index limit 1) as tmuxSession,
-	(select l.window_index from tmux_window_links l
-		where l.socket = p.socket and l.window_id = p.window_id order by l.window_index limit 1) as windowIndex`;
-/** Joins for `FACTS_COLUMNS`: the session's current incarnation `i` and its pane `p`. */
-var FACTS_JOINS = `left join incarnations i on i.session_id = s.id and i.generation = s.generation
-left join tmux_panes p on p.socket = i.tmux_socket and p.id = i.pane_id`;
-function parse$3(json) {
-	if (!json) return void 0;
-	try {
-		return JSON.parse(json);
-	} catch {
-		return;
-	}
-}
-var text$1 = (value) => typeof value === "string" && value.trim() ? value.trim() : null;
-/** The questions of an `ask_user_question` prompt, as the panel's form needs them; undefined when they do not parse. */
-function questionsOf(value) {
-	if (!Array.isArray(value) || !value.length) return void 0;
-	const questions = [];
-	for (const raw of value) {
-		const question = text$1(raw?.question);
-		const options = Array.isArray(raw?.options) ? raw.options.map((option) => ({
-			label: typeof option?.label === "string" ? option.label : "",
-			description: typeof option?.description === "string" ? option.description : ""
-		})) : [];
-		if (!question || !options.length || options.some((option) => !option.label)) return void 0;
-		questions.push({
-			question,
-			header: text$1(raw.header),
-			options,
-			multiSelect: raw.multiSelect === true
-		});
-	}
-	return questions;
-}
-/**
-* The open prompt's kind and what it asks: its title, or else its first question. A questionnaire also carries its id
-* and questions, so the conversation panel can answer it.
-*/
-function asking(prompt) {
-	if (prompt === null) return null;
-	const open = parse$3(prompt);
-	const first = Array.isArray(open?.questions) ? open.questions[0] : void 0;
-	const kind = text$1(open?.kind) ?? "dialog";
-	const shown = {
-		kind,
-		text: text$1(open?.title) ?? text$1(first?.question)
-	};
-	const questions = kind === "questionnaire" ? questionsOf(open?.questions) : void 0;
-	const id = text$1(open?.id);
-	return questions && id ? {
-		...shown,
-		questionnaire: {
-			id,
-			questions
-		}
-	} : shown;
-}
-/** Reads ledger tasks' `task.md`, again only when the file changed. */
-function taskReader() {
-	const cache = /* @__PURE__ */ new Map();
-	return (currentTask) => {
-		const task = parse$3(currentTask);
-		if (typeof task?.bundle !== "string" || typeof task.taskId !== "string") return null;
-		const file = join(task.bundle, "task.md");
-		let read = cache.get(file);
-		try {
-			const mtime = statSync(file).mtimeMs;
-			if (read?.mtime !== mtime) {
-				let title = null;
-				let status = null;
-				for (const line of readFileSync(file, "utf8").split("\n")) if (status === null && line.startsWith("Status:")) status = line.slice(7).trim();
-				else if (title === null && line.startsWith("# ")) title = line.slice(2).trim();
-				read = {
-					mtime,
-					title,
-					status
-				};
-				cache.set(file, read);
-			}
-		} catch {
-			read = void 0;
-			cache.delete(file);
-		}
-		return {
-			title: read?.title || task.taskId,
-			status: read?.status || null,
-			bundle: task.bundle
-		};
-	};
-}
-function factsOf(row, readTask) {
-	const open = asking(row.prompt);
-	const git = parse$3(row.git);
-	return {
-		run: row.runState,
-		status: open ? "asking" : row.runState !== "idle" ? "working" : "idle",
-		asking: open,
-		needsYouSince: row.needsYouSince,
-		unseen: row.needsYouSince !== null && open === null,
-		seenAt: row.seenAt,
-		settledAt: row.settledAt,
-		tool: row.currentTool ? {
-			name: row.currentTool,
-			arg: row.currentToolArg,
-			since: row.currentToolSince
-		} : null,
-		task: readTask(row.currentTask),
-		git: git && typeof git.repository === "string" ? {
-			repository: git.repository,
-			worktree: String(git.worktree ?? ""),
-			branch: String(git.branch ?? "")
-		} : null,
-		cwd: row.cwd,
-		reportsTo: row.reportsTo,
-		model: row.model,
-		contextTokens: row.contextTokens,
-		contextWindow: row.contextWindow,
-		cost: row.cost ?? 0,
-		tmux: row.tmuxSocket && row.paneId ? {
-			socket: row.tmuxSocket,
-			pane: row.paneId,
-			session: row.tmuxSession,
-			window: row.windowIndex
-		} : null
-	};
 }
 /** New events of `FEED_TYPES` after a sequence number, with their session's name; `?` is the last seq read. */
 var FEED_SINCE = `select e.seq, e.at, e.session_id as sessionId, e.generation, e.type, e.data,
@@ -1960,6 +2072,8 @@ var POLL_MS$1 = 200;
 var RECONNECT_MS = 1e3;
 /** Polls between rereads of the world while no event arrives, so edited `task.md` files show. */
 var TASK_REREAD_POLLS = 10;
+/** Polls between reads of every session row; between them only the rows events name (and awake ones) are read. */
+var FULL_REREAD_POLLS = 150;
 var FEED_BACKLOG_EVENTS = 5e3;
 /** After a failed preference write, wait this long before sending it again. */
 var RETRY_MS = 5e3;
@@ -1979,6 +2093,8 @@ select s.id, s.name, s.cwd, s.reports_to as reportsTo, s.git, s.config,
 from sessions s
 ${FACTS_JOINS}
 where s.kind = 'root'`;
+var CHANGED_SESSIONS = `${SESSIONS}
+	and s.id in (select session_id from events where seq > ? union select value from json_each(?))`;
 function parse$1(json) {
 	if (!json) return void 0;
 	try {
@@ -1988,8 +2104,8 @@ function parse$1(json) {
 	}
 }
 function sessionRow(row) {
-	const git = parse$1(row.git);
-	const config = parse$1(row.config);
+	const git = parseShared(row.git);
+	const config = parseShared(row.config);
 	return {
 		id: row.id,
 		name: row.name,
@@ -2024,6 +2140,9 @@ function openWorldBackend(paths) {
 	let socket;
 	let socketOpen = false;
 	let lastSeq = -1;
+	const rowsById = /* @__PURE__ */ new Map();
+	const sessionsById = /* @__PURE__ */ new Map();
+	let rowsSeq = -1;
 	let closed = false;
 	let seen = {};
 	let sending;
@@ -2045,8 +2164,16 @@ function openWorldBackend(paths) {
 	const feedListeners = /* @__PURE__ */ new Set();
 	let recent = [];
 	let feedSeq;
+	let currentJson = JSON.stringify(current);
 	const publish = (next) => {
-		if (JSON.stringify(next) === JSON.stringify(current)) return;
+		const json = JSON.stringify({
+			...next,
+			dormant: void 0,
+			mail: void 0
+		});
+		const same = (a, b) => a === b || JSON.stringify(a) === JSON.stringify(b);
+		if (json === currentJson && same(next.dormant, current.dormant) && same(next.mail, current.mail)) return;
+		currentJson = json;
 		current = next;
 		for (const listener of listeners) listener(current);
 	};
@@ -2055,6 +2182,7 @@ function openWorldBackend(paths) {
 		db = new DatabaseSync(paths.db);
 		db.exec("pragma query_only = 1");
 		lastSeq = -1;
+		rowsSeq = -1;
 	};
 	const dropDb = () => {
 		db?.close();
@@ -2106,18 +2234,30 @@ function openWorldBackend(paths) {
 			command
 		})}\n`);
 	};
-	const read = () => {
+	/** `rereadTasks`: check the sleepers' task files for changes too (awake characters' are checked on every read). */
+	const read = (rereadTasks) => {
 		openDb();
 		if (!db) return void 0;
 		try {
 			const { seq } = db.prepare("select coalesce(max(seq), 0) as seq from events").get();
 			if (seq === lastSeq && world) return world;
 			lastSeq = seq;
-			const rows = db.prepare(SESSIONS).all();
+			const full = rowsSeq < 0 || seq < rowsSeq || polls % FULL_REREAD_POLLS === 0;
+			const awakeIds = [...sessionsById.values()].filter((session) => session.awake).map((session) => session.id);
+			const changed = full ? db.prepare(SESSIONS).all() : db.prepare(CHANGED_SESSIONS).all(rowsSeq, JSON.stringify(awakeIds));
+			if (full) {
+				rowsById.clear();
+				sessionsById.clear();
+			}
+			for (const row of changed) {
+				rowsById.set(row.id, row);
+				sessionsById.set(row.id, sessionRow(row));
+			}
+			rowsSeq = seq;
 			const preference = storedPreference(db);
 			const storedWings = preference.wings && typeof preference.wings === "object" ? preference.wings : {};
-			const projected = projectWorld(rows.map(sessionRow), mergeWings(storedWings, seen));
-			const byId = new Map(rows.map((row) => [row.id, row]));
+			const projected = projectWorld([...sessionsById.values()], mergeWings(storedWings, seen));
+			const byId = rowsById;
 			world = {
 				...projected,
 				characters: projected.characters.map((character) => ({
@@ -2125,8 +2265,9 @@ function openWorldBackend(paths) {
 					facts: factsOf(byId.get(character.id), readTask)
 				}))
 			};
-			dormant = dormantAgents(world.dormant, byId, readTask);
-			mail = readMail(db);
+			dormant = dormantAgents(world.dormant, byId, (task) => readTask(task, rereadTasks), dormant, !rereadTasks);
+			const nextMail = readMail(db);
+			if (JSON.stringify(nextMail) !== JSON.stringify(mail)) mail = nextMail;
 			seen = mergeWings(seen, world.wings);
 			remember(preference, storedWings, world.wings);
 			return world;
@@ -2178,8 +2319,9 @@ function openWorldBackend(paths) {
 	};
 	const poll = () => {
 		if (closed) return;
-		if (++polls % TASK_REREAD_POLLS === 0) lastSeq = -1;
-		const next = read();
+		const rereadTasks = ++polls % TASK_REREAD_POLLS === 0;
+		if (rereadTasks) lastSeq = -1;
+		const next = read(rereadTasks);
 		readFeed();
 		publish({
 			connected: socketOpen && next !== void 0,
@@ -2224,6 +2366,7 @@ function openWorldBackend(paths) {
 			socketOpen = true;
 			sending = void 0;
 			lastSeq = -1;
+			rowsSeq = -1;
 			poll();
 		});
 		next.on("error", () => {});
@@ -4043,7 +4186,9 @@ function wireIntegrations(options) {
 //#endregion
 //#region apps/agent-world/src/electron/main.ts
 var appDir = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-var CAPTURE_DELAY_MS = 3e3;
+/** How long the capture waits for a place to draw, and then for its art to settle. */
+var CAPTURE_WAIT_MS = 2e4;
+var CAPTURE_DELAY_MS = 1500;
 app.setName("Agent World");
 app.setPath("userData", join(agentDir(), "agent-world", "electron-data"));
 protocol.registerSchemesAsPrivileged([{
@@ -4056,6 +4201,25 @@ protocol.registerSchemesAsPrivileged([{
 }]);
 if (app.requestSingleInstanceLock()) start();
 else app.quit();
+/**
+* The capture hook: once a place scene has drawn its painting (or after `CAPTURE_WAIT_MS`), write the window as a
+* PNG, print which place it shows, and quit.
+*/
+async function captureWhenDrawn(window, file) {
+	const drawn = `(() => { const v = window.agentWorldView; const p = v && v.place(); return p && v.painting() ? p : ""; })()`;
+	const until = Date.now() + CAPTURE_WAIT_MS;
+	let place = "";
+	while (!window.isDestroyed() && Date.now() < until) {
+		place = String(await window.webContents.executeJavaScript(drawn).catch(() => "") ?? "");
+		if (place) break;
+		await new Promise((resolve) => setTimeout(resolve, 250));
+	}
+	await new Promise((resolve) => setTimeout(resolve, CAPTURE_DELAY_MS));
+	const image = !window.isDestroyed() ? await window.webContents.capturePage() : void 0;
+	if (image) writeFileSync(file, image.toPNG());
+	console.log(`agent-world capture: ${place ? `place ${place}` : "no place drew"}`);
+	app.quit();
+}
 function start() {
 	const world = openWorldBackend(statePaths());
 	const conversations = openConversations(statePaths().socket);
@@ -4159,11 +4323,7 @@ function start() {
 		window.webContents.on("will-navigate", (event) => event.preventDefault());
 		window.loadURL("app://world/index.html");
 		const capture = process.env.AGENT_WORLD_CAPTURE;
-		if (capture) window.webContents.once("did-finish-load", () => setTimeout(async () => {
-			const image = await window?.webContents.capturePage();
-			if (image) writeFileSync(capture, image.toPNG());
-			app.quit();
-		}, CAPTURE_DELAY_MS));
+		if (capture) window.webContents.once("did-finish-load", () => window && void captureWhenDrawn(window, capture));
 	});
 }
 //#endregion

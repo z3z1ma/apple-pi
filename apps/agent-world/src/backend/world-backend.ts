@@ -7,7 +7,7 @@ import { existsSync } from "node:fs";
 import { createConnection, type Socket } from "node:net";
 import { DatabaseSync } from "node:sqlite";
 import type { CommandResult, DormantAgent, FeedLine, MailItem, TerminalResult, WorldSnapshot } from "../world.js";
-import { FACTS_COLUMNS, FACTS_JOINS, type FactsRow, factsOf, taskReader } from "./facts.js";
+import { FACTS_COLUMNS, FACTS_JOINS, type FactsRow, factsOf, parseShared, taskReader } from "./facts.js";
 import { FEED_SINCE, type FeedLookup, type FeedRow, feedLine } from "./feed.js";
 import { dormantAgents } from "./inn.js";
 import { readMail } from "./mail.js";
@@ -36,6 +36,8 @@ const POLL_MS = 200;
 const RECONNECT_MS = 1000;
 /** Polls between rereads of the world while no event arrives, so edited `task.md` files show. */
 const TASK_REREAD_POLLS = 10;
+/** Polls between reads of every session row; between them only the rows events name (and awake ones) are read. */
+const FULL_REREAD_POLLS = 150;
 /** Feed lines kept for a newly opened window, and how far back the first read looks for them. */
 const FEED_KEPT = 200;
 const FEED_BACKLOG = 60;
@@ -61,6 +63,11 @@ from sessions s
 ${FACTS_JOINS}
 where s.kind = 'root'`;
 
+// The rows that may have changed since an event sequence: sessions named by a newer event (a session that starts is
+// one), and the ones awake at the last read (given as a JSON array of ids), looked up by id.
+const CHANGED_SESSIONS = `${SESSIONS}
+	and s.id in (select session_id from events where seq > ? union select value from json_each(?))`;
+
 interface Row extends FactsRow {
 	id: string;
 	name: string | null;
@@ -81,8 +88,8 @@ function parse<T>(json: string | null | undefined): T | undefined {
 }
 
 function sessionRow(row: Row): SessionRow {
-	const git = parse<{ repository?: unknown }>(row.git);
-	const config = parse<{ flags?: unknown }>(row.config);
+	const git = parseShared<{ repository?: unknown }>(row.git);
+	const config = parseShared<{ flags?: unknown }>(row.config);
 	return {
 		id: row.id,
 		name: row.name,
@@ -119,6 +126,10 @@ export function openWorldBackend(paths: { db: string; socket: string }): WorldBa
 	let socket: Socket | undefined;
 	let socketOpen = false;
 	let lastSeq = -1;
+	// Every root session's row as last read, and the event sequence they reflect (-1: read them all again).
+	const rowsById = new Map<string, Row>();
+	const sessionsById = new Map<string, SessionRow>();
+	let rowsSeq = -1;
 	let closed = false;
 	// Wings seen in this run, kept until the runtime has stored them, so a wing never blinks out meanwhile.
 	let seen: RememberedWings = {};
@@ -142,8 +153,14 @@ export function openWorldBackend(paths: { db: string; socket: string }): WorldBa
 	let recent: FeedLine[] = [];
 	let feedSeq: number | undefined;
 
+	// The JSON of the published snapshot but its inn and mail, which stay the same arrays while unchanged: comparing
+	// them whole on every update cost more than reading them, with thousands asleep.
+	let currentJson = JSON.stringify(current);
 	const publish = (next: WorldSnapshot) => {
-		if (JSON.stringify(next) === JSON.stringify(current)) return;
+		const json = JSON.stringify({ ...next, dormant: undefined, mail: undefined });
+		const same = (a: unknown, b: unknown) => a === b || JSON.stringify(a) === JSON.stringify(b);
+		if (json === currentJson && same(next.dormant, current.dormant) && same(next.mail, current.mail)) return;
+		currentJson = json;
 		current = next;
 		for (const listener of listeners) listener(current);
 	};
@@ -155,6 +172,7 @@ export function openWorldBackend(paths: { db: string; socket: string }): WorldBa
 		db = new DatabaseSync(paths.db);
 		db.exec("pragma query_only = 1");
 		lastSeq = -1;
+		rowsSeq = -1;
 	};
 
 	const dropDb = () => {
@@ -197,20 +215,36 @@ export function openWorldBackend(paths: { db: string; socket: string }): WorldBa
 		socket.write(`${JSON.stringify({ type: "command", commandId, sessionId: "agent-world", command })}\n`);
 	};
 
-	const read = (): Projection | undefined => {
+	/** `rereadTasks`: check the sleepers' task files for changes too (awake characters' are checked on every read). */
+	const read = (rereadTasks: boolean): Projection | undefined => {
 		openDb();
 		if (!db) return undefined;
 		try {
 			const { seq } = db.prepare("select coalesce(max(seq), 0) as seq from events").get() as { seq: number };
 			if (seq === lastSeq && world) return world;
 			lastSeq = seq;
-			const rows = db.prepare(SESSIONS).all() as unknown as Row[];
+			// With thousands asleep, reading every row on each event was most of a read's time; a sleeper's row changes
+			// only with an event naming it. A database whose sequence went back is a new one.
+			const full = rowsSeq < 0 || seq < rowsSeq || polls % FULL_REREAD_POLLS === 0;
+			const awakeIds = [...sessionsById.values()].filter((session) => session.awake).map((session) => session.id);
+			const changed = (full
+				? db.prepare(SESSIONS).all()
+				: db.prepare(CHANGED_SESSIONS).all(rowsSeq, JSON.stringify(awakeIds))) as unknown as Row[];
+			if (full) {
+				rowsById.clear();
+				sessionsById.clear();
+			}
+			for (const row of changed) {
+				rowsById.set(row.id, row);
+				sessionsById.set(row.id, sessionRow(row));
+			}
+			rowsSeq = seq;
 			const preference = storedPreference(db);
 			const storedWings = (
 				preference.wings && typeof preference.wings === "object" ? preference.wings : {}
 			) as RememberedWings;
-			const projected = projectWorld(rows.map(sessionRow), mergeWings(storedWings, seen));
-			const byId = new Map(rows.map((row) => [row.id, row]));
+			const projected = projectWorld([...sessionsById.values()], mergeWings(storedWings, seen));
+			const byId = rowsById;
 			world = {
 				...projected,
 				characters: projected.characters.map((character) => ({
@@ -218,8 +252,9 @@ export function openWorldBackend(paths: { db: string; socket: string }): WorldBa
 					facts: factsOf(byId.get(character.id)!, readTask),
 				})),
 			};
-			dormant = dormantAgents(world.dormant, byId, readTask);
-			mail = readMail(db);
+			dormant = dormantAgents(world.dormant, byId, (task) => readTask(task, rereadTasks), dormant, !rereadTasks);
+			const nextMail = readMail(db);
+			if (JSON.stringify(nextMail) !== JSON.stringify(mail)) mail = nextMail;
 			seen = mergeWings(seen, world.wings);
 			remember(preference, storedWings, world.wings);
 			return world;
@@ -276,8 +311,9 @@ export function openWorldBackend(paths: { db: string; socket: string }): WorldBa
 	const poll = () => {
 		if (closed) return;
 		// A ledger task's title or status can change with no runtime event; read the world again now and then.
-		if (++polls % TASK_REREAD_POLLS === 0) lastSeq = -1;
-		const next = read();
+		const rereadTasks = ++polls % TASK_REREAD_POLLS === 0;
+		if (rereadTasks) lastSeq = -1;
+		const next = read(rereadTasks);
 		readFeed();
 		publish({
 			connected: socketOpen && next !== undefined,
@@ -321,6 +357,7 @@ export function openWorldBackend(paths: { db: string; socket: string }): WorldBa
 			socketOpen = true;
 			sending = undefined; // a command sent to an earlier runtime may never have been stored
 			lastSeq = -1; // anything may have changed while the runtime was gone
+			rowsSeq = -1;
 			poll();
 		});
 		next.on("error", () => {});

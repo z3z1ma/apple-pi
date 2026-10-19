@@ -1,0 +1,46 @@
+{
+  "label": "fix2",
+  "dormant": 3000,
+  "awake": 41,
+  "openMs": [
+    21.3,
+    18.9,
+    18.6,
+    18.4,
+    21,
+    18.4,
+    19
+  ],
+  "openMedianMs": 18.88824999999997,
+  "snapshotBytes": 1138194,
+  "dormantBytes": 1064753,
+  "mailBytes": 52558,
+  "characters": 41,
+  "dormantCount": 3000,
+  "mailCount": 218,
+  "idle": {
+    "seconds": 6,
+    "busyFraction": 0.014098304204598483,
+    "busyMsPerSecond": 14.104890168693297,
+    "publishes": 0
+  },
+  "busy": {
+    "seconds": 6.000460375,
+    "writes": 59,
+    "busyFraction": 0.08779017824381609,
+    "busyMsPerSecond": 87.79009777598468,
+    "publishes": 29,
+    "publishesPerSecond": 4.832962504147859,
+    "ipcBytesPerSecond": 5500931.084808638
+  },
+  "partsMedianMs": {
+    "query": 6.46,
+    "project": 3.76,
+    "facts": 0.04,
+    "inn": 9.24,
+    "mail": 1.9,
+    "compareJson": 2.66,
+    "ipcSerialize": 1.13,
+    "innUnchanged": 4.29
+  }
+}

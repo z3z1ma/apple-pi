@@ -4,14 +4,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { Character, PlaceRef } from "../../../src/world.js";
 import { placeKey } from "../../../src/world.js";
-import { say as themeLine } from "../../theme.js";
 import { useTheme } from "../../theme-store.js";
 import type { ViewStore, WorldIntent } from "../../view-state.js";
 import type { WorldStore } from "../../world-store.js";
 import { CharacterCard } from "./character-card.js";
+import { chatLines } from "./chat-lines.js";
 import { Chatbox, type ChatKind, type ChatLine } from "./chatbox.js";
 import "./interface.css";
 import { placeActions } from "../places/place-panels.js";
+import { useUnreadOrb } from "../places/slack-tab.js";
 import { Minimap } from "./minimap.js";
 import { orbCounts, placeName } from "./model.js";
 import type { CharacterAction } from "./rows.js";
@@ -28,6 +29,7 @@ export function Interface({ store, view }: { store: WorldStore; view: ViewStore 
 	const world = useSyncExternalStore(store.subscribe, store.get);
 	const state = useSyncExternalStore(view.subscribe, view.get);
 	const feed = useSyncExternalStore(store.subscribeFeed, store.feed);
+	const placeLines = useSyncExternalStore(chatLines.subscribe, chatLines.get);
 	const theme = useTheme();
 	const [tab, setTab] = useState<Tab>("agents");
 	const [folded, setFolded] = useState(false);
@@ -75,6 +77,10 @@ export function Interface({ store, view }: { store: WorldStore; view: ViewStore 
 		() =>
 			view.onIntent((intent) => {
 				if (intent.kind === "examine") setExamining(intent.character);
+				if (intent.kind === "open-tab") {
+					setTab(intent.tab);
+					setFolded(false);
+				}
 				if (intent.kind !== "terminal") return;
 				const name = findRef.current(intent.character)?.name ?? intent.character;
 				void store.goToTerminal(intent.character).then((result) => {
@@ -107,10 +113,11 @@ export function Interface({ store, view }: { store: WorldStore; view: ViewStore 
 
 	const lines = useMemo(() => {
 		const runtime: ChatLine[] = feed.map((line) => ({ ...line, key: `feed:${line.seq}` }));
-		return [...runtime, ...game].sort((a, b) => a.at - b.at);
-	}, [feed, game]);
+		return [...runtime, ...game, ...placeLines].sort((a, b) => a.at - b.at);
+	}, [feed, game, placeLines]);
 
 	const counts = orbCounts(world);
+	const slackOrb = useUnreadOrb();
 	const open = (next: Tab) => {
 		if (next === tab && !folded) setFolded(true);
 		else {
@@ -154,10 +161,19 @@ export function Interface({ store, view }: { store: WorldStore; view: ViewStore 
 						</span>
 						<span className="aw-orb-label">Working</span>
 					</button>
-					<div className="aw-orb aw-orb-slack" title={themeLine(theme, "slack-later")}>
-						<span className="aw-orb-glass" />
+					<button
+						type="button"
+						className={`aw-orb aw-orb-slack${slackOrb.signedIn ? "" : " aw-orb-off"}`}
+						aria-label={slackOrb.label}
+						title={slackOrb.title}
+						onClick={() => {
+							setTab("slack");
+							setFolded(false);
+						}}
+					>
+						<span className="aw-orb-glass">{slackOrb.text && <span className="aw-num">{slackOrb.text}</span>}</span>
 						<span className="aw-orb-label">Slack</span>
-					</div>
+					</button>
 				</div>
 				<Minimap map={state.minimap} world={world} onWalk={(place, at) => intend({ kind: "walk-to", place, at })} />
 			</div>

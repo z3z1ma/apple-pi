@@ -11,6 +11,15 @@ A task's title and status are read from the bundle's `task.md` as the sidebar's 
 Why: the runtime records only the bundle path in `current_task`; an archived bundle moves under `.ledger/history/`, and the sidebar shows the task id then too.
 Coupled: components/tmux-sessions/sidebar/model.py
 
+With `recheck` false a file read before is returned from the cache without a `stat`, and a missing file is cached too (as unread), so only the backend's task rereads stat the inn's sleepers' files.
+Why: with thousands of sleepers, a `stat` per sleeper on every event was a large share of each read.
+Coupled: apps/agent-world/src/backend/world-backend.ts
+
+## symbol:parseShared
+
+Parsed values are shared by every caller and every read (one cache for the process); nothing may change them.
+Why: the `git`, `config`, and `current_task` strings repeat from read to read, and parsing them for every sleeper on every read was measurable; a caller that mutates a value would change it for all.
+
 ## symbol:asking
 
 Only a prompt of kind `questionnaire` whose `id` and every question parse (text, at least one option, each with a label) carries `questionnaire`; anything else is shown as a dialog answered in its terminal.

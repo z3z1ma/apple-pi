@@ -43,10 +43,14 @@
   "enterBy": "Way out to the plaza",
   "host": { "look": "smith", "at": [20.4, 4.7] },
   "overlaySlots": [
-    { "kind": "fidget", "at": [7.5, 6.06] },
-    { "kind": "fidget", "at": [16.17, 6.06] },
-    { "kind": "fidget", "at": [6.75, 9.45] },
-    { "kind": "fidget", "at": [16.25, 9.45] },
+    { "kind": "work", "at": [6.9, 6.35], "w": 1.9 },
+    { "kind": "work", "at": [15.25, 6.4], "w": 1.9 },
+    { "kind": "work", "at": [5.9, 9.75], "w": 1.9 },
+    { "kind": "work", "at": [15.3, 9.75], "w": 1.9 },
+    { "kind": "work", "at": [9.0, 6.35], "w": 1.9 },
+    { "kind": "work", "at": [17.35, 6.4], "w": 1.9 },
+    { "kind": "work", "at": [8.0, 9.75], "w": 1.9 },
+    { "kind": "work", "at": [17.4, 9.75], "w": 1.9 },
     { "kind": "glow", "at": [13.75, 0.3], "r": 0.8 },
     { "kind": "glow", "at": [18.2, 1.25], "r": 0.8 },
     { "kind": "glow", "at": [20.44, 0.3], "r": 0.8 },
@@ -62,5 +66,11 @@
     { "rect": [13.15, 4.4, 6.45, 3.25], "feet": 7.65 },
     { "rect": [3.6, 7.85, 7.5, 3.35], "feet": 11.2 },
     { "rect": [13.25, 7.75, 7.5, 3.45], "feet": 11.2 }
+  ],
+  "furniture": [
+    { "name": "Workbench", "rect": [4.7, 4.3, 6.55, 3.3], "use": "smith" },
+    { "name": "Workbench", "rect": [13.15, 4.4, 6.45, 3.25], "use": "smith" },
+    { "name": "Workbench", "rect": [3.6, 7.85, 7.5, 3.35], "use": "smith" },
+    { "name": "Workbench", "rect": [13.25, 7.75, 7.5, 3.45], "use": "smith" }
   ]
 }

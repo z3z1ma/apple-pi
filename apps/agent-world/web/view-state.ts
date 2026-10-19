@@ -57,7 +57,9 @@ export type WorldIntent =
 	/** Settings: show or hide the walk grid. */
 	| { kind: "walk-grid"; shown: boolean }
 	/** Settings: wear another theme (`main.tsx` checks its pack, switches, and keeps the choice). */
-	| { kind: "choose-theme"; theme: string };
+	| { kind: "choose-theme"; theme: string }
+	/** Open a tab of the side panel (a place sends the operator to Settings to sign in). */
+	| { kind: "open-tab"; tab: "agents" | "needs-you" | "work" | "mail" | "slack" | "places" | "settings" };
 
 /** A theme in Settings: its name and line, and why it cannot be worn when its pack is broken. */
 export interface ThemeOption {

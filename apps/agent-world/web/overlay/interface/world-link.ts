@@ -10,6 +10,8 @@ import { minimapFor } from "./minimap-source.js";
 export interface MinimapScene {
 	placeKey(): string;
 	figureViews(): { id: string; x: number; y: number }[];
+	/** The town square's townsfolk (Slack channels). */
+	townsfolkViews?(): { id: string; x: number; y: number }[];
 	avatarView?(): { x: number; y: number } | undefined;
 	/** A point on screen in CSS px, in tiles. */
 	toWorld?(point: [number, number]): [number, number];
@@ -29,6 +31,12 @@ export function publishMinimap(view: ViewStore, store: WorldStore, scene: () => 
 		const avatar = active.avatarView?.();
 		const dots: MinimapView["dots"] = [
 			...active.figureViews().map((f) => ({ id: f.id, kind: "agent" as const, x: round(f.x), y: round(f.y) })),
+			...(active.townsfolkViews?.() ?? []).map((f) => ({
+				id: f.id,
+				kind: "townsfolk" as const,
+				x: round(f.x),
+				y: round(f.y),
+			})),
 			...(avatar ? [{ id: "avatar", kind: "avatar" as const, x: round(avatar.x), y: round(avatar.y) }] : []),
 		];
 		let shown: MinimapView["view"];

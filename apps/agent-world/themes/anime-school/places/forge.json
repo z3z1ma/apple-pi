@@ -23,17 +23,9 @@
     [8.3, 14.5, 7.2, 1.5]
   ],
   "spots": [[7.4, 7.6], [14.6, 7.6], [6.8, 11.1], [14.8, 11.1], [9.6, 7.6], [16.8, 7.6], [9.2, 11.1], [17.3, 11.1]],
-  "entries": {
-    "start": [11.9, 12.4],
-    "square": [11.9, 13.3]
-  },
+  "entries": { "start": [11.9, 12.4], "square": [11.9, 13.3] },
   "doors": [
-    {
-      "name": "Door to the courtyard",
-      "rect": [8.3, 13.7, 7.2, 2.3],
-      "standAt": [11.9, 13.3],
-      "to": "square"
-    }
+    { "name": "Door to the courtyard", "rect": [8.3, 13.7, 7.2, 2.3], "standAt": [11.9, 13.3], "to": "square" }
   ],
   "enterBy": "Door to the courtyard",
   "host": { "look": "smith", "at": [12.2, 4.4] },
@@ -44,11 +36,15 @@
     { "name": "Workbench", "rect": [12.9, 7.6, 6.2, 2.95], "use": "smith" }
   ],
   "overlaySlots": [
-    { "kind": "banner", "at": [12.02, 0.35] },
-    { "kind": "fidget", "at": [8.2, 5.5] },
-    { "kind": "fidget", "at": [15.6, 5.5] },
-    { "kind": "fidget", "at": [8.1, 8.6] },
-    { "kind": "fidget", "at": [16.0, 8.6] }
+    { "kind": "work", "at": [7.65, 6.1], "w": 1.5 },
+    { "kind": "work", "at": [14.75, 6.05], "w": 1.5 },
+    { "kind": "work", "at": [7.25, 9.3], "w": 1.5 },
+    { "kind": "work", "at": [15.15, 9.3], "w": 1.5 },
+    { "kind": "work", "at": [9.35, 6.1], "w": 1.5 },
+    { "kind": "work", "at": [16.45, 6.05], "w": 1.5 },
+    { "kind": "work", "at": [8.95, 9.3], "w": 1.5 },
+    { "kind": "work", "at": [16.85, 9.3], "w": 1.5 },
+    { "kind": "banner", "at": [12.02, 0.35] }
   ],
   "foreground": [
     { "rect": [5.7, 4.6, 5.4, 2.5], "feet": 7.1 },

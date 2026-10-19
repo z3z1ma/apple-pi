@@ -101,6 +101,16 @@ export const SLOT_OVERLAYS: Record<string, readonly string[]> = {
 	water: ["water-0", "water-1", "water-2", "water-3"],
 	bed: ["bed"],
 	letters: ["letters"],
+	work: ["blade-passing", "blade-failing", "blade-running"],
+	notice: ["notice-open", "notice-urgent", "notice-progress", "notice-done"],
+};
+
+/** What a place must have beyond the shared format: its host's look role, and slots it cannot do without. */
+export const PLACE_NEEDS: Record<string, { host?: string; slots?: Record<string, string> }> = {
+	forge: { host: "smith", slots: { work: "the forge lays its pull requests on them" } },
+	"quest-office": { host: "clerk", slots: { notice: "the quest office pins the operator's issues on them" } },
+	library: { host: "librarian" },
+	square: { host: "crier" },
 };
 
 /**
@@ -156,8 +166,34 @@ export const TEXT_KEYS = [
 	"conversation-opening",
 	"conversation-older",
 	"conversation-asleep",
-	/** The Slack orb until the town square opens. */
-	"slack-later",
+	/**
+	 * The quest office's host: over {count} issues assigned to the operator (and one), with none, and before he signs in
+	 * to Atlassian; its search's placeholder; and the board's tag for {count} issues beyond its notices.
+	 */
+	"quest-greeting",
+	"quest-greeting-one",
+	"quest-empty",
+	"quest-signed-out",
+	"quest-search",
+	"quest-more",
+	/** The library's host, and before sign-in; its search's placeholder; the pages read lately, and none yet. */
+	"library-greeting",
+	"library-signed-out",
+	"library-search",
+	"library-recent",
+	"library-recent-empty",
+	/** The square's crier: with {count} channels unread, with none, before Slack is signed in; its search's placeholder. */
+	"crier-greeting",
+	"crier-quiet",
+	"crier-signed-out",
+	"crier-search",
+	/** The forge's host: what it says over the open pull requests, with none, and while it reads them. */
+	"forge-greeting",
+	"forge-empty",
+	"forge-loading",
+	/** A workbench: asking the forge's host for the list; and the tag for {count} pull requests beyond its benches. */
+	"ask-smith",
+	"forge-more",
 ] as const;
 
 /**
@@ -247,6 +283,12 @@ export interface WorldStyle {
 	 * polygon, below which they hide the sleeper. Needed only when a place has a `bed` slot.
 	 */
 	bed?: { pillow: [number, number]; covers: [number, number][] };
+	/**
+	 * The quest office's notices (`overlays/notice-*.png`): the part of the sprite that is the notice itself (`paper`, a
+	 * fraction `[x, y, w, h]`), when the sprite also paints board around it; with `cutOut`, the board left inside that
+	 * part (cork or wood touching its edge) is cut away. Absent: the whole sprite is the notice.
+	 */
+	notice?: { paper: [number, number, number, number]; cutOut?: boolean };
 }
 
 export interface ThemeManifest {
@@ -326,10 +368,12 @@ export interface PlaceData {
  * pillar); `glow` is warm light around a lantern or candle at `at`, `r` tiles across its halo; `banner` hangs its rod
  * at `at`; `fidget` is a bare spot for something to play with; `bed` stands a bed `w` tiles wide with its foot's
  * bottom centre at `at`, in which whoever takes spot `spot` sleeps (the spot is where it climbs in); `window` is where
- * birds fly in and out; `letters` is where a pile of letters (`w` tiles wide) lies while mail waits.
+ * birds fly in and out; `letters` is where a pile of letters (`w` tiles wide) lies while mail waits; `work` is a place
+ * on a workbench where a piece of work (a pull request at the forge) lies, `w` tiles wide, its bottom centre at `at`;
+ * `notice` is a place on the quest office's board where an issue's notice is pinned, `w` tiles wide, centred on `at`.
  */
 export interface OverlaySlot {
-	kind: "fire" | "water" | "glow" | "banner" | "fidget" | "bed" | "window" | "letters";
+	kind: "fire" | "water" | "glow" | "banner" | "fidget" | "bed" | "window" | "letters" | "work" | "notice";
 	at: Point;
 	spot?: number;
 	w?: number;
@@ -337,6 +381,11 @@ export interface OverlaySlot {
 	rx?: number;
 	ry?: number;
 	hole?: Point[];
+	/**
+	 * A `work` piece turned clockwise by this many degrees: a diagonal piece (a blade, pommel at the bottom left) laid
+	 * flatter along its bench; `at` stays the bottom centre of what it covers.
+	 */
+	turn?: number;
 	/** Brief-named slots (a forge's mats, a notice board) carry a name; the world draws only the kinds above. */
 	name?: string;
 }
@@ -497,6 +546,9 @@ function checkManifest(value: unknown, id: string, problems: PackProblem[]): The
 			!bed.covers.every(isPoint))
 	)
 		fault("world.bed needs a pillow point and a covers polygon (px in bed.png)");
+	const notice = world.notice;
+	if (notice !== undefined && (!isObject(notice) || !isRect(notice.paper) || !notice.paper.every(isFraction)))
+		fault("world.notice needs paper as fractions [x, y, w, h] of the notice sprites");
 	return value as unknown as ThemeManifest;
 }
 
@@ -550,6 +602,10 @@ function checkPlace(name: string, value: unknown, painting: PackImage | undefine
 	for (const door of place.doors) onFloor(`door ${door.name}'s stand point`, door.standAt);
 	if (place.enterBy !== undefined && !place.doors.some((door) => door.name === place.enterBy))
 		fault(`enterBy names ${JSON.stringify(place.enterBy)}, which is not one of its doors`);
+	const needs = PLACE_NEEDS[name];
+	if (needs?.host && !isObject(place.host)) fault(`has no host; the ${name} needs its ${needs.host}`);
+	for (const [kind, why] of Object.entries(needs?.slots ?? {}))
+		if (!place.overlaySlots.some((slot) => slot.kind === kind)) fault(`has no ${kind} slots; ${why}`);
 	for (const slot of place.overlaySlots)
 		if (slot.kind === "bed" && slot.spot !== undefined && !place.spots[slot.spot])
 			fault(`a bed at ${fmt(slot.at)} names spot ${slot.spot}, which it does not have`);
@@ -679,6 +735,8 @@ async function checkSkin(reader: PackReader, manifest: ThemeManifest, problems: 
 /** Every place over its painting; returns the looks its hosts wear and the kinds of overlay slot it has. */
 async function checkPlaces(reader: PackReader, problems: PackProblem[]) {
 	const hosts: string[] = [];
+	/** Each place's host look, by place. */
+	const hostOf: Record<string, string> = {};
 	const slotKinds = new Set<string>();
 	for (const name of PLACE_FILES) {
 		const file = `places/${name}.json`;
@@ -693,11 +751,14 @@ async function checkPlaces(reader: PackReader, problems: PackProblem[]) {
 		if (!painting) problems.push({ file: `places/${place.painting}`, fault: `is missing (the painting of ${name})` });
 		checkPlace(name, place, painting, problems);
 		const data = place as unknown as PlaceData;
-		if (isObject(data.host) && typeof data.host.look === "string") hosts.push(data.host.look);
+		if (isObject(data.host) && typeof data.host.look === "string") {
+			hosts.push(data.host.look);
+			hostOf[name] = data.host.look;
+		}
 		for (const slot of Array.isArray(data.overlaySlots) ? data.overlaySlots : [])
 			if (isObject(slot)) slotKinds.add(String(slot.kind));
 	}
-	return { hosts, slotKinds };
+	return { hosts, hostOf, slotKinds };
 }
 
 /**
@@ -709,9 +770,16 @@ export async function checkPack(reader: PackReader, id: string, { pixels = true 
 	const problems: PackProblem[] = [];
 	const manifest = checkManifest(await json(reader, "theme.json", problems), id, problems);
 	if (manifest && typeof manifest.skin === "string") await checkSkin(reader, manifest, problems);
-	const { hosts, slotKinds } = await checkPlaces(reader, problems);
+	const { hosts, hostOf, slotKinds } = await checkPlaces(reader, problems);
 	const looks = await json(reader, "characters/looks.json", problems);
 	if (looks !== undefined) await checkLooks(reader, looks, hosts, pixels, problems);
+	// A function place's host wears a look made for its role (the quest office's clerk, not an agent).
+	for (const [place, look] of Object.entries(hostOf)) {
+		const role = PLACE_NEEDS[place]?.host;
+		const worn = isObject(looks) && isObject(looks[look]) ? looks[look].role : undefined;
+		if (role && worn !== undefined && worn !== role)
+			problems.push({ file: `places/${place}.json`, fault: `its host wears ${look}, which is not a ${role} look` });
+	}
 	if (slotKinds.has("bed") && manifest && isObject(manifest.world) && manifest.world.bed === undefined)
 		problems.push({ file: "theme.json", fault: "has no world.bed, which its places' bed slots need" });
 	const overlays = [...REQUIRED_OVERLAYS, ...[...slotKinds].flatMap((kind) => SLOT_OVERLAYS[kind] ?? [])];

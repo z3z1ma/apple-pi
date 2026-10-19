@@ -138,6 +138,57 @@ describe("a broken pack names the file and the fault", () => {
 		);
 	});
 
+	it("a forge without its smith, its places for work on the benches, or the work's overlays", async () => {
+		const dir = brokenPack((d) => {
+			editJson(join(d, "places/forge.json"), (forge) => {
+				delete forge.host;
+				forge.overlaySlots = forge.overlaySlots.filter((slot: { kind: string }) => slot.kind !== "work");
+			});
+		});
+		expect(lines(await checkThemePack(dir))).toEqual(
+			expect.arrayContaining([
+				"places/forge.json: has no host; the forge needs its smith",
+				"places/forge.json: has no work slots; the forge lays its pull requests on them",
+			]),
+		);
+		const bare = brokenPack((d) => unlinkSync(join(d, "overlays/blade-running.png")));
+		expect(lines(await checkThemePack(bare))).toContain("overlays/blade-running.png: is missing");
+	}, 60_000);
+
+	it("a quest office without its clerk, its notice slots, or the notices; a library without its librarian", async () => {
+		const dir = brokenPack((d) => {
+			editJson(join(d, "places/quest-office.json"), (office) => {
+				delete office.host;
+				office.overlaySlots = office.overlaySlots.filter((slot: { kind: string }) => slot.kind !== "notice");
+			});
+			editJson(join(d, "places/library.json"), (library) => {
+				library.host.look = "mage";
+			});
+		});
+		expect(lines(await checkThemePack(dir))).toEqual(
+			expect.arrayContaining([
+				"places/quest-office.json: has no host; the quest-office needs its clerk",
+				"places/quest-office.json: has no notice slots; the quest office pins the operator's issues on them",
+				"places/library.json: its host wears mage, which is not a librarian look",
+			]),
+		);
+		const bare = brokenPack((d) => unlinkSync(join(d, "overlays/notice-urgent.png")));
+		expect(lines(await checkThemePack(bare))).toContain("overlays/notice-urgent.png: is missing");
+	});
+
+	it("a square without its crier, or a crier who is not a crier look", async () => {
+		const dir = brokenPack((d) => editJson(join(d, "places/square.json"), (square) => delete square.host));
+		expect(lines(await checkThemePack(dir))).toContain("places/square.json: has no host; the square needs its crier");
+		const wrong = brokenPack((d) =>
+			editJson(join(d, "places/square.json"), (square) => {
+				square.host.look = "townsfolk-1";
+			}),
+		);
+		expect(lines(await checkThemePack(wrong))).toContain(
+			"places/square.json: its host wears townsfolk-1, which is not a crier look",
+		);
+	});
+
 	it("a spot, an entry, and a door's stand point off open floor", async () => {
 		const hall = JSON.parse(readFileSync(join(themesDir, "fantasy/places/headquarters.json"), "utf8"));
 		const [x, y, w, h] = hall.blocked[0];

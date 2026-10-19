@@ -1889,3 +1889,1119 @@ a.aw-md-link:focus-visible {
 	letter-spacing: 0;
 	text-transform: none;
 }
+
+/* ---- the town square: Slack ---- */
+
+/* The crier's list, a channel read in a panel, and Slack in the side panel and Settings, in the theme's clean card
+   style: counts as small pills, mentions in the warning colour. */
+.aw-slack-kind {
+	color: var(--aw-ink-faint);
+}
+
+.aw-slack-row + .aw-slack-row {
+	border-top: 1px solid var(--t-line);
+}
+
+.aw-slack-row-main {
+	border-radius: 7px;
+}
+
+.aw-slack-row-main:hover {
+	background: var(--t-teal-soft);
+}
+
+.aw-slack-row-main:focus-visible {
+	outline: 2px solid var(--t-teal);
+	outline-offset: -2px;
+}
+
+.aw-slack-name {
+	color: var(--aw-ink);
+}
+
+.aw-slack-count {
+	border-radius: 10px;
+	background: var(--t-card-alt);
+	box-shadow: inset 0 0 0 1px var(--t-line-strong);
+	color: var(--aw-ink);
+}
+
+.aw-slack-mentions {
+	border-radius: 10px;
+	background: var(--t-coral);
+	color: #fff;
+}
+
+.aw-slack-go {
+	color: var(--t-teal);
+	font-weight: 600;
+}
+
+.aw-crier-caption,
+.aw-slack-note,
+.aw-slack-sub {
+	color: var(--aw-ink-soft);
+}
+
+.aw-slack-lead {
+	color: var(--aw-ink);
+}
+
+.aw-slack-problem {
+	color: var(--aw-danger);
+}
+
+.aw-slack-title {
+	color: var(--aw-ink);
+}
+
+.aw-slack-messages {
+	scrollbar-color: var(--t-line-strong) transparent;
+}
+
+.aw-slack-message {
+	border-radius: 8px;
+}
+
+.aw-slack-message:hover {
+	background: var(--t-card-alt);
+}
+
+.aw-slack-author {
+	color: var(--aw-ink);
+}
+
+.aw-slack-message time {
+	color: var(--aw-ink-faint);
+}
+
+.aw-slack-text {
+	color: var(--aw-ink);
+}
+
+.aw-slack-text a {
+	color: var(--t-teal);
+	text-decoration: underline;
+	text-decoration-color: var(--t-teal-ring);
+	text-underline-offset: 2px;
+}
+
+.aw-slack-text a:hover {
+	text-decoration-color: currentColor;
+}
+
+.aw-slack-acts {
+	border: 1px solid var(--t-line-strong);
+	border-radius: 8px;
+	background: var(--t-card);
+	box-shadow: 0 2px 6px rgb(20 24 30 / 12%);
+}
+
+.aw-slack-act {
+	border-radius: 6px;
+	color: var(--aw-ink-soft);
+}
+
+.aw-slack-act:hover,
+.aw-slack-act:focus-visible {
+	background: var(--t-teal-soft);
+	color: var(--aw-ink);
+}
+
+.aw-slack-act[aria-pressed="true"] {
+	background: var(--t-teal);
+	color: #fff;
+}
+
+.aw-slack-replies {
+	border-radius: 6px;
+	color: var(--t-teal);
+}
+
+.aw-slack-replies:hover,
+.aw-slack-replies:focus-visible {
+	background: var(--t-teal-soft);
+}
+
+.aw-slack-new {
+	color: var(--t-coral);
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+}
+
+.aw-slack-new::before,
+.aw-slack-new::after {
+	background: var(--t-coral);
+	opacity: 0.5;
+}
+
+.aw-slack-thread {
+	border-left: 2px solid var(--t-line-strong);
+}
+
+.aw-slack-form {
+	border: 1px solid var(--t-line);
+	border-radius: 10px;
+	background: var(--t-card-alt);
+}
+
+.aw-slack-ask-to {
+	color: var(--aw-ink);
+}
+
+.aw-slack-ask-to select {
+	border: 1px solid var(--t-line-strong);
+	border-radius: 6px;
+	background: var(--t-card);
+	color: var(--aw-ink);
+}
+
+.aw-slack-url {
+	color: var(--aw-ink-faint);
+}
+
+/* ---- the quest office and the library ---- */
+
+/* The student council's notice board and the library's catalogue as rounded lists on the notebook page; an issue reads like a club request with its details on a card; a page is a notebook leaf; a write as the operator waits under a star sticker until he confirms. */
+.aw-quest-row,
+.aw-page-row {
+	border-bottom: 1px solid var(--t-line);
+}
+
+.aw-quest-row:last-child,
+.aw-page-row:last-child {
+	border-bottom: 0;
+}
+
+.aw-quest-main,
+.aw-page-main {
+	border-radius: 12px;
+	transition: background 120ms ease-out;
+}
+
+.aw-quest-main:hover,
+.aw-page-main:hover {
+	background: #fdf1f3;
+}
+
+.aw-quest-main:focus-visible,
+.aw-page-main:focus-visible {
+	outline: 2px solid var(--t-teal-ring);
+	outline-offset: -2px;
+}
+
+.aw-notice-icon img {
+	filter: drop-shadow(0 1px 1px rgb(0 0 0 / 18%));
+}
+
+.aw-quest-title,
+.aw-page-title {
+	color: var(--aw-ink);
+}
+
+.aw-jira-key {
+	font-family: var(--aw-font-mono);
+	font-size: 11.5px;
+	color: #d9708a;
+}
+
+.aw-quest-meta,
+.aw-page-meta,
+.aw-quest-time {
+	color: var(--aw-ink-faint);
+}
+
+.aw-quest-section small {
+	border-radius: 9px;
+	background: var(--t-card-alt);
+	letter-spacing: 0;
+	color: var(--aw-ink-soft);
+}
+
+.aw-jira-status {
+	border-radius: 999px;
+	letter-spacing: 0.02em;
+}
+
+.aw-jira-status-todo {
+	background: #efeef6;
+	color: #5b6280;
+}
+
+.aw-jira-status-doing {
+	background: #e6eefc;
+	color: #3f69b8;
+}
+
+.aw-jira-status-done {
+	background: #e3f6ea;
+	color: #2e8a5a;
+}
+
+.aw-back {
+	border-radius: 7px;
+	background: var(--t-card-alt);
+	color: var(--aw-ink-soft);
+}
+
+.aw-back:hover {
+	background: var(--t-line);
+	color: var(--aw-ink);
+}
+
+.aw-back:focus-visible {
+	outline: 2px solid var(--t-teal-ring);
+}
+
+.aw-issue-head h2,
+.aw-page-head h2 {
+	font-family: var(--aw-font-display);
+	font-weight: 700;
+	letter-spacing: -0.01em;
+	color: var(--aw-ink);
+}
+
+.aw-places .aw-button[aria-pressed="true"] {
+	border-color: var(--t-teal);
+	background: var(--t-teal-soft);
+	color: var(--t-teal);
+}
+
+.aw-issue-facts {
+	border: 1px solid var(--t-line);
+	border-radius: 12px;
+	background: var(--t-card-alt);
+}
+
+.aw-issue-facts dt {
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: var(--aw-ink-faint);
+}
+
+.aw-issue-facts dd {
+	color: var(--aw-ink);
+}
+
+.aw-issue-comment-row {
+	border-top: 1px solid var(--t-line);
+}
+
+.aw-issue-comment-by strong {
+	color: var(--aw-ink);
+}
+
+.aw-issue-comment-by span {
+	color: var(--aw-ink-faint);
+}
+
+.aw-issue-compose,
+.aw-issue-moves,
+.aw-hand {
+	border: 1px solid var(--t-line-strong);
+	border-radius: 12px;
+	background: #fffdf8;
+}
+
+.aw-issue-moves legend,
+.aw-hand-head h3 {
+	font-family: var(--aw-font-display);
+	color: var(--aw-ink);
+}
+
+.aw-hand-hint,
+.aw-hand-who {
+	color: var(--aw-ink-soft);
+}
+
+.aw-hand-who strong {
+	color: var(--aw-ink);
+}
+
+.aw-issue-comment,
+.aw-hand-note {
+	border: 1px solid var(--t-line-strong);
+	border-radius: 10px;
+	background: #fff;
+	color: var(--aw-ink);
+	font: 14.5px / 1.5 var(--aw-font-body);
+}
+
+.aw-issue-comment::placeholder,
+.aw-hand-note::placeholder {
+	color: var(--aw-ink-faint);
+}
+
+.aw-issue-comment:focus-visible,
+.aw-hand-note:focus-visible,
+.aw-hand-to select:focus-visible {
+	outline: none;
+	border-color: var(--t-teal);
+	box-shadow: 0 0 0 3px var(--t-teal-soft);
+}
+
+.aw-hand-to,
+.aw-hand-asks legend {
+	color: var(--aw-ink-soft);
+}
+
+.aw-hand-to select {
+	border: 1px solid var(--t-line-strong);
+	border-radius: 8px;
+	background: #fff;
+	color: var(--aw-ink);
+	font: 13.5px var(--aw-font-body);
+}
+
+.aw-hand-ask span {
+	border: 1px solid var(--t-line-strong);
+	border-radius: 999px;
+	background: #fff;
+	color: var(--aw-ink-soft);
+}
+
+.aw-hand-ask input:checked + span {
+	border-color: var(--t-teal);
+	background: var(--t-teal-soft);
+	color: var(--t-teal);
+	font-weight: 700;
+}
+
+.aw-hand-ask input:focus-visible + span {
+	outline: 2px solid var(--t-teal-ring);
+	outline-offset: 1px;
+}
+
+.aw-move {
+	border: 1px solid var(--t-line-strong);
+	border-radius: 10px;
+	background: #fff;
+	box-shadow: 0 1px 2px rgb(0 0 0 / 6%);
+	color: var(--aw-ink);
+}
+
+.aw-move::before {
+	content: "";
+	display: block;
+	width: 22px;
+	height: 3px;
+	margin-bottom: 4px;
+	border-radius: 2px;
+	background: #5b6280;
+}
+
+.aw-move-doing::before {
+	background: #3f69b8;
+}
+
+.aw-move-done::before {
+	background: #2e8a5a;
+}
+
+.aw-move:hover {
+	border-color: var(--t-teal);
+	background: var(--t-teal-soft);
+}
+
+.aw-move:focus-visible {
+	outline: 2px solid var(--t-teal-ring);
+	outline-offset: 1px;
+}
+
+.aw-move small {
+	color: var(--aw-ink-faint);
+}
+
+.aw-gate-veil {
+	background: rgb(10 12 20 / 38%);
+	backdrop-filter: blur(1px);
+}
+
+.aw-gate-mark {
+	top: -16px;
+	width: 32px;
+	height: 32px;
+	background:
+		url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 2.5l3.9 8.3 9 1.1-6.6 6.2 1.7 9-8-4.4-8 4.4 1.7-9-6.6-6.2 9-1.1z' fill='%23ffc24b' stroke='%23d9952a' stroke-width='1.4' stroke-linejoin='round'/%3E%3C/svg%3E")
+		no-repeat center / contain;
+	filter: drop-shadow(0 2px 2px rgb(16 12 32 / 25%));
+}
+
+.aw-gate h2 {
+	font-family: var(--aw-font-display);
+	color: var(--aw-ink);
+}
+
+.aw-gate-facts dt {
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: var(--aw-ink-faint);
+}
+
+.aw-gate-facts dd {
+	color: var(--aw-ink);
+}
+
+.aw-gate-text {
+	border: 1px solid var(--t-line-strong);
+	border-left: 3px solid var(--t-teal);
+	border-radius: 8px;
+	background: #fff;
+	color: var(--aw-ink);
+}
+
+.aw-gate-note {
+	text-align: center;
+	color: var(--aw-ink-soft);
+}
+
+.aw-gate-reason {
+	text-align: center;
+	color: var(--t-coral);
+}
+
+.aw-page-mark {
+	background:
+		url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 22'%3E%3Cpath d='M2.5 1.5h9l4 4v15h-13z' fill='%23fffaf0' stroke='%23d9708a' stroke-width='1.2' stroke-linejoin='round'/%3E%3Cpath d='M11.5 1.5v4h4' fill='%23f7c6d0' stroke='%23d9708a' stroke-width='1.2' stroke-linejoin='round'/%3E%3Cpath d='M5.5 10h7M5.5 13h7M5.5 16h5' stroke='%23d9708a' stroke-width='1.2' stroke-linecap='round'/%3E%3C/svg%3E")
+		no-repeat center / contain;
+}
+
+.aw-page-excerpt {
+	color: var(--aw-ink-soft);
+}
+
+.aw-page-space {
+	border-radius: 999px;
+	background: var(--t-teal-soft);
+	color: var(--t-teal);
+}
+
+.aw-page-where {
+	color: var(--aw-ink-faint);
+}
+
+.aw-page-sheet {
+	border-radius: 10px;
+	background: var(--aw-panel-page);
+	box-shadow:
+		inset 0 0 0 1px var(--t-line),
+		0 4px 14px rgb(16 12 32 / 8%);
+}
+
+.aw-page-body {
+	font-size: 15px;
+	color: var(--aw-ink);
+}
+
+.aw-rich {
+	color: var(--aw-ink);
+}
+
+.aw-rich h1,
+.aw-rich h2,
+.aw-rich h3,
+.aw-rich h4,
+.aw-rich h5,
+.aw-rich h6 {
+	font-family: var(--aw-font-display);
+	font-weight: 700;
+	color: var(--aw-ink);
+}
+
+.aw-rich h1,
+.aw-rich h2 {
+	padding-bottom: 4px;
+	border-bottom: 1px solid var(--t-line);
+}
+
+.aw-rich a {
+	color: var(--t-blue);
+	text-decoration: none;
+}
+
+.aw-rich a:hover {
+	text-decoration: underline;
+}
+
+.aw-rich code {
+	padding: 1px 5px;
+	border-radius: 5px;
+	background: var(--t-card-alt);
+	font-family: var(--aw-font-mono);
+	color: #c2557a;
+}
+
+.aw-rich pre {
+	border-radius: 10px;
+	background: #2a3657;
+	font-family: var(--aw-font-mono);
+	color: #fff6e6;
+}
+
+.aw-rich pre code {
+	padding: 0;
+	background: none;
+	color: inherit;
+}
+
+.aw-rich blockquote {
+	border-left: 3px solid var(--t-line-strong);
+	color: var(--aw-ink-soft);
+}
+
+.aw-rich th,
+.aw-rich td {
+	border: 1px solid var(--t-line);
+}
+
+.aw-rich th {
+	background: var(--t-card-alt);
+	color: var(--aw-ink);
+}
+
+.aw-rich hr {
+	height: 1px;
+	background: var(--t-line);
+}
+
+.aw-rich-panel {
+	border-radius: 10px;
+	border-left: 4px solid var(--t-blue);
+	background: #eef3fd;
+}
+
+.aw-rich-panel-note {
+	border-left-color: var(--t-amber);
+	background: #fff6e2;
+}
+
+.aw-rich-panel-warning {
+	border-left-color: var(--t-coral);
+	background: #fdecee;
+}
+
+.aw-rich-panel-tip {
+	border-left-color: var(--t-green);
+	background: #e9f8ef;
+}
+
+.aw-rich-lozenge {
+	border-radius: 4px;
+	background: #efeef6;
+	color: #5b6280;
+}
+
+.aw-rich-mention {
+	padding: 0 4px;
+	border-radius: 999px;
+	background: var(--t-teal-soft);
+}
+
+.aw-rich-image {
+	border: 1px dashed var(--t-line-strong);
+	border-radius: 7px;
+	background: var(--t-card-alt);
+	color: var(--aw-ink-soft);
+}
+
+.aw-rich-image::before {
+	background:
+		url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 10'%3E%3Crect x='.6' y='.6' width='10.8' height='8.8' rx='1.5' fill='none' stroke='%238b949c' stroke-width='1.1'/%3E%3Cpath d='M1.5 8.5l3-3.2 2 2 1.6-1.4 2.4 2.6' fill='none' stroke='%238b949c' stroke-width='1.1'/%3E%3Ccircle cx='8.3' cy='3.2' r='1' fill='%238b949c'/%3E%3C/svg%3E")
+		no-repeat center / contain;
+}
+
+.aw-rich-empty {
+	color: var(--aw-ink-faint);
+}
+
+.aw-atlassian-settings h3 small {
+	color: var(--aw-ink-faint);
+}
+
+.aw-field {
+	color: var(--aw-ink-soft);
+}
+
+.aw-field input {
+	border: 1px solid var(--t-line-strong);
+	border-radius: 8px;
+	background: #fff;
+	color: var(--aw-ink);
+	font: 13px var(--aw-font-body);
+}
+
+.aw-field input::placeholder {
+	color: var(--aw-ink-faint);
+}
+
+.aw-field input:focus-visible {
+	outline: none;
+	border-color: var(--t-teal);
+	box-shadow: 0 0 0 3px var(--t-teal-soft);
+}
+
+.aw-link-button {
+	color: var(--t-blue);
+}
+
+.aw-link-button:hover {
+	text-decoration: underline;
+}
+
+.aw-account-facts dt {
+	color: var(--aw-ink-faint);
+}
+
+.aw-account-facts dd {
+	color: var(--aw-ink);
+}
+
+.aw-account-set {
+	border-radius: 999px;
+	background: #e3f6ea;
+	color: #2e8a5a;
+}
+
+.aw-account-note {
+	color: var(--aw-ink-faint);
+}
+
+/* ---- the forge ---- */
+
+/* The forge in the anime school theme: the shop workshop's list and a pull request's card are pages of the class notebook, soft and rounded. CI reads as status chips (green tick, red cross, amber ring, grey dash);
+   the review page is a code review in the pack's surface colours, additions and removals washed green and red. A write
+   outside is a small confirmation card over the page that asked for it. */
+.aw-ci {
+	border-radius: 50%;
+	background: center / 100% no-repeat;
+}
+
+.aw-ci-passing {
+	background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Ccircle cx='10' cy='10' r='9' fill='%234fb87d'/%3E%3Cpath d='M6 10.3l2.7 2.7L14.2 7.4' fill='none' stroke='%23fff' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+.aw-ci-failing {
+	background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Ccircle cx='10' cy='10' r='9' fill='%23e0606d'/%3E%3Cpath d='M7 7l6 6M13 7l-6 6' stroke='%23fff' stroke-width='2.2' stroke-linecap='round'/%3E%3C/svg%3E");
+}
+
+.aw-ci-running {
+	background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Ccircle cx='10' cy='10' r='9' fill='%23f0ad3a'/%3E%3Cpath d='M10 5.2a4.8 4.8 0 1 1-4.8 4.8' fill='none' stroke='%23fff' stroke-width='2.2' stroke-linecap='round'/%3E%3C/svg%3E");
+	animation: aw-ci-turn 1.6s linear infinite;
+}
+
+.aw-ci-none {
+	background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Ccircle cx='10' cy='10' r='8.3' fill='none' stroke='%239aa1b5' stroke-width='1.6'/%3E%3Cpath d='M6.5 10h7' stroke='%239aa1b5' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");
+}
+
+@keyframes aw-ci-turn {
+	to {
+		transform: rotate(1turn);
+	}
+}
+
+.aw-forge-when,
+.aw-forge-time,
+.aw-forge-quiet,
+.aw-review-hint,
+.aw-write-note,
+.aw-forge-ask-note {
+	color: var(--aw-ink-faint);
+}
+
+.aw-forge-tally {
+	color: var(--aw-ink-soft);
+}
+
+.aw-forge-count-failing {
+	color: var(--t-coral);
+	font-weight: 700;
+}
+
+.aw-forge-count .aw-ci {
+	width: 14px;
+	height: 14px;
+}
+
+.aw-forge-signin {
+	border: 1px solid var(--t-line-strong);
+	border-radius: 12px;
+	background: var(--t-card-alt);
+	color: var(--aw-ink);
+}
+
+.aw-forge-signin code,
+.aw-forge-branch {
+	border-radius: 5px;
+	background: var(--t-card-alt);
+	box-shadow: inset 0 0 0 1px var(--t-line);
+	font-family: var(--aw-font-mono);
+	color: var(--aw-ink-soft);
+}
+
+.aw-forge-signin code {
+	padding: 1px 5px;
+}
+
+.aw-forge-row {
+	border-bottom: 1px solid var(--t-line);
+}
+
+.aw-forge-row:last-child {
+	border-bottom: 0;
+}
+
+.aw-forge-main {
+	border-radius: 12px;
+	transition: background 120ms;
+}
+
+.aw-forge-main:hover {
+	background: var(--t-teal-soft);
+}
+
+.aw-forge-main:focus-visible {
+	box-shadow: 0 0 0 2px var(--t-teal-ring);
+}
+
+.aw-forge-title,
+.aw-forge-fact dd,
+.aw-forge-check,
+.aw-write-facts dd {
+	color: var(--aw-ink);
+}
+
+.aw-forge-number {
+	color: var(--aw-ink-faint);
+}
+
+.aw-forge-detail,
+.aw-forge-card-meta {
+	color: var(--aw-ink-soft);
+}
+
+.aw-forge-repo {
+	font-weight: 600;
+}
+
+.aw-forge-tag {
+	border-radius: 999px;
+	background: var(--t-card-alt);
+	box-shadow: inset 0 0 0 1px var(--t-line-strong);
+	color: var(--aw-ink-soft);
+}
+
+.aw-forge-tag-approved {
+	background: rgb(53 168 119 / 13%);
+	box-shadow: none;
+	color: #2e8a5a;
+}
+
+.aw-forge-tag-changes_requested {
+	background: rgb(214 87 62 / 12%);
+	box-shadow: none;
+	color: var(--t-coral);
+}
+
+.aw-forge-tag-review_required {
+	background: rgb(242 179 61 / 18%);
+	box-shadow: none;
+	color: #a86a00;
+}
+
+.aw-forge-agent {
+	border-radius: 999px;
+	background: var(--t-teal-soft);
+	box-shadow: inset 0 0 0 1px var(--t-teal-ring);
+	color: var(--aw-ink);
+}
+
+.aw-forge-agent-face {
+	border-radius: 50%;
+	background: var(--t-card-alt);
+}
+
+.aw-forge-ghost {
+	border-radius: 12px;
+	background: linear-gradient(90deg, var(--t-card-alt), var(--t-line), var(--t-card-alt)) 0 0 / 200% 100%;
+	animation: aw-forge-ghost 1.4s ease-in-out infinite;
+}
+
+@keyframes aw-forge-ghost {
+	to {
+		background-position: -200% 0;
+	}
+}
+
+.aw-forge-back {
+	border-radius: 999px;
+	background:
+		url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M6.5 1.5L3 5l3.5 3.5' fill='none' stroke='%239aa1b5' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+		no-repeat 7px center / 9px,
+		var(--t-card-alt);
+	box-shadow: inset 0 0 0 1px var(--t-line);
+	color: var(--aw-ink-soft);
+}
+
+.aw-forge-back:hover {
+	color: var(--aw-ink);
+	box-shadow: inset 0 0 0 1px var(--t-line-strong);
+}
+
+.aw-forge-back:focus-visible {
+	box-shadow: 0 0 0 2px var(--t-teal-ring);
+}
+
+.aw-forge-card-head,
+.aw-review-head {
+	border-bottom: 1px solid var(--t-line);
+}
+
+.aw-forge-card-heading h2,
+.aw-review-heading h2,
+.aw-write-confirm h2 {
+	color: var(--aw-ink);
+	font-family: var(--aw-font-display);
+	letter-spacing: 0.01em;
+}
+
+.aw-forge-fact dt,
+.aw-forge-ask h3,
+.aw-write-facts dt,
+.aw-forge-checks summary,
+.aw-forge-description summary {
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: var(--aw-ink-faint);
+}
+
+.aw-forge-ci-passing {
+	color: #2e8a5a;
+	font-weight: 700;
+}
+
+.aw-forge-ci-failing {
+	color: var(--t-coral);
+	font-weight: 700;
+}
+
+.aw-forge-ci-running {
+	color: #a86a00;
+	font-weight: 700;
+}
+
+.aw-forge-body {
+	border-radius: 12px;
+	background: var(--t-card-alt);
+	box-shadow: inset 0 0 0 1px var(--t-line);
+	color: var(--aw-ink);
+}
+
+.aw-forge-ask {
+	border-radius: 12px;
+	background: var(--t-card-alt);
+	box-shadow: inset 0 0 0 1px var(--t-line);
+}
+
+.aw-forge-note,
+.aw-review-text {
+	border: 1px solid var(--t-line-strong);
+	border-radius: 12px;
+	background: #fff;
+	color: var(--aw-ink);
+	font-family: var(--aw-font-body);
+}
+
+.aw-forge-note::placeholder,
+.aw-review-text::placeholder {
+	color: var(--aw-ink-faint);
+}
+
+.aw-forge-note:focus-visible,
+.aw-review-text:focus-visible {
+	border-color: var(--t-teal);
+	box-shadow: 0 0 0 3px var(--t-teal-soft);
+}
+
+.aw-forge-stages li {
+	border-radius: 999px;
+	background: #fff;
+	box-shadow: inset 0 0 0 1px var(--t-line);
+	color: var(--aw-ink-faint);
+}
+
+.aw-forge-stages li.aw-on {
+	background: rgb(53 168 119 / 13%);
+	box-shadow: none;
+	color: #2e8a5a;
+	font-weight: 700;
+}
+
+.aw-forge-actions,
+.aw-review-compose {
+	border-top: 1px solid var(--t-line);
+}
+
+.aw-forge-link {
+	color: var(--t-teal);
+	font-weight: 600;
+}
+
+.aw-review-totals {
+	font-family: var(--aw-font-figures);
+}
+
+.aw-diff-add {
+	color: #2e8a5a;
+}
+
+.aw-diff-del {
+	color: var(--t-coral);
+}
+
+.aw-review-files {
+	border-radius: 12px;
+	background: var(--t-card-alt);
+	box-shadow: inset 0 0 0 1px var(--t-line);
+	scrollbar-color: var(--t-line-strong) transparent;
+}
+
+.aw-review-file {
+	border-radius: 6px;
+	color: var(--aw-ink);
+}
+
+.aw-review-file:hover {
+	background: var(--t-teal-soft);
+}
+
+.aw-review-file.aw-on {
+	background: #fff;
+	box-shadow:
+		inset 3px 0 0 var(--t-teal),
+		0 1px 2px rgb(0 0 0 / 8%);
+}
+
+.aw-review-file:focus-visible {
+	box-shadow: 0 0 0 2px var(--t-teal-ring);
+}
+
+.aw-review-file-dir {
+	color: var(--aw-ink-faint);
+}
+
+.aw-review-diff {
+	border-radius: 12px;
+	background: #fff;
+	box-shadow: inset 0 0 0 1px var(--t-line);
+	scrollbar-color: var(--t-line-strong) transparent;
+}
+
+.aw-diff-file + .aw-diff-file {
+	border-top: 1px solid var(--t-line);
+}
+
+.aw-diff-file-head {
+	background: var(--t-card-alt);
+	box-shadow: 0 1px 0 var(--t-line);
+	color: var(--aw-ink);
+}
+
+.aw-diff-status {
+	border-radius: 999px;
+	background: #fff;
+	box-shadow: inset 0 0 0 1px var(--t-line-strong);
+	color: var(--aw-ink-soft);
+}
+
+.aw-diff-status-added {
+	background: rgb(53 168 119 / 13%);
+	box-shadow: none;
+	color: #2e8a5a;
+}
+
+.aw-diff-status-deleted {
+	background: rgb(214 87 62 / 12%);
+	box-shadow: none;
+	color: var(--t-coral);
+}
+
+.aw-diff-status-renamed {
+	background: rgb(47 111 214 / 12%);
+	box-shadow: none;
+	color: var(--t-blue);
+}
+
+.aw-diff {
+	color: var(--aw-ink);
+}
+
+.aw-diff-no {
+	background: var(--t-card-alt);
+	color: var(--aw-ink-faint);
+}
+
+.aw-diff-hunk td {
+	background: rgb(47 111 214 / 7%);
+	color: var(--t-blue);
+}
+
+.aw-diff-add .aw-diff-code {
+	background: rgb(92 197 138 / 14%);
+}
+
+.aw-diff-add .aw-diff-no {
+	background: rgb(92 197 138 / 22%);
+}
+
+.aw-diff-del .aw-diff-code {
+	background: rgb(224 96 109 / 10%);
+}
+
+.aw-diff-del .aw-diff-no {
+	background: rgb(224 96 109 / 17%);
+}
+
+.aw-diff-add .aw-diff-sign {
+	color: #2e8a5a;
+}
+
+.aw-diff-del .aw-diff-sign {
+	color: var(--t-coral);
+}
+
+.aw-diff-note,
+.aw-review-cut {
+	color: var(--aw-ink-soft);
+}
+
+.aw-places .aw-review-request-changes:not([disabled]) {
+	color: var(--t-coral);
+}
+
+.aw-write-veil {
+	border-radius: 12px;
+	background: rgb(20 24 30 / 28%);
+	backdrop-filter: blur(1.5px);
+}
+
+.aw-write-confirm {
+	border-radius: 20px;
+	background: var(--t-card);
+	box-shadow: var(--t-shadow);
+}
+
+.aw-write-confirm .aw-confirm-mark {
+	top: 26px;
+	right: 24px;
+}
+
+.aw-write-text {
+	border-radius: 12px;
+	background: var(--t-card-alt);
+	box-shadow: inset 3px 0 0 var(--t-teal);
+	color: var(--aw-ink);
+}
+
+.aw-write-none {
+	color: var(--aw-ink-soft);
+}

@@ -1898,3 +1898,1276 @@ a.aw-md-link:focus-visible {
 .pointer-menu button:hover {
 	background: #6b4a2a;
 }
+
+/* ---- the quest office and the library ---- */
+
+/* The clerk's board and the librarian's catalogue are ledgers like the inn's register; an issue or a page reads on
+   warm parchment, its facts in a ruled margin; a write as the operator waits under a wax seal until he confirms. */
+.aw-quest-row,
+.aw-page-row {
+	border-bottom: 1px dashed rgb(122 90 50 / 30%);
+}
+
+.aw-quest-row:last-child,
+.aw-page-row:last-child {
+	border-bottom: 0;
+}
+
+.aw-quest-main,
+.aw-page-main {
+	border-radius: 6px;
+	transition: background 120ms ease-out;
+}
+
+.aw-quest-main:hover,
+.aw-page-main:hover {
+	background: rgb(160 110 50 / 12%);
+}
+
+.aw-quest-main:focus-visible,
+.aw-page-main:focus-visible {
+	outline: 2px solid #a8742e;
+	outline-offset: -1px;
+}
+
+.aw-notice-icon img {
+	filter: drop-shadow(0 1px 1px rgb(60 30 10 / 45%));
+}
+
+.aw-quest-title,
+.aw-page-title {
+	color: #2b1d12;
+}
+
+.aw-jira-key {
+	font-family: var(--aw-font-figures);
+	font-variant: small-caps;
+	letter-spacing: 0.04em;
+	color: #8a5a22;
+}
+
+.aw-quest-meta,
+.aw-page-meta {
+	color: #7a5a32;
+	font-style: italic;
+}
+
+.aw-quest-time {
+	font-style: italic;
+	color: #8a6d48;
+}
+
+.aw-quest-section small {
+	border-radius: 8px;
+	background: rgb(122 90 50 / 14%);
+	letter-spacing: 0;
+	color: var(--aw-ink-soft);
+}
+
+.aw-jira-status {
+	border: 1px solid;
+	border-radius: 9px;
+	font-family: var(--aw-font-body);
+	font-style: italic;
+	font-weight: 600;
+}
+
+.aw-jira-status-todo {
+	border-color: rgb(122 90 50 / 45%);
+	background: rgb(255 251 238 / 70%);
+	color: #6b4a2a;
+}
+
+.aw-jira-status-doing {
+	border-color: rgb(36 71 106 / 40%);
+	background: rgb(60 100 150 / 12%);
+	color: #24476a;
+}
+
+.aw-jira-status-done {
+	border-color: rgb(63 106 44 / 45%);
+	background: rgb(111 182 88 / 18%);
+	color: #2f5a22;
+}
+
+.aw-back {
+	border-radius: 9px;
+	background: rgb(122 90 50 / 12%);
+	font-style: italic;
+	color: #6b4a2a;
+}
+
+.aw-back:hover {
+	background: rgb(122 90 50 / 22%);
+	color: #3a2414;
+}
+
+.aw-back:focus-visible {
+	outline: 2px solid #a8742e;
+}
+
+.aw-issue-head h2,
+.aw-page-head h2 {
+	font-family: var(--aw-display);
+	color: #3a2010;
+}
+
+.aw-places .aw-button[aria-pressed="true"] {
+	border-color: #4a2d16;
+	background: linear-gradient(#e8d09c, #f3e2b6);
+	box-shadow: inset 0 1px 3px rgb(60 35 15 / 30%);
+}
+
+/* The issue's facts in the margin of the ledger. */
+.aw-issue-facts {
+	border: 1px solid rgb(122 90 50 / 30%);
+	border-radius: 6px;
+	background:
+		linear-gradient(90deg, transparent 10px, rgb(176 72 48 / 22%) 10px 11px, transparent 11px), rgb(255 251 238 / 60%);
+	box-shadow: inset 0 1px 3px rgb(90 55 20 / 10%);
+}
+
+.aw-issue-facts dt {
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	color: var(--aw-ink-soft);
+}
+
+.aw-issue-facts dd {
+	color: #2b1d12;
+}
+
+.aw-issue-comment-row {
+	border-top: 1px dashed rgb(122 90 50 / 30%);
+}
+
+.aw-issue-comment-by strong {
+	color: #2b1d12;
+}
+
+.aw-issue-comment-by span {
+	font-style: italic;
+	color: #8a6d48;
+}
+
+/* Trays: a comment being written, the moves Jira allows, a hand-over. */
+.aw-issue-compose,
+.aw-issue-moves,
+.aw-hand {
+	border: 1px solid rgb(122 90 50 / 35%);
+	border-radius: 8px;
+	background: rgb(255 251 238 / 55%);
+	box-shadow: inset 0 1px 3px rgb(90 55 20 / 12%);
+}
+
+.aw-issue-moves legend,
+.aw-hand-head h3 {
+	font-family: var(--aw-display);
+	font-weight: 600;
+	color: #3a2010;
+}
+
+.aw-hand-hint,
+.aw-hand-who {
+	font-style: italic;
+	color: #7a5a32;
+}
+
+.aw-hand-who strong {
+	font-style: normal;
+	color: #2b1d12;
+}
+
+.aw-issue-comment,
+.aw-hand-note {
+	border: 1px solid #a07a46;
+	border-radius: 6px;
+	background:
+		repeating-linear-gradient(transparent 0 23px, rgb(122 90 50 / 18%) 23px 24px) 0 9px / 100% 24px,
+		rgb(255 251 238 / 80%);
+	box-shadow: inset 0 1px 3px rgb(90 55 20 / 18%);
+	font: italic 15px / 24px var(--aw-serif);
+	color: #24476a;
+}
+
+.aw-issue-comment::placeholder,
+.aw-hand-note::placeholder {
+	color: #9a7d55;
+}
+
+.aw-issue-comment:focus-visible,
+.aw-hand-note:focus-visible,
+.aw-hand-to select:focus-visible {
+	outline: 2px solid rgb(201 163 90 / 75%);
+	outline-offset: 1px;
+}
+
+.aw-hand-to {
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--aw-ink-soft);
+}
+
+.aw-hand-to select {
+	border: 1px solid #a07a46;
+	border-radius: 6px;
+	background: rgb(255 251 238 / 80%);
+	font: 14px var(--aw-serif);
+	letter-spacing: 0;
+	text-transform: none;
+	color: var(--aw-ink);
+}
+
+.aw-hand-asks legend {
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--aw-ink-soft);
+}
+
+.aw-hand-ask span {
+	border: 1px solid rgb(122 90 50 / 45%);
+	border-radius: 12px;
+	background: rgb(255 251 238 / 70%);
+	color: #6b4a2a;
+}
+
+.aw-hand-ask input:checked + span {
+	border-color: #3d2a12;
+	background: linear-gradient(#f3d488, #d3a64e);
+	color: #2b1d12;
+	font-weight: 700;
+}
+
+.aw-hand-ask input:focus-visible + span {
+	outline: 2px solid #a8742e;
+	outline-offset: 1px;
+}
+
+/* A move: a tab of parchment with a ribbon of its kind. */
+.aw-move {
+	border: 1px solid #a07a46;
+	border-left-width: 5px;
+	border-radius: 5px;
+	background: linear-gradient(#fff9e6, #f1dfb2);
+	box-shadow: 0 1px 0 rgb(60 35 15 / 20%);
+	color: #2b1d12;
+}
+
+.aw-move:hover {
+	background: linear-gradient(#fffcf0, #f6e7c2);
+}
+
+.aw-move:focus-visible {
+	outline: 2px solid #a8742e;
+	outline-offset: 1px;
+}
+
+.aw-move-todo {
+	border-left-color: #9a7d55;
+}
+
+.aw-move-doing {
+	border-left-color: #3c6496;
+}
+
+.aw-move-done {
+	border-left-color: #4f8a3a;
+}
+
+.aw-move small {
+	font-style: italic;
+	color: #7a5a32;
+}
+
+/* The confirmation: a small note under a wax seal. */
+.aw-gate-veil {
+	background: rgb(8 5 10 / 42%);
+}
+
+.aw-gate-mark {
+	border-radius: 50%;
+	background: radial-gradient(circle at 40% 35%, #d65a3c, #8a2414 60%, #5a140a);
+	box-shadow:
+		0 0 0 2px #4a1008,
+		0 2px 4px rgb(0 0 0 / 40%);
+}
+
+.aw-gate h2 {
+	font-family: var(--aw-display);
+	color: #3a2010;
+}
+
+.aw-gate-facts dt {
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	color: var(--aw-ink-soft);
+}
+
+.aw-gate-facts dd {
+	color: #2b1d12;
+}
+
+.aw-gate-text {
+	border: 1px solid #a07a46;
+	border-radius: 6px;
+	background:
+		repeating-linear-gradient(transparent 0 23px, rgb(122 90 50 / 18%) 23px 24px) 0 9px / 100% 24px,
+		rgb(255 251 238 / 85%);
+	font: italic 15px / 24px var(--aw-serif);
+	color: #24476a;
+}
+
+.aw-gate-note,
+.aw-gate-reason {
+	font-style: italic;
+	text-align: center;
+	color: #7a5a32;
+}
+
+.aw-gate-reason {
+	color: var(--aw-oxblood);
+}
+
+/* The library: a page found or read lately, marked by a small leaf of parchment. */
+.aw-page-mark {
+	background:
+		url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 22'%3E%3Cpath d='M2 1h10l4 4v16H2z' fill='%23fbf0d0' stroke='%237a5a32' stroke-width='1.2' stroke-linejoin='round'/%3E%3Cpath d='M12 1v4h4' fill='%23e8d09c' stroke='%237a5a32' stroke-width='1.2' stroke-linejoin='round'/%3E%3Cpath d='M5 9h8M5 12h8M5 15h6' stroke='%23a07a46' stroke-width='1.1' stroke-linecap='round'/%3E%3C/svg%3E")
+		no-repeat center / contain;
+	filter: drop-shadow(0 1px 1px rgb(60 30 10 / 35%));
+}
+
+.aw-page-excerpt {
+	color: #5a4028;
+}
+
+.aw-page-space {
+	border-radius: 8px;
+	background: rgb(60 100 150 / 12%);
+	font-style: normal;
+	color: #24476a;
+}
+
+.aw-page-where {
+	color: #8a6d48;
+	font-style: italic;
+}
+
+/* A page read in the library: a leaf of the book, its first letter illuminated. */
+.aw-page-sheet {
+	border-radius: 4px;
+	background: var(--aw-panel-page);
+	box-shadow:
+		inset 0 0 0 1px rgb(122 90 50 / 25%),
+		inset 0 0 40px rgb(160 110 50 / 14%),
+		0 2px 6px rgb(60 35 15 / 18%);
+}
+
+.aw-page-body {
+	font-size: 15.5px;
+	color: #2b1d12;
+}
+
+.aw-page-body > h1:first-child + p::first-letter,
+.aw-page-body > p:first-child::first-letter {
+	float: left;
+	margin: 3px 5px 0 0;
+	font: 600 2.55em / 0.8 var(--aw-display);
+	color: #8a2414;
+}
+
+.aw-page-body > :not(p) {
+	clear: left;
+}
+
+/* Sanitised HTML from Jira and Confluence, in the ledger's inks. */
+.aw-rich {
+	color: #2b1d12;
+}
+
+.aw-rich h1,
+.aw-rich h2,
+.aw-rich h3,
+.aw-rich h4,
+.aw-rich h5,
+.aw-rich h6 {
+	font-family: var(--aw-display);
+	font-weight: 600;
+	color: #3a2010;
+}
+
+.aw-rich h1,
+.aw-rich h2 {
+	padding-bottom: 3px;
+	border-bottom: 1px solid rgb(122 90 50 / 30%);
+}
+
+.aw-rich a {
+	color: #24476a;
+	text-decoration-color: rgb(36 71 106 / 45%);
+	text-underline-offset: 2px;
+}
+
+.aw-rich a:hover {
+	color: #13304d;
+	text-decoration-color: currentcolor;
+}
+
+.aw-rich code {
+	padding: 0 4px;
+	border-radius: 4px;
+	background: rgb(122 90 50 / 13%);
+	font-family: var(--aw-font-mono);
+	color: #5a2a14;
+}
+
+.aw-rich pre {
+	border: 1px solid rgb(122 90 50 / 30%);
+	border-left: 3px solid #a07a46;
+	border-radius: 5px;
+	background: rgb(90 60 30 / 7%);
+	font-family: var(--aw-font-mono);
+	color: #3a2414;
+}
+
+.aw-rich pre code {
+	padding: 0;
+	background: none;
+}
+
+.aw-rich blockquote {
+	border-left: 3px solid rgb(122 90 50 / 45%);
+	font-style: italic;
+	color: #5a4028;
+}
+
+.aw-rich th,
+.aw-rich td {
+	border: 1px solid rgb(122 90 50 / 25%);
+}
+
+.aw-rich th {
+	background: rgb(122 90 50 / 12%);
+	font-family: var(--aw-display);
+	color: #3a2010;
+}
+
+.aw-rich hr {
+	height: 1px;
+	background: linear-gradient(90deg, transparent, rgb(122 90 50 / 50%), transparent);
+}
+
+.aw-rich-panel {
+	border: 1px solid rgb(60 100 150 / 30%);
+	border-left: 4px solid #3c6496;
+	border-radius: 5px;
+	background: rgb(60 100 150 / 8%);
+}
+
+.aw-rich-panel-note {
+	border-color: rgb(160 110 30 / 35%);
+	border-left-color: #b8862a;
+	background: rgb(224 164 34 / 10%);
+}
+
+.aw-rich-panel-warning {
+	border-color: rgb(140 40 20 / 30%);
+	border-left-color: #8a2414;
+	background: rgb(196 69 42 / 9%);
+}
+
+.aw-rich-panel-tip {
+	border-color: rgb(63 106 44 / 30%);
+	border-left-color: #4f8a3a;
+	background: rgb(111 182 88 / 10%);
+}
+
+.aw-rich-lozenge {
+	border: 1px solid rgb(122 90 50 / 45%);
+	border-radius: 4px;
+	background: rgb(255 251 238 / 70%);
+	color: #6b4a2a;
+}
+
+.aw-rich-mention {
+	font-weight: 600;
+}
+
+.aw-rich-image {
+	border: 1px dashed rgb(122 90 50 / 50%);
+	border-radius: 5px;
+	background: rgb(255 251 238 / 70%);
+	font-style: italic;
+	color: #7a5a32;
+}
+
+.aw-rich-image::before {
+	background:
+		url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 10'%3E%3Crect x='.6' y='.6' width='10.8' height='8.8' rx='1' fill='none' stroke='%237a5a32' stroke-width='1.1'/%3E%3Cpath d='M1.5 8.5l3-3.2 2 2 1.6-1.4 2.4 2.6' fill='none' stroke='%237a5a32' stroke-width='1.1'/%3E%3Ccircle cx='8.3' cy='3.2' r='1' fill='%237a5a32'/%3E%3C/svg%3E")
+		no-repeat center / contain;
+}
+
+.aw-rich-empty {
+	font-style: italic;
+	color: #8a6d48;
+}
+
+/* Settings: the Atlassian sign-in, in the side panel's own inks. */
+.aw-atlassian-settings h3 small {
+	font-style: italic;
+	color: var(--aw-ink-faint);
+}
+
+.aw-field {
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: var(--aw-ink-soft);
+}
+
+.aw-field input {
+	border: 1px solid #a07a46;
+	border-radius: 5px;
+	background: rgb(255 251 238 / 80%);
+	box-shadow: inset 0 1px 2px rgb(90 55 20 / 18%);
+	font: 13.5px var(--aw-serif);
+	letter-spacing: 0;
+	text-transform: none;
+	color: var(--aw-ink);
+}
+
+.aw-field input::placeholder {
+	font-style: italic;
+	color: #9a7d55;
+}
+
+.aw-field input:focus-visible {
+	outline: 2px solid rgb(201 163 90 / 75%);
+	outline-offset: 0;
+	border-color: #6b4422;
+}
+
+.aw-link-button {
+	font-style: italic;
+	color: #24476a;
+	text-decoration: underline;
+	text-decoration-color: rgb(36 71 106 / 40%);
+	text-underline-offset: 2px;
+}
+
+.aw-link-button:hover {
+	color: #13304d;
+}
+
+.aw-account-facts dt {
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: var(--aw-ink-soft);
+}
+
+.aw-account-facts dd {
+	color: var(--aw-ink);
+}
+
+.aw-account-set {
+	border-radius: 8px;
+	background: rgb(111 182 88 / 22%);
+	font-style: italic;
+	color: #2f5a22;
+}
+
+.aw-account-note {
+	font-style: italic;
+}
+
+/* ---- the forge ---- */
+
+/* The forge in the fantasy theme: the smith's list and a pull request's card are the same warm ledger as the inn's,
+   with CI as the quench: a moss-green tick for a tempered piece, an oxblood cross for a cracked one, and an ember ring
+   for one still in the fire. The review page is a long scroll of the diff, set in ink on parchment, with additions
+   and removals washed green and red like a scribe's corrections. A write outside is a sealed note over the page. */
+.aw-ci {
+	border-radius: 50%;
+	background: center / 100% no-repeat;
+	filter: drop-shadow(0 1px 0 rgb(255 250 230 / 60%));
+}
+
+.aw-ci-passing {
+	background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Ccircle cx='10' cy='10' r='8.6' fill='%235a8a3a' stroke='%23284616' stroke-width='1.4'/%3E%3Cpath d='M6 10.4l2.7 2.7L14.2 7.4' fill='none' stroke='%23fff6dc' stroke-width='2.1' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+.aw-ci-failing {
+	background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Ccircle cx='10' cy='10' r='8.6' fill='%23a8381f' stroke='%234e1206' stroke-width='1.4'/%3E%3Cpath d='M7 7l6 6M13 7l-6 6' stroke='%23fff0dc' stroke-width='2.1' stroke-linecap='round'/%3E%3C/svg%3E");
+}
+
+.aw-ci-running {
+	background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Ccircle cx='10' cy='10' r='8.6' fill='%23e3a238' stroke='%23704310' stroke-width='1.4'/%3E%3Cpath d='M10 5.2a4.8 4.8 0 1 1-4.6 3.4' fill='none' stroke='%23fff6dc' stroke-width='2' stroke-linecap='round'/%3E%3Cpath d='M4 7.2l1.6 1.9 1.9-1.4' fill='none' stroke='%23fff6dc' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+	animation: aw-ci-turn 2.4s linear infinite;
+}
+
+.aw-ci-none {
+	background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Ccircle cx='10' cy='10' r='8.6' fill='%23d9c7a2' stroke='%238a6d48' stroke-width='1.4'/%3E%3Cpath d='M6.5 10h7' stroke='%236f5332' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");
+}
+
+@keyframes aw-ci-turn {
+	to {
+		transform: rotate(1turn);
+	}
+}
+
+.aw-forge-when {
+	font-style: italic;
+	color: #8a6d48;
+}
+
+.aw-forge-tally {
+	font-style: italic;
+	color: var(--aw-ink-soft);
+}
+
+.aw-forge-count-failing {
+	color: var(--aw-oxblood);
+	font-style: normal;
+	font-weight: 700;
+}
+
+.aw-forge-count .aw-ci {
+	width: 14px;
+	height: 14px;
+}
+
+.aw-forge-signin {
+	border: 1px dashed rgb(122 90 50 / 45%);
+	border-radius: 6px;
+	background: rgb(255 251 238 / 55%);
+	color: var(--aw-ink);
+}
+
+.aw-forge-signin code,
+.aw-forge-branch {
+	border-radius: 4px;
+	background: rgb(122 90 50 / 13%);
+	font-family: var(--aw-font-mono);
+	color: #4a3420;
+}
+
+.aw-forge-signin code {
+	padding: 1px 5px;
+}
+
+.aw-forge-row {
+	border-bottom: 1px dashed rgb(122 90 50 / 30%);
+}
+
+.aw-forge-row:last-child {
+	border-bottom: 0;
+}
+
+.aw-forge-main {
+	border-radius: 6px;
+	transition: background 120ms;
+}
+
+.aw-forge-main:hover {
+	background: rgb(160 110 50 / 12%);
+}
+
+.aw-forge-main:focus-visible {
+	outline: 2px solid #a8742e;
+	outline-offset: -1px;
+}
+
+.aw-forge-title {
+	color: #2b1d12;
+}
+
+.aw-forge-number {
+	color: #8a6d48;
+}
+
+.aw-forge-detail,
+.aw-forge-card-meta {
+	color: #5a4028;
+}
+
+.aw-forge-repo {
+	font-weight: 600;
+}
+
+.aw-forge-time {
+	font-style: italic;
+	color: #8a6d48;
+}
+
+.aw-forge-tag {
+	border-radius: 9px;
+	background: rgb(122 90 50 / 14%);
+	font-style: italic;
+	color: var(--aw-ink-soft);
+}
+
+.aw-forge-tag-approved {
+	background: rgb(111 182 88 / 22%);
+	color: #2f5a22;
+}
+
+.aw-forge-tag-changes_requested {
+	background: rgb(196 69 42 / 16%);
+	color: var(--aw-oxblood);
+}
+
+.aw-forge-tag-review_required {
+	background: rgb(224 164 34 / 20%);
+	color: #6b4a08;
+}
+
+.aw-forge-tag-draft {
+	background: rgb(90 80 70 / 14%);
+	color: #5e5245;
+}
+
+.aw-forge-agent {
+	border-radius: 11px;
+	background: linear-gradient(#f8e8bf, #ead196);
+	box-shadow:
+		inset 0 0 0 1px rgb(122 90 50 / 45%),
+		0 1px 0 rgb(255 250 230 / 70%);
+	color: #3a2414;
+}
+
+.aw-forge-agent-face {
+	border-radius: 50%;
+	background: linear-gradient(#5d3f26, #3a2414);
+	box-shadow: 0 0 0 1px #3a2414;
+}
+
+.aw-forge-ghost {
+	border-radius: 6px;
+	background: linear-gradient(90deg, rgb(122 90 50 / 8%), rgb(122 90 50 / 16%), rgb(122 90 50 / 8%)) 0 0 / 200% 100%;
+	animation: aw-forge-ghost 1.4s ease-in-out infinite;
+}
+
+@keyframes aw-forge-ghost {
+	to {
+		background-position: -200% 0;
+	}
+}
+
+/* The card. */
+.aw-forge-back {
+	border-radius: 12px;
+	background:
+		url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M6.5 1.5L3 5l3.5 3.5' fill='none' stroke='%236f5332' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+		no-repeat 6px center / 9px,
+		rgb(122 90 50 / 10%);
+	font-style: italic;
+	color: var(--aw-ink-soft);
+}
+
+.aw-forge-back:hover {
+	background-color: rgb(122 90 50 / 18%);
+	color: #3a2010;
+}
+
+.aw-forge-back:focus-visible {
+	outline: 2px solid #a8742e;
+}
+
+.aw-forge-card-head,
+.aw-review-head {
+	border-bottom: 1px solid rgb(122 90 50 / 35%);
+	box-shadow: 0 1px 0 rgb(255 250 230 / 70%);
+}
+
+.aw-forge-card-heading h2,
+.aw-review-heading h2 {
+	font-family: var(--aw-display);
+	color: #3a2010;
+}
+
+.aw-forge-fact dt,
+.aw-forge-ask h3,
+.aw-write-facts dt {
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	color: var(--aw-ink-soft);
+}
+
+.aw-forge-fact dd {
+	color: #2b1d12;
+}
+
+.aw-forge-quiet {
+	font-style: italic;
+	color: #8a6d48;
+}
+
+.aw-forge-ci-passing {
+	color: #2f5a22;
+	font-weight: 700;
+}
+
+.aw-forge-ci-failing {
+	color: var(--aw-oxblood);
+	font-weight: 700;
+}
+
+.aw-forge-ci-running {
+	color: #8a5a10;
+	font-weight: 700;
+}
+
+.aw-forge-checks summary,
+.aw-forge-description summary {
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--aw-ink-soft);
+}
+
+.aw-forge-checks summary::marker,
+.aw-forge-description summary::marker {
+	color: #a07a46;
+}
+
+.aw-forge-check {
+	color: #2b1d12;
+}
+
+.aw-forge-body {
+	border-left: 3px solid rgb(160 122 70 / 45%);
+	border-radius: 0 6px 6px 0;
+	background: rgb(255 251 238 / 55%);
+	color: #2b1d12;
+}
+
+.aw-forge-ask {
+	border: 1px solid rgb(122 90 50 / 32%);
+	border-radius: 8px;
+	background: linear-gradient(rgb(255 251 238 / 60%), rgb(240 224 186 / 45%));
+	box-shadow: inset 0 1px 0 rgb(255 255 255 / 55%);
+}
+
+.aw-forge-note,
+.aw-review-text {
+	border: 1px solid #a07a46;
+	border-radius: 6px;
+	background:
+		repeating-linear-gradient(transparent 0 19px, rgb(122 90 50 / 15%) 19px 20px) 0 7px / 100% 20px,
+		rgb(255 251 238 / 78%);
+	box-shadow: inset 0 1px 3px rgb(90 55 20 / 18%);
+	font: italic 14px / 20px var(--aw-serif);
+	color: #24476a;
+}
+
+.aw-review-text {
+	background:
+		repeating-linear-gradient(transparent 0 20px, rgb(122 90 50 / 15%) 20px 21px) 0 8px / 100% 21px,
+		rgb(255 251 238 / 82%);
+	font: italic 14.5px / 21px var(--aw-serif);
+}
+
+.aw-forge-note::placeholder,
+.aw-review-text::placeholder {
+	color: #9a7d55;
+}
+
+.aw-forge-note:focus-visible,
+.aw-review-text:focus-visible {
+	border-color: #6b4422;
+	outline: 2px solid rgb(201 163 90 / 70%);
+	outline-offset: 1px;
+}
+
+.aw-forge-ask-note {
+	font-style: italic;
+}
+
+.aw-forge-stages li {
+	border-radius: 9px;
+	background: rgb(122 90 50 / 10%);
+	font-style: italic;
+	color: #9a7d55;
+}
+
+.aw-forge-stages li.aw-on {
+	background: rgb(111 182 88 / 22%);
+	color: #2f5a22;
+	font-style: normal;
+	font-weight: 700;
+}
+
+.aw-forge-actions {
+	border-top: 1px solid rgb(122 90 50 / 30%);
+}
+
+.aw-forge-link {
+	font-style: italic;
+	color: #24476a;
+}
+
+.aw-forge-link:hover {
+	color: #163050;
+}
+
+/* The review page. */
+.aw-review-totals {
+	font-family: var(--aw-figures);
+}
+
+.aw-diff-add {
+	color: #2f6a22;
+}
+
+.aw-diff-del {
+	color: var(--aw-oxblood);
+}
+
+.aw-review-files {
+	border-radius: 6px;
+	background: rgb(122 90 50 / 8%);
+	box-shadow: inset 0 0 0 1px rgb(122 90 50 / 22%);
+	scrollbar-color: #a07a46 transparent;
+}
+
+.aw-review-file {
+	border-radius: 5px;
+	color: #3a2414;
+}
+
+.aw-review-file:hover {
+	background: rgb(160 110 50 / 14%);
+}
+
+.aw-review-file.aw-on {
+	background: linear-gradient(90deg, rgb(201 163 90 / 42%), rgb(201 163 90 / 12%));
+	box-shadow: inset 3px 0 0 #a8742e;
+}
+
+.aw-review-file:focus-visible {
+	outline: 2px solid #a8742e;
+	outline-offset: -2px;
+}
+
+.aw-review-file-dir {
+	color: #8a6d48;
+}
+
+.aw-review-diff {
+	border-radius: 6px;
+	background: rgb(255 252 242 / 70%);
+	box-shadow:
+		inset 0 0 0 1px rgb(122 90 50 / 28%),
+		inset 0 2px 6px rgb(90 55 20 / 10%);
+	scrollbar-color: #a07a46 transparent;
+}
+
+.aw-diff-file + .aw-diff-file {
+	border-top: 1px solid rgb(122 90 50 / 25%);
+}
+
+.aw-diff-file-head {
+	background: linear-gradient(#f4e4bd, #ead6a6);
+	box-shadow: 0 1px 0 rgb(122 90 50 / 35%);
+	color: #2b1d12;
+}
+
+.aw-diff-status {
+	border-radius: 8px;
+	background: rgb(122 90 50 / 16%);
+	color: var(--aw-ink-soft);
+}
+
+.aw-diff-status-added {
+	background: rgb(111 182 88 / 26%);
+	color: #2f5a22;
+}
+
+.aw-diff-status-deleted {
+	background: rgb(196 69 42 / 18%);
+	color: var(--aw-oxblood);
+}
+
+.aw-diff-status-renamed {
+	background: rgb(60 90 140 / 16%);
+	color: #24476a;
+}
+
+.aw-diff {
+	color: #2b1d12;
+}
+
+.aw-diff-no {
+	color: #a08560;
+	background: rgb(122 90 50 / 6%);
+}
+
+.aw-diff-hunk td {
+	background: rgb(60 90 140 / 10%);
+	font-style: italic;
+	color: #3d4a72;
+}
+
+.aw-diff-add .aw-diff-code {
+	background: rgb(111 182 88 / 20%);
+}
+
+.aw-diff-add .aw-diff-no {
+	background: rgb(111 182 88 / 28%);
+	color: #4d7a3a;
+}
+
+.aw-diff-del .aw-diff-code {
+	background: rgb(196 69 42 / 13%);
+}
+
+.aw-diff-del .aw-diff-no {
+	background: rgb(196 69 42 / 19%);
+	color: #9a4a34;
+}
+
+.aw-diff-add .aw-diff-sign {
+	color: #2f6a22;
+}
+
+.aw-diff-del .aw-diff-sign {
+	color: var(--aw-oxblood);
+}
+
+.aw-diff-note,
+.aw-review-cut {
+	font-style: italic;
+	color: var(--aw-ink-soft);
+}
+
+.aw-review-compose {
+	border-top: 1px solid rgb(122 90 50 / 30%);
+}
+
+.aw-review-hint {
+	font-style: italic;
+	color: #8a6d48;
+}
+
+.aw-places .aw-review-request-changes:not([disabled]) {
+	color: var(--aw-oxblood);
+}
+
+/* A write outside: a sealed note over the page that asked for it. */
+.aw-write-veil {
+	border-radius: 4px;
+	background: radial-gradient(ellipse at 50% 45%, rgb(40 25 12 / 28%), rgb(30 18 8 / 52%));
+}
+
+.aw-write-confirm {
+	border: 1px solid #a07a46;
+	border-radius: 8px;
+	box-shadow:
+		0 0 0 4px rgb(255 248 228 / 55%),
+		0 14px 34px rgb(40 20 5 / 45%);
+}
+
+.aw-write-confirm .aw-confirm-mark {
+	transform: rotate(-8deg);
+}
+
+.aw-write-confirm h2 {
+	font-family: var(--aw-display);
+	color: #3a2010;
+}
+
+.aw-write-facts dd {
+	color: #2b1d12;
+}
+
+.aw-write-text {
+	border-left: 3px solid #a8742e;
+	border-radius: 0 6px 6px 0;
+	background: rgb(255 251 238 / 85%);
+	box-shadow: inset 0 1px 3px rgb(90 55 20 / 14%);
+	font-style: italic;
+	color: #24476a;
+}
+
+.aw-write-none {
+	color: var(--aw-ink-soft);
+}
+
+.aw-write-note {
+	font-style: italic;
+	color: #8a6d48;
+}
+
+/* ---- the town square: Slack ---- */
+
+/* The crier's list, a channel read in a panel, and Slack in the side panel and Settings: a town's notices on the same
+   warm parchment as the register, with counts as dark wax tokens and mentions in sealing red. */
+.aw-slack-kind {
+	color: #8a6a3e;
+}
+
+.aw-slack-row + .aw-slack-row {
+	border-top: 1px dashed rgb(122 90 50 / 28%);
+}
+
+.aw-slack-row-main {
+	border-radius: 5px;
+}
+
+.aw-slack-row-main:hover {
+	background: rgb(122 90 50 / 11%);
+}
+
+.aw-slack-row-main:focus-visible {
+	outline: 2px solid var(--aw-brass);
+	outline-offset: -2px;
+}
+
+.aw-slack-name {
+	color: #2b1d12;
+}
+
+.aw-slack-count {
+	border-radius: 10px;
+	background: linear-gradient(#4a3020, #2e1c10);
+	box-shadow: inset 0 1px 0 rgb(255 220 160 / 22%);
+	color: #f6e2b0;
+}
+
+.aw-slack-mentions {
+	border-radius: 10px;
+	background: linear-gradient(#c4513a, #92301c);
+	box-shadow: inset 0 1px 0 rgb(255 190 160 / 35%);
+	color: #fff4e4;
+}
+
+.aw-slack-go {
+	color: #8a6d48;
+	font-style: italic;
+}
+
+.aw-crier-caption,
+.aw-slack-note,
+.aw-slack-sub {
+	color: var(--aw-ink-soft);
+	font-style: italic;
+}
+
+.aw-slack-lead {
+	color: var(--aw-ink);
+}
+
+.aw-slack-problem {
+	color: var(--aw-danger);
+	font-style: normal;
+}
+
+.aw-slack-title {
+	color: #3a2010;
+}
+
+.aw-slack-title .aw-slack-kind {
+	color: #9a7444;
+}
+
+.aw-slack-messages {
+	scrollbar-color: #a07a46 transparent;
+}
+
+.aw-slack-message {
+	border-radius: 6px;
+}
+
+.aw-slack-message:hover {
+	background: rgb(122 90 50 / 7%);
+}
+
+.aw-slack-author {
+	color: #3a2010;
+}
+
+.aw-slack-message time {
+	color: #8a6d48;
+	font-style: italic;
+}
+
+.aw-slack-text {
+	color: #2e2014;
+}
+
+.aw-slack-text a {
+	color: #7a3a14;
+	text-decoration: underline;
+	text-decoration-color: rgb(122 58 20 / 40%);
+	text-underline-offset: 2px;
+}
+
+.aw-slack-text a:hover {
+	text-decoration-color: currentColor;
+}
+
+.aw-slack-acts {
+	border: 1px solid rgb(122 90 50 / 38%);
+	border-radius: 7px;
+	background: #fbf1d6;
+	box-shadow: 0 2px 5px rgb(80 50 20 / 18%);
+}
+
+.aw-slack-act {
+	border-radius: 5px;
+	color: #5a3a1a;
+}
+
+.aw-slack-act:hover,
+.aw-slack-act:focus-visible {
+	background: rgb(122 90 50 / 15%);
+}
+
+.aw-slack-act[aria-pressed="true"] {
+	background: linear-gradient(#f3d488, #d3a64e);
+	color: #2b1d12;
+}
+
+.aw-slack-replies {
+	border-radius: 5px;
+	color: #7a4420;
+}
+
+.aw-slack-replies:hover,
+.aw-slack-replies:focus-visible {
+	background: rgb(122 90 50 / 12%);
+}
+
+.aw-slack-new {
+	color: var(--aw-danger);
+	font-style: italic;
+	letter-spacing: 0.06em;
+}
+
+.aw-slack-new::before,
+.aw-slack-new::after {
+	background: rgb(165 54 31 / 45%);
+}
+
+.aw-slack-thread {
+	border-left: 2px solid rgb(160 122 70 / 40%);
+}
+
+.aw-slack-form {
+	border: 1px solid rgb(122 90 50 / 30%);
+	border-radius: 8px;
+	background: rgb(255 251 238 / 55%);
+}
+
+.aw-slack-ask-to {
+	color: #3a2010;
+}
+
+.aw-slack-ask-to select {
+	border: 1px solid #a07a46;
+	border-radius: 5px;
+	background: #fff8e6;
+	color: var(--aw-ink);
+}
+
+.aw-slack-url {
+	color: var(--aw-ink-soft);
+	font-style: italic;
+}

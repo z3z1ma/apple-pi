@@ -1,0 +1,768 @@
+/* The quest office's and the library's panels, the confirmation before a write as the operator, delegation, and the
+   Atlassian sign-in in Settings: layout only; every colour, face, and border comes from the theme pack's skin. */
+
+/* Wider panels: an issue or a page is a long read. */
+.aw-quest,
+.aw-library {
+	width: min(720px, calc(100vw - 48px));
+}
+
+.aw-quest-issue,
+.aw-library-page {
+	width: min(860px, calc(100vw - 48px));
+	height: min(780px, calc(100vh - 56px));
+	max-height: none;
+}
+
+.aw-quest-issue .aw-place-body,
+.aw-library-page .aw-place-body {
+	flex: 1;
+}
+
+.aw-quest .aw-place-scroll,
+.aw-library .aw-place-scroll {
+	min-height: 120px;
+}
+
+.aw-quest-search {
+	margin: 0;
+}
+
+.aw-quest-section {
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
+}
+
+.aw-quest-section small {
+	padding: 0 6px;
+	font-size: 11px;
+}
+
+.aw-quest-section .aw-progress {
+	margin-left: auto;
+	font-size: 11.5px;
+	text-transform: none;
+	letter-spacing: 0;
+}
+
+/* The clerk's list: a notice, the key and summary, and the status. */
+.aw-quest-list,
+.aw-page-list {
+	margin: 0 -6px;
+	padding: 0;
+}
+
+.aw-quest-main,
+.aw-page-main {
+	all: unset;
+	box-sizing: border-box;
+	display: grid;
+	grid-template-columns: 30px 1fr auto;
+	align-items: center;
+	gap: 12px;
+	width: 100%;
+	padding: 8px 8px 9px;
+	cursor: pointer;
+}
+
+.aw-notice-icon {
+	display: grid;
+	place-items: center;
+	width: 30px;
+	height: 36px;
+}
+
+.aw-notice-icon img {
+	max-width: 100%;
+	max-height: 100%;
+	image-rendering: auto;
+}
+
+.aw-quest-text,
+.aw-page-text {
+	display: grid;
+	gap: 2px;
+	min-width: 0;
+}
+
+.aw-quest-title {
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
+	min-width: 0;
+	font-size: 14.5px;
+	font-weight: 700;
+}
+
+.aw-jira-key {
+	flex: none;
+	font-size: 12px;
+	font-weight: 700;
+	letter-spacing: 0.02em;
+}
+
+.aw-quest-summary {
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+
+.aw-quest-meta,
+.aw-page-meta {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 4px 10px;
+	overflow: hidden;
+	font-size: 12px;
+	white-space: nowrap;
+}
+
+.aw-quest-side {
+	display: grid;
+	justify-items: end;
+	gap: 4px;
+}
+
+.aw-quest-time {
+	font-size: 11.5px;
+	white-space: nowrap;
+}
+
+.aw-jira-status {
+	flex: none;
+	padding: 1px 8px 2px;
+	font-size: 11px;
+	font-weight: 700;
+	white-space: nowrap;
+}
+
+/* An issue: its key and status over its summary, what to do, then the facts, description, and comments. */
+.aw-issue-head {
+	align-items: flex-start;
+}
+
+.aw-issue-head .aw-notice-icon {
+	width: 46px;
+	height: 56px;
+	margin-top: 2px;
+}
+
+.aw-issue-key,
+.aw-page-where {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: 0 0 4px;
+	font-size: 12px;
+}
+
+.aw-issue-head h2,
+.aw-page-head h2 {
+	font-size: 21px;
+	line-height: 1.22;
+}
+
+.aw-back {
+	all: unset;
+	flex: none;
+	margin-right: 4px;
+	padding: 1px 8px 2px;
+	font-size: 12px;
+	cursor: pointer;
+}
+
+.aw-issue-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	padding: 10px 0 2px;
+}
+
+.aw-issue-actions .aw-button-strong {
+	margin-left: auto;
+}
+
+.aw-issue-result {
+	margin: 8px 0 0;
+}
+
+.aw-issue-failed {
+	display: grid;
+	justify-items: start;
+	gap: 10px;
+	padding: 14px 2px;
+}
+
+.aw-issue-scroll {
+	margin-top: 10px;
+	padding-top: 2px;
+}
+
+.aw-issue-layout {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) 188px;
+	gap: 22px;
+	align-items: start;
+}
+
+.aw-issue-facts {
+	position: sticky;
+	top: 12px;
+	display: grid;
+	gap: 9px;
+	margin: 14px 0 4px;
+	padding: 12px 14px;
+}
+
+.aw-issue-facts div {
+	min-width: 0;
+}
+
+.aw-issue-facts dt {
+	font-size: 10.5px;
+	font-weight: 700;
+}
+
+.aw-issue-facts dd {
+	margin: 1px 0 0;
+	overflow: hidden;
+	font-size: 13.5px;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+
+.aw-issue-comments {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.aw-issue-comment-row {
+	padding: 10px 2px 8px;
+}
+
+.aw-issue-comment-by {
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
+	margin: 0 0 4px;
+	font-size: 13px;
+}
+
+.aw-issue-comment-by span {
+	font-size: 11.5px;
+}
+
+/* Writing a comment, choosing a move, handing over: a tray under the actions. */
+.aw-issue-compose,
+.aw-issue-moves,
+.aw-hand {
+	display: grid;
+	min-width: 0;
+	gap: 10px;
+	margin-top: 10px;
+	padding: 12px 14px;
+	animation: aw-tray-in 160ms ease-out;
+}
+
+@keyframes aw-tray-in {
+	from {
+		opacity: 0;
+		transform: translateY(-4px);
+	}
+}
+
+.aw-issue-comment,
+.aw-hand-note {
+	box-sizing: border-box;
+	width: 100%;
+	padding: 10px 12px;
+	resize: vertical;
+}
+
+.aw-issue-compose-actions,
+.aw-hand-actions,
+.aw-account-actions {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 8px;
+}
+
+.aw-hand-actions .aw-progress {
+	margin-right: auto;
+}
+
+.aw-issue-moves legend,
+.aw-hand-head h3 {
+	float: left;
+	margin: 0;
+	font-size: 14px;
+}
+
+.aw-issue-move-list {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.aw-issue-move-list li {
+	display: flex;
+}
+
+.aw-move {
+	all: unset;
+	box-sizing: border-box;
+	display: grid;
+	gap: 1px;
+	padding: 6px 12px 7px;
+	cursor: pointer;
+}
+
+.aw-move-name {
+	font-size: 13.5px;
+	font-weight: 700;
+}
+
+.aw-move small {
+	font-size: 11px;
+}
+
+.aw-hand-head {
+	display: grid;
+	gap: 2px;
+}
+
+.aw-hand-hint {
+	margin: 0;
+	font-size: 12px;
+}
+
+.aw-issue-compose-actions .aw-hand-hint {
+	margin-right: auto;
+}
+
+.aw-hand-who {
+	margin: 0;
+	font-size: 13.5px;
+}
+
+.aw-hand-choices {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 10px 18px;
+}
+
+.aw-hand-to {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-size: 12.5px;
+	font-weight: 700;
+}
+
+.aw-hand-to select {
+	min-width: 180px;
+	padding: 5px 8px;
+}
+
+.aw-hand-asks {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin: 0;
+	padding: 0;
+	border: 0;
+}
+
+.aw-hand-asks legend {
+	float: left;
+	margin-right: 6px;
+	font-size: 12.5px;
+	font-weight: 700;
+}
+
+.aw-hand-ask {
+	position: relative;
+	cursor: pointer;
+}
+
+.aw-hand-ask input {
+	position: absolute;
+	opacity: 0;
+	pointer-events: none;
+}
+
+.aw-hand-ask span {
+	display: inline-block;
+	padding: 4px 11px 5px;
+	font-size: 12.5px;
+}
+
+/* The confirmation before a write as the operator: a small sealed note over the panel. */
+.aw-gate-veil {
+	position: absolute;
+	inset: 0;
+	z-index: 5;
+	display: grid;
+	place-items: center;
+	animation: aw-place-veil-in 140ms ease-out;
+}
+
+.aw-gate {
+	position: relative;
+	width: min(460px, calc(100% - 40px));
+	padding: 9px;
+	animation: aw-place-in 180ms cubic-bezier(0.2, 0.9, 0.3, 1.15);
+}
+
+.aw-gate-body {
+	position: relative;
+	display: grid;
+	gap: 10px;
+	padding: 22px 22px 16px;
+}
+
+.aw-gate-mark {
+	position: absolute;
+	top: -14px;
+	left: 50%;
+	width: 28px;
+	height: 28px;
+	transform: translateX(-50%);
+}
+
+.aw-gate h2 {
+	margin: 2px 0 0;
+	font-size: 19px;
+	text-align: center;
+}
+
+.aw-gate-facts {
+	display: grid;
+	grid-template-columns: auto 1fr;
+	gap: 4px 12px;
+	margin: 0;
+	font-size: 13.5px;
+}
+
+.aw-gate-facts dt {
+	font-size: 11px;
+	font-weight: 700;
+	line-height: 1.7;
+}
+
+.aw-gate-facts dd {
+	margin: 0;
+	overflow-wrap: anywhere;
+}
+
+.aw-gate-text {
+	max-height: 220px;
+	margin: 0;
+	padding: 10px 12px;
+	overflow-y: auto;
+	font-size: 14px;
+	line-height: 1.45;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+.aw-gate-note,
+.aw-gate-reason {
+	margin: 0;
+	font-size: 12.5px;
+	line-height: 1.4;
+}
+
+.aw-gate-actions {
+	display: flex;
+	justify-content: flex-end;
+	gap: 10px;
+	margin-top: 4px;
+}
+
+/* The library: a page found or read lately, and a page read in full. */
+.aw-page-main {
+	grid-template-columns: 22px 1fr;
+}
+
+.aw-page-mark {
+	align-self: start;
+	width: 18px;
+	height: 22px;
+	margin-top: 1px;
+}
+
+.aw-page-mark-large {
+	flex: none;
+	align-self: flex-start;
+	width: 34px;
+	height: 42px;
+	margin-top: 4px;
+}
+
+.aw-page-title {
+	overflow: hidden;
+	font-size: 14.5px;
+	font-weight: 700;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+
+.aw-page-excerpt {
+	display: -webkit-box;
+	overflow: hidden;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 2;
+	font-size: 12.5px;
+	line-height: 1.35;
+}
+
+.aw-page-space {
+	padding: 0 6px 1px;
+	font-size: 11px;
+	font-weight: 700;
+}
+
+.aw-page-loading {
+	margin: 16px 2px;
+}
+
+.aw-page-scroll {
+	margin-top: 12px;
+}
+
+.aw-page-sheet {
+	padding: 22px 30px 26px;
+}
+
+/* Sanitised HTML from Jira and Confluence. */
+.aw-rich {
+	font-size: 14.5px;
+	line-height: 1.55;
+	overflow-wrap: anywhere;
+}
+
+.aw-rich > :first-child {
+	margin-top: 0;
+}
+
+.aw-rich > :last-child {
+	margin-bottom: 0;
+}
+
+.aw-rich p,
+.aw-rich ul,
+.aw-rich ol,
+.aw-rich blockquote,
+.aw-rich pre,
+.aw-rich table,
+.aw-rich dl {
+	margin: 0 0 0.75em;
+}
+
+.aw-rich h1,
+.aw-rich h2,
+.aw-rich h3,
+.aw-rich h4,
+.aw-rich h5,
+.aw-rich h6 {
+	margin: 1.1em 0 0.45em;
+	line-height: 1.25;
+}
+
+.aw-rich h1 {
+	font-size: 1.55em;
+}
+
+.aw-rich h2 {
+	font-size: 1.3em;
+}
+
+.aw-rich h3 {
+	font-size: 1.12em;
+}
+
+.aw-rich h4,
+.aw-rich h5,
+.aw-rich h6 {
+	font-size: 1em;
+}
+
+.aw-rich ul,
+.aw-rich ol {
+	padding-left: 1.4em;
+}
+
+.aw-rich li + li {
+	margin-top: 0.2em;
+}
+
+.aw-rich pre {
+	padding: 10px 12px;
+	overflow-x: auto;
+	font-size: 12.5px;
+	line-height: 1.45;
+	white-space: pre;
+	overflow-wrap: normal;
+}
+
+.aw-rich code {
+	font-size: 0.9em;
+}
+
+.aw-rich pre code {
+	font-size: inherit;
+}
+
+.aw-rich blockquote {
+	padding: 2px 0 2px 12px;
+}
+
+.aw-rich table {
+	display: block;
+	width: max-content;
+	max-width: 100%;
+	overflow-x: auto;
+	border-collapse: collapse;
+	font-size: 13px;
+}
+
+.aw-rich th,
+.aw-rich td {
+	padding: 5px 9px;
+	text-align: left;
+	vertical-align: top;
+}
+
+.aw-rich hr {
+	margin: 1.2em 0;
+	border: 0;
+}
+
+.aw-rich-panel {
+	margin: 0 0 0.85em;
+	padding: 9px 12px;
+}
+
+.aw-rich-panel > :last-child {
+	margin-bottom: 0;
+}
+
+.aw-rich-lozenge {
+	display: inline-block;
+	padding: 0 6px 1px;
+	font-size: 0.78em;
+	font-weight: 700;
+	letter-spacing: 0.03em;
+	text-transform: uppercase;
+}
+
+.aw-rich-image {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	padding: 1px 8px 2px;
+	font-size: 0.85em;
+}
+
+.aw-rich-image::before {
+	content: "";
+	width: 12px;
+	height: 10px;
+}
+
+.aw-rich-empty {
+	margin: 0;
+	font-size: 13.5px;
+}
+
+/* Settings: the Atlassian sign-in. */
+.aw-atlassian-settings h3 small {
+	margin-left: auto;
+	font-size: 11px;
+	font-weight: 400;
+	letter-spacing: 0;
+	text-transform: none;
+}
+
+.aw-signin,
+.aw-account {
+	display: grid;
+	gap: 8px;
+	padding: 2px 2px 6px;
+}
+
+.aw-signin .aw-note {
+	margin: 0;
+}
+
+.aw-field {
+	display: grid;
+	gap: 3px;
+	font-size: 11.5px;
+	font-weight: 700;
+}
+
+.aw-field input {
+	box-sizing: border-box;
+	width: 100%;
+	padding: 6px 9px;
+	font-size: 13px;
+}
+
+.aw-link-button {
+	all: unset;
+	justify-self: start;
+	font-size: 12px;
+	cursor: pointer;
+}
+
+.aw-account-facts {
+	display: grid;
+	grid-template-columns: auto 1fr;
+	gap: 3px 10px;
+	margin: 0;
+	font-size: 13px;
+}
+
+.aw-account-facts dt {
+	font-size: 11px;
+	font-weight: 700;
+	line-height: 1.6;
+}
+
+.aw-account-facts dd {
+	min-width: 0;
+	margin: 0;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+
+.aw-account-note {
+	margin: 0;
+	font-size: 11.5px;
+}
+
+.aw-account-set {
+	padding: 0 6px 1px;
+	font-size: 11.5px;
+	font-weight: 700;
+}
+
+/* A host's head with nothing under it (before sign-in) draws no rule. */
+.aw-quest .aw-place-head:last-child,
+.aw-library .aw-place-head:last-child {
+	padding-bottom: 0;
+	border-bottom: 0;
+	box-shadow: none;
+}

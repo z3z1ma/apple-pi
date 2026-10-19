@@ -51,6 +51,22 @@ function parse<T>(json: string | null): T | undefined {
 	}
 }
 
+const PARSED_KEPT = 20_000;
+const parsed = new Map<string, unknown>();
+
+/**
+ * `JSON.parse` for column values that repeat from read to read (`git`, `config`, `current_task`), parsed once each.
+ * The values are shared between readers: never change one.
+ */
+export function parseShared<T>(json: string | null | undefined): T | undefined {
+	if (!json) return undefined;
+	if (parsed.has(json)) return parsed.get(json) as T | undefined;
+	if (parsed.size >= PARSED_KEPT) parsed.clear();
+	const value = parse<T>(json);
+	parsed.set(json, value);
+	return value;
+}
+
 const text = (value: unknown) => (typeof value === "string" && value.trim() ? value.trim() : null);
 
 /** The questions of an `ask_user_question` prompt, as the panel's form needs them; undefined when they do not parse. */
@@ -86,14 +102,18 @@ function asking(prompt: string | null): CharacterFacts["asking"] {
 	return questions && id ? { ...shown, questionnaire: { id, questions } } : shown;
 }
 
-/** Reads ledger tasks' `task.md`, again only when the file changed. */
-export function taskReader(): (currentTask: string | null) => CharacterFacts["task"] {
+/**
+ * Reads ledger tasks' `task.md`, again only when the file changed. With `recheck` false, a file read before is not
+ * even checked for changes: the inn's thousands of sleepers are checked only on the backend's task rereads.
+ */
+export function taskReader(): (currentTask: string | null, recheck?: boolean) => CharacterFacts["task"] {
 	const cache = new Map<string, { mtime: number; title: string | null; status: string | null }>();
-	return (currentTask) => {
-		const task = parse<{ bundle?: unknown; taskId?: unknown }>(currentTask);
+	return (currentTask, recheck = true) => {
+		const task = parseShared<{ bundle?: unknown; taskId?: unknown }>(currentTask);
 		if (typeof task?.bundle !== "string" || typeof task.taskId !== "string") return null;
 		const file = join(task.bundle, "task.md");
 		let read = cache.get(file);
+		if (read && !recheck) return { title: read.title || task.taskId, status: read.status || null, bundle: task.bundle };
 		try {
 			const mtime = statSync(file).mtimeMs;
 			if (read?.mtime !== mtime) {
@@ -108,8 +128,9 @@ export function taskReader(): (currentTask: string | null) => CharacterFacts["ta
 				cache.set(file, read);
 			}
 		} catch {
-			read = undefined;
-			cache.delete(file);
+			// Gone, as after the task is archived: remembered as unread, so the next check stats it again.
+			read = { mtime: -1, title: null, status: null };
+			cache.set(file, read);
 		}
 		return { title: read?.title || task.taskId, status: read?.status || null, bundle: task.bundle };
 	};

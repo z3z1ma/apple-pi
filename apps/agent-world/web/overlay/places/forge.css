@@ -1,0 +1,746 @@
+/* The forge's panel (list, card, review page) and the confirmation of an outside write: layout only; the look comes
+   from the theme pack's skin. */
+
+.aw-forge.aw-place-panel {
+	width: min(720px, calc(100vw - 48px));
+	max-height: min(720px, calc(100vh - 56px));
+}
+
+.aw-forge-review.aw-place-panel {
+	width: min(1180px, calc(100vw - 40px));
+	height: min(860px, calc(100vh - 40px));
+	max-height: none;
+}
+
+.aw-forge .aw-place-body {
+	position: relative;
+	flex: 1;
+}
+
+/* The list. */
+
+.aw-forge .aw-place-head {
+	align-items: flex-start;
+}
+
+.aw-forge .aw-place-heading {
+	flex: 1;
+}
+
+.aw-forge-read {
+	display: grid;
+	flex: none;
+	justify-items: end;
+	gap: 6px;
+	padding-top: 4px;
+}
+
+.aw-forge-when {
+	font-size: 11px;
+	white-space: nowrap;
+}
+
+.aw-forge-tools {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	margin: 12px 0 6px;
+}
+
+.aw-forge-tools .aw-place-search {
+	flex: 1;
+	margin: 0;
+}
+
+.aw-forge-tally {
+	display: flex;
+	flex: none;
+	gap: 10px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+	font-size: 12px;
+	white-space: nowrap;
+}
+
+.aw-forge-count {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+}
+
+.aw-forge-stale {
+	margin: 8px 0 0;
+	font-size: 12px;
+}
+
+.aw-forge-signin {
+	margin: 10px 0 2px;
+	padding: 10px 12px;
+	font-size: 13px;
+	line-height: 1.45;
+}
+
+.aw-forge-signin p {
+	margin: 0;
+}
+
+.aw-forge-row {
+	margin: 0;
+}
+
+.aw-forge-main {
+	all: unset;
+	box-sizing: border-box;
+	display: grid;
+	grid-template-columns: 22px 1fr auto;
+	align-items: center;
+	gap: 12px;
+	width: 100%;
+	padding: 9px 8px;
+	cursor: pointer;
+}
+
+.aw-forge-text {
+	display: grid;
+	gap: 3px;
+	min-width: 0;
+}
+
+.aw-forge-title {
+	overflow: hidden;
+	font-size: 15px;
+	font-weight: 700;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+
+.aw-forge-number {
+	font-weight: 600;
+}
+
+.aw-forge-detail {
+	overflow: hidden;
+	font-size: 12.5px;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+
+.aw-forge-branch {
+	padding: 0 4px;
+	font-size: 11.5px;
+}
+
+.aw-forge-side {
+	display: grid;
+	justify-items: end;
+	gap: 5px;
+	max-width: 230px;
+}
+
+.aw-forge-time {
+	font-size: 11px;
+}
+
+.aw-forge-tags {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: flex-end;
+	gap: 5px;
+}
+
+.aw-forge-tag {
+	padding: 0 6px;
+	font-size: 11px;
+	font-weight: 600;
+	line-height: 18px;
+	white-space: nowrap;
+}
+
+.aw-forge-agent {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	padding: 0 7px 0 1px;
+	font-size: 11.5px;
+	font-weight: 700;
+	line-height: 20px;
+	white-space: nowrap;
+}
+
+.aw-forge-agent-face {
+	display: block;
+	flex: none;
+	width: 18px;
+	height: 18px;
+	overflow: hidden;
+}
+
+.aw-forge-agent-face img {
+	display: block;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	object-position: 50% 14%;
+	image-rendering: pixelated;
+}
+
+.aw-forge-ghost {
+	height: 52px;
+	margin: 6px 0;
+}
+
+/* The CI mark: a round pip with its glyph drawn by the skin. */
+
+.aw-ci {
+	display: inline-block;
+	flex: none;
+	width: 18px;
+	height: 18px;
+	vertical-align: middle;
+}
+
+.aw-ci-large {
+	width: 34px;
+	height: 34px;
+}
+
+/* The card. */
+
+.aw-forge-card,
+.aw-review {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	min-height: 0;
+}
+
+.aw-forge-crumbs {
+	display: flex;
+	margin: -4px 0 8px;
+}
+
+.aw-forge-back {
+	all: unset;
+	box-sizing: border-box;
+	padding: 2px 8px 2px 18px;
+	font-size: 12.5px;
+	cursor: pointer;
+}
+
+.aw-forge-card-head {
+	display: flex;
+	align-items: flex-start;
+	gap: 14px;
+	padding-bottom: 12px;
+}
+
+.aw-forge-card-heading {
+	min-width: 0;
+}
+
+.aw-forge-card-heading h2,
+.aw-review-heading h2 {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 8px;
+	margin: 0 0 4px;
+	font-size: 21px;
+	font-weight: 600;
+	line-height: 1.2;
+}
+
+.aw-forge-card-meta {
+	margin: 0;
+	font-size: 13px;
+}
+
+.aw-forge-card-scroll {
+	flex: 1;
+	min-height: 0;
+	overflow-y: auto;
+	margin: 0 -8px;
+	padding: 2px 8px 8px;
+	scrollbar-width: thin;
+}
+
+.aw-forge-facts {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 10px 18px;
+	margin: 4px 0 12px;
+}
+
+.aw-forge-fact dt {
+	margin-bottom: 3px;
+	font-size: 10.5px;
+	font-weight: 700;
+}
+
+.aw-forge-fact dd {
+	margin: 0;
+	font-size: 14px;
+	line-height: 1.4;
+}
+
+.aw-forge-built {
+	display: inline-flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px;
+}
+
+.aw-forge-built .aw-forge-quiet {
+	font-size: 12px;
+}
+
+.aw-forge-checks,
+.aw-forge-description {
+	margin: 0 0 10px;
+}
+
+.aw-forge-checks summary,
+.aw-forge-description summary {
+	padding: 6px 0;
+	font-size: 12px;
+	font-weight: 700;
+	cursor: pointer;
+}
+
+.aw-forge-checks ul {
+	display: grid;
+	gap: 3px;
+	margin: 2px 0 4px;
+	padding: 0;
+	list-style: none;
+}
+
+.aw-forge-check {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-size: 13px;
+}
+
+.aw-forge-check .aw-ci {
+	width: 14px;
+	height: 14px;
+}
+
+.aw-forge-check .aw-forge-quiet {
+	margin-left: auto;
+	font-size: 11.5px;
+}
+
+.aw-forge-more {
+	margin: 2px 0 4px 22px;
+	font-size: 12px;
+}
+
+.aw-forge-body {
+	max-height: 260px;
+	overflow-y: auto;
+	padding: 8px 12px;
+	font-size: 13.5px;
+	line-height: 1.5;
+	scrollbar-width: thin;
+}
+
+.aw-forge-body > :first-child {
+	margin-top: 0;
+}
+
+.aw-forge-body > :last-child {
+	margin-bottom: 0;
+}
+
+.aw-forge-ask {
+	margin-top: 6px;
+	padding: 12px 14px;
+}
+
+.aw-forge-ask h3 {
+	margin: 0 0 8px;
+	font-size: 11px;
+	font-weight: 700;
+}
+
+.aw-forge-note {
+	all: unset;
+	box-sizing: border-box;
+	display: block;
+	width: 100%;
+	min-height: 48px;
+	padding: 7px 10px;
+	font-size: 13.5px;
+	line-height: 1.4;
+	white-space: pre-wrap;
+	resize: vertical;
+}
+
+.aw-forge-ask-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin-top: 8px;
+}
+
+.aw-forge-ask-note {
+	margin: 8px 0 0;
+	font-size: 12px;
+}
+
+.aw-forge-receipt {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px 14px;
+}
+
+.aw-forge-receipt .aw-progress {
+	flex: 1 1 100%;
+	margin: 0;
+}
+
+.aw-forge-stages {
+	display: flex;
+	gap: 6px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+	font-size: 11px;
+}
+
+.aw-forge-stages li {
+	padding: 1px 7px;
+}
+
+.aw-forge-actions {
+	display: flex;
+	justify-content: flex-end;
+	gap: 8px;
+	padding-top: 12px;
+}
+
+.aw-places .aw-forge-actions .aw-button {
+	padding: 6px 14px 7px;
+	font-size: 13px;
+}
+
+.aw-forge-link {
+	all: unset;
+	cursor: pointer;
+	text-decoration: underline;
+	text-underline-offset: 2px;
+}
+
+/* The review page: a head, the files beside the diff, and the review to send under them. */
+
+.aw-review-head {
+	display: flex;
+	align-items: flex-end;
+	gap: 16px;
+	padding-bottom: 10px;
+}
+
+.aw-review-heading {
+	flex: 1;
+	min-width: 0;
+}
+
+.aw-review-totals {
+	display: flex;
+	flex: none;
+	gap: 10px;
+	margin: 0;
+	font-size: 13px;
+	font-weight: 700;
+}
+
+.aw-review-body {
+	display: grid;
+	flex: 1;
+	grid-template-columns: minmax(180px, 250px) 1fr;
+	gap: 12px;
+	min-height: 0;
+}
+
+.aw-review-files {
+	min-height: 0;
+	overflow-y: auto;
+	scrollbar-width: thin;
+}
+
+.aw-review-files ul {
+	margin: 0;
+	padding: 4px;
+	list-style: none;
+}
+
+.aw-review-file {
+	all: unset;
+	box-sizing: border-box;
+	display: grid;
+	grid-template-columns: 1fr auto;
+	align-items: baseline;
+	gap: 6px;
+	width: 100%;
+	padding: 5px 8px;
+	font-size: 12.5px;
+	cursor: pointer;
+}
+
+.aw-review-file-name {
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+	direction: rtl;
+	text-align: left;
+}
+
+.aw-review-file-dir:not(:empty)::after {
+	content: "/";
+}
+
+.aw-review-file-counts {
+	display: inline-flex;
+	gap: 5px;
+	font-size: 11px;
+	font-weight: 700;
+}
+
+.aw-review-diff {
+	min-height: 0;
+	overflow: auto;
+	scrollbar-width: thin;
+}
+
+.aw-diff-file {
+	margin: 0 0 14px;
+	scroll-margin-top: 0;
+}
+
+.aw-diff-file-head {
+	position: sticky;
+	top: 0;
+	z-index: 1;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 6px 10px;
+	font-size: 12.5px;
+}
+
+.aw-diff-status {
+	flex: none;
+	padding: 0 6px;
+	font-size: 10.5px;
+	font-weight: 700;
+	line-height: 17px;
+}
+
+.aw-diff-path {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	font-family: var(--aw-font-mono);
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+
+.aw-diff-note {
+	margin: 0;
+	padding: 10px 12px;
+	font-size: 13px;
+}
+
+.aw-diff {
+	width: 100%;
+	border-collapse: collapse;
+	font-family: var(--aw-font-mono);
+	font-size: 12px;
+	line-height: 18px;
+}
+
+.aw-diff td {
+	padding: 0;
+	vertical-align: top;
+}
+
+.aw-diff td.aw-diff-no {
+	width: 1%;
+	min-width: 38px;
+	padding: 0 8px;
+	text-align: right;
+	white-space: nowrap;
+	user-select: none;
+}
+
+.aw-diff-no::before {
+	content: attr(data-no);
+}
+
+.aw-diff td.aw-diff-code {
+	padding: 0 12px 0 6px;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	tab-size: 4;
+}
+
+.aw-diff-sign {
+	display: inline-block;
+	width: 14px;
+	user-select: none;
+}
+
+.aw-diff .aw-diff-hunk td {
+	padding: 3px 12px;
+	font-size: 11.5px;
+	white-space: pre;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.aw-review-cut {
+	margin: 4px 0 12px;
+	padding: 10px 12px;
+	font-size: 13px;
+}
+
+.aw-review-compose {
+	display: grid;
+	gap: 8px;
+	margin-top: 12px;
+	padding-top: 12px;
+}
+
+.aw-review-text {
+	all: unset;
+	box-sizing: border-box;
+	display: block;
+	width: 100%;
+	min-height: 64px;
+	max-height: 180px;
+	padding: 8px 11px;
+	font-size: 14px;
+	line-height: 1.45;
+	white-space: pre-wrap;
+	overflow-y: auto;
+	resize: vertical;
+}
+
+.aw-review-send {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+}
+
+.aw-review-send > p {
+	flex: 1;
+	min-width: 0;
+	margin: 0;
+	font-size: 13px;
+}
+
+.aw-review-buttons {
+	display: flex;
+	flex: none;
+	gap: 8px;
+}
+
+.aw-places .aw-review-buttons .aw-button {
+	padding: 6px 14px 7px;
+	font-size: 13px;
+}
+
+/* The confirmation of a write outside, over the panel that asked for it. */
+
+.aw-write-veil {
+	position: absolute;
+	inset: 0;
+	z-index: 5;
+	display: grid;
+	place-items: center;
+	padding: 24px;
+	animation: aw-place-veil-in 140ms ease-out;
+}
+
+.aw-write-confirm {
+	position: relative;
+	display: grid;
+	gap: 10px;
+	width: min(520px, 100%);
+	max-height: 100%;
+	padding: 22px 24px 18px;
+	animation: aw-place-in 180ms cubic-bezier(0.2, 0.9, 0.3, 1.15);
+}
+
+.aw-write-confirm .aw-confirm-mark {
+	position: absolute;
+	top: -13px;
+	right: 20px;
+	left: auto;
+	width: 28px;
+	height: 28px;
+	transform: none;
+}
+
+.aw-write-confirm h2 {
+	margin: 0;
+	padding-right: 36px;
+	font-size: 20px;
+	font-weight: 600;
+}
+
+.aw-write-facts {
+	display: grid;
+	gap: 4px;
+	margin: 0;
+}
+
+.aw-write-facts div {
+	display: grid;
+	grid-template-columns: 56px 1fr;
+	gap: 8px;
+	font-size: 13.5px;
+}
+
+.aw-write-facts dt {
+	font-size: 10.5px;
+	font-weight: 700;
+	line-height: 20px;
+}
+
+.aw-write-facts dd {
+	margin: 0;
+	overflow-wrap: anywhere;
+}
+
+.aw-write-text {
+	max-height: 220px;
+	overflow-y: auto;
+	margin: 2px 0 0;
+	padding: 10px 12px;
+	font-size: 14px;
+	line-height: 1.45;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+.aw-write-note {
+	margin: 0;
+	font-size: 12px;
+}
+
+.aw-write-actions {
+	display: flex;
+	justify-content: flex-end;
+	gap: 8px;
+	margin-top: 4px;
+}
+
+.aw-places .aw-write-actions .aw-button {
+	padding: 6px 14px 7px;
+	font-size: 13px;
+}

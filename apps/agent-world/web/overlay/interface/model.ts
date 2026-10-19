@@ -68,7 +68,14 @@ export function placeOwner(ref: PlaceRef, world: WorldSnapshot | undefined): str
 }
 
 /** The places outside any headquarters, in the order the Places tab lists them. */
-export const OUTSIDE: PlaceRef[] = [{ kind: "square" }, { kind: "inn" }, { kind: "rookery" }];
+export const OUTSIDE: PlaceRef[] = [
+	{ kind: "square" },
+	{ kind: "forge" },
+	{ kind: "quest-office" },
+	{ kind: "library" },
+	{ kind: "inn" },
+	{ kind: "rookery" },
+];
 
 /** Every place that exists now, in the order the world opens them: each headquarters' rooms and wings, then the square. */
 export function placesOf(world: WorldSnapshot | undefined): PlaceRef[] {

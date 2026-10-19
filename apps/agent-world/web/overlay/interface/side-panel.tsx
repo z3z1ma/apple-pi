@@ -1,25 +1,29 @@
 // The tabbed side panel at the bottom right, as in Old School RuneScape: everyone by place, who needs you, work by
 // ledger task, every place to travel to, and settings. Clicking the open tab folds the panel down to its tabs.
-import type { ReactNode } from "react";
+import { type ReactNode, useSyncExternalStore } from "react";
 import type { Character, PlaceRef, WorldSnapshot } from "../../../src/world.js";
 import { isOutside, placeKey } from "../../../src/world.js";
 import type { AvatarLook } from "../../looks.js";
 import { say } from "../../theme.js";
 import { useTheme } from "../../theme-store.js";
 import type { ThemeOption } from "../../view-state.js";
+import { AtlassianSettings } from "../places/atlassian-settings.js";
+import { forge } from "../places/forge-state.js";
 import { MailList } from "../places/mail-list.js";
 import { placePanels } from "../places/place-panels.js";
+import { SlackIcon, SlackSettings, SlackTab } from "../places/slack-tab.js";
 import { AgentsIcon, BellIcon, ChevronIcon, CogIcon, LetterIcon, ScrollIcon, SignpostIcon } from "./icons.js";
 import { activity, byPlace, byTask, type Group, needsYou, OUTSIDE, orbCounts, placeName, placesOf } from "./model.js";
 import { type CharacterAction, CharacterRow } from "./rows.js";
 
-export type Tab = "agents" | "needs-you" | "work" | "mail" | "places" | "settings";
+export type Tab = "agents" | "needs-you" | "work" | "mail" | "slack" | "places" | "settings";
 
 const TABS: { tab: Tab; title: string; icon: ReactNode }[] = [
 	{ tab: "agents", title: "Agents", icon: <AgentsIcon /> },
 	{ tab: "needs-you", title: "Needs you", icon: <BellIcon /> },
 	{ tab: "work", title: "Work", icon: <ScrollIcon /> },
 	{ tab: "mail", title: "Mail", icon: <LetterIcon /> },
+	{ tab: "slack", title: "Slack", icon: <SlackIcon /> },
 	{ tab: "places", title: "Places", icon: <SignpostIcon /> },
 	{ tab: "settings", title: "Settings", icon: <CogIcon /> },
 ];
@@ -107,6 +111,7 @@ function TabBody(props: SidePanelProps) {
 	if (tab === "places") return <Places {...props} />;
 	if (tab === "settings") return <Settings {...props} />;
 	if (tab === "mail") return <Mail {...props} />;
+	if (tab === "slack") return <SlackTab />;
 	if (!world?.characters.length) return <p className="aw-empty">Nobody is awake.</p>;
 	if (tab === "agents") return <Groups {...props} groups={byPlace(world, labels)} detail={activity} />;
 	if (tab === "work")
@@ -188,6 +193,7 @@ function Mail({ world }: SidePanelProps) {
 }
 
 function Places({ world, labels, here, travel }: SidePanelProps) {
+	const forgeList = useSyncExternalStore(forge.subscribe, forge.get).list;
 	const theme = useTheme();
 	const places = placesOf(world);
 	const sections: { key: string; title: string; places: PlaceRef[] }[] = [
@@ -207,6 +213,12 @@ function Places({ world, labels, here, travel }: SidePanelProps) {
 		if (ref.kind === "inn") {
 			const asleep = world?.dormant?.length ?? 0;
 			return asleep ? say(theme, "asleep-count", { count: asleep }) : say(theme, "nobody-asleep");
+		}
+		if (ref.kind === "forge") {
+			const open = forgeList.pullRequests.length;
+			const failing = forgeList.pullRequests.filter((pr) => pr.ci === "failing").length;
+			if (!open) return "";
+			return `${open} open pull ${open === 1 ? "request" : "requests"}${failing ? `, ${failing} failing` : ""}`;
 		}
 		if (ref.kind === "rookery") {
 			const waiting = world?.mail?.filter((item) => item.state === "waiting").length ?? 0;
@@ -369,6 +381,8 @@ function Settings({
 					))}
 				</fieldset>
 			</section>
+			<AtlassianSettings />
+			<SlackSettings />
 			<section aria-label="Controls">
 				<h3>
 					<span>Controls</span>
