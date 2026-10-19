@@ -3,6 +3,7 @@
 // Movement has two modes to compare: "smooth" (a fine grid, string-pulled paths, continuous motion) and "tiles"
 // (RuneScape's tile-by-tile steps on the place's tile grid).
 import { Grid } from "./grid.js";
+import { closeTalk, openTalk, talkOpen } from "./talk.js";
 import { closeChat, menuOpen, openMenu, say, showHover } from "./ui.js";
 import { lineFor } from "./world.js";
 
@@ -38,12 +39,14 @@ export class PlaceScene extends Phaser.Scene {
 			this.fine.block(cells(r, FINE));
 		}
 		closeChat();
+		closeTalk();
 		showHover([]);
 		place.drawBackdrop(this);
 		this.hotspots = place.hotspots ?? [];
 		this.people = [];
 		for (const p of place.people) this.addPerson(p);
 		this.props = (place.props ?? []).map((p) => this.addProp(p));
+		this.time.addEvent({ delay: 2600, loop: true, callback: () => this.bark() });
 		const start = place.entries[this.entry] ?? place.entries.start;
 		this.avatar = this.makeCharacter(app.avatarLook, this.pt(start), STILL.up);
 		if (app.showGrid) this.drawGrid();
@@ -122,9 +125,37 @@ export class PlaceScene extends Phaser.Scene {
 		this.coarse.block([Math.floor(at[0]), Math.floor(at[1]), 1, 1]);
 		this.fine.block(cells([at[0] - 0.3, at[1] - 0.3, 0.6, 0.5], FINE));
 		if (pose === "sit" && s.status === "busy") sprite.play(`${look}-work`);
-		const badge = this.add.container(sprite.x, sprite.y - sprite.displayHeight - 8).setDepth(100000);
-		this.drawBadge(badge, s);
-		this.people.push({ sprite, badge, session: s });
+		const person = { sprite, badge: null, session: s };
+		this.people.push(person);
+		this.redrawBadge(person);
+	}
+
+	redrawBadge(person) {
+		person.badge?.destroy();
+		const { sprite, session } = person;
+		person.badge = this.add.container(sprite.x, sprite.y - sprite.displayHeight - 8).setDepth(100000);
+		this.drawBadge(person.badge, session);
+	}
+
+	/** Now and then a character that needs you says so in a speech bubble: state that reads from a distance. */
+	bark() {
+		const candidates = this.people.filter((p) => !p.bubble && (p.session.status === "waiting" || p.session.needsYou || p.session.unread));
+		if (!candidates.length || Math.random() < 0.4) return;
+		const person = candidates[Math.floor(Math.random() * candidates.length)];
+		const s = person.session;
+		const line = s.status === "waiting" ? "I have a question!" : s.needsYou ? "Done! Come and see." : `${s.unread} new in ${s.name}`;
+		const text = this.add.text(0, 0, line, { fontFamily: "Georgia, serif", fontSize: "14px", color: "#2b1d12" }).setOrigin(0.5);
+		const w = text.width + 18;
+		const g = this.add.graphics();
+		g.fillStyle(0xfff6e0, 0.97).fillRoundedRect(-w / 2, -14, w, 28, 10).lineStyle(2, 0x6b4a2a).strokeRoundedRect(-w / 2, -14, w, 28, 10);
+		g.fillStyle(0xfff6e0, 0.97).fillTriangle(-6, 13, 6, 13, 0, 21);
+		const { sprite } = person;
+		const bubble = this.add.container(sprite.x, sprite.y - sprite.displayHeight - 44, [g, text]).setDepth(100001).setAlpha(0);
+		person.bubble = bubble;
+		this.tweens.add({ targets: bubble, alpha: 1, y: bubble.y - 6, duration: 220 });
+		this.time.delayedCall(2600, () =>
+			this.tweens.add({ targets: bubble, alpha: 0, duration: 300, onComplete: () => { bubble.destroy(); person.bubble = null; } }),
+		);
 	}
 
 	/** An overlaid thing to interact with, drawn over the painting at its feet position. */
@@ -175,7 +206,7 @@ export class PlaceScene extends Phaser.Scene {
 
 	/** Every action under the pointer, the default first, as RuneScape lists them. */
 	actionsAt(pointer) {
-		if (menuOpen()) return [];
+		if (menuOpen() || talkOpen()) return [];
 		const world = this.pointerWorld(pointer);
 		const tx = world.x / this.T;
 		const ty = world.y / this.T;
@@ -198,7 +229,7 @@ export class PlaceScene extends Phaser.Scene {
 	}
 
 	click(pointer) {
-		if (menuOpen()) return;
+		if (menuOpen() || talkOpen()) return;
 		const actions = this.actionsAt(pointer);
 		if (pointer.rightButtonDown()) openMenu(pointer.event.clientX, pointer.event.clientY, actions);
 		else actions[0].run();
@@ -314,7 +345,16 @@ export class PlaceScene extends Phaser.Scene {
 			say(s.name, lineFor(s), ["Reply as myself (not in this prototype).", "Ask an agent to look into it (not in this prototype).", "Goodbye."], this.portraitFor(s));
 			return;
 		}
-		say(s.name, lineFor(s), s.status === "waiting" ? ["Show me the question.", "Later."] : ["Tell me more.", "Goodbye."], this.portraitFor(s));
+		openTalk(s, this.portraitFor(s), {
+			changed: (changed) => {
+				const person = this.people.find((p) => p.session === changed);
+				if (!person) return;
+				this.redrawBadge(person);
+				if (person.sprite.lift !== undefined && changed.status === "busy") person.sprite.play(`${person.sprite.look}-work`);
+				else if (person.sprite.lift !== undefined) person.sprite.anims.stop();
+			},
+			terminal: () => closeTalk() || this.note(`Would switch tmux to ${s.name}'s pane (prototype: not wired).`),
+		});
 	}
 
 	examine(s) {

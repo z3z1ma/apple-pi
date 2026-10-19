@@ -1,6 +1,6 @@
 # PROTOTYPE: the Agent World headquarters
 
-Throwaway prototype for [How places are built](../../decisions/15-how-places-are-built.md) (round 1), then [Characters and portraits](../../decisions/22-characters-and-portraits.md) and [Movement and pathing](../../decisions/23-movement-and-pathing.md) (round 2), and [How exteriors are built](../../decisions/24-how-exteriors-are-built.md) (round 4), built after [Purpose and form of the world](../../decisions/19-purpose-and-form-of-the-world.md) and [What a wing is](../../decisions/21-what-a-wing-is.md). Fantasy theme only. It shares nothing with the notch, the rejected Guild Hall room, or the town.
+Throwaway prototype for [How places are built](../../decisions/15-how-places-are-built.md) (round 1), then [Characters and portraits](../../decisions/22-characters-and-portraits.md) and [Movement and pathing](../../decisions/23-movement-and-pathing.md) (round 2), and [How exteriors are built](../../decisions/24-how-exteriors-are-built.md) (round 4), and [Dialogue with a character](../../decisions/17-dialogue-with-a-character.md) (round 5), built after [Purpose and form of the world](../../decisions/19-purpose-and-form-of-the-world.md) and [What a wing is](../../decisions/21-what-a-wing-is.md). Fantasy theme only. It shares nothing with the notch, the rejected Guild Hall room, or the town.
 
 ## Question
 
@@ -40,6 +40,17 @@ The tiled lane was rejected, so the hall doors now open onto **the village squar
 - **Left open in the painting and overlaid:** the fountain basin was painted dry and gets animated water (a surface, a moving shine, a spout of particles); the lanterns were painted unlit and get flickering glows; a cat to pet sits on the inn steps.
 - **Slack channels as townsfolk:** `#incidents`, `#eng-data`, and `#random` (seed data, no Slack connection) stand in the square as a merchant, a crier, and a bard, each with an unread badge; talking shows the channel's latest message and offers to reply as yourself or to ask an agent (not wired). Independent agents stand around the square.
 - New art: one Codex painting, three townsfolk sheets with portraits, and a cat sheet, about 70 seconds in parallel.
+
+## Round 5: the conversation panel
+
+Talking to an agent now opens the conversation panel decided in [Dialogue with a character](../../decisions/17-dialogue-with-a-character.md), drawn as a leather-bound book over the dimmed world (`src/talk.js`, seed conversations in `src/conversations.js`):
+
+- **Left:** the large portrait (its expression follows the state), name, repository, ledger task, what it is doing, and **Go to its terminal**.
+- **Right:** the transcript as Markdown with code; tool calls folded to one line ("ran `npx vitest run ...`") that open on click; a busy agent's reply streams in with a caret.
+- **Actions by state:** idle: **Reply**; busy: **Redirect now**, **Tell it after this**, **Stop**; asking you: the questionnaire as a form (each question with its options and their descriptions, plus "Something else"). Sending only changes this page and notes which command a real session would get.
+- Opening the panel marks the agent seen; **Esc** or the cross closes it.
+- **Barks:** now and then a character that needs you says so in a speech bubble ("I have a question!", "Done! Come and see.", "3 new in #incidents").
+- Townsfolk (Slack channels) still answer in the small dialogue box.
 
 ## What to try
 

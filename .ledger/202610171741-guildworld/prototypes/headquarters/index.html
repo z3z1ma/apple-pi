@@ -25,6 +25,40 @@ of wings, wing rooms) and a tiled exterior, walked RuneScape-style. Run ./serve.
 	#chat .portrait.talking { animation: talk .32s ease-in-out infinite alternate; }
 	@keyframes talk { from { transform: translateY(0) scale(1); } to { transform: translateY(-3px) scale(1.012); } }
 	#chat .opts { margin-top: 8px; display: grid; gap: 2px; } #chat .opt { color: #9fd3ff; cursor: pointer; } #chat .opt:hover { color: #fff; }
+	/* The conversation panel, fantasy theme: a leather-bound book over the dimmed world. */
+	#talk { position: fixed; inset: 0; background: rgba(12, 8, 16, .55); display: flex; align-items: center; justify-content: center; z-index: 20; }
+	#talk[hidden] { display: none; }
+	#talk .book { position: relative; display: grid; grid-template-columns: 300px 1fr; width: min(1120px, 94vw); height: min(740px, 88vh); padding: 18px; box-sizing: border-box; border-radius: 14px; background: linear-gradient(135deg, #5b3a24, #3d2516 60%, #4a2e1b); box-shadow: 0 24px 60px rgba(0,0,0,.65), inset 0 0 0 3px #a07a42, inset 0 0 0 6px #3d2516, inset 0 0 0 7px #c9a25e; }
+	#talk .side { display: flex; flex-direction: column; align-items: center; padding: 12px 16px; color: #f3e2b8; font-family: Georgia, serif; text-align: center; }
+	#talk .portrait { width: 250px; height: auto; margin-top: 6px; filter: drop-shadow(0 8px 12px rgba(0,0,0,.5)); }
+	#talk h2 { margin: 10px 0 2px; font: 600 24px Georgia, serif; color: #ffe2a0; }
+	#talk .meta { font-size: 14px; color: #e5cf9f; } #talk .task { font-size: 12px; color: #d8c08a; }
+	#talk .doing { margin: 12px 0; padding: 6px 12px; border-radius: 999px; background: rgba(0,0,0,.28); font-size: 13px; color: #f3e2b8; }
+	#talk .doing.waiting { background: #f2c14e; color: #2b2238; font-weight: 700; } #talk .doing.busy { box-shadow: inset 0 0 0 1px #c9a25e; }
+	#talk .side-btn { margin-top: auto; font: 14px Georgia, serif; color: #2b1d12; background: linear-gradient(#f3e2b8, #d9c08a); border: 1px solid #8a6a3a; border-radius: 8px; padding: 8px 14px; cursor: pointer; }
+	#talk .page { position: relative; display: flex; flex-direction: column; min-height: 0; border-radius: 6px 10px 10px 6px; background: radial-gradient(ellipse at 30% 20%, #fbf1d8, #efe0bc 70%, #e4d0a4); box-shadow: inset 8px 0 18px -8px rgba(80,50,20,.55), inset 0 0 40px rgba(140,100,40,.18); color: #2b1d12; font: 16px/1.5 Georgia, serif; }
+	#talk .close { position: absolute; top: 6px; right: 10px; z-index: 2; background: none; border: 0; font-size: 26px; color: #6b4a2a; cursor: pointer; }
+	#talk .log { flex: 1; overflow: auto; padding: 22px 30px 10px; }
+	#talk .entry { margin: 0 0 14px; } #talk .entry .who { font-weight: 700; color: #6b3e1c; font-size: 14px; letter-spacing: .3px; }
+	#talk .entry.you .who { color: #2f5a7a; } #talk .entry.you .body { color: #1f3b52; }
+	#talk .tag { font-weight: 400; font-style: italic; color: #8a6a3a; }
+	#talk .body p { margin: 4px 0; } #talk .body ul, #talk .body ol { margin: 4px 0 4px 22px; padding: 0; }
+	#talk code { font: 13px ui-monospace, Menlo, monospace; background: rgba(107,74,42,.12); padding: 1px 4px; border-radius: 4px; }
+	#talk pre { margin: 8px 0; padding: 10px 12px; background: #2b2238; color: #f3e9d2; border-radius: 8px; overflow: auto; } #talk pre code { background: none; color: inherit; padding: 0; }
+	#talk .tool { margin: 0 0 10px 6px; font-size: 13px; color: #6b5a3e; } #talk .tool summary { cursor: pointer; list-style: none; } #talk .tool summary::before { content: "\25B8  "; color: #a07a42; }
+	#talk .tool[open] summary::before { content: "\25BE  "; } #talk .tool-body { margin: 4px 0 0 16px; font-style: italic; }
+	#talk .note { margin: 0 0 12px; font-size: 13px; font-style: italic; color: #8a6a3a; text-align: center; }
+	#talk .caret { display: inline-block; width: 8px; height: 15px; margin-left: 2px; background: #6b3e1c; vertical-align: -2px; animation: caret 1s steps(1) infinite; }
+	@keyframes caret { 50% { opacity: 0; } }
+	#talk .act { padding: 12px 24px 18px; border-top: 1px solid rgba(107,74,42,.3); }
+	#talk textarea { width: 100%; box-sizing: border-box; min-height: 64px; resize: vertical; font: 15px/1.4 Georgia, serif; color: #2b1d12; background: rgba(255,250,235,.8); border: 1px solid #b89a66; border-radius: 8px; padding: 8px 10px; }
+	#talk .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px; }
+	#talk .row button { font: 14px Georgia, serif; padding: 7px 14px; border-radius: 8px; border: 1px solid #8a6a3a; background: #f6ead0; color: #2b1d12; cursor: pointer; }
+	#talk .row button.primary { background: linear-gradient(#7a4a24, #5b3518); color: #ffe9bf; border-color: #3d2516; } #talk .row button.danger { color: #8a2a1a; }
+	#talk .form { max-height: 46vh; overflow: auto; } #talk .form-title { font-weight: 700; color: #6b3e1c; margin-bottom: 6px; }
+	#talk fieldset { border: 1px solid #c9ab76; border-radius: 10px; margin: 0 0 10px; padding: 8px 12px; background: rgba(255,250,235,.55); } #talk legend { padding: 0 6px; font-weight: 700; }
+	#talk .opt { display: flex; gap: 10px; align-items: flex-start; padding: 5px 4px; cursor: pointer; border-radius: 6px; } #talk .opt:hover { background: rgba(160,122,66,.12); }
+	#talk .opt span { display: flex; flex-direction: column; } #talk .opt small { color: #6b5a3e; font-size: 13px; } #talk .opt input[type=text] { margin-top: 4px; font: 14px Georgia, serif; padding: 4px 8px; border: 1px solid #b89a66; border-radius: 6px; background: #fffaf0; }
 	#controls { position: fixed; left: 10px; bottom: 10px; width: 330px; border-radius: 8px; background: rgba(246,243,238,.95); color: #222; font-size: 12px; box-shadow: 0 8px 24px rgba(0,0,0,.5); z-index: 8; }
 	#controls.closed #body { display: none; }
 	#toggle { width: 100%; text-align: left; border: 0; background: #e6dfd3; padding: 6px 10px; font-weight: 700; cursor: pointer; border-radius: 8px 8px 0 0; }
@@ -39,6 +73,7 @@ of wings, wing rooms) and a tiled exterior, walked RuneScape-style. Run ./serve.
 <div id="where"></div>
 <div id="menu" hidden></div>
 <div id="chat" hidden></div>
+<div id="talk" hidden></div>
 <div id="controls" class="closed">
 	<button id="toggle">Prototype controls (not part of the design)</button>
 	<div id="body">
