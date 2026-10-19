@@ -45,6 +45,7 @@ A whole-product spec for Agent World, ready for `/skill:to-spec`: every architec
 - [Dialogue with a character](decisions/17-dialogue-with-a-character.md): talking opens a themed conversation panel with the portrait, the Markdown transcript with folded tool calls and the streaming reply, and state-dependent actions (reply; redirect, tell it after, stop; a themed form for questionnaires); barks over heads for state at a distance.
 - [Coordinator delegation protocol](decisions/12-coordinator-delegation-protocol.md): no protocol of its own: the operator talks to the coordinator in the panel, the coordinator starts workers with its lifecycle tools, and the world observes the outcome; no required link from a worker to a thread.
 - [The interface panel](decisions/26-the-interface-panel.md): Old School RuneScape's layout in each theme's style: minimap with orbs, a tabbed side panel from which every action works anywhere, and a chatbox of world events; walking is for immersion.
+- [What you do in each function place](decisions/25-what-you-do-in-each-function-place.md): per place, what it shows and what you do as yourself or delegate: forge (PRs, review), quest office (your issues plus search), library (Confluence search), town square (unread channels, bounded, plus the crier), inn (wake dormant agents), rookery (mail); every place opens the real tool.
 
 ## Not yet specified
 
