@@ -83,6 +83,10 @@ const actions = {
 		app.movement = app.movement === "smooth" ? "tiles" : "smooth";
 		document.getElementById("movement").textContent = `Movement: ${app.movement}`;
 	},
+	grid: () => {
+		app.showGrid = !app.showGrid;
+		restart();
+	},
 	forget: () => {
 		app.remembered = [];
 		restart();

@@ -25,7 +25,7 @@ gen() {
 }
 
 sheet() {
-	gen "$1-sheet.png" "A pixel art character sprite sheet on a solid flat pure magenta #FF00FF background: a grid of 4 columns and 4 rows of equal cells with wide magenta gaps, every cell showing the same single character at exactly the same size and scale, full body, feet at the same height in every cell. Polished hand-crafted pixel art of top-tier indie RPG quality (Eastward, Sea of Stars, Octopath), drawn for a 3/4 top-down view, about 100 pixels tall, clean dark outline, soft warm shading, no ground shadow, no text. Row 1: walking toward the viewer (facing down), four walk-cycle frames with clearly alternating legs and swinging arms. Row 2: walking away from the viewer (facing up, back visible), four walk-cycle frames. Row 3: walking to the left in side profile, four walk-cycle frames. Row 4: (1) sitting on a low stool seen from behind, leaning forward writing at a desk that is not drawn; (2) the same pose with the writing arm moved; (3) standing relaxed facing the viewer; (4) standing facing the viewer with one hand raised high as if asking a question. Character: $2"
+	gen "$1-sheet.png" "A pixel art character sprite sheet on a solid flat pure magenta #FF00FF background: a grid of 4 columns and 4 rows of equal cells with wide magenta gaps, every cell showing the same single character at exactly the same size and scale, full body, feet at the same height in every cell. Polished hand-crafted pixel art of top-tier indie RPG quality (Eastward, Sea of Stars, Octopath), drawn for a 3/4 top-down view, about 100 pixels tall, clean dark outline, soft warm shading, no ground shadow, no text. Each walking row is a proper four-frame walk cycle in this order: frame 1 contact (front leg forward, back leg behind, both feet on the ground), frame 2 passing (legs together under the body, one knee lifted, body slightly higher), frame 3 contact with the other leg forward, frame 4 passing with the other knee lifted; arms swing opposite to the legs. Row 1: walking toward the viewer (facing down). Row 2: walking away from the viewer (facing up, back visible). Row 3: walking to the left in side profile; the side view must clearly show the legs closing together in frames 2 and 4. Row 4: (1) seated pose seen from behind, leaning forward writing at a desk, with NO stool, chair or seat drawn at all (the character is drawn alone in the seated pose, so a seat painted in the room shows beneath); (2) the same seated pose with the writing arm moved; (3) standing relaxed facing the viewer; (4) standing facing the viewer with one hand raised high as if asking a question. Character: $2"
 }
 
 portrait() {
@@ -34,7 +34,7 @@ portrait() {
 
 for name in "${!LOOK[@]}"; do
 	sheet "$name" "${LOOK[$name]}" &
-	portrait "$name" "${LOOK[$name]}" &
+	[ -f "$name-portrait.png" ] || portrait "$name" "${LOOK[$name]}" &
 done
 wait
 ls

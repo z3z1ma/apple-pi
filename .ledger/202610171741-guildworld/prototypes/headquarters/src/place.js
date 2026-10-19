@@ -33,9 +33,9 @@ export class PlaceScene extends Phaser.Scene {
 		this.T = T;
 		this.coarse = new Grid(place.cols, place.rows);
 		this.fine = new Grid(place.cols * FINE, place.rows * FINE);
-		for (const [x, y, w, h] of place.blocked) {
-			this.coarse.block([x, y, w, h]);
-			this.fine.block([x * FINE, y * FINE, w * FINE, h * FINE]);
+		for (const r of place.blocked) {
+			this.coarse.block(cells(r, 1));
+			this.fine.block(cells(r, FINE));
 		}
 		closeChat();
 		showHover([]);
@@ -44,7 +44,8 @@ export class PlaceScene extends Phaser.Scene {
 		this.people = [];
 		for (const p of place.people) this.addPerson(p);
 		const start = place.entries[this.entry] ?? place.entries.start;
-		this.avatar = this.makeCharacter(app.avatarLook, this.tileCenter(start), STILL.up);
+		this.avatar = this.makeCharacter(app.avatarLook, this.pt(start), STILL.up);
+		if (app.showGrid) this.drawGrid();
 		this.cameras.main.startFollow(this.avatar, true, 0.1, 0.1);
 		this.applyZoom();
 		this.cameras.main.fadeIn(220, 20, 14, 24);
@@ -70,13 +71,24 @@ export class PlaceScene extends Phaser.Scene {
 		this.cameras.main.setBounds(Math.min(0, (w - vw) / 2), Math.min(0, (h - vh) / 2), Math.max(w, vw), Math.max(h, vh));
 	}
 
-	tileCenter([x, y]) {
-		return { x: (x + 0.5) * this.T, y: (y + 0.5) * this.T };
+	/** A place coordinate in tiles (fractions allowed) as a world point. */
+	pt([x, y]) {
+		return { x: x * this.T, y: y * this.T };
+	}
+
+	/** The fine walk grid over the painting, blocked cells in red: a prototype aid for tracing furniture. */
+	drawGrid() {
+		const g = this.add.graphics().setDepth(99990);
+		const u = this.T / FINE;
+		for (let y = 0; y < this.fine.h; y++)
+			for (let x = 0; x < this.fine.w; x++) {
+				g.fillStyle(this.fine.free(x, y) ? 0x40ff80 : 0xff3030, this.fine.free(x, y) ? 0.08 : 0.28).fillRect(x * u + 1, y * u + 1, u - 2, u - 2);
+			}
 	}
 
 	makeCharacter(look, at, frame) {
-		const shadow = this.add.ellipse(at.x, at.y + this.T * 0.42, this.T * 0.62, this.T * 0.2, 0x000000, 0.28);
-		const sprite = this.add.sprite(at.x, at.y + this.T * 0.45, look, frame).setOrigin(0.5, 1);
+		const shadow = this.add.ellipse(at.x, at.y, this.T * 0.62, this.T * 0.2, 0x000000, 0.28);
+		const sprite = this.add.sprite(at.x, at.y, look, frame).setOrigin(0.5, 1);
 		sprite.setScale((PERSON_TILES * this.T) / STANDING);
 		sprite.look = look;
 		sprite.shadow = shadow;
@@ -88,19 +100,26 @@ export class PlaceScene extends Phaser.Scene {
 
 	/** Put a character's sprite and shadow at its feet position `pos`, sorted by depth. */
 	settle(sprite) {
-		sprite.setPosition(sprite.pos.x, sprite.pos.y + this.T * 0.45);
-		sprite.shadow.setPosition(sprite.pos.x, sprite.pos.y + this.T * 0.42).setDepth(sprite.y - 1);
-		sprite.setDepth(sprite.y);
+		sprite.setPosition(sprite.pos.x, sprite.pos.y - (sprite.lift ?? 0));
+		sprite.shadow.setPosition(sprite.pos.x, sprite.pos.y - 2).setDepth(sprite.pos.y - 1);
+		sprite.setDepth(sprite.pos.y);
 	}
 
 	addPerson({ session, at, look, pose = "stand" }) {
 		const s = session;
+		// Asking you, an agent stands up beside its stool rather than on it.
+		if (pose === "sit" && s.status === "waiting") at = [at[0] + 0.7, at[1] + 0.15];
 		const frame = pose === "sit" ? (s.status === "waiting" ? STILL.ask : STILL.sitA) : s.status === "waiting" ? STILL.ask : STILL.stand;
-		const sprite = this.makeCharacter(look, this.tileCenter(at), frame);
+		const sprite = this.makeCharacter(look, this.pt(at), frame);
 		sprite.session = s;
-		sprite.tile = [...at];
-		this.coarse.block([at[0], at[1], 1, 1]);
-		this.fine.block([at[0] * FINE, at[1] * FINE, FINE, FINE]);
+		if (pose === "sit" && s.status !== "waiting") {
+			// Seated frames draw no seat: lift the body onto the stool painted at the spot, whose shadow is painted too.
+			sprite.lift = -this.T * 0.32;
+			sprite.shadow.setVisible(false);
+			this.settle(sprite);
+		}
+		this.coarse.block([Math.floor(at[0]), Math.floor(at[1]), 1, 1]);
+		this.fine.block(cells([at[0] - 0.3, at[1] - 0.3, 0.6, 0.5], FINE));
 		if (pose === "sit" && s.status === "busy") sprite.play(`${look}-work`);
 		const badge = this.add.container(sprite.x, sprite.y - sprite.displayHeight - 8).setDepth(100000);
 		this.drawBadge(badge, s);
@@ -136,18 +155,19 @@ export class PlaceScene extends Phaser.Scene {
 	actionsAt(pointer) {
 		if (menuOpen()) return [];
 		const world = this.pointerWorld(pointer);
-		const tile = [Math.floor(world.x / this.T), Math.floor(world.y / this.T)];
+		const tx = world.x / this.T;
+		const ty = world.y / this.T;
 		const actions = [];
 		const person = this.people.find((p) => p.sprite.getBounds().contains(world.x, world.y));
 		if (person) {
 			const s = person.session;
-			actions.push({ verb: "Talk-to", target: s.name, kind: "npc", run: () => this.approach(person.sprite.tile, () => this.talk(s), true) });
+			actions.push({ verb: "Talk-to", target: s.name, kind: "npc", run: () => this.approach(person.sprite.pos, () => this.talk(s), true) });
 			actions.push({ verb: "Examine", target: s.name, kind: "npc", run: () => this.examine(s) });
 		}
 		for (const h of this.hotspots) {
 			const [x, y, w, hh] = h.rect;
-			if (tile[0] >= x && tile[0] < x + w && tile[1] >= y && tile[1] < y + hh)
-				for (const v of h.verbs) actions.push({ verb: v.verb, target: h.name, run: () => this.approach(h.standAt, () => v.run(this), false, true) });
+			if (tx >= x && tx < x + w && ty >= y && ty < y + hh)
+				for (const v of h.verbs) actions.push({ verb: v.verb, target: h.name, run: () => this.approach(this.pt(h.standAt), () => v.run(this), false, true) });
 		}
 		actions.push({ verb: "Walk here", run: () => this.walkTo(world) });
 		return actions;
@@ -175,20 +195,32 @@ export class PlaceScene extends Phaser.Scene {
 		this.route(world);
 	}
 
-	/** Walk next to a target, then act: the RuneScape rhythm. */
+	/** Walk next to a target (a world point), then act: the RuneScape rhythm. */
 	approach(target, act, person, exact) {
 		closeChat();
-		this.marker(this.tileCenter(target), true);
-		const stand = exact ? target : this.coarse.besideNearest(target, this.avatarTile());
+		this.marker(target, true);
+		const stand = exact ? target : this.beside(target);
 		if (!stand) return;
-		this.route(this.tileCenter(stand), () => {
-			if (person) this.faceToward(this.avatar, this.tileCenter(target));
+		this.route(stand, () => {
+			if (person) this.faceToward(this.avatar, target);
 			act();
 		});
 	}
 
-	avatarTile() {
-		return [Math.floor(this.avatar.pos.x / this.T), Math.floor(this.avatar.pos.y / this.T)];
+	/** An open spot about a step from `target`, on the side nearest the avatar. */
+	beside(target) {
+		const u = this.T / FINE;
+		let best = null;
+		for (let y = 0; y < this.fine.h; y++)
+			for (let x = 0; x < this.fine.w; x++) {
+				if (!this.fine.free(x, y)) continue;
+				const c = { x: (x + 0.5) * u, y: (y + 0.5) * u };
+				const d = Math.hypot(c.x - target.x, c.y - target.y) / this.T;
+				if (d < 0.55 || d > 1.3) continue;
+				const score = d + Math.hypot(c.x - this.avatar.pos.x, c.y - this.avatar.pos.y) / this.T / 10;
+				if (!best || score < best.score) best = { c, score };
+			}
+		return best?.c ?? null;
 	}
 
 	route(goal, then) {
@@ -280,6 +312,13 @@ export class PlaceScene extends Phaser.Scene {
 	note(text) {
 		say("", text);
 	}
+}
+
+/** The cells of a grid with `per` cells per tile that an area [x, y, w, h] in tiles covers (by cell centre). */
+function cells([x, y, w, h], per) {
+	const x0 = Math.round(x * per);
+	const y0 = Math.round(y * per);
+	return [x0, y0, Math.round((x + w) * per) - x0, Math.round((y + h) * per) - y0];
 }
 
 /** The free cell nearest to `cell`, searched ring by ring. */

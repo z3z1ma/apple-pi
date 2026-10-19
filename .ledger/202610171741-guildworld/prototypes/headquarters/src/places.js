@@ -1,5 +1,7 @@
 // PROTOTYPE: the hand-authored places: painted interiors (hall, gallery, wing rooms) and one tiled exterior
 // (the lane outside). Walk grids, spots, and doors are written by hand over each painting, in tiles of T px.
+// Coordinates are in tiles and may be fractional: blocked areas are [x, y, w, h] traced around furniture over a
+// half-tile grid, and spots, entries, and stand points are the feet position of a character.
 import { tileIndex, tilesetCanvas } from "./terrain.js";
 import { hash } from "./util.js";
 
@@ -23,8 +25,8 @@ function wingDoorColumns(n) {
 
 export function hall(scene, world) {
 	const people = [];
-	if (world.coordinator) people.push({ session: world.coordinator, at: [14, 5], look: look(world.coordinator) });
-	const commonSpots = [[3, 10], [8, 9], [8, 11], [9, 12], [10, 9]];
+	if (world.coordinator) people.push({ session: world.coordinator, at: [14.6, 5.3], look: look(world.coordinator) });
+	const commonSpots = [[3.6, 10.4], [8.7, 9.4], [8.6, 11.4], [9.6, 12.6], [10.6, 9.6]];
 	world.common.forEach((s, i) => commonSpots[i] && people.push({ session: s, at: commonSpots[i], face: "left", look: look(s) }));
 	return {
 		title: "Guild hall",
@@ -33,13 +35,14 @@ export function hall(scene, world) {
 		rows: 20,
 		drawBackdrop: painted("hall", 30 * T, 20 * T),
 		blocked: [
-			[0, 0, 30, 4], [11, 4, 8, 1], [0, 4, 2, 11], [2, 4, 4, 3], [6, 5, 4, 3], [2, 7, 3, 2], [5, 8, 3, 2], [5, 7, 2, 1],
-			[2, 11, 6, 4], [0, 15, 30, 5], [23, 4, 3, 4], [26, 4, 4, 11],
+			[0, 0, 30, 4], [12.3, 3, 5.6, 2], [9, 3.4, 1.6, 0.8], [0, 4, 1.6, 11], [1.8, 4, 4.4, 3.2], [5, 4, 2.6, 1.7],
+			[6.3, 5.8, 3.5, 2.2], [2.4, 7.3, 1.6, 1.7], [4.9, 7.6, 2.1, 1.1], [5.6, 8.4, 2, 1.5], [2.2, 11, 4.8, 3],
+			[0, 14.6, 30, 5.4], [23, 4, 3, 4], [26, 4, 4, 11],
 		],
-		entries: { start: [15, 12], lane: [15, 14], gallery: [25, 9] },
+		entries: { start: [15, 12.5], lane: [15, 14.2], gallery: [25.4, 9] },
 		hotspots: [
-			{ name: "Archway to the wings", rect: [26, 5, 3, 6], standAt: [25, 9], verbs: [{ verb: "Walk-through", run: (sc) => sc.go("gallery", "hall") }] },
-			{ name: "Hall doors", rect: [13, 15, 4, 3], standAt: [15, 14], verbs: [{ verb: "Open", run: (sc) => sc.go("lane", "hall") }] },
+			{ name: "Archway to the wings", rect: [26.1, 4.5, 1.8, 6.5], standAt: [25.4, 9], verbs: [{ verb: "Walk-through", run: (sc) => sc.go("gallery", "hall") }] },
+			{ name: "Hall doors", rect: [13, 15, 4.2, 3.6], standAt: [15, 14.2], verbs: [{ verb: "Open", run: (sc) => sc.go("lane", "hall") }] },
 		],
 		people,
 	};
@@ -82,15 +85,15 @@ export function gallery(scene, world) {
 			}
 		},
 		blocked: [[0, 0, cols, 7], [0, 12, cols, 2]],
-		entries: { start: [2, 8], hall: [2, 8], ...Object.fromEntries(doors.filter((d) => d.wing).map((d) => [`wing:${d.wing.repo}`, [d.col, 7]])) },
+		entries: { start: [2, 8.5], hall: [2, 8.5], ...Object.fromEntries(doors.filter((d) => d.wing).map((d) => [`wing:${d.wing.repo}`, [d.x / T, 7.5]])) },
 		hotspots: [
-			{ name: "Archway to the hall", rect: [0, 2, 3, 5], standAt: [1, 7], verbs: [{ verb: "Walk-through", run: (sc) => sc.go("hall", "gallery") }] },
+			{ name: "Archway to the hall", rect: [0.4, 2.5, 1.9, 4.5], standAt: [1.6, 7.5], verbs: [{ verb: "Walk-through", run: (sc) => sc.go("hall", "gallery") }] },
 			...doors
 				.filter((d) => d.wing)
 				.map((d) => ({
 					name: `${d.wing.repo} wing`,
-					rect: [d.col - 1, 2, 3, 5],
-					standAt: [d.col, 7],
+					rect: [d.x / T - 0.9, 2.7, 1.8, 3.6],
+					standAt: [d.x / T, 7.5],
 					verbs: [
 						{ verb: "Enter", run: (sc) => sc.go("wing", "gallery", { repo: d.wing.repo }) },
 						...(d.wing.agents.length ? [] : [{ verb: "Examine", run: (sc) => sc.note(`${d.wing.repo}: closed up; nobody works here now.`) }]),
@@ -103,14 +106,19 @@ export function gallery(scene, world) {
 
 const WING_ROOMS = {
 	small: {
-		image: "wing-small", cols: 16, rows: 16, banner: [373, 18], door: [7, 13, 3, 3], stand: [8, 12],
-		blocked: [[0, 0, 16, 5], [0, 5, 2, 7], [1, 11, 2, 2], [12, 4, 4, 2], [14, 5, 2, 8], [0, 13, 16, 3], [2, 5, 5, 2], [9, 5, 5, 2], [6, 8, 4, 2]],
-		spots: [[4, 7], [11, 7], [7, 10]],
+		image: "wing-small", cols: 16, rows: 16, banner: [384, 18], door: [7.1, 12.9, 1.8, 1.8], stand: [8, 12.2],
+		blocked: [[0, 0, 16, 4.3], [0, 4, 2.2, 1], [0, 4, 1.6, 8.5], [0, 11.5, 2.2, 1], [13.6, 3, 2.4, 2.2], [14.2, 6.5, 1.8, 5.3], [14.6, 4, 1.4, 8.5], [13.7, 11.6, 2.3, 1], [0, 12.6, 7, 3.4], [9, 12.6, 7, 3.4], [7, 14.6, 2, 1.4], [2.6, 5.4, 3.5, 1.3], [10, 5.4, 3.5, 1.3], [6.1, 8.4, 3.7, 1.3]],
+		spots: [[4.2, 7.1], [11.7, 7.1], [7.4, 10.2]],
 	},
 	large: {
-		image: "wing-large", cols: 30, rows: 20, banner: [728, 30], door: [14, 15, 3, 4], stand: [15, 14],
-		blocked: [[0, 0, 30, 5], [0, 5, 3, 15], [27, 5, 3, 15], [0, 15, 30, 5], [4, 6, 5, 2], [10, 6, 5, 2], [16, 6, 5, 2], [21, 6, 5, 2], [11, 9, 8, 3], [3, 11, 6, 2], [22, 11, 5, 2], [9, 12, 6, 2], [16, 12, 5, 2]],
-		spots: [[5, 8], [11, 8], [17, 8], [23, 8], [5, 13], [24, 13], [11, 14], [17, 14]],
+		image: "wing-large", cols: 30, rows: 20, banner: [728, 30], door: [14.2, 17, 1.8, 2.5], stand: [15.1, 15.8],
+		blocked: [
+			[0, 0, 30, 5], [0, 4, 1.5, 12], [1.5, 4.5, 2, 1.5], [26.5, 4, 3.5, 3], [29, 4, 1, 14], [27.5, 13, 2.5, 5],
+			[0, 15.6, 14.1, 4.4], [16.2, 15.6, 13.8, 4.4], [14, 19.5, 2.3, 0.5],
+			[4.5, 6, 4, 1.5], [10, 6, 4.3, 1.5], [15.9, 6, 4.1, 1.5], [21.4, 6, 4, 1.6], [11.8, 9, 6.9, 2.5],
+			[3.3, 10.8, 4.7, 1.6], [22, 10.6, 4.3, 1.8], [9.6, 12.6, 4.4, 1.6], [16, 12.6, 4.8, 1.7],
+		],
+		spots: [[5.9, 8.1], [11.3, 8.1], [17.3, 8.1], [23.1, 8.1], [5.2, 13.1], [24.2, 13.1], [11.2, 15], [17.6, 15]],
 	},
 };
 
@@ -149,7 +157,7 @@ export function lane(scene, world) {
 		["lamp", 10, 11], ["lamp", 16, 11], ["lamp", 6, 14], ["lamp", 20, 14], ["bench", 7, 11], ["bench", 18, 11],
 		["flowerbed", 9, 9], ["flowerbed", 16, 9], ["signpost", 14, 15], ["barrel", 17, 7],
 	];
-	const independentSpots = [[8, 13], [20, 12], [22, 13]];
+	const independentSpots = [[8.5, 13.5], [20.5, 12.5], [22.5, 13.5]];
 	return {
 		title: "The lane outside",
 		tile: T,
@@ -185,8 +193,8 @@ export function lane(scene, world) {
 			}
 		},
 		blocked: [[8, 1, 10, 7], ...decor.map(([key, x, y]) => (["oak", "blossom"].includes(key) ? [x - 1, y, 3, 1] : [x, y, 1, 1]))],
-		entries: { start: [13, 10], hall: [13, 9] },
-		hotspots: [{ name: "Guild hall", rect: [12, 6, 2, 2], standAt: [13, 8], verbs: [{ verb: "Enter", run: (sc) => sc.go("hall", "lane") }] }],
+		entries: { start: [13, 10.5], hall: [13, 9.2] },
+		hotspots: [{ name: "Guild hall", rect: [12.4, 6.6, 1.3, 1.5], standAt: [13, 8.6], verbs: [{ verb: "Enter", run: (sc) => sc.go("hall", "lane") }] }],
 		people: world.independent.slice(0, independentSpots.length).map((s, i) => ({ session: s, at: independentSpots[i], look: look(s) })),
 	};
 }

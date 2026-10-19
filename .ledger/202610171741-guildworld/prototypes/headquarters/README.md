@@ -22,6 +22,16 @@ You start in the guild hall. **Left click** walks to a tile, or does the default
 - **Movement:** two modes, switched in the prototype controls. **Smooth** (default): an A* path on a grid twice as fine as the tiles, string-pulled into straight runs that keep clear of furniture, walked continuously at 175 px/s, ending exactly where you clicked. **Tiles:** RuneScape's tile-by-tile steps on the place's tile grid at 120 px/s. In both, a click on furniture walks to the nearest open floor, and a new click retargets at once.
 - **Cost:** 14 Codex images in parallel, about two and a half minutes; about 1.4 MB of cut sprites and portraits.
 
+## Round 3: walking room and seats
+
+After the operator's verdict on round 2 (side walk stiff, pathing still poor, characters could not pass between desks, double stools, oversized door targets):
+
+- **Walk cycles regenerated** with a four-phase cycle spelled out per frame (contact, passing with a lifted knee, contact, passing), so the side walk now closes its legs between strides. Portraits kept.
+- **Seated frames draw no seat:** a working agent sits on the stool painted at its spot.
+- **Furniture traced on a half-tile grid:** every room's blocked areas were re-traced over a grid laid on the painting (fractional tiles), so aisles between desks are open; characters block only their own footprint. **Show walk grid** in the prototype controls draws the grid (blocked in red).
+- **Door targets traced to the door itself**, and stand points moved onto open floor.
+- **Asking agents stand beside their stool.**
+
 ## What to try
 
 1. **The hall:** talk to Orla, the coordinator, at the head desk (portrait and typed line); examine the agent in the common room (an agent outside any repository). Walk around the furniture and click on it; switch **Movement** between smooth and tiles and compare.
