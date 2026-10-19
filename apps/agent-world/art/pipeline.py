@@ -198,10 +198,21 @@ def sheet(raw, out):
     # last row (seated, seated, standing, asking) by its standing frame. Otherwise a figure changes size as it sits.
     scales = [STANDING_HEIGHT / float(np.median([f.height for f in frames[r * 4 : r * 4 + 4]])) for r in range(3)]
     scales.append(STANDING_HEIGHT / frames[14].height)
+    save_strip(frames, [scales[i // 4] for i in range(len(frames))], out, "sheet")
+
+
+def idle(raw, out):
+    # Eight standing idle poses (look left, look right, stretch, wave, laugh, shrug, nod, yawn), scaled together by
+    # their median height so the figure keeps its size from pose to pose.
+    frames = cut(raw, 2, 4, body=True)
+    s = STANDING_HEIGHT / float(np.median([f.height for f in frames]))
+    save_strip(frames, [s] * len(frames), out, "idle")
+
+
+def save_strip(frames, scales, out, label):
     frames = [
         f.resize((max(1, round(f.width * s)), max(1, round(f.height * s))), Image.Resampling.LANCZOS)
-        for i, f in enumerate(frames)
-        for s in [scales[i // 4]]
+        for f, s in zip(frames, scales)
     ]
     # Clean each frame before placing it, so its feet sit exactly on the baseline.
     frames = [hard_alpha(f) for f in frames]
@@ -215,29 +226,7 @@ def sheet(raw, out):
     save_sprite(strip, out)
     meta = {"frameWidth": cw, "frameHeight": ch, "frames": len(frames), "baseline": baseline}
     Path(out).with_suffix(".json").write_text(json.dumps(meta, indent=2) + "\n")
-    print(f"sheet {out} {meta}")
-
-
-def idle(raw, out):
-    # Eight standing idle poses (look left, look right, stretch, wave, laugh, shrug, nod, yawn), scaled together by
-    # their median height so the figure keeps its size from pose to pose.
-    frames = cut(raw, 2, 4, body=True)
-    s = STANDING_HEIGHT / float(np.median([f.height for f in frames]))
-    frames = [
-        f.resize((max(1, round(f.width * s)), max(1, round(f.height * s))), Image.Resampling.LANCZOS) for f in frames
-    ]
-    frames = [hard_alpha(f) for f in frames]
-    frames = [f.crop(f.getbbox()) for f in frames]
-    cw = max(f.width for f in frames) + 4
-    ch = max(f.height for f in frames) + 4
-    baseline = ch - 2
-    strip = Image.new("RGBA", (cw * len(frames), ch))
-    for i, f in enumerate(frames):
-        strip.paste(f, (i * cw + (cw - f.width) // 2, baseline - f.height), f)
-    save_sprite(strip, out)
-    meta = {"frameWidth": cw, "frameHeight": ch, "frames": len(frames), "baseline": baseline}
-    Path(out).with_suffix(".json").write_text(json.dumps(meta, indent=2) + "\n")
-    print(f"idle {out} {meta}")
+    print(f"{label} {out} {meta}")
 
 
 def portraits(raw, prefix):
