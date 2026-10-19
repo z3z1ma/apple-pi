@@ -35,7 +35,7 @@ The coordinator's place, where the operator starts and where the coordinator and
 _Avoid_: Coordination hub
 
 **Wing**:
-A part of the headquarters that holds some of the coordinator's workers; what groups them is still open.
+The part of the headquarters for one repository the coordinator's workers work in. It stays once seen, closed while empty; dormant workers rest in the dormant place instead.
 
 **Hub**:
 The place for one external system of engineering work: Jira, GitHub, Confluence, or Slack [Quest board room, Forge, Library, Town square]. Slack channels appear as characters in an exterior.

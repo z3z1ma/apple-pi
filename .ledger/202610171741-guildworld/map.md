@@ -37,6 +37,7 @@ A whole-product spec for Agent World, ready for `/skill:to-spec`: every architec
 - [Live reply streaming](decisions/20-live-reply-streaming.md): Pi's `message_update` already carries text deltas; add a transient bridge message the runtime relays only to subscribed clients (no events), reconcile with the transcript entry at `turn_end`; page and batch history reads from the `messages` index.
 - [Purpose and form of the world](decisions/19-purpose-and-form-of-the-world.md): a home base beside the operator's work; every function has its own hand-designed place (mostly interiors) drawn per theme, joined by cozy exteriors; the operator starts in the headquarters with the coordinator and its agents; places follow functions and reporting, not tmux.
 - [Local API access control](decisions/11-local-api-access-control.md): the backend runs in Electron's main process, holds all secrets and external writes, and the renderer reaches it only over typed IPC; no network listener until browser mode, which reuses the browser-pages loopback, per-launch token, and Host/Origin pattern.
+- [What a wing is](decisions/21-what-a-wing-is.md): one wing per repository, remembered once seen (closed when empty); dormant agents rest in the dormant place; agents outside any repository use a shared common room.
 
 ## Not yet specified
 
