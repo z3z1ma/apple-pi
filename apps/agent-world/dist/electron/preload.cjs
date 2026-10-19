@@ -35,6 +35,7 @@ var api = {
 	endSession: (characterId, confirmed) => electron.ipcRenderer.invoke("world:end-session", characterId, confirmed),
 	sendMail: (characterId, body) => electron.ipcRenderer.invoke("world:send-mail", characterId, body),
 	recruit: (request) => electron.ipcRenderer.invoke("world:recruit", request),
+	rename: (characterId, name) => electron.ipcRenderer.invoke("world:rename", characterId, name),
 	openLink: (url) => electron.ipcRenderer.invoke("world:open-link", url),
 	...places()
 };

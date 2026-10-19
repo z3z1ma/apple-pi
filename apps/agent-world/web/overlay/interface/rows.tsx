@@ -4,7 +4,7 @@ import type { Character } from "../../../src/world.js";
 import { CheckIcon, QuestionIcon } from "./icons.js";
 import { type Attention, ago, attentionOf } from "./model.js";
 
-export type CharacterAction = "talk-to" | "examine" | "go-to" | "terminal" | "end-session";
+export type CharacterAction = "talk-to" | "examine" | "go-to" | "terminal" | "rename" | "end-session";
 
 const PIP_LABEL: Record<Attention, string> = {
 	asking: "Asking you",
@@ -45,6 +45,7 @@ export function ActionButtons({
 		{ action: "examine", text: "Examine", label: `Examine ${name}` },
 		{ action: "go-to", text: "Go to", label: `Go to ${name}` },
 		{ action: "terminal", text: "Terminal", label: `Go to ${name}'s terminal` },
+		{ action: "rename", text: "Rename", label: `Rename ${name}` },
 		{ action: "end-session", text: "End session", label: `End ${name}'s session` },
 	];
 	return (
@@ -55,7 +56,7 @@ export function ActionButtons({
 					<button
 						key={a.action}
 						type="button"
-						className={a.action === "end-session" ? "aw-button aw-button-end" : "aw-button"}
+						className={`aw-button${a.action === "end-session" ? " aw-button-end" : a.action === "rename" ? " aw-button-rename" : ""}`}
 						aria-label={a.label}
 						title={a.label}
 						onClick={(event) => {
@@ -73,6 +74,7 @@ export function ActionButtons({
 export function CharacterRow({
 	character,
 	detail,
+	work,
 	since,
 	selected,
 	onSelect,
@@ -80,6 +82,8 @@ export function CharacterRow({
 }: {
 	character: Character;
 	detail: string;
+	/** What it works on (its ledger task or stated intent), on a line of its own under the detail. */
+	work?: string;
 	/** A time to show at the row's end, such as how long it has needed you. */
 	since?: number | null;
 	selected: boolean;
@@ -109,6 +113,14 @@ export function CharacterRow({
 						<span className="aw-row-detail" title={detail}>
 							{detail}
 						</span>
+					)}
+					{work && (
+						<>
+							<span className="aw-sr">; </span>
+							<span className="aw-row-detail aw-row-work" title={work}>
+								{work}
+							</span>
+						</>
 					)}
 				</span>
 				{time && <span className="aw-row-time">{time}</span>}

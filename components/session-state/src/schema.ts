@@ -160,6 +160,8 @@ const MIGRATIONS = [
 		value text not null,
 		updated_at integer not null
 	) strict;`,
+	// What the session says it works on now (session-title's stated intent), shown when it has no ledger task.
+	`alter table sessions add column intent text;`,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

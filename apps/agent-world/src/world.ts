@@ -13,12 +13,14 @@ export type PlaceRef =
 	| { kind: "wing"; headquarters: string; repository: string }
 	/**
 	 * Outside: the village square, the inn where dormant agents sleep, the rookery where mail comes and goes, and the
-	 * function places off the square (the forge for GitHub, the quest office for Jira, the library for Confluence).
+	 * function places off the square (the forge for GitHub, the quest office for Jira, the library for Confluence), and the
+	 * street beyond the square (the second exterior, ticket 09 of the alive pass), where townsfolk the square has no room
+	 * for stand.
 	 */
 	| { kind: OutsideKind };
 
 /** The places outside any headquarters. */
-export const OUTSIDE_KINDS = ["square", "inn", "rookery", "forge", "quest-office", "library"] as const;
+export const OUTSIDE_KINDS = ["square", "street", "inn", "rookery", "forge", "quest-office", "library"] as const;
 export type OutsideKind = (typeof OUTSIDE_KINDS)[number];
 
 /** A session's run state as the runtime records it. */
@@ -46,6 +48,11 @@ export interface CharacterFacts {
 	tool: { name: string; arg: string | null; since: number | null } | null;
 	/** The ledger task it touched last: the title from its `task.md` heading and its Status line. */
 	task: { title: string; status: string | null; bundle: string } | null;
+	/**
+	 * What the session says it works on now (session-title's stated intent), shown when it has no ledger task. The
+	 * backend always sets it; fixtures may leave it out.
+	 */
+	intent?: string | null;
 	git: { repository: string; worktree: string; branch: string } | null;
 	cwd: string;
 	reportsTo: string | null;
@@ -168,6 +175,9 @@ export interface MailItem {
 }
 
 export const MAIL_BODY_MAX = 4000;
+
+/** The longest name the operator gives an agent from the world (renaming); the backend refuses longer. */
+export const NAME_MAX = 60;
 
 /**
  * How far a command the operator sent from a place got: the runtime's last receipt stage (with its note, such as why
@@ -369,6 +379,8 @@ export interface AgentWorldApi extends IntegrationsApi {
 	 * independent agent's after the operator's current one.
 	 */
 	recruit(request: RecruitRequest): Promise<RecruitReceipt>;
+	/** Rename an awake character (`rename`); a blank name is refused and nothing is sent. */
+	rename(characterId: string, name: string): Promise<CommandReceipt>;
 	/** Open a link from a transcript in the system browser: http and https only; the window itself never navigates. */
 	openLink(url: string): Promise<CommandResult>;
 }

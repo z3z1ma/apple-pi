@@ -5,6 +5,7 @@ import { atlassian } from "../overlay/places/atlassian-state.js";
 import { forge } from "../overlay/places/forge-state.js";
 import { placeActions, placePanels } from "../overlay/places/place-panels.js";
 import { recruiterLook, recruiting } from "../overlay/places/recruit-state.js";
+import { renaming } from "../overlay/places/rename-state.js";
 import { squarePanels } from "../overlay/places/square-panels.js";
 import { ClickMarks, type MarkView } from "../overlay/pointer/click-marks.js";
 import { type CursorArt, type CursorKind, cursorArt, cursorCss } from "../overlay/pointer/cursor.js";
@@ -14,6 +15,7 @@ import { worn } from "../theme-store.js";
 import type { ViewStore, WorldIntent } from "../view-state.js";
 import type { WorldStore } from "../world-store.js";
 import { type Action, action, type Target } from "./actions.js";
+import { AmbientCast, type AmbientView } from "./ambient.js";
 import { Birds, type BirdView, type Perch } from "./birds.js";
 import {
 	type BadgeKind,
@@ -282,6 +284,8 @@ export class PlaceScene extends Phaser.Scene {
 	private recruiter?: { walker: Walker; look: string; name: string; at: Point };
 	/** In the town square: the townsfolk who stand for Slack channels with unread messages. */
 	private square?: SquareLife;
+	/** The pack's ambient characters standing here, there only for fun (ticket 08). */
+	private ambient?: AmbientCast;
 	/** Those standing about wander a little: townsfolk, idle agents, and the host behind its counter (ticket 07). */
 	private wander?: Wander;
 	/** The names lettered on the buildings' sign boards (the square's). */
@@ -368,6 +372,7 @@ export class PlaceScene extends Phaser.Scene {
 		this.beds = new Map();
 		this.host = undefined;
 		this.recruiter = undefined;
+		this.ambient = undefined;
 		this.square = undefined;
 		this.wander = undefined;
 		this.signs = [];
@@ -406,9 +411,14 @@ export class PlaceScene extends Phaser.Scene {
 		});
 		this.addHost();
 		this.addRecruiter();
+		this.addAmbient();
 		this.signs = drawSigns(this, this.layout.place.doors, this.theme);
-		if (this.layout.ref.kind === "square")
+		// Townsfolk stand in the square, and those it has no room for in the street beyond it (ticket 09).
+		const street = this.layout.ref.kind === "street";
+		if (this.layout.ref.kind === "square" || street)
 			this.square = new SquareLife(this, {
+				key: () => this.layout.key,
+				...(street ? { before: () => this.squareRoom() } : {}),
 				place: () => this.layout.place,
 				approach: (at, then) => this.approach(at, then),
 				pointer: () => this.worldPointer(),
@@ -509,6 +519,7 @@ export class PlaceScene extends Phaser.Scene {
 			this.benches?.destroy();
 			this.questBoard?.destroy();
 			this.fidgets?.destroy();
+			this.ambient?.destroy();
 		});
 	}
 
@@ -528,6 +539,7 @@ export class PlaceScene extends Phaser.Scene {
 		this.wander?.update(delta);
 		this.host?.walker.update(delta);
 		this.recruiter?.walker.update(delta);
+		this.ambient?.update(delta, Math.max(1, UI_ZOOM / this.cameras.main.zoom));
 		this.liveCharacters(time, delta);
 		this.square?.update(delta, Math.max(1, UI_ZOOM / this.cameras.main.zoom));
 		this.benches?.update();
@@ -703,6 +715,11 @@ export class PlaceScene extends Phaser.Scene {
 	private wanderView(id: string): { wander: WanderView["state"]; interest: string | null } {
 		const view = this.wander?.view(id);
 		return { wander: view?.state ?? "home", interest: view?.interest ?? null };
+	}
+
+	/** The pack's ambient characters standing here (ticket 08). */
+	ambientViews(): AmbientView[] {
+		return this.ambient?.views() ?? [];
 	}
 
 	/** The square's recruiter, where it stands. */
@@ -1041,6 +1058,26 @@ export class PlaceScene extends Phaser.Scene {
 		this.recruiter = { walker, look, name: this.theme.labels.recruiter ?? "Recruiter", at };
 		walker.live(`recruiter:${this.layout.key}`);
 		this.wander?.add("recruiter", "host", walker, () => at);
+	}
+
+	/** The pack's ambient characters who stand here: presentation only, they send nothing anywhere (ticket 08). */
+	private addAmbient() {
+		if (!this.layout.place.ambient?.length) return;
+		this.ambient = new AmbientCast(this, {
+			place: () => this.layout.place,
+			approach: (at, then) => this.approach(at, then),
+			notify: (text) => this.view.notify(text),
+			avatar: (): Point | undefined => (this.avatar ? [this.avatar.x, this.avatar.y] : undefined),
+			toScreen: (at) => this.toScreen(at),
+			zoom: () => this.cameras.main.zoom,
+			screen: () => ({ width: this.cameras.main.width, height: this.cameras.main.height }),
+			// Clear of the interface and of the agents' barks, which come first.
+			covered: (box) =>
+				[...this.uiBoxes, ...[...this.figures.values()].flatMap((f) => (f.bark ? [this.barkBox(f.bark)] : []))].some(
+					(other) => overlaps(box, other),
+				),
+			wander: this.wander,
+		});
 	}
 
 	private addHost() {
@@ -1494,6 +1531,7 @@ export class PlaceScene extends Phaser.Scene {
 			...(this.host ? [this.host.at] : []),
 			...(this.recruiter ? [this.recruiter.at] : []),
 			...(this.square?.occupied() ?? []),
+			...(this.ambient?.occupied() ?? []),
 			// A cat on the floor is walked round, as a body is.
 			...floorFidgets(this.layout.place),
 		]);
@@ -1575,6 +1613,7 @@ export class PlaceScene extends Phaser.Scene {
 			...(this.host ? [this.host.at] : []),
 			...(this.recruiter ? [this.recruiter.at] : []),
 			...(this.square?.occupied() ?? []),
+			...(this.ambient?.occupied() ?? []),
 			...floorFidgets(this.layout.place),
 		];
 	}
@@ -1650,9 +1689,15 @@ export class PlaceScene extends Phaser.Scene {
 		figure.walker.face([figure.walker.x, figure.walker.y + 1]);
 	}
 
-	/** Out of doors (the square): no desks, so those at work stand. */
+	/** Out of doors (the square, the street): no desks, so those at work stand. */
 	private outdoors(): boolean {
-		return this.layout.ref.kind === "square";
+		return this.layout.ref.kind === "square" || this.layout.ref.kind === "street";
+	}
+
+	/** How many townsfolk stand in the square: its painted spots no agent holds (agents take spots first). */
+	private squareRoom(): number {
+		const square = this.theme.places.square;
+		return Math.max(0, square.spots.length - charactersIn({ kind: "square" }, this.store.get()).length);
 	}
 
 	/** Pose, badge, and the seated beat by the character's state; at the inn, asleep. */
@@ -1822,7 +1867,8 @@ export class PlaceScene extends Phaser.Scene {
 					bottom: sy + BARK_MARGIN,
 				};
 				if (box.left < 0 || box.top < 0 || box.right > camera.width || box.bottom > camera.height) return false;
-				if ([...this.uiBoxes, ...placed].some((other) => overlaps(box, other))) return false;
+				const cast = this.ambient?.barkBoxes() ?? [];
+				if ([...this.uiBoxes, ...placed, ...cast].some((other) => overlaps(box, other))) return false;
 				placed.push(box);
 				return true;
 			});
@@ -1917,6 +1963,7 @@ export class PlaceScene extends Phaser.Scene {
 			...(this.host ? [this.host.at] : []),
 			...(this.recruiter ? [this.recruiter.at] : []),
 			...(this.square?.occupied() ?? []),
+			...(this.ambient?.occupied() ?? []),
 			...floorFidgets(this.layout.place),
 		];
 		// Too close: beside them, or in front of them (south) by less than a body's height, where the avatar would cover
@@ -1964,7 +2011,7 @@ export class PlaceScene extends Phaser.Scene {
 			.map(({ character }) => this.characterTarget(character));
 		const host = this.host && over(this.host.walker) ? [this.hostTarget()] : [];
 		if (this.recruiter && over(this.recruiter.walker)) host.push(this.recruiterTarget());
-		const townsfolk = this.square?.targetsAt([x, y]) ?? [];
+		const townsfolk = [...(this.square?.targetsAt([x, y]) ?? []), ...(this.ambient?.targetsAt([x, y]) ?? [])];
 		const work = this.benches?.targetsAt([x, y]) ?? [];
 		const notices = this.questBoard?.targetsAt([x, y]) ?? [];
 		const fidgets = this.fidgets?.targetsAt([x, y]) ?? [];
@@ -2114,6 +2161,8 @@ export class PlaceScene extends Phaser.Scene {
 							),
 						]
 					: []),
+				// Renaming needs no walk: it opens the rename form at once (ticket 12).
+				action("Rename", () => renaming.open(character), name, "character"),
 				// Ending its session asks first while it is busy (the interface's confirmation).
 				action("End session of", () => void placeActions.endSession(character), name, "character"),
 			],
@@ -2128,10 +2177,12 @@ export class PlaceScene extends Phaser.Scene {
 				tone: "object",
 				actions: [action(say(this.theme, "ask-upstairs"), () => placePanels.open("innkeeper"), door.name, "object")],
 			};
+		// Between the square and the street there is no door to enter, only the way on.
+		const open = [this.layout.ref.kind, door.to].every((kind) => kind === "square" || kind === "street");
 		return {
 			name: door.name,
 			tone: "object",
-			actions: [action("Enter", () => this.useDoor(door), door.name, "object")],
+			actions: [action(open ? "Go to" : "Enter", () => this.useDoor(door), door.name, "object")],
 		};
 	}
 
@@ -2365,6 +2416,7 @@ export class PlaceScene extends Phaser.Scene {
 		const headquarters = isOutside(here) ? lastHeadquarters : here.headquarters;
 		const world = this.store.get();
 		if (door.to === "square") return this.travel({ kind: "square" });
+		if (door.to === "street" && this.theme.places.street) return this.travel({ kind: "street" });
 		if (
 			(door.to === "inn" ||
 				door.to === "rookery" ||

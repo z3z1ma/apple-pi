@@ -1,6 +1,6 @@
 // What the operator does to a session from the inn, the rookery, and a character's actions: wake a dormant one
 // (`start`), end an awake one (`close`, confirmed only while it is busy, decision 13), mail anyone as himself
-// (`mail`), and recruit a new agent (`start` for a new id, ticket 10). Commands go through the command client (`commands.ts`); each resolves with the receipt stage that answers
+// (`mail`), recruit a new agent (`start` for a new id, ticket 10), and rename an awake one (`rename`, ticket 12). Commands go through the command client (`commands.ts`); each resolves with the receipt stage that answers
 // the operator's question (is it awake, is it ended, did the letter arrive or does it wait), not necessarily the last.
 import { randomUUID } from "node:crypto";
 import { existsSync, statSync } from "node:fs";
@@ -10,6 +10,7 @@ import { DatabaseSync } from "node:sqlite";
 import type { Command } from "../../../../components/session-state/src/protocol.js";
 import {
 	type CommandReceipt,
+	NAME_MAX,
 	OPERATOR,
 	type ReceiptStage,
 	type RecruitReceipt,
@@ -24,12 +25,15 @@ const WAKE_MS = 30_000;
 /** Mail to an awake session is delivered once its transcript records it, usually within a second or two. */
 const MAIL_MS = 8000;
 const CLOSE_MS = 10_000;
+/** A rename is applied as soon as the bridge has it. */
+const RENAME_MS = 8000;
 
 export interface Lifecycle {
 	wake(characterId: string): Promise<CommandReceipt>;
 	endSession(characterId: string, confirmed?: boolean): Promise<CommandReceipt>;
 	sendMail(characterId: string, body: string): Promise<CommandReceipt>;
 	recruit(request: RecruitRequest): Promise<RecruitReceipt>;
+	rename(characterId: string, name: string): Promise<CommandReceipt>;
 }
 
 /** A directory as the operator typed it: `~` is his home. */
@@ -197,6 +201,24 @@ export function openLifecycle(paths: { db: string }, commands: Commands, snapsho
 				() => `Its window opened, but ${name} has not joined yet.`,
 			);
 			return { ...receipt, sessionId };
+		},
+
+		async rename(characterId, given) {
+			// One line, as the recruit form names a new agent.
+			const name = given.replace(/\s+/g, " ").trim();
+			if (!name) return { ok: false, reason: "Give it a name." };
+			if (name.length > NAME_MAX)
+				return { ok: false, reason: `That name is too long: keep it to ${NAME_MAX} characters.` };
+			if (!snapshot().characters.some((character) => character.id === characterId))
+				return { ok: false, reason: "That session is not running." };
+			return follow(
+				commands,
+				characterId,
+				{ kind: "rename", name },
+				RENAME_MS,
+				(stage) => stage === "applied",
+				() => "Sent; it has not taken the name yet.",
+			);
 		},
 
 		async sendMail(characterId, body) {

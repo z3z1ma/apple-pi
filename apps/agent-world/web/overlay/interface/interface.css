@@ -90,6 +90,51 @@
 	pointer-events: none;
 }
 
+/* The way on to the next place out of doors: an arrowhead at the edge, pointing out (its colours are the skin's). */
+.aw-minimap-exit {
+	position: absolute;
+	width: 13px;
+	height: 13px;
+}
+
+.aw-minimap-exit::before {
+	content: "";
+	position: absolute;
+	inset: 0;
+}
+
+.aw-minimap-exit-right {
+	transform: translate(-100%, -50%);
+}
+
+.aw-minimap-exit-right::before {
+	clip-path: polygon(0 0, 100% 50%, 0 100%, 30% 50%);
+}
+
+.aw-minimap-exit-left {
+	transform: translate(0, -50%);
+}
+
+.aw-minimap-exit-left::before {
+	clip-path: polygon(100% 0, 0 50%, 100% 100%, 70% 50%);
+}
+
+.aw-minimap-exit-bottom {
+	transform: translate(-50%, -100%);
+}
+
+.aw-minimap-exit-bottom::before {
+	clip-path: polygon(0 0, 50% 100%, 100% 0, 50% 30%);
+}
+
+.aw-minimap-exit-top {
+	transform: translate(-50%, 0);
+}
+
+.aw-minimap-exit-top::before {
+	clip-path: polygon(0 100%, 50% 0, 100% 100%, 50% 70%);
+}
+
 .aw-dot {
 	position: absolute;
 	width: 7px;
@@ -608,7 +653,12 @@
 	grid-column: 3 / span 2;
 }
 
-.aw-card .aw-actions .aw-button-end {
+.aw-actions .aw-button-rename {
+	grid-column: 1 / span 2;
+}
+
+.aw-card .aw-actions .aw-button-end,
+.aw-card .aw-actions .aw-button-rename {
 	grid-column: auto;
 }
 

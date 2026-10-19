@@ -1,5 +1,6 @@
 // The minimap at the top right: the whole current place, its painting scaled to fit, with a dot for each agent,
-// townsperson, and the avatar, and the part on screen outlined. Clicking it asks the world to walk there.
+// townsperson, and the avatar, the part on screen outlined, and an arrow at the edge where the way on to the next place
+// out of doors leaves (the square's exit to the street). Clicking it asks the world to walk there.
 import type { WorldSnapshot } from "../../../src/world.js";
 import type { MinimapView } from "../../view-state.js";
 import { attentionOf } from "./model.js";
@@ -65,6 +66,14 @@ export function Minimap({
 							}}
 						/>
 					)}
+					{map.exits?.map((exit) => (
+						<span
+							key={`exit:${exit.name}`}
+							className={`aw-minimap-exit aw-minimap-exit-${exit.edge}`}
+							title={`To ${exit.name}`}
+							style={{ left: exit.x * scale, top: exit.y * scale }}
+						/>
+					))}
 					{map.dots.map((dot) => {
 						const character = dot.kind === "agent" ? people.get(dot.id) : undefined;
 						const attention = character ? attentionOf(character) : undefined;

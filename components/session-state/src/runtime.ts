@@ -42,6 +42,7 @@ const FACT_COLUMNS: Record<keyof Facts, string> = {
 	previousSession: "previous_session",
 	git: "git",
 	currentTask: "current_task",
+	intent: "intent",
 	config: "config",
 };
 const JSON_FACTS = new Set<string>(["prompt", "queue", "config", "previousSession", "git", "currentTask"]);

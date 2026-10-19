@@ -3,6 +3,7 @@
 // apps/agent-world/themes/<theme>/, served beside the built UI; their format and check are in src/theme-pack.ts.
 // Before the world switches to a pack it checks it (all but the sheets' pixels), so a broken pack never half-loads.
 import {
+	type AmbientMember,
 	checkPack,
 	describeProblems,
 	FIDGETS,
@@ -60,6 +61,8 @@ export interface Theme {
 	world: WorldStyle;
 	/** How it names and dresses each kind of fidget object its places hold. */
 	fidgets: Partial<Record<FidgetKind, FidgetStyle>>;
+	/** Its ambient characters (ticket 08), by cast name; their places say where each stands. */
+	ambient?: Record<string, AmbientMember>;
 }
 
 export type TextKey = (typeof TEXT_KEYS)[number];
@@ -185,6 +188,7 @@ export async function loadTheme(id: string): Promise<Theme> {
 		skin: url + manifest.skin,
 		world: manifest.world,
 		fidgets: manifest.fidgets ?? {},
+		ambient: manifest.ambient ?? {},
 	};
 }
 

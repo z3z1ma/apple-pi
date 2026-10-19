@@ -35,6 +35,11 @@ export interface MinimapView {
 	dots: MinimapDot[];
 	/** The part of the place on screen, in tiles. */
 	view?: { x: number; y: number; w: number; h: number };
+	/**
+	 * The ways out to the next place out of doors (the square's exit to the street, the street's way back): where each
+	 * meets the edge it leaves by (tiles), that edge, and what the place it leads to is called.
+	 */
+	exits?: { name: string; x: number; y: number; edge: "left" | "right" | "top" | "bottom" }[];
 }
 
 /**

@@ -2,9 +2,11 @@ import { type ChildProcess, execFileSync, spawn } from "node:child_process";
 import { mkdirSync, realpathSync, writeFileSync } from "node:fs";
 import { createConnection } from "node:net";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
 import bridge from "../../../components/session-state/src/index.js";
+import { migrate } from "../../../components/session-state/src/schema.js";
 import {
 	close,
 	fakeBridge,
@@ -527,3 +529,32 @@ test("the world shows it is disconnected while the runtime is gone and reconnect
 	await startRuntime(state.socketPath);
 	await vi.waitFor(() => expect(latest().connected).toBe(true), { timeout: 3000 });
 }, 20000);
+
+test("a character carries its stated intent, which changes with the session's intent fact", async () => {
+	const { send } = await agent("intent-1", { intent: "Fixing the CSV parser crash" });
+	await soon(() => expect(character("intent-1")?.facts?.intent).toBe("Fixing the CSV parser crash"));
+	send({ type: "facts", facts: { intent: "Writing the upload retry docs" } });
+	await soon(() => expect(character("intent-1")?.facts?.intent).toBe("Writing the upload retry docs"));
+	expect(character("intent-1")?.facts?.task).toBeNull();
+}, 30000);
+
+test("a database an older runtime has not migrated yet still reads, with no intent", async () => {
+	const dbPath = join(state.agentDir, "older.db");
+	const db = new DatabaseSync(dbPath);
+	migrate(db);
+	db.exec(`alter table sessions drop column intent;
+		insert into sessions (id, kind, cwd, name, run_state, generation, source, updated_at)
+			values ('older-1', 'root', '/home/older', 'Older', 'idle', 1, 'bridge', 0);
+		insert into incarnations (session_id, generation, pid, process_started_at, process_state, started_at, source, updated_at)
+			values ('older-1', 1, 1, 0, 'alive', 0, 'bridge', 0);
+		insert into events (at, source, session_id, generation, type) values (0, 'bridge', 'older-1', 1, 'started');`);
+	db.close();
+	const older = openWorldBackend({ db: dbPath, socket: join(state.agentDir, "no-runtime.sock") });
+	try {
+		await soon(() =>
+			expect(older.snapshot().characters.map((c) => [c.name, c.facts?.intent])).toEqual([["Older", null]]),
+		);
+	} finally {
+		older.close();
+	}
+});

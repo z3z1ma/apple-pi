@@ -58,7 +58,7 @@ A large count shows how many agents need you, or "all clear". Below it, agents s
 | WORKING | turn in progress, with a spinner | mauve border, 30-minute tool-call graph, context size and cost |
 | QUIET | settled and seen | grey border |
 
-Each card's title is the agent's name: the Pi session name, else the title of the ledger task the session touched last, else the project directory. The body shows that ledger task and its status, and the agent's last tool call. The bottom border shows the tmux location and the time since the status changed; `◂ here` marks the pane you are looking at. Cost, context size, and the last tool call come from the database. NEEDS YOU lists the agent that has waited longest first. An agent that enters it flashes for four seconds.
+Each card's title is the agent's name: the Pi session name, else the title of the ledger task the session touched last, else the project directory. The body shows that ledger task and its status, or, without one, what the session says it works on now (its stated intent, after `◇`), and the agent's last tool call. The bottom border shows the tmux location and the time since the status changed; `◂ here` marks the pane you are looking at. Cost, context size, and the last tool call come from the database. NEEDS YOU lists the agent that has waited longest first. An agent that enters it flashes for four seconds.
 
 The sidebar paints the terminal's default background, so it stays translucent on a translucent terminal, and uses the Catppuccin Mocha palette.
 
@@ -86,7 +86,7 @@ The right end of the status line counts agents by state, for example `π ? 1 ✓
 `prefix` + `A` opens a window named `π agents` in the current session, or switches to it if it exists anywhere; pressing it inside the dashboard returns to the window you came from. The window holds:
 
 - a header with the counts by state, the number of agents, and their total cost;
-- a table of every agent in the same attention order: state, name, ledger task, last tool call, time in state, context size, and cost;
+- a table of every agent in the same attention order: state, name, what it works on (its ledger task, else its stated intent), last tool call, time in state, context size, and cost;
 - the selected agent's full details and its 30-minute tool-call graph;
 - a live view of the selected agent's pane, refreshed twice a second.
 
@@ -163,7 +163,7 @@ The raw art lives in `components/tmux-sessions/notch/art/raw/<vibe>/`, in the re
 - **Cost.** Measured with six agents, one of them working: the sidebar uses about 2% of one CPU core and 45 MB; a dashboard that no client is showing uses about 1.5% and 50 MB. Views redraw only what changed; a hidden dashboard stops capturing panes and animating, and catches up when you look at it.
 - **Crashes.** The sidebar and dashboard panes restart their app two seconds after a crash. `q` or `prefix` + `u` closes them for good. A failed read shows one error toast and the view keeps going.
 - **Memory.** Flash timers and tool-history positions of ended sessions are dropped, so the views do not grow over days.
-- **Session names.** Agents name themselves after their first turn (see [automatic session titles](context.md#session-titles)), so cards and rows do not all read as the project directory.
+- **Session names.** Agents get a human name as they start (see [session titles](context.md#session-titles)), so cards and rows do not all read as the project directory.
 - **Restarts.** A tmux server restart forgets the bindings and hooks; the next Pi that starts loads the plugin again. Seen times and notch choices live in the database.
 
 ## `/pi-sessions`

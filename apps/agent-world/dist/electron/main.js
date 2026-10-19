@@ -157,6 +157,7 @@ function openCommands(socketPath) {
 /** The places outside any headquarters. */
 var OUTSIDE_KINDS = [
 	"square",
+	"street",
 	"inn",
 	"rookery",
 	"forge",
@@ -615,16 +616,21 @@ async function instruct(commands, character, commandId, instruction, onReceipt) 
 }
 //#endregion
 //#region apps/agent-world/src/backend/facts.ts
-/** The facts columns for `select ... from sessions s join incarnations i ...` (the current incarnation). */
-var FACTS_COLUMNS = `s.run_state as runState, s.prompt, s.needs_you_since as needsYouSince, s.seen_at as seenAt,
-	s.settled_at as settledAt, s.current_tool as currentTool, s.current_tool_arg as currentToolArg,
-	s.current_tool_since as currentToolSince, s.current_task as currentTask, s.model, s.context_tokens as contextTokens,
+/**
+* The facts columns for `select ... from sessions s join incarnations i ...` (the current incarnation). Without
+* `intent`, the column reads as null: a runtime started before the migration that adds it keeps running old code until
+* it restarts, and its database has no such column.
+*/
+var factsColumns = (intent) => `s.run_state as runState, s.prompt, s.needs_you_since as needsYouSince,
+	s.seen_at as seenAt, s.settled_at as settledAt, s.current_tool as currentTool, s.current_tool_arg as currentToolArg,
+	s.current_tool_since as currentToolSince, s.current_task as currentTask, ${intent ? "s.intent" : "null as intent"},
+	s.model, s.context_tokens as contextTokens,
 	s.context_window as contextWindow, s.cost, i.tmux_socket as tmuxSocket, i.pane_id as paneId,
 	(select ts.name from tmux_window_links l join tmux_sessions ts on ts.socket = l.socket and ts.id = l.session_id
 		where l.socket = p.socket and l.window_id = p.window_id order by l.window_index limit 1) as tmuxSession,
 	(select l.window_index from tmux_window_links l
 		where l.socket = p.socket and l.window_id = p.window_id order by l.window_index limit 1) as windowIndex`;
-/** Joins for `FACTS_COLUMNS`: the session's current incarnation `i` and its pane `p`. */
+/** Joins for `factsColumns`: the session's current incarnation `i` and its pane `p`. */
 var FACTS_JOINS = `left join incarnations i on i.session_id = s.id and i.generation = s.generation
 left join tmux_panes p on p.socket = i.tmux_socket and p.id = i.pane_id`;
 function parse$3(json) {
@@ -755,6 +761,7 @@ function factsOf(row, readTask) {
 			since: row.currentToolSince
 		} : null,
 		task: readTask(row.currentTask),
+		intent: text$1(row.intent),
 		git: git && typeof git.repository === "string" ? {
 			repository: git.repository,
 			worktree: String(git.worktree ?? ""),
@@ -853,6 +860,8 @@ var WAKE_MS = 3e4;
 /** Mail to an awake session is delivered once its transcript records it, usually within a second or two. */
 var MAIL_MS = 8e3;
 var CLOSE_MS = 1e4;
+/** A rename is applied as soon as the bridge has it. */
+var RENAME_MS = 8e3;
 /** A directory as the operator typed it: `~` is his home. */
 var expandHome = (path) => path === "~" ? homedir() : path.startsWith("~/") ? join(homedir(), path.slice(2)) : path;
 var isDirectory = (path) => {
@@ -1008,6 +1017,25 @@ function openLifecycle(paths, commands, snapshot) {
 				}, WAKE_MS, (stage) => stage === "applied", () => `Its window opened, but ${name} has not joined yet.`),
 				sessionId
 			};
+		},
+		async rename(characterId, given) {
+			const name = given.replace(/\s+/g, " ").trim();
+			if (!name) return {
+				ok: false,
+				reason: "Give it a name."
+			};
+			if (name.length > 60) return {
+				ok: false,
+				reason: `That name is too long: keep it to 60 characters.`
+			};
+			if (!snapshot().characters.some((character) => character.id === characterId)) return {
+				ok: false,
+				reason: "That session is not running."
+			};
+			return follow(commands, characterId, {
+				kind: "rename",
+				name
+			}, RENAME_MS, (stage) => stage === "applied", () => "Sent; it has not taken the name yet.");
 		},
 		async sendMail(characterId, body) {
 			const text = body.trim();
@@ -1173,6 +1201,7 @@ var PLACE_FILES = [
 	"wing-small",
 	"wing-large",
 	"square",
+	"street",
 	"inn",
 	"rookery",
 	"forge",
@@ -1186,6 +1215,7 @@ var PLACE_LABELS = [
 	"gallery",
 	"wing",
 	"square",
+	"street",
 	"forge",
 	"quest-office",
 	"library",
@@ -1398,6 +1428,16 @@ function slotStyle(style, slot) {
 		looks: void 0
 	};
 }
+/** The idles a cast member may play as its gesture when it reacts (the world's idles, `character-life.ts`). */
+var AMBIENT_GESTURES = [
+	"look-around",
+	"stretch",
+	"wave",
+	"laugh",
+	"shrug",
+	"nod",
+	"yawn"
+];
 /**
 * What a place must have beyond the shared format: its host's look role, slots it cannot do without, a recruiter (and
 * why), and furniture by its `use` (and why).
@@ -1688,6 +1728,7 @@ function checkManifest(value, id, problems) {
 		}
 	}
 	checkFidgetStyles(value.fidgets, fault);
+	checkCast(value.ambient, fault);
 	return value;
 }
 var isText = (value) => typeof value === "string" && value.trim().length > 0;
@@ -1864,6 +1905,7 @@ function checkPlace(name, value, painting, problems) {
 	for (const door of place.doors) onFloor(`door ${door.name}'s stand point`, door.standAt);
 	checkRecruiting(place, PLACE_NEEDS[name], fault, onFloor);
 	checkInterest(place, grid, fault);
+	checkAmbientPlaces(place, grid, fault);
 	if (place.enterBy !== void 0 && !place.doors.some((door) => door.name === place.enterBy)) fault(`enterBy names ${JSON.stringify(place.enterBy)}, which is not one of its doors`);
 	const needs = PLACE_NEEDS[name];
 	if (needs?.host && !isObject(place.host)) fault(`has no host; the ${name} needs its ${needs.host}`);
@@ -1972,6 +2014,125 @@ function checkInterest(place, grid, fault) {
 			"right"
 		].includes(point.face)) fault(`${what} faces ${JSON.stringify(point.face)}, not up, down, left, or right`);
 		for (const [other, at, least] of clear) if (near(point.at, at, least)) fault(`${what} is within ${least === 1 ? "a tile" : `${least} tiles`} of ${other}`);
+	}
+}
+/** The manifest's ambient cast (ticket 08), when there: each a cast name with its name, look, Examine line, and lines. */
+function checkCast(ambient, fault) {
+	if (ambient === void 0) return;
+	if (!isObject(ambient)) return fault("ambient is not an object of cast members");
+	const lines = (value) => Array.isArray(value) && value.every(isText);
+	for (const [id, member] of Object.entries(ambient)) {
+		const where = `ambient.${id}`;
+		if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(id)) fault(`${where} is not a cast name (lowercase words joined by -)`);
+		if (!isObject(member)) {
+			fault(`${where} is not an object`);
+			continue;
+		}
+		if (!isText(member.name)) fault(`${where} has no name`);
+		if (!isText(member.look)) fault(`${where} has no look`);
+		if (!isText(member.examine)) fault(`${where} has no examine line`);
+		if (!lines(member.lines) || member.lines.length < 3) fault(`${where} has fewer than 3 lines to say when talked to`);
+		if (!lines(member.reactions) || !member.reactions.length) fault(`${where} has no reaction to say when clicked again and again`);
+		if (member.barks !== void 0 && !lines(member.barks)) fault(`${where}.barks is not a list of lines`);
+		if (member.gesture !== void 0 && !AMBIENT_GESTURES.includes(member.gesture)) fault(`${where}.gesture is not one of ${AMBIENT_GESTURES.join(", ")}`);
+	}
+}
+/**
+* Where a place's cast members stand: each names one, on open floor inside the grid, a tile clear of every door's stand
+* point and entry, and clear of every spot, the host, the recruiter, the points of interest, and one another.
+*/
+function checkAmbientPlaces(place, grid, fault) {
+	if (place.ambient === void 0) return;
+	if (!Array.isArray(place.ambient)) return fault("has ambient characters that are not a list");
+	const near = (a, b, least) => Math.hypot(a[0] - b[0], a[1] - b[1]) < least;
+	const point = (what, at, least) => isPoint(at) ? [[
+		what,
+		at,
+		least
+	]] : [];
+	const clear = [
+		...place.doors.flatMap((door) => point(`door ${door.name}'s stand point`, door.standAt, 1)),
+		...Object.entries(place.entries).flatMap(([from, at]) => point(`the entry from ${from}`, at, 1)),
+		...place.spots.flatMap((at, i) => point(`spot ${i}`, at, .9)),
+		...point("its host", isObject(place.host) ? place.host.at : void 0, .9),
+		...point("its recruiter", isObject(place.recruiter) ? place.recruiter.at : void 0, .9),
+		...(Array.isArray(place.interest) ? place.interest : []).flatMap((p) => isObject(p) ? point(`point of interest ${p.name}`, p.at, .9) : [])
+	];
+	for (const [i, entry] of place.ambient.entries()) {
+		if (!isObject(entry) || !isText(entry.cast)) {
+			fault(`ambient ${i} names no cast member`);
+			continue;
+		}
+		if (!isPoint(entry.at)) {
+			fault(`ambient ${entry.cast} has no place (at)`);
+			continue;
+		}
+		const what = `ambient ${entry.cast} ${fmt(entry.at)}`;
+		const [x, y] = entry.at;
+		if (x < 0 || y < 0 || x > place.cols || y > place.rows) fault(`${what} lies outside its grid`);
+		else if (!isOpen(grid, entry.at)) fault(`${what} is not on open floor`);
+		if (entry.face !== void 0 && ![
+			"up",
+			"down",
+			"left",
+			"right"
+		].includes(entry.face)) fault(`${what} faces ${JSON.stringify(entry.face)}, not up, down, left, or right`);
+		if (entry.stay !== void 0 && typeof entry.stay !== "boolean") fault(`${what} has a stay that is not true or false`);
+		for (const [other, at, least] of clear) if (near(entry.at, at, least)) fault(`${what} is within ${least === 1 ? "a tile" : `${least} tiles`} of ${other}`);
+		clear.push([
+			`ambient ${entry.cast}`,
+			entry.at,
+			.9
+		]);
+	}
+}
+/** Rooms the world shows once per coordinator or per wing: a cast member there would stand in every copy. */
+var REPEATING_ROOMS = [
+	"headquarters",
+	"common-room",
+	"wing-small",
+	"wing-large"
+].map((name) => `places/${name}.json`);
+/**
+* The cast against its places and looks: every member stands in exactly one place (one person, one place), every one
+* standing is a member, and each wears a look of the `ambient` role.
+*/
+function checkCastPlaced(manifest, looks, placed, problems) {
+	const cast = isObject(manifest.ambient) ? manifest.ambient : {};
+	const first = /* @__PURE__ */ new Map();
+	for (const { file, cast: name } of placed) {
+		if (!Object.hasOwn(cast, name)) {
+			problems.push({
+				file,
+				fault: `ambient ${name} stands here, but theme.json's ambient does not name it`
+			});
+			continue;
+		}
+		if (REPEATING_ROOMS.includes(file)) problems.push({
+			file,
+			fault: `ambient ${name} stands in a room the world shows once per coordinator or wing`
+		});
+		const before = first.get(name);
+		if (before === void 0) first.set(name, file);
+		else if (before !== file) problems.push({
+			file,
+			fault: `ambient ${name} stands here and in ${before}: one person, one place`
+		});
+		else problems.push({
+			file,
+			fault: `ambient ${name} stands here twice: one person, one place`
+		});
+	}
+	const fault = (text) => problems.push({
+		file: "theme.json",
+		fault: text
+	});
+	for (const [name, member] of Object.entries(cast)) {
+		if (!first.has(name)) fault(`ambient.${name} stands in no place`);
+		if (!isObject(member) || !isText(member.look) || !isObject(looks)) continue;
+		const look = looks[member.look];
+		if (!isObject(look)) fault(`ambient.${name} wears ${member.look}, which looks.json does not name`);
+		else if (look.role !== "ambient") fault(`ambient.${name} wears ${member.look}, which is not an ambient look`);
 	}
 }
 /** Where each frame's feet are: the lowest drawn row, per frame. */
@@ -2112,6 +2273,7 @@ async function checkPlaces(reader, problems) {
 	/** The kinds of fidget object placed, and the first place file placing each. */
 	const fidgets = /* @__PURE__ */ new Map();
 	const pets = [];
+	const cast = [];
 	for (const name of PLACE_FILES) {
 		const file = `places/${name}.json`;
 		const place = await json(reader, file, problems);
@@ -2135,6 +2297,12 @@ async function checkPlaces(reader, problems) {
 			hosts.push(data.host.look);
 			hostOf[name] = data.host.look;
 		}
+		if (Array.isArray(data.ambient)) {
+			for (const entry of data.ambient) if (isObject(entry) && isText(entry.cast)) cast.push({
+				file,
+				cast: entry.cast
+			});
+		}
 		if (isObject(data.recruiter) && typeof data.recruiter.look === "string") {
 			hosts.push(data.recruiter.look);
 			recruiterOf[name] = data.recruiter.look;
@@ -2155,7 +2323,8 @@ async function checkPlaces(reader, problems) {
 		recruiterOf,
 		slotKinds,
 		fidgets,
-		pets
+		pets,
+		cast
 	};
 }
 /**
@@ -2167,9 +2336,10 @@ async function checkPack(reader, id, { pixels = true } = {}) {
 	const problems = [];
 	const manifest = checkManifest(await json(reader, "theme.json", problems), id, problems);
 	if (manifest && typeof manifest.skin === "string") await checkSkin(reader, manifest, problems);
-	const { hosts, hostOf, recruiterOf, slotKinds, fidgets, pets } = await checkPlaces(reader, problems);
+	const { hosts, hostOf, recruiterOf, slotKinds, fidgets, pets, cast } = await checkPlaces(reader, problems);
 	const looks = await json(reader, "characters/looks.json", problems);
 	if (looks !== void 0) await checkLooks(reader, looks, hosts, pixels, problems);
+	if (manifest) checkCastPlaced(manifest, looks, cast, problems);
 	for (const [place, look] of Object.entries(hostOf)) {
 		const role = PLACE_NEEDS[place]?.host;
 		const worn = isObject(looks) && isObject(looks[look]) ? looks[look].role : void 0;
@@ -2661,17 +2831,20 @@ var STORE_TIMEOUT_MS = 5e3;
 * `{ wings: { [coordinator id]: repository[] }, avatar: look, theme: id }`.
 */
 var PREFERENCE_KEY = "agent-world";
-var SESSIONS = `
+var sessionsSql = (intent) => `
 select s.id, s.name, s.cwd, s.reports_to as reportsTo, s.git, s.config,
 	(select min(f.started_at) from incarnations f where f.session_id = s.id) as firstStartedAt,
 	coalesce(i.ended_at is null and i.process_state in ('alive', 'alive_bridge_lost'), 0) as awake,
 	i.ended_at as stoppedAt, i.end_reason as stopReason,
-	${FACTS_COLUMNS}
+	${factsColumns(intent)}
 from sessions s
 ${FACTS_JOINS}
 where s.kind = 'root'`;
-var CHANGED_SESSIONS = `${SESSIONS}
+var changedSql = (intent) => `${sessionsSql(intent)}
 	and s.id in (select session_id from events where seq > ? union select value from json_each(?))`;
+var SESSIONS = [sessionsSql(false), sessionsSql(true)];
+var CHANGED_SESSIONS = [changedSql(false), changedSql(true)];
+var INTENT_COLUMN = "select 1 from pragma_table_info('sessions') where name = 'intent'";
 function parse$1(json) {
 	if (!json) return void 0;
 	try {
@@ -2821,7 +2994,8 @@ function openWorldBackend(paths) {
 			lastSeq = seq;
 			const full = rowsSeq < 0 || seq < rowsSeq || polls % FULL_REREAD_POLLS === 0;
 			const awakeIds = [...sessionsById.values()].filter((session) => session.awake).map((session) => session.id);
-			const changed = full ? db.prepare(SESSIONS).all() : db.prepare(CHANGED_SESSIONS).all(rowsSeq, JSON.stringify(awakeIds));
+			const intent = Number(db.prepare(INTENT_COLUMN).get() !== void 0);
+			const changed = full ? db.prepare(SESSIONS[intent]).all() : db.prepare(CHANGED_SESSIONS[intent]).all(rowsSeq, JSON.stringify(awakeIds));
 			if (full) {
 				rowsById.clear();
 				sessionsById.clear();
@@ -4984,6 +5158,7 @@ function start() {
 			...typeof reportsTo === "string" ? { reportsTo } : {}
 		});
 	});
+	ipcMain.handle("world:rename", (_event, characterId, name) => typeof characterId === "string" && typeof name === "string" ? lifecycle.rename(characterId, name) : unnamed);
 	wireIntegrations({
 		stateDir: statePaths().dir,
 		snapshot: () => world.snapshot(),

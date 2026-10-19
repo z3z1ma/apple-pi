@@ -37,6 +37,8 @@ export const PLACE_FILES = [
 	"wing-small",
 	"wing-large",
 	"square",
+	/** The second exterior, joined to the square (ticket 09 of the alive pass): a harbour lane, a shop street. */
+	"street",
 	"inn",
 	"rookery",
 	"forge",
@@ -51,6 +53,7 @@ export const PLACE_LABELS = [
 	"gallery",
 	"wing",
 	"square",
+	"street",
 	"forge",
 	"quest-office",
 	"library",
@@ -214,6 +217,44 @@ export interface FidgetStyle {
 export type PetLook = Pick<FidgetStyle, "name" | "examine" | "particle" | "height" | "frames"> & {
 	verbs?: Record<string, string>;
 };
+
+/** The idles a cast member may play as its gesture when it reacts (the world's idles, `character-life.ts`). */
+export const AMBIENT_GESTURES = ["look-around", "stretch", "wave", "laugh", "shrug", "nod", "yawn"] as const;
+export type AmbientGesture = (typeof AMBIENT_GESTURES)[number];
+/** A cast member says at least this many lines in turn. */
+export const AMBIENT_LINES = 3;
+
+/**
+ * One of a pack's ambient characters (ticket 08, `theme.json`'s `ambient`, by cast name): there only for fun and
+ * immersion. Talked to, it says its `lines` in turn in the small dialogue box; clicked several times in a row, one of
+ * its `reactions`; now and then, standing about, one of its `barks` in a speech bubble. It sends no command and makes
+ * no outside call. Its place data (`PlaceData.ambient`) says where it stands.
+ */
+export interface AmbientMember {
+	/** What hover text and the menu call it ("Pip the bard"). */
+	name: string;
+	/** Its look, one whose role is `ambient`. */
+	look: string;
+	/** What Examine says. */
+	examine: string;
+	lines: string[];
+	reactions: string[];
+	barks?: string[];
+	/** The idle it plays when it reacts (default: a shrug). */
+	gesture?: AmbientGesture;
+}
+
+/**
+ * Where a cast member stands in a place (`PlaceData.ambient`): its feet at `at`, on open floor clear of doors' stand
+ * points, entries, spots, the host, the recruiter, points of interest, and the rest of the cast, facing `face` (else
+ * the room). It strolls to the place's points of interest unless it `stay`s at its post.
+ */
+export interface AmbientPlacement {
+	cast: string;
+	at: Point;
+	face?: "up" | "down" | "left" | "right";
+	stay?: boolean;
+}
 
 /**
  * What a place must have beyond the shared format: its host's look role, slots it cannot do without, a recruiter (and
@@ -458,6 +499,8 @@ export interface ThemeManifest {
 	world: WorldStyle;
 	/** Each kind of fidget object its places hold (`FIDGETS`), by kind; optional. */
 	fidgets?: Partial<Record<FidgetKind, FidgetStyle>>;
+	/** Its ambient characters (ticket 08), by cast name; optional. */
+	ambient?: Record<string, AmbientMember>;
 }
 
 export type Rect = [x: number, y: number, w: number, h: number];
@@ -524,6 +567,8 @@ export interface PlaceData {
 	 * clear of where others stand.
 	 */
 	interest?: { name: string; at: Point; face?: "up" | "down" | "left" | "right" }[];
+	/** The pack's ambient characters standing here (ticket 08), each named in `theme.json`'s `ambient`. */
+	ambient?: AmbientPlacement[];
 	niches?: {
 		at: number[];
 		door: Rect;
@@ -750,6 +795,7 @@ function checkManifest(value: unknown, id: string, problems: PackProblem[]): The
 		}
 	}
 	checkFidgetStyles(value.fidgets, fault);
+	checkCast(value.ambient, fault);
 	return value as unknown as ThemeManifest;
 }
 
@@ -964,6 +1010,7 @@ function checkPlace(name: string, value: unknown, painting: PackImage | undefine
 	for (const door of place.doors) onFloor(`door ${door.name}'s stand point`, door.standAt);
 	checkRecruiting(place, PLACE_NEEDS[name], fault, onFloor);
 	checkInterest(place, grid, fault);
+	checkAmbientPlaces(place, grid, fault);
 	if (place.enterBy !== undefined && !place.doors.some((door) => door.name === place.enterBy))
 		fault(`enterBy names ${JSON.stringify(place.enterBy)}, which is not one of its doors`);
 	const needs = PLACE_NEEDS[name];
@@ -1061,6 +1108,112 @@ function checkInterest(place: PlaceData, grid: ReturnType<typeof gridFor>, fault
 		for (const [other, at, least] of clear)
 			if (near(point.at, at, least))
 				fault(`${what} is within ${least === 1 ? "a tile" : `${least} tiles`} of ${other}`);
+	}
+}
+
+/** The manifest's ambient cast (ticket 08), when there: each a cast name with its name, look, Examine line, and lines. */
+function checkCast(ambient: unknown, fault: (text: string) => void) {
+	if (ambient === undefined) return;
+	if (!isObject(ambient)) return fault("ambient is not an object of cast members");
+	const lines = (value: unknown) => Array.isArray(value) && value.every(isText);
+	for (const [id, member] of Object.entries(ambient)) {
+		const where = `ambient.${id}`;
+		if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(id)) fault(`${where} is not a cast name (lowercase words joined by -)`);
+		if (!isObject(member)) {
+			fault(`${where} is not an object`);
+			continue;
+		}
+		if (!isText(member.name)) fault(`${where} has no name`);
+		if (!isText(member.look)) fault(`${where} has no look`);
+		if (!isText(member.examine)) fault(`${where} has no examine line`);
+		if (!lines(member.lines) || (member.lines as string[]).length < AMBIENT_LINES)
+			fault(`${where} has fewer than ${AMBIENT_LINES} lines to say when talked to`);
+		if (!lines(member.reactions) || !(member.reactions as string[]).length)
+			fault(`${where} has no reaction to say when clicked again and again`);
+		if (member.barks !== undefined && !lines(member.barks)) fault(`${where}.barks is not a list of lines`);
+		if (member.gesture !== undefined && !AMBIENT_GESTURES.includes(member.gesture as AmbientGesture))
+			fault(`${where}.gesture is not one of ${AMBIENT_GESTURES.join(", ")}`);
+	}
+}
+
+/**
+ * Where a place's cast members stand: each names one, on open floor inside the grid, a tile clear of every door's stand
+ * point and entry, and clear of every spot, the host, the recruiter, the points of interest, and one another.
+ */
+function checkAmbientPlaces(place: PlaceData, grid: ReturnType<typeof gridFor>, fault: (text: string) => void) {
+	if (place.ambient === undefined) return;
+	if (!Array.isArray(place.ambient)) return fault("has ambient characters that are not a list");
+	const near = (a: Point, b: Point, least: number) => Math.hypot(a[0] - b[0], a[1] - b[1]) < least;
+	const point = (what: string, at: unknown, least: number): [string, Point, number][] =>
+		isPoint(at) ? [[what, at, least]] : [];
+	const clear: [string, Point, number][] = [
+		...place.doors.flatMap((door) => point(`door ${door.name}'s stand point`, door.standAt, 1)),
+		...Object.entries(place.entries).flatMap(([from, at]) => point(`the entry from ${from}`, at, 1)),
+		...place.spots.flatMap((at, i) => point(`spot ${i}`, at, 0.9)),
+		...point("its host", isObject(place.host) ? place.host.at : undefined, 0.9),
+		...point("its recruiter", isObject(place.recruiter) ? place.recruiter.at : undefined, 0.9),
+		...(Array.isArray(place.interest) ? place.interest : []).flatMap((p) =>
+			isObject(p) ? point(`point of interest ${p.name}`, p.at, 0.9) : [],
+		),
+	];
+	for (const [i, entry] of place.ambient.entries()) {
+		if (!isObject(entry) || !isText(entry.cast)) {
+			fault(`ambient ${i} names no cast member`);
+			continue;
+		}
+		if (!isPoint(entry.at)) {
+			fault(`ambient ${entry.cast} has no place (at)`);
+			continue;
+		}
+		const what = `ambient ${entry.cast} ${fmt(entry.at)}`;
+		const [x, y] = entry.at;
+		if (x < 0 || y < 0 || x > place.cols || y > place.rows) fault(`${what} lies outside its grid`);
+		else if (!isOpen(grid, entry.at)) fault(`${what} is not on open floor`);
+		if (entry.face !== undefined && !["up", "down", "left", "right"].includes(entry.face))
+			fault(`${what} faces ${JSON.stringify(entry.face)}, not up, down, left, or right`);
+		if (entry.stay !== undefined && typeof entry.stay !== "boolean")
+			fault(`${what} has a stay that is not true or false`);
+		for (const [other, at, least] of clear)
+			if (near(entry.at, at, least))
+				fault(`${what} is within ${least === 1 ? "a tile" : `${least} tiles`} of ${other}`);
+		clear.push([`ambient ${entry.cast}`, entry.at, 0.9]);
+	}
+}
+
+/** Which cast member stands in which place file. */
+type CastPlaced = { file: string; cast: string }[];
+/** Rooms the world shows once per coordinator or per wing: a cast member there would stand in every copy. */
+const REPEATING_ROOMS = ["headquarters", "common-room", "wing-small", "wing-large"].map(
+	(name) => `places/${name}.json`,
+);
+
+/**
+ * The cast against its places and looks: every member stands in exactly one place (one person, one place), every one
+ * standing is a member, and each wears a look of the `ambient` role.
+ */
+function checkCastPlaced(manifest: ThemeManifest, looks: unknown, placed: CastPlaced, problems: PackProblem[]) {
+	const cast = isObject(manifest.ambient) ? manifest.ambient : {};
+	const first = new Map<string, string>();
+	for (const { file, cast: name } of placed) {
+		if (!Object.hasOwn(cast, name)) {
+			problems.push({ file, fault: `ambient ${name} stands here, but theme.json's ambient does not name it` });
+			continue;
+		}
+		if (REPEATING_ROOMS.includes(file))
+			problems.push({ file, fault: `ambient ${name} stands in a room the world shows once per coordinator or wing` });
+		const before = first.get(name);
+		if (before === undefined) first.set(name, file);
+		else if (before !== file)
+			problems.push({ file, fault: `ambient ${name} stands here and in ${before}: one person, one place` });
+		else problems.push({ file, fault: `ambient ${name} stands here twice: one person, one place` });
+	}
+	const fault = (text: string) => problems.push({ file: "theme.json", fault: text });
+	for (const [name, member] of Object.entries(cast)) {
+		if (!first.has(name)) fault(`ambient.${name} stands in no place`);
+		if (!isObject(member) || !isText(member.look) || !isObject(looks)) continue;
+		const look = looks[member.look];
+		if (!isObject(look)) fault(`ambient.${name} wears ${member.look}, which looks.json does not name`);
+		else if (look.role !== "ambient") fault(`ambient.${name} wears ${member.look}, which is not an ambient look`);
 	}
 }
 
@@ -1189,6 +1342,7 @@ async function checkPlaces(reader: PackReader, problems: PackProblem[]) {
 	/** The kinds of fidget object placed, and the first place file placing each. */
 	const fidgets = new Map<FidgetKind, string>();
 	const pets: PetsPlaced = [];
+	const cast: CastPlaced = [];
 	for (const name of PLACE_FILES) {
 		const file = `places/${name}.json`;
 		const place = await json(reader, file, problems);
@@ -1206,6 +1360,9 @@ async function checkPlaces(reader: PackReader, problems: PackProblem[]) {
 			hosts.push(data.host.look);
 			hostOf[name] = data.host.look;
 		}
+		if (Array.isArray(data.ambient))
+			for (const entry of data.ambient)
+				if (isObject(entry) && isText(entry.cast)) cast.push({ file, cast: entry.cast });
 		if (isObject(data.recruiter) && typeof data.recruiter.look === "string") {
 			hosts.push(data.recruiter.look);
 			recruiterOf[name] = data.recruiter.look;
@@ -1218,7 +1375,7 @@ async function checkPlaces(reader: PackReader, problems: PackProblem[]) {
 				pets.push({ file, slot: slot as unknown as OverlaySlot });
 		}
 	}
-	return { hosts, hostOf, recruiterOf, slotKinds, fidgets, pets };
+	return { hosts, hostOf, recruiterOf, slotKinds, fidgets, pets, cast };
 }
 
 /**
@@ -1230,9 +1387,10 @@ export async function checkPack(reader: PackReader, id: string, { pixels = true 
 	const problems: PackProblem[] = [];
 	const manifest = checkManifest(await json(reader, "theme.json", problems), id, problems);
 	if (manifest && typeof manifest.skin === "string") await checkSkin(reader, manifest, problems);
-	const { hosts, hostOf, recruiterOf, slotKinds, fidgets, pets } = await checkPlaces(reader, problems);
+	const { hosts, hostOf, recruiterOf, slotKinds, fidgets, pets, cast } = await checkPlaces(reader, problems);
 	const looks = await json(reader, "characters/looks.json", problems);
 	if (looks !== undefined) await checkLooks(reader, looks, hosts, pixels, problems);
+	if (manifest) checkCastPlaced(manifest, looks, cast, problems);
 	// A function place's host wears a look made for its role (the quest office's clerk, not an agent).
 	for (const [place, look] of Object.entries(hostOf)) {
 		const role = PLACE_NEEDS[place]?.host;

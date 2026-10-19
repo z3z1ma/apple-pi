@@ -3,7 +3,8 @@
 // head and the channel's name on a sign while the pointer is over it. Talking to one reads its channel; the crier (the
 // square's host) reaches every other channel. Agents come first: townsfolk stand only on painted spots no agent
 // holds, so the square never holds more people than its painting was laid out for (the bound, see this file's
-// context file).
+// context file). The street beyond the square (ticket 09 of the alive pass) holds the channels the square has no room
+// for, on its own painted spots, the same way.
 import * as Phaser from "phaser";
 import type { SlackChannel } from "../../../src/integrations.js";
 import { channelTitle, slack, unreadLabel } from "../../overlay/places/slack-state.js";
@@ -166,6 +167,13 @@ export interface SquareHooks {
 	notify(text: string): void;
 	/** The place's wandering (ticket 07): townsfolk stroll between its points of interest and come back. */
 	wander?: Wander;
+	/** The place's key: each place keeps which spot each channel held there. */
+	key(): string;
+	/**
+	 * How many channels stand in the square before this place (the street): the first so many are there, and this place
+	 * holds the next ones. The square itself holds the first.
+	 */
+	before?(): number;
 }
 
 /** A `#rrggbb` colour as a number, for Phaser's fills. */
@@ -375,8 +383,8 @@ export class SquareLife {
 	private readonly scene: Phaser.Scene;
 	private readonly hooks: SquareHooks;
 	private folk = new Map<string, Folk>();
-	/** Which spot each channel held, for as long as the app runs (a revisit puts everyone back). */
-	private static held = new Map<string, number>();
+	/** Which spot each channel held, by place, for as long as the app runs (a revisit puts everyone back). */
+	private static held = new Map<string, Map<string, number>>();
 	private readonly stop: () => void;
 	private lastChannels = slack.get().channels;
 	private lastStatus = slack.get().status;
@@ -406,8 +414,11 @@ export class SquareLife {
 		const theme = worn();
 		const place = this.hooks.place();
 		const signedIn = slack.get().status === "signed-in";
-		const channels = signedIn ? slack.get().channels : [];
-		const spots = townsfolkSpots(channels, free, SquareLife.held);
+		const channels = (signedIn ? slack.get().channels : []).slice(this.hooks.before?.() ?? 0);
+		const key = this.hooks.key();
+		const held = SquareLife.held.get(key) ?? new Map<string, number>();
+		SquareLife.held.set(key, held);
+		const spots = townsfolkSpots(channels, free, held);
 		const byId = new Map(channels.map((channel) => [channel.id, channel]));
 		for (const [id, folk] of this.folk) if (!spots.has(id) && !folk.leaving) this.leave(folk, animate);
 		const standing = new Map(
@@ -470,7 +481,7 @@ export class SquareLife {
 				folk.badge = this.badge(channel);
 			}
 		}
-		for (const [id, spot] of spots) SquareLife.held.set(id, spot);
+		for (const [id, spot] of spots) held.set(id, spot);
 	}
 
 	/** Where townsfolk stand (the avatar and the agents walk round them). */

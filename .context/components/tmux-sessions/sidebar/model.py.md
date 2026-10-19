@@ -10,6 +10,10 @@ This server's socket from tmux is compared after `os.path.realpath`.
 Why: the runtime stores tmux sockets by resolved path (`/tmp` is `/private/tmp` on macOS); the raw path matches nothing.
 Verify: components/tmux-sessions/sidebar/tests/test_sidebar.py
 
+`intent` is selected only when the `sessions` table has the column; otherwise it reads as empty.
+Why: a runtime started before the migration that adds it keeps running old code, and selecting a missing column would list no sessions at all.
+Verify: components/tmux-sessions/sidebar/tests/test_sidebar.py
+
 The views never mark a session seen because its pane is focused.
 Why: the runtime marks a session seen when a tmux client shows its pane; the views only send `mark_seen` for an explicit `x` or for reading it in the dashboard.
 

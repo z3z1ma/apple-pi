@@ -32,7 +32,7 @@ const editJson = (file: string, change: (value: any) => void) => {
 };
 
 /** Places where characters stand about and may wander. */
-const LIVED_IN = ["square", "headquarters", "common-room", "wing-small", "wing-large"];
+const LIVED_IN = ["square", "street", "headquarters", "common-room", "wing-small", "wing-large"];
 
 describe.each(packs)("%s", (id) => {
 	const looks: Record<string, Look> = JSON.parse(readFileSync(join(themesDir, id, "characters", "looks.json"), "utf8"));

@@ -18,6 +18,7 @@ export interface FactsRow {
 	currentToolArg: string | null;
 	currentToolSince: number | null;
 	currentTask: string | null;
+	intent: string | null;
 	model: string | null;
 	contextTokens: number | null;
 	contextWindow: number | null;
@@ -28,17 +29,22 @@ export interface FactsRow {
 	windowIndex: number | null;
 }
 
-/** The facts columns for `select ... from sessions s join incarnations i ...` (the current incarnation). */
-export const FACTS_COLUMNS = `s.run_state as runState, s.prompt, s.needs_you_since as needsYouSince, s.seen_at as seenAt,
-	s.settled_at as settledAt, s.current_tool as currentTool, s.current_tool_arg as currentToolArg,
-	s.current_tool_since as currentToolSince, s.current_task as currentTask, s.model, s.context_tokens as contextTokens,
+/**
+ * The facts columns for `select ... from sessions s join incarnations i ...` (the current incarnation). Without
+ * `intent`, the column reads as null: a runtime started before the migration that adds it keeps running old code until
+ * it restarts, and its database has no such column.
+ */
+export const factsColumns = (intent: boolean) => `s.run_state as runState, s.prompt, s.needs_you_since as needsYouSince,
+	s.seen_at as seenAt, s.settled_at as settledAt, s.current_tool as currentTool, s.current_tool_arg as currentToolArg,
+	s.current_tool_since as currentToolSince, s.current_task as currentTask, ${intent ? "s.intent" : "null as intent"},
+	s.model, s.context_tokens as contextTokens,
 	s.context_window as contextWindow, s.cost, i.tmux_socket as tmuxSocket, i.pane_id as paneId,
 	(select ts.name from tmux_window_links l join tmux_sessions ts on ts.socket = l.socket and ts.id = l.session_id
 		where l.socket = p.socket and l.window_id = p.window_id order by l.window_index limit 1) as tmuxSession,
 	(select l.window_index from tmux_window_links l
 		where l.socket = p.socket and l.window_id = p.window_id order by l.window_index limit 1) as windowIndex`;
 
-/** Joins for `FACTS_COLUMNS`: the session's current incarnation `i` and its pane `p`. */
+/** Joins for `factsColumns`: the session's current incarnation `i` and its pane `p`. */
 export const FACTS_JOINS = `left join incarnations i on i.session_id = s.id and i.generation = s.generation
 left join tmux_panes p on p.socket = i.tmux_socket and p.id = i.pane_id`;
 
@@ -152,6 +158,7 @@ export function factsOf(
 		settledAt: row.settledAt,
 		tool: row.currentTool ? { name: row.currentTool, arg: row.currentToolArg, since: row.currentToolSince } : null,
 		task: readTask(row.currentTask),
+		intent: text(row.intent),
 		git:
 			git && typeof git.repository === "string"
 				? { repository: git.repository, worktree: String(git.worktree ?? ""), branch: String(git.branch ?? "") }

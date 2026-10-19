@@ -3,6 +3,7 @@
 import asyncio
 import time
 
+import dashboard
 import model
 import sidebar
 
@@ -161,3 +162,39 @@ def test_the_sidebar_keeps_running_when_the_runtime_is_down(world, monkeypatch):
             return app.is_running, len(app.agents)
 
     assert asyncio.run(run()) == (True, 1)
+
+
+def test_without_a_ledger_task_a_session_shows_its_stated_intent_and_a_task_wins_over_it(world):
+    bundle = world.task("202601010000-login", "Status: in-progress\n\n# Fix the login bug\n")
+    world.add("stated", "%1", name="Ada Lovejoy", intent="Fixing the CSV parser crash")
+    world.add(
+        "tasked",
+        "%2",
+        name="Kofi Marchetti",
+        intent="Reading the billing code",
+        current_task={"bundle": bundle, "taskId": "202601010000-login"},
+    )
+    world.add("neither", "%3", name="Orla Brannigan", cwd="/repo/app")
+
+    async def run():
+        app = sidebar.Sidebar()
+        async with app.run_test(size=(60, 50)) as pilot:
+            await pilot.pause(0.5)
+            return card_text(app)
+
+    cards = asyncio.run(run())
+    assert cards["stated"]["task"] == "◇ Fixing the CSV parser crash"
+    assert cards["tasked"]["task"] == "◆ Fix the login bug in-progress"
+    assert cards["neither"]["task"] == "◇ no ledger task · app"
+
+    now = time.time()
+    by_id = {agent.session_id: agent for agent in model.live()}
+    assert str(dashboard.cells(by_id["stated"], now, 0)["task"]) == "Fixing the CSV parser crash"
+    assert str(dashboard.cells(by_id["tasked"], now, 0)["task"]) == "Fix the login bug"
+
+
+def test_a_database_an_older_runtime_has_not_migrated_yet_still_lists_its_sessions(world):
+    world.add("old", "%1", name="Older")
+    world.execute("alter table sessions drop column intent")
+    agents = model.live()
+    assert [(agent.session_id, agent.intent) for agent in agents] == [("old", "")]

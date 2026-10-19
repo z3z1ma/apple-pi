@@ -1,7 +1,7 @@
 // The conversation panel (decision 17): talking to a character opens it over the dimmed world, drawn by the theme's
 // skin (an open book in fantasy, a document window in the tech office, a notebook in the anime school). The side pane
 // holds the character's large portrait (its expression follows its state), name,
-// role and place, repository, ledger task, what it is doing now, and Go to its terminal; the main pane holds the
+// role and place, repository, ledger task (else its stated intent), what it is doing now, and Go to its terminal; the main pane holds the
 // transcript, newest at the bottom, with older pages loading as the operator scrolls up. Opening it marks the character
 // seen. The foot of the main pane holds what the operator can do by its state (`actions.tsx`), and the reply being
 // written streams in at the bottom of the transcript (`live-reply.ts`).
@@ -171,9 +171,12 @@ function Panel({ opened, world, store }: { opened: Character; world: WorldSnapsh
 							</div>
 						)}
 						<div>
-							<dt>Ledger task</dt>
+							{/* What it works on: its ledger task, else what the session says it works on now. */}
+							<dt>{!facts?.task && facts?.intent ? "Working on" : "Ledger task"}</dt>
 							<dd>
-								{facts?.task ? (
+								{!facts?.task && facts?.intent ? (
+									facts.intent
+								) : facts?.task ? (
 									<>
 										{facts.task.title}
 										{facts.task.status && <span className="aw-conv-status">{facts.task.status}</span>}

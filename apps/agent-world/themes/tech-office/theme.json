@@ -8,6 +8,7 @@
     "gallery": "Project corridor",
     "wing": "team room",
     "square": "Campus plaza",
+    "street": "Main street",
     "forge": "The hardware lab",
     "quest-office": "The planning studio",
     "library": "The library",
@@ -260,6 +261,84 @@
         "spin": "Spin",
         "nudge": "Nudge"
       }
+    }
+  },
+  "ambient": {
+    "barista": {
+      "name": "Theo the barista",
+      "look": "ambient-barista",
+      "examine": "A barista who can read the state of a sprint from the coffee orders.",
+      "lines": [
+        "Oat, almond, or the one that's basically water we charge extra for?",
+        "I can tell how a sprint's going by the orders. Today is a triple-shot kind of day.",
+        "Your name on the cup? I'll spell it creatively. It's my art form.",
+        "Between us, the decaf pot is a myth. Everyone knows. Nobody says.",
+        "This espresso machine has better uptime than production. Don't tell the on-call."
+      ],
+      "reactions": [
+        "Whoa, one order at a time! I've got two hands and one milk frother.",
+        "Okay, I'm putting you down for 'surprise me'."
+      ],
+      "barks": [
+        "Flat white for... Kevyn? Kevvin?",
+        "Fresh pot! Get it while it's hot.",
+        "Who ordered the oat cortado?"
+      ],
+      "gesture": "laugh"
+    },
+    "facilities": {
+      "name": "Dana from Facilities",
+      "look": "ambient-facilities",
+      "examine": "Dana from Facilities, a ladder on her shoulder and a ticket queue in her head.",
+      "lines": [
+        "A light flickering isn't a ghost. It's ticket four-oh-four. I'm on it.",
+        "Someone keeps setting the thermostat to 'arctic'. I will find you.",
+        "The ladder is not a standing desk. I've had to say that more than once.",
+        "Every plant in this plaza has a name. That one's Gerald. Say hi to Gerald.",
+        "Please stop microwaving fish. I'm asking nicely. For now."
+      ],
+      "reactions": [
+        "Did you file a ticket? You did not file a ticket.",
+        "Hold that thought, my radio's... no, that's just you."
+      ],
+      "barks": ["Ladder coming through!", "Who unplugged the vending machine?", "Gerald needs watering."],
+      "gesture": "shrug"
+    },
+    "visitor": {
+      "name": "Sam the visitor",
+      "look": "ambient-visitor",
+      "examine": "A visitor with a lanyard, a confident smile, and no idea where the lobby is.",
+      "lines": [
+        "Hi! I'm here for the nine o'clock. It's... half past eleven? Oh no.",
+        "Is it normal for everyone here to talk to their laptops?",
+        "Reception gave me a badge and a smile. I still have the smile.",
+        "I followed the smell of solder to the hardware lab and ended up at the cafe. Not complaining.",
+        "Everyone's so friendly. Someone gave me a sticker. I have nine stickers now."
+      ],
+      "reactions": [
+        "Sorry! Am I in your way? I feel like I'm in everyone's way.",
+        "Do you work here? Could you badge me in? Please?"
+      ],
+      "barks": ["Lobby... lobby... where's the lobby?", "Is this the visitor wifi?", "Ooh, free stickers!"],
+      "gesture": "wave"
+    },
+    "dogwalker": {
+      "name": "Priya the dog walker",
+      "look": "ambient-dogwalker",
+      "examine": "The office dog walker, holding a leash with nobody on the end of it.",
+      "lines": [
+        "Have you seen Waffles? Corgi, this tall, extremely confident? I looked away for one second.",
+        "Office dogs are great for morale. Mine is great for morale and for stealing croissants.",
+        "I walk six dogs a day round this plaza. My step count is the stuff of legend.",
+        "Yes, the leash is empty. Long story. It probably ends at the snack table.",
+        "Dogs always know who's had too many meetings. They sit with them. It's a service."
+      ],
+      "reactions": [
+        "Is that a treat in your pocket? No? Waffles will be crushed.",
+        "Okay, okay, I'll check by the planters. Again."
+      ],
+      "barks": ["Waffles! Waffles, come!", "Who's a good... where'd he go?", "Waffles, drop the croissant!"],
+      "gesture": "look-around"
     }
   }
 }

@@ -260,6 +260,7 @@ test("every row offers Talk to, Examine, Go to, and Go to its terminal, which wo
 			"Examine",
 			"Go to",
 			"Terminal",
+			"Rename",
 			"End session",
 		]);
 		await shot(page, "row-actions");
@@ -393,7 +394,15 @@ test("Places travels anywhere at once, and Settings toggles the walk grid", asyn
 			},
 			{
 				title: "Outside",
-				names: ["Village square", "The forge", "The quest office", "The library", "The inn", "The rookery"],
+				names: [
+					"Village square",
+					"Harbour lane",
+					"The forge",
+					"The quest office",
+					"The library",
+					"The inn",
+					"The rookery",
+				],
 			},
 		]);
 		await shot(page, "tab-places");
@@ -574,6 +583,7 @@ test("the Places tab lists every function place as open, the inn with who sleeps
 		const outside = page.getByRole("region", { name: "Outside" });
 		await expect(outside.locator(".aw-row-name").allTextContents()).resolves.toEqual([
 			"Village square",
+			"Harbour lane",
 			"The forge",
 			"The quest office",
 			"The library",

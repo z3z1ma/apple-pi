@@ -12,6 +12,7 @@ import { chatLines } from "./chat-lines.js";
 import { Chatbox, type ChatKind, type ChatLine } from "./chatbox.js";
 import "./interface.css";
 import { placeActions } from "../places/place-panels.js";
+import { renaming } from "../places/rename-state.js";
 import { useUnreadOrb } from "../places/slack-tab.js";
 import { Minimap } from "./minimap.js";
 import { orbCounts, placeName } from "./model.js";
@@ -103,6 +104,7 @@ export function Interface({ store, view }: { store: WorldStore; view: ViewStore 
 			void placeActions.endSession(character);
 			return;
 		}
+		if (action === "rename") return renaming.open(character);
 		intend({ kind: action, character: character.id });
 	};
 	const travel = (place: PlaceRef) => {

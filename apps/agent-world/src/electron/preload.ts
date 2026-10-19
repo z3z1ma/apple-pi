@@ -55,6 +55,7 @@ const api: AgentWorldApi = {
 		ipcRenderer.invoke("world:end-session", characterId, confirmed) as Promise<CommandReceipt>,
 	sendMail: (characterId, body) => ipcRenderer.invoke("world:send-mail", characterId, body) as Promise<CommandReceipt>,
 	recruit: (request) => ipcRenderer.invoke("world:recruit", request) as Promise<RecruitReceipt>,
+	rename: (characterId, name) => ipcRenderer.invoke("world:rename", characterId, name) as Promise<CommandReceipt>,
 	openLink: (url) => ipcRenderer.invoke("world:open-link", url) as Promise<CommandResult>,
 	...places(),
 };

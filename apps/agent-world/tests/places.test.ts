@@ -153,7 +153,8 @@ describe.each(themes)("the %s pack", (theme) => {
 	it("gives every building in the square a sign board, inside the painting and above its door", () => {
 		if (!has("square")) return;
 		const square = load(theme, "square");
-		for (const door of square.doors) {
+		// The way on to the street (ticket 09 of the alive pass) is open ground, not a building.
+		for (const door of square.doors.filter((d) => d.to !== "street")) {
 			expect(door.sign, door.name).toBeDefined();
 			const [x, y, w, h] = door.sign!.rect;
 			expect(x >= 0 && y >= 0 && x + w <= square.cols && y + h <= square.rows, door.name).toBe(true);

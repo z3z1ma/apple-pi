@@ -9,6 +9,11 @@ A channel's look is chosen by `chooseTownsfolkLooks` as it comes to stand: the l
 Why: ticket 31; hashing alone put two of the same look side by side while others went unworn.
 Verify: apps/agent-world/tests/world-square.test.ts
 
+The same `SquareLife` runs in the `street` (ticket 09 of `.ledger/202610191114-agent-world-alive/`): `hooks.before()` gives how many channels the square stands (its spots minus the agents in it, `PlaceScene.squareRoom`), and the street stands the channels after those on its own free spots, so the outside holds more townsfolk without crowding either painting. `held` and the kept looks are keyed by `hooks.key()` (the layout key) so walking between the two never carries one place's figures into the other.
+Why: the brief asks the square's bound to grow and the new exterior to hold townsfolk too; slicing one ordered list keeps the most pressing channels in the square, nearest the crier.
+Coupled: apps/agent-world/themes/fantasy/places/street.json, apps/agent-world/themes/tech-office/places/street.json, apps/agent-world/themes/anime-school/places/street.json
+Verify: apps/agent-world/tests/world-street.test.ts
+
 Townsfolk fade in and out on their spot rather than walking through a door: they stand for channels, not sessions, and a square that a refresh reshuffles must stay calm.
 
 `drawUnreadBadge` centres the count on its ink (`measureText`'s actual bounding box against Phaser's `getTextMetrics().ascent`), not on the line box, so `1` and `88` sit in the middle alike; the prototype's numbers sat off centre. It never pulses (unlike the agents' state badges) so a square of unread channels stays calm; a channel that mentions the operator wears the theme's asking colour.

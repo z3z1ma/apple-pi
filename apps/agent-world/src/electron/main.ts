@@ -122,6 +122,9 @@ function start() {
 			return { ok: false, reason: "The recruit needs a name, a directory, and a brief." };
 		return lifecycle.recruit({ name, cwd, brief, ...(typeof reportsTo === "string" ? { reportsTo } : {}) });
 	});
+	ipcMain.handle("world:rename", (_event, characterId: unknown, name: unknown) =>
+		typeof characterId === "string" && typeof name === "string" ? lifecycle.rename(characterId, name) : unnamed,
+	);
 	// The function places: GitHub, Jira, Confluence, Slack, the outside-write gate, and delegation.
 	wireIntegrations({ stateDir: statePaths().dir, snapshot: () => world.snapshot(), commands, toWindow });
 	// Links in transcripts open in the system browser, web links only.

@@ -49,6 +49,11 @@ export interface Facts {
 	 * keeps the task the runtime already recorded.
 	 */
 	currentTask?: { bundle: string; taskId: string } | null;
+	/**
+	 * One short sentence of what the session works on now, written by the session-title extension after a settled user
+	 * turn. Like `currentTask`, reported only once known, so a reload keeps the recorded one.
+	 */
+	intent?: string | null;
 	config: {
 		name: string | null;
 		flags: string[];

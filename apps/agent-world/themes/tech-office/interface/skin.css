@@ -199,6 +199,14 @@ body {
 	box-shadow: 0 0 0 1px rgb(0 0 0 / 30%);
 }
 
+.aw-minimap-exit {
+	filter: drop-shadow(0 0 0.5px #1b1f24) drop-shadow(0 1px 1px rgb(0 0 0 / 60%));
+}
+
+.aw-minimap-exit::before {
+	background: #fff;
+}
+
 .aw-dot {
 	border-radius: 50%;
 	background: var(--t-amber);

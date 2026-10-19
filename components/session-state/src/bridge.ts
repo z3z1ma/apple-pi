@@ -5,6 +5,7 @@ import { dirname } from "node:path";
 import type { ExtensionAPI, ExtensionContext, SessionEntry } from "@earendil-works/pi-coding-agent";
 import { LEDGER_LINK_CHANNEL, type LedgerLink } from "../../shared/src/ledger-events.js";
 import { type OpenQuestionnaire, QUESTIONNAIRE_CHANNEL } from "../../shared/src/questionnaire-events.js";
+import { SESSION_INTENT_CHANNEL, type SessionIntent } from "../../shared/src/session-intent-events.js";
 import { childSessionParent, inChildSessionContext } from "../../subagents/src/child-context.js";
 import { RETRY_MS, spawnRuntime } from "./client.js";
 import { installCoordinator } from "./coordinator.js";
@@ -467,6 +468,11 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 		if (!link || touch.sessionId !== link.hello.session.id) return;
 		link.facts({ currentTask: { bundle: touch.bundle, taskId: touch.taskId } });
 		link.taskLink(touch.bundle, touch.taskId, touch.via);
+	});
+	// The session-title extension states what this session works on now.
+	pi.events.on(SESSION_INTENT_CHANNEL, (data) => {
+		const stated = data as SessionIntent;
+		if (link && stated.sessionId === link.hello.session.id) link.facts({ intent: stated.intent });
 	});
 	// Steers and follow-ups the operator typed during a run. Pi delivers steers before follow-ups, one user message each.
 	let queued = { steers: 0, followUps: 0 };

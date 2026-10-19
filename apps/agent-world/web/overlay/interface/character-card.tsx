@@ -38,6 +38,7 @@ export function CharacterCard({
 		if (doing && doing !== STATUS[attention]) rows.push(["Doing", doing]);
 		if (facts.task)
 			rows.push(["Ledger task", facts.task.status ? `${facts.task.title} (${facts.task.status})` : facts.task.title]);
+		else if (facts.intent) rows.push(["Working on", facts.intent]);
 		if (facts.git) {
 			rows.push(["Repository", base(facts.git.repository)]);
 			if (facts.git.branch) rows.push(["Branch", facts.git.branch]);

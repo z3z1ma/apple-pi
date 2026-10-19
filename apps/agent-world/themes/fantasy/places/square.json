@@ -52,7 +52,11 @@
     [38.5, 11],
     [24, 9.8],
     [20, 9.8],
-    [16.8, 14]
+    [16.8, 14],
+    [35.5, 10.0],
+    [30.6, 16.0],
+    [18.5, 10.6],
+    [26.0, 11.4]
   ],
   "entries": {
     "start": [22, 10],
@@ -60,7 +64,8 @@
     "quest-office": [20.2, 9],
     "library": [27, 9.2],
     "inn": [32.8, 9.2],
-    "rookery": [40.2, 10.4]
+    "rookery": [40.2, 10.4],
+    "street": [22.2, 19.8]
   },
   "doors": [
     {
@@ -104,6 +109,12 @@
       "standAt": [40.2, 10.4],
       "to": "rookery",
       "sign": { "rect": [41.18, 7.15, 1.35, 0.92], "plate": true }
+    },
+    {
+      "name": "Harbour lane",
+      "rect": [21, 20.4, 2.5, 1.6],
+      "standAt": [22.2, 19.8],
+      "to": "street"
     }
   ],
   "overlaySlots": [
@@ -237,5 +248,9 @@
     { "name": "the produce stall", "at": [13.9, 13.2], "face": "left" },
     { "name": "the bench", "at": [18.8, 18.2], "face": "down" },
     { "name": "the flower boxes", "at": [11.0, 10.0], "face": "up" }
+  ],
+  "ambient": [
+    { "cast": "guard", "at": [9.4, 9.9], "stay": true },
+    { "cast": "baker", "at": [29.0, 16.5], "face": "down" }
   ]
 }

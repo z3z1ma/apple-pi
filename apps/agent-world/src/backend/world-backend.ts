@@ -16,7 +16,7 @@ import type {
 	WorldSnapshot,
 	WorldUpdate,
 } from "../world.js";
-import { FACTS_COLUMNS, FACTS_JOINS, type FactsRow, factsOf, parseShared, taskReader } from "./facts.js";
+import { FACTS_JOINS, type FactsRow, factsColumns, factsOf, parseShared, taskReader } from "./facts.js";
 import { FEED_SINCE, type FeedLookup, type FeedRow, feedLine } from "./feed.js";
 import { dormantAgents } from "./inn.js";
 import { readMail } from "./mail.js";
@@ -81,21 +81,25 @@ const STORE_TIMEOUT_MS = 5000;
  */
 export const PREFERENCE_KEY = "agent-world";
 
-// Every top-level session with what places it: awake while its current incarnation is alive.
-const SESSIONS = `
+// Every top-level session with what places it: awake while its current incarnation is alive. `intent` is false on a
+// database an older runtime has not migrated yet.
+const sessionsSql = (intent: boolean) => `
 select s.id, s.name, s.cwd, s.reports_to as reportsTo, s.git, s.config,
 	(select min(f.started_at) from incarnations f where f.session_id = s.id) as firstStartedAt,
 	coalesce(i.ended_at is null and i.process_state in ('alive', 'alive_bridge_lost'), 0) as awake,
 	i.ended_at as stoppedAt, i.end_reason as stopReason,
-	${FACTS_COLUMNS}
+	${factsColumns(intent)}
 from sessions s
 ${FACTS_JOINS}
 where s.kind = 'root'`;
 
 // The rows that may have changed since an event sequence: sessions named by a newer event (a session that starts is
 // one), and the ones awake at the last read (given as a JSON array of ids), looked up by id.
-const CHANGED_SESSIONS = `${SESSIONS}
+const changedSql = (intent: boolean) => `${sessionsSql(intent)}
 	and s.id in (select session_id from events where seq > ? union select value from json_each(?))`;
+const SESSIONS = [sessionsSql(false), sessionsSql(true)];
+const CHANGED_SESSIONS = [changedSql(false), changedSql(true)];
+const INTENT_COLUMN = "select 1 from pragma_table_info('sessions') where name = 'intent'";
 
 interface Row extends FactsRow {
 	id: string;
@@ -256,9 +260,10 @@ export function openWorldBackend(paths: { db: string; socket: string }): WorldBa
 			// only with an event naming it. A database whose sequence went back is a new one.
 			const full = rowsSeq < 0 || seq < rowsSeq || polls % FULL_REREAD_POLLS === 0;
 			const awakeIds = [...sessionsById.values()].filter((session) => session.awake).map((session) => session.id);
+			const intent = Number(db.prepare(INTENT_COLUMN).get() !== undefined);
 			const changed = (full
-				? db.prepare(SESSIONS).all()
-				: db.prepare(CHANGED_SESSIONS).all(rowsSeq, JSON.stringify(awakeIds))) as unknown as Row[];
+				? db.prepare(SESSIONS[intent]!).all()
+				: db.prepare(CHANGED_SESSIONS[intent]!).all(rowsSeq, JSON.stringify(awakeIds))) as unknown as Row[];
 			if (full) {
 				rowsById.clear();
 				sessionsById.clear();

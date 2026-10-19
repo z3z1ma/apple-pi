@@ -249,7 +249,7 @@ test("hover text names the left-click action; right click lists every action and
 		const orla = await figure(page, HQ);
 		const body: Point = [orla.x, orla.y - 0.9];
 		await pointAt(page, body);
-		await vi.waitFor(async () => expect(await hoverText(page)).toBe("Talk to Orla the Wise / 4 more options"));
+		await vi.waitFor(async () => expect(await hoverText(page)).toBe("Talk to Orla the Wise / 5 more options"));
 		await shot(page, "hover-character");
 		const archway = HALL.doors.find((d) => d.name === "Archway to the gallery")!;
 		const [dx, dy, dw, dh] = archway.rect;
@@ -268,6 +268,7 @@ test("hover text names the left-click action; right click lists every action and
 			"Talk to Orla the Wise",
 			"Examine Orla the Wise",
 			"Recruit a guild member",
+			"Rename Orla the Wise",
 			"End session of Orla the Wise",
 			"Walk here",
 			"Cancel",

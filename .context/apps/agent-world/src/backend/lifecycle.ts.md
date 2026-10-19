@@ -14,3 +14,8 @@ Recruiting (`recruit`, ticket 10) sends `start` for a fresh `randomUUID` session
 Why: the runtime puts the prompt on Pi's command line after the flags (`pi --session-id <id> --name <n> [--reports-to <c>] <prompt>`), and Pi's argument parser reads a leading dash as an option; the runtime offers no `--` separator.
 Coupled: components/session-state/src/runtime.ts, components/session-state/src/coordinator.ts, apps/agent-world/web/overlay/places/recruit-state.ts
 Verify: apps/agent-world/tests/recruit.test.ts
+
+Renaming (`rename`, ticket 12) collapses whitespace to one line, refuses a blank name, a name over `NAME_MAX` (60, in `world.ts`), or a character not in the snapshot before anything is sent, and resolves at `applied`. The world, the side panel, and the conversation panel show the new name only from the session's own `name` fact, which the bridge updates through `pi.setSessionName`; nothing here edits the snapshot.
+Why: the rename form reads the same `NAME_MAX` for its `maxLength`, so the form and the backend cannot disagree; the recruit form still hard-codes 60.
+Coupled: apps/agent-world/web/overlay/places/rename-state.ts, components/session-state/src/bridge.ts
+Verify: apps/agent-world/tests/rename.test.ts, apps/agent-world/tests/world-rename.test.ts

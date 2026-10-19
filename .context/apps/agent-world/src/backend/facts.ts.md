@@ -26,3 +26,10 @@ Only a prompt of kind `questionnaire` whose `id` and every question parse (text,
 Why: the `answer` command names the prompt's `id` and must give one reply per question in order, so a half-read questionnaire would send answers the tool refuses; the panel then points to the terminal instead of showing a form it cannot send.
 Coupled: components/session-state/src/bridge.ts, apps/agent-world/web/overlay/conversation/question-form.tsx
 Verify: apps/agent-world/tests/instruct.test.ts
+
+## symbol:factsColumns
+
+`intent` is selected only when the database has the column (`world-backend.ts` checks `pragma_table_info` on each read); otherwise it reads as null.
+Why: the session-state runtime is a long-lived daemon that keeps running old code after the checkout changes, so its database can lack a newly migrated column for days; selecting a missing column fails the whole read and the world goes empty.
+Coupled: apps/agent-world/src/backend/world-backend.ts, components/session-state/src/schema.ts, components/tmux-sessions/sidebar/model.py
+Verify: apps/agent-world/tests/backend.test.ts

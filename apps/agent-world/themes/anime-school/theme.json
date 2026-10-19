@@ -8,6 +8,7 @@
     "gallery": "School corridor",
     "wing": "club",
     "square": "School courtyard",
+    "street": "Shopping street",
     "forge": "The shop workshop",
     "quest-office": "The student council",
     "library": "The library",
@@ -260,6 +261,77 @@
         "nudge": "Sprinkle food into"
       },
       "particle": "bubbles"
+    }
+  },
+  "ambient": {
+    "monitor": {
+      "name": "Kanade the hall monitor",
+      "look": "ambient-monitor",
+      "examine": "The hall monitor, armband on, clipboard ready, glasses gleaming.",
+      "lines": [
+        "No running in the courtyard! ...You were walking? Then keep walking. Properly.",
+        "I have a clipboard, and I'm not afraid to use it.",
+        "Tie straight, shoes tied, homework done. Two out of three is a start.",
+        "The rules keep everyone safe. Also, I wrote half of them.",
+        "If you see the senpai with the guitar, the music room is not a nap room. Tell him."
+      ],
+      "reactions": [
+        "That's three times! That's a warning! A friendly one, but a warning!",
+        "Please queue properly, even if it's just you."
+      ],
+      "barks": ["Walk, don't run!", "Shirts tucked in, everyone!", "I saw that!"],
+      "gesture": "nod"
+    },
+    "senpai": {
+      "name": "Haruto-senpai",
+      "look": "ambient-senpai",
+      "examine": "A third-year with a guitar case and the calm of someone who never does the reading.",
+      "lines": [
+        "Oh, a new face. Want to join the light music club? We have snacks. Mostly snacks.",
+        "They say practise every day. I practise looking cool every day. It's going well.",
+        "The secret to a great solo is confidence. And knowing three chords really well.",
+        "Don't worry about the festival. It always works out. Usually at the last minute.",
+        "You're doing great, kouhai. I can tell. Senpai senses."
+      ],
+      "reactions": [
+        "Whoa, so eager! I like it. The sign-up sheet's in the club room.",
+        "Easy, easy. Cool people pace themselves."
+      ],
+      "barks": ["Has anyone seen my pick?", "Club practice after school!", "Perfect weather for a nap..."],
+      "gesture": "wave"
+    },
+    "lunchlady": {
+      "name": "Mrs. Tanaka",
+      "look": "ambient-lunchlady",
+      "examine": "The lunch lady, ladle in hand, who knows every student's favourite dish.",
+      "lines": [
+        "Eat your vegetables! Growing minds need carrots. That's science.",
+        "Curry day is Friday. I don't make the rules. Well, I do. Curry day is Friday.",
+        "You look tired, dear. Have a rice ball. No, take two.",
+        "I've fed three generations of this school. The secret ingredient is remembering names.",
+        "Midnight snacks are against dorm rules. ...The good ones are on the left shelf."
+      ],
+      "reactions": [
+        "Seconds already? Well, you're still growing!",
+        "One at a time, one at a time! A ladle only goes so fast."
+      ],
+      "barks": ["Who wants miso soup?", "Lights out at ten, dears!", "Don't skip breakfast!"],
+      "gesture": "laugh"
+    },
+    "gardener": {
+      "name": "Mr. Mori the gardener",
+      "look": "ambient-gardener",
+      "examine": "The school's gardener, with a watering can and forty springs behind him.",
+      "lines": [
+        "The cherry trees bloom whether anyone watches or not. I like to watch anyway.",
+        "Weeds are only flowers nobody asked for. Be kind to them anyway.",
+        "Water at dawn, talk to them at noon, apologise at dusk if you stepped on one.",
+        "Forty years I've tended this courtyard. The trees and I are old friends.",
+        "Slow down, young one. Even bamboo takes its time to start."
+      ],
+      "reactions": ["Ho ho, so much energy! Save some for the sports festival.", "Mind the hydrangeas. They're shy."],
+      "barks": ["There we are, little one.", "Rain tomorrow, I think.", "Who's been stepping on my moss?"],
+      "gesture": "nod"
     }
   }
 }

@@ -7,6 +7,8 @@ import { PlacesOverlay } from "./places/places-overlay.js";
 import { PointerLayer } from "./pointer/pointer-layer.js";
 
 const NOTICE_MS = 2600;
+/** A longer line (an ambient character's) stays long enough to read: this much longer per character (ms). */
+const NOTICE_MS_PER_CHAR = 45;
 /** A broken theme's problems listed on screen; the rest are counted. */
 const THEME_PROBLEMS_SHOWN = 3;
 
@@ -52,9 +54,9 @@ export function Overlay({ store, view }: { store: WorldStore; view: ViewStore })
 function Notice({ text }: { text: string }) {
 	const [shown, setShown] = useState(true);
 	useEffect(() => {
-		const timer = setTimeout(() => setShown(false), NOTICE_MS);
+		const timer = setTimeout(() => setShown(false), Math.max(NOTICE_MS, 1000 + text.length * NOTICE_MS_PER_CHAR));
 		return () => clearTimeout(timer);
-	}, []);
+	}, [text]);
 	return shown ? (
 		<div className="notice" role="status">
 			{text}

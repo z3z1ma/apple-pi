@@ -70,6 +70,7 @@ export function placeOwner(ref: PlaceRef, world: WorldSnapshot | undefined): str
 /** The places outside any headquarters, in the order the Places tab lists them. */
 export const OUTSIDE: PlaceRef[] = [
 	{ kind: "square" },
+	{ kind: "street" },
 	{ kind: "forge" },
 	{ kind: "quest-office" },
 	{ kind: "library" },
@@ -112,6 +113,14 @@ export function needsYou(world: WorldSnapshot | undefined): Group[] {
 		{ key: "finished", title: "Finished, unseen", characters: waiting("finished") },
 	];
 	return groups.filter((group) => group.characters.length);
+}
+
+/**
+ * One line of what a character works on: the title of the ledger task it touched last, else what its session says it
+ * works on now (its stated intent); empty when neither is known.
+ */
+export function workLine(character: Character): string {
+	return character.facts?.task?.title ?? character.facts?.intent ?? "";
 }
 
 /** The Work tab: agents grouped by the ledger task they touched last; those without one last. */

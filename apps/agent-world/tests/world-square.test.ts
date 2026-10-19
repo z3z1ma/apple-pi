@@ -681,7 +681,13 @@ test("every building's sign board names its place in the theme's words, fitted i
 		);
 		const { page, errors } = await openWorld(world([WREN, BRAM], theme), { signedIn: false, unread: [] });
 		const signs = await view<SignView[]>(page, "signs()");
-		expect(signs.map((sign) => sign.door).sort(), theme).toEqual(place.doors.map((door) => door.name).sort());
+		expect(signs.map((sign) => sign.door).sort(), theme).toEqual(
+			place.doors
+				// The way to the street is an open-air exit, not a building: it has no sign board.
+				.filter((door) => door.to !== "street")
+				.map((door) => door.name)
+				.sort(),
+		);
 		const { zoom } = (await view<{ zoom: number }>(page, "zoom()"))!;
 		for (const sign of signs) {
 			// The place's name as the pack says it, without its article: "The forge" is signed "Forge".

@@ -35,7 +35,7 @@ NARROW_COLUMNS = 180
 COLUMNS = (
     ("state", " ", 1),
     ("name", "Agent", 26),
-    ("task", "Ledger task", 24),
+    ("task", "Working on", 24),
     ("doing", "Doing", 30),
     ("age", "For", 4),
     ("context", "Context", 7),
@@ -50,7 +50,10 @@ def cells(agent: Agent, now: float, frame: int) -> dict[str, Text]:
     return {
         "state": Text(glyph(agent, frame), style=f"bold {STATUS_STYLE[current]}"),
         "name": Text(agent.name, style=f"bold {STATUS_STYLE[current]}" if agent.needs_you else quiet),
-        "task": Text(agent.ledger.title if agent.ledger else "", style=quiet or "#fab387"),
+        # The ledger task when there is one, else what the session says it works on now.
+        "task": Text(agent.ledger.title, style=quiet or "#fab387")
+        if agent.ledger
+        else Text(agent.intent, style="#7f849c"),
         "doing": Text(f"{act.last_tool} {act.last_tool_detail}".strip(), style=quiet),
         "age": Text(ago(agent.updated_at, now), style="#7f849c"),
         "context": Text(tokens(act.context_tokens) if act.model else "", style=quiet, justify="right"),

@@ -61,7 +61,11 @@
     [22.5, 9.4],
     [17.5, 9.4],
     [15.5, 18.8],
-    [24.5, 18.8]
+    [24.5, 18.8],
+    [9.8, 9.4],
+    [31.6, 9.3],
+    [25.8, 15.6],
+    [3.4, 9.2]
   ],
   "entries": {
     "start": [20, 9.6],
@@ -70,7 +74,8 @@
     "quest-office": [22.2, 8.4],
     "library": [26.8, 8.4],
     "inn": [33.5, 8.4],
-    "rookery": [36.7, 8.4]
+    "rookery": [36.7, 8.4],
+    "street": [38.3, 9.9]
   },
   "doors": [
     {
@@ -114,6 +119,12 @@
       "standAt": [36.7, 8.4],
       "to": "rookery",
       "sign": { "rect": [35.82, 5.37, 1.6, 0.48] }
+    },
+    {
+      "name": "Main street",
+      "rect": [38.7, 9.5, 1.3, 1.9],
+      "standAt": [38.3, 9.9],
+      "to": "street"
     }
   ],
   "overlaySlots": [
@@ -161,5 +172,6 @@
     { "name": "the cafe tables", "at": [30.2, 12.2], "face": "right" },
     { "name": "the bench", "at": [6.0, 17.9], "face": "down" },
     { "name": "the flower beds", "at": [12.5, 15.8], "face": "down" }
-  ]
+  ],
+  "ambient": [{ "cast": "facilities", "at": [26.3, 11.8] }, { "cast": "dogwalker", "at": [27.0, 16.2] }]
 }

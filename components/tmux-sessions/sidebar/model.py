@@ -67,6 +67,8 @@ class Agent:
     focused: bool = False
     unseen: bool = False
     ledger: LedgerTask | None = None
+    # What the session says it works on now (its stated intent), shown when it has no ledger task.
+    intent: str = ""
     activity: Activity = field(default_factory=Activity)
 
     @property
@@ -107,7 +109,7 @@ def connect() -> sqlite3.Connection | None:
 
 LIVE_SESSIONS = """
 select s.id, s.generation, s.run_state, s.prompt, s.cwd, s.name, s.updated_at, s.needs_you_since, s.model,
-    s.context_tokens, s.cost, s.current_tool, s.current_tool_arg, s.current_task, i.pane_id,
+    s.context_tokens, s.cost, s.current_tool, s.current_tool_arg, s.current_task, {intent}, i.pane_id,
     (select ts.name from tmux_window_links l join tmux_sessions ts on ts.socket = l.socket and ts.id = l.session_id
         where l.socket = p.socket and l.window_id = p.window_id order by l.window_index limit 1) as tmux_session,
     (select l.window_index from tmux_window_links l
@@ -169,8 +171,11 @@ def live() -> list[Agent]:
     if db is None:
         return []
     try:
+        # A runtime started before the migration that adds `intent` runs old code, and its database lacks the column.
+        has_intent = db.execute("select 1 from pragma_table_info('sessions') where name = 'intent'").fetchone()
+        sql = LIVE_SESSIONS.format(intent="s.intent" if has_intent else "null as intent")
         # The runtime keys tmux servers by resolved socket path.
-        rows = db.execute(LIVE_SESSIONS, (os.path.realpath(server),)).fetchall()
+        rows = db.execute(sql, (os.path.realpath(server),)).fetchall()
     finally:
         db.close()
     agents = []
@@ -191,6 +196,7 @@ def live() -> list[Agent]:
             focused=row["pane_id"] in focused,
             unseen=row["needs_you_since"] is not None and not waiting,
             ledger=ledger_task(row["current_task"]),
+            intent=(row["intent"] or "").strip(),
             activity=Activity(
                 model=row["model"] or "",
                 context_tokens=row["context_tokens"] or 0,

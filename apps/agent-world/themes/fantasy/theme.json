@@ -8,6 +8,7 @@
     "gallery": "Gallery of wings",
     "wing": "wing",
     "square": "Village square",
+    "street": "Harbour lane",
     "forge": "The forge",
     "quest-office": "The quest office",
     "library": "The library",
@@ -265,6 +266,78 @@
         "spin": "Spin",
         "nudge": "Nudge"
       }
+    }
+  },
+  "ambient": {
+    "bard": {
+      "name": "Pip the bard",
+      "look": "ambient-bard",
+      "examine": "A bard with a lute, a feathered cap, and rather more confidence than chords.",
+      "lines": [
+        "Ah, an audience! Well, half of one. You'll do.",
+        "I'm writing a ballad about your guild. So far it rhymes 'quest' with 'rest' fourteen times.",
+        "The innkeeper pays me in stew. Best contract I ever signed.",
+        "Every song needs a chorus, and every chorus needs someone to hum along. That's you, friend.",
+        "If you hear a lute at three in the morning, that was the cat. Mostly.",
+        "I once played for a king. He clapped, then he left. I'm counting it."
+      ],
+      "reactions": [
+        "Easy, easy! The lute's in tune. My nerves are not.",
+        "An encore already? I haven't finished the first verse!"
+      ],
+      "barks": ["La la... no. La LA.", "Requests? None? The long one, then!", "What rhymes with 'guild'? Anyone?"],
+      "gesture": "laugh"
+    },
+    "guard": {
+      "name": "Bertram the guard",
+      "look": "ambient-guard",
+      "examine": "A guard leaning on his spear by the guild hall doors, heroically awake. Mostly.",
+      "lines": [
+        "Halt! Who goes... oh, it's you. Carry on. Quietly, please.",
+        "I'm not asleep. I'm guarding with my eyes closed. Advanced technique.",
+        "Nothing has happened on my watch in eleven years. I like to think that's me.",
+        "The guildmaster calls me 'decorative'. I've decided that's a compliment.",
+        "The spear's for ceremony, mostly. And for leaning. Mainly leaning."
+      ],
+      "reactions": ["Hrm? Wha? I'm up! I'm up!", "Five more minutes, then I'll stand to attention. Promise."],
+      "barks": ["All quiet... all quiet...", "Halt! ...or don't. Either's fine.", "Is it lunch yet?"],
+      "gesture": "yawn"
+    },
+    "baker": {
+      "name": "Marjorie the baker",
+      "look": "ambient-baker",
+      "examine": "A baker with a basket of warm rolls and a fresher basket of news.",
+      "lines": [
+        "Fresh rolls! And fresher news: the smith's been humming. Humming! Something's afoot.",
+        "Don't tell a soul, but the librarian dog-eared a page. On purpose.",
+        "The crier gets all his news from me, you know. He just says it louder.",
+        "A new wanderer joined the guild, I hear. Lovely manners. Takes the bread unbuttered.",
+        "Gossip's like sourdough, dearie. Give it a night and it rises on its own."
+      ],
+      "reactions": [
+        "Ooh, you want the juicy bit! Closer... closer... it's a cinnamon bun. Gotcha.",
+        "Patience, love. The best stories come out of the oven last."
+      ],
+      "barks": ["Warm bread! Warmer gossip!", "Did you hear? No? Come here, then.", "Honey buns, two a copper!"],
+      "gesture": "laugh"
+    },
+    "tourist": {
+      "name": "Ottilie the traveller",
+      "look": "ambient-tourist",
+      "examine": "A traveller holding a map upside down, beaming at everything.",
+      "lines": [
+        "Excuse me, is this the harbour? My map says there's a dragon here.",
+        "I came all this way for the famous fountain. It's very... wet. Lovely, though!",
+        "Everyone's so busy here. Back home the big news is the weather.",
+        "I've walked in circles for an hour. On the bright side, I've met that seagull four times.",
+        "I bought a souvenir sword. The smith says it's a butter knife. I'm keeping it."
+      ],
+      "reactions": [
+        "Oh! Are you the guide? Please say you're the guide.",
+        "Sorry, sorry, I'll move! Which way is 'move'?"
+      ],
+      "barks": ["Left at the fountain... or right?", "Is this map upside down?", "Ooh, look at that roof!"],
+      "gesture": "shrug"
     }
   }
 }

@@ -4,6 +4,7 @@ import * as Phaser from "phaser";
 import { createRoot } from "react-dom/client";
 import type { AgentWorldApi, ThemeChoice } from "../src/world.js";
 import { conversations } from "./game/actions.js";
+import type { AmbientView } from "./game/ambient.js";
 import { BootScene } from "./game/boot-scene.js";
 import type { FidgetView } from "./game/fidgets.js";
 import {
@@ -27,6 +28,7 @@ import { atlassian } from "./overlay/places/atlassian-state.js";
 import { forge } from "./overlay/places/forge-state.js";
 import { placePanels } from "./overlay/places/place-panels.js";
 import { recruiting } from "./overlay/places/recruit-state.js";
+import { renaming } from "./overlay/places/rename-state.js";
 import { slack } from "./overlay/places/slack-state.js";
 import { applyTheme, loadTheme, type Theme, ThemeProblem } from "./theme.js";
 import { themeStore } from "./theme-store.js";
@@ -76,6 +78,8 @@ declare global {
 			host(): { name: string; look: string; x: number; y: number } | undefined;
 			/** The square's recruiter, where it stands. */
 			recruiter(): { name: string; look: string; x: number; y: number } | undefined;
+			/** The pack's ambient characters standing here (ticket 08). */
+			ambient(): AmbientView[];
 			/** The operator's avatar: where it is, its facing and frame, and the rest of its walk. */
 			avatar(): AvatarView | undefined;
 			/** A point in tiles, on screen in CSS px. */
@@ -267,6 +271,7 @@ const talkedTo: string[] = [];
 conversationPanel.connect(window.agentWorld);
 placePanels.connect(window.agentWorld, view);
 recruiting.connect(window.agentWorld, view);
+renaming.connect(window.agentWorld, view);
 slack.connect(window.agentWorld);
 forge.connect(window.agentWorld);
 atlassian.connect(window.agentWorld, view);
@@ -295,6 +300,7 @@ window.agentWorldView = {
 	lookAt: (door) => active()?.lookAt(door) ?? false,
 	host: () => active()?.hostView(),
 	recruiter: () => active()?.recruiterView(),
+	ambient: () => active()?.ambientViews() ?? [],
 	townsfolk: () => active()?.townsfolkViews() ?? [],
 	signs: () => active()?.signViews() ?? [],
 	work: () => active()?.workViews() ?? [],

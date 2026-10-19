@@ -63,6 +63,8 @@ def task_line(agent: Agent) -> Content:
         return Content.from_markup(
             "[$text-accent]◆[/] [$text-muted]$status · $project[/]", status=agent.ledger.status, project=agent.project
         )
+    if agent.intent:
+        return Content.from_markup("[$text-muted]◇[/] $intent", intent=agent.intent)
     if agent.session_name:
         return Content.from_markup("[$text-muted]◇ no ledger task · $project[/]", project=agent.project)
     return Content.from_markup("[$text-muted]◇ no ledger task · unnamed[/]")

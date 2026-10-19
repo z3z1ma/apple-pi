@@ -66,5 +66,10 @@
     { "rect": [13.5, 4.2, 4.9, 2.3], "feet": 6.5 },
     { "rect": [4.8, 7.7, 5.4, 3.25], "feet": 10.95 },
     { "rect": [13.8, 7.8, 5.3, 3.2], "feet": 11.0 }
+  ],
+  "ambient": [{ "cast": "lunchlady", "at": [7.6, 3.6] }],
+  "interest": [
+    { "name": "the window", "at": [3.4, 6.6], "face": "left" },
+    { "name": "the futons", "at": [19.6, 5.5], "face": "right" }
   ]
 }

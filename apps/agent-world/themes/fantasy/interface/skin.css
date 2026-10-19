@@ -175,6 +175,14 @@ body {
 	box-shadow: 0 0 0 1px rgb(0 0 0 / 35%);
 }
 
+.aw-minimap-exit {
+	filter: drop-shadow(0 0 0.5px #2a1606) drop-shadow(0 1px 1px rgb(0 0 0 / 70%));
+}
+
+.aw-minimap-exit::before {
+	background: linear-gradient(#fff1c4, var(--aw-brass-light));
+}
+
 .aw-dot {
 	border-radius: 50%;
 	background: #ffd84a;

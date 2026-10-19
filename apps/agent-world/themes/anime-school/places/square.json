@@ -46,7 +46,11 @@
     [37, 9.6],
     [25, 9.7],
     [19.5, 9.7],
-    [16.5, 13]
+    [16.5, 13],
+    [31.5, 10.2],
+    [31.4, 13.2],
+    [16, 11],
+    [20, 17.8]
   ],
   "entries": {
     "start": [22, 10],
@@ -55,7 +59,8 @@
     "quest-office": [22, 9.1],
     "library": [28.3, 9.1],
     "inn": [34.1, 9.1],
-    "rookery": [38.9, 9.1]
+    "rookery": [38.9, 9.1],
+    "street": [22, 18.1]
   },
   "doors": [
     {
@@ -99,6 +104,12 @@
       "standAt": [38.9, 9.1],
       "to": "rookery",
       "sign": { "rect": [38.05, 6.42, 1.96, 0.42] }
+    },
+    {
+      "name": "Shopping street",
+      "rect": [17, 18.6, 9.5, 2.6],
+      "standAt": [22, 18.1],
+      "to": "street"
     }
   ],
   "host": { "look": "crier", "at": [28.0, 12.8] },
@@ -153,5 +164,6 @@
     { "name": "the bench", "at": [17.6, 16.4], "face": "down" },
     { "name": "the notice board", "at": [36.9, 15.1], "face": "down" },
     { "name": "the cherry trees", "at": [8.3, 16.0], "face": "left" }
-  ]
+  ],
+  "ambient": [{ "cast": "monitor", "at": [11.2, 9.9], "stay": true }, { "cast": "gardener", "at": [29.2, 17.4] }]
 }

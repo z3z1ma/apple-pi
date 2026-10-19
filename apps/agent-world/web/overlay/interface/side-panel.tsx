@@ -16,7 +16,18 @@ import { MailList } from "../places/mail-list.js";
 import { placePanels } from "../places/place-panels.js";
 import { SlackIcon, SlackSettings, SlackTab } from "../places/slack-tab.js";
 import { AgentsIcon, BellIcon, ChecklistIcon, ChevronIcon, CogIcon, LetterIcon, MapIcon } from "./icons.js";
-import { activity, byPlace, byTask, type Group, needsYou, OUTSIDE, orbCounts, placeName, placesOf } from "./model.js";
+import {
+	activity,
+	byPlace,
+	byTask,
+	type Group,
+	needsYou,
+	OUTSIDE,
+	orbCounts,
+	placeName,
+	placesOf,
+	workLine,
+} from "./model.js";
 import { type CharacterAction, CharacterRow } from "./rows.js";
 
 export type Tab = "agents" | "needs-you" | "work" | "mail" | "slack" | "places" | "settings";
@@ -134,10 +145,17 @@ function TabBody(props: SidePanelProps) {
 	if (tab === "mail") return <Mail {...props} />;
 	if (tab === "slack") return <SlackTab />;
 	if (!world?.characters.length) return <p className="aw-empty">Nobody is awake.</p>;
-	if (tab === "agents") return <Groups {...props} groups={byPlace(world, labels)} detail={activity} />;
+	if (tab === "agents") return <Groups {...props} groups={byPlace(world, labels)} detail={activity} work={workLine} />;
 	if (tab === "work")
 		return (
-			<Groups {...props} groups={byTask(world)} detail={(character) => placeName(character.place, world, labels)} />
+			<Groups
+				{...props}
+				groups={byTask(world)}
+				// Those with no ledger task say what they work on instead of where they are.
+				detail={(character) =>
+					(!character.facts?.task && character.facts?.intent) || placeName(character.place, world, labels)
+				}
+			/>
 		);
 	const groups = needsYou(world);
 	if (!groups.length) return <p className="aw-empty">Nobody needs you.</p>;
@@ -156,6 +174,7 @@ function TabBody(props: SidePanelProps) {
 function Groups({
 	groups,
 	detail,
+	work,
 	since,
 	selected,
 	onSelect,
@@ -163,6 +182,7 @@ function Groups({
 }: SidePanelProps & {
 	groups: Group[];
 	detail: (character: Character) => string;
+	work?: (character: Character) => string;
 	since?: (character: Character) => number | null | undefined;
 }) {
 	return (
@@ -179,6 +199,7 @@ function Groups({
 								key={character.id}
 								character={character}
 								detail={detail(character)}
+								work={work?.(character)}
 								since={since?.(character)}
 								selected={selected === character.id}
 								onSelect={() => onSelect(selected === character.id ? undefined : character.id)}
