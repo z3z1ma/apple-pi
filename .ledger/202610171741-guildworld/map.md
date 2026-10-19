@@ -42,6 +42,7 @@ A whole-product spec for Agent World, ready for `/skill:to-spec`: every architec
 - [Characters and portraits](decisions/22-characters-and-portraits.md): HD 16-frame sprite sheets per character with spelled-out walk phases and their own seats; large JRPG portraits with four expressions beside the dialogue box.
 - [Movement and pathing](decisions/23-movement-and-pathing.md): RuneScape's interaction rhythm with smooth movement along straightened paths over half-tile walk grids traced by hand; paintings leave room to move and interact.
 - [How exteriors are built](decisions/24-how-exteriors-are-built.md): exteriors are hand-painted like interiors, with a door per function place on painted building fronts, animation overlaid into spaces the painting leaves empty, and Slack channels as townsfolk.
+- [Dialogue with a character](decisions/17-dialogue-with-a-character.md): talking opens a themed conversation panel with the portrait, the Markdown transcript with folded tool calls and the streaming reply, and state-dependent actions (reply; redirect, tell it after, stop; a themed form for questionnaires); barks over heads for state at a distance.
 
 ## Not yet specified
 
