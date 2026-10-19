@@ -223,6 +223,12 @@ export interface AvatarView extends WalkerView {
 // Which spot each character holds, per place, for as long as the app runs; and view choices that outlive a scene.
 const heldSpots = new Map<string, Map<string, number>>();
 let showGrid = false;
+/**
+ * Key presses already handled. Phaser's keyboard plugin runs its whole queue of the frame's key events again for each
+ * new event, skipping only a repeat of the very last one, so after another key's release (Escape's, closing a panel) a
+ * G pressed and released in the same frame came round twice and toggled the grid back off.
+ */
+const handledKeys = new WeakSet<KeyboardEvent>();
 
 /** A new theme lays its places out its own way: who held which spot no longer means anything. */
 export function forgetSpots() {
@@ -305,7 +311,7 @@ export class PlaceScene extends Phaser.Scene {
 	private pointerAt?: Point;
 	private goTo?: string;
 	/** How far the interface's panels reach in from each edge of the window (CSS px), measured now and then. */
-	private insets: Insets = { top: 0, right: 0, bottom: 0, left: 0 };
+	private insets: Insets = { top: 0, right: 0, bottom: 0, left: 0, panels: [] };
 	/** Where the interface's panels, the place's title, and the hover text are on screen (CSS px), measured with them. */
 	private uiBoxes: Box[] = [];
 	private insetsAt = -Infinity;
@@ -377,7 +383,7 @@ export class PlaceScene extends Phaser.Scene {
 			this.square = new SquareLife(this, {
 				place: () => this.layout.place,
 				approach: (at, then) => this.approach(at, then),
-				pointer: () => (this.pointerAt ? this.toWorld(this.pointerAt) : undefined),
+				pointer: () => this.worldPointer(),
 				changed: () => {
 					if (!this.leaving) this.showCharacters(true);
 				},
@@ -392,8 +398,8 @@ export class PlaceScene extends Phaser.Scene {
 						if (reached || dist(goal, at) <= 1.2) then();
 						else this.view.notify("I can't reach that bench from here.");
 					}),
-				pointer: () => (this.pointerAt ? this.toWorld(this.pointerAt) : undefined),
-				host: () => this.host?.at,
+				pointer: () => this.worldPointer(),
+				caption: (line) => this.view.update({ subtitle: line ?? this.layout.subtitle }),
 				uiScale: () => Math.max(1, UI_ZOOM / this.cameras.main.zoom),
 			});
 		if (this.layout.ref.kind === "quest-office")
@@ -404,7 +410,7 @@ export class PlaceScene extends Phaser.Scene {
 						this.avatar.face(at);
 						then();
 					}),
-				pointer: () => (this.pointerAt ? this.toWorld(this.pointerAt) : undefined),
+				pointer: () => this.worldPointer(),
 				uiScale: () => Math.max(1, UI_ZOOM / this.cameras.main.zoom),
 			});
 		this.fidgets = new Fidgets(this, {
@@ -433,11 +439,12 @@ export class PlaceScene extends Phaser.Scene {
 		this.zoomTarget = this.clampZoom(chosenZoom.get(this.layout.data) ?? this.defaultZoom());
 		camera.setZoom(this.zoomTarget);
 		this.mid = this.keep?.mid ?? this.followMid(camera.zoom);
-		// The quest office's board and the library's desk stand on the north wall: arriving, the view looks there first
-		// (just below the place's title), until the avatar walks.
+		// The quest office's board, the library's desk, and the forge's smith stand on the north wall: arriving, the view
+		// looks there first (the painting's top at the window's top), until the avatar walks.
 		const kind = this.layout.ref.kind;
-		if (!this.keep && (kind === "quest-office" || kind === "library")) {
-			this.freeLook = this.clampMid([this.mid[0], 0], camera.zoom);
+		if (!this.keep && (kind === "quest-office" || kind === "library" || kind === "forge")) {
+			const view = this.scale.height / camera.zoom;
+			this.freeLook = [this.mid[0], Math.min((this.layout.place.rows * TILE) / 2, view / 2)];
 			this.mid = this.freeLook;
 		}
 		this.applyCamera();
@@ -1147,6 +1154,9 @@ export class PlaceScene extends Phaser.Scene {
 				.setDepth((dy + dh) * TILE - TILE);
 			// Each state's sprite keeps its own proportions, at the niche's height.
 			image.setScale((dh * TILE) / image.height);
+			// Without the sprite's outermost pixels: the anime school's door sprites carry a line of magenta keying fringe
+			// along their sides and foot, which drew a pink line down the door frame.
+			image.setCrop(1, 0, image.width - 2, image.height - 1);
 			if (door === "open") this.addGlow({ kind: "glow", at: [x + dx + dw / 2, dy + dh - 0.35], r: dw * 0.75 }, 0.32);
 			this.banner(x, template.banner[1], wing.name);
 			this.doors.push({
@@ -1256,7 +1266,14 @@ export class PlaceScene extends Phaser.Scene {
 			// The full stop ends the word; the next one starts after a space, not the separator.
 			return `${word.slice(0, n)}.${sep ? " " : ""}`;
 		});
-		let lines = bannerLines(short, fits, BANNER_LINES_SHORT);
+		// As many lines as the cloth holds at this size (a short sign plate holds fewer than a banner), at most five.
+		const tall = (count: number) => {
+			text.setText(Array.from({ length: count }, () => "Ag").join("\n"));
+			return text.height <= height + 0.5;
+		};
+		let most = BANNER_LINES_SHORT;
+		while (most > 1 && !tall(most)) most--;
+		let lines = bannerLines(short, fits, most);
 		if (!lines) {
 			// More words than lines: as many as fit, the last line cut short.
 			lines = [];
@@ -1269,11 +1286,11 @@ export class PlaceScene extends Phaser.Scene {
 				line += part;
 			}
 			if (line) lines.push(line);
-			if (lines.length > BANNER_LINES_SHORT) {
-				lines = lines.slice(0, BANNER_LINES_SHORT);
-				let last = lines[BANNER_LINES_SHORT - 1].trim();
+			if (lines.length > most) {
+				lines = lines.slice(0, most);
+				let last = lines[most - 1].trim();
 				while (last.length > 1 && !fits(`${last}\u2026`)) last = last.slice(0, -1);
-				lines[BANNER_LINES_SHORT - 1] = `${last.replace(/[-_./ ]+$/, "")}\u2026`;
+				lines[most - 1] = `${last.replace(/[-_./ ]+$/, "")}\u2026`;
 			}
 			view.abbreviated = true;
 		}
@@ -1306,7 +1323,9 @@ export class PlaceScene extends Phaser.Scene {
 		this.gridOverlay = graphics;
 	}
 
-	private toggleGrid() {
+	private toggleGrid(event: KeyboardEvent) {
+		if (handledKeys.has(event)) return;
+		handledKeys.add(event);
 		this.setGrid(!showGrid);
 	}
 
@@ -1960,8 +1979,23 @@ export class PlaceScene extends Phaser.Scene {
 	}
 
 	private refreshHover() {
-		if (!this.pointerAt || this.leaving) return pointer.hover(undefined);
-		pointer.hover(this.actionsAt(this.toWorld(this.pointerAt)));
+		const at = this.worldPointer();
+		if (!at || this.leaving) return pointer.hover(undefined);
+		pointer.hover(this.actionsAt(at));
+	}
+
+	/**
+	 * The pointer over the world, in tiles; undefined when it is off the canvas or over the interface or a panel. A
+	 * panel opened under a still pointer sends the canvas no `gameout`, so the hover text and a piece's sign stayed
+	 * drawn under it; asking the page what is under the pointer catches that.
+	 */
+	private worldPointer(): Point | undefined {
+		const at = this.pointerAt;
+		if (!at) return undefined;
+		const canvas = this.game.canvas;
+		const box = canvas.getBoundingClientRect();
+		if (document.elementFromPoint(box.left + at[0], box.top + at[1]) !== canvas) return undefined;
+		return this.toWorld(at);
 	}
 
 	// Walking.
@@ -2214,7 +2248,11 @@ export class PlaceScene extends Phaser.Scene {
 
 	// The camera.
 
-	/** The whole place fits the window at the smallest zoom. */
+	/**
+	 * The whole place fits the window at the smallest zoom: a place of another shape than the window then shows the
+	 * backdrop beside it, as RuneScape shows the void past the map's edge. Only the operator's wheel goes there; the
+	 * default zoom and the camera's follow always fill the window.
+	 */
 	private minZoom(): number {
 		const { cols, rows } = this.layout.place;
 		return Math.min(this.scale.width / (cols * TILE), this.scale.height / (rows * TILE));
@@ -2247,39 +2285,56 @@ export class PlaceScene extends Phaser.Scene {
 	}
 
 	/**
-	 * Where the view centres to follow the avatar: on it, kept on the painting. Along a side where the whole place fits
-	 * the window, the place stays centred, and slides only as far as it takes to bring the avatar out from under a panel
-	 * (as far as the panel reaches), so a room seen whole does not drift with every step.
+	 * Where the view centres to follow the avatar: on it, kept on the painting (a side the whole place fits stays
+	 * centred). Only where a panel covers the avatar does the painting slide out from under the panel, as far as it
+	 * takes to bring the avatar into the open and no further than the panel reaches; so near an edge the painting still
+	 * fills the window, and a room seen whole does not drift with every step.
 	 */
 	private followMid(zoom: number): Point {
-		const [mx, my] = this.clampMid(this.avatarMid(), zoom);
 		const { cols, rows } = this.layout.place;
-		const { top, right, bottom, left } = this.insets;
 		const { width, height } = this.scale;
-		const reveal = (
-			mid: number,
-			size: number,
-			screen: number,
-			low: number,
-			high: number,
-			near: number,
-			far: number,
-		) => {
-			if (size > screen / zoom) return mid;
-			// The avatar's near and far edges (world px) stay this far (CSS px) inside the uncovered part of the window.
-			const margin = 16;
-			const least = far - (screen / 2 - high - margin) / zoom;
-			const most = near + (screen / 2 - low - margin) / zoom;
-			const wanted = Math.min(Math.max(mid, least), Math.max(most, least));
-			const reach = (edge: number) => Math.max(size / 2, size - screen / zoom / 2 + edge / zoom);
-			return Math.min(reach(high), Math.max(size - reach(low), wanted));
+		const { top, right, bottom, left, panels } = this.insets;
+		const onPainting = (v: number, size: number, view: number) =>
+			size <= view ? size / 2 : Math.min(size - view / 2, Math.max(view / 2, v));
+		const [ax0, ay0] = this.avatarMid();
+		let mx = onPainting(ax0, cols * TILE, width / zoom);
+		let my = onPainting(ay0, rows * TILE, height / zoom);
+		// The avatar's box on screen (CSS px) with the view at (mx, my); it stays this far inside the uncovered part.
+		const margin = 16;
+		// What must show: the avatar, and a door it stands at (walking up to a door under a panel brings it out).
+		const { x, y } = this.avatar;
+		let [x0, y0, x1, y1] = [x - 0.5, y - PERSON_TILES, x + 0.5, y + 0.25];
+		const door = this.doors.find(({ standAt }) => dist(standAt, [x, y]) <= 0.6);
+		if (door) {
+			const [rx, ry, rw, rh] = door.rect;
+			[x0, y0, x1, y1] = [Math.min(x0, rx), Math.min(y0, ry), Math.max(x1, rx + rw), Math.max(y1, ry + rh)];
+		}
+		const box = () => ({
+			left: (x0 * TILE - mx) * zoom + width / 2,
+			right: (x1 * TILE - mx) * zoom + width / 2,
+			top: (y0 * TILE - my) * zoom + height / 2,
+			bottom: (y1 * TILE - my) * zoom + height / 2,
+		});
+		for (const panel of panels) {
+			const b = box();
+			const overlaps =
+				b.right > panel.left - margin &&
+				b.left < panel.right + margin &&
+				b.bottom > panel.top - margin &&
+				b.top < panel.bottom + margin;
+			if (!overlaps) continue;
+			if (panel.edge === "bottom") my += (b.bottom - (panel.top - margin)) / zoom;
+			else if (panel.edge === "right") mx += (b.right - (panel.left - margin)) / zoom;
+			else my -= (panel.bottom + margin - b.top) / zoom;
+		}
+		// No further than the panels reach.
+		const reach = (v: number, size: number, view: number, low: number, high: number) => {
+			const centred = size <= view;
+			const least = centred ? size / 2 - Math.max(0, low / zoom - (view - size) / 2) : view / 2 - low / zoom;
+			const most = centred ? size / 2 + Math.max(0, high / zoom - (view - size) / 2) : size - view / 2 + high / zoom;
+			return Math.min(most, Math.max(least, v));
 		};
-		const ax = this.avatar.x * TILE;
-		const ay = this.avatar.y * TILE;
-		return [
-			reveal(mx, cols * TILE, width, left, right, ax - TILE / 2, ax + TILE / 2),
-			reveal(my, rows * TILE, height, top, bottom, ay - PERSON_TILES * TILE, ay + TILE / 4),
-		];
+		return [reach(mx, cols * TILE, width / zoom, left, right), reach(my, rows * TILE, height / zoom, top, bottom)];
 	}
 
 	private avatarMid(): Point {
@@ -2347,6 +2402,8 @@ interface Insets {
 	right: number;
 	bottom: number;
 	left: number;
+	/** Each panel at an edge, in CSS px, with the edge it reaches: the view slides only for what it covers. */
+	panels: { edge: "top" | "right" | "bottom"; left: number; top: number; right: number; bottom: number }[];
 }
 
 /** A box on screen, in CSS px. */
@@ -2383,11 +2440,19 @@ function interfaceInsets(): Insets {
 	const right = boxes(".aw-side, .aw-top-right").filter((r) => r.right > width - 40);
 	const bottom = boxes(".aw-chat").filter((r) => r.bottom > height - 40);
 	const top = boxes(".place-title").filter((r) => r.top < 40);
+	const panel = (edge: Insets["panels"][number]["edge"]) => (r: DOMRect) => ({
+		edge,
+		left: r.left,
+		top: r.top,
+		right: r.right,
+		bottom: r.bottom,
+	});
 	return {
 		right: right.length ? width - Math.min(...right.map((r) => r.left)) + gap : 0,
 		bottom: bottom.length ? height - Math.min(...bottom.map((r) => r.top)) + gap : 0,
 		top: top.length ? Math.max(...top.map((r) => r.bottom)) + gap : 0,
 		left: 0,
+		panels: [...right.map(panel("right")), ...bottom.map(panel("bottom")), ...top.map(panel("top"))],
 	};
 }
 

@@ -1,4 +1,12 @@
-import type { AgentWorldApi, CommandResult, FeedLine, TerminalResult, WorldSnapshot } from "../src/world.js";
+import type {
+	AgentWorldApi,
+	CommandResult,
+	FeedLine,
+	KeptPart,
+	TerminalResult,
+	WorldSnapshot,
+	WorldUpdate,
+} from "../src/world.js";
 
 /** Feed lines the world UI keeps for the chatbox. */
 const FEED_KEPT = 200;
@@ -17,6 +25,12 @@ export interface WorldStore {
 	setTheme(id: string): Promise<CommandResult>;
 }
 
+/** Copy the inn or the mail from one snapshot to another. */
+function copyPart(to: WorldSnapshot, from: WorldSnapshot, part: KeptPart) {
+	if (part === "dormant") to.dormant = from.dormant;
+	else to.mail = from.mail;
+}
+
 export function worldStore(api: AgentWorldApi): WorldStore {
 	let snapshot: WorldSnapshot | undefined;
 	const listeners = new Set<() => void>();
@@ -24,9 +38,29 @@ export function worldStore(api: AgentWorldApi): WorldStore {
 		snapshot = next;
 		for (const listener of listeners) listener();
 	};
-	api.onUpdate(set);
-	// An update that arrives first is newer than the snapshot asked for.
-	void api.snapshot().then((first) => snapshot ?? set(first));
+	// An update leaves out the inn and the mail while they are unchanged; they are kept from the snapshot before. One
+	// that came before this window had them (it reloaded) is filled from the whole snapshot asked for below.
+	let missing: KeptPart[] = [];
+	const take = ({ unchanged, ...update }: WorldUpdate) => {
+		const next: WorldSnapshot = update;
+		const unknown: KeptPart[] = [];
+		for (const part of unchanged ?? []) {
+			if (snapshot && !missing.includes(part)) copyPart(next, snapshot, part);
+			else unknown.push(part);
+		}
+		missing = unknown;
+		set(next);
+	};
+	api.onUpdate(take);
+	// An update that arrives first is newer than the snapshot asked for, but for the parts it did not carry.
+	void api.snapshot().then((first) => {
+		if (!snapshot) return set(first);
+		if (!missing.length) return;
+		const filled: WorldSnapshot = { ...snapshot };
+		for (const part of missing) copyPart(filled, first, part);
+		missing = [];
+		set(filled);
+	});
 
 	let lines: FeedLine[] = [];
 	const feedListeners = new Set<() => void>();

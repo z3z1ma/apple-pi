@@ -65,7 +65,7 @@ export function Interface({ store, view }: { store: WorldStore; view: ViewStore 
 	// Where you are, as the world's title says.
 	const placeTitle = state.title;
 	useEffect(() => {
-		if (placeTitle) say(`You are in ${theName(placeTitle)}.`);
+		if (placeTitle) say(`You enter ${theName(placeTitle)}.`);
 	}, [placeTitle, say]);
 
 	// The interface handles examining and the terminal itself, whoever asks (a row here, or the world's own menu).

@@ -96,7 +96,9 @@
     "--aw-surface-background": "#fbfaf8",
     "--aw-panel-cover": "#f4f5f7",
     "--aw-panel-page": "#ffffff",
-    "--aw-veil": "radial-gradient(ellipse 70% 65% at 50% 50%, rgb(12 15 19 / 32%), rgb(8 10 14 / 70%))"
+    "--aw-veil": "radial-gradient(ellipse 70% 65% at 50% 50%, rgb(12 15 19 / 32%), rgb(8 10 14 / 70%))",
+    "--aw-icon-work": "url(interface/icons/work.svg)",
+    "--aw-icon-places": "url(interface/icons/places.svg)"
   },
   "skin": "interface/skin.css",
   "world": {
@@ -138,7 +140,7 @@
     },
     "glow": ["#fff1cf", "#ffd08a", "#ffa552"],
     "banner": {
-      "tiles": 2.1,
+      "tiles": 2.0,
       "text": [0.31, 0.18, 0.62, 0.66],
       "hover": [0.24, 0.07, 0.74, 0.9],
       "ink": "#1f2a33"

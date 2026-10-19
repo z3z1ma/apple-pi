@@ -12,6 +12,7 @@ import type {
 	WriteDescription,
 } from "../../../src/integrations.js";
 import { chatLines } from "../interface/chat-lines.js";
+import { dialogLayer } from "./place-dialog.js";
 
 export type WriteApi = Pick<IntegrationsApi, "describeWrite" | "confirmWrite">;
 
@@ -89,7 +90,8 @@ export const confirming = (state: WriteState) => state.phase === "confirming" ||
 
 /**
  * The confirmation, over the panel that asked: what is done, where, the exact text, and two buttons, the safe one
- * focused. While it shows, the panel behind it is inert, so Tab and clicks stay here.
+ * focused. Render it inside the place's `PlaceDialog`, with the rest of the panel `inert` while it shows, so Tab and
+ * clicks stay here; Escape, the panel's close button, or a click on the world decline it and leave the panel open.
  */
 export function ConfirmWrite({
 	state,
@@ -101,6 +103,9 @@ export function ConfirmWrite({
 	onCancel: () => void;
 }) {
 	const keep = useRef<HTMLButtonElement>(null);
+	const decline = useRef(onCancel);
+	decline.current = onCancel;
+	useEffect(() => dialogLayer(() => decline.current()), []);
 	useEffect(() => {
 		const before = document.activeElement;
 		keep.current?.focus({ preventScroll: true });

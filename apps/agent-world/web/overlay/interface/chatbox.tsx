@@ -73,7 +73,11 @@ export function Chatbox({
 						pinned.current = el.scrollHeight - el.scrollTop - el.clientHeight < 8;
 					}}
 				>
-					{shown.length === 0 && <p className="aw-empty">Nothing yet.</p>}
+					{shown.length === 0 && (
+						<p className="aw-empty">
+							{lines.length ? "Nothing to show: the filters below hide every line." : "Nothing yet."}
+						</p>
+					)}
 					{shown.map((line) => (
 						<p key={line.key} className={`aw-chat-line aw-chat-${line.kind}`} data-kind={line.kind}>
 							<time>{time(line.at)}</time> <LineText line={line} awake={awake} onName={onName} />

@@ -8,6 +8,7 @@ import { sleeperCharacter } from "../../game/layout.js";
 import { say } from "../../theme.js";
 import { themeStore } from "../../theme-store.js";
 import type { ViewStore } from "../../view-state.js";
+import { onePanel } from "../one-panel.js";
 
 export type PlacesApi = Pick<AgentWorldApi, "wake" | "endSession" | "sendMail">;
 
@@ -51,6 +52,7 @@ export const placePanels = {
 		update({ api, view });
 	},
 	open(panel: "innkeeper" | "rookery", options: { write?: boolean; letterTo?: string } = {}) {
+		onePanel.opening("places");
 		update({ panel, opening: state.opening + 1, write: options.write, letterTo: options.letterTo });
 	},
 	close() {
@@ -60,6 +62,8 @@ export const placePanels = {
 		if (state.confirmEnd) update({ confirmEnd: undefined });
 	},
 };
+
+onePanel.closes("places", () => placePanels.close());
 
 export const placeActions = {
 	/** Wake a dormant agent: its session opens in a new tmux window, and it walks out of the inn to its place. */

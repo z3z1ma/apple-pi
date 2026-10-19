@@ -32,13 +32,66 @@ function hash(text: string): number {
 	return h;
 }
 
-/** The townsfolk look a channel wears: fixed by its id, so a channel is always the same person. */
-export function townsfolkLook(theme: Theme, channelId: string): string | undefined {
-	const choices = Object.entries(theme.looks)
+/** The look each channel wore when it last stood in the square, for as long as the app runs (per theme). */
+const keptLooks = new Map<string, string>();
+
+const townsfolkChoices = (theme: Theme) =>
+	Object.entries(theme.looks)
 		.filter(([, look]) => look.role === "townsfolk")
 		.map(([name]) => name)
 		.sort();
+
+/**
+ * The townsfolk look a channel wears: the one it wore when it last stood in the square, else the one its id hashes to,
+ * so the crier's list and the channel's panel show the person standing in the square.
+ */
+export function townsfolkLook(theme: Theme, channelId: string): string | undefined {
+	const choices = townsfolkChoices(theme);
+	const kept = keptLooks.get(channelId);
+	if (kept && choices.includes(kept)) return kept;
 	return choices.length ? choices[hash(channelId) % choices.length] : undefined;
+}
+
+/**
+ * Looks for the channels standing together (`ids`, in the square's order): those already standing keep theirs
+ * (`standing`); each newcomer takes the look it wore before or its id's look while no one else wears it, else the next
+ * look worn by the fewest, so no two townspeople look alike until there are more of them than looks.
+ */
+export function chooseTownsfolkLooks(
+	choices: string[],
+	ids: string[],
+	standing: Map<string, string>,
+	kept: Map<string, string> = new Map(),
+): Map<string, string> {
+	const looks = new Map<string, string>();
+	if (!choices.length) return looks;
+	const uses = new Map(choices.map((look) => [look, 0]));
+	const take = (id: string, look: string) => {
+		looks.set(id, look);
+		uses.set(look, (uses.get(look) ?? 0) + 1);
+	};
+	for (const id of ids) {
+		const look = standing.get(id);
+		if (look && uses.has(look)) take(id, look);
+	}
+	for (const id of ids) {
+		if (looks.has(id)) continue;
+		const fewest = Math.min(...uses.values());
+		const before = kept.get(id);
+		if (before && uses.get(before) === fewest) {
+			take(id, before);
+			continue;
+		}
+		const from = hash(id) % choices.length;
+		for (let i = 0; i < choices.length; i++) {
+			const look = choices[(from + i) % choices.length];
+			if (uses.get(look) === fewest) {
+				take(id, look);
+				break;
+			}
+		}
+	}
+	return looks;
 }
 
 /**
@@ -196,6 +249,7 @@ export class SquareLife {
 	/** A new theme lays the square out its own way. */
 	static forget() {
 		SquareLife.held.clear();
+		keptLooks.clear();
 	}
 
 	/** Stand the channels with unread messages on the free spots (`free`, indexes into the place's spots). */
@@ -207,17 +261,27 @@ export class SquareLife {
 		const spots = townsfolkSpots(channels, free, SquareLife.held);
 		const byId = new Map(channels.map((channel) => [channel.id, channel]));
 		for (const [id, folk] of this.folk) if (!spots.has(id) && !folk.leaving) this.leave(folk, animate);
+		const standing = new Map(
+			[...this.folk].filter(([id, folk]) => spots.has(id) && !folk.leaving).map(([id, folk]) => [id, folk.look]),
+		);
+		const looks = chooseTownsfolkLooks(townsfolkChoices(theme), [...spots.keys()], standing, keptLooks);
+		for (const [id, look] of looks) keptLooks.set(id, look);
 		for (const [id, spot] of spots) {
 			const channel = byId.get(id)!;
 			const at = place.spots[spot];
 			let folk = this.folk.get(id);
+			if (folk?.leaving && folk.look !== looks.get(id)) {
+				// Coming back while fading out, but its look is someone else's now: the fading one goes, a new one comes.
+				this.folk.delete(id);
+				folk = undefined;
+			}
 			if (folk?.leaving) {
 				folk.fade?.tween.remove();
 				folk.leaving = false;
 				this.fade(folk, 1);
 			}
 			if (!folk) {
-				const look = townsfolkLook(theme, id);
+				const look = looks.get(id);
 				if (!look) continue;
 				const walker = new Walker(this.scene, look, theme.looks[look], at, "down");
 				folk = {

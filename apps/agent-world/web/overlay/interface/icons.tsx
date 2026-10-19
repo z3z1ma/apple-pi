@@ -29,12 +29,12 @@ export function BellIcon() {
 	);
 }
 
-export function ScrollIcon() {
+/** Work, by default: a checklist (a pack may draw its own, `--aw-icon-work`). */
+export function ChecklistIcon() {
 	return (
 		<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
-			<path d="M7 4.5h10.5a2 2 0 0 1 2 2v.5H17M7 4.5a2 2 0 0 0-2 2V17" {...stroke} />
-			<path d="M17 7v11.5a2 2 0 0 1-2 2H5.5a2 2 0 0 1-2-2V17H13v1.5a2 2 0 0 0 4 0" {...stroke} />
-			<path d="M9 9h5M9 12h5" {...stroke} />
+			<rect x="4" y="3.5" width="16" height="17" rx="2" {...stroke} />
+			<path d="M7.5 8.5l1.3 1.3 2.2-2.4M7.5 14.5l1.3 1.3 2.2-2.4M13.5 9h3.5M13.5 15h3.5" {...stroke} />
 		</svg>
 	);
 }
@@ -49,11 +49,12 @@ export function LetterIcon() {
 	);
 }
 
-export function SignpostIcon() {
+/** Places, by default: a folded map (a pack may draw its own, `--aw-icon-places`). */
+export function MapIcon() {
 	return (
 		<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
-			<path d="M12 3v18M8.5 21h7" {...stroke} />
-			<path d="M12 5.5h6.5l2 2-2 2H12zM12 11.5H5.5l-2 2 2 2H12z" {...stroke} />
+			<path d="M3.5 6.5 9 4.5l6 2 5.5-2v13l-5.5 2-6-2-5.5 2z" {...stroke} />
+			<path d="M9 4.5v13M15 6.5v13" {...stroke} />
 		</svg>
 	);
 }

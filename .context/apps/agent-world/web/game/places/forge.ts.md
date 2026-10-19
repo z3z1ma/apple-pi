@@ -8,3 +8,6 @@ Why: the blades are painted diagonally in a 612 x ~520 frame; unturned they only
 
 The `work` slots replace the four `fidget` slots each pack's tracer had put on the benches: the art briefs (`apps/agent-world/art/briefs/*.json`, `scenes/forge/slots`) name "the empty tops of the four workbenches" and "the empty workbench mats" as the place for the crafted pieces, and no `work` kind existed then. Fidget objects on the benches would now overlap the pieces.
 Verify: apps/agent-world/tests/world-forge.test.ts
+
+Pull requests beyond the benches are counted in the place's title (`caption`, the host callback that sets the title's subtitle: "3 more on the rack"), not in a tag over the smith: the tag sat above the painting's top edge at the default zoom, off screen in every pack.
+Verify: apps/agent-world/tests/world-forge.test.ts

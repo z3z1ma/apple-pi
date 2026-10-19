@@ -49,7 +49,7 @@
   "overlaySlots": [
     { "kind": "glow", "at": [8.72, 0.9], "r": 1.0 },
     { "kind": "fidget", "fidget": "sleeper", "at": [5.2, 2.6] },
-    { "kind": "fidget", "fidget": "pet", "at": [6.6, 4.1] },
+    { "kind": "fidget", "fidget": "pet", "at": [16.4, 4.7] },
     { "kind": "fidget", "fidget": "tome", "at": [6.4, 6.9] },
     { "kind": "fidget", "fidget": "light", "at": [17.4, 6.7] },
     { "kind": "fidget", "fidget": "bell", "at": [13.0, 3.4] }

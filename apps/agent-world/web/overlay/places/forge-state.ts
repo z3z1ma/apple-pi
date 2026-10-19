@@ -6,6 +6,7 @@
 import type { Delegation, PullRequest, PullRequestDetail, Refusal } from "../../../src/integrations.js";
 import type { AgentWorldApi, ReceiptStage } from "../../../src/world.js";
 import { chatLines } from "../interface/chat-lines.js";
+import { onePanel } from "../one-panel.js";
 
 export type ForgeApi = Partial<
 	Pick<
@@ -77,8 +78,6 @@ const update = (change: Partial<ForgeState>) => {
 const failure = (error: unknown) => String((error as Error)?.message ?? error);
 
 let reading: Promise<void> | undefined;
-/** What Escape (or a click on the world) does first while a confirmation shows over the panel. */
-let guarded: (() => void) | undefined;
 let visiting: ReturnType<typeof setInterval> | undefined;
 let stopReceipts: (() => void) | undefined;
 let commands = 0;
@@ -157,18 +156,21 @@ export const forge = {
 
 	/** The smith's list. */
 	open() {
+		onePanel.opening("forge");
 		update({ page: "list", selected: undefined, opening: state.opening + 1 });
 		void forge.refresh(FRESH_MS);
 	},
 	/** One pull request's card; its diff is read as it opens, so the review page is ready. */
 	openCard(pr: PullRef) {
 		const fresh = !state.page;
+		onePanel.opening("forge");
 		update({ page: "card", selected: { repo: pr.repo, number: pr.number }, opening: state.opening + (fresh ? 1 : 0) });
 		void forge.loadDetail(pr);
 		if (fresh) void forge.refresh(FRESH_MS);
 	},
 	openReview(pr: PullRef) {
 		const fresh = !state.page;
+		onePanel.opening("forge");
 		update({
 			page: "review",
 			selected: { repo: pr.repo, number: pr.number },
@@ -182,16 +184,7 @@ export const forge = {
 		else if (state.page === "card") update({ page: "list", selected: undefined });
 	},
 	close() {
-		guarded = undefined;
 		if (state.page) update({ page: undefined });
-	},
-	/** Escape, the close button, or the world: decline a confirmation showing, else close the panel. */
-	escape() {
-		if (guarded) guarded();
-		else forge.close();
-	},
-	guard(then: (() => void) | undefined) {
-		guarded = then;
 	},
 
 	/** The pull request as last listed, or as its review page read it. */
@@ -319,3 +312,4 @@ export const forge = {
 		update({ delegations });
 	},
 };
+onePanel.closes("forge", () => forge.close());

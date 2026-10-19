@@ -69,7 +69,7 @@ function ForgePanel({ world }: { world: WorldSnapshot | undefined }) {
 	const page = state.page === "list" || !pr ? "list" : state.page;
 	const label = page === "list" ? title : page === "review" ? `Review #${pr?.number}` : `Pull request #${pr?.number}`;
 	return (
-		<PlaceDialog label={label} className={`aw-forge aw-forge-${page}`} onClose={() => forge.escape()}>
+		<PlaceDialog label={label} className={`aw-forge aw-forge-${page}`} onClose={() => forge.close()}>
 			{page === "list" && <ForgeList world={world} />}
 			{page === "card" && pr && <PullRequestCard pr={pr} world={world} />}
 			{page === "review" && pr && <ReviewPage pr={pr} />}

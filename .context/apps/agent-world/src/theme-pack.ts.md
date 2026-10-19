@@ -8,3 +8,7 @@ Verify: apps/agent-world/tests/theme-pack.test.ts, apps/agent-world/tests/world-
 Coupled: apps/agent-world/themes/fantasy/theme.json, apps/agent-world/themes/fantasy/interface/skin.css
 
 The baseline check reads a frame's feet as its lowest row with alpha of at least 128, one row above `baseline` (the art pipeline sets `baseline` just below the feet); the soft shadow under the feet is fainter and does not count.
+
+`--aw-icon-<tab>` tokens (`TAB_ICONS`) are optional, unlike `STYLE_TOKENS`: a pack may give any tab its own icon as `url(<svg>)` (drawn as a mask in the text colour by the side panel's `TabIcon`), and a tab without one keeps the built-in neutral icon. The check rejects an unknown tab name or a non-SVG and, like every url token, a missing file.
+Coupled: apps/agent-world/web/overlay/interface/side-panel.tsx, apps/agent-world/themes/README.md
+Verify: apps/agent-world/tests/theme-pack.test.ts, apps/agent-world/tests/world-themes.test.ts

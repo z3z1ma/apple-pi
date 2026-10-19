@@ -17,8 +17,13 @@ import {
 	tempStateDir,
 } from "../../../components/session-state/tests/helpers.js";
 import { fauxSession } from "../../../tests/helpers/faux-session.js";
-import { openWorldBackend, PREFERENCE_KEY, type WorldBackend } from "../src/backend/world-backend.js";
-import type { FeedKind, FeedLine, WorldSnapshot } from "../src/world.js";
+import {
+	leaveOutUnchanged,
+	openWorldBackend,
+	PREFERENCE_KEY,
+	type WorldBackend,
+} from "../src/backend/world-backend.js";
+import type { FeedKind, FeedLine, WorldSnapshot, WorldUpdate } from "../src/world.js";
 
 // Seam 1: the backend API in Node, without Electron, over a real session-state runtime.
 const state = tempStateDir();
@@ -187,6 +192,32 @@ test("a wing counts its dormant workers, whose door shows closed rather than boa
 	// alpha: two awake and w-gone stopped; beta: its only worker stopped; gamma: one awake.
 	await soon(() => expect(dormant()).toEqual({ alpha: [2, 1], beta: [0, 1], gamma: [1, 0] }));
 }, 10000);
+
+test("an update to the window leaves out the inn and the mail while unchanged, and carries the inn whole when it changes", async () => {
+	const toUpdate = leaveOutUnchanged();
+	const sent: WorldUpdate[] = [];
+	const stop = world.subscribe((snapshot) => sent.push(toUpdate(snapshot)));
+	try {
+		const sleeper = await session("upd-sleeper");
+		// The first update carries everything; one where only an awake character changed leaves the inn and mail out.
+		expect(sent[0].unchanged).toBeUndefined();
+		expect(sent[0]).toHaveProperty("dormant");
+		expect(sent[0]).toHaveProperty("mail");
+		await session("upd-awake");
+		const later = sent.at(-1)!;
+		expect(later.characters.map((c) => c.id)).toContain("upd-awake");
+		expect(later.unchanged).toEqual(["dormant", "mail"]);
+		expect(later).not.toHaveProperty("dormant");
+		expect(later).not.toHaveProperty("mail");
+		// A session stops: the inn changed, so it goes whole, with the new sleeper; the mail stays out.
+		await sleeper.stop();
+		await soon(() => expect(sent.at(-1)?.dormant?.map((agent) => agent.id)).toContain("upd-sleeper"));
+		expect(sent.at(-1)!.unchanged).toEqual(["mail"]);
+		expect(sent.at(-1)!.dormant).toEqual(world.snapshot().dormant);
+	} finally {
+		stop();
+	}
+}, 30000);
 
 test("the avatar look chosen in Settings is stored through the runtime beside the wings, and outlives the app", async () => {
 	const stored = () => {

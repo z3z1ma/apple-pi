@@ -6,7 +6,16 @@ import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { createConnection, type Socket } from "node:net";
 import { DatabaseSync } from "node:sqlite";
-import type { CommandResult, DormantAgent, FeedLine, MailItem, TerminalResult, WorldSnapshot } from "../world.js";
+import type {
+	CommandResult,
+	DormantAgent,
+	FeedLine,
+	KeptPart,
+	MailItem,
+	TerminalResult,
+	WorldSnapshot,
+	WorldUpdate,
+} from "../world.js";
 import { FACTS_COLUMNS, FACTS_JOINS, type FactsRow, factsOf, parseShared, taskReader } from "./facts.js";
 import { FEED_SINCE, type FeedLookup, type FeedRow, feedLine } from "./feed.js";
 import { dormantAgents } from "./inn.js";
@@ -29,6 +38,26 @@ export interface WorldBackend {
 	/** Choose the theme; the snapshot shows it at once, and it resolves once the runtime stored it. */
 	setTheme(id: string): Promise<CommandResult>;
 	close(): void;
+}
+
+/**
+ * Turns each published snapshot into the update one receiver (the window) is sent: the inn and the mail are left out
+ * while they are the same arrays as in the snapshot before, which `publish` keeps them as while unchanged.
+ */
+export function leaveOutUnchanged(): (snapshot: WorldSnapshot) => WorldUpdate {
+	const sent: Partial<Record<KeptPart, unknown>> = {};
+	return (snapshot) => {
+		const update: WorldUpdate = { ...snapshot };
+		const unchanged: KeptPart[] = [];
+		for (const part of ["dormant", "mail"] as const) {
+			if (part in sent && sent[part] === snapshot[part]) {
+				delete update[part];
+				unchanged.push(part);
+			} else sent[part] = snapshot[part];
+		}
+		if (unchanged.length) update.unchanged = unchanged;
+		return update;
+	};
 }
 
 /** How often new `events` rows are looked for; updates must reach the world within a second. */

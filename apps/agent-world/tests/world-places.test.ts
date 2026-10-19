@@ -424,3 +424,34 @@ test("zoomed in, character sprites are drawn crisp; zoomed out, they and the pai
 		await page.close();
 	}
 }, 60000);
+
+test("in the tech office the corridor's sign plates hang clear of the door frames, and long names stay on the plate", async () => {
+	const names = ["apple-pi", "customer-billing-reconciliation-service", "supercalifragilisticexpialidocious"];
+	const snapshot: WorldSnapshot = {
+		connected: true,
+		theme: "tech-office",
+		headquarters: [{ id: HQ, name: "Orla", wings: names.map((n) => wing(`/r/${n}`, 0, 1)) }],
+		characters: [ORLA],
+	};
+	const { page, errors } = await openWorld(snapshot);
+	try {
+		await travel(page, /^Project corridor/, `gallery:${HQ}`);
+		const banners = (await view(page, "banners()")) as { name: string; fits: boolean; size: number }[];
+		expect(banners.map((b) => b.name)).toEqual(names);
+		for (const banner of banners) {
+			expect(banner.fits, banner.name).toBe(true);
+			expect(banner.size, banner.name).toBeGreaterThanOrEqual(12);
+		}
+		// The plate (drawn `tiles` wide from its rod, as tall as its sprite's shape) ends above the door frame.
+		const read = (file: string) =>
+			JSON.parse(readFileSync(fileURLToPath(new URL(`../themes/tech-office/${file}`, import.meta.url)), "utf8"));
+		const gallery = read("places/gallery.json");
+		const { tiles } = read("theme.json").world.banner;
+		const [w, h] = [277, 156]; // overlays/banner-cream.png
+		expect(gallery.niches.banner[1] + (tiles * h) / w).toBeLessThanOrEqual(gallery.niches.door[1] - 0.15);
+		await shot(page, "aw-31-tech-corridor-plates");
+		expect(errors).toEqual([]);
+	} finally {
+		await page.close();
+	}
+}, 60000);

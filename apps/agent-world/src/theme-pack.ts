@@ -272,6 +272,12 @@ export const STYLE_TOKENS = [
 ] as const;
 
 /**
+ * The side panel's tabs whose icon a pack may draw: an optional style token `--aw-icon-<tab>` naming an SVG in the pack
+ * (`url(interface/icons/work.svg)`), drawn in the tab's ink through a mask. A tab without one wears the world's own.
+ */
+export const TAB_ICONS = ["agents", "needs-you", "work", "mail", "slack", "places", "settings"] as const;
+
+/**
  * Classes a skin must style: the interface's frames and surfaces, its tabs and buttons, the conversation panel and
  * its panes, the places' panels, and the pointer's menu. A skin that leaves one out draws a bare browser widget.
  */
@@ -560,6 +566,14 @@ function checkManifest(value: unknown, id: string, problems: PackProblem[]): The
 	table("labels", [...PLACE_LABELS, ...ROLE_LABELS], "label");
 	table("text", TEXT_KEYS, "line");
 	table("style", STYLE_TOKENS, "style token");
+	for (const [token, css] of Object.entries(isObject(value.style) ? value.style : {})) {
+		if (!token.startsWith("--aw-icon-")) continue;
+		const tab = token.slice("--aw-icon-".length);
+		if (!(TAB_ICONS as readonly string[]).includes(tab))
+			fault(`style ${token} names no tab (a tab icon is one of ${TAB_ICONS.map((t) => `--aw-icon-${t}`).join(", ")})`);
+		else if (typeof css !== "string" || !/^url\(\s*['"]?[^'")]+\.svg['"]?\s*\)$/i.test(css.trim()))
+			fault(`style ${token} is not url(...) of an SVG in the pack: ${JSON.stringify(css)}`);
+	}
 	if (typeof value.skin !== "string" || !value.skin.endsWith(".css")) fault("names no skin stylesheet (skin: *.css)");
 	const world = value.world;
 	if (!isObject(world)) {

@@ -33,7 +33,7 @@ export function LibraryPanels({ world }: { world: WorldSnapshot | undefined }) {
 			key={state.opening}
 			label={panel.kind === "page" ? (panel.title ?? "A page") : label}
 			className={`aw-library${panel.kind === "page" ? " aw-library-page" : ""}`}
-			onClose={() => atlassian.dismiss()}
+			onClose={() => atlassian.close()}
 		>
 			{panel.kind === "librarian" ? (
 				<Librarian

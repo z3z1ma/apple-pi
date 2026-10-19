@@ -1,23 +1,18 @@
 // The quest office's panels (tickets 24 and 25), in the theme's words: the clerk's board of the Jira issues assigned to
 // the operator, with a search across every issue; and one issue read in full (its fields, sanitised description, and
-// comments) with Open in Jira, Comment and Move as the operator (each through the outside-write gate's confirmation),
+// comments) with Open in Jira, Comment and Move as the operator (each through the outside-write gate's confirmation,
+// the same one every place shows: `outside-write.tsx`),
 // and Hand to the coordinator (an instruction; nothing is written to Jira).
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import type {
-	JiraIssue,
-	JiraIssueDetail,
-	JiraTransition,
-	OutsideWriteIntent,
-	WriteResult,
-} from "../../../src/integrations.js";
+import type { JiraIssue, JiraIssueDetail, JiraTransition } from "../../../src/integrations.js";
 import type { WorldSnapshot } from "../../../src/world.js";
 import { portraitOf } from "../../looks.js";
 import { say, type Theme } from "../../theme.js";
 import { useTheme } from "../../theme-store.js";
 import { ago } from "../interface/model.js";
 import { atlassian, type NoticeKind, noticeOf } from "./atlassian-state.js";
-import { GatedWrite } from "./gated-write.js";
 import { HandOver } from "./hand-over.js";
+import { ConfirmWrite, confirming, useOutsideWrite } from "./outside-write.js";
 import { PlaceDialog } from "./place-dialog.js";
 import type { Progress } from "./place-panels.js";
 import { RichView } from "./rich-view.js";
@@ -73,7 +68,7 @@ export function QuestOfficePanels({ world }: { world: WorldSnapshot | undefined 
 			key={state.opening}
 			label={panel.kind === "issue" ? `Issue ${panel.key}` : label}
 			className={`aw-quest${panel.kind === "issue" ? " aw-quest-issue" : ""}`}
-			onClose={() => atlassian.dismiss()}
+			onClose={() => atlassian.close()}
 		>
 			{panel.kind === "clerk" ? (
 				<ClerkBoard onOpen={(key) => atlassian.show({ kind: "issue", key, from: "clerk" })} />
@@ -237,11 +232,7 @@ function IssueRow({ issue, theme, onOpen }: { issue: JiraIssue; theme: Theme | u
 	);
 }
 
-type Doing =
-	| { kind: "comment" }
-	| { kind: "move" }
-	| { kind: "hand" }
-	| { kind: "confirm"; intent: OutsideWriteIntent; verb: string; after: "comment" | "move" };
+type Doing = { kind: "comment" } | { kind: "move" } | { kind: "hand" };
 
 /** One issue: what it is, its description and comments, and what the operator can do with it. */
 function IssueView({
@@ -262,8 +253,18 @@ function IssueView({
 	const [doing, setDoing] = useState<Doing>();
 	const [comment, setComment] = useState("");
 	const [transitions, setTransitions] = useState<{ list?: JiraTransition[]; reason?: string }>();
-	const [result, setResult] = useState<Progress>();
+	const [result, setResult] = useState<Progress & { signIn?: boolean }>();
 	const reads = useRef(0);
+	const { api } = state;
+	const writeApi = useMemo(
+		() =>
+			api?.describeWrite && api.confirmWrite
+				? { describeWrite: api.describeWrite, confirmWrite: api.confirmWrite }
+				: undefined,
+		[api],
+	);
+	const write = useOutsideWrite(writeApi);
+	const asking = confirming(write.state);
 
 	const read = async () => {
 		const turn = ++reads.current;
@@ -300,22 +301,23 @@ function IssueView({
 		}
 	};
 
-	const sent = (what: "comment" | "move", outcome: WriteResult) => {
+	// A write sent (or tried, and Jira said no), or refused before it was sent: say so above the issue, and read it again.
+	const outcome = write.state.phase === "sent" || write.state.phase === "failed" ? write.state : undefined;
+	// biome-ignore lint/correctness/useExhaustiveDependencies: once per outcome
+	useEffect(() => {
+		if (!outcome) return;
+		const comment = outcome.intent.kind === "jira-comment";
 		setDoing(undefined);
-		if (outcome.ok && outcome.entry.ok) {
-			setResult({
-				state: "done",
-				text: what === "comment" ? "Your comment is on the issue." : `Moved: ${outcome.entry.text}.`,
-			});
-			if (what === "comment") setComment("");
+		if (outcome.phase === "sent" && outcome.entry.ok) {
+			setResult({ state: "done", text: comment ? "Your comment is on the issue." : `Moved: ${outcome.entry.text}.` });
+			if (comment) setComment("");
 			void read();
 			void atlassian.loadAssigned();
-		} else
-			setResult({
-				state: "failed",
-				text: outcome.ok ? (outcome.entry.reason ?? "Jira did not take it.") : outcome.reason,
-			});
-	};
+		} else if (outcome.phase === "sent")
+			setResult({ state: "failed", text: outcome.entry.reason ?? "Jira did not take it." });
+		else setResult({ state: "failed", text: outcome.reason, signIn: outcome.signIn === "atlassian" });
+		write.cancel();
+	}, [outcome]);
 
 	const issue = detail?.issue;
 	const kind = issue ? noticeOf(issue) : "open";
@@ -333,201 +335,206 @@ function IssueView({
 
 	return (
 		<>
-			<header className="aw-place-head aw-issue-head">
-				<NoticeIcon theme={theme} kind={kind} />
-				<div className="aw-place-heading">
-					<p className="aw-issue-key">
-						{onBack && (
-							<button type="button" className="aw-back" onClick={onBack} title="Back to the list">
-								<span aria-hidden="true">&larr;</span> Back
+			<div className="aw-quest-inert" inert={asking || undefined}>
+				<header className="aw-place-head aw-issue-head">
+					<NoticeIcon theme={theme} kind={kind} />
+					<div className="aw-place-heading">
+						<p className="aw-issue-key">
+							{onBack && (
+								<button type="button" className="aw-back" onClick={onBack} title="Back to the list">
+									<span aria-hidden="true">&larr;</span> Back
+								</button>
+							)}
+							<span className="aw-jira-key">{issueKey}</span>
+							{issue && <StatusPill issue={issue} />}
+						</p>
+						<h2>{issue?.summary ?? (reason ? "This issue could not be read" : "Reading\u2026")}</h2>
+					</div>
+				</header>
+				{reason && !detail && (
+					<div className="aw-issue-failed">
+						<p className="aw-progress aw-progress-failed" role="alert">
+							{reason}
+						</p>
+						{signedOut && (
+							<button type="button" className="aw-button aw-button-strong" onClick={() => atlassian.askSignIn()}>
+								Sign in from Settings
 							</button>
 						)}
-						<span className="aw-jira-key">{issueKey}</span>
-						{issue && <StatusPill issue={issue} />}
-					</p>
-					<h2>{issue?.summary ?? (reason ? "This issue could not be read" : "Reading\u2026")}</h2>
-				</div>
-			</header>
-			{reason && !detail && (
-				<div className="aw-issue-failed">
-					<p className="aw-progress aw-progress-failed" role="alert">
-						{reason}
-					</p>
-					{signedOut && (
-						<button type="button" className="aw-button aw-button-strong" onClick={() => atlassian.askSignIn()}>
-							Sign in from Settings
-						</button>
-					)}
-				</div>
-			)}
-			{issue && (
-				<>
-					<div className="aw-issue-actions" role="toolbar" aria-label="What to do with it">
-						<button type="button" className="aw-button" onClick={() => void atlassian.openLink(issue.url)}>
-							Open in Jira
-						</button>
-						<button
-							type="button"
-							className="aw-button"
-							aria-pressed={doing?.kind === "comment"}
-							onClick={() => {
-								setResult(undefined);
-								setDoing(doing?.kind === "comment" ? undefined : { kind: "comment" });
-							}}
-						>
-							Comment
-						</button>
-						<button
-							type="button"
-							className="aw-button"
-							aria-pressed={doing?.kind === "move"}
-							onClick={() => {
-								setResult(undefined);
-								if (doing?.kind === "move") return setDoing(undefined);
-								setDoing({ kind: "move" });
-								void loadTransitions();
-							}}
-						>
-							Move
-						</button>
-						<button
-							type="button"
-							className="aw-button aw-button-strong"
-							aria-pressed={doing?.kind === "hand"}
-							onClick={() => {
-								setResult(undefined);
-								setDoing(doing?.kind === "hand" ? undefined : { kind: "hand" });
-							}}
-						>
-							Hand to the coordinator
-						</button>
 					</div>
-					{result && (
-						<p className={`aw-progress aw-progress-${result.state} aw-issue-result`} role="status">
-							{result.text}
-						</p>
-					)}
-					{doing?.kind === "comment" && (
-						<form
-							className="aw-issue-compose"
-							onSubmit={(event) => {
-								event.preventDefault();
-								if (comment.trim())
-									setDoing({
-										kind: "confirm",
-										intent: { kind: "jira-comment", key: issue.key, body: comment.trim() },
-										verb: "Comment as you",
-										after: "comment",
-									});
-							}}
-						>
-							<textarea
-								// biome-ignore lint/a11y/noAutofocus: the operator just asked to write a comment
-								autoFocus
-								className="aw-issue-comment"
-								aria-label={`Your comment on ${issue.key}`}
-								placeholder={`Your comment on ${issue.key}, posted as you`}
-								rows={4}
-								value={comment}
-								onChange={(event) => setComment(event.target.value)}
-							/>
-							<div className="aw-issue-compose-actions">
-								<span className="aw-hand-hint">You see exactly what is posted before it goes.</span>
-								<button type="button" className="aw-button" onClick={() => setDoing(undefined)}>
-									Cancel
-								</button>
-								<button type="submit" className="aw-button aw-button-strong" disabled={!comment.trim()}>
-									Review and post&hellip;
-								</button>
-							</div>
-						</form>
-					)}
-					{doing?.kind === "move" && (
-						<fieldset className="aw-issue-moves" aria-label="Move to">
-							<legend>Move {issue.key}</legend>
-							{!transitions && (
-								<p className="aw-progress aw-progress-sending">Asking Jira which moves it allows&hellip;</p>
-							)}
-							{transitions?.reason && (
-								<p className="aw-progress aw-progress-failed" role="alert">
-									{transitions.reason}
-								</p>
-							)}
-							{transitions?.list && transitions.list.length === 0 && (
-								<p className="aw-place-empty">Jira offers no move for this issue now.</p>
-							)}
-							{transitions?.list && transitions.list.length > 0 && (
-								<ul className="aw-issue-move-list">
-									{transitions.list.map((move) => (
-										<li key={move.id}>
-											<button
-												type="button"
-												className={`aw-move aw-move-${move.toCategory === "done" ? "done" : move.toCategory === "indeterminate" ? "doing" : "todo"}`}
-												onClick={() =>
-													setDoing({
-														kind: "confirm",
-														intent: { kind: "jira-transition", key: issue.key, transition: move.id },
-														verb: "Move it",
-														after: "move",
-													})
-												}
-											>
-												<span className="aw-move-name">{move.name}</span>
-												{move.to && move.to !== move.name && <small>to {move.to}</small>}
-											</button>
-										</li>
-									))}
-								</ul>
-							)}
-						</fieldset>
-					)}
-					{doing?.kind === "hand" && (
-						<HandOver
-							world={world}
-							item={{ kind: "issue", key: issue.key, summary: issue.summary, url: issue.url }}
-							asks={[{ ask: "start-work", label: "Start work on it" }]}
-							fixedTo="coordinator"
-							title={`Hand ${issue.key} to the coordinator`}
-							hint="It reaches your coordinator as an instruction to start work. Nothing is written to Jira."
-							onClose={() => setDoing(undefined)}
-						/>
-					)}
-					<div className="aw-place-scroll aw-issue-scroll">
-						<div className="aw-issue-layout">
-							<div className="aw-issue-main">
-								<section className="aw-place-section" aria-label="Description">
-									<h3>Description</h3>
-									<RichView
-										html={detail?.descriptionHtml}
-										text={detail?.descriptionText}
-										base={site}
-										className="aw-issue-description"
-										empty="No description."
-									/>
-								</section>
-								<Comments detail={detail} site={site} />
-							</div>
-							<dl className="aw-issue-facts" aria-label="Details">
-								{facts
-									.filter(([, value]) => value)
-									.map(([name, value]) => (
-										<div key={name}>
-											<dt>{name}</dt>
-											<dd>{value}</dd>
-										</div>
-									))}
-							</dl>
+				)}
+				{issue && (
+					<>
+						<div className="aw-issue-actions" role="toolbar" aria-label="What to do with it">
+							<button type="button" className="aw-button" onClick={() => void atlassian.openLink(issue.url)}>
+								Open in Jira
+							</button>
+							<button
+								type="button"
+								className="aw-button"
+								aria-pressed={doing?.kind === "comment"}
+								onClick={() => {
+									setResult(undefined);
+									setDoing(doing?.kind === "comment" ? undefined : { kind: "comment" });
+								}}
+							>
+								Comment
+							</button>
+							<button
+								type="button"
+								className="aw-button"
+								aria-pressed={doing?.kind === "move"}
+								onClick={() => {
+									setResult(undefined);
+									if (doing?.kind === "move") return setDoing(undefined);
+									setDoing({ kind: "move" });
+									void loadTransitions();
+								}}
+							>
+								Move
+							</button>
+							<button
+								type="button"
+								className="aw-button aw-button-strong"
+								aria-pressed={doing?.kind === "hand"}
+								onClick={() => {
+									setResult(undefined);
+									setDoing(doing?.kind === "hand" ? undefined : { kind: "hand" });
+								}}
+							>
+								Hand to the coordinator
+							</button>
 						</div>
-					</div>
-				</>
-			)}
-			{doing?.kind === "confirm" && (
-				<GatedWrite
-					intent={doing.intent}
-					verb={doing.verb}
-					onCancel={() => setDoing(doing.after === "comment" ? { kind: "comment" } : { kind: "move" })}
-					onSent={(outcome) => sent(doing.after, outcome)}
-				/>
+						{write.state.phase === "describing" && (
+							<p className="aw-progress aw-progress-sending aw-issue-result" role="status">
+								Getting it ready to confirm&hellip;
+							</p>
+						)}
+						{result && (
+							<p className={`aw-progress aw-progress-${result.state} aw-issue-result`} role="status">
+								{result.text}
+								{result.signIn && (
+									<>
+										{" "}
+										<button type="button" className="aw-forge-link" onClick={() => atlassian.askSignIn()}>
+											Sign in from Settings
+										</button>
+									</>
+								)}
+							</p>
+						)}
+						{doing?.kind === "comment" && (
+							<form
+								className="aw-issue-compose"
+								onSubmit={(event) => {
+									event.preventDefault();
+									if (comment.trim() && write.state.phase !== "describing")
+										void write.ask({ kind: "jira-comment", key: issue.key, body: comment.trim() });
+								}}
+							>
+								<textarea
+									// biome-ignore lint/a11y/noAutofocus: the operator just asked to write a comment
+									autoFocus
+									className="aw-issue-comment"
+									aria-label={`Your comment on ${issue.key}`}
+									placeholder={`Your comment on ${issue.key}, posted as you`}
+									rows={4}
+									value={comment}
+									onChange={(event) => setComment(event.target.value)}
+								/>
+								<div className="aw-issue-compose-actions">
+									<span className="aw-hand-hint">You see exactly what is posted before it goes.</span>
+									<button type="button" className="aw-button" onClick={() => setDoing(undefined)}>
+										Cancel
+									</button>
+									<button
+										type="submit"
+										className="aw-button aw-button-strong"
+										disabled={!comment.trim() || write.state.phase === "describing"}
+									>
+										Review and post&hellip;
+									</button>
+								</div>
+							</form>
+						)}
+						{doing?.kind === "move" && (
+							<fieldset className="aw-issue-moves" aria-label="Move to">
+								<legend>Move {issue.key}</legend>
+								{!transitions && (
+									<p className="aw-progress aw-progress-sending">Asking Jira which moves it allows&hellip;</p>
+								)}
+								{transitions?.reason && (
+									<p className="aw-progress aw-progress-failed" role="alert">
+										{transitions.reason}
+									</p>
+								)}
+								{transitions?.list && transitions.list.length === 0 && (
+									<p className="aw-place-empty">Jira offers no move for this issue now.</p>
+								)}
+								{transitions?.list && transitions.list.length > 0 && (
+									<ul className="aw-issue-move-list">
+										{transitions.list.map((move) => (
+											<li key={move.id}>
+												<button
+													type="button"
+													className={`aw-move aw-move-${move.toCategory === "done" ? "done" : move.toCategory === "indeterminate" ? "doing" : "todo"}`}
+													disabled={write.state.phase === "describing"}
+													onClick={() =>
+														void write.ask({ kind: "jira-transition", key: issue.key, transition: move.id })
+													}
+												>
+													<span className="aw-move-name">{move.name}</span>
+													{move.to && move.to !== move.name && <small>to {move.to}</small>}
+												</button>
+											</li>
+										))}
+									</ul>
+								)}
+							</fieldset>
+						)}
+						{doing?.kind === "hand" && (
+							<HandOver
+								world={world}
+								item={{ kind: "issue", key: issue.key, summary: issue.summary, url: issue.url }}
+								asks={[{ ask: "start-work", label: "Start work on it" }]}
+								fixedTo="coordinator"
+								title={`Hand ${issue.key} to the coordinator`}
+								hint="It reaches your coordinator as an instruction to start work. Nothing is written to Jira."
+								onClose={() => setDoing(undefined)}
+							/>
+						)}
+						<div className="aw-place-scroll aw-issue-scroll">
+							<div className="aw-issue-layout">
+								<div className="aw-issue-main">
+									<section className="aw-place-section" aria-label="Description">
+										<h3>Description</h3>
+										<RichView
+											html={detail?.descriptionHtml}
+											text={detail?.descriptionText}
+											base={site}
+											className="aw-issue-description"
+											empty="No description."
+										/>
+									</section>
+									<Comments detail={detail} site={site} />
+								</div>
+								<dl className="aw-issue-facts" aria-label="Details">
+									{facts
+										.filter(([, value]) => value)
+										.map(([name, value]) => (
+											<div key={name}>
+												<dt>{name}</dt>
+												<dd>{value}</dd>
+											</div>
+										))}
+								</dl>
+							</div>
+						</div>
+					</>
+				)}
+			</div>
+			{(write.state.phase === "confirming" || write.state.phase === "sending") && (
+				<ConfirmWrite state={write.state} onConfirm={() => void write.confirm()} onCancel={write.cancel} />
 			)}
 		</>
 	);

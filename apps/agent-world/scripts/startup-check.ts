@@ -14,12 +14,18 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { inflateSync } from "node:zlib";
+import { themeBackdrop } from "../src/backend/theme-packs.js";
 
 const repo = resolve(fileURLToPath(new URL("../../..", import.meta.url)));
 const appDir = join(repo, "apps", "agent-world");
 const START_TIMEOUT_MS = 60_000;
-/** The window's background colour (`backgroundColor` in src/electron/main.ts), which an empty window shows. */
-const BACKGROUND = [0x14, 0x0e, 0x18];
+/**
+ * The window's background colour, which an empty window shows: `themeBackdrop` as src/electron/main.ts uses it, for the
+ * scratch agent directory's world, which has chosen no theme.
+ */
+const BACKGROUND = (themeBackdrop(join(appDir, "themes"), null).match(/[0-9a-f]{2}/gi) ?? []).map((hex) =>
+	Number.parseInt(hex, 16),
+);
 
 function fail(message: string): never {
 	throw new Error(message);

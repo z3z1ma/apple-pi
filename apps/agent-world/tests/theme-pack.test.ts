@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { afterAll, describe, expect, it } from "vitest";
-import { checkThemePack, listThemes } from "../src/backend/theme-packs.js";
+import { checkThemePack, listThemes, NEUTRAL_BACKDROP, themeBackdrop } from "../src/backend/theme-packs.js";
 import { describeProblems, type PackProblem } from "../src/theme-pack.js";
 
 // Seam 1 for the pack check: the backend module (and its CLI) over the real packs, and over copies of the fantasy
@@ -44,6 +44,26 @@ describe("the real packs", () => {
 });
 
 // Each test copies and checks a whole pack: alone well under a second, but slow while the headless suites run.
+describe("the window's colour before the page draws", () => {
+	it("is the chosen pack's backdrop, else the default pack's, else a neutral dark", () => {
+		const packs = readdirSync(themesDir, { withFileTypes: true }).filter((entry) => entry.isDirectory());
+		expect(packs.length).toBeGreaterThanOrEqual(3);
+		for (const { name: id } of packs) {
+			const backdrop = JSON.parse(readFileSync(join(themesDir, id, "theme.json"), "utf8")).world.backdrop;
+			expect(themeBackdrop(themesDir, id), id).toBe(backdrop);
+		}
+		const fantasy = themeBackdrop(themesDir, "fantasy");
+		expect(themeBackdrop(themesDir, null)).toBe(fantasy);
+		expect(themeBackdrop(themesDir, "no-such-pack")).toBe(fantasy);
+		expect(themeBackdrop(themesDir, "../fantasy")).toBe(fantasy);
+		const odd = brokenPack(
+			(dir) => editJson(join(dir, "theme.json"), (theme) => (theme.world.backdrop = "red")),
+			"odd",
+		);
+		expect(themeBackdrop(join(odd, ".."), "odd")).toBe(NEUTRAL_BACKDROP);
+	});
+});
+
 describe("a broken pack names the file and the fault", { timeout: 30_000 }, () => {
 	it("a required piece missing: an overlay, a portrait, a place's data, a painting", async () => {
 		const dir = brokenPack((d) => {
@@ -58,6 +78,23 @@ describe("a broken pack names the file and the fault", { timeout: 30_000 }, () =
 				"characters/mage-portrait-3.png: is missing (the worried portrait)",
 				"places/rookery.json: is missing",
 				"places/inn.png: is missing (the painting of inn)",
+			]),
+		);
+	});
+
+	it("a tab icon names a tab the side panel has, and an SVG the pack has", async () => {
+		const dir = brokenPack((d) => {
+			editJson(join(d, "theme.json"), (theme) => {
+				theme.style["--aw-icon-quests"] = "url(interface/icons/work.svg)";
+				theme.style["--aw-icon-mail"] = "url(interface/icons/mail.svg)";
+				theme.style["--aw-icon-slack"] = "red";
+			});
+		});
+		expect(lines(await checkThemePack(dir))).toEqual(
+			expect.arrayContaining([
+				expect.stringMatching(/^theme\.json: style --aw-icon-quests names no tab/),
+				"theme.json: style --aw-icon-mail names interface/icons/mail.svg, which is not in the pack",
+				'theme.json: style --aw-icon-slack is not url(...) of an SVG in the pack: "red"',
 			]),
 		);
 	});

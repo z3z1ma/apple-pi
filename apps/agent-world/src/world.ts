@@ -109,6 +109,17 @@ export interface WorldSnapshot {
 	mail?: MailItem[];
 }
 
+/** The parts of a snapshot an update may leave out while they are the same as in the update before. */
+export type KeptPart = "dormant" | "mail";
+
+/**
+ * A snapshot as an update carries it: the inn (thousands of sleepers) and the mail change seldom, so an update
+ * leaves out each that is the same as in the update before and names it in `unchanged`; the receiver keeps its own.
+ */
+export interface WorldUpdate extends WorldSnapshot {
+	unchanged?: KeptPart[];
+}
+
 /** A stopped top-level session (a dormant character): it sleeps at the inn until it is woken. */
 export interface DormantAgent {
 	id: string;
@@ -301,8 +312,11 @@ export type ReplyStreamEvent =
  */
 export interface AgentWorldApi extends IntegrationsApi {
 	snapshot(): Promise<WorldSnapshot>;
-	/** Called with the whole new snapshot after every change; returns a function that stops the calls. */
-	onUpdate(listener: (snapshot: WorldSnapshot) => void): () => void;
+	/**
+	 * Called with the new snapshot after every change, whole but for the parts named in `unchanged` (the same as the
+	 * update before); returns a function that stops the calls.
+	 */
+	onUpdate(listener: (update: WorldUpdate) => void): () => void;
 	/** The latest feed lines, oldest first. */
 	feed(): Promise<FeedLine[]>;
 	/** Called with each batch of new feed lines; returns a function that stops the calls. */

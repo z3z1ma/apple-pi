@@ -114,7 +114,7 @@ test("mail to a dormant agent waits until it wakes, and says so in its receipt",
 			deliveredAt: null,
 		}),
 	);
-	expect(await lifecycle.sendMail("sleepy", "   ")).toEqual({ ok: false, reason: "The letter is empty." });
+	expect(await lifecycle.sendMail("sleepy", "   ")).toEqual({ ok: false, reason: "The message is empty." });
 }, 30000);
 
 test("a letter written as the operator reaches an awake agent's transcript, with its receipt and a feed line", async () => {

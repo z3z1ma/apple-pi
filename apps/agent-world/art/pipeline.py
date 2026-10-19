@@ -153,14 +153,18 @@ def hard_alpha(img):
     return Image.fromarray(defringe(a))
 
 
+def interior(opaque):
+    # Padded, not rolled: a pixel on the image's border is an edge, while a roll would wrap it to the far side.
+    p = np.pad(opaque, 1)
+    return p[:-2, 1:-1] & p[2:, 1:-1] & p[1:-1, :-2] & p[1:-1, 2:]
+
+
 def defringe(a):
     # Edge pixels blended with the magenta background are pinkish rather than magenta; peel them off the outline.
     # The blend is at most two pixels deep; peeling further would eat real purple cloth or hair.
     for _ in range(2):
         opaque = a[..., 3] > 0
-        edge = opaque & ~(
-            np.roll(opaque, 1, 0) & np.roll(opaque, -1, 0) & np.roll(opaque, 1, 1) & np.roll(opaque, -1, 1)
-        )
+        edge = opaque & ~interior(opaque)
         r, g, b = (a[..., i].astype(int) for i in range(3))
         pink = (r > 110) & (b > 90) & (g < 0.8 * np.minimum(r, b)) & (b > 0.55 * r)
         a[edge & pink, 3] = 0

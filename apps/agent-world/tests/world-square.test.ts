@@ -436,6 +436,15 @@ test("the square is bounded by its painted spots: with many unread channels only
 	await settled(page, free);
 	const folk = await townsfolk(page);
 	expect(folk.map((f) => f.id).sort()).toEqual(many.slice(0, free).map((c) => c.id));
+	// Every townsfolk look stands before any is worn twice, and none is worn a third time while another is worn once.
+	const looks = JSON.parse(
+		readFileSync(fileURLToPath(new URL("../themes/fantasy/characters/looks.json", import.meta.url)), "utf8"),
+	);
+	const kinds = Object.keys(looks).filter((look) => looks[look].role === "townsfolk").length;
+	const worn = new Map<string, number>();
+	for (const f of folk) worn.set(f.look, (worn.get(f.look) ?? 0) + 1);
+	expect(worn.size).toBe(Math.min(kinds, free));
+	expect(Math.max(...worn.values()) - Math.min(...worn.values())).toBeLessThanOrEqual(1);
 	await shot(page, "aw-27-square-bounded");
 	// Another agent comes out to the square: it takes a spot, and one townsperson makes way.
 	const CORA = independent("cora", "Cora", 3);
@@ -449,6 +458,11 @@ test("the square is bounded by its painted spots: with many unread channels only
 	await crier.waitFor({ timeout: 8000 });
 	await counts(crier.getByRole("list", { name: "Unread channels" }).getByRole("listitem"), 40);
 	await shows(crier.getByText("40 channels have unread messages"));
+	// A standing channel read from the crier's list shows the person who stands for it.
+	const standing = (await townsfolk(page))[0];
+	await crier.getByRole("button", { name: new RegExp(`^Read ${standing.name},`) }).dispatchEvent("click");
+	const portrait = page.locator(`img[src*="${standing.look}-portrait"]`);
+	await portrait.first().waitFor({ timeout: 8000 });
 	expect(errors).toEqual([]);
 	await page.close();
 });

@@ -5,6 +5,7 @@
 import type { CredentialStatus, JiraIssue, Outcome, RecentPage } from "../../../src/integrations.js";
 import type { AgentWorldApi } from "../../../src/world.js";
 import type { ViewStore } from "../../view-state.js";
+import { onePanel } from "../one-panel.js";
 
 export type AtlassianApi = Partial<
 	Pick<
@@ -92,9 +93,6 @@ export function noticeOf(issue: JiraIssue): NoticeKind {
 	if (issue.statusCategory === "indeterminate") return "progress";
 	return urgent(issue) ? "urgent" : "open";
 }
-
-/** Layers over a panel (a confirmation) that Escape or the close button dismiss before the panel itself. */
-const layers: (() => void)[] = [];
 
 let loadingAssigned: Promise<void> | undefined;
 let loadingRecent: Promise<void> | undefined;
@@ -190,6 +188,7 @@ export const atlassian = {
 	},
 
 	open(panel: AtlassianPanel) {
+		onePanel.opening("atlassian");
 		update({ panel, opening: state.opening + 1 });
 		void atlassian.refreshStatus();
 	},
@@ -198,22 +197,7 @@ export const atlassian = {
 		update({ panel });
 	},
 	close() {
-		layers.length = 0;
 		if (state.panel) update({ panel: undefined });
-	},
-	/** Escape, the close button, or a click on the world: the top layer goes first, then the panel. */
-	dismiss() {
-		const top = layers.at(-1);
-		if (top) top();
-		else atlassian.close();
-	},
-	/** A layer over the panel: `dismiss` calls `cancel` first. Returns its removal. */
-	layer(cancel: () => void): () => void {
-		layers.push(cancel);
-		return () => {
-			const at = layers.lastIndexOf(cancel);
-			if (at >= 0) layers.splice(at, 1);
-		};
 	},
 
 	/** Settings, with the Atlassian sign-in ready to fill in (from a place that needs it). */
@@ -234,3 +218,4 @@ export const atlassian = {
 		}
 	},
 };
+onePanel.closes("atlassian", () => atlassian.close());

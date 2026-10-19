@@ -15,8 +15,8 @@ import { openConversations } from "../backend/conversations.js";
 import { instruct } from "../backend/instructions.js";
 import { openLifecycle } from "../backend/lifecycle.js";
 import { openLink } from "../backend/links.js";
-import { listThemes } from "../backend/theme-packs.js";
-import { openWorldBackend } from "../backend/world-backend.js";
+import { listThemes, themeBackdrop } from "../backend/theme-packs.js";
+import { leaveOutUnchanged, openWorldBackend } from "../backend/world-backend.js";
 import { wireIntegrations } from "./integrations-ipc.js";
 
 // This file runs as dist/electron/main.js, two levels below the app directory.
@@ -86,9 +86,11 @@ function start() {
 	);
 	// Settings: the theme packs, each checked as the window asks, and the one chosen.
 	ipcMain.handle("world:themes", () => listThemes(join(appDir, "themes")));
-	ipcMain.handle("world:set-theme", (_event, id: unknown) =>
-		typeof id === "string" ? world.setTheme(id) : { ok: false, reason: "No theme was named." },
-	);
+	ipcMain.handle("world:set-theme", (_event, id: unknown) => {
+		if (typeof id !== "string") return { ok: false, reason: "No theme was named." };
+		if (window && !window.isDestroyed()) window.setBackgroundColor(themeBackdrop(join(appDir, "themes"), id));
+		return world.setTheme(id);
+	});
 	ipcMain.handle("world:instruct", (_event, characterId: unknown, commandId: unknown, instruction: unknown) => {
 		if (typeof characterId !== "string" || typeof commandId !== "string" || !commandId)
 			return { ok: false, reason: "No character was named." };
@@ -117,8 +119,11 @@ function start() {
 	wireIntegrations({ stateDir: statePaths().dir, snapshot: () => world.snapshot(), commands, toWindow });
 	// Links in transcripts open in the system browser, web links only.
 	ipcMain.handle("world:open-link", (_event, url: unknown) => openLink(url, (href) => shell.openExternal(href)));
+	// Each update leaves out the inn and the mail while they are unchanged: with thousands asleep, sending them on every
+	// update was most of the IPC traffic (ticket 31). The renderer's store keeps its own (`web/world-store.ts`).
+	const toUpdate = leaveOutUnchanged();
 	world.subscribe((snapshot) => {
-		if (window && !window.isDestroyed()) window.webContents.send("world:update", snapshot);
+		if (window && !window.isDestroyed()) window.webContents.send("world:update", toUpdate(snapshot));
 	});
 	world.subscribeFeed((lines) => {
 		if (window && !window.isDestroyed()) window.webContents.send("world:feed", lines);
@@ -145,7 +150,8 @@ function start() {
 			width: 1280,
 			height: 800,
 			title: "Agent World",
-			backgroundColor: "#140e18",
+			// The chosen theme's backdrop, so the window opens in the colour its world will draw.
+			backgroundColor: themeBackdrop(join(appDir, "themes"), world.snapshot().theme),
 			webPreferences: {
 				preload: join(appDir, "dist", "electron", "preload.cjs"),
 				contextIsolation: true,

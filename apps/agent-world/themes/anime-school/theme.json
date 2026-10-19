@@ -96,7 +96,9 @@
     "--aw-surface-background": "radial-gradient(circle, rgb(91 111 168 / 17%) 0.9px, transparent 1.3px) 0 0 / 14px 14px, #fffaf0",
     "--aw-panel-cover": "repeating-linear-gradient(45deg, rgb(255 255 255 / 3%) 0 2px, transparent 2px 6px), repeating-linear-gradient(-45deg, rgb(0 0 0 / 5%) 0 2px, transparent 2px 6px), linear-gradient(160deg, #3a4a74, #26314f)",
     "--aw-panel-page": "linear-gradient(rgb(91 140 200 / 13%) 1px, transparent 1px) 0 0 / 100% 22px, linear-gradient(90deg, rgb(91 140 200 / 13%) 1px, transparent 1px) 0 0 / 22px 100%, #fffdf6",
-    "--aw-veil": "radial-gradient(ellipse 70% 65% at 50% 50%, rgb(27 24 48 / 32%), rgb(16 12 32 / 74%))"
+    "--aw-veil": "radial-gradient(ellipse 70% 65% at 50% 50%, rgb(27 24 48 / 32%), rgb(16 12 32 / 74%))",
+    "--aw-icon-work": "url(interface/icons/work.svg)",
+    "--aw-icon-places": "url(interface/icons/places.svg)"
   },
   "skin": "interface/skin.css",
   "world": {

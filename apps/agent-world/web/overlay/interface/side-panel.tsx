@@ -1,6 +1,8 @@
 // The tabbed side panel at the bottom right, as in Old School RuneScape: everyone by place, who needs you, work by
 // ledger task, every place to travel to, and settings. Clicking the open tab folds the panel down to its tabs.
-import { type ReactNode, useSyncExternalStore } from "react";
+import { type ReactNode, useEffect, useSyncExternalStore } from "react";
+import type { JiraIssue, PullRequest, RecentPage } from "../../../src/integrations.js";
+import { TAB_ICONS } from "../../../src/theme-pack.js";
 import type { Character, PlaceRef, WorldSnapshot } from "../../../src/world.js";
 import { isOutside, placeKey } from "../../../src/world.js";
 import type { AvatarLook } from "../../looks.js";
@@ -8,11 +10,12 @@ import { say } from "../../theme.js";
 import { useTheme } from "../../theme-store.js";
 import type { ThemeOption } from "../../view-state.js";
 import { AtlassianSettings } from "../places/atlassian-settings.js";
+import { atlassian, type Reading, urgent } from "../places/atlassian-state.js";
 import { forge } from "../places/forge-state.js";
 import { MailList } from "../places/mail-list.js";
 import { placePanels } from "../places/place-panels.js";
 import { SlackIcon, SlackSettings, SlackTab } from "../places/slack-tab.js";
-import { AgentsIcon, BellIcon, ChevronIcon, CogIcon, LetterIcon, ScrollIcon, SignpostIcon } from "./icons.js";
+import { AgentsIcon, BellIcon, ChecklistIcon, ChevronIcon, CogIcon, LetterIcon, MapIcon } from "./icons.js";
 import { activity, byPlace, byTask, type Group, needsYou, OUTSIDE, orbCounts, placeName, placesOf } from "./model.js";
 import { type CharacterAction, CharacterRow } from "./rows.js";
 
@@ -21,10 +24,10 @@ export type Tab = "agents" | "needs-you" | "work" | "mail" | "slack" | "places" 
 const TABS: { tab: Tab; title: string; icon: ReactNode }[] = [
 	{ tab: "agents", title: "Agents", icon: <AgentsIcon /> },
 	{ tab: "needs-you", title: "Needs you", icon: <BellIcon /> },
-	{ tab: "work", title: "Work", icon: <ScrollIcon /> },
+	{ tab: "work", title: "Work", icon: <ChecklistIcon /> },
 	{ tab: "mail", title: "Mail", icon: <LetterIcon /> },
 	{ tab: "slack", title: "Slack", icon: <SlackIcon /> },
-	{ tab: "places", title: "Places", icon: <SignpostIcon /> },
+	{ tab: "places", title: "Places", icon: <MapIcon /> },
 	{ tab: "settings", title: "Settings", icon: <CogIcon /> },
 ];
 
@@ -60,6 +63,7 @@ export function SidePanel(props: SidePanelProps) {
 	const { tab, folded, onTab, onFold, world } = props;
 	const title = TABS.find((t) => t.tab === tab)!.title;
 	const { needsYou: waiting } = orbCounts(world);
+	const theme = useTheme();
 	return (
 		<aside className={`aw-frame aw-side${folded ? " aw-folded" : ""}`} aria-label="Side panel">
 			{!folded && (
@@ -91,9 +95,10 @@ export function SidePanel(props: SidePanelProps) {
 						aria-label={name}
 						title={folded ? `Open ${name}` : key !== tab ? name : `${name} (click to fold)`}
 						className="aw-tab"
+						data-tab={key}
 						onClick={() => onTab(key)}
 					>
-						{icon}
+						<TabIcon tab={key} pack={theme?.style[`--aw-icon-${key}`]} fallback={icon} />
 						{key === "needs-you" && waiting > 0 && (
 							<span className="aw-badge" aria-hidden="true">
 								<span>{waiting}</span>
@@ -103,6 +108,22 @@ export function SidePanel(props: SidePanelProps) {
 				))}
 			</div>
 		</aside>
+	);
+}
+
+/**
+ * A tab's icon: the pack's own drawing when its manifest names one (`--aw-icon-<tab>`, an SVG drawn in the tab's ink
+ * through a mask, so the skin's colours still apply), else the world's own.
+ */
+function TabIcon({ tab, pack, fallback }: { tab: Tab; pack: string | undefined; fallback: ReactNode }) {
+	if (!pack || !(TAB_ICONS as readonly string[]).includes(tab)) return <>{fallback}</>;
+	return (
+		<span
+			className="aw-tab-icon"
+			data-icon={tab}
+			aria-hidden="true"
+			style={{ maskImage: pack, WebkitMaskImage: pack }}
+		/>
 	);
 }
 
@@ -192,9 +213,40 @@ function Mail({ world }: SidePanelProps) {
 	);
 }
 
+/** The forge's line in the Places tab: its open pull requests, and how many fail. Each line fits the tab's width. */
+function forgeDetail(pullRequests: PullRequest[]): string {
+	const open = pullRequests.length;
+	const failing = pullRequests.filter((pr) => pr.ci === "failing").length;
+	if (!open) return "";
+	return `${open} pull ${open === 1 ? "request" : "requests"}${failing ? `, ${failing} failing` : ""}`;
+}
+
+/** The quest office's: the open issues assigned to the operator, and how many are pressing; nothing until read. */
+function questDetail(assigned: Reading<JiraIssue[]>): string {
+	if (!("items" in assigned) || !assigned.items) return "";
+	const open = assigned.items.filter((issue) => issue.statusCategory !== "done");
+	const pressing = open.filter(urgent).length;
+	if (!open.length) return "Nothing assigned to you";
+	return pressing ? `${open.length} assigned, ${pressing} pressing` : `${open.length} assigned to you`;
+}
+
+/** The library's: the pages read there lately. */
+function libraryDetail(recent: Reading<RecentPage[]>): string {
+	const read = "items" in recent ? (recent.items?.length ?? 0) : 0;
+	return read ? `${read} ${read === 1 ? "page" : "pages"} read lately` : "";
+}
+
 function Places({ world, labels, here, travel }: SidePanelProps) {
 	const forgeList = useSyncExternalStore(forge.subscribe, forge.get).list;
+	const { assigned, recent, signedIn } = useSyncExternalStore(atlassian.subscribe, atlassian.get);
 	const theme = useTheme();
+	// The quest office's and the library's counts are cheap to read (one Jira query, the local list of pages read), so
+	// the tab reads them when it opens if nothing has yet; the forge's list costs a `gh` call per pull request and is
+	// counted once the forge has read it.
+	useEffect(() => {
+		if (signedIn && atlassian.get().assigned.state === "idle") void atlassian.loadAssigned();
+		if (atlassian.get().recent.state === "idle") void atlassian.loadRecent();
+	}, [signedIn]);
 	const places = placesOf(world);
 	const sections: { key: string; title: string; places: PlaceRef[] }[] = [
 		...(world?.headquarters ?? []).map((hq) => ({
@@ -214,12 +266,9 @@ function Places({ world, labels, here, travel }: SidePanelProps) {
 			const asleep = world?.dormant?.length ?? 0;
 			return asleep ? say(theme, "asleep-count", { count: asleep }) : say(theme, "nobody-asleep");
 		}
-		if (ref.kind === "forge") {
-			const open = forgeList.pullRequests.length;
-			const failing = forgeList.pullRequests.filter((pr) => pr.ci === "failing").length;
-			if (!open) return "";
-			return `${open} open pull ${open === 1 ? "request" : "requests"}${failing ? `, ${failing} failing` : ""}`;
-		}
+		if (ref.kind === "forge") return forgeDetail(forgeList.pullRequests);
+		if (ref.kind === "quest-office") return questDetail(assigned);
+		if (ref.kind === "library") return libraryDetail(recent);
 		if (ref.kind === "rookery") {
 			const waiting = world?.mail?.filter((item) => item.state === "waiting").length ?? 0;
 			return waiting ? say(theme, waiting === 1 ? "letter-waits" : "letters-wait", { count: waiting }) : "";

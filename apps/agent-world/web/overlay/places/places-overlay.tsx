@@ -22,10 +22,11 @@ export function PlacesOverlay({ store }: { store: WorldStore }) {
 		<div className="aw-interface aw-places">
 			{state.panel === "innkeeper" && <InnkeeperRegister key={state.opening} world={world} />}
 			{state.panel === "rookery" && <RookeryView key={state.opening} world={world} />}
-			{!state.panel && <SquarePanels world={world} />}
-			{!state.panel && <ForgePanels world={world} />}
-			{!state.panel && <QuestOfficePanels world={world} />}
-			{!state.panel && <LibraryPanels world={world} />}
+			{/* One of these at most: opening any panel closes the others (`one-panel.ts`). */}
+			<SquarePanels world={world} />
+			<ForgePanels world={world} />
+			<QuestOfficePanels world={world} />
+			<LibraryPanels world={world} />
 			{state.confirmEnd && <ConfirmEnd {...state.confirmEnd} />}
 		</div>
 	);

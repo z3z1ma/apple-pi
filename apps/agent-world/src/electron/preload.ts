@@ -13,12 +13,13 @@ import type {
 	TerminalResult,
 	ThemeChoice,
 	WorldSnapshot,
+	WorldUpdate,
 } from "../world.js";
 
 const api: AgentWorldApi = {
 	snapshot: () => ipcRenderer.invoke("world:snapshot") as Promise<WorldSnapshot>,
 	onUpdate(listener) {
-		const forward = (_event: unknown, snapshot: WorldSnapshot) => listener(snapshot);
+		const forward = (_event: unknown, update: WorldUpdate) => listener(update);
 		ipcRenderer.on("world:update", forward);
 		return () => ipcRenderer.removeListener("world:update", forward);
 	},

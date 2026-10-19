@@ -4,6 +4,7 @@
 // It also keeps what outlives one opening of the panel: each character's unsent draft, and the instructions sent to it
 // with the receipt stages they reached.
 import type { AgentWorldApi, Character, Instruction, ReceiptStage } from "../../../src/world.js";
+import { onePanel } from "../one-panel.js";
 
 /** Reading the conversation is required; acting and live replies are there once the backend offers them. */
 export type ConversationApi = Pick<AgentWorldApi, "conversation" | "markSeen"> &
@@ -83,6 +84,7 @@ export const conversationPanel = {
 		update({ api });
 	},
 	open(character: Character) {
+		onePanel.opening("conversation");
 		update({ character, opening: state.opening + 1 });
 	},
 	close() {
@@ -152,3 +154,4 @@ export const conversationPanel = {
 			);
 	},
 };
+onePanel.closes("conversation", () => conversationPanel.close());

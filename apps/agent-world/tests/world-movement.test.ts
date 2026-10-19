@@ -392,13 +392,14 @@ test("the camera follows the avatar across a place larger than the window, and t
 		await arrived(page, 15000);
 		await page.waitForTimeout(1500);
 		const frames = await recorded(page);
-		// Centred on the avatar: near the painting's east edge, the view may slide the painting out from under the side
-		// panel, but no further than the panel reaches.
+		// Near the painting's east edge the view stops at the edge: the painting still fills the window (no backdrop
+		// shows past it), and the avatar, clear of the side panel, stays where it is on screen.
 		const [sx] = await screen(page, [34, 10]);
-		expect(sx).toBeCloseTo(640, 0);
 		const [east] = await screen(page, [44, 10]);
+		expect(east).toBeCloseTo(1280, 0);
 		const panel = await page.evaluate(() => document.querySelector(".aw-side")!.getBoundingClientRect().left);
-		expect(east).toBeGreaterThanOrEqual(panel);
+		expect(sx).toBeGreaterThan(640);
+		expect(sx + 24).toBeLessThan(panel);
 		// The view eased: it never moved more than a walking step's worth of screen in one frame.
 		for (let i = 1; i < frames.length; i++)
 			expect(

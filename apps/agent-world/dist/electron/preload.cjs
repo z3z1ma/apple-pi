@@ -3,7 +3,7 @@ let electron = require("electron");
 var api = {
 	snapshot: () => electron.ipcRenderer.invoke("world:snapshot"),
 	onUpdate(listener) {
-		const forward = (_event, snapshot) => listener(snapshot);
+		const forward = (_event, update) => listener(update);
 		electron.ipcRenderer.on("world:update", forward);
 		return () => electron.ipcRenderer.removeListener("world:update", forward);
 	},

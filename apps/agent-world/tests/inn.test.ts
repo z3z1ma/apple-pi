@@ -180,6 +180,7 @@ test("waking needs a terminal to open the window beside", async () => {
 		reason: "No terminal is attached to tmux, so there is nowhere to open w-docs's window.",
 	});
 	expect(await lifecycle.wake("lead")).toEqual({ ok: false, reason: "lead is already awake." });
+	expect(await lifecycle.wake("nobody")).toEqual({ ok: false, reason: "No stopped session has that id." });
 	expect(existsSync(piLog)).toBe(false);
 }, 20000);
 

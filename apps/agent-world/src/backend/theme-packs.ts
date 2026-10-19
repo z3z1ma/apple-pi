@@ -121,6 +121,27 @@ export function checkThemePack(dir: string, options?: { pixels?: boolean }): Pro
 	return checkPack(packReader(dir), id, options);
 }
 
+/** The window's colour when no pack's backdrop can be read: a neutral dark near every theme's own. */
+export const NEUTRAL_BACKDROP = "#121216";
+
+/**
+ * The colour the window shows before the page draws (and around it while it resizes): the backdrop (`world.backdrop`,
+ * a `#rrggbb` colour) of the theme `id`, else of the pack the world opens in by default, else a neutral dark.
+ */
+export function themeBackdrop(themesDir: string, id: string | null | undefined): string {
+	for (const each of [id, "fantasy"]) {
+		if (!each || !/^[a-z0-9][a-z0-9-]*$/.test(each)) continue;
+		try {
+			const manifest = JSON.parse(readFileSync(join(themesDir, each, "theme.json"), "utf8")) as {
+				world?: { backdrop?: unknown };
+			};
+			const backdrop = manifest.world?.backdrop;
+			if (typeof backdrop === "string" && /^#[0-9a-f]{6}$/i.test(backdrop)) return backdrop;
+		} catch {}
+	}
+	return NEUTRAL_BACKDROP;
+}
+
 /** Every pack under `themesDir` (a directory with a theme.json), checked, in name order with fantasy first. */
 export async function listThemes(themesDir: string, options?: { pixels?: boolean }): Promise<ThemeChoice[]> {
 	const ids = existsSync(themesDir)

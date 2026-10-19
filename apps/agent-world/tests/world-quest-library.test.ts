@@ -553,6 +553,15 @@ describe("the quest office", () => {
 		expect(await confirm.textContent()).toContain("APP-101 on acme.atlassian.net");
 		expect(await confirm.getByLabel("Exactly what is sent").textContent()).toBe("Fixed by setting SameSite=Lax.");
 		expect(await callsOf(page, "confirmWrite")).toEqual([]);
+		// The same confirmation as every place's: until it is answered, Tab never reaches the issue behind it.
+		for (let i = 0; i < 6; i++) {
+			await page.keyboard.press("Tab");
+			const behind = await page.evaluate(() => {
+				const at = document.activeElement;
+				return !!at?.closest("[role=toolbar], textarea") && !at.closest("[role=alertdialog]");
+			});
+			expect(behind, `Tab ${i + 1}`).toBe(false);
+		}
 		await shot(page, "aw-25-confirm-comment");
 		// Escape cancels the confirmation, not the issue; nothing is sent.
 		await page.keyboard.press("Escape");
@@ -563,7 +572,7 @@ describe("the quest office", () => {
 		await dialog.getByRole("button", { name: /Review and post/ }).click();
 		await page
 			.getByRole("alertdialog", { name: "Comment on Jira issue?" })
-			.getByRole("button", { name: "Comment as you" })
+			.getByRole("button", { name: "Send as you" })
 			.click();
 		await vi.waitFor(async () => expect(await dialog.textContent()).toContain("Your comment is on the issue."));
 		const describe = (await callsOf(page, "describeWrite")).at(-1)!;
@@ -588,7 +597,7 @@ describe("the quest office", () => {
 		await move.waitFor();
 		expect(await move.getByLabel("Exactly what is sent").textContent()).toBe("Start progress (to In Progress)");
 		await shot(page, "aw-25-confirm-move");
-		await move.getByRole("button", { name: "Move it" }).click();
+		await move.getByRole("button", { name: "Send as you" }).click();
 		await vi.waitFor(async () =>
 			expect(await dialog.textContent()).toContain("Moved: Start progress (to In Progress)."),
 		);
@@ -634,6 +643,37 @@ describe("the quest office", () => {
 			),
 		);
 		await shot(page, "aw-25-handed");
+		expect(errors).toEqual([]);
+		await page.close();
+	});
+
+	test("one panel at a time: opening another panel or a conversation closes the clerk's, and closing it brings nothing back", async () => {
+		const { page, errors } = await openWorld(world(), true);
+		const dialogs = page.getByRole("dialog");
+		const names = () => dialogs.evaluateAll((all) => all.map((d) => d.getAttribute("aria-label")));
+		await travel(page, /^The quest office/, "quest-office");
+		await talkToHost(page, "The quest office");
+		expect(await names()).toEqual(["The quest office"]);
+
+		// The rookery's letter from the Mail tab (the side panel lies under the panel's veil, so the click is dispatched).
+		await page.getByRole("tab", { name: "Mail", exact: true }).dispatchEvent("click");
+		await page.locator(".aw-mail-write").dispatchEvent("click");
+		await vi.waitFor(async () => expect(await names()).toEqual(["The rookery"]));
+		await page.keyboard.press("Escape");
+		await vi.waitFor(async () => expect(await names()).toEqual([]));
+		await page.waitForTimeout(300);
+		expect(await names()).toEqual([]);
+
+		// A conversation from the Agents tab closes the clerk's panel too.
+		await talkToHost(page, "The quest office");
+		await page.getByRole("tab", { name: "Agents", exact: true }).dispatchEvent("click");
+		await page.getByRole("button", { name: /^scribe/ }).dispatchEvent("click");
+		await page.getByRole("button", { name: "Talk to scribe", exact: true }).dispatchEvent("click");
+		await vi.waitFor(async () => expect(await names()).toEqual(["Conversation with scribe"]));
+		await page.keyboard.press("Escape");
+		await vi.waitFor(async () => expect(await names()).toEqual([]));
+		await page.waitForTimeout(300);
+		expect(await names()).toEqual([]);
 		expect(errors).toEqual([]);
 		await page.close();
 	});
@@ -749,7 +789,7 @@ describe.skipIf(!SHOTS)("in every theme", () => {
 				expect(await issueDialog.getByRole("group", { name: "Move to" }).getByRole("button").count()).toBe(2),
 			);
 			await issueDialog.getByRole("button", { name: /Start progress/ }).click();
-			await page.getByRole("alertdialog").getByRole("button", { name: "Move it" }).waitFor();
+			await page.getByRole("alertdialog").getByRole("button", { name: "Send as you" }).waitFor();
 			await shot(page, `aw-25-${theme}-confirm`);
 			await page.keyboard.press("Escape");
 			await issueDialog.getByRole("button", { name: "Hand to the coordinator" }).click();
@@ -784,4 +824,48 @@ describe.skipIf(!SHOTS)("in every theme", () => {
 			expect(errors).toEqual([]);
 			await page.close();
 		});
+});
+
+describe("the Places tab", () => {
+	test("counts the issues assigned to you and the pages read lately, as it counts the forge's pull requests", async () => {
+		const { page, errors } = await openWorld(world(), true);
+		const row = (name: string) => page.locator(".aw-place").filter({ hasText: name });
+		await page.getByRole("tab", { name: "Places", exact: true }).dispatchEvent("click");
+		// Opening the tab reads what was not read yet: the quest office counts its open issues and the pressing ones.
+		await vi.waitFor(async () =>
+			expect(await row("The quest office").textContent()).toContain("5 assigned, 2 pressing"),
+		);
+		// Nothing read in the library yet: no count.
+		expect(await row("The library").locator(".aw-row-detail").textContent()).toBe("");
+		// A page read in the library is counted.
+		await travel(page, /^The library/, "library");
+		await talkToHost(page, "The library");
+		const dialog = page.getByRole("dialog", { name: "The library" });
+		await dialog.getByRole("searchbox", { name: "Search all of Confluence" }).fill("release");
+		await dialog
+			.getByRole("list", { name: "Search results" })
+			.getByRole("button", { name: /Release process/ })
+			.click();
+		const reader = page.getByRole("dialog", { name: "Release process" });
+		await vi.waitFor(async () => expect(await reader.textContent()).toContain("Never release on a Friday."));
+		await page.keyboard.press("Escape");
+		await reader.waitFor({ state: "detached" });
+		// Away from the library (where its row says "You are here"), its row counts what was read.
+		await travel(page, /^Village square/, "square");
+		await vi.waitFor(async () => expect(await row("The library").textContent()).toContain("1 page read lately"));
+		await shot(page, "aw-31-places-counts");
+		expect(errors).toEqual([]);
+		await page.close();
+	});
+
+	test("signed out of Atlassian, the quest office shows no count and nothing is asked of Jira", async () => {
+		const { page, errors } = await openWorld(world(), false);
+		await page.getByRole("tab", { name: "Places", exact: true }).dispatchEvent("click");
+		await page.waitForTimeout(500);
+		const quest = page.locator(".aw-place").filter({ hasText: "The quest office" });
+		expect(await quest.locator(".aw-row-detail").textContent()).toBe("");
+		expect(await callsOf(page, "jiraAssigned")).toEqual([]);
+		expect(errors).toEqual([]);
+		await page.close();
+	});
 });

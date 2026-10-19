@@ -41,6 +41,7 @@ declare module "electron" {
 		restore(): void;
 		show(): void;
 		focus(): void;
+		setBackgroundColor(color: string): void;
 		on(event: "closed", listener: () => void): this;
 		once(event: "closed", listener: () => void): this;
 		close(): void;

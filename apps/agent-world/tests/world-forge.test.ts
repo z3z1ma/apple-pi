@@ -669,3 +669,41 @@ test.each(["tech-office", "anime-school"])(
 	},
 	60000,
 );
+
+test("pull requests beyond the benches are counted under the place's title, and a piece's sign goes under an open card", async () => {
+	const many = [...PRS, ...Array.from({ length: 6 }, (_, i) => pr(60 + i, `Chore number ${i + 1}`))];
+	const { page, errors } = await openWorld(world(), { pullRequests: { ok: true, pullRequests: many } });
+	try {
+		await tab(page, "Places");
+		await page.getByRole("button", { name: /^The forge/ }).click();
+		await vi.waitFor(async () => expect(await view(page, "place()")).toBe("forge"), { timeout: 5000 });
+		const slots = placeData("fantasy").overlaySlots.filter((slot) => slot.kind === "work").length;
+		await vi.waitFor(async () => expect(await work(page)).toHaveLength(slots), { timeout: 5000 });
+		// At the default zoom, the count of those on the rack is in view: under the title.
+		const title = page.locator(".place-title");
+		await vi.waitFor(async () =>
+			expect(await title.textContent()).toContain(`${many.length - slots} more on the rack`),
+		);
+		await shot(page, "aw-31-forge-rack");
+		// Hovering a piece signs it; once its card opens over the world, the sign and the hover text go.
+		await clickThrough(page);
+		const piece = (await work(page))[0];
+		const [sx, sy] = await screen(page, piece.x, piece.y - 0.35);
+		await page.mouse.move(sx, sy);
+		await vi.waitFor(async () => expect((await work(page)).some((p) => p.sign)).toBe(true));
+		// The card is a panel the pointer can be over again.
+		await page.evaluate(() => {
+			for (const style of document.querySelectorAll("style"))
+				if (style.textContent?.includes("pointer-events: none !important")) style.remove();
+		});
+		await page.mouse.click(sx, sy);
+		await page.getByRole("dialog", { name: `Pull request #${piece.number}` }).waitFor({ timeout: 10_000 });
+		await page.mouse.move(sx + 1, sy);
+		await vi.waitFor(async () => expect((await work(page)).some((p) => p.sign)).toBe(false));
+		expect(await page.locator(".pointer-hover").count()).toBe(0);
+		await shot(page, "aw-31-forge-card-no-sign");
+		expect(errors).toEqual([]);
+	} finally {
+		await page.close();
+	}
+}, 60000);

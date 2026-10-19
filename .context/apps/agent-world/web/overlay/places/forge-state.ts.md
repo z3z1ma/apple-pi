@@ -5,8 +5,3 @@ Why: a listing is one `gh search prs` (GitHub's search API allows 30 a minute) p
 Verify: apps/agent-world/tests/world-forge.test.ts
 
 `window.agentWorldForgeRefreshMs` overrides the interval; only the headless test sets it.
-
-## symbol:forge
-
-`escape` declines a confirmation showing over the review page (`guard`) before it closes the panel: `PlaceDialog`'s window capture listener sees Escape before any listener the confirmation could add, since window capture listeners run in the order they were added.
-Coupled: apps/agent-world/web/overlay/places/review.tsx, apps/agent-world/web/overlay/places/place-dialog.tsx

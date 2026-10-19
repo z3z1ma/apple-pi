@@ -1144,13 +1144,21 @@ test("Tab keeps to the open book, and Escape gives the keys back to the world", 
 		await page.keyboard.press("Escape");
 		await book(page).waitFor({ state: "detached", timeout: 2000 });
 		await expect(page.evaluate(() => document.activeElement?.id)).resolves.toBe("game");
-		// The world's keys work again: G shows the walk grid. (A key pressed within ~150 ms of closing is lost; the cause
-		// is not found yet, so the test leaves a moment.)
+		// The world's keys work again at once: G, pressed and released in the same frame as Escape's release, shows the
+		// walk grid and keeps it shown. (Phaser handles its key queue again for each new key event within a frame, so G's
+		// press was handled a second time on its release and the grid went back off: the key "lost" after closing.)
+		await page.evaluate(() => {
+			const key = (type: string, key: string, code: string, keyCode: number) =>
+				window.dispatchEvent(new KeyboardEvent(type, { key, code, keyCode, bubbles: true }));
+			key("keyup", "Escape", "Escape", 27);
+			key("keydown", "g", "KeyG", 71);
+			key("keyup", "g", "KeyG", 71);
+		});
 		await page.waitForTimeout(300);
+		expect(await page.evaluate(() => (window as any).agentWorldView.walkGrid())).toBe(true);
 		await page.keyboard.press("g");
-		await vi.waitFor(async () =>
-			expect(await page.evaluate(() => (window as any).agentWorldView.walkGrid())).toBe(true),
-		);
+		await page.waitForTimeout(300);
+		expect(await page.evaluate(() => (window as any).agentWorldView.walkGrid())).toBe(false);
 		expect(errors).toEqual([]);
 	} finally {
 		await page.close();

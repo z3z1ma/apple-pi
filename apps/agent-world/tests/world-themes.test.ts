@@ -249,6 +249,13 @@ async function travel(page: Page, title: string, place: string) {
 	await page.locator(`.aw-place .aw-row-main[title="Travel to ${title}"]`).click();
 	await vi.waitFor(async () => expect(await view(page, "place()")).toBe(place), { timeout: 10000 });
 }
+/** The icon a side-panel tab wears: the pack's SVG (its mask) or "built in" for the world's own drawing. */
+const tabIcon = (page: Page, name: string) =>
+	page.getByRole("tab", { name, exact: true }).evaluate((tab) => {
+		const icon = tab.querySelector<HTMLElement>(".aw-tab-icon");
+		if (!icon) return tab.querySelector("svg") ? "built in" : "none";
+		return getComputedStyle(icon).maskImage;
+	});
 const manifest = (id: string) =>
 	JSON.parse(readFileSync(fileURLToPath(new URL(`../themes/${id}/theme.json`, import.meta.url)), "utf8"));
 
@@ -266,6 +273,10 @@ test("Settings switches theme live: the same place, characters, states, selectio
 		await page.locator(".aw-row-main", { hasText: "pi-tests" }).click();
 		await tab(page, "Settings");
 		await shot(page, "aw-19-settings-fantasy");
+		// The tabs wear the pack's own icons where it draws one (Work and Places); the rest wear the world's own.
+		expect(await tabIcon(page, "Work")).toContain("themes/fantasy/interface/icons/work.svg");
+		expect(await tabIcon(page, "Places")).toContain("themes/fantasy/interface/icons/places.svg");
+		expect(await tabIcon(page, "Agents")).toBe("built in");
 
 		await page.locator("label", { hasText: tech.name }).click();
 		await vi.waitFor(async () => expect(await wearing(page)).toBe("tech-office"), { timeout: 10000 });
@@ -282,6 +293,8 @@ test("Settings switches theme live: the same place, characters, states, selectio
 		expect(await page.evaluate(() => document.querySelector("link.aw-theme-skin")?.getAttribute("href"))).toContain(
 			"themes/tech-office/",
 		);
+		expect(await tabIcon(page, "Work")).toContain("themes/tech-office/interface/icons/work.svg");
+		expect(await tabIcon(page, "Places")).toContain("themes/tech-office/interface/icons/places.svg");
 		// The open tab and the selection stay.
 		expect(await page.getByRole("tab", { name: "Settings", exact: true }).getAttribute("aria-selected")).toBe("true");
 		await shot(page, "aw-19-settings-tech");

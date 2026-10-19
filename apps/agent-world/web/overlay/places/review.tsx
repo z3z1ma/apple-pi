@@ -75,14 +75,8 @@ export function ReviewPage({ pr }: { pr: PullRequest }) {
 		if (!sendable(event)) return;
 		void write.ask({ kind: "github-review", repo: pr.repo, number: pr.number, event, body: draft.trim() });
 	};
-	const asking = confirming(write.state);
 	// While the confirmation shows, Escape or a click on the world declines it instead of closing the forge.
-	const cancel = write.cancel;
-	useEffect(() => {
-		if (!asking) return;
-		forge.guard(cancel);
-		return () => forge.guard(undefined);
-	}, [asking, cancel]);
+	const asking = confirming(write.state);
 	const sentHere = write.state.phase === "sent";
 	// Once sent, the draft is spent and the page and the list are read again.
 	useEffect(() => {

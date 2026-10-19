@@ -913,7 +913,7 @@ function openLifecycle(paths, commands, snapshot) {
 				const awake = world.characters.find((character) => character.id === characterId);
 				return {
 					ok: false,
-					reason: awake ? `${awake.name} is already awake.` : "Nobody by that name sleeps here."
+					reason: awake ? `${awake.name} is already awake.` : "No stopped session has that id."
 				};
 			}
 			const pane = await operatorPane(servers());
@@ -944,7 +944,7 @@ function openLifecycle(paths, commands, snapshot) {
 			const text = body.trim();
 			if (!text) return {
 				ok: false,
-				reason: "The letter is empty."
+				reason: "The message is empty."
 			};
 			return follow(commands, characterId, {
 				kind: "mail",
@@ -1357,6 +1357,19 @@ var STYLE_TOKENS = [
 	"--aw-veil"
 ];
 /**
+* The side panel's tabs whose icon a pack may draw: an optional style token `--aw-icon-<tab>` naming an SVG in the pack
+* (`url(interface/icons/work.svg)`), drawn in the tab's ink through a mask. A tab without one wears the world's own.
+*/
+var TAB_ICONS = [
+	"agents",
+	"needs-you",
+	"work",
+	"mail",
+	"slack",
+	"places",
+	"settings"
+];
+/**
 * Classes a skin must style: the interface's frames and surfaces, its tabs and buttons, the conversation panel and
 * its panes, the places' panels, and the pointer's menu. A skin that leaves one out draws a bare browser widget.
 */
@@ -1459,6 +1472,12 @@ function checkManifest(value, id, problems) {
 	table("labels", [...PLACE_LABELS, ...ROLE_LABELS], "label");
 	table("text", TEXT_KEYS, "line");
 	table("style", STYLE_TOKENS, "style token");
+	for (const [token, css] of Object.entries(isObject(value.style) ? value.style : {})) {
+		if (!token.startsWith("--aw-icon-")) continue;
+		const tab = token.slice(10);
+		if (!TAB_ICONS.includes(tab)) fault(`style ${token} names no tab (a tab icon is one of ${TAB_ICONS.map((t) => `--aw-icon-${t}`).join(", ")})`);
+		else if (typeof css !== "string" || !/^url\(\s*['"]?[^'")]+\.svg['"]?\s*\)$/i.test(css.trim())) fault(`style ${token} is not url(...) of an SVG in the pack: ${JSON.stringify(css)}`);
+	}
 	if (typeof value.skin !== "string" || !value.skin.endsWith(".css")) fault("names no skin stylesheet (skin: *.css)");
 	const world = value.world;
 	if (!isObject(world)) {
@@ -1913,6 +1932,22 @@ function checkThemePack(dir, options) {
 	const id = normalize(dir).split(sep).filter(Boolean).pop() ?? "";
 	return checkPack(packReader(dir), id, options);
 }
+/** The window's colour when no pack's backdrop can be read: a neutral dark near every theme's own. */
+var NEUTRAL_BACKDROP = "#121216";
+/**
+* The colour the window shows before the page draws (and around it while it resizes): the backdrop (`world.backdrop`,
+* a `#rrggbb` colour) of the theme `id`, else of the pack the world opens in by default, else a neutral dark.
+*/
+function themeBackdrop(themesDir, id) {
+	for (const each of [id, "fantasy"]) {
+		if (!each || !/^[a-z0-9][a-z0-9-]*$/.test(each)) continue;
+		try {
+			const backdrop = JSON.parse(readFileSync(join(themesDir, each, "theme.json"), "utf8")).world?.backdrop;
+			if (typeof backdrop === "string" && /^#[0-9a-f]{6}$/i.test(backdrop)) return backdrop;
+		} catch {}
+	}
+	return NEUTRAL_BACKDROP;
+}
 /** Every pack under `themesDir` (a directory with a theme.json), checked, in name order with fantasy first. */
 async function listThemes(themesDir, options) {
 	const ids = existsSync(themesDir) ? readdirSync(themesDir, { withFileTypes: true }).filter((entry) => entry.isDirectory() && existsSync(join(themesDir, entry.name, "theme.json"))).map((entry) => entry.name).sort((a, b) => a === "fantasy" ? -1 : b === "fantasy" ? 1 : a.localeCompare(b)) : [];
@@ -2199,6 +2234,23 @@ async function switchToPane(socket, pane, name) {
 }
 //#endregion
 //#region apps/agent-world/src/backend/world-backend.ts
+/**
+* Turns each published snapshot into the update one receiver (the window) is sent: the inn and the mail are left out
+* while they are the same arrays as in the snapshot before, which `publish` keeps them as while unchanged.
+*/
+function leaveOutUnchanged() {
+	const sent = {};
+	return (snapshot) => {
+		const update = { ...snapshot };
+		const unchanged = [];
+		for (const part of ["dormant", "mail"]) if (part in sent && sent[part] === snapshot[part]) {
+			delete update[part];
+			unchanged.push(part);
+		} else sent[part] = snapshot[part];
+		if (unchanged.length) update.unchanged = unchanged;
+		return update;
+	};
+}
 /** How often new `events` rows are looked for; updates must reach the world within a second. */
 var POLL_MS$1 = 200;
 var RECONNECT_MS = 1e3;
@@ -4379,9 +4431,13 @@ function start() {
 		reason: "No look was named."
 	});
 	ipcMain.handle("world:themes", () => listThemes(join(appDir, "themes")));
-	ipcMain.handle("world:set-theme", (_event, id) => typeof id === "string" ? world.setTheme(id) : {
-		ok: false,
-		reason: "No theme was named."
+	ipcMain.handle("world:set-theme", (_event, id) => {
+		if (typeof id !== "string") return {
+			ok: false,
+			reason: "No theme was named."
+		};
+		if (window && !window.isDestroyed()) window.setBackgroundColor(themeBackdrop(join(appDir, "themes"), id));
+		return world.setTheme(id);
 	});
 	ipcMain.handle("world:instruct", (_event, characterId, commandId, instruction) => {
 		if (typeof characterId !== "string" || typeof commandId !== "string" || !commandId) return {
@@ -4413,8 +4469,9 @@ function start() {
 		toWindow
 	});
 	ipcMain.handle("world:open-link", (_event, url) => openLink(url, (href) => shell.openExternal(href)));
+	const toUpdate = leaveOutUnchanged();
 	world.subscribe((snapshot) => {
-		if (window && !window.isDestroyed()) window.webContents.send("world:update", snapshot);
+		if (window && !window.isDestroyed()) window.webContents.send("world:update", toUpdate(snapshot));
 	});
 	world.subscribeFeed((lines) => {
 		if (window && !window.isDestroyed()) window.webContents.send("world:feed", lines);
@@ -4440,7 +4497,7 @@ function start() {
 			width: 1280,
 			height: 800,
 			title: "Agent World",
-			backgroundColor: "#140e18",
+			backgroundColor: themeBackdrop(join(appDir, "themes"), world.snapshot().theme),
 			webPreferences: {
 				preload: join(appDir, "dist", "electron", "preload.cjs"),
 				contextIsolation: true,

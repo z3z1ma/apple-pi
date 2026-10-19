@@ -6,7 +6,7 @@ Coupled: apps/agent-world/web/game/place-scene.ts
 Verify: apps/agent-world/tests/world-conversation.test.ts
 
 Tab and Shift+Tab are kept inside the panel (inside an open confirmation, if there is one) by `trapTab` from `overlay/focus.ts`, and closing gives the focus to the world's `#game` (`focusWorld`) in the effect's cleanup. The place panels and their confirmations do the same.
-Hazard: a key pressed within about 150 ms of closing is lost by the world (seen with G in the tests); the cause is not yet found, and the focus test leaves 300 ms.
+A key pressed right after closing was once "lost": Escape's release and G's press and release fell in one Phaser frame, and Phaser's keyboard plugin handles its whole queue again for each new key event, so G toggled the grid twice. `PlaceScene.toggleGrid` now handles each event once (`handledKeys`); any new `keydown-<KEY>` toggle in a scene needs the same guard.
 Coupled: apps/agent-world/web/overlay/focus.ts, apps/agent-world/web/overlay/places/place-dialog.tsx
 Verify: apps/agent-world/tests/world-conversation.test.ts, apps/agent-world/tests/world-rookery.test.ts
 

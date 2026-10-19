@@ -1,7 +1,7 @@
 // The forge's benches (ticket 21): each open pull request that involves the operator or his agents lies on a workbench
 // as a piece of work in the theme's art (a blade, a device, a robot), in its CI state: passing, failing, or running
 // (the quench). They fill the forge's `work` slots in the backend's order (newest first); the rest wait "on the rack",
-// a tag over the smith, and in the smith's list. Hovering a piece names it on a small sign; looking it over walks up
+// counted under the place's title, and in the smith's list. Hovering a piece names it on a small sign; looking it over walks up
 // to the bench and opens its card. The list is read on entering and every minute while the operator is here
 // (`forge-state.ts`).
 import * as Phaser from "phaser";
@@ -27,8 +27,6 @@ const SIGN_LIFT = 0.12;
 const SIGN_TITLE = 42;
 /** How thick a turned (diagonal) piece is, in tiles, beyond its diagonal. */
 const TURNED_THICKNESS = 0.3;
-/** The tag over the smith for pull requests beyond the benches, in tiles above its feet. */
-const RACK_LIFT = 2.35;
 
 export interface WorkView {
 	key: string;
@@ -61,8 +59,12 @@ export interface ForgeHost {
 	walkUp(at: Point, then: () => void): void;
 	/** Where the pointer is over the world, in tiles. */
 	pointer(): Point | undefined;
-	/** The smith's feet, where the rack's tag floats. */
-	host(): Point | undefined;
+	/**
+	 * Say under the place's title how many wait on the rack (or that GitHub cannot be read); undefined says nothing. A
+	 * tag over the smith was off screen at the default zoom (the view follows the avatar in at the south door) and,
+	 * looking north, sat under the title or the minimap; the title is always in view.
+	 */
+	caption(line: string | undefined): void;
 	/** The view's zoom correction for things drawn at a steady size on screen. */
 	uiScale(): number;
 }
@@ -74,7 +76,7 @@ export class ForgeBenches {
 	private readonly host: ForgeHost;
 	private pieces = new Map<string, Piece>();
 	private sign?: { key: string; tag: Phaser.GameObjects.Container };
-	private rack?: { line: string; tag: Phaser.GameObjects.Container };
+	private rack?: string;
 	private readonly stop: () => void;
 
 	constructor(scene: Phaser.Scene, host: ForgeHost) {
@@ -248,17 +250,12 @@ export class ForgeBenches {
 		return key;
 	}
 
-	/** "4 more on the rack" over the smith when the benches are full; "Can't read GitHub" when the list failed. */
+	/** "4 more on the rack" under the title when the benches are full; "GitHub can't be read" when the list failed. */
 	private showRack(more: number, failed: boolean) {
 		const line = failed ? "GitHub can\u2019t be read" : more > 0 ? say(worn(), "forge-more", { count: more }) : "";
-		if (this.rack?.line === line) return;
-		this.rack?.tag.destroy();
-		this.rack = undefined;
-		const at = this.host.host();
-		if (!line || !at) return;
-		const tag = drawTag(this.scene, line);
-		tag.setPosition(at[0] * TILE, (at[1] - RACK_LIFT) * TILE).setDepth(9.6e4);
-		this.rack = { line, tag };
+		if (this.rack === line) return;
+		this.rack = line;
+		this.host.caption(line || undefined);
 	}
 
 	private piecesAt([x, y]: Point): Piece[] {
@@ -295,7 +292,6 @@ export class ForgeBenches {
 		}
 		const scale = this.host.uiScale();
 		this.sign?.tag.setScale(scale);
-		this.rack?.tag.setScale(scale);
 	}
 
 	private showSign(key: string, piece: Piece) {

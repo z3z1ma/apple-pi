@@ -27,3 +27,10 @@ The feed keeps its own sequence cursor, apart from the world's: the first read s
 Why: the world's read skips when nothing changed, but every line must reach the chatbox once and in order, within a second.
 Coupled: apps/agent-world/src/backend/feed.ts
 Verify: apps/agent-world/tests/backend.test.ts
+
+## symbol:leaveOutUnchanged
+
+Leaves the inn and the mail out of an update while they are the same array (by reference) as in the last update it made, naming them in `unchanged`; `web/world-store.ts` keeps its own and, when an update names a part it never had (a reloaded window), fills it from the whole `snapshot()` it asked for at start. It relies on `publish` keeping those arrays the same while unchanged; a new but equal array is only sent whole, never wrongly left out. One instance per receiver, advanced only when the update is actually sent.
+Why: ticket 31 measured 17.5 MB/s of IPC at 10,000 sleepers while one agent worked, nearly all of it the inn; updates are now about 17 KB.
+Coupled: apps/agent-world/src/electron/main.ts, apps/agent-world/web/world-store.ts, apps/agent-world/src/world.ts
+Verify: apps/agent-world/tests/backend.test.ts, apps/agent-world/tests/world-inn.test.ts

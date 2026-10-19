@@ -78,7 +78,7 @@ export function openLifecycle(paths: { db: string }, commands: Commands, snapsho
 			const sleeper = world.dormant?.find((agent) => agent.id === characterId);
 			if (!sleeper) {
 				const awake = world.characters.find((character) => character.id === characterId);
-				return { ok: false, reason: awake ? `${awake.name} is already awake.` : "Nobody by that name sleeps here." };
+				return { ok: false, reason: awake ? `${awake.name} is already awake.` : "No stopped session has that id." };
 			}
 			const pane = await operatorPane(servers());
 			if (!pane)
@@ -124,7 +124,7 @@ export function openLifecycle(paths: { db: string }, commands: Commands, snapsho
 
 		async sendMail(characterId, body) {
 			const text = body.trim();
-			if (!text) return { ok: false, reason: "The letter is empty." };
+			if (!text) return { ok: false, reason: "The message is empty." };
 			const command: Command = { kind: "mail", from: OPERATOR, body: text, sentAt: new Date().toISOString() };
 			return follow(
 				commands,

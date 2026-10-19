@@ -5,6 +5,22 @@ import { type ReactNode, useEffect, useRef } from "react";
 import { focusWorld, trapTab } from "../focus.js";
 import { placePanels } from "./place-panels.js";
 
+/**
+ * Layers over the open panel (a write's confirmation): Escape, the close button, or a click on the world dismiss the
+ * top one before the panel. They are kept here, not by the layer's own key listener, because the panel's window
+ * capture listener was added first and so sees Escape first.
+ */
+const layers: (() => void)[] = [];
+
+/** Put a layer over the open panel; `dismiss` runs instead of closing it. Returns the layer's removal. */
+export function dialogLayer(dismiss: () => void): () => void {
+	layers.push(dismiss);
+	return () => {
+		const at = layers.lastIndexOf(dismiss);
+		if (at >= 0) layers.splice(at, 1);
+	};
+}
+
 export function PlaceDialog({
 	label,
 	className,
@@ -20,7 +36,11 @@ export function PlaceDialog({
 	const ref = useRef<HTMLDivElement>(null);
 	const closeRef = useRef(onClose);
 	closeRef.current = onClose;
-	const close = () => (closeRef.current ?? placePanels.close)();
+	const close = () => {
+		const top = layers.at(-1);
+		if (top) top();
+		else (closeRef.current ?? placePanels.close)();
+	};
 	// biome-ignore lint/correctness/useExhaustiveDependencies: `close` reads the latest `onClose` through its ref
 	useEffect(() => {
 		const capture = (event: KeyboardEvent) => {

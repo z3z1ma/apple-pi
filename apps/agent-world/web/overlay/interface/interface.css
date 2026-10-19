@@ -255,6 +255,17 @@
 	cursor: pointer;
 }
 
+/* A pack's own tab icon (`--aw-icon-<tab>`): its SVG's shape filled with the tab's ink, whatever the skin makes it. */
+.aw-tab-icon {
+	display: block;
+	width: 20px;
+	height: 20px;
+	background: currentColor;
+	mask-size: contain;
+	mask-repeat: no-repeat;
+	mask-position: center;
+}
+
 .aw-badge {
 	position: absolute;
 	top: -5px;

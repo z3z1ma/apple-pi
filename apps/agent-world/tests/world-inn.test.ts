@@ -235,6 +235,29 @@ test("the newest dormant agents sleep at the inn's tables and in its beds, each 
 	}
 }, 60000);
 
+test("an update that leaves out an unchanged inn keeps the sleepers; one that carries the inn changes them", async () => {
+	const { page, push, errors } = await openWorld(world([ORLA]));
+	const sleeping = async () => (await figures(page)).map((f) => f.id);
+	try {
+		await toInn(page);
+		const shown = SLEEPERS.slice(0, INN.spots.length).map((s) => s.id);
+		expect(await sleeping()).toEqual(shown);
+		// A worker starts elsewhere: the update leaves the inn and the mail out, as the main process sends it.
+		const { dormant: _inn, ...rest } = world([ORLA, worker("w-new")]);
+		await push({ ...rest, unchanged: ["dormant", "mail"] } as WorldSnapshot);
+		await tab(page, "Agents");
+		await vi.waitFor(async () => expect(await page.getByRole("button", { name: /^w-new/ }).count()).toBeGreaterThan(0));
+		await page.waitForTimeout(500);
+		expect(await sleeping()).toEqual(shown);
+		// The newest sleeper wakes: the inn comes whole, and the room follows it.
+		await push(world([ORLA, worker("w-new")], SLEEPERS.slice(1)));
+		await vi.waitFor(async () => expect((await sleeping())[0]).toBe(SLEEPERS[1].id), { timeout: 5000 });
+		expect(errors).toEqual([]);
+	} finally {
+		await page.close();
+	}
+}, 60000);
+
 test("the innkeeper's register lists every dormant agent, newest first, with its repository and last task, and searches", async () => {
 	const { page, errors } = await openWorld(world([ORLA]));
 	try {

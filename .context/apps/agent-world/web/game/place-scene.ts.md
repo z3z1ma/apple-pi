@@ -30,7 +30,11 @@ Verify: apps/agent-world/tests/world-places.test.ts
 
 The camera does not use Phaser's bounds or `startFollow`: `mid` (the world point at the view's centre) eases toward the avatar every frame and is clamped by `clampMid`, which centres a place smaller than the view. Phaser's `clampX` left-aligns a place narrower than the zoomed-out view instead of centring it. `toScreen` and `toWorld` derive from `scrollX` and `zoom` directly, so they agree with the frame drawn next without waiting for Phaser to update `worldView` in `preRender`.
 
-`followMid` keeps a place that fits the window along a side centred along it, and slides it only as far as it takes to bring the avatar out from under a panel; following the avatar there made a room seen whole drift with every step.
+`followMid` centres on the avatar kept on the painting (a side that fits the window stays centred), so near an edge the painting still fills the window; it slides the painting out only when a panel (`Insets.panels`) covers the avatar, or the door it stands at, and no further than that panel reaches. Following the avatar freely made a room seen whole drift with every step, and sliding toward every edge showed bare backdrop past the painting beside the chatbox. Only the operator's wheel goes past cover (`minZoom` fits the whole place); the default zoom covers the window.
+Verify: apps/agent-world/tests/world-movement.test.ts
+
+The hover text, a piece's sign, and pointer clicks read the pointer through `worldPointer`, which asks `document.elementFromPoint` whether the canvas is topmost there: a panel opened under a still pointer sends the canvas no `gameout`, so the forge's piece sign stayed drawn under an open card.
+Verify: apps/agent-world/tests/world-forge.test.ts
 
 `clampMid` lets the painting slide out by the interface's insets (measured from the DOM by `interfaceInsets` every 300 ms by class name: `.aw-side`, `.aw-top-right`, `.aw-chat`, `.place-title`), so a door under a panel can be brought into the open. Renaming those classes silently turns the slack off.
 Coupled: apps/agent-world/web/overlay/interface/interface.css
@@ -38,9 +42,10 @@ Verify: apps/agent-world/tests/world-places.test.ts
 
 ## symbol:PlaceScene.banner
 
-The banner sprite's cloth is only part of the image, so the pack measures where its name goes and where it answers the pointer (`world.banner.text` and `hover`, fractions of the sprite in `theme.json`): in fantasy the vine border bounds the text to about 0.48 of the sprite's width (0.42 leaves a margin), and the swallowtail starts near 0.75 of its height; the tech office's sign plate and the anime school's plaque are wide, short boards with their own text areas. Names go on one line from 15 px down to 13 px, else on as many lines (broken after separators) as fit, from 15 px down to 12 px. A name still too long at 12 px has each word that does not fit cut to at most six letters ending on a consonant, with a full stop ("custom. ident."), on up to five lines, an ellipsis as the last resort; `BannerView.abbreviated` says so, and hovering the banner (`bannerRects`) shows the full name.
+The banner sprite's cloth is only part of the image, so the pack measures where its name goes and where it answers the pointer (`world.banner.text` and `hover`, fractions of the sprite in `theme.json`): in fantasy the vine border bounds the text to about 0.48 of the sprite's width (0.42 leaves a margin), and the swallowtail starts near 0.75 of its height; the tech office's sign plate and the anime school's plaque are wide, short boards with their own text areas. Names go on one line from 15 px down to 13 px, else on as many lines (broken after separators) as fit, from 15 px down to 12 px. A name still too long at 12 px has each word that does not fit cut to at most six letters ending on a consonant, with a full stop ("custom. ident."), on as many lines as the board is tall at 12 px (at most five; the tech office's short plate holds two), an ellipsis as the last resort; `BannerView.abbreviated` says so, and hovering the banner (`bannerRects`) shows the full name.
 Why: the polish pass for tickets 11 and 17 (the polish bar in Further Notes of `.ledger/202610171741-guildworld/spec.md`) set 12 px as the smallest size that reads at the default zoom; the old 10 px hyphenated names did not.
-Coupled: apps/agent-world/themes/fantasy/overlays/banner-cream.png, apps/agent-world/themes/fantasy/theme.json
+The tech office's corridor plates hang from `niches.banner` (y 2.02) at `world.banner.tiles` 2.0 wide; their bottom edge must stay above the door frame (`niches.door` y 3.35), or the plate covers the frame's top.
+Coupled: apps/agent-world/themes/fantasy/overlays/banner-cream.png, apps/agent-world/themes/fantasy/theme.json, apps/agent-world/themes/tech-office/places/gallery.json
 Verify: apps/agent-world/tests/world-places.test.ts
 
 ## symbol:PlaceScene.intended
@@ -68,5 +73,5 @@ Verify: apps/agent-world/tests/world-rookery.test.ts
 
 ## symbol:PlaceScene.create
 
-Arriving in the quest office or the library (not on a relayout), the view starts at the top of the painting (`freeLook`), just below the place's title, and goes back to following the avatar when it walks. The default zoom covers the window, so the entry at the south door left the board (the quest office's whole point) and the librarian's desk cut off under the title.
+Arriving in the forge, the quest office, or the library (not on a relayout), the view starts at the top of the painting (`freeLook`), just below the place's title, and goes back to following the avatar when it walks. The default zoom covers the window, so the entry at the south door left the board (the quest office's whole point) and the librarian's desk cut off under the title.
 Verify: apps/agent-world/tests/world-quest-library.test.ts

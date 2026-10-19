@@ -399,7 +399,7 @@ test("Places travels anywhere at once, and Settings toggles the walk grid", asyn
 		await shot(page, "tab-places");
 		await page.getByRole("button", { name: /^billing-service wing/ }).click();
 		await vi.waitFor(async () => expect(await place(page)).toBe(`wing:${HQ}:/r/billing-service`), { timeout: 3000 });
-		await page.getByRole("log").getByText("You are in the billing-service wing.").waitFor({ timeout: 2000 });
+		await page.getByRole("log").getByText("You enter the billing-service wing.").waitFor({ timeout: 2000 });
 
 		await tab(page, "Settings");
 		const grid = page.getByRole("switch", { name: /Walk grid/ });

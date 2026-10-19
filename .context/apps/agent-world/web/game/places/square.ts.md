@@ -5,7 +5,11 @@ Why: decision 25 and ticket 27 require a deliberate bound, not a constant. A pac
 Coupled: apps/agent-world/themes/fantasy/places/square.json, apps/agent-world/themes/tech-office/places/square.json, apps/agent-world/themes/anime-school/places/square.json, apps/agent-world/web/game/place-scene.ts
 Verify: apps/agent-world/tests/world-square.test.ts
 
-A channel's look is `townsfolkLook` (its id hashed over the pack's `townsfolk` looks, sorted), the same in the square, the crier's list, and the channel panel's portrait; with six looks and up to ten standing, two channels can wear the same look. Townsfolk fade in and out on their spot rather than walking through a door: they stand for channels, not sessions, and a square that a refresh reshuffles must stay calm.
+A channel's look is chosen by `chooseTownsfolkLooks` as it comes to stand: the least-worn look among those standing, preferring the one it wore before (`keptLooks`) or its hash over the pack's `townsfolk` looks, so with six looks and up to ten standing every look is worn before any is worn twice (counts differ by at most one). Someone already standing never changes look; `townsfolkLook` returns the kept look, so the crier's list and the channel panel's portrait match the figure, and `forget()` clears the memory with the scene's other state.
+Why: ticket 31; hashing alone put two of the same look side by side while others went unworn.
+Verify: apps/agent-world/tests/world-square.test.ts
+
+Townsfolk fade in and out on their spot rather than walking through a door: they stand for channels, not sessions, and a square that a refresh reshuffles must stay calm.
 
 `drawUnreadBadge` centres the count on its ink (`measureText`'s actual bounding box against Phaser's `getTextMetrics().ascent`), not on the line box, so `1` and `88` sit in the middle alike; the prototype's numbers sat off centre. It never pulses (unlike the agents' state badges) so a square of unread channels stays calm; a channel that mentions the operator wears the theme's asking colour.
 Verify: apps/agent-world/tests/world-square.test.ts
