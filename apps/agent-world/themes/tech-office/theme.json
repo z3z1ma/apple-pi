@@ -339,6 +339,120 @@
       ],
       "barks": ["Waffles! Waffles, come!", "Who's a good... where'd he go?", "Waffles, drop the croissant!"],
       "gesture": "look-around"
+    },
+    "maya": {
+      "name": "Maya the product manager",
+      "look": "townsfolk-3",
+      "examine": "A product manager with a coffee, a roadmap, and a sticky note on her sleeve she hasn't noticed.",
+      "lines": [
+        "Quick sync? Two minutes. I said that about the last meeting, and I meant it then too.",
+        "I've moved this sticky note across the wall four times. It's in 'Next' now. Emotionally, it's 'Later'.",
+        "Every roadmap is a guess with nice colours. Mine has the nicest colours.",
+        "What problem are we solving? I ask it so often my coffee order is just 'the user'.",
+        "I love a good retro. Mostly for the snacks. Also the learnings. Mostly the snacks."
+      ],
+      "reactions": [
+        "Let's take this offline. By offline I mean over there, by the coffee.",
+        "Love the energy! Can you put it in a ticket?"
+      ],
+      "barks": ["Who has the big meeting room?", "Can we timebox this?", "Parking lot! Parking lot!"],
+      "gesture": "nod",
+      "crew": true
+    },
+    "kai": {
+      "name": "Kai the SRE",
+      "look": "townsfolk-1",
+      "examine": "The SRE on call this week, still in a cycling helmet, ready to sprint to a server that isn't here.",
+      "lines": [
+        "I'm on call. It's quiet. Don't say it's quiet. Oh no, I said it's quiet.",
+        "The helmet stays on. You never know when you'll need to sprint to a rack. We're in the cloud, but still.",
+        "Three things I believe in: monitoring, runbooks, and a bike ride after a long night.",
+        "Every outage teaches you something. Mostly that someone once wrote 'TODO: handle this later'.",
+        "My pager has a ringtone. I heard it in my sleep last night. It was the kettle."
+      ],
+      "reactions": [
+        "Is that a page? Was that a page? Oh. It's you.",
+        "Easy! My heart rate is already on a dashboard somewhere."
+      ],
+      "barks": ["Nobody say the Q word.", "Who touched the config?", "Coffee. Then dashboards."],
+      "gesture": "look-around",
+      "crew": true
+    },
+    "jo": {
+      "name": "Jo the office manager",
+      "look": "townsfolk-2",
+      "examine": "The office manager, apron on from restocking the kitchen, who knows where every spare charger lives.",
+      "lines": [
+        "Snacks restocked, plants watered, and someone has once again taken all the good pens.",
+        "Lost a charger? Third drawer, left side, behind the forty other chargers people lost.",
+        "Please label your lunch. 'Mine' is not a label. Everyone thinks it's theirs.",
+        "The meeting rooms are named after planets. Pluto is the small one. We don't talk about Pluto.",
+        "Cake at three! Whose birthday? Doesn't matter. Cake at three."
+      ],
+      "reactions": [
+        "I'm one person with one label maker. Pace yourself.",
+        "If this is about the thermostat, I've heard. Everyone's heard."
+      ],
+      "barks": ["Cake at three!", "Who took the stapler?", "Label your lunches, people!"],
+      "gesture": "shrug",
+      "crew": true
+    },
+    "juniper": {
+      "name": "Juniper the design intern",
+      "look": "townsfolk-6",
+      "examine": "The design intern, laptop open and scarf on, nudging a button one pixel left and back again.",
+      "lines": [
+        "Does this button look friendly to you? I moved it one pixel left. It feels braver now.",
+        "I made forty icons today. Thirty-nine are arrows. I've become an arrow person.",
+        "My mentor says whitespace is a feature. I'm learning to love the nothing.",
+        "I named my colour palette 'Sunday morning'. Everyone pretends that's normal. Thank you.",
+        "Is it okay to have opinions about fonts as an intern? Asking for me. I have many."
+      ],
+      "reactions": [
+        "Ah! Sorry, I was in the zone. The kerning zone.",
+        "Hold still? I'm sketching you as a user persona."
+      ],
+      "barks": ["One more pixel... no, back.", "Is this blue too blue?", "Rounded corners. Always."],
+      "gesture": "laugh",
+      "crew": true
+    },
+    "marco": {
+      "name": "Marco the office chef",
+      "look": "townsfolk-5",
+      "examine": "The office chef, hat high and spoon ready, who believes no problem survives a good soup.",
+      "lines": [
+        "Today's special: lentil soup, and a gentle reminder to look away from the screen once an hour.",
+        "Nobody argues over a good lasagna. Well, they do, but more kindly.",
+        "I put the cookies out at four. At four-oh-two there are no cookies. Every day.",
+        "Food is a feature. I ship it daily, and I've never once had to roll it back.",
+        "Try the chili. It's mild. I say that and someone always cries. Happily, I hope."
+      ],
+      "reactions": [
+        "Ah, a hungry one! Lunch is at noon, my friend, not now.",
+        "Hands off the tiramisu. It's resting. Like you should."
+      ],
+      "barks": ["Soup's on!", "Cookies at four, not before!", "Who wants to taste this?"],
+      "gesture": "laugh",
+      "crew": true
+    },
+    "rex": {
+      "name": "Rex the lunch-run captain",
+      "look": "townsfolk-4",
+      "examine": "A colleague in a headband who has turned the lounge into the start line of the lunchtime run.",
+      "lines": [
+        "Lunch run at noon! Five kilometres, or one, or a brisk walk to the sandwich place. All welcome.",
+        "Standing desks are great. Walking desks are greater. Running desks are a lawsuit.",
+        "Hydrate! You, me, the plants. Everybody hydrates.",
+        "I took a call on the treadmill once. Never again. Everyone thought I was panicking.",
+        "Stretch your wrists, roll your shoulders. Your keyboard will thank you. Silently."
+      ],
+      "reactions": [
+        "You're keen! Love it. Warm up first, though.",
+        "Whoa, pace yourself! It's a marathon, not a... it's a marathon."
+      ],
+      "barks": ["Lunch run at noon, who's in?", "Water break! Everybody!", "Stretch break, everyone!"],
+      "gesture": "stretch",
+      "crew": true
     }
   }
 }

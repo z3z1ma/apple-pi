@@ -107,11 +107,17 @@
     { "name": "the hearth", "at": [10.5, 4.3], "face": "up" },
     { "name": "the window seat", "at": [5.4, 4.0], "face": "up" },
     { "name": "the map table", "at": [16.8, 4.7], "face": "up" },
-    { "name": "the side table", "at": [19.3, 8.2], "face": "right" }
+    { "name": "the side table", "at": [19.3, 8.2], "face": "right" },
+    { "name": "the bookcase", "at": [3.2, 5.6], "face": "left" },
+    { "name": "the long tables", "at": [11.5, 12.6], "face": "up" }
   ],
   "atmosphere": [
     { "kind": "motes", "rect": [4, 3, 14, 8], "count": 12 },
     { "kind": "steam", "at": [20.6, 6.95], "w": 0.2, "count": 4 },
     { "kind": "sparks", "at": [11.04, 3.45], "w": 1.0, "count": 4 }
+  ],
+  "ambient": [
+    { "cast": "tobin", "at": [14.8, 4.6], "face": "right" },
+    { "cast": "posy", "at": [4.0, 7.5], "face": "right" }
   ]
 }

@@ -33,3 +33,7 @@ Verify: apps/agent-world/tests/pets.test.ts
 The ambient cast (ticket 08) is split across files: members in `theme.json`'s `ambient`, homes in each place's `ambient`. Only `checkPack` sees both, so names, the one-place rule, the repeating rooms, and the `ambient` look role are checked there after the places and looks are read; a home's floor and clearance are checked per place in `checkAmbientPlaces`. A member who stands nowhere is a fault, so a cast member moved out of a place (to the second exterior, say) must be placed again in the same change.
 Coupled: apps/agent-world/themes/README.md, apps/agent-world/web/game/ambient.ts
 Verify: apps/agent-world/tests/ambient-pack.test.ts
+
+The headquarters crew (`crew: true`, 2026-10-20) is the one exception to the repeating-room rule: the operator asked for staff in every coordinator's headquarters, so a crew member stands only in `headquarters` or `common-room` and appears in each copy (the scene needs no change: `layoutFor` hands every coordinator the same place data). Only `crew === true` counts; any other value is reported and the member is checked as ordinary cast. The crew may wear `townsfolk` looks because the packs have no spare `ambient` looks and no new art was wanted, but never a look the rest of the cast wears, and no two cast members in one place file share a look. `Patter` memory is keyed by theme and cast name, so a crew member's lines continue from one coordinator's headquarters into the next.
+Coupled: apps/agent-world/web/game/layout.ts
+Verify: apps/agent-world/tests/world-ambient.test.ts

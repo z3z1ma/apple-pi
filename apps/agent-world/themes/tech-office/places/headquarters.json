@@ -72,10 +72,17 @@
     { "name": "the whiteboard", "at": [21.0, 4.6], "face": "up" },
     { "name": "the vending machine", "at": [25.0, 11.8], "face": "right" },
     { "name": "the ping-pong table", "at": [6.6, 12.5], "face": "left" },
-    { "name": "the lounge", "at": [23.6, 13.2], "face": "down" }
+    { "name": "the lounge", "at": [23.6, 13.2], "face": "down" },
+    { "name": "the planters", "at": [11.0, 15.1], "face": "down" }
   ],
   "atmosphere": [
     { "kind": "motes", "rect": [4, 3, 22, 10], "count": 18 },
     { "kind": "steam", "at": [16.44, 3.45], "w": 0.15, "count": 3 }
+  ],
+  "ambient": [
+    { "cast": "maya", "at": [11.0, 9.0], "face": "left" },
+    { "cast": "kai", "at": [19.5, 8.0], "face": "right" },
+    { "cast": "jo", "at": [20.0, 12.5], "face": "down" },
+    { "cast": "juniper", "at": [9.5, 13.5], "face": "left" }
   ]
 }

@@ -56,7 +56,12 @@
     { "name": "the vending machine", "at": [4.6, 4.3], "face": "up" },
     { "name": "the bookshelves", "at": [8.5, 3.9], "face": "up" },
     { "name": "the whiteboard", "at": [14.5, 3.6], "face": "up" },
-    { "name": "the windows", "at": [2.2, 8.0], "face": "left" }
+    { "name": "the windows", "at": [2.2, 8.0], "face": "left" },
+    { "name": "the tatami corner", "at": [13.3, 6.0], "face": "right" }
   ],
-  "atmosphere": [{ "kind": "motes", "rect": [2, 1, 8, 9], "count": 14 }]
+  "atmosphere": [{ "kind": "motes", "rect": [2, 1, 8, 9], "count": 14 }],
+  "ambient": [
+    { "cast": "ishida", "at": [17.5, 10.0], "face": "left" },
+    { "cast": "fumi", "at": [3.5, 10.5], "face": "right" }
+  ]
 }

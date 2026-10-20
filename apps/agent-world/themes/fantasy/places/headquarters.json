@@ -162,11 +162,20 @@
     { "name": "the notice board", "at": [7.0, 10.4], "face": "left" },
     { "name": "the weapon rack", "at": [22.8, 9.5], "face": "right" },
     { "name": "the trophy shelf", "at": [24.5, 5.8], "face": "up" },
-    { "name": "the window", "at": [10.0, 4.8], "face": "up" }
+    { "name": "the window", "at": [10.0, 4.8], "face": "up" },
+    { "name": "the guild banners", "at": [20.2, 5.0], "face": "up" },
+    { "name": "the east bench", "at": [23.5, 12.6], "face": "down" },
+    { "name": "the west bench", "at": [6.0, 12.6], "face": "down" }
   ],
   "atmosphere": [
     { "kind": "motes", "rect": [0.5, 1.5, 6, 6], "count": 10 },
     { "kind": "motes", "rect": [8, 5, 14, 9], "count": 10 },
     { "kind": "sparks", "at": [4.97, 4.2], "w": 1.0, "count": 4 }
+  ],
+  "ambient": [
+    { "cast": "haldor", "at": [9.5, 12.0], "face": "right" },
+    { "cast": "marta", "at": [21.0, 12.0], "face": "left" },
+    { "cast": "wim", "at": [8.5, 7.5], "face": "down" },
+    { "cast": "rosalind", "at": [21.5, 7.0], "face": "down" }
   ]
 }

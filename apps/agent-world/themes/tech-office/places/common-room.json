@@ -82,10 +82,15 @@
     { "name": "the coffee bar", "at": [10.5, 4.6], "face": "up" },
     { "name": "the screen", "at": [15.5, 4.6], "face": "up" },
     { "name": "the beanbags", "at": [6.3, 5.0], "face": "left" },
-    { "name": "the shelves", "at": [19.3, 7.5], "face": "right" }
+    { "name": "the shelves", "at": [19.3, 7.5], "face": "right" },
+    { "name": "the rug", "at": [4.5, 9.5], "face": "down" }
   ],
   "atmosphere": [
     { "kind": "motes", "rect": [1, 1, 8, 7], "count": 12 },
     { "kind": "steam", "at": [11.25, 6.15], "w": 0.15, "count": 3 }
+  ],
+  "ambient": [
+    { "cast": "marco", "at": [8.0, 4.8], "face": "up" },
+    { "cast": "rex", "at": [15.0, 10.0], "face": "left" }
   ]
 }

@@ -70,10 +70,18 @@
     { "name": "the bookshelf", "at": [7.6, 4.0], "face": "up" },
     { "name": "the lockers", "at": [22.0, 4.7], "face": "up" },
     { "name": "the windows", "at": [3.8, 10.6], "face": "left" },
-    { "name": "the east windows", "at": [26.4, 11.0], "face": "right" }
+    { "name": "the east windows", "at": [26.4, 11.0], "face": "right" },
+    { "name": "the notice board", "at": [19.6, 4.5], "face": "up" },
+    { "name": "the sunny spot", "at": [7.5, 13.0], "face": "left" }
   ],
   "atmosphere": [
     { "kind": "motes", "rect": [4, 3, 14, 12], "count": 16 },
     { "kind": "fall", "what": "petals", "rect": [0, 15.5, 30, 4.5], "count": 6 }
+  ],
+  "ambient": [
+    { "cast": "hana", "at": [9.0, 7.5], "face": "down" },
+    { "cast": "momo", "at": [21.0, 7.5], "face": "down" },
+    { "cast": "kenta", "at": [10.0, 12.0], "face": "right" },
+    { "cast": "daichi", "at": [21.5, 12.0], "face": "left" }
   ]
 }

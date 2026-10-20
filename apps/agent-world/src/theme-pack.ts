@@ -233,7 +233,7 @@ export const AMBIENT_LINES = 3;
 export interface AmbientMember {
 	/** What hover text and the menu call it ("Pip the bard"). */
 	name: string;
-	/** Its look, one whose role is `ambient`. */
+	/** Its look, one whose role is `ambient` (for the headquarters crew, `ambient` or `townsfolk`). */
 	look: string;
 	/** What Examine says. */
 	examine: string;
@@ -242,6 +242,11 @@ export interface AmbientMember {
 	barks?: string[];
 	/** The idle it plays when it reacts (default: a shrug). */
 	gesture?: AmbientGesture;
+	/**
+	 * The headquarters crew: the staff of every headquarters, standing in the headquarters or its common room, which the
+	 * world shows once per coordinator, so it stands in each one.
+	 */
+	crew?: boolean;
 }
 
 /**
@@ -1219,6 +1224,7 @@ function checkCast(ambient: unknown, fault: (text: string) => void) {
 		if (member.barks !== undefined && !lines(member.barks)) fault(`${where}.barks is not a list of lines`);
 		if (member.gesture !== undefined && !AMBIENT_GESTURES.includes(member.gesture as AmbientGesture))
 			fault(`${where}.gesture is not one of ${AMBIENT_GESTURES.join(", ")}`);
+		if (member.crew !== undefined && typeof member.crew !== "boolean") fault(`${where}.crew is not true or false`);
 	}
 }
 
@@ -1272,21 +1278,43 @@ type CastPlaced = { file: string; cast: string }[];
 const REPEATING_ROOMS = ["headquarters", "common-room", "wing-small", "wing-large"].map(
 	(name) => `places/${name}.json`,
 );
+/** Where the headquarters crew stands (in every coordinator's copy), and the looks it may wear. */
+const CREW_ROOMS = ["headquarters", "common-room"].map((name) => `places/${name}.json`);
+const CREW_LOOK_ROLES = ["townsfolk", "ambient"];
 
 /**
  * The cast against its places and looks: every member stands in exactly one place (one person, one place), every one
- * standing is a member, and each wears a look of the `ambient` role.
+ * standing is a member, each wears a look of the `ambient` role, and no two in one place wear the same look. The
+ * headquarters crew (`crew`) stands only in the headquarters or its common room, which repeat per coordinator, in an
+ * `ambient` or `townsfolk` look that no one outside the crew wears; everyone else stays out of rooms that repeat.
  */
 function checkCastPlaced(manifest: ThemeManifest, looks: unknown, placed: CastPlaced, problems: PackProblem[]) {
 	const cast = isObject(manifest.ambient) ? manifest.ambient : {};
+	const isCrew = (name: string) => isObject(cast[name]) && cast[name].crew === true;
+	const lookOf = (name: string) => (isObject(cast[name]) && isText(cast[name].look) ? cast[name].look : undefined);
 	const first = new Map<string, string>();
+	/** Who wears which look, per place file. */
+	const wornIn = new Map<string, string>();
 	for (const { file, cast: name } of placed) {
 		if (!Object.hasOwn(cast, name)) {
 			problems.push({ file, fault: `ambient ${name} stands here, but theme.json's ambient does not name it` });
 			continue;
 		}
-		if (REPEATING_ROOMS.includes(file))
+		if (isCrew(name) && !CREW_ROOMS.includes(file))
+			problems.push({
+				file,
+				fault: `ambient ${name} is headquarters crew, who stand only in the headquarters or its common room`,
+			});
+		else if (!isCrew(name) && REPEATING_ROOMS.includes(file))
 			problems.push({ file, fault: `ambient ${name} stands in a room the world shows once per coordinator or wing` });
+		const look = lookOf(name);
+		const other = look && wornIn.get(`${file}|${look}`);
+		if (other && other !== name)
+			problems.push({
+				file,
+				fault: `ambient ${name} wears ${look}, as ${other} here does: one look per person in a place`,
+			});
+		else if (look) wornIn.set(`${file}|${look}`, name);
 		const before = first.get(name);
 		if (before === undefined) first.set(name, file);
 		else if (before !== file)
@@ -1294,12 +1322,31 @@ function checkCastPlaced(manifest: ThemeManifest, looks: unknown, placed: CastPl
 		else problems.push({ file, fault: `ambient ${name} stands here twice: one person, one place` });
 	}
 	const fault = (text: string) => problems.push({ file: "theme.json", fault: text });
+	for (const name of Object.keys(cast)) if (!first.has(name)) fault(`ambient.${name} stands in no place`);
+	if (isObject(looks)) checkCastLooks(cast, looks, isCrew, fault);
+}
+
+/** Each cast member's look: an `ambient` one, or for the crew a townsperson's too, never one the rest of the cast wears. */
+function checkCastLooks(
+	cast: Record<string, unknown>,
+	looks: Record<string, unknown>,
+	isCrew: (name: string) => boolean,
+	fault: (text: string) => void,
+) {
+	const town = new Map<string, string>();
+	for (const [name, member] of Object.entries(cast))
+		if (!isCrew(name) && isObject(member) && isText(member.look) && !town.has(member.look)) town.set(member.look, name);
 	for (const [name, member] of Object.entries(cast)) {
-		if (!first.has(name)) fault(`ambient.${name} stands in no place`);
-		if (!isObject(member) || !isText(member.look) || !isObject(looks)) continue;
+		if (!isObject(member) || !isText(member.look)) continue;
 		const look = looks[member.look];
+		const crew = isCrew(name);
 		if (!isObject(look)) fault(`ambient.${name} wears ${member.look}, which looks.json does not name`);
-		else if (look.role !== "ambient") fault(`ambient.${name} wears ${member.look}, which is not an ambient look`);
+		else if (crew && !CREW_LOOK_ROLES.includes(String(look.role)))
+			fault(`ambient.${name} wears ${member.look}, which is not a townsfolk or ambient look`);
+		else if (!crew && look.role !== "ambient")
+			fault(`ambient.${name} wears ${member.look}, which is not an ambient look`);
+		else if (crew && town.has(member.look))
+			fault(`ambient.${name} wears ${member.look}, which ambient.${town.get(member.look)} wears too`);
 	}
 }
 

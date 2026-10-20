@@ -332,6 +332,111 @@
       "reactions": ["Ho ho, so much energy! Save some for the sports festival.", "Mind the hydrangeas. They're shy."],
       "barks": ["There we are, little one.", "Rain tomorrow, I think.", "Who's been stepping on my moss?"],
       "gesture": "nod"
+    },
+    "hana": {
+      "name": "Hana the class treasurer",
+      "look": "townsfolk-3",
+      "examine": "The class treasurer, selling melon bread for the festival fund, with a smile and exact change.",
+      "lines": [
+        "Melon bread, one hundred yen! Every coin goes to the festival fund. I've counted them twice.",
+        "The class budget balances to the yen. I checked it three times, and once more for luck.",
+        "Want a festival with lanterns? Buy bread. Want one without? Still buy bread.",
+        "I keep the receipts in a folder with stickers. Accounting should be cute too.",
+        "Last year's class spent their fund on a giant papier-mache cat. We will learn from history."
+      ],
+      "reactions": [
+        "One at a time! I can't give change to a crowd.",
+        "No discounts, even for persistence. Nice try, though!"
+      ],
+      "barks": ["Melon bread! Fresh this morning!", "One hundred yen, exact change!", "The festival fund grows!"],
+      "gesture": "nod",
+      "crew": true
+    },
+    "daichi": {
+      "name": "Daichi the sleepy one",
+      "look": "townsfolk-2",
+      "examine": "A classmate who cycles an hour up the hill to school every morning and naps through the rest of it.",
+      "lines": [
+        "I cycled up the big hill again. My legs are awake. The rest of me is still at home.",
+        "I'm not sleeping. I'm resting my eyes so they're fresh for the blackboard.",
+        "The window seat gets the morning sun. It's the best seat for... studying. Yes.",
+        "I dreamed the whole class went to the beach. Then the bell rang. Worst plot twist.",
+        "Wake me if there's a quiz. Or lunch. Mostly lunch."
+      ],
+      "reactions": ["Mm? Is it lunch? It's not lunch.", "Five more minutes... I'm listening, really."],
+      "barks": ["Zzz... huh? I'm up!", "Is it lunch yet?", "The sun is so warm..."],
+      "gesture": "yawn",
+      "crew": true
+    },
+    "kenta": {
+      "name": "Kenta the class clown",
+      "look": "townsfolk-5",
+      "examine": "The class clown, carrying a crate of festival props and a plan nobody has approved.",
+      "lines": [
+        "This box? Festival props. A wig, three fake moustaches, and a rubber fish. Classic.",
+        "I'm doing a comedy act at the culture festival. The class rep hasn't said no yet. That's a yes.",
+        "Why did the eraser need a break? Too many mistakes to rub out. ...I'll workshop it.",
+        "I tried to make the teacher laugh. She gave me extra homework. With a smile, though.",
+        "Every class needs someone to drop a box loudly at the quietest moment. It's a calling."
+      ],
+      "reactions": ["Hey, I'm the one who does the bits around here!", "Okay, okay, you get a moustache. Just one."],
+      "barks": ["Who wants a fake moustache?", "Rubber fish, anyone?", "Tough crowd today..."],
+      "gesture": "laugh",
+      "crew": true
+    },
+    "momo": {
+      "name": "Momo the first-year",
+      "look": "townsfolk-6",
+      "examine": "A first-year with a balloon and an ear for every rumour in the building.",
+      "lines": [
+        "Did you hear? The shop teacher has a secret cat. I saw a whisker. That's evidence.",
+        "They say the old piano in the music room plays at night. It's probably the senpai with the guitar.",
+        "I know who has a crush on whom. I'll never tell. Unless you ask nicely. Twice.",
+        "The balloon? Left over from the welcome party. It's my lucky balloon now. It knows things.",
+        "Rumour says the cafeteria is making curry on a Tuesday. A Tuesday! The world is changing."
+      ],
+      "reactions": [
+        "Shh! You'll scare the rumours away!",
+        "Fine, one secret: there are no secrets. Just kidding, there are loads."
+      ],
+      "barks": ["Psst! Did you hear?", "Ooh, who's that?", "My balloon knows things."],
+      "gesture": "look-around",
+      "crew": true
+    },
+    "ishida": {
+      "name": "Ishida-sensei",
+      "look": "townsfolk-1",
+      "examine": "A substitute teacher with a briefcase of handouts, who has taught every subject at least once.",
+      "lines": [
+        "I've covered maths, music, and P.E. in one week. I am now a very confused triathlon.",
+        "Study hard, but sit near a window. Sunlight is half of learning. The other half is snacks.",
+        "My briefcase holds handouts for every subject. I hope today's isn't the swimming one.",
+        "When I was a student, this lounge had one chair. We took turns. Character-building.",
+        "Ask questions! The worst that happens is I look it up. That's how I learned everything."
+      ],
+      "reactions": [
+        "Yes, yes, I'll take questions after. All of them. Eventually.",
+        "Patience! Even the bell waits for the end of the lesson."
+      ],
+      "barks": ["Handouts, anyone? Any subject.", "Quiet study time, please.", "Where did I put my chalk?"],
+      "gesture": "nod",
+      "crew": true
+    },
+    "fumi": {
+      "name": "Granny Fumi the caretaker",
+      "look": "townsfolk-4",
+      "examine": "The school caretaker, here longer than the building, with a cat who considers the lounge hers.",
+      "lines": [
+        "I've swept these floors since your class rep's grandmother was a first-year. They were dustier then.",
+        "This is Mochi. She inspects the lounge every day. She has never once approved.",
+        "Tea's in the cupboard. The good biscuits are behind the plain ones. Now you know.",
+        "Every scuff on this floor has a story. That one was a sports-day trophy. Long story.",
+        "Rest when you're tired, dear. The books will still be here. I'll make sure of it."
+      ],
+      "reactions": ["Ho ho, you'll wear out the floor like that!", "Mochi says that's enough fussing for today."],
+      "barks": ["Mind the wet floor!", "Mochi, off the table.", "Who left these crumbs?"],
+      "gesture": "laugh",
+      "crew": true
     }
   }
 }

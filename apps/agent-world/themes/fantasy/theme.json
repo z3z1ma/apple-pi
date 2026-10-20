@@ -338,6 +338,120 @@
       ],
       "barks": ["Left at the fountain... or right?", "Is this map upside down?", "Ooh, look at that roof!"],
       "gesture": "shrug"
+    },
+    "haldor": {
+      "name": "Old Haldor the veteran",
+      "look": "townsfolk-5",
+      "examine": "A retired adventurer in a salt-stiff oilskin, with a fishing rod he swears was once a lance.",
+      "lines": [
+        "Did I ever tell you about the kraken? It was this big. No, bigger. My arms aren't long enough for the true size.",
+        "Forty years adventuring and one rule: never trust a dungeon with a gift shop.",
+        "This rod? Slew a sea serpent with it. Well, annoyed one. It left, which counts.",
+        "Young ones today, all maps and planning. In my day we got lost properly, and we liked it.",
+        "This hearth has heard all my stories. Twice. It still crackles at the good bits.",
+        "I've retired three times. The guild keeps finding me jobs. Mostly sitting. I'm excellent at sitting."
+      ],
+      "reactions": [
+        "Patience! A good tale needs a slow start and a bigger fish.",
+        "Alright, the short version: there was a dragon. I won. Mostly.",
+        "You've the eagerness of a first-year squire. I like it."
+      ],
+      "barks": ["Did I mention the kraken?", "Bigger than that, it was.", "Ah, the old knees. Rain coming."],
+      "gesture": "laugh",
+      "crew": true
+    },
+    "marta": {
+      "name": "Marta the quartermaster",
+      "look": "townsfolk-1",
+      "examine": "The guild's quartermaster, a basket on her hip and every rope, ration, and apple counted twice.",
+      "lines": [
+        "Rope, rations, rope, lantern oil, rope. Adventurers always forget rope.",
+        "If a quest needs it, I've got it. If it needs two, I've got one and a very stern look.",
+        "Apples for the road. Don't argue: nobody slays anything well on an empty stomach.",
+        "Sign the ledger before you take a torch. Yes, even you. Especially you.",
+        "Someone borrowed a ten-foot pole in spring. I can wait. I have a very long memory."
+      ],
+      "reactions": [
+        "One thing at a time, love! I've two hands and one ledger.",
+        "Asking twice won't make the potions restock faster.",
+        "Fine, take an apple. Now shoo."
+      ],
+      "barks": ["Who took the last coil of rope?", "Apples! One each, no hoarding.", "Ledger says three. I count two."],
+      "gesture": "nod",
+      "crew": true
+    },
+    "wim": {
+      "name": "Wim the squire",
+      "look": "townsfolk-3",
+      "examine": "A squire on errands, pitchfork in hand from the stables and straw in his hair from everywhere else.",
+      "lines": [
+        "Can't stop! Stables, then the helms, then the guildmaster's quill. Again.",
+        "One day I'll be a knight. Until then I'm very good at carrying things.",
+        "The pitchfork's for the stables. Old Haldor calls it a trident. I'm not arguing.",
+        "I ran the length of the village twice before breakfast. Nobody asked me to. Felt heroic.",
+        "Need anything fetched? Please say yes. I'm faster when it's important."
+      ],
+      "reactions": ["Yes! I mean, sorry, what was the errand again?", "I'm going, I'm going! Which way was I going?"],
+      "barks": ["Coming through! Errand!", "Fetch the quill... then the ink!", "Has anyone seen my other boot?"],
+      "gesture": "wave",
+      "crew": true
+    },
+    "rosalind": {
+      "name": "Dame Rosalind the patroness",
+      "look": "townsfolk-4",
+      "examine": "The guild's patroness, fan in hand, who pays for the quests and judges the stories after.",
+      "lines": [
+        "I fund the guild's adventures, darling. In return I demand stories. Good ones. With peril.",
+        "A quest without a ballad afterwards is just a long walk, I always say.",
+        "That banner? I paid for it. The dragon on it was, I'm told, rather smaller in person.",
+        "One must dress for the hall. One never knows when a hero will need inspiring.",
+        "I never ask how a quest goes, only how it ends. And whether anyone was dashing."
+      ],
+      "reactions": [
+        "My, aren't we persistent. I approve. Mostly.",
+        "Darling, the fan means I'm thinking. Do let me finish."
+      ],
+      "barks": ["Such a draughty hall. Charming.", "Has anyone done anything dashing?", "Someone fetch me a ballad."],
+      "gesture": "laugh",
+      "crew": true
+    },
+    "tobin": {
+      "name": "Tobin the cartographer",
+      "look": "townsfolk-2",
+      "examine": "A journeyman cartographer with ink on his cuffs and a lute he plays to the maps while they dry.",
+      "lines": [
+        "Every map in this guild has a little dragon in the corner. That one's mine. I call him Smudge.",
+        "Here be dragons? Here be me, guessing. Most cartography is confident guessing.",
+        "Ink dries faster if you play it a song. That's not science, but it's my method.",
+        "I mapped the whole harbour lane once. Then they moved a barrel and I had to start again.",
+        "North is up. Usually. Depends who's holding the map."
+      ],
+      "reactions": [
+        "Careful! Wet ink! That coast is still drying.",
+        "Jog my elbow and the river runs through the tavern. Again."
+      ],
+      "barks": ["North is... that way. Probably.", "Hold still, little coastline.", "Smudge needs a hat."],
+      "gesture": "shrug",
+      "crew": true
+    },
+    "posy": {
+      "name": "Posy the hall maid",
+      "look": "townsfolk-6",
+      "examine": "The common room's maid, with a basket of fresh flowers and firm opinions about boots on tables.",
+      "lines": [
+        "Fresh flowers on every table! Adventurers smell of dungeon. Somebody has to fight back.",
+        "Boots off the table, please. The table has done nothing to you.",
+        "I found a goblin tooth in the cushions again. I'm keeping a jar. It's nearly full.",
+        "The hearth's lit, the kettle's on, and every chair is sat in just right.",
+        "Lavender for calm, rosemary for memory, daisies because they're cheerful. Take one."
+      ],
+      "reactions": [
+        "Oh! You startled me. Have a daisy, that'll calm us both.",
+        "I'm sweeping round you, dear. Do keep still."
+      ],
+      "barks": ["Boots off the table!", "Who brought mud in? Again?", "Lavender, for the grumpy ones."],
+      "gesture": "wave",
+      "crew": true
     }
   }
 }
