@@ -122,13 +122,13 @@ export class Walker {
 
 	/** Idles being played, by whom: someone about to start one picks another, so nobody idles in step. */
 	private static playing = new Map<Walker, IdleName>();
-	/** Whether anyone is playing an idle now; walkers whose scene has gone are forgotten. */
-	private static busy = {
-		has(name: IdleName): boolean {
+	/** Whether anyone but this walker is playing an idle now; walkers whose scene has gone are forgotten. */
+	private readonly busy = {
+		has: (name: IdleName): boolean => {
 			let found = false;
 			for (const [walker, playing] of Walker.playing) {
 				if (!walker.sprite.active) Walker.playing.delete(walker);
-				else if (playing === name) found = true;
+				else if (walker !== this && playing === name) found = true;
 			}
 			return found;
 		},
@@ -141,11 +141,13 @@ export class Walker {
 
 	/**
 	 * Play an idle now (or the next its clock picks): only standing still, facing the room, with a look that has an idle
-	 * sheet. Walking, another pose, or turning away ends it. Says whether it plays.
+	 * sheet. Walking, another pose, or turning away ends it. Never one someone else is playing, named or picked (the
+	 * clock picks none when every idle is taken): then it plays nothing. Says whether it plays.
 	 */
 	playIdle(name?: IdleName): boolean {
 		if (!this.canIdle()) return false;
-		const chosen = name ?? this.idles?.pick(Walker.busy) ?? "look-around";
+		const chosen = name ?? (this.idles ? this.idles.pick(this.busy) : "look-around");
+		if (!chosen || this.busy.has(chosen)) return false;
 		const steps = IDLES[chosen];
 		this.idling = { name: chosen, steps, step: 0, left: steps[0][1] };
 		Walker.playing.set(this, chosen);
@@ -276,7 +278,7 @@ export class Walker {
 		}
 		if (!this.idles) return;
 		if (!this.canIdle()) return this.idles.putOff();
-		const name = this.idles.tick(deltaMs, undefined, Walker.busy);
+		const name = this.idles.tick(deltaMs, undefined, this.busy);
 		if (name) this.playIdle(name);
 	}
 

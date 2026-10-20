@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { IdleClock, type IdleName } from "../web/game/character-life.js";
+import { IDLES, IdleClock, type IdleName } from "../web/game/character-life.js";
 import { findPath, gridFor } from "../web/game/pathing.js";
 import { Wander, type WanderBody, type WanderHooks } from "../web/game/wander.js";
 import type { PlaceData, Point } from "../web/theme.js";
@@ -70,6 +70,16 @@ describe("idles", () => {
 		// And their rhythms differ: no two start their first idle at the same moment.
 		const firsts = ids.map((id) => starts.find((s) => s.id === id)!.t);
 		expect(new Set(firsts).size).toBe(ids.length);
+	});
+
+	it("wait while every idle is taken: more people stand about than there are idles", () => {
+		const clock = new IdleClock("crowded");
+		const all = new Set(Object.keys(IDLES) as IdleName[]);
+		for (let t = 0; t < 60_000; t += FRAME) expect(clock.tick(FRAME, 1, all)).toBeUndefined();
+		for (const free of all) {
+			const taken = new Set([...all].filter((name) => name !== free));
+			expect(clock.pick(taken)).toBe(free);
+		}
 	});
 
 	it("are still when life is paused (pace 0)", () => {

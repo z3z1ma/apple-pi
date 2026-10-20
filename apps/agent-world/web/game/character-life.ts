@@ -161,12 +161,15 @@ export class IdleClock {
 		return this.pick(playing);
 	}
 
-	/** The next idle, now (a wanderer pausing at a point of interest): its clock starts the wait again. */
-	pick(playing: Pick<ReadonlySet<IdleName>, "has"> = new Set()): IdleName {
+	/**
+	 * The next idle, now (a wanderer pausing at a point of interest): its clock starts the wait again. None when every
+	 * idle but its last is being played by someone else (more people stand about than there are idles): it waits.
+	 */
+	pick(playing: Pick<ReadonlySet<IdleName>, "has"> = new Set()): IdleName | undefined {
 		this.wait = this.between(IDLE_EVERY_MS);
 		const fresh = IDLE_NAMES.filter((name) => name !== this.last && !playing.has(name));
-		const choices = fresh.length ? fresh : IDLE_NAMES.filter((name) => name !== this.last);
-		this.last = choices[Math.floor(this.random() * choices.length)];
+		if (!fresh.length) return undefined;
+		this.last = fresh[Math.floor(this.random() * fresh.length)];
 		return this.last;
 	}
 
