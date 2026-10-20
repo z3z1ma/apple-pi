@@ -431,15 +431,8 @@ try {
 		"codebase-design",
 	];
 	const fundamentalSkills = ["code-review", "skill-authoring", "llm-wiki"];
-	const roleSkills = ["coordinator"];
 	const browserSkills = ["human-review-code", "human-review-markdown", "human-review-ledger-task", "explain-change"];
-	const packagedSkills = [
-		...explicitWorkflowSkills,
-		...engineeringSkills,
-		...fundamentalSkills,
-		...roleSkills,
-		...browserSkills,
-	];
+	const packagedSkills = [...explicitWorkflowSkills, ...engineeringSkills, ...fundamentalSkills, ...browserSkills];
 	const loadedSkills = loadSkills({
 		cwd: process.cwd(),
 		skillPaths: manifest.pi.skills,

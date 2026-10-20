@@ -1,7 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+import { setSystemPromptSection } from "../../shared/src/system-prompt-section.js";
 import { sendCommand } from "./client.js";
+import { COORDINATOR_SYSTEM_PROMPT, COORDINATOR_SYSTEM_PROMPT_TAG } from "./coordinator-prompt.js";
 import type { Command, Receipt } from "./protocol.js";
 
 const TOOLS = ["start_peer_session", "reopen_peer_session", "close_peer_session", "rename_peer_session"];
@@ -26,7 +28,7 @@ const reply = (text: string, details: Record<string, unknown>) => ({
 	details,
 });
 
-/** Peer management tools, active only in a session started with `--coordinator`. */
+/** Peer management tools and the coordinator's operating guidance, active only in a session started with `--coordinator`. */
 export function installCoordinator(pi: ExtensionAPI): void {
 	pi.registerTool(
 		defineTool({
@@ -123,5 +125,9 @@ export function installCoordinator(pi: ExtensionAPI): void {
 		if (next.length !== active.length) pi.setActiveTools(next);
 	};
 	pi.on("session_start", reconcile);
-	pi.on("before_agent_start", reconcile);
+	pi.on("before_agent_start", (event) => {
+		reconcile();
+		if (pi.getFlag("coordinator") === true)
+			setSystemPromptSection(event.systemPromptOptions, COORDINATOR_SYSTEM_PROMPT_TAG, COORDINATOR_SYSTEM_PROMPT);
+	});
 }

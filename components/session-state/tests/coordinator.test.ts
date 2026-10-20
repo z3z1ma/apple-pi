@@ -241,3 +241,20 @@ test.each([false, true])(
 	},
 	20000,
 );
+
+test.each([false, true])(
+	"only a coordinator receives the coordinator guidance (coordinator=%s)",
+	async (enabled) => {
+		const run = await fauxSession([bridge], [fauxAssistantMessage("ok")], []);
+		run.session.extensionRunner.setFlagValue("coordinator", enabled);
+		try {
+			await run.session.prompt("hi");
+			const prompt = run.session.agent.state.systemPrompt;
+			if (enabled) expect(prompt).toContain("<coordinator>\nYou are a coordinator");
+			else expect(prompt).not.toContain("<coordinator>");
+		} finally {
+			await close(run);
+		}
+	},
+	20000,
+);
