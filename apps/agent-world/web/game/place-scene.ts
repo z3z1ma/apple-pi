@@ -16,7 +16,7 @@ import type { ViewStore, WorldIntent } from "../view-state.js";
 import type { WorldStore } from "../world-store.js";
 import { type Action, action, type Target } from "./actions.js";
 import { AmbientCast, type AmbientView } from "./ambient.js";
-import { AtmosphereLayer, type AtmosphereView } from "./atmosphere.js";
+import { AtmosphereLayer, type AtmosphereView, glowDepth, keepLit } from "./atmosphere.js";
 import { Birds, type BirdView, type Perch } from "./birds.js";
 import {
 	type BadgeKind,
@@ -470,7 +470,7 @@ export class PlaceScene extends Phaser.Scene {
 					if (reached || dist(goal, at) <= 1.8) then();
 					else this.view.notify("I can't reach that from here.");
 				}),
-			glow: (at, r, level) => this.addGlow({ kind: "glow", at, r }, level, false),
+			glow: (at, r, level, depth) => this.addGlow({ kind: "glow", at, r }, level, false, depth),
 			notify: (text) => this.view.notify(text),
 			uiScale: () => Math.max(1, UI_ZOOM / this.cameras.main.zoom),
 		});
@@ -1230,13 +1230,21 @@ export class PlaceScene extends Phaser.Scene {
 	 * Warm light around a lantern or a candle: a soft halo added to what is under it, flickering a little. A fidget's
 	 * light (`listed` false) turns it up and down through the handle; the place's own glows are listed as overlays.
 	 */
-	private addGlow(slot: OverlaySlot, strength = 0.5, listed = true): Glow {
+	private addGlow(
+		slot: OverlaySlot,
+		strength = 0.5,
+		listed = true,
+		depth = glowDepth(this.layout.place, slot.at),
+	): Glow {
 		const [x, y] = slot.at;
-		const glow = this.add
-			.image(x * TILE, y * TILE, this.glowTexture())
-			.setBlendMode(Phaser.BlendModes.ADD)
-			.setDepth(9e4)
-			.setAlpha(strength);
+		// Sorted with what it lights (not over everyone), and never darkened by the night.
+		const glow = keepLit(
+			this.add
+				.image(x * TILE, y * TILE, this.glowTexture())
+				.setBlendMode(Phaser.BlendModes.ADD)
+				.setDepth(depth)
+				.setAlpha(strength),
+		);
 		const scale = ((slot.r ?? 0.9) * TILE * 2) / glow.width;
 		glow.setScale(scale);
 		// The flicker eases toward a new brightness and size now and then; the level scales it.

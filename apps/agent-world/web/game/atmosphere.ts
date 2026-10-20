@@ -38,14 +38,26 @@ export interface AtmosphereView {
 	} | null;
 	/** Each effect the place names, with where its particles are drawn now (tiles). */
 	effects: { kind: Atmosphere["kind"]; what: string | null; shown: Point[] }[];
+	/** Out of doors, each piece of the painting's lit windows and lamps: its rect, and how lit it is (0 to 1). */
+	lights: { rect: Rect; alpha: number }[];
+	/** The night on the world's sprites: the tint each is multiplied by, and how many carry it now. */
+	shade: { tint: string; sprites: number };
 	/** The mean time (ms) one update of every effect has taken, and how many updates that covers. */
 	cost: { mean: number; updates: number };
 }
 
-/** The tint over everything in the place but its glows, the badges, and the bubbles. */
-const TINT_DEPTH = 8e4;
-/** Things in the air over the place's characters, under its tint. */
+/**
+ * The tint out of doors: over the painting and what lies flat in it (its seams, water, the square's sign plates), under
+ * everything that stands on it. Whatever is drawn above it, up to `NIGHT_TOP`, is tinted sprite by sprite instead.
+ */
+const TINT_DEPTH = -0.95;
+/** Sprites from the tint up to here are darkened by the light one by one; the badges, tags, and bubbles above are not. */
+const NIGHT_TOP = 8e4;
+/** Things in the air over the place's characters, under the badges. */
 const AIR_DEPTH = 7.5e4;
+/** A lit piece of the painting lies just over a foreground piece with the same feet line, under anyone standing on it. */
+const LIT_OVER_FEET = 0.45;
+const WHITE = 0xffffff;
 /** On the floor, over the painting and its water, under everyone. */
 const FLOOR_DEPTH = -0.9;
 /** How often the light of the time of day is looked at again, ms. */
@@ -80,13 +92,58 @@ interface Effect {
 
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
 
+/** Lights: drawn as they are, never darkened by the night (the painting's lit windows, the lamps' and candles' glow). */
+const LIT = new WeakSet<object>();
+export function keepLit<T extends object>(object: T): T {
+	LIT.add(object);
+	return object;
+}
+
+/**
+ * Where a glow at `at` is drawn: over the furniture piece it sits on and over the lit windows of a facade it hangs on,
+ * else at its own line; so anyone standing south of what it belongs to is drawn over its halo.
+ */
+export function glowDepth(place: PlaceData, [x, y]: Point): number {
+	const inside = ([rx, ry, rw, rh]: Rect) => x >= rx && x <= rx + rw && y >= ry && y <= ry + rh;
+	const piece = place.foreground?.find(({ rect }) => inside(rect));
+	const lit = (place.atmosphere ?? [])
+		.filter((effect) => effect.kind === "lights")
+		.flatMap((effect) => effect.rects ?? [])
+		.filter(inside);
+	return Math.max(
+		(piece ? piece.feet : y) * TILE + 0.1,
+		...lit.map(([, ry, , rh]) => (ry + rh) * TILE - LIT_OVER_FEET + 0.05),
+	);
+}
+
+/** Two colours multiplied channel by channel, as the GPU tints a sprite. */
+function multiply(a: number, b: number): number {
+	const channel = (shift: number) => Math.round((((a >> shift) & 255) * ((b >> shift) & 255)) / 255);
+	return (channel(16) << 16) | (channel(8) << 8) | channel(0);
+}
+
+type Tinted = Phaser.GameObjects.GameObject & { tintTopLeft: number; setTint(tint: number): unknown };
+const tinted = (object: Phaser.GameObjects.GameObject): object is Tinted =>
+	typeof (object as Partial<Tinted>).tintTopLeft === "number" &&
+	typeof (object as Partial<Tinted>).setTint === "function";
+
+/** A painting's lit piece: its windows and lamps inside one `lights` rect, with their halo. */
+interface LitPiece {
+	rect: Rect;
+	image: Phaser.GameObjects.Image;
+	halo: Phaser.GameObjects.Image;
+}
+
 export class AtmosphereLayer {
 	private readonly scene: Phaser.Scene;
 	private readonly host: AtmosphereHost;
 	private readonly effects: Effect[] = [];
 	private tint?: Phaser.GameObjects.Rectangle;
-	private lights?: { image: Phaser.GameObjects.Image; halo: Phaser.GameObjects.Image };
+	private lights: LitPiece[] = [];
 	private daylight?: Daylight;
+	/** Each sprite the night tints: its own tint (what its code set), and the tint it shows. */
+	private readonly shaded = new WeakMap<object, { own: number; shown: number }>();
+	private shadedCount = 0;
 	private sinceDaylight = 0;
 	private spent = 0;
 	private updates = 0;
@@ -111,8 +168,48 @@ export class AtmosphereLayer {
 			const lit = (place.atmosphere ?? []).find((effect) => effect.kind === "lights");
 			if (lit?.rects?.length) this.lights = this.addLights(lit.rects);
 			this.refreshDaylight();
+			// Just before each frame is drawn, so a sprite made or re-tinted this frame shows the night already.
+			scene.events.on(Phaser.Scenes.Events.PRE_RENDER, this.shade);
+			scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () =>
+				scene.events.off(Phaser.Scenes.Events.PRE_RENDER, this.shade),
+			);
 		}
 	}
+
+	/**
+	 * Out of doors, the light on everything standing in the place: each sprite drawn above the tint (people, pets,
+	 * fidgets, furniture pieces, the overlays, the particles) is multiplied by the daylight colour, as the tint multiplies
+	 * the painting under it, over whatever tint its own code gave it. Lights (`keepLit`) stay as drawn. One pass over
+	 * the display list each frame: only what changed is touched, and nothing at all while the light is as painted.
+	 */
+	private readonly shade = () => {
+		const tint = this.daylight?.tint ?? WHITE;
+		if (tint === WHITE && this.shadedCount === 0) return;
+		let count = 0;
+		const visit = (object: Phaser.GameObjects.GameObject, night: boolean) => {
+			if (object instanceof Phaser.GameObjects.Container) {
+				for (const child of object.list) visit(child, night);
+				return;
+			}
+			if (!tinted(object)) return;
+			const shown = object.tintTopLeft;
+			const before = this.shaded.get(object);
+			// A tint other than the one given here was set by the sprite's own code since: that is its own now.
+			const own = before && shown === before.shown ? before.own : shown;
+			const wanted = night && !LIT.has(object) ? multiply(own, tint) : own;
+			if (wanted !== shown) object.setTint(wanted);
+			if (wanted === own) this.shaded.delete(object);
+			else {
+				this.shaded.set(object, { own, shown: wanted });
+				count++;
+			}
+		};
+		for (const object of this.scene.children.list) {
+			const depth = (object as Partial<Phaser.GameObjects.Components.Depth>).depth ?? 0;
+			visit(object, depth > TINT_DEPTH && depth < NIGHT_TOP);
+		}
+		this.shadedCount = count;
+	};
 
 	private make(effect: Atmosphere, random: () => number): Effect | undefined {
 		const place = this.host.place();
@@ -183,14 +280,17 @@ export class AtmosphereLayer {
 
 	/**
 	 * The painting's lit windows and lamps inside `rects` (its bright, warm pixels), drawn over the tint as painted, with
-	 * a soft halo added around them: after dark they glow while the rest of the place dims.
+	 * a soft halo added around them: after dark they glow while the rest of the place dims. Each rect is its own piece,
+	 * sorted by its bottom edge like a foreground piece, so anyone standing south of it is drawn over it and its halo.
 	 */
-	private addLights(rects: Rect[]) {
+	private addLights(rects: Rect[]): LitPiece[] {
 		const key = `atmosphere:lights:${this.host.painting()}`;
-		const haloKey = `${key}:halo`;
 		const source = this.scene.textures.get(this.host.painting()).getSourceImage() as HTMLImageElement;
 		const ppt = source.width / this.host.place().cols;
-		if (!this.scene.textures.exists(key)) {
+		const blur = Math.round(ppt * 0.12);
+		const pad = blur * 3;
+		const px = (rect: Rect) => rect.map((v) => Math.round(v * ppt)) as Rect;
+		if (!this.scene.textures.exists(`${key}:0`)) {
 			const canvas = document.createElement("canvas");
 			canvas.width = source.width;
 			canvas.height = source.height;
@@ -209,31 +309,49 @@ export class AtmosphereLayer {
 				}
 				ctx.putImageData(image, sx, sy);
 			}
-			this.scene.textures.addCanvas(key, canvas);
-			const halo = document.createElement("canvas");
-			halo.width = source.width;
-			halo.height = source.height;
-			const hctx = halo.getContext("2d")!;
-			hctx.filter = `blur(${Math.round(ppt * 0.12)}px)`;
-			hctx.drawImage(canvas, 0, 0);
-			hctx.drawImage(canvas, 0, 0);
-			this.scene.textures.addCanvas(haloKey, halo);
+			// Each rect's piece, with what an earlier rect already holds cleared, so overlapping rects light a pixel once.
+			rects.forEach((rect, i) => {
+				const [sx, sy, sw, sh] = px(rect);
+				const piece = document.createElement("canvas");
+				piece.width = Math.max(1, sw);
+				piece.height = Math.max(1, sh);
+				const pctx = piece.getContext("2d")!;
+				if (sw > 0 && sh > 0) pctx.drawImage(canvas, sx, sy, sw, sh, 0, 0, sw, sh);
+				for (const [ox, oy, ow, oh] of rects.slice(0, i).map(px)) pctx.clearRect(ox - sx, oy - sy, ow, oh);
+				this.scene.textures.addCanvas(`${key}:${i}`, piece);
+				const halo = document.createElement("canvas");
+				halo.width = piece.width + pad * 2;
+				halo.height = piece.height + pad * 2;
+				const hctx = halo.getContext("2d")!;
+				hctx.filter = `blur(${blur}px)`;
+				hctx.drawImage(piece, pad, pad);
+				hctx.drawImage(piece, pad, pad);
+				this.scene.textures.addCanvas(`${key}:${i}:halo`, halo);
+			});
 		}
 		const scale = TILE / ppt;
-		const image = this.scene.add
-			.image(0, 0, key)
-			.setOrigin(0)
-			.setScale(scale)
-			.setDepth(TINT_DEPTH + 1)
-			.setAlpha(0);
-		const halo = this.scene.add
-			.image(0, 0, haloKey)
-			.setOrigin(0)
-			.setScale(scale)
-			.setBlendMode(Phaser.BlendModes.ADD)
-			.setDepth(TINT_DEPTH + 2)
-			.setAlpha(0);
-		return { image, halo };
+		return rects.map((rect, i) => {
+			const [sx, sy] = px(rect);
+			const depth = (rect[1] + rect[3]) * TILE - LIT_OVER_FEET;
+			const image = keepLit(
+				this.scene.add
+					.image(sx * scale, sy * scale, `${key}:${i}`)
+					.setOrigin(0)
+					.setScale(scale)
+					.setDepth(depth)
+					.setAlpha(0),
+			);
+			const halo = keepLit(
+				this.scene.add
+					.image((sx - pad) * scale, (sy - pad) * scale, `${key}:${i}:halo`)
+					.setOrigin(0)
+					.setScale(scale)
+					.setBlendMode(Phaser.BlendModes.ADD)
+					.setDepth(depth + 0.01)
+					.setAlpha(0),
+			);
+			return { rect, image, halo };
+		});
 	}
 
 	private refreshDaylight() {
@@ -241,9 +359,11 @@ export class AtmosphereLayer {
 		const light = daylightAt(this.host.now());
 		this.daylight = light;
 		this.tint.setFillStyle(light.tint);
-		this.tint.setVisible(light.tint !== 0xffffff);
-		this.lights?.image.setAlpha(light.windows);
-		this.lights?.halo.setAlpha(light.windows * 0.55);
+		this.tint.setVisible(light.tint !== WHITE);
+		for (const { image, halo } of this.lights) {
+			image.setAlpha(light.windows);
+			halo.setAlpha(light.windows * 0.55);
+		}
 		this.host.lamps(light.lamps);
 	}
 
@@ -270,13 +390,16 @@ export class AtmosphereLayer {
 					: null,
 			effects: [
 				...this.effects.map((effect) => ({ kind: effect.kind, what: effect.what, shown: effect.shown() })),
-				...(this.lights ? [{ kind: "lights" as const, what: null, shown: [] }] : []),
+				...(this.lights.length ? [{ kind: "lights" as const, what: null, shown: [] }] : []),
 			],
+			lights: this.lights.map(({ rect, image }) => ({ rect, alpha: image.alpha })),
+			shade: { tint: hex(this.tint && light ? light.tint : WHITE), sprites: this.shadedCount },
 			cost: { mean: this.updates ? this.spent / this.updates : 0, updates: this.updates },
 		};
 	}
 
 	destroy() {
+		this.scene.events.off(Phaser.Scenes.Events.PRE_RENDER, this.shade);
 		for (const effect of this.effects) effect.destroy();
 	}
 }

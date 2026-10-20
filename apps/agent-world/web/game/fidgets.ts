@@ -40,8 +40,8 @@ export interface FidgetHost {
 	placeKey(): string;
 	/** Walk up to the first group of stand points that can be reached, face `at`, then play. */
 	walkUp(stands: Point[][], at: Point, then: () => void): void;
-	/** The scene's warm glow at a point (tiles), `r` tiles across its halo. */
-	glow(at: Point, r: number, level: number): Glow;
+	/** The scene's warm glow at a point (tiles), `r` tiles across its halo, drawn at `depth` (just over its fidget). */
+	glow(at: Point, r: number, level: number, depth: number): Glow;
 	notify(text: string): void;
 	/** The view's zoom correction for things drawn at a steady size on screen. */
 	uiScale(): number;
@@ -96,7 +96,7 @@ const PARTICLE: Record<FidgetKind, FidgetParticle> = {
 const SPIN = { spin: 15, nudge: 5, most: 24, slowing: 0.62, rest: 0.5 } as const;
 /** World px per pixel of a particle's pattern. */
 const FX_PX = 1.7;
-/** Over the place's characters and furniture, under its glows' halo and the signs. */
+/** Rising over the place's characters and furniture (puffs and sparkles in the air), under the signs. */
 const FX_DEPTH = 9.3e4;
 
 interface Fidget {
@@ -223,7 +223,7 @@ export class Fidgets {
 		if (kind === "light" || kind === "box") this.show(fidget, FIDGETS[kind].art[fidget.on ? 1 : 0]);
 		if (kind === "light" || kind === "candle") {
 			const r = Math.max(0.9, fidget.slot.r ?? this.width(fidget) * 1.9);
-			fidget.glow ??= this.host.glow([x, y - h * (kind === "light" ? 0.78 : 0.8)], r, 0);
+			fidget.glow ??= this.host.glow([x, y - h * (kind === "light" ? 0.78 : 0.8)], r, 0, fidget.depth + 0.05);
 			fidget.glow.level(kind === "candle" || fidget.on ? 0.55 : 0, 0);
 		}
 		if (kind === "sleeper" || fidget.asleep)

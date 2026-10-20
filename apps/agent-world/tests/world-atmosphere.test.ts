@@ -90,6 +90,36 @@ const view = <T>(page: Page, call: string): Promise<T> =>
 const atmosphere = (page: Page) => view<AtmosphereView>(page, "atmosphere()");
 const glows = async (page: Page) =>
 	(await view<{ kind: string; alpha: number }[]>(page, "overlays()")).filter((o) => o.kind === "glow");
+type Point = [number, number];
+const screen = (page: Page, [x, y]: Point) =>
+	page.evaluate(([a, b]) => (window as any).agentWorldView.toScreen(a, b), [x, y]) as Promise<Point>;
+const avatar = (page: Page) => view<{ x: number; y: number; moving: boolean }>(page, "avatar()");
+
+/** The brightness (0 to 255) of what is drawn on screen between two points in tiles: its mean and its brightest. */
+async function sample(page: Page, from: Point, to: Point) {
+	const [ax, ay] = await screen(page, from);
+	const [bx, by] = await screen(page, to);
+	const png = await page.screenshot({
+		clip: { x: Math.round(ax), y: Math.round(ay), width: Math.round(bx - ax), height: Math.round(by - ay) },
+		animations: "disabled",
+	});
+	return page.evaluate(async (b64) => {
+		const bitmap = await createImageBitmap(await (await fetch(`data:image/png;base64,${b64}`)).blob());
+		const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+		const ctx = canvas.getContext("2d")!;
+		ctx.drawImage(bitmap, 0, 0);
+		const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+		let sum = 0;
+		let max = 0;
+		for (let i = 0; i < data.length; i += 4) {
+			const light = (data[i] + data[i + 1] + data[i + 2]) / 3;
+			sum += light;
+			max = Math.max(max, light);
+		}
+		return { mean: sum / (data.length / 4), max };
+	}, png.toString("base64"));
+}
+
 const brightness = (tint: string) => {
 	const n = Number.parseInt(tint.slice(1), 16);
 	return (((n >> 16) & 255) + ((n >> 8) & 255) + (n & 255)) / 3;
@@ -142,6 +172,85 @@ test.each(THEMES)(
 		await page.clock.setSystemTime(at(17));
 		await vi.waitFor(async () => expect((await atmosphere(page)).daylight?.tint).toBe("#ffffff"), { timeout: 4000 });
 		await shot(page, `${theme}-square-golden`);
+		expect(errors).toEqual([]);
+		await page.close();
+	},
+);
+
+// Where the avatar stands just in front of a building's lit windows (or lit door) in each pack's square, and a window
+// of the same facade, away from anyone, that is lit after dark.
+const IN_FRONT: Record<(typeof THEMES)[number], { stand: Point; window: [Point, Point] }> = {
+	"tech-office": {
+		stand: [20.6, 8.5],
+		window: [
+			[25.5, 3],
+			[28, 5],
+		],
+	},
+	fantasy: {
+		stand: [20.5, 9.8],
+		window: [
+			[17, 3],
+			[23, 6],
+		],
+	},
+	"anime-school": {
+		stand: [29.2, 8.6],
+		window: [
+			[26.5, 3.5],
+			[29.5, 5.5],
+		],
+	},
+};
+
+test.each(THEMES)(
+	"in the %s pack someone in front of a lit window is drawn over it after dark, darkened by the night like the painting, while the windows stay lit",
+	{ timeout: 60_000 },
+	async (theme) => {
+		const { stand, window } = IN_FRONT[theme];
+		const { page, errors } = await openWorld(theme, at(13));
+		const [sx, sy] = await screen(page, stand);
+		await page.mouse.click(sx, sy);
+		await page.waitForTimeout(300);
+		await vi.waitFor(async () => expect((await avatar(page)).moving).toBe(false), { timeout: 12000 });
+		await page.waitForTimeout(1500); // the camera settles on the avatar
+		const { x, y } = await avatar(page);
+		// The avatar's body, clear of its outline: a little box at its chest.
+		const chest: [Point, Point] = [
+			[x - 0.12, y - 1.15],
+			[x + 0.12, y - 0.75],
+		];
+
+		// By day: the windows unlit, everyone as painted (but for the day's slight tint).
+		const day = await atmosphere(page);
+		expect(day.daylight?.windows).toBe(0);
+		const dayChest = await sample(page, ...chest);
+		const dayWindow = await sample(page, ...window);
+
+		await page.clock.setSystemTime(at(22));
+		await vi.waitFor(async () => expect((await atmosphere(page)).daylight?.phase).toBe("night"), { timeout: 4000 });
+		await page.waitForTimeout(1200);
+		const night = await atmosphere(page);
+		await shot(page, `${theme}-square-night-in-front`);
+		// The stand point means something only with a lit piece of the painting behind the avatar, fully lit.
+		const behind = night.lights.filter(
+			({ rect: [rx, ry, rw, rh] }) => x >= rx && x <= rx + rw && ry <= y && ry + rh >= y - 1.8,
+		);
+		expect(behind.length, "a lit piece behind the avatar").toBeGreaterThan(0);
+		for (const piece of behind) expect(piece.alpha).toBe(1);
+		// On screen: the avatar's chest is its own colour darkened (no window shows through it), and the window still glows.
+		const nightChest = await sample(page, ...chest);
+		const darker = brightness(night.daylight!.tint) / brightness(day.daylight!.tint);
+		expect(nightChest.mean).toBeLessThan(dayChest.mean * (darker + 0.15));
+		expect(nightChest.mean).toBeGreaterThan(dayChest.mean * (darker - 0.15));
+		const nightWindow = await sample(page, ...window);
+		expect(nightWindow.max).toBeGreaterThan(dayWindow.max * 0.85);
+
+		// Golden hour leaves everyone as painted: no sprite carries a tint of the light.
+		await page.clock.setSystemTime(at(17));
+		await vi.waitFor(async () => expect((await atmosphere(page)).daylight?.tint).toBe("#ffffff"), { timeout: 4000 });
+		await page.waitForTimeout(100);
+		expect((await atmosphere(page)).shade).toEqual({ tint: "#ffffff", sprites: 0 });
 		expect(errors).toEqual([]);
 		await page.close();
 	},
