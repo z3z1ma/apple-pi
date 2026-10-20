@@ -46,8 +46,8 @@
   },
   "data": {
     "role": "agent",
-    "frame": [72, 147],
-    "baseline": 145,
+    "frame": [72, 136],
+    "baseline": 134,
     "idle": {
       "frame": [77, 140],
       "baseline": 138

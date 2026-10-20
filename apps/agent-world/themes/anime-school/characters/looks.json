@@ -226,8 +226,8 @@
   },
   "ambient-senpai": {
     "role": "ambient",
-    "frame": [69, 158],
-    "baseline": 156,
+    "frame": [64, 134],
+    "baseline": 132,
     "idle": {
       "frame": [80, 125],
       "baseline": 123

@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run --script
 # /// script
 # requires-python = ">=3.11"
-# dependencies = ["pillow", "numpy"]
+# dependencies = ["pillow", "numpy", "scipy"]
 # ///
 """Agent World art pipeline: generate art with Codex, then cut, scale, quantize, and check it.
 
@@ -28,6 +28,7 @@ from pathlib import Path
 
 import numpy as np
 from PIL import Image
+from scipy import ndimage
 
 HERE = Path(__file__).resolve().parent
 STANDING_HEIGHT = 120
@@ -128,9 +129,66 @@ def main_body(m):
     return m
 
 
+def figures(keep, rows, cols):
+    """The sheet's figures as masks in reading order, found as connected shapes rather than cut on grid lines.
+
+    Generated sheets often let a pose reach across a cell line (a raised hand under the row above, a guitar neck), so
+    cutting on bands or equal cells sliced heads off and pasted them under other frames. The rows * cols largest shapes
+    are the figures; every smaller shape (a hair strand, a sparkle) joins the figure whose box it is nearest. Returns
+    None when the largest shapes do not look like rows * cols figures, so the caller can fall back.
+    """
+    labels, count = ndimage.label(keep, structure=np.ones((3, 3)))
+    want = rows * cols
+    if count < want:
+        return None
+    sizes = np.bincount(labels.ravel())[1:]
+    order = np.argsort(sizes)[::-1]
+    seeds = order[:want] + 1
+    if sizes[seeds - 1].min() < 0.25 * np.median(sizes[seeds - 1]):
+        return None
+    boxes = ndimage.find_objects(labels)
+    centre = {
+        s: ((boxes[s - 1][0].start + boxes[s - 1][0].stop) / 2, (boxes[s - 1][1].start + boxes[s - 1][1].stop) / 2)
+        for s in seeds
+    }
+    by_y = sorted(seeds, key=lambda s: centre[s][0])
+    grid = [sorted(by_y[r * cols : (r + 1) * cols], key=lambda s: centre[s][1]) for r in range(rows)]
+    owner = {int(s): int(s) for s in seeds}
+    for small in order[want:] + 1:
+        sy, sx = boxes[small - 1]
+        cy, cx = (sy.start + sy.stop) / 2, (sx.start + sx.stop) / 2
+
+        def distance(s):
+            y, x = boxes[s - 1]
+            return max(y.start - cy, 0, cy - y.stop) + max(x.start - cx, 0, cx - x.stop)
+
+        nearest = min(seeds, key=distance)
+        # A hair strand or a prop sits at or inside its figure's box; a speck further out is noise, which would
+        # otherwise stretch the figure and lift it off the baseline.
+        if distance(nearest) <= 0.1 * (boxes[nearest - 1][0].stop - boxes[nearest - 1][0].start):
+            owner[int(small)] = int(nearest)
+    lookup = np.zeros(count + 1, dtype=np.int64)
+    for label_id, seed in owner.items():
+        lookup[label_id] = seed
+    owned = lookup[labels]
+    return [owned == s for row in grid for s in row]
+
+
 def cut(path, rows, cols, gap=6, body=False):
     rgb = np.array(Image.open(path).convert("RGB")).astype(int)
     keep = ~magenta_mask(rgb)
+    if rows and cols:
+        masks = figures(keep, rows, cols)
+        if masks is not None:
+            found = []
+            for m in masks:
+                ys, xs = np.where(m)
+                y0, y1, x0, x1 = ys.min(), ys.max() + 1, xs.min(), xs.max() + 1
+                rgba = np.zeros((y1 - y0, x1 - x0, 4), dtype=np.uint8)
+                rgba[..., :3] = rgb[y0:y1, x0:x1]
+                rgba[..., 3] = np.where(m[y0:y1, x0:x1], 255, 0)
+                found.append(Image.fromarray(rgba))
+            return found
     row_bands = bands(keep.sum(axis=1) > 2, 6, 20)
     if rows and len(row_bands) != rows:
         # A pose can reach into the gap (a raised hand), so fall back to the equal cells the sheet was drawn on.

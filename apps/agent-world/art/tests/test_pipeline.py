@@ -95,3 +95,17 @@ def test_a_piece_cut_to_the_image_edge_loses_its_pink_fringe(tmp_path):
         opaque = piece[..., 3] > 0
         pink = opaque & (piece[..., 0] > 110) & (piece[..., 2] > 90) & (piece[..., 1] < 60)
         assert not pink.any()
+
+
+def test_a_pose_reaching_into_the_row_above_stays_with_its_own_figure(tmp_path):
+    raw = tmp_path / "raw.png"
+    generated_sheet(raw, np.random.default_rng(5))
+    img = np.array(Image.open(raw))
+    # The last frame raises an arm up past the cell line, beside (not touching) the figure above it.
+    img[400:452, 355:360] = (90, 60, 40)
+    img[449:452, 349:360] = (90, 60, 40)
+    Image.fromarray(img).save(raw)
+    frames = pipeline.cut(raw, 4, 4)
+    assert len(frames) == 16
+    assert abs(frames[11].width - frames[10].width) <= 3  # nothing from the arm landed in the frame above
+    assert frames[15].height >= frames[14].height + 15  # the arm stayed whole with its own figure
