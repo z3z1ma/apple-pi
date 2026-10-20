@@ -134,7 +134,7 @@ def figures(keep, rows, cols):
 
     Generated sheets often let a pose reach across a cell line (a raised hand under the row above, a guitar neck), so
     cutting on bands or equal cells sliced heads off and pasted them under other frames. The rows * cols largest shapes
-    are the figures; every smaller shape (a hair strand, a sparkle) joins the figure whose box it is nearest. Returns
+    are the figures; a smaller shape (a hair strand, a sparkle) joins the nearest figure when it lies at its box. Returns
     None when the largest shapes do not look like rows * cols figures, so the caller can fall back.
     """
     labels, count = ndimage.label(keep, structure=np.ones((3, 3)))
@@ -174,21 +174,23 @@ def figures(keep, rows, cols):
     return [owned == s for row in grid for s in row]
 
 
+def piece(rgb, m):
+    """The pixels of mask `m` over `rgb` (both the same shape), cropped to the mask and transparent elsewhere."""
+    ys, xs = np.where(m)
+    y0, y1, x0, x1 = ys.min(), ys.max() + 1, xs.min(), xs.max() + 1
+    rgba = np.zeros((y1 - y0, x1 - x0, 4), dtype=np.uint8)
+    rgba[..., :3] = rgb[y0:y1, x0:x1]
+    rgba[..., 3] = np.where(m[y0:y1, x0:x1], 255, 0)
+    return Image.fromarray(rgba)
+
+
 def cut(path, rows, cols, gap=6, body=False):
     rgb = np.array(Image.open(path).convert("RGB")).astype(int)
     keep = ~magenta_mask(rgb)
     if rows and cols:
         masks = figures(keep, rows, cols)
         if masks is not None:
-            found = []
-            for m in masks:
-                ys, xs = np.where(m)
-                y0, y1, x0, x1 = ys.min(), ys.max() + 1, xs.min(), xs.max() + 1
-                rgba = np.zeros((y1 - y0, x1 - x0, 4), dtype=np.uint8)
-                rgba[..., :3] = rgb[y0:y1, x0:x1]
-                rgba[..., 3] = np.where(m[y0:y1, x0:x1], 255, 0)
-                found.append(Image.fromarray(rgba))
-            return found
+            return [piece(rgb, m) for m in masks]
     row_bands = bands(keep.sum(axis=1) > 2, 6, 20)
     if rows and len(row_bands) != rows:
         # A pose can reach into the gap (a raised hand), so fall back to the equal cells the sheet was drawn on.
@@ -204,12 +206,7 @@ def cut(path, rows, cols, gap=6, body=False):
             if not keep[y0:y1, x0:x1].any():
                 sys.exit(f"{Path(path).name}: an empty cell at {x0},{y0}")
             m = main_body(keep[y0:y1, x0:x1]) if body else keep[y0:y1, x0:x1]
-            ys, xs = np.where(m)
-            yy0, yy1, xx0, xx1 = ys.min(), ys.max() + 1, xs.min(), xs.max() + 1
-            rgba = np.zeros((yy1 - yy0, xx1 - xx0, 4), dtype=np.uint8)
-            rgba[..., :3] = rgb[y0 + yy0 : y0 + yy1, x0 + xx0 : x0 + xx1]
-            rgba[..., 3] = np.where(m[yy0:yy1, xx0:xx1], 255, 0)
-            found.append(Image.fromarray(rgba))
+            found.append(piece(rgb[y0:y1, x0:x1], m))
     return found
 
 
