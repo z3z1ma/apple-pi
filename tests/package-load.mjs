@@ -271,7 +271,8 @@ try {
 				extension.tools.has("list_peer_sessions") &&
 				extension.tools.has("start_peer_session") &&
 				extension.tools.has("reopen_peer_session") &&
-				extension.tools.has("close_peer_session"),
+				extension.tools.has("close_peer_session") &&
+				extension.tools.has("rename_peer_session"),
 		),
 		"session-state extension must own the mail, peer, and coordinator tools",
 	);

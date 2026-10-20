@@ -172,11 +172,36 @@ test("a coordinator closes a running session, which records its exit", async () 
 	}
 }, 30000);
 
+test("a coordinator renames a running peer through its bridge", async () => {
+	const worker = await fauxSession([bridge], [], []);
+	const workerId = worker.session.sessionManager.getSessionId();
+	const run = await coordinator([call("rename_peer_session", { session_id: workerId, name: "Renamed worker" })]);
+	try {
+		await vi.waitFor(() => expect(incarnation(workerId)).toMatchObject({ ended_at: null }), { timeout: 15000 });
+		await run.session.prompt("rename the worker");
+		expect(toolResults(run)[0]).toMatchObject({ isError: false });
+		expect(worker.session.sessionManager.getSessionName()).toBe("Renamed worker");
+	} finally {
+		await close(worker);
+		await close(run);
+	}
+}, 30000);
+
+test("renaming a stopped peer reports the command failure", async () => {
+	const run = await coordinator([call("rename_peer_session", { session_id: "missing-worker", name: "New name" })]);
+	try {
+		await run.session.prompt("rename a missing worker");
+		expect(toolResults(run)[0]).toMatchObject({ isError: true, text: expect.stringContaining("not running") });
+	} finally {
+		await close(run);
+	}
+}, 20000);
+
 test("only a session started with --coordinator has the lifecycle tools", async () => {
 	const run = await fauxSession(
 		[bridge],
 		[fauxAssistantMessage("ok")],
-		["start_peer_session", "reopen_peer_session", "close_peer_session", "list_peer_sessions"],
+		["start_peer_session", "reopen_peer_session", "close_peer_session", "rename_peer_session", "list_peer_sessions"],
 	);
 	try {
 		await run.session.prompt("hi");
@@ -196,7 +221,14 @@ test.each([false, true])(
 			expect(toolResults(run)[0]).toMatchObject({ isError: false });
 			expect(run.session.getActiveToolNames().sort()).toEqual(
 				(enabled
-					? ["read", "list_peer_sessions", "start_peer_session", "reopen_peer_session", "close_peer_session"]
+					? [
+							"read",
+							"list_peer_sessions",
+							"start_peer_session",
+							"reopen_peer_session",
+							"close_peer_session",
+							"rename_peer_session",
+						]
 					: ["read", "list_peer_sessions"]
 				).sort(),
 			);

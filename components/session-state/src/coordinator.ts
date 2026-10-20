@@ -4,7 +4,7 @@ import { Type } from "typebox";
 import { sendCommand } from "./client.js";
 import type { Command, Receipt } from "./protocol.js";
 
-const TOOLS = ["start_peer_session", "reopen_peer_session", "close_peer_session"];
+const TOOLS = ["start_peer_session", "reopen_peer_session", "close_peer_session", "rename_peer_session"];
 
 /** The tmux pane this session runs in, which new windows open next to. */
 function ownPane(): { socket: string; pane: string } {
@@ -26,7 +26,7 @@ const reply = (text: string, details: Record<string, unknown>) => ({
 	details,
 });
 
-/** Tools to start, reopen, and close peer sessions in tmux, active only in a session started with `--coordinator`. */
+/** Peer management tools, active only in a session started with `--coordinator`. */
 export function installCoordinator(pi: ExtensionAPI): void {
 	pi.registerTool(
 		defineTool({
@@ -94,6 +94,25 @@ export function installCoordinator(pi: ExtensionAPI): void {
 			async execute(_toolCallId, params, signal) {
 				await run(params.session_id, { kind: "close" }, signal);
 				return reply(`Closed session ${params.session_id}.`, { sessionId: params.session_id });
+			},
+		}),
+	);
+	pi.registerTool(
+		defineTool({
+			name: "rename_peer_session",
+			label: "rename_peer_session",
+			description:
+				"Rename a running peer session by id. Use list_peer_sessions to find its id; its id and history stay the same.",
+			parameters: Type.Object(
+				{
+					session_id: Type.String({ minLength: 1, description: "Id of the running session." }),
+					name: Type.String({ minLength: 1, description: "New session name." }),
+				},
+				{ additionalProperties: false },
+			),
+			async execute(_toolCallId, params, signal) {
+				await run(params.session_id, { kind: "rename", name: params.name }, signal);
+				return reply(`Renamed session ${params.session_id} to ${params.name}.`, { sessionId: params.session_id });
 			},
 		}),
 	);
