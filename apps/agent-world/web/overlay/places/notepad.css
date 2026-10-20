@@ -1,0 +1,61 @@
+/* The headquarters' notepad: layout only, on the letter form's fields; the look comes from the theme pack's skin. */
+
+.aw-notepad {
+	width: min(760px, calc(100vw - 48px));
+}
+
+.aw-notepad .aw-place-body {
+	display: grid;
+	gap: 10px;
+}
+
+.aw-notepad-head .aw-place-says {
+	overflow-wrap: anywhere;
+	font-size: 12px;
+}
+
+.aw-notepad-text {
+	min-height: min(52vh, 460px);
+	resize: vertical;
+	letter-spacing: normal;
+	text-transform: none;
+}
+
+/* A request to an agent takes room from the notes, so the dialog still fits the window. */
+.aw-notepad .aw-place-body:has(.aw-notepad-request) .aw-notepad-text {
+	min-height: min(24vh, 200px);
+	height: min(24vh, 200px);
+}
+
+.aw-notepad-saved {
+	justify-self: end;
+	margin-top: -4px;
+	font-size: 12px;
+	opacity: 0.75;
+}
+
+.aw-notepad-failed {
+	opacity: 1;
+}
+
+.aw-notepad-changed {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+	font-size: 13px;
+	font-weight: 700;
+}
+
+.aw-notepad-changed > span {
+	flex: 1;
+	min-width: 200px;
+}
+
+.aw-notepad-actions {
+	flex-wrap: wrap;
+}
+
+.aw-notepad-request {
+	padding-top: 2px;
+}

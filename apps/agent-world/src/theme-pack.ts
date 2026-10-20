@@ -273,7 +273,12 @@ export const PLACE_NEEDS: Record<
 	"quest-office": { host: "clerk", slots: { notice: "the quest office pins the operator's issues on them" } },
 	library: { host: "librarian" },
 	square: { host: "crier", recruiter: "the square's recruiter recruits independent agents at its booth" },
-	headquarters: { furniture: { recruit: "the coordinator's desk recruits workers there" } },
+	headquarters: {
+		furniture: {
+			recruit: "the coordinator's desk recruits workers there",
+			notes: "the operator's notepad opens there",
+		},
+	},
 };
 
 /**
@@ -558,7 +563,7 @@ export interface PlaceData {
 	recruiter?: { look?: string; at: Point };
 	/**
 	 * Furniture that answers the pointer, such as the inn's tables: `use` names what the place does with it (`recruit`:
-	 * the coordinator's desk, which recruits a worker).
+	 * the coordinator's desk, which recruits a worker; `notes`: the board that opens the coordinator's notepad).
 	 */
 	furniture?: { name: string; rect: Rect; use: string }[];
 	/**

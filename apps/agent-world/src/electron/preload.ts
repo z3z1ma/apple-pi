@@ -8,6 +8,9 @@ import type {
 	CommandResult,
 	ConversationPage,
 	FeedLine,
+	NotepadChange,
+	NotepadRead,
+	NotepadSave,
 	Receipt,
 	RecruitReceipt,
 	ReplyStreamEvent,
@@ -56,6 +59,15 @@ const api: AgentWorldApi = {
 	sendMail: (characterId, body) => ipcRenderer.invoke("world:send-mail", characterId, body) as Promise<CommandReceipt>,
 	recruit: (request) => ipcRenderer.invoke("world:recruit", request) as Promise<RecruitReceipt>,
 	rename: (characterId, name) => ipcRenderer.invoke("world:rename", characterId, name) as Promise<CommandReceipt>,
+	openNotepad: (coordinatorId) => ipcRenderer.invoke("world:open-notepad", coordinatorId) as Promise<NotepadRead>,
+	saveNotepad: (coordinatorId, text, base) =>
+		ipcRenderer.invoke("world:save-notepad", coordinatorId, text, base) as Promise<NotepadSave>,
+	closeNotepad: () => ipcRenderer.invoke("world:close-notepad") as Promise<void>,
+	onNotepad(listener) {
+		const forward = (_event: unknown, change: NotepadChange) => listener(change);
+		ipcRenderer.on("world:notepad", forward);
+		return () => ipcRenderer.removeListener("world:notepad", forward);
+	},
 	openLink: (url) => ipcRenderer.invoke("world:open-link", url) as Promise<CommandResult>,
 	...places(),
 };

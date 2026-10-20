@@ -330,6 +330,16 @@ export type ReplyStreamEvent =
 	| { kind: "delta"; characterId: string; streamId: string; seq: number; delta: string }
 	| { kind: "end"; characterId: string; streamId: string; entry: TranscriptEntry | null };
 
+/** A coordinator's notepad as read: its file's path and text (empty until first saved), or why it cannot be read. */
+export type NotepadRead = { ok: true; path: string; text: string } | { ok: false; reason: string };
+/** A save, or why not; `changed` is the file's text when it changed on disk since the text the save started from. */
+export type NotepadSave = { ok: true } | { ok: false; reason: string; changed?: string };
+/** The open notepad's file changed on disk (an agent, or an editor, wrote it). */
+export interface NotepadChange {
+	coordinatorId: string;
+	text: string;
+}
+
 /**
  * What the preload bridge exposes to the world UI as `window.agentWorld`; the function places' part (GitHub, Jira,
  * Confluence, Slack, the outside-write gate, delegation) is in `integrations.ts`.
@@ -381,6 +391,14 @@ export interface AgentWorldApi extends IntegrationsApi {
 	recruit(request: RecruitRequest): Promise<RecruitReceipt>;
 	/** Rename an awake character (`rename`); a blank name is refused and nothing is sent. */
 	rename(characterId: string, name: string): Promise<CommandReceipt>;
+	/** Read a running coordinator's notepad (`NOTES.md` in its directory) and watch it for changes. */
+	openNotepad(coordinatorId: string): Promise<NotepadRead>;
+	/** Write the notepad; refused, with the file's text, when it changed on disk since `base`. */
+	saveNotepad(coordinatorId: string, text: string, base: string): Promise<NotepadSave>;
+	/** Stop watching the notepad. */
+	closeNotepad(): Promise<void>;
+	/** Called with each change to the open notepad's file; returns a function that stops the calls. */
+	onNotepad(listener: (change: NotepadChange) => void): () => void;
 	/** Open a link from a transcript in the system browser: http and https only; the window itself never navigates. */
 	openLink(url: string): Promise<CommandResult>;
 }

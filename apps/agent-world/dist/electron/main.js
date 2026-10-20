@@ -1,4 +1,4 @@
-import { appendFileSync, chmodSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync, writeSync } from "node:fs";
+import { appendFileSync, chmodSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, readdirSync, renameSync, rmSync, statSync, watch, writeFileSync, writeSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, normalize, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { BrowserWindow, app, ipcMain, net, protocol, shell } from "electron";
@@ -1085,6 +1085,105 @@ async function openLink(url, open) {
 	}
 }
 //#endregion
+//#region apps/agent-world/src/backend/notepad.ts
+var NOTEPAD_FILE = "NOTES.md";
+var readText = (path) => {
+	try {
+		return readFileSync(path, "utf8");
+	} catch (error) {
+		if (error.code === "ENOENT") return "";
+		throw error;
+	}
+};
+function openNotepads(snapshot, onChange) {
+	let watcher;
+	/** The watched file and its text as last read or saved here, so a save of ours is not reported back as a change. */
+	let watched;
+	const locate = (coordinatorId) => {
+		const cwd = snapshot().characters.find((c) => c.id === coordinatorId && c.role === "coordinator")?.facts?.cwd;
+		if (!cwd) return { reason: "That coordinator is not running." };
+		try {
+			if (!statSync(cwd).isDirectory()) return { reason: `${cwd} is not a directory.` };
+		} catch {
+			return { reason: `${cwd} does not exist.` };
+		}
+		return { path: join(cwd, NOTEPAD_FILE) };
+	};
+	const close = () => {
+		watcher?.close();
+		watcher = void 0;
+		watched = void 0;
+	};
+	return {
+		open(coordinatorId) {
+			const at = locate(coordinatorId);
+			if ("reason" in at) return {
+				ok: false,
+				reason: at.reason
+			};
+			close();
+			let text;
+			try {
+				text = readText(at.path);
+			} catch (error) {
+				return {
+					ok: false,
+					reason: `The notes could not be read: ${error.message}`
+				};
+			}
+			const file = {
+				path: at.path,
+				text
+			};
+			watched = file;
+			watcher = watch(join(at.path, ".."), (_event, name) => {
+				if (name !== "NOTES.md") return;
+				let now;
+				try {
+					now = readText(file.path);
+				} catch {
+					return;
+				}
+				if (now === file.text) return;
+				file.text = now;
+				onChange({
+					coordinatorId,
+					text: now
+				});
+			});
+			return {
+				ok: true,
+				path: at.path,
+				text
+			};
+		},
+		save(coordinatorId, text, base) {
+			const at = locate(coordinatorId);
+			if ("reason" in at) return {
+				ok: false,
+				reason: at.reason
+			};
+			try {
+				const current = readText(at.path);
+				if (current !== base) return {
+					ok: false,
+					reason: "The notes changed on disk.",
+					changed: current
+				};
+				writeFileSync(at.path, text);
+				if (watched?.path === at.path) watched.text = text;
+				return { ok: true };
+			} catch (error) {
+				return {
+					ok: false,
+					reason: `The notes could not be saved: ${error.message}`
+				};
+			}
+		},
+		close
+	};
+}
+//#endregion
 //#region apps/agent-world/web/game/layout.ts
 /** The walk grid: half-tile cells, true where blocked. A cell is blocked when its centre is inside a blocked rect. */
 function walkGrid(place) {
@@ -1456,7 +1555,10 @@ var PLACE_NEEDS = {
 		host: "crier",
 		recruiter: "the square's recruiter recruits independent agents at its booth"
 	},
-	headquarters: { furniture: { recruit: "the coordinator's desk recruits workers there" } }
+	headquarters: { furniture: {
+		recruit: "the coordinator's desk recruits workers there",
+		notes: "the operator's notepad opens there"
+	} }
 };
 /**
 * Theme-flavoured lines the world says, by key; `{name}`, `{count}`, and the like are filled in. Everything else the
@@ -5448,6 +5550,14 @@ function start() {
 		});
 	});
 	ipcMain.handle("world:rename", (_event, characterId, name) => typeof characterId === "string" && typeof name === "string" ? lifecycle.rename(characterId, name) : unnamed);
+	const notepads = openNotepads(() => world.snapshot(), (change) => toWindow("world:notepad", change));
+	const noCoordinator = {
+		ok: false,
+		reason: "No coordinator was named."
+	};
+	ipcMain.handle("world:open-notepad", (_event, coordinatorId) => typeof coordinatorId === "string" ? notepads.open(coordinatorId) : noCoordinator);
+	ipcMain.handle("world:save-notepad", (_event, coordinatorId, text, base) => typeof coordinatorId === "string" && typeof text === "string" && typeof base === "string" ? notepads.save(coordinatorId, text, base) : noCoordinator);
+	ipcMain.handle("world:close-notepad", () => notepads.close());
 	wireIntegrations({
 		stateDir: statePaths().dir,
 		snapshot: () => world.snapshot(),
@@ -5471,6 +5581,7 @@ function start() {
 	app.on("window-all-closed", () => app.quit());
 	app.on("will-quit", () => {
 		world.close();
+		notepads.close();
 		conversations.close();
 		commands.close();
 	});

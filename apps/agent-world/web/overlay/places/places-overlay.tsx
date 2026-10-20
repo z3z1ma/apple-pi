@@ -9,6 +9,7 @@ import "./atlassian.css";
 import { ForgePanels } from "./forge.js";
 import { InnkeeperRegister } from "./innkeeper.js";
 import { LibraryPanels } from "./library.js";
+import { NotepadPanels } from "./notepad.js";
 import { placeActions, placePanels } from "./place-panels.js";
 import "./places.css";
 import { QuestOfficePanels } from "./quest-office.js";
@@ -31,6 +32,7 @@ export function PlacesOverlay({ store }: { store: WorldStore }) {
 			<LibraryPanels world={world} />
 			<RecruitPanels world={world} />
 			<RenamePanels world={world} />
+			<NotepadPanels world={world} />
 			{state.confirmEnd && <ConfirmEnd {...state.confirmEnd} />}
 		</div>
 	);

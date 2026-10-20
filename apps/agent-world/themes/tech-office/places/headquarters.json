@@ -59,7 +59,10 @@
     { "kind": "fidget", "fidget": "spin", "at": [7.6, 8.3] },
     { "kind": "fidget", "fidget": "bell", "at": [16.6, 3.95] }
   ],
-  "furniture": [{ "name": "Lead's desk", "rect": [12.3, 2.5, 4.8, 2.75], "use": "recruit" }],
+  "furniture": [
+    { "name": "Lead's desk", "rect": [12.3, 2.5, 4.8, 2.75], "use": "recruit" },
+    { "name": "Whiteboard", "rect": [19.1, 2.3, 4.2, 1.6], "use": "notes" }
+  ],
   "enterBy": "Front doors",
   "foreground": [
     { "rect": [12.3, 2.5, 4.8, 2.5], "feet": 5.0 },

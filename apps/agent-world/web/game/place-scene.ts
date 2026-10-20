@@ -3,6 +3,7 @@ import { type Character, isOutside, type MailItem, OPERATOR, type PlaceRef, plac
 import { avatarLookIn, lookFor } from "../looks.js";
 import { atlassian } from "../overlay/places/atlassian-state.js";
 import { forge } from "../overlay/places/forge-state.js";
+import { notepad } from "../overlay/places/notepad-state.js";
 import { placeActions, placePanels } from "../overlay/places/place-panels.js";
 import { recruiterLook, recruiting } from "../overlay/places/recruit-state.js";
 import { renaming } from "../overlay/places/rename-state.js";
@@ -2114,6 +2115,15 @@ export class PlaceScene extends Phaser.Scene {
 		];
 	}
 
+	/** The notepad of the coordinator whose headquarters the operator is in, while it is awake. */
+	private readNotes(): Action[] {
+		const ref = this.layout.ref;
+		const id = isOutside(ref) ? undefined : ref.headquarters;
+		const coordinator = this.store.get()?.characters.find((c) => c.id === id && c.role === "coordinator");
+		if (!coordinator) return [];
+		return [action("Read the notes", () => notepad.open({ id: coordinator.id, name: coordinator.name }))];
+	}
+
 	private openHostPanel() {
 		if (this.layout.ref.kind === "inn") placePanels.open("innkeeper");
 		if (this.layout.ref.kind === "rookery") placePanels.open("rookery");
@@ -2127,6 +2137,7 @@ export class PlaceScene extends Phaser.Scene {
 	private furnitureTarget(piece: { name: string; rect: Rect; use: string }): Target {
 		// The coordinator's desk recruits a worker (ticket 10).
 		if (piece.use === "recruit") return { name: piece.name, tone: "object", actions: this.recruitWorker() };
+		if (piece.use === "notes") return { name: piece.name, tone: "object", actions: this.readNotes() };
 		const actions =
 			piece.use === "innkeeper"
 				? [action(say(this.theme, "ask-host"), () => placePanels.open("innkeeper"))]
@@ -2202,6 +2213,7 @@ export class PlaceScene extends Phaser.Scene {
 									recruiting.open({ kind: "worker", coordinator: { id: character.id, name } }),
 								),
 							),
+							action("Read the notes of", () => notepad.open({ id: character.id, name }), name, "character"),
 						]
 					: []),
 				// Renaming needs no walk: it opens the rename form at once (ticket 12).

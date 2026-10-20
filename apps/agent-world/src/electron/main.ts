@@ -15,6 +15,7 @@ import { openConversations } from "../backend/conversations.js";
 import { instruct } from "../backend/instructions.js";
 import { openLifecycle } from "../backend/lifecycle.js";
 import { openLink } from "../backend/links.js";
+import { openNotepads } from "../backend/notepad.js";
 import { listThemes, themeBackdrop } from "../backend/theme-packs.js";
 import { leaveOutUnchanged, openWorldBackend } from "../backend/world-backend.js";
 import { wireIntegrations } from "./integrations-ipc.js";
@@ -125,6 +126,21 @@ function start() {
 	ipcMain.handle("world:rename", (_event, characterId: unknown, name: unknown) =>
 		typeof characterId === "string" && typeof name === "string" ? lifecycle.rename(characterId, name) : unnamed,
 	);
+	// The coordinator's notepad in its headquarters: NOTES.md in its directory, named here by the coordinator only.
+	const notepads = openNotepads(
+		() => world.snapshot(),
+		(change) => toWindow("world:notepad", change),
+	);
+	const noCoordinator = { ok: false, reason: "No coordinator was named." };
+	ipcMain.handle("world:open-notepad", (_event, coordinatorId: unknown) =>
+		typeof coordinatorId === "string" ? notepads.open(coordinatorId) : noCoordinator,
+	);
+	ipcMain.handle("world:save-notepad", (_event, coordinatorId: unknown, text: unknown, base: unknown) =>
+		typeof coordinatorId === "string" && typeof text === "string" && typeof base === "string"
+			? notepads.save(coordinatorId, text, base)
+			: noCoordinator,
+	);
+	ipcMain.handle("world:close-notepad", () => notepads.close());
 	// The function places: GitHub, Jira, Confluence, Slack, the outside-write gate, and delegation.
 	wireIntegrations({ stateDir: statePaths().dir, snapshot: () => world.snapshot(), commands, toWindow });
 	// Links in transcripts open in the system browser, web links only.
@@ -147,6 +163,7 @@ function start() {
 	app.on("window-all-closed", () => app.quit());
 	app.on("will-quit", () => {
 		world.close();
+		notepads.close();
 		conversations.close();
 		commands.close();
 	});

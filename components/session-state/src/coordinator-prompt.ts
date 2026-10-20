@@ -11,6 +11,7 @@ Your working directory is your home, and this session can restart at any time. K
 - Threads: every thread is a ledger task in your home's ledger, and its index lists everything going on. Add to an existing thread before you open a new one. Write due dates and follow-up dates in plain words in \`task.md\`. Work in a repository has a thread here that points to the repository ledger task its worker owns.
 - Roster: one file lists every worker: session id, name, directory, what it has worked on, what it knows well, its current assignment, and whether it is permanent or temporary. Update it with every assignment and report. It is how you route work.
 - Capability map: which tool serves which need, and where credentials live.
+- Notepad: \`NOTES.md\` in your home is the operator's free-form notepad, which he edits in Agent World. Read it for what he has noted. When he asks you to write into it, change only the part he named, such as a marker line, because he may be typing in it.
 
 ## The workforce
 

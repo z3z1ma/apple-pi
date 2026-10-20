@@ -36,6 +36,14 @@ var api = {
 	sendMail: (characterId, body) => electron.ipcRenderer.invoke("world:send-mail", characterId, body),
 	recruit: (request) => electron.ipcRenderer.invoke("world:recruit", request),
 	rename: (characterId, name) => electron.ipcRenderer.invoke("world:rename", characterId, name),
+	openNotepad: (coordinatorId) => electron.ipcRenderer.invoke("world:open-notepad", coordinatorId),
+	saveNotepad: (coordinatorId, text, base) => electron.ipcRenderer.invoke("world:save-notepad", coordinatorId, text, base),
+	closeNotepad: () => electron.ipcRenderer.invoke("world:close-notepad"),
+	onNotepad(listener) {
+		const forward = (_event, change) => listener(change);
+		electron.ipcRenderer.on("world:notepad", forward);
+		return () => electron.ipcRenderer.removeListener("world:notepad", forward);
+	},
 	openLink: (url) => electron.ipcRenderer.invoke("world:open-link", url),
 	...places()
 };

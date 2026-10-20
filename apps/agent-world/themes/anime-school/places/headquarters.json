@@ -53,7 +53,10 @@
       "to": "square"
     }
   ],
-  "furniture": [{ "name": "Class rep's desk", "rect": [13.4, 3.2, 3.1, 1.95], "use": "recruit" }],
+  "furniture": [
+    { "name": "Class rep's desk", "rect": [13.4, 3.2, 3.1, 1.95], "use": "recruit" },
+    { "name": "Bulletin board", "rect": [18.7, 0.6, 1.8, 2.2], "use": "notes" }
+  ],
   "enterBy": "Classroom doors",
   "foreground": [{ "rect": [13.4, 3.2, 3.1, 1.8], "feet": 5.0 }, { "rect": [24.5, 14.4, 4.2, 1.25], "feet": 15.65 }],
   "overlaySlots": [
