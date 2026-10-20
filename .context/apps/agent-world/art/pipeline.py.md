@@ -21,3 +21,9 @@ Verify: apps/agent-world/art/tests/test_pipeline.py
 
 A job with a reference image (each look's idle sheet, referencing its main sheet) attaches it with `-i` placed after the prompt.
 Why: idle sheets from a text brief alone drew a different person for many looks; and `-i` takes several files, so a prompt after it was swallowed as a file and every job failed with "No prompt provided via stdin".
+
+## symbol:figures
+
+Grid sheets (character sheets, idle sheets, portraits) are cut as connected figures, not on bands or equal cells: the rows * cols largest shapes are the figures, ordered by their centres, and a smaller shape joins the nearest figure only when it lies within a tenth of that figure's height of its box (hair strands, props), else it is dropped. Band and equal-cell cutting remain only as the fallback when the largest shapes do not look like rows * cols figures.
+Why: Codex lets poses cross cell lines (a raised hand under the row above, a guitar neck), and equal-cell cutting sliced the anime senpai's heads off and pasted a hand and head under another frame's feet; a far speck joined to a figure would stretch it off the baseline.
+Verify: apps/agent-world/art/tests/test_pipeline.py
