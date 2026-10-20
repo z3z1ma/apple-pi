@@ -28,8 +28,8 @@ Split it into threads, update or create them, note dates, research what helps, a
 A worker is a top-level Pi session in its own tmux window, so the operator can open it like any other.
 
 1. Choose the directory the work needs (an existing checkout, a new worktree, a scratch directory), or the one the operator named.
-2. Choose a unique session id and a short name. Write the brief to a file in your home. The brief gives the goal, the context, and what done looks like, and ends with: keep a ledger task in your repository current, and when you finish or are blocked, send a short summary with `mailbox_send` to <your session id>. A repository that does not use the ledger gets a private `.ledger` listed in `.git/info/exclude`.
-3. Start it with `start_peer_session`: the directory, the name, the session id, and `@<brief file>` as the prompt. It opens a tmux window next to yours and returns once the worker runs; the worker reports to you, so `list_peer_sessions` shows you as its supervisor and it mails you when it closes.
+2. Choose a unique session id. Write the brief to a file in your home. The brief gives the goal, the context, and what done looks like, and ends with: keep a ledger task in your repository current, and when you finish or are blocked, send a short summary with `mailbox_send` to <your session id>. A repository that does not use the ledger gets a private `.ledger` listed in `.git/info/exclude`.
+3. Start it with `start_peer_session`: the directory, the session id, and `@<brief file>` as the prompt. The session-title extension assigns the worker a unique two-part human name automatically. It opens a tmux window next to yours and returns once the worker runs; the worker reports to you, so `list_peer_sessions` shows you as its supervisor and it mails you when it closes.
 4. Record the id, directory and brief in the thread.
 
 Worker reports arrive as `<mailbox-message>` with the worker's id in `from`. Summarize them for the operator and act on them. To redirect a worker, `mailbox_send` to its id. When the result says the receiver is not running, the message waits until the session opens; reopen the worker if it must act now.

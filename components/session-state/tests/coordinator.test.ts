@@ -33,12 +33,15 @@ const args = process.argv.slice(2);
 appendFileSync(process.env.FAKE_PI_LOG, JSON.stringify({ args, cwd: process.cwd() }) + "\\n");
 if (args.at(-1) === "@fail") process.exit(1);
 const id = args[args.indexOf("--session-id") + 1];
+// Simulate the title extension assigning a name in the newly started session.
+const name = args.includes("--name") ? args[args.indexOf("--name") + 1] : "Ada Lovelace";
+execFileSync("tmux", ["rename-window", "-t", process.env.TMUX_PANE, name]);
 const startedAt = Date.parse(execFileSync("ps", ["-o", "lstart=", "-p", String(process.pid)], { encoding: "utf8" }).trim());
 const socket = createConnection(process.env.PI_CODING_AGENT_DIR + "/state/apple-pi.sock");
 socket.on("connect", () => {
 	socket.write(JSON.stringify({
 		type: "hello",
-		session: { id, kind: "root", cwd: process.cwd(), name: args.includes("--name") ? args[args.indexOf("--name") + 1] : undefined },
+		session: { id, kind: "root", cwd: process.cwd(), name },
 		process: { pid: process.pid, startedAt },
 		run: "idle",
 		facts: {},
@@ -98,7 +101,7 @@ async function coordinator(calls: Reply[]) {
 
 test("a coordinator starts a session in a new tmux window, and reopens it by id once it stopped", async () => {
 	const run = await coordinator([
-		call("start_peer_session", { cwd: workDir, name: "docs", prompt: "@brief.md", session_id: "worker-1" }),
+		call("start_peer_session", { cwd: workDir, prompt: "@brief.md", session_id: "worker-1" }),
 		fauxAssistantMessage("started"),
 		call("reopen_peer_session", { session_id: "worker-1" }),
 	]);
@@ -110,16 +113,16 @@ test("a coordinator starts a session in a new tmux window, and reopens it by id 
 			text: expect.stringContaining("Started session worker-1"),
 		});
 		expect(starts()[0]).toEqual({
-			args: ["--session-id", "worker-1", "--name", "docs", "--reports-to", coordinatorId, "@brief.md"],
+			args: ["--session-id", "worker-1", "--reports-to", coordinatorId, "@brief.md"],
 			cwd: workDir,
 		});
-		expect(tmux("list-windows", "-a", "-F", "#{window_name}").split("\n")).toContain("docs");
+		expect(tmux("list-windows", "-a", "-F", "#{window_name}").split("\n")).toContain("Ada Lovelace");
 		expect(query(state.dbPath, "select stage from commands where session_id = 'worker-1'")).toEqual([
 			{ stage: "applied" },
 		]);
 		expect(incarnation("worker-1")).toMatchObject({ generation: 1, ended_at: null });
 
-		tmux("kill-window", "-t", "docs");
+		tmux("kill-window", "-t", "Ada Lovelace");
 		await vi.waitFor(() => expect(incarnation("worker-1").ended_at).not.toBeNull(), { timeout: 15000 });
 		await run.session.prompt("bring it back");
 		expect(toolResults(run)[1]).toMatchObject({
@@ -127,20 +130,20 @@ test("a coordinator starts a session in a new tmux window, and reopens it by id 
 			text: expect.stringContaining("Reopened session worker-1"),
 		});
 		expect(starts()[1]).toEqual({
-			args: ["--session-id", "worker-1", "--name", "docs", "--reports-to", coordinatorId],
+			args: ["--session-id", "worker-1", "--name", "Ada Lovelace", "--reports-to", coordinatorId],
 			cwd: workDir,
 		});
 		expect(incarnation("worker-1")).toMatchObject({ generation: 2, ended_at: null });
 	} finally {
 		await close(run);
 		try {
-			tmux("kill-window", "-t", "docs");
+			tmux("kill-window", "-t", "Ada Lovelace");
 		} catch {}
 	}
 }, 40000);
 
 test("starting a session fails when its window closes before the session connects", async () => {
-	const run = await coordinator([call("start_peer_session", { cwd: workDir, name: "broken", prompt: "@fail" })]);
+	const run = await coordinator([call("start_peer_session", { cwd: workDir, prompt: "@fail" })]);
 	try {
 		await run.session.prompt("start a broken worker");
 		expect(toolResults(run)[0]).toMatchObject({

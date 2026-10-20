@@ -33,11 +33,10 @@ export function installCoordinator(pi: ExtensionAPI): void {
 			name: "start_peer_session",
 			label: "start_peer_session",
 			description:
-				"Start a new peer session: a top-level Pi session in its own tmux window next to yours, which reports to you (it mails you when it closes, and list_peer_sessions shows you as its supervisor). Returns once the session is running. Pass a brief file as the prompt with @path.",
+				"Start a new peer session: a top-level Pi session in its own tmux window next to yours, which reports to you (it mails you when it closes, and list_peer_sessions shows you as its supervisor). Its session-title extension assigns a unique two-part human name automatically. Returns once the session is running. Pass a brief file as the prompt with @path.",
 			parameters: Type.Object(
 				{
 					cwd: Type.String({ minLength: 1, description: "Directory the session works in." }),
-					name: Type.String({ minLength: 1, description: "Short name, also the tmux window name." }),
 					prompt: Type.Optional(Type.String({ description: "First prompt, such as @/path/to/brief.md." })),
 					session_id: Type.Optional(Type.String({ description: "Session id to use; a new one by default." })),
 				},
@@ -51,13 +50,12 @@ export function installCoordinator(pi: ExtensionAPI): void {
 						kind: "start",
 						tmux: ownPane(),
 						cwd: params.cwd,
-						name: params.name,
 						reportsTo: ctx.sessionManager.getSessionId(),
 						...(params.prompt ? { prompt: params.prompt } : {}),
 					},
 					signal,
 				);
-				return reply(`Started session ${sessionId} (${params.name}).`, { sessionId });
+				return reply(`Started session ${sessionId}.`, { sessionId });
 			},
 		}),
 	);
