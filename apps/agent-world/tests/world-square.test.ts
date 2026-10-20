@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { type Browser, chromium, type Locator, type Page } from "playwright-core";
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
 import { appFile, contentType } from "../src/app-files.js";
-import type { SlackChannel, SlackMessage } from "../src/integrations.js";
+import type { SlackChannel, SlackHit, SlackMessage } from "../src/integrations.js";
 import type { Character, CharacterFacts, WorldSnapshot } from "../src/world.js";
 import type { PlaceData } from "../web/theme.js";
 
@@ -114,6 +114,12 @@ interface SlackFixture {
 	history?: Record<string, SlackMessage[]>;
 	/** Where the operator last read each channel, and each thread (by its parent's ts); null when Slack does not say. */
 	lastRead?: Record<string, string | null>;
+	/** What Slack's message search finds (whatever is asked), three to a page. */
+	hits?: SlackHit[];
+	/** Every conversation the operator belongs to; else the unread and quiet ones. */
+	all?: SlackChannel[];
+	/** Channels that, opened at a message, have newer messages than those shown. */
+	newer?: Record<string, boolean>;
 }
 
 /** Open the world over a fixture backend; `window.calls` records what it was asked. */
@@ -185,20 +191,34 @@ async function openWorld(first: WorldSnapshot, slack: SlackFixture, viewport = {
 					w.calls.push(["slackUnread"]);
 					return signedIn() ? { ok: true, channels: w.slack.unread } : refuse;
 				},
-				slackFindChannels: async (text: string) => {
-					w.calls.push(["slackFindChannels", text]);
+				slackSearch: async (text: string, page?: number) => {
+					w.calls.push(["slackSearch", text, page ?? 1]);
 					if (!signedIn()) return refuse;
+					const at = page ?? 1;
 					const all = [...w.slack.unread, ...(w.slack.quiet ?? [])];
 					const wanted = text.replace(/^#/, "").toLowerCase();
+					const hits = w.slack.hits ?? [];
 					return {
 						ok: true,
-						channels: all
-							.filter((c: any) => c.name.toLowerCase().includes(wanted))
-							.map((c: any) => ({ ...c, unread: null, more: false, mentions: 0, latest: null })),
+						channels:
+							at === 1
+								? all
+										.filter((c: any) => c.name.toLowerCase().includes(wanted))
+										.map((c: any) => ({ ...c, unread: null, more: false, mentions: 0, latest: null }))
+								: [],
+						hits: hits.slice((at - 1) * 3, at * 3),
+						page: at,
+						pages: Math.max(1, Math.ceil(hits.length / 3)),
+						total: hits.length,
 					};
 				},
-				slackChannel: async (id: string) => {
-					w.calls.push(["slackChannel", id]);
+				slackConversations: async () => {
+					w.calls.push(["slackConversations"]);
+					if (!signedIn()) return refuse;
+					return { ok: true, channels: w.slack.all ?? [...w.slack.unread, ...(w.slack.quiet ?? [])] };
+				},
+				slackChannel: async (id: string, at?: string) => {
+					w.calls.push(at === undefined ? ["slackChannel", id] : ["slackChannel", id, at]);
 					if (!signedIn()) return refuse;
 					const found = [...w.slack.unread, ...(w.slack.quiet ?? [])].find((c: any) => c.id === id);
 					return {
@@ -208,6 +228,7 @@ async function openWorld(first: WorldSnapshot, slack: SlackFixture, viewport = {
 							messages: w.slack.history?.[id] ?? history,
 							url: found?.url ?? null,
 							lastRead: w.slack.lastRead?.[id] ?? null,
+							...(at === undefined ? {} : { newer: w.slack.newer?.[id] ?? false }),
 						},
 					};
 				},
@@ -519,10 +540,11 @@ test("the crier finds a channel with no unread messages and opens it; its thread
 	const crier = await openCrier(page);
 	await shot(page, "aw-28-crier");
 	await crier.getByRole("searchbox").fill("release");
+	await crier.getByRole("searchbox").press("Enter");
 	const found = crier.getByRole("list", { name: "Channels found" });
 	await counts(found.getByRole("listitem"), 1);
 	await reads(found, "release-notes");
-	expect((await called(page, "slackFindChannels")).at(-1)).toEqual(["slackFindChannels", "release"]);
+	expect(await called(page, "slackSearch")).toEqual([["slackSearch", "release", 1]]);
 	await shot(page, "aw-28-crier-found");
 	await found.getByRole("button", { name: "Read #release-notes" }).click();
 	const panel = page.getByRole("dialog", { name: "#release-notes in Slack" });
@@ -549,6 +571,7 @@ test("a reply is sent only after confirming its exact text and channel, and the 
 	const { page, errors } = await openWorld(world(), { signedIn: true, unread: UNREAD, quiet: [QUIET] });
 	const crier = await openCrier(page);
 	await crier.getByRole("searchbox").fill("release");
+	await crier.getByRole("searchbox").press("Enter");
 	await crier.getByRole("button", { name: "Read #release-notes" }).click();
 	const panel = page.getByRole("dialog", { name: "#release-notes in Slack" });
 	const parent = panel.getByRole("article").filter({ hasText: "Is the 2.4 release" });
@@ -594,6 +617,7 @@ test("asking an agent to look into a thread sends it an instruction naming the t
 	const { page, errors } = await openWorld(world(), { signedIn: true, unread: UNREAD, quiet: [QUIET] });
 	const crier = await openCrier(page);
 	await crier.getByRole("searchbox").fill("release");
+	await crier.getByRole("searchbox").press("Enter");
 	await crier.getByRole("button", { name: "Read #release-notes" }).click();
 	const panel = page.getByRole("dialog", { name: "#release-notes in Slack" });
 	const parent = panel.getByRole("article").filter({ hasText: "Is the 2.4 release" });
@@ -776,6 +800,7 @@ test("a channel opens at its first new message with the New divider just above; 
 	// A channel read to its newest message opens at the bottom, with no divider.
 	await panel.getByRole("button", { name: "Other channels" }).click();
 	await page.locator(".aw-crier").getByRole("searchbox").fill("release");
+	await page.locator(".aw-crier").getByRole("searchbox").press("Enter");
 	await page.locator(".aw-crier").getByRole("button", { name: "Read #release-notes" }).click();
 	const quiet = page.getByRole("dialog", { name: "#release-notes in Slack" });
 	const quietLog = quiet.getByRole("log", { name: "Messages in #release-notes" });
@@ -890,6 +915,256 @@ test("the channel panel with its first new message and Mark read, in all three t
 		await panel.getByRole("button", { name: "Mark read", exact: true }).click();
 		await reads(page.locator(".aw-chat"), "You marked #general read in Slack.");
 		await shot(page, `aw-05-marked-${theme}`);
+		expect(errors).toEqual([]);
+		await page.close();
+	}
+});
+
+// The crier's search (the walkthrough of 2026-10-19): Slack's own message search, run on Enter only, and every channel.
+const hit = (channel: SlackChannel, message: SlackMessage, words: string, over: Partial<SlackHit> = {}): SlackHit => {
+	const [before, after] = message.text.split(words);
+	return {
+		channel: { id: channel.id, name: channel.name, kind: channel.kind },
+		ts: message.ts,
+		threadTs: null,
+		name: message.name,
+		at: message.at,
+		excerpt: [
+			{ text: before, match: false },
+			{ text: words, match: true },
+			{ text: after ?? "", match: false },
+		],
+		url: `https://acme.slack.com/archives/${channel.id}/p${message.ts.replace(".", "")}`,
+		...over,
+	};
+};
+const [DEPLOY_CH, GENERAL_CH, MAYA_CH] = UNREAD;
+const EARLY = LONG[4];
+const THREAD_REPLY = REPLIES[2];
+const HITS: SlackHit[] = [
+	hit(GENERAL_CH, EARLY, "release train"),
+	hit(GENERAL_CH, { ...THREAD_REPLY, text: "Great, thanks. The release is out." }, "release", {
+		ts: THREAD_REPLY.ts,
+		threadTs: LONG_PARENT.ts,
+	}),
+	hit(MAYA_CH, msg(300, "Maya Lin", "Can you check the release notes before lunch?"), "release"),
+	hit(DEPLOY_CH, msg(400, "deploybot", "release 2.3 is out"), "release"),
+];
+const SEARCHING: SlackFixture = {
+	signedIn: true,
+	unread: UNREAD,
+	quiet: [QUIET],
+	history: { C0GENERAL: LONG },
+	lastRead: { C0GENERAL: LONG[19].ts, [LONG_PARENT.ts]: LONG_REPLIES_READ },
+	hits: HITS,
+};
+
+test("the crier searches Slack only on Enter: typing asks nothing, Enter or Search asks once; channels first, then messages", {
+	timeout: 60_000,
+}, async () => {
+	const { page, errors } = await openWorld(world(), SEARCHING);
+	await settled(page, 3);
+	const crier = await openCrier(page);
+	const box = crier.getByRole("searchbox", { name: "Search Slack" });
+	await box.pressSequentially("release", { delay: 40 });
+	await page.waitForTimeout(800);
+	expect(await called(page, "slackSearch")).toEqual([]);
+	// Still the unread channels while typing.
+	await counts(crier.getByRole("list", { name: "Unread channels" }).getByRole("listitem"), 3);
+	await box.press("Enter");
+	await vi.waitFor(async () => expect(await called(page, "slackSearch")).toEqual([["slackSearch", "release", 1]]));
+	const channels = crier.getByRole("list", { name: "Channels found" });
+	const messages = crier.getByRole("list", { name: "Messages found" });
+	await counts(channels.getByRole("listitem"), 1);
+	await counts(messages.getByRole("listitem"), 3);
+	await reads(crier.locator(".aw-crier-caption"), "4 messages");
+	// The channels named like it come first.
+	expect((await channels.boundingBox())!.y).toBeLessThan((await messages.boundingBox())!.y);
+	// Each message: its channel (and thread), who wrote it, when, and the words that matched, marked.
+	const first = messages.getByRole("listitem").nth(0);
+	await reads(first, "general");
+	await reads(first, "Maya");
+	await reads(first, "Message 5: the");
+	expect(await first.locator("mark").allInnerTexts()).toEqual(["release train"]);
+	await reads(first.locator("time"), /\d/);
+	await reads(messages.getByRole("listitem").nth(1), "in a thread");
+	await reads(messages.getByRole("listitem").nth(2), "Maya Lin");
+	await shot(page, "aw-slack-search-results");
+	// Typing more asks nothing; the Search button asks once.
+	await box.pressSequentially(" notes", { delay: 40 });
+	await page.waitForTimeout(600);
+	expect(await called(page, "slackSearch")).toHaveLength(1);
+	await crier.getByRole("button", { name: "Search", exact: true }).click();
+	await vi.waitFor(async () =>
+		expect((await called(page, "slackSearch")).at(-1)).toEqual(["slackSearch", "release notes", 1]),
+	);
+	expect(await called(page, "slackSearch")).toHaveLength(2);
+	// Slack's paging: the next page adds the next messages.
+	await counts(messages.getByRole("listitem"), 3);
+	await crier.getByRole("button", { name: "More messages" }).click();
+	await counts(messages.getByRole("listitem"), 4);
+	expect((await called(page, "slackSearch")).at(-1)).toEqual(["slackSearch", "release notes", 2]);
+	await hidden(crier.getByRole("button", { name: "More messages" }));
+	// Emptying the box goes back to the channels, asking Slack nothing.
+	await box.fill("");
+	await counts(crier.getByRole("list", { name: "Unread channels" }).getByRole("listitem"), 3);
+	expect(await called(page, "slackSearch")).toHaveLength(3);
+	expect(await called(page, "slackMarkRead")).toEqual([]);
+	expect(errors).toEqual([]);
+	await page.close();
+});
+
+test("a found message opens its channel at that message; one in a thread opens the thread at that reply", {
+	timeout: 60_000,
+}, async () => {
+	const { page, errors } = await openWorld(world(), { ...SEARCHING, newer: { C0GENERAL: true } });
+	await settled(page, 3);
+	let crier = await openCrier(page);
+	await crier.getByRole("searchbox", { name: "Search Slack" }).fill("release");
+	await crier.getByRole("searchbox", { name: "Search Slack" }).press("Enter");
+	const messages = crier.getByRole("list", { name: "Messages found" });
+	await counts(messages.getByRole("listitem"), 3);
+	await messages.getByRole("button", { name: /^Open Maya's message in #general/ }).click();
+	const panel = page.getByRole("dialog", { name: "#general in Slack" });
+	const log = panel.getByRole("log", { name: "Messages in #general" });
+	await counts(log.getByRole("article"), 30);
+	expect((await called(page, "slackChannel")).at(-1)).toEqual(["slackChannel", "C0GENERAL", EARLY.ts]);
+	// Scrolled to the message (not to the first new one), which stands out.
+	const focused = log.locator(".aw-slack-focus");
+	await counts(focused, 1);
+	await reads(focused, "Message 5:");
+	await vi.waitFor(async () => {
+		const at = await placeIn(log, focused);
+		expect(at.top).toBeGreaterThanOrEqual(0);
+		expect(at.bottom).toBeLessThanOrEqual(at.box.height);
+	});
+	// Newer messages follow those shown: it says so, and Mark read waits for the newest.
+	await shows(panel.getByText("Newer messages follow"));
+	expect(await panel.getByRole("button", { name: "Mark read", exact: true }).isDisabled()).toBe(true);
+	await shot(page, "aw-slack-search-opened");
+
+	// Back to the crier: the search is still there; a reply in a thread opens the thread at it.
+	await panel.getByRole("button", { name: "Other channels" }).click();
+	crier = page.locator(".aw-crier");
+	await crier.getByRole("button", { name: /^Open Ines's message in #general, in a thread/ }).click();
+	const again = page.getByRole("dialog", { name: "#general in Slack" });
+	const thread = again.getByLabel("Thread of Ines");
+	await counts(thread.getByRole("article"), 2);
+	expect((await called(page, "slackChannel")).at(-1)).toEqual(["slackChannel", "C0GENERAL", LONG_PARENT.ts]);
+	expect((await called(page, "slackThread")).at(-1)).toEqual(["slackThread", "C0GENERAL", LONG_PARENT.ts]);
+	const reply = thread.locator(".aw-slack-focus");
+	await counts(reply, 1);
+	await reads(reply, "Great, thanks.");
+	const againLog = again.getByRole("log", { name: "Messages in #general" });
+	await vi.waitFor(async () => {
+		const at = await placeIn(againLog, reply);
+		expect(at.top).toBeGreaterThanOrEqual(0);
+		expect(at.bottom).toBeLessThanOrEqual(at.box.height);
+	});
+	await shot(page, "aw-slack-search-thread");
+	// Show the newest reads the channel as usual.
+	await again.getByRole("button", { name: "Show the newest" }).click();
+	await vi.waitFor(async () =>
+		expect((await called(page, "slackChannel")).at(-1)).toEqual(["slackChannel", "C0GENERAL"]),
+	);
+	// Opening and reading marked nothing read.
+	expect(await called(page, "slackMarkRead")).toEqual([]);
+	expect(errors).toEqual([]);
+	await page.close();
+});
+
+const ALL: SlackChannel[] = [
+	{ ...UNREAD[0], unread: null, unreads: true, mentions: 2 },
+	{ ...UNREAD[1], unread: null, unreads: true },
+	{ ...QUIET, unreads: false },
+	channel("C0RANDOM", "random", null, { latest: null, unreads: false }),
+	{ ...UNREAD[2], unread: null, unreads: true },
+	channel("G0GROUP", "ann, ben", null, { kind: "group", latest: null, unreads: false }),
+];
+
+test("every channel lists in the crier and the Slack tab with its unread count, and the name filter asks Slack nothing", {
+	timeout: 60_000,
+}, async () => {
+	const { page, errors } = await openWorld(world(), { ...SEARCHING, all: ALL });
+	await settled(page, 3);
+	const crier = await openCrier(page);
+	await crier.getByRole("button", { name: "All channels" }).click();
+	const list = crier.getByRole("list", { name: "All channels" });
+	await counts(list.getByRole("listitem"), 6);
+	expect(await called(page, "slackConversations")).toHaveLength(1);
+	// The unread first, with their counts from the unread listing; then the rest.
+	const rows = await list.getByRole("listitem").allInnerTexts();
+	expect(rows.map((row) => row.split("\n")[0])).toEqual([
+		"deploys",
+		"general",
+		"Maya Lin",
+		"release-notes",
+		"random",
+		"ann, ben",
+	]);
+	await reads(list.getByRole("listitem").nth(0), "@2");
+	await reads(list.getByRole("listitem").nth(0), "4");
+	await reads(list.getByRole("listitem").nth(1), "12");
+	expect(await list.getByRole("listitem").nth(3).locator(".aw-slack-count").count()).toBe(0);
+	await shot(page, "aw-slack-search-all");
+	// The filter narrows the list as you type, asking Slack nothing.
+	const before = (await calls(page)).length;
+	await crier.getByRole("searchbox", { name: "Filter channels by name" }).pressSequentially("an", { delay: 40 });
+	await counts(list.getByRole("listitem"), 2);
+	expect((await list.getByRole("listitem").allInnerTexts()).map((row) => row.split("\n")[0])).toEqual([
+		"random",
+		"ann, ben",
+	]);
+	await page.waitForTimeout(500);
+	expect((await calls(page)).length).toBe(before);
+	await shot(page, "aw-slack-search-filter");
+
+	// The Slack tab lists them too, with its own filter.
+	await page.keyboard.press("Escape");
+	await page.locator(".aw-orb-slack").dispatchEvent("click");
+	const tabPanel = page.getByRole("region", { name: "Slack" });
+	await tabPanel.getByRole("button", { name: "All channels" }).dispatchEvent("click");
+	const tabList = tabPanel.getByRole("list", { name: "All channels" });
+	await counts(tabList.getByRole("listitem"), 6);
+	const listed = (await called(page, "slackConversations")).length;
+	await tabPanel.getByRole("searchbox", { name: "Filter channels by name" }).pressSequentially("dep", { delay: 40 });
+	await counts(tabList.getByRole("listitem"), 1);
+	expect(await called(page, "slackConversations")).toHaveLength(listed);
+	expect(await called(page, "slackSearch")).toEqual([]);
+	await shot(page, "aw-slack-search-tab-all");
+	await tabList.getByRole("button", { name: /^Read #deploys/ }).dispatchEvent("click");
+	await page.getByRole("dialog", { name: "#deploys in Slack" }).waitFor({ timeout: 8000 });
+	expect(errors).toEqual([]);
+	await page.close();
+});
+
+test("the crier's search, a found message, and every channel, in all three themes", { timeout: 120_000 }, async () => {
+	for (const theme of THEMES) {
+		const { page, errors } = await openWorld(world([WREN, BRAM], theme), { ...SEARCHING, all: ALL });
+		await settled(page, 3);
+		const crier = await openCrier(page);
+		await crier.getByRole("button", { name: "All channels" }).click();
+		await counts(crier.getByRole("list", { name: "All channels" }).getByRole("listitem"), 6);
+		await shot(page, `aw-slack-search-all-${theme}`);
+		await crier.getByRole("searchbox", { name: "Search Slack" }).fill("release");
+		await crier.getByRole("searchbox", { name: "Search Slack" }).press("Enter");
+		await counts(crier.getByRole("list", { name: "Messages found" }).getByRole("listitem"), 3);
+		await shot(page, `aw-slack-search-results-${theme}`);
+		await crier.getByRole("button", { name: /^Open Ines's message in #general, in a thread/ }).click();
+		const panel = page.getByRole("dialog", { name: "#general in Slack" });
+		await counts(panel.getByLabel("Thread of Ines").locator(".aw-slack-focus"), 1);
+		await shot(page, `aw-slack-search-thread-${theme}`);
+		await page.keyboard.press("Escape");
+		await page.locator(".aw-orb-slack").dispatchEvent("click");
+		await page
+			.getByRole("region", { name: "Slack" })
+			.getByRole("button", { name: "All channels" })
+			.dispatchEvent("click");
+		await counts(
+			page.getByRole("region", { name: "Slack" }).getByRole("list", { name: "All channels" }).getByRole("listitem"),
+			6,
+		);
+		await shot(page, `aw-slack-search-tab-${theme}`);
 		expect(errors).toEqual([]);
 		await page.close();
 	}

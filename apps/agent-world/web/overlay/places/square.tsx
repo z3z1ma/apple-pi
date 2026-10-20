@@ -1,10 +1,11 @@
-// The town square's panels (tickets 27 and 28). The crier reaches any Slack channel, read or unread, by search; a
-// channel reads in a panel with names, times, and messages, its threads expanding. In a thread the operator replies as
+// The town square's panels (tickets 27 and 28). The crier searches all of Slack as its own search bar does (on Enter
+// only: channels named like it first, then the messages found, each opening its channel or thread at that message) and
+// lists every channel; a channel reads in a panel with names, times, and messages, its threads expanding. In a thread the operator replies as
 // himself, only through the outside-write gate's confirmation (the exact text and where it goes), or asks an agent to
 // look into it, which is an instruction to the agent and posts nothing to Slack. A channel or thread opens at its first
 // new message (ticket 05 of the aliveness task), and reading changes nothing in Slack: only Mark read does.
 import { type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import type { SlackChannel, SlackMessage, SlackThread } from "../../../src/integrations.js";
+import type { SlackChannel, SlackHit, SlackMessage, SlackThread } from "../../../src/integrations.js";
 import type { Character, WorldSnapshot } from "../../../src/world.js";
 import { townsfolkLook } from "../../game/places/square.js";
 import { portraitOf } from "../../looks.js";
@@ -13,12 +14,16 @@ import { useTheme } from "../../theme-store.js";
 import { chatLines } from "../interface/chat-lines.js";
 import { ConfirmWrite, confirming, useOutsideWrite, type WriteApi } from "./outside-write.js";
 import { PlaceDialog } from "./place-dialog.js";
-import { channelTitle, type SlackState, slack, unreadLabel } from "./slack-state.js";
-import { type ChannelRef, squarePanels } from "./square-panels.js";
+import {
+	channelTitle,
+	everyChannel,
+	type SlackSearchState,
+	type SlackState,
+	slack,
+	unreadLabel,
+} from "./slack-state.js";
+import { type ChannelRef, type MessageRef, squarePanels } from "./square-panels.js";
 import "./square.css";
-
-/** Shown while the crier's search waits for the operator to stop typing (ms). */
-const SEARCH_PAUSE_MS = 220;
 
 const useSlack = () => useSyncExternalStore(slack.subscribe, slack.get);
 const failure = (error: unknown) => String((error as Error)?.message ?? error);
@@ -28,7 +33,9 @@ export function SquarePanels({ world }: { world: WorldSnapshot | undefined }) {
 	const panel = state.panel;
 	if (!panel) return null;
 	if (panel.kind === "crier") return <CrierPanel key={state.opening} />;
-	return <ChannelPanel key={state.opening} channel={panel.channel} look={panel.look} world={world} />;
+	return (
+		<ChannelPanel key={state.opening} channel={panel.channel} look={panel.look} focus={panel.focus} world={world} />
+	);
 }
 
 /** A channel's kind as a small mark before its name: `#` for a channel, a lock, or a person. */
@@ -96,52 +103,29 @@ export function SlackSignIn({ state, lead, settings }: { state: SlackState; lead
 	);
 }
 
-/** The crier: any channel by name, read or unread; with nothing typed, every channel with unread messages. */
+/**
+ * The crier: a search of all of Slack, run only on Enter (or Search), and the channels: those with unread messages,
+ * or every one the operator belongs to, filtered by name as he types (which asks Slack nothing).
+ */
 function CrierPanel() {
 	const theme = useTheme();
 	const state = useSlack();
-	const [text, setText] = useState("");
-	const [found, setFound] = useState<{ text: string; channels?: SlackChannel[]; problem?: string }>();
+	const [text, setText] = useState(() => slack.get().search?.text ?? "");
+	const [view, setView] = useState<"unread" | "all">("unread");
 	const label = theme?.labels.crier ?? "Crier";
 	const signedIn = state.status === "signed-in";
 	const unread = state.channels;
-	const asked = text.trim();
 
 	useEffect(() => {
 		if (!signedIn) return;
 		void slack.refresh();
 	}, [signedIn]);
 
-	useEffect(() => {
-		const find = slack.api().slackFindChannels;
-		if (!asked || !signedIn || !find) return setFound(undefined);
-		let live = true;
-		const timer = setTimeout(() => {
-			setFound((now) => ({ text: asked, channels: now?.channels }));
-			find(asked)
-				.then((answer) => {
-					if (!live) return;
-					if (answer.ok) setFound({ text: asked, channels: answer.channels });
-					else {
-						slack.refused(answer);
-						setFound({ text: asked, problem: answer.reason });
-					}
-				})
-				.catch((error) => live && setFound({ text: asked, problem: failure(error) }));
-		}, SEARCH_PAUSE_MS);
-		return () => {
-			live = false;
-			clearTimeout(timer);
-		};
-	}, [asked, signedIn]);
-
 	const greeting = !signedIn
 		? say(theme, "crier-signed-out")
 		: unread.length
 			? say(theme, "crier-greeting", { count: unread.length })
 			: say(theme, "crier-quiet");
-	const unreadById = new Map(unread.map((channel) => [channel.id, channel]));
-	const results = asked ? found?.channels?.map((channel) => unreadById.get(channel.id) ?? channel) : unread;
 	const portrait = theme ? portraitOf(theme, "crier", signedIn && unread.length ? "happy" : "neutral") : undefined;
 
 	return (
@@ -162,59 +146,265 @@ function CrierPanel() {
 					state={state}
 					lead={
 						<p className="aw-slack-lead">
-							Sign in to Slack as yourself, and the channels with unread messages gather in the square; then any
-							channel, read or unread, can be found here.
+							Sign in to Slack as yourself, and the channels with unread messages gather in the square; then all of
+							Slack can be searched here.
 						</p>
 					}
 				/>
 			) : (
 				<>
-					<label className="aw-place-search-wrap aw-crier-search">
-						<span className="aw-sr">Find a channel</span>
+					<form
+						className="aw-crier-search"
+						onSubmit={(event) => {
+							event.preventDefault();
+							void slack.search(text);
+						}}
+					>
 						<input
 							className="aw-place-search"
 							type="search"
+							aria-label="Search Slack"
 							placeholder={say(theme, "crier-search")}
 							value={text}
-							onChange={(event) => setText(event.target.value)}
+							onChange={(event) => {
+								setText(event.target.value);
+								// Emptied: back to the channels (Slack is not asked).
+								if (!event.target.value.trim()) slack.clearSearch();
+							}}
 						/>
-					</label>
-					<p className="aw-crier-caption" aria-live="polite">
-						{crierCaption(asked, found, state)}
-						{!asked && state.problem && <span className="aw-slack-problem"> {state.problem}</span>}
-					</p>
-					<ul className="aw-place-list aw-slack-list" aria-label={asked ? "Channels found" : "Unread channels"}>
-						{(results ?? []).map((channel) => (
-							<ChannelRow key={channel.id} channel={channel} theme={theme} />
-						))}
-					</ul>
+						<button type="submit" className="aw-button" disabled={!text.trim()}>
+							Search
+						</button>
+					</form>
+					{state.search ? (
+						<SearchResults
+							search={state.search}
+							unread={unread}
+							theme={theme}
+							onBack={() => {
+								setText("");
+								slack.clearSearch();
+							}}
+						/>
+					) : (
+						<>
+							<div className="aw-slack-views">
+								<button
+									type="button"
+									className="aw-button"
+									aria-pressed={view === "unread"}
+									onClick={() => setView("unread")}
+								>
+									Unread{unread.length ? ` (${unread.length})` : ""}
+								</button>
+								<button
+									type="button"
+									className="aw-button"
+									aria-pressed={view === "all"}
+									onClick={() => setView("all")}
+								>
+									All channels
+								</button>
+							</div>
+							{view === "all" ? (
+								<AllChannels theme={theme} />
+							) : (
+								<>
+									<p className="aw-crier-caption" aria-live="polite">
+										{unreadCaption(state)}
+										{state.problem && <span className="aw-slack-problem"> {state.problem}</span>}
+									</p>
+									<ul className="aw-place-list aw-slack-list" aria-label="Unread channels">
+										{unread.map((channel) => (
+											<ChannelRow key={channel.id} channel={channel} theme={theme} />
+										))}
+									</ul>
+								</>
+							)}
+						</>
+					)}
 				</>
 			)}
 		</PlaceDialog>
 	);
 }
 
-/** What the crier's list shows: what was found for the name typed, or, with nothing typed, how many are unread. */
-function crierCaption(
-	asked: string,
-	found: { channels?: SlackChannel[]; problem?: string } | undefined,
-	state: SlackState,
-): string {
-	if (!asked) {
-		const unread = state.channels.length;
-		if (unread) return `${unread} ${unread === 1 ? "channel has" : "channels have"} unread messages`;
-		return state.listed ? "Nothing unread. Type a channel\u2019s name to read it anyway." : "Reading Slack\u2026";
-	}
-	if (found?.problem) return found.problem;
-	if (found?.channels === undefined) return "Looking\u2026";
-	const n = found.channels.length;
-	if (!n) return `No channel is named like \u201c${asked}\u201d.`;
-	return `${n === 50 ? "The first 50" : n} ${n === 1 ? "channel" : "channels"} named like \u201c${asked}\u201d`;
+/** How many channels are unread, as the crier's list says it. */
+function unreadCaption(state: SlackState): string {
+	const unread = state.channels.length;
+	if (unread) return `${unread} ${unread === 1 ? "channel has" : "channels have"} unread messages`;
+	return state.listed ? "Nothing unread. Search Slack above, or see all channels." : "Reading Slack\u2026";
+}
+
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+/** What a search found, as its caption says it. */
+function searchCaption(search: SlackSearchState): string {
+	if (search.problem && !search.hits) return search.problem;
+	if (!search.hits) return `Searching Slack for \u201c${search.text}\u201d\u2026`;
+	const channels = search.channels?.length ?? 0;
+	if (!search.total && !channels) return `Nothing in Slack matches \u201c${search.text}\u201d.`;
+	const found = [
+		...(search.total ? [plural(search.total, "message", "messages")] : []),
+		...(channels ? [plural(channels, "channel", "channels")] : []),
+	].join(" and ");
+	return `${found} for \u201c${search.text}\u201d`;
+}
+
+/** A search's results: the channels named like it first, then the messages Slack found, a page at a time. */
+function SearchResults({
+	search,
+	unread,
+	theme,
+	onBack,
+}: {
+	search: SlackSearchState;
+	unread: SlackChannel[];
+	theme: Theme | undefined;
+	onBack: () => void;
+}) {
+	const listed = new Map(unread.map((channel) => [channel.id, channel]));
+	const channels = (search.channels ?? []).map((channel) => listed.get(channel.id) ?? channel);
+	const hits = search.hits ?? [];
+	return (
+		<>
+			<p className="aw-crier-caption aw-crier-found" aria-live="polite">
+				<span>{searchCaption(search)}</span>
+				<button type="button" className="aw-slack-replies aw-crier-back" onClick={onBack}>
+					Back to the channels
+				</button>
+			</p>
+			<div className="aw-place-scroll aw-crier-results">
+				{channels.length > 0 && (
+					<section className="aw-place-section" aria-label="Channels">
+						<h3>Channels</h3>
+						<ul className="aw-slack-list" aria-label="Channels found">
+							{channels.map((channel) => (
+								<ChannelRow key={channel.id} channel={channel} theme={theme} />
+							))}
+						</ul>
+					</section>
+				)}
+				{hits.length > 0 && (
+					<section className="aw-place-section" aria-label="Messages">
+						<h3>Messages</h3>
+						<ul className="aw-slack-list" aria-label="Messages found">
+							{hits.map((hit) => (
+								<HitRow key={`${hit.channel.id}:${hit.ts}`} hit={hit} theme={theme} />
+							))}
+						</ul>
+					</section>
+				)}
+				{search.hits && search.problem && <p className="aw-slack-note aw-slack-problem">{search.problem}</p>}
+				{search.page < search.pages && (
+					<button
+						type="button"
+						className="aw-button aw-crier-more"
+						disabled={search.loading}
+						onClick={() => void slack.more()}
+					>
+						{search.loading ? "Searching\u2026" : "More messages"}
+					</button>
+				)}
+			</div>
+		</>
+	);
+}
+
+/** One message found: where it is (and in which thread), who wrote it and when, and the words that matched. */
+function HitRow({ hit, theme }: { hit: SlackHit; theme: Theme | undefined }) {
+	const title = channelTitle(hit.channel);
+	const thread = hit.threadTs !== null;
+	const focus: MessageRef = { ts: hit.ts, ...(hit.threadTs ? { threadTs: hit.threadTs } : {}) };
+	return (
+		<li className="aw-slack-row aw-slack-hit">
+			<button
+				type="button"
+				className="aw-slack-row-main aw-slack-hit-main"
+				aria-label={`Open ${hit.name}'s message in ${title}${thread ? ", in a thread" : ""}`}
+				onClick={() =>
+					squarePanels.openChannel(hit.channel, theme ? townsfolkLook(theme, hit.channel.id) : undefined, focus)
+				}
+			>
+				<span className="aw-slack-hit-where">
+					<KindMark kind={hit.channel.kind} />
+					<span className="aw-slack-name">
+						{hit.channel.kind === "channel" || hit.channel.kind === "private" ? hit.channel.name : title}
+					</span>
+					{thread && <span className="aw-slack-hit-thread">in a thread</span>}
+					<time dateTime={new Date(hit.at).toISOString()} title={new Date(hit.at).toLocaleString()}>
+						{when(hit.at)}
+					</time>
+				</span>
+				<span className="aw-slack-hit-text">
+					<span className="aw-slack-author">{hit.name}</span>{" "}
+					{hit.excerpt.map((part, i) =>
+						part.match ? (
+							// biome-ignore lint/suspicious/noArrayIndexKey: the parts of one excerpt never reorder
+							<mark key={i}>{part.text}</mark>
+						) : (
+							// biome-ignore lint/suspicious/noArrayIndexKey: the parts of one excerpt never reorder
+							<span key={i}>{part.text}</span>
+						),
+					)}
+				</span>
+			</button>
+		</li>
+	);
+}
+
+/** What the list of every channel says above itself. */
+function allCaption(state: SlackState, shown: number, filter: string): string {
+	const all = state.all.channels;
+	if (!all) return state.all.problem ?? "Listing every channel you are in\u2026";
+	if (filter.trim())
+		return shown
+			? `${shown} of ${all.length} named like \u201c${filter.trim()}\u201d`
+			: `None named like \u201c${filter.trim()}\u201d.`;
+	return `${plural(all.length, "conversation", "conversations")} you are in`;
+}
+
+/**
+ * Every channel, direct message, and group the operator belongs to, the unread first with their counts; the filter
+ * narrows the loaded list as he types, asking Slack nothing. In the crier and in the Slack tab.
+ */
+export function AllChannels({ theme, inTab }: { theme: Theme | undefined; inTab?: boolean }) {
+	const state = useSlack();
+	const [filter, setFilter] = useState("");
+	useEffect(() => {
+		void slack.loadAll();
+	}, []);
+	const shown = state.all.channels ? everyChannel(state.all.channels, state.channels, filter) : [];
+	return (
+		<>
+			<label className="aw-place-search-wrap aw-slack-filter">
+				<span className="aw-sr">Filter channels by name</span>
+				<input
+					className="aw-place-search"
+					type="search"
+					placeholder="Filter by name"
+					value={filter}
+					onChange={(event) => setFilter(event.target.value)}
+				/>
+			</label>
+			<p className="aw-crier-caption" aria-live="polite">
+				{allCaption(state, shown.length, filter)}
+				{state.all.channels && state.all.problem && <span className="aw-slack-problem"> {state.all.problem}</span>}
+			</p>
+			<ul className={`${inTab ? "" : "aw-place-list "}aw-slack-list`} aria-label="All channels">
+				{shown.map((channel) => (
+					<ChannelRow key={channel.id} channel={channel} theme={theme} />
+				))}
+			</ul>
+		</>
+	);
 }
 
 /** One channel in a list: its kind, name, and unread count; choosing it reads it. */
 export function ChannelRow({ channel, theme }: { channel: SlackChannel; theme: Theme | undefined }) {
-	const unread = channel.unread !== null || channel.more || channel.mentions > 0 || channel.latest !== null;
+	// The list of every channel says which are unread; elsewhere a channel with a count or a newest message is.
+	const unread =
+		channel.unreads ?? (channel.unread !== null || channel.more || channel.mentions > 0 || channel.latest !== null);
 	const look = theme ? townsfolkLook(theme, channel.id) : undefined;
 	return (
 		<li className="aw-slack-row">
@@ -311,6 +501,12 @@ function scrollToMark(box: HTMLElement, mark: HTMLElement) {
 	box.scrollTop = Math.max(0, top - 4);
 }
 
+/** Scroll `box` so `item` (a message opened at) sits a third of the way down its view. */
+function scrollToItem(box: HTMLElement, item: HTMLElement) {
+	const top = item.getBoundingClientRect().top - box.getBoundingClientRect().top + box.scrollTop;
+	box.scrollTop = Math.max(0, top - box.clientHeight / 3);
+}
+
 /** A Mark read button's progress: sending, or why it failed. */
 type Marking = { state: "sending" } | { state: "failed"; reason: string } | undefined;
 
@@ -321,10 +517,13 @@ type Writing = { ts: string; mode: "reply" | "ask" };
 function ChannelPanel({
 	channel,
 	look,
+	focus,
 	world,
 }: {
 	channel: ChannelRef;
 	look?: string;
+	/** A message to open at (found by search), and its thread if it is a reply in one. */
+	focus?: MessageRef;
 	world: WorldSnapshot | undefined;
 }) {
 	const theme = useTheme();
@@ -346,12 +545,14 @@ function ChannelPanel({
 	const unread = listed?.unread ?? channel.unread ?? 0;
 	const wearer = look ?? (theme ? townsfolkLook(theme, channel.id) : undefined);
 	const portrait = theme && wearer ? portraitOf(theme, wearer, listed?.mentions ? "worried" : "neutral") : undefined;
+	/** The message in the channel to open at: the hit, or the thread it is a reply in. */
+	const target = focus?.threadTs ?? focus?.ts;
 
 	useEffect(() => {
 		const open = slack.api().slackChannel;
 		if (!open) return setRead({ problem: "This window cannot read Slack." });
 		let live = true;
-		open(channel.id)
+		(target ? open(channel.id, target) : open(channel.id))
 			.then((answer) => {
 				if (!live) return;
 				if (answer.ok) setRead({ thread: answer.thread });
@@ -364,7 +565,7 @@ function ChannelPanel({
 		return () => {
 			live = false;
 		};
-	}, [channel.id]);
+	}, [channel.id, target]);
 
 	const messages = read.thread?.messages ?? [];
 	/**
@@ -373,16 +574,27 @@ function ChannelPanel({
 	 */
 	const lastRead = markedTs ?? read.thread?.lastRead;
 	const firstNew = lastRead ? firstAfter(messages, lastRead) : unread > 0 ? Math.max(0, messages.length - unread) : -1;
-	// Open at the first new message, the New divider just above it, or at the newest when nothing is new.
+	// Open at the message asked for (found by search); else at the first new message, the New divider just above it,
+	// or at the newest when nothing is new.
 	// biome-ignore lint/correctness/useExhaustiveDependencies: scroll once, when the messages first arrive
 	useLayoutEffect(() => {
 		const box = list.current;
 		if (!box || !messages.length) return;
+		const at = target ? box.querySelector<HTMLElement>(`:scope > [data-ts="${CSS.escape(target)}"]`) : null;
+		if (at) return scrollToItem(box, at);
 		const mark = box.querySelector<HTMLElement>(":scope > .aw-slack-entry > .aw-slack-new");
 		if (mark) scrollToMark(box, mark);
 		else box.scrollTop = box.scrollHeight;
 	}, [read.thread]);
-	// A thread opened: at its first new reply, else down to its newest.
+	// Opened at a reply in a thread: that thread opens with the channel.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: once, when the messages first arrive
+	useEffect(() => {
+		const parent = focus?.threadTs;
+		if (!parent || !read.thread?.messages.some((message) => (message.threadTs ?? message.ts) === parent)) return;
+		setJustOpened(parent);
+		void openThread(parent);
+	}, [read.thread]);
+	// A thread opened: at the reply asked for, else at its first new reply, else down to its newest.
 	useLayoutEffect(() => {
 		const box = list.current;
 		const opened = justOpened && threads[justOpened];
@@ -390,11 +602,14 @@ function ChannelPanel({
 		setJustOpened(undefined);
 		const section = box.querySelector<HTMLElement>(`[data-thread="${CSS.escape(justOpened)}"]`);
 		if (!section) return;
+		const reply =
+			focus?.threadTs === justOpened ? section.querySelector<HTMLElement>(`[data-ts="${CSS.escape(focus.ts)}"]`) : null;
+		if (reply) return scrollToItem(box, reply);
 		const mark = section.querySelector<HTMLElement>(".aw-slack-new");
 		if (mark) return scrollToMark(box, mark);
 		const below = section.getBoundingClientRect().bottom - box.getBoundingClientRect().bottom;
 		if (below > 0) box.scrollTop += below + 8;
-	}, [justOpened, threads]);
+	}, [justOpened, threads, focus]);
 
 	const newest = messages.at(-1);
 	const unreadHere = (!!listed || firstNew >= 0) && !markedTs;
@@ -489,13 +704,15 @@ function ChannelPanel({
 						<button
 							type="button"
 							className="aw-button aw-button-strong aw-slack-mark"
-							disabled={!newest || !unreadHere || marking?.state === "sending"}
+							disabled={!newest || !unreadHere || read.thread?.newer || marking?.state === "sending"}
 							title={
 								marking?.state === "failed"
 									? marking.reason
-									: unreadHere
-										? "Mark this channel read in Slack, as you, up to its newest message"
-										: "Nothing unread"
+									: read.thread?.newer
+										? "Newer messages follow; show the newest to mark this channel read"
+										: unreadHere
+											? "Mark this channel read in Slack, as you, up to its newest message"
+											: "Nothing unread"
 							}
 							onClick={() => void markRead()}
 						>
@@ -525,7 +742,7 @@ function ChannelPanel({
 						const opened = threads[ts];
 						const here = writing?.ts === ts;
 						return (
-							<div key={message.ts} className="aw-slack-entry">
+							<div key={message.ts} className="aw-slack-entry" data-ts={message.ts}>
 								{i === firstNew && (
 									<div className="aw-slack-new">
 										<span>New</span>
@@ -533,6 +750,7 @@ function ChannelPanel({
 								)}
 								<Message
 									message={message}
+									focused={!focus?.threadTs && message.ts === focus?.ts}
 									acts={
 										<>
 											<button
@@ -573,13 +791,13 @@ function ChannelPanel({
 									<section className="aw-slack-thread" aria-label={`Thread of ${message.name}`} data-thread={ts}>
 										{opened?.problem && <p className="aw-place-empty">{opened.problem}</p>}
 										{opened?.messages?.map((reply, r) => (
-											<div key={reply.ts} className="aw-slack-entry">
+											<div key={reply.ts} className="aw-slack-entry" data-ts={reply.ts}>
 												{r === firstAfter(opened.messages!, opened.lastRead) && (
 													<div className="aw-slack-new">
 														<span>New</span>
 													</div>
 												)}
-												<Message message={reply} reply />
+												<Message message={reply} reply focused={focus?.threadTs === ts && reply.ts === focus.ts} />
 											</div>
 										))}
 										{opened?.messages?.length ? (
@@ -626,6 +844,18 @@ function ChannelPanel({
 							</div>
 						);
 					})}
+					{read.thread?.newer && (
+						<div className="aw-slack-newer">
+							<span className="aw-slack-note">Newer messages follow.</span>
+							<button
+								type="button"
+								className="aw-slack-replies"
+								onClick={() => squarePanels.openChannel(channel, look)}
+							>
+								Show the newest
+							</button>
+						</div>
+					)}
 				</div>
 			</div>
 			{confirming(write.state) && (
@@ -642,17 +872,20 @@ function ChannelPanel({
 function Message({
 	message,
 	reply,
+	focused,
 	acts,
 	children,
 }: {
 	message: SlackMessage;
 	reply?: boolean;
+	/** The message opened at (found by search): it stands out. */
+	focused?: boolean;
 	/** What can be done with it, shown over its corner while the pointer or the focus is on it. */
 	acts?: ReactNode;
 	children?: ReactNode;
 }) {
 	return (
-		<article className={`aw-slack-message${reply ? " aw-slack-reply" : ""}`}>
+		<article className={`aw-slack-message${reply ? " aw-slack-reply" : ""}${focused ? " aw-slack-focus" : ""}`}>
 			<header>
 				<span className="aw-slack-author">{message.name}</span>
 				<time dateTime={new Date(message.at).toISOString()} title={new Date(message.at).toLocaleString()}>

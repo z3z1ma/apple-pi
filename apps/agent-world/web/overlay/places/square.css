@@ -28,13 +28,73 @@
 	min-height: 0;
 }
 
+/* The crier's search: the box and its Search button on one line; it searches only when asked. */
 .aw-crier-search {
-	display: block;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: 12px 0 6px;
 }
 
-.aw-crier-caption {
-	margin: 2px 2px 6px;
-	font-size: 12px;
+.aw-crier-search .aw-place-search {
+	flex: 1;
+	min-width: 0;
+	margin: 0;
+}
+
+.aw-crier-search .aw-button {
+	flex: none;
+}
+
+/* Which channels: the unread, or every one. */
+.aw-slack-views {
+	display: flex;
+	gap: 6px;
+	margin: 2px 0 4px;
+}
+
+.aw-slack-tab-views {
+	margin: 0 0 6px;
+}
+
+/* In the side panel the skins' buttons have no pressed look: the chosen one is marked with the theme's accent. */
+.aw-slack-tab-views .aw-button {
+	flex: 1;
+}
+
+.aw-slack-tab-views .aw-button[aria-pressed="false"] {
+	opacity: 0.72;
+}
+
+.aw-slack-tab-views .aw-button[aria-pressed="true"] {
+	box-shadow: inset 0 -3px 0 var(--aw-accent);
+	font-weight: 700;
+}
+
+.aw-slack-filter .aw-place-search {
+	margin: 4px 0 4px;
+}
+
+.aw-crier-found {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 10px;
+}
+
+.aw-crier-back {
+	flex: none;
+	margin: 0;
+	font-style: normal;
+}
+
+.aw-crier-results .aw-place-section:first-child h3 {
+	margin-top: 4px;
+}
+
+.aw-crier-more {
+	display: block;
+	margin: 10px auto 6px;
 }
 
 /* A channel in a list: its kind, its name, mentions and unread, and Read on hover. */
@@ -352,4 +412,75 @@
 /* The unread orb before Slack is signed in: there, but quiet. */
 .aw-orb-off .aw-orb-glass {
 	opacity: 0.75;
+}
+
+/* A message found: where and when on one line, who and the words that matched below. */
+.aw-slack-row-main.aw-slack-hit-main {
+	grid-template-columns: minmax(0, 1fr);
+	gap: 3px;
+}
+
+.aw-slack-hit-where {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+}
+
+.aw-slack-hit-where .aw-slack-name {
+	font-size: 13px;
+}
+
+.aw-slack-hit-thread,
+.aw-slack-hit-where time {
+	flex: none;
+	font-size: 11.5px;
+}
+
+.aw-slack-hit-where time {
+	margin-left: auto;
+	font-variant-numeric: tabular-nums;
+}
+
+.aw-slack-hit-text {
+	display: -webkit-box;
+	overflow: hidden;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 3;
+	padding-left: 24px;
+	font-size: 13px;
+	line-height: 1.4;
+	overflow-wrap: anywhere;
+}
+
+.aw-slack-hit-text .aw-slack-author {
+	font-size: 13px;
+}
+
+.aw-slack-hit-text mark {
+	padding: 0 2px;
+	border-radius: 3px;
+	background: color-mix(in srgb, var(--aw-accent-light) 75%, transparent);
+	color: inherit;
+	font-weight: 700;
+}
+
+/* The message a search opened at stands out. */
+.aw-slack-message.aw-slack-focus {
+	background: color-mix(in srgb, var(--aw-accent-light) 32%, transparent);
+	box-shadow: inset 3px 0 0 var(--aw-accent);
+}
+
+/* Opened at a message with newer ones after it: says so, with the way to the newest. */
+.aw-slack-newer {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	margin: 10px 0 4px;
+}
+
+.aw-crier-caption {
+	margin: 2px 2px 6px;
+	font-size: 12px;
 }

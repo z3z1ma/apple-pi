@@ -4402,6 +4402,17 @@ var COUNT_LIMIT = 100;
 var CHANNEL_MESSAGES = 50;
 var THREAD_MESSAGES = 200;
 var FOUND_MAX = 50;
+/** Messages per page of a search (Slack's own default; its most is 100), and the last page Slack serves. */
+var SEARCH_COUNT = 20;
+var SEARCH_PAGES_MAX = 100;
+/** A search hit's excerpt: at most this many characters, starting this many before the first match. */
+var EXCERPT_MAX = 240;
+var EXCERPT_BEFORE = 80;
+/** Opened at a message: this many up to it, and up to this many after it (all of them, or none: see `channel`). */
+var AROUND_BEFORE = 25;
+var AROUND_AFTER = 50;
+/** People named at once (`users.info`) when every direct message is listed. */
+var NAMING_AT_ONCE = 6;
 /** How long the lists of channels are kept before they are read again. */
 var LIST_TTL_MS = 6e5;
 var SIGN_IN_ERRORS = /* @__PURE__ */ new Set([
@@ -4423,6 +4434,75 @@ function slackLink(base, channel, ts) {
 	if (!base) return null;
 	return `${base.endsWith("/") ? base : `${base}/`}archives/${channel}${ts ? `/p${ts.replace(".", "")}` : ""}`;
 }
+/** A group's name as Slack shows it: `mpdm-ann--ben--me-1` is "ann, ben" for `me`. */
+function groupName(name, me) {
+	const people = /^mpdm-(.+)-\d+$/.exec(name)?.[1]?.split("--");
+	if (!people) return name;
+	const others = people.filter((person) => person !== me);
+	return (others.length ? others : people).join(", ");
+}
+/**
+* A search hit's text (Slack's highlight markers U+E000 and U+E001 around each match) as an excerpt in parts: on one
+* line, cut to `EXCERPT_MAX` characters around the first match, with an ellipsis where it was cut.
+*/
+function excerptOf(text) {
+	const parts = [];
+	let match = false;
+	for (const piece of text.replace(/\s+/g, " ").trim().split(/([\ue000\ue001])/)) if (piece === "" || piece === "") match = piece === "";
+	else if (piece) {
+		const last = parts.at(-1);
+		if (last && last.match === match) last.text += piece;
+		else parts.push({
+			text: piece,
+			match
+		});
+	}
+	const total = parts.reduce((sum, part) => sum + part.text.length, 0);
+	if (total <= EXCERPT_MAX) return parts;
+	let first = 0;
+	for (const part of parts) {
+		if (part.match) break;
+		first += part.text.length;
+	}
+	if (first >= total) first = 0;
+	const start = Math.max(0, Math.min(first - EXCERPT_BEFORE, total - EXCERPT_MAX));
+	const end = start + EXCERPT_MAX;
+	const cut = [];
+	let at = 0;
+	for (const part of parts) {
+		const from = Math.max(start, at);
+		const to = Math.min(end, at + part.text.length);
+		if (to > from) cut.push({
+			text: part.text.slice(from - at, to - at),
+			match: part.match
+		});
+		at += part.text.length;
+	}
+	if (start > 0) cut[0] = {
+		...cut[0],
+		text: `\u2026${cut[0].text.trimStart()}`
+	};
+	if (end < total) cut[cut.length - 1] = {
+		...cut[cut.length - 1],
+		text: `${cut[cut.length - 1].text.trimEnd()}\u2026`
+	};
+	return cut;
+}
+/** Run `work` over `items`, at most `limit` at a time, keeping their order. */
+async function atMost(items, limit, work) {
+	const out = new Array(items.length);
+	let next = 0;
+	const worker = async () => {
+		while (next < items.length) {
+			const index = next++;
+			out[index] = await work(items[index]);
+		}
+	};
+	await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+	return out;
+}
+/** Slack timestamps (`1700000000.000100`) in order; as strings, since they have more digits than a double keeps. */
+var byTs = (a, b) => a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0;
 function openSlack(credentials, options = {}) {
 	const now = options.now ?? Date.now;
 	const users = /* @__PURE__ */ new Map();
@@ -4528,13 +4608,16 @@ function openSlack(credentials, options = {}) {
 		return name;
 	};
 	const kindOf = (row) => row?.is_im ? "dm" : row?.is_mpim ? "group" : row?.is_private || row?.is_group ? "private" : "channel";
+	const me = () => credentials()?.user ?? null;
 	const nameOf = async (row, id) => {
 		if (row?.is_im && row.user) return userName(row.user);
+		if (row?.is_mpim && row.name) return groupName(row.name, me());
 		if (row?.name) return row.name;
 		const answer = await call("conversations.info", { channel: id });
 		const info = answer.ok ? answer.json.channel : void 0;
 		if (info) names.set(id, info);
 		if (info?.is_im && info.user) return userName(info.user);
+		if (info?.is_mpim && info.name) return groupName(info.name, me());
 		return info?.name ?? id;
 	};
 	/** Slack's message markup as plain text: people, channels, and links by name; entities decoded. */
@@ -4556,6 +4639,79 @@ function openSlack(credentials, options = {}) {
 	const badChannel = {
 		ok: false,
 		reason: "That is not a Slack channel."
+	};
+	/** Channels named like `text`: every public and private channel (`conversations.list`) and every one he is in. */
+	const findChannels = async (text) => {
+		const wanted = text.trim().replace(/^#/, "").toLowerCase();
+		if (!wanted) return {
+			ok: true,
+			channels: []
+		};
+		if (!everything || now() - everything.at >= LIST_TTL_MS) {
+			const listed = await pages("conversations.list", {
+				types: "public_channel,private_channel",
+				exclude_archived: "true"
+			});
+			if (!listed.ok) return listed;
+			everything = {
+				at: now(),
+				rows: listed.rows
+			};
+		}
+		const mine = await memberRows();
+		return {
+			ok: true,
+			channels: [...new Map([...everything.rows, ...mine.ok ? mine.rows : []].map((row) => [row.id, row])).values()].map((row) => ({
+				row,
+				name: row.is_im && row.user ? users.get(row.user) ?? "" : row.is_mpim && row.name ? groupName(row.name, me()) : row.name ?? ""
+			})).filter(({ name }) => name.toLowerCase().includes(wanted)).sort((a, b) => Number(!a.name.toLowerCase().startsWith(wanted)) - Number(!b.name.toLowerCase().startsWith(wanted))).slice(0, FOUND_MAX).map(({ row, name }) => ({
+				id: row.id,
+				name,
+				kind: kindOf(row),
+				unread: null,
+				more: false,
+				mentions: 0,
+				latest: null,
+				url: slackLink(teamUrl(), row.id)
+			}))
+		};
+	};
+	/** A `search.messages` match as a hit: its conversation named (a direct message by its person), its thread found. */
+	const hitOf = async (match) => {
+		const where = match.channel;
+		let row = names.get(where.id);
+		if (!row) {
+			const im = match.type === "im" || where.is_im === true;
+			row = {
+				id: where.id,
+				...im ? {
+					is_im: true,
+					user: where.name
+				} : { name: where.name },
+				is_mpim: where.is_mpim === true || match.type === "mpim",
+				is_private: where.is_private === true
+			};
+			names.set(where.id, row);
+		}
+		let thread = match.thread_ts ?? null;
+		if (!thread && match.permalink) try {
+			thread = new URL(match.permalink).searchParams.get("thread_ts");
+		} catch {
+			thread = null;
+		}
+		return {
+			channel: {
+				id: where.id,
+				name: await nameOf(row, where.id),
+				kind: kindOf(row)
+			},
+			ts: match.ts,
+			threadTs: thread && TS.test(thread) && thread !== match.ts ? thread : null,
+			name: match.user ? await userName(match.user) : match.username ?? "someone",
+			at: Math.round(Number(match.ts) * 1e3),
+			excerpt: excerptOf(await plain(match.text ?? "")),
+			url: match.permalink ?? slackLink(teamUrl(), where.id, match.ts)
+		};
 	};
 	const slack = {
 		async check(session) {
@@ -4615,50 +4771,105 @@ function openSlack(credentials, options = {}) {
 				}))
 			};
 		},
-		async find(text) {
-			const wanted = text.trim().replace(/^#/, "").toLowerCase();
-			if (!wanted) return {
+		async search(text, page = 1) {
+			const query = text.trim();
+			if (!query) return {
 				ok: true,
-				channels: []
+				channels: [],
+				hits: [],
+				page: 1,
+				pages: 0,
+				total: 0
 			};
-			if (!everything || now() - everything.at >= LIST_TTL_MS) {
-				const listed = await pages("conversations.list", {
-					types: "public_channel,private_channel",
-					exclude_archived: "true"
-				});
-				if (!listed.ok) return listed;
-				everything = {
-					at: now(),
-					rows: listed.rows
-				};
-			}
-			const mine = await memberRows();
-			const rows = [...new Map([...everything.rows, ...mine.ok ? mine.rows : []].map((row) => [row.id, row])).values()];
+			const at = Math.min(SEARCH_PAGES_MAX, Math.max(1, Math.floor(page) || 1));
+			const [found, named] = await Promise.all([call("search.messages", {
+				query,
+				count: String(SEARCH_COUNT),
+				page: String(at),
+				highlight: "true",
+				sort: "score",
+				sort_dir: "desc"
+			}), at === 1 ? findChannels(query) : Promise.resolve(void 0)]);
+			if (!found.ok) return found;
+			const box = found.json.messages;
+			const matches = (box?.matches ?? []).filter((match) => !!match.channel?.id && ID.test(match.channel.id) && !!match.ts && TS.test(match.ts));
+			const hits = await Promise.all(matches.map(hitOf));
 			return {
 				ok: true,
-				channels: (await Promise.all(rows.map(async (row) => ({
-					row,
-					name: row.is_im && row.user ? users.get(row.user) ?? "" : row.name ?? ""
-				})))).filter(({ name }) => name.toLowerCase().includes(wanted)).sort((a, b) => Number(!a.name.toLowerCase().startsWith(wanted)) - Number(!b.name.toLowerCase().startsWith(wanted))).slice(0, FOUND_MAX).map(({ row, name }) => ({
+				channels: named?.ok ? named.channels : [],
+				hits,
+				page: box?.paging?.page ?? at,
+				pages: Math.min(SEARCH_PAGES_MAX, box?.paging?.pages ?? 1),
+				total: box?.paging?.total ?? box?.total ?? hits.length
+			};
+		},
+		async conversations() {
+			members = void 0;
+			const listed = await memberRows();
+			if (!listed.ok) return listed;
+			const counts = await call("client.counts", {
+				thread_counts_by_channel: "true",
+				org_wide_aware: "true",
+				include_file_channels: "true"
+			});
+			const countOf = /* @__PURE__ */ new Map();
+			if (counts.ok) for (const key of [
+				"channels",
+				"mpims",
+				"ims"
+			]) for (const row of counts.json[key] ?? []) {
+				countOf.set(row.id, row);
+				if (row.last_read) lastRead.set(row.id, row.last_read);
+			}
+			const channels = await atMost(listed.rows.filter((row) => !(row.is_im && row.is_user_deleted)), NAMING_AT_ONCE, async (row) => {
+				const count = countOf.get(row.id);
+				return {
 					id: row.id,
-					name,
+					name: await nameOf(row, row.id),
 					kind: kindOf(row),
 					unread: null,
 					more: false,
-					mentions: 0,
-					latest: null,
-					url: slackLink(teamUrl(), row.id)
-				}))
+					mentions: count?.mention_count ?? 0,
+					latest: count?.latest ?? null,
+					url: slackLink(teamUrl(), row.id),
+					...counts.ok ? { unreads: count?.has_unreads === true } : {}
+				};
+			});
+			const people = (channel) => Number(channel.kind === "dm" || channel.kind === "group");
+			channels.sort((a, b) => people(a) - people(b) || a.name.localeCompare(b.name, void 0, { sensitivity: "base" }));
+			return {
+				ok: true,
+				channels
 			};
 		},
-		async channel(id) {
-			if (!ID.test(id)) return badChannel;
-			const history = await call("conversations.history", {
-				channel: id,
-				limit: String(CHANNEL_MESSAGES)
-			});
-			if (!history.ok) return history;
-			const rows = [...history.json.messages ?? []].reverse();
+		async channel(id, at) {
+			if (!ID.test(id) || at !== void 0 && !TS.test(at)) return badChannel;
+			let rows;
+			let newer;
+			if (at) {
+				const [before, after] = await Promise.all([call("conversations.history", {
+					channel: id,
+					latest: at,
+					inclusive: "true",
+					limit: String(AROUND_BEFORE)
+				}), call("conversations.history", {
+					channel: id,
+					oldest: at,
+					limit: String(AROUND_AFTER)
+				})]);
+				if (!before.ok) return before;
+				const complete = after.ok && after.json.has_more !== true;
+				const both = [...before.json.messages ?? [], ...complete ? after.json.messages ?? [] : []];
+				rows = [...new Map(both.map((row) => [row.ts, row])).values()].sort(byTs);
+				newer = !complete;
+			} else {
+				const history = await call("conversations.history", {
+					channel: id,
+					limit: String(CHANNEL_MESSAGES)
+				});
+				if (!history.ok) return history;
+				rows = [...history.json.messages ?? []].reverse();
+			}
 			let read = lastRead.get(id);
 			if (read === void 0) {
 				const info = await call("conversations.info", { channel: id });
@@ -4678,7 +4889,8 @@ function openSlack(credentials, options = {}) {
 					},
 					messages: await messages(rows),
 					url: slackLink(teamUrl(), id),
-					lastRead: read && read !== "0000000000.000000" ? read : null
+					lastRead: read && read !== "0000000000.000000" ? read : null,
+					...newer === void 0 ? {} : { newer }
 				}
 			};
 		},
@@ -4956,8 +5168,9 @@ function openIntegrations(options) {
 		confluencePage: (id) => confluence.page(String(id ?? "")),
 		libraryRecent: () => confluence.recent(),
 		slackUnread: () => slack.unread(),
-		slackFindChannels: (text) => slack.find(typeof text === "string" ? text : ""),
-		slackChannel: (id) => slack.channel(String(id ?? "")),
+		slackSearch: (text, page) => slack.search(typeof text === "string" ? text : "", typeof page === "number" ? page : 1),
+		slackConversations: () => slack.conversations(),
+		slackChannel: (id, at) => slack.channel(String(id ?? ""), at == null ? void 0 : String(at)),
 		slackThread: (id, ts) => slack.thread(String(id ?? ""), String(ts ?? "")),
 		/** Mark read: the button is the operator's choice, so the gate sends it unconfirmed but records it. */
 		slackMarkRead: (id, ts, threadTs) => gate.act({
@@ -5084,8 +5297,9 @@ function wireIntegrations(options) {
 	handle("confluence-page", (id) => integrations.confluencePage(id));
 	handle("library-recent", () => integrations.libraryRecent());
 	handle("slack-unread", () => integrations.slackUnread());
-	handle("slack-find", (text) => integrations.slackFindChannels(text));
-	handle("slack-channel", (id) => integrations.slackChannel(id));
+	handle("slack-search", (text, page) => integrations.slackSearch(text, page));
+	handle("slack-conversations", () => integrations.slackConversations());
+	handle("slack-channel", (id, at) => integrations.slackChannel(id, at));
 	handle("slack-thread", (id, ts) => integrations.slackThread(id, ts));
 	handle("slack-mark-read", (id, ts, threadTs) => integrations.slackMarkRead(id, ts, threadTs));
 	handle("describe-write", (intent) => integrations.describeWrite(intent));

@@ -168,6 +168,32 @@ export interface SlackChannel {
 	/** The newest message's timestamp (`1712345678.000100`), or null. */
 	latest: string | null;
 	url: string | null;
+	/** Whether Slack says it has unread messages, counted or not (the list of every channel); absent when not known. */
+	unreads?: boolean;
+}
+
+/** One message found by Slack's search: where it is, who wrote it, when, and the words that matched. */
+export interface SlackHit {
+	channel: Pick<SlackChannel, "id" | "name" | "kind">;
+	ts: string;
+	/** The thread it is a reply in (its parent's `ts`); null for a message in the channel itself. */
+	threadTs: string | null;
+	/** Who wrote it. */
+	name: string;
+	at: number;
+	/** A short plain-text excerpt around the match, in parts; `match` marks the words Slack matched. */
+	excerpt: { text: string; match: boolean }[];
+	url: string | null;
+}
+
+/** One page of a Slack search: the channels named like it first (on the first page), then the messages found. */
+export interface SlackSearch {
+	channels: SlackChannel[];
+	hits: SlackHit[];
+	page: number;
+	pages: number;
+	/** Messages found in all. */
+	total: number;
 }
 
 export interface SlackMessage {
@@ -186,6 +212,8 @@ export interface SlackThread {
 	url: string | null;
 	/** The newest message the operator has read (its `ts`): later ones are new. Null when Slack does not say. */
 	lastRead: string | null;
+	/** Opened at a message: true when newer messages follow those shown (the newest are not among them). */
+	newer?: boolean;
 }
 
 // The outside-write gate
@@ -286,10 +314,15 @@ export interface IntegrationsApi {
 
 	/** The town square: channels with unread messages, most pressing first (mentions, then newest). */
 	slackUnread(): Promise<Outcome<{ channels: SlackChannel[] }>>;
-	/** The crier: any channel by name, read or unread. */
-	slackFindChannels(text: string): Promise<Outcome<{ channels: SlackChannel[] }>>;
-	/** A channel's latest messages, newest last. */
-	slackChannel(channelId: string): Promise<Outcome<{ thread: SlackThread }>>;
+	/**
+	 * The crier's search, as Slack's own search bar: on page 1 the channels named like `text` (from every channel he can
+	 * see), then a page of the messages Slack's search finds in every channel, direct message, and thread he can see.
+	 */
+	slackSearch(text: string, page?: number): Promise<Outcome<SlackSearch>>;
+	/** Every channel, direct message, and group the operator belongs to, with what Slack says is unread. */
+	slackConversations(): Promise<Outcome<{ channels: SlackChannel[] }>>;
+	/** A channel's latest messages, newest last; with `at`, the messages around that one instead. */
+	slackChannel(channelId: string, at?: string): Promise<Outcome<{ thread: SlackThread }>>;
 	/** A thread's messages, the parent first. */
 	slackThread(channelId: string, threadTs: string): Promise<Outcome<{ thread: SlackThread }>>;
 	/**

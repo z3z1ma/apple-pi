@@ -59,8 +59,9 @@ export function wireIntegrations(options: {
 	handle("confluence-page", (id) => integrations.confluencePage(id));
 	handle("library-recent", () => integrations.libraryRecent());
 	handle("slack-unread", () => integrations.slackUnread());
-	handle("slack-find", (text) => integrations.slackFindChannels(text));
-	handle("slack-channel", (id) => integrations.slackChannel(id));
+	handle("slack-search", (text, page) => integrations.slackSearch(text, page));
+	handle("slack-conversations", () => integrations.slackConversations());
+	handle("slack-channel", (id, at) => integrations.slackChannel(id, at));
 	handle("slack-thread", (id, ts) => integrations.slackThread(id, ts));
 	handle("slack-mark-read", (id, ts, threadTs) => integrations.slackMarkRead(id, ts, threadTs));
 	handle("describe-write", (intent) => integrations.describeWrite(intent));

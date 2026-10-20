@@ -215,8 +215,10 @@ export function openIntegrations(options: IntegrationOptions) {
 		libraryRecent: (): RecentPage[] => confluence.recent(),
 
 		slackUnread: () => slack.unread(),
-		slackFindChannels: (text: unknown) => slack.find(typeof text === "string" ? text : ""),
-		slackChannel: (id: unknown) => slack.channel(String(id ?? "")),
+		slackSearch: (text: unknown, page?: unknown) =>
+			slack.search(typeof text === "string" ? text : "", typeof page === "number" ? page : 1),
+		slackConversations: () => slack.conversations(),
+		slackChannel: (id: unknown, at?: unknown) => slack.channel(String(id ?? ""), at == null ? undefined : String(at)),
 		slackThread: (id: unknown, ts: unknown) => slack.thread(String(id ?? ""), String(ts ?? "")),
 		/** Mark read: the button is the operator's choice, so the gate sends it unconfirmed but records it. */
 		slackMarkRead: (id: unknown, ts: unknown, threadTs?: unknown) =>

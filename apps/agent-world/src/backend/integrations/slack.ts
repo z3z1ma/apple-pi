@@ -2,10 +2,20 @@
 // (`xoxc-`) in each form body plus its `d` cookie as a `Cookie` header, against the workspace's own `api/` address as
 // the web client calls it. Unread channels come from `client.counts` (the web client's method), named from
 // `users.conversations`, counted from `conversations.history` since each one's `last_read`; the crier searches
-// `conversations.list`; threads read through `conversations.replies`; a reply posts with `chat.postMessage`, which
-// only the outside-write gate calls, as it does `conversations.mark` and `subscriptions.thread.mark` (Mark read).
-// Reading never marks anything read. Sources are cited in this file's context file.
-import type { Outcome, Refusal, SlackChannel, SlackMessage, SlackThread } from "../../integrations.js";
+// messages with `search.messages` and channel names in `conversations.list` and `users.conversations`, and lists every
+// conversation from `users.conversations`; threads read through `conversations.replies`; a reply posts with
+// `chat.postMessage`, which only the outside-write gate calls, as it does `conversations.mark` and
+// `subscriptions.thread.mark` (Mark read). Reading never marks anything read. Sources are cited in this file's context
+// file.
+import type {
+	Outcome,
+	Refusal,
+	SlackChannel,
+	SlackHit,
+	SlackMessage,
+	SlackSearch,
+	SlackThread,
+} from "../../integrations.js";
 import type { Fetch } from "./atlassian.js";
 import type { SlackCredentials } from "./credentials.js";
 
@@ -17,6 +27,17 @@ const COUNT_LIMIT = 100;
 const CHANNEL_MESSAGES = 50;
 const THREAD_MESSAGES = 200;
 const FOUND_MAX = 50;
+/** Messages per page of a search (Slack's own default; its most is 100), and the last page Slack serves. */
+const SEARCH_COUNT = 20;
+const SEARCH_PAGES_MAX = 100;
+/** A search hit's excerpt: at most this many characters, starting this many before the first match. */
+const EXCERPT_MAX = 240;
+const EXCERPT_BEFORE = 80;
+/** Opened at a message: this many up to it, and up to this many after it (all of them, or none: see `channel`). */
+const AROUND_BEFORE = 25;
+const AROUND_AFTER = 50;
+/** People named at once (`users.info`) when every direct message is listed. */
+const NAMING_AT_ONCE = 6;
 /** How long the lists of channels are kept before they are read again. */
 const LIST_TTL_MS = 10 * 60_000;
 const SIGN_IN_ERRORS = new Set(["invalid_auth", "not_authed", "token_revoked", "token_expired", "account_inactive"]);
@@ -33,6 +54,19 @@ interface ConversationRow {
 	is_mpim?: boolean;
 	is_private?: boolean;
 	is_group?: boolean;
+	is_user_deleted?: boolean;
+}
+
+/** One match of `search.messages`; for a direct message `type` is `im` and `channel.name` is the other person's id. */
+interface SearchMatch {
+	type?: string;
+	channel?: { id: string; name?: string; is_private?: boolean; is_mpim?: boolean; is_im?: boolean };
+	user?: string;
+	username?: string;
+	ts?: string;
+	thread_ts?: string;
+	text?: string;
+	permalink?: string;
 }
 
 interface CountRow {
@@ -62,8 +96,12 @@ export interface Slack {
 		cookie: string;
 	}): Promise<Outcome<{ team: string | null; url: string | null; user: string | null }>>;
 	unread(): Promise<Outcome<{ channels: SlackChannel[] }>>;
-	find(text: string): Promise<Outcome<{ channels: SlackChannel[] }>>;
-	channel(id: string): Promise<Outcome<{ thread: SlackThread }>>;
+	/** Channels named like `text` first (page 1 only), then one page of Slack's message search. */
+	search(text: string, page?: number): Promise<Outcome<SlackSearch>>;
+	/** Every conversation the operator belongs to, read afresh, with what `client.counts` says is unread. */
+	conversations(): Promise<Outcome<{ channels: SlackChannel[] }>>;
+	/** A channel's latest messages, or with `at` the messages around that one. */
+	channel(id: string, at?: string): Promise<Outcome<{ thread: SlackThread }>>;
 	thread(id: string, ts: string): Promise<Outcome<{ thread: SlackThread }>>;
 	/** A channel's name for descriptions (`#name`, or a person's name). */
 	channelName(id: string): Promise<string>;
@@ -82,6 +120,73 @@ export function slackLink(base: string | null, channel: string, ts?: string): st
 	const root = base.endsWith("/") ? base : `${base}/`;
 	return `${root}archives/${channel}${ts ? `/p${ts.replace(".", "")}` : ""}`;
 }
+
+/** A group's name as Slack shows it: `mpdm-ann--ben--me-1` is "ann, ben" for `me`. */
+export function groupName(name: string, me?: string | null): string {
+	const people = /^mpdm-(.+)-\d+$/.exec(name)?.[1]?.split("--");
+	if (!people) return name;
+	const others = people.filter((person) => person !== me);
+	return (others.length ? others : people).join(", ");
+}
+
+/**
+ * A search hit's text (Slack's highlight markers U+E000 and U+E001 around each match) as an excerpt in parts: on one
+ * line, cut to `EXCERPT_MAX` characters around the first match, with an ellipsis where it was cut.
+ */
+export function excerptOf(text: string): SlackHit["excerpt"] {
+	const parts: SlackHit["excerpt"] = [];
+	let match = false;
+	for (const piece of text
+		.replace(/\s+/g, " ")
+		.trim()
+		.split(/([\ue000\ue001])/)) {
+		if (piece === "\ue000" || piece === "\ue001") match = piece === "\ue000";
+		else if (piece) {
+			const last = parts.at(-1);
+			if (last && last.match === match) last.text += piece;
+			else parts.push({ text: piece, match });
+		}
+	}
+	const total = parts.reduce((sum, part) => sum + part.text.length, 0);
+	if (total <= EXCERPT_MAX) return parts;
+	let first = 0;
+	for (const part of parts) {
+		if (part.match) break;
+		first += part.text.length;
+	}
+	if (first >= total) first = 0;
+	const start = Math.max(0, Math.min(first - EXCERPT_BEFORE, total - EXCERPT_MAX));
+	const end = start + EXCERPT_MAX;
+	const cut: SlackHit["excerpt"] = [];
+	let at = 0;
+	for (const part of parts) {
+		const from = Math.max(start, at);
+		const to = Math.min(end, at + part.text.length);
+		if (to > from) cut.push({ text: part.text.slice(from - at, to - at), match: part.match });
+		at += part.text.length;
+	}
+	if (start > 0) cut[0] = { ...cut[0], text: `\u2026${cut[0].text.trimStart()}` };
+	if (end < total)
+		cut[cut.length - 1] = { ...cut[cut.length - 1], text: `${cut[cut.length - 1].text.trimEnd()}\u2026` };
+	return cut;
+}
+
+/** Run `work` over `items`, at most `limit` at a time, keeping their order. */
+async function atMost<T, R>(items: T[], limit: number, work: (item: T) => Promise<R>): Promise<R[]> {
+	const out: R[] = new Array(items.length);
+	let next = 0;
+	const worker = async () => {
+		while (next < items.length) {
+			const index = next++;
+			out[index] = await work(items[index]);
+		}
+	};
+	await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+	return out;
+}
+
+/** Slack timestamps (`1700000000.000100`) in order; as strings, since they have more digits than a double keeps. */
+const byTs = (a: { ts: string }, b: { ts: string }) => (a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0);
 
 export function openSlack(
 	credentials: () => SlackCredentials | undefined,
@@ -170,13 +275,17 @@ export function openSlack(
 	const kindOf = (row: ConversationRow | undefined): SlackChannel["kind"] =>
 		row?.is_im ? "dm" : row?.is_mpim ? "group" : row?.is_private || row?.is_group ? "private" : "channel";
 
+	const me = () => credentials()?.user ?? null;
+
 	const nameOf = async (row: ConversationRow | undefined, id: string): Promise<string> => {
 		if (row?.is_im && row.user) return userName(row.user);
+		if (row?.is_mpim && row.name) return groupName(row.name, me());
 		if (row?.name) return row.name;
 		const answer = await call("conversations.info", { channel: id });
 		const info = answer.ok ? (answer.json.channel as ConversationRow | undefined) : undefined;
 		if (info) names.set(id, info);
 		if (info?.is_im && info.user) return userName(info.user);
+		if (info?.is_mpim && info.name) return groupName(info.name, me());
 		return info?.name ?? id;
 	};
 
@@ -210,6 +319,83 @@ export function openSlack(
 
 	const teamUrl = () => credentials()?.url ?? null;
 	const badChannel: Refusal = { ok: false, reason: "That is not a Slack channel." };
+
+	/** Channels named like `text`: every public and private channel (`conversations.list`) and every one he is in. */
+	const findChannels = async (text: string): Promise<Outcome<{ channels: SlackChannel[] }>> => {
+		const wanted = text.trim().replace(/^#/, "").toLowerCase();
+		if (!wanted) return { ok: true, channels: [] };
+		if (!everything || now() - everything.at >= LIST_TTL_MS) {
+			const listed = await pages("conversations.list", {
+				types: "public_channel,private_channel",
+				exclude_archived: "true",
+			});
+			if (!listed.ok) return listed;
+			everything = { at: now(), rows: listed.rows };
+		}
+		const mine = await memberRows();
+		const rows = [...new Map([...everything.rows, ...(mine.ok ? mine.rows : [])].map((row) => [row.id, row])).values()];
+		const named = rows.map((row) => ({
+			row,
+			name:
+				row.is_im && row.user
+					? (users.get(row.user) ?? "")
+					: row.is_mpim && row.name
+						? groupName(row.name, me())
+						: (row.name ?? ""),
+		}));
+		const matches = named
+			.filter(({ name }) => name.toLowerCase().includes(wanted))
+			.sort(
+				(a, b) => Number(!a.name.toLowerCase().startsWith(wanted)) - Number(!b.name.toLowerCase().startsWith(wanted)),
+			)
+			.slice(0, FOUND_MAX);
+		return {
+			ok: true,
+			channels: matches.map(({ row, name }) => ({
+				id: row.id,
+				name,
+				kind: kindOf(row),
+				unread: null,
+				more: false,
+				mentions: 0,
+				latest: null,
+				url: slackLink(teamUrl(), row.id),
+			})),
+		};
+	};
+
+	/** A `search.messages` match as a hit: its conversation named (a direct message by its person), its thread found. */
+	const hitOf = async (match: SearchMatch & { channel: { id: string }; ts: string }): Promise<SlackHit> => {
+		const where = match.channel;
+		let row = names.get(where.id);
+		if (!row) {
+			const im = match.type === "im" || where.is_im === true;
+			row = {
+				id: where.id,
+				...(im ? { is_im: true, user: where.name } : { name: where.name }),
+				is_mpim: where.is_mpim === true || match.type === "mpim",
+				is_private: where.is_private === true,
+			};
+			names.set(where.id, row);
+		}
+		// A reply's permalink names its thread (`?thread_ts=`), as korotovsky/slack-mcp-server reads it.
+		let thread = match.thread_ts ?? null;
+		if (!thread && match.permalink)
+			try {
+				thread = new URL(match.permalink).searchParams.get("thread_ts");
+			} catch {
+				thread = null;
+			}
+		return {
+			channel: { id: where.id, name: await nameOf(row, where.id), kind: kindOf(row) },
+			ts: match.ts,
+			threadTs: thread && TS.test(thread) && thread !== match.ts ? thread : null,
+			name: match.user ? await userName(match.user) : (match.username ?? "someone"),
+			at: Math.round(Number(match.ts) * 1000),
+			excerpt: excerptOf(await plain(match.text ?? "")),
+			url: match.permalink ?? slackLink(teamUrl(), where.id, match.ts),
+		};
+	};
 
 	const slack: Slack = {
 		async check(session) {
@@ -268,53 +454,104 @@ export function openSlack(
 			return { ok: true, channels };
 		},
 
-		async find(text) {
-			const wanted = text.trim().replace(/^#/, "").toLowerCase();
-			if (!wanted) return { ok: true, channels: [] };
-			if (!everything || now() - everything.at >= LIST_TTL_MS) {
-				const listed = await pages("conversations.list", {
-					types: "public_channel,private_channel",
-					exclude_archived: "true",
-				});
-				if (!listed.ok) return listed;
-				everything = { at: now(), rows: listed.rows };
-			}
-			const mine = await memberRows();
-			const rows = [
-				...new Map([...everything.rows, ...(mine.ok ? mine.rows : [])].map((row) => [row.id, row])).values(),
-			];
-			const named = await Promise.all(
-				rows.map(async (row) => ({
-					row,
-					name: row.is_im && row.user ? (users.get(row.user) ?? "") : (row.name ?? ""),
-				})),
+		async search(text, page = 1) {
+			const query = text.trim();
+			if (!query) return { ok: true, channels: [], hits: [], page: 1, pages: 0, total: 0 };
+			const at = Math.min(SEARCH_PAGES_MAX, Math.max(1, Math.floor(page) || 1));
+			const [found, named] = await Promise.all([
+				call("search.messages", {
+					query,
+					count: String(SEARCH_COUNT),
+					page: String(at),
+					highlight: "true",
+					sort: "score",
+					sort_dir: "desc",
+				}),
+				at === 1 ? findChannels(query) : Promise.resolve(undefined),
+			]);
+			if (!found.ok) return found;
+			const box = found.json.messages as
+				| { matches?: SearchMatch[]; total?: number; paging?: { page?: number; pages?: number; total?: number } }
+				| undefined;
+			const matches = (box?.matches ?? []).filter(
+				(match): match is SearchMatch & { channel: { id: string }; ts: string } =>
+					!!match.channel?.id && ID.test(match.channel.id) && !!match.ts && TS.test(match.ts),
 			);
-			const matches = named
-				.filter(({ name }) => name.toLowerCase().includes(wanted))
-				.sort(
-					(a, b) => Number(!a.name.toLowerCase().startsWith(wanted)) - Number(!b.name.toLowerCase().startsWith(wanted)),
-				)
-				.slice(0, FOUND_MAX);
+			const hits = await Promise.all(matches.map(hitOf));
 			return {
 				ok: true,
-				channels: matches.map(({ row, name }) => ({
-					id: row.id,
-					name,
-					kind: kindOf(row),
-					unread: null,
-					more: false,
-					mentions: 0,
-					latest: null,
-					url: slackLink(teamUrl(), row.id),
-				})),
+				// A failed channel listing leaves the channel matches out; the messages found still show.
+				channels: named?.ok ? named.channels : [],
+				hits,
+				page: box?.paging?.page ?? at,
+				pages: Math.min(SEARCH_PAGES_MAX, box?.paging?.pages ?? 1),
+				total: box?.paging?.total ?? box?.total ?? hits.length,
 			};
 		},
 
-		async channel(id) {
-			if (!ID.test(id)) return badChannel;
-			const history = await call("conversations.history", { channel: id, limit: String(CHANNEL_MESSAGES) });
-			if (!history.ok) return history;
-			const rows = [...((history.json.messages as MessageRow[] | undefined) ?? [])].reverse();
+		async conversations() {
+			members = undefined; // the operator asked for the list: read it afresh
+			const listed = await memberRows();
+			if (!listed.ok) return listed;
+			const counts = await call("client.counts", {
+				thread_counts_by_channel: "true",
+				org_wide_aware: "true",
+				include_file_channels: "true",
+			});
+			const countOf = new Map<string, CountRow>();
+			if (counts.ok)
+				for (const key of ["channels", "mpims", "ims"])
+					for (const row of (counts.json[key] as CountRow[] | undefined) ?? []) {
+						countOf.set(row.id, row);
+						if (row.last_read) lastRead.set(row.id, row.last_read);
+					}
+			const rows = listed.rows.filter((row) => !(row.is_im && row.is_user_deleted));
+			const channels = await atMost(rows, NAMING_AT_ONCE, async (row): Promise<SlackChannel> => {
+				const count = countOf.get(row.id);
+				return {
+					id: row.id,
+					name: await nameOf(row, row.id),
+					kind: kindOf(row),
+					unread: null,
+					more: false,
+					mentions: count?.mention_count ?? 0,
+					latest: count?.latest ?? null,
+					url: slackLink(teamUrl(), row.id),
+					...(counts.ok ? { unreads: count?.has_unreads === true } : {}),
+				};
+			});
+			const people = (channel: SlackChannel) => Number(channel.kind === "dm" || channel.kind === "group");
+			channels.sort(
+				(a, b) => people(a) - people(b) || a.name.localeCompare(b.name, undefined, { sensitivity: "base" }),
+			);
+			return { ok: true, channels };
+		},
+
+		async channel(id, at) {
+			if (!ID.test(id) || (at !== undefined && !TS.test(at))) return badChannel;
+			let rows: MessageRow[];
+			let newer: boolean | undefined;
+			if (at) {
+				// Up to the message (Slack gives the newest in range), and after it. Whether Slack answers an `oldest`-only
+				// read from `oldest` forward or with the newest is not documented, so the later messages are shown only when
+				// all of them came: never a gap between the message and what follows it.
+				const [before, after] = await Promise.all([
+					call("conversations.history", { channel: id, latest: at, inclusive: "true", limit: String(AROUND_BEFORE) }),
+					call("conversations.history", { channel: id, oldest: at, limit: String(AROUND_AFTER) }),
+				]);
+				if (!before.ok) return before;
+				const complete = after.ok && after.json.has_more !== true;
+				const both = [
+					...((before.json.messages as MessageRow[] | undefined) ?? []),
+					...(complete ? ((after.json.messages as MessageRow[] | undefined) ?? []) : []),
+				];
+				rows = [...new Map(both.map((row) => [row.ts, row])).values()].sort(byTs);
+				newer = !complete;
+			} else {
+				const history = await call("conversations.history", { channel: id, limit: String(CHANNEL_MESSAGES) });
+				if (!history.ok) return history;
+				rows = [...((history.json.messages as MessageRow[] | undefined) ?? [])].reverse();
+			}
 			// Where it was last read: as the unread listing said, else as conversations.info says (a read-only call).
 			let read = lastRead.get(id);
 			if (read === undefined) {
@@ -330,6 +567,7 @@ export function openSlack(
 					messages: await messages(rows),
 					url: slackLink(teamUrl(), id),
 					lastRead: read && read !== "0000000000.000000" ? read : null,
+					...(newer === undefined ? {} : { newer }),
 				},
 			};
 		},

@@ -1,8 +1,10 @@
 // Slack as the world UI knows it (tickets 27 and 28): whether the operator is signed in and to which workspace, and
 // the channels with unread messages, read through the backend's integrations API (`window.agentWorld`). The town
 // square's townsfolk, the unread orb, the Slack tab, Settings, and the crier all read this one store, so they always
-// agree. It never sees a token or a cookie: the backend keeps those and answers only with status and messages.
-import type { CredentialStatus, SlackChannel } from "../../../src/integrations.js";
+// agree. It also keeps the list of every channel (read when asked for) and the crier's last search, so they survive
+// the crier closing for a channel and opening again. It never sees a token or a cookie: the backend keeps those and
+// answers only with status and messages.
+import type { CredentialStatus, SlackChannel, SlackHit } from "../../../src/integrations.js";
 import type { AgentWorldApi } from "../../../src/world.js";
 
 export type SlackApi = Partial<
@@ -12,7 +14,8 @@ export type SlackApi = Partial<
 		| "signInSlack"
 		| "signOutSlack"
 		| "slackUnread"
-		| "slackFindChannels"
+		| "slackSearch"
+		| "slackConversations"
 		| "slackChannel"
 		| "slackThread"
 		| "slackMarkRead"
@@ -40,6 +43,21 @@ export interface SlackState {
 	signingIn: boolean;
 	/** Why the last sign-in or sign-out did not happen. */
 	signInProblem?: string;
+	/** Every channel, direct message, and group the operator belongs to: read when first shown, kept a while. */
+	all: { channels?: SlackChannel[]; loading: boolean; problem?: string };
+	/** The crier's search, as last asked (on Enter): what was asked, and what Slack found so far. */
+	search?: SlackSearchState;
+}
+
+export interface SlackSearchState {
+	text: string;
+	loading: boolean;
+	problem?: string;
+	channels?: SlackChannel[];
+	hits?: SlackHit[];
+	page: number;
+	pages: number;
+	total: number;
 }
 
 /**
@@ -50,9 +68,21 @@ export interface SlackState {
 const REFRESH_MS = 120_000;
 /** A listing asked for this soon after the last one is the same listing. */
 const FRESH_MS = 15_000;
+/** The list of every channel, once read, is shown again without asking Slack for this long. */
+const ALL_FRESH_MS = 60_000;
 
 let api: SlackApi = {};
-let state: SlackState = { status: "unknown", channels: [], listed: false, refreshing: false, signingIn: false };
+let state: SlackState = {
+	status: "unknown",
+	channels: [],
+	listed: false,
+	refreshing: false,
+	signingIn: false,
+	all: { loading: false },
+};
+let allAt = -Infinity;
+/** Counts searches, so an answer to an older one is dropped. */
+let searches = 0;
 let listedAt = -Infinity;
 let timer: ReturnType<typeof setInterval> | undefined;
 let inFlight: Promise<void> | undefined;
@@ -67,7 +97,17 @@ const update = (change: Partial<SlackState>) => {
 const failure = (error: unknown) => String((error as Error)?.message ?? error);
 
 function signedOut(problem?: string) {
-	update({ status: "signed-out", account: undefined, channels: [], listed: false, problem });
+	allAt = -Infinity;
+	searches++;
+	update({
+		status: "signed-out",
+		account: undefined,
+		channels: [],
+		listed: false,
+		problem,
+		all: { loading: false },
+		search: undefined,
+	});
 }
 
 async function readStatus() {
@@ -98,6 +138,22 @@ export function unreadTotal(channels: SlackChannel[]): { count: number; more: bo
 export function unreadLabel(channel: Pick<SlackChannel, "unread" | "more">): string {
 	if (channel.unread === null) return "\u2022";
 	return channel.more ? `${channel.unread}+` : String(channel.unread);
+}
+
+/**
+ * Every channel as a list shows it: the unread first, in the unread listing's order and with its counts, then the rest
+ * as the backend sorted them; `filter` keeps those whose name has it (no call to Slack).
+ */
+export function everyChannel(all: SlackChannel[], unread: SlackChannel[], filter = ""): SlackChannel[] {
+	const listed = new Map(unread.map((channel) => [channel.id, channel]));
+	const known = new Set(all.map((channel) => channel.id));
+	const first = unread.filter((channel) => known.has(channel.id));
+	const rest = all
+		.filter((channel) => !listed.has(channel.id))
+		.sort((a, b) => Number(b.unreads === true) - Number(a.unreads === true));
+	const wanted = filter.trim().replace(/^[#@]/, "").toLowerCase();
+	const every = [...first, ...rest];
+	return wanted ? every.filter((channel) => channel.name.toLowerCase().includes(wanted)) : every;
 }
 
 /** A channel's name as Slack shows it: `#general` for a channel, the person's or group's name otherwise. */
@@ -148,6 +204,85 @@ export const slack = {
 			}
 		})();
 		return inFlight;
+	},
+
+	/** Read the list of every channel (at once with `force`, else only when the last one is not fresh). */
+	async loadAll(force = false): Promise<void> {
+		const list = api.slackConversations;
+		if (state.status !== "signed-in" || typeof list !== "function" || state.all.loading) return;
+		if (!force && state.all.channels && performance.now() - allAt < ALL_FRESH_MS) return;
+		update({ all: { ...state.all, loading: true } });
+		try {
+			const answer = await list();
+			if (answer.ok) {
+				allAt = performance.now();
+				update({ all: { channels: answer.channels, loading: false } });
+			} else {
+				slack.refused(answer);
+				update({ all: { ...state.all, loading: false, problem: answer.reason } });
+			}
+		} catch (error) {
+			update({ all: { ...state.all, loading: false, problem: failure(error) } });
+		}
+	},
+
+	/** Search Slack as its own search bar does: one call, for the first page. Only the crier calls it, on Enter. */
+	async search(text: string): Promise<void> {
+		const find = api.slackSearch;
+		const asked = text.trim();
+		if (!asked || state.status !== "signed-in" || typeof find !== "function") return;
+		const turn = ++searches;
+		update({ search: { text: asked, loading: true, page: 0, pages: 0, total: 0 } });
+		try {
+			const answer = await find(asked, 1);
+			if (turn !== searches) return;
+			if (answer.ok) {
+				const { channels, hits, page, pages, total } = answer;
+				update({ search: { text: asked, loading: false, channels, hits, page, pages, total } });
+			} else {
+				slack.refused(answer);
+				update({ search: { text: asked, loading: false, problem: answer.reason, page: 0, pages: 0, total: 0 } });
+			}
+		} catch (error) {
+			if (turn === searches)
+				update({ search: { text: asked, loading: false, problem: failure(error), page: 0, pages: 0, total: 0 } });
+		}
+	},
+
+	/** The next page of the last search's messages, added under those shown. */
+	async more(): Promise<void> {
+		const find = api.slackSearch;
+		const now = state.search;
+		if (!now || now.loading || now.page >= now.pages || typeof find !== "function") return;
+		const turn = searches;
+		update({ search: { ...now, loading: true, problem: undefined } });
+		try {
+			const answer = await find(now.text, now.page + 1);
+			if (turn !== searches) return;
+			if (answer.ok)
+				update({
+					search: {
+						...now,
+						loading: false,
+						hits: [...(now.hits ?? []), ...answer.hits],
+						page: answer.page,
+						pages: answer.pages,
+						total: answer.total,
+					},
+				});
+			else {
+				slack.refused(answer);
+				update({ search: { ...now, loading: false, problem: answer.reason } });
+			}
+		} catch (error) {
+			if (turn === searches) update({ search: { ...now, loading: false, problem: failure(error) } });
+		}
+	},
+
+	/** Forget the last search: the crier shows the channels again. */
+	clearSearch() {
+		searches++;
+		if (state.search) update({ search: undefined });
 	},
 
 	/** Open Slack's sign-in window (the backend captures the session); resolves once it closed. */

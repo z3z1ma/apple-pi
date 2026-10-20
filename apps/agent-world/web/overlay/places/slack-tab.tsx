@@ -1,9 +1,10 @@
 // Slack in the interface (ticket 27): the side panel's Slack tab (the channels with unread messages, one click from
-// reading; the crier for any other), the unread orb's number, and Settings' Slack sign-in. All read `slack-state`.
-import { useSyncExternalStore } from "react";
+// reading, or every channel filtered by name; the crier to search Slack), the unread orb's number, and Settings' Slack
+// sign-in. All read `slack-state`.
+import { useState, useSyncExternalStore } from "react";
 import { useTheme } from "../../theme-store.js";
 import { slack, unreadTotal } from "./slack-state.js";
-import { ChannelRow, SlackSignIn } from "./square.js";
+import { AllChannels, ChannelRow, SlackSignIn } from "./square.js";
 import { squarePanels } from "./square-panels.js";
 
 const useSlack = () => useSyncExternalStore(slack.subscribe, slack.get);
@@ -50,10 +51,11 @@ export function useUnreadOrb(): { text: string; label: string; title: string; si
 	};
 }
 
-/** The Slack tab: every channel with unread messages, most pressing first; the crier for any other channel. */
+/** The Slack tab: every channel with unread messages, most pressing first, or every channel; the crier to search. */
 export function SlackTab() {
 	const state = useSlack();
 	const theme = useTheme();
+	const [view, setView] = useState<"unread" | "all">("unread");
 	const crier = theme?.labels.crier ?? "the crier";
 	if (state.status === "unavailable") return <p className="aw-empty">Slack is not available in this window.</p>;
 	if (state.status !== "signed-in")
@@ -77,15 +79,29 @@ export function SlackTab() {
 					Ask the {crier.toLowerCase()}
 				</button>
 			</h3>
-			{state.problem && <p className="aw-note aw-slack-problem">{state.problem}</p>}
-			{channels.length ? (
-				<ul className="aw-slack-list" aria-label="Unread channels">
-					{channels.map((channel) => (
-						<ChannelRow key={channel.id} channel={channel} theme={theme} />
-					))}
-				</ul>
+			<div className="aw-slack-views aw-slack-tab-views">
+				<button type="button" className="aw-button" aria-pressed={view === "unread"} onClick={() => setView("unread")}>
+					Unread
+				</button>
+				<button type="button" className="aw-button" aria-pressed={view === "all"} onClick={() => setView("all")}>
+					All channels
+				</button>
+			</div>
+			{view === "all" ? (
+				<AllChannels theme={theme} inTab />
 			) : (
-				<p className="aw-empty">{state.listed ? "Nothing unread." : "Reading Slack\u2026"}</p>
+				<>
+					{state.problem && <p className="aw-note aw-slack-problem">{state.problem}</p>}
+					{channels.length ? (
+						<ul className="aw-slack-list" aria-label="Unread channels">
+							{channels.map((channel) => (
+								<ChannelRow key={channel.id} channel={channel} theme={theme} />
+							))}
+						</ul>
+					) : (
+						<p className="aw-empty">{state.listed ? "Nothing unread." : "Reading Slack\u2026"}</p>
+					)}
+				</>
 			)}
 		</section>
 	);

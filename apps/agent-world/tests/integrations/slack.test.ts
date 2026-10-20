@@ -26,6 +26,71 @@ const crowd = Array.from({ length: 40 }, (_, index) => ({
 	has_unreads: true,
 }));
 
+// Slack's message search (`search.messages`, highlight on): a hit in a channel, in a direct message (whose
+// `channel.name` is the other person's id), and a reply in a thread (its permalink names the thread); a second page.
+const HL = (word: string) => `\ue000${word}\ue001`;
+const LONG_TEXT = `${"Before the train leaves we check every box on the list. ".repeat(6)}The ${HL("release")} is tagged. ${"After that we wait for the mirrors to catch up and the notes to publish. ".repeat(6)}`;
+function searchPage(page: number) {
+	const match = (over: object) => ({ type: "message", iid: "x", team: "T1", ...over });
+	const matches =
+		page === 1
+			? [
+					match({
+						channel: { id: "C1", name: "deploys", is_private: false, is_mpim: false },
+						user: "U1",
+						ts: "1700000300.000100",
+						text: `The ${HL("release")} train left &amp; <@U2> waved`,
+						permalink: "https://acme.slack.com/archives/C1/p1700000300000100",
+					}),
+					match({
+						type: "im",
+						channel: { id: "D1", name: "U2", is_private: true, is_mpim: false },
+						user: "U2",
+						ts: "1700000200.000100",
+						text: LONG_TEXT,
+						permalink: "https://acme.slack.com/archives/D1/p1700000200000100",
+					}),
+					match({
+						channel: { id: "C9", name: "releases", is_private: false, is_mpim: false },
+						user: "U1",
+						ts: "1700000003.000000",
+						text: `Thanks, ${HL("release")} notes are up`,
+						permalink: "https://acme.slack.com/archives/C9/p1700000003000000?thread_ts=1700000002.000000&cid=C9",
+					}),
+				]
+			: [
+					match({
+						channel: { id: "C3", name: "random", is_private: false, is_mpim: false },
+						username: "deploybot",
+						ts: "1700000100.000100",
+						text: `${HL("release")} 2.3 out`,
+						permalink: "https://acme.slack.com/archives/C3/p1700000100000100",
+					}),
+				];
+	return { matches, total: 4, paging: { count: 3, total: 4, page, pages: 2 } };
+}
+
+/** A long channel: sixty messages a minute apart, `1700001001` to `1700001060`. */
+const LONG_CHANNEL = Array.from({ length: 60 }, (_, i) => ({
+	ts: `${1700001001 + i}.000000`,
+	user: "U1",
+	text: `Message ${i + 1}`,
+}));
+/** `conversations.history` over `LONG_CHANNEL`, newest first, as Slack answers within `oldest` and `latest`. */
+function longHistory(params: URLSearchParams) {
+	const inclusive = params.get("inclusive") === "true";
+	const oldest = Number(params.get("oldest") ?? 0);
+	const latest = Number(params.get("latest") ?? Number.POSITIVE_INFINITY);
+	const limit = Number(params.get("limit") ?? 100);
+	const inRange = LONG_CHANNEL.filter((message) => {
+		const ts = Number(message.ts);
+		return (inclusive ? ts >= oldest : ts > oldest) && (inclusive ? ts <= latest : ts < latest);
+	});
+	// With only `oldest`, Slack answers from `oldest` forward; otherwise the newest in range.
+	const window = params.has("oldest") && !params.has("latest") ? inRange.slice(0, limit) : inRange.slice(-limit);
+	return { messages: [...window].reverse(), has_more: inRange.length > limit };
+}
+
 beforeAll(async () => {
 	slack = await fakeServer();
 	const ok = (json: object) => ({ json: { ok: true, ...json } });
@@ -96,6 +161,7 @@ beforeAll(async () => {
 				});
 			case "/api/conversations.history": {
 				const channel = params.get("channel");
+				if (channel === "C7") return ok(longHistory(params));
 				if (channel === "C1" && params.get("oldest") === "1700000000.000100")
 					return ok({ messages: [{ ts: "1" }, { ts: "2" }, { ts: "3" }], has_more: false });
 				if (channel === "C2")
@@ -142,6 +208,8 @@ beforeAll(async () => {
 				const user = params.get("user") ?? "";
 				return ok({ user: { id: user, name: user.toLowerCase(), profile: { display_name: names[user] ?? "" } } });
 			}
+			case "/api/search.messages":
+				return ok({ query: params.get("query"), messages: searchPage(Number(params.get("page") ?? 1)) });
 			case "/api/chat.postMessage":
 				return ok({ channel: params.get("channel"), ts: "1700000004.000000" });
 			case "/api/conversations.mark":
@@ -197,7 +265,7 @@ test("the square lists channels with unread messages, most pressing first, count
 });
 
 test("the crier finds a channel with no unread messages and opens it with names", async () => {
-	const found = await api.slackFindChannels("releas");
+	const found = await api.slackSearch("releas");
 	expect(found.ok && found.channels.map((channel) => channel.name)).toEqual(["releases", "release-train"]);
 	const opened = await api.slackChannel("C9");
 	expect(opened.ok).toBe(true);
@@ -241,6 +309,136 @@ test("a thread reply posts only with its confirmation, then is recorded and anno
 	const record = readFileSync(join(stateDir, "agent-world-outside-writes.jsonl"), "utf8").trim().split("\n");
 	expect(JSON.parse(record.at(-1)!)).toMatchObject({ kind: "slack-reply", text: "On it.", ok: true });
 	expect(announced.map((entry) => entry.line)).toEqual(["You replied in #releases: On it."]);
+});
+
+test("a search finds messages in channels, direct messages, and threads, with sender, time, and the match marked", async () => {
+	slack.seen.length = 0;
+	const found = await api.slackSearch("release");
+	expect(found.ok).toBe(true);
+	if (!found.ok) return;
+	// One message search, Slack's own (highlighted, paged), and the channels named like it from the full list.
+	const searches = calls("search.messages").map((request) => Object.fromEntries(form(request)));
+	expect(searches).toEqual([
+		{ token: TOKEN, query: "release", count: "20", page: "1", highlight: "true", sort: "score", sort_dir: "desc" },
+	]);
+	expect(found.channels.map((channel) => channel.name)).toEqual(["releases", "release-train"]);
+	expect([found.page, found.pages, found.total]).toEqual([1, 2, 4]);
+	expect(
+		found.hits.map((hit) => [
+			hit.channel.id,
+			hit.channel.name,
+			hit.channel.kind,
+			hit.ts,
+			hit.threadTs,
+			hit.name,
+			hit.at,
+		]),
+	).toEqual([
+		["C1", "deploys", "channel", "1700000300.000100", null, "Ann", 1700000300000],
+		["D1", "Ben", "dm", "1700000200.000100", null, "Ben", 1700000200000],
+		["C9", "releases", "channel", "1700000003.000000", "1700000002.000000", "Ann", 1700000003000],
+	]);
+	// The excerpt is plain text, the matched words marked; a long message is cut around its first match.
+	expect(found.hits[0].excerpt).toEqual([
+		{ text: "The ", match: false },
+		{ text: "release", match: true },
+		{ text: " train left & @Ben waved", match: false },
+	]);
+	const long = found.hits[1].excerpt;
+	expect(long.find((part) => part.match)?.text).toBe("release");
+	const shown = long.map((part) => part.text).join("");
+	expect(shown.length).toBeLessThanOrEqual(260);
+	expect(shown.startsWith("\u2026")).toBe(true);
+	expect(shown.endsWith("\u2026")).toBe(true);
+	expect(found.hits[2].url).toBe(
+		"https://acme.slack.com/archives/C9/p1700000003000000?thread_ts=1700000002.000000&cid=C9",
+	);
+
+	// The next page: the next messages only; the channels came with the first.
+	const next = await api.slackSearch("release", 2);
+	expect(next.ok && [next.page, next.channels, next.hits.map((hit) => [hit.channel.name, hit.name])]).toEqual([
+		2,
+		[],
+		[["random", "deploybot"]],
+	]);
+	expect(calls("search.messages").map((request) => form(request).get("page"))).toEqual(["1", "2"]);
+	// Searching reads; it marks nothing read.
+	expect(calls("conversations.mark")).toEqual([]);
+});
+
+test("every conversation the operator belongs to is listed, paging through users.conversations, with what is unread", async () => {
+	slack.seen.length = 0;
+	const pagesOf = [
+		[
+			{ id: "C1", name: "deploys", is_channel: true },
+			{ id: "C2", name: "team-secret", is_channel: true, is_private: true },
+		],
+		[
+			{ id: "C3", name: "random", is_channel: true },
+			{ id: "G1", name: "mpdm-ann--ben--operator-1", is_mpim: true },
+		],
+		[
+			{ id: "D1", is_im: true, user: "U2" },
+			{ id: "D2", is_im: true, user: "U1" },
+			{ id: "D3", is_im: true, user: "U3", is_user_deleted: true },
+		],
+	];
+	slack.route((request) => {
+		if (request.path !== "/api/users.conversations") return undefined;
+		const cursor = form(request).get("cursor");
+		const page = cursor ? Number(cursor.replace("page-", "")) : 0;
+		return {
+			json: {
+				ok: true,
+				channels: pagesOf[page],
+				response_metadata: { next_cursor: page < pagesOf.length - 1 ? `page-${page + 1}` : "" },
+			},
+		};
+	});
+	const listed = await api.slackConversations();
+	expect(listed.ok).toBe(true);
+	if (!listed.ok) return;
+	const asked = calls("users.conversations").map((request) => form(request));
+	expect(asked.map((params) => params.get("cursor"))).toEqual([null, "page-1", "page-2"]);
+	expect(asked[0].get("types")).toBe("public_channel,private_channel,mpim,im");
+	// Every kind, channels first and then people, each by name (a person by name, a group by its other people; a
+	// deleted person's conversation left out), each with what client.counts says is unread.
+	expect(
+		listed.channels.map((channel) => [channel.id, channel.name, channel.kind, channel.unreads, channel.mentions]),
+	).toEqual([
+		["C1", "deploys", "channel", true, 2],
+		["C3", "random", "channel", false, 0],
+		["C2", "team-secret", "private", true, 0],
+		["D2", "Ann", "dm", false, 0],
+		["G1", "ann, ben", "group", false, 0],
+		["D1", "Ben", "dm", true, 1],
+	]);
+	expect(listed.channels.every((channel) => channel.unread === null)).toBe(true);
+});
+
+test("a channel opens at a message found by search, with the messages around it", async () => {
+	// In the middle: the messages up to it and every one after it (there are few enough to show them all).
+	const middle = await api.slackChannel("C7", "1700001020.000000");
+	expect(middle.ok).toBe(true);
+	if (!middle.ok) return;
+	const texts = middle.thread.messages.map((message) => message.text);
+	expect(texts[0]).toBe("Message 1");
+	expect(texts.at(-1)).toBe("Message 60");
+	expect(texts).toHaveLength(60);
+	expect(texts).toContain("Message 20");
+	expect(middle.thread.newer).toBe(false);
+	// Early on, with more after it than one reading shows: up to it, saying newer ones follow (no gap is shown).
+	const early = await api.slackChannel("C7", "1700001005.000000");
+	expect(early.ok && early.thread.messages.map((message) => message.text)).toEqual([
+		"Message 1",
+		"Message 2",
+		"Message 3",
+		"Message 4",
+		"Message 5",
+	]);
+	expect(early.ok && early.thread.newer).toBe(true);
+	// Not a timestamp: refused, nothing read.
+	expect(await api.slackChannel("C7", "soon")).toMatchObject({ ok: false });
 });
 
 /** Slack's methods that change what the operator has read. */
