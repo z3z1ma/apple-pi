@@ -108,12 +108,14 @@ function Panel({ opened, world, store }: { opened: Character; world: WorldSnapsh
 		};
 	}, []);
 
-	// Links open in the system browser, through the main process; a refusal or failure shows where Go to does.
-	const openLink = (href: string) => {
-		if (!api?.openLink) return setTerminal("This window cannot open links.");
+	// Links open through the main process: web links in the system browser, files in their default app (relative paths
+	// from the agent's directory). A refusal or failure shows where Go to does.
+	const openLink = (href: string, file: boolean) => {
+		const open = file ? api?.openFile : api?.openLink;
+		if (!open) return setTerminal("This window cannot open links.");
 		setTerminal(undefined);
 		void Promise.resolve()
-			.then(() => api.openLink!(href))
+			.then(() => (file ? api!.openFile!(href, facts?.cwd ?? "") : api!.openLink!(href)))
 			.then((result) => setTerminal(result.ok ? undefined : result.reason))
 			.catch((failure: unknown) => setTerminal(String(failure)));
 	};
@@ -281,13 +283,13 @@ function Doing({ character, text }: { character: Character; text: string }) {
 	return <>{text}</>;
 }
 
-/** A click on a web link in the transcript: the window stays put, and the system browser opens it. */
-function openLinkIn(event: React.MouseEvent, open: (href: string) => void) {
+/** A click on a link in the transcript: the window stays put, and the main process opens the page or the file. */
+function openLinkIn(event: React.MouseEvent, open: (href: string, file: boolean) => void) {
 	const link = event.target instanceof Element ? event.target.closest("a.aw-md-link") : null;
 	if (!link) return;
 	event.preventDefault();
 	const href = link.getAttribute("href");
-	if (href) open(href);
+	if (href) open(href, link.hasAttribute("data-file"));
 }
 
 function Transcript({
@@ -299,7 +301,7 @@ function Transcript({
 }: {
 	history: ReturnType<typeof useHistory>;
 	/** Open a web link in the system browser. */
-	onLink: (href: string) => void;
+	onLink: (href: string, file: boolean) => void;
 	/** Replies being written, and written ones the history has not read yet, drawn after it. */
 	live: TranscriptEntry[];
 	name: string;

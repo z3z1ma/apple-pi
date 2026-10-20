@@ -14,7 +14,7 @@ import { openCommands } from "../backend/commands.js";
 import { openConversations } from "../backend/conversations.js";
 import { instruct } from "../backend/instructions.js";
 import { openLifecycle } from "../backend/lifecycle.js";
-import { openLink } from "../backend/links.js";
+import { openFileLink, openLink } from "../backend/links.js";
 import { openNotepads } from "../backend/notepad.js";
 import { listThemes, themeBackdrop } from "../backend/theme-packs.js";
 import { leaveOutUnchanged, openWorldBackend } from "../backend/world-backend.js";
@@ -145,6 +145,15 @@ function start() {
 	wireIntegrations({ stateDir: statePaths().dir, snapshot: () => world.snapshot(), commands, toWindow });
 	// Links in transcripts open in the system browser, web links only.
 	ipcMain.handle("world:open-link", (_event, url: unknown) => openLink(url, (href) => shell.openExternal(href)));
+	// Links to files open in the operator's default app; one that could run is shown in Finder instead.
+	ipcMain.handle("world:open-file", (_event, href: unknown, base: unknown) =>
+		openFileLink(
+			href,
+			base,
+			(path) => shell.openPath(path),
+			(path) => shell.showItemInFolder(path),
+		),
+	);
 	// Each update leaves out the inn and the mail while they are unchanged: with thousands asleep, sending them on every
 	// update was most of the IPC traffic (ticket 31). The renderer's store keeps its own (`web/world-store.ts`).
 	const toUpdate = leaveOutUnchanged();

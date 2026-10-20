@@ -274,6 +274,10 @@ async function openWorld(first: WorldSnapshot, transcripts: Record<string, Trans
 					w.links.push(url);
 					return { ok: true };
 				},
+				async openFile(href: string, base: string) {
+					w.links.push(["file", href, base]);
+					return { ok: true };
+				},
 				// Instructions answer with the runtime's receipt stages, a moment apart; `refuse` fails the next one at once
 				// (as the backend refuses an unconfirmed Stop), `failNext` after it was delivered.
 				async instruct(id: string, commandId: string, instruction: unknown) {
@@ -1009,7 +1013,10 @@ const THINKER: TranscriptEntry[] = [
 			{ kind: "thinking", text: "Read the guide first." },
 			{ kind: "thinking", text: "  " },
 			{ kind: "thinking", text: "Then list the docs." },
-			{ kind: "text", text: "Reading <https://pi.dev>, the guide, and <file:///etc/hosts>." },
+			{
+				kind: "text",
+				text: "Reading <https://pi.dev>, the guide, <file:///etc/hosts>, and [the run](docs/run.md:3), but not <vscode://file/x>.",
+			},
 			{ kind: "thinking", text: "" },
 			{
 				kind: "tool",
@@ -1097,7 +1104,7 @@ test("thoughts read quietly: hidden ones are left out and a run of them folds in
 	}
 }, 30000);
 
-test("web links in a transcript open in the system browser; the window never navigates, and other links do not open", async () => {
+test("web links in a transcript open in the system browser and file links in their app; the window never navigates, and other links do not open", async () => {
 	const { page, errors } = await openWorld(world(), { "pi-tests": THINKER, ledger: [], asker: [], [HQ]: [] });
 	try {
 		const before = page.url();
@@ -1108,13 +1115,23 @@ test("web links in a transcript open in the system browser; the window never nav
 		await vi.waitFor(async () =>
 			expect(await page.evaluate(() => (window as any).links)).toEqual(["https://example.com/guide", "https://pi.dev"]),
 		);
-		// A link that is not a web link is no link at all: its target shows on hover only.
-		await expect(log(page).getByRole("link", { name: "file:///etc/hosts" }).count()).resolves.toBe(0);
-		await expect(log(page).locator(".aw-md-link-dead").getAttribute("title")).resolves.toBe("file:///etc/hosts");
+		// Links to files open through the main process too, with the agent's directory for relative paths.
+		await log(page).getByRole("link", { name: "file:///etc/hosts" }).click();
+		await log(page).getByRole("link", { name: "the run" }).click();
+		const cwd = "/Users/op/code/apple-pi";
+		await vi.waitFor(async () =>
+			expect((await page.evaluate(() => (window as any).links)).slice(2)).toEqual([
+				["file", "file:///etc/hosts", cwd],
+				["file", "docs/run.md:3", cwd],
+			]),
+		);
+		// A link of any other scheme is no link at all: its target shows on hover only.
+		await expect(log(page).getByRole("link", { name: "vscode://file/x" }).count()).resolves.toBe(0);
+		await expect(log(page).locator(".aw-md-link-dead").getAttribute("title")).resolves.toBe("vscode://file/x");
 		// The keyboard opens a link too.
 		await log(page).getByRole("link", { name: "guide" }).focus();
 		await page.keyboard.press("Enter");
-		await vi.waitFor(async () => expect(await page.evaluate(() => (window as any).links.length)).toBe(3));
+		await vi.waitFor(async () => expect(await page.evaluate(() => (window as any).links.length)).toBe(5));
 		expect(page.url()).toBe(before);
 		await expect(book(page).count()).resolves.toBe(1);
 		expect(errors).toEqual([]);

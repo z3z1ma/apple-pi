@@ -8,7 +8,8 @@ Why: Electron runs only the bundled output; moving the build output breaks the U
 Coupled: apps/agent-world/electron.vite.config.ts, apps/agent-world/src/app-files.ts
 
 `world:open-link` opens transcript links with `shell.openExternal` only after `openLink` in `src/backend/links.ts` accepts them (http and https, at most 8192 characters).
-Why: the renderer shows untrusted text; the main process must not trust the renderer's own check, or a `file:` or custom-scheme link could launch a local handler.
+`world:open-file` opens a linked file with `shell.openPath` only through `openFileLink`, which shows anything that could run in Finder (`shell.showItemInFolder`) instead.
+Why: the renderer shows untrusted text; the main process must not trust the renderer's own check, or a custom-scheme link could launch a local handler and a linked script or app could run.
 Coupled: apps/agent-world/src/backend/links.ts, apps/agent-world/src/electron/preload.ts
 Verify: apps/agent-world/tests/links.test.ts
 

@@ -1,7 +1,8 @@
 // Agents' replies as HTML: GitHub-flavoured Markdown through `marked`, the parser the repository already ships. A
-// transcript is untrusted text, so raw HTML shows as text, web links (http and https) become links the transcript
-// opens in the system browser through the main process (the window itself never navigates), any other link shows its
-// target as a title only, and images show as their alt text (the page loads no remote content).
+// transcript is untrusted text, so raw HTML shows as text, web links (http and https) and links to files (paths and
+// `file:` URLs) become links the transcript opens through the main process (the window itself never navigates), a
+// link of any other scheme shows its target as a title only, and images show as their alt text (the page loads no
+// remote content).
 import { Marked, type Tokens } from "marked";
 
 const escapeHtml = (s: string) =>
@@ -14,9 +15,12 @@ marked.use({
 		link(token: Tokens.Link) {
 			const text = this.parser.parseInline(token.tokens);
 			const href = escapeHtml(token.href);
-			if (!/^https?:\/\//i.test(token.href))
-				return `<span class="aw-md-link aw-md-link-dead" title="${href}">${text}</span>`;
-			return `<a class="aw-md-link" href="${href}" title="${href}" rel="noreferrer noopener">${text}</a>`;
+			if (/^https?:\/\//i.test(token.href))
+				return `<a class="aw-md-link" href="${href}" title="${href}" rel="noreferrer noopener">${text}</a>`;
+			// A path or a `file:` URL: the main process opens the file, if there is one, in the operator's default app.
+			if (/^file:/i.test(token.href) || !/^[a-z][a-z0-9+.-]*:(?!\d)/i.test(token.href))
+				return `<a class="aw-md-link aw-md-file" href="${href}" title="${href}" data-file="">${text}</a>`;
+			return `<span class="aw-md-link aw-md-link-dead" title="${href}">${text}</span>`;
 		},
 		image: (token: Tokens.Image) => `<span class="aw-md-image">${escapeHtml(token.text || "image")}</span>`,
 		code(token: Tokens.Code) {

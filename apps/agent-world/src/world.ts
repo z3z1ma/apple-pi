@@ -399,6 +399,11 @@ export interface AgentWorldApi extends IntegrationsApi {
 	closeNotepad(): Promise<void>;
 	/** Called with each change to the open notepad's file; returns a function that stops the calls. */
 	onNotepad(listener: (change: NotepadChange) => void): () => void;
+	/**
+	 * Open a file a transcript links to (a `file:` URL, or a path, relative ones from `base`, the agent's directory) with
+	 * the operator's default app for it; a file that could run is shown in Finder instead.
+	 */
+	openFile(href: string, base: string): Promise<CommandResult>;
 	/** Open a link from a transcript in the system browser: http and https only; the window itself never navigates. */
 	openLink(url: string): Promise<CommandResult>;
 }

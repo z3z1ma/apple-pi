@@ -8,7 +8,7 @@ import { onePanel } from "../one-panel.js";
 
 /** Reading the conversation is required; acting and live replies are there once the backend offers them. */
 export type ConversationApi = Pick<AgentWorldApi, "conversation" | "markSeen"> &
-	Partial<Pick<AgentWorldApi, "instruct" | "onReceipt" | "watchReplies" | "onReply" | "openLink">>;
+	Partial<Pick<AgentWorldApi, "instruct" | "onReceipt" | "watchReplies" | "onReply" | "openLink" | "openFile">>;
 
 export interface PanelState {
 	/** The character talked to, as it was when the panel opened; the panel follows its live facts from the store. */

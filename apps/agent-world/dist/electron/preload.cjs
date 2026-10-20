@@ -44,6 +44,7 @@ var api = {
 		electron.ipcRenderer.on("world:notepad", forward);
 		return () => electron.ipcRenderer.removeListener("world:notepad", forward);
 	},
+	openFile: (href, base) => electron.ipcRenderer.invoke("world:open-file", href, base),
 	openLink: (url) => electron.ipcRenderer.invoke("world:open-link", url),
 	...places()
 };

@@ -54,7 +54,7 @@ Around the world, laid out as in Old School RuneScape and styled by the theme:
 
 ### Talking to a character
 
-Talking to a character opens the conversation panel over the dimmed world: its portrait, name, repository, ledger task (or, without one, what the session says it works on now: its stated intent, see [session titles](context.md#session-titles)), and what it is doing now; the whole transcript in Markdown with tool calls folded to one line each; its reply streaming in as it is written; and older history as you scroll up. Opening it marks the character seen everywhere (the sidebar, the notch, the status line).
+Talking to a character opens the conversation panel over the dimmed world: its portrait, name, repository, ledger task (or, without one, what the session says it works on now: its stated intent, see [session titles](context.md#session-titles)), and what it is doing now; the whole transcript in Markdown with tool calls folded to one line each; its reply streaming in as it is written; and older history as you scroll up. Opening it marks the character seen everywhere (the sidebar, the notch, the status line). A web link in the transcript opens in your browser. A link to a file (a path, relative to the agent's directory, or a `file:` URL, with any `:12` line suffix ignored) opens in your default app for that file; a file that could run (an app, a script, anything with an execute bit) is shown in Finder instead. Links of other kinds show their target on hover only.
 
 What you can send depends on its state:
 

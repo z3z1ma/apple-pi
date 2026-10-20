@@ -68,6 +68,7 @@ const api: AgentWorldApi = {
 		ipcRenderer.on("world:notepad", forward);
 		return () => ipcRenderer.removeListener("world:notepad", forward);
 	},
+	openFile: (href, base) => ipcRenderer.invoke("world:open-file", href, base) as Promise<CommandResult>,
 	openLink: (url) => ipcRenderer.invoke("world:open-link", url) as Promise<CommandResult>,
 	...places(),
 };

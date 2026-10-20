@@ -62,6 +62,9 @@ declare module "electron" {
 
 	export const shell: {
 		openExternal(url: string): Promise<void>;
+		/** Opens a file in its default app; resolves with an error message, or "" when it opened. */
+		openPath(path: string): Promise<string>;
+		showItemInFolder(path: string): void;
 	};
 
 	export const net: {

@@ -1084,6 +1084,67 @@ async function openLink(url, open) {
 		};
 	}
 }
+/**
+* Kinds of file that macOS runs, installs, or scripts when opened. A link to one, like any file with an execute bit, is
+* shown in Finder instead of opened: a transcript is untrusted, and a click must not run a program.
+*/
+var LAUNCHES = /\.(app|command|tool|terminal|pkg|mpkg|workflow|action|scpt|scptd|applescript|jar|sh|bash|zsh|py|rb|pl)$/i;
+/**
+* The file a transcript's link names, as an absolute path on disk: a `file:` URL, an absolute or `~` path, or a path
+* relative to `base` (the agent's directory). A `:12`, `:12:3`, or `#L12` line suffix is dropped when the path with it
+* does not exist. Undefined for a web link, another scheme, or a file that does not exist.
+*/
+function fileLink(href, base) {
+	if (typeof href !== "string" || !href.trim() || href.length > LINK_MAX) return void 0;
+	let path = href.trim();
+	if (/^file:/i.test(path)) try {
+		path = fileURLToPath(path);
+	} catch {
+		return;
+	}
+	else if (/^[a-z][a-z0-9+.-]*:(?!\d)/i.test(path)) return void 0;
+	else {
+		try {
+			path = decodeURIComponent(path);
+		} catch {}
+		if (path === "~" || path.startsWith("~/")) path = join(homedir(), path.slice(1));
+		else if (!isAbsolute(path)) {
+			if (typeof base !== "string" || !isAbsolute(base)) return void 0;
+			path = resolve(base, path);
+		}
+	}
+	for (const candidate of [path, path.replace(/(:\d+){1,2}$|#L\d+(-L?\d+)?$/, "")]) if (existsSync(candidate)) return candidate;
+}
+/**
+* Open a file a transcript links to with the operator's default app for it (`open`, Electron's `shell.openPath`, which
+* resolves with an error message or ""), or show it in Finder (`reveal`) when opening could run something.
+*/
+async function openFileLink(href, base, open, reveal) {
+	const path = fileLink(href, base);
+	if (!path) return {
+		ok: false,
+		reason: `No file at ${typeof href === "string" ? href : "that link"}.`
+	};
+	let launches = LAUNCHES.test(path);
+	try {
+		const stat = statSync(path);
+		if (stat.isFile() && stat.mode & 73) launches = true;
+	} catch (error) {
+		return {
+			ok: false,
+			reason: `The file could not be read: ${error.message}`
+		};
+	}
+	if (launches) {
+		reveal(path);
+		return { ok: true };
+	}
+	const failure = await open(path);
+	return failure ? {
+		ok: false,
+		reason: `The file did not open: ${failure}`
+	} : { ok: true };
+}
 //#endregion
 //#region apps/agent-world/src/backend/notepad.ts
 var NOTEPAD_FILE = "NOTES.md";
@@ -5565,6 +5626,7 @@ function start() {
 		toWindow
 	});
 	ipcMain.handle("world:open-link", (_event, url) => openLink(url, (href) => shell.openExternal(href)));
+	ipcMain.handle("world:open-file", (_event, href, base) => openFileLink(href, base, (path) => shell.openPath(path), (path) => shell.showItemInFolder(path)));
 	const toUpdate = leaveOutUnchanged();
 	world.subscribe((snapshot) => {
 		if (window && !window.isDestroyed()) window.webContents.send("world:update", toUpdate(snapshot));
