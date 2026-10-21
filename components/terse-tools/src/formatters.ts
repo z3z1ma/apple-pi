@@ -223,7 +223,9 @@ function formatDefaultArgs(args: Record<string, unknown>): string {
 	}
 	const entries: string[] = [];
 	for (const [k, v] of Object.entries(args)) {
-		if (typeof v === "string" || typeof v === "number" || typeof v === "boolean") {
+		if (typeof v === "string") {
+			entries.push(`${k}: ${v.replace(/[\r\n]+/g, " ").trim()}`);
+		} else if (typeof v === "number" || typeof v === "boolean") {
 			entries.push(`${k}: ${v}`);
 		} else if (Array.isArray(v) && v.length > 0) {
 			const arrSummary = summarizeArray(v);

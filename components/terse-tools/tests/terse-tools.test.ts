@@ -139,6 +139,9 @@ describe("terse tool formatters", () => {
 
 		expect(formatToolArgs("find", { pattern: "*.ts" })).toBe("*.ts");
 		expect(formatToolArgs("ls", { path: "components" })).toBe("components");
+		expect(formatToolArgs("update_self", { text: "# Nana\nI am Nana, the coordinator.\n" })).toBe(
+			"text: # Nana I am Nana, the coordinator.",
+		);
 
 		expect(formatToolArgs("task", { action: "status", task_id: "task-54" })).toBe("status task-54");
 		expect(formatToolArgs("manage_task", { action: "cancel", taskId: "task-58" })).toBe("cancel task-58");
