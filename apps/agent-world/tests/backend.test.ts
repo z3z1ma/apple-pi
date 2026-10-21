@@ -63,10 +63,11 @@ async function session(id: string, options: { coordinator?: boolean; reportsTo?:
 		session: { cwd: `/home/${id}` },
 		facts: {
 			reportsTo: options.reportsTo ?? null,
+			role: options.coordinator ? "coordinator" : null,
 			git: repository ? { repository, worktree: repository, branch: "main" } : null,
 			config: {
 				name: id,
-				flags: options.coordinator ? ["coordinator"] : [],
+				flags: [],
 				activeTools: [],
 				extensions: [],
 				skills: [],

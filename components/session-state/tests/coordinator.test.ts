@@ -92,16 +92,35 @@ const toolResults = (run: Awaited<ReturnType<typeof coordinator>>) =>
 		m.role === "toolResult" ? [{ isError: m.isError, text: JSON.stringify(m.content) }] : [],
 	);
 
-/** A session started with --coordinator whose model makes the given tool calls in turn. */
+/** A session started with `--role coordinator` whose model makes the given tool calls in turn. */
 async function coordinator(calls: Reply[]) {
 	const run = await fauxSession([bridge], [...calls, fauxAssistantMessage("done")], []);
-	run.session.extensionRunner.setFlagValue("coordinator", true);
+	await withRole(run, "coordinator");
 	return run;
+}
+
+/** Restart the session with `--role <name>` (a new session_start reads the flag) and wait until the runtime records the role. */
+async function withRole(run: Awaited<ReturnType<typeof fauxSession>>, role: string | undefined) {
+	if (!role) return; // unroled is the default
+	const id = run.session.sessionManager.getSessionId();
+	run.session.extensionRunner.setFlagValue("role", role);
+	await run.session.bindExtensions({});
+	await vi.waitFor(
+		() => expect(query(state.dbPath, "select role from sessions where id = ?", id)).toEqual([{ role }]),
+		{
+			timeout: 15000,
+		},
+	);
 }
 
 test("a coordinator starts a session in a new tmux window, and reopens it by id once it stopped", async () => {
 	const run = await coordinator([
-		call("start_peer_session", { cwd: workDir, prompt: "@brief.md", session_id: "worker-1" }),
+		call("start_peer_session", {
+			cwd: workDir,
+			role: "repository-archaeologist",
+			prompt: "@brief.md",
+			session_id: "worker-1",
+		}),
 		fauxAssistantMessage("started"),
 		call("reopen_peer_session", { session_id: "worker-1" }),
 	]);
@@ -113,7 +132,15 @@ test("a coordinator starts a session in a new tmux window, and reopens it by id 
 			text: expect.stringContaining("Started session worker-1"),
 		});
 		expect(starts()[0]).toEqual({
-			args: ["--session-id", "worker-1", "--reports-to", coordinatorId, "@brief.md"],
+			args: [
+				"--session-id",
+				"worker-1",
+				"--reports-to",
+				coordinatorId,
+				"--role",
+				"repository-archaeologist",
+				"@brief.md",
+			],
 			cwd: workDir,
 		});
 		expect(tmux("list-windows", "-a", "-F", "#{window_name}").split("\n")).toContain("Ada Lovelace");
@@ -200,7 +227,20 @@ test("renaming a stopped peer reports the command failure", async () => {
 	}
 }, 20000);
 
-test("only a session started with --coordinator has the lifecycle tools", async () => {
+test("hiring into a role the catalog lacks fails before any window opens", async () => {
+	const run = await coordinator([call("start_peer_session", { cwd: workDir, role: "court-jester" })]);
+	try {
+		await run.session.prompt("hire a jester");
+		expect(toolResults(run)[0]).toMatchObject({
+			isError: true,
+			text: expect.stringContaining('Unknown role \\"court-jester\\"'),
+		});
+	} finally {
+		await close(run);
+	}
+}, 20000);
+
+test("only a session whose role manages has the lifecycle tools", async () => {
 	const run = await fauxSession(
 		[bridge],
 		[fauxAssistantMessage("ok")],
@@ -215,10 +255,10 @@ test("only a session started with --coordinator has the lifecycle tools", async 
 }, 20000);
 
 test.each([false, true])(
-	"a root can discover peers when its initial tool set lacks peer tools (coordinator=%s)",
+	"a root can discover peers when its initial tool set lacks peer tools (manages=%s)",
 	async (enabled) => {
 		const run = await fauxSession([bridge], [call("list_peer_sessions", {}), fauxAssistantMessage("done")], ["read"]);
-		run.session.extensionRunner.setFlagValue("coordinator", enabled);
+		await withRole(run, enabled ? "coordinator" : undefined);
 		try {
 			await run.session.prompt("list my peers");
 			expect(toolResults(run)[0]).toMatchObject({ isError: false });
@@ -243,15 +283,15 @@ test.each([false, true])(
 );
 
 test.each([false, true])(
-	"only a coordinator receives the coordinator guidance (coordinator=%s)",
+	"only a coordinator receives the coordinator charter (coordinator=%s)",
 	async (enabled) => {
 		const run = await fauxSession([bridge], [fauxAssistantMessage("ok")], []);
-		run.session.extensionRunner.setFlagValue("coordinator", enabled);
+		await withRole(run, enabled ? "coordinator" : undefined);
 		try {
 			await run.session.prompt("hi");
 			const prompt = run.session.agent.state.systemPrompt;
-			if (enabled) expect(prompt).toContain("<coordinator>\nYou are a coordinator");
-			else expect(prompt).not.toContain("<coordinator>");
+			if (enabled) expect(prompt).toContain("<role>\nYou are a coordinator");
+			else expect(prompt).not.toContain("<role>");
 		} finally {
 			await close(run);
 		}

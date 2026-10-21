@@ -37,8 +37,10 @@ export interface Facts {
 	queue: { steers: number; followUps: number; pending: boolean };
 	lastError: string | null;
 	lastAbortAt: number | null;
-	/** The coordinator session this one reports to (`--reports-to`). */
+	/** The manager session this one reports to (`--reports-to`). */
 	reportsTo: string | null;
+	/** The role this session holds for life (a role catalog name), or null. */
+	role: string | null;
 	/** The session file this one was forked or cloned from (Pi's `parentSession`). */
 	parentSessionFile: string | null;
 	/** The session file that ran before this one in the same process (and pane), and why it gave way. */
@@ -125,6 +127,8 @@ export type Command =
 			cwd?: string;
 			name?: string;
 			reportsTo?: string;
+			/** The role a new session is hired into; a stopped session keeps the role its transcript records. */
+			role?: string;
 			prompt?: string;
 	  }
 	/** Quit the session's Pi process. */

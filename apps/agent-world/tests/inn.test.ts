@@ -147,7 +147,7 @@ async function session(id: string, facts: Record<string, unknown> = {}, cwd = wo
 }
 
 test("stopped sessions sleep at the inn, the most recently stopped first, with their repository and last ledger task", async () => {
-	await session("lead", { config: { name: "lead", flags: ["coordinator"], activeTools: [], extensions: [] } });
+	await session("lead", { role: "coordinator" });
 	const docs = await session("w-docs", {
 		reportsTo: "lead",
 		git: { repository: "/repos/handbook", worktree: "/repos/handbook", branch: "main" },

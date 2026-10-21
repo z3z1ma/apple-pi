@@ -36,6 +36,8 @@
     "components/notify/scripts/",
     "components/notify/LICENSE",
     "components/session-title/src/",
+    "components/organization/src/",
+    "roles/",
     "components/tmux-sessions/src/",
     "components/tmux-sessions/scripts/",
     "components/tmux-sessions/sidebar/*.py",

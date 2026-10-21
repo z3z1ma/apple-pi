@@ -4,12 +4,12 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] A session started with `--role staff-engineer-simplicity` runs on the first listed model the registry knows at the role's thinking level, declares no `edit` or `write` tool, and its system prompt contains the role body under `<role>`; a session started with `--role implementation-engineer` keeps `edit` and `write`.
-- [ ] A role whose listed models are all unknown to the registry starts on the session's default model and warns once.
-- [ ] After `close_peer_session` and `reopen_peer_session`, the person has the same role, mind, and posture without the flag being passed by the caller; starting the same session id with a different `--role` keeps the stored role.
-- [ ] A role file in `<cwd>/.pi/roles/` with the same name as a package role replaces it; a file with a missing or malformed front-matter field is reported by name and skipped.
-- [ ] `start_peer_session` with `role` starts a person that reports to the caller and shows that role; without `role` it starts an unroled person as today.
-- [ ] `pi --coordinator` is no longer a registered flag; `pi --role coordinator` has the four peer-management tools active and the coordinator charter in its prompt; a non-managing role does not.
-- [ ] The package-load test, `docs/session-state.md`, and the README no longer mention `--coordinator`.
+- [x] A session started with `--role staff-engineer-simplicity` runs on the first listed model the registry knows at the role's thinking level, declares no `edit` or `write` tool, and its system prompt contains the role body under `<role>`; a session started with `--role implementation-engineer` keeps `edit` and `write`.
+- [x] A role whose listed models are all unknown to the registry starts on the session's default model and warns once.
+- [x] After `close_peer_session` and `reopen_peer_session`, the person has the same role, mind, and posture without the flag being passed by the caller; starting the same session id with a different `--role` keeps the stored role.
+- [x] A role file in `<cwd>/.pi/roles/` with the same name as a package role replaces it; a file with a missing or malformed front-matter field is reported by name and skipped.
+- [x] `start_peer_session` with `role` starts a person that reports to the caller and shows that role; without `role` it starts an unroled person as today.
+- [x] `pi --coordinator` is no longer a registered flag; `pi --role coordinator` has the four peer-management tools active and the coordinator charter in its prompt; a non-managing role does not.
+- [x] The package-load test, `docs/session-state.md`, and the README no longer mention `--coordinator`.

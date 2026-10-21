@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { createConnection, type Socket } from "node:net";
 import { dirname } from "node:path";
 import type { ExtensionAPI, ExtensionContext, SessionEntry } from "@earendil-works/pi-coding-agent";
+import { installSessionRole, sessionRole } from "../../organization/src/index.js";
 import { LEDGER_LINK_CHANNEL, type LedgerLink } from "../../shared/src/ledger-events.js";
 import { type OpenQuestionnaire, QUESTIONNAIRE_CHANNEL } from "../../shared/src/questionnaire-events.js";
 import { SESSION_INTENT_CHANNEL, type SessionIntent } from "../../shared/src/session-intent-events.js";
@@ -303,6 +304,7 @@ function helloFor(
 			lastError: null,
 			lastAbortAt: null,
 			reportsTo: (pi.getFlag("reports-to") as string | undefined) || null,
+			role: sessionRole(ctx)?.name ?? null,
 			parentSessionFile: sessions.getHeader()?.parentSession ?? null,
 			previousSession,
 			git: null,
@@ -426,15 +428,17 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 	// Registered even when switched off: Pi exits with "Unknown option" on a flag no extension registered.
 	pi.registerFlag("reports-to", {
 		type: "string",
-		description: "Session id of the coordinator this session reports to; mailed when this session closes",
+		description: "Session id of the manager this session reports to; mailed when this session closes",
 	});
-	pi.registerFlag("coordinator", {
-		type: "boolean",
-		description: "Give this session the tools to start, reopen, and close peer sessions in tmux",
+	pi.registerFlag("role", {
+		type: "string",
+		description: "Role from the role catalog this session takes for life at its first start",
 	});
 	if (process.env.PI_SESSION_STATE_DISABLED === "1") return;
 	installMail(pi, !inChildSessionContext());
 	if (!inChildSessionContext()) {
+		// The role resolves at session start before the hello below reads it and the manager tools reconcile on it.
+		installSessionRole(pi);
 		installPeers(pi);
 		installCoordinator(pi);
 	}

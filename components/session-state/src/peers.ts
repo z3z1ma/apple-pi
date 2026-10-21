@@ -10,6 +10,7 @@ export interface Peer {
 	cwd: string;
 	status: "busy" | "idle" | "waiting";
 	reportsTo: string | null;
+	role: string | null;
 	currentTask: string | null;
 }
 
@@ -21,7 +22,7 @@ export function livePeers(self: string | null): Peer[] {
 	try {
 		const rows = db
 			.prepare(
-				`select s.id, s.name, s.cwd, s.run_state, s.prompt, s.reports_to, json_extract(s.current_task, '$.taskId') as task
+				`select s.id, s.name, s.cwd, s.run_state, s.prompt, s.reports_to, s.role, json_extract(s.current_task, '$.taskId') as task
 				from sessions s join incarnations i on i.session_id = s.id and i.generation = s.generation
 				where s.kind = 'root' and s.id is not ? and i.ended_at is null and i.process_state in ('alive', 'alive_bridge_lost')
 				order by s.updated_at desc`,
@@ -33,6 +34,7 @@ export function livePeers(self: string | null): Peer[] {
 			run_state: string;
 			prompt: string | null;
 			reports_to: string | null;
+			role: string | null;
 			task: string | null;
 		}[];
 		return rows.map((row) => ({
@@ -41,6 +43,7 @@ export function livePeers(self: string | null): Peer[] {
 			cwd: row.cwd,
 			status: row.prompt ? "waiting" : row.run_state === "idle" ? "idle" : "busy",
 			reportsTo: row.reports_to,
+			role: row.role,
 			currentTask: row.task,
 		}));
 	} finally {
@@ -71,7 +74,7 @@ export function installPeers(pi: ExtensionAPI): void {
 			name: "list_peer_sessions",
 			label: "list_peer_sessions",
 			description:
-				"List the other live top-level Pi sessions on this machine: peer sessions, which are separate and long-lived, often in their own tmux windows, and which you reach with mailbox_send. Each has an id, name, directory, status (busy, idle, or waiting for the user), the session it reports to, and its current ledger task. Your subagents are not peers: they are children you start with agent and reach with steer_subagent and get_subagent_result.",
+				"List the other live top-level Pi sessions on this machine: peer sessions, which are separate and long-lived, often in their own tmux windows, and which you reach with mailbox_send. Each has an id, name, directory, status (busy, idle, or waiting for the user), the session it reports to, its role when hired into one, and its current ledger task. Your subagents are not peers: they are children you start with agent and reach with steer_subagent and get_subagent_result.",
 			promptSnippet: "List live peer Pi sessions (not your subagents) to mail them.",
 			parameters: Type.Object({}, { additionalProperties: false }),
 			async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {

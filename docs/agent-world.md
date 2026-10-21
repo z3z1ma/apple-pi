@@ -16,7 +16,7 @@ Closing the window quits Agent World and changes nothing in tmux or Pi: your ses
 
 ## The world
 
-The world opens in the headquarters of your first coordinator (a session started with `pi --coordinator`, or one that other sessions report to). Each other function has its own place, reached through the doors of the town square or from the Places tab.
+The world opens in the headquarters of your first coordinator (a session started with `pi --role coordinator`, or one that other sessions report to). Each other function has its own place, reached through the doors of the town square or from the Places tab.
 
 | Place | What it shows | What you can do |
 | --- | --- | --- |

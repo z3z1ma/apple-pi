@@ -12,8 +12,8 @@ export interface SessionRow {
 	reportsTo: string | null;
 	/** Its git repository (the main checkout's directory); null outside a repository. */
 	repository: string | null;
-	/** Started with `--coordinator`. */
-	coordinatorFlag: boolean;
+	/** Holds the coordinator role (`--role coordinator`). */
+	coordinatorRole: boolean;
 	/** Its current incarnation is alive. */
 	awake: boolean;
 	/** When it first started (ms), or undefined when it never had an incarnation. */
@@ -48,7 +48,7 @@ const byStart = (a: { firstStartedAt?: number; id: string }, b: { firstStartedAt
 	(a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 
 /**
- * A coordinator was started with `--coordinator` or has a session reporting to it; a worker reports to one; any
+ * A coordinator holds the coordinator role or has a session reporting to it; a worker reports to one; any
  * other session is independent. Each awake coordinator, and each coordinator with an awake worker, has a
  * headquarters. Workers stand in the wing of their repository, or the common room outside one; independents stand
  * in the square. Dormant sessions sleep at the inn, the most recently stopped first, each in the role it had.
@@ -57,7 +57,7 @@ export function projectWorld(sessions: SessionRow[], remembered: RememberedWings
 	const byId = new Map(sessions.map((session) => [session.id, session]));
 	const coordinators = new Set<string>();
 	for (const session of sessions) {
-		if (session.coordinatorFlag) coordinators.add(session.id);
+		if (session.coordinatorRole) coordinators.add(session.id);
 		if (session.reportsTo && session.reportsTo !== session.id) coordinators.add(session.reportsTo);
 	}
 

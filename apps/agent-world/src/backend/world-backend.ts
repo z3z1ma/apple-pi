@@ -81,10 +81,10 @@ const STORE_TIMEOUT_MS = 5000;
  */
 export const PREFERENCE_KEY = "agent-world";
 
-// Every top-level session with what places it: awake while its current incarnation is alive. `intent` is false on a
-// database an older runtime has not migrated yet.
-const sessionsSql = (intent: boolean) => `
-select s.id, s.name, s.cwd, s.reports_to as reportsTo, s.git, s.config,
+// Every top-level session with what places it: awake while its current incarnation is alive. A column a runtime started
+// before its migration has not added yet (`intent`, `role`) reads as null.
+const sessionsSql = ({ intent, role }: OptionalColumns) => `
+select s.id, s.name, s.cwd, s.reports_to as reportsTo, s.git, ${role ? "s.role" : "null as role"},
 	(select min(f.started_at) from incarnations f where f.session_id = s.id) as firstStartedAt,
 	coalesce(i.ended_at is null and i.process_state in ('alive', 'alive_bridge_lost'), 0) as awake,
 	i.ended_at as stoppedAt, i.end_reason as stopReason,
@@ -95,16 +95,33 @@ where s.kind = 'root'`;
 
 // The rows that may have changed since an event sequence: sessions named by a newer event (a session that starts is
 // one), and the ones awake at the last read (given as a JSON array of ids), looked up by id.
-const changedSql = (intent: boolean) => `${sessionsSql(intent)}
+const changedSql = (columns: OptionalColumns) => `${sessionsSql(columns)}
 	and s.id in (select session_id from events where seq > ? union select value from json_each(?))`;
-const SESSIONS = [sessionsSql(false), sessionsSql(true)];
-const CHANGED_SESSIONS = [changedSql(false), changedSql(true)];
-const INTENT_COLUMN = "select 1 from pragma_table_info('sessions') where name = 'intent'";
+interface OptionalColumns {
+	intent: boolean;
+	role: boolean;
+}
+const OPTIONAL_COLUMNS = ["intent", "role"] as const;
+const optionalColumns = (db: DatabaseSync): OptionalColumns => {
+	const present = new Set(
+		(db.prepare("select name from pragma_table_info('sessions')").all() as { name: string }[]).map((row) => row.name),
+	);
+	return { intent: present.has("intent"), role: present.has("role") };
+};
+const sqlCache = new Map<string, { sessions: string; changed: string }>();
+const sqlFor = (columns: OptionalColumns) => {
+	const key = OPTIONAL_COLUMNS.map((column) => Number(columns[column])).join("");
+	const cached = sqlCache.get(key);
+	if (cached) return cached;
+	const sql = { sessions: sessionsSql(columns), changed: changedSql(columns) };
+	sqlCache.set(key, sql);
+	return sql;
+};
 
 interface Row extends FactsRow {
 	id: string;
 	name: string | null;
-	config: string | null;
+	role: string | null;
 	firstStartedAt: number | null;
 	awake: number;
 	stoppedAt: number | null;
@@ -122,14 +139,13 @@ function parse<T>(json: string | null | undefined): T | undefined {
 
 function sessionRow(row: Row): SessionRow {
 	const git = parseShared<{ repository?: unknown }>(row.git);
-	const config = parseShared<{ flags?: unknown }>(row.config);
 	return {
 		id: row.id,
 		name: row.name,
 		cwd: row.cwd,
 		reportsTo: row.reportsTo,
 		repository: typeof git?.repository === "string" ? git.repository : null,
-		coordinatorFlag: Array.isArray(config?.flags) && config.flags.includes("coordinator"),
+		coordinatorRole: row.role === "coordinator",
 		awake: row.awake === 1,
 		firstStartedAt: row.firstStartedAt ?? undefined,
 		stoppedAt: row.stoppedAt ?? undefined,
@@ -260,10 +276,10 @@ export function openWorldBackend(paths: { db: string; socket: string }): WorldBa
 			// only with an event naming it. A database whose sequence went back is a new one.
 			const full = rowsSeq < 0 || seq < rowsSeq || polls % FULL_REREAD_POLLS === 0;
 			const awakeIds = [...sessionsById.values()].filter((session) => session.awake).map((session) => session.id);
-			const intent = Number(db.prepare(INTENT_COLUMN).get() !== undefined);
+			const sql = sqlFor(optionalColumns(db));
 			const changed = (full
-				? db.prepare(SESSIONS[intent]!).all()
-				: db.prepare(CHANGED_SESSIONS[intent]!).all(rowsSeq, JSON.stringify(awakeIds))) as unknown as Row[];
+				? db.prepare(sql.sessions).all()
+				: db.prepare(sql.changed).all(rowsSeq, JSON.stringify(awakeIds))) as unknown as Row[];
 			if (full) {
 				rowsById.clear();
 				sessionsById.clear();

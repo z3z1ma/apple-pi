@@ -162,6 +162,8 @@ const MIGRATIONS = [
 	) strict;`,
 	// What the session says it works on now (session-title's stated intent), shown when it has no ledger task.
 	`alter table sessions add column intent text;`,
+	// The role a hired person holds for life (the name of a role catalog file); null for an unroled session.
+	`alter table sessions add column role text;`,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

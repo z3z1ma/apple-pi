@@ -38,6 +38,7 @@ const FACT_COLUMNS: Record<keyof Facts, string> = {
 	lastError: "last_error",
 	lastAbortAt: "last_abort_at",
 	reportsTo: "reports_to",
+	role: "role",
 	parentSessionFile: "parent_session_file",
 	previousSession: "previous_session",
 	git: "git",
@@ -551,6 +552,7 @@ export class Runtime {
 			sessionId,
 			...(name ? ["--name", name] : []),
 			...(command.reportsTo ? ["--reports-to", command.reportsTo] : []),
+			...(command.role ? ["--role", command.role] : []),
 			...(command.prompt ? [command.prompt] : []),
 		];
 		const start: { commandId: string; socket: string; pane?: string } = {

@@ -1,9 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { defineTool, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { setSystemPromptSection } from "../../shared/src/system-prompt-section.js";
+import { loadRoles, sessionRole } from "../../organization/src/index.js";
 import { sendCommand } from "./client.js";
-import { COORDINATOR_SYSTEM_PROMPT, COORDINATOR_SYSTEM_PROMPT_TAG } from "./coordinator-prompt.js";
 import type { Command, Receipt } from "./protocol.js";
 
 const TOOLS = ["start_peer_session", "reopen_peer_session", "close_peer_session", "rename_peer_session"];
@@ -28,17 +27,20 @@ const reply = (text: string, details: Record<string, unknown>) => ({
 	details,
 });
 
-/** Peer management tools and the coordinator's operating guidance, active only in a session started with `--coordinator`. */
+/** Peer management tools, active only in a session whose role manages. */
 export function installCoordinator(pi: ExtensionAPI): void {
 	pi.registerTool(
 		defineTool({
 			name: "start_peer_session",
 			label: "start_peer_session",
 			description:
-				"Start a new peer session: a top-level Pi session in its own tmux window next to yours, which reports to you (it mails you when it closes, and list_peer_sessions shows you as its supervisor). Its session-title extension assigns a unique two-part human name automatically. Returns once the session is running. Pass a brief file as the prompt with @path.",
+				"Hire a person: start a new peer session, a top-level Pi session in its own tmux window next to yours, which reports to you (it mails you when it closes, and list_peer_sessions shows you as its manager). Give it a role from the catalog; it keeps that role, mind, and posture for life. Its session-title extension assigns a unique two-part human name automatically. Returns once the session is running. Pass a brief file as the prompt with @path.",
 			parameters: Type.Object(
 				{
 					cwd: Type.String({ minLength: 1, description: "Directory the session works in." }),
+					role: Type.Optional(
+						Type.String({ minLength: 1, description: "Role catalog name, such as staff-engineer-simplicity." }),
+					),
 					prompt: Type.Optional(Type.String({ description: "First prompt, such as @/path/to/brief.md." })),
 					session_id: Type.Optional(Type.String({ description: "Session id to use; a new one by default." })),
 				},
@@ -46,6 +48,11 @@ export function installCoordinator(pi: ExtensionAPI): void {
 			),
 			async execute(_toolCallId, params, signal, _onUpdate, ctx) {
 				const sessionId = params.session_id ?? randomUUID();
+				if (params.role) {
+					const catalog = loadRoles(ctx.cwd);
+					if (!catalog.roles.has(params.role))
+						throw new Error(`Unknown role "${params.role}"; known roles: ${[...catalog.roles.keys()].join(", ")}.`);
+				}
 				await run(
 					sessionId,
 					{
@@ -53,11 +60,12 @@ export function installCoordinator(pi: ExtensionAPI): void {
 						tmux: ownPane(),
 						cwd: params.cwd,
 						reportsTo: ctx.sessionManager.getSessionId(),
+						...(params.role ? { role: params.role } : {}),
 						...(params.prompt ? { prompt: params.prompt } : {}),
 					},
 					signal,
 				);
-				return reply(`Started session ${sessionId}.`, { sessionId });
+				return reply(`Started session ${sessionId}${params.role ? ` as ${params.role}` : ""}.`, { sessionId });
 			},
 		}),
 	);
@@ -116,18 +124,13 @@ export function installCoordinator(pi: ExtensionAPI): void {
 			},
 		}),
 	);
-	const reconcile = () => {
+	const reconcile = (ctx: ExtensionContext) => {
 		const active = pi.getActiveTools();
-		const next =
-			pi.getFlag("coordinator") === true
-				? [...new Set([...active, ...TOOLS])]
-				: active.filter((name) => !TOOLS.includes(name));
+		const next = sessionRole(ctx)?.manages
+			? [...new Set([...active, ...TOOLS])]
+			: active.filter((name) => !TOOLS.includes(name));
 		if (next.length !== active.length) pi.setActiveTools(next);
 	};
-	pi.on("session_start", reconcile);
-	pi.on("before_agent_start", (event) => {
-		reconcile();
-		if (pi.getFlag("coordinator") === true)
-			setSystemPromptSection(event.systemPromptOptions, COORDINATOR_SYSTEM_PROMPT_TAG, COORDINATOR_SYSTEM_PROMPT);
-	});
+	pi.on("session_start", (_event, ctx) => reconcile(ctx));
+	pi.on("before_agent_start", (_event, ctx) => reconcile(ctx));
 }

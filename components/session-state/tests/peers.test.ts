@@ -50,6 +50,7 @@ test("a session lists its live peers, not subagents or ended sessions, and mails
 			session: { name: "docs-worker", cwd: "/work/docs" },
 			facts: {
 				reportsTo: "coordinator-1",
+				role: "technical-writer",
 				currentTask: { bundle: "/work/docs/.ledger/202610180001-docs", taskId: "202610180001-docs" },
 				prompt: { kind: "select", title: "Overwrite?" },
 			},
@@ -80,6 +81,7 @@ test("a session lists its live peers, not subagents or ended sessions, and mails
 				cwd: "/work/docs",
 				status: "waiting",
 				reportsTo: "coordinator-1",
+				role: "technical-writer",
 				currentTask: "202610180001-docs",
 			},
 		]);

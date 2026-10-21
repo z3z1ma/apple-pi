@@ -55,8 +55,9 @@ socket.on("connect", () => {
 		run: "idle",
 		facts: {
 			reportsTo: flag("--reports-to") ?? null,
+			role: flag("--role") ?? null,
 			git: { repository: process.cwd(), worktree: process.cwd(), branch: "main" },
-			config: { name: flag("--name"), flags: args.includes("--coordinator") ? ["coordinator"] : [], activeTools: [], extensions: [], skills: [], mcpServers: [] },
+			config: { name: flag("--name"), flags: [], activeTools: [], extensions: [], skills: [], mcpServers: [] },
 		},
 		tmux: { socket: process.env.TMUX.split(",")[0], pane: process.env.TMUX_PANE },
 	}) + "\\n");
@@ -139,7 +140,8 @@ test("the coordinator runs in its own tmux window, in the headquarters", async (
 		"lead",
 		"--name",
 		"lead",
-		"--coordinator",
+		"--role",
+		"coordinator",
 	);
 	await soon(() => expect(awake("lead")).toMatchObject({ role: "coordinator", place: { kind: "headquarters" } }));
 	expect(awake("lead")?.facts?.tmux?.pane).toMatch(/^%\d+$/);
@@ -231,7 +233,8 @@ test("recruiting for a coordinator that runs outside tmux says so, and sends not
 	const link = await fakeBridge(state.socketPath, "hq-2", stand.pid, stand.startedAt, {
 		session: { cwd: otherDir, name: "hq-2" },
 		facts: {
-			config: { name: "hq-2", flags: ["coordinator"], activeTools: [], extensions: [], skills: [], mcpServers: [] },
+			role: "coordinator",
+			config: { name: "hq-2", flags: [], activeTools: [], extensions: [], skills: [], mcpServers: [] },
 		},
 	});
 	link.socket.on("error", () => {});
