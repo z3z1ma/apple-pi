@@ -15,6 +15,8 @@ export interface Role {
 	/** The file name without `.md`; the name a hire or `--role` uses. */
 	name: string;
 	title: string;
+	/** One line a manager hires by: what the role is for. */
+	mandate: string;
 	/** `provider/id` in order of preference; the first the registry knows is used. */
 	models: string[];
 	thinking: ModelThinkingLevel;
@@ -70,6 +72,8 @@ export function readRole(path: string, name: string): Role | string {
 	const body = parsed.body.trim();
 	const title = typeof fm.title === "string" ? fm.title.trim() : "";
 	if (!title) return `${path}: title must be a non-empty string`;
+	const mandate = typeof fm.mandate === "string" ? fm.mandate.trim() : "";
+	if (!mandate || mandate.includes("\n")) return `${path}: mandate must be one non-empty line`;
 	const models = Array.isArray(fm.models) ? fm.models : [];
 	if (models.length === 0 || !models.every((m) => typeof m === "string" && MODEL_ID.test(m)))
 		return `${path}: models must be a non-empty list of provider/id`;
@@ -81,6 +85,7 @@ export function readRole(path: string, name: string): Role | string {
 	return {
 		name,
 		title,
+		mandate,
 		models: models as string[],
 		thinking: fm.thinking as ModelThinkingLevel,
 		writes: fm.writes,

@@ -4,9 +4,11 @@
 
 **Blocked by:** 01 A session started with a role is that role
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Each of the 31 catalog roles loads with the minds and thinking level in the spec, and the two managing roles are the only ones with `manages: true`.
-- [ ] A test loads every package role and fails on a missing field, an unknown model id format, or an empty body.
-- [ ] A session with the coordinator role has every catalog title and its one-line mandate in its prompt; a non-managing role does not.
-- [ ] Hiring each of three roles with the same brief (the Distinguished Engineer, the Simplicity Engineer, and the Architecture Prosecutor) through a faux model shows three prompts whose obligations differ, not one prompt with three titles.
+- [x] Each of the 31 catalog roles loads with the minds and thinking level in the spec, and the two managing roles are the only ones with `manages: true`.
+- [x] A test loads every package role and fails on a missing field, an unknown model id format, or an empty body.
+- [x] A session with the coordinator role has every catalog title and its one-line mandate in its prompt; a non-managing role does not.
+- [x] Hiring each of three roles with the same brief (the Distinguished Engineer, the Simplicity Engineer, and the Architecture Prosecutor) through a faux model shows three prompts whose obligations differ, not one prompt with three titles.
+
+Deviations: role files carry a `mandate` line in front matter, so the catalog section (`<role-catalog>`, shown to whoever holds the manager tools, not only managing roles, since the operator's root session hires too) reads it instead of a hand-kept list. The coordinator keeps its short body; managers get their deliverable from the `<manager>` charter.

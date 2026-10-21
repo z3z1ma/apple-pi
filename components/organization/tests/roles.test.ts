@@ -10,6 +10,7 @@ import { installOrganization, loadRoles, PACKAGE_ROLES_DIR } from "../src/index.
 
 const ROLE = `---
 title: Test Role
+mandate: Test the role
 models: [faux-session-provider/faux-session-model]
 thinking: low
 writes: false
@@ -62,7 +63,7 @@ test("the package catalog loads, a project file overrides by name, and a bad fil
 
 	mkdirSync(join(cwd, ".pi", "roles"), { recursive: true });
 	writeFileSync(join(cwd, ".pi", "roles", "coordinator.md"), ROLE);
-	writeFileSync(join(cwd, ".pi", "roles", "broken.md"), "---\ntitle: Broken\nmodels: []\n---\nbody\n");
+	writeFileSync(join(cwd, ".pi", "roles", "broken.md"), "---\ntitle: Broken\nmandate: Break\nmodels: []\n---\nbody\n");
 	const local = loadRoles(cwd);
 	expect(local.roles.get("coordinator")).toMatchObject({ title: "Test Role", manages: false });
 	expect(local.roles.has("broken")).toBe(false);
@@ -163,7 +164,7 @@ test("an unknown role name warns and leaves the session unroled", async () => {
 		expect(run.session.getActiveToolNames().sort()).toEqual(["edit", "read", "update_self"]);
 		expect(run.session.agent.state.systemPrompt).not.toContain("<role>");
 		expect(stderr.mock.calls.map((call) => String(call[0]))).toContainEqual(
-			expect.stringContaining('Unknown role "court-jester"; known roles: coordinator'),
+			expect.stringContaining('Unknown role "court-jester"; known roles: accessibility-specialist'),
 		);
 	} finally {
 		stderr.mockRestore();

@@ -7,8 +7,16 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { setSystemPromptSection } from "../../shared/src/system-prompt-section.js";
 import { inChildSessionContext } from "../../subagents/src/child-context.js";
-import { MANAGER_SYSTEM_PROMPT_TAG, managerCharter, ORG_SYSTEM_PROMPT_TAG, orgSection } from "./charters.js";
+import {
+	CATALOG_SYSTEM_PROMPT_TAG,
+	catalogSection,
+	MANAGER_SYSTEM_PROMPT_TAG,
+	managerCharter,
+	ORG_SYSTEM_PROMPT_TAG,
+	orgSection,
+} from "./charters.js";
 import { organizationOf } from "./directory.js";
+import { loadRoles } from "./roles.js";
 import { installSelf } from "./self.js";
 import { installSessionRole, sessionRole } from "./session-role.js";
 
@@ -44,5 +52,11 @@ export function installOrganization(pi: ExtensionAPI): void {
 		);
 		if (role?.manages)
 			setSystemPromptSection(event.systemPromptOptions, MANAGER_SYSTEM_PROMPT_TAG, managerCharter(managerId));
+		if (managesPeople(pi, ctx))
+			setSystemPromptSection(
+				event.systemPromptOptions,
+				CATALOG_SYSTEM_PROMPT_TAG,
+				catalogSection(loadRoles(ctx.cwd).roles.values()),
+			);
 	});
 }

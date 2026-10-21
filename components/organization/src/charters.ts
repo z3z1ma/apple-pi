@@ -1,10 +1,25 @@
 /**
  * The system prompt sections of the organization: `<org>` for every root session (who it is, how the directory,
- * mail, and the tree work) and `<manager>` for a session whose role manages (how to build and run a team).
+ * mail, and the tree work), `<manager>` for a session whose role manages (how to build and run a team), and
+ * `<role-catalog>` for whoever holds the manager tools (what it can hire).
  */
+
+import type { Role } from "./roles.js";
 
 export const ORG_SYSTEM_PROMPT_TAG = "org";
 export const MANAGER_SYSTEM_PROMPT_TAG = "manager";
+export const CATALOG_SYSTEM_PROMPT_TAG = "role-catalog";
+
+/** The roles a manager can hire, one line each: the name `start_peer_session` takes, the title, and the mandate. */
+export function catalogSection(roles: Iterable<Role>): string {
+	const lines = [...roles].map(
+		(role) =>
+			`- \`${role.name}\`: ${role.title}. ${role.mandate}. ${role.manages ? "Manages. " : ""}${role.writes ? "Writes files." : "Advises; changes no files."}`,
+	);
+	return `The roles you can hire with \`start_peer_session\`. Each is a lasting obligation on a named mind; they are written to collide, so hire the perspectives a decision needs, not the whole catalog.
+
+${lines.join("\n")}`;
+}
 
 export interface OrgIdentity {
 	id: string;
