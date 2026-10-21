@@ -29,7 +29,7 @@ Verify: apps/agent-world/tests/instruct.test.ts
 
 ## symbol:factsColumns
 
-`intent` is selected only when the database has the column (`world-backend.ts` checks `pragma_table_info` on each read); otherwise it reads as null.
+`intent` is selected only when the database has the column (`world-backend.ts` checks `pragma_table_info` on each read); otherwise it reads as null. The organization's columns (`role_title` as `title`, `soul`, `self`) are selected the same way; `selfHeadings` are the Markdown headings of the `self` text, since the card shows what a person keeps notes under, never the notes.
 Why: the session-state runtime is a long-lived daemon that keeps running old code after the checkout changes, so its database can lack a newly migrated column for days; selecting a missing column fails the whole read and the world goes empty.
 Coupled: apps/agent-world/src/backend/world-backend.ts, components/session-state/src/schema.ts, components/tmux-sessions/sidebar/model.py
 Verify: apps/agent-world/tests/backend.test.ts

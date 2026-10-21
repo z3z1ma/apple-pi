@@ -1,6 +1,6 @@
 ## file
 
-The backend imports only Node, Electron-free npm modules, and other `apps/agent-world/src/backend/` files; nothing from `components/` or `@earendil-works/pi-coding-agent`. What it needs about sessions (such as the `role` column) it reads from the session-state database, and a column a newer migration adds is selected only when `pragma_table_info` lists it (`OPTIONAL_COLUMNS`).
+The backend imports only Node, Electron-free npm modules, and other `apps/agent-world/src/backend/` files; nothing from `components/` or `@earendil-works/pi-coding-agent`. What it needs about sessions it reads from the session-state database, and a column a newer migration adds is selected only when `pragma_table_info` lists it (`OPTIONAL_COLUMNS`: `intent` and the organization's `role_title`, `manages`, `soul`, `self`, `retired_at`, `retired_reason`). Who manages is the `manages` fact the bridge reports (stored as 0/1), or having anyone report to it; the role's name is never interpreted here, and the catalog is read from its files (`roles.ts`) only for the hire form.
 Why: the Electron main build (`apps/agent-world/electron.vite.config.ts`) bundles everything it imports except Electron and `node:`, so a `components/` import drags the package's extension code into the committed `dist/`; and the running runtime keeps old code and an unmigrated database until it restarts, so a selected column may not exist yet.
 Coupled: apps/agent-world/electron.vite.config.ts, components/session-state/src/schema.ts
 Verify: apps/agent-world/tests/backend.test.ts

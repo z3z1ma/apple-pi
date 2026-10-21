@@ -5,5 +5,7 @@ Why: the spec places the self with the person, and the transcript is the one rec
 
 The self is a system prompt section, not a message.
 Why: compaction never touches the system prompt, so the self needs no re-injection after it, and provider prefix caching breaks only when the self changes, not on every turn.
+`update_self` is added to the active tools at `session_start` and again at every `before_agent_start`.
+Why: Pi restores the active tool set from the saved transcript after extensions load, so a session older than the tool, or one whose user disabled it, would otherwise run without it; every new root-session tool also lands in the `activeTools` the bridge records, which `activity.test.ts` checks with `arrayContaining`.
 Coupled: components/session-state/src/bridge.ts, components/session-state/src/protocol.ts
-Verify: components/organization/tests/person.test.ts, components/session-state/tests/coordinator.test.ts
+Verify: components/organization/tests/person.test.ts, components/session-state/tests/coordinator.test.ts, components/session-state/tests/activity.test.ts
