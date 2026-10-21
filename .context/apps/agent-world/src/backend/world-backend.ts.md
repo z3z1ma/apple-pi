@@ -1,3 +1,10 @@
+## file
+
+The backend imports only Node, Electron-free npm modules, and other `apps/agent-world/src/backend/` files; nothing from `components/` or `@earendil-works/pi-coding-agent`. What it needs about sessions (such as the `role` column) it reads from the session-state database, and a column a newer migration adds is selected only when `pragma_table_info` lists it (`OPTIONAL_COLUMNS`).
+Why: the Electron main build (`apps/agent-world/electron.vite.config.ts`) bundles everything it imports except Electron and `node:`, so a `components/` import drags the package's extension code into the committed `dist/`; and the running runtime keeps old code and an unmigrated database until it restarts, so a selected column may not exist yet.
+Coupled: apps/agent-world/electron.vite.config.ts, components/session-state/src/schema.ts
+Verify: apps/agent-world/tests/backend.test.ts
+
 ## symbol:openWorldBackend
 
 The database is opened writable with `pragma query_only = 1`, not `readOnly`, and only once the file exists.
