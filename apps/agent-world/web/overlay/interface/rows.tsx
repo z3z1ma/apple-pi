@@ -63,7 +63,7 @@ export function ActionButtons({
 					<button
 						key={a.action}
 						type="button"
-						className={`aw-button${a.action === "end-session" ? " aw-button-end" : a.action === "rename" ? " aw-button-rename" : ""}`}
+						className={`aw-button${a.action === "end-session" ? " aw-button-end" : ""}`}
 						aria-label={a.label}
 						title={a.label}
 						onClick={(event) => {

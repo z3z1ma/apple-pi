@@ -453,10 +453,7 @@
 
 /* As many to a row as their words allow; each row stretches to the full width. */
 .aw-actions .aw-button {
-	box-sizing: border-box;
 	flex: 1 1 auto;
-	min-width: 0;
-	overflow: hidden;
 }
 
 .aw-switch-row {
