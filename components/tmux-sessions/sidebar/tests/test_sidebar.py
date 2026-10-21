@@ -5,7 +5,9 @@ import time
 
 import dashboard
 import model
+import presentation
 import sidebar
+from textual.content import Content
 
 
 def ids(agents):
@@ -34,18 +36,31 @@ def test_status_needs_you_and_attention_order_follow_the_recorded_facts(world):
     world.add("working", "%3", "running_tool", updated_at=now - 30)
     world.add("done", "%4", needs_you_since=now - 100, updated_at=now - 100)
     world.add("asking", "%5", "running_tool", prompt={"id": "q1"}, needs_you_since=now - 300)
+    # Settled unseen, then mail started another run: it works, waits for nobody, and keeps its unseen result.
+    world.add("working-again", "%6", "running_tool", needs_you_since=now - 400, updated_at=now - 20)
 
     agents = model.live()
 
-    assert ids(agents) == ["asking", "done", "working", "quiet-new", "quiet-old"]
+    assert ids(agents) == ["asking", "done", "working-again", "working", "quiet-new", "quiet-old"]
     by_id = {agent.session_id: agent for agent in agents}
-    assert [(by_id[key].status, by_id[key].unseen) for key in ids(agents)] == [
-        ("waiting", False),
-        ("idle", True),
-        ("busy", False),
-        ("idle", False),
-        ("idle", False),
+    assert [(by_id[key].status, by_id[key].unseen, by_id[key].needs_you) for key in ids(agents)] == [
+        ("waiting", False, True),
+        ("idle", True, True),
+        ("busy", True, False),
+        ("busy", False, False),
+        ("idle", False, False),
+        ("idle", False, False),
     ]
+    assert [presentation.state(by_id[key]) for key in ids(agents)] == [
+        "waiting",
+        "done",
+        "working",
+        "working",
+        "quiet",
+        "quiet",
+    ]
+    assert presentation.state_label(by_id["working-again"]) == "working · result unseen"
+    assert presentation.state_label(by_id["working"]) == "working"
     assert by_id["working"].updated_at == int(now - 30)
 
 
@@ -84,7 +99,7 @@ def card_text(app):
     return {
         card.agent.session_id: {
             "lane": card.parent.id,
-            "title": str(card.border_title),
+            "title": Content.from_markup(str(card.border_title)).plain,
             "task": str(card.query_one(".task").shown),
             "act": str(card.query_one(".act").shown),
             "meta": str(card.query_one(".meta").shown),
@@ -110,6 +125,7 @@ def test_a_session_shows_its_name_status_tool_ledger_task_cost_context_and_lane_
         cost=1.25,
     )
     world.add("finished", "%2", name="Finished work", needs_you_since=now - 10)
+    world.add("again", "%3", "thinking", name="Working again", needs_you_since=now - 20)
 
     async def run():
         app = sidebar.Sidebar()
@@ -124,6 +140,9 @@ def test_a_session_shows_its_name_status_tool_ledger_task_cost_context_and_lane_
     assert cards["worker"]["act"] == "bash npm test"
     assert cards["worker"]["meta"] == "120k $1.25"
     assert cards["finished"]["lane"] == "lane-need" and "✓" in cards["finished"]["title"]
+    # Working again after an unseen settle: in the working lane, its spinner followed by the unseen tick.
+    assert cards["again"]["lane"] == "lane-work" and "✓ Working again" in cards["again"]["title"]
+    assert "✓" not in cards["worker"]["title"]
     assert count == "1"
 
 

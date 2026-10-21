@@ -96,8 +96,9 @@ final class Store {
 		lastTools = lastTools.filter { id, _ in sessions.contains { $0[0] == id } }
 		let agents = sessions.map { row -> [String: Any] in
 			let id = row[0]!
+			// What it does now; a working agent keeps an earlier unseen result as `unseen`.
 			let state =
-				row[4] == "1" ? "waiting" : row[5] == "1" ? "done" : row[3] != "idle" ? "working" : "quiet"
+				row[4] == "1" ? "waiting" : row[3] != "idle" ? "working" : row[5] == "1" ? "done" : "quiet"
 			let project = URL(fileURLWithPath: row[2]!).lastPathComponent
 			let last = row[6].map { (tool: $0, detail: row[7] ?? "") } ?? lastTools[id]
 			return [
@@ -105,6 +106,7 @@ final class Store {
 				"name": row[1] ?? row[8].flatMap(taskTitle) ?? project,
 				"project": project,
 				"state": state,
+				"unseen": row[4] != "1" && row[5] == "1",
 				"tool": last?.tool ?? "",
 				"detail": last?.detail ?? "",
 				"tmuxSession": row[12] ?? "",

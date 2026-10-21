@@ -19,7 +19,19 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from model import Agent, Store, live, mark_seen, talk, tmux, trees  # noqa: E402
-from presentation import STATE_LABEL, STATUS_STYLE, ago, count_of, details, glyph, show, state, tokens, use_theme  # noqa: E402
+from presentation import (  # noqa: E402
+    STATUS_STYLE,
+    ago,
+    count_of,
+    details,
+    glyph,
+    show,
+    state,
+    state_label,
+    tokens,
+    unseen_while_working,
+    use_theme,
+)
 from rich.text import Text  # noqa: E402
 from textual import on, work  # noqa: E402
 from textual.app import App, ComposeResult  # noqa: E402
@@ -52,7 +64,8 @@ def cells(agent: Agent, now: float, frame: int) -> dict[str, Text]:
     quiet = "#7f849c" if current == "quiet" else ""
     act = agent.activity
     return {
-        "state": Text(glyph(agent, frame), style=f"bold {STATUS_STYLE[current]}"),
+        "state": Text(glyph(agent, frame), style=f"bold {STATUS_STYLE[current]}")
+        + Text("✓" if unseen_while_working(agent) else "", style=f"bold {STATUS_STYLE['done']}"),
         "name": Text(
             "  " * agent.depth + agent.name, style=f"bold {STATUS_STYLE[current]}" if agent.needs_you else quiet
         ),
@@ -257,7 +270,7 @@ class Dashboard(App):
         if agent is None:
             show(detail, "")
             return
-        title = f"{glyph(agent, self.frame)} {STATE_LABEL[state(agent)]}"
+        title = f"{glyph(agent, self.frame)} {state_label(agent)}"
         if detail.border_title != title:
             detail.border_title = title
         show(detail, details(agent, now))
@@ -336,7 +349,7 @@ class Dashboard(App):
         if agent is None:
             return
         if agent.status != "idle":
-            self.notify(f"{agent.name} is {STATE_LABEL[state(agent)]}; press enter to go to it.", timeout=4)
+            self.notify(f"{agent.name} is {state_label(agent)}; press enter to go to it.", timeout=4)
             return
         reply = self.query_one("#reply", Input)
         reply.border_title = f"Reply to {agent.name} · enter sends · esc cancels"

@@ -1,6 +1,7 @@
 // What the interface derives from the world snapshot: each character's attention, the groupings of each tab, the orb
 // counts, and the names of places. Pure, so the views only draw. Attention matches the tmux sidebar: asking means an
-// open prompt; finished means it needs you with no prompt open (a settle not seen yet); working is any run but idle.
+// open prompt; working is any run but idle; finished means idle with a settle not seen yet. What it does now comes
+// first: a character that works again after an unseen settle is working, with the unseen result marked beside it.
 import type { Character, Headquarters, PlaceRef, WorldSnapshot } from "../../../src/world.js";
 import { isOutside, placeKey } from "../../../src/world.js";
 import { shortArg } from "../tool-line.js";
@@ -11,8 +12,13 @@ export function attentionOf(character: Character): Attention {
 	const facts = character.facts;
 	if (!facts) return "idle";
 	if (facts.status === "asking") return "asking";
-	if (facts.unseen) return "finished";
-	return facts.status === "working" ? "working" : "idle";
+	if (facts.status === "working") return "working";
+	return facts.unseen ? "finished" : "idle";
+}
+
+/** Working, with the result of an earlier run still unseen. */
+export function unseenWhileWorking(character: Character): boolean {
+	return attentionOf(character) === "working" && Boolean(character.facts?.unseen);
 }
 
 export interface Group {

@@ -47,6 +47,9 @@ function fixture(agentDir: string) {
 	incarnation.run("done", 1, "alive_bridge_lost", null, "%2");
 	session.run("work", "root", "/work/gamma", null, "running_tool", 1, 5000, null, null, "read", "/x.ts", null);
 	incarnation.run("work", 1, "alive", null, "%3");
+	// Settled unseen, then started another run without the operator: working, with its result still unseen.
+	session.run("again", "root", "/work/eta", null, "thinking", 1, 6000, null, 2000, null, null, null);
+	incarnation.run("again", 1, "alive", null, "%7");
 	session.run("quiet", "root", "/work/delta", "Idle one", "idle", 1, 7000, null, null, null, null, null);
 	incarnation.run("quiet", 1, "alive", null, "%9");
 	// Left out: a subagent, an ended session, a session outside tmux, and one whose current generation has not started.
@@ -106,19 +109,25 @@ test.skipIf(!hasSwiftc)(
 		const socket = "/tmp/tmux-1/default";
 		expect(JSON.parse(result.stdout)).toEqual([
 			{
-				...{ id: "done", name: "Fix the parser", project: "beta", state: "done", tool: "edit", detail: "src/a.ts" },
+				...{ id: "done", name: "Fix the parser", project: "beta", state: "done", unseen: true, tool: "edit" },
+				detail: "src/a.ts",
 				...{ tmuxSession: "main", paneId: "%2", tmuxSocket: socket, updatedAt: 3 },
 			},
 			{
-				...{ id: "ask", name: "Asker", project: "alpha", state: "waiting", tool: "", detail: "" },
+				...{ id: "ask", name: "Asker", project: "alpha", state: "waiting", unseen: false, tool: "", detail: "" },
 				...{ tmuxSession: "main", paneId: "%1", tmuxSocket: socket, updatedAt: 9 },
 			},
 			{
-				...{ id: "work", name: "gamma", project: "gamma", state: "working", tool: "read", detail: "/x.ts" },
+				...{ id: "again", name: "eta", project: "eta", state: "working", unseen: true, tool: "", detail: "" },
+				...{ tmuxSession: "", paneId: "%7", tmuxSocket: socket, updatedAt: 6 },
+			},
+			{
+				...{ id: "work", name: "gamma", project: "gamma", state: "working", unseen: false, tool: "read" },
+				detail: "/x.ts",
 				...{ tmuxSession: "side", paneId: "%3", tmuxSocket: socket, updatedAt: 5 },
 			},
 			{
-				...{ id: "quiet", name: "Idle one", project: "delta", state: "quiet", tool: "", detail: "" },
+				...{ id: "quiet", name: "Idle one", project: "delta", state: "quiet", unseen: false, tool: "", detail: "" },
 				...{ tmuxSession: "", paneId: "%9", tmuxSocket: socket, updatedAt: 7 },
 			},
 		]);

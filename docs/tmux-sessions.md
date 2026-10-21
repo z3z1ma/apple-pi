@@ -54,8 +54,8 @@ A large count shows how many agents need you, or "all clear". Below it, each [or
 
 | Lane | Agents | Card |
 | --- | --- | --- |
-| NEEDS YOU | `?` asking you (a prompt is open), `✓` done (settled since you last saw it) | yellow or green border |
-| WORKING | turn in progress, with a spinner | mauve border, 30-minute tool-call graph, context size and cost |
+| NEEDS YOU | `?` asking you (a prompt is open), `✓` done (settled since you last saw it, and idle) | yellow or green border |
+| WORKING | turn in progress, with a spinner; a `✓` after the spinner means an earlier result is still unseen | mauve border, 30-minute tool-call graph, context size and cost |
 | QUIET | settled and seen | grey border |
 
 Each card's title is the agent's name: the Pi session name, else the title of the ledger task the session touched last, else the project directory. The body shows that ledger task and its status, or, without one, what the session says it works on now (its stated intent, after `◇`), and the agent's last tool call. The bottom border shows the tmux location and the time since the status changed; `◂ here` marks the pane you are looking at. Cost, context size, and the last tool call come from the database. NEEDS YOU lists the agent that has waited longest first. An agent that enters it flashes for four seconds.
@@ -78,9 +78,9 @@ The session-state runtime records when you last saw each session: when a tmux cl
 
 ## Status line and jump
 
-The right end of the status line counts agents by state, for example `π ? 1 ✓ 2 ⠿ 3 · 1`: asking you, done and unseen, working, and idle, in the sidebar's colours. It is empty when no agent runs. The [session-state](session-state.md#attention) runtime writes it to the server option `@pi_agents` within a second of a change, and the session that has needed you longest to `@pi_jump_target`, which `prefix` + `y` jumps to.
+The right end of the status line counts agents by state, for example `π ? 1 ✓ 2 ⠿ 3 · 1`: asking you, done and unseen, working (whether or not an earlier result is unseen), and idle, in the sidebar's colours. It is empty when no agent runs. The [session-state](session-state.md#attention) runtime writes it to the server option `@pi_agents` within a second of a change, and the session that has needed you longest to `@pi_jump_target`, which `prefix` + `y` jumps to.
 
-`prefix` + `y` jumps to the agent that has needed you longest. Once you see it, the target moves to the next one in line, so pressing it again walks the queue; an agent with an open prompt stays the target until you answer it. With nothing waiting it says so.
+`prefix` + `y` jumps to the agent that has needed you longest, among those that wait now (asking you, or done and idle); a working agent with an unseen result comes only after them. Once you see it, the target moves to the next one in line, so pressing it again walks the queue; an agent with an open prompt stays the target until you answer it. With nothing waiting it says so.
 
 ## The dashboard
 
@@ -107,7 +107,7 @@ A reply is a `talk` command, sent only to an agent that is idle when you press `
 
 ## The notch panel
 
-On a Mac, a black pill sits under the notch: the agent count, then one dot per agent. Dots for agents that need you or have finished sit on the left; working and quiet agents sit on the right. Hover the pill to open the pixel room of one tmux session. Each agent is a worker, posed by its state, with a bubble over its head: `…` working, `z` quiet, `!` needs you, `✓` done.
+On a Mac, a black pill sits under the notch: the agent count, then one dot per agent. Dots for agents that need you or have finished sit on the left; working and quiet agents sit on the right, and a green ring on a working dot means an earlier result is still unseen. Hover the pill to open the pixel room of one tmux session. Each agent is a worker, posed by its state, with a bubble over its head: `…` working, `z` quiet, `!` needs you, `✓` done.
 
 | Action | Effect |
 | --- | --- |

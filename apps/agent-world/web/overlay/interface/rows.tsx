@@ -4,7 +4,7 @@ import type { Character } from "../../../src/world.js";
 import { say } from "../../theme.js";
 import { useTheme } from "../../theme-store.js";
 import { CheckIcon, QuestionIcon } from "./icons.js";
-import { type Attention, ago, attentionOf } from "./model.js";
+import { type Attention, ago, attentionOf, unseenWhileWorking } from "./model.js";
 
 export type CharacterAction = "talk-to" | "examine" | "go-to" | "terminal" | "rename" | "retire" | "end-session";
 
@@ -15,8 +15,14 @@ const PIP_LABEL: Record<Attention, string> = {
 	idle: "Idle",
 };
 
-/** The state pip: a question, a tick, three working dots, or a quiet dot, each drawn centred. */
-export function Pip({ attention }: { attention: Attention }) {
+/** Working with an earlier result unseen: said after the state, as the pip's tick mark shows it. */
+export const UNSEEN_RESULT = "result unseen";
+
+/**
+ * The state pip: a question, a tick, three working dots, or a quiet dot, each drawn centred. Working dots carry a
+ * small tick when an earlier result is still unseen.
+ */
+export function Pip({ attention, unseen = false }: { attention: Attention; unseen?: boolean }) {
 	return (
 		<span className={`aw-pip aw-pip-${attention}`} aria-hidden="true">
 			{attention === "asking" && <QuestionIcon />}
@@ -26,6 +32,11 @@ export function Pip({ attention }: { attention: Attention }) {
 					<i />
 					<i />
 					<i />
+				</span>
+			)}
+			{attention === "working" && unseen && (
+				<span className="aw-pip aw-pip-finished aw-pip-mark">
+					<CheckIcon />
 				</span>
 			)}
 		</span>
@@ -98,6 +109,7 @@ export function CharacterRow({
 	act: (action: CharacterAction, character: Character) => void;
 }) {
 	const attention = attentionOf(character);
+	const unseen = unseenWhileWorking(character);
 	const time = ago(since);
 	return (
 		<li className={`aw-row aw-row-${attention}${selected ? " aw-row-selected" : ""}`}>
@@ -112,10 +124,13 @@ export function CharacterRow({
 				}}
 				onDoubleClick={() => act("talk-to", character)}
 			>
-				<Pip attention={attention} />
+				<Pip attention={attention} unseen={unseen} />
 				<span className="aw-row-text">
 					<span className="aw-row-name">{character.name}</span>
-					<span className="aw-sr">, {PIP_LABEL[attention]}: </span>
+					<span className="aw-sr">
+						, {PIP_LABEL[attention]}
+						{unseen && `, ${UNSEEN_RESULT}`}:{" "}
+					</span>
 					{detail && (
 						<span className="aw-row-detail" title={detail}>
 							{detail}

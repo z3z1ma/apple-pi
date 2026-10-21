@@ -379,10 +379,25 @@
 }
 
 .aw-pip {
+	position: relative;
 	display: grid;
 	place-items: center;
 	width: 18px;
 	height: 18px;
+}
+
+/* The tick on working dots whose earlier result is unseen. */
+.aw-pip-mark {
+	position: absolute;
+	right: -4px;
+	bottom: -4px;
+	width: 11px;
+	height: 11px;
+}
+
+.aw-pip-mark svg {
+	width: 8px;
+	height: 8px;
 }
 
 .aw-pip-idle::after {
@@ -623,6 +638,11 @@
 .aw-card-status .aw-row-time {
 	margin-left: auto;
 	font-weight: 400;
+}
+
+.aw-card-unseen {
+	margin: -2px 0 6px 25px;
+	font-size: 12px;
 }
 
 .aw-card blockquote {

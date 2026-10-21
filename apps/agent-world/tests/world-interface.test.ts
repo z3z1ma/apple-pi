@@ -214,6 +214,50 @@ test("the orbs count who needs you and who is working, leave a slot for Slack, a
 	}
 }, 30000);
 
+test("a finished character that starts working again shows as working at once, with its unseen result marked beside", async () => {
+	const { page, push, errors } = await openWorld(world());
+	try {
+		const row = () => page.locator(".aw-row").filter({ hasText: "ledger" });
+		await expect(row().locator(".aw-sr").first().textContent()).resolves.toBe(", Finished, unseen: ");
+		// Mail starts a run without the operator: the earlier settle is still unseen, and needs_you_since is kept.
+		const again = (f: Partial<CharacterFacts>) =>
+			world(CAST.map((c) => (c.id === "ledger" ? { ...c, facts: { ...c.facts!, ...f } } : c)));
+		await push(again({ ...working("bash", "git fetch -q origin main"), unseen: true }));
+		await vi.waitFor(
+			async () => expect(await row().locator(".aw-sr").first().textContent()).toBe(", Working, result unseen: "),
+			{ timeout: 2000 },
+		);
+		await expect(row().locator(".aw-pip-working .aw-pip-mark").count()).resolves.toBe(1);
+		await expect(row().textContent()).resolves.toContain("bash \u00b7 git fetch -q origin main");
+		// It waits for nobody while it works: it leaves Needs you and counts as working.
+		await expect(orb(page, "Needs you").getAttribute("aria-label")).resolves.toBe("Needs you: 2");
+		await expect(orb(page, "Working").getAttribute("aria-label")).resolves.toBe("Working: 3");
+		await tab(page, "Needs you");
+		expect(await groups(page)).toEqual([{ title: "Questions", names: ["pi-tests", "solo"] }]);
+		await tab(page, "Agents");
+		await row().locator(".aw-row-main").click();
+		await page.getByRole("button", { name: "Examine ledger" }).click();
+		const card = page.getByRole("dialog", { name: "Examine ledger" });
+		await expect(card.locator(".aw-card-status").textContent()).resolves.toContain("Working");
+		await expect(card.locator(".aw-card-unseen").textContent()).resolves.toBe("An earlier result unseen for 40m");
+		await shot(page, "working-unseen");
+		// When that run settles too, it is finished and unseen again, waiting since its first unseen settle.
+		await push(again({ run: "idle", status: "idle", tool: null, unseen: true }));
+		await vi.waitFor(
+			async () => expect(await row().locator(".aw-sr").first().textContent()).toBe(", Finished, unseen: "),
+			{
+				timeout: 2000,
+			},
+		);
+		await expect(row().locator(".aw-pip-mark").count()).resolves.toBe(0);
+		await expect(card.locator(".aw-card-unseen").count()).resolves.toBe(0);
+		await expect(orb(page, "Needs you").getAttribute("aria-label")).resolves.toBe("Needs you: 3");
+		expect(errors).toEqual([]);
+	} finally {
+		await page.close();
+	}
+}, 30000);
+
 test("Agents groups everyone by place; Needs you lists questions first, then finished work; Work groups by ledger task", async () => {
 	const { page, errors } = await openWorld(world());
 	try {

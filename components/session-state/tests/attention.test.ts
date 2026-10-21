@@ -6,6 +6,7 @@ import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai/compat
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
 import { fauxSession, type Reply } from "../../../tests/helpers/faux-session.js";
 import askUserQuestion from "../../ask-user-question/src/index.js";
+import { jumpTarget, statusSummary } from "../src/attention.js";
 import bridge from "../src/index.js";
 import { close, query, sendCommand, startRuntime, stopRuntime, tempStateDir } from "./helpers.js";
 
@@ -190,3 +191,24 @@ test("the jump target is the pane that has needed you longest, and the jump key 
 		if (newer) await close(newer.run);
 	}
 }, 30000);
+
+test("a session that works again shows as working, and the jump key prefers a session that waits now", () => {
+	const row = (paneId: string, runState: string, needsYouSince: number | null, prompt = false) => ({
+		paneId,
+		runState,
+		prompt,
+		needsYouSince,
+	});
+	// %1 settled unseen at 100 and then started another run (from mail, say); %2 settled unseen at 200 and is idle.
+	const rows = [row("%1", "running_tool", 100), row("%2", "idle", 200), row("%3", "idle", null)];
+	const summary = statusSummary(rows);
+	expect(summary).toContain("\u2713 1");
+	expect(summary).toContain("\u283f 1");
+	expect(summary).toContain("\u00b7 1");
+	expect(jumpTarget(rows)).toBe("%2");
+	// With nothing else waiting, the working session's unseen result is still a place to jump to.
+	expect(jumpTarget([row("%1", "thinking", 100), row("%3", "idle", null)])).toBe("%1");
+	// A question waits now as a done session does: the older of the two goes first, and both beat a working one.
+	expect(jumpTarget([...rows, row("%4", "idle", 300, true)])).toBe("%2");
+	expect(jumpTarget([row("%1", "thinking", 100), row("%4", "idle", 300, true)])).toBe("%4");
+});

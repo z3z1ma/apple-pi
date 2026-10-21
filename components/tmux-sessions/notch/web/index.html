@@ -22,6 +22,7 @@
 	.wing { display: flex; align-items: center; gap: 5px; }
 	.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--c); flex: none; }
 	.dot.working { animation: pulse 1.6s ease-in-out infinite; }
+	.dot.unseen { box-shadow: 0 0 0 1.5px var(--done); }
 	@keyframes pulse { 50% { opacity: .35; } }
 	.count { color: var(--quiet); font-weight: 600; font-size: 11px; }
 	#stage { position: relative; width: max-content; margin: 6px 14px 14px; opacity: 0; transition: opacity .2s; }
@@ -133,7 +134,7 @@ function renderPill() {
 		sorted.filter((a) => a.state === "waiting" || a.state === "done")
 			.map((a) => `<span class="dot" style="--c:var(--${a.state})"></span>`).join("");
 	$("right").innerHTML = sorted.filter((a) => a.state === "working" || a.state === "quiet")
-		.map((a) => `<span class="dot ${a.state}" style="--c:var(--${a.state})"></span>`).join("");
+		.map((a) => `<span class="dot ${a.state}${a.unseen ? " unseen" : ""}" style="--c:var(--${a.state})"></span>`).join("");
 }
 
 function roomScale(group, name) {

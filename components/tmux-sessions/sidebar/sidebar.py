@@ -29,6 +29,7 @@ from presentation import (  # noqa: E402
     state,
     task_line,
     tokens,
+    unseen_while_working,
     use_theme,
 )
 from textual import work  # noqa: E402
@@ -99,7 +100,8 @@ class Card(Widget):
 
     def paint_title(self, frame: int) -> None:
         agent = self.agent
-        title = Content.from_markup("[b]$glyph  $name[/b]", glyph=glyph(agent, frame), name=agent.name)
+        mark = "[$text-success]✓[/]" if unseen_while_working(agent) else " "
+        title = Content.from_markup(f"[b]$glyph{mark} $name[/b]", glyph=glyph(agent, frame), name=agent.name)
         if agent.role:
             title += Content.from_markup(" [$text-muted]$role[/]", role=agent.role)
         if title != self.shown_title:

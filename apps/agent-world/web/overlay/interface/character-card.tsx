@@ -3,8 +3,8 @@
 // tool, model, context, cost, and tmux pane. Nothing here is inferred.
 import type { Character, WorldSnapshot } from "../../../src/world.js";
 import { CloseIcon } from "./icons.js";
-import { activity, ago, attentionOf, placeName } from "./model.js";
-import { ActionButtons, type CharacterAction, Pip } from "./rows.js";
+import { activity, ago, attentionOf, placeName, unseenWhileWorking } from "./model.js";
+import { ActionButtons, type CharacterAction, Pip, UNSEEN_RESULT } from "./rows.js";
 
 const STATUS = { asking: "Asking you", finished: "Finished, unseen", working: "Working", idle: "Idle" };
 
@@ -77,6 +77,8 @@ export function CharacterCard({
 				: facts?.settledAt;
 	const rows = factRows(character, world);
 	const time = ago(since);
+	const unseen = unseenWhileWorking(character);
+	const unseenFor = ago(facts?.needsYouSince);
 	return (
 		<div className="aw-frame aw-card" role="dialog" aria-label={`Examine ${character.name}`}>
 			<header className="aw-card-head">
@@ -92,10 +94,16 @@ export function CharacterCard({
 			</header>
 			<div className="aw-card-body aw-surface">
 				<p className={`aw-card-status aw-row-${attention}`}>
-					<Pip attention={attention} />
+					<Pip attention={attention} unseen={unseen} />
 					<span>{STATUS[attention]}</span>
 					{time && <span className="aw-row-time">{time === "now" ? "just now" : `for ${time}`}</span>}
 				</p>
+				{unseen && (
+					<p className="aw-card-unseen">
+						An earlier {UNSEEN_RESULT}
+						{unseenFor && unseenFor !== "now" ? ` for ${unseenFor}` : ""}
+					</p>
+				)}
 				{facts?.asking?.text && <blockquote>{facts.asking.text}</blockquote>}
 				<dl>
 					{rows.map(([term, value]) => (

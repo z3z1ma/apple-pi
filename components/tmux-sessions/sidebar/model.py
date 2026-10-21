@@ -81,7 +81,8 @@ class Agent:
 
     @property
     def needs_you(self) -> bool:
-        return self.status == "waiting" or self.unseen
+        """An open question, or an unseen result while idle; a session that works again waits for nobody."""
+        return self.status == "waiting" or (self.unseen and self.status != "busy")
 
     @property
     def name(self) -> str:

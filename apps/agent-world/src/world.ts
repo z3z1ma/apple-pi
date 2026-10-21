@@ -41,7 +41,10 @@ export interface CharacterFacts {
 	asking: { kind: string; text: string | null; questionnaire?: Questionnaire } | null;
 	/** Since when it has needed the operator (an open prompt, or a settle not seen yet); null when it does not. */
 	needsYouSince: number | null;
-	/** Finished and unseen: it needs the operator with no prompt open. */
+	/**
+	 * A settled run the operator has not seen, with no prompt open. It stays set while a later run works; the views
+	 * show that run first and mark the unseen result beside it.
+	 */
 	unseen: boolean;
 	seenAt: number | null;
 	settledAt: number | null;

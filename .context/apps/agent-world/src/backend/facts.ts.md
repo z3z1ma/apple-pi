@@ -1,9 +1,9 @@
 ## symbol:factsOf
 
-`status`, `unseen`, and `needsYouSince` follow the tmux sidebar exactly: asking is an open `prompt`; working is any `run_state` but `idle`; finished-and-unseen is `needs_you_since` set with no prompt open. The runtime owns `needs_you_since`; nothing here recomputes it from `seen_at` and `settled_at`.
+`status`, `unseen`, and `needsYouSince` follow the tmux sidebar exactly: asking is an open `prompt`; working is any `run_state` but `idle`; `unseen` is `needs_you_since` set with no prompt open, and it stays set through a later run, so the views rank a working status above it and mark it beside the state (the interface's `attentionOf`, the sidebar's `state`, the notch). The runtime owns `needs_you_since`; nothing here recomputes it from `seen_at` and `settled_at`.
 Why: every view (sidebar, dashboard, notch, orbs) must agree on who needs the operator; the backend test runs the sidebar's own `model.live()` against the same database and compares.
-Coupled: components/tmux-sessions/sidebar/model.py, apps/agent-world/web/overlay/interface/model.ts
-Verify: apps/agent-world/tests/backend.test.ts
+Coupled: components/tmux-sessions/sidebar/model.py, components/tmux-sessions/sidebar/presentation.py, components/tmux-sessions/notch/NotchShell.swift, components/session-state/src/attention.ts, apps/agent-world/web/overlay/interface/model.ts
+Verify: apps/agent-world/tests/backend.test.ts, apps/agent-world/tests/world-interface.test.ts
 
 ## symbol:taskReader
 

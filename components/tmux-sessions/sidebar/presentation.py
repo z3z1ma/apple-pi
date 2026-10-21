@@ -19,13 +19,19 @@ STATUS_STYLE = {"waiting": "#FAE3B0", "done": "#ABE9B3", "working": "#F5C2E7", "
 
 
 def state(agent: Agent) -> str:
+    """What the agent does now: a run in progress is working even when an earlier result is still unseen."""
     if agent.status == "waiting":
         return "waiting"
-    if agent.unseen:
-        return "done"
     if agent.status == "busy":
         return "working"
+    if agent.unseen:
+        return "done"
     return "quiet"
+
+
+def unseen_while_working(agent: Agent) -> bool:
+    """Working, with the result of an earlier run still unseen: drawn as a tick beside the spinner."""
+    return state(agent) == "working" and agent.unseen
 
 
 def glyph(agent: Agent, frame: int) -> str:
@@ -33,6 +39,11 @@ def glyph(agent: Agent, frame: int) -> str:
     if current == "working":
         return SPINNER[frame % len(SPINNER)]
     return {"waiting": "?", "done": "✓", "quiet": "·"}[current]
+
+
+def state_label(agent: Agent) -> str:
+    label = STATE_LABEL[state(agent)]
+    return f"{label} · result unseen" if unseen_while_working(agent) else label
 
 
 def ago(timestamp: float, now: float) -> str:
@@ -95,7 +106,7 @@ def details(agent: Agent, now: float) -> Content:
         Content.from_markup(
             "[$text-muted]$where · $state for $age · $cwd[/]",
             where=f"{agent.tmux_session}:{agent.window_index}.{agent.pane_index}",
-            state=STATE_LABEL[state(agent)],
+            state=state_label(agent),
             age=ago(agent.updated_at, now),
             cwd=agent.cwd.replace(str(Path.home()), "~"),
         ),
