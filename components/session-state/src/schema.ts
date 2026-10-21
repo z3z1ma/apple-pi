@@ -181,6 +181,8 @@ const MIGRATIONS = [
 	`alter table sessions add column role_title text;`,
 	// Whether the role manages (1), does not (0), or the session has no role (null); views draw managers by it.
 	`alter table sessions add column manages integer;`,
+	// A subagent never needs the operator (its parent takes its result); clear what earlier runtimes set.
+	`update sessions set needs_you_since = null where kind = 'child';`,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

@@ -95,6 +95,16 @@ test("a subagent appears as a child of the session that started it, with its own
 				),
 			).toEqual([{ name: "read" }]),
 		);
+		// Its run settled, but it never needs the operator: its parent takes the result, and no view shows it.
+		await vi.waitFor(() =>
+			expect(
+				query<Row>(
+					state.dbPath,
+					"select settled_at is not null as settled, needs_you_since from sessions where id = ?",
+					childId,
+				),
+			).toEqual([{ settled: 1, needs_you_since: null }]),
+		);
 		await disposeAgentSession(result.session);
 		child = undefined;
 		await vi.waitFor(() =>

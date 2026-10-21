@@ -958,12 +958,12 @@ export class Runtime {
 				db.prepare("update sessions set parent_session_id = null where id = ?").run(sessionId);
 			if (key === "previousSession")
 				db.prepare("update sessions set previous_session_id = null where id = ?").run(sessionId);
-			// An open prompt needs the operator; once it closes, only a settle they have not seen still does.
+			// An open prompt needs the operator; once it closes, only a settle they have not seen still does. A subagent
+			// never needs them: its parent takes its result, and no view shows it.
 			if (key === "prompt" && value)
-				db.prepare("update sessions set needs_you_since = coalesce(needs_you_since, ?) where id = ?").run(
-					Date.now(),
-					sessionId,
-				);
+				db.prepare(
+					"update sessions set needs_you_since = coalesce(needs_you_since, ?) where id = ? and kind = 'root'",
+				).run(Date.now(), sessionId);
 			else if (key === "prompt")
 				db.prepare(
 					"update sessions set needs_you_since = case when coalesce(settled_at, 0) > coalesce(seen_at, 0) then needs_you_since end where id = ?",
@@ -1035,11 +1035,9 @@ export class Runtime {
 		if (run === "idle" && row.run_state !== "compacting") {
 			// A settle needs the operator until they see it; a compaction outside a run brings no reply.
 			const now = Date.now();
-			db.prepare("update sessions set settled_at = ?, needs_you_since = coalesce(needs_you_since, ?) where id = ?").run(
-				now,
-				now,
-				sessionId,
-			);
+			db.prepare(
+				"update sessions set settled_at = ?, needs_you_since = case when kind = 'root' then coalesce(needs_you_since, ?) end where id = ?",
+			).run(now, now, sessionId);
 		}
 	}
 
