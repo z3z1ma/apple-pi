@@ -6,7 +6,7 @@ import { fauxAssistantMessage } from "@earendil-works/pi-ai/compat";
 import { type ExtensionAPI, SessionManager } from "@earendil-works/pi-coding-agent";
 import { afterEach, expect, test, vi } from "vitest";
 import { fauxSession } from "../../../tests/helpers/faux-session.js";
-import { installSessionRole, loadRoles, PACKAGE_ROLES_DIR } from "../src/index.js";
+import { installOrganization, loadRoles, PACKAGE_ROLES_DIR } from "../src/index.js";
 
 const ROLE = `---
 title: Test Role
@@ -18,10 +18,11 @@ manages: false
 You are the test role.
 `;
 
-/** The role extension on its own, with the flag the session-state bridge registers in production. */
+/** The organization extension on its own, with the flags the session-state bridge registers in production. */
 const organization = (pi: ExtensionAPI) => {
 	pi.registerFlag("role", { type: "string", description: "role" });
-	installSessionRole(pi);
+	pi.registerFlag("reports-to", { type: "string", description: "manager" });
+	installOrganization(pi);
 };
 
 const dirs: string[] = [];
@@ -189,5 +190,45 @@ test("a resumed session takes its role from its transcript, with no flag", async
 		expect(resumed.session.agent.state.systemPrompt).toContain("<role>\nYou are a Staff Software Engineer");
 	} finally {
 		resumed.dispose();
+	}
+});
+
+test("everyone gets the org section; only a managing role gets the manager charter", async () => {
+	const run = await fauxSession(
+		[organization],
+		[fauxAssistantMessage("ok"), fauxAssistantMessage("ok"), fauxAssistantMessage("ok")],
+		["read"],
+	);
+	try {
+		const id = run.session.sessionManager.getSessionId();
+		await run.session.prompt("hi");
+		let prompt = run.session.agent.state.systemPrompt;
+		expect(prompt).toContain(`<org>\nYou are a session with no role, a person in an organization`);
+		expect(prompt).toContain(`Your session id is \`${id}\``);
+		expect(prompt).toContain("You are the root of your organization");
+		expect(prompt).toContain("You hold the manager tools");
+		expect(prompt).not.toContain("<manager>");
+
+		run.session.extensionRunner.setFlagValue("reports-to", "boss");
+		await restartWithRole(run, "staff-engineer-simplicity");
+		await run.session.prompt("hi");
+		prompt = run.session.agent.state.systemPrompt;
+		expect(prompt).toContain("<org>\nYou are Staff Engineer, Simplicity, a person");
+		expect(prompt).toContain("You report to the session `boss`");
+		expect(prompt).toContain("ask your manager to hire one");
+		expect(prompt).not.toContain("<manager>");
+	} finally {
+		run.dispose();
+	}
+
+	const manager = await fauxSession([organization], [fauxAssistantMessage("ok")], ["read"]);
+	try {
+		await restartWithRole(manager, "coordinator");
+		await manager.session.prompt("hi");
+		const prompt = manager.session.agent.state.systemPrompt;
+		expect(prompt).toContain("<org>\nYou are Coordinator, a person");
+		expect(prompt).toContain("<manager>\nYou are a manager: the operator brings you work");
+	} finally {
+		manager.dispose();
 	}
 });

@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+import { organizationOf } from "../../organization/src/directory.js";
 import { statePaths } from "./paths.js";
 
 export interface Peer {
@@ -51,7 +52,7 @@ export function livePeers(self: string | null): Peer[] {
 	}
 }
 
-/** `list_peer_sessions` for the model and `/pi-sessions` for the operator, in root sessions. */
+/** `list_peer_sessions` (the directory of the session's organization) for the model and `/pi-sessions` (every live session on the machine) for the operator, in root sessions. */
 export function installPeers(pi: ExtensionAPI): void {
 	const activate = () => {
 		const active = pi.getActiveTools();
@@ -74,16 +75,19 @@ export function installPeers(pi: ExtensionAPI): void {
 			name: "list_peer_sessions",
 			label: "list_peer_sessions",
 			description:
-				"List the other live top-level Pi sessions on this machine: peer sessions, which are separate and long-lived, often in their own tmux windows, and which you reach with mailbox_send. Each has an id, name, directory, status (busy, idle, or waiting for the user), the session it reports to, its role when hired into one, and its current ledger task. Your subagents are not peers: they are children you start with agent and reach with steer_subagent and get_subagent_result.",
-			promptSnippet: "List live peer Pi sessions (not your subagents) to mail them.",
+				"The directory of your organization: every other person in it, awake or asleep. A person is a lasting top-level Pi session, often in its own tmux window, which you reach with mailbox_send by id. Each has an id, name, role, manager (reportsTo), status (busy, idle, waiting for the user, or asleep), directory, current ledger task, the ledger tasks it has worked on (newest first), and when it was hired. Your subagents are not people: they are children you start with agent and reach with steer_subagent and get_subagent_result.",
+			promptSnippet: "The directory of your organization: the people (not your subagents) you can mail.",
 			parameters: Type.Object({}, { additionalProperties: false }),
 			async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
-				const peers = livePeers(ctx.sessionManager.getSessionId());
+				const { members } = organizationOf(ctx.sessionManager.getSessionId());
 				return {
 					content: [
-						{ type: "text", text: peers.length > 0 ? JSON.stringify(peers, null, 2) : "No other live Pi sessions." },
+						{
+							type: "text",
+							text: members.length > 0 ? JSON.stringify(members, null, 2) : "Nobody else is in your organization.",
+						},
 					],
-					details: { peers },
+					details: { members },
 				};
 			},
 		}),

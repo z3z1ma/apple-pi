@@ -10,7 +10,7 @@ Turn apple-pi's peer sessions into an organization of lasting people. A person i
 
 ## Current State
 
-Shaped in conversation on 2026-10-20; `spec.md` holds the design. Spec approved 2026-10-21. Tickets cut into `tickets/` (ten, in dependency order); next: operator review of the tickets, then implementation from the frontier (01, 06, 07).
+Shaped in conversation on 2026-10-20; `spec.md` holds the design. Spec and tickets approved 2026-10-21. Tickets 01 and 03 done: roles exist (`roles/` catalog, `components/organization/`, `--role`, hire with a role, `pi --role coordinator` replaces `--coordinator`); the organization is the `reports_to` tree, `list_peer_sessions` is its directory, every root session gets `<org>`, managing roles get `<manager>`, roots hold the manager tools. Frontier: 02, 04, 05, 06, 07.
 
 ## Outcome
 

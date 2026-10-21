@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { createConnection, type Socket } from "node:net";
 import { dirname } from "node:path";
 import type { ExtensionAPI, ExtensionContext, SessionEntry } from "@earendil-works/pi-coding-agent";
-import { installSessionRole, sessionRole } from "../../organization/src/index.js";
+import { installOrganization, sessionRole } from "../../organization/src/index.js";
 import { LEDGER_LINK_CHANNEL, type LedgerLink } from "../../shared/src/ledger-events.js";
 import { type OpenQuestionnaire, QUESTIONNAIRE_CHANNEL } from "../../shared/src/questionnaire-events.js";
 import { SESSION_INTENT_CHANNEL, type SessionIntent } from "../../shared/src/session-intent-events.js";
@@ -438,7 +438,7 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 	installMail(pi, !inChildSessionContext());
 	if (!inChildSessionContext()) {
 		// The role resolves at session start before the hello below reads it and the manager tools reconcile on it.
-		installSessionRole(pi);
+		installOrganization(pi);
 		installPeers(pi);
 		installCoordinator(pi);
 	}

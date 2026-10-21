@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { defineTool, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { loadRoles, sessionRole } from "../../organization/src/index.js";
+import { loadRoles, managesPeople } from "../../organization/src/index.js";
 import { sendCommand } from "./client.js";
 import type { Command, Receipt } from "./protocol.js";
 
@@ -126,7 +126,7 @@ export function installCoordinator(pi: ExtensionAPI): void {
 	);
 	const reconcile = (ctx: ExtensionContext) => {
 		const active = pi.getActiveTools();
-		const next = sessionRole(ctx)?.manages
+		const next = managesPeople(pi, ctx)
 			? [...new Set([...active, ...TOOLS])]
 			: active.filter((name) => !TOOLS.includes(name));
 		if (next.length !== active.length) pi.setActiveTools(next);

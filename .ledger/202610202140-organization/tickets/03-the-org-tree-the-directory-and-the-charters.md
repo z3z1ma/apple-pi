@@ -4,10 +4,12 @@
 
 **Blocked by:** 01 A session started with a role is that role
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] With two roots X and Y on one runtime, each with hires at two depths, `list_peer_sessions` from a leaf under X lists exactly X's org, including X, and none of Y's; mail by id from X's leaf to Y's leaf still arrives.
-- [ ] A plain root session (no role) has the peer-management tools active; a hired non-managing person does not; a hired Director of Engineering does.
-- [ ] The directory entry of a person shows its role title, manager id, hire date, and the ledger tasks it has owned.
-- [ ] Every root session's prompt has an `<org>` section with its own id, manager, and root; a hired manager's `<manager>` section names its manager as its principal, and a root's names the operator.
-- [ ] The coordinator charter no longer asks for a roster file, and `docs/session-state.md` describes the org, the directory, and the charters.
+- [x] With two roots X and Y on one runtime, each with hires at two depths, `list_peer_sessions` from a leaf under X lists exactly X's org, including X, and none of Y's; mail by id from X's leaf to Y's leaf still arrives.
+- [x] A plain root session (no role) has the peer-management tools active; a hired non-managing person does not; a hired Director of Engineering does.
+- [x] The directory entry of a person shows its role title, manager id, hire date, and the ledger tasks it has owned.
+- [x] Every root session's prompt has an `<org>` section with its own id, manager, and root; a hired manager's `<manager>` section names its manager as its principal, and a root's names the operator.
+- [x] The coordinator charter no longer asks for a roster file, and `docs/session-state.md` describes the org, the directory, and the charters.
+
+Deviations: the `<manager>` charter goes to managing roles only; a root without one holds the tools and is told so in `<org>` (the full charter would tell every plain operator session to schedule sweeps). The directory shows the role's catalog name, which is what `start_peer_session` takes, not its title. Resolved in test by one runtime with the caller as root, a hire, a sleeping hire under it, a stranger, and a subagent.

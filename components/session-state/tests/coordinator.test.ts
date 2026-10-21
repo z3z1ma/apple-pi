@@ -240,22 +240,34 @@ test("hiring into a role the catalog lacks fails before any window opens", async
 	}
 }, 20000);
 
-test("only a session whose role manages has the lifecycle tools", async () => {
+test("a hired person whose role does not manage loses the lifecycle tools; a hired manager keeps them", async () => {
+	const tools = ["start_peer_session", "reopen_peer_session", "close_peer_session", "rename_peer_session"];
 	const run = await fauxSession(
 		[bridge],
-		[fauxAssistantMessage("ok")],
-		["start_peer_session", "reopen_peer_session", "close_peer_session", "rename_peer_session", "list_peer_sessions"],
+		[fauxAssistantMessage("ok"), fauxAssistantMessage("ok")],
+		[...tools, "list_peer_sessions"],
 	);
 	try {
+		run.session.extensionRunner.setFlagValue("reports-to", "boss");
+		await withRole(run, "staff-engineer-simplicity");
 		await run.session.prompt("hi");
 		expect(run.session.getActiveToolNames()).toEqual(["list_peer_sessions"]);
 	} finally {
 		await close(run);
 	}
-}, 20000);
+	const manager = await fauxSession([bridge], [fauxAssistantMessage("ok")], ["list_peer_sessions"]);
+	try {
+		manager.session.extensionRunner.setFlagValue("reports-to", "boss");
+		await withRole(manager, "coordinator");
+		await manager.session.prompt("hi");
+		expect(manager.session.getActiveToolNames().sort()).toEqual([...tools, "list_peer_sessions"].sort());
+	} finally {
+		await close(manager);
+	}
+}, 30000);
 
 test.each([false, true])(
-	"a root can discover peers when its initial tool set lacks peer tools (manages=%s)",
+	"a root holds the manager tools whether or not its role manages, even when its initial tool set lacks them (role=%s)",
 	async (enabled) => {
 		const run = await fauxSession([bridge], [call("list_peer_sessions", {}), fauxAssistantMessage("done")], ["read"]);
 		await withRole(run, enabled ? "coordinator" : undefined);
@@ -263,17 +275,14 @@ test.each([false, true])(
 			await run.session.prompt("list my peers");
 			expect(toolResults(run)[0]).toMatchObject({ isError: false });
 			expect(run.session.getActiveToolNames().sort()).toEqual(
-				(enabled
-					? [
-							"read",
-							"list_peer_sessions",
-							"start_peer_session",
-							"reopen_peer_session",
-							"close_peer_session",
-							"rename_peer_session",
-						]
-					: ["read", "list_peer_sessions"]
-				).sort(),
+				[
+					"read",
+					"list_peer_sessions",
+					"start_peer_session",
+					"reopen_peer_session",
+					"close_peer_session",
+					"rename_peer_session",
+				].sort(),
 			);
 		} finally {
 			await close(run);
@@ -292,6 +301,8 @@ test.each([false, true])(
 			const prompt = run.session.agent.state.systemPrompt;
 			if (enabled) expect(prompt).toContain("<role>\nYou are a coordinator");
 			else expect(prompt).not.toContain("<role>");
+			if (enabled) expect(prompt).toContain("<manager>\n");
+			else expect(prompt).not.toContain("<manager>");
 		} finally {
 			await close(run);
 		}
