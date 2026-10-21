@@ -3,7 +3,10 @@
 # requires-python = ">=3.11"
 # dependencies = ["textual==8.2.8"]
 # ///
-"""Pi agent dashboard: a tmux window with every root Pi agent in a table and a live view of the selected one."""
+"""Pi agent dashboard: a tmux window with every root Pi agent in a table and a live view of the selected one.
+
+Organizations come first, each root followed by its people indented under their managers with their role titles;
+sessions on their own follow in attention order."""
 
 from __future__ import annotations
 
@@ -15,7 +18,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from model import Agent, Store, live, mark_seen, talk, tmux  # noqa: E402
+from model import Agent, Store, live, mark_seen, talk, tmux, trees  # noqa: E402
 from presentation import STATE_LABEL, STATUS_STYLE, ago, count_of, details, glyph, show, state, tokens, use_theme  # noqa: E402
 from rich.text import Text  # noqa: E402
 from textual import on, work  # noqa: E402
@@ -35,6 +38,7 @@ NARROW_COLUMNS = 180
 COLUMNS = (
     ("state", " ", 1),
     ("name", "Agent", 26),
+    ("role", "Role", 20),
     ("task", "Working on", 24),
     ("doing", "Doing", 30),
     ("age", "For", 4),
@@ -49,7 +53,10 @@ def cells(agent: Agent, now: float, frame: int) -> dict[str, Text]:
     act = agent.activity
     return {
         "state": Text(glyph(agent, frame), style=f"bold {STATUS_STYLE[current]}"),
-        "name": Text(agent.name, style=f"bold {STATUS_STYLE[current]}" if agent.needs_you else quiet),
+        "name": Text(
+            "  " * agent.depth + agent.name, style=f"bold {STATUS_STYLE[current]}" if agent.needs_you else quiet
+        ),
+        "role": Text(agent.role, style=quiet or "#7f849c"),
         # The ledger task when there is one, else what the session says it works on now.
         "task": Text(agent.ledger.title, style=quiet or "#fab387")
         if agent.ledger
@@ -170,6 +177,10 @@ class Dashboard(App):
 
     def apply(self, agents: list[Agent]) -> None:
         self.last_error = ""
+        forest = trees(agents)
+        agents = [agent for members in forest if len(members) > 1 for agent in members] + [
+            members[0] for members in forest if len(members) == 1
+        ]
         self.agents = agents
         now = time.time()
         table = self.query_one(DataTable)

@@ -69,6 +69,10 @@ class Agent:
     ledger: LedgerTask | None = None
     # What the session says it works on now (its stated intent), shown when it has no ledger task.
     intent: str = ""
+    # The role title of a hired person, the session it reports to, and its depth under its live root.
+    role: str = ""
+    reports_to: str = ""
+    depth: int = 0
     activity: Activity = field(default_factory=Activity)
 
     @property
@@ -109,7 +113,7 @@ def connect() -> sqlite3.Connection | None:
 
 LIVE_SESSIONS = """
 select s.id, s.generation, s.run_state, s.prompt, s.cwd, s.name, s.updated_at, s.needs_you_since, s.model,
-    s.context_tokens, s.cost, s.current_tool, s.current_tool_arg, s.current_task, {intent}, i.pane_id,
+    s.context_tokens, s.cost, s.current_tool, s.current_tool_arg, s.current_task, {optional}, i.pane_id,
     (select ts.name from tmux_window_links l join tmux_sessions ts on ts.socket = l.socket and ts.id = l.session_id
         where l.socket = p.socket and l.window_id = p.window_id order by l.window_index limit 1) as tmux_session,
     (select l.window_index from tmux_window_links l
@@ -142,6 +146,26 @@ def ledger_task(current_task: str | None) -> LedgerTask | None:
     return LedgerTask(title or task_id, status)
 
 
+@dataclass
+class Former:
+    """A retired person: it left the organization, and reopens only if a manager brings it back."""
+
+    session_id: str
+    name: str
+    role: str
+    reports_to: str
+    reason: str
+
+
+# Columns a runtime older than their migrations lacks; each reads as null then, so the views draw without them.
+OPTIONAL_COLUMNS = ("intent", "role_title", "reports_to", "retired_at", "retired_reason")
+
+
+def optional_columns(db: sqlite3.Connection) -> set[str]:
+    rows = db.execute("select name from pragma_table_info('sessions')").fetchall()
+    return {row["name"] for row in rows} & set(OPTIONAL_COLUMNS)
+
+
 def live() -> list[Agent]:
     """This tmux server's live top-level sessions in attention order: needs-you first, the longest-waiting first;
     then working, then idle, most recently changed first."""
@@ -171,9 +195,10 @@ def live() -> list[Agent]:
     if db is None:
         return []
     try:
-        # A runtime started before the migration that adds `intent` runs old code, and its database lacks the column.
-        has_intent = db.execute("select 1 from pragma_table_info('sessions') where name = 'intent'").fetchone()
-        sql = LIVE_SESSIONS.format(intent="s.intent" if has_intent else "null as intent")
+        present = optional_columns(db)
+        sql = LIVE_SESSIONS.format(
+            optional=", ".join(f"s.{name}" if name in present else f"null as {name}" for name in OPTIONAL_COLUMNS)
+        )
         # The runtime keys tmux servers by resolved socket path.
         rows = db.execute(sql, (os.path.realpath(server),)).fetchall()
     finally:
@@ -197,6 +222,8 @@ def live() -> list[Agent]:
             unseen=row["needs_you_since"] is not None and not waiting,
             ledger=ledger_task(row["current_task"]),
             intent=(row["intent"] or "").strip(),
+            role=row["role_title"] or "",
+            reports_to=row["reports_to"] or "",
             activity=Activity(
                 model=row["model"] or "",
                 context_tokens=row["context_tokens"] or 0,
@@ -214,6 +241,67 @@ def attention_order(agent: Agent) -> tuple[int, int]:
     if agent.needs_you:
         return (0, agent.needs_you_since or 0)
     return (1 if agent.status == "busy" else 2, -agent.updated_at)
+
+
+def trees(agents: list[Agent]) -> list[list[Agent]]:
+    """The live agents as organizations: one list per live root, in attention order, each root first and its people
+    after it depth-first in attention order, with `depth` set. A person whose manager is not live is a root here."""
+    by_id = {agent.session_id: agent for agent in agents}
+    reports: dict[str, list[Agent]] = {}
+    roots: list[Agent] = []
+    for agent in agents:
+        if agent.reports_to in by_id and agent.reports_to != agent.session_id:
+            reports.setdefault(agent.reports_to, []).append(agent)
+        else:
+            roots.append(agent)
+
+    def walk(agent: Agent, depth: int, seen: set[str]) -> list[Agent]:
+        agent.depth = depth
+        members = [agent]
+        for person in reports.get(agent.session_id, ()):
+            if person.session_id not in seen:
+                seen.add(person.session_id)
+                members.extend(walk(person, depth + 1, seen))
+        return members
+
+    forest = [walk(root, 0, {root.session_id}) for root in roots]
+    # A cycle among live sessions (which the runtime refuses) would reach no root; show its members flat.
+    placed = {agent.session_id for members in forest for agent in members}
+    forest.extend([agent] for agent in agents if agent.session_id not in placed)
+    return forest
+
+
+def former(agents: list[Agent]) -> dict[str, list[Former]]:
+    """Retired people, by the live member they last reported to; retired people of no live organization are not
+    listed."""
+    live_ids = {agent.session_id for agent in agents}
+    if not live_ids:
+        return {}
+    db = connect()
+    if db is None:
+        return {}
+    try:
+        if "retired_at" not in optional_columns(db):
+            return {}
+        rows = db.execute(
+            "select id, name, role_title, reports_to, retired_reason from sessions "
+            "where kind = 'root' and retired_at is not null order by retired_at"
+        ).fetchall()
+    finally:
+        db.close()
+    result: dict[str, list[Former]] = {}
+    for row in rows:
+        if row["reports_to"] in live_ids:
+            result.setdefault(row["reports_to"], []).append(
+                Former(
+                    row["id"],
+                    row["name"] or row["id"],
+                    row["role_title"] or "",
+                    row["reports_to"],
+                    row["retired_reason"] or "",
+                )
+            )
+    return result
 
 
 class Store:

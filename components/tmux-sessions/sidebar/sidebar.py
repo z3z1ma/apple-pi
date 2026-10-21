@@ -3,7 +3,10 @@
 # requires-python = ">=3.11"
 # dependencies = ["textual==8.2.8"]
 # ///
-"""Pi agent sidebar: a live tmux pane that shows which root Pi agents need you, what each is, and what it does."""
+"""Pi agent sidebar: a live tmux pane that shows which root Pi agents need you, what each is, and what it does.
+
+Sessions that hired people are drawn as organizations: the root, then its people indented under their managers, with
+former members folded at the end. A session on its own sits in the attention lanes."""
 
 from __future__ import annotations
 
@@ -15,7 +18,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from model import Agent, Store, mark_seen, tmux  # noqa: E402
+from model import Agent, Former, Store, former, mark_seen, trees, tmux  # noqa: E402
 from presentation import (  # noqa: E402
     STATES,
     activity,
@@ -95,9 +98,13 @@ class Card(Widget):
         show(self.query_one(".meta", Static), f"{tokens(act.context_tokens)} ${act.cost:.2f}" if act.model else "")
 
     def paint_title(self, frame: int) -> None:
-        title = Content.from_markup("[b]$glyph  $name[/b]", glyph=glyph(self.agent, frame), name=self.agent.name)
+        agent = self.agent
+        title = Content.from_markup("[b]$glyph  $name[/b]", glyph=glyph(agent, frame), name=agent.name)
+        if agent.role:
+            title += Content.from_markup(" [$text-muted]$role[/]", role=agent.role)
         if title != self.shown_title:
             self.shown_title = self.border_title = title
+        self.styles.margin = (0, 0, 0, 2 * agent.depth)
 
     def tick(self, frame: int) -> None:
         if state(self.agent) == "working":
@@ -105,6 +112,32 @@ class Card(Widget):
 
     def on_click(self) -> None:
         self.app.jump(self.agent)
+
+
+class FormerRow(Static):
+    """The former members of one organization: one folded line, or every person on its own line when opened."""
+
+    def __init__(self, people: list[Former]) -> None:
+        super().__init__(classes="former")
+        self.people = people
+
+    def paint(self, people: list[Former], opened: bool) -> None:
+        self.people = people
+        head = Content.from_markup(
+            "[$text-muted]$arrow $count[/]", arrow="▾" if opened else "▸", count=count_of(len(people), "former member")
+        )
+        lines = [head]
+        if opened:
+            for person in people:
+                lines.append(
+                    Content.from_markup(
+                        "[$text-muted]  $name · $role · $reason[/]",
+                        name=person.name,
+                        role=person.role or "no role",
+                        reason=person.reason or "retired",
+                    )
+                )
+        show(self, Content("\n").join(lines))
 
 
 class Sidebar(App):
@@ -125,6 +158,8 @@ class Sidebar(App):
     #head-need { border-top: heavy $warning; border-title-color: $text-warning; }
     #head-work { border-top: heavy $primary; border-title-color: $text-primary; }
     .lane { height: auto; }
+    .org-head { border-top: heavy $secondary; border-title-color: $text-secondary; }
+    .former { height: auto; margin: 0 1; }
 
     Card { height: auto; border: round $panel; border-title-color: $text; border-subtitle-color: $text-muted;
            padding: 0 1; }
@@ -148,6 +183,7 @@ class Sidebar(App):
         Binding("enter", "jump", "jump", show=False),
         Binding("x", "seen", "mark seen", show=False),
         Binding("X", "seen_all", "mark all seen", show=False),
+        Binding("f", "former", "former members", show=False),
         Binding("escape", "leave", "back", show=False),
         Binding("q", "close", "close", show=False),
     ]
@@ -159,6 +195,9 @@ class Sidebar(App):
         self.store = Store()
         self.lock = threading.Lock()
         self.agents: list[Agent] = []
+        self.forest: list[list[Agent]] = []
+        self.former: dict[str, list[Former]] = {}
+        self.show_former = False
         self.selected: str | None = None
         self.frame = 0
         self.previous_states: dict[str, str] = {}
@@ -174,7 +213,7 @@ class Sidebar(App):
                 yield Static(classes="lane-head", id=f"head-{key}")
                 yield Vertical(classes="lane", id=f"lane-{key}")
             yield Static("No Pi agents in tmux yet. Start pi in any pane and it appears here.", id="empty")
-        yield Static("j/k move · ⏎ jump · x seen · esc back · q close", id="keys")
+        yield Static("j/k move · ⏎ jump · x seen · f former · esc back · q close", id="keys")
 
     def on_mount(self) -> None:
         use_theme(self)
@@ -188,20 +227,22 @@ class Sidebar(App):
             return
         try:
             agents = self.store.poll()
+            retired = former(agents)
         except Exception as error:  # noqa: BLE001 - a bad poll must not end an always-on sidebar
             self.call_from_thread(self.report, f"Could not read agents: {error}")
             return
         finally:
             self.lock.release()
-        self.call_from_thread(self.apply, agents)
+        self.call_from_thread(self.apply, agents, retired)
 
     def report(self, message: str) -> None:
         if message != self.last_error:
             self.last_error = message
             self.notify(message, severity="error", timeout=10)
 
-    def apply(self, agents: list[Agent]) -> None:
+    def apply(self, agents: list[Agent], retired: dict[str, list[Former]] | None = None) -> None:
         now = time.time()
+        self.former = retired or {}
         self.last_error = ""
         live = {agent.session_id for agent in agents}
         self.previous_states = {sid: s for sid, s in self.previous_states.items() if sid in live}
@@ -212,8 +253,12 @@ class Sidebar(App):
             if before is not None and before != current and current in ("waiting", "done"):
                 self.flash_until[agent.session_id] = now + FLASH_SECONDS
             self.previous_states[agent.session_id] = current
-        self.agents = agents
-        ids = [agent.session_id for agent in agents]
+        # Organizations first, each in tree order, then the sessions on their own: the order j/k walks.
+        self.forest = trees(agents)
+        self.agents = [agent for members in self.forest if len(members) > 1 for agent in members] + [
+            members[0] for members in self.forest if len(members) == 1
+        ]
+        ids = [agent.session_id for agent in self.agents]
         if self.selected not in ids:
             self.selected = ids[0] if ids else None
         self.render_agents()
@@ -243,12 +288,50 @@ class Sidebar(App):
         )
         self.query_one("#empty").display = not agents
         now = time.time()
+        organizations = [members for members in self.forest if len(members) > 1]
+        lone = {members[0].session_id for members in self.forest if len(members) == 1}
+        self.sync_organizations(organizations, now)
         for key, title, belongs in LANES:
-            members = [agent for agent in agents if belongs(agent)]
+            members = [agent for agent in agents if belongs(agent) and agent.session_id in lone]
             head = self.query_one(f"#head-{key}", Static)
             head.border_title = f"{title} · {len(members)}"
             head.display = bool(members)
             self.sync_lane(self.query_one(f"#lane-{key}", Vertical), members, now)
+
+    def sync_organizations(self, organizations: list[list[Agent]], now: float) -> None:
+        """One head and lane per organization, before the attention lanes, in the organizations' order."""
+        lanes = self.query_one("#lanes", VerticalScroll)
+        heads = {head.id.removeprefix("head-org-"): head for head in self.query(".org-head")}
+        wanted = {members[0].session_id for members in organizations}
+        for root_id, head in heads.items():
+            if root_id not in wanted:
+                head.remove()
+                self.query_one(f"#lane-org-{root_id}").remove()
+        for index, members in enumerate(organizations):
+            root = members[0]
+            head = heads.get(root.session_id)
+            lane = self.query_one(f"#lane-org-{root.session_id}", Vertical) if head else None
+            if head is None or lane is None:
+                head = Static(classes="lane-head org-head", id=f"head-org-{root.session_id}")
+                lane = Vertical(classes="lane", id=f"lane-org-{root.session_id}")
+                lanes.mount(head, lane, before=2 * index)
+            people = len(members) - 1
+            head.border_title = f"{root.name.upper()} · {people} {'person' if people == 1 else 'people'}"
+            if lanes.children.index(head) != 2 * index:
+                lanes.move_child(head, before=2 * index)
+                lanes.move_child(lane, after=head)
+            self.sync_lane(lane, members, now)
+            retired = [person for member in members for person in self.former.get(member.session_id, ())]
+            row = next((child for child in lane.children if isinstance(child, FormerRow)), None)
+            if retired and row is None:
+                row = FormerRow(retired)
+                lane.mount(row)
+            elif not retired and row is not None:
+                row.remove()
+            if retired and row is not None:
+                row.paint(retired, self.show_former)
+                if lane.children.index(row) != len(lane.children) - 1:
+                    lane.move_child(row, after=len(lane.children) - 1)
 
     def sync_lane(self, lane: Vertical, members: list[Agent], now: float) -> None:
         """Hold exactly one card per member, in member order, updated in place."""
@@ -305,6 +388,10 @@ class Sidebar(App):
         rest = ids[index + 1 :] or ids[:index]
         self.selected = rest[0] if rest else agent.session_id
         self.poll()
+
+    def action_former(self) -> None:
+        self.show_former = not self.show_former
+        self.render_agents()
 
     def action_seen_all(self) -> None:
         for agent in self.agents:

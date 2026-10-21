@@ -75,7 +75,7 @@ export function installPeers(pi: ExtensionAPI): void {
 			name: "list_peer_sessions",
 			label: "list_peer_sessions",
 			description:
-				"The directory of your organization: every other person in it, awake or asleep. A person is a lasting top-level Pi session, often in its own tmux window, which you reach with mailbox_send by id. Each has an id, name, role, one line of its soul, manager (reportsTo), status (busy, idle, waiting for the user, or asleep), directory, current ledger task, the ledger tasks it has worked on (newest first), and when it was hired. Former members (retired, with when and why) are listed apart. Your subagents are not people: they are children you start with agent and reach with steer_subagent and get_subagent_result.",
+				"The directory of your organization: every other person in it, awake or asleep. A person is a lasting top-level Pi session, often in its own tmux window, which you reach with mailbox_send by id. Each has an id, name, role and its title, one line of its soul, manager (reportsTo), status (busy, idle, waiting for the user, or asleep), directory, current ledger task, the ledger tasks it has worked on (newest first), and when it was hired. Former members (retired, with when and why) are listed apart. Your subagents are not people: they are children you start with agent and reach with steer_subagent and get_subagent_result.",
 			promptSnippet: "The directory of your organization: the people (not your subagents) you can mail.",
 			parameters: Type.Object({}, { additionalProperties: false }),
 			async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {

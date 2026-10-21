@@ -51,6 +51,7 @@ test("a session lists its organization, awake and asleep, not subagents or stran
 			facts: {
 				reportsTo: callerId,
 				role: "technical-writer",
+				title: "Technical Writer",
 				soul: "You count the callers; habit: you reread the ask.",
 				currentTask: { bundle: "/work/docs/.ledger/202610180001-docs", taskId: "202610180001-docs" },
 				prompt: { kind: "select", title: "Overwrite?" },
@@ -98,6 +99,7 @@ test("a session lists its organization, awake and asleep, not subagents or stran
 				id: "peer-1",
 				name: "docs-worker",
 				role: "technical-writer",
+				title: "Technical Writer",
 				soul: "You count the callers; habit: you reread the ask.",
 				reportsTo: callerId,
 				status: "waiting",
@@ -111,6 +113,7 @@ test("a session lists its organization, awake and asleep, not subagents or stran
 				id: "asleep-1",
 				name: "reviewer",
 				role: null,
+				title: null,
 				soul: null,
 				reportsTo: "peer-1",
 				status: "asleep",

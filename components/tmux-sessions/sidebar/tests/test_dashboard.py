@@ -159,3 +159,28 @@ def test_a_dashboard_no_client_is_showing_marks_nothing_seen(world, monkeypatch)
 
     run(scenario)
     assert world.runtime.commands() == []
+
+
+def test_table_draws_organizations_first_as_indented_trees_with_role_titles(world):
+    now = time.time()
+    world.add("lone", "%1", "thinking", name="Mina Castellano", updated_at=now - 10)
+    world.add("root", "%2", name="Ada Lovejoy", updated_at=now - 900)
+    world.add("manager", "%3", name="Kofi Marchetti", reports_to="root", role_title="Coordinator")
+    world.add("person", "%4", name="Orla Brannigan", reports_to="manager", role_title="Technical Writer")
+
+    async def scenario():
+        app = dashboard.Dashboard()
+        async with app.run_test(size=(200, 50)) as pilot:
+            await pilot.pause(0.8)
+            table = app.query_one(DataTable)
+            return [
+                (row.value, str(table.get_cell(row.value, "name")), str(table.get_cell(row.value, "role")))
+                for row in table.rows
+            ]
+
+    assert run(scenario) == [
+        ("root", "Ada Lovejoy", ""),
+        ("manager", "  Kofi Marchetti", "Coordinator"),
+        ("person", "    Orla Brannigan", "Technical Writer"),
+        ("lone", "Mina Castellano", ""),
+    ]

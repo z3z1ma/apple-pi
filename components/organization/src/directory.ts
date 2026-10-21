@@ -13,6 +13,8 @@ export interface Member {
 	name: string | null;
 	/** The role catalog name, or null for an unroled session. */
 	role: string | null;
+	/** The role's title, or null for an unroled session. */
+	title: string | null;
 	/** One line of the soul drawn at hire, or null without a role. */
 	soul: string | null;
 	/** The manager's session id; null for the root. */
@@ -38,6 +40,7 @@ interface Row {
 	id: string;
 	name: string | null;
 	role: string | null;
+	role_title: string | null;
 	soul: string | null;
 	reports_to: string | null;
 	cwd: string;
@@ -56,7 +59,7 @@ interface Row {
  */
 export function organizationColumns(
 	db: DatabaseSync,
-	names = ["role", "soul", "retired_at", "retired_reason"],
+	names = ["role", "role_title", "soul", "retired_at", "retired_reason"],
 ): string {
 	const columns = new Set(
 		(db.prepare("select name from pragma_table_info('sessions')").all() as { name: string }[]).map((c) => c.name),
@@ -104,6 +107,7 @@ export function organizationOf(self: string): Organization {
 				id: row.id,
 				name: row.name,
 				role: row.role,
+				title: row.role_title,
 				soul: row.soul,
 				reportsTo: row.reports_to,
 				status: !row.awake ? "asleep" : row.prompt ? "waiting" : row.run_state === "idle" ? "idle" : "busy",

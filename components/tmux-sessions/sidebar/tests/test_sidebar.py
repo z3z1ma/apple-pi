@@ -198,3 +198,59 @@ def test_a_database_an_older_runtime_has_not_migrated_yet_still_lists_its_sessio
     world.execute("alter table sessions drop column intent")
     agents = model.live()
     assert [(agent.session_id, agent.intent) for agent in agents] == [("old", "")]
+
+
+def test_an_organization_is_drawn_as_a_tree_with_role_titles_and_its_former_members_folded(world):
+    world.add("root", "%1", name="Ada Lovejoy")
+    world.add("manager", "%2", "thinking", name="Kofi Marchetti", reports_to="root", role_title="Coordinator")
+    world.add("person-a", "%3", name="Orla Brannigan", reports_to="manager", role_title="Staff Engineer, Simplicity")
+    world.add("person-b", "%4", name="Ravi Okonkwo", reports_to="manager", role_title="Architecture Prosecutor")
+    world.add("lone", "%5", name="Mina Castellano")
+    world.add("gone", None, name="Theo Lindqvist", reports_to="manager", role_title="Technical Writer")
+    world.execute("update sessions set retired_at = 1, retired_reason = 'the burst passed' where id = 'gone'")
+
+    agents = model.live()
+    assert [[a.session_id for a in members] for members in model.trees(agents)] == [
+        ["root", "manager", "person-a", "person-b"],
+        ["lone"],
+    ]
+    assert [a.depth for a in model.trees(agents)[0]] == [0, 1, 2, 2]
+    assert [person.session_id for person in model.former(agents)["manager"]] == ["gone"]
+
+    async def run():
+        app = sidebar.Sidebar()
+        async with app.run_test(size=(70, 60)) as pilot:
+            await pilot.pause(0.5)
+            before = (
+                card_text(app),
+                str(app.query_one(".former").shown),
+                str(app.query_one("#head-org-root").border_title),
+            )
+            await pilot.press("f")
+            await pilot.pause(0.2)
+            margins = {card.agent.session_id: card.styles.margin.left for card in app.query(sidebar.Card)}
+            return before, str(app.query_one(".former").shown), margins, [a.session_id for a in app.agents]
+
+    (cards, folded, head), opened, margins, order = asyncio.run(run())
+    assert head == "ADA LOVEJOY · 3 people"
+    assert {sid: card["lane"] for sid, card in cards.items()} == {
+        "root": "lane-org-root",
+        "manager": "lane-org-root",
+        "person-a": "lane-org-root",
+        "person-b": "lane-org-root",
+        "lone": "lane-quiet",
+    }
+    assert "Coordinator" in cards["manager"]["title"] and "Staff Engineer, Simplicity" in cards["person-a"]["title"]
+    assert margins == {"root": 0, "manager": 2, "person-a": 4, "person-b": 4, "lone": 0}
+    assert folded == "▸ 1 former member"
+    assert opened == "▸ 1 former member".replace("▸", "▾") + "\n  Theo Lindqvist · Technical Writer · the burst passed"
+    assert order == ["root", "manager", "person-a", "person-b", "lone"]
+
+
+def test_a_database_without_the_organization_columns_draws_every_session_on_its_own(world):
+    world.add("old", "%1", name="Older")
+    for column in ("role", "role_title", "reports_to", "retired_at", "retired_reason"):
+        world.execute(f"alter table sessions drop column {column}")
+    agents = model.live()
+    assert [(agent.session_id, agent.role, agent.reports_to) for agent in agents] == [("old", "", "")]
+    assert model.trees(agents) == [[agents[0]]] and model.former(agents) == {}

@@ -4,8 +4,10 @@
 
 **Blocked by:** 03 The org tree, the directory, and the charters
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] In the sidebar test with a root, a manager under it, and two people under the manager, the rows are indented by depth and show role titles.
-- [ ] A retired person is folded under a former-members row that opens on demand.
-- [ ] A database without the new columns (an old runtime) renders as before, with no role or tree.
+- [x] In the sidebar test with a root, a manager under it, and two people under the manager, the rows are indented by depth and show role titles.
+- [x] A retired person is folded under a former-members row that opens on demand.
+- [x] A database without the new columns (an old runtime) renders as before, with no role or tree.
+
+Deviations: the role's title is a new `role_title` column (the `title` fact), so views read it from the database without the catalog. The sidebar keeps its attention lanes for sessions on their own; an organization gets its own section. The dashboard shows the tree with a Role column but not former members.

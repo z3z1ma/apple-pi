@@ -40,6 +40,7 @@ const FACT_COLUMNS: Record<keyof Facts, string> = {
 	lastAbortAt: "last_abort_at",
 	reportsTo: "reports_to",
 	role: "role",
+	title: "role_title",
 	soul: "soul",
 	self: "self",
 	parentSessionFile: "parent_session_file",

@@ -50,7 +50,7 @@ Requirements: tmux ≥ 3.2 and [uv](https://docs.astral.sh/uv/) on the tmux serv
 
 `prefix` + `u` opens the sidebar as a 42-column, full-height pane on the right of the current window, without taking focus. It then follows you: switching window or session moves the same pane, at its current width, into the new window. Panes make room for it in proportion and grow back in proportion when it leaves, so splits do not drift and resizes you make while it is there survive (`sidebar/layout.py` rewrites the window layout). `prefix` + `u` again closes it. There is one sidebar per tmux server and one process. A zoomed pane stays zoomed when the sidebar arrives or leaves, and the sidebar never enters the dashboard window.
 
-A large count shows how many agents need you, or "all clear". Below it, agents sit in three lanes:
+A large count shows how many agents need you, or "all clear". Below it, each [organization](organization.md) (a live session with live people under it) has its own section headed by the root's name: the root's card, then its people indented two columns per level under their managers, each with its role title after its name, and a folded `▸ N former members` line at the end when people were retired from it (`f` opens and closes it). Sessions on their own sit in three lanes:
 
 | Lane | Agents | Card |
 | --- | --- | --- |
@@ -68,6 +68,7 @@ The sidebar paints the terminal's default background, so it stays translucent on
 | `j` / `k` | move the cursor (the sidebar must have focus: click it or move to its pane) |
 | `enter` | jump to the selected agent |
 | `x` / `X` | mark the selected / every agent as seen |
+| `f` | open or fold the former members of every organization |
 | `esc` | return to the pane you came from |
 | `q` | close the sidebar |
 
@@ -86,7 +87,7 @@ The right end of the status line counts agents by state, for example `π ? 1 ✓
 `prefix` + `A` opens a window named `π agents` in the current session, or switches to it if it exists anywhere; pressing it inside the dashboard returns to the window you came from. The window holds:
 
 - a header with the counts by state, the number of agents, and their total cost;
-- a table of every agent in the same attention order: state, name, what it works on (its ledger task, else its stated intent), last tool call, time in state, context size, and cost;
+- a table of every agent, organizations first as indented trees and then the sessions on their own in attention order: state, name, role title, what it works on (its ledger task, else its stated intent), last tool call, time in state, context size, and cost;
 - the selected agent's full details and its 30-minute tool-call graph;
 - a live view of the selected agent's pane, refreshed twice a second.
 
