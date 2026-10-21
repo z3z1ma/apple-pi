@@ -273,6 +273,8 @@ try {
 				extension.tools.has("reopen_peer_session") &&
 				extension.tools.has("close_peer_session") &&
 				extension.tools.has("rename_peer_session") &&
+				extension.tools.has("transfer_peer_session") &&
+				extension.tools.has("retire_peer_session") &&
 				extension.tools.has("update_self"),
 		),
 		"session-state extension must own the mail, directory, manager, and self tools",

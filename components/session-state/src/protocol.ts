@@ -137,6 +137,14 @@ export type Command =
 	  }
 	/** Quit the session's Pi process. */
 	| { kind: "close" }
+	/**
+	 * Move the person under another manager, which must be in its organization and not in its own subtree; its
+	 * reports move with it. Applied by the runtime, which tells the running bridge (so later close notices go to the
+	 * new manager); `by` is the acting manager's session id, for the record.
+	 */
+	| { kind: "transfer"; manager: string; by: string }
+	/** Record that the person left (when and why) and close it when it runs. Applied by the runtime. */
+	| { kind: "retire"; reason: string }
 	/** The operator saw the session: it no longer needs them unless a prompt is open. Applied by the runtime. */
 	| { kind: "mark_seen" }
 	/**

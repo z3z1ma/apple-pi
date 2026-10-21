@@ -105,6 +105,7 @@ test("a session lists its organization, awake and asleep, not subagents or stran
 				currentTask: "202610180001-docs",
 				tasks: ["202610180001-docs", "202610170001-old"],
 				since: expect.any(Number),
+				retired: null,
 			},
 			{
 				id: "asleep-1",
@@ -117,6 +118,7 @@ test("a session lists its organization, awake and asleep, not subagents or stran
 				currentTask: null,
 				tasks: [],
 				since: expect.any(Number),
+				retired: null,
 			},
 		]);
 		expect(await mail).toMatchObject({

@@ -1,11 +1,18 @@
 import { randomUUID } from "node:crypto";
 import { defineTool, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { loadRoles, managesPeople } from "../../organization/src/index.js";
+import { loadRoles, managesPeople, organizationOf } from "../../organization/src/index.js";
 import { sendCommand } from "./client.js";
 import type { Command, Receipt } from "./protocol.js";
 
-const TOOLS = ["start_peer_session", "reopen_peer_session", "close_peer_session", "rename_peer_session"];
+const TOOLS = [
+	"start_peer_session",
+	"reopen_peer_session",
+	"close_peer_session",
+	"rename_peer_session",
+	"transfer_peer_session",
+	"retire_peer_session",
+];
 
 /** The tmux pane this session runs in, which new windows open next to. */
 function ownPane(): { socket: string; pane: string } {
@@ -121,6 +128,79 @@ export function installCoordinator(pi: ExtensionAPI): void {
 			async execute(_toolCallId, params, signal) {
 				await run(params.session_id, { kind: "rename", name: params.name }, signal);
 				return reply(`Renamed session ${params.session_id} to ${params.name}.`, { sessionId: params.session_id });
+			},
+		}),
+	);
+	pi.registerTool(
+		defineTool({
+			name: "transfer_peer_session",
+			label: "transfer_peer_session",
+			description:
+				"Move a person under another manager in your organization; a manager moves with its whole team. From then on the person takes work from, reports to, and escalates to the new manager. The move is refused when it would make a cycle or leave the organization. The person and both managers get mail naming the move.",
+			parameters: Type.Object(
+				{
+					session_id: Type.String({ minLength: 1, description: "Id of the person to move." }),
+					manager: Type.String({ minLength: 1, description: "Session id of the new manager." }),
+				},
+				{ additionalProperties: false },
+			),
+			async execute(_toolCallId, params, signal, _onUpdate, ctx) {
+				const by = ctx.sessionManager.getSessionId();
+				const from = organizationOf(by).members.find((member) => member.id === params.session_id)?.reportsTo;
+				await run(params.session_id, { kind: "transfer", manager: params.manager, by }, signal);
+				const note = (text: string) => ({
+					kind: "mail" as const,
+					from: by,
+					body: text,
+					sentAt: new Date().toISOString(),
+				});
+				const mails = [
+					sendCommand(
+						params.session_id,
+						note(
+							`You now report to ${params.manager}: take work from, report to, and escalate to that session from now on.`,
+						),
+						{ signal, until: "accepted" },
+					),
+					sendCommand(
+						params.manager,
+						note(`${params.session_id} now reports to you${from ? ` (moved from ${from})` : ""}.`),
+						{ signal, until: "accepted" },
+					),
+					...(from && from !== by
+						? [
+								sendCommand(from, note(`${params.session_id} now reports to ${params.manager}, not to you.`), {
+									signal,
+									until: "accepted",
+								}),
+							]
+						: []),
+				];
+				await Promise.all(mails);
+				return reply(`${params.session_id} now reports to ${params.manager}.`, {
+					sessionId: params.session_id,
+					manager: params.manager,
+					from: from ?? null,
+				});
+			},
+		}),
+	);
+	pi.registerTool(
+		defineTool({
+			name: "retire_peer_session",
+			label: "retire_peer_session",
+			description:
+				"Record that a person has left your organization, with the date and reason, and close it if it runs. Its history stays, and the directory lists it among former members; reopen_peer_session brings it back. Retire reluctantly: a person's accumulated context is expensive to rebuild.",
+			parameters: Type.Object(
+				{
+					session_id: Type.String({ minLength: 1, description: "Id of the person." }),
+					reason: Type.String({ minLength: 1, description: "Why it leaves, in one sentence." }),
+				},
+				{ additionalProperties: false },
+			),
+			async execute(_toolCallId, params, signal) {
+				await run(params.session_id, { kind: "retire", reason: params.reason }, signal);
+				return reply(`${params.session_id} retired: ${params.reason}`, { sessionId: params.session_id });
 			},
 		}),
 	);

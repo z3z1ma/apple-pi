@@ -166,6 +166,17 @@ const MIGRATIONS = [
 	`alter table sessions add column role text;`,
 	`alter table sessions add column soul text;`,
 	`alter table sessions add column self text;`,
+	// A retired person: when and why it left; cleared when a manager reopens it. Every manager change, for the record.
+	`alter table sessions add column retired_at integer;
+	alter table sessions add column retired_reason text;
+	create table manager_changes (
+		id integer primary key autoincrement,
+		session_id text not null,
+		from_manager text,
+		to_manager text not null,
+		by text not null,
+		at integer not null
+	) strict;`,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

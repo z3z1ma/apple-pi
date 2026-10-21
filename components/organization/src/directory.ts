@@ -24,6 +24,8 @@ export interface Member {
 	tasks: string[];
 	/** When the session first started (ms), or null when it never ran. */
 	since: number | null;
+	/** When and why the person left; null for a member. */
+	retired: { at: number; reason: string } | null;
 }
 
 export interface Organization {
@@ -44,13 +46,18 @@ interface Row {
 	task: string | null;
 	awake: number | null;
 	since: number | null;
+	retired_at: number | null;
+	retired_reason: string | null;
 }
 
 /**
  * The organization's columns of `sessions` as select terms, each null when the running runtime predates it: the
  * runtime migrates the schema only when it starts, and a bridge of newer code can connect to an older runtime.
  */
-export function organizationColumns(db: DatabaseSync, names = ["role", "soul"]): string {
+export function organizationColumns(
+	db: DatabaseSync,
+	names = ["role", "soul", "retired_at", "retired_reason"],
+): string {
 	const columns = new Set(
 		(db.prepare("select name from pragma_table_info('sessions')").all() as { name: string }[]).map((c) => c.name),
 	);
@@ -104,6 +111,7 @@ export function organizationOf(self: string): Organization {
 				currentTask: row.task,
 				tasks: (tasks.all(row.id) as { task_id: string }[]).map((t) => t.task_id),
 				since: row.since,
+				retired: row.retired_at ? { at: row.retired_at, reason: row.retired_reason ?? "" } : null,
 			}));
 		return { root, members };
 	} finally {

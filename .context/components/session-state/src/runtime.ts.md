@@ -40,3 +40,16 @@ Verify: components/session-state/tests/streaming.test.ts
 A page reads the transcript once and picks its ids in one pass; entries are ordered by the `messages` index (`at`, then `rowid`), not by file position. Byte offsets were deliberately not added: the JSONL is Pi's, and offsets would have to survive appends and rewrites. Both `read_entry` and `read_entries` stream the file line by line (`scanTranscript`) and parse only lines whose first id is wanted; the scan reads to the end, which keeps one open per page.
 Why: `read_entry` reads the whole file per id, so paging through a long transcript one entry at a time scanned it thousands of times; reading the file as one string failed with "Invalid string length" on a 390 MB session, which now pages in about 0.8 s.
 Verify: components/session-state/tests/history.test.ts
+
+## symbol:Runtime.hello
+
+The hello's `reportsTo` is applied only while the record's `reports_to` is null; afterwards the record wins, and a bridge whose flag disagrees is sent a `transfer` command with its recorded manager.
+Why: the flag is what the session was started with, and `transfer_peer_session` changes the manager after that; a reconnect or hand restart carrying the old flag would otherwise undo the move, and the bridge addresses its close notice from its own copy of the manager.
+Coupled: components/session-state/src/bridge.ts, components/session-state/src/coordinator.ts
+Verify: components/session-state/tests/organization.test.ts
+
+## symbol:Runtime.transfer
+
+A move is refused when the new manager is the person, is under the person, or is in another organization (a different root), so the tree stays one tree; the person's own reports keep reporting to it and move with it.
+Why: the directory and the charters assume one root per organization and no cycles; a cycle would make `rootOf` stop at an arbitrary member.
+Verify: components/session-state/tests/organization.test.ts

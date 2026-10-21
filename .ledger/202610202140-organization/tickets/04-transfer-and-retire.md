@@ -4,10 +4,12 @@
 
 **Blocked by:** 03 The org tree, the directory, and the charters
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] After a transfer, the moved person's directory entry shows the new manager, all three parties have received mail naming the move, and a close notice from the moved person reaches the new manager, not the old.
-- [ ] Transferring a manager moves its reports with it, and the directory shows the subtree under the new manager.
-- [ ] A transfer that would put a person under its own report, or under a session outside its org, fails with a reason and changes nothing.
-- [ ] A retired person appears in the directory under former members with its reason and is absent from the active list; reopening it by a manager returns it to the active list.
-- [ ] The manager-changes record lists each move with from, to, and time.
+- [x] After a transfer, the moved person's directory entry shows the new manager, all three parties have received mail naming the move, and a close notice from the moved person reaches the new manager, not the old.
+- [x] Transferring a manager moves its reports with it, and the directory shows the subtree under the new manager.
+- [x] A transfer that would put a person under its own report, or under a session outside its org, fails with a reason and changes nothing.
+- [x] A retired person appears in the directory under former members with its reason and is absent from the active list; reopening it by a manager returns it to the active list.
+- [x] The manager-changes record lists each move with from, to, and time.
+
+Deviations: the mails go from the acting manager (the tool sends them), not from the runtime, so the person reads who moved it. A transfer that closes before the runtime has told the restarted bridge its recorded manager (a hand restart with a stale `--reports-to` and an immediate close) would still notify the old manager; the window is the hello round trip.

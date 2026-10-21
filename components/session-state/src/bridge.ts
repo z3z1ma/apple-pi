@@ -570,6 +570,9 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 				case "rename":
 					pi.setSessionName(command.name);
 					break;
+				case "transfer":
+					target.hello.facts.reportsTo = command.manager;
+					break;
 				case "set_thinking":
 					pi.setThinkingLevel(command.level as never);
 					break;

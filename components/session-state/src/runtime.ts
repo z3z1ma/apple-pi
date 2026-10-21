@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { chmodSync, createReadStream, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server, type Socket } from "node:net";
 import { createInterface } from "node:readline";
@@ -405,7 +406,15 @@ export class Runtime {
 		connection.sessionId = session.id;
 		connection.generation = generation;
 		this.setRunState(session.id, generation, hello.run);
-		this.applyFacts(session.id, generation, hello.facts);
+		// The runtime owns the tree once a session is in it: a transfer outlives the flag the session was started with.
+		const { reportsTo, ...facts } = hello.facts;
+		const stored = db.prepare("select reports_to from sessions where id = ?").get(session.id) as {
+			reports_to: string | null;
+		};
+		this.applyFacts(session.id, generation, stored.reports_to === null && reportsTo ? { ...facts, reportsTo } : facts);
+		// A bridge started with a stale flag learns its manager from the record.
+		if (stored.reports_to !== null && reportsTo !== undefined && stored.reports_to !== reportsTo)
+			this.issue(connection, { kind: "transfer", manager: stored.reports_to, by: "runtime" });
 		this.resolveParents();
 		// A (re)connecting bridge reports the tool it runs now; one that ended while the bridge was away just clears.
 		if (hello.tool) this.startTool(session.id, generation, hello.tool);
@@ -498,6 +507,34 @@ export class Runtime {
 			}
 			return;
 		}
+		if (command.kind === "transfer") {
+			receipt("accepted");
+			const refused = this.transfer(sessionId, command);
+			if (refused) this.setCommandStage(commandId, "failed", refused);
+			else {
+				this.setCommandStage(commandId, "applied");
+				if (target) this.issue(target, { kind: "transfer", manager: command.manager, by: command.by });
+			}
+			return;
+		}
+		if (command.kind === "retire") {
+			receipt("accepted");
+			if (!current) this.setCommandStage(commandId, "failed", "unknown session");
+			else if (typeof command.reason !== "string" || !command.reason)
+				this.setCommandStage(commandId, "failed", "retire needs a reason");
+			else {
+				db.prepare("update sessions set retired_at = ?, retired_reason = ?, updated_at = ? where id = ?").run(
+					now,
+					command.reason,
+					now,
+					sessionId,
+				);
+				this.event("client", sessionId, current.generation, "retired", { reason: command.reason });
+				this.setCommandStage(commandId, "applied");
+				if (target) this.issue(target, { kind: "close" });
+			}
+			return;
+		}
 		if (command.kind === "set_preference") {
 			receipt("accepted");
 			if (typeof command.key !== "string" || !command.key || command.value === undefined)
@@ -529,12 +566,63 @@ export class Runtime {
 		this.dispatch(target, commandId, command);
 	}
 
+	/**
+	 * Move a person under another manager: both must be root sessions of one organization, and the new manager must
+	 * not be the person or anyone under it, so the tree stays a tree. Returns the reason a move is refused.
+	 */
+	private transfer(sessionId: string, command: Extract<Command, { kind: "transfer" }>): string | undefined {
+		const db = this.db!;
+		if (typeof command.manager !== "string" || !command.manager || typeof command.by !== "string" || !command.by)
+			return "transfer needs a manager and the acting manager (by)";
+		if (command.manager === sessionId) return "a person cannot report to itself";
+		const managerOf = new Map(
+			(
+				db.prepare("select id, reports_to from sessions where kind = 'root'").all() as {
+					id: string;
+					reports_to: string | null;
+				}[]
+			).map((row) => [row.id, row.reports_to]),
+		);
+		if (!managerOf.has(sessionId)) return "unknown session";
+		if (!managerOf.has(command.manager)) return `unknown manager ${command.manager}`;
+		const rootOf = (id: string) => {
+			const seen = new Set<string>();
+			let current = id;
+			while (!seen.has(current)) {
+				seen.add(current);
+				const manager = managerOf.get(current);
+				if (!manager || !managerOf.has(manager)) return current;
+				current = manager;
+			}
+			return current;
+		};
+		const root = rootOf(sessionId);
+		if (rootOf(command.manager) !== root || rootOf(command.by) !== root)
+			return `${command.manager} is not in ${sessionId}'s organization`;
+		for (let id: string | null | undefined = command.manager; id; id = managerOf.get(id))
+			if (id === sessionId)
+				return `${command.manager} reports to ${sessionId}; a manager cannot report to its own report`;
+		const from = managerOf.get(sessionId) ?? null;
+		if (from === command.manager) return `already reports to ${command.manager}`;
+		const now = Date.now();
+		db.prepare("update sessions set reports_to = ?, updated_at = ? where id = ?").run(command.manager, now, sessionId);
+		db.prepare("insert into manager_changes (session_id, from_manager, to_manager, by, at) values (?, ?, ?, ?, ?)").run(
+			sessionId,
+			from,
+			command.manager,
+			command.by,
+			now,
+		);
+		this.event("client", sessionId, null, "transferred", { from, to: command.manager, by: command.by });
+		return undefined;
+	}
+
 	/** Run `pi` for a session in a new tmux window; the session's bridge connecting applies the command. */
 	private async startSession(commandId: string, sessionId: string, command: Extract<Command, { kind: "start" }>) {
 		const db = this.db!;
 		const fail = (reason: string) => this.setCommandStage(commandId, "failed", reason);
-		const row = db.prepare("select cwd, name, generation from sessions where id = ?").get(sessionId) as
-			| { cwd: string; name: string | null; generation: number }
+		const row = db.prepare("select cwd, name, generation, reports_to from sessions where id = ?").get(sessionId) as
+			| { cwd: string; name: string | null; generation: number; reports_to: string | null }
 			| undefined;
 		const live =
 			row &&
@@ -548,12 +636,15 @@ export class Runtime {
 		const cwd = command.cwd ?? row?.cwd;
 		if (!cwd) return fail("unknown session; give a directory to start it in");
 		const name = command.name ?? row?.name ?? undefined;
+		// A stopped person keeps its manager; a reopen by a manager is a return from retirement.
+		const reportsTo = row?.reports_to ?? command.reportsTo;
+		if (row) db.prepare("update sessions set retired_at = null, retired_reason = null where id = ?").run(sessionId);
 		const pi = [
 			"pi",
 			"--session-id",
 			sessionId,
 			...(name ? ["--name", name] : []),
-			...(command.reportsTo ? ["--reports-to", command.reportsTo] : []),
+			...(reportsTo ? ["--reports-to", reportsTo] : []),
 			...(command.role ? ["--role", command.role] : []),
 			...(command.prompt ? [command.prompt] : []),
 		];
@@ -576,6 +667,26 @@ export class Runtime {
 			return;
 		}
 		if (this.db === db && this.starting.get(sessionId) === start) this.setCommandStage(commandId, "delivered");
+	}
+
+	/** A command of the runtime's own to a running bridge, recorded like a client's but with nobody waiting on it. */
+	private issue(target: Connection, command: Command): void {
+		const commandId = randomUUID();
+		const now = Date.now();
+		this.db!.prepare(
+			`insert into commands (command_id, session_id, generation, bound_generation, kind, command, stage, created_at, updated_at)
+			values (?, ?, ?, ?, ?, ?, 'accepted', ?, ?)`,
+		).run(
+			commandId,
+			target.sessionId!,
+			target.generation!,
+			target.generation!,
+			command.kind,
+			JSON.stringify(command),
+			now,
+			now,
+		);
+		this.dispatch(target, commandId, command);
 	}
 
 	/** Hand a command to a bridge, binding it to that bridge's incarnation; only that incarnation may report on it. */
