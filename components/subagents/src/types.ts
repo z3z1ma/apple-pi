@@ -6,7 +6,7 @@ import type { LifetimeUsage } from "./usage.js";
 export type ThinkingLevel = ModelThinkingLevel;
 export type SubagentType = string;
 export type SubagentConfigScope = Readonly<{ cwd: string; projectTrusted: boolean }>;
-export const DEFAULT_AGENT_NAMES = ["explorer", "planner", "researcher", "consultant", "builder", "designer"] as const;
+export const DEFAULT_AGENT_NAMES = ["explorer", "researcher", "builder"] as const;
 
 export interface AgentConfig {
 	name: string;
@@ -30,6 +30,8 @@ export interface AgentConfig {
 	systemPrompt: string;
 	promptMode: "replace" | "append";
 	isDefault?: boolean;
+	/** Whether the team prompt lists it; an unlisted agent is still callable by name. Default true. */
+	listed?: boolean;
 	enabled?: boolean;
 	source?: "default" | "project" | "global";
 	sourcePath?: string;

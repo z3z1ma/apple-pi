@@ -4,9 +4,11 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] The `<subagent-team>` prompt section lists explorer and researcher only; `agent` with `subagent_type: builder` still runs; `consultant`, `planner`, and `designer` are rejected as unknown types.
-- [ ] The pair programmer's `ask_consultant` consultation still runs and returns a typed disposition in its existing tests.
-- [ ] `grep` over skills, prompts, docs, and `.pi/programs` finds no instruction to use the planner, designer, or public consultant.
-- [ ] `docs/subagents.md` and the README describe the two senses and the hidden builder.
+- [x] The `<subagent-team>` prompt section lists explorer and researcher only; `agent` with `subagent_type: builder` still runs; `consultant`, `planner`, and `designer` are rejected as unknown types.
+- [x] The pair programmer's `ask_consultant` consultation still runs and returns a typed disposition in its existing tests.
+- [x] `grep` over skills, prompts, docs, and `.pi/programs` finds no instruction to use the planner, designer, or public consultant.
+- [x] `docs/subagents.md` and the README describe the two senses and the hidden builder.
+
+Deviations: `docs/subagents.md` carries the senses and the hidden builder; the README catalog row names them. The code-review skill's `review-planner` is a `pi_exec` worker with its own prompt, not the removed planner type, and stays.

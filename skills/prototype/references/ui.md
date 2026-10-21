@@ -4,7 +4,7 @@ Generate **several radically different UI variations** on a single route, switch
 
 If the question is about logic/state rather than what something looks like, this is the wrong branch. Use [LOGIC.md](logic.md).
 
-When delegating the visual implementation, give one `designer` teammate ownership of every variant and the shared switcher. Do not send multiple writers into the same route.
+Build the visual implementation in your own session, or give one person (hired into a role with visual judgment) ownership of every variant and the shared switcher. Do not send multiple writers into the same route.
 
 Keep the canonical variant code and run instructions in the active ledger task. The existing page or throwaway route is the evaluation surface, not the artifact's durable home. If the framework requires route-local files, treat them as temporary wiring or working copies; preserve the evaluated variants in the ledger before removing them from the production tree.
 

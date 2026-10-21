@@ -251,14 +251,14 @@ describe("pi_exec agent binding", () => {
 		mkdirSync(globalRoot, { recursive: true });
 		writeFileSync(
 			join(globalRoot, "model-profiles.json"),
-			JSON.stringify({ profiles: { deep: { model: "anthropic/route-advisor", thinking: "high" } } }),
+			JSON.stringify({ profiles: { quick: { model: "anthropic/route-advisor", thinking: "high" } } }),
 		);
 		const previous = process.env.PI_CODING_AGENT_DIR;
 		process.env.PI_CODING_AGENT_DIR = globalRoot;
 		try {
 			const available = [{ provider: "anthropic", id: "route-advisor", name: "route-advisor" }];
 			const resolved = await resolveExecWorker(
-				{ task: "should we split this module?", type: "consultant" },
+				{ task: "where is the module split?", type: "explorer" },
 				{
 					cwd: root,
 					parentModel: "openai-codex/parent",

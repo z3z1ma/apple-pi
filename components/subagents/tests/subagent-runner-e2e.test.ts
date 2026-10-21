@@ -17,7 +17,7 @@ import { fauxModelBackend } from "../../../tests/helpers/faux-model.js";
 import { installWorkManager } from "../../shared/src/work-manager.js";
 import { AgentManager } from "../src/agent-manager.js";
 import { runAgent, SUBAGENT_TOOL_NAMES } from "../src/agent-runner.js";
-import { registerAgents } from "../src/agent-types.js";
+import { registerAgents, resolveSpawnType } from "../src/agent-types.js";
 import { buildConsultationContext } from "../src/consultation.js";
 import { DEFAULT_AGENTS } from "../src/default-agents.js";
 import installSubagents from "../src/index.js";
@@ -178,6 +178,32 @@ describe("subagent runner with Pi's real AgentSession", () => {
 			expect(untrusted).toContain('"name":"explorer"');
 			expect(untrusted).not.toContain("project-injected");
 			expect(untrusted).not.toContain("UNTRUSTED SYSTEM TEXT");
+		} finally {
+			await lifecycle.get("session_shutdown")?.();
+		}
+	});
+
+	it("lists the two senses only; the builder is callable by name, and the consultant, planner, and designer are unknown", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "apple-pi-agent-roster-senses-"));
+		temporaryDirectories.push(cwd);
+		const lifecycle = new Map<string, (...args: any[]) => any>();
+		const pi = {
+			registerMessageRenderer: () => {},
+			registerTool: () => {},
+			registerCommand: () => {},
+			registerShortcut: () => {},
+			on: (event: string, handler: (...args: any[]) => any) => lifecycle.set(event, handler),
+			events: { emit: () => {}, on: () => () => {} },
+			sendMessage: () => {},
+			exec: async () => ({ code: 1, stdout: "", stderr: "" }),
+		} as any;
+		installSubagents(pi);
+		try {
+			const section = teamSection(lifecycle.get("before_agent_start")!, { cwd, isProjectTrusted: () => true });
+			const names = [...section.matchAll(/"name":"([^"]+)"/g)].map((match) => match[1]);
+			expect(names).toEqual(["explorer", "researcher"]);
+			expect(resolveSpawnType("builder")).toEqual({ ok: true, type: "builder" });
+			for (const gone of ["consultant", "planner", "designer"]) expect(resolveSpawnType(gone).ok).toBe(false);
 		} finally {
 			await lifecycle.get("session_shutdown")?.();
 		}

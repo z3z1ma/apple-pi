@@ -19,7 +19,7 @@ import {
 import { buildFullParentContext } from "../src/context.js";
 import { getAgentConversation, TRANSCRIPT_TAIL_MAX_CHARS } from "../src/conversation.js";
 import { loadCustomAgents } from "../src/custom-agents.js";
-import { DEFAULT_AGENTS } from "../src/default-agents.js";
+import { CONSULTANT, DEFAULT_AGENTS } from "../src/default-agents.js";
 import installSubagents from "../src/installer.js";
 import { getAgentResumeError, resolveAgentInvocationConfig } from "../src/invocation-config.js";
 import { resolveAgentProfile } from "../src/model-routing.js";
@@ -400,8 +400,7 @@ describe("owned subagent surface", () => {
 	});
 
 	it("gives advisory roles every built-in except direct file editing", () => {
-		for (const type of ["explorer", "planner", "researcher", "consultant"]) {
-			const config = DEFAULT_AGENTS.get(type);
+		for (const config of [DEFAULT_AGENTS.get("explorer"), DEFAULT_AGENTS.get("researcher"), CONSULTANT]) {
 			expect(config?.builtinToolNames).toEqual(
 				BUILTIN_TOOL_NAMES.filter((name) => name !== "edit" && name !== "write"),
 			);
@@ -507,27 +506,16 @@ describe("owned subagent surface", () => {
 		expect(buildBtwInjection(exchange!)).not.toContain("Because the guard is inverted.");
 	});
 
-	it("registers common-noun specialist titles as built-ins with lane-specific tools", () => {
-		expect(DEFAULT_AGENT_NAMES).toEqual(["explorer", "planner", "researcher", "consultant", "builder", "designer"]);
+	it("registers the two senses and the unlisted builder as built-ins; the consultant is the pair's alone", () => {
+		expect(DEFAULT_AGENT_NAMES).toEqual(["explorer", "researcher", "builder"]);
 		expect([...DEFAULT_AGENTS.keys()]).toEqual([...DEFAULT_AGENT_NAMES]);
 		expect([...DEFAULT_AGENTS.values()].map((config) => config.displayName)).toEqual([
 			"Explorer",
-			"Planner",
 			"Researcher",
-			"Consultant",
 			"Builder",
-			"Designer",
 		]);
-		const retiredCapitalizedNames = [
-			"explore",
-			"plan",
-			"research",
-			"advisor",
-			"implement",
-			"design",
-			...DEFAULT_AGENT_NAMES,
-		].map((name) => `${name[0]!.toUpperCase()}${name.slice(1)}`);
-		for (const retired of retiredCapitalizedNames) expect(DEFAULT_AGENTS.has(retired)).toBe(false);
+		for (const retired of ["planner", "consultant", "designer", "Explorer", "Researcher", "Builder"])
+			expect(DEFAULT_AGENTS.has(retired)).toBe(false);
 		expect(DEFAULT_AGENTS.get("researcher")).toMatchObject({
 			profile: "quick",
 			builtinToolNames: BUILTIN_TOOL_NAMES.filter((name) => name !== "edit" && name !== "write"),
@@ -535,31 +523,28 @@ describe("owned subagent surface", () => {
 			skills: false,
 			promptMode: "replace",
 		});
-		expect(DEFAULT_AGENTS.get("consultant")).toMatchObject({
-			profile: "deep",
-			builtinToolNames: BUILTIN_TOOL_NAMES.filter((name) => name !== "edit" && name !== "write"),
-			promptMode: "replace",
-		});
+		expect(DEFAULT_AGENTS.get("explorer")?.listed).toBeUndefined();
 		expect(DEFAULT_AGENTS.get("builder")).toMatchObject({
 			profile: "coding",
 			pair: true,
 			extensions: false,
 			skills: false,
 			promptMode: "replace",
+			listed: false,
 		});
 		expect(DEFAULT_AGENTS.get("builder")?.builtinToolNames).toBeUndefined();
-		expect(DEFAULT_AGENTS.get("designer")).toMatchObject({
-			profile: "visual-engineering",
-			extensions: false,
-			skills: false,
-			promptMode: "replace",
-		});
 		expect(DEFAULT_AGENTS.get("researcher")?.systemPrompt).toMatch(/external research partner/);
 		expect(DEFAULT_AGENTS.get("researcher")?.systemPrompt).toMatch(/retrieved primary sources/);
 		expect(DEFAULT_AGENTS.get("researcher")?.description).toMatch(/Researches external sources/);
-		expect(DEFAULT_AGENTS.get("consultant")?.systemPrompt).toMatch(/senior software architect/);
-		expect(DEFAULT_AGENTS.get("builder")?.systemPrompt).toMatch(/belong to the designer/);
-		expect(DEFAULT_AGENTS.get("designer")?.systemPrompt).toMatch(/belongs to the builder/);
+		expect(CONSULTANT).toMatchObject({
+			name: "consultant",
+			profile: "deep",
+			builtinToolNames: BUILTIN_TOOL_NAMES.filter((name) => name !== "edit" && name !== "write"),
+			promptMode: "replace",
+		});
+		expect(CONSULTANT.systemPrompt).toMatch(/senior software architect/);
+		for (const config of [...DEFAULT_AGENTS.values(), CONSULTANT])
+			expect(config.systemPrompt).not.toMatch(/planner|designer/);
 	});
 
 	it("fails unknown, disabled, missing, and ambiguous dispatch closed", () => {

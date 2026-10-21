@@ -39,6 +39,7 @@ import {
 	renderConsultationContext,
 } from "./consultation.js";
 import { loadCustomAgents } from "./custom-agents.js";
+import { CONSULTANT } from "./default-agents.js";
 import { GroupJoinManager } from "./group-join.js";
 import { getAgentResumeError, resolveAgentInvocationConfig, resolveJoinMode } from "./invocation-config.js";
 import { INFERENCE_PROFILE_PARAMETER_SCHEMA, resolveAgentProfile } from "./model-routing.js";
@@ -322,12 +323,8 @@ export default function installSubagents(pi: ExtensionAPI): void {
 		},
 		async runConsultation(ctx, request) {
 			bindSessionContext(ctx);
-			const dispatch = resolveSpawnType("consultant");
-			if (!dispatch.ok) throw new Error(dispatch.message);
-			const configured = getAgentConfig(dispatch.type);
-			if (!configured) throw new Error('Unknown or disabled agent type: "consultant"');
 			const agentConfig = {
-				...configured,
+				...CONSULTANT,
 				builtinToolNames: ["read", "grep", "find", "ls"],
 				pair: false,
 				allowedSubagents: undefined,
@@ -385,7 +382,7 @@ export default function installSubagents(pi: ExtensionAPI): void {
 			let thrown: unknown;
 			try {
 				record = await managedService.runFresh(ctx, {
-					type: dispatch.type,
+					type: CONSULTANT.name,
 					description: "consultant consultation",
 					prompt: renderConsultationContext(request.context),
 					agentConfig,
@@ -690,7 +687,9 @@ export default function installSubagents(pi: ExtensionAPI): void {
 	// agent files and cwd changes are reflected.
 	pi.on("before_agent_start", (event, ctx) => {
 		bindSessionContext(ctx);
-		const members: TeamMember[] = getAvailableTypes().map((name) => toTeamMember(name, getAgentConfig(name)));
+		const members: TeamMember[] = getAvailableTypes()
+			.filter((name) => getAgentConfig(name)?.listed !== false)
+			.map((name) => toTeamMember(name, getAgentConfig(name)));
 		setSystemPromptSection(event.systemPromptOptions, TEAM_SYSTEM_PROMPT_TAG, buildTeamSection(members));
 		setSystemPromptSection(
 			event.systemPromptOptions,

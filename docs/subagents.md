@@ -32,20 +32,17 @@ The Agents tab lists the session's public agents, running and finished, with eac
 
 While a steering message is being composed, every key, including arrows, `Tab`, and `q`, goes to the message. A pending stop confirmation is dropped when focus leaves the panel, the tab changes, or another agent is selected. Settled conversations remain readable without steer or stop actions.
 
-`agent` and `pi_exec` `agent_run` share the same team catalog but support different kinds of collaboration. Use `agent` when a teammate should own a piece of work with their own session, context, and ability to check back in. Use `pi_exec` when model workers belong inside a program graph that fans out, binds MCP or tool results as `context`, and reduces to a compact value. The interactive `agent`, result, steer, and stop tools are not exposed through Pi Exec's generic extension bridge; programs use the runtime-owned `agent()` / `agent_run()` lifecycle instead. [`/btw`](btw.md) is the small human-facing exception: one hidden, ephemeral, read-only child conversation that reuses the same manager with a focused answer-first overlay, without joining the public team roster. The root prompt uses separate `<subagent-team>` and `<inference-profiles>` blocks. The first introduces every available teammate with their `name`, configured inference `profile`, and own `description`; the second lists each fixed inference profile with a one-line description of its intended model and reasoning effort. Inference profiles select inference policy, not capabilities.
+`agent` and `pi_exec` `agent_run` share the same team catalog but support different kinds of collaboration. Use `agent` when a teammate should own a piece of work with their own session, context, and ability to check back in. Use `pi_exec` when model workers belong inside a program graph that fans out, binds MCP or tool results as `context`, and reduces to a compact value. The interactive `agent`, result, steer, and stop tools are not exposed through Pi Exec's generic extension bridge; programs use the runtime-owned `agent()` / `agent_run()` lifecycle instead. [`/btw`](btw.md) is the small human-facing exception: one hidden, ephemeral, read-only child conversation that reuses the same manager with a focused answer-first overlay, without joining the public team roster. The root prompt uses separate `<subagent-team>` and `<inference-profiles>` blocks. The first introduces every listed teammate with their `name`, configured inference `profile`, and own `description` (a definition with `listed: false` stays callable by name but out of the prompt); the second lists each fixed inference profile with a one-line description of its intended model and reasoning effort. Inference profiles select inference policy, not capabilities.
 
-Built-in types:
+Built-in types are the two **senses**, which reduce the main session's context use by reading on its behalf, and the unlisted builder:
 
-| Type | Lane | Default tools |
-| --- | --- | --- |
-| `explorer` | Local recon: where is X? | All built-ins except `edit` and `write`; ordinary child extensions |
-| `planner` | How-to-implement across modules | All built-ins except `edit` and `write`; ordinary child extensions |
-| `researcher` | External docs and primary sources; not local recon | All built-ins except `edit` and `write`; ordinary child extensions |
-| `consultant` | Should we / root cause / YAGNI. Not the pair programmer, not review | All built-ins except `edit` and `write`; ordinary child extensions |
-| `builder` | Bounded specified writes. No research, no UI taste | write |
-| `designer` | User-visible layout, interaction, polish | write |
+| Type | Lane | Listed | Default tools |
+| --- | --- | --- | --- |
+| `explorer` | Local recon: where is X? | yes | All built-ins except `edit` and `write`; ordinary child extensions |
+| `researcher` | External docs and primary sources; not local recon | yes | All built-ins except `edit` and `write`; ordinary child extensions |
+| `builder` | Bounded specified writes for `pi_exec` programs and the skills that name it | no | write |
 
-Use the team when another perspective, specialist skill, isolated context, or parallel lane would materially help. One small, known-path action usually stays in the main session, and work without a fitting teammate should not be forced into an ambiguous catch-all. Give a teammate one clear outcome and enough context to own it, then let the main session inspect, integrate, and fix ordinary issues. Review and Ralph remain explicitly chosen program-specific workers with `systemPrompt` values and must not be retargeted onto catalog types. Unknown, disabled, missing, and ambiguous agent types always fail closed; dispatch never substitutes a different teammate.
+Judgment, planning, design, and a second opinion are not subagents: they are people in the session's [organization](organization.md), hired into a role from the catalog for life. The pair programmer's consultant (`CONSULTANT` in `default-agents.ts`) is not an agent type; only `ask_consultant` runs it. Use a sense when reading would cost the main session more context than the answer is worth. One small, known-path action usually stays in the main session, and work without a fitting teammate should not be forced into an ambiguous catch-all. Give a teammate one clear outcome and enough context to own it, then let the main session inspect, integrate, and fix ordinary issues. Review and Ralph remain explicitly chosen program-specific workers with `systemPrompt` values and must not be retargeted onto catalog types. Unknown, disabled, missing, and ambiguous agent types always fail closed; dispatch never substitutes a different teammate.
 
 ## Definitions
 
@@ -86,7 +83,7 @@ Public coding children, including nested ones, review and reflect before they ha
 
 A root `agent` call is a normal sub-agent handoff. Its prompt is the complete task by default. For a new root or nested session, `run_in_background`, `isolated`, and `inherit_context` each default to `false`. Set `inherit_context: true` only when the child also needs the full parent conversation. On resume, omitted `isolated` and `inherit_context` reuse the session's stored choices; `run_in_background` remains a per-invocation choice and defaults to `false`.
 
-The consultant follows this same public contract when the main agent brings the architect in directly. The pair programming partner's hidden typed second-opinion path is an internal host operation, not an `agent` mode or parameter.
+The pair programming partner's hidden typed second-opinion path is an internal host operation, not an `agent` mode or parameter.
 
 ### Child clarification
 
@@ -100,7 +97,7 @@ The answer returns only to the calling child as tool output. It is advice based 
 
 ## Model profiles
 
-Agent definitions select a semantic workload profile rather than naming a provider, model, or thinking level. Built-ins use `quick` for the explorer and researcher, `deep` for the planner and consultant, `coding` for the builder, and `visual-engineering` for the designer. The user maps those names in global `~/.pi/agent/model-profiles.json`; repositories cannot redefine the mapping.
+Agent definitions select a semantic workload profile rather than naming a provider, model, or thinking level. Built-ins use `quick` for the explorer and researcher and `coding` for the builder; the pair's consultant runs on `deep`. People in the organization name their models directly in their role files, not through profiles. The user maps those names in global `~/.pi/agent/model-profiles.json`; repositories cannot redefine the mapping.
 
 The optional `profile` argument on top-level and nested `agent` calls overrides the type's default as one model/thinking bundle. It never changes the type's prompt, tools, permissions, skills, or lifecycle. A missing, invalid, or unavailable selected profile fails the spawn instead of substituting the parent or another provider. A custom Markdown agent may omit `profile` to inherit the parent session's model/thinking.
 

@@ -32,7 +32,7 @@ At a high level, the package adds seven kinds of capability to Pi:
 1. **Turn assistance and interaction** — a persistent read-only pair programming partner with episodic guidance from a senior software architect, a structured user-question tool, and one reflection on the agent's own edits before a run finishes.
 2. **Context continuity** — xAI server-side or Pi default compaction with a fail-closed automatic-compaction gate, the pair programmer's sourced notebook, two complementary session-recall paths, and a project-local wiki for reusable knowledge.
 3. **Execution continuity** — root-session background work, one-shot scheduling, and reactive command monitoring, plus the ledger for durable operational memory.
-4. **Execution and team collaboration** — a bounded, type-checked Monty Python composition runtime plus an interactive team of specialist agents.
+4. **Execution and team collaboration** — a bounded, type-checked Monty Python composition runtime, two sense subagents (explorer, researcher) plus an unlisted builder for programs, and an organization of lasting peer sessions hired into roles.
 5. **Workflow guidance** — packaged skills for review, ledger task lifecycles, and fresh-context Ralph loops, plus explicit prompt templates such as proposal-first promotion.
 6. **Integration bridges** — Pi-native MCP in root and ordinary child sessions, plus provider-specific hosted-tool injection for supported xAI requests and a priority service tier toggle.
 7. **Terminal and session ergonomics** — custom input editor, terse tool rendering, prompt stashing, RTK command rewriting, macOS completion notifications, automatic human session names, and a tmux agent sidebar and dashboard.
