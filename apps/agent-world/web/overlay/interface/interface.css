@@ -431,8 +431,8 @@
 .aw-actions {
 	min-width: 0;
 	margin: 0;
-	display: grid;
-	grid-template-columns: repeat(4, 1fr);
+	display: flex;
+	flex-wrap: wrap;
 	gap: 4px;
 	padding: 1px 5px 6px;
 }
@@ -449,6 +449,14 @@
 
 .aw-button:active {
 	transform: translateY(1px);
+}
+
+/* As many to a row as their words allow; each row stretches to the full width. */
+.aw-actions .aw-button {
+	box-sizing: border-box;
+	flex: 1 1 auto;
+	min-width: 0;
+	overflow: hidden;
 }
 
 .aw-switch-row {
@@ -649,22 +657,7 @@
 	white-space: nowrap;
 }
 
-.aw-actions .aw-button-end {
-	grid-column: 3 / span 2;
-}
-
-.aw-actions .aw-button-rename {
-	grid-column: 1 / span 2;
-}
-
-.aw-card .aw-actions .aw-button-end,
-.aw-card .aw-actions .aw-button-rename {
-	grid-column: auto;
-}
-
 .aw-card .aw-actions {
-	grid-template-columns: repeat(3, 76px);
-	justify-content: start;
 	padding: 0;
 }
 
