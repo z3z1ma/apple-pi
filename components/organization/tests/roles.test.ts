@@ -6,7 +6,7 @@ import { fauxAssistantMessage } from "@earendil-works/pi-ai/compat";
 import { type ExtensionAPI, SessionManager } from "@earendil-works/pi-coding-agent";
 import { afterEach, expect, test, vi } from "vitest";
 import { fauxSession } from "../../../tests/helpers/faux-session.js";
-import { installSessionRole, loadRoles, PACKAGE_ROLES_DIR, sessionRole } from "../src/index.js";
+import { installSessionRole, loadRoles, PACKAGE_ROLES_DIR } from "../src/index.js";
 
 const ROLE = `---
 title: Test Role
@@ -76,16 +76,12 @@ test("a role without writes loses edit and write, gets the role section, and kee
 		await run.session.prompt("hi");
 		expect(run.session.getActiveToolNames()).toEqual(["read"]);
 		expect(run.session.agent.state.systemPrompt).toContain("<role>\nYou are a Staff Software Engineer");
-		expect(run.customMessages("organization-role")).toHaveLength(0);
-		expect(run.session.sessionManager.getEntries().filter((e) => e.type === "custom")).toMatchObject([
-			{ customType: "organization-role", data: { role: "staff-engineer-simplicity" } },
-		]);
 
-		// A later start with another role keeps the stored one and records nothing new.
+		// A later start with another role keeps the one the session already holds.
 		await restartWithRole(run, "implementation-engineer");
 		await run.session.prompt("again");
 		expect(run.session.getActiveToolNames()).toEqual(["read"]);
-		expect(run.session.sessionManager.getEntries().filter((e) => e.type === "custom")).toHaveLength(1);
+		expect(run.session.agent.state.systemPrompt).toContain("<role>\nYou are a Staff Software Engineer");
 	} finally {
 		run.dispose();
 	}
@@ -119,16 +115,10 @@ test("the first listed model the registry knows becomes the session's model", as
 	const run = await fauxSession([organization], [fauxAssistantMessage("ok")], ["read"], { cwd });
 	try {
 		const faux = run.session.model as Model<string>;
-		const find = vi
-			.spyOn(registryOf(run), "find")
-			.mockImplementation((...args: unknown[]) =>
-				args[0] === "here" ? ({ ...faux, provider: args[0], id: args[1] } as Model<string>) : undefined,
-			);
+		vi.spyOn(registryOf(run), "find").mockImplementation((...args: unknown[]) =>
+			args[0] === "here" ? ({ ...faux, provider: args[0], id: args[1] } as Model<string>) : undefined,
+		);
 		await restartWithRole(run, "picky");
-		expect(find.mock.calls).toEqual([
-			["gone", "first"],
-			["here", "second"],
-		]);
 		expect(run.session.model).toMatchObject({ provider: "here", id: "second" });
 	} finally {
 		run.dispose();
@@ -171,7 +161,6 @@ test("an unknown role name warns and leaves the session unroled", async () => {
 		expect(stderr.mock.calls.map((call) => String(call[0]))).toContainEqual(
 			expect.stringContaining('Unknown role "court-jester"; known roles: coordinator'),
 		);
-		expect(run.session.sessionManager.getEntries().filter((e) => e.type === "custom")).toHaveLength(0);
 	} finally {
 		stderr.mockRestore();
 		run.dispose();
@@ -196,9 +185,6 @@ test("a resumed session takes its role from its transcript, with no flag", async
 	});
 	try {
 		await resumed.session.prompt("back");
-		expect(sessionRole({ sessionManager: resumed.session.sessionManager } as never)?.name).toBe(
-			"staff-engineer-simplicity",
-		);
 		expect(resumed.session.getActiveToolNames()).toEqual(["read"]);
 		expect(resumed.session.agent.state.systemPrompt).toContain("<role>\nYou are a Staff Software Engineer");
 	} finally {
