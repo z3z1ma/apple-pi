@@ -26,7 +26,7 @@ export interface Member {
 
 export interface Organization {
 	root: string;
-	/** Every member but `self`, the root first, then by manager and name. */
+	/** Every member but `self`: the root first, then by manager and name. */
 	members: Member[];
 }
 
@@ -39,8 +39,17 @@ interface Row {
 	run_state: string;
 	prompt: string | null;
 	task: string | null;
-	awake: number;
+	awake: number | null;
 	since: number | null;
+}
+
+/**
+ * The `role` column as a select term, or null when the running runtime predates it: the runtime migrates the schema
+ * only when it starts, and a bridge of newer code can connect to an older runtime.
+ */
+export function roleColumn(db: DatabaseSync): string {
+	const columns = db.prepare("select name from pragma_table_info('sessions')").all() as { name: string }[];
+	return columns.some((column) => column.name === "role") ? "s.role" : "null as role";
 }
 
 /** The root of the tree `id` is in, following managers up and stopping at a cycle. */
@@ -62,31 +71,23 @@ export function organizationOf(self: string): Organization {
 	if (!existsSync(path)) return { root: self, members: [] };
 	const db = new DatabaseSync(path, { readOnly: true });
 	try {
-		const columns = new Set(
-			(db.prepare("select name from pragma_table_info('sessions')").all() as { name: string }[]).map((r) => r.name),
-		);
 		const rows = db
 			.prepare(
-				`select s.id, s.name, ${columns.has("role") ? "s.role" : "null as role"}, s.reports_to, s.cwd, s.run_state, s.prompt,
+				`select s.id, s.name, ${roleColumn(db)}, s.reports_to, s.cwd, s.run_state, s.prompt,
 					json_extract(s.current_task, '$.taskId') as task,
-					coalesce(i.ended_at is null and i.process_state in ('alive', 'alive_bridge_lost'), 0) as awake,
+					i.ended_at is null and i.process_state in ('alive', 'alive_bridge_lost') as awake,
 					(select min(f.started_at) from incarnations f where f.session_id = s.id) as since
 				from sessions s left join incarnations i on i.session_id = s.id and i.generation = s.generation
-				where s.kind = 'root'`,
+				where s.kind = 'root'
+				order by s.reports_to, s.name`,
 			)
 			.all() as unknown as Row[];
 		const managerOf = new Map(rows.map((row) => [row.id, row.reports_to]));
 		if (!managerOf.has(self)) managerOf.set(self, null);
 		const root = rootOf(self, managerOf);
-		const inOrg = rows.filter((row) => row.id !== self && rootOf(row.id, managerOf) === root);
 		const tasks = db.prepare("select distinct task_id from session_tasks where session_id = ? order by at desc");
-		const members: Member[] = inOrg
-			.sort(
-				(a, b) =>
-					Number(b.id === root) - Number(a.id === root) ||
-					compare(a.reports_to, b.reports_to) ||
-					compare(a.name, b.name),
-			)
+		const members: Member[] = rows
+			.filter((row) => row.id !== self && rootOf(row.id, managerOf) === root)
 			.map((row) => ({
 				id: row.id,
 				name: row.name,
@@ -103,5 +104,3 @@ export function organizationOf(self: string): Organization {
 		db.close();
 	}
 }
-
-const compare = (a: string | null, b: string | null) => (a ?? "").localeCompare(b ?? "");

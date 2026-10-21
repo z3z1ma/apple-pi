@@ -25,6 +25,9 @@ const organization = (pi: ExtensionAPI) => {
 	installOrganization(pi);
 };
 
+// The organization reads the session-state database; a temporary agent directory keeps tests off the operator's.
+vi.stubEnv("PI_CODING_AGENT_DIR", mkdtempSync(join(tmpdir(), "apo-agent-")));
+
 const dirs: string[] = [];
 const tempDir = () => {
 	const dir = mkdtempSync(join(tmpdir(), "apo-"));

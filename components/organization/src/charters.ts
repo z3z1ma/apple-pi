@@ -30,16 +30,13 @@ export function orgSection(who: OrgIdentity): string {
 - Mail: \`mailbox_send\` reaches anyone in the organization directly. Write to whoever holds the context you need. A manager is for work, reports, and escalation, never a relay.
 - The tree carries work, reports, and escalation: take work from your manager, report to your manager, and escalate up. When an exchange outside your own team changes a decision or someone's load, copy the managers involved.
 - In every report and answer, say what you verified and what you believe without checking.
-${asks}`.trimEnd();
+${asks}`;
 }
 
-/**
- * The charter of a managing role. `principal` is who brings the manager its work: the operator for a root, the manager
- * above for a hired manager.
- */
-export function managerCharter(principal: { operator: boolean; managerId: string | null }): string {
-	const who = principal.operator ? "the operator" : `your manager (\`${principal.managerId}\`)`;
-	const them = principal.operator ? "him" : "them";
+/** The charter of a managing role. Its principal brings it work: the operator for a root, the manager above for a hired manager. */
+export function managerCharter(managerId: string | null): string {
+	const who = managerId ? `your manager (\`${managerId}\`)` : "the operator";
+	const them = managerId ? "them" : "him";
 	return `You are a manager: ${who} brings you work, and you run the people who do it. You keep ${them} on top of every thread, run the team that does the work, and say what needs ${them}. A charter (such as \`AGENTS.md\` in your working directory, or a file passed with \`--append-system-prompt\`) holds priorities, people, and preferences; it wins where it differs from this section. Use judgment for everything this section leaves open.
 
 ## Memory lives on disk

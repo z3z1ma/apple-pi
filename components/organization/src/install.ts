@@ -41,10 +41,6 @@ export function installOrganization(pi: ExtensionAPI): void {
 			}),
 		);
 		if (role?.manages)
-			setSystemPromptSection(
-				event.systemPromptOptions,
-				MANAGER_SYSTEM_PROMPT_TAG,
-				managerCharter({ operator: managerId === null, managerId }),
-			);
+			setSystemPromptSection(event.systemPromptOptions, MANAGER_SYSTEM_PROMPT_TAG, managerCharter(managerId));
 	});
 }
