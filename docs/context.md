@@ -97,6 +97,10 @@ Notebook records remain in Pi's append-only session JSONL, normally under:
 
 They are project-associated through Pi's session location, but they are not repository state and are not shared through Git. apple-pi intentionally does not create a `.pi/notebook` mirror because that would create a second source of truth and an implicit privacy policy.
 
+## The self
+
+Every root session also keeps a **self**: one Markdown document about itself and the people it works with (what it thinks of each, who has done what, standing agreements, what it is on, what it has learned about its organization). The session writes the whole document with `update_self`; the latest is the `<self>` section of its system prompt at every run, and a session that has never written one sees suggested headings there. The self is not the notebook: the notebook holds sourced learnings that the pair curates, distills, and retires; the self is the person's own account of itself and its colleagues, never distilled, never capped, and never touched by notebook maintenance. It lives as `organization-self` custom entries in the session's transcript (the latest on the branch wins, so it survives restarts and compaction the way the system prompt does) and is reported to the session-state runtime as the `self` fact for the views. See [the organization](organization.md).
+
 ## Pair programmer and consultant usage records
 
 Pair programmer reviews and consultant consultations write one NDJSON line per model call to:

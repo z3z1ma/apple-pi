@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { organizationOf, roleColumn } from "../../organization/src/directory.js";
+import { organizationColumns, organizationOf } from "../../organization/src/directory.js";
 import { statePaths } from "./paths.js";
 
 export interface Peer {
@@ -23,7 +23,7 @@ export function livePeers(self: string | null): Peer[] {
 	try {
 		const rows = db
 			.prepare(
-				`select s.id, s.name, s.cwd, s.run_state, s.prompt, s.reports_to, ${roleColumn(db)}, json_extract(s.current_task, '$.taskId') as task
+				`select s.id, s.name, s.cwd, s.run_state, s.prompt, s.reports_to, ${organizationColumns(db, ["role"])}, json_extract(s.current_task, '$.taskId') as task
 				from sessions s join incarnations i on i.session_id = s.id and i.generation = s.generation
 				where s.kind = 'root' and s.id is not ? and i.ended_at is null and i.process_state in ('alive', 'alive_bridge_lost')
 				order by s.updated_at desc`,

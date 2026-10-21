@@ -164,6 +164,8 @@ const MIGRATIONS = [
 	`alter table sessions add column intent text;`,
 	// The role a hired person holds for life (the name of a role catalog file); null for an unroled session.
 	`alter table sessions add column role text;`,
+	`alter table sessions add column soul text;`,
+	`alter table sessions add column self text;`,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

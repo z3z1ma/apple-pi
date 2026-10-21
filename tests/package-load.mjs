@@ -272,9 +272,10 @@ try {
 				extension.tools.has("start_peer_session") &&
 				extension.tools.has("reopen_peer_session") &&
 				extension.tools.has("close_peer_session") &&
-				extension.tools.has("rename_peer_session"),
+				extension.tools.has("rename_peer_session") &&
+				extension.tools.has("update_self"),
 		),
-		"session-state extension must own the mail, peer, and coordinator tools",
+		"session-state extension must own the mail, directory, manager, and self tools",
 	);
 
 	const searchBranchesTool = result.extensions

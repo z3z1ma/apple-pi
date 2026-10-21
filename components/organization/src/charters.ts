@@ -30,6 +30,7 @@ export function orgSection(who: OrgIdentity): string {
 - Mail: \`mailbox_send\` reaches anyone in the organization directly. Write to whoever holds the context you need. A manager is for work, reports, and escalation, never a relay.
 - The tree carries work, reports, and escalation: take work from your manager, report to your manager, and escalate up. When an exchange outside your own team changes a decision or someone's load, copy the managers involved.
 - In every report and answer, say what you verified and what you believe without checking.
+- Your self (\`update_self\`) is yours: what you think of the people you work with, who has done what, standing agreements, and what you are on. Keep it current; it is what you remember across restarts.
 ${asks}`;
 }
 

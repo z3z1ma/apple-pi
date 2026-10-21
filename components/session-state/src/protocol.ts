@@ -41,6 +41,10 @@ export interface Facts {
 	reportsTo: string | null;
 	/** The role this session holds for life (a role catalog name), or null. */
 	role: string | null;
+	/** One line of the soul drawn at hire, or null without a role. */
+	soul: string | null;
+	/** The person's self: the document it keeps about itself and its teammates, or null before its first `update_self`. */
+	self: string | null;
 	/** The session file this one was forked or cloned from (Pi's `parentSession`). */
 	parentSessionFile: string | null;
 	/** The session file that ran before this one in the same process (and pane), and why it gave way. */

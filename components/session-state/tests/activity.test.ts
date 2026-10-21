@@ -189,7 +189,9 @@ test("model, thinking level, context use, cost, and configuration are recorded a
 		expect(session(id).thinking_level).toEqual(expect.any(String));
 		await run.session.prompt("hello");
 		await vi.waitFor(() => expect(session(id).cost).toBe(0.25));
-		expect(JSON.parse(session(id).config as string)).toMatchObject({ activeTools: ["read"] }); // refreshed when the run starts
+		expect(JSON.parse(session(id).config as string).activeTools).toEqual(
+			expect.arrayContaining(["read", "list_peer_sessions", "update_self"]),
+		); // refreshed when the run starts
 		// read after the turn was saved, so it matches what the session itself reports now
 		expect(session(id).context_tokens).toBe(run.session.getContextUsage()?.tokens ?? null);
 		expect(JSON.parse(session(id).config as string).flags).toEqual(expect.any(Array));

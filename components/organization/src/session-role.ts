@@ -3,7 +3,8 @@
  * re-applied at every later start (the stored role wins over a later flag). Applying a role sets the session's mind
  * (the first of the role's models the registry knows, at the role's thinking level), its posture (`writes: false`
  * drops the built-in `edit` and `write` tools, which Pi restores from the transcript on every start, so posture is
- * re-applied before each run), and a `<role>` system prompt section.
+ * re-applied before each run), and a `<role>` system prompt section. The first start with a role also draws the
+ * person's soul, stored in the same entry and rendered under the role body.
  */
 
 import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
@@ -11,30 +12,43 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 import { setSystemPromptSection } from "../../shared/src/system-prompt-section.js";
 import { inChildSessionContext } from "../../subagents/src/child-context.js";
 import { loadRoles, type Role } from "./roles.js";
+import { drawSoul, renderSoul, type Soul, soulLine } from "./soul.js";
 
 export const ROLE_ENTRY = "organization-role";
 export const ROLE_SYSTEM_PROMPT_TAG = "role";
 
 interface RoleEntry {
 	role: string;
+	soul?: Soul;
 }
 
-/** Each session's role as resolved at its start, by session id; a session in it without a role is unroled. */
-const resolved = new Map<string, Role | undefined>();
+interface Person {
+	role: Role;
+	soul: Soul | undefined;
+}
+
+/** Each session's role and soul as resolved at its start, by session id; a session in it without one is unroled. */
+const resolved = new Map<string, Person | undefined>();
 
 /** The role of the session `ctx` runs, resolved at its start; undefined for an unroled session. */
 export function sessionRole(ctx: ExtensionContext): Role | undefined {
-	return resolved.get(ctx.sessionManager.getSessionId());
+	return resolved.get(ctx.sessionManager.getSessionId())?.role;
 }
 
-function storedRoleName(ctx: ExtensionContext): string | undefined {
-	let name: string | undefined;
+/** The one-line soul of the session `ctx` runs, for the directory; undefined without a role. */
+export function sessionSoulLine(ctx: ExtensionContext): string | undefined {
+	const soul = resolved.get(ctx.sessionManager.getSessionId())?.soul;
+	return soul && soulLine(soul);
+}
+
+function storedRole(ctx: ExtensionContext): RoleEntry | undefined {
+	let stored: RoleEntry | undefined;
 	for (const entry of ctx.sessionManager.getEntries()) {
 		if (entry.type !== "custom" || entry.customType !== ROLE_ENTRY) continue;
 		const data = entry.data as Partial<RoleEntry> | undefined;
-		if (typeof data?.role === "string") name = data.role;
+		if (typeof data?.role === "string") stored = { role: data.role, ...(data.soul ? { soul: data.soul } : {}) };
 	}
-	return name;
+	return stored;
 }
 
 function applyPosture(pi: ExtensionAPI, role: Role): void {
@@ -67,9 +81,9 @@ export function installSessionRole(pi: ExtensionAPI): void {
 			if (ctx.hasUI) ctx.ui.notify(text, "warning");
 			else process.stderr.write(`${text}\n`);
 		};
-		const stored = storedRoleName(ctx);
+		const stored = storedRole(ctx);
 		const flag = pi.getFlag("role");
-		const name = stored ?? (typeof flag === "string" && flag ? flag : undefined);
+		const name = stored?.role ?? (typeof flag === "string" && flag ? flag : undefined);
 		if (!name) return;
 		const catalog = loadRoles(ctx.cwd);
 		for (const problem of catalog.problems) warn(`Role file skipped: ${problem}`);
@@ -78,15 +92,17 @@ export function installSessionRole(pi: ExtensionAPI): void {
 			warn(`Unknown role "${name}"; known roles: ${[...catalog.roles.keys()].join(", ")}.`);
 			return;
 		}
-		if (!stored) pi.appendEntry<RoleEntry>(ROLE_ENTRY, { role: name });
-		resolved.set(sessionId, role);
+		const soul = stored ? stored.soul : drawSoul();
+		if (!stored) pi.appendEntry<RoleEntry>(ROLE_ENTRY, { role: name, soul });
+		resolved.set(sessionId, { role, soul });
 		applyPosture(pi, role);
 		await applyMind(pi, ctx, role, warn);
 	});
 	pi.on("before_agent_start", (event, ctx) => {
-		const role = sessionRole(ctx);
-		if (!role) return;
-		applyPosture(pi, role);
-		setSystemPromptSection(event.systemPromptOptions, ROLE_SYSTEM_PROMPT_TAG, role.body);
+		const person = resolved.get(ctx.sessionManager.getSessionId());
+		if (!person) return;
+		applyPosture(pi, person.role);
+		const body = person.soul ? `${person.role.body.trimEnd()}\n\n${renderSoul(person.soul)}` : person.role.body;
+		setSystemPromptSection(event.systemPromptOptions, ROLE_SYSTEM_PROMPT_TAG, body);
 	});
 }

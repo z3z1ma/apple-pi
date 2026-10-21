@@ -1,8 +1,8 @@
 import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai/compat";
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
 import { fauxSession, type Reply } from "../../../tests/helpers/faux-session.js";
-import bridge from "../src/index.js";
 import type { Member } from "../../organization/src/directory.js";
+import bridge from "../src/index.js";
 import { close, fakeBridge, query, standInProcess, startRuntime, stopRuntime, tempStateDir } from "./helpers.js";
 
 const state = tempStateDir();
@@ -51,6 +51,7 @@ test("a session lists its organization, awake and asleep, not subagents or stran
 			facts: {
 				reportsTo: callerId,
 				role: "technical-writer",
+				soul: "You count the callers; habit: you reread the ask.",
 				currentTask: { bundle: "/work/docs/.ledger/202610180001-docs", taskId: "202610180001-docs" },
 				prompt: { kind: "select", title: "Overwrite?" },
 			},
@@ -97,6 +98,7 @@ test("a session lists its organization, awake and asleep, not subagents or stran
 				id: "peer-1",
 				name: "docs-worker",
 				role: "technical-writer",
+				soul: "You count the callers; habit: you reread the ask.",
 				reportsTo: callerId,
 				status: "waiting",
 				cwd: "/work/docs",
@@ -108,6 +110,7 @@ test("a session lists its organization, awake and asleep, not subagents or stran
 				id: "asleep-1",
 				name: "reviewer",
 				role: null,
+				soul: null,
 				reportsTo: "peer-1",
 				status: "asleep",
 				cwd: expect.any(String),

@@ -9,6 +9,7 @@ import { setSystemPromptSection } from "../../shared/src/system-prompt-section.j
 import { inChildSessionContext } from "../../subagents/src/child-context.js";
 import { MANAGER_SYSTEM_PROMPT_TAG, managerCharter, ORG_SYSTEM_PROMPT_TAG, orgSection } from "./charters.js";
 import { organizationOf } from "./directory.js";
+import { installSelf } from "./self.js";
 import { installSessionRole, sessionRole } from "./session-role.js";
 
 /** The manager this session reports to (`--reports-to`), or null for a root. */
@@ -25,6 +26,7 @@ export function managesPeople(pi: ExtensionAPI, ctx: ExtensionContext): boolean 
 export function installOrganization(pi: ExtensionAPI): void {
 	if (inChildSessionContext()) return;
 	installSessionRole(pi);
+	installSelf(pi);
 	pi.on("before_agent_start", (event, ctx) => {
 		const id = ctx.sessionManager.getSessionId();
 		const role = sessionRole(ctx);

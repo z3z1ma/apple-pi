@@ -78,13 +78,13 @@ test("a role without writes loses edit and write, gets the role section, and kee
 	try {
 		await restartWithRole(run, "staff-engineer-simplicity");
 		await run.session.prompt("hi");
-		expect(run.session.getActiveToolNames()).toEqual(["read"]);
+		expect(run.session.getActiveToolNames()).toEqual(["read", "update_self"]);
 		expect(run.session.agent.state.systemPrompt).toContain("<role>\nYou are a Staff Software Engineer");
 
 		// A later start with another role keeps the one the session already holds.
 		await restartWithRole(run, "implementation-engineer");
 		await run.session.prompt("again");
-		expect(run.session.getActiveToolNames()).toEqual(["read"]);
+		expect(run.session.getActiveToolNames()).toEqual(["read", "update_self"]);
 		expect(run.session.agent.state.systemPrompt).toContain("<role>\nYou are a Staff Software Engineer");
 	} finally {
 		run.dispose();
@@ -102,7 +102,7 @@ test("a role that writes keeps edit and write; an unroled session has no role se
 		expect(run.session.agent.state.systemPrompt).not.toContain("<role>");
 		await restartWithRole(run, "implementation-engineer");
 		await run.session.prompt("hi");
-		expect(run.session.getActiveToolNames().sort()).toEqual(["edit", "read", "write"]);
+		expect(run.session.getActiveToolNames().sort()).toEqual(["edit", "read", "update_self", "write"]);
 		expect(run.session.agent.state.systemPrompt).toContain("<role>\nYou are an Implementation Engineer");
 	} finally {
 		run.dispose();
@@ -160,7 +160,7 @@ test("an unknown role name warns and leaves the session unroled", async () => {
 	try {
 		await restartWithRole(run, "court-jester");
 		await run.session.prompt("hi");
-		expect(run.session.getActiveToolNames().sort()).toEqual(["edit", "read"]);
+		expect(run.session.getActiveToolNames().sort()).toEqual(["edit", "read", "update_self"]);
 		expect(run.session.agent.state.systemPrompt).not.toContain("<role>");
 		expect(stderr.mock.calls.map((call) => String(call[0]))).toContainEqual(
 			expect.stringContaining('Unknown role "court-jester"; known roles: coordinator'),
@@ -189,8 +189,12 @@ test("a resumed session takes its role from its transcript, with no flag", async
 	});
 	try {
 		await resumed.session.prompt("back");
-		expect(resumed.session.getActiveToolNames()).toEqual(["read"]);
+		expect(resumed.session.getActiveToolNames()).toEqual(["read", "update_self"]);
 		expect(resumed.session.agent.state.systemPrompt).toContain("<role>\nYou are a Staff Software Engineer");
+		// The soul drawn at the first start is the one the resumed session has.
+		const soulOf = (prompt: string) => /As a person: [^\n]+/.exec(prompt)?.[0];
+		expect(soulOf(resumed.session.agent.state.systemPrompt)).toBe(soulOf(first.session.agent.state.systemPrompt));
+		expect(soulOf(resumed.session.agent.state.systemPrompt)).toMatch(/^As a person: You .+ One habit: you .+\.$/);
 	} finally {
 		resumed.dispose();
 	}

@@ -3,7 +3,14 @@ import { randomUUID } from "node:crypto";
 import { createConnection, type Socket } from "node:net";
 import { dirname } from "node:path";
 import type { ExtensionAPI, ExtensionContext, SessionEntry } from "@earendil-works/pi-coding-agent";
-import { installOrganization, sessionRole } from "../../organization/src/index.js";
+import {
+	installOrganization,
+	SELF_CHANNEL,
+	type SelfChange,
+	sessionRole,
+	sessionSelf,
+	sessionSoulLine,
+} from "../../organization/src/index.js";
 import { LEDGER_LINK_CHANNEL, type LedgerLink } from "../../shared/src/ledger-events.js";
 import { type OpenQuestionnaire, QUESTIONNAIRE_CHANNEL } from "../../shared/src/questionnaire-events.js";
 import { SESSION_INTENT_CHANNEL, type SessionIntent } from "../../shared/src/session-intent-events.js";
@@ -305,6 +312,8 @@ function helloFor(
 			lastAbortAt: null,
 			reportsTo: (pi.getFlag("reports-to") as string | undefined) || null,
 			role: sessionRole(ctx)?.name ?? null,
+			soul: sessionSoulLine(ctx) ?? null,
+			self: sessionSelf(ctx) ?? null,
 			parentSessionFile: sessions.getHeader()?.parentSession ?? null,
 			previousSession,
 			git: null,
@@ -472,6 +481,11 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 		if (!link || touch.sessionId !== link.hello.session.id) return;
 		link.facts({ currentTask: { bundle: touch.bundle, taskId: touch.taskId } });
 		link.taskLink(touch.bundle, touch.taskId, touch.via);
+	});
+	// A person rewrote its self.
+	pi.events.on(SELF_CHANNEL, (data) => {
+		const change = data as SelfChange;
+		if (link && change.sessionId === link.hello.session.id) link.facts({ self: change.self });
 	});
 	// The session-title extension states what this session works on now.
 	pi.events.on(SESSION_INTENT_CHANNEL, (data) => {

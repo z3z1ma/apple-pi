@@ -13,6 +13,8 @@ export interface Member {
 	name: string | null;
 	/** The role catalog name, or null for an unroled session. */
 	role: string | null;
+	/** One line of the soul drawn at hire, or null without a role. */
+	soul: string | null;
 	/** The manager's session id; null for the root. */
 	reportsTo: string | null;
 	status: "busy" | "idle" | "waiting" | "asleep";
@@ -34,6 +36,7 @@ interface Row {
 	id: string;
 	name: string | null;
 	role: string | null;
+	soul: string | null;
 	reports_to: string | null;
 	cwd: string;
 	run_state: string;
@@ -44,12 +47,14 @@ interface Row {
 }
 
 /**
- * The `role` column as a select term, or null when the running runtime predates it: the runtime migrates the schema
- * only when it starts, and a bridge of newer code can connect to an older runtime.
+ * The organization's columns of `sessions` as select terms, each null when the running runtime predates it: the
+ * runtime migrates the schema only when it starts, and a bridge of newer code can connect to an older runtime.
  */
-export function roleColumn(db: DatabaseSync): string {
-	const columns = db.prepare("select name from pragma_table_info('sessions')").all() as { name: string }[];
-	return columns.some((column) => column.name === "role") ? "s.role" : "null as role";
+export function organizationColumns(db: DatabaseSync, names = ["role", "soul"]): string {
+	const columns = new Set(
+		(db.prepare("select name from pragma_table_info('sessions')").all() as { name: string }[]).map((c) => c.name),
+	);
+	return names.map((name) => (columns.has(name) ? `s.${name}` : `null as ${name}`)).join(", ");
 }
 
 /** The root of the tree `id` is in, following managers up and stopping at a cycle. */
@@ -73,7 +78,7 @@ export function organizationOf(self: string): Organization {
 	try {
 		const rows = db
 			.prepare(
-				`select s.id, s.name, ${roleColumn(db)}, s.reports_to, s.cwd, s.run_state, s.prompt,
+				`select s.id, s.name, ${organizationColumns(db)}, s.reports_to, s.cwd, s.run_state, s.prompt,
 					json_extract(s.current_task, '$.taskId') as task,
 					i.ended_at is null and i.process_state in ('alive', 'alive_bridge_lost') as awake,
 					(select min(f.started_at) from incarnations f where f.session_id = s.id) as since
@@ -92,6 +97,7 @@ export function organizationOf(self: string): Organization {
 				id: row.id,
 				name: row.name,
 				role: row.role,
+				soul: row.soul,
 				reportsTo: row.reports_to,
 				status: !row.awake ? "asleep" : row.prompt ? "waiting" : row.run_state === "idle" ? "idle" : "busy",
 				cwd: row.cwd,

@@ -4,10 +4,12 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] After `update_self` in a faux session, the next run's system prompt has the new text under `<self>`, and the runtime's database holds it keyed by the session id.
-- [ ] After the session closes and reopens, the self is in the prompt without any call; after a compaction, the self is in the context that follows.
-- [ ] A new person's first self holds the seeded headings; an operator's root session gets the same seed.
+- [x] After `update_self` in a faux session, the next run's system prompt has the new text under `<self>`, and the runtime's database holds it keyed by the session id.
+- [x] After the session closes and reopens, the self is in the prompt without any call; after a compaction, the self is in the context that follows.
+- [x] A new person's first self holds the seeded headings; an operator's root session gets the same seed.
 - [ ] `npm run audit:cache` on a session that updated its self shows the prefix cache intact across runs that did not change it.
-- [ ] `docs/context.md` says what the self is and how it differs from the notebook.
+- [x] `docs/context.md` says what the self is and how it differs from the notebook.
+
+Deviations: the self is recorded in the session's own transcript (`organization-self` entries, latest wins) and reported to the runtime as the `self` column of `sessions`, not a `selves` table: one store that follows the session, projected for the views. Re-injection after compaction is free: the self is a system prompt section, which compaction never touches. The cache audit needs a real model run and is left unverified.

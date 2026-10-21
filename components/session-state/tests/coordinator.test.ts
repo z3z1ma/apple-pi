@@ -251,7 +251,7 @@ test("a hired person whose role does not manage loses the lifecycle tools; a hir
 		run.session.extensionRunner.setFlagValue("reports-to", "boss");
 		await withRole(run, "staff-engineer-simplicity");
 		await run.session.prompt("hi");
-		expect(run.session.getActiveToolNames()).toEqual(["list_peer_sessions"]);
+		expect(run.session.getActiveToolNames()).toEqual(["list_peer_sessions", "update_self"]);
 	} finally {
 		await close(run);
 	}
@@ -260,7 +260,7 @@ test("a hired person whose role does not manage loses the lifecycle tools; a hir
 		manager.session.extensionRunner.setFlagValue("reports-to", "boss");
 		await withRole(manager, "coordinator");
 		await manager.session.prompt("hi");
-		expect(manager.session.getActiveToolNames().sort()).toEqual([...tools, "list_peer_sessions"].sort());
+		expect(manager.session.getActiveToolNames().sort()).toEqual([...tools, "list_peer_sessions", "update_self"].sort());
 	} finally {
 		await close(manager);
 	}
@@ -282,6 +282,7 @@ test.each([false, true])(
 					"reopen_peer_session",
 					"close_peer_session",
 					"rename_peer_session",
+					"update_self",
 				].sort(),
 			);
 		} finally {
@@ -309,3 +310,33 @@ test.each([false, true])(
 	},
 	20000,
 );
+
+test("a hired person's soul and self reach the runtime, and the self follows the session through a restart", async () => {
+	const self = "# The people I work with\n- The coordinator: terse, fair.";
+	const run = await fauxSession(
+		[bridge],
+		[call("update_self", { text: self }), fauxAssistantMessage("written"), fauxAssistantMessage("back")],
+		["read"],
+	);
+	const id = run.session.sessionManager.getSessionId();
+	try {
+		run.session.extensionRunner.setFlagValue("reports-to", "boss");
+		await withRole(run, "repository-archaeologist");
+		const facts = () =>
+			query(state.dbPath, "select soul, self from sessions where id = ?", id)[0] as Record<string, unknown>;
+		expect(facts()).toMatchObject({ soul: expect.stringMatching(/^You .+; habit: you .+\.$/), self: null });
+
+		await run.session.prompt("write your self");
+		expect(toolResults(run)[0]).toMatchObject({ isError: false });
+		await vi.waitFor(() => expect(facts().self).toBe(self));
+
+		// A new process of the same session (a rebind here) reports the self and soul its transcript holds.
+		const { soul } = facts();
+		await run.session.bindExtensions({});
+		await run.session.prompt("back");
+		expect(run.session.agent.state.systemPrompt).toContain(`<self>\n${self}\n</self>`);
+		await vi.waitFor(() => expect(facts()).toEqual({ soul, self }));
+	} finally {
+		await close(run);
+	}
+}, 30000);

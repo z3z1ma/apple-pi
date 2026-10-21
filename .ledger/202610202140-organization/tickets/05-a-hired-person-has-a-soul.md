@@ -4,9 +4,11 @@
 
 **Blocked by:** 01 A session started with a role is that role
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Two hires with the same role on one runtime have different souls in their prompts and the same role body.
-- [ ] A reopened person has the same soul as before; a session started by hand without a role has no soul paragraph.
-- [ ] The habit list holds at least thirty distinct habits, and the draw is covered by a test that checks every field is filled from its list.
-- [ ] `list_peer_sessions` shows one soul line per hired person.
+- [x] Two hires with the same role on one runtime have different souls in their prompts and the same role body.
+- [x] A reopened person has the same soul as before; a session started by hand without a role has no soul paragraph.
+- [x] The habit list holds at least thirty distinct habits, and the draw is covered by a test that checks every field is filled from its list.
+- [x] `list_peer_sessions` shows one soul line per hired person.
+
+Deviations: the soul is drawn with the role at the session's first start with a role (hand-started `pi --role x` included) and stored in the role's transcript entry; the runtime stores one line of it as the `soul` column.
