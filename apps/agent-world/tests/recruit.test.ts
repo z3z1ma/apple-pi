@@ -56,6 +56,7 @@ socket.on("connect", () => {
 		facts: {
 			reportsTo: flag("--reports-to") ?? null,
 			role: flag("--role") ?? null,
+			manages: flag("--role") === "coordinator",
 			git: { repository: process.cwd(), worktree: process.cwd(), branch: "main" },
 			config: { name: flag("--name"), flags: [], activeTools: [], extensions: [], skills: [], mcpServers: [] },
 		},
@@ -83,7 +84,7 @@ beforeAll(async () => {
 	await startRuntime(state.socketPath);
 	world = openWorldBackend({ db: state.dbPath, socket: state.socketPath });
 	commands = openCommands(state.socketPath);
-	lifecycle = openLifecycle({ db: state.dbPath }, commands, () => world.snapshot());
+	lifecycle = openLifecycle({ db: state.dbPath, agentDir: state.agentDir }, commands, () => world.snapshot());
 });
 afterAll(async () => {
 	world.close();
@@ -164,7 +165,7 @@ test("recruiting refuses what Pi could not start, and sends nothing", async () =
 			{ name: "docs", cwd: workDir, brief: "--model x", reportsTo: "lead" },
 			"The brief cannot start with a dash: Pi would read it as an option.",
 		],
-		[{ name: "docs", cwd: workDir, brief: "", reportsTo: "nobody" }, "That coordinator is not running."],
+		[{ name: "docs", cwd: workDir, brief: "", reportsTo: "nobody" }, "That manager is not running."],
 		// No client is attached yet, so an independent agent has nowhere to open.
 		[
 			{ name: "scout", cwd: workDir, brief: "" },
@@ -234,6 +235,7 @@ test("recruiting for a coordinator that runs outside tmux says so, and sends not
 		session: { cwd: otherDir, name: "hq-2" },
 		facts: {
 			role: "coordinator",
+			manages: true,
 			config: { name: "hq-2", flags: [], activeTools: [], extensions: [], skills: [], mcpServers: [] },
 		},
 	});

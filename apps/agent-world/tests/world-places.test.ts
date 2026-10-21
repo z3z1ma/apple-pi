@@ -264,6 +264,37 @@ test("a wing's door is open while agents work there, closed while they sleep at 
 	}
 }, 60000);
 
+test("a manager's team room is a wing off the headquarters named after the manager, and its door leads to the team", async () => {
+	const team = { repository: "team:mara", team: "mara", name: "Mara", headcount: 2, dormant: 0 };
+	const inRoom = (id: string, n: number, title: string): Character => ({
+		...worker(id, n, { reportsTo: "mara", title }),
+		place: { kind: "wing", headquarters: HQ, repository: "team:mara" },
+	});
+	const snapshot: WorldSnapshot = {
+		connected: true,
+		headquarters: [{ id: HQ, name: "Orla", wings: [wing("/r/apple-pi", 1), team] }],
+		characters: [
+			ORLA,
+			worker("pi-docs", 1),
+			{ ...inRoom("mara", 2, "Director of Engineering"), role: "coordinator" },
+			inRoom("skeptic", 3, "Scientific Skeptic"),
+		],
+	};
+	const { page, errors } = await openWorld(snapshot);
+	try {
+		await travel(page, /^Gallery of wings/, `gallery:${HQ}`);
+		const doors = (await view(page, "gallery()")) as { wings: { name: string; door: string }[] };
+		expect(doors.wings.map((w) => `${w.name}:${w.door}`)).toEqual(["apple-pi:open", "Mara:open"]);
+		await travel(page, /^Mara wing/, `wing:${HQ}:team:mara`);
+		await vi.waitFor(async () => expect(await view(page, "characters()")).toEqual(["mara", "skeptic"]), {
+			timeout: 5000,
+		});
+		expect(errors).toEqual([]);
+	} finally {
+		await page.close();
+	}
+}, 60000);
+
 test("banner names fit their banners and stay legible, even for long repository names", async () => {
 	const names = [
 		"api",

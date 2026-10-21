@@ -89,7 +89,15 @@
     "recruit-brief": "Their first assignment…",
     "recruit-send": "Invite",
     "recruit-sending": "Running off to find {name}…",
-    "recruit-joined": "{name} has joined! Welcome!"
+    "recruit-joined": "{name} has joined! Welcome!",
+    "recruit-role": "Club role",
+    "recruit-no-role": "No club role: just a student",
+    "retire": "Graduate",
+    "retire-title": "{name} graduates",
+    "retire-reason": "Their send-off…",
+    "retire-send": "Graduate",
+    "retire-done": "{name} has graduated! Farewell!",
+    "retired": "Graduated"
   },
   "style": {
     "--aw-font-body": "\"Hiragino Maru Gothic ProN\", \"Hiragino Maru Gothic Pro\", \"Avenir Next\", \"Helvetica Neue\", sans-serif",

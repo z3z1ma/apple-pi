@@ -156,7 +156,14 @@ const CAST: Character[] = [
 	{ ...person("Orla", { kind: "headquarters", headquarters: HQ }, 0, { reportsTo: null }), id: HQ },
 	person("pi-docs", wing("/r/apple-pi"), 1, { ...working("bash", "npm test"), task: DOCS_TASK }),
 	person("pi-tests", wing("/r/apple-pi"), 2, { ...asking("Which branch should I rebase on?", 30), task: DOCS_TASK }),
-	person("ledger", wing("/r/billing-service"), 3, { ...finished(20), task: RETRY_TASK }),
+	person("ledger", wing("/r/billing-service"), 3, {
+		...finished(20),
+		task: RETRY_TASK,
+		title: "Technical Writer",
+		soul: "You quote the source before you paraphrase it.",
+		selfHeadings: ["Teammates", "Who has done what"],
+		tasks: ["202610190002-retry", "202610180009-invoices"],
+	}),
 	person("loose", { kind: "common-room", headquarters: HQ }, 4, working("read", "docs/session-state.md")),
 	person("solo", { kind: "square" }, 5, { ...asking("Deploy now?", 40), reportsTo: null }),
 ];
@@ -255,14 +262,17 @@ test("every row offers Talk to, Examine, Go to, and Go to its terminal, which wo
 		expect(await place(page)).toBe(`headquarters:${HQ}`);
 		await page.getByRole("button", { name: /^ledger/ }).click();
 		const actions = page.getByRole("group", { name: "Actions on ledger" });
+		// ledger holds a role, so it can retire, in the theme's words; the operator's own sessions cannot.
 		await expect(actions.getByRole("button").allTextContents()).resolves.toEqual([
 			"Talk to",
 			"Examine",
 			"Go to",
 			"Terminal",
 			"Rename",
+			"Leave the guild",
 			"End session",
 		]);
+		await expect(page.getByRole("button", { name: "Retire Orla" }).count()).resolves.toBe(0);
 		await shot(page, "row-actions");
 		await actions.getByRole("button", { name: "Talk to ledger" }).click();
 		// Talking opens the conversation over everything; Escape closes it.
@@ -289,8 +299,14 @@ test("every row offers Talk to, Examine, Go to, and Go to its terminal, which wo
 			"Reports to",
 			"Orla",
 			"billing-service wing",
+			"Technical Writer",
+			"You quote the source before you paraphrase it.",
+			"Teammates \u00b7 Who has done what",
 		])
 			expect(text).toContain(fact);
+		// The record: its other ledger tasks, besides the one it holds now.
+		expect(text).toContain("202610180009-invoices");
+		expect(text).not.toContain("202610190002-retry");
 		await shot(page, "examine");
 		await card.getByRole("button", { name: "Close" }).click();
 		await card.waitFor({ state: "detached", timeout: 2000 });

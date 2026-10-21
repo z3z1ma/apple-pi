@@ -39,6 +39,11 @@
 	padding-top: 10px;
 }
 
+/* The chosen role's mandate, under its select, in the field column. */
+.aw-recruit-form .aw-recruit-mandate {
+	margin: -6px 0 0 102px;
+}
+
 .aw-recruit-form .aw-letter-to input,
 .aw-recruit-form .aw-letter-to select {
 	box-sizing: border-box;

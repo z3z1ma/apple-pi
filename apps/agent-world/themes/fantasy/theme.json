@@ -89,7 +89,15 @@
     "recruit-brief": "Their first quest…",
     "recruit-send": "Recruit",
     "recruit-sending": "A runner sets off to fetch {name}…",
-    "recruit-joined": "{name} has answered the call."
+    "recruit-joined": "{name} has answered the call.",
+    "recruit-role": "Role",
+    "recruit-no-role": "No role: a free hand",
+    "retire": "Leave the guild",
+    "retire-title": "{name} leaves the guild",
+    "retire-reason": "Why they leave…",
+    "retire-send": "Bid farewell",
+    "retire-done": "{name} has left the guild.",
+    "retired": "Left the guild"
   },
   "style": {
     "--aw-font-body": "\"Iowan Old Style\", Georgia, serif",

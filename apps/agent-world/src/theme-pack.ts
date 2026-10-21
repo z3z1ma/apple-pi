@@ -377,6 +377,19 @@ export const TEXT_KEYS = [
 	"recruit-send",
 	"recruit-sending",
 	"recruit-joined",
+	/**
+	 * The organization: the hire form's role field and its line for a session hired into no role; retiring a person
+	 * (the action, the form's title for {name}, the reason's placeholder, the send button, and once it has left); and
+	 * the mark on a former member at the inn.
+	 */
+	"recruit-role",
+	"recruit-no-role",
+	"retire",
+	"retire-title",
+	"retire-reason",
+	"retire-send",
+	"retire-done",
+	"retired",
 ] as const;
 
 /**

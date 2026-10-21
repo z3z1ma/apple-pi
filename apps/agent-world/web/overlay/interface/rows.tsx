@@ -1,10 +1,12 @@
 // A character's row in any tab: its state pip, name, what it is doing, and, once chosen, every action on it. Each
 // action works from anywhere; none needs the avatar to walk.
 import type { Character } from "../../../src/world.js";
+import { say } from "../../theme.js";
+import { useTheme } from "../../theme-store.js";
 import { CheckIcon, QuestionIcon } from "./icons.js";
 import { type Attention, ago, attentionOf } from "./model.js";
 
-export type CharacterAction = "talk-to" | "examine" | "go-to" | "terminal" | "rename" | "end-session";
+export type CharacterAction = "talk-to" | "examine" | "go-to" | "terminal" | "rename" | "retire" | "end-session";
 
 const PIP_LABEL: Record<Attention, string> = {
 	asking: "Asking you",
@@ -39,6 +41,7 @@ export function ActionButtons({
 	act: (action: CharacterAction, character: Character) => void;
 	skip?: CharacterAction;
 }) {
+	const theme = useTheme();
 	const name = character.name;
 	const actions: { action: CharacterAction; text: string; label: string }[] = [
 		{ action: "talk-to", text: "Talk to", label: `Talk to ${name}` },
@@ -46,6 +49,10 @@ export function ActionButtons({
 		{ action: "go-to", text: "Go to", label: `Go to ${name}` },
 		{ action: "terminal", text: "Terminal", label: `Go to ${name}'s terminal` },
 		{ action: "rename", text: "Rename", label: `Rename ${name}` },
+		// Only a person hired into a role retires; the operator's own sessions have none.
+		...(character.facts?.title
+			? [{ action: "retire" as const, text: say(theme, "retire"), label: `Retire ${name}` }]
+			: []),
 		{ action: "end-session", text: "End session", label: `End ${name}'s session` },
 	];
 	return (

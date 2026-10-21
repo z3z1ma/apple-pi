@@ -15,7 +15,7 @@ A character whose Pi session is stopped. It keeps its identity and history and w
 _Avoid_: dead, ghost, offline
 
 **Coordinator**:
-A character whose session keeps the operator's threads and supervises workers; the operator names which sessions these are [Guildmaster].
+A character that manages people: the root of an organization, or a person hired into a managing role [Guildmaster]. In the world the word covers every manager; the catalog's `coordinator` role is one of them.
 _Avoid_: Orchard, supervisor, chief of staff
 
 **Worker**:
@@ -25,13 +25,19 @@ _Avoid_: Summon, party member
 **Independent session**:
 A character that reports to no coordinator.
 
+**Former member**:
+A dormant character that retired: it left its organization, with a reason, and sleeps at the inn marked so until a manager calls it back [Left the guild; resigned; graduated].
+
+**Team room**:
+A wing of the headquarters that holds one manager under the root and everyone reporting to it, named after the manager.
+
 ### Places
 
 **Place**:
 A hand-designed location, mostly an interior, that serves one function of the world and is drawn differently by each theme. Places follow functions and reporting, not tmux topology.
 
 **Headquarters**:
-The coordinator's place, where the operator starts and where the coordinator and the workers that report to it are [Guild Hall; office floor; classroom].
+The organization's place, one per root: where the operator starts and where the root and the people that report to it are [Guild Hall; office floor; classroom].
 _Avoid_: Coordination hub
 
 **Wing**:

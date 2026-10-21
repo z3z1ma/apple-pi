@@ -313,6 +313,7 @@ function helloFor(
 			reportsTo: (pi.getFlag("reports-to") as string | undefined) || null,
 			role: sessionRole(ctx)?.name ?? null,
 			title: sessionRole(ctx)?.title ?? null,
+			manages: sessionRole(ctx)?.manages ?? null,
 			soul: sessionSoulLine(ctx) ?? null,
 			self: sessionSelf(ctx) ?? null,
 			parentSessionFile: sessions.getHeader()?.parentSession ?? null,

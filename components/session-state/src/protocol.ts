@@ -43,6 +43,8 @@ export interface Facts {
 	role: string | null;
 	/** The role's title, for people reading the views; null without a role. */
 	title: string | null;
+	/** Whether the role manages (holds the manager tools and charter); null without a role. */
+	manages: boolean | null;
 	/** One line of the soul drawn at hire, or null without a role. */
 	soul: string | null;
 	/** The person's self: the document it keeps about itself and its teammates, or null before its first `update_self`. */

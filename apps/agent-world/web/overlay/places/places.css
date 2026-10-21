@@ -160,6 +160,22 @@
 	font-weight: 600;
 }
 
+.aw-register-title {
+	font-size: 12px;
+	font-weight: 600;
+	color: var(--aw-ink-soft);
+}
+
+/* The leaving mark on a former member: the theme's word for it, and why. */
+.aw-register-left {
+	overflow: hidden;
+	font-size: 12px;
+	font-style: italic;
+	color: var(--aw-danger);
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+
 .aw-register-detail {
 	overflow: hidden;
 	font-size: 13px;

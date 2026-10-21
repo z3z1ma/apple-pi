@@ -2,8 +2,9 @@
 import type { IntegrationsApi } from "./integrations.js";
 
 /**
- * A coordinator keeps a headquarters; a worker reports to a coordinator; an independent session reports to none
- * (`.wiki/pages/agent-world-language.md`).
+ * How a character is drawn: a coordinator is the root of an organization (it keeps the headquarters) or a manager
+ * inside one; a worker reports to one; an independent session reports to none and has nobody under it
+ * (`.wiki/pages/agent-world-language.md`). The role a person holds for life is its `facts.title`.
  */
 export type Role = "coordinator" | "worker" | "independent";
 
@@ -56,6 +57,15 @@ export interface CharacterFacts {
 	git: { repository: string; worktree: string; branch: string } | null;
 	cwd: string;
 	reportsTo: string | null;
+	/**
+	 * The person (the backend always sets these; fixtures may leave them out): the title of the role it was hired into
+	 * (null for a session with no role, such as the operator's own), one line of the soul drawn at hire, the headings of
+	 * its self (the document it keeps about itself and its teammates), and the ledger tasks it has worked on, newest first.
+	 */
+	title?: string | null;
+	soul?: string | null;
+	selfHeadings?: string[];
+	tasks?: string[];
 	model: string | null;
 	contextTokens: number | null;
 	contextWindow: number | null;
@@ -76,10 +86,15 @@ export interface Character {
 	facts?: CharacterFacts;
 }
 
-/** One repository's wing. It stays once seen, boarded up while nobody works in it. */
+/**
+ * One room off the headquarters: a repository's wing, which stays once seen and is boarded up while nobody works in
+ * it, or a manager's team room (`team` set), which exists while the manager is in the organization.
+ */
 export interface Wing {
-	/** The repository's directory (the main checkout, shared by its worktrees). */
+	/** The repository's directory (the main checkout, shared by its worktrees), or `team:<manager id>` for a team room. */
 	repository: string;
+	/** For a team room: the manager whose team it is. */
+	team?: string;
 	/** What its banner says. */
 	name: string;
 	/** Awake workers in it; 0 means its door is shut. */
@@ -133,7 +148,12 @@ export interface DormantAgent {
 	name: string;
 	/** What it was while awake; a dormant coordinator keeps its look. */
 	role: Role;
+	/** The title of the role it holds, or null without one (the backend always sets it; fixtures may leave it out). */
+	title?: string | null;
 	reportsTo: string | null;
+	/** Retired (it left the organization): when and why; null for a person merely asleep. */
+	retiredAt?: number | null;
+	retiredReason?: string | null;
 	/** Its git repository's directory, or null outside one. */
 	repository: string | null;
 	cwd: string;
@@ -197,6 +217,17 @@ export interface RecruitRequest {
 	cwd: string;
 	brief: string;
 	reportsTo?: string;
+	/** The catalog role it is hired into; none for a session with no role. */
+	role?: string;
+}
+
+/** A role a person can be hired into, as the catalog describes it. */
+export interface RoleChoice {
+	name: string;
+	title: string;
+	mandate: string;
+	manages: boolean;
+	writes: boolean;
 }
 
 /** How a recruit went: a command receipt, with the new session's id once `start` was sent. */
@@ -391,6 +422,10 @@ export interface AgentWorldApi extends IntegrationsApi {
 	recruit(request: RecruitRequest): Promise<RecruitReceipt>;
 	/** Rename an awake character (`rename`); a blank name is refused and nothing is sent. */
 	rename(characterId: string, name: string): Promise<CommandReceipt>;
+	/** The roles the hire form offers, from the role catalog. */
+	roles(): Promise<RoleChoice[]>;
+	/** Retire a character (`retire`): it leaves the organization with a reason, and sleeps at the inn marked so. */
+	retire(characterId: string, reason: string): Promise<CommandReceipt>;
 	/** Read a running coordinator's notepad (`NOTES.md` in its directory) and watch it for changes. */
 	openNotepad(coordinatorId: string): Promise<NotepadRead>;
 	/** Write the notepad; refused, with the file's text, when it changed on disk since `base`. */

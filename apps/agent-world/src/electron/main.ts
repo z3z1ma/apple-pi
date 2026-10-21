@@ -105,7 +105,7 @@ function start() {
 	);
 	conversations.onReply((event) => toWindow("world:reply", event));
 	// The inn, the rookery, and ending a session.
-	const lifecycle = openLifecycle(statePaths(), commands, () => world.snapshot());
+	const lifecycle = openLifecycle({ ...statePaths(), agentDir: agentDir() }, commands, () => world.snapshot());
 	const unnamed = { ok: false, reason: "No character was named." };
 	ipcMain.handle("world:wake", (_event, characterId: unknown) =>
 		typeof characterId === "string" ? lifecycle.wake(characterId) : unnamed,
@@ -118,11 +118,21 @@ function start() {
 	);
 	// Recruiting a new agent: a worker at its coordinator's desk, an independent one at the square's recruiter.
 	ipcMain.handle("world:recruit", (_event, request: unknown) => {
-		const { name, cwd, brief, reportsTo } = (request ?? {}) as Record<string, unknown>;
+		const { name, cwd, brief, reportsTo, role } = (request ?? {}) as Record<string, unknown>;
 		if (typeof name !== "string" || typeof cwd !== "string" || typeof brief !== "string")
 			return { ok: false, reason: "The recruit needs a name, a directory, and a brief." };
-		return lifecycle.recruit({ name, cwd, brief, ...(typeof reportsTo === "string" ? { reportsTo } : {}) });
+		return lifecycle.recruit({
+			name,
+			cwd,
+			brief,
+			...(typeof reportsTo === "string" ? { reportsTo } : {}),
+			...(typeof role === "string" ? { role } : {}),
+		});
 	});
+	ipcMain.handle("world:roles", () => lifecycle.roles());
+	ipcMain.handle("world:retire", (_event, characterId: unknown, reason: unknown) =>
+		typeof characterId === "string" && typeof reason === "string" ? lifecycle.retire(characterId, reason) : unnamed,
+	);
 	ipcMain.handle("world:rename", (_event, characterId: unknown, name: unknown) =>
 		typeof characterId === "string" && typeof name === "string" ? lifecycle.rename(characterId, name) : unnamed,
 	);

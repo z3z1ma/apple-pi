@@ -19,6 +19,9 @@ export interface FactsRow {
 	currentToolSince: number | null;
 	currentTask: string | null;
 	intent: string | null;
+	role_title: string | null;
+	soul: string | null;
+	self: string | null;
 	model: string | null;
 	contextTokens: number | null;
 	contextWindow: number | null;
@@ -142,9 +145,17 @@ export function taskReader(): (currentTask: string | null, recheck?: boolean) =>
 	};
 }
 
+/** The headings of a self document: what the person keeps notes under. */
+export const selfHeadings = (self: string | null): string[] =>
+	(self ?? "")
+		.split("\n")
+		.filter((line) => /^#{1,6}\s+\S/.test(line))
+		.map((line) => line.replace(/^#+\s+/, "").trim());
+
 export function factsOf(
 	row: FactsRow,
 	readTask: (currentTask: string | null) => CharacterFacts["task"],
+	tasks: string[] = [],
 ): CharacterFacts {
 	const open = asking(row.prompt);
 	const git = parse<{ repository?: unknown; worktree?: unknown; branch?: unknown }>(row.git);
@@ -165,6 +176,10 @@ export function factsOf(
 				: null,
 		cwd: row.cwd,
 		reportsTo: row.reportsTo,
+		title: row.role_title,
+		soul: row.soul,
+		selfHeadings: selfHeadings(row.self),
+		tasks,
 		model: row.model,
 		contextTokens: row.contextTokens,
 		contextWindow: row.contextWindow,

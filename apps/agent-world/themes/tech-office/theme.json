@@ -89,7 +89,15 @@
     "recruit-brief": "Their first ticket…",
     "recruit-send": "Hire",
     "recruit-sending": "Sending {name} an offer…",
-    "recruit-joined": "{name} accepted the offer and is onboarding."
+    "recruit-joined": "{name} accepted the offer and is onboarding.",
+    "recruit-role": "Position",
+    "recruit-no-role": "No position: a plain session",
+    "retire": "Resign",
+    "retire-title": "{name} resigns",
+    "retire-reason": "Why they resign…",
+    "retire-send": "Accept resignation",
+    "retire-done": "{name} has resigned.",
+    "retired": "Resigned"
   },
   "style": {
     "--aw-font-body": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", Inter, \"Helvetica Neue\", Arial, sans-serif",

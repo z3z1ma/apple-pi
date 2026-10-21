@@ -15,6 +15,7 @@ import "./places.css";
 import { QuestOfficePanels } from "./quest-office.js";
 import { RecruitPanels } from "./recruit.js";
 import { RenamePanels } from "./rename.js";
+import { RetirePanels } from "./retire.js";
 import { RookeryView } from "./rookery.js";
 import { SquarePanels } from "./square.js";
 
@@ -32,6 +33,7 @@ export function PlacesOverlay({ store }: { store: WorldStore }) {
 			<LibraryPanels world={world} />
 			<RecruitPanels world={world} />
 			<RenamePanels world={world} />
+			<RetirePanels world={world} />
 			<NotepadPanels world={world} />
 			{state.confirmEnd && <ConfirmEnd {...state.confirmEnd} />}
 		</div>

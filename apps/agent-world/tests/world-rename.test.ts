@@ -24,6 +24,7 @@ const SIZES = [
 const manifest = (id: string) =>
 	JSON.parse(readFileSync(join(appDir, "themes", id, "theme.json"), "utf8")) as {
 		name: string;
+		labels: Record<string, string>;
 		text: Record<string, string>;
 	};
 
@@ -73,7 +74,12 @@ const WANDERER: Character = {
 	role: "independent",
 	place: { kind: "square" },
 	startedAt: NOW - 7_000_000,
-	facts: facts({ reportsTo: null, git: { repository: LONG, worktree: LONG, branch: "main" }, cwd: LONG }),
+	facts: facts({
+		reportsTo: null,
+		git: { repository: LONG, worktree: LONG, branch: "main" },
+		cwd: LONG,
+		title: "Technical Writer",
+	}),
 };
 const world = (theme: string): WorldSnapshot => ({
 	connected: true,
@@ -115,6 +121,7 @@ async function openWorld(theme: string, size: readonly [number, number] = [1280,
 			let current = snapshot as any;
 			const w = window as any;
 			w.renames = [];
+			w.retirements = [];
 			const push = (next: unknown) => {
 				current = next;
 				for (const listener of listeners) listener(next);
@@ -141,6 +148,36 @@ async function openWorld(theme: string, size: readonly [number, number] = [1280,
 				endSession: async () => ({ ok: true, stage: "applied" }),
 				sendMail: async () => ({ ok: true, stage: "applied" }),
 				recruit: async () => ({ ok: true, stage: "applied", sessionId: "new-1" }),
+				roles: async () => [],
+				async retire(characterId: string, reason: string) {
+					w.retirements.push({ characterId, reason });
+					await new Promise((resolve) => setTimeout(resolve, 200));
+					// The runtime applied it, and the session closed: the person sleeps at the inn as a former member.
+					const gone = current.characters.find((c: any) => c.id === characterId);
+					push({
+						...current,
+						characters: current.characters.filter((c: any) => c.id !== characterId),
+						dormant: [
+							...current.dormant,
+							{
+								id: gone.id,
+								name: gone.name,
+								role: gone.role,
+								title: gone.facts.title,
+								reportsTo: null,
+								repository: null,
+								cwd: gone.facts.cwd,
+								task: null,
+								stoppedAt: Date.now(),
+								stopReason: "retired",
+								retiredAt: Date.now(),
+								retiredReason: reason,
+								startedAt: gone.startedAt,
+							},
+						],
+					});
+					return { ok: true, stage: "applied" };
+				},
 				async rename(characterId: string, name: string) {
 					w.renames.push({ characterId, name });
 					await new Promise((resolve) => setTimeout(resolve, 200));
@@ -278,6 +315,57 @@ describe.each(PACKS)("%s", (id) => {
 		}
 	});
 
+	test("a person with a role retires from its row, in the theme's words, with a reason; it then sleeps at the inn marked so", {
+		timeout: 60_000,
+	}, async () => {
+		const { page, errors } = await openWorld(id);
+		try {
+			await page
+				.getByRole("button", { name: /^wanderer/ })
+				.first()
+				.click();
+			const actions = page.getByRole("group", { name: "Actions on wanderer" });
+			const retire = actions.getByRole("button", { name: "Retire wanderer" });
+			expect(await retire.textContent()).toBe(say("retire"));
+			await retire.click();
+			const form = page.getByRole("dialog", { name: say("retire-title", { name: "wanderer" }) });
+			await form.waitFor({ timeout: 5000 });
+			expect(await form.getByLabel("Reason").getAttribute("placeholder")).toBe(say("retire-reason"));
+			const send = form.getByRole("button", { name: say("retire-send"), exact: true });
+			expect(await send.isDisabled()).toBe(true);
+			await form.getByLabel("Reason").fill("The survey is written.");
+			await shot(page, `aw-12-${id}-retire-form`);
+			await send.click();
+			await form.getByText(say("retire-done", { name: "wanderer" })).waitFor({ timeout: 5000 });
+			expect(await page.evaluate(() => (window as any).retirements)).toEqual([
+				{ characterId: "wanderer", reason: "The survey is written." },
+			]);
+			await form.getByRole("button", { name: "Close", exact: true }).last().click();
+			// Gone from the world; the inn's register marks it a former member.
+			await vi.waitFor(async () => expect(await page.getByRole("button", { name: /^wanderer/ }).count()).toBe(0));
+			await page.getByRole("tab", { name: "Places", exact: true }).click();
+			await page.getByTitle(`Travel to ${manifest(id).labels.inn}`, { exact: true }).click();
+			await vi.waitFor(async () => expect(await view(page, "place()")).toBe("inn"), { timeout: 8000 });
+			await page.getByRole("tab", { name: "Places", exact: true }).click();
+			await page.waitForTimeout(600);
+			await clickThrough(page);
+			const host = JSON.parse(readFileSync(join(appDir, "themes", id, "places", "inn.json"), "utf8")).host.at;
+			const [hx, hy] = await screen(page, host[0], host[1] - 1.2);
+			await page.mouse.click(hx, hy);
+			await clickable(page);
+			const register = page.getByRole("dialog", { name: say("register-title") });
+			await register.waitFor({ timeout: 15_000 });
+			const row = register.getByRole("listitem").first();
+			expect(await row.textContent()).toContain("wanderer");
+			expect(await row.textContent()).toContain("Technical Writer");
+			expect(await row.textContent()).toContain(`${say("retired")}: The survey is written.`);
+			await shot(page, `aw-12-${id}-former-member`);
+			expect(errors).toEqual([]);
+		} finally {
+			await page.close();
+		}
+	});
+
 	test.each(SIZES)("every field of the recruit form fits inside it at %ix%i", { timeout: 60_000 }, async (w, h) => {
 		const { page, errors } = await openWorld(id, [w, h]);
 		try {
@@ -313,7 +401,13 @@ describe.each(PACKS)("%s", (id) => {
 				};
 			});
 			await shot(page, `aw-12-${id}-recruit-${w}x${h}`);
-			expect(boxes.fields.map((field) => field.label)).toEqual(["Name", "Repository", "Directory", "Brief"]);
+			expect(boxes.fields.map((field) => field.label)).toEqual([
+				"Name",
+				say("recruit-role"),
+				"Repository",
+				"Directory",
+				"Brief",
+			]);
 			expect(boxes.scrollsSideways).toBe(false);
 			expect(boxes.dialog.left).toBeGreaterThanOrEqual(0);
 			expect(boxes.dialog.right).toBeLessThanOrEqual(w);

@@ -41,6 +41,7 @@ const FACT_COLUMNS: Record<keyof Facts, string> = {
 	reportsTo: "reports_to",
 	role: "role",
 	title: "role_title",
+	manages: "manages",
 	soul: "soul",
 	self: "self",
 	parentSessionFile: "parent_session_file",
@@ -938,7 +939,12 @@ export class Runtime {
 		for (const [key, value] of Object.entries(facts)) {
 			const column = FACT_COLUMNS[key as keyof Facts];
 			if (!column) continue;
-			const stored = JSON_FACTS.has(key) && value !== null ? JSON.stringify(value) : (value as string | number | null);
+			const stored =
+				JSON_FACTS.has(key) && value !== null
+					? JSON.stringify(value)
+					: typeof value === "boolean"
+						? Number(value)
+						: (value as string | number | null);
 			if (row[column] === stored) continue;
 			db.prepare(`update sessions set ${column} = ?, source = 'bridge', updated_at = ? where id = ?`).run(
 				stored,

@@ -1,8 +1,8 @@
-// Recruiting a new agent (ticket 10): the form opened at the coordinator's desk (a worker who reports to that
-// coordinator) or at the square's recruiter (an independent agent), and what it sends. The world and the form act
-// through here; `main.tsx` connects the backend API and the view store. Each change replaces the state object, as
-// useSyncExternalStore needs.
-import type { AgentWorldApi, Character, RecruitRequest, WorldSnapshot } from "../../../src/world.js";
+// Hiring a new person (ticket 10): the form opened at a manager's desk (a person who reports to that manager) or at
+// the square's recruiter (an independent one), the role catalog it offers, and what it sends. The world and the form
+// act through here; `main.tsx` connects the backend API and the view store. Each change replaces the state object,
+// as useSyncExternalStore needs.
+import type { AgentWorldApi, Character, RecruitRequest, RoleChoice, WorldSnapshot } from "../../../src/world.js";
 import { say, type Theme } from "../../theme.js";
 import { themeStore } from "../../theme-store.js";
 import type { ViewStore } from "../../view-state.js";
@@ -16,7 +16,9 @@ export interface RecruitState {
 	open?: RecruitFor;
 	/** Counts each opening, so opening again starts afresh. */
 	opening: number;
-	api?: Pick<AgentWorldApi, "recruit">;
+	/** The catalog, read as the form opens; undefined until it arrives. */
+	roles?: RoleChoice[];
+	api?: Pick<AgentWorldApi, "recruit" | "roles">;
 	view?: ViewStore;
 }
 
@@ -64,7 +66,8 @@ export function knownRepositories(world: WorldSnapshot | undefined, coordinator?
 	);
 	for (const hq of headquarters)
 		for (const wing of hq.wings)
-			if (!found.has(wing.repository)) found.set(wing.repository, { path: wing.repository, name: wing.name });
+			if (!wing.team && !found.has(wing.repository))
+				found.set(wing.repository, { path: wing.repository, name: wing.name });
 	for (const character of world?.characters ?? []) {
 		const repository = character.facts?.git?.repository;
 		if (repository && !found.has(repository)) found.set(repository, { path: repository, name: base(repository) });
@@ -78,12 +81,21 @@ export const recruiting = {
 		listeners.add(listener);
 		return () => listeners.delete(listener);
 	},
-	connect(api: Pick<AgentWorldApi, "recruit">, view: ViewStore) {
+	connect(api: Pick<AgentWorldApi, "recruit" | "roles">, view: ViewStore) {
 		update({ api, view });
 	},
 	open(recruit: RecruitFor) {
 		onePanel.opening("recruit");
-		update({ open: recruit, opening: state.opening + 1 });
+		const opening = state.opening + 1;
+		update({ open: recruit, opening, roles: undefined });
+		void state.api?.roles().then(
+			(roles) => {
+				if (state.opening === opening) update({ roles });
+			},
+			() => {
+				if (state.opening === opening) update({ roles: [] });
+			},
+		);
 	},
 	close() {
 		if (state.open) update({ open: undefined });

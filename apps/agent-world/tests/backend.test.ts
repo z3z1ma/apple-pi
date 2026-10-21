@@ -55,7 +55,16 @@ const recorded = (sql: string, ...params: string[]) =>
 const soon = (check: () => void) => vi.waitFor(check, { timeout: 3000 });
 
 /** A top-level session on a fake bridge, kept alive by heartbeats; `stop` ends it the way Pi quits. */
-async function session(id: string, options: { coordinator?: boolean; reportsTo?: string; repository?: string } = {}) {
+async function session(
+	id: string,
+	options: {
+		coordinator?: boolean;
+		reportsTo?: string;
+		repository?: string;
+		role?: { name: string; title: string; manages: boolean; soul: string };
+		self?: string;
+	} = {},
+) {
 	const stand = standInProcess();
 	processes.push(stand);
 	const { repository } = options;
@@ -63,7 +72,11 @@ async function session(id: string, options: { coordinator?: boolean; reportsTo?:
 		session: { cwd: `/home/${id}` },
 		facts: {
 			reportsTo: options.reportsTo ?? null,
-			role: options.coordinator ? "coordinator" : null,
+			role: options.role?.name ?? (options.coordinator ? "coordinator" : null),
+			title: options.role?.title ?? null,
+			manages: options.role?.manages ?? (options.coordinator ? true : null),
+			soul: options.role?.soul ?? null,
+			self: options.self ?? null,
 			git: repository ? { repository, worktree: repository, branch: "main" } : null,
 			config: {
 				name: id,
@@ -157,6 +170,61 @@ test("two coordinators each get their own headquarters; a session others report 
 	expect(wings("coord-1")).toEqual(["alpha:1"]);
 	expect(wings("lead")).toEqual(["alpha:1"]);
 }, 30000);
+
+test("an organization is one headquarters: the root at its desk, a manager's team in its team room, and a retired person at the inn marked so", async () => {
+	await session("org-root", { coordinator: true });
+	await session("org-manager", {
+		reportsTo: "org-root",
+		role: { name: "director-of-engineering", title: "Director of Engineering", manages: true, soul: "You test first" },
+		self: "# Teammates\n\n## Who has done what\n\n- nothing yet\n\n## Standing agreements\n",
+	});
+	await session("org-a", {
+		reportsTo: "org-manager",
+		repository: "/repos/alpha",
+		role: { name: "technical-writer", title: "Technical Writer", manages: false, soul: "You quote sources" },
+	});
+	const skeptic = await session("org-b", {
+		reportsTo: "org-manager",
+		role: { name: "scientific-skeptic", title: "Scientific Skeptic", manages: false, soul: "You sort claims" },
+	});
+	await soon(() => expect(character("org-b")).toBeDefined());
+	expect(latest().headquarters.map((hq) => hq.id)).toContain("org-root");
+	expect(latest().headquarters.map((hq) => hq.id)).not.toContain("org-manager");
+	expect(character("org-root")?.place).toEqual({ kind: "headquarters", headquarters: "org-root" });
+	for (const id of ["org-manager", "org-a", "org-b"])
+		expect(character(id)?.place).toEqual({ kind: "wing", headquarters: "org-root", repository: "team:org-manager" });
+	expect(character("org-manager")?.role).toBe("coordinator");
+	expect(character("org-a")?.role).toBe("worker");
+	expect(latest().headquarters.find((hq) => hq.id === "org-root")?.wings).toContainEqual({
+		repository: "team:org-manager",
+		team: "org-manager",
+		name: "org-manager",
+		headcount: 3,
+		dormant: 0,
+	});
+	expect(character("org-manager")?.facts).toMatchObject({
+		title: "Director of Engineering",
+		soul: "You test first",
+		selfHeadings: ["Teammates", "Who has done what", "Standing agreements"],
+		reportsTo: "org-root",
+	});
+	expect(character("org-root")?.facts).toMatchObject({ title: null, soul: null, selfHeadings: [] });
+
+	const receipts = await sendCommand(state.socketPath, "org-b", { kind: "retire", reason: "the burst passed" });
+	expect(receipts.at(-1)?.stage).toBe("applied");
+	await skeptic.stop(); // the runtime asked it to close; a fake bridge quits only when told
+	await soon(() => expect(character("org-b")).toBeUndefined());
+	await soon(() =>
+		expect(latest().dormant?.find((agent) => agent.id === "org-b")).toMatchObject({
+			title: "Scientific Skeptic",
+			retiredAt: expect.any(Number),
+			retiredReason: "the burst passed",
+		}),
+	);
+	expect(latest().headquarters.find((hq) => hq.id === "org-root")?.wings).toContainEqual(
+		expect.objectContaining({ team: "org-manager", headcount: 2, dormant: 0 }),
+	);
+}, 60000);
 
 test("a wing stays once seen, in first-seen order, boarded when its last agent stops, and is still there after the app restarts", async () => {
 	const beta = await session("w-beta", { reportsTo: "coord-1", repository: "/repos/beta" });

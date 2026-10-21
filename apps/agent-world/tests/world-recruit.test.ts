@@ -4,13 +4,14 @@ import { fileURLToPath } from "node:url";
 import { type Browser, chromium, type Page } from "playwright-core";
 import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
 import { appFile, contentType } from "../src/app-files.js";
+import { loadRoleChoices } from "../src/backend/roles.js";
 import type { Character, CharacterFacts, ThemeChoice, WorldSnapshot } from "../src/world.js";
 import type { PlaceData } from "../web/theme.js";
 
 // Seam 2 for recruiting (ticket 10): the committed, built world UI in headless Chrome over a fixture backend that
 // records each recruit and answers with a receipt, then pushes the snapshot with the new agent in it. In every pack,
 // the coordinator's desk (and the coordinator) recruits a worker for that coordinator, and the square's recruiter an
-// independent agent, each in the theme's own words.
+// independent agent, each in the theme's own words; the form offers the package's role catalog with each mandate.
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const ORIGIN = "http://agent-world.test";
 const appDir = fileURLToPath(new URL("..", import.meta.url));
@@ -98,6 +99,8 @@ const world = (theme: string, more: Character[] = []): WorldSnapshot => ({
 });
 
 const good = (id: string, name: string): ThemeChoice => ({ id, name, description: null, problems: [] });
+/** The package's catalog, as the backend reads it (no user roles: a directory with none). */
+const ROLES = loadRoleChoices("/nonexistent");
 
 /** Open the world over a fixture backend; `window.recruits` records each recruit it was asked for. */
 async function openWorld(theme: string) {
@@ -114,7 +117,7 @@ async function openWorld(theme: string) {
 	});
 	const themes = PACKS.map((id) => good(id, pack(id).manifest.name));
 	await page.addInitScript(
-		([snapshot, themes]) => {
+		([snapshot, themes, roles]) => {
 			const listeners = new Set<(s: unknown) => void>();
 			let current = snapshot as any;
 			const w = window as any;
@@ -145,6 +148,7 @@ async function openWorld(theme: string) {
 				wake: async () => ({ ok: true, stage: "applied" }),
 				endSession: async () => ({ ok: true, stage: "applied" }),
 				sendMail: async () => ({ ok: true, stage: "applied" }),
+				roles: async () => roles,
 				async recruit(request: any) {
 					w.recruits.push(request);
 					const sessionId = `new-${++made}`;
@@ -158,14 +162,19 @@ async function openWorld(theme: string) {
 							? { kind: "wing", headquarters: request.reportsTo, repository: request.cwd }
 							: { kind: "square" },
 						startedAt: Date.now(),
-						facts: { ...current.characters[0].facts, reportsTo: request.reportsTo ?? null, cwd: request.cwd },
+						facts: {
+							...current.characters[0].facts,
+							reportsTo: request.reportsTo ?? null,
+							cwd: request.cwd,
+							title: (roles as any[]).find((role) => role.name === request.role)?.title ?? null,
+						},
 					};
 					push({ ...current, characters: [...current.characters, character] });
 					return { ok: true, stage: "applied", sessionId };
 				},
 			};
 		},
-		[world(theme), themes] as const,
+		[world(theme), themes, ROLES] as const,
 	);
 	await page.goto(`${ORIGIN}/index.html`);
 	await vi.waitFor(async () => expect(await page.evaluate(() => document.documentElement.dataset.theme)).toBe(theme), {
@@ -233,6 +242,16 @@ describe.each(PACKS)("%s", (id) => {
 				"Another directory\u2026",
 			]);
 			expect(await form.getByLabel("Brief").getAttribute("placeholder")).toBe(say("recruit-brief"));
+			// The role: every catalog role by title, the first chosen, its mandate under the select.
+			const role = form.getByLabel(say("recruit-role"));
+			await vi.waitFor(async () => expect(await role.locator("option").count()).toBe(ROLES.length));
+			expect(await role.locator("option").allTextContents()).toEqual(ROLES.map((offered) => offered.title));
+			expect(ROLES.length).toBeGreaterThan(20);
+			expect(await role.inputValue()).toBe(ROLES[0].name);
+			expect(await form.locator(".aw-recruit-mandate").textContent()).toBe(ROLES[0].mandate);
+			const writer = ROLES.find((offered) => offered.name === "technical-writer")!;
+			await role.selectOption(writer.name);
+			expect(await form.locator(".aw-recruit-mandate").textContent()).toBe(writer.mandate);
 			const send = form.getByRole("button", { name: say("recruit-send"), exact: true });
 			expect(await send.isDisabled()).toBe(true);
 			await form.getByLabel("Name").fill("docs");
@@ -242,7 +261,7 @@ describe.each(PACKS)("%s", (id) => {
 			await send.click();
 			await form.getByText(say("recruit-joined", { name: "docs" })).waitFor({ timeout: 5000 });
 			expect(await recruits(page)).toEqual([
-				{ name: "docs", cwd: "/r/handbook", brief: "Write the style guide.", reportsTo: HQ },
+				{ name: "docs", cwd: "/r/handbook", brief: "Write the style guide.", reportsTo: HQ, role: "technical-writer" },
 			]);
 			await shot(page, `aw-10-${id}-worker-receipt`);
 
@@ -290,6 +309,11 @@ describe.each(PACKS)("%s", (id) => {
 			await form.waitFor({ timeout: 25_000 });
 			expect(await form.locator(".aw-place-says").textContent()).toContain(say("recruit-independent-greeting"));
 			await form.getByLabel("Name").fill("scout");
+			// At the square the role may be none, and is by default.
+			const role = form.getByLabel(say("recruit-role"));
+			await vi.waitFor(async () => expect(await role.locator("option").count()).toBe(ROLES.length + 1));
+			expect((await role.locator("option").allTextContents())[0]).toBe(say("recruit-no-role"));
+			expect(await role.inputValue()).toBe("");
 			await form.getByLabel("Repository").selectOption("");
 			await form.getByLabel("Directory").fill("~/code/scratch");
 			await form.getByLabel("Brief").fill("Look around.");

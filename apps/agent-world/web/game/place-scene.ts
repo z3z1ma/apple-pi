@@ -7,6 +7,7 @@ import { notepad } from "../overlay/places/notepad-state.js";
 import { placeActions, placePanels } from "../overlay/places/place-panels.js";
 import { recruiterLook, recruiting } from "../overlay/places/recruit-state.js";
 import { renaming } from "../overlay/places/rename-state.js";
+import { retiring } from "../overlay/places/retire-state.js";
 import { squarePanels } from "../overlay/places/square-panels.js";
 import { ClickMarks, type MarkView } from "../overlay/pointer/click-marks.js";
 import { type CursorArt, type CursorKind, cursorArt, cursorCss } from "../overlay/pointer/cursor.js";
@@ -2216,8 +2217,11 @@ export class PlaceScene extends Phaser.Scene {
 							action("Read the notes of", () => notepad.open({ id: character.id, name }), name, "character"),
 						]
 					: []),
-				// Renaming needs no walk: it opens the rename form at once (ticket 12).
+				// Renaming and retiring need no walk: each opens its form at once (ticket 12).
 				action("Rename", () => renaming.open(character), name, "character"),
+				...(character.facts?.title
+					? [action(say(this.theme, "retire"), () => retiring.open(character), name, "character")]
+					: []),
 				// Ending its session asks first while it is busy (the interface's confirmation).
 				action("End session of", () => void placeActions.endSession(character), name, "character"),
 			],

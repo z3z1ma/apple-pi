@@ -744,7 +744,9 @@ function taskReader() {
 		};
 	};
 }
-function factsOf(row, readTask) {
+/** The headings of a self document: what the person keeps notes under. */
+var selfHeadings = (self) => (self ?? "").split("\n").filter((line) => /^#{1,6}\s+\S/.test(line)).map((line) => line.replace(/^#+\s+/, "").trim());
+function factsOf(row, readTask, tasks = []) {
 	const open = asking(row.prompt);
 	const git = parse$3(row.git);
 	return {
@@ -769,6 +771,10 @@ function factsOf(row, readTask) {
 		} : null,
 		cwd: row.cwd,
 		reportsTo: row.reportsTo,
+		title: row.role_title,
+		soul: row.soul,
+		selfHeadings: selfHeadings(row.self),
+		tasks,
 		model: row.model,
 		contextTokens: row.contextTokens,
 		contextWindow: row.contextWindow,
@@ -852,6 +858,43 @@ async function operatorPane(sockets) {
 		socket: latest.socket,
 		pane: latest.pane
 	} : void 0;
+}
+//#endregion
+//#region apps/agent-world/src/backend/roles.ts
+var PACKAGE_ROLES = fileURLToPath(new URL("../../../../roles/", import.meta.url));
+/** The front matter's scalar fields, `key: value` one per line between the `---` fences. */
+function frontMatter(text) {
+	const match = /^---\r?\n([\s\S]*?)\r?\n---/.exec(text);
+	if (!match) return void 0;
+	const fields = {};
+	for (const line of match[1].split("\n")) {
+		const colon = line.indexOf(":");
+		if (colon > 0) fields[line.slice(0, colon).trim()] = line.slice(colon + 1).trim();
+	}
+	return fields;
+}
+function loadRoleChoices(agentDir) {
+	const roles = /* @__PURE__ */ new Map();
+	for (const dir of [PACKAGE_ROLES, join(agentDir, "roles")]) {
+		if (!existsSync(dir)) continue;
+		for (const file of readdirSync(dir).filter((name) => name.endsWith(".md")).sort()) {
+			let fields;
+			try {
+				fields = frontMatter(readFileSync(join(dir, file), "utf8"));
+			} catch {
+				continue;
+			}
+			if (!fields?.title || !fields.mandate) continue;
+			roles.set(file.slice(0, -3), {
+				name: file.slice(0, -3),
+				title: fields.title,
+				mandate: fields.mandate,
+				manages: fields.manages === "true",
+				writes: fields.writes === "true"
+			});
+		}
+	}
+	return [...roles.values()];
 }
 //#endregion
 //#region apps/agent-world/src/backend/lifecycle.ts
@@ -982,12 +1025,17 @@ function openLifecycle(paths, commands, snapshot) {
 				ok: false,
 				reason: "The brief cannot start with a dash: Pi would read it as an option."
 			};
+			const role = request.role?.trim();
+			if (role && !loadRoleChoices(paths.agentDir).some((choice) => choice.name === role)) return {
+				ok: false,
+				reason: `No role in the catalog is named ${role}.`
+			};
 			let pane;
 			if (request.reportsTo) {
-				const coordinator = snapshot().characters.find((character) => character.id === request.reportsTo && character.role === "coordinator");
+				const coordinator = snapshot().characters.find((character) => character.id === request.reportsTo);
 				if (!coordinator) return {
 					ok: false,
-					reason: "That coordinator is not running."
+					reason: "That manager is not running."
 				};
 				const tmux = coordinator.facts?.tmux;
 				if (!tmux) return {
@@ -1013,6 +1061,7 @@ function openLifecycle(paths, commands, snapshot) {
 					cwd,
 					name,
 					...request.reportsTo ? { reportsTo: request.reportsTo } : {},
+					...role ? { role } : {},
 					...brief ? { prompt: brief } : {}
 				}, WAKE_MS, (stage) => stage === "applied", () => `Its window opened, but ${name} has not joined yet.`),
 				sessionId
@@ -1036,6 +1085,24 @@ function openLifecycle(paths, commands, snapshot) {
 				kind: "rename",
 				name
 			}, RENAME_MS, (stage) => stage === "applied", () => "Sent; it has not taken the name yet.");
+		},
+		roles: () => loadRoleChoices(paths.agentDir),
+		async retire(characterId, given) {
+			const reason = given.trim();
+			if (!reason) return {
+				ok: false,
+				reason: "Say why it leaves."
+			};
+			const world = snapshot();
+			const person = world.characters.find((character) => character.id === characterId) ?? world.dormant?.find((agent) => agent.id === characterId);
+			if (!person) return {
+				ok: false,
+				reason: "No session has that id."
+			};
+			return follow(commands, characterId, {
+				kind: "retire",
+				reason
+			}, CLOSE_MS, (stage) => stage === "applied", () => `${person.name} has not left yet.`);
 		},
 		async sendMail(characterId, body) {
 			const text = body.trim();
@@ -1688,7 +1755,15 @@ var TEXT_KEYS = [
 	"recruit-brief",
 	"recruit-send",
 	"recruit-sending",
-	"recruit-joined"
+	"recruit-joined",
+	"recruit-role",
+	"recruit-no-role",
+	"retire",
+	"retire-title",
+	"retire-reason",
+	"retire-send",
+	"retire-done",
+	"retired"
 ];
 /**
 * Style tokens every pack sets: CSS custom properties put on the page's root, which the pack's skin and the world
@@ -2892,60 +2967,85 @@ function readMail(db) {
 }
 //#endregion
 //#region apps/agent-world/src/backend/projection.ts
+/** The key of a manager's team room among a headquarters' wings. */
+var teamRoom = (manager) => `team:${manager}`;
 var byStart = (a, b) => (a.firstStartedAt ?? Number.MAX_SAFE_INTEGER) - (b.firstStartedAt ?? Number.MAX_SAFE_INTEGER) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 /**
-* A coordinator was started with `--coordinator` or has a session reporting to it; a worker reports to one; any
-* other session is independent. Each awake coordinator, and each coordinator with an awake worker, has a
-* headquarters. Workers stand in the wing of their repository, or the common room outside one; independents stand
-* in the square. Dormant sessions sleep at the inn, the most recently stopped first, each in the role it had.
+* The organization is a tree of managers: a session reports to the one named by `reportsTo`, and the tree ends at a
+* root. A root with a managing role or anyone under it (awake or asleep) is a coordinator and keeps the headquarters,
+* standing in its hall; a person it manages directly stands in the wing of its repository, or the common room outside
+* one; a manager below the root, and everyone reporting to that manager, stand in the manager's team room off the same
+* headquarters. A root with nobody under it and no managing role is independent, in the square. Dormant sessions
+* sleep at the inn, the most recently stopped first, each in the role it had, a retired one marked so.
 */
 function projectWorld(sessions, remembered) {
 	const byId = new Map(sessions.map((session) => [session.id, session]));
-	const coordinators = /* @__PURE__ */ new Set();
+	const managerOf = (session) => session.reportsTo && session.reportsTo !== session.id && byId.has(session.reportsTo) ? byId.get(session.reportsTo) : void 0;
+	/** The root of the tree a session is in, stopping at a cycle. */
+	const rootOf = (session) => {
+		const seen = /* @__PURE__ */ new Set([session.id]);
+		let current = session;
+		for (let manager = managerOf(current); manager && !seen.has(manager.id); manager = managerOf(current)) {
+			seen.add(manager.id);
+			current = manager;
+		}
+		return current;
+	};
+	const managers = /* @__PURE__ */ new Set();
 	for (const session of sessions) {
-		if (session.coordinatorFlag) coordinators.add(session.id);
-		if (session.reportsTo && session.reportsTo !== session.id) coordinators.add(session.reportsTo);
+		if (session.manages) managers.add(session.id);
+		const manager = managerOf(session);
+		if (manager) managers.add(manager.id);
 	}
-	const roleOf = (session) => coordinators.has(session.id) ? "coordinator" : session.reportsTo && coordinators.has(session.reportsTo) ? "worker" : "independent";
+	const roleOf = (session) => managers.has(session.id) ? "coordinator" : managerOf(session) ? "worker" : "independent";
 	const nameOf = (session) => session.name || basename(session.cwd) || session.id;
+	/** Where a session stands or would stand: a root in its hall, a direct report of the root in a repository wing or the common room, anyone else in its nearest manager's team room. */
+	const placeOf = (session) => {
+		const manager = managerOf(session);
+		if (!manager) return managers.has(session.id) ? {
+			kind: "headquarters",
+			headquarters: session.id
+		} : { kind: "square" };
+		const root = rootOf(session);
+		if (manager.id === root.id) {
+			if (managers.has(session.id)) return {
+				kind: "wing",
+				headquarters: root.id,
+				repository: teamRoom(session.id)
+			};
+			return session.repository ? {
+				kind: "wing",
+				headquarters: root.id,
+				repository: session.repository
+			} : {
+				kind: "common-room",
+				headquarters: root.id
+			};
+		}
+		const room = managers.has(session.id) ? session.id : manager.id;
+		return {
+			kind: "wing",
+			headquarters: root.id,
+			repository: teamRoom(room)
+		};
+	};
 	const dormant = sessions.filter((session) => !session.awake).sort((a, b) => (b.stoppedAt ?? 0) - (a.stoppedAt ?? 0) || byStart(b, a)).map((session) => ({
 		id: session.id,
 		name: nameOf(session),
 		role: roleOf(session),
+		title: session.title,
 		startedAt: session.firstStartedAt ?? 0,
-		stoppedAt: session.stoppedAt ?? null
+		stoppedAt: session.stoppedAt ?? null,
+		retiredAt: session.retiredAt,
+		retiredReason: session.retiredReason
 	}));
-	const characters = sessions.filter((session) => session.awake).sort(byStart).map((session) => {
-		let role;
-		let place;
-		if (coordinators.has(session.id)) {
-			role = "coordinator";
-			place = {
-				kind: "headquarters",
-				headquarters: session.id
-			};
-		} else if (session.reportsTo && coordinators.has(session.reportsTo)) {
-			role = "worker";
-			place = session.repository ? {
-				kind: "wing",
-				headquarters: session.reportsTo,
-				repository: session.repository
-			} : {
-				kind: "common-room",
-				headquarters: session.reportsTo
-			};
-		} else {
-			role = "independent";
-			place = { kind: "square" };
-		}
-		return {
-			id: session.id,
-			name: nameOf(session),
-			role,
-			place,
-			startedAt: session.firstStartedAt ?? 0
-		};
-	});
+	const characters = sessions.filter((session) => session.awake).sort(byStart).map((session) => ({
+		id: session.id,
+		name: nameOf(session),
+		role: roleOf(session),
+		place: placeOf(session),
+		startedAt: session.firstStartedAt ?? 0
+	}));
 	const shown = /* @__PURE__ */ new Set();
 	for (const { place } of characters) if (!isOutside(place)) shown.add(place.headquarters);
 	const order = [...shown].map((id) => ({
@@ -2955,23 +3055,32 @@ function projectWorld(sessions, remembered) {
 	const wings = {};
 	return {
 		headquarters: order.map((id) => {
-			const workers = characters.filter((character) => character.place.kind === "wing" && character.place.headquarters === id);
+			const inRooms = characters.filter((character) => character.place.kind === "wing" && character.place.headquarters === id);
+			const inRoom = (repository) => inRooms.filter((character) => character.place.repository === repository);
+			const teams = sessions.filter((session) => managers.has(session.id) && !session.retiredAt && rootOf(session).id === id && session.id !== id).sort(byStart);
 			const list = [...remembered[id] ?? []];
-			for (const worker of workers) {
-				const { repository } = worker.place;
-				if (!list.includes(repository)) list.push(repository);
+			for (const character of inRooms) {
+				const { repository } = character.place;
+				if (!repository.startsWith("team:") && !list.includes(repository)) list.push(repository);
 			}
-			wings[id] = list;
+			if (list.length) wings[id] = list;
 			const coordinator = byId.get(id);
+			const dormantIn = (test) => sessions.filter((session) => !session.awake && !session.retiredAt && test(session)).length;
 			return {
 				id,
 				name: coordinator ? coordinator.name || basename(coordinator.cwd) || id : id,
-				wings: list.map((repository) => ({
+				wings: [...list.map((repository) => ({
 					repository,
 					name: basename(repository) || repository,
-					headcount: workers.filter((worker) => worker.place.repository === repository).length,
-					dormant: sessions.filter((session) => !session.awake && session.reportsTo === id && session.repository === repository).length
-				}))
+					headcount: inRoom(repository).length,
+					dormant: dormantIn((session) => session.reportsTo === id && session.repository === repository)
+				})), ...teams.map((manager) => ({
+					repository: teamRoom(manager.id),
+					team: manager.id,
+					name: nameOf(manager),
+					headcount: inRoom(teamRoom(manager.id)).length,
+					dormant: dormantIn((session) => (session.id === manager.id || session.reportsTo === manager.id) && placeOf(session).repository === teamRoom(manager.id))
+				}))]
 			};
 		}),
 		characters,
@@ -3069,20 +3178,43 @@ var STORE_TIMEOUT_MS = 5e3;
 * `{ wings: { [coordinator id]: repository[] }, avatar: look, theme: id }`.
 */
 var PREFERENCE_KEY = "agent-world";
-var sessionsSql = (intent) => `
-select s.id, s.name, s.cwd, s.reports_to as reportsTo, s.git, s.config,
+var sessionsSql = (columns) => `
+select s.id, s.name, s.cwd, s.reports_to as reportsTo, s.git,
+	${OPTIONAL_COLUMNS.filter((column) => column !== "intent").map((column) => columns[column] ? `s.${column}` : `null as ${column}`).join(", ")},
 	(select min(f.started_at) from incarnations f where f.session_id = s.id) as firstStartedAt,
 	coalesce(i.ended_at is null and i.process_state in ('alive', 'alive_bridge_lost'), 0) as awake,
 	i.ended_at as stoppedAt, i.end_reason as stopReason,
-	${factsColumns(intent)}
+	${factsColumns(columns.intent)}
 from sessions s
 ${FACTS_JOINS}
 where s.kind = 'root'`;
-var changedSql = (intent) => `${sessionsSql(intent)}
+var changedSql = (columns) => `${sessionsSql(columns)}
 	and s.id in (select session_id from events where seq > ? union select value from json_each(?))`;
-var SESSIONS = [sessionsSql(false), sessionsSql(true)];
-var CHANGED_SESSIONS = [changedSql(false), changedSql(true)];
-var INTENT_COLUMN = "select 1 from pragma_table_info('sessions') where name = 'intent'";
+var OPTIONAL_COLUMNS = [
+	"intent",
+	"role_title",
+	"manages",
+	"soul",
+	"self",
+	"retired_at",
+	"retired_reason"
+];
+var optionalColumns = (db) => {
+	const present = new Set(db.prepare("select name from pragma_table_info('sessions')").all().map((row) => row.name));
+	return Object.fromEntries(OPTIONAL_COLUMNS.map((column) => [column, present.has(column)]));
+};
+var sqlCache = /* @__PURE__ */ new Map();
+var sqlFor = (columns) => {
+	const key = OPTIONAL_COLUMNS.map((column) => Number(columns[column])).join("");
+	const cached = sqlCache.get(key);
+	if (cached) return cached;
+	const sql = {
+		sessions: sessionsSql(columns),
+		changed: changedSql(columns)
+	};
+	sqlCache.set(key, sql);
+	return sql;
+};
 function parse$1(json) {
 	if (!json) return void 0;
 	try {
@@ -3093,14 +3225,16 @@ function parse$1(json) {
 }
 function sessionRow(row) {
 	const git = parseShared(row.git);
-	const config = parseShared(row.config);
 	return {
 		id: row.id,
 		name: row.name,
 		cwd: row.cwd,
 		reportsTo: row.reportsTo,
 		repository: typeof git?.repository === "string" ? git.repository : null,
-		coordinatorFlag: Array.isArray(config?.flags) && config.flags.includes("coordinator"),
+		manages: row.manages === 1,
+		title: row.role_title,
+		retiredAt: row.retired_at,
+		retiredReason: row.retired_reason,
 		awake: row.awake === 1,
 		firstStartedAt: row.firstStartedAt ?? void 0,
 		stoppedAt: row.stoppedAt ?? void 0
@@ -3232,8 +3366,8 @@ function openWorldBackend(paths) {
 			lastSeq = seq;
 			const full = rowsSeq < 0 || seq < rowsSeq || polls % FULL_REREAD_POLLS === 0;
 			const awakeIds = [...sessionsById.values()].filter((session) => session.awake).map((session) => session.id);
-			const intent = Number(db.prepare(INTENT_COLUMN).get() !== void 0);
-			const changed = full ? db.prepare(SESSIONS[intent]).all() : db.prepare(CHANGED_SESSIONS[intent]).all(rowsSeq, JSON.stringify(awakeIds));
+			const sql = sqlFor(optionalColumns(db));
+			const changed = full ? db.prepare(sql.sessions).all() : db.prepare(sql.changed).all(rowsSeq, JSON.stringify(awakeIds));
 			if (full) {
 				rowsById.clear();
 				sessionsById.clear();
@@ -3247,11 +3381,12 @@ function openWorldBackend(paths) {
 			const storedWings = preference.wings && typeof preference.wings === "object" ? preference.wings : {};
 			const projected = projectWorld([...sessionsById.values()], mergeWings(storedWings, seen));
 			const byId = rowsById;
+			const tasksOf = db.prepare("select distinct task_id as id from session_tasks where session_id = ? order by at desc");
 			world = {
 				...projected,
 				characters: projected.characters.map((character) => ({
 					...character,
-					facts: factsOf(byId.get(character.id), readTask)
+					facts: factsOf(byId.get(character.id), readTask, tasksOf.all(character.id).map((task) => task.id))
 				}))
 			};
 			dormant = dormantAgents(world.dormant, byId, (task) => readTask(task, rereadTasks), dormant, !rereadTasks);
@@ -5589,7 +5724,10 @@ function start() {
 	});
 	ipcMain.handle("world:watch-replies", (_event, characterIds) => conversations.watch(Array.isArray(characterIds) ? characterIds.filter((id) => typeof id === "string") : []));
 	conversations.onReply((event) => toWindow("world:reply", event));
-	const lifecycle = openLifecycle(statePaths(), commands, () => world.snapshot());
+	const lifecycle = openLifecycle({
+		...statePaths(),
+		agentDir: agentDir()
+	}, commands, () => world.snapshot());
 	const unnamed = {
 		ok: false,
 		reason: "No character was named."
@@ -5598,7 +5736,7 @@ function start() {
 	ipcMain.handle("world:end-session", (_event, characterId, confirmed) => typeof characterId === "string" ? lifecycle.endSession(characterId, confirmed === true) : unnamed);
 	ipcMain.handle("world:send-mail", (_event, characterId, body) => typeof characterId === "string" && typeof body === "string" ? lifecycle.sendMail(characterId, body) : unnamed);
 	ipcMain.handle("world:recruit", (_event, request) => {
-		const { name, cwd, brief, reportsTo } = request ?? {};
+		const { name, cwd, brief, reportsTo, role } = request ?? {};
 		if (typeof name !== "string" || typeof cwd !== "string" || typeof brief !== "string") return {
 			ok: false,
 			reason: "The recruit needs a name, a directory, and a brief."
@@ -5607,9 +5745,12 @@ function start() {
 			name,
 			cwd,
 			brief,
-			...typeof reportsTo === "string" ? { reportsTo } : {}
+			...typeof reportsTo === "string" ? { reportsTo } : {},
+			...typeof role === "string" ? { role } : {}
 		});
 	});
+	ipcMain.handle("world:roles", () => lifecycle.roles());
+	ipcMain.handle("world:retire", (_event, characterId, reason) => typeof characterId === "string" && typeof reason === "string" ? lifecycle.retire(characterId, reason) : unnamed);
 	ipcMain.handle("world:rename", (_event, characterId, name) => typeof characterId === "string" && typeof name === "string" ? lifecycle.rename(characterId, name) : unnamed);
 	const notepads = openNotepads(() => world.snapshot(), (change) => toWindow("world:notepad", change));
 	const noCoordinator = {

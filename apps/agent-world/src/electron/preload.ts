@@ -14,6 +14,7 @@ import type {
 	Receipt,
 	RecruitReceipt,
 	ReplyStreamEvent,
+	RoleChoice,
 	TerminalResult,
 	ThemeChoice,
 	WorldSnapshot,
@@ -59,6 +60,8 @@ const api: AgentWorldApi = {
 	sendMail: (characterId, body) => ipcRenderer.invoke("world:send-mail", characterId, body) as Promise<CommandReceipt>,
 	recruit: (request) => ipcRenderer.invoke("world:recruit", request) as Promise<RecruitReceipt>,
 	rename: (characterId, name) => ipcRenderer.invoke("world:rename", characterId, name) as Promise<CommandReceipt>,
+	roles: () => ipcRenderer.invoke("world:roles") as Promise<RoleChoice[]>,
+	retire: (characterId, reason) => ipcRenderer.invoke("world:retire", characterId, reason) as Promise<CommandReceipt>,
 	openNotepad: (coordinatorId) => ipcRenderer.invoke("world:open-notepad", coordinatorId) as Promise<NotepadRead>,
 	saveNotepad: (coordinatorId, text, base) =>
 		ipcRenderer.invoke("world:save-notepad", coordinatorId, text, base) as Promise<NotepadSave>,

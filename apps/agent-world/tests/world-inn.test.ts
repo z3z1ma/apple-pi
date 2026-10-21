@@ -191,6 +191,10 @@ const SLEEPERS: DormantAgent[] = Array.from({ length: 12 }, (_, i) => ({
 	stoppedAt: NOW - (i + 1) * 3_600_000,
 	stopReason: "quit",
 	startedAt: NOW - 20_000_000 + i,
+	// The second sleeper is a former member: it retired, and the register marks it so.
+	...(i === 1
+		? { title: "Scientific Skeptic", retiredAt: NOW - 2 * 3_600_000, retiredReason: "the burst passed" }
+		: {}),
 }));
 function world(characters: Character[], dormant: DormantAgent[] = SLEEPERS): WorldSnapshot {
 	return {
@@ -274,6 +278,9 @@ test("the innkeeper's register lists every dormant agent, newest first, with its
 		expect(await rows.first().textContent()).toContain("handbook");
 		expect(await rows.first().textContent()).toContain("Task number 0");
 		expect(await rows.nth(1).textContent()).toContain("No ledger task");
+		expect(await rows.nth(1).textContent()).toContain("Scientific Skeptic");
+		expect(await rows.nth(1).textContent()).toContain("Left the guild: the burst passed");
+		expect(await rows.first().textContent()).not.toContain("Left the guild");
 		await register.getByText("10 asleep here, 2 upstairs").waitFor({ timeout: 2000 });
 		expect(await rows.nth(11).textContent()).toContain("Upstairs");
 		await shot(page, "aw-15-register");

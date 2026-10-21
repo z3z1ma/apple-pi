@@ -12,8 +12,13 @@ export interface SessionRow {
 	reportsTo: string | null;
 	/** Its git repository (the main checkout's directory); null outside a repository. */
 	repository: string | null;
-	/** Holds the coordinator role (`--role coordinator`). */
-	coordinatorRole: boolean;
+	/** Holds a managing role (its `manages` fact). */
+	manages: boolean;
+	/** The title of its role, or null without one. */
+	title: string | null;
+	/** Retired: it left the organization. */
+	retiredAt: number | null;
+	retiredReason: string | null;
 	/** Its current incarnation is alive. */
 	awake: boolean;
 	/** When it first started (ms), or undefined when it never had an incarnation. */
@@ -27,9 +32,15 @@ export interface Sleeper {
 	id: string;
 	name: string;
 	role: Role;
+	title: string | null;
 	startedAt: number;
 	stoppedAt: number | null;
+	retiredAt: number | null;
+	retiredReason: string | null;
 }
+
+/** The key of a manager's team room among a headquarters' wings. */
+export const teamRoom = (manager: string) => `team:${manager}`;
 
 /** Remembered wings: repositories by coordinator id, in first-seen order. */
 export type RememberedWings = Record<string, string[]>;
@@ -48,26 +59,55 @@ const byStart = (a: { firstStartedAt?: number; id: string }, b: { firstStartedAt
 	(a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 
 /**
- * A coordinator holds the coordinator role or has a session reporting to it; a worker reports to one; any
- * other session is independent. Each awake coordinator, and each coordinator with an awake worker, has a
- * headquarters. Workers stand in the wing of their repository, or the common room outside one; independents stand
- * in the square. Dormant sessions sleep at the inn, the most recently stopped first, each in the role it had.
+ * The organization is a tree of managers: a session reports to the one named by `reportsTo`, and the tree ends at a
+ * root. A root with a managing role or anyone under it (awake or asleep) is a coordinator and keeps the headquarters,
+ * standing in its hall; a person it manages directly stands in the wing of its repository, or the common room outside
+ * one; a manager below the root, and everyone reporting to that manager, stand in the manager's team room off the same
+ * headquarters. A root with nobody under it and no managing role is independent, in the square. Dormant sessions
+ * sleep at the inn, the most recently stopped first, each in the role it had, a retired one marked so.
  */
 export function projectWorld(sessions: SessionRow[], remembered: RememberedWings): Projection {
 	const byId = new Map(sessions.map((session) => [session.id, session]));
-	const coordinators = new Set<string>();
+	const managerOf = (session: SessionRow) =>
+		session.reportsTo && session.reportsTo !== session.id && byId.has(session.reportsTo)
+			? byId.get(session.reportsTo)!
+			: undefined;
+	/** The root of the tree a session is in, stopping at a cycle. */
+	const rootOf = (session: SessionRow): SessionRow => {
+		const seen = new Set<string>([session.id]);
+		let current = session;
+		for (let manager = managerOf(current); manager && !seen.has(manager.id); manager = managerOf(current)) {
+			seen.add(manager.id);
+			current = manager;
+		}
+		return current;
+	};
+	const managers = new Set<string>();
 	for (const session of sessions) {
-		if (session.coordinatorRole) coordinators.add(session.id);
-		if (session.reportsTo && session.reportsTo !== session.id) coordinators.add(session.reportsTo);
+		if (session.manages) managers.add(session.id);
+		const manager = managerOf(session);
+		if (manager) managers.add(manager.id);
 	}
 
 	const roleOf = (session: SessionRow): Role =>
-		coordinators.has(session.id)
-			? "coordinator"
-			: session.reportsTo && coordinators.has(session.reportsTo)
-				? "worker"
-				: "independent";
+		managers.has(session.id) ? "coordinator" : managerOf(session) ? "worker" : "independent";
 	const nameOf = (session: SessionRow) => session.name || basename(session.cwd) || session.id;
+	/** Where a session stands or would stand: a root in its hall, a direct report of the root in a repository wing or the common room, anyone else in its nearest manager's team room. */
+	const placeOf = (session: SessionRow): PlaceRef => {
+		const manager = managerOf(session);
+		if (!manager)
+			return managers.has(session.id) ? { kind: "headquarters", headquarters: session.id } : { kind: "square" };
+		const root = rootOf(session);
+		if (manager.id === root.id) {
+			if (managers.has(session.id)) return { kind: "wing", headquarters: root.id, repository: teamRoom(session.id) };
+			return session.repository
+				? { kind: "wing", headquarters: root.id, repository: session.repository }
+				: { kind: "common-room", headquarters: root.id };
+		}
+		const room = managers.has(session.id) ? session.id : manager.id;
+		return { kind: "wing", headquarters: root.id, repository: teamRoom(room) };
+	};
+
 	const dormant: Sleeper[] = sessions
 		.filter((session) => !session.awake)
 		.sort((a, b) => (b.stoppedAt ?? 0) - (a.stoppedAt ?? 0) || byStart(b, a))
@@ -75,34 +115,21 @@ export function projectWorld(sessions: SessionRow[], remembered: RememberedWings
 			id: session.id,
 			name: nameOf(session),
 			role: roleOf(session),
+			title: session.title,
 			startedAt: session.firstStartedAt ?? 0,
 			stoppedAt: session.stoppedAt ?? null,
+			retiredAt: session.retiredAt,
+			retiredReason: session.retiredReason,
 		}));
 
 	const awake = sessions.filter((session) => session.awake).sort(byStart);
-	const characters: Character[] = awake.map((session) => {
-		let role: Role;
-		let place: PlaceRef;
-		if (coordinators.has(session.id)) {
-			role = "coordinator";
-			place = { kind: "headquarters", headquarters: session.id };
-		} else if (session.reportsTo && coordinators.has(session.reportsTo)) {
-			role = "worker";
-			place = session.repository
-				? { kind: "wing", headquarters: session.reportsTo, repository: session.repository }
-				: { kind: "common-room", headquarters: session.reportsTo };
-		} else {
-			role = "independent";
-			place = { kind: "square" };
-		}
-		return {
-			id: session.id,
-			name: nameOf(session),
-			role,
-			place,
-			startedAt: session.firstStartedAt ?? 0,
-		};
-	});
+	const characters: Character[] = awake.map((session) => ({
+		id: session.id,
+		name: nameOf(session),
+		role: roleOf(session),
+		place: placeOf(session),
+		startedAt: session.firstStartedAt ?? 0,
+	}));
 
 	const shown = new Set<string>();
 	for (const { place } of characters) if (!isOutside(place)) shown.add(place.headquarters);
@@ -113,28 +140,48 @@ export function projectWorld(sessions: SessionRow[], remembered: RememberedWings
 
 	const wings: RememberedWings = {};
 	const headquarters = order.map((id): Headquarters => {
-		const workers = characters.filter(
+		const inRooms = characters.filter(
 			(character) => character.place.kind === "wing" && character.place.headquarters === id,
 		);
+		const inRoom = (repository: string) =>
+			inRooms.filter((character) => (character.place as { repository: string }).repository === repository);
+		// Team rooms exist while their manager is in the organization, awake or asleep; repository wings are remembered.
+		const teams = sessions
+			.filter(
+				(session) => managers.has(session.id) && !session.retiredAt && rootOf(session).id === id && session.id !== id,
+			)
+			.sort(byStart);
 		const list = [...(remembered[id] ?? [])];
-		for (const worker of workers) {
-			const { repository } = worker.place as { repository: string };
-			if (!list.includes(repository)) list.push(repository);
+		for (const character of inRooms) {
+			const { repository } = character.place as { repository: string };
+			if (!repository.startsWith("team:") && !list.includes(repository)) list.push(repository);
 		}
-		wings[id] = list;
+		if (list.length) wings[id] = list;
 		const coordinator = byId.get(id);
+		const dormantIn = (test: (session: SessionRow) => boolean) =>
+			sessions.filter((session) => !session.awake && !session.retiredAt && test(session)).length;
 		return {
 			id,
 			name: coordinator ? coordinator.name || basename(coordinator.cwd) || id : id,
-			wings: list.map((repository) => ({
-				repository,
-				name: basename(repository) || repository,
-				headcount: workers.filter((worker) => (worker.place as { repository: string }).repository === repository)
-					.length,
-				dormant: sessions.filter(
-					(session) => !session.awake && session.reportsTo === id && session.repository === repository,
-				).length,
-			})),
+			wings: [
+				...list.map((repository) => ({
+					repository,
+					name: basename(repository) || repository,
+					headcount: inRoom(repository).length,
+					dormant: dormantIn((session) => session.reportsTo === id && session.repository === repository),
+				})),
+				...teams.map((manager) => ({
+					repository: teamRoom(manager.id),
+					team: manager.id,
+					name: nameOf(manager),
+					headcount: inRoom(teamRoom(manager.id)).length,
+					dormant: dormantIn(
+						(session) =>
+							(session.id === manager.id || session.reportsTo === manager.id) &&
+							(placeOf(session) as { repository?: string }).repository === teamRoom(manager.id),
+					),
+				})),
+			],
 		};
 	});
 	return { headquarters, characters, wings, dormant };

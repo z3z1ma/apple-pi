@@ -103,8 +103,15 @@ function SleeperRow({
 			<span className="aw-register-text">
 				<span className="aw-register-name">
 					{agent.name}
+					{agent.title && <small className="aw-register-title">{agent.title}</small>}
 					<small className={where.upstairs ? "aw-register-where aw-upstairs" : "aw-register-where"}>{where.text}</small>
 				</span>
+				{agent.retiredAt && (
+					<span className="aw-register-left" title={agent.retiredReason ?? undefined}>
+						{say(theme, "retired")}
+						{agent.retiredReason && `: ${agent.retiredReason}`}
+					</span>
+				)}
 				<span className="aw-register-detail">
 					{repository ?? base(agent.cwd) ?? "No repository"}
 					{" \u00b7 "}

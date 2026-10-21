@@ -28,7 +28,7 @@ beforeAll(async () => {
 	world = openWorldBackend({ db: state.dbPath, socket: state.socketPath });
 	world.subscribeFeed((batch) => lines.push(...batch));
 	commands = openCommands(state.socketPath);
-	lifecycle = openLifecycle({ db: state.dbPath }, commands, () => world.snapshot());
+	lifecycle = openLifecycle({ db: state.dbPath, agentDir: state.agentDir }, commands, () => world.snapshot());
 });
 afterAll(async () => {
 	for (const run of runs) await close(run);

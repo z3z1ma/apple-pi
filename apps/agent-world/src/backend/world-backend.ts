@@ -82,13 +82,16 @@ const STORE_TIMEOUT_MS = 5000;
 export const PREFERENCE_KEY = "agent-world";
 
 // Every top-level session with what places it: awake while its current incarnation is alive. A column a runtime started
-// before its migration has not added yet (`intent`, `role`) reads as null.
-const sessionsSql = ({ intent, role }: OptionalColumns) => `
-select s.id, s.name, s.cwd, s.reports_to as reportsTo, s.git, ${role ? "s.role" : "null as role"},
+// before its migration has not added yet (`intent`, the organization's) reads as null.
+const sessionsSql = (columns: OptionalColumns) => `
+select s.id, s.name, s.cwd, s.reports_to as reportsTo, s.git,
+	${OPTIONAL_COLUMNS.filter((column) => column !== "intent")
+		.map((column) => (columns[column] ? `s.${column}` : `null as ${column}`))
+		.join(", ")},
 	(select min(f.started_at) from incarnations f where f.session_id = s.id) as firstStartedAt,
 	coalesce(i.ended_at is null and i.process_state in ('alive', 'alive_bridge_lost'), 0) as awake,
 	i.ended_at as stoppedAt, i.end_reason as stopReason,
-	${factsColumns(intent)}
+	${factsColumns(columns.intent)}
 from sessions s
 ${FACTS_JOINS}
 where s.kind = 'root'`;
@@ -97,16 +100,13 @@ where s.kind = 'root'`;
 // one), and the ones awake at the last read (given as a JSON array of ids), looked up by id.
 const changedSql = (columns: OptionalColumns) => `${sessionsSql(columns)}
 	and s.id in (select session_id from events where seq > ? union select value from json_each(?))`;
-interface OptionalColumns {
-	intent: boolean;
-	role: boolean;
-}
-const OPTIONAL_COLUMNS = ["intent", "role"] as const;
+const OPTIONAL_COLUMNS = ["intent", "role_title", "manages", "soul", "self", "retired_at", "retired_reason"] as const;
+type OptionalColumns = Record<(typeof OPTIONAL_COLUMNS)[number], boolean>;
 const optionalColumns = (db: DatabaseSync): OptionalColumns => {
 	const present = new Set(
 		(db.prepare("select name from pragma_table_info('sessions')").all() as { name: string }[]).map((row) => row.name),
 	);
-	return { intent: present.has("intent"), role: present.has("role") };
+	return Object.fromEntries(OPTIONAL_COLUMNS.map((column) => [column, present.has(column)])) as OptionalColumns;
 };
 const sqlCache = new Map<string, { sessions: string; changed: string }>();
 const sqlFor = (columns: OptionalColumns) => {
@@ -121,7 +121,9 @@ const sqlFor = (columns: OptionalColumns) => {
 interface Row extends FactsRow {
 	id: string;
 	name: string | null;
-	role: string | null;
+	manages: number | null;
+	retired_at: number | null;
+	retired_reason: string | null;
 	firstStartedAt: number | null;
 	awake: number;
 	stoppedAt: number | null;
@@ -145,7 +147,10 @@ function sessionRow(row: Row): SessionRow {
 		cwd: row.cwd,
 		reportsTo: row.reportsTo,
 		repository: typeof git?.repository === "string" ? git.repository : null,
-		coordinatorRole: row.role === "coordinator",
+		manages: row.manages === 1,
+		title: row.role_title,
+		retiredAt: row.retired_at,
+		retiredReason: row.retired_reason,
 		awake: row.awake === 1,
 		firstStartedAt: row.firstStartedAt ?? undefined,
 		stoppedAt: row.stoppedAt ?? undefined,
@@ -295,11 +300,18 @@ export function openWorldBackend(paths: { db: string; socket: string }): WorldBa
 			) as RememberedWings;
 			const projected = projectWorld([...sessionsById.values()], mergeWings(storedWings, seen));
 			const byId = rowsById;
+			const tasksOf = db.prepare(
+				"select distinct task_id as id from session_tasks where session_id = ? order by at desc",
+			);
 			world = {
 				...projected,
 				characters: projected.characters.map((character) => ({
 					...character,
-					facts: factsOf(byId.get(character.id)!, readTask),
+					facts: factsOf(
+						byId.get(character.id)!,
+						readTask,
+						(tasksOf.all(character.id) as { id: string }[]).map((task) => task.id),
+					),
 				})),
 			};
 			dormant = dormantAgents(world.dormant, byId, (task) => readTask(task, rereadTasks), dormant, !rereadTasks);

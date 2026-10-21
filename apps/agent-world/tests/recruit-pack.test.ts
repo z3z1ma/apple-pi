@@ -83,20 +83,36 @@ const editJson = (file: string, change: (value: any) => void) => {
 };
 
 describe("the pack check", { timeout: 30_000 }, () => {
-	it("wants the recruiter's name and the recruiting lines in the theme's own words", async () => {
+	it("wants the recruiter's name and the hiring and retiring lines in the theme's own words", async () => {
 		const dir = brokenPack((d) =>
 			editJson(join(d, "theme.json"), (theme) => {
 				delete theme.labels.recruiter;
 				delete theme.text["recruit-worker"];
 				theme.text["recruit-send"] = " ";
+				delete theme.text["recruit-role"];
+				delete theme.text.retire;
+				delete theme.text.retired;
 			}),
 		);
 		expect(describeProblems(await checkThemePack(dir))).toEqual(
 			expect.arrayContaining([
 				"theme.json: has no label for recruiter",
-				"theme.json: has no line for recruit-worker, recruit-send",
+				"theme.json: has no line for recruit-worker, recruit-send, recruit-role, retire, retired",
 			]),
 		);
+	});
+
+	it.each(["fantasy", "tech-office", "anime-school"])("%s words hiring and retiring its own way", (id) => {
+		const text = JSON.parse(readFileSync(join(themesDir, id, "theme.json"), "utf8")).text as Record<string, string>;
+		const words = {
+			fantasy: ["Recruit", "guild"],
+			"tech-office": ["Hire", "resign"],
+			"anime-school": ["Invite", "raduate"],
+		}[id]!;
+		expect(text["recruit-send"]).toContain(words[0]);
+		expect(`${text.retire} ${text.retired} ${text["retire-done"]}`.toLowerCase()).toContain(words[1].toLowerCase());
+		for (const key of ["recruit-role", "recruit-no-role", "retire-title", "retire-reason", "retire-send"])
+			expect(text[key], key).toBeTruthy();
 	});
 
 	it("wants a square with its recruiter on open floor, and a headquarters with a desk that recruits", async () => {

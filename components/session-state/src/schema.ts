@@ -179,6 +179,8 @@ const MIGRATIONS = [
 	) strict;`,
 	// The role's title, so views that read the database (sidebar, dashboard, Agent World) show it without the catalog.
 	`alter table sessions add column role_title text;`,
+	// Whether the role manages (1), does not (0), or the session has no role (null); views draw managers by it.
+	`alter table sessions add column manages integer;`,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

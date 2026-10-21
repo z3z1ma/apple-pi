@@ -1,7 +1,9 @@
 // What the operator does to a session from the inn, the rookery, and a character's actions: wake a dormant one
 // (`start`), end an awake one (`close`, confirmed only while it is busy, decision 13), mail anyone as himself
-// (`mail`), recruit a new agent (`start` for a new id, ticket 10), and rename an awake one (`rename`, ticket 12). Commands go through the command client (`commands.ts`); each resolves with the receipt stage that answers
-// the operator's question (is it awake, is it ended, did the letter arrive or does it wait), not necessarily the last.
+// (`mail`), hire a new person (`start` for a new id, with a role from the catalog), rename an awake one (`rename`),
+// and retire one (`retire`: it leaves the organization and sleeps at the inn marked so). Commands go through the
+// command client (`commands.ts`); each resolves with the receipt stage that answers the operator's question (is it
+// awake, is it ended, did the letter arrive or does it wait), not necessarily the last.
 import { randomUUID } from "node:crypto";
 import { existsSync, statSync } from "node:fs";
 import { homedir } from "node:os";
@@ -15,10 +17,12 @@ import {
 	type ReceiptStage,
 	type RecruitReceipt,
 	type RecruitRequest,
+	type RoleChoice,
 	type WorldSnapshot,
 } from "../world.js";
 import type { Commands } from "./commands.js";
 import { operatorPane } from "./inn.js";
+import { loadRoleChoices } from "./roles.js";
 
 /** A woken session joins once Pi has started in its window; a slow start still says the window opened. */
 const WAKE_MS = 30_000;
@@ -34,6 +38,8 @@ export interface Lifecycle {
 	sendMail(characterId: string, body: string): Promise<CommandReceipt>;
 	recruit(request: RecruitRequest): Promise<RecruitReceipt>;
 	rename(characterId: string, name: string): Promise<CommandReceipt>;
+	roles(): RoleChoice[];
+	retire(characterId: string, reason: string): Promise<CommandReceipt>;
 }
 
 /** A directory as the operator typed it: `~` is his home. */
@@ -82,7 +88,11 @@ function follow(
 	});
 }
 
-export function openLifecycle(paths: { db: string }, commands: Commands, snapshot: () => WorldSnapshot): Lifecycle {
+export function openLifecycle(
+	paths: { db: string; agentDir: string },
+	commands: Commands,
+	snapshot: () => WorldSnapshot,
+): Lifecycle {
 	/** The tmux servers the runtime knows, read from its database. */
 	const servers = (): string[] => {
 		if (!existsSync(paths.db)) return [];
@@ -161,13 +171,14 @@ export function openLifecycle(paths: { db: string }, commands: Commands, snapsho
 			// The runtime puts the brief on Pi's command line as its first prompt, where a leading dash reads as an option.
 			if (brief.startsWith("-"))
 				return { ok: false, reason: "The brief cannot start with a dash: Pi would read it as an option." };
+			const role = request.role?.trim();
+			if (role && !loadRoleChoices(paths.agentDir).some((choice) => choice.name === role))
+				return { ok: false, reason: `No role in the catalog is named ${role}.` };
 			let pane: { socket: string; pane: string } | undefined;
 			if (request.reportsTo) {
-				// A worker's window opens beside its coordinator's, where the coordinator's own new sessions open.
-				const coordinator = snapshot().characters.find(
-					(character) => character.id === request.reportsTo && character.role === "coordinator",
-				);
-				if (!coordinator) return { ok: false, reason: "That coordinator is not running." };
+				// A new person's window opens beside its manager's, where the manager's own new sessions open.
+				const coordinator = snapshot().characters.find((character) => character.id === request.reportsTo);
+				if (!coordinator) return { ok: false, reason: "That manager is not running." };
 				const tmux = coordinator.facts?.tmux;
 				if (!tmux)
 					return {
@@ -190,6 +201,7 @@ export function openLifecycle(paths: { db: string }, commands: Commands, snapsho
 				cwd,
 				name,
 				...(request.reportsTo ? { reportsTo: request.reportsTo } : {}),
+				...(role ? { role } : {}),
 				...(brief ? { prompt: brief } : {}),
 			};
 			const receipt = await follow(
@@ -218,6 +230,26 @@ export function openLifecycle(paths: { db: string }, commands: Commands, snapsho
 				RENAME_MS,
 				(stage) => stage === "applied",
 				() => "Sent; it has not taken the name yet.",
+			);
+		},
+
+		roles: () => loadRoleChoices(paths.agentDir),
+
+		async retire(characterId, given) {
+			const reason = given.trim();
+			if (!reason) return { ok: false, reason: "Say why it leaves." };
+			const world = snapshot();
+			const person =
+				world.characters.find((character) => character.id === characterId) ??
+				world.dormant?.find((agent) => agent.id === characterId);
+			if (!person) return { ok: false, reason: "No session has that id." };
+			return follow(
+				commands,
+				characterId,
+				{ kind: "retire", reason },
+				CLOSE_MS,
+				(stage) => stage === "applied",
+				() => `${person.name} has not left yet.`,
 			);
 		},
 
