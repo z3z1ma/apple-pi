@@ -12,4 +12,3 @@
 
 - `.ledger/202610150034-code-context-evaluation/task.md` — planning — Evaluate code context sidecars on replayed failure tasks — Phase 5 of code-context sidecars: replay 3–5 historical failure tasks under Baseline, Read-only injection, and Full v1 (gate) and compare pre-edit constraint awareness, plan changes after blocks, violation rates, and token overhead.
 
-- `.ledger/202610202140-organization/task.md` — in-progress — Organization: Pi sessions as people with roles, souls, selves, and an org tree — Turn peer sessions into lasting people: a role catalog with fixed minds, harness-drawn souls, harness-kept selves, an org tree rooted at the operator's session with managers hired from the catalog, open mail across the org, and Agent World as the view.
