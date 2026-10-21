@@ -224,7 +224,11 @@ function formatDefaultArgs(args: Record<string, unknown>): string {
 	const entries: string[] = [];
 	for (const [k, v] of Object.entries(args)) {
 		if (typeof v === "string" || typeof v === "number" || typeof v === "boolean") {
-			entries.push(`${k}: ${String(v).replace(/[\r\n]+/g, " ").trim()}`);
+			entries.push(
+				`${k}: ${String(v)
+					.replace(/[\r\n]+/g, " ")
+					.trim()}`,
+			);
 		} else if (Array.isArray(v) && v.length > 0) {
 			const arrSummary = summarizeArray(v);
 			if (arrSummary) {
