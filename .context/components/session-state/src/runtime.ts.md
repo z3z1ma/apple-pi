@@ -48,6 +48,13 @@ Why: the flag is what the session was started with, and `move` changes the manag
 Coupled: components/session-state/src/bridge.ts, components/session-state/src/coordinator.ts
 Verify: components/session-state/tests/organization.test.ts
 
+## symbol:Runtime.threadPost
+
+The message, any meeting closure, and every outgoing delivery commit in one transaction before a bridge receives the mail. Startup completes accepted `thread_post` commands: a stored message means its outbox committed; an absent message means the post still needs applying.
+Why: acknowledging or delivering between these writes can leave a closed meeting without its summary at one participant, or a durable message without all recipients after a crash. Delivery remains idempotent through the existing command ids and transcript receipts.
+Coupled: components/session-state/src/threads.ts
+Verify: components/session-state/tests/thread-recovery.test.ts
+
 ## symbol:Runtime.transfer
 
 A move is refused when the new manager is the person, is under the person, or is in another organization (a different root), so the tree stays one tree; the person's own reports keep reporting to it and move with it.

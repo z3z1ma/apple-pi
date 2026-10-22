@@ -22,6 +22,8 @@ export interface ThreadPost {
 	threadKind?: ThreadKind;
 	to?: string[];
 	cc?: string[];
+	/** The organizer ends a meeting by posting its summary and closing it together. */
+	closeMeeting?: boolean;
 }
 
 export interface Posted {
@@ -51,10 +53,12 @@ export function postToThread(
 		`insert into thread_participants (thread_id, participant, delivery, read_up_to, joined_at)
 		values (?, ?, ?, 0, ?) on conflict (thread_id, participant) do nothing`,
 	);
-	const thread = db.prepare("select subject, kind, closed_at from threads where id = ?").get(post.thread) as
-		| { subject: string; kind: ThreadKind; closed_at: number | null }
+	const thread = db.prepare("select subject, kind, created_by, closed_at from threads where id = ?").get(post.thread) as
+		| { subject: string; kind: ThreadKind; created_by: string; closed_at: number | null }
 		| undefined;
 	if (post.threadKind === "channel" && thread?.kind !== "channel") return "no team channel with that id";
+	if (post.closeMeeting && thread?.kind !== "meeting") return "this is not a meeting";
+	if (post.closeMeeting && thread?.created_by !== sender) return "only the organizer can end this meeting";
 	if (!thread) {
 		if (!post.subject) return "a new thread needs a subject";
 		if (addresses.length === 0) return "a new thread needs someone to write to";
@@ -78,6 +82,7 @@ export function postToThread(
 		.prepare("insert into thread_messages (id, thread_id, sender, body, at) values (?, ?, ?, ?, ?)")
 		.run(messageId, post.thread, sender, post.body, now);
 	const seq = Number(lastInsertRowid);
+	if (post.closeMeeting) db.prepare("update threads set closed_at = ? where id = ?").run(now, post.thread);
 	markRead(db, post.thread, sender, seq);
 	const participants = db
 		.prepare("select participant, delivery from thread_participants where thread_id = ? and participant != ?")

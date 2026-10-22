@@ -131,13 +131,18 @@ test("a mark-seen command clears needs you; an open questionnaire needs you unti
 	);
 	try {
 		// With a UI from the start: without one, ask_user_question leaves the active tools.
+		run.session.sessionManager.appendSessionInfo("Questionnaire reader");
 		await run.session.bindExtensions({
 			mode: "tui",
 			uiContext: { custom: () => new Promise((resolve) => (answer = resolve)), notify: () => {} } as never,
 		});
 		// The rebound bridge reconnects; a settle before that would go unseen by the runtime.
-		await vi.waitFor(() =>
-			expect(query(state.dbPath, "select 1 from events where session_id = ? and type = 'gap'", id)).toHaveLength(1),
+		await vi.waitFor(
+			() =>
+				expect(query(state.dbPath, "select name from sessions where id = ?", id)).toEqual([
+					{ name: "Questionnaire reader" },
+				]),
+			{ timeout: 10000 },
 		);
 		await run.session.prompt("work");
 		await vi.waitFor(() => expect(row(id).needs_you_since).not.toBeNull());

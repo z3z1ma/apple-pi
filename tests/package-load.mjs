@@ -292,6 +292,8 @@ try {
 				extension.tools.has("rename") &&
 				extension.tools.has("move") &&
 				extension.tools.has("let_go") &&
+				extension.tools.has("meet") &&
+				extension.tools.has("end_meeting") &&
 				extension.tools.has("update_self"),
 		),
 		"session-state extension must own the mail, directory, manager, and self tools",

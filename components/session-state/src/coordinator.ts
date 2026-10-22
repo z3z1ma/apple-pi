@@ -4,9 +4,10 @@ import { Type } from "typebox";
 import { loadRoles, managesPeople, organizationOf } from "../../organization/src/index.js";
 import { resolvePerson } from "./addresses.js";
 import { sendCommand } from "./client.js";
+import { installMeetings } from "./meetings.js";
 import type { Command, Receipt } from "./protocol.js";
 
-const MANAGER_TOOLS = ["hire", "rehire", "send_home", "rename", "move", "let_go"];
+const MANAGER_TOOLS = ["hire", "rehire", "send_home", "rename", "move", "let_go", "meet", "end_meeting"];
 
 /** The tmux pane this session runs in, which new windows open next to. */
 function ownPane(): { socket: string; pane: string } {
@@ -35,6 +36,7 @@ const personParameter = Type.String({
 
 /** The manager tools, active only in a root session or one whose role manages. */
 export function installCoordinator(pi: ExtensionAPI): void {
+	installMeetings(pi);
 	pi.registerTool(
 		defineTool({
 			name: "hire",

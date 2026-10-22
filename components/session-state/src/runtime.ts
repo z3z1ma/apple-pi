@@ -207,6 +207,7 @@ export class Runtime {
 		this.db.exec("pragma journal_mode = wal");
 		migrate(this.db);
 		syncChannels(this.db, Date.now());
+		this.recoverThreadPosts();
 		rmSync(this.paths.socket, { force: true }); // we hold the lock, so any socket file is stale
 		const server = createServer((socket) => this.accept(socket));
 		this.server = server;
@@ -592,33 +593,47 @@ export class Runtime {
 		now: number,
 	): void {
 		const db = this.db!;
-		const posted = postToThread(db, sessionId, commandId, command, now);
-		if (typeof posted === "string") {
-			this.setCommandStage(commandId, "failed", posted);
+		const asleep: string[] = [];
+		const deliveries: { target: Connection; id: string; mail: Command }[] = [];
+		db.exec("begin");
+		try {
+			const posted = postToThread(db, sessionId, commandId, command, now);
+			if (typeof posted === "string") {
+				db.exec("rollback");
+				this.setCommandStage(commandId, "failed", posted);
+				return;
+			}
+			const fromName =
+				(db.prepare("select name from sessions where id = ?").get(sessionId) as { name: string | null } | undefined)
+					?.name ?? undefined;
+			for (const participant of posted.push) {
+				if (participant === OPERATOR) continue;
+				const mail: Command = {
+					kind: "mail",
+					from: sessionId,
+					body: command.body,
+					sentAt: new Date(now).toISOString(),
+					thread: posted.thread,
+					subject: posted.subject,
+					seq: posted.seq,
+					...(fromName ? { fromName } : {}),
+				};
+				const id = `${commandId}:${participant}`;
+				const target = this.queueMail(id, participant, mail);
+				if (target) deliveries.push({ target, id, mail });
+				else
+					asleep.push(
+						(db.prepare("select name from sessions where id = ?").get(participant) as { name: string | null }).name ||
+							participant,
+					);
+			}
+			db.exec("commit");
+		} catch (error) {
+			db.exec("rollback");
+			this.setCommandStage(commandId, "failed", (error as Error).message);
 			return;
 		}
-		const fromName =
-			(db.prepare("select name from sessions where id = ?").get(sessionId) as { name: string | null } | undefined)
-				?.name ?? undefined;
-		const asleep: string[] = [];
-		for (const participant of posted.push) {
-			if (participant === OPERATOR) continue;
-			const mail: Command = {
-				kind: "mail",
-				from: sessionId,
-				body: command.body,
-				sentAt: new Date(now).toISOString(),
-				thread: posted.thread,
-				subject: posted.subject,
-				seq: posted.seq,
-				...(fromName ? { fromName } : {}),
-			};
-			if (!this.enqueueMail(`${commandId}:${participant}`, participant, mail)) {
-				const name = (db.prepare("select name from sessions where id = ?").get(participant) as { name: string | null })
-					.name;
-				asleep.push(name || participant);
-			}
-		}
+		for (const { target, id, mail } of deliveries) this.dispatch(target, id, mail);
 		this.setCommandStage(
 			commandId,
 			"applied",
@@ -626,11 +641,23 @@ export class Runtime {
 		);
 	}
 
-	/**
-	 * Store mail for `recipient` and hand it to its live bridge, or leave it waiting for the next one, as client mail
-	 * waits. Returns whether a live bridge took it.
-	 */
-	private enqueueMail(commandId: string, recipient: string, mail: Command): boolean {
+	/** Complete posts accepted before a crash. A stored message means its full outbox committed with it. */
+	private recoverThreadPosts(): void {
+		const db = this.db!;
+		const pending = db
+			.prepare(
+				"select command_id, session_id, command, created_at from commands where kind = 'thread_post' and stage = 'accepted'",
+			)
+			.all() as { command_id: string; session_id: string; command: string; created_at: number }[];
+		for (const row of pending) {
+			if (db.prepare("select 1 from thread_messages where id = ?").get(row.command_id))
+				this.setCommandStage(row.command_id, "applied");
+			else this.threadPost(row.command_id, row.session_id, JSON.parse(row.command), row.created_at);
+		}
+	}
+
+	/** Persist an outgoing delivery in the post's transaction; its bridge is notified only after commit. */
+	private queueMail(commandId: string, recipient: string, mail: Command): Connection | undefined {
 		const db = this.db!;
 		const current = db.prepare("select generation from sessions where id = ?").get(recipient) as
 			| { generation: number }
@@ -645,8 +672,7 @@ export class Runtime {
 			(connection) =>
 				!connection.shutdown && connection.sessionId === recipient && connection.generation === current?.generation,
 		);
-		if (target) this.dispatch(target, commandId, mail);
-		return target !== undefined;
+		return target;
 	}
 
 	/**

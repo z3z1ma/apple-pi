@@ -58,7 +58,11 @@ export function deliverMail(pi: ExtensionAPI, mail: Mail, startingUp: boolean): 
 const THREADS_MISSING =
 	"The session-state runtime predates threads; it migrates when it restarts (kill the pid in ~/.pi/agent/state/apple-pi-runtime.pid).";
 
-async function post(self: string, post: ThreadPost, signal: AbortSignal | undefined): Promise<string | undefined> {
+export async function sendThreadMessage(
+	self: string,
+	post: ThreadPost,
+	signal: AbortSignal | undefined,
+): Promise<string | undefined> {
 	if (withThreads(() => true) === undefined) throw new Error(THREADS_MISSING);
 	const receipt = await sendCommand(self, { kind: "thread_post", ...post }, { signal });
 	if (receipt.stage === "failed") throw new Error(`Not sent: ${receipt.reason}`);
@@ -101,7 +105,11 @@ function createSendMailTool() {
 			const cc = resolveAddresses(self, params.cc ?? []).filter((id) => !to.includes(id));
 			if (!to.length) throw new Error("Nobody to write to (you cannot mail only yourself).");
 			const thread = newThreadId();
-			const note = await post(self, { thread, subject: params.subject, body: params.body, to, cc }, signal);
+			const note = await sendThreadMessage(
+				self,
+				{ thread, subject: params.subject, body: params.body, to, cc },
+				signal,
+			);
 			return {
 				content: [{ type: "text", text: `Sent (thread ${thread}).${sentence(note)}` }],
 				details: { thread, to, cc },
@@ -133,7 +141,11 @@ function createEscalateTool() {
 			const self = ctx.sessionManager.getSessionId();
 			const to = managerAddress(self);
 			const thread = newThreadId();
-			const note = await post(self, { thread, subject: "Escalation", body: params.body, to: [to] }, signal);
+			const note = await sendThreadMessage(
+				self,
+				{ thread, subject: "Escalation", body: params.body, to: [to] },
+				signal,
+			);
 			return {
 				content: [
 					{
@@ -163,7 +175,7 @@ function createReplyTool() {
 		),
 		async execute(_toolCallId, params, signal, _onUpdate, ctx) {
 			const self = ctx.sessionManager.getSessionId();
-			const note = await post(self, { thread: params.thread, body: params.body }, signal);
+			const note = await sendThreadMessage(self, { thread: params.thread, body: params.body }, signal);
 			return {
 				content: [{ type: "text", text: `Replied in ${params.thread}.${sentence(note)}` }],
 				details: { thread: params.thread },
@@ -193,7 +205,11 @@ function createPostTool() {
 		async execute(_toolCallId, params, signal, _onUpdate, ctx) {
 			const self = ctx.sessionManager.getSessionId();
 			const to = resolveAddresses(self, params.invite ?? []);
-			const note = await post(self, { thread: params.channel, threadKind: "channel", body: params.body, to }, signal);
+			const note = await sendThreadMessage(
+				self,
+				{ thread: params.channel, threadKind: "channel", body: params.body, to },
+				signal,
+			);
 			return {
 				content: [{ type: "text", text: `Posted in ${params.channel}.${sentence(note)}` }],
 				details: { thread: params.channel },

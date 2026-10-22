@@ -1,6 +1,6 @@
 Status: in-progress
 Created: 2026-10-21
-Updated: 2026-10-21
+Updated: 2026-10-22
 
 # Interns and peers replace subagents
 
@@ -38,9 +38,9 @@ None. The choices proposed as R1 to R5 and P1 to P5 were approved by the operato
 
 ## Current State
 
-Ready: the operator approved the specification and tickets on 2026-10-22. Decisions 1 to 11 recorded from the operator's answers; decision 4's details confirmed.
+The operator approved the specification and all 14 tickets on 2026-10-22, then asked for solo implementation in ticket order with commits as it proceeds. Tickets 01 to 05 are implemented: threaded mail, human-named management, pull channels with mentions, the operator inbox and escalation, and meetings. Each ticket records its checks and deviations.
 
-Next: implementation, starting from the frontier (tickets 01, 02, 08), when the operator starts it.
+Next: ticket 06, explicit assignments and task bundles, then the remaining tickets in order. Live organization rollout remains separate until the implementation is complete.
 
 ## Outcome
 

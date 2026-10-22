@@ -244,7 +244,7 @@ test("hiring into a role the catalog lacks fails before any window opens", async
 }, 20000);
 
 test("a hired person whose role does not manage loses the lifecycle tools; a hired manager keeps them", async () => {
-	const tools = ["hire", "rehire", "send_home", "rename", "move", "let_go"];
+	const tools = ["hire", "rehire", "send_home", "rename", "move", "let_go", "meet", "end_meeting"];
 	const run = await fauxSession(
 		[bridge],
 		[fauxAssistantMessage("ok"), fauxAssistantMessage("ok")],
@@ -297,6 +297,8 @@ test.each([false, true])(
 					"rename",
 					"move",
 					"let_go",
+					"meet",
+					"end_meeting",
 					"update_self",
 				].sort(),
 			);

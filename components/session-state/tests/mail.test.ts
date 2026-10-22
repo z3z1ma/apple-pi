@@ -171,18 +171,30 @@ test("a worker that closes mails its supervisor, but not on reload", async () =>
 		worker.session.extensionRunner.setFlagValue("reports-to", supervisorId);
 		worker.session.sessionManager.appendSessionInfo("docs-worker");
 		const workerId = worker.session.sessionManager.getSessionId();
-		const reconnects = () =>
-			query(state.dbPath, "select 1 from events where session_id = ? and type = 'gap'", workerId).length;
 		await worker.session.bindExtensions({}); // a rebind reads the flag
-		await vi.waitFor(() => expect(reconnects()).toBe(1), { timeout: 10000 });
+		await vi.waitFor(
+			() =>
+				expect(query(state.dbPath, "select reports_to from sessions where id = ?", workerId)).toEqual([
+					{ reports_to: supervisorId },
+				]),
+			{ timeout: 10000 },
+		);
 		await worker.session.extensionRunner.emit({ type: "session_shutdown", reason: "reload" }); // no notice
+		worker.session.sessionManager.appendSessionInfo("docs-worker-reloaded");
 		await worker.session.bindExtensions({});
-		await vi.waitFor(() => expect(reconnects()).toBe(2), { timeout: 10000 });
+		await vi.waitFor(
+			() =>
+				expect(query(state.dbPath, "select name from sessions where id = ?", workerId)).toEqual([
+					{ name: "docs-worker-reloaded" },
+				]),
+			{ timeout: 10000 },
+		);
+		expect(mailIn(supervisor.session)).toHaveLength(0);
 		await worker.session.extensionRunner.emit({ type: "session_shutdown", reason: "quit" });
 		await vi.waitFor(() => expect(mailIn(supervisor.session)).toHaveLength(1), { timeout: 10000 });
 		const details = (mailIn(supervisor.session)[0] as { details: { from: string; body: string } }).details;
 		expect(details.from).toBe(worker.session.sessionManager.getSessionId());
-		expect(details.body).toBe(`Session "docs-worker" closed (quit) while idle. Directory: ${worker.cwd}`);
+		expect(details.body).toBe(`Session "docs-worker-reloaded" closed (quit) while idle. Directory: ${worker.cwd}`);
 	} finally {
 		await close(worker);
 		await close(supervisor);
