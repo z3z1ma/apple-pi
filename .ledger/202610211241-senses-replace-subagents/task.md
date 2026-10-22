@@ -1,0 +1,47 @@
+Status: ready
+Created: 2026-10-21
+Updated: 2026-10-21
+
+# Interns and peers replace subagents
+
+## Intent
+
+Subagents were a flexible delegation system: background runs, resume, steering, nesting, clarification, coding children with notebook access and completion review, custom agent definitions, and a live team view. Persistent peers in the organization now own all cross-agent work, so that machinery carries complexity, memory, and lifecycle cost for little use. The 37 finished builders held in one root process for three days are an example.
+
+Terms: a peer is a lasting top-level Pi session in the organization ([docs/organization.md](../../docs/organization.md)); the machinery being removed is described in [docs/subagents.md](../../docs/subagents.md).
+
+Keep only what a session needs to read without filling its own context: two interns, `explore` (the local repository and filesystem) and `research` (external sources). Each is a first-class tool whose description says when to use it and what it costs. An intern returns a lossy summary: the main window gets less context, but only what the intern chose to report.
+
+## Decisions (operator, 2026-10-21)
+
+1. The `agent` tool goes away, with `get_subagent_result`, `steer_subagent`, `stop_subagent`, and the `<subagent-team>` prompt. All other cross-agent work happens through peers.
+2. Explorer and researcher become their own tools, not agent types. Under the hood they work as before, but they are one-shot: no background, no resume, no steering. They are not kept alive after they answer.
+3. No custom agent definitions (`.pi/agents`, `.agents/agents`, `~/.pi/agent/agents`). Roles, peers, and the organization replace them.
+4. `pi_exec` model workers run on peers, so everything runs through one mechanism. A `pi_exec` call can attach existing peers as an input: a mapping of program variable names to peer handles. An `agent` call on no attached peer starts an ephemeral peer that is discarded when the execution ends, and the program (and the agent) can close one sooner, so a loop does not pile up tmux windows. A call returns what the model writes in its reply (prose, or a typed value), never mail. Ralph needs nothing special: each iteration is a new ephemeral peer, closed before the next.
+5. `/btw` stays and owns its one session directly, with no manager.
+6. While an intern runs, a live activity line (current tool and argument) is enough. There is no conversation viewer and no transcript afterwards.
+7. The same effort leans into self-organizing, hierarchical, human-like behavior: give the model one coherent set of tools that work like human communication in a digital medium and like a human organization. The workplace proposal ([proposal-workplace.md](proposal-workplace.md)) items 1 to 12 and A to E are approved; `explore` and `research` are framed as a cheap intern, with the same benefits, caveats, and risks.
+8. Work is assigned, not inferred: a person holds tasks someone assigned, and work with no ledger task is an ephemeral task with the same bundle shape. Details are proposal items 13 to 24, approved; ledger tasks are shown in the headquarters, not the quest office (Jira's).
+9. The two one-shot tools are called **interns**, never senses, in prompts, tools, and docs.
+10. Custom agent definitions are deleted, including the operator's `~/.pi/agent/agents/grafana-debugger.md` (deleted during implementation, with his approval of 2026-10-21).
+11. The pair programmer's hidden consultant is removed. For a second opinion, the pair writes to the main session's manager or escalates to a peer through the organization's own mail; the organization answers, not a hidden run.
+
+Decision 4 details, confirmed by the operator ("lgtm"):
+
+- An ephemeral peer is started into a catalog role, and the role sets its model; the old `type` and `profile` arguments go away.
+- A discarded ephemeral peer's session record is deleted, so it does not join the former members; its transcript file stays on disk.
+- A plain `agent()` call closes its ephemeral peer when it returns; a program that needs several turns holds a handle (`peer(role=...)`), which it closes or which is discarded when the execution ends.
+
+## Open questions
+
+None. The choices proposed as R1 to R5 and P1 to P5 were approved by the operator and are recorded in the specification.
+
+## Current State
+
+Ready: the operator approved the specification and tickets on 2026-10-22. Decisions 1 to 11 recorded from the operator's answers; decision 4's details confirmed.
+
+Next: implementation, starting from the frontier (tickets 01, 02, 08), when the operator starts it.
+
+## Outcome
+
+Pending.
