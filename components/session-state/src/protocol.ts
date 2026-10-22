@@ -56,16 +56,6 @@ export interface Facts {
 	/** The session file that ran before this one in the same process (and pane), and why it gave way. */
 	previousSession: { file: string; reason: string } | null;
 	git: { repository: string; worktree: string; branch: string } | null;
-	/**
-	 * The ledger task this session touched last. A bridge reports it only once it sees a touch, so a reload or reopen
-	 * keeps the task the runtime already recorded.
-	 */
-	currentTask?: { bundle: string; taskId: string } | null;
-	/**
-	 * One short sentence of what the session works on now, written by the session-title extension after a settled user
-	 * turn. Like `currentTask`, reported only once known, so a reload keeps the recorded one.
-	 */
-	intent?: string | null;
 	config: {
 		name: string | null;
 		flags: string[];
@@ -139,6 +129,8 @@ export type Command =
 			taskGoal?: boolean;
 	  }
 	| WorkCommand
+	/** A ledger archive changes a known task's path, never its assignments. */
+	| { kind: "task_moved"; from: string; to: string }
 	/**
 	 * Post a message from the request's session (or a named outside sender) to a thread, creating it when new. Applied
 	 * by the runtime, which pushes the message as mail to each pushed participant; the reason names who is asleep.
@@ -159,6 +151,8 @@ export type Command =
 			reportsTo?: string;
 			/** The role a new session is hired into; a stopped session keeps the role its transcript records. */
 			role?: string;
+			/** Written work, assigned before the new process starts so its first turn receives the goal. */
+			goal?: { text: string; by: string };
 			prompt?: string;
 	  }
 	/** Quit the session's Pi process. */
@@ -272,7 +266,6 @@ export type BridgeMessage =
 	| { type: "tool_start"; tool: Tool }
 	| { type: "tool_end"; id: string; name: string; durationMs: number; isError: boolean; current: Tool | null }
 	| { type: "index"; rows: IndexRow[] }
-	| { type: "task_link"; bundle: string; taskId: string; via: string; at: number }
 	| CommandRequest
 	/** A bridge reporting how far a command it was given got. */
 	| { type: "command_progress"; commandId: string; stage: "delivered" | "applied" | "failed"; reason?: string }

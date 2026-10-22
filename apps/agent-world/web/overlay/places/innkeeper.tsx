@@ -121,7 +121,7 @@ function SleeperRow({
 							{agent.task.status && <span className="aw-register-status">{agent.task.status}</span>}
 						</>
 					) : (
-						<span className="aw-register-quiet">No ledger task</span>
+						<span className="aw-register-quiet">No focused task</span>
 					)}
 				</span>
 				{progress && (

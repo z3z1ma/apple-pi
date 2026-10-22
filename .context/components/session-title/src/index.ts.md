@@ -1,9 +1,9 @@
 ## file
 
-Names are checked against the other live sessions by reading the session-state database directly (`livePeers` from `components/session-state/src/peers.ts`); any failure to read it just picks a name. The stated intent reaches the session-state bridge only through `SESSION_INTENT_CHANNEL` on `pi.events`, which the bridge reports as the `intent` fact.
-Why: the runtime may be down or not yet started when a session starts, and naming must never wait for it or fail because of it; the event channel keeps the two extensions independent, as the ledger's `ledger:session-linked` channel does.
-Coupled: components/session-state/src/peers.ts, components/session-state/src/bridge.ts, components/shared/src/session-intent-events.ts
-Verify: components/session-title/tests/session-title.test.ts, components/session-state/tests/intent.test.ts
+Names are checked against other live sessions by reading the session-state database directly (`livePeers` from `components/session-state/src/peers.ts`); any failure to read it just picks a name. Naming makes no model request. Explicit task assignments own what a person works on.
+Why: the runtime may be down or not yet started when a session starts, and naming must never wait for it or fail because of it.
+Coupled: components/session-state/src/peers.ts
+Verify: components/session-title/tests/session-title.test.ts
 
 ## symbol:registerSessionTitle
 

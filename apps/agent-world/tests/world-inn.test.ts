@@ -277,7 +277,7 @@ test("the innkeeper's register lists every dormant agent, newest first, with its
 		expect(await rows.first().textContent()).toContain("docs-writer");
 		expect(await rows.first().textContent()).toContain("handbook");
 		expect(await rows.first().textContent()).toContain("Task number 0");
-		expect(await rows.nth(1).textContent()).toContain("No ledger task");
+		expect(await rows.nth(1).textContent()).toContain("No focused task");
 		expect(await rows.nth(1).textContent()).toContain("Scientific Skeptic");
 		expect(await rows.nth(1).textContent()).toContain("Left the guild: the burst passed");
 		expect(await rows.first().textContent()).not.toContain("Left the guild");

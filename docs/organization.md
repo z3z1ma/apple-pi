@@ -15,7 +15,7 @@ This page is the product contract. The runtime mechanics (the database, the comm
 | Mind | The role's ordered list of models and a thinking level; the first model the session's registry has is used. |
 | Soul | A temperament the harness draws at hire from local lists, like a name. Never edited. |
 | Self | One Markdown document the person keeps about itself and its teammates, written with `update_self`. Never distilled, never capped. |
-| Record | What the harness knows a person did: directory, ledger tasks, stated intent, manager history, hire and retire dates. |
+| Record | What the harness knows a person did: assignments and their outcomes, manager history, hire and retire dates. |
 | Hire, transfer, close, reopen, retire | Start a new person with a role under a manager; move a person under another manager; stop the process (the person sleeps); start it again with its history; record that the person has left (it stays reopenable). |
 | Senses | The two subagents every session keeps, `explorer` and `researcher`, to spend less of its own context. They are not people. |
 
@@ -29,7 +29,7 @@ This page is the product contract. The runtime mechanics (the database, the comm
 
 **Self.** One Markdown document per person, replaced whole with `update_self` and shown as the `<self>` section at every run; a person that has never written one sees suggested headings (the people it works with and what it thinks of them, who has done what, standing agreements, what it is on, what it has learned about this organization). It lives in the person's transcript and is reported to the runtime as the `self` fact, so the views show its headings. The [notebook](context.md) keeps its own job, sourced learnings about the work; the self is the person's own account of itself and its colleagues.
 
-**Record.** The directory (`directory`) shows every member of the caller's organization with its id, name, role and title, manager, status, directory, current ledger task, the ledger tasks it has worked on, when it first started, and, on request (`former: true`), when and why a former member left. Every manager change is kept (`manager_changes`). The record is public to the organization; Agent World's card is built from it.
+**Record.** The directory (`directory`) shows every member of the caller's organization with its id, name, role and title, manager, status, directory, held tasks and focus, availability (no held tasks), finished assignments and their outcomes, when it first started, and, on request (`former: true`), when and why a former member left. Managers also see the backlog: unassigned live ledger tasks in the organization's working directories, discovered without assigning them. Every manager change is kept (`manager_changes`). The record is public to the organization; Agent World's card shows the focused task and titles of finished tasks.
 
 ## The tree
 
@@ -39,17 +39,17 @@ Every root session's system prompt carries an `<org>` section: who it is, its id
 
 ## Manager tools
 
-A root, and a person whose role manages, holds six tools besides the directory: `hire` (`role`, `cwd`, optional `name`, `prompt`, `session_id`), `rehire`, `send_home`, `rename`, `move` (a person with everyone under it, to another manager of the same organization), and `let_go` (`reason`). The same acts are available to you from Agent World (hire at a manager's desk, retire from a person's actions) and the retire and transfer commands of the runtime. The details are in [session-state](session-state.md#manager-tools).
+A root, and a person whose role manages, holds six tools besides the directory: `hire` (required `role` and `goal`; optional `cwd`, `name`, `session_id`), `rehire` (`person`, optional `goal`), `send_home`, `rename`, `move` (a person with everyone under it, to another manager of the same organization), and `let_go` (`reason`). The same acts are available to you from Agent World (hire at a manager's desk, retire from a person's actions) and the retire and transfer commands of the runtime. The details are in [session-state](session-state.md#manager-tools).
 
 ## Tasks and assignments
 
-Work is explicit. `take_task` takes a written `goal` (creating an ephemeral task) or an existing `task` (its id or ledger path). Managers use `assign(person, goal or task)` and `unassign(person, task)`. An assignment records who gave whom what, when, and how it ended; assigning an asleep person opens its session and starts the work. A wake failure reports that the assignment was saved, so the manager can rehire without duplicating it.
+Work is explicit. Hiring creates and assigns a task before the person's first turn; rehiring without a new goal preserves its work, while a new goal adds an assignment and becomes its focus. `take_task` takes a written `goal` (creating an ephemeral task) or an existing `task` (its id or ledger path). Managers use `assign(person, goal or task)` and `unassign(person, task)`. An assignment records who gave whom what, when, and how it ended; assigning an asleep person opens its session and starts the work. A wake failure reports that the assignment was saved, so the manager can rehire without duplicating it.
 
 A person can hold several tasks, with one in focus. `focus(task)` rereads its `task.md`; the file is the goal, not a database copy. The goal is appended to context on assignment or focus, and again after compaction. Editing the file and refocusing brings its revision into context. Each task has a thread shared by its assignees and assigners; taking work also tells the person's manager there.
 
 Ephemeral tasks live under the Pi state directory in `tasks/<id>/`, with `task.md`, `retrospective.md`, and any useful context files. They survive restarts. `finish_task(outcome)` writes the outcome, ends the focused assignment, clears focus, and posts the outcome in the thread. Once all assignees finish, an ephemeral bundle moves to `tasks/history/<id>/`, including its retrospective. Ledger tasks keep the ledger's separate status and archive workflow.
 
-`promote_task(task)` moves a live ephemeral bundle into its project's `.ledger/`, through the same index transaction as `ledger_add`. Files, assignment identity, and thread stay together. Its heading supplies the ledger title and summary; optional `title` and `description` can name it more clearly. The runtime alone writes assignments and focus.
+`promote_task(task)` moves a live ephemeral bundle into its project's `.ledger/`, through the same index transaction as `ledger_add`. Files, assignment identity, and thread stay together. Its heading supplies the ledger title and summary; optional `title` and `description` can name it more clearly. The runtime alone writes assignments and focus. Editing a ledger bundle still records a transcript pointer in `history.json`, but never assigns work. Archiving a registered ledger task updates its bundle path without ending assignments or changing their identity. Views read the explicit focus, never old inferred intent or ledger touches.
 
 ## The role catalog
 

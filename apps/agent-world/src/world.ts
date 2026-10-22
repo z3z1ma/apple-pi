@@ -50,20 +50,15 @@ export interface CharacterFacts {
 	settledAt: number | null;
 	/** The top-level tool running now, with its main argument (command, path, ...). */
 	tool: { name: string; arg: string | null; since: number | null } | null;
-	/** The ledger task it touched last: the title from its `task.md` heading and its Status line. */
+	/** Its explicitly focused task: the title and status from task.md, whether ledger or ephemeral. */
 	task: { title: string; status: string | null; bundle: string } | null;
-	/**
-	 * What the session says it works on now (session-title's stated intent), shown when it has no ledger task. The
-	 * backend always sets it; fixtures may leave it out.
-	 */
-	intent?: string | null;
 	git: { repository: string; worktree: string; branch: string } | null;
 	cwd: string;
 	reportsTo: string | null;
 	/**
 	 * The person (the backend always sets these; fixtures may leave them out): the title of the role it was hired into
 	 * (null for a session with no role, such as the operator's own), one line of the soul drawn at hire, the headings of
-	 * its self (the document it keeps about itself and its teammates), and the ledger tasks it has worked on, newest first.
+	 * its self (the document it keeps about itself and its teammates), and the tasks it has finished, newest first.
 	 */
 	title?: string | null;
 	soul?: string | null;
@@ -162,7 +157,7 @@ export interface DormantAgent {
 	/** Its git repository's directory, or null outside one. */
 	repository: string | null;
 	cwd: string;
-	/** The ledger task it touched last. */
+	/** Its focused assignment, retained while it sleeps. */
 	task: { title: string; status: string | null; bundle: string } | null;
 	/** When its last incarnation ended (ms), and why (`exited`, `lost`, ...); null when unknown. */
 	stoppedAt: number | null;

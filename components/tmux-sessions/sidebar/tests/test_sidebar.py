@@ -83,16 +83,17 @@ def test_last_tool_falls_back_to_the_latest_tool_event_and_the_spark_counts_rece
     assert (idle.activity.last_tool, sum(idle.spark(now))) == ("grep", 3)
 
 
-def test_the_ledger_task_names_an_unnamed_session_falls_back_to_its_id_and_a_session_name_wins(world):
+def test_focused_work_titles_a_session_without_changing_the_persons_name(world):
     bundle = world.task("202601010000-thing", "Status: in-progress\nCreated: x\n\n# Build the thing\n")
-    world.add("tasked", "%1", current_task={"bundle": bundle, "taskId": "202601010000-thing"})
-    world.add("missing", "%2", current_task={"bundle": "/nowhere/x", "taskId": "202601010000-gone"})
-    world.add("named", "%3", name="Thing builder", current_task={"bundle": bundle, "taskId": "202601010000-thing"})
+    world.add("tasked", "%1", focus={"bundle": bundle, "taskId": "202601010000-thing"})
+    world.add("missing", "%2", focus={"bundle": "/nowhere/x", "taskId": "202601010000-gone"})
+    world.add("named", "%3", name="Thing builder", focus={"bundle": bundle, "taskId": "202601010000-thing"})
 
     by_id = {agent.session_id: agent for agent in model.live()}
-    assert (by_id["tasked"].name, by_id["tasked"].ledger.status) == ("Build the thing", "in-progress")
-    assert by_id["missing"].name == "202601010000-gone"
+    assert (by_id["tasked"].title, by_id["tasked"].task.status) == ("Build the thing", "in-progress")
+    assert by_id["missing"].title == "202601010000-gone"
     assert by_id["named"].name == "Thing builder"
+    assert by_id["named"].title == "Build the thing"
 
 
 def card_text(app):
@@ -119,7 +120,7 @@ def test_a_session_shows_its_name_status_tool_ledger_task_cost_context_and_lane_
         cwd="/repo/app",
         current_tool="bash",
         current_tool_arg="npm test",
-        current_task={"bundle": bundle, "taskId": "202601010000-login"},
+        focus={"bundle": bundle, "taskId": "202601010000-login"},
         model="claude",
         context_tokens=120_000,
         cost=1.25,
@@ -135,8 +136,8 @@ def test_a_session_shows_its_name_status_tool_ledger_task_cost_context_and_lane_
 
     cards, count = asyncio.run(run())
     assert cards["worker"]["lane"] == "lane-work"
-    assert "Login fixer" in cards["worker"]["title"]
-    assert cards["worker"]["task"] == "◆ Fix the login bug in-progress"
+    assert "Fix the login bug" in cards["worker"]["title"]
+    assert cards["worker"]["task"] == "◆ Login fixer in-progress"
     assert cards["worker"]["act"] == "bash npm test"
     assert cards["worker"]["meta"] == "120k $1.25"
     assert cards["finished"]["lane"] == "lane-need" and "✓" in cards["finished"]["title"]
@@ -183,7 +184,7 @@ def test_the_sidebar_keeps_running_when_the_runtime_is_down(world, monkeypatch):
     assert asyncio.run(run()) == (True, 1)
 
 
-def test_without_a_ledger_task_a_session_shows_its_stated_intent_and_a_task_wins_over_it(world):
+def test_views_show_explicit_focus_and_ignore_historical_guessed_intent(world):
     bundle = world.task("202601010000-login", "Status: in-progress\n\n# Fix the login bug\n")
     world.add("stated", "%1", name="Ada Lovejoy", intent="Fixing the CSV parser crash")
     world.add(
@@ -191,7 +192,7 @@ def test_without_a_ledger_task_a_session_shows_its_stated_intent_and_a_task_wins
         "%2",
         name="Kofi Marchetti",
         intent="Reading the billing code",
-        current_task={"bundle": bundle, "taskId": "202601010000-login"},
+        focus={"bundle": bundle, "taskId": "202601010000-login"},
     )
     world.add("neither", "%3", name="Orla Brannigan", cwd="/repo/app")
 
@@ -202,21 +203,23 @@ def test_without_a_ledger_task_a_session_shows_its_stated_intent_and_a_task_wins
             return card_text(app)
 
     cards = asyncio.run(run())
-    assert cards["stated"]["task"] == "◇ Fixing the CSV parser crash"
-    assert cards["tasked"]["task"] == "◆ Fix the login bug in-progress"
-    assert cards["neither"]["task"] == "◇ no ledger task · app"
+    assert cards["stated"]["task"] == "◇ no focused task · project"
+    assert "Fix the login bug" in cards["tasked"]["title"]
+    assert cards["tasked"]["task"] == "◆ Kofi Marchetti in-progress"
+    assert cards["neither"]["task"] == "◇ no focused task · app"
 
     now = time.time()
     by_id = {agent.session_id: agent for agent in model.live()}
-    assert str(dashboard.cells(by_id["stated"], now, 0)["task"]) == "Fixing the CSV parser crash"
+    assert str(dashboard.cells(by_id["stated"], now, 0)["task"]) == ""
     assert str(dashboard.cells(by_id["tasked"], now, 0)["task"]) == "Fix the login bug"
 
 
 def test_a_database_an_older_runtime_has_not_migrated_yet_still_lists_its_sessions(world):
     world.add("old", "%1", name="Older")
-    world.execute("alter table sessions drop column intent")
+    world.execute("drop table work_focus")
+    world.execute("drop table work_tasks")
     agents = model.live()
-    assert [(agent.session_id, agent.intent) for agent in agents] == [("old", "")]
+    assert [(agent.session_id, agent.task) for agent in agents] == [("old", None)]
 
 
 def test_an_organization_is_drawn_as_a_tree_with_role_titles_and_its_former_members_folded(world):

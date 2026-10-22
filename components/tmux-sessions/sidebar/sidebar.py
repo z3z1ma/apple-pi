@@ -102,7 +102,7 @@ class Card(Widget):
     def paint_title(self, frame: int) -> None:
         agent = self.agent
         mark = "[$text-success]✓[/]" if unseen_while_working(agent) else " "
-        title = Content.from_markup(f"[b]$glyph{mark} $name[/b]", glyph=glyph(agent, frame), name=agent.name)
+        title = Content.from_markup(f"[b]$glyph{mark} $name[/b]", glyph=glyph(agent, frame), name=agent.title)
         if agent.role:
             title += Content.from_markup(" [$text-muted]$role[/]", role=agent.role)
         if title != self.shown_title:

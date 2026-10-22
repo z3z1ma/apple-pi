@@ -10,9 +10,12 @@ This server's socket from tmux is compared after `os.path.realpath`.
 Why: the runtime stores tmux sockets by resolved path (`/tmp` is `/private/tmp` on macOS); the raw path matches nothing.
 Verify: components/tmux-sessions/sidebar/tests/test_sidebar.py
 
-`intent`, `role_title`, `reports_to`, `retired_at`, and `retired_reason` (`OPTIONAL_COLUMNS`) are selected only when the `sessions` table has them; otherwise each reads as null, and every session draws on its own.
+`role_title`, `reports_to`, `retired_at`, and `retired_reason` (`OPTIONAL_COLUMNS`) are selected only when the `sessions` table has them; otherwise each reads as null, and every session draws on its own.
 Why: a runtime started before the migration that adds a column keeps running old code, and selecting a missing column would list no sessions at all.
 Verify: components/tmux-sessions/sidebar/tests/test_sidebar.py
+
+Task titles come only from `work_focus` and `work_tasks`, guarded by table existence. Historical `current_task` and `intent` are not fallback assignments. The title may change with focus; the human name used for replies remains the person's name.
+Coupled: components/session-state/src/work.ts
 
 The views never mark a session seen because its pane is focused.
 Why: the runtime marks a session seen when a tmux client shows its pane; the views only send `mark_seen` for an explicit `x` or for reading it in the dashboard.

@@ -45,6 +45,12 @@ function fixture(agentDir: string) {
 	incarnation.run("ask", 1, "alive", null, "%1");
 	session.run("done", "root", "/work/beta", null, "idle", 1, 3000, null, 3000, null, null, task);
 	incarnation.run("done", 1, "alive_bridge_lost", null, "%2");
+	db.prepare(
+		"insert into work_tasks (id, bundle, project, organization, ephemeral, thread) values ('fix', ?, '/work/beta', 'done', 0, 'task:fix')",
+	).run(bundle);
+	db.exec(
+		"insert into assignments (person, task_id, assigned_by, assigned_at) values ('done', 'fix', 'operator', 0); insert into work_focus values ('done', 'fix');",
+	);
 	session.run("work", "root", "/work/gamma", null, "running_tool", 1, 5000, null, null, "read", "/x.ts", null);
 	incarnation.run("work", 1, "alive", null, "%3");
 	// Settled unseen, then started another run without the operator: working, with its result still unseen.
@@ -133,6 +139,20 @@ test.skipIf(!hasSwiftc)(
 		]);
 	},
 );
+
+test.skipIf(!hasSwiftc)("an older database stays visible without treating old ledger touches as assignments", () => {
+	const agentDir = join(scratch, "old-feed");
+	fixture(agentDir);
+	const db = new DatabaseSync(join(agentDir, "state", "apple-pi.db"));
+	db.exec("drop table work_focus; drop table work_tasks;");
+	db.close();
+	const result = spawnSync(binary, ["--feed-once"], {
+		env: { ...process.env, PI_CODING_AGENT_DIR: agentDir },
+		encoding: "utf8",
+	});
+	expect(result.status, result.stderr).toBe(0);
+	expect(JSON.parse(result.stdout)).toContainEqual(expect.objectContaining({ id: "done", name: "beta" }));
+});
 
 test.skipIf(!hasSwiftc)("--feed-once prints no agents before the database exists", () => {
 	const result = spawnSync(binary, ["--feed-once"], {

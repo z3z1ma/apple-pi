@@ -54,27 +54,9 @@ test("a session lists its organization, awake and asleep, not subagents or stran
 				role: "technical-writer",
 				title: "Technical Writer",
 				soul: "You count the callers; habit: you reread the ask.",
-				currentTask: { bundle: "/work/docs/.ledger/202610180001-docs", taskId: "202610180001-docs" },
 				prompt: { kind: "select", title: "Overwrite?" },
 			},
 		});
-		peer.send({
-			type: "task_link",
-			bundle: "/work/docs/.ledger/202610170001-old",
-			taskId: "202610170001-old",
-			via: "ledger",
-			at: 1,
-		});
-		peer.send({
-			type: "task_link",
-			bundle: "/work/docs/.ledger/202610180001-docs",
-			taskId: "202610180001-docs",
-			via: "ledger",
-			at: 2,
-		});
-		await vi.waitFor(() =>
-			expect(query(state.dbPath, "select 1 from session_tasks where session_id = 'peer-1'")).toHaveLength(2),
-		);
 		await fake("child-1", { session: { kind: "child", spawnedBy: callerId } });
 		await fake("stranger-1", { session: { name: "stranger" } });
 		const asleep = await fake("asleep-1", { session: { name: "reviewer" }, facts: { reportsTo: "peer-1" } });
@@ -107,8 +89,10 @@ test("a session lists its organization, awake and asleep, not subagents or stran
 				team: `team:${callerId}`,
 				status: "asking the operator",
 				directory: "/work/docs",
-				workingOn: "202610180001-docs",
-				record: ["202610180001-docs", "202610170001-old"],
+				availability: "available",
+				focus: null,
+				tasks: [],
+				record: [],
 				since: expect.any(Number),
 			},
 			{
@@ -121,7 +105,9 @@ test("a session lists its organization, awake and asleep, not subagents or stran
 				team: "team:peer-1",
 				status: "asleep",
 				directory: expect.any(String),
-				workingOn: null,
+				availability: "available",
+				focus: null,
+				tasks: [],
 				record: [],
 				since: expect.any(Number),
 			},

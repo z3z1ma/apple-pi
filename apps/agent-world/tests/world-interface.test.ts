@@ -162,7 +162,7 @@ const CAST: Character[] = [
 		title: "Technical Writer",
 		soul: "You quote the source before you paraphrase it.",
 		selfHeadings: ["Teammates", "Who has done what"],
-		tasks: ["202610190002-retry", "202610180009-invoices"],
+		tasks: ["Document invoice retries"],
 	}),
 	person("loose", { kind: "common-room", headquarters: HQ }, 4, working("read", "docs/session-state.md")),
 	person("solo", { kind: "square" }, 5, { ...asking("Deploy now?", 40), reportsTo: null }),
@@ -283,7 +283,7 @@ test("Agents groups everyone by place; Needs you lists questions first, then fin
 		expect(await groups(page)).toEqual([
 			{ title: "Document the interface", names: ["pi-docs", "pi-tests"] },
 			{ title: "Retry failed invoices", names: ["ledger"] },
-			{ title: "No ledger task", names: ["Orla", "loose", "solo"] },
+			{ title: "No focused task", names: ["Orla", "loose", "solo"] },
 		]);
 		await expect(page.getByRole("region", { name: "Document the interface" }).textContent()).resolves.toContain(
 			"in-progress",
@@ -348,9 +348,8 @@ test("every row offers Talk to, Examine, Go to, and Go to its terminal, which wo
 			"Teammates \u00b7 Who has done what",
 		])
 			expect(text).toContain(fact);
-		// The record: its other ledger tasks, besides the one it holds now.
-		expect(text).toContain("202610180009-invoices");
-		expect(text).not.toContain("202610190002-retry");
+		// The record is completed assignments, not files touched.
+		expect(text).toContain("RecordDocument invoice retries");
 		await shot(page, "examine");
 		await card.getByRole("button", { name: "Close" }).click();
 		await card.waitFor({ state: "detached", timeout: 2000 });

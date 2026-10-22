@@ -2,6 +2,7 @@ import { existsSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai/compat";
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
+import installLedger from "../../../extensions/ledger.js";
 import { fauxSession, type Reply } from "../../../tests/helpers/faux-session.js";
 import { addLedgerTask } from "../../shared/src/ledger-files.js";
 import bridge from "../src/index.js";
@@ -23,24 +24,25 @@ async function person(manager?: string) {
 				const getFlag = pi.getFlag.bind(pi);
 				pi.getFlag = (name) => (name === "reports-to" && manager ? manager : getFlag(name));
 				bridge(pi);
+				installLedger(pi);
 			},
 		],
 		() => script.shift() ?? fauxAssistantMessage("noted"),
-		[],
+		["ledger_status"],
 	);
 	const id = run.session.sessionManager.getSessionId();
 	await vi.waitFor(() => expect(query(state.dbPath, "select 1 from sessions where id = ?", id)).toHaveLength(1), {
 		timeout: 15000,
 	});
 	await run.session.prompt("ready");
-	async function invoke(name: string, args: Parameters<typeof fauxToolCall>[1]) {
+	async function invoke<T = WorkTask>(name: string, args: Parameters<typeof fauxToolCall>[1]) {
 		await vi.waitFor(() => expect(run.session.isStreaming).toBe(false));
 		script.push(call(name, args));
 		await run.session.prompt(`call ${name}`);
 		const result = run.session.messages.filter((m) => m.role === "toolResult").at(-1)!;
 		expect(result).toMatchObject({ isError: false });
 		await vi.waitFor(() => expect(run.session.isStreaming).toBe(false));
-		return result.details as unknown as WorkTask;
+		return result.details as unknown as T;
 	}
 	return { run, id, invoke, script };
 }
@@ -193,6 +195,95 @@ test("promotion keeps files, assignment identity and conversation, while ledger 
 		expect(taken.ephemeral).toBe(0);
 		expect(taken.bundle).toBe(realpathSync(join(who.run.cwd, ledger.bundlePath)));
 		await packets(who.run, 3);
+	} finally {
+		await close(who.run);
+	}
+}, 30000);
+
+test("archiving a ledger bundle updates its path without changing the assignment, focus, or thread", async () => {
+	const who = await person();
+	try {
+		const ledger = await addLedgerTask(
+			who.run.cwd,
+			"Verify task archive paths",
+			"Keep the goal reachable after archive",
+		);
+		const taken = await who.invoke("take_task", { task: ledger.taskId });
+		await packets(who.run, 1);
+		await who.invoke("ledger_status", { task: ledger.taskId, status: "done" });
+		const after = await who.invoke("focus", { task: taken.id });
+		await packets(who.run, 2);
+		expect(after).toMatchObject({
+			id: taken.id,
+			thread: taken.thread,
+			bundle: realpathSync(join(who.run.cwd, ".ledger", "history", ledger.taskId)),
+		});
+		expect(JSON.stringify(goalPackets(who.run).at(-1))).toContain("Status: done");
+		expect(
+			query(state.dbPath, "select task_id from assignments where person = ? and ended_at is null", who.id),
+		).toEqual([{ task_id: taken.id }]);
+	} finally {
+		await close(who.run);
+	}
+}, 30000);
+
+test("the directory shows availability, assigned work, focus, ended outcomes, and the unassigned ledger backlog", async () => {
+	const who = await person();
+	type Directory = {
+		members: {
+			id: string;
+			availability: string;
+			focus: { id: string; title: string } | null;
+			tasks: { id: string }[];
+			record: { outcome: string; endReason: string }[];
+		}[];
+		backlog: { id: string; bundle: string; title: string }[];
+	};
+	try {
+		const ledger = await addLedgerTask(who.run.cwd, "Review release readiness", "Check the release evidence");
+		let directory = await who.invoke<Directory>("directory", {});
+		expect(directory.members.find((m) => m.id === who.id)).toMatchObject({
+			availability: "available",
+			focus: null,
+			tasks: [],
+			record: [],
+		});
+		expect(directory.backlog).toContainEqual(expect.objectContaining({ title: "Review release readiness" }));
+		const task = await who.invoke("take_task", {
+			task: directory.backlog.find((entry) => entry.bundle.endsWith(ledger.taskId))!.id,
+		});
+		await packets(who.run, 1);
+		directory = await who.invoke<Directory>("directory", {});
+		expect(directory.backlog).toEqual([]);
+		expect(directory.members.find((m) => m.id === who.id)).toMatchObject({
+			availability: "assigned",
+			focus: { id: task.id, title: "Review release readiness" },
+			tasks: [expect.objectContaining({ id: task.id })],
+		});
+		await who.invoke("unassign", { person: who.id, task: task.id });
+		directory = await who.invoke<Directory>("directory", {});
+		expect(directory.members.find((m) => m.id === who.id)).toMatchObject({
+			availability: "available",
+			focus: null,
+			tasks: [],
+			record: [],
+		});
+		expect(directory.backlog).toContainEqual(expect.objectContaining({ id: task.id }));
+		await who.invoke("take_task", { task: task.id });
+		await packets(who.run, 2);
+		await who.invoke("finish_task", { outcome: "Release checks passed; load behavior remains unverified." });
+		directory = await who.invoke<Directory>("directory", {});
+		expect(directory.members.find((m) => m.id === who.id)).toMatchObject({
+			availability: "available",
+			focus: null,
+			tasks: [],
+			record: [
+				expect.objectContaining({
+					endReason: "finished",
+					outcome: "Release checks passed; load behavior remains unverified.",
+				}),
+			],
+		});
 	} finally {
 		await close(who.run);
 	}

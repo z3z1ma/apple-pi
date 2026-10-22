@@ -59,7 +59,12 @@ function RecruitForm({
 	const host = theme && look ? portraitOf(theme, look, progress?.state === "done" ? "happy" : "neutral") : undefined;
 	const hostName = worker ? coordinator!.name : theme?.labels.recruiter;
 	const cwd = repository === TYPED ? typed.trim() : repository;
-	const ready = name.trim() !== "" && cwd !== "" && (!worker || role !== NO_ROLE) && progress?.state !== "sending";
+	const ready =
+		name.trim() !== "" &&
+		cwd !== "" &&
+		(!worker || role !== NO_ROLE) &&
+		(role === NO_ROLE || brief.trim() !== "") &&
+		progress?.state !== "sending";
 	const joined = progress?.sessionId
 		? world?.characters.find((character) => character.id === progress.sessionId)
 		: undefined;
@@ -182,9 +187,10 @@ function RecruitForm({
 						</label>
 					)}
 					<label className="aw-letter-to aw-recruit-brief">
-						<span>Brief</span>
+						<span>Goal</span>
 						<textarea
-							aria-label="Brief"
+							aria-label="Goal"
+							required={role !== NO_ROLE}
 							className="aw-letter-body"
 							placeholder={say(theme, "recruit-brief")}
 							value={brief}
@@ -197,8 +203,8 @@ function RecruitForm({
 					</label>
 					<p className="aw-letter-note">
 						{worker
-							? `Opens in a new tmux window after ${coordinator!.name}'s, reporting to ${coordinator!.name}. The brief is its first prompt.`
-							: "Opens in a new tmux window beside your current one, reporting to nobody. The brief is its first prompt."}
+							? `Opens in a new tmux window after ${coordinator!.name}'s, reporting to ${coordinator!.name}. The goal becomes its first assigned task.`
+							: "Opens in a new tmux window beside your current one, reporting to nobody. A goal becomes its first assigned task."}
 					</p>
 					<div className="aw-letter-actions">
 						<button type="button" className="aw-button" onClick={() => recruiting.close()}>

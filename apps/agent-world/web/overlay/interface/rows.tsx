@@ -100,7 +100,7 @@ export function CharacterRow({
 }: {
 	character: Character;
 	detail: string;
-	/** What it works on (its ledger task or stated intent), on a line of its own under the detail. */
+	/** Its focused task, on a line of its own under the detail. */
 	work?: string;
 	/** A time to show at the row's end, such as how long it has needed you. */
 	since?: number | null;

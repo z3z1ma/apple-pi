@@ -7,6 +7,7 @@
 import { existsSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { statePaths } from "../../session-state/src/paths.js";
+import { type AssignedTask, workOf } from "../../session-state/src/work-read.js";
 
 export interface Member {
 	id: string;
@@ -21,9 +22,10 @@ export interface Member {
 	reportsTo: string | null;
 	status: "busy" | "idle" | "waiting" | "asleep";
 	cwd: string;
-	currentTask: string | null;
-	/** Ledger task ids this session has touched, newest first. */
-	tasks: string[];
+	/** Work explicitly held, with one focus and a record of finished assignments. */
+	tasks: AssignedTask[];
+	focus: AssignedTask | null;
+	record: AssignedTask[];
 	/** When the session first started (ms), or null when it never ran. */
 	since: number | null;
 	/** When and why the person left; null for a member. */
@@ -46,7 +48,6 @@ interface Row {
 	cwd: string;
 	run_state: string;
 	prompt: string | null;
-	task: string | null;
 	awake: number | null;
 	since: number | null;
 	retired_at: number | null;
@@ -89,7 +90,6 @@ export function organizationOf(self: string, includeSelf = false): Organization 
 		const rows = db
 			.prepare(
 				`select s.id, s.name, ${organizationColumns(db)}, s.reports_to, s.cwd, s.run_state, s.prompt,
-					json_extract(s.current_task, '$.taskId') as task,
 					i.ended_at is null and i.process_state in ('alive', 'alive_bridge_lost') as awake,
 					(select min(f.started_at) from incarnations f where f.session_id = s.id) as since
 				from sessions s left join incarnations i on i.session_id = s.id and i.generation = s.generation
@@ -100,7 +100,6 @@ export function organizationOf(self: string, includeSelf = false): Organization 
 		const managerOf = new Map(rows.map((row) => [row.id, row.reports_to]));
 		if (!managerOf.has(self)) managerOf.set(self, null);
 		const root = rootOf(self, managerOf);
-		const tasks = db.prepare("select distinct task_id from session_tasks where session_id = ? order by at desc");
 		const members: Member[] = rows
 			.filter((row) => (includeSelf || row.id !== self) && rootOf(row.id, managerOf) === root)
 			.map((row) => ({
@@ -112,8 +111,7 @@ export function organizationOf(self: string, includeSelf = false): Organization 
 				reportsTo: row.reports_to,
 				status: !row.awake ? "asleep" : row.prompt ? "waiting" : row.run_state === "idle" ? "idle" : "busy",
 				cwd: row.cwd,
-				currentTask: row.task,
-				tasks: (tasks.all(row.id) as { task_id: string }[]).map((t) => t.task_id),
+				...workOf(db, row.id),
 				since: row.since,
 				retired: row.retired_at ? { at: row.retired_at, reason: row.retired_reason ?? "" } : null,
 			}));

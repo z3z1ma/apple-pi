@@ -1,9 +1,11 @@
-import { basename, dirname, resolve } from "node:path";
+import { realpathSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineTool, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
-import { LEDGER_LINK_CHANNEL, type LedgerLink } from "../components/shared/src/ledger-events.js";
+import { sendCommand } from "../components/session-state/src/client.js";
+import { withWork } from "../components/session-state/src/work.js";
 import {
 	addLedgerTask,
 	isLiveStatus,
@@ -83,9 +85,23 @@ function createLedgerStatusTool() {
 				{ description: "New status. done and cancelled archive the task." },
 			),
 		}),
-		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+		async execute(_toolCallId, params, signal, _onUpdate, ctx) {
 			if (!ctx.isProjectTrusted()) throw new Error("Changing a ledger task requires a trusted session repository");
-			const result = await transitionLedgerTask(ctx.cwd, params.task, params.status, linkableSession(ctx));
+			const root = realpathSync(ctx.cwd);
+			const result = await transitionLedgerTask(root, params.task, params.status, linkableSession(ctx));
+			const from = join(root, ".ledger", result.taskId);
+			if (
+				!isLiveStatus(result.status) &&
+				withWork((db) => db.prepare("select 1 from work_tasks where bundle = ?").get(from))
+			) {
+				const receipt = await sendCommand(
+					ctx.sessionManager.getSessionId(),
+					{ kind: "task_moved", from, to: join(root, result.bundlePath) },
+					{ signal },
+				);
+				if (receipt.stage === "failed")
+					throw new Error(`The ledger task was archived, but its assignment path was not updated: ${receipt.reason}`);
+			}
 			const verb = isLiveStatus(result.status) ? "Moved" : "Archived";
 			return {
 				content: [{ type: "text" as const, text: `${verb} ${result.taskPath} to ${result.status}` }],
@@ -118,23 +134,13 @@ export default function installLedger(pi: ExtensionAPI): void {
 		if (OPAQUE_CHANGE_TOOLS.has(event.toolName))
 			observed.set(ctx.sessionManager.getSessionId(), observeBundles(ctx.cwd));
 	});
-	const announce = (sessionId: string, bundle: string | undefined, via: LedgerLink["via"]) => {
-		if (bundle)
-			pi.events.emit(LEDGER_LINK_CHANNEL, { sessionId, bundle, taskId: basename(bundle), via } satisfies LedgerLink);
-	};
-	// No trust gate: the session already changed the bundle, and workers may run untrusted. Every session announces
-	// its touches; only one with a transcript file is written to history.json, whose ids must point at a transcript.
+	// Only a session with a persisted transcript is written to history.json. Touching a file never assigns work.
 	pi.on("tool_result", async (event, ctx) => {
 		const sessionId = ctx.sessionManager.getSessionId();
 		const historySession = linkableSession(ctx);
-		if ((event.toolName === "ledger_add" || event.toolName === "ledger_status") && !event.isError) {
-			const details = event.details as { bundlePath?: string } | undefined;
-			if (details?.bundlePath) announce(sessionId, resolve(ctx.cwd, details.bundlePath), event.toolName);
-			return;
-		}
 		if (event.toolName === "write" || event.toolName === "edit") {
 			if (!event.isError && typeof event.input.path === "string") {
-				announce(sessionId, await linkChangedFile(ctx.cwd, event.input.path, historySession, ctx.signal), "edit");
+				await linkChangedFile(ctx.cwd, event.input.path, historySession, ctx.signal);
 			}
 			return;
 		}
@@ -145,11 +151,7 @@ export default function installLedger(pi: ExtensionAPI): void {
 		for (const [bundle, signature] of after) {
 			const previous = before.get(bundle);
 			if (previous === undefined || previous === signature) continue;
-			announce(
-				sessionId,
-				await linkSession(dirname(dirname(bundle)), basename(bundle), historySession, ctx.signal),
-				"edit",
-			);
+			await linkSession(dirname(dirname(bundle)), basename(bundle), historySession, ctx.signal);
 		}
 	});
 }

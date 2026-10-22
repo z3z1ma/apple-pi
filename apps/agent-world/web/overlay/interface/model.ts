@@ -121,15 +121,12 @@ export function needsYou(world: WorldSnapshot | undefined): Group[] {
 	return groups.filter((group) => group.characters.length);
 }
 
-/**
- * One line of what a character works on: the title of the ledger task it touched last, else what its session says it
- * works on now (its stated intent); empty when neither is known.
- */
+/** The explicit focused task, or no work line when the person has not focused an assignment. */
 export function workLine(character: Character): string {
-	return character.facts?.task?.title ?? character.facts?.intent ?? "";
+	return character.facts?.task?.title ?? "";
 }
 
-/** The Work tab: agents grouped by the ledger task they touched last; those without one last. */
+/** The Work tab: people grouped by focused task; those without a focus last. */
 export function byTask(world: WorldSnapshot | undefined): Group[] {
 	const tasks = new Map<string, Group>();
 	const loose: Character[] = [];
@@ -149,7 +146,7 @@ export function byTask(world: WorldSnapshot | undefined): Group[] {
 		tasks.set(task.bundle, group);
 	}
 	const groups = [...tasks.values()];
-	if (loose.length) groups.push({ key: "no-task", title: "No ledger task", characters: loose });
+	if (loose.length) groups.push({ key: "no-task", title: "No focused task", characters: loose });
 	return groups;
 }
 

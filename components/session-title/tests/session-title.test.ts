@@ -1,14 +1,12 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import type { Context } from "@earendil-works/pi-ai";
 import { fauxAssistantMessage } from "@earendil-works/pi-ai/compat";
 import { type ExtensionAPI, SessionManager } from "@earendil-works/pi-coding-agent";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fauxSession, type Reply } from "../../../tests/helpers/faux-session.js";
+import { fauxSession } from "../../../tests/helpers/faux-session.js";
 import { migrate } from "../../session-state/src/schema.js";
-import { SESSION_INTENT_CHANNEL, type SessionIntent } from "../../shared/src/session-intent-events.js";
 import { runInChildSessionContext } from "../../subagents/src/child-context.js";
 import registerSessionTitle, { SESSION_TITLE_ENTRY } from "../src/index.js";
 import { FAMILY_NAMES, FIRST_NAMES, pickName } from "../src/names.js";
@@ -29,13 +27,6 @@ afterEach(() => {
 	else process.env.PI_CODING_AGENT_DIR = previousAgentDir;
 	rmSync(agentDir, { recursive: true, force: true });
 });
-
-function quickProfile(): void {
-	writeFileSync(
-		join(agentDir, "model-profiles.json"),
-		JSON.stringify({ profiles: { quick: { model: "faux-session-provider/faux-session-model", thinking: "off" } } }),
-	);
-}
 
 /** Live root sessions in the state database, as the runtime records them. */
 function liveSessions(names: string[]): void {
@@ -58,51 +49,23 @@ function liveSessions(names: string[]): void {
 	}
 }
 
-/** True for a request that asks for the session's intent; every other request is a session turn. */
-const isIntent = (context: Context) => {
-	const first = context.messages[0];
-	return typeof first?.content === "string" && first.content.includes("is working on now");
-};
-
 interface Options {
 	tui?: boolean;
 	factory?: (pi: ExtensionAPI) => void;
-	/** Session turns in order; "Done." once exhausted. */
-	turns?: Reply[];
-	/** Answers to intent requests in order; "Fixing the parser" once exhausted. */
-	intents?: (Reply | Promise<Reply>)[];
 	cwd?: string;
 	sessionManager?: SessionManager;
-	/** Runs just before the session is bound to the TUI, which starts it. */
 	beforeStart?: () => void;
 }
 
-/** A real session with the extension; intent requests are answered from `intents`. */
 async function harness(options: Options = {}) {
-	const requests: string[] = [];
-	const turnRequests: Context[] = [];
-	const turns = options.turns ?? [];
-	const intents = options.intents ?? [];
-	const announced: SessionIntent[] = [];
-	const listen = (pi: ExtensionAPI) =>
-		pi.events.on(SESSION_INTENT_CHANNEL, (data) => announced.push(data as SessionIntent));
-	const run = await fauxSession(
-		[options.factory ?? registerSessionTitle, listen],
-		(context) => {
-			if (!isIntent(context)) {
-				turnRequests.push(context);
-				return turns.shift() ?? fauxAssistantMessage("Done.");
-			}
-			requests.push(context.messages[0]?.content as string);
-			return intents.shift() ?? fauxAssistantMessage("Fixing the parser");
-		},
-		[],
-		{ cwd: options.cwd, sessionManager: options.sessionManager },
-	);
+	const run = await fauxSession([options.factory ?? registerSessionTitle], () => fauxAssistantMessage("Done."), [], {
+		cwd: options.cwd,
+		sessionManager: options.sessionManager,
+	});
 	cleanup.push(run.dispose);
 	const warnings: string[] = [];
 	options.beforeStart?.();
-	if (options.tui !== false) {
+	if (options.tui !== false)
 		await run.session.bindExtensions({
 			mode: "tui",
 			uiContext: {
@@ -111,21 +74,14 @@ async function harness(options: Options = {}) {
 				},
 			} as never,
 		});
-	}
 	const name = () => run.session.sessionManager.getSessionName();
 	const recorded = () =>
 		run.session.sessionManager
 			.getEntries()
 			.flatMap((entry) => (entry.type === "custom" && entry.customType === SESSION_TITLE_ENTRY ? [entry.data] : []));
-	return { ...run, requests, turnRequests, announced, warnings, name, recorded };
+	return { ...run, warnings, name, recorded };
 }
 
-async function until(check: () => boolean): Promise<void> {
-	for (let attempt = 0; attempt < 200 && !check(); attempt++) await new Promise((resolve) => setTimeout(resolve, 5));
-	expect(check()).toBe(true);
-}
-
-/** Lets any request the extension would start run to completion. */
 const settle = () => new Promise((resolve) => setTimeout(resolve, 50));
 
 function parts(name: string | undefined): [string, string] {
@@ -151,7 +107,6 @@ describe("session names", () => {
 	});
 
 	it("names a new unnamed root TUI session as it starts, unlike any live session, without a model request", async () => {
-		quickProfile();
 		const taken = `${FIRST_NAMES[0]} ${FAMILY_NAMES[0]}`;
 		liveSessions([taken]);
 		const scripted = [0, 0];
@@ -166,8 +121,9 @@ describe("session names", () => {
 
 		await run.session.prompt("The CSV parser crashes on quoted commas.");
 		await settle();
-		// The only quick request is the intent; the name stays.
-		expect(run.requests.every((prompt) => prompt.includes("is working on now"))).toBe(true);
+		// Only the operator's turn calls the model; neither the name nor the work is guessed.
+		expect(run.requests).toHaveLength(1);
+		expect(run.warnings).toEqual([]);
 		expect(run.name()).toBe(name);
 	});
 
@@ -212,62 +168,15 @@ describe("session names", () => {
 	});
 
 	it("does nothing in a child session or outside the TUI", async () => {
-		quickProfile();
 		const child = await harness({ factory: (pi) => runInChildSessionContext(() => registerSessionTitle(pi)) });
 		await child.session.prompt("Fix the parser.");
 		const print = await harness({ tui: false });
 		await print.session.prompt("Fix the parser.");
 
 		await settle();
-		expect(child.requests).toHaveLength(0);
-		expect(print.requests).toHaveLength(0);
+		expect(child.requests).toHaveLength(1);
+		expect(print.requests).toHaveLength(1);
 		expect(child.name()).toBeUndefined();
 		expect(print.name()).toBeUndefined();
-	});
-});
-
-describe("session intent", () => {
-	it("after each settled user turn, announces the quick model's sentence and keeps it when the work has not changed", async () => {
-		quickProfile();
-		const run = await harness({
-			turns: [fauxAssistantMessage("Found the quoting bug."), fauxAssistantMessage("Added a test.")],
-			intents: [
-				fauxAssistantMessage('"Fixing the CSV parser crash on quoted commas."'),
-				fauxAssistantMessage("KEEP"),
-				fauxAssistantMessage("Writing the upload retry docs"),
-			],
-		});
-		const id = run.session.sessionManager.getSessionId();
-		await run.session.prompt("The CSV parser crashes on quoted commas.");
-		await until(() => run.announced.length === 1);
-		expect(run.announced).toEqual([{ sessionId: id, intent: "Fixing the CSV parser crash on quoted commas" }]);
-		expect(run.requests[0]).toContain("The CSV parser crashes on quoted commas.");
-		expect(run.requests[0]).toContain("Found the quoting bug.");
-
-		await run.session.prompt("Add a test for it.");
-		await until(() => run.requests.length === 2);
-		await settle();
-		// The model sees the previous sentence, so it can say the work is unchanged.
-		expect(run.requests[1]).toContain("Fixing the CSV parser crash on quoted commas");
-		expect(run.announced).toHaveLength(1);
-
-		await run.session.prompt("Now document the upload retries.");
-		await until(() => run.announced.length === 2);
-		expect(run.announced[1]?.intent).toBe("Writing the upload retry docs");
-		// No intent request ever reaches the session's own conversation.
-		expect(run.turnRequests).toHaveLength(3);
-		expect(run.warnings).toEqual([]);
-	});
-
-	it("warns once when the quick model fails, and announces nothing", async () => {
-		const run = await harness();
-		await run.session.prompt("Fix the parser.");
-		await until(() => run.warnings.length === 1);
-		expect(run.warnings[0]).toContain("model-profiles.json");
-		await run.session.prompt("Now add a test.");
-		await settle();
-		expect(run.warnings).toHaveLength(1);
-		expect(run.announced).toEqual([]);
-		parts(run.name());
 	});
 });

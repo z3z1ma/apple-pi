@@ -24,9 +24,8 @@ function factRows(character: Character, world: WorldSnapshot | undefined): [stri
 	if (facts.soul) rows.push(["Soul", facts.soul]);
 	if (facts.selfHeadings?.length) rows.push(["Self", facts.selfHeadings.join(" \u00b7 ")]);
 	if (facts.task)
-		rows.push(["Ledger task", facts.task.status ? `${facts.task.title} (${facts.task.status})` : facts.task.title]);
-	else if (facts.intent) rows.push(["Working on", facts.intent]);
-	const record = (facts.tasks ?? []).filter((id) => id !== facts.task?.bundle.split("/").pop());
+		rows.push(["Focused task", facts.task.status ? `${facts.task.title} (${facts.task.status})` : facts.task.title]);
+	const record = facts.tasks ?? [];
 	if (record.length) rows.push(["Record", record.join(", ")]);
 	if (facts.git) {
 		rows.push(["Repository", base(facts.git.repository)]);

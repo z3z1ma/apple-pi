@@ -241,7 +241,7 @@ describe.each(PACKS)("%s", (id) => {
 				"notes \u2014 /r/notes",
 				"Another directory\u2026",
 			]);
-			expect(await form.getByLabel("Brief").getAttribute("placeholder")).toBe(say("recruit-brief"));
+			expect(await form.getByLabel("Goal").getAttribute("placeholder")).toBe(say("recruit-brief"));
 			// The role: every catalog role by title, the first chosen, its mandate under the select.
 			const role = form.getByLabel(say("recruit-role"));
 			await vi.waitFor(async () => expect(await role.locator("option").count()).toBe(ROLES.length));
@@ -256,7 +256,8 @@ describe.each(PACKS)("%s", (id) => {
 			expect(await send.isDisabled()).toBe(true);
 			await form.getByLabel("Name").fill("docs");
 			await form.getByLabel("Repository").selectOption("/r/handbook");
-			await form.getByLabel("Brief").fill("Write the style guide.");
+			expect(await send.isDisabled()).toBe(true);
+			await form.getByLabel("Goal").fill("Write the style guide.");
 			await shot(page, `aw-10-${id}-worker-form`);
 			await send.click();
 			await form.getByText(say("recruit-joined", { name: "docs" })).waitFor({ timeout: 5000 });
@@ -316,7 +317,7 @@ describe.each(PACKS)("%s", (id) => {
 			expect(await role.inputValue()).toBe("");
 			await form.getByLabel("Repository").selectOption("");
 			await form.getByLabel("Directory").fill("~/code/scratch");
-			await form.getByLabel("Brief").fill("Look around.");
+			await form.getByLabel("Goal").fill("Look around.");
 			await shot(page, `aw-10-${id}-independent-form`);
 			await form.getByRole("button", { name: say("recruit-send"), exact: true }).click();
 			await form.getByText(say("recruit-joined", { name: "scout" })).waitFor({ timeout: 5000 });

@@ -22,7 +22,8 @@ vi.stubEnv("FAKE_PI_LOG", piLog);
 writeFileSync(
 	join(fakeDir, "pi"),
 	`#!${process.execPath}
-const { appendFileSync } = require("node:fs");
+const { appendFileSync, readFileSync } = require("node:fs");
+const { DatabaseSync } = require("node:sqlite");
 const { execFileSync } = require("node:child_process");
 const { createConnection } = require("node:net");
 process.on("uncaughtException", (error) => {
@@ -30,9 +31,13 @@ process.on("uncaughtException", (error) => {
 	process.exit(1);
 });
 const args = process.argv.slice(2);
-appendFileSync(process.env.FAKE_PI_LOG, JSON.stringify({ args, cwd: process.cwd() }) + "\\n");
-if (args.at(-1) === "@fail") process.exit(1);
+if (args.includes("Failing hire")) process.exit(1);
 const id = args[args.indexOf("--session-id") + 1];
+const db = new DatabaseSync(process.env.PI_CODING_AGENT_DIR + "/state/apple-pi.db", { readOnly: true });
+const task = db.prepare("select t.bundle from work_tasks t join work_focus f on f.task_id = t.id where f.person = ?").get(id);
+const goal = task ? readFileSync(task.bundle + "/task.md", "utf8") : null;
+db.close();
+appendFileSync(process.env.FAKE_PI_LOG, JSON.stringify({ args, cwd: process.cwd(), goal }) + "\\n");
 // Simulate the title extension assigning a name in the newly started session.
 const name = args.includes("--name") ? args[args.indexOf("--name") + 1] : "Ada Lovelace";
 execFileSync("tmux", ["rename-window", "-t", process.env.TMUX_PANE, name]);
@@ -80,7 +85,7 @@ const starts = () =>
 	readFileSync(piLog, "utf8")
 		.trim()
 		.split("\n")
-		.map((line) => JSON.parse(line) as { args: string[]; cwd: string });
+		.map((line) => JSON.parse(line) as { args: string[]; cwd: string; goal: string | null });
 const incarnation = (id: string) =>
 	query<{ generation: number; ended_at: number | null; end_reason: string | null; process_state: string }>(
 		state.dbPath,
@@ -118,11 +123,13 @@ test("a coordinator starts a session in a new tmux window, and reopens it by id 
 		call("hire", {
 			cwd: workDir,
 			role: "repository-archaeologist",
-			prompt: "@brief.md",
+			goal: "Read brief.md and document the interfaces.",
 			session_id: "worker-1",
 		}),
 		fauxAssistantMessage("started"),
 		call("rehire", { person: "worker-1" }),
+		fauxAssistantMessage("rehired"),
+		call("rehire", { person: "worker-1", goal: "Check the rewritten interfaces." }),
 	]);
 	const coordinatorId = run.session.sessionManager.getSessionId();
 	try {
@@ -139,12 +146,13 @@ test("a coordinator starts a session in a new tmux window, and reopens it by id 
 				coordinatorId,
 				"--role",
 				"repository-archaeologist",
-				"@brief.md",
+				"You have assigned work. Begin with your focused task.",
 			],
 			cwd: workDir,
+			goal: expect.stringContaining("Read brief.md and document the interfaces."),
 		});
 		expect(tmux("list-windows", "-a", "-F", "#{window_name}").split("\n")).toContain("Ada Lovelace");
-		expect(query(state.dbPath, "select stage from commands where session_id = 'worker-1'")).toEqual([
+		expect(query(state.dbPath, "select stage from commands where session_id = 'worker-1' and kind = 'start'")).toEqual([
 			{ stage: "applied" },
 		]);
 		expect(incarnation("worker-1")).toMatchObject({ generation: 1, ended_at: null });
@@ -157,10 +165,29 @@ test("a coordinator starts a session in a new tmux window, and reopens it by id 
 			text: expect.stringContaining("worker-1 is back (worker-1)."),
 		});
 		expect(starts()[1]).toEqual({
-			args: ["--session-id", "worker-1", "--name", "Ada Lovelace", "--reports-to", coordinatorId],
+			args: [
+				"--session-id",
+				"worker-1",
+				"--name",
+				"Ada Lovelace",
+				"--reports-to",
+				coordinatorId,
+				"--role",
+				"repository-archaeologist",
+				"You have assigned work. Begin with your focused task.",
+			],
 			cwd: workDir,
+			goal: expect.stringContaining("Read brief.md and document the interfaces."),
 		});
 		expect(incarnation("worker-1")).toMatchObject({ generation: 2, ended_at: null });
+		tmux("kill-window", "-t", "Ada Lovelace");
+		await vi.waitFor(() => expect(incarnation("worker-1").ended_at).not.toBeNull(), { timeout: 15000 });
+		await run.session.prompt("bring it back with the next goal");
+		expect(toolResults(run)[2]).toMatchObject({ isError: false });
+		expect(starts().at(-1)?.goal).toContain("Check the rewritten interfaces.");
+		expect(
+			query(state.dbPath, "select count(*) as count from assignments where person = 'worker-1' and ended_at is null"),
+		).toEqual([{ count: 2 }]);
 	} finally {
 		await close(run);
 		try {
@@ -234,7 +261,14 @@ test("assigning a sleeping report opens its window with the goal waiting in its 
 }, 30000);
 
 test("starting a session fails when its window closes before the session connects", async () => {
-	const run = await coordinator([call("hire", { cwd: workDir, role: "repository-archaeologist", prompt: "@fail" })]);
+	const run = await coordinator([
+		call("hire", {
+			cwd: workDir,
+			role: "repository-archaeologist",
+			name: "Failing hire",
+			goal: "Exercise failed startup.",
+		}),
+	]);
 	try {
 		await run.session.prompt("start a broken worker");
 		expect(toolResults(run)[0]).toMatchObject({
@@ -294,8 +328,21 @@ test("renaming an unknown person reports that it does not exist", async () => {
 	}
 }, 20000);
 
+test("a hire without a written goal is refused before creating a person", async () => {
+	const run = await coordinator([call("hire", { role: "technical-writer", session_id: "no-goal-person" })]);
+	try {
+		await run.session.prompt("hire without assigning work");
+		expect(toolResults(run)[0]).toMatchObject({ isError: true, text: expect.stringContaining("goal") });
+		expect(query(state.dbPath, "select 1 from sessions where id = 'no-goal-person'")).toEqual([]);
+	} finally {
+		await close(run);
+	}
+}, 20000);
+
 test("hiring into a role the catalog lacks fails before any window opens", async () => {
-	const run = await coordinator([call("hire", { cwd: workDir, role: "court-jester" })]);
+	const run = await coordinator([
+		call("hire", { cwd: workDir, role: "court-jester", goal: "Review the release plan." }),
+	]);
 	try {
 		await run.session.prompt("hire a jester");
 		expect(toolResults(run)[0]).toMatchObject({

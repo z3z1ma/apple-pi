@@ -18,7 +18,6 @@ export interface FactsRow {
 	currentToolArg: string | null;
 	currentToolSince: number | null;
 	currentTask: string | null;
-	intent: string | null;
 	role_title: string | null;
 	soul: string | null;
 	self: string | null;
@@ -33,13 +32,13 @@ export interface FactsRow {
 }
 
 /**
- * The facts columns for `select ... from sessions s join incarnations i ...` (the current incarnation). Without
- * `intent`, the column reads as null: a runtime started before the migration that adds it keeps running old code until
- * it restarts, and its database has no such column.
+ * The facts columns for the current incarnation. A runtime predating explicit work has no focused task;
+ * its old inferred ledger touch and intent are not substitutes for an assignment.
  */
-export const factsColumns = (intent: boolean) => `s.run_state as runState, s.prompt, s.needs_you_since as needsYouSince,
+export const factsColumns = (work: boolean) => `s.run_state as runState, s.prompt, s.needs_you_since as needsYouSince,
 	s.seen_at as seenAt, s.settled_at as settledAt, s.current_tool as currentTool, s.current_tool_arg as currentToolArg,
-	s.current_tool_since as currentToolSince, s.current_task as currentTask, ${intent ? "s.intent" : "null as intent"},
+	s.current_tool_since as currentToolSince,
+	${work ? "(select json_object('bundle', t.bundle, 'taskId', t.id) from work_focus f join work_tasks t on t.id = f.task_id where f.person = s.id)" : "null"} as currentTask,
 	s.model, s.context_tokens as contextTokens,
 	s.context_window as contextWindow, s.cost, i.tmux_socket as tmuxSocket, i.pane_id as paneId,
 	(select ts.name from tmux_window_links l join tmux_sessions ts on ts.socket = l.socket and ts.id = l.session_id
@@ -169,7 +168,6 @@ export function factsOf(
 		settledAt: row.settledAt,
 		tool: row.currentTool ? { name: row.currentTool, arg: row.currentToolArg, since: row.currentToolSince } : null,
 		task: readTask(row.currentTask),
-		intent: text(row.intent),
 		git:
 			git && typeof git.repository === "string"
 				? { repository: git.repository, worktree: String(git.worktree ?? ""), branch: String(git.branch ?? "") }

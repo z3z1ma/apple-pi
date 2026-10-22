@@ -617,13 +617,13 @@ async function instruct(commands, character, commandId, instruction, onReceipt) 
 //#endregion
 //#region apps/agent-world/src/backend/facts.ts
 /**
-* The facts columns for `select ... from sessions s join incarnations i ...` (the current incarnation). Without
-* `intent`, the column reads as null: a runtime started before the migration that adds it keeps running old code until
-* it restarts, and its database has no such column.
+* The facts columns for the current incarnation. A runtime predating explicit work has no focused task;
+* its old inferred ledger touch and intent are not substitutes for an assignment.
 */
-var factsColumns = (intent) => `s.run_state as runState, s.prompt, s.needs_you_since as needsYouSince,
+var factsColumns = (work) => `s.run_state as runState, s.prompt, s.needs_you_since as needsYouSince,
 	s.seen_at as seenAt, s.settled_at as settledAt, s.current_tool as currentTool, s.current_tool_arg as currentToolArg,
-	s.current_tool_since as currentToolSince, s.current_task as currentTask, ${intent ? "s.intent" : "null as intent"},
+	s.current_tool_since as currentToolSince,
+	${work ? "(select json_object('bundle', t.bundle, 'taskId', t.id) from work_focus f join work_tasks t on t.id = f.task_id where f.person = s.id)" : "null"} as currentTask,
 	s.model, s.context_tokens as contextTokens,
 	s.context_window as contextWindow, s.cost, i.tmux_socket as tmuxSocket, i.pane_id as paneId,
 	(select ts.name from tmux_window_links l join tmux_sessions ts on ts.socket = l.socket and ts.id = l.session_id
@@ -763,7 +763,6 @@ function factsOf(row, readTask, tasks = []) {
 			since: row.currentToolSince
 		} : null,
 		task: readTask(row.currentTask),
-		intent: text$1(row.intent),
 		git: git && typeof git.repository === "string" ? {
 			repository: git.repository,
 			worktree: String(git.worktree ?? ""),
@@ -1144,11 +1143,11 @@ function openLifecycle(paths, commands, snapshot) {
 				ok: false,
 				reason: `${cwd} is not a directory.`
 			};
-			if (brief.startsWith("-")) return {
-				ok: false,
-				reason: "The brief cannot start with a dash: Pi would read it as an option."
-			};
 			const role = request.role?.trim();
+			if (role && !brief) return {
+				ok: false,
+				reason: "A role hire needs a written goal."
+			};
 			if (role && !loadRoleChoices(paths.agentDir).some((choice) => choice.name === role)) return {
 				ok: false,
 				reason: `No role in the catalog is named ${role}.`
@@ -1185,7 +1184,10 @@ function openLifecycle(paths, commands, snapshot) {
 					name,
 					...request.reportsTo ? { reportsTo: request.reportsTo } : {},
 					...role ? { role } : {},
-					...brief ? { prompt: brief } : {}
+					...brief ? { goal: {
+						text: brief,
+						by: "operator"
+					} } : {}
 				}, WAKE_MS, (stage) => stage === "applied", () => `Its window opened, but ${name} has not joined yet.`),
 				sessionId
 			};
@@ -3263,18 +3265,17 @@ var STORE_TIMEOUT_MS = 5e3;
 var PREFERENCE_KEY = "agent-world";
 var sessionsSql = (columns) => `
 select s.id, s.name, s.cwd, s.reports_to as reportsTo, s.git,
-	${OPTIONAL_COLUMNS.filter((column) => column !== "intent").map((column) => columns[column] ? `s.${column}` : `null as ${column}`).join(", ")},
+	${OPTIONAL_COLUMNS.map((column) => columns[column] ? `s.${column}` : `null as ${column}`).join(", ")},
 	(select min(f.started_at) from incarnations f where f.session_id = s.id) as firstStartedAt,
 	coalesce(i.ended_at is null and i.process_state in ('alive', 'alive_bridge_lost'), 0) as awake,
 	i.ended_at as stoppedAt, i.end_reason as stopReason,
-	${factsColumns(columns.intent)}
+	${factsColumns(columns.work)}
 from sessions s
 ${FACTS_JOINS}
 where s.kind = 'root'`;
 var changedSql = (columns) => `${sessionsSql(columns)}
 	and s.id in (select session_id from events where seq > ? union select value from json_each(?))`;
 var OPTIONAL_COLUMNS = [
-	"intent",
 	"role_title",
 	"manages",
 	"soul",
@@ -3284,11 +3285,14 @@ var OPTIONAL_COLUMNS = [
 ];
 var optionalColumns = (db) => {
 	const present = new Set(db.prepare("select name from pragma_table_info('sessions')").all().map((row) => row.name));
-	return Object.fromEntries(OPTIONAL_COLUMNS.map((column) => [column, present.has(column)]));
+	return {
+		...Object.fromEntries(OPTIONAL_COLUMNS.map((column) => [column, present.has(column)])),
+		work: Boolean(db.prepare("select 1 from sqlite_master where type = 'table' and name = 'work_focus'").get())
+	};
 };
 var sqlCache = /* @__PURE__ */ new Map();
 var sqlFor = (columns) => {
-	const key = OPTIONAL_COLUMNS.map((column) => Number(columns[column])).join("");
+	const key = [Number(columns.work), ...OPTIONAL_COLUMNS.map((column) => Number(columns[column]))].join("");
 	const cached = sqlCache.get(key);
 	if (cached) return cached;
 	const sql = {
@@ -3450,7 +3454,8 @@ function openWorldBackend(paths) {
 			lastSeq = seq;
 			const full = rowsSeq < 0 || seq < rowsSeq || polls % FULL_REREAD_POLLS === 0;
 			const awakeIds = [...sessionsById.values()].filter((session) => session.awake).map((session) => session.id);
-			const sql = sqlFor(optionalColumns(db));
+			const columns = optionalColumns(db);
+			const sql = sqlFor(columns);
 			const changed = full ? db.prepare(sql.sessions).all() : db.prepare(sql.changed).all(rowsSeq, JSON.stringify(awakeIds));
 			if (full) {
 				rowsById.clear();
@@ -3465,12 +3470,15 @@ function openWorldBackend(paths) {
 			const storedWings = preference.wings && typeof preference.wings === "object" ? preference.wings : {};
 			const projected = projectWorld([...sessionsById.values()], mergeWings(storedWings, seen));
 			const byId = rowsById;
-			const tasksOf = db.prepare("select distinct task_id as id from session_tasks where session_id = ? order by at desc");
+			const tasksOf = columns.work ? db.prepare("select t.id, t.bundle from assignments a join work_tasks t on t.id = a.task_id where a.person = ? and a.end_reason = 'finished' group by t.id order by max(a.ended_at) desc") : void 0;
 			world = {
 				...projected,
 				characters: projected.characters.map((character) => ({
 					...character,
-					facts: factsOf(byId.get(character.id), readTask, tasksOf.all(character.id).map((task) => task.id))
+					facts: factsOf(byId.get(character.id), readTask, (tasksOf?.all(character.id) ?? []).map((task) => readTask(JSON.stringify({
+						bundle: task.bundle,
+						taskId: task.id
+					}))?.title ?? task.id))
 				}))
 			};
 			dormant = dormantAgents(world.dormant, byId, (task) => readTask(task, rereadTasks), dormant, !rereadTasks);

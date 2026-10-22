@@ -70,10 +70,7 @@ def cells(agent: Agent, now: float, frame: int) -> dict[str, Text]:
             "  " * agent.depth + agent.name, style=f"bold {STATUS_STYLE[current]}" if agent.needs_you else quiet
         ),
         "role": Text(agent.role, style=quiet or "#7f849c"),
-        # The ledger task when there is one, else what the session says it works on now.
-        "task": Text(agent.ledger.title, style=quiet or "#fab387")
-        if agent.ledger
-        else Text(agent.intent, style="#7f849c"),
+        "task": Text(agent.task.title, style=quiet or "#fab387") if agent.task else Text("", style="#7f849c"),
         "doing": Text(f"{act.last_tool} {act.last_tool_detail}".strip(), style=quiet),
         "age": Text(ago(agent.updated_at, now), style="#7f849c"),
         "context": Text(tokens(act.context_tokens) if act.model else "", style=quiet, justify="right"),
@@ -319,7 +316,7 @@ class Dashboard(App):
             self.shown_screen = (agent.session_id, screen, rows)
             lines = screen.rstrip("\n").split("\n")[-rows:]
             preview.update(Text.from_ansi("\n".join(lines), no_wrap=True, overflow="crop"))
-            preview.border_title = f"Live view · {agent.name}"
+            preview.border_title = f"Live view · {agent.title}"
             preview.border_subtitle = f"{agent.tmux_session} {agent.window_index}.{agent.pane_index}"
         if agent.unseen and self.app_focus and time.time() - self.selected_since >= SEEN_AFTER_SECONDS:
             mark_seen(agent)

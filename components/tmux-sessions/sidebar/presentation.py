@@ -66,19 +66,11 @@ def tokens(count: int) -> str:
 
 
 def task_line(agent: Agent) -> Content:
-    if agent.ledger and agent.session_name:
+    if agent.task:
         return Content.from_markup(
-            "[$text-accent]◆[/] $title [$text-muted]$status[/]", title=agent.ledger.title, status=agent.ledger.status
+            "[$text-accent]◆[/] $name [$text-muted]$status[/]", name=agent.name, status=agent.task.status
         )
-    if agent.ledger:
-        return Content.from_markup(
-            "[$text-accent]◆[/] [$text-muted]$status · $project[/]", status=agent.ledger.status, project=agent.project
-        )
-    if agent.intent:
-        return Content.from_markup("[$text-muted]◇[/] $intent", intent=agent.intent)
-    if agent.session_name:
-        return Content.from_markup("[$text-muted]◇ no ledger task · $project[/]", project=agent.project)
-    return Content.from_markup("[$text-muted]◇ no ledger task · unnamed[/]")
+    return Content.from_markup("[$text-muted]◇ no focused task · $project[/]", project=agent.project)
 
 
 def activity(agent: Agent) -> Content:

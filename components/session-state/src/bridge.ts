@@ -11,9 +11,7 @@ import {
 	sessionSelf,
 	sessionSoulLine,
 } from "../../organization/src/index.js";
-import { LEDGER_LINK_CHANNEL, type LedgerLink } from "../../shared/src/ledger-events.js";
 import { type OpenQuestionnaire, QUESTIONNAIRE_CHANNEL } from "../../shared/src/questionnaire-events.js";
-import { SESSION_INTENT_CHANNEL, type SessionIntent } from "../../shared/src/session-intent-events.js";
 import { childSessionParent, inChildSessionContext } from "../../subagents/src/child-context.js";
 import { RETRY_MS, spawnRuntime } from "./client.js";
 import { installCoordinator } from "./coordinator.js";
@@ -95,10 +93,6 @@ class StateLink {
 		const command: Command = { kind: "thread_post", thread, subject, body, to: [to] };
 		this.send({ type: "command", commandId: randomUUID(), sessionId: this.hello.session.id, command });
 		return true;
-	}
-
-	taskLink(bundle: string, taskId: string, via: string): void {
-		this.send({ type: "task_link", bundle, taskId, via, at: Date.now() });
 	}
 
 	index(rows: IndexRow[]): void {
@@ -484,22 +478,10 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 			if (target.hello.facts.prompt?.id === open.toolCallId) target.facts({ prompt: null });
 		});
 	});
-	// The ledger extension announces every touch of a task; only this session's touches count here.
-	pi.events.on(LEDGER_LINK_CHANNEL, (data) => {
-		const touch = data as LedgerLink;
-		if (!link || touch.sessionId !== link.hello.session.id) return;
-		link.facts({ currentTask: { bundle: touch.bundle, taskId: touch.taskId } });
-		link.taskLink(touch.bundle, touch.taskId, touch.via);
-	});
 	// A person rewrote its self.
 	pi.events.on(SELF_CHANNEL, (data) => {
 		const change = data as SelfChange;
 		if (link && change.sessionId === link.hello.session.id) link.facts({ self: change.self });
-	});
-	// The session-title extension states what this session works on now.
-	pi.events.on(SESSION_INTENT_CHANNEL, (data) => {
-		const stated = data as SessionIntent;
-		if (link && stated.sessionId === link.hello.session.id) link.facts({ intent: stated.intent });
 	});
 	// Steers and follow-ups the operator typed during a run. Pi delivers steers before follow-ups, one user message each.
 	let queued = { steers: 0, followUps: 0 };

@@ -155,14 +155,7 @@ function TabBody(props: SidePanelProps) {
 	if (tab === "agents") return <Groups {...props} groups={byPlace(world, labels)} detail={activity} work={workLine} />;
 	if (tab === "work")
 		return (
-			<Groups
-				{...props}
-				groups={byTask(world)}
-				// Those with no ledger task say what they work on instead of where they are.
-				detail={(character) =>
-					(!character.facts?.task && character.facts?.intent) || placeName(character.place, world, labels)
-				}
-			/>
+			<Groups {...props} groups={byTask(world)} detail={(character) => placeName(character.place, world, labels)} />
 		);
 	const groups = needsYou(world);
 	if (!groups.length) return <p className="aw-empty">Nobody needs you.</p>;

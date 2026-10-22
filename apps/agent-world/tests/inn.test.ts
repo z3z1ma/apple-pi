@@ -6,6 +6,7 @@ import { afterAll, beforeAll, expect, test, vi } from "vitest";
 import {
 	fakeBridge,
 	query,
+	sendCommand,
 	standInProcess,
 	startRuntime,
 	stopRuntime,
@@ -92,7 +93,7 @@ const awake = (id: string) => latest().characters.find((character) => character.
 
 /** A ledger task bundle whose `task.md` names it. */
 function task(slug: string, title: string, status: string) {
-	const bundle = join(state.agentDir, "ledger", slug);
+	const bundle = join(state.agentDir, ".ledger", slug);
 	mkdirSync(bundle, { recursive: true });
 	writeFileSync(join(bundle, "task.md"), `Status: ${status}\n\n# ${title}\n`);
 	return { bundle, taskId: slug };
@@ -151,8 +152,16 @@ test("stopped sessions sleep at the inn, the most recently stopped first, with t
 	const docs = await session("w-docs", {
 		reportsTo: "lead",
 		git: { repository: "/repos/handbook", worktree: "/repos/handbook", branch: "main" },
-		currentTask: task("202610190000-style-guide", "Write the style guide", "in-progress"),
 	});
+	expect(
+		await sendCommand(state.socketPath, "w-docs", {
+			kind: "work",
+			action: "take",
+			cwd: state.agentDir,
+			task: task("202610190000-style-guide", "Write the style guide", "in-progress").bundle,
+		}),
+	).toContainEqual({ stage: "applied" });
+	await soon(() => expect(awake("w-docs")?.facts?.task?.title).toBe("Write the style guide"));
 	const tests = await session("w-tests", { reportsTo: "lead" });
 	await docs.stop();
 	await tests.stop();
@@ -211,7 +220,15 @@ test("waking starts a new incarnation in a new tmux window after the operator's 
 		.trim()
 		.split("\n")
 		.map((line) => JSON.parse(line) as { args: string[]; cwd: string });
-	expect(start.args).toEqual(["--session-id", "w-docs", "--name", "w-docs", "--reports-to", "lead"]);
+	expect(start.args).toEqual([
+		"--session-id",
+		"w-docs",
+		"--name",
+		"w-docs",
+		"--reports-to",
+		"lead",
+		"You have assigned work. Begin with your focused task.",
+	]);
 	// The new window opens right after the window the operator's client shows (window 1 of `home`).
 	const windows = tmux("list-windows", "-t", "home", "-F", "#{window_index}:#{window_name}").split("\n");
 	expect(windows).toHaveLength(before.length + 1);

@@ -36,7 +36,7 @@ def tmux(*args: str) -> str:
 
 
 @dataclass
-class LedgerTask:
+class FocusedTask:
     title: str
     status: str
 
@@ -66,9 +66,7 @@ class Agent:
     pane_index: str = ""
     focused: bool = False
     unseen: bool = False
-    ledger: LedgerTask | None = None
-    # What the session says it works on now (its stated intent), shown when it has no ledger task.
-    intent: str = ""
+    task: FocusedTask | None = None
     # The role title of a hired person, the session it reports to, and its depth under its live root.
     role: str = ""
     reports_to: str = ""
@@ -88,9 +86,11 @@ class Agent:
     def name(self) -> str:
         if self.session_name:
             return self.session_name
-        if self.ledger:
-            return self.ledger.title
         return self.project
+
+    @property
+    def title(self) -> str:
+        return self.task.title if self.task else self.name
 
     def spark(self, now: float) -> list[float]:
         buckets = [0.0] * SPARK_MINUTES
@@ -114,7 +114,7 @@ def connect() -> sqlite3.Connection | None:
 
 LIVE_SESSIONS = """
 select s.id, s.generation, s.run_state, s.prompt, s.cwd, s.name, s.updated_at, s.needs_you_since, s.model,
-    s.context_tokens, s.cost, s.current_tool, s.current_tool_arg, s.current_task, {optional}, i.pane_id,
+    s.context_tokens, s.cost, s.current_tool, s.current_tool_arg, {focus} as focused_task, {optional}, i.pane_id,
     (select ts.name from tmux_window_links l join tmux_sessions ts on ts.socket = l.socket and ts.id = l.session_id
         where l.socket = p.socket and l.window_id = p.window_id order by l.window_index limit 1) as tmux_session,
     (select l.window_index from tmux_window_links l
@@ -127,11 +127,11 @@ where s.kind = 'root' and i.ended_at is null and i.process_state in ('alive', 'a
 """
 
 
-def ledger_task(current_task: str | None) -> LedgerTask | None:
-    if not current_task:
+def focused_task(value: str | None) -> FocusedTask | None:
+    if not value:
         return None
     try:
-        task = json.loads(current_task)
+        task = json.loads(value)
         bundle, task_id = str(task["bundle"]), str(task["taskId"])
     except (ValueError, KeyError, TypeError):
         return None
@@ -144,7 +144,7 @@ def ledger_task(current_task: str | None) -> LedgerTask | None:
                 title = line[2:].strip()
     except OSError:
         pass
-    return LedgerTask(title or task_id, status)
+    return FocusedTask(title or task_id, status)
 
 
 @dataclass
@@ -159,7 +159,7 @@ class Former:
 
 
 # Columns a runtime older than their migrations lacks; each reads as null then, so the views draw without them.
-OPTIONAL_COLUMNS = ("intent", "role_title", "reports_to", "retired_at", "retired_reason")
+OPTIONAL_COLUMNS = ("role_title", "reports_to", "retired_at", "retired_reason")
 
 
 def optional_columns(db: sqlite3.Connection) -> set[str]:
@@ -197,8 +197,13 @@ def live() -> list[Agent]:
         return []
     try:
         present = optional_columns(db)
+        work = db.execute("select 1 from sqlite_master where type = 'table' and name = 'work_focus'").fetchone()
         sql = LIVE_SESSIONS.format(
-            optional=", ".join(f"s.{name}" if name in present else f"null as {name}" for name in OPTIONAL_COLUMNS)
+            optional=", ".join(f"s.{name}" if name in present else f"null as {name}" for name in OPTIONAL_COLUMNS),
+            focus="(select json_object('bundle', t.bundle, 'taskId', t.id) from work_focus f "
+            "join work_tasks t on t.id = f.task_id where f.person = s.id)"
+            if work
+            else "null",
         )
         # The runtime keys tmux servers by resolved socket path.
         rows = db.execute(sql, (os.path.realpath(server),)).fetchall()
@@ -221,8 +226,7 @@ def live() -> list[Agent]:
             pane_index=pane_index.get(row["pane_id"], ""),
             focused=row["pane_id"] in focused,
             unseen=row["needs_you_since"] is not None and not waiting,
-            ledger=ledger_task(row["current_task"]),
-            intent=(row["intent"] or "").strip(),
+            task=focused_task(row["focused_task"]),
             role=row["role_title"] or "",
             reports_to=row["reports_to"] or "",
             activity=Activity(

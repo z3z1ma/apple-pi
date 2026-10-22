@@ -165,10 +165,8 @@ export function openLifecycle(
 			if (!cwd) return { ok: false, reason: "Choose the directory it works in." };
 			if (!isAbsolute(cwd)) return { ok: false, reason: `${cwd} is not a full path to a directory.` };
 			if (!isDirectory(cwd)) return { ok: false, reason: `${cwd} is not a directory.` };
-			// The runtime puts the brief on Pi's command line as its first prompt, where a leading dash reads as an option.
-			if (brief.startsWith("-"))
-				return { ok: false, reason: "The brief cannot start with a dash: Pi would read it as an option." };
 			const role = request.role?.trim();
+			if (role && !brief) return { ok: false, reason: "A role hire needs a written goal." };
 			if (role && !loadRoleChoices(paths.agentDir).some((choice) => choice.name === role))
 				return { ok: false, reason: `No role in the catalog is named ${role}.` };
 			let pane: { socket: string; pane: string } | undefined;
@@ -199,7 +197,7 @@ export function openLifecycle(
 				name,
 				...(request.reportsTo ? { reportsTo: request.reportsTo } : {}),
 				...(role ? { role } : {}),
-				...(brief ? { prompt: brief } : {}),
+				...(brief ? { goal: { text: brief, by: "operator" } } : {}),
 			};
 			const receipt = await follow(
 				commands,

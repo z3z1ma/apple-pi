@@ -6,9 +6,8 @@ import { afterAll, beforeAll, expect, test, vi } from "vitest";
 import { appFile, contentType } from "../src/app-files.js";
 import type { Character, CharacterFacts, WorldSnapshot } from "../src/world.js";
 
-// What each character works on (ticket 13 of the aliveness task): its ledger task when it has one, else the session's
-// stated intent, in the side panel's rows, the Work tab, the examine card, and the conversation panel. The built world
-// UI in headless Chrome against a fixture backend.
+// Explicit focused work in the agent rows, Work tab, examine card, and conversation panel.
+// The built world UI in headless Chrome against a fixture backend.
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const ORIGIN = "http://agent-world.test";
 const appDir = fileURLToPath(new URL("..", import.meta.url));
@@ -75,7 +74,6 @@ function facts(over: Partial<CharacterFacts> = {}): CharacterFacts {
 		settledAt: null,
 		tool: null,
 		task: null,
-		intent: null,
 		git: null,
 		cwd: "/Users/op/code/apple-pi",
 		reportsTo: HQ,
@@ -88,7 +86,7 @@ function facts(over: Partial<CharacterFacts> = {}): CharacterFacts {
 	};
 }
 const TASK = { title: "Retry failed invoices", status: "in-progress", bundle: "/l/202610190002-retry" };
-const INTENT = "Fixing the CSV parser crash on quoted commas";
+const EPHEMERAL = { title: "Fix the CSV parser crash", status: "in-progress", bundle: "/state/tasks/csv" };
 const person = (id: string, name: string, n: number, f: Partial<CharacterFacts>): Character => ({
 	id,
 	name,
@@ -106,9 +104,8 @@ const CAST: Character[] = [
 		startedAt: Date.now() - 3_600_000,
 		facts: facts({ reportsTo: null }),
 	},
-	// A ledger task wins over a stated intent.
-	person("tasked", "Kofi Marchetti", 1, { task: TASK, intent: "Reading the billing code" }),
-	person("intent", "Ada Lovejoy", 2, { intent: INTENT }),
+	person("tasked", "Kofi Marchetti", 1, { task: TASK }),
+	person("ephemeral", "Ada Lovejoy", 2, { task: EPHEMERAL }),
 ];
 const WORLD: WorldSnapshot = {
 	connected: true,
@@ -118,26 +115,27 @@ const WORLD: WorldSnapshot = {
 
 const row = (page: Page, name: string) => page.getByRole("button", { name: new RegExp(`^${name}`) });
 
-test("each character shows its ledger task when it has one and its stated intent otherwise", async () => {
+test("ledger and ephemeral focuses appear across the views while an unassigned person has no work line", async () => {
 	const { page, errors } = await openWorld(WORLD);
 	try {
 		// Agents tab rows.
 		await expect(row(page, "Kofi Marchetti").locator(".aw-row-work").textContent()).resolves.toBe(
 			"Retry failed invoices",
 		);
-		await expect(row(page, "Ada Lovejoy").locator(".aw-row-work").textContent()).resolves.toBe(INTENT);
+		await expect(row(page, "Ada Lovejoy").locator(".aw-row-work").textContent()).resolves.toBe(EPHEMERAL.title);
 		await expect(row(page, "Orla Brannigan").locator(".aw-row-work").count()).resolves.toBe(0);
 		await shot(page, "agents");
 
-		// Work tab: the task's group, and the stated intent among those with no ledger task.
+		// Both types of assigned work have a group; the unassigned root is separate.
 		await page.getByRole("tab", { name: "Work", exact: true }).click();
-		const loose = page.getByRole("region", { name: "No ledger task" });
+		const loose = page.getByRole("region", { name: "No focused task" });
+		await expect(loose.getByRole("button", { name: /^Orla Brannigan/ }).count()).resolves.toBe(1);
 		await expect(
-			loose
+			page
+				.getByRole("region", { name: EPHEMERAL.title })
 				.getByRole("button", { name: /^Ada Lovejoy/ })
-				.locator(".aw-row-detail")
-				.textContent(),
-		).resolves.toBe(INTENT);
+				.count(),
+		).resolves.toBe(1);
 		await expect(
 			page
 				.getByRole("region", { name: "Retry failed invoices" })
@@ -151,7 +149,7 @@ test("each character shows its ledger task when it has one and its stated intent
 		await page.getByRole("button", { name: "Examine Ada Lovejoy" }).click();
 		const card = page.getByRole("dialog", { name: "Examine Ada Lovejoy" });
 		await card.waitFor({ timeout: 2000 });
-		await expect(card.textContent()).resolves.toContain(`Working on${INTENT}`);
+		await expect(card.textContent()).resolves.toContain(`Focused task${EPHEMERAL.title}`);
 		await expect(card.textContent()).resolves.not.toContain("Ledger task");
 		await shot(page, "examine");
 		await card.getByRole("button", { name: "Close" }).click();
@@ -159,8 +157,7 @@ test("each character shows its ledger task when it has one and its stated intent
 		await page.getByRole("button", { name: "Examine Kofi Marchetti" }).click();
 		const tasked = page.getByRole("dialog", { name: "Examine Kofi Marchetti" });
 		await tasked.waitFor({ timeout: 2000 });
-		await expect(tasked.textContent()).resolves.toContain("Ledger taskRetry failed invoices (in-progress)");
-		await expect(tasked.textContent()).resolves.not.toContain("Reading the billing code");
+		await expect(tasked.textContent()).resolves.toContain("Focused taskRetry failed invoices (in-progress)");
 		await tasked.getByRole("button", { name: "Close" }).click();
 
 		// Conversation panel.
@@ -170,7 +167,7 @@ test("each character shows its ledger task when it has one and its stated intent
 		const panel = page.getByRole("dialog", { name: "Conversation with Ada Lovejoy" });
 		await panel.waitFor({ timeout: 2000 });
 		await vi.waitFor(async () =>
-			expect(await panel.locator(".aw-conv-facts").textContent()).toContain(`Working on${INTENT}`),
+			expect(await panel.locator(".aw-conv-facts").textContent()).toContain(`Focused task${EPHEMERAL.title}`),
 		);
 		await shot(page, "conversation");
 		expect(errors).toEqual([]);

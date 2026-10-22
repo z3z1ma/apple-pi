@@ -39,6 +39,24 @@ def test_table_lists_agents_in_attention_order_and_previews_the_selected_pane(wo
     assert selected == "busy"
 
 
+def test_the_live_view_is_titled_by_focus_but_replies_address_the_person(world):
+    bundle = world.task("202601010000-verify", "# Verify the release\n\nStatus: in-progress\n")
+    world.add("alice", "%1", name="Alice", focus={"bundle": bundle, "taskId": "202601010000-verify"})
+
+    async def scenario():
+        app = dashboard.Dashboard()
+        async with app.run_test(size=(200, 50)) as pilot:
+            await pilot.pause(0.8)
+            title = str(app.query_one("#preview").border_title)
+            await pilot.press("r")
+            await pilot.pause(0.2)
+            return title, str(app.query_one("#reply").border_title)
+
+    title, reply = run(scenario)
+    assert "Verify the release" in title
+    assert "Reply to Alice" in reply
+
+
 def test_enter_jumps_to_the_selected_agent(world):
     fake = setup_agents(world)
 

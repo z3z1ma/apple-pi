@@ -72,11 +72,13 @@ final class Store {
 	/// The live top-level sessions bound to a tmux pane, as the page reads them: those that need you first, oldest first,
 	/// then working and quiet ones, most recently changed first. Nil when the database cannot be read.
 	func feed() -> [[String: Any]]? {
+		let hasWork = rows("select 1 from sqlite_master where type = 'table' and name = 'work_focus'")?.isEmpty == false
+		let focus = hasWork ? "(select t.bundle from work_focus f join work_tasks t on t.id = f.task_id where f.person = s.id)" : "null"
 		guard
 			let sessions = rows(
 				"""
 				select s.id, s.name, s.cwd, s.run_state, s.prompt is not null, s.needs_you_since is not null, s.current_tool,
-					s.current_tool_arg, json_extract(s.current_task, '$.bundle'), s.updated_at / 1000, i.tmux_socket, i.pane_id,
+					s.current_tool_arg, \(focus), s.updated_at / 1000, i.tmux_socket, i.pane_id,
 					(select t.name from tmux_panes p
 						join tmux_window_links l on l.socket = p.socket and l.window_id = p.window_id
 						join tmux_sessions t on t.socket = l.socket and t.id = l.session_id
@@ -124,7 +126,7 @@ final class Store {
 		}
 	}
 
-	/// The title of a ledger task bundle: its `task.md`'s first `# ` heading.
+	/// The title of a focused task bundle: its `task.md`'s first `# ` heading.
 	func taskTitle(bundle: String) -> String? {
 		guard let text = try? String(contentsOfFile: bundle + "/task.md", encoding: .utf8) else { return nil }
 		return text.split(separator: "\n").first { $0.hasPrefix("# ") }.map { $0.dropFirst(2).trimmingCharacters(in: .whitespaces) }

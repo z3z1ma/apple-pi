@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai/compat";
@@ -133,7 +133,7 @@ test("a session in a git repository shows its repository, worktree, and branch, 
 	}
 }, 20000);
 
-test("each touch of a ledger task is a time-stamped link, and the latest is the session's current task", async () => {
+test("editing other ledger bundles records their touch history without changing the explicit assignment or focus", async () => {
 	const cwd = tempDir("aps-ledger-");
 	for (const task of ["202610180001-alpha", "202610180002-beta"]) {
 		mkdirSync(join(cwd, ".ledger", task), { recursive: true });
@@ -143,6 +143,9 @@ test("each touch of a ledger task is a time-stamped link, and the latest is the 
 	const run = await fauxSession(
 		[bridge, installLedger],
 		[
+			fauxAssistantMessage([fauxToolCall("take_task", { goal: "Verify the session lifecycle." })], {
+				stopReason: "toolUse",
+			}),
 			write(".ledger/202610180001-alpha/notes.md", "first"),
 			write(".ledger/202610180002-beta/notes.md", "second"),
 			fauxAssistantMessage("done"),
@@ -154,28 +157,24 @@ test("each touch of a ledger task is a time-stamped link, and the latest is the 
 		const id = manager.getSessionId();
 		await seen(id);
 		await run.session.prompt("take notes");
-		await vi.waitFor(() =>
-			expect(
-				query(state.dbPath, "select task_id, via from session_tasks where session_id = ? order by id", id),
-			).toEqual([
-				{ task_id: "202610180001-alpha", via: "edit" },
-				{ task_id: "202610180002-beta", via: "edit" },
-			]),
-		);
-		expect(json(session(id).current_task)).toMatchObject({ taskId: "202610180002-beta" });
-		expect(query(state.dbPath, "select 1 from events where session_id = ? and type = 'task_linked'", id)).toHaveLength(
-			2,
-		);
-		// A reload's new bridge does not know the task yet; the recorded one stays current.
+		const focus = query(state.dbPath, "select task_id from work_focus where person = ?", id);
+		expect(focus).toHaveLength(1);
+		const assignment = query(state.dbPath, "select task_id from assignments where person = ? and ended_at is null", id);
+		expect(assignment).toEqual(focus);
+		for (const task of ["202610180001-alpha", "202610180002-beta"]) {
+			const history = JSON.parse(readFileSync(join(cwd, ".ledger", task, "history.json"), "utf8"));
+			expect(history.sessions).toContainEqual(expect.objectContaining({ id, via: "edit" }));
+		}
+		expect(query(state.dbPath, "select * from session_tasks where session_id = ?", id)).toEqual([]);
+		expect(session(id).current_task).toBeNull();
 		await run.session.bindExtensions({});
-		await new Promise((resolve) => setTimeout(resolve, 500));
-		expect(json(session(id).current_task)).toMatchObject({ taskId: "202610180002-beta" });
+		expect(query(state.dbPath, "select task_id from work_focus where person = ?", id)).toEqual(focus);
 	} finally {
 		await close(run);
 	}
 }, 20000);
 
-test("a session without a transcript file still records its ledger touches", async () => {
+test("editing a ledger bundle in an in-memory session assigns no work and creates no broken history pointer", async () => {
 	const cwd = tempDir("aps-ledger-mem-");
 	mkdirSync(join(cwd, ".ledger", "202610180003-gamma"), { recursive: true });
 	writeFileSync(join(cwd, ".ledger", "202610180003-gamma", "task.md"), "# gamma\n");
@@ -189,11 +188,9 @@ test("a session without a transcript file still records its ledger touches", asy
 		const id = run.session.sessionManager.getSessionId();
 		await seen(id);
 		await run.session.prompt("note it");
-		await vi.waitFor(() =>
-			expect(query(state.dbPath, "select task_id from session_tasks where session_id = ?", id)).toEqual([
-				{ task_id: "202610180003-gamma" },
-			]),
-		);
+		expect(query(state.dbPath, "select * from assignments where person = ?", id)).toEqual([]);
+		expect(query(state.dbPath, "select * from work_focus where person = ?", id)).toEqual([]);
+		expect(existsSync(join(cwd, ".ledger", "202610180003-gamma", "history.json"))).toBe(false);
 	} finally {
 		await close(run);
 	}

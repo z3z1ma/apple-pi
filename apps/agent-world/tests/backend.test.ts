@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
 import bridge from "../../../components/session-state/src/index.js";
 import { migrate } from "../../../components/session-state/src/schema.js";
+import type { WorkAction } from "../../../components/session-state/src/work.js";
 import {
 	close,
 	fakeBridge,
@@ -395,7 +396,7 @@ async function agent(id: string, facts: Record<string, unknown> = {}, cwd = `/ho
 }
 
 test("each character carries the facts the views show: run state, tool, ledger task, git, cost, model, context, and pane", async () => {
-	const bundle = join(state.agentDir, "ledger", "202610190000-invoice-retries");
+	const bundle = join(realpathSync(state.agentDir), ".ledger", "202610190000-invoice-retries");
 	mkdirSync(bundle, { recursive: true });
 	writeFileSync(
 		join(bundle, "task.md"),
@@ -403,12 +404,14 @@ test("each character carries the facts the views show: run state, tool, ledger t
 	);
 	const { pane, send } = await agent("facts-1", {
 		git: { repository: "/repos/billing", worktree: "/repos/billing-wt", branch: "retry" },
-		currentTask: { bundle, taskId: "202610190000-invoice-retries" },
 		model: "claude-opus",
 		contextTokens: 52000,
 		contextWindow: 200000,
 		cost: 1.25,
 	});
+	expect(
+		await sendCommand(state.socketPath, "facts-1", { kind: "work", action: "take", task: bundle, cwd: state.agentDir }),
+	).toContainEqual({ stage: "applied" });
 	send({ type: "run", run: "running_tool" });
 	send({ type: "tool_start", tool: { id: "t1", name: "bash", arg: "npm test", since: 1_700_000_000_000 } });
 	await soon(() => expect(character("facts-1")?.facts?.tool?.name).toBe("bash"));
@@ -599,19 +602,33 @@ test("the world shows it is disconnected while the runtime is gone and reconnect
 	await vi.waitFor(() => expect(latest().connected).toBe(true), { timeout: 3000 });
 }, 20000);
 
-test("a character carries its stated intent, which changes with the session's intent fact", async () => {
-	const { send } = await agent("intent-1", { intent: "Fixing the CSV parser crash" });
-	await soon(() => expect(character("intent-1")?.facts?.intent).toBe("Fixing the CSV parser crash"));
-	send({ type: "facts", facts: { intent: "Writing the upload retry docs" } });
-	await soon(() => expect(character("intent-1")?.facts?.intent).toBe("Writing the upload retry docs"));
-	expect(character("intent-1")?.facts?.task).toBeNull();
+test("the world follows explicit focus changes and completed assignments", async () => {
+	await agent("assigned-view");
+	const work = async (action: WorkAction) =>
+		expect(
+			await sendCommand(state.socketPath, "assigned-view", { kind: "work", cwd: state.agentDir, ...action }),
+		).toContainEqual({ stage: "applied" });
+	await work({ action: "take", goal: "Fix the CSV parser" });
+	const first = query<{ task_id: string }>(
+		state.dbPath,
+		"select task_id from work_focus where person = 'assigned-view'",
+	)[0].task_id;
+	await soon(() => expect(character("assigned-view")?.facts?.task?.title).toBe("Fix the CSV parser"));
+	await work({ action: "take", goal: "Review the parser" });
+	await soon(() => expect(character("assigned-view")?.facts?.task?.title).toBe("Review the parser"));
+	await work({ action: "finish", outcome: "Tests passed." });
+	await soon(() =>
+		expect(character("assigned-view")?.facts).toMatchObject({ task: null, tasks: ["Review the parser"] }),
+	);
+	await work({ action: "focus", task: first });
+	await soon(() => expect(character("assigned-view")?.facts?.task?.title).toBe("Fix the CSV parser"));
 }, 30000);
 
-test("a database an older runtime has not migrated yet still reads, with no intent", async () => {
+test("a database before explicit work still reads, with no focused assignment", async () => {
 	const dbPath = join(state.agentDir, "older.db");
 	const db = new DatabaseSync(dbPath);
 	migrate(db);
-	db.exec(`alter table sessions drop column intent;
+	db.exec(`drop table work_focus; drop table work_tasks;
 		insert into sessions (id, kind, cwd, name, run_state, generation, source, updated_at)
 			values ('older-1', 'root', '/home/older', 'Older', 'idle', 1, 'bridge', 0);
 		insert into incarnations (session_id, generation, pid, process_started_at, process_state, started_at, source, updated_at)
@@ -621,7 +638,7 @@ test("a database an older runtime has not migrated yet still reads, with no inte
 	const older = openWorldBackend({ db: dbPath, socket: join(state.agentDir, "no-runtime.sock") });
 	try {
 		await soon(() =>
-			expect(older.snapshot().characters.map((c) => [c.name, c.facts?.intent])).toEqual([["Older", null]]),
+			expect(older.snapshot().characters.map((c) => [c.name, c.facts?.task])).toEqual([["Older", null]]),
 		);
 	} finally {
 		older.close();

@@ -7,8 +7,8 @@ Verify: apps/agent-world/tests/backend.test.ts, apps/agent-world/tests/world-int
 
 ## symbol:taskReader
 
-A task's title and status are read from the bundle's `task.md` as the sidebar's `ledger_task` reads them (first `# ` heading, first `Status:` line), falling back to the task id; files are reread only when their mtime changes.
-Why: the runtime records only the bundle path in `current_task`; an archived bundle moves under `.ledger/history/`, and the sidebar shows the task id then too.
+A task's title and status are read from the bundle's `task.md` as the sidebar's `focused_task` reads them (first `# ` heading, first `Status:` line), falling back to the task id; files are reread only when their mtime changes.
+Why: goals belong to task files, while `work_focus` and `work_tasks` supply identity and the current path. Ledger archival updates that registered path; missing files remain visible by task id.
 Coupled: components/tmux-sessions/sidebar/model.py
 
 With `recheck` false a file read before is returned from the cache without a `stat`, and a missing file is cached too (as unread), so only the backend's task rereads stat the inn's sleepers' files.
@@ -18,7 +18,7 @@ Coupled: apps/agent-world/src/backend/world-backend.ts
 ## symbol:parseShared
 
 Parsed values are shared by every caller and every read (one cache for the process); nothing may change them.
-Why: the `git`, `config`, and `current_task` strings repeat from read to read, and parsing them for every sleeper on every read was measurable; a caller that mutates a value would change it for all.
+Why: the `git`, `config`, and focused-task reference strings repeat from read to read, and parsing them for every sleeper on every read was measurable; a caller that mutates a value would change it for all.
 
 ## symbol:asking
 
@@ -29,7 +29,7 @@ Verify: apps/agent-world/tests/instruct.test.ts
 
 ## symbol:factsColumns
 
-`intent` is selected only when the database has the column (`world-backend.ts` checks `pragma_table_info` on each read); otherwise it reads as null. The organization's columns (`role_title` as `title`, `soul`, `self`) are selected the same way; `selfHeadings` are the Markdown headings of the `self` text, since the card shows what a person keeps notes under, never the notes.
+Focus is selected from `work_focus` joined to `work_tasks` only when those tables exist; otherwise it is null, with no fallback to historical ledger touches or intent. The organization's columns (`role_title` as `title`, `soul`, `self`) are guarded with `pragma_table_info`; `selfHeadings` are the Markdown headings of the `self` text, since the card shows what a person keeps notes under, never the notes.
 Why: the session-state runtime is a long-lived daemon that keeps running old code after the checkout changes, so its database can lack a newly migrated column for days; selecting a missing column fails the whole read and the world goes empty.
 Coupled: apps/agent-world/src/backend/world-backend.ts, components/session-state/src/schema.ts, components/tmux-sessions/sidebar/model.py
 Verify: apps/agent-world/tests/backend.test.ts

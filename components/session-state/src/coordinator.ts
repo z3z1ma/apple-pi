@@ -6,6 +6,7 @@ import { resolvePerson } from "./addresses.js";
 import { sendCommand } from "./client.js";
 import { installMeetings } from "./meetings.js";
 import type { Command, Receipt } from "./protocol.js";
+import { focusedTask, withWork } from "./work.js";
 import { installAssignments } from "./work-tools.js";
 
 const MANAGER_TOOLS = [
@@ -55,19 +56,26 @@ export function installCoordinator(pi: ExtensionAPI): void {
 			name: "hire",
 			label: "hire",
 			description:
-				"Hire a person into your organization: a new lasting colleague, a top-level Pi session in its own tmux window next to yours, which reports to you (directory shows you as its manager, and it mails you when it closes). It holds its role, mind, and posture for life, and receives a unique two-part human name unless you give one. Returns once the person runs. Pass a brief file as the prompt with @path.",
+				"Hire a person into your organization: a new lasting colleague, a top-level Pi session in its own tmux window next to yours, which reports to you (directory shows you as its manager, and it mails you when it closes). It holds its role, mind, and posture for life, and receives a unique two-part human name unless you give one. Give a written goal: an ephemeral task is assigned before its first turn. Returns once the person runs.",
 			parameters: Type.Object(
 				{
 					role: Type.String({ minLength: 1, description: "Role catalog name, such as staff-engineer-simplicity." }),
-					cwd: Type.String({ minLength: 1, description: "Directory the person works in." }),
+					cwd: Type.Optional(
+						Type.String({ minLength: 1, description: "Directory the person works in; yours by default." }),
+					),
+					goal: Type.String({
+						minLength: 1,
+						description: "The written goal to assign, with context and what done looks like.",
+					}),
 					name: Type.Optional(Type.String({ minLength: 1, description: "A name to give instead of a drawn one." })),
-					prompt: Type.Optional(Type.String({ description: "First prompt, such as @/path/to/brief.md." })),
 					session_id: Type.Optional(Type.String({ description: "Session id to use; a new one by default." })),
 				},
 				{ additionalProperties: false },
 			),
 			async execute(_toolCallId, params, signal, _onUpdate, ctx) {
 				const sessionId = params.session_id ?? randomUUID();
+				if (withWork((db) => db.prepare("select 1 from sessions where id = ?").get(sessionId)))
+					throw new Error("This person already exists; use rehire.");
 				const catalog = loadRoles(ctx.cwd);
 				if (!catalog.roles.has(params.role))
 					throw new Error(`Unknown role "${params.role}"; known roles: ${[...catalog.roles.keys()].join(", ")}.`);
@@ -76,15 +84,18 @@ export function installCoordinator(pi: ExtensionAPI): void {
 					{
 						kind: "start",
 						tmux: ownPane(),
-						cwd: params.cwd,
+						cwd: params.cwd ?? ctx.cwd,
 						reportsTo: ctx.sessionManager.getSessionId(),
 						role: params.role,
 						...(params.name ? { name: params.name } : {}),
-						...(params.prompt ? { prompt: params.prompt } : {}),
+						goal: { text: params.goal, by: ctx.sessionManager.getSessionId() },
 					},
 					signal,
 				);
-				return reply(`Hired ${params.name ?? "a new person"} (${sessionId}) as ${params.role}.`, { sessionId });
+				return reply(`Hired ${params.name ?? "a new person"} (${sessionId}) as ${params.role}.`, {
+					sessionId,
+					task: withWork((db) => focusedTask(db, sessionId)),
+				});
 			},
 		}),
 	);
@@ -93,12 +104,29 @@ export function installCoordinator(pi: ExtensionAPI): void {
 			name: "rehire",
 			label: "rehire",
 			description:
-				"Bring back a person who is asleep or has left: it reopens in a new tmux window next to yours, in its own directory and with its full history, and reports to you. Give it new work by mail, not its first brief again. Returns once it runs.",
-			parameters: Type.Object({ person: personParameter }, { additionalProperties: false }),
+				"Bring back a person who is asleep or has left: it reopens in a new tmux window next to yours, in its own directory and with its full history, and reports to you. An optional goal becomes a new assigned task; otherwise it keeps its existing work. Returns once it runs.",
+			parameters: Type.Object(
+				{
+					person: personParameter,
+					goal: Type.Optional(
+						Type.String({ minLength: 1, description: "New work to assign before the person wakes." }),
+					),
+				},
+				{ additionalProperties: false },
+			),
 			async execute(_toolCallId, params, signal, _onUpdate, ctx) {
 				const self = ctx.sessionManager.getSessionId();
 				const id = resolvePerson(self, params.person);
-				await run(id, { kind: "start", tmux: ownPane(), reportsTo: self }, signal);
+				await run(
+					id,
+					{
+						kind: "start",
+						tmux: ownPane(),
+						reportsTo: self,
+						...(params.goal ? { goal: { text: params.goal, by: self } } : {}),
+					},
+					signal,
+				);
 				return reply(`${params.person} is back (${id}).`, { sessionId: id });
 			},
 		}),

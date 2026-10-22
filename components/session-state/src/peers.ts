@@ -3,7 +3,10 @@ import { DatabaseSync } from "node:sqlite";
 import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { type Member, organizationColumns, organizationOf } from "../../organization/src/directory.js";
+import { managesPeople } from "../../organization/src/install.js";
 import { statePaths } from "./paths.js";
+import { withWork } from "./work.js";
+import { backlogOf, hasWork } from "./work-read.js";
 
 export interface Peer {
 	id: string;
@@ -12,7 +15,7 @@ export interface Peer {
 	status: "busy" | "idle" | "waiting";
 	reportsTo: string | null;
 	role: string | null;
-	currentTask: string | null;
+	focus: string | null;
 }
 
 /** Live top-level sessions other than `self`, read from the state database. */
@@ -21,9 +24,10 @@ export function livePeers(self: string | null): Peer[] {
 	if (!existsSync(path)) return [];
 	const db = new DatabaseSync(path, { readOnly: true });
 	try {
+		const focused = hasWork(db) ? "(select task_id from work_focus where person = s.id)" : "null";
 		const rows = db
 			.prepare(
-				`select s.id, s.name, s.cwd, s.run_state, s.prompt, s.reports_to, ${organizationColumns(db, ["role"])}, json_extract(s.current_task, '$.taskId') as task
+				`select s.id, s.name, s.cwd, s.run_state, s.prompt, s.reports_to, ${organizationColumns(db, ["role"])}, ${focused} as task
 				from sessions s join incarnations i on i.session_id = s.id and i.generation = s.generation
 				where s.kind = 'root' and s.id is not ? and i.ended_at is null and i.process_state in ('alive', 'alive_bridge_lost')
 				order by s.updated_at desc`,
@@ -45,7 +49,7 @@ export function livePeers(self: string | null): Peer[] {
 			status: row.prompt ? "waiting" : row.run_state === "idle" ? "idle" : "busy",
 			reportsTo: row.reports_to,
 			role: row.role,
-			currentTask: row.task,
+			focus: row.task,
 		}));
 	} finally {
 		db.close();
@@ -65,10 +69,12 @@ function entry(member: Member, names: Map<string, string>) {
 		manager: member.reportsTo ? (names.get(member.reportsTo) ?? member.reportsTo) : "Operator",
 		team: `team:${member.reportsTo ?? member.id}`,
 		status: member.status === "busy" ? "working" : member.status === "waiting" ? "asking the operator" : member.status,
-		workingOn: member.currentTask,
+		availability: member.tasks.length ? "assigned" : "available",
+		focus: member.focus,
+		tasks: member.tasks,
 		directory: member.cwd,
 		soul: member.soul,
-		record: member.tasks,
+		record: member.record,
 		since: member.since,
 		...(member.retired ? { left: member.retired } : {}),
 	};
@@ -98,7 +104,7 @@ export function installPeers(pi: ExtensionAPI): void {
 			name: "directory",
 			label: "directory",
 			description:
-				"Your organization's directory: everyone in it including you, awake or asleep, with the operator at the top, name, id, title, manager, whether they are working, idle, asking the operator, or asleep, what they work on, their directory, one line of their soul, and their record (the ledger tasks they have worked on, newest first). Former members, who left, are listed only with former: true. Write to anyone with send_mail by name.",
+				"Your organization's directory: everyone in it including you, awake or asleep, with the operator at the top, name, id, title, manager, whether they are working, idle, asking the operator, or asleep, their explicit tasks and focused goal, whether they are available for work, their directory, one line of their soul, and the record of finished assignments and outcomes. Managers also see unassigned live ledger tasks in the backlog. Former members, who left, are listed only with former: true. Write to anyone with send_mail by name.",
 			promptSnippet: "Your organization's directory: who is in it, what each does, and whom each reports to.",
 			parameters: Type.Object(
 				{ former: Type.Optional(Type.Boolean({ description: "Also list the people who left, with when and why." })) },
@@ -106,7 +112,17 @@ export function installPeers(pi: ExtensionAPI): void {
 			),
 			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 				const self = ctx.sessionManager.getSessionId();
-				const all = organizationOf(self, true).members;
+				const organization = organizationOf(self, true);
+				const all = organization.members;
+				const backlog = managesPeople(pi, ctx)
+					? (withWork((db) =>
+							backlogOf(
+								db,
+								organization.root,
+								all.filter((member) => !member.retired).map((member) => member.cwd),
+							),
+						) ?? [])
+					: undefined;
 				const names = new Map(all.map((member) => [member.id, member.name ?? member.id]));
 				const members = [
 					{
@@ -117,7 +133,9 @@ export function installPeers(pi: ExtensionAPI): void {
 						manager: null,
 						team: null,
 						status: "human",
-						workingOn: null,
+						availability: null,
+						focus: null,
+						tasks: [],
 						directory: null,
 						soul: null,
 						record: [],
@@ -128,11 +146,8 @@ export function installPeers(pi: ExtensionAPI): void {
 				const former = params.former
 					? all.filter((member) => member.retired).map((member) => entry(member, names))
 					: [];
-				const text =
-					members.length || former.length
-						? JSON.stringify(params.former ? { members, former } : members, null, 2)
-						: "Nobody else is in your organization.";
-				return { content: [{ type: "text", text }], details: { members, former } };
+				const details = { members, former, ...(backlog ? { backlog } : {}) };
+				return { content: [{ type: "text", text: JSON.stringify(details, null, 2) }], details };
 			},
 		}),
 	);

@@ -346,6 +346,19 @@ export function changeWork(
 	return { task, person, post: { thread: task.thread, body }, notify: person, goal };
 }
 
+/** Follow a ledger archive without taking, finishing, or focusing work on anyone's behalf. */
+export function moveTask(db: DatabaseSync, from: string, to: string): string[] {
+	const source = join(realpathSync(dirname(from)), basename(from));
+	const task = db.prepare("select id from work_tasks where bundle = ?").get(source) as { id: string } | undefined;
+	if (!task) return [];
+	const destination = realpathSync(to);
+	readFileSync(join(destination, "task.md"), "utf8");
+	db.prepare("update work_tasks set bundle = ? where id = ?").run(destination, task.id);
+	return (
+		db.prepare("select distinct person from assignments where task_id = ?").all(task.id) as { person: string }[]
+	).map((row) => row.person);
+}
+
 /** A committed move may have lost power before removing its source. The destination and assignments already agree. */
 export function cleanMovedBundles(db: DatabaseSync): void {
 	const moves = db

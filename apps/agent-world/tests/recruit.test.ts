@@ -162,8 +162,8 @@ test("recruiting refuses what Pi could not start, and sends nothing", async () =
 			`${join(workDir, "missing")} is not a directory.`,
 		],
 		[
-			{ name: "docs", cwd: workDir, brief: "--model x", reportsTo: "lead" },
-			"The brief cannot start with a dash: Pi would read it as an option.",
+			{ name: "docs", cwd: workDir, brief: "", reportsTo: "lead", role: "technical-writer" },
+			"A role hire needs a written goal.",
 		],
 		[{ name: "docs", cwd: workDir, brief: "", reportsTo: "nobody" }, "That manager is not running."],
 		// No client is attached yet, so an independent agent has nowhere to open.
@@ -179,8 +179,14 @@ test("recruiting refuses what Pi could not start, and sends nothing", async () =
 
 test("recruiting a worker sends start reporting to the coordinator; its window opens after the coordinator's, and it walks into its wing", async () => {
 	await attachClient();
-	const brief = "Write the style guide.\nKeep it short.";
-	const receipt = await lifecycle.recruit({ name: " docs ", cwd: workDir, brief, reportsTo: "lead" });
+	const brief = "- Write the style guide.\n- Keep it short.";
+	const receipt = await lifecycle.recruit({
+		name: " docs ",
+		cwd: workDir,
+		brief,
+		reportsTo: "lead",
+		role: "technical-writer",
+	});
 	expect(receipt).toMatchObject({ ok: true, stage: "applied" });
 	const id = (receipt as { sessionId: string }).sessionId;
 	expect(id).toMatch(/^[0-9a-f-]{36}$/);
@@ -191,11 +197,22 @@ test("recruiting a worker sends start reporting to the coordinator; its window o
 		cwd: workDir,
 		name: "docs",
 		reportsTo: "lead",
-		prompt: brief,
+		goal: { text: brief, by: "operator" },
+		role: "technical-writer",
 		tmux: { pane: awake("lead")?.facts?.tmux?.pane },
 	});
 	const start = starts().at(-1)!;
-	expect(start.args).toEqual(["--session-id", id, "--name", "docs", "--reports-to", "lead", brief]);
+	expect(start.args).toEqual([
+		"--session-id",
+		id,
+		"--name",
+		"docs",
+		"--reports-to",
+		"lead",
+		"--role",
+		"technical-writer",
+		"You have assigned work. Begin with your focused task.",
+	]);
 	expect(realpathSync(start.cwd)).toBe(workDir);
 	// After the coordinator's window (1), not after the window the operator's client shows (0).
 	expect(windows().slice(1)).toEqual(["1:lead", "2:docs"]);
@@ -204,6 +221,7 @@ test("recruiting a worker sends start reporting to the coordinator; its window o
 		expect(awake(id)).toMatchObject({
 			name: "docs",
 			role: "worker",
+			facts: { task: { title: "- Write the style guide." } },
 			place: { kind: "wing", headquarters: "lead", repository: workDir },
 		}),
 	);

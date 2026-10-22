@@ -83,16 +83,14 @@ const STORE_TIMEOUT_MS = 5000;
 export const PREFERENCE_KEY = "agent-world";
 
 // Every top-level session with what places it: awake while its current incarnation is alive. A column a runtime started
-// before its migration has not added yet (`intent`, the organization's) reads as null.
+// before its migration has not added yet reads as null; explicit work is selected only when its tables exist.
 const sessionsSql = (columns: OptionalColumns) => `
 select s.id, s.name, s.cwd, s.reports_to as reportsTo, s.git,
-	${OPTIONAL_COLUMNS.filter((column) => column !== "intent")
-		.map((column) => (columns[column] ? `s.${column}` : `null as ${column}`))
-		.join(", ")},
+	${OPTIONAL_COLUMNS.map((column) => (columns[column] ? `s.${column}` : `null as ${column}`)).join(", ")},
 	(select min(f.started_at) from incarnations f where f.session_id = s.id) as firstStartedAt,
 	coalesce(i.ended_at is null and i.process_state in ('alive', 'alive_bridge_lost'), 0) as awake,
 	i.ended_at as stoppedAt, i.end_reason as stopReason,
-	${factsColumns(columns.intent)}
+	${factsColumns(columns.work)}
 from sessions s
 ${FACTS_JOINS}
 where s.kind = 'root'`;
@@ -101,17 +99,20 @@ where s.kind = 'root'`;
 // one), and the ones awake at the last read (given as a JSON array of ids), looked up by id.
 const changedSql = (columns: OptionalColumns) => `${sessionsSql(columns)}
 	and s.id in (select session_id from events where seq > ? union select value from json_each(?))`;
-const OPTIONAL_COLUMNS = ["intent", "role_title", "manages", "soul", "self", "retired_at", "retired_reason"] as const;
-type OptionalColumns = Record<(typeof OPTIONAL_COLUMNS)[number], boolean>;
+const OPTIONAL_COLUMNS = ["role_title", "manages", "soul", "self", "retired_at", "retired_reason"] as const;
+type OptionalColumns = Record<(typeof OPTIONAL_COLUMNS)[number], boolean> & { work: boolean };
 const optionalColumns = (db: DatabaseSync): OptionalColumns => {
 	const present = new Set(
 		(db.prepare("select name from pragma_table_info('sessions')").all() as { name: string }[]).map((row) => row.name),
 	);
-	return Object.fromEntries(OPTIONAL_COLUMNS.map((column) => [column, present.has(column)])) as OptionalColumns;
+	return {
+		...Object.fromEntries(OPTIONAL_COLUMNS.map((column) => [column, present.has(column)])),
+		work: Boolean(db.prepare("select 1 from sqlite_master where type = 'table' and name = 'work_focus'").get()),
+	} as OptionalColumns;
 };
 const sqlCache = new Map<string, { sessions: string; changed: string }>();
 const sqlFor = (columns: OptionalColumns) => {
-	const key = OPTIONAL_COLUMNS.map((column) => Number(columns[column])).join("");
+	const key = [Number(columns.work), ...OPTIONAL_COLUMNS.map((column) => Number(columns[column]))].join("");
 	const cached = sqlCache.get(key);
 	if (cached) return cached;
 	const sql = { sessions: sessionsSql(columns), changed: changedSql(columns) };
@@ -283,7 +284,8 @@ export function openWorldBackend(paths: { db: string; socket: string }): WorldBa
 			// only with an event naming it. A database whose sequence went back is a new one.
 			const full = rowsSeq < 0 || seq < rowsSeq || polls % FULL_REREAD_POLLS === 0;
 			const awakeIds = [...sessionsById.values()].filter((session) => session.awake).map((session) => session.id);
-			const sql = sqlFor(optionalColumns(db));
+			const columns = optionalColumns(db);
+			const sql = sqlFor(columns);
 			const changed = (full
 				? db.prepare(sql.sessions).all()
 				: db.prepare(sql.changed).all(rowsSeq, JSON.stringify(awakeIds))) as unknown as Row[];
@@ -302,9 +304,11 @@ export function openWorldBackend(paths: { db: string; socket: string }): WorldBa
 			) as RememberedWings;
 			const projected = projectWorld([...sessionsById.values()], mergeWings(storedWings, seen));
 			const byId = rowsById;
-			const tasksOf = db.prepare(
-				"select distinct task_id as id from session_tasks where session_id = ? order by at desc",
-			);
+			const tasksOf = columns.work
+				? db.prepare(
+						"select t.id, t.bundle from assignments a join work_tasks t on t.id = a.task_id where a.person = ? and a.end_reason = 'finished' group by t.id order by max(a.ended_at) desc",
+					)
+				: undefined;
 			world = {
 				...projected,
 				characters: projected.characters.map((character) => ({
@@ -312,7 +316,9 @@ export function openWorldBackend(paths: { db: string; socket: string }): WorldBa
 					facts: factsOf(
 						byId.get(character.id)!,
 						readTask,
-						(tasksOf.all(character.id) as { id: string }[]).map((task) => task.id),
+						((tasksOf?.all(character.id) ?? []) as { id: string; bundle: string }[]).map(
+							(task) => readTask(JSON.stringify({ bundle: task.bundle, taskId: task.id }))?.title ?? task.id,
+						),
 					),
 				})),
 			};

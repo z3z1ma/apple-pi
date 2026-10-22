@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { chmodSync, createReadStream, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, createReadStream, mkdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server, type Socket } from "node:net";
 import { createInterface } from "node:readline";
 import { DatabaseSync } from "node:sqlite";
@@ -47,11 +47,9 @@ const FACT_COLUMNS: Record<keyof Facts, string> = {
 	parentSessionFile: "parent_session_file",
 	previousSession: "previous_session",
 	git: "git",
-	currentTask: "current_task",
-	intent: "intent",
 	config: "config",
 };
-const JSON_FACTS = new Set<string>(["prompt", "queue", "config", "previousSession", "git", "currentTask"]);
+const JSON_FACTS = new Set<string>(["prompt", "queue", "config", "previousSession", "git"]);
 
 import { type AttentionRow, jumpTarget, statusSummary } from "./attention.js";
 import { syncChannels } from "./channels.js";
@@ -66,7 +64,7 @@ import {
 	setServerOptions,
 	socketFiles,
 } from "./tmux.js";
-import { changeWork, cleanMovedBundles, type WorkCommand } from "./work.js";
+import { changeWork, cleanMovedBundles, focusedTask, moveTask, type WorkCommand } from "./work.js";
 
 /** How often the runtime reads tmux, and how long one server may take to answer before the read counts as failed. */
 const TMUX_POLL_MS = 1000;
@@ -326,13 +324,7 @@ export class Runtime {
 		}
 		if (message.type === "run") this.setRunState(sessionId, generation, message.run);
 		else if (message.type === "index") this.index(sessionId, generation, message.rows);
-		else if (message.type === "task_link" && this.isCurrent(sessionId, generation)) {
-			const { bundle, taskId, via, at } = message;
-			this.db!.prepare(
-				"insert into session_tasks (session_id, generation, bundle, task_id, via, at, source) values (?, ?, ?, ?, ?, ?, 'bridge')",
-			).run(sessionId, generation, bundle, taskId, via, at);
-			this.event("bridge", sessionId, generation, "task_linked", { bundle, taskId, via });
-		} else if (message.type === "facts") this.applyFacts(sessionId, generation, message.facts);
+		else if (message.type === "facts") this.applyFacts(sessionId, generation, message.facts);
 		else if (message.type === "tool_start") this.startTool(sessionId, generation, message.tool);
 		else if (message.type === "tool_end") {
 			// Every end is recorded, even of a tool that was not the one shown; the session then shows the tool still running.
@@ -560,6 +552,11 @@ export class Runtime {
 			}
 			return;
 		}
+		if (command.kind === "task_moved") {
+			receipt("accepted");
+			this.taskMoved(commandId, command.from, command.to);
+			return;
+		}
 		if (command.kind === "work") {
 			receipt("accepted");
 			this.workCommand(commandId, sessionId, command, now);
@@ -593,7 +590,27 @@ export class Runtime {
 		this.dispatch(target, commandId, command);
 	}
 
+	private taskMoved(commandId: string, from: string, to: string): void {
+		try {
+			for (const person of moveTask(this.db!, from, to))
+				this.event("runtime", person, null, "task_moved", { from, to });
+			this.setCommandStage(commandId, "applied");
+		} catch (error) {
+			this.setCommandStage(commandId, "failed", (error as Error).message);
+		}
+	}
+
 	private workCommand(commandId: string, actor: string, command: WorkCommand, now: number): void {
+		if (this.applyWork(commandId, actor, command, now)) this.finishWorkCommand(commandId, actor, command);
+	}
+
+	private applyWork(
+		commandId: string,
+		actor: string,
+		command: WorkCommand,
+		now: number,
+		prepare?: () => void,
+	): boolean {
 		const db = this.db!;
 		const rollback: (() => void)[] = [];
 		const committed: (() => void)[] = [];
@@ -601,6 +618,7 @@ export class Runtime {
 		this.setCommandStage(commandId, "delivered");
 		db.exec("begin");
 		try {
+			prepare?.();
 			const change = changeWork(db, this.paths.dir, commandId, actor, command, now, rollback, committed);
 			deliveries = this.preparePost(`${commandId}:post`, actor, change.post, now, {
 				person: change.notify,
@@ -611,7 +629,7 @@ export class Runtime {
 			db.exec("rollback");
 			for (const undo of rollback.reverse()) undo();
 			this.setCommandStage(commandId, "failed", (error as Error).message);
-			return;
+			return false;
 		}
 		for (const finish of committed) {
 			try {
@@ -622,7 +640,7 @@ export class Runtime {
 		}
 		cleanMovedBundles(db);
 		for (const { target, id, mail } of deliveries.deliveries) this.dispatch(target, id, mail);
-		this.finishWorkCommand(commandId, actor, command);
+		return true;
 	}
 
 	private finishWorkCommand(commandId: string, actor: string, command: WorkCommand): void {
@@ -838,8 +856,10 @@ export class Runtime {
 	private async startSession(commandId: string, sessionId: string, command: Extract<Command, { kind: "start" }>) {
 		const db = this.db!;
 		const fail = (reason: string) => this.setCommandStage(commandId, "failed", reason);
-		const row = db.prepare("select cwd, name, generation, reports_to from sessions where id = ?").get(sessionId) as
-			| { cwd: string; name: string | null; generation: number; reports_to: string | null }
+		const row = db
+			.prepare("select cwd, name, generation, reports_to, role from sessions where id = ?")
+			.get(sessionId) as
+			| { cwd: string; name: string | null; generation: number; reports_to: string | null; role: string | null }
 			| undefined;
 		const live =
 			row &&
@@ -850,20 +870,50 @@ export class Runtime {
 				.get(sessionId, row.generation);
 		if (live) return fail("already running");
 		if (this.starting.has(sessionId)) return fail("already starting");
-		const cwd = command.cwd ?? row?.cwd;
-		if (!cwd) return fail("unknown session; give a directory to start it in");
+		const directory = command.cwd ?? row?.cwd;
+		if (!directory) return fail("unknown session; give a directory to start it in");
+		const cwd = realpathSync(directory);
+		if (!row && command.role && !command.goal?.text.trim()) return fail("A new hire needs a written goal");
 		const name = command.name ?? row?.name ?? undefined;
 		// A stopped person keeps its manager; a reopen by a manager is a return from retirement.
 		const reportsTo = row?.reports_to ?? command.reportsTo;
 		if (row) db.prepare("update sessions set retired_at = null, retired_reason = null where id = ?").run(sessionId);
+		if (command.goal) {
+			const prepare = () => {
+				if (!row)
+					db.prepare(`insert into sessions (id, kind, cwd, name, run_state, generation, reports_to, role, source, updated_at)
+					values (?, 'root', ?, ?, 'idle', 0, ?, ?, 'runtime', ?)`).run(
+						sessionId,
+						cwd,
+						name ?? null,
+						reportsTo ?? null,
+						command.role ?? null,
+						Date.now(),
+					);
+			};
+			if (
+				!this.applyWork(
+					commandId,
+					command.goal.by,
+					{ kind: "work", action: "assign", person: sessionId, goal: command.goal.text, cwd },
+					Date.now(),
+					prepare,
+				)
+			)
+				return;
+		}
+		const role = row?.role ?? command.role;
+		const prompt =
+			command.prompt ??
+			(focusedTask(db, sessionId) ? "You have assigned work. Begin with your focused task." : undefined);
 		const pi = [
 			"pi",
 			"--session-id",
 			sessionId,
 			...(name ? ["--name", name] : []),
 			...(reportsTo ? ["--reports-to", reportsTo] : []),
-			...(command.role ? ["--role", command.role] : []),
-			...(command.prompt ? [command.prompt] : []),
+			...(role ? ["--role", role] : []),
+			...(prompt ? [prompt] : []),
 		];
 		const start: { commandId: string; socket: string; pane?: string } = {
 			commandId,

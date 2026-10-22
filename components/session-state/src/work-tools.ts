@@ -54,7 +54,7 @@ export function installWork(pi: ExtensionAPI): void {
 				"Take responsibility for work: give a goal to create an ephemeral task, or take an existing unassigned task by id or ledger path. It becomes your focused task; your manager hears through its task thread. Every task has a task.md goal and a retrospective, even informal work. You can hold several tasks, with one in focus.",
 			promptSnippet: "Take a goal or existing task; it becomes your focused work.",
 			promptGuidelines: [
-				"Take the operator's first request as a task before working. Edit task.md to change the goal, then focus it again to reread it. Finish the retrospective before finish_task.",
+				"Take new work from the operator as a task before working, unless it is already assigned to you. Edit task.md to change the goal, then focus it again to reread it. Finish the retrospective before finish_task.",
 			],
 			parameters: Type.Object(goalOrTask, { additionalProperties: false }),
 			execute: (_id, args, signal, _update, ctx) => change(ctx, { action: "take", ...args }, signal),

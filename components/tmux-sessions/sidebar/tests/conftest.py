@@ -144,6 +144,7 @@ class World:
         process_state: str = "alive",
         ended: bool = False,
         socket: str | None = None,
+        focus: dict | None = None,
         **facts,
     ) -> None:
         """A session with one incarnation in `pane` (added to fake tmux too); times are in seconds."""
@@ -175,6 +176,22 @@ class World:
             socket or self.socket,
             pane,
         )
+        if focus:
+            self.execute(
+                "insert or ignore into work_tasks (id, bundle, project, organization, ephemeral, thread) values (?, ?, ?, ?, 0, ?)",
+                focus["taskId"],
+                focus["bundle"],
+                cwd,
+                session_id,
+                f"task:{focus['taskId']}",
+            )
+            self.execute(
+                "insert into assignments (person, task_id, assigned_by, assigned_at) values (?, ?, 'operator', ?)",
+                session_id,
+                focus["taskId"],
+                now,
+            )
+            self.execute("insert into work_focus (person, task_id) values (?, ?)", session_id, focus["taskId"])
         if pane is None:
             return
         if pane not in self.tmux.panes:

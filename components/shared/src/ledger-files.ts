@@ -336,7 +336,7 @@ export async function linkChangedFile(
 }
 
 /** Live bundles under the session's directory and every ancestor that holds a `.ledger/`. */
-function visibleLiveBundles(cwd: string): string[] {
+export function visibleLiveBundles(cwd: string): string[] {
 	const bundles: string[] = [];
 	let current = realpathSync(cwd);
 	while (true) {
