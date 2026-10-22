@@ -53,7 +53,7 @@ export function livePeers(self: string | null): Peer[] {
 }
 
 /** The tools every person has, restored after a resume replaces the tool loadout with the transcript's older one. */
-const PERSON_TOOLS = ["directory", "send_mail", "reply", "inbox", "read_thread", "post"];
+const PERSON_TOOLS = ["directory", "send_mail", "reply", "inbox", "read_thread", "post", "escalate"];
 
 /** A person as the directory shows it: who, what it does, and to whom it reports. */
 function entry(member: Member, names: Map<string, string>) {
@@ -62,7 +62,7 @@ function entry(member: Member, names: Map<string, string>) {
 		id: member.id,
 		title: member.title,
 		role: member.role,
-		manager: member.reportsTo ? (names.get(member.reportsTo) ?? member.reportsTo) : null,
+		manager: member.reportsTo ? (names.get(member.reportsTo) ?? member.reportsTo) : "Operator",
 		team: `team:${member.reportsTo ?? member.id}`,
 		status: member.status === "busy" ? "working" : member.status === "waiting" ? "asking the operator" : member.status,
 		workingOn: member.currentTask,
@@ -98,7 +98,7 @@ export function installPeers(pi: ExtensionAPI): void {
 			name: "directory",
 			label: "directory",
 			description:
-				"Your organization's directory: everyone in it including you, awake or asleep, with name, id, title, manager, whether they are working, idle, asking the operator, or asleep, what they work on, their directory, one line of their soul, and their record (the ledger tasks they have worked on, newest first). Former members, who left, are listed only with former: true. Write to anyone with send_mail by name.",
+				"Your organization's directory: everyone in it including you, awake or asleep, with the operator at the top, name, id, title, manager, whether they are working, idle, asking the operator, or asleep, what they work on, their directory, one line of their soul, and their record (the ledger tasks they have worked on, newest first). Former members, who left, are listed only with former: true. Write to anyone with send_mail by name.",
 			promptSnippet: "Your organization's directory: who is in it, what each does, and whom each reports to.",
 			parameters: Type.Object(
 				{ former: Type.Optional(Type.Boolean({ description: "Also list the people who left, with when and why." })) },
@@ -108,7 +108,23 @@ export function installPeers(pi: ExtensionAPI): void {
 				const self = ctx.sessionManager.getSessionId();
 				const all = organizationOf(self, true).members;
 				const names = new Map(all.map((member) => [member.id, member.name ?? member.id]));
-				const members = all.filter((member) => !member.retired).map((member) => entry(member, names));
+				const members = [
+					{
+						id: "operator",
+						name: "Operator",
+						title: "Operator",
+						role: null,
+						manager: null,
+						team: null,
+						status: "human",
+						workingOn: null,
+						directory: null,
+						soul: null,
+						record: [],
+						since: null,
+					},
+					...all.filter((member) => !member.retired).map((member) => entry(member, names)),
+				];
 				const former = params.former
 					? all.filter((member) => member.retired).map((member) => entry(member, names))
 					: [];

@@ -127,7 +127,8 @@ test("a manager transfers a person with its team, is refused a cycle or a strang
 
 		await root.session.prompt("list");
 		expect(listed?.members.map((m) => [m.id, m.manager])).toEqual([
-			[rootId, null],
+			["operator", null],
+			[rootId, "Operator"],
 			["m1", rootId],
 			["m2", rootId],
 			["p1", "Person m2"],

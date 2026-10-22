@@ -608,6 +608,62 @@ test("tool lines leave out a leading `cd <dir> &&` and the working directory, in
 	}
 }, 30000);
 
+test("the Mail tab shows conversations needing the operator, reads them, and sends a thread reply", async () => {
+	const snapshot = {
+		...world(),
+		operatorMail: [{ id: "approval", subject: "Release approval", unread: 1, lastAt: Date.now() }],
+	};
+	const { page, push, errors } = await openWorld(snapshot);
+	try {
+		await page.evaluate(() => {
+			const w = window as any;
+			w.mailCalls = [];
+			const thread = {
+				id: "approval",
+				subject: "Release approval",
+				closed: false,
+				participants: [
+					{ id: "operator", name: "Operator" },
+					{ id: "ada", name: "Ada" },
+				],
+				messages: [{ seq: 1, from: "ada", name: "Ada", body: "May we release?", at: Date.now() }],
+			};
+			w.agentWorld.readThread = async (id: string) => {
+				w.mailCalls.push(["read", id]);
+				return { ok: true, thread };
+			};
+			w.agentWorld.replyThread = async (id: string, body: string) => {
+				w.mailCalls.push(["reply", id, body]);
+				thread.messages.push({ seq: 2, from: "operator", name: "Operator", body, at: Date.now() });
+				return { ok: true, stage: "applied" };
+			};
+		});
+		await tab(page, "Mail");
+		expect(await page.getByRole("status", { name: "1 conversations need you" }).count()).toBe(1);
+		await page.getByRole("button", { name: /Release approval.*Needs you/ }).click();
+		await page.getByText("May we release?", { exact: true }).waitFor();
+		await push({ ...snapshot, operatorMail: [{ ...snapshot.operatorMail[0], unread: 0 }] });
+		await vi.waitFor(async () =>
+			expect(await page.getByRole("status", { name: "1 conversations need you" }).count()).toBe(0),
+		);
+		await page.getByRole("textbox", { name: "Reply to everyone" }).fill("Approved. Keep the rollback ready.");
+		await page.getByRole("button", { name: "Send reply", exact: true }).click();
+		await page.getByText("Approved. Keep the rollback ready.", { exact: true }).waitFor();
+		expect(await page.evaluate(() => (window as any).mailCalls)).toEqual([
+			["read", "approval"],
+			["reply", "approval", "Approved. Keep the rollback ready."],
+			["read", "approval"],
+		]);
+		if (SHOTS) {
+			mkdirSync(SHOTS, { recursive: true });
+			await page.screenshot({ path: join(SHOTS, "operator-inbox.png"), animations: "disabled" });
+		}
+		expect(errors).toEqual([]);
+	} finally {
+		await page.close();
+	}
+}, 30000);
+
 test("the Places tab lists every function place as open, the inn with who sleeps and the rookery with what mail waits", async () => {
 	const sleeper = (id: string) => ({
 		id,

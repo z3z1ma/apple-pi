@@ -103,8 +103,8 @@ test("mail to a dormant agent waits until it wakes, and says so in its receipt",
 
 	expect(await lifecycle.sendMail("sleepy", "Rebase on main when you wake.")).toEqual({
 		ok: true,
-		stage: "accepted",
-		note: "not running; the mail waits until it opens",
+		stage: "applied",
+		note: "asleep, the mail waits: sleepy",
 	});
 	await soon(() =>
 		expect(mailItem("Rebase on main when you wake.")).toMatchObject({
@@ -122,6 +122,7 @@ test("mail to a dormant agent waits until it wakes, and says so in its receipt",
 test("a letter written as the operator reaches an awake agent's transcript, with its receipt and a feed line", async () => {
 	const receiver = await listener();
 	expect(await lifecycle.sendMail(receiver.id, "How is the parser going?")).toEqual({ ok: true, stage: "applied" });
+	await soon(() => expect(JSON.stringify(receiver.run.session.messages)).toContain("How is the parser going?"));
 	const delivered = receiver.run.session.messages.filter(
 		(message) => message.role === "custom" && message.customType === MAIL_CUSTOM_TYPE,
 	);

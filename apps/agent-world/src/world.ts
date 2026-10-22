@@ -132,6 +132,8 @@ export interface WorldSnapshot {
 	dormant?: DormantAgent[];
 	/** Recent mail between sessions (and from the operator), newest first, with every mail still waiting. */
 	mail?: MailItem[];
+	/** The operator's threaded inbox. Unread threads need the operator, independently of session attention. */
+	operatorMail?: MailThreadSummary[];
 }
 
 /** The parts of a snapshot an update may leave out while they are the same as in the update before. */
@@ -196,6 +198,23 @@ export interface MailItem {
 	state: "delivered" | "waiting" | "failed";
 	reason: string | null;
 }
+
+export interface MailThreadSummary {
+	id: string;
+	subject: string;
+	unread: number;
+	lastAt: number;
+}
+
+export interface MailThread {
+	id: string;
+	subject: string;
+	closed: boolean;
+	participants: { id: string; name: string }[];
+	messages: { seq: number; from: string; name: string; body: string; at: number }[];
+}
+
+export type ThreadRead = { ok: true; thread: MailThread } | { ok: false; reason: string };
 
 export const MAIL_BODY_MAX = 4000;
 
@@ -416,8 +435,12 @@ export interface AgentWorldApi extends IntegrationsApi {
 	wake(characterId: string): Promise<CommandReceipt>;
 	/** End an awake character's session (`close`); a busy one asks for `confirmed` first. */
 	endSession(characterId: string, confirmed?: boolean): Promise<CommandReceipt>;
-	/** Mail a character as the operator (`mail`, from `OPERATOR`); mail to a dormant one waits until it wakes. */
+	/** Start a mail thread as the operator; messages to a dormant character wait until it wakes. */
 	sendMail(characterId: string, body: string): Promise<CommandReceipt>;
+	/** Read an operator thread and mark only the returned messages read. */
+	readThread(thread: string): Promise<ThreadRead>;
+	/** Reply as the operator to everyone in the thread, not as a session prompt. */
+	replyThread(thread: string, body: string): Promise<CommandReceipt>;
 	/**
 	 * Recruit a new agent (`start` for a new session id): a worker's window opens after its coordinator's pane, an
 	 * independent agent's after the operator's current one.

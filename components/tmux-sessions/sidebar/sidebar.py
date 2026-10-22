@@ -19,6 +19,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from model import Agent, Former, Store, former, mark_seen, trees, tmux  # noqa: E402
+from mailbox_view import Mailbox, operator_threads  # noqa: E402
 from presentation import (  # noqa: E402
     STATES,
     activity,
@@ -38,7 +39,7 @@ from textual.binding import Binding  # noqa: E402
 from textual.containers import Horizontal, Vertical, VerticalScroll  # noqa: E402
 from textual.content import Content  # noqa: E402
 from textual.widget import Widget  # noqa: E402
-from textual.widgets import Digits, Sparkline, Static  # noqa: E402
+from textual.widgets import Button, Digits, Sparkline, Static  # noqa: E402
 
 POLL_SECONDS = 1.0
 TICK_SECONDS = 0.1
@@ -154,6 +155,8 @@ class Sidebar(App):
     #hero-count.-clear { color: $success; }
     #hero-label { width: 1fr; height: 3; padding-left: 2; content-align: left middle; }
     #lanes { scrollbar-size-vertical: 1; }
+    #mail { width: 100%; min-width: 0; height: 3; }
+    #mail.-unread { color: $warning; border: tall $warning; }
     #empty { margin: 2 2; color: $text-muted; text-wrap: wrap; }
     .lane-head { height: 1; margin: 1 0; border-top: heavy $panel; border-title-align: left;
                  border-title-style: bold; border-title-color: $text-muted; }
@@ -186,6 +189,7 @@ class Sidebar(App):
         Binding("x", "seen", "mark seen", show=False),
         Binding("X", "seen_all", "mark all seen", show=False),
         Binding("f", "former", "former members", show=False),
+        Binding("m", "mail", "mail", show=False),
         Binding("escape", "leave", "back", show=False),
         Binding("q", "close", "close", show=False),
     ]
@@ -210,6 +214,7 @@ class Sidebar(App):
         with Horizontal(id="hero"):
             yield Digits("0", id="hero-count")
             yield Static(id="hero-label")
+        yield Button("Mail", id="mail")
         with VerticalScroll(id="lanes"):
             for key, _, _ in LANES:
                 yield Static(classes="lane-head", id=f"head-{key}")
@@ -230,12 +235,26 @@ class Sidebar(App):
         try:
             agents = self.store.poll()
             retired = former(agents)
+            unread = sum(t["unread"] > 0 for t in operator_threads())
         except Exception as error:  # noqa: BLE001 - a bad poll must not end an always-on sidebar
             self.call_from_thread(self.report, f"Could not read agents: {error}")
             return
         finally:
             self.lock.release()
         self.call_from_thread(self.apply, agents, retired)
+        self.call_from_thread(self.show_mail, unread)
+
+    def show_mail(self, unread: int) -> None:
+        button = self.query_one("#mail", Button)
+        button.label = f"Mail: {unread} need you" if unread else "Mail (m)"
+        button.set_class(unread > 0, "-unread")
+
+    def action_mail(self) -> None:
+        self.push_screen(Mailbox())
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "mail":
+            self.action_mail()
 
     def report(self, message: str) -> None:
         if message != self.last_error:

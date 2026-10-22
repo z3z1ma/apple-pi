@@ -95,8 +95,8 @@ test("a session lists its organization, awake and asleep, not subagents or stran
 		);
 
 		await caller.session.prompt("check on the docs worker");
-		expect(listed).toContainEqual(expect.objectContaining({ id: callerId, manager: null }));
-		expect(listed.filter((member) => member.id !== callerId)).toEqual([
+		expect(listed).toContainEqual(expect.objectContaining({ id: callerId, manager: "Operator" }));
+		expect(listed.filter((member) => member.id !== callerId && member.id !== "operator")).toEqual([
 			{
 				id: "peer-1",
 				name: "docs-worker",
@@ -163,7 +163,7 @@ test("a leaf sees its named manager, teammates, and itself, with former members 
 		await sendCommand("leaf-sibling", { kind: "retire", reason: "Assignment complete." });
 		sibling.send({ type: "shutdown", reason: "quit" });
 		await run.session.prompt("who is here?");
-		expect(results[0].members.map((member) => member.id).sort()).toEqual(["leaf-boss", id].sort());
+		expect(results[0].members.map((member) => member.id).sort()).toEqual(["operator", "leaf-boss", id].sort());
 		expect(results[0].members.find((member) => member.id === id)).toMatchObject({
 			manager: "Ada",
 			team: "team:leaf-boss",

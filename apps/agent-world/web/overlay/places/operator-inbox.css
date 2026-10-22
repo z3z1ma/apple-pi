@@ -1,0 +1,46 @@
+.aw-operator-inbox {
+	padding: 0 0 16px;
+	font-size: 13px;
+	border-bottom: 1px solid currentColor;
+}
+
+.aw-operator-inbox ul {
+	list-style: none;
+	padding: 0;
+}
+
+.aw-thread-choice {
+	display: flex;
+	justify-content: space-between;
+	gap: 12px;
+	margin: 6px 0;
+}
+
+.aw-thread-choice strong {
+	color: var(--aw-danger);
+}
+
+.aw-thread-message {
+	margin: 12px 0;
+	padding: 8px 0;
+	border-bottom: 1px solid #8884;
+}
+
+.aw-thread-message time {
+	display: block;
+	opacity: 0.6;
+	font-size: 0.8em;
+}
+
+.aw-thread-message p {
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+.aw-thread textarea {
+	display: block;
+	box-sizing: border-box;
+	width: 100%;
+	min-height: 6em;
+	margin: 8px 0;
+}

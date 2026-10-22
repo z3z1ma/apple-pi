@@ -106,6 +106,12 @@ Root sessions form organizations: a session started with `--reports-to <id>` has
 
 Every root session's system prompt has an `<org>` section (`charters.ts`): who the session is (name and role title), its id as its mail address, its manager and root, how the directory and mail work, and the tree's norms (work, reports, and escalation follow the tree; a manager is never a relay; say what you verified and what you believe). A hired session is told to ask its manager for people it lacks and when to escalate; a root is told it holds the manager tools. A session whose role manages also gets the `<manager>` charter: memory on disk, hiring colliding perspectives from the catalog, giving independent thinkers the problem before the preferred answer, routing by affinity, delegating whole outcomes, naming disagreements, escalating by uncertainty times consequence, sizing the team like hiring, hiring a manager under itself when fan-in would make it the bottleneck, reconciling against the directory, and sweeping. Its principal is the operator for a root and its manager for a hired manager.
 
+## The operator and escalation
+
+`directory` includes the human operator at the top of each organization. Anyone can address `send_mail` to `operator`. `escalate(body)` starts a thread to the caller's manager, or to the operator at the root; it returns after the message is stored, so work can continue. `ask_user_question` remains the way to interrupt the operator immediately.
+
+The operator is an address, not a synthetic Pi session. Unread messages in their threads are their needs-you state. Agent World's Mail tab has **Your inbox**, and the terminal sidebar has **Mail** (`m`): each shows the unread conversations, opens them in full, and sends replies to every participant through the thread. Reading acknowledges only the displayed messages; later arrivals remain unread. The normal mail traffic view still shows delivery to sessions and messages from outside scripts.
+
 ## Team channels
 
 Each manager has a `team:<manager-id>` thread for the manager and its direct reports. `directory` shows a person's team channel; `inbox(all: true)` lists the channels they belong to. Use `post(channel, body)` and `read_thread(thread)` to share and read context. Normal posts are pulled: they appear unread without starting a turn. A complete participant name or id in a post (optionally prefixed with `@`) pushes just that post to that person. Substrings of another name or word do not count.

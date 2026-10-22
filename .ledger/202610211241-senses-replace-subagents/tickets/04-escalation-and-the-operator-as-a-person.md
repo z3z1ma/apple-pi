@@ -6,9 +6,13 @@
 
 **Blocked by:** 01 Mail is threads, 02 The directory and human-named manager tools
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] `escalate` from a leaf reaches its manager; from a root it reaches the operator and the root keeps working.
-- [ ] The operator is listed in `directory` and can be addressed by `send_mail`.
-- [ ] A thread to the operator shows as needing him in the sidebar and in Agent World's Mail tab until he reads it.
-- [ ] A reply sent from the sidebar or Agent World arrives in every participant's session as a thread message.
+- [x] `escalate` from a leaf reaches its manager; from a root it reaches the operator and the root keeps working.
+- [x] The operator is listed in `directory` and can be addressed by `send_mail`.
+- [x] A thread to the operator shows as needing him in the sidebar and in Agent World's Mail tab until he reads it.
+- [x] A reply sent from the sidebar or Agent World arrives in every participant's session as a thread message.
+
+**Evidence:** Session-state, organization, and the focused Agent World backend suites: 29 files / 114 tests passed. Sidebar: 29 tests passed. Built Agent World interface/build tests: 12 passed, with a focused repeat of the inbox case after styling. Node/web typecheck, package loader, scoped Biome, and Python lint passed. Inspected the inbox screenshot with the existing fantasy skin. The new tests assert unread state, exact read cursors, non-blocking escalation, and reply-to-all through mail rather than session prompts.
+
+**Deviations:** The operator's needs-you state is derived from its thread read cursor, not a fabricated session row or a copy in `sessions.needs_you_since`. The world keeps its existing delivery-traffic view alongside the operator's conversation inbox; outside scripts still use plain mail. The sidebar opens its inbox with `m` or the Mail button.

@@ -116,6 +116,14 @@ function start() {
 	ipcMain.handle("world:send-mail", (_event, characterId: unknown, body: unknown) =>
 		typeof characterId === "string" && typeof body === "string" ? lifecycle.sendMail(characterId, body) : unnamed,
 	);
+	ipcMain.handle("world:read-thread", (_event, thread: unknown) =>
+		typeof thread === "string" ? lifecycle.readThread(thread) : { ok: false, reason: "No thread was named." },
+	);
+	ipcMain.handle("world:reply-thread", (_event, thread: unknown, body: unknown) =>
+		typeof thread === "string" && typeof body === "string"
+			? lifecycle.replyThread(thread, body)
+			: { ok: false, reason: "A thread and reply are required." },
+	);
 	// Recruiting a new agent: a worker at its coordinator's desk, an independent one at the square's recruiter.
 	ipcMain.handle("world:recruit", (_event, request: unknown) => {
 		const { name, cwd, brief, reportsTo, role } = (request ?? {}) as Record<string, unknown>;

@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { organizationOf } from "../../organization/src/directory.js";
 import { statePaths } from "./paths.js";
+import { OPERATOR } from "./threads.js";
 
 /** The session row of `id`, read-only; undefined when the database or the session is missing. */
 function sessionRow(id: string): { id: string; reports_to: string | null } | undefined {
@@ -27,6 +28,10 @@ export function resolveAddresses(self: string, addresses: string[]): string[] {
 	const ids: string[] = [];
 	for (const raw of addresses) {
 		const address = raw.trim();
+		if (address.toLowerCase() === OPERATOR) {
+			ids.push(OPERATOR);
+			continue;
+		}
 		if (address === "my-manager") {
 			if (!me?.reports_to) throw new Error("You have no manager.");
 			ids.push(me.reports_to);
@@ -57,8 +62,13 @@ export function resolveAddresses(self: string, addresses: string[]): string[] {
 	return [...new Set(ids)].filter((id) => id !== self);
 }
 
+export function managerAddress(self: string): string {
+	return sessionRow(self)?.reports_to ?? OPERATOR;
+}
+
 /** One person, by name in your organization or by session id; aliases such as my-team are refused. */
 export function resolvePerson(self: string, address: string): string {
+	if (address.toLowerCase() === OPERATOR) throw new Error("The operator is a person, not a Pi session to manage.");
 	if (address === "my-team") throw new Error("Name one person, not my-team.");
 	const [id] = address === self ? [self] : resolveAddresses(self, [address]);
 	if (!id) throw new Error(`Nobody to act on in ${address}.`);

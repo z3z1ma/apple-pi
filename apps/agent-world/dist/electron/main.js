@@ -859,6 +859,131 @@ async function operatorPane(sockets) {
 		pane: latest.pane
 	} : void 0;
 }
+function openMailbox(path, commands) {
+	const send = async (command) => {
+		let note;
+		const result = await commands.send(OPERATOR, command, { onReceipt(stage, reason) {
+			if (stage === "applied") note = reason;
+		} });
+		return result.ok ? {
+			ok: true,
+			stage: "applied",
+			...note ? { note } : {}
+		} : result;
+	};
+	return {
+		async sendMail(characterId, body) {
+			if (!body.trim()) return {
+				ok: false,
+				reason: "The message is empty."
+			};
+			return send({
+				kind: "thread_post",
+				thread: `t-${randomUUID()}`,
+				subject: "Message from the operator",
+				to: [characterId],
+				body: body.trim()
+			});
+		},
+		async replyThread(thread, body) {
+			if (!body.trim()) return {
+				ok: false,
+				reason: "The message is empty."
+			};
+			return send({
+				kind: "thread_post",
+				thread,
+				body: body.trim()
+			});
+		},
+		async readThread(id) {
+			if (!existsSync(path)) return {
+				ok: false,
+				reason: "The session database is not available."
+			};
+			const db = new DatabaseSync(path);
+			let thread;
+			try {
+				db.exec("pragma query_only = 1");
+				thread = readOperatorThread(db, id);
+			} finally {
+				db.close();
+			}
+			if (!thread) return {
+				ok: false,
+				reason: "You are not a participant in this thread, or it does not exist."
+			};
+			const last = thread.messages.at(-1);
+			if (last) {
+				const receipt = await send({
+					kind: "thread_read",
+					thread: id,
+					seq: last.seq
+				});
+				if (!receipt.ok) return receipt;
+			}
+			return {
+				ok: true,
+				thread
+			};
+		}
+	};
+}
+var MAIL = `select m.id, m.sender, m.receiver, m.body, m.sent_at as sentAt, m.delivered_at as deliveredAt, m.stage,
+	m.reason, fs.name as fromName, fs.cwd as fromCwd, ts.name as toName, ts.cwd as toCwd
+from mail m
+left join sessions fs on fs.id = m.sender
+left join sessions ts on ts.id = m.receiver
+where m.id in (select id from mail order by sent_at desc limit 120)
+	or m.stage in ('accepted', 'delivered')
+order by m.sent_at desc, m.id`;
+var nameOf = (id, name, cwd) => name || (cwd ? cwd.split("/").filter(Boolean).pop() : void 0) || id;
+var hasThreads = (db) => db.prepare("select 1 from sqlite_master where type = 'table' and name = 'thread_messages'").get() !== void 0;
+/** The operator is not a session row: its needs-you state is its unread thread cursor. */
+function readOperatorMail(db) {
+	if (!hasThreads(db)) return [];
+	return db.prepare(`select t.id, t.subject, max(m.at) as lastAt,
+		count(case when m.seq > p.read_up_to and m.sender != ? then 1 end) as unread
+		from threads t join thread_participants p on p.thread_id = t.id and p.participant = ?
+		join thread_messages m on m.thread_id = t.id group by t.id order by lastAt desc`).all(OPERATOR, OPERATOR);
+}
+/** Read a thread only if the operator participates. The caller marks the returned sequence read through the runtime. */
+function readOperatorThread(db, id) {
+	if (!hasThreads(db)) return void 0;
+	const row = db.prepare(`select t.subject, t.closed_at from threads t join thread_participants p on p.thread_id = t.id
+		where t.id = ? and p.participant = ?`).get(id, OPERATOR);
+	if (!row) return void 0;
+	const participants = db.prepare(`select p.participant as id, coalesce(s.name, p.participant) as name
+		from thread_participants p left join sessions s on s.id = p.participant where p.thread_id = ? order by p.joined_at`).all(id);
+	const messages = db.prepare(`select m.seq, m.sender as "from", coalesce(s.name, m.sender) as name, m.body, m.at
+		from thread_messages m left join sessions s on s.id = m.sender where m.thread_id = ? order by m.seq`).all(id);
+	return {
+		id,
+		subject: row.subject,
+		closed: row.closed_at !== null,
+		participants,
+		messages
+	};
+}
+/** The mail the world shows now. */
+function readMail(db) {
+	return db.prepare(MAIL).all().map((row) => {
+		const from = row.sender ?? "someone";
+		const body = row.body ?? "";
+		return {
+			id: row.id,
+			from,
+			fromName: from === "operator" ? "You" : nameOf(from, row.fromName, row.fromCwd),
+			to: row.receiver,
+			toName: nameOf(row.receiver, row.toName, row.toCwd),
+			body: body.length > 4e3 ? `${body.slice(0, MAIL_BODY_MAX - 1)}\u2026` : body,
+			sentAt: row.sentAt,
+			deliveredAt: row.deliveredAt,
+			state: row.stage === "applied" ? "delivered" : row.stage === "failed" ? "failed" : "waiting",
+			reason: row.reason
+		};
+	});
+}
 //#endregion
 //#region apps/agent-world/src/backend/roles.ts
 var PACKAGE_ROLES = fileURLToPath(new URL("../../../../roles/", import.meta.url));
@@ -900,8 +1025,6 @@ function loadRoleChoices(agentDir) {
 //#region apps/agent-world/src/backend/lifecycle.ts
 /** A woken session joins once Pi has started in its window; a slow start still says the window opened. */
 var WAKE_MS = 3e4;
-/** Mail to an awake session is delivered once its transcript records it, usually within a second or two. */
-var MAIL_MS = 8e3;
 var CLOSE_MS = 1e4;
 /** A rename is applied as soon as the bridge has it. */
 var RENAME_MS = 8e3;
@@ -1104,19 +1227,7 @@ function openLifecycle(paths, commands, snapshot) {
 				reason
 			}, CLOSE_MS, (stage) => stage === "applied", () => `${person.name} has not left yet.`);
 		},
-		async sendMail(characterId, body) {
-			const text = body.trim();
-			if (!text) return {
-				ok: false,
-				reason: "The message is empty."
-			};
-			return follow(commands, characterId, {
-				kind: "mail",
-				from: OPERATOR,
-				body: text,
-				sentAt: (/* @__PURE__ */ new Date()).toISOString()
-			}, MAIL_MS, (stage, reason) => stage === "applied" || stage === "accepted" && reason !== void 0, (stage) => stage === "delivered" ? "Handed over; not in its transcript yet." : "Sent; not delivered yet.");
-		}
+		...openMailbox(paths.db, commands)
 	};
 }
 //#endregion
@@ -2937,34 +3048,6 @@ function feedLine(row, lookup) {
 		}
 	}
 }
-var MAIL = `select m.id, m.sender, m.receiver, m.body, m.sent_at as sentAt, m.delivered_at as deliveredAt, m.stage,
-	m.reason, fs.name as fromName, fs.cwd as fromCwd, ts.name as toName, ts.cwd as toCwd
-from mail m
-left join sessions fs on fs.id = m.sender
-left join sessions ts on ts.id = m.receiver
-where m.id in (select id from mail order by sent_at desc limit 120)
-	or m.stage in ('accepted', 'delivered')
-order by m.sent_at desc, m.id`;
-var nameOf = (id, name, cwd) => name || (cwd ? cwd.split("/").filter(Boolean).pop() : void 0) || id;
-/** The mail the world shows now. */
-function readMail(db) {
-	return db.prepare(MAIL).all().map((row) => {
-		const from = row.sender ?? "someone";
-		const body = row.body ?? "";
-		return {
-			id: row.id,
-			from,
-			fromName: from === "operator" ? "You" : nameOf(from, row.fromName, row.fromCwd),
-			to: row.receiver,
-			toName: nameOf(row.receiver, row.toName, row.toCwd),
-			body: body.length > 4e3 ? `${body.slice(0, MAIL_BODY_MAX - 1)}\u2026` : body,
-			sentAt: row.sentAt,
-			deliveredAt: row.deliveredAt,
-			state: row.stage === "applied" ? "delivered" : row.stage === "failed" ? "failed" : "waiting",
-			reason: row.reason
-		};
-	});
-}
 //#endregion
 //#region apps/agent-world/src/backend/projection.ts
 /** The key of a manager's team room among a headquarters' wings. */
@@ -3258,6 +3341,7 @@ function openWorldBackend(paths) {
 	let world;
 	let dormant = [];
 	let mail = [];
+	let operatorMail = [];
 	let db;
 	let socket;
 	let socketOpen = false;
@@ -3390,6 +3474,7 @@ function openWorldBackend(paths) {
 				}))
 			};
 			dormant = dormantAgents(world.dormant, byId, (task) => readTask(task, rereadTasks), dormant, !rereadTasks);
+			operatorMail = readOperatorMail(db);
 			const nextMail = readMail(db);
 			if (JSON.stringify(nextMail) !== JSON.stringify(mail)) mail = nextMail;
 			seen = mergeWings(seen, world.wings);
@@ -3454,7 +3539,8 @@ function openWorldBackend(paths) {
 			avatarLook: chosen.avatar ?? stored.avatar,
 			theme: chosen.theme ?? stored.theme,
 			dormant,
-			mail
+			mail,
+			operatorMail
 		});
 	};
 	const onLine = (line) => {
@@ -5735,6 +5821,14 @@ function start() {
 	ipcMain.handle("world:wake", (_event, characterId) => typeof characterId === "string" ? lifecycle.wake(characterId) : unnamed);
 	ipcMain.handle("world:end-session", (_event, characterId, confirmed) => typeof characterId === "string" ? lifecycle.endSession(characterId, confirmed === true) : unnamed);
 	ipcMain.handle("world:send-mail", (_event, characterId, body) => typeof characterId === "string" && typeof body === "string" ? lifecycle.sendMail(characterId, body) : unnamed);
+	ipcMain.handle("world:read-thread", (_event, thread) => typeof thread === "string" ? lifecycle.readThread(thread) : {
+		ok: false,
+		reason: "No thread was named."
+	});
+	ipcMain.handle("world:reply-thread", (_event, thread, body) => typeof thread === "string" && typeof body === "string" ? lifecycle.replyThread(thread, body) : {
+		ok: false,
+		reason: "A thread and reply are required."
+	});
 	ipcMain.handle("world:recruit", (_event, request) => {
 		const { name, cwd, brief, reportsTo, role } = request ?? {};
 		if (typeof name !== "string" || typeof cwd !== "string" || typeof brief !== "string") return {

@@ -1,6 +1,6 @@
 // What the operator does to a session from the inn, the rookery, and a character's actions: wake a dormant one
 // (`start`), end an awake one (`close`, confirmed only while it is busy, decision 13), mail anyone as himself
-// (`mail`), hire a new person (`start` for a new id, with a role from the catalog), rename an awake one (`rename`),
+// (threaded mail, owned by mail.ts), hire a new person (`start` for a new id, with a role from the catalog), rename an awake one (`rename`),
 // and retire one (`retire`: it leaves the organization and sleeps at the inn marked so). Commands go through the
 // command client (`commands.ts`); each resolves with the receipt stage that answers the operator's question (is it
 // awake, is it ended, did the letter arrive or does it wait), not necessarily the last.
@@ -13,7 +13,6 @@ import type { Command } from "../../../../components/session-state/src/protocol.
 import {
 	type CommandReceipt,
 	NAME_MAX,
-	OPERATOR,
 	type ReceiptStage,
 	type RecruitReceipt,
 	type RecruitRequest,
@@ -22,20 +21,18 @@ import {
 } from "../world.js";
 import type { Commands } from "./commands.js";
 import { operatorPane } from "./inn.js";
+import { type Mailbox, openMailbox } from "./mail.js";
 import { loadRoleChoices } from "./roles.js";
 
 /** A woken session joins once Pi has started in its window; a slow start still says the window opened. */
 const WAKE_MS = 30_000;
-/** Mail to an awake session is delivered once its transcript records it, usually within a second or two. */
-const MAIL_MS = 8000;
 const CLOSE_MS = 10_000;
 /** A rename is applied as soon as the bridge has it. */
 const RENAME_MS = 8000;
 
-export interface Lifecycle {
+export interface Lifecycle extends Mailbox {
 	wake(characterId: string): Promise<CommandReceipt>;
 	endSession(characterId: string, confirmed?: boolean): Promise<CommandReceipt>;
-	sendMail(characterId: string, body: string): Promise<CommandReceipt>;
 	recruit(request: RecruitRequest): Promise<RecruitReceipt>;
 	rename(characterId: string, name: string): Promise<CommandReceipt>;
 	roles(): RoleChoice[];
@@ -253,19 +250,6 @@ export function openLifecycle(
 			);
 		},
 
-		async sendMail(characterId, body) {
-			const text = body.trim();
-			if (!text) return { ok: false, reason: "The message is empty." };
-			const command: Command = { kind: "mail", from: OPERATOR, body: text, sentAt: new Date().toISOString() };
-			return follow(
-				commands,
-				characterId,
-				command,
-				MAIL_MS,
-				// Accepted with a reason means it waits for the session to open; applied means its transcript holds it.
-				(stage, reason) => stage === "applied" || (stage === "accepted" && reason !== undefined),
-				(stage) => (stage === "delivered" ? "Handed over; not in its transcript yet." : "Sent; not delivered yet."),
-			);
-		},
+		...openMailbox(paths.db, commands),
 	};
 }

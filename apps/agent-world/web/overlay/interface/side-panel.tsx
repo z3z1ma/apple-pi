@@ -13,6 +13,7 @@ import { AtlassianSettings } from "../places/atlassian-settings.js";
 import { atlassian, type Reading, urgent } from "../places/atlassian-state.js";
 import { forge } from "../places/forge-state.js";
 import { MailList } from "../places/mail-list.js";
+import { OperatorInbox } from "../places/operator-inbox.js";
 import { placePanels } from "../places/place-panels.js";
 import { SlackIcon, SlackSettings, SlackTab } from "../places/slack-tab.js";
 import { AgentsIcon, BellIcon, ChecklistIcon, ChevronIcon, CogIcon, LetterIcon, MapIcon } from "./icons.js";
@@ -74,6 +75,7 @@ export function SidePanel(props: SidePanelProps) {
 	const { tab, folded, onTab, onFold, world } = props;
 	const title = TABS.find((t) => t.tab === tab)!.title;
 	const { needsYou: waiting } = orbCounts(world);
+	const unreadMail = world?.operatorMail?.filter((thread) => thread.unread > 0).length ?? 0;
 	const theme = useTheme();
 	return (
 		<aside className={`aw-frame aw-side${folded ? " aw-folded" : ""}`} aria-label="Side panel">
@@ -110,6 +112,11 @@ export function SidePanel(props: SidePanelProps) {
 						onClick={() => onTab(key)}
 					>
 						<TabIcon tab={key} pack={theme?.style[`--aw-icon-${key}`]} fallback={icon} />
+						{key === "mail" && unreadMail > 0 && (
+							<span className="aw-badge" role="status" aria-label={`${unreadMail} conversations need you`}>
+								<span>{unreadMail}</span>
+							</span>
+						)}
 						{key === "needs-you" && waiting > 0 && (
 							<span className="aw-badge" aria-hidden="true">
 								<span>{waiting}</span>
@@ -219,6 +226,7 @@ function Mail({ world }: SidePanelProps) {
 	const theme = useTheme();
 	return (
 		<section aria-label="Mail">
+			<OperatorInbox threads={world?.operatorMail ?? []} />
 			<h3 className="aw-mail-head">
 				<span>Recent mail</span>
 				<button

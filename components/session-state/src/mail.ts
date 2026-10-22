@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import { defineTool, type ExtensionAPI, type SessionEntry } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
-import { resolveAddresses } from "./addresses.js";
+import { managerAddress, resolveAddresses } from "./addresses.js";
 import { sendCommand } from "./client.js";
 import { messagesOf, type ThreadPost, threadOf, threadsOf, withThreads } from "./threads.js";
 
@@ -71,7 +71,7 @@ const sentence = (note: string | undefined) => (note ? ` ${note[0].toUpperCase()
 
 const addressList = (description: string) =>
 	Type.Array(Type.String({ minLength: 1 }), {
-		description: `${description} A name, a session id, my-team, or my-manager.`,
+		description: `${description} A name, a session id, operator, my-team, or my-manager.`,
 	});
 
 function createSendMailTool() {
@@ -79,7 +79,7 @@ function createSendMailTool() {
 		name: "send_mail",
 		label: "send_mail",
 		description:
-			"Write to people in your organization, the way you would email a colleague: one or several people, with copies. It starts a thread; every participant receives each message in it as mail (a new turn when idle, at the next safe point while working, or when they next wake). Address people by name, by session id, or with my-team and my-manager.",
+			"Write to people in your organization, the way you would email a colleague: one or several people, with copies. It starts a thread; every participant receives each message in it as mail (a new turn when idle, at the next safe point while working, or when they next wake). Address people by name, by session id, or with my-team and my-manager. Address the human as operator; mail waits for them to read it without stopping your work. Use ask_user_question when you need to interrupt them now.",
 		promptSnippet: "Write to people in your organization; starts a thread.",
 		promptGuidelines: [
 			"Mail from others arrives as <mail thread=... subject=... from=...>; answer it with reply on that thread, so everyone in it hears the answer.",
@@ -109,6 +109,40 @@ function createSendMailTool() {
 		},
 		renderCall(args, theme) {
 			return new Text(theme.fg("toolTitle", theme.bold(`send_mail ${args.subject ?? "..."}`)), 0, 0);
+		},
+	});
+}
+
+function createEscalateTool() {
+	return defineTool({
+		name: "escalate",
+		label: "escalate",
+		description:
+			"Raise a decision, risk, or blocker beyond your authority with your manager. At the top of the tree it goes to the operator's inbox. This is mail, not a blocking question: keep working where you can. Use ask_user_question to interrupt the operator now.",
+		promptSnippet: "Raise an issue to your manager, or to the operator at the top of the tree.",
+		parameters: Type.Object(
+			{
+				body: Type.String({
+					minLength: 1,
+					description: "What needs a decision, what you know, and what you recommend.",
+				}),
+			},
+			{ additionalProperties: false },
+		),
+		async execute(_toolCallId, params, signal, _onUpdate, ctx) {
+			const self = ctx.sessionManager.getSessionId();
+			const to = managerAddress(self);
+			const thread = newThreadId();
+			const note = await post(self, { thread, subject: "Escalation", body: params.body, to: [to] }, signal);
+			return {
+				content: [
+					{
+						type: "text",
+						text: `Escalated to ${to} (thread ${thread}).${sentence(note)} Continue the work that does not need this decision.`,
+					},
+				],
+				details: { thread, to },
+			};
 		},
 	});
 }
@@ -263,4 +297,5 @@ export function installMail(pi: ExtensionAPI, withTools: boolean): void {
 	pi.registerTool(createInboxTool());
 	pi.registerTool(createReadThreadTool());
 	pi.registerTool(createPostTool());
+	pi.registerTool(createEscalateTool());
 }

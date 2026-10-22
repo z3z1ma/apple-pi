@@ -255,7 +255,7 @@ test("a hired person whose role does not manage loses the lifecycle tools; a hir
 		await withRole(run, "staff-engineer-simplicity");
 		await run.session.prompt("hi");
 		expect(run.session.getActiveToolNames().sort()).toEqual(
-			["directory", "send_mail", "reply", "inbox", "read_thread", "post", "update_self"].sort(),
+			["directory", "send_mail", "reply", "inbox", "read_thread", "post", "escalate", "update_self"].sort(),
 		);
 	} finally {
 		await close(run);
@@ -266,7 +266,7 @@ test("a hired person whose role does not manage loses the lifecycle tools; a hir
 		await withRole(manager, "coordinator");
 		await manager.session.prompt("hi");
 		expect(manager.session.getActiveToolNames().sort()).toEqual(
-			[...tools, "directory", "send_mail", "reply", "inbox", "read_thread", "post", "update_self"].sort(),
+			[...tools, "directory", "send_mail", "reply", "inbox", "read_thread", "post", "escalate", "update_self"].sort(),
 		);
 	} finally {
 		await close(manager);
@@ -290,6 +290,7 @@ test.each([false, true])(
 					"inbox",
 					"read_thread",
 					"post",
+					"escalate",
 					"hire",
 					"rehire",
 					"send_home",

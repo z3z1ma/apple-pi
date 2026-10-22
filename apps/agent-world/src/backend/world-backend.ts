@@ -12,6 +12,7 @@ import type {
 	FeedLine,
 	KeptPart,
 	MailItem,
+	MailThreadSummary,
 	TerminalResult,
 	WorldSnapshot,
 	WorldUpdate,
@@ -19,7 +20,7 @@ import type {
 import { FACTS_JOINS, type FactsRow, factsColumns, factsOf, parseShared, taskReader } from "./facts.js";
 import { FEED_SINCE, type FeedLookup, type FeedRow, feedLine } from "./feed.js";
 import { dormantAgents } from "./inn.js";
-import { readMail } from "./mail.js";
+import { readMail, readOperatorMail } from "./mail.js";
 import { type Projection, projectWorld, type RememberedWings, type SessionRow } from "./projection.js";
 import { switchToPane } from "./terminal.js";
 
@@ -176,6 +177,7 @@ export function openWorldBackend(paths: { db: string; socket: string }): WorldBa
 	// The inn's sleepers and the rookery's mail, read with the world.
 	let dormant: DormantAgent[] = [];
 	let mail: MailItem[] = [];
+	let operatorMail: MailThreadSummary[] = [];
 	let db: DatabaseSync | undefined;
 	let socket: Socket | undefined;
 	let socketOpen = false;
@@ -315,6 +317,7 @@ export function openWorldBackend(paths: { db: string; socket: string }): WorldBa
 				})),
 			};
 			dormant = dormantAgents(world.dormant, byId, (task) => readTask(task, rereadTasks), dormant, !rereadTasks);
+			operatorMail = readOperatorMail(db);
 			const nextMail = readMail(db);
 			if (JSON.stringify(nextMail) !== JSON.stringify(mail)) mail = nextMail;
 			seen = mergeWings(seen, world.wings);
@@ -385,6 +388,7 @@ export function openWorldBackend(paths: { db: string; socket: string }): WorldBa
 			theme: chosen.theme ?? stored.theme,
 			dormant,
 			mail,
+			operatorMail,
 		});
 	};
 

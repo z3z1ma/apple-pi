@@ -358,14 +358,20 @@ def send(agent: Agent, command: dict, wait: bool = False) -> str | None:
     With `wait`, it returns only once the runtime answers that the command was applied or failed, so call it off
     the UI thread.
     """
+    return send_as(agent.session_id, command, generation=agent.generation, wait=wait)
+
+
+def send_as(session_id: str, command: dict, *, generation: int | None = None, wait: bool = True) -> str | None:
+    """Send a command as a person. The operator is an address without a session incarnation."""
     command_id = str(uuid.uuid4())
     line = {
         "type": "command",
         "commandId": command_id,
-        "sessionId": agent.session_id,
-        "generation": agent.generation,
+        "sessionId": session_id,
         "command": command,
     }
+    if generation is not None:
+        line["generation"] = generation
     try:
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
             connection.settimeout(1)
