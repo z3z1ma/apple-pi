@@ -6,7 +6,7 @@ Apple-pi keeps one shared account of your Pi sessions in a SQLite database. Ever
 
 - **Bridge** (`components/session-state/src/bridge.ts`, loaded by `extensions/session-state.ts`): an extension in every root session and, by path, in every interactive child session (subagent); the internal `/btw` session does not load it. It reports the session's identity, its process, and its run state, sends a heartbeat every second, and reports a clean shutdown.
 - **Runtime** (`components/session-state/src/runtime.ts`): one daemon per Mac and the only writer to the database. The first bridge that finds no runtime starts it with `node`, detached, and it keeps running after sessions end. One instance is guarded by an exclusive SQLite lock it holds for its whole life; the operating system releases it however the runtime exits, so there is no stale lock to clean up. If the runtime cannot start, the session shows one warning naming the runtime log.
-- **Clients** (`client.ts`): `sendCommand` sends one command over the socket and starts the runtime when none answers; `mailbox_send`, `scripts/pi-send.mjs`, and the manager tools use it; the close notice goes over the bridge's own connection. Mail delivery and its tool live in `mail.ts`.
+- **Clients** (`client.ts`): `sendCommand` sends one command over the socket and starts the runtime when none answers; the mail tools, `scripts/pi-send.mjs`, and the manager tools use it; the close notice goes over the bridge's own connection. Mail delivery and its tool live in `mail.ts`.
 - **Database**: SQLite in WAL mode, created and upgraded by forward migrations (`schema.ts`; the schema version is SQLite's `user_version`).
 
 Everything lives under `~/.pi/agent/state/` (or `$PI_CODING_AGENT_DIR/state/`, where a leading `~` means the home directory, as in Pi): `apple-pi.db`, the socket `apple-pi.sock` (mode `0600`), the lock `apple-pi-runtime.lock`, the running runtime's pid in `apple-pi-runtime.pid`, and its output in `apple-pi-runtime.log`.
@@ -54,7 +54,9 @@ Any client can ask a session to do something by sending `{"type": "command", "co
 | `set_model` | `provider`, `id` | Switches model; fails for an unknown or unavailable model |
 | `set_thinking` | `level` | Sets the thinking level |
 | `answer` | `questionnaire`, `replies` | Answers the open questionnaire with that prompt `id`: one reply per question, in order, either `{"selected": [labels]}` or `{"custom": text}`. The dialog in the terminal closes, and the tool returns what the terminal would for the same choices. Fails when the terminal answered first or the replies do not fit; other dialogs are answered only in the terminal |
-| `mail` | `from`, `body`, `sentAt` | Mails the session; see [Mail](#mail). Waits while the session is not running |
+| `mail` | `from`, `body`, `sentAt`; thread mail also `thread`, `subject`, `seq`, `fromName` | Mails the session; see [Mail and threads](#mail-and-threads). Waits while the session is not running |
+| `thread_post` | `thread`, `body`; a new thread also `subject`, `to`, optional `cc` | Posts from the request's session to a thread, creating it when new; applied by the runtime, which pushes it as `mail` to each pushed participant; see [Mail and threads](#mail-and-threads) |
+| `thread_read` | `thread`, `seq` | The session has read the thread up to `seq` (applied by the runtime) |
 | `start` | `tmux` (`socket`, `pane`), `cwd`, `name`, `reportsTo`, `prompt` | Runs by the runtime itself: opens a tmux window after that pane's window running `pi --session-id <id> [--name] [--reports-to] [prompt]`, for a new id or a stopped session (whose `cwd` and `name` are the defaults). Fails when the session runs; `delivered` once the window opened, `applied` when the session's bridge connects, `failed` when the window closes first |
 | `close` | | Stops a running turn and quits the session's Pi process |
 | `mark_seen` | | The operator saw the session (applied by the runtime); see [Attention](#attention) |
@@ -62,18 +64,20 @@ Any client can ask a session to do something by sending `{"type": "command", "co
 
 The runtime stores each command in `commands` and answers the sender with one `{"type": "receipt", "commandId": ..., "stage": ..., "reason"?: ...}` line per stage: `accepted` (stored), `delivered` (the session's bridge has it), `applied` (Pi took it), or `failed` with a reason. Each stage is also an event (`command_accepted`, ...). No receipt says the work is done; its effects appear as ordinary observed facts and events. A command for a session with no live incarnation, or bound to one that is no longer current, fails at once with `not running`. Sending the same `commandId` again applies nothing and answers with the stage the first one reached. A command handed to a bridge is bound to that incarnation, and only it can report on the command; if the bridge disconnects first, the command fails, since nobody can say whether it was applied (mail is sent again instead). `talk`, `steer`, and `follow_up` fail with `no model selected` when the session has no model. Anyone who can open the socket, which is only your user, can send commands; confirmations belong to the view that sends them.
 
-## Mail
+## Mail and threads
 
-Any session can mail another by its session id, and the receiver gets the message as a `<mailbox-message>` steer: at the next safe boundary during a run, as a new turn while idle, or with the first run after it next opens. Agents in root sessions call `mailbox_send`:
+Every exchange between people is a **thread**: a subject, its participants, and its messages in order, stored in `threads`, `thread_participants`, and `thread_messages`. A participant is a session id (or the operator) and is either **pushed** each new message, which arrives as mail, or **pulls** it, reading the thread when it chooses. Each participant's `read_up_to` marks the last message it has read: a pushed message counts as read once the receiver's transcript records it, and `read_thread` marks the rest.
 
-```json
-{
-  "session_id": "coordinator",
-  "message": "Worker w-7f3a is blocked on a review."
-}
-```
+Agents in root sessions use four tools:
 
-`list_peer_sessions` lists the other live top-level sessions (peer sessions) with their id, name, directory, status (`busy`, `idle`, or `waiting`), the session each reports to, and its current ledger task; subagents are not peers, and the tool descriptions say so. `from` is the sender's session id, so the receiver can answer with `mailbox_send` to that id. `mailbox_send` returns once the runtime has the mail and says when it waits. Anything outside Pi uses the packaged script; its path is in the `mailbox_send` tool guidance:
+- `send_mail` (`to`, optional `cc`, `subject`, `body`) starts a thread. Addresses are names in the sender's organization, session ids, `my-team` (the sender's reports, or its teammates under the same manager when it has none), or `my-manager`.
+- `reply` (`thread`, `body`) answers everyone in a thread.
+- `inbox` lists the threads the caller is in that have messages it has not read (every thread with `all: true`), with the count and the latest message.
+- `read_thread` reads a thread in full and marks it read.
+
+Each sends a `thread_post` command (from the sender's session, with the thread id the tool chose, and for a new thread its subject and recipients) or reads the database read-only. The runtime stores the message and pushes it as one `mail` command per pushed participant, carrying the thread, subject, and sender's name; the receiver reads it as `<mail thread="..." subject="..." from="Name (id)" ts="...">`, at the next safe boundary during a run, as a new turn while idle, or with the first run after it next opens. The receipt's reason names who is asleep, whose mail waits.
+
+Anything outside Pi uses the packaged script, which sends one plain `mail` command with no thread; its path is in the `send_mail` tool guidance:
 
 ```bash
 node components/session-state/scripts/pi-send.mjs coordinator --from launchd "Tick."
@@ -86,7 +90,7 @@ A mail is delivered when the session's transcript records it on disk, as a `cust
 
 For a stable address, start a session with a fixed id: `pi --session-id coordinator` reopens the same session every time. `/fork` and `/clone` create a new session id; `/tree` keeps it. Session ids are shared across projects, so give a named id such as `coordinator` to one project only.
 
-Mail bound to one incarnation (`generation`) never waits for a later one. A session started with `--reports-to <id>` mails that session when it closes, except on reload, through its own connection to the runtime (dropped, with a line on stderr, when the runtime is unreachable, so shutdown goes on): `Session "<name>" closed (<reason>) while <idle|busy|waiting>. Directory: <cwd>`.
+Mail bound to one incarnation (`generation`) never waits for a later one. A session started with `--reports-to <id>` mails that session in a new thread when it closes, except on reload, through its own connection to the runtime (dropped, with a line on stderr, when the runtime is unreachable, so shutdown goes on): `Session "<name>" closed (<reason>) while <idle|busy|waiting>. Directory: <cwd>`.
 
 ## Attention
 

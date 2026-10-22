@@ -6,10 +6,12 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] In a faux session, `send_mail` to two people with one copied creates one thread; each of the three receives the message with its thread id, subject, and sender.
-- [ ] `reply` from a recipient reaches the sender and the other participants, and `read_thread` shows all messages in order.
-- [ ] `my-team` and `my-manager` expand to the tree's members; mail to a sleeping person waits and arrives when it reopens, and the sender is told it waits.
-- [ ] `inbox` lists only threads the caller is in, with the count of messages it has not read.
-- [ ] `mailbox_send` no longer exists (package-load test), and no view or tool reads mail from anywhere but threads.
+- [x] In a faux session, `send_mail` to two people with one copied creates one thread; each of the three receives the message with its thread id, subject, and sender.
+- [x] `reply` from a recipient reaches the sender and the other participants, and `read_thread` shows all messages in order.
+- [x] `my-team` and `my-manager` expand to the tree's members; mail to a sleeping person waits and arrives when it reopens, and the sender is told it waits.
+- [x] `inbox` lists only threads the caller is in, with the count of messages it has not read.
+- [x] `mailbox_send` no longer exists (package-load test), and no view or tool reads mail from anywhere but threads.
+
+Deviations: Agent World's rookery and Mail tab still read the runtime's `mail` view (one row per delivered `mail` command, which thread messages still produce); ticket 04 moves them to threads with the operator's mail. `pi-send.mjs` still sends one plain `mail` with no thread, since its senders (launchd, scripts) are not people. A pushed message counts as read once the receiver's transcript records it.

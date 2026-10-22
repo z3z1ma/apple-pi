@@ -183,6 +183,34 @@ const MIGRATIONS = [
 	`alter table sessions add column manages integer;`,
 	// A subagent never needs the operator (its parent takes its result); clear what earlier runtimes set.
 	`update sessions set needs_you_since = null where kind = 'child';`,
+	// Threads: every exchange between people. A participant is a session id or the operator; a pushed participant
+	// gets each new message as mail, a pulled one reads it when it chooses. Messages are ordered by `seq`.
+	`create table threads (
+		id text primary key,
+		kind text not null,
+		subject text not null,
+		created_by text not null,
+		created_at integer not null,
+		closed_at integer
+	) strict;
+	create table thread_participants (
+		thread_id text not null,
+		participant text not null,
+		delivery text not null,
+		read_up_to integer not null,
+		joined_at integer not null,
+		primary key (thread_id, participant)
+	) strict;
+	create index thread_participants_by_participant on thread_participants (participant);
+	create table thread_messages (
+		seq integer primary key autoincrement,
+		id text not null unique,
+		thread_id text not null,
+		sender text not null,
+		body text not null,
+		at integer not null
+	) strict;
+	create index thread_messages_by_thread on thread_messages (thread_id, seq);`,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

@@ -17,7 +17,7 @@ import { openWorldBackend, type WorldBackend } from "../src/backend/world-backen
 import type { FeedLine, MailItem } from "../src/world.js";
 
 // Seam 1 for the rookery (ticket 16): the backend API over a real session-state runtime, with faux Pi sessions that
-// mail each other through the bridge's `mailbox_send`, a stopped session whose mail waits, and the operator's own
+// mail each other through the bridge's `send_mail`, a stopped session whose mail waits, and the operator's own
 // letters sent as `mail` commands with their receipts.
 const state = tempStateDir();
 let world: WorldBackend;
@@ -41,7 +41,9 @@ afterAll(async () => {
 
 const soon = (check: () => void, timeout = 8000) => vi.waitFor(check, { timeout });
 const mailTo = (to: string, message: string): Reply =>
-	fauxAssistantMessage([fauxToolCall("mailbox_send", { session_id: to, message })], { stopReason: "toolUse" });
+	fauxAssistantMessage([fauxToolCall("send_mail", { to: [to], subject: "Note", body: message })], {
+		stopReason: "toolUse",
+	});
 const mailItem = (body: string): MailItem | undefined => world.snapshot().mail?.find((item) => item.body === body);
 const nameOf = (id: string) => world.snapshot().characters.find((c) => c.id === id)?.name;
 
@@ -64,7 +66,7 @@ test("mail between two sessions is listed, newest first, with sender, receiver, 
 			mailTo(receiver.id, "And the lexer."),
 			fauxAssistantMessage("sent"),
 		],
-		["mailbox_send"],
+		["send_mail"],
 	);
 	runs.push(sender);
 	const from = sender.session.sessionManager.getSessionId();

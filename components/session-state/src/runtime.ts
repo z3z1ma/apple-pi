@@ -55,6 +55,7 @@ const JSON_FACTS = new Set<string>(["prompt", "queue", "config", "previousSessio
 
 import { type AttentionRow, jumpTarget, statusSummary } from "./attention.js";
 import { migrate } from "./schema.js";
+import { markRead, OPERATOR, postToThread } from "./threads.js";
 import {
 	canonicalSocket,
 	listClients,
@@ -551,6 +552,17 @@ export class Runtime {
 			}
 			return;
 		}
+		if (command.kind === "thread_post") {
+			receipt("accepted");
+			this.threadPost(commandId, sessionId, command, now);
+			return;
+		}
+		if (command.kind === "thread_read") {
+			receipt("accepted");
+			markRead(db, command.thread, sessionId, command.seq);
+			this.setCommandStage(commandId, "applied");
+			return;
+		}
 		if (waits) {
 			receipt(
 				"accepted",
@@ -566,6 +578,71 @@ export class Runtime {
 			return;
 		}
 		this.dispatch(target, commandId, command);
+	}
+
+	/** Store a thread message and push it as mail to each pushed participant; the receipt names who is asleep. */
+	private threadPost(
+		commandId: string,
+		sessionId: string,
+		command: Extract<Command, { kind: "thread_post" }>,
+		now: number,
+	): void {
+		const db = this.db!;
+		const posted = postToThread(db, sessionId, commandId, command, now);
+		if (typeof posted === "string") {
+			this.setCommandStage(commandId, "failed", posted);
+			return;
+		}
+		const fromName =
+			(db.prepare("select name from sessions where id = ?").get(sessionId) as { name: string | null } | undefined)
+				?.name ?? undefined;
+		const asleep: string[] = [];
+		for (const participant of posted.push) {
+			if (participant === OPERATOR) continue;
+			const mail: Command = {
+				kind: "mail",
+				from: sessionId,
+				body: command.body,
+				sentAt: new Date(now).toISOString(),
+				thread: posted.thread,
+				subject: posted.subject,
+				seq: posted.seq,
+				...(fromName ? { fromName } : {}),
+			};
+			if (!this.enqueueMail(`${commandId}:${participant}`, participant, mail)) {
+				const name = (db.prepare("select name from sessions where id = ?").get(participant) as { name: string | null })
+					.name;
+				asleep.push(name || participant);
+			}
+		}
+		this.setCommandStage(
+			commandId,
+			"applied",
+			asleep.length ? `asleep, the mail waits: ${asleep.join(", ")}` : undefined,
+		);
+	}
+
+	/**
+	 * Store mail for `recipient` and hand it to its live bridge, or leave it waiting for the next one, as client mail
+	 * waits. Returns whether a live bridge took it.
+	 */
+	private enqueueMail(commandId: string, recipient: string, mail: Command): boolean {
+		const db = this.db!;
+		const current = db.prepare("select generation from sessions where id = ?").get(recipient) as
+			| { generation: number }
+			| undefined;
+		const now = Date.now();
+		db.prepare(
+			`insert into commands (command_id, session_id, generation, bound_generation, kind, command, stage, created_at, updated_at)
+			values (?, ?, null, null, 'mail', ?, 'accepted', ?, ?) on conflict (command_id) do nothing`,
+		).run(commandId, recipient, JSON.stringify(mail), now, now);
+		this.event("runtime", recipient, null, "command_accepted", { commandId, command: mail });
+		const target = [...this.connections].find(
+			(connection) =>
+				!connection.shutdown && connection.sessionId === recipient && connection.generation === current?.generation,
+		);
+		if (target) this.dispatch(target, commandId, mail);
+		return target !== undefined;
 	}
 
 	/**
@@ -731,10 +808,17 @@ export class Runtime {
 
 	private setCommandStage(commandId: string, stage: ReceiptStage, reason?: string): void {
 		const db = this.db!;
-		const row = db.prepare("select session_id, generation, stage from commands where command_id = ?").get(commandId) as
-			| { session_id: string; generation: number | null; stage: ReceiptStage }
+		const row = db
+			.prepare("select session_id, generation, stage, kind, command from commands where command_id = ?")
+			.get(commandId) as
+			| { session_id: string; generation: number | null; stage: ReceiptStage; kind: string; command: string }
 			| undefined;
 		if (!row || row.stage === "applied" || row.stage === "failed") return;
+		// Mail of a thread that reached the transcript has been read there.
+		if (stage === "applied" && row.kind === "mail") {
+			const mail = JSON.parse(row.command) as { thread?: string; seq?: number };
+			if (mail.thread && typeof mail.seq === "number") markRead(db, mail.thread, row.session_id, mail.seq);
+		}
 		db.prepare("update commands set stage = ?, reason = ?, updated_at = ? where command_id = ?").run(
 			stage,
 			reason ?? null,

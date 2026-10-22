@@ -28,7 +28,9 @@ const seen = (id: string) =>
 const mailIn = (session: AgentSession) =>
 	session.messages.filter((m) => m.role === "custom" && m.customType === MAIL_CUSTOM_TYPE);
 const mailTo = (to: string, message: string): Reply =>
-	fauxAssistantMessage([fauxToolCall("mailbox_send", { session_id: to, message })], { stopReason: "toolUse" });
+	fauxAssistantMessage([fauxToolCall("send_mail", { to: [to], subject: "Note", body: message })], {
+		stopReason: "toolUse",
+	});
 const sawText = (requests: { messages: unknown[] }[], text: string) =>
 	requests.some((request) => JSON.stringify(request.messages).includes(text));
 
@@ -80,7 +82,7 @@ test("mail between sessions starts a turn when idle and steers a running turn, a
 			mailTo(to, "switch to docs"),
 			fauxAssistantMessage("sent"),
 		],
-		["mailbox_send"],
+		["send_mail"],
 	);
 	const from = sender.session.sessionManager.getSessionId();
 	try {

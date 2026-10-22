@@ -26,7 +26,7 @@ Subagents and `pi_exec` workers are not agents here. On settle the extension rin
 
 ### Supervised sessions
 
-A session that another session started and watches, such as a [coordinator](session-state.md#coordinator-tools) worker, is started with `pi --reports-to <supervisor id>` (the coordinator's `start_peer_session` does this). When it closes (quit, `/new`, `/resume` or `/fork`, but not `/reload`) the session-state bridge [mails](session-state.md#mail) the supervisor from its own session id:
+A session that another session started and watches, such as a [coordinator](session-state.md#coordinator-tools) worker, is started with `pi --reports-to <supervisor id>` (the coordinator's `start_peer_session` does this). When it closes (quit, `/new`, `/resume` or `/fork`, but not `/reload`) the session-state bridge [mails](session-state.md#mail-and-threads) the supervisor from its own session id:
 
 ```text
 Session "JEM review" closed (quit) while busy. Directory: /path/to/repo

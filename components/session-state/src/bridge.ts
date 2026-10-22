@@ -83,11 +83,15 @@ class StateLink {
 		if (Object.keys(changed).length > 0) this.send({ type: "facts", facts: changed });
 	}
 
-	/** Send mail from this session without waiting; the runtime reads it even if this link closes right after. */
-	mail(to: string, body: string): boolean {
+	/**
+	 * Mail one person from this session in a new thread, without waiting; the runtime reads it even if this link
+	 * closes right after.
+	 */
+	mail(to: string, subject: string, body: string): boolean {
 		if (!this.connected) return false;
-		const command: Command = { kind: "mail", from: this.hello.session.id, body, sentAt: new Date().toISOString() };
-		this.send({ type: "command", commandId: randomUUID(), sessionId: to, command });
+		const thread = `t-${randomUUID().slice(0, 8)}`;
+		const command: Command = { kind: "thread_post", thread, subject, body, to: [to] };
+		this.send({ type: "command", commandId: randomUUID(), sessionId: this.hello.session.id, command });
 		return true;
 	}
 
@@ -596,7 +600,14 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 					if (!pending.has(commandId)) {
 						pending.add(commandId);
 						// Only mail that waited for this process rides the next turn while it starts up.
-						const mail = { id: commandId, from: command.from, ts: command.sentAt, body: command.body };
+						const mail = {
+							id: commandId,
+							from: command.from,
+							ts: command.sentAt,
+							body: command.body,
+							...(command.thread ? { thread: command.thread, subject: command.subject } : {}),
+							...(command.fromName ? { fromName: command.fromName } : {}),
+						};
 						deliverMail(pi, mail, startingUp && replay);
 					}
 					return; // applied once the transcript records it
@@ -661,7 +672,7 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 			const status = link.hello.facts.prompt ? "waiting" : link.hello.run === "idle" ? "idle" : "busy";
 			const body = `Session${name ? ` "${name}"` : ""} closed (${event.reason}) while ${status}. Directory: ${current.cwd}`;
 			// Shutdown must go on, so with the runtime unreachable the notice is dropped, and said so.
-			if (!link.mail(reportsTo, body))
+			if (!link.mail(reportsTo, `Closed: ${name ?? current.cwd}`, body))
 				process.stderr.write(
 					`Session state: the close notice to ${reportsTo} was not sent: the runtime is unreachable\n`,
 				);

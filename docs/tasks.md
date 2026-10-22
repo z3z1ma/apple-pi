@@ -133,4 +133,4 @@ Output:
 - **Session local**: Schedules and monitors are in memory. Session start, fork, tree navigation, switch, and shutdown stop active work and clear the prior session's task roster without terminal notifications.
 - **Process cleanup**: Cancellation terminates the complete process tree and removes temporary output files during lifecycle cleanup.
 - **Memory bounded**: Command output keeps a rolling tail. Full truncated output streams to a temporary file.
-- **Pi Exec isolation**: `schedule`, `monitor`, and `task` are excluded from captured extension tools. Programs may call `mailbox_send` ([mail](session-state.md#mail)), because it wakes another session, not this one. Pi Exec's `pi.bash` remains direct, verbatim, and without background, scheduling, or monitoring parameters.
+- **Pi Exec isolation**: `schedule`, `monitor`, and `task` are excluded from captured extension tools. Programs may call `send_mail` and `reply` ([mail](session-state.md#mail-and-threads)), because it wakes another session, not this one. Pi Exec's `pi.bash` remains direct, verbatim, and without background, scheduling, or monitoring parameters.

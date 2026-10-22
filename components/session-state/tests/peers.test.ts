@@ -37,11 +37,11 @@ test("a session lists its organization, awake and asleep, not subagents or stran
 			if (last.toolName === "list_peer_sessions") {
 				listed = last.details?.members ?? [];
 				const worker = listed.find((peer) => peer.name === "docs-worker");
-				return call("mailbox_send", { session_id: worker?.id ?? "none", message: "status please" });
+				return call("send_mail", { to: [worker?.id ?? "none"], subject: "Status", body: "status please" });
 			}
 			return fauxAssistantMessage("done");
 		},
-		["list_peer_sessions", "mailbox_send"],
+		["list_peer_sessions", "send_mail"],
 	);
 	try {
 		const callerId = caller.session.sessionManager.getSessionId();
@@ -138,8 +138,8 @@ test("the discovery and mail tools tell peer sessions from subagents", async () 
 	try {
 		const tools = run.session.getAllTools();
 		const description = (name: string) => tools.find((tool) => tool.name === name)?.description ?? "";
-		expect(description("list_peer_sessions")).toMatch(/organization.*mailbox_send.*subagents are not people.*agent/is);
-		expect(description("mailbox_send")).toMatch(/peer session.*list_peer_sessions.*subagents.*steer_subagent/is);
+		expect(description("list_peer_sessions")).toMatch(/organization.*send_mail.*subagents are not people.*agent/is);
+		expect(description("send_mail")).toMatch(/organization.*thread.*my-team/is);
 	} finally {
 		await close(run);
 	}

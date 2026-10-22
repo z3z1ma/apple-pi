@@ -195,7 +195,10 @@ try {
 		"ask_user_question",
 		"schedule",
 		"monitor",
-		"mailbox_send",
+		"send_mail",
+		"reply",
+		"inbox",
+		"read_thread",
 		"search_session",
 		"revisit_note",
 		"pi_exec",
@@ -267,7 +270,10 @@ try {
 		result.extensions.some(
 			(extension) =>
 				extension.path.endsWith("session-state.ts") &&
-				extension.tools.has("mailbox_send") &&
+				extension.tools.has("send_mail") &&
+				extension.tools.has("reply") &&
+				extension.tools.has("inbox") &&
+				extension.tools.has("read_thread") &&
 				extension.tools.has("list_peer_sessions") &&
 				extension.tools.has("start_peer_session") &&
 				extension.tools.has("reopen_peer_session") &&

@@ -1,6 +1,7 @@
 // The runtime's socket protocol: bridges send one JSON object per line.
 
 import type { QuestionnaireReply } from "../../shared/src/questionnaire-events.js";
+import type { ThreadPost } from "./threads.js";
 
 export type RunState = "idle" | "thinking" | "writing_reply" | "running_tool" | "compacting";
 export type ProcessState = "starting" | "alive" | "alive_bridge_lost" | "exited" | "lost";
@@ -123,7 +124,24 @@ export type Command =
 	 * Mail from `from` (a session id, or a name such as "shell"). Unlike every other command it waits while the session
 	 * is not running and is delivered when it next opens; it is applied once the session's transcript records it.
 	 */
-	| { kind: "mail"; from: string; body: string; sentAt: string }
+	| {
+			kind: "mail";
+			from: string;
+			body: string;
+			sentAt: string;
+			/** Mail that carries a thread message: its thread, subject, sequence number, and the sender's name. */
+			thread?: string;
+			subject?: string;
+			seq?: number;
+			fromName?: string;
+	  }
+	/**
+	 * Post a message from the request's session (or a named outside sender) to a thread, creating it when new. Applied
+	 * by the runtime, which pushes the message as mail to each pushed participant; the reason names who is asleep.
+	 */
+	| ({ kind: "thread_post" } & ThreadPost)
+	/** The session has read `thread` up to message `seq`. Applied by the runtime. */
+	| { kind: "thread_read"; thread: string; seq: number }
 	/**
 	 * Start the session (a new id, or a stopped session by its id) with `pi` in a new tmux window after `tmux.pane`'s
 	 * window. The runtime opens the window itself; `cwd` and `name` default to the stopped session's. Applied when the
