@@ -213,6 +213,35 @@ const MIGRATIONS = [
 	create index thread_messages_by_thread on thread_messages (thread_id, seq);`,
 	// Team membership follows the tree; an explicit invitation survives a change of manager.
 	`alter table thread_participants add column invited integer not null default 0;`,
+	`create table work_tasks (
+		id text primary key,
+		bundle text not null unique,
+		project text not null,
+		organization text not null,
+		ephemeral integer not null,
+		thread text not null unique,
+		archived_at integer
+	) strict;
+	create table assignments (
+		id integer primary key autoincrement,
+		person text not null,
+		task_id text not null,
+		assigned_by text not null,
+		assigned_at integer not null,
+		ended_at integer,
+		outcome text,
+		end_reason text
+	) strict;
+	create unique index held_assignment on assignments(person, task_id) where ended_at is null;
+	create index assignments_by_task on assignments(task_id);
+	create table work_focus (person text primary key, task_id text not null) strict;
+	create table work_changes (
+		command_id text primary key,
+		task_id text not null,
+		person text not null,
+		action text not null,
+		previous_bundle text
+	) strict;`,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

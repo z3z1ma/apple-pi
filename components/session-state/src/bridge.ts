@@ -31,6 +31,8 @@ import {
 	type RunState,
 	type Tool,
 } from "./protocol.js";
+import { goalText } from "./work.js";
+import { installWork } from "./work-tools.js";
 
 /**
  * One session's link to the runtime. It keeps the session's current state and sends it whole on every
@@ -456,6 +458,7 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 		installOrganization(pi);
 		installPeers(pi);
 		installCoordinator(pi);
+		installWork(pi);
 	}
 	let link: StateLink | undefined;
 	let current: ExtensionContext | undefined;
@@ -604,7 +607,9 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 							id: commandId,
 							from: command.from,
 							ts: command.sentAt,
-							body: command.body,
+							body: command.taskGoal
+								? `${command.body}\n\n${goalText(ctx.sessionManager.getSessionId()) ?? "You no longer have a focused task."}`
+								: command.body,
 							...(command.thread ? { thread: command.thread, subject: command.subject } : {}),
 							...(command.fromName ? { fromName: command.fromName } : {}),
 						};

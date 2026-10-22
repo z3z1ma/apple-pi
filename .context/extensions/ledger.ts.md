@@ -1,5 +1,6 @@
-## symbol:recordHistory
+## file
 
-`history.json` holds only `{ "sessions": [...] }`: the sessions with a transcript that touched the task. The session-state model gets its work links from the `ledger:session-linked` events instead, so it also sees sessions without a transcript and every touch over time.
-Why: commit recording for history replay was removed when replay was shelved; the session links stayed as the bundle's own record of who worked on it.
+File transactions and history recording live in `components/shared/src/ledger-files.ts`, shared with explicit-task promotion. This extension owns Pi registration and observing changes to bundles.
+Why: a promotion must use the same ledger index and lease as `ledger_add`; the runtime stays a plain Node process and imports no Pi extension code.
+Coupled: components/shared/src/ledger-files.ts
 Verify: tests/ledger-history.test.ts

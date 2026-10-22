@@ -38,9 +38,9 @@ None. The choices proposed as R1 to R5 and P1 to P5 were approved by the operato
 
 ## Current State
 
-The operator approved the specification and all 14 tickets on 2026-10-22, then asked for solo implementation in ticket order with commits as it proceeds. Tickets 01 to 05 are implemented: threaded mail, human-named management, pull channels with mentions, the operator inbox and escalation, and meetings. Each ticket records its checks and deviations.
+The operator approved the specification and all 14 tickets on 2026-10-22, then asked for solo implementation in ticket order with commits as it proceeds. Tickets 01 to 06 are implemented: threaded mail, human-named management, pull channels with mentions, the operator inbox and escalation, meetings, and explicit tasks and assignments. Each ticket records its checks and deviations.
 
-Next: ticket 06, explicit assignments and task bundles, then the remaining tickets in order. Live organization rollout remains separate until the implementation is complete.
+Next: ticket 07, hiring assigns work and the inferred binding and intent are removed, then the remaining tickets in order. Live organization rollout remains separate until the implementation is complete.
 
 ## Outcome
 

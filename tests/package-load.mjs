@@ -294,6 +294,12 @@ try {
 				extension.tools.has("let_go") &&
 				extension.tools.has("meet") &&
 				extension.tools.has("end_meeting") &&
+				extension.tools.has("take_task") &&
+				extension.tools.has("assign") &&
+				extension.tools.has("unassign") &&
+				extension.tools.has("focus") &&
+				extension.tools.has("finish_task") &&
+				extension.tools.has("promote_task") &&
 				extension.tools.has("update_self"),
 		),
 		"session-state extension must own the mail, directory, manager, and self tools",

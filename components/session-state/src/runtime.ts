@@ -56,7 +56,7 @@ const JSON_FACTS = new Set<string>(["prompt", "queue", "config", "previousSessio
 import { type AttentionRow, jumpTarget, statusSummary } from "./attention.js";
 import { syncChannels } from "./channels.js";
 import { migrate } from "./schema.js";
-import { markRead, OPERATOR, postToThread } from "./threads.js";
+import { markRead, OPERATOR, postToThread, type ThreadPost } from "./threads.js";
 import {
 	canonicalSocket,
 	listClients,
@@ -66,6 +66,7 @@ import {
 	setServerOptions,
 	socketFiles,
 } from "./tmux.js";
+import { changeWork, cleanMovedBundles, type WorkCommand } from "./work.js";
 
 /** How often the runtime reads tmux, and how long one server may take to answer before the read counts as failed. */
 const TMUX_POLL_MS = 1000;
@@ -206,8 +207,10 @@ export class Runtime {
 		this.db = new DatabaseSync(this.paths.db);
 		this.db.exec("pragma journal_mode = wal");
 		migrate(this.db);
+		cleanMovedBundles(this.db);
 		syncChannels(this.db, Date.now());
 		this.recoverThreadPosts();
+		this.recoverWorkCommands();
 		rmSync(this.paths.socket, { force: true }); // we hold the lock, so any socket file is stale
 		const server = createServer((socket) => this.accept(socket));
 		this.server = server;
@@ -557,6 +560,11 @@ export class Runtime {
 			}
 			return;
 		}
+		if (command.kind === "work") {
+			receipt("accepted");
+			this.workCommand(commandId, sessionId, command, now);
+			return;
+		}
 		if (command.kind === "thread_post") {
 			receipt("accepted");
 			this.threadPost(commandId, sessionId, command, now);
@@ -585,6 +593,134 @@ export class Runtime {
 		this.dispatch(target, commandId, command);
 	}
 
+	private workCommand(commandId: string, actor: string, command: WorkCommand, now: number): void {
+		const db = this.db!;
+		const rollback: (() => void)[] = [];
+		const committed: (() => void)[] = [];
+		let deliveries: ReturnType<Runtime["preparePost"]>;
+		this.setCommandStage(commandId, "delivered");
+		db.exec("begin");
+		try {
+			const change = changeWork(db, this.paths.dir, commandId, actor, command, now, rollback, committed);
+			deliveries = this.preparePost(`${commandId}:post`, actor, change.post, now, {
+				person: change.notify,
+				goal: change.goal,
+			});
+			db.exec("commit");
+		} catch (error) {
+			db.exec("rollback");
+			for (const undo of rollback.reverse()) undo();
+			this.setCommandStage(commandId, "failed", (error as Error).message);
+			return;
+		}
+		for (const finish of committed) {
+			try {
+				finish();
+			} catch (error) {
+				console.error(`Task committed; source bundle cleanup failed: ${error}`);
+			}
+		}
+		cleanMovedBundles(db);
+		for (const { target, id, mail } of deliveries.deliveries) this.dispatch(target, id, mail);
+		this.finishWorkCommand(commandId, actor, command);
+	}
+
+	private finishWorkCommand(commandId: string, actor: string, command: WorkCommand): void {
+		const db = this.db!;
+		if (command.action !== "assign" || !command.person || command.person === actor) {
+			this.setCommandStage(commandId, "applied");
+			return;
+		}
+		const live = db
+			.prepare(`select 1 from sessions s join incarnations i on i.session_id = s.id and i.generation = s.generation
+			where s.id = ? and i.ended_at is null and i.process_state in ('alive', 'alive_bridge_lost')`)
+			.get(command.person);
+		if (live) {
+			this.setCommandStage(commandId, "applied");
+			return;
+		}
+		const pane = db
+			.prepare(`select i.tmux_socket as socket, i.pane_id as pane from incarnations i join sessions s
+			on s.id = i.session_id and s.generation = i.generation where s.id = ?`)
+			.get(actor) as { socket: string | null; pane: string | null } | undefined;
+		if (!pane?.socket || !pane.pane) {
+			this.setCommandStage(
+				commandId,
+				"failed",
+				"Assignment saved, but waking this person needs a manager's tmux pane. Rehire it to begin.",
+			);
+			return;
+		}
+		this.startSession(commandId, command.person, {
+			kind: "start",
+			tmux: { socket: pane.socket, pane: pane.pane },
+			prompt: "You have assigned work. Begin with your focused task.",
+		}).catch((error) => {
+			if (this.db) this.setCommandStage(commandId, "failed", `Assignment saved; waking failed: ${error}`);
+		});
+	}
+
+	private recoverWorkCommands(): void {
+		const db = this.db!;
+		const pending = db
+			.prepare(
+				"select command_id, session_id, command, created_at, stage from commands where kind = 'work' and stage in ('accepted', 'delivered')",
+			)
+			.all() as { command_id: string; session_id: string; command: string; created_at: number; stage: string }[];
+		for (const row of pending) {
+			const command = JSON.parse(row.command) as WorkCommand;
+			if (db.prepare("select 1 from work_changes where command_id = ?").get(row.command_id))
+				this.finishWorkCommand(row.command_id, row.session_id, command);
+			else if (row.stage === "accepted") this.workCommand(row.command_id, row.session_id, command, row.created_at);
+			else
+				this.setCommandStage(
+					row.command_id,
+					"failed",
+					`Interrupted during task file changes; the assignment change did not commit. Inspect task.md and the ledger index before retrying: ${JSON.stringify(command)}`,
+				);
+		}
+	}
+
+	private preparePost(
+		commandId: string,
+		sender: string,
+		post: ThreadPost,
+		now: number,
+		changed?: { person: string; goal: boolean },
+	) {
+		const db = this.db!;
+		const posted = postToThread(db, sender, commandId, post, now);
+		if (typeof posted === "string") throw new Error(posted);
+		const fromName = (
+			db.prepare("select name from sessions where id = ?").get(sender) as { name: string | null } | undefined
+		)?.name;
+		const asleep: string[] = [];
+		const deliveries: { target: Connection; id: string; mail: Command }[] = [];
+		for (const participant of new Set([...posted.push, ...(changed ? [changed.person] : [])])) {
+			if (participant === OPERATOR) continue;
+			const mail: Command = {
+				kind: "mail",
+				from: sender,
+				body: post.body,
+				sentAt: new Date(now).toISOString(),
+				thread: posted.thread,
+				subject: posted.subject,
+				seq: posted.seq,
+				...(fromName ? { fromName } : {}),
+				...(changed?.person === participant && changed.goal ? { taskGoal: true } : {}),
+			};
+			const id = `${commandId}:${participant}`;
+			const target = this.queueMail(id, participant, mail);
+			if (target) deliveries.push({ target, id, mail });
+			else
+				asleep.push(
+					(db.prepare("select name from sessions where id = ?").get(participant) as { name: string | null } | undefined)
+						?.name || participant,
+				);
+		}
+		return { asleep, deliveries };
+	}
+
 	/** Store a thread message and push it as mail to each pushed participant; the receipt names who is asleep. */
 	private threadPost(
 		commandId: string,
@@ -593,46 +729,17 @@ export class Runtime {
 		now: number,
 	): void {
 		const db = this.db!;
-		const asleep: string[] = [];
-		const deliveries: { target: Connection; id: string; mail: Command }[] = [];
+		let pending: ReturnType<Runtime["preparePost"]>;
 		db.exec("begin");
 		try {
-			const posted = postToThread(db, sessionId, commandId, command, now);
-			if (typeof posted === "string") {
-				db.exec("rollback");
-				this.setCommandStage(commandId, "failed", posted);
-				return;
-			}
-			const fromName =
-				(db.prepare("select name from sessions where id = ?").get(sessionId) as { name: string | null } | undefined)
-					?.name ?? undefined;
-			for (const participant of posted.push) {
-				if (participant === OPERATOR) continue;
-				const mail: Command = {
-					kind: "mail",
-					from: sessionId,
-					body: command.body,
-					sentAt: new Date(now).toISOString(),
-					thread: posted.thread,
-					subject: posted.subject,
-					seq: posted.seq,
-					...(fromName ? { fromName } : {}),
-				};
-				const id = `${commandId}:${participant}`;
-				const target = this.queueMail(id, participant, mail);
-				if (target) deliveries.push({ target, id, mail });
-				else
-					asleep.push(
-						(db.prepare("select name from sessions where id = ?").get(participant) as { name: string | null }).name ||
-							participant,
-					);
-			}
+			pending = this.preparePost(commandId, sessionId, command, now);
 			db.exec("commit");
 		} catch (error) {
 			db.exec("rollback");
 			this.setCommandStage(commandId, "failed", (error as Error).message);
 			return;
 		}
+		const { deliveries, asleep } = pending;
 		for (const { target, id, mail } of deliveries) this.dispatch(target, id, mail);
 		this.setCommandStage(
 			commandId,

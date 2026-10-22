@@ -55,6 +55,13 @@ Why: acknowledging or delivering between these writes can leave a closed meeting
 Coupled: components/session-state/src/threads.ts
 Verify: components/session-state/tests/thread-recovery.test.ts
 
+## symbol:Runtime.workCommand
+
+Assignment state, the task thread post, and its outbox commit together. A caught error restores file changes too. `delivered` is recorded before any task-file mutation: startup can replay an untouched `accepted` command, finish a committed change, or report an interrupted uncommitted file operation for inspection. It never blindly republishes a ledger bundle after a mid-file-change crash.
+Why: SQLite and the filesystem have no shared atomic commit, so claiming success or replaying a partly published ledger index would hide a real failure.
+Coupled: components/session-state/src/work.ts, components/shared/src/ledger-files.ts
+Verify: components/session-state/tests/work-recovery.test.ts
+
 ## symbol:Runtime.transfer
 
 A move is refused when the new manager is the person, is under the person, or is in another organization (a different root), so the tree stays one tree; the person's own reports keep reporting to it and move with it.

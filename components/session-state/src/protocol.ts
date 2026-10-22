@@ -2,6 +2,7 @@
 
 import type { QuestionnaireReply } from "../../shared/src/questionnaire-events.js";
 import type { ThreadPost } from "./threads.js";
+import type { WorkCommand } from "./work.js";
 
 export type RunState = "idle" | "thinking" | "writing_reply" | "running_tool" | "compacting";
 export type ProcessState = "starting" | "alive" | "alive_bridge_lost" | "exited" | "lost";
@@ -134,7 +135,10 @@ export type Command =
 			subject?: string;
 			seq?: number;
 			fromName?: string;
+			/** Read the recipient's current goal when delivering this assignment/focus notification. */
+			taskGoal?: boolean;
 	  }
+	| WorkCommand
 	/**
 	 * Post a message from the request's session (or a named outside sender) to a thread, creating it when new. Applied
 	 * by the runtime, which pushes the message as mail to each pushed participant; the reason names who is asleep.

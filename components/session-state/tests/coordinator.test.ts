@@ -169,6 +169,70 @@ test("a coordinator starts a session in a new tmux window, and reopens it by id 
 	}
 }, 40000);
 
+test("assigning a sleeping report opens its window with the goal waiting in its task thread", async () => {
+	let workerId = "";
+	const manager = await fauxSession(
+		[bridge],
+		(context) => {
+			const last = context.messages.at(-1);
+			return last?.role === "user" && JSON.stringify(last.content).includes("assign the goal")
+				? call("assign", { person: workerId, goal: "Verify the reconnect boundary." })
+				: fauxAssistantMessage("noted");
+		},
+		[],
+	);
+	const managerId = manager.session.sessionManager.getSessionId();
+	const worker = await fauxSession(
+		[
+			(pi) => {
+				const getFlag = pi.getFlag.bind(pi);
+				pi.getFlag = (name) => (name === "reports-to" ? managerId : getFlag(name));
+				bridge(pi);
+			},
+		],
+		[],
+		[],
+		{ cwd: workDir },
+	);
+	workerId = worker.session.sessionManager.getSessionId();
+	try {
+		await manager.session.prompt("ready");
+		await vi.waitFor(
+			() =>
+				expect(query(state.dbPath, "select reports_to from sessions where id = ?", workerId)).toEqual([
+					{ reports_to: managerId },
+				]),
+			{ timeout: 15000 },
+		);
+		await close(worker);
+		await vi.waitFor(() => expect(incarnation(workerId).ended_at).not.toBeNull());
+		await vi.waitFor(() => expect(manager.session.isStreaming).toBe(false));
+		await manager.session.prompt("assign the goal");
+		expect(toolResults(manager).at(-1)).toMatchObject({ isError: false });
+		expect(incarnation(workerId)).toMatchObject({ generation: 2, ended_at: null });
+		expect(starts().at(-1)?.args).toContain("You have assigned work. Begin with your focused task.");
+		const focus = query<{ bundle: string; thread: string }>(
+			state.dbPath,
+			"select t.bundle, t.thread from work_tasks t join work_focus f on f.task_id = t.id where f.person = ?",
+			workerId,
+		)[0];
+		expect(readFileSync(join(focus.bundle, "task.md"), "utf8")).toContain("Verify the reconnect boundary.");
+		expect(
+			query(
+				state.dbPath,
+				"select json_extract(command, '$.taskGoal') as goal from commands where kind = 'mail' and session_id = ? and json_extract(command, '$.thread') = ?",
+				workerId,
+				focus.thread,
+			),
+		).toEqual([{ goal: 1 }]);
+	} finally {
+		await close(manager);
+		try {
+			tmux("kill-window", "-t", "Ada Lovelace");
+		} catch {}
+	}
+}, 30000);
+
 test("starting a session fails when its window closes before the session connects", async () => {
 	const run = await coordinator([call("hire", { cwd: workDir, role: "repository-archaeologist", prompt: "@fail" })]);
 	try {
@@ -244,7 +308,18 @@ test("hiring into a role the catalog lacks fails before any window opens", async
 }, 20000);
 
 test("a hired person whose role does not manage loses the lifecycle tools; a hired manager keeps them", async () => {
-	const tools = ["hire", "rehire", "send_home", "rename", "move", "let_go", "meet", "end_meeting"];
+	const tools = [
+		"hire",
+		"rehire",
+		"send_home",
+		"rename",
+		"move",
+		"let_go",
+		"meet",
+		"end_meeting",
+		"assign",
+		"unassign",
+	];
 	const run = await fauxSession(
 		[bridge],
 		[fauxAssistantMessage("ok"), fauxAssistantMessage("ok")],
@@ -255,7 +330,20 @@ test("a hired person whose role does not manage loses the lifecycle tools; a hir
 		await withRole(run, "staff-engineer-simplicity");
 		await run.session.prompt("hi");
 		expect(run.session.getActiveToolNames().sort()).toEqual(
-			["directory", "send_mail", "reply", "inbox", "read_thread", "post", "escalate", "update_self"].sort(),
+			[
+				"directory",
+				"send_mail",
+				"reply",
+				"inbox",
+				"read_thread",
+				"post",
+				"escalate",
+				"update_self",
+				"take_task",
+				"focus",
+				"finish_task",
+				"promote_task",
+			].sort(),
 		);
 	} finally {
 		await close(run);
@@ -266,7 +354,21 @@ test("a hired person whose role does not manage loses the lifecycle tools; a hir
 		await withRole(manager, "coordinator");
 		await manager.session.prompt("hi");
 		expect(manager.session.getActiveToolNames().sort()).toEqual(
-			[...tools, "directory", "send_mail", "reply", "inbox", "read_thread", "post", "escalate", "update_self"].sort(),
+			[
+				...tools,
+				"directory",
+				"send_mail",
+				"reply",
+				"inbox",
+				"read_thread",
+				"post",
+				"escalate",
+				"update_self",
+				"take_task",
+				"focus",
+				"finish_task",
+				"promote_task",
+			].sort(),
 		);
 	} finally {
 		await close(manager);
@@ -299,6 +401,12 @@ test.each([false, true])(
 					"let_go",
 					"meet",
 					"end_meeting",
+					"assign",
+					"unassign",
+					"take_task",
+					"focus",
+					"finish_task",
+					"promote_task",
 					"update_self",
 				].sort(),
 			);

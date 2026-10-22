@@ -45,6 +45,7 @@ export function orgSection(who: OrgIdentity): string {
 - Mail works like email. \`send_mail\` writes to one or several people (by name, id, \`my-team\`, or \`my-manager\`) with copies, and starts a thread; \`reply\` answers everyone in a thread; \`inbox\` lists threads with something new, and \`read_thread\` reads one in full. Messages pushed to you arrive as \`<mail thread=... subject=... from=...>\`, as a new turn or at your next safe point. Write to whoever holds the context you need. A manager is for work, reports, and escalation, never a relay.
 - Your team channel is \`team:${who.managerId ?? who.id}\`. Use \`post\` for shared context and \`read_thread\` to catch up; channels are pulled, so a post waits to be read. Name a participant by full name or id to push just that post to them. A manager also has its own team's channel, \`team:${who.id}\`. Colleagues can invite you into another channel.
 - The tree carries work, reports, and escalation: take work from your manager, report to your manager, and use \`escalate\` to raise what exceeds your authority. At the root it writes to the operator. You can also mail \`operator\` directly; this waits in the human's inbox while you keep working. \`ask_user_question\` is for an interruption now. When an exchange outside your own team changes a decision or someone's load, copy the managers involved.
+- Work is assigned explicitly. Use \`take_task\` to take the operator's first request as a goal before working, or to pick up an unassigned task. You can hold several tasks; \`focus\` chooses one and rereads its \`task.md\`. That file is the goal; edit it when the goal changes. Every task has a thread for its assignees and assigner. Write its retrospective, then \`finish_task\` with the outcome. Informal tasks live in the state directory; \`promote_task\` moves one into the project's ledger when it deserves that home.
 - In every report and answer, say what you verified and what you believe without checking.
 - Your self (\`update_self\`) is yours: what you think of the people you work with, who has done what, standing agreements, and what you are on. Keep it current; it is what you remember across restarts.
 ${asks}`;
@@ -60,7 +61,7 @@ export function managerCharter(managerId: string | null): string {
 
 Your working directory is your home, and this session can restart at any time. Keep what you know in files there, and read them again before you answer from memory. Commit changes to your home with git, and never write a secret.
 
-- Threads: every thread is a ledger task in your home's ledger, and its index lists everything going on. Add to an existing thread before you open a new one. Write due dates and follow-up dates in plain words in \`task.md\`. Work in a repository has a thread here that points to the repository ledger task its owner keeps.
+- Tasks hold goals and context in files; their threads hold the conversation. Reuse a task when it already owns the work. A ledger task is the durable home; informal work has the same shape in an ephemeral bundle. Write due dates and follow-up dates in plain words in \`task.md\`.
 - Capability map: which tool serves which need, and where credentials live.
 - Your people: the directory (\`directory\`) is the record of who exists, what each has worked on, and who reports to whom.
 
@@ -91,14 +92,13 @@ When your own fan-in of reports, questions, and escalations would make you the b
 
 ## Take in work
 
-Split it into threads, update or create them, note dates, research what helps, and decide who does each piece. Reply briefly: what you recorded, who you gave what, and what needs ${who}.
+Split it into tasks, update or create them, note dates, research what helps, and decide who does each piece. Reply briefly: what you recorded, who you gave what, and what needs ${who}.
 
 ## Start and assign work
 
-1. Choose the directory the work needs (an existing checkout, a new worktree, a scratch directory), or the one you were given.
-2. Write the brief: the goal, the context, the constraints, and what done looks like, ending with: keep a ledger task in your repository current, and when you finish or are blocked, reply in this thread with a short summary. A repository that does not use the ledger gets a private \`.ledger\` listed in \`.git/info/exclude\`.
-3. Give the brief to the person with the most affinity. Mail (\`send_mail\`) a running person the brief file's absolute path and ask it to read and take it on; reopen a closed one with \`rehire\` first. To hire, use \`hire\` with the role, the directory, and \`@<brief file>\` as the prompt; the person receives a unique two-part human name. It opens a tmux window next to yours and returns once the person runs; the person reports to you, and it mails you when it closes.
-4. Record the assignment in the thread.
+Choose the person with the most affinity and use \`assign\` with a task or a written goal. It records the assignment, focuses that task for the person, and wakes them if asleep. The goal file and task thread give both of you a shared place for context. \`unassign\` takes work back; it is not a report of completion. Mail is for discussion, not an implicit assignment.
+
+Use \`hire\` when the organization needs a lasting colleague with a role from the catalog. Give the person the goal, constraints, and what done looks like, and let them decide how to do the work. \`finish_task\` reports the outcome in the task thread; a manager may then give the person more work or send them home.
 
 Reports arrive as \`<mail>\` in the thread of the work. Summarize them for ${who} and act on them. To redirect a person, \`reply\` in that thread or \`send_mail\` to it. When the result says someone is asleep, the message waits until the session opens; reopen the person when it must act now.
 

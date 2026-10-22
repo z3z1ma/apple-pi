@@ -41,6 +41,16 @@ Every root session's system prompt carries an `<org>` section: who it is, its id
 
 A root, and a person whose role manages, holds six tools besides the directory: `hire` (`role`, `cwd`, optional `name`, `prompt`, `session_id`), `rehire`, `send_home`, `rename`, `move` (a person with everyone under it, to another manager of the same organization), and `let_go` (`reason`). The same acts are available to you from Agent World (hire at a manager's desk, retire from a person's actions) and the retire and transfer commands of the runtime. The details are in [session-state](session-state.md#manager-tools).
 
+## Tasks and assignments
+
+Work is explicit. `take_task` takes a written `goal` (creating an ephemeral task) or an existing `task` (its id or ledger path). Managers use `assign(person, goal or task)` and `unassign(person, task)`. An assignment records who gave whom what, when, and how it ended; assigning an asleep person opens its session and starts the work. A wake failure reports that the assignment was saved, so the manager can rehire without duplicating it.
+
+A person can hold several tasks, with one in focus. `focus(task)` rereads its `task.md`; the file is the goal, not a database copy. The goal is appended to context on assignment or focus, and again after compaction. Editing the file and refocusing brings its revision into context. Each task has a thread shared by its assignees and assigners; taking work also tells the person's manager there.
+
+Ephemeral tasks live under the Pi state directory in `tasks/<id>/`, with `task.md`, `retrospective.md`, and any useful context files. They survive restarts. `finish_task(outcome)` writes the outcome, ends the focused assignment, clears focus, and posts the outcome in the thread. Once all assignees finish, an ephemeral bundle moves to `tasks/history/<id>/`, including its retrospective. Ledger tasks keep the ledger's separate status and archive workflow.
+
+`promote_task(task)` moves a live ephemeral bundle into its project's `.ledger/`, through the same index transaction as `ledger_add`. Files, assignment identity, and thread stay together. Its heading supplies the ledger title and summary; optional `title` and `description` can name it more clearly. The runtime alone writes assignments and focus.
+
 ## The role catalog
 
 A role is a Markdown file: front matter (`title`, `mandate`, `models`, `thinking`, `writes`, `manages`) and a body that is the role's obligation, what it is not responsible for, how it works, and what it delivers, ending with the one standing rule: say what you verified and what you believe. The catalog is the package's `roles/` directory, then `~/.pi/agent/roles/`, then `<cwd>/.pi/roles/`, a later file replacing an earlier one of the same name. A malformed file is reported by path and skipped. Managers see the whole catalog in their prompt and hire by name.
