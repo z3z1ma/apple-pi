@@ -109,19 +109,10 @@ test("isTerminalTurn: only a response without tool calls is terminal", () => {
 	assert.equal(A.isTerminalTurn({ content: [{ type: "text" }, { type: "toolCall" }] }), false);
 });
 
-test("formatPairFooterText: pair programmer is default and consultant work is visible", () => {
+test("formatPairFooterText: shows pair activity and its cost", () => {
 	assert.equal(A.formatPairFooterText(false, 0), "Pair programmer: $0.00");
 	assert.equal(A.formatPairFooterText(true, 0.02), "Pair programmer (reviewing): $0.02");
 	assert.equal(A.formatPairFooterText(false, 1.5), "Pair programmer: $1.50");
-	assert.equal(A.formatPairFooterText(false, 0.02, "consultant_running", 0.5), "Pair programmer → Consultant: $0.52");
-	assert.equal(
-		A.formatPairFooterText(false, 0.02, "escalation_pending", 0.5),
-		"Pair programmer (consultant queued): $0.52",
-	);
-	assert.equal(
-		A.formatPairFooterText(false, 0.02, "delivery_pending", 0.5),
-		"Pair programmer (consultant ready): $0.52",
-	);
 });
 
 test("formatReconfirmPreamble: empty when nothing held, else lists held notes", () => {
@@ -1300,6 +1291,9 @@ test("pair-bound revisit_note resolves the primary branch without general sessio
 	);
 	assert.ok(A.PAIR_SESSION_TOOLS.includes("revisit_note"));
 	assert.ok(A.PAIR_SESSION_TOOLS.includes("set_pair_attention"));
+	assert.ok(A.PAIR_SESSION_TOOLS.includes("ask_for_second_opinion"));
+	assert.ok(A.PAIR_SESSION_TOOLS.includes("directory"));
+	assert.ok(!A.PAIR_SESSION_TOOLS.includes("ask_consultant"));
 	assert.ok(!A.PAIR_SESSION_TOOLS.includes("search_session"));
 	const hit = await notebook.execute("c1", { id: "aabbccddeeff" }, undefined, undefined, {
 		sessionManager: { getBranch: () => [] },
@@ -1310,38 +1304,6 @@ test("pair-bound revisit_note resolves the primary branch without general sessio
 		sessionManager: { getBranch: () => [] },
 	});
 	assert.match(miss.content[0].text, /No observation or reflection/);
-});
-
-test("primary-bound search_session reads the primary session file, not the caller ctx", async () => {
-	const dir = mkdtempSync(join(tmpdir(), "pair-recall-"));
-	const file = join(dir, "session.jsonl");
-	writeFileSync(
-		file,
-		`${JSON.stringify({
-			type: "message",
-			id: "m1",
-			message: { role: "user", content: "primary-only-token" },
-		})}\n`,
-	);
-	try {
-		const tools = A.bindPrimaryRecallTools({
-			getSessionFile: () => file,
-			getBranch: () => [{ id: "m1" }],
-			getEntries: () => [{ id: "m1" }],
-		});
-		const search = tools.find((t) => t.name === "search_session");
-		assert.ok(search);
-		assert.match(search.description, /your partner's session/);
-		const hit = await search.execute("c1", { query: "primary-only-token" }, undefined, undefined, {
-			sessionManager: {
-				getSessionFile: () => undefined,
-				getBranch: () => [],
-			},
-		});
-		assert.match(hit.content[0].text, /primary-only-token/);
-	} finally {
-		rmSync(dir, { recursive: true, force: true });
-	}
 });
 
 test("buildReviewMessages: header turn + one single-block user turn per delta, content verbatim", () => {
@@ -2843,10 +2805,10 @@ test("runtime.acceptingAdvice: an in-flight review orphaned by reset() stops acc
 	assert.equal(afterReset, false, "advice rejected once the review's epoch is orphaned");
 });
 
-test("runtime: failed reviews commit no direct, consultant, or notebook effects", async () => {
+test("runtime: failed reviews commit no direct, second-opinion mail, or notebook effects", async () => {
 	let attempt = 0;
 	let rt;
-	const escalations = [];
+	const opinions = [];
 	const notebookCommits = [];
 	let stagedNotebook;
 	const notebookTool = {
@@ -2862,18 +2824,13 @@ test("runtime: failed reviews commit no direct, consultant, or notebook effects"
 			return update;
 		},
 	};
-	const request = {
-		severity: "concern",
-		claim: "deep queue ownership risk",
-		whyDeepReasoning: "ownership spans several layers",
-		evidence: [{ kind: "file", ref: "src/queue.ts" }],
-	};
+	const request = { thread: "second-opinion", to: "manager", question: "Who owns the queue?" };
 	const agent = {
 		state: { messages: [], model: {} },
 		async prompt() {
 			attempt++;
 			rt.enqueueAdvice("direct retry risk", "concern");
-			assert.equal(rt.stageEscalation(request), "accepted");
+			assert.equal(rt.stageSecondOpinion(request), true);
 			if (attempt === 1) throw new Error("provider failed after tools ran");
 			this.state.messages.push({ role: "assistant", content: [], usage: {}, stopReason: "stop" });
 		},
@@ -2891,14 +2848,13 @@ test("runtime: failed reviews commit no direct, consultant, or notebook effects"
 		notebookTool,
 		(update) => notebookCommits.push(update),
 		(requestValue) => {
-			escalations.push(requestValue);
-			return "accepted";
+			opinions.push(requestValue);
 		},
 	);
 	rt.push("first turn");
 	assert.equal(await rt.waitUntilSettled(2000), "failed");
 	assert.deepEqual(rt.takeAllAdvice(), []);
-	assert.deepEqual(escalations, []);
+	assert.deepEqual(opinions, []);
 	assert.deepEqual(notebookCommits, []);
 
 	rt.push("second turn");
@@ -2907,29 +2863,24 @@ test("runtime: failed reviews commit no direct, consultant, or notebook effects"
 		rt.takeAllAdvice().map(({ id: _id, ...note }) => note),
 		[{ note: "direct retry risk", severity: "concern" }],
 	);
-	assert.equal(escalations.length, 2);
+	assert.equal(opinions.length, 2);
 	assert.equal(notebookCommits.length, 2);
 });
 
-test("runtime: notebook persistence failure publishes no direct or consultant effects", async () => {
+test("runtime: notebook persistence failure publishes no direct or second-opinion mail effects", async () => {
 	let rt;
-	const escalations = [];
+	const opinions = [];
 	const notebookTool = {
 		begin() {},
 		clear() {},
 		takeStaged: () => ({ batchId: "batch-1" }),
 	};
-	const request = {
-		severity: "concern",
-		claim: "deep queue ownership risk",
-		whyDeepReasoning: "ownership spans several layers",
-		evidence: [{ kind: "file", ref: "src/queue.ts" }],
-	};
+	const request = { thread: "second-opinion", to: "manager", question: "Who owns the queue?" };
 	const agent = {
 		state: { messages: [], model: {} },
 		async prompt() {
 			rt.enqueueAdvice("direct retry risk", "concern");
-			rt.stageEscalation(request);
+			rt.stageSecondOpinion(request);
 			this.state.messages.push({ role: "assistant", content: [], usage: {}, stopReason: "stop" });
 		},
 		abort() {},
@@ -2948,54 +2899,13 @@ test("runtime: notebook persistence failure publishes no direct or consultant ef
 			throw new Error("session append failed");
 		},
 		(requestValue) => {
-			escalations.push(requestValue);
-			return "accepted";
+			opinions.push(requestValue);
 		},
 	);
 	rt.push("turn");
 	assert.equal(await rt.waitUntilSettled(2000), "failed");
 	assert.deepEqual(rt.takeAllAdvice(), []);
-	assert.deepEqual(escalations, []);
-});
-
-test("runtime: one successful attempt collapses an exact direct/consultant shared root", async () => {
-	let rt;
-	const escalations = [];
-	const request = {
-		severity: "concern",
-		claim: "shared queue ownership",
-		whyDeepReasoning: "ownership spans several layers",
-		evidence: [{ kind: "file", ref: "src/queue.ts" }],
-	};
-	const agent = {
-		state: { messages: [], model: {} },
-		async prompt() {
-			rt.enqueueAdvice("shared queue ownership", "concern");
-			rt.stageEscalation(request);
-			this.state.messages.push({ role: "assistant", content: [], usage: {}, stopReason: "stop" });
-		},
-		abort() {},
-		reset() {},
-	};
-	rt = new A.PairRuntime(
-		agent,
-		new A.AdviseTool(() => false),
-		0,
-		undefined,
-		undefined,
-		undefined,
-		undefined,
-		undefined,
-		undefined,
-		(requestValue) => {
-			escalations.push(requestValue);
-			return "accepted";
-		},
-	);
-	rt.push("turn");
-	assert.equal(await rt.waitUntilSettled(2000), "settled");
-	assert.equal(escalations.length, 1);
-	assert.deepEqual(rt.takeAllAdvice(), [], "the same root is not queued on both delivery paths");
+	assert.deepEqual(opinions, []);
 });
 
 test("runtime queue: re-raising advice at higher severity escalates it", () => {
@@ -3035,114 +2945,6 @@ test("runtime queue: questions stay separate from findings and never carry sever
 	assert.equal(rt.canonicalFindingId(question.id, "finding"), undefined);
 	assert.equal(rt.canonicalFindingId(question.id, "question"), question.id);
 });
-
-test("boundary: a send failure requeues direct findings and retains consultant delivery", () => {
-	const delivered = [];
-	const failed = [];
-	const advisorCommits = [];
-	assert.throws(
-		() =>
-			A.deliverBoundaryBatch({
-				direct: [{ note: "retry this", severity: "concern" }],
-				advisor: {
-					note: { note: "validated finding", severity: "concern", source: "consultant" },
-					commit: (...args) => advisorCommits.push(args),
-				},
-				send: () => {
-					throw new Error("session closed");
-				},
-				onDirectDelivered: (note) => delivered.push(note),
-				onDirectFailed: (note) => failed.push(note),
-			}),
-		/session closed/,
-	);
-	assert.deepEqual(delivered, []);
-	assert.deepEqual(failed, [{ note: "retry this", severity: "concern" }]);
-	assert.deepEqual(advisorCommits, [], "a transient send failure leaves the validated consultant candidate pending");
-});
-
-test("boundary: an exact cross-source duplicate keeps the direct finding only", () => {
-	const sent = [];
-	const commits = [];
-	const direct = [{ note: "Shared queue ownership", severity: "concern", source: "pair" }];
-	const advisor = {
-		note: { note: "consultant restatement", severity: "concern", source: "consultant" },
-		dedupeKeys: ["shared queue ownership"],
-		commit: (...args) => commits.push(args),
-	};
-	assert.equal(
-		A.deliverBoundaryBatch({
-			direct,
-			advisor,
-			send: (notes) => sent.push(notes),
-			onDirectDelivered: () => {},
-			onDirectFailed: () => {},
-		}),
-		true,
-	);
-	assert.deepEqual(sent, [direct]);
-	assert.deepEqual(commits, [[false, true]], "duplicate consultant identity remains suppressed without a second send");
-});
-
-test("boundary: direct pair programmer and ready consultant findings share one outbound batch", () => {
-	const sent = [];
-	const delivered = [];
-	const commits = [];
-	const direct = [{ note: "pair programmer finding", severity: "concern", source: "pair" }];
-	const advisor = {
-		note: { note: "consultant finding", severity: "blocker", source: "consultant", adjudication: "confirm" },
-		commit: (value) => commits.push(value),
-	};
-
-	assert.equal(
-		A.deliverBoundaryBatch({
-			direct,
-			advisor,
-			send: (notes) => sent.push(notes),
-			onDirectDelivered: (note) => delivered.push(note.note),
-			onDirectFailed: () => assert.fail("successful send must not requeue"),
-		}),
-		true,
-	);
-	assert.equal(sent.length, 1, "one boundary produces one outbound send");
-	assert.deepEqual(
-		sent[0].map((note) => note.source),
-		["pair", "consultant"],
-	);
-	assert.deepEqual(delivered, ["pair programmer finding"]);
-	assert.deepEqual(commits, [true]);
-});
-
-test("boundary: a question does not collapse a consultant finding", () => {
-	const sent = [];
-	const commits = [];
-	const direct = [{ note: "Shared queue ownership", kind: "question", source: "pair" }];
-	const advisor = {
-		note: { note: "consultant restatement", severity: "concern", source: "consultant" },
-		dedupeKeys: ["shared queue ownership"],
-		commit: (value) => commits.push(value),
-	};
-	assert.equal(
-		A.deliverBoundaryBatch({
-			direct,
-			advisor,
-			send: (notes) => sent.push(notes),
-			onDirectDelivered: () => {},
-			onDirectFailed: () => {},
-		}),
-		true,
-	);
-	assert.equal(sent.length, 1);
-	assert.deepEqual(
-		sent[0].map((note) => note.source),
-		["pair", "consultant"],
-	);
-	assert.deepEqual(commits, [true]);
-});
-
-// ===========================================================================
-// 2. real loader
-// ===========================================================================
 
 async function loadPairExtension() {
 	const runtime = createExtensionRuntime();

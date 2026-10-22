@@ -394,7 +394,7 @@ describe("PairReviewScheduler", () => {
 		h.settle(h.take(), { outcome: "ok", silent: true });
 		expect(h.scheduler.snapshot().attention).toBe("routine");
 		h.scheduler.observe(toolTurn(4, "write"));
-		h.settle(h.take(), { outcome: "ok", consultantRequested: true, silent: true });
+		h.settle(h.take(), { outcome: "ok", secondOpinionRequested: true, silent: true });
 		expect(h.scheduler.snapshot().attention).toBe("close");
 		expect([...h.scheduler.snapshot().wakeOn]).toEqual([...DEFAULT_PAIR_WAKE_ON]);
 	});

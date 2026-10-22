@@ -75,7 +75,7 @@ Between snapshots, primary and sibling additions are not broadcast into running 
 
 Commands and tools:
 
-- `/pair status` — pair programmer state, notebook coverage, and pair programmer and consultant usage
+- `/pair status` — pair programmer state, notebook coverage, and pair usage
 - `/pair notebook [full]` — open learnings; `full` also shows archived evidence and retired learnings
 - `/reflect` — ask the main agent to record what it learned in the notebook
 - `update_notebook` — primary programmers jointly record, supersede, or retire sourced learnings; coding children add only
@@ -85,7 +85,7 @@ Commands and tools:
 
 The pair programmer's operational settings use the `pair` key in global `~/.pi/agent/settings.json` or trusted project `.pi/settings.json`; project values override global values. The pair programmer's model and thinking policy come from the user-global `pair` model profile. `PI_PAIR_NOTEBOOK_PASSIVE` disables pair programmer notebook automatic maintenance while preserving reads and explicit main-agent updates; it does not disable Pi's native compaction or automatic-compaction failure safety. See [Model profiles](model-profiles.md) and [`components/notebook/src/config.ts`](../components/notebook/src/config.ts).
 
-The pair programmer binds `revisit_note` to the primary session and uses handle-bound `expand_receipt` for folded trajectory content. It does not receive `search_session`. The episodic consultant retains primary-bound `search_session`, `revisit_note`, and read-only repository tools for independent investigation. Ordinary subagents and `pi_exec` workers load `search_session`. Interactive coding children share the primary notebook through the access described above; they do not create a notebook owner. Children without active built-in editing capability, internal sessions, and Pi Exec workers do not receive these shared notebook tools. The internal BTW child loads only vroom (fast mode), compaction failure safety, and the search root guard.
+The pair programmer binds `revisit_note` to the primary session and uses handle-bound `expand_receipt` for folded trajectory content. It does not receive `search_session`. Second opinions are mail to colleagues in the organization; those people use their own sessions and tools. Ordinary subagents and `pi_exec` workers load `search_session`. Interactive coding children share the primary notebook through the access described above; they do not create a notebook owner. Children without active built-in editing capability, internal sessions, and Pi Exec workers do not receive these shared notebook tools. The internal BTW child loads only vroom (fast mode), compaction failure safety, and the search root guard.
 
 ## Where the notebook persists
 
@@ -101,15 +101,15 @@ They are project-associated through Pi's session location, but they are not repo
 
 Every root session also keeps a **self**: one Markdown document about itself and the people it works with (what it thinks of each, who has done what, standing agreements, what it is on, what it has learned about its organization). The session writes the whole document with `update_self`; the latest is the `<self>` section of its system prompt at every run, and a session that has never written one sees suggested headings there. The self is not the notebook: the notebook holds sourced learnings that the pair curates, distills, and retires; the self is the person's own account of itself and its colleagues, never distilled, never capped, and never touched by notebook maintenance. It lives as `organization-self` custom entries in the session's transcript (the latest on the branch wins, so it survives restarts and compaction the way the system prompt does) and is reported to the session-state runtime as the `self` fact for the views. See [the organization](organization.md).
 
-## Pair programmer and consultant usage records
+## Pair programmer usage records
 
-Pair programmer reviews and consultant consultations write one NDJSON line per model call to:
+Pair reviews write one NDJSON line per model call to:
 
 ```text
 ~/.pi/agent/sidecar-usage/<session-id>.ndjson
 ```
 
-Calls without a usable session ID go to `sidecar-usage/unscoped.ndjson`. Records contain identifiers and counters only: actor, provider, model, input, cache read/write, output, cost, duration, trigger, and status. They do not contain prompts or findings and do not affect compaction or notebook projection. A write failure is ignored so instrumentation cannot change pair programmer or consultant behavior.
+Calls without a usable session ID go to `sidecar-usage/unscoped.ndjson`. Records contain identifiers and counters only: actor, provider, model, input, cache read/write, output, cost, duration, trigger, and status. They do not contain prompts or findings and do not affect compaction or notebook projection. A write failure is ignored so instrumentation cannot change pair behavior. Existing files can contain historical consultant calls; new second-opinion work belongs to the colleague's own session.
 
 ## Session titles
 

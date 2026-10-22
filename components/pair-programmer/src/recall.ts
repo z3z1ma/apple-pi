@@ -3,7 +3,6 @@ import type { ExtensionContext, ToolDefinition } from "@earendil-works/pi-coding
 import { recallNotebookSources } from "../../notebook/src/session-ledger/recall.js";
 import type { Entry } from "../../notebook/src/session-ledger/types.js";
 import { recallObservationTool } from "../../notebook/src/tools/notebook-source.js";
-import { sessionSearchTool } from "../../session-search/src/index.js";
 
 export type PrimarySessionManager = Pick<
 	ExtensionContext["sessionManager"],
@@ -55,21 +54,6 @@ export function bindPairRecallTools(
 				}
 				return result;
 			},
-		},
-	];
-}
-
-export function bindPrimaryRecallTools(sessionManager: PrimarySessionManager): ToolDefinition[] {
-	const search = bindPrimarySession(sessionSearchTool, sessionManager);
-	return [
-		...bindPairRecallTools(sessionManager),
-		{
-			...search,
-			description: `${sessionSearchTool.description} This searches your partner's session, never this side conversation.`,
-			promptGuidelines: [
-				...(sessionSearchTool.promptGuidelines ?? []),
-				"This searches your partner's session history, not this side conversation.",
-			],
 		},
 	];
 }

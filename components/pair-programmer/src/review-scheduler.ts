@@ -77,7 +77,7 @@ export type PairReviewSettlement = {
 	readonly outcome: "ok" | "failed";
 	readonly reviewedThrough?: number;
 	readonly newIntervention?: boolean;
-	readonly consultantRequested?: boolean;
+	readonly secondOpinionRequested?: boolean;
 	readonly lease?: PairAttentionLease;
 	readonly silent?: boolean;
 	readonly terminalCovered?: boolean;
@@ -665,7 +665,7 @@ export class PairReviewScheduler {
 
 	#applySettlementAttention(settlement: PairReviewSettlement): void {
 		const lease = normalizeLease(settlement.lease);
-		const resetClose = Boolean(settlement.newIntervention || settlement.consultantRequested);
+		const resetClose = Boolean(settlement.newIntervention || settlement.secondOpinionRequested);
 		const directionChanged = this.#inFlightDirectionVersion !== this.#directionVersion;
 		const newerAttentionReset = this.#inFlightAttentionVersion !== this.#attentionVersion;
 		if (lease && !directionChanged) {

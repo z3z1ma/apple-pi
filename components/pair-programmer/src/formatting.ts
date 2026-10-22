@@ -1,6 +1,7 @@
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { AssistantMessage, ToolResultMessage, UserMessage } from "@earendil-works/pi-ai";
 import { type SessionEntry, sessionEntryToContextMessages } from "@earendil-works/pi-coding-agent";
+import { MAIL_CUSTOM_TYPE } from "../../session-state/src/mail.js";
 import type { PairReceiptImage, PairReceiptIssuer, PairReceiptSnapshot } from "./receipt-expansion.js";
 import {
 	formatBashReceipt,
@@ -11,6 +12,20 @@ import {
 	utf8Bytes,
 } from "./receipts.js";
 import { isPairQuestion, type PairNote } from "./types.js";
+
+export function mailFromEntry(entry: unknown): string | undefined {
+	if (!entry || typeof entry !== "object") return undefined;
+	const message = entry as { type?: string; customType?: string; content?: unknown };
+	return message.type === "custom_message" &&
+		message.customType === MAIL_CUSTOM_TYPE &&
+		typeof message.content === "string"
+		? message.content
+		: undefined;
+}
+
+export function formatIncomingMail(content: string): string {
+	return `#### Mail received by your partner\n\n${content}`;
+}
 
 const ADVISORY_TYPE = "advisory";
 
@@ -340,7 +355,7 @@ function formatProjectedResults(
 // how a provider concatenates content parts — see buildReviewMessages.
 export function formatTurnDelta(opts: {
 	userPrompt?: string;
-	userMessages?: ReadonlyArray<{ content: unknown; sourceEntryId?: string }>;
+	userMessages?: ReadonlyArray<{ content: unknown; sourceEntryId?: string; kind?: "mail" }>;
 	assistant?: AssistantMessage;
 	toolResults?: ToolResultMessage[];
 	issueReceipt?: PairReceiptIssuer;
@@ -352,7 +367,10 @@ export function formatTurnDelta(opts: {
 				issueReceipt: opts.issueReceipt,
 				sourceEntryId: message.sourceEntryId,
 			});
-			if (text) parts.push(`#### What the user told your partner\n\n${text}`);
+			if (text)
+				parts.push(
+					message.kind === "mail" ? formatIncomingMail(text) : `#### What the user told your partner\n\n${text}`,
+				);
 		}
 	} else if (opts.userPrompt?.trim()) {
 		const text = formatUserMessage(opts.userPrompt);

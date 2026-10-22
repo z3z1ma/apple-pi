@@ -224,6 +224,8 @@ try {
 		"mcp",
 		"mcpScript",
 		"pi_exec_program",
+		"ask_for_second_opinion",
+		"ask_consultant",
 		"schedule",
 		"list_peer_sessions",
 		"start_peer_session",

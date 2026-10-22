@@ -1,4 +1,4 @@
-import type { AssistantUsageDelta, HarnessBoundedActivity } from "./service.js";
+import type { AssistantUsageDelta, HarnessBoundedActivity } from "./types.js";
 import type { AgentActivity } from "./ui/agent-widget.js";
 import { addUsage } from "./usage.js";
 

@@ -29,6 +29,7 @@ export const SIDECAR_USAGE_RECORD_KEYS = [
 	"attention",
 ] as const;
 
+/** Consultant records remain in older on-disk usage logs; only the pair writes new sidecar calls. */
 export type SidecarAgent = "pair" | "consultant";
 
 export type SidecarUsageRecord = {

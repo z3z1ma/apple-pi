@@ -373,7 +373,7 @@ export function createExpandReceiptTool(
 		promptGuidelines: [
 			"Use expand_receipt only with an opaque id already shown in the shared trajectory or a previous expansion.",
 			"Expand when the folded payload could materially affect your judgment or answer a question you would otherwise ask your partner; leave irrelevant receipts folded.",
-			"Keep expansion focused on the already-presented trajectory; repository navigation remains with your partner and the consultant.",
+			"Keep expansion focused on the already-presented trajectory; repository navigation remains with your partner and its colleagues.",
 		],
 		parameters: expandReceiptParameters,
 		async execute(_toolCallId, params, signal) {

@@ -137,3 +137,38 @@ export interface EnvInfo {
 	branch: string;
 	platform: string;
 }
+
+export type HarnessActivityPhase = "thinking" | "tool";
+
+export interface AssistantUsageDelta {
+	input: number;
+	cacheRead: number;
+	cacheWrite: number;
+	output: number;
+	cost: number;
+}
+
+/** Bounded, sanitized role activity. Never includes IDs, paths, prompts, args, or model text. */
+export interface HarnessBoundedActivity {
+	phase: HarnessActivityPhase;
+	toolName?: string;
+	turnCount: number;
+	toolCount: number;
+	label: string;
+}
+
+export interface AgentToolPolicyCall {
+	toolName: string;
+	args: unknown;
+}
+
+export interface AgentToolPolicyResult {
+	block: true;
+	reason: string;
+	terminate?: boolean;
+}
+
+export type AgentToolPolicy = (
+	call: AgentToolPolicyCall,
+	signal?: AbortSignal,
+) => AgentToolPolicyResult | undefined | Promise<AgentToolPolicyResult | undefined>;

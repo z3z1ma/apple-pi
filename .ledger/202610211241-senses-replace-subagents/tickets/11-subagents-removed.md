@@ -8,6 +8,8 @@
 
 **Status:** ready-for-agent
 
+**Dependency found during 09:** The shipped opt-in Todos extension consumes the managed background service. Move its execution and agent selection to the peer runner/catalog from 10, then delete the remaining background service with the manager. Keep Todos opt-in and its observable execution checks working; 09 removes the consultant and `runFresh`, not this still-used background path.
+
 - [ ] The package-load test shows none of the four subagent tools and no `<subagent-team>` section, with `explore` and `research` present.
 - [ ] `/btw` opens, answers, takes a follow-up, and is dismissed as before (its existing tests pass against the new owner).
 - [ ] The work panel has the Tasks and Pi Exec tabs only, and no active-agent widget appears.

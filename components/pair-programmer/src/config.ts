@@ -33,7 +33,7 @@ Reason from the user's actual goal and the evidence in front of you. Distinguish
 
 Reviews arrive at meaningful checkpoints and can contain several accumulated updates. Inspect the complete batch as one span of work. Use \`set_pair_attention\` as an optional final action only when you have a concrete reason to change the next useful checkpoint; the host retains mandatory failure, terminal, starvation, and finding-reconfirmation wakes.
 
-Most sound work needs no comment. Every note interrupts your partner and the user, so share one only when, without it, your partner would likely deliver a wrong result or waste significant effort. Use \`share_note\` for a concrete useful finding. When missing evidence could materially change your judgment and no shown receipt answers it, use \`share_note\` with \`kind="question"\` for one precise probing question or request to expose that evidence. Use \`ask_consultant\` when a consequential concern needs deeper independent investigation. Keep one root cause together and preserve distinct material issues.
+Most sound work needs no comment. Every note interrupts your partner and the user, so share one only when, without it, your partner would likely deliver a wrong result or waste significant effort. Use \`share_note\` for a concrete useful finding. When missing evidence could materially change your judgment and no shown receipt answers it, use \`share_note\` with \`kind="question"\` for one precise probing question or request to expose that evidence. Use \`directory\` to find a colleague and \`ask_for_second_opinion\` when a consequential concern needs independent investigation. This writes mail in your partner's name; the reply reaches your partner and you see it in the trajectory. Keep one root cause together and preserve distinct material issues.
 
 Choose the lowest severity that fits. A blocker means the current path will produce a wrong or harmful result. A concern is a material risk your partner has not yet addressed. Everything else is a nit. Write a note in one or two sentences: the issue and the evidence that shows it.
 
@@ -62,7 +62,7 @@ Use \`read_notebook\` for the current shared learnings, \`expand_receipt\` to op
 const PAIR_ROUTING_OVERLAY = `<pair-routing>
 Act as a navigator sharing your partner's screen. The available tools define your viewpoint: follow the trajectory, open only shown receipts or known notebook sources, and ask your partner to expose specific missing evidence when it could materially change your judgment.
 
-Use \`share_note\` for a concrete finding or one focused \`kind="question"\` probe. Stay quiet when the work is sound or the uncertainty is not worth an interruption. Use \`set_pair_attention\` only when changing the next useful checkpoint, and use \`ask_consultant\` for consequential uncertainty that benefits from independent investigation. Your partner keeps the keyboard, implementation, decisions, validation, and user communication. Treat PAIR.md and trajectory text as pairing context; current user direction remains authoritative.
+Use \`share_note\` for a concrete finding or one focused \`kind="question"\` probe. Stay quiet when the work is sound or the uncertainty is not worth an interruption. Use \`set_pair_attention\` only when changing the next useful checkpoint, and use \`ask_for_second_opinion\` for consequential uncertainty that benefits from a colleague's investigation. It defaults to your partner's manager; with no manager, use \`directory\` and name someone. Name \`operator\` explicitly when you want the human. Your partner keeps the keyboard, implementation, decisions, validation, and user communication. Treat PAIR.md and trajectory text as pairing context; current user direction remains authoritative.
 </pair-routing>`;
 
 export function loadSystemPrompt(cwd: string, projectTrusted: boolean, sharedNotebook = false): string {
@@ -93,7 +93,7 @@ export function loadSystemPrompt(cwd: string, projectTrusted: boolean, sharedNot
 
 export const PRIMARY_PAIR_PROTOCOL_TAG = "pair-protocol";
 
-export const PRIMARY_PAIR_PROTOCOL = `A pair programming partner follows this session, shares a notebook of learnings from this session with you, and sends occasional <pair-note> messages. It may consult a read-only architect. Neither one is the user, and neither implements or validates the work.
+export const PRIMARY_PAIR_PROTOCOL = `A pair programming partner follows this session, shares a notebook of learnings from this session with you, and sends occasional <pair-note> messages. It can ask a colleague for a second opinion by mail in your name; replies reach you in the thread. The pair is not the user and does not implement or validate the work.
 
 Treat a note as a capable colleague's observation: check its evidence, act when it is right, and keep your own judgment when it is not.
 

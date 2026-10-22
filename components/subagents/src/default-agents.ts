@@ -3,10 +3,9 @@
  *
  * The interns (explorer, researcher) are listed in the team prompt; the builder is callable by name for `pi_exec`
  * programs and the skills that use it, but not listed. Each can be overridden by a user .md file with the same name.
- * The consultant is not an agent type at all: the pair programmer's consultation runs it from `CONSULTANT`.
  */
 
-import { INVESTIGATION_GUIDANCE as ADVISORY_CONTRACT, INTERN_PROMPTS } from "../../interns/src/prompts.js";
+import { INTERN_PROMPTS } from "../../interns/src/prompts.js";
 import { BUILTIN_TOOL_NAMES } from "./builtin-tools.js";
 import type { AgentConfig } from "./types.js";
 
@@ -71,22 +70,3 @@ Find missing context in the repository yourself, and ask only for inputs you can
 		},
 	],
 ]);
-
-/** The pair programmer's consultant: a read-only second opinion, run by `ask_consultant` and never by `agent`. */
-export const CONSULTANT: AgentConfig = {
-	name: "consultant",
-	displayName: "Consultant",
-	description:
-		"Senior architect for a read-only second opinion on costly decisions, bugs that survived earlier fixes, and simplification.",
-	builtinToolNames: ADVISORY_TOOLS,
-	extensions: false,
-	skills: false,
-	profile: "deep",
-	systemPrompt: `${ADVISORY_CONTRACT}
-
-# Role
-You are a senior software architect giving a capable team a focused second opinion on architecture, costly trade-offs, persistent bugs, review, or simplification.
-
-Form your own view rather than echo the caller's framing. Give a candid recommendation with brief reasoning, point at specific files and lines, and name your uncertainty. Prefer the simpler design unless complexity earns its keep. Routine verification stays with the team.`,
-	promptMode: "replace",
-};

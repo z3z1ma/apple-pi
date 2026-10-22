@@ -4,7 +4,7 @@ import { foldLedger } from "../../notebook/src/session-ledger/fold.js";
 import { reflectionToSummaryLine } from "../../notebook/src/session-ledger/render-summary.js";
 import type { Entry } from "../../notebook/src/session-ledger/types.js";
 
-import { formatTurnDelta, formatUserBash, formatUserMessage } from "./formatting.js";
+import { formatIncomingMail, formatTurnDelta, formatUserBash, formatUserMessage, mailFromEntry } from "./formatting.js";
 import type { PairReceiptIssuer } from "./receipt-expansion.js";
 import { isPairQuestion, type PairNote } from "./types.js";
 
@@ -130,6 +130,7 @@ export function formatRollingAdvice(notes: readonly SettledAdvice[]): string {
 
 type TrajectoryItem =
 	| { kind: "turn"; assistant?: AssistantMessage; toolResults: ToolResultMessage[] }
+	| { kind: "mail"; content: string; sourceEntryId?: string }
 	| {
 			kind: "bash";
 			sourceEntryId?: string;
@@ -150,6 +151,12 @@ function collectTrajectoryItems(entries: readonly unknown[]): TrajectoryItem[] {
 	for (const raw of entries) {
 		if (!raw || typeof raw !== "object") continue;
 		const entry = raw as { id?: string; type?: string; message?: { role?: string } };
+		const mail = mailFromEntry(entry);
+		if (mail !== undefined) {
+			flush();
+			items.push({ kind: "mail", content: mail, sourceEntryId: entry.id });
+			continue;
+		}
 		if (isCustom(entry)) continue;
 		const message = entryMessage(entry);
 		const role = message?.role ?? (entry.type === "message" ? undefined : entry.type);
@@ -187,6 +194,10 @@ export function formatRecentTrajectory(entries: readonly unknown[], issueReceipt
 			? 0
 			: (turnIndexes[turnIndexes.length - RECENT_TRAJECTORY_TURNS] ?? 0);
 	const parts = items.slice(cut).flatMap((item) => {
+		if (item.kind === "mail")
+			return [
+				`${item.sourceEntryId ? `[Source entry id: ${item.sourceEntryId}]\n` : ""}${formatIncomingMail(item.content)}`,
+			];
 		if (item.kind === "bash") {
 			const text = formatUserBash(item.message, { issueReceipt, sourceEntryId: item.sourceEntryId });
 			return text ? [text] : [];
@@ -231,6 +242,12 @@ export function formatSourceAddressedTrajectory(
 			summary?: unknown;
 		};
 		if (!entry.id || !allowed.has(entry.id)) continue;
+		const mail = mailFromEntry(entry);
+		if (mail !== undefined) {
+			flush();
+			parts.push(`${labels([entry.id])}\n${formatIncomingMail(mail)}`);
+			continue;
+		}
 		const message = entryMessage(entry);
 		const role = message?.role ?? (entry.type === "message" ? undefined : entry.type);
 		if (role === "user") {

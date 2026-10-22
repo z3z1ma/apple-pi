@@ -1,4 +1,4 @@
-import type { Model } from "@earendil-works/pi-ai";
+import type { Model, Tool } from "@earendil-works/pi-ai";
 import type {
 	AgentSession,
 	ExtensionAPI,
@@ -13,15 +13,13 @@ import {
 	SessionManager,
 	SettingsManager,
 } from "@earendil-works/pi-coding-agent";
-
-import type { Tool } from "@earendil-works/pi-ai";
+import type { ChildPairNotebook } from "../../notebook/src/shared-notebook.js";
 import {
 	activeTools,
 	compactOnServer,
 	registerServerCompactionReplayHooks,
 } from "../../server-compaction/src/index.js";
 import { bindPairRecallTools, type PrimarySessionManager } from "./recall.js";
-import type { ChildPairNotebook } from "../../notebook/src/shared-notebook.js";
 import type { PairReceiptIssuer } from "./receipt-expansion.js";
 import { SET_PAIR_ATTENTION_TOOL_NAME } from "./review-scheduler.js";
 import { buildPairSeed, PAIR_RESEED_ENTRY_ID, type SettledAdvice } from "./seed.js";
@@ -40,7 +38,8 @@ export type PairSeedSource = {
 /** `createAgentSession({ tools })` is an allowlist. Custom tools omitted here never register. */
 export const PAIR_SESSION_TOOLS = [
 	"share_note",
-	"ask_consultant",
+	"ask_for_second_opinion",
+	"directory",
 	"expand_receipt",
 	"revisit_note",
 	SET_PAIR_ATTENTION_TOOL_NAME,
@@ -103,7 +102,8 @@ export async function createPairSession(opts: {
 	thinkingLevel?: string;
 	systemPrompt: string;
 	adviseTool: ToolDefinition;
-	escalateTool: ToolDefinition;
+	secondOpinionTool: ToolDefinition;
+	directoryTool: ToolDefinition;
 	receiptTool: ToolDefinition;
 	attentionTool: ToolDefinition;
 	notebookTool?: ToolDefinition;
@@ -165,7 +165,8 @@ export async function createPairSession(opts: {
 	];
 	const customTools = [
 		opts.adviseTool,
-		opts.escalateTool,
+		opts.secondOpinionTool,
+		opts.directoryTool,
 		opts.receiptTool,
 		opts.attentionTool,
 		...(opts.notebookTool ? [opts.notebookTool] : []),

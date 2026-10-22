@@ -80,6 +80,44 @@ function entry(member: Member, names: Map<string, string>) {
 	};
 }
 
+/** One read-only directory projection, shared by the person and its pair. */
+export function readDirectory(self: string, includeFormer = false, includeBacklog = false) {
+	const organization = organizationOf(self, true);
+	const all = organization.members;
+	const backlog = includeBacklog
+		? (withWork((db) =>
+				backlogOf(
+					db,
+					organization.root,
+					all.filter((member) => !member.retired).map((member) => member.cwd),
+				),
+			) ?? [])
+		: undefined;
+	const names = new Map(all.map((member) => [member.id, member.name ?? member.id]));
+	const members = [
+		{
+			id: "operator",
+			name: "Operator",
+			title: "Operator",
+			role: null,
+			manager: null,
+			team: null,
+			status: "human",
+			availability: null,
+			focus: null,
+			tasks: [],
+			directory: null,
+			soul: null,
+			record: [],
+			since: null,
+		},
+		...all.filter((member) => !member.retired).map((member) => entry(member, names)),
+	];
+	const former = includeFormer ? all.filter((member) => member.retired).map((member) => entry(member, names)) : [];
+	const details = { members, former, ...(backlog ? { backlog } : {}) };
+	return details;
+}
+
 /** `directory` (your organization) for the model and `/pi-sessions` (every live session on the machine) for the operator, in root sessions. */
 export function installPeers(pi: ExtensionAPI): void {
 	const activate = () => {
@@ -112,41 +150,7 @@ export function installPeers(pi: ExtensionAPI): void {
 			),
 			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 				const self = ctx.sessionManager.getSessionId();
-				const organization = organizationOf(self, true);
-				const all = organization.members;
-				const backlog = managesPeople(pi, ctx)
-					? (withWork((db) =>
-							backlogOf(
-								db,
-								organization.root,
-								all.filter((member) => !member.retired).map((member) => member.cwd),
-							),
-						) ?? [])
-					: undefined;
-				const names = new Map(all.map((member) => [member.id, member.name ?? member.id]));
-				const members = [
-					{
-						id: "operator",
-						name: "Operator",
-						title: "Operator",
-						role: null,
-						manager: null,
-						team: null,
-						status: "human",
-						availability: null,
-						focus: null,
-						tasks: [],
-						directory: null,
-						soul: null,
-						record: [],
-						since: null,
-					},
-					...all.filter((member) => !member.retired).map((member) => entry(member, names)),
-				];
-				const former = params.former
-					? all.filter((member) => member.retired).map((member) => entry(member, names))
-					: [];
-				const details = { members, former, ...(backlog ? { backlog } : {}) };
+				const details = readDirectory(self, params.former, managesPeople(pi, ctx));
 				return { content: [{ type: "text", text: JSON.stringify(details, null, 2) }], details };
 			},
 		}),

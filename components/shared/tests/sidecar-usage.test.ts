@@ -120,7 +120,7 @@ describe("sidecar usage records", () => {
 		writeFileSync(mock.agentDir, "not-a-directory");
 		expect(() =>
 			withSidecarUsageContext({ sessionId: "session-123" }, () => {
-				recordSidecarUsage({ agent: "consultant", trigger: "consultation", status: "error" });
+				recordSidecarUsage({ agent: "pair", trigger: "orientation", status: "error" });
 			}),
 		).not.toThrow();
 	});

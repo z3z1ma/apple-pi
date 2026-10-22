@@ -17,13 +17,14 @@ import { trackLiveSessions } from "../../shared/src/forked-continuation.js";
 import { resumeAgent, runAgent, type ToolActivity } from "./agent-runner.js";
 import { createClarifyTool } from "./clarify.js";
 import { persistAgentOutput } from "./output-file.js";
-import type { AssistantUsageDelta, ManagedAgentToolPolicy } from "./service.js";
 import { disposeAgentSession } from "./session-lifecycle.js";
 import type {
 	AgentConfig,
 	AgentInvocation,
 	AgentRecord,
 	AgentTerminationCause,
+	AgentToolPolicy,
+	AssistantUsageDelta,
 	SubagentType,
 	ThinkingLevel,
 } from "./types.js";
@@ -97,7 +98,7 @@ export interface SpawnOptions {
 	/** Invocation-level guidance appended after the selected definition's prompt. */
 	systemPrompt?: string;
 	/** Per-call enforcement layered ahead of the session's existing tool policy. */
-	toolPolicy?: ManagedAgentToolPolicy;
+	toolPolicy?: AgentToolPolicy;
 	/** Controller-supplied SDK tools, independent of extension discovery. */
 	customTools?: ToolDefinition[];
 	/** Public agent launches can consult an ephemeral snapshot of their immediate parent. */

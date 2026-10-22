@@ -38,9 +38,9 @@ None. The choices proposed as R1 to R5 and P1 to P5 were approved by the operato
 
 ## Current State
 
-The operator approved the specification and all 14 tickets on 2026-10-22, then asked for solo implementation in ticket order with commits as it proceeds. Tickets 01 to 08 are implemented: threaded mail, human-named management, pull channels with mentions, the operator inbox and escalation, meetings, explicit tasks and assignments, and hiring that assigns work. Inferred ledger binding and quick-model intent are removed; the directory and views use actual assignments and focus. The two one-shot intern tools now run on the existing headless runner, with live tool activity and cancellation rather than retained sessions. Each ticket records its checks and deviations.
+The operator approved the specification and all 14 tickets on 2026-10-22, then asked for solo implementation in ticket order with commits as it proceeds. Tickets 01 to 09 are implemented: threaded mail, human-named management, pull channels with mentions, the operator inbox and escalation, meetings, explicit tasks and assignments, and hiring that assigns work. Inferred ledger binding and quick-model intent are removed; the directory and views use actual assignments and focus. The two one-shot intern tools now run on the existing headless runner, with live tool activity and cancellation rather than retained sessions. The pair now asks colleagues for second opinions through ordinary mail, and sees their replies in its trajectory; the hidden consultant is removed. Each ticket records its checks and deviations.
 
-Next: ticket 09, the pair asks the organization for a second opinion, then the remaining tickets in order. Live organization rollout remains separate until the implementation is complete.
+Next: ticket 10, pi_exec runs on peers, then the remaining tickets in order. Live organization rollout remains separate until the implementation is complete.
 
 ## Outcome
 

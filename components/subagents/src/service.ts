@@ -1,83 +1,5 @@
-import type { Model } from "@earendil-works/pi-ai";
-import type { EventBus, ExtensionContext, ToolDefinition } from "@earendil-works/pi-coding-agent";
-import type { ConsultantConsultationResult, ConsultationContext } from "./consultation.js";
-import type { AgentConfig, AgentRecord, ThinkingLevel } from "./types.js";
-
-export type HarnessActivityPhase = "thinking" | "tool";
-
-export interface AssistantUsageDelta {
-	input: number;
-	cacheRead: number;
-	cacheWrite: number;
-	output: number;
-	cost: number;
-}
-
-/** Bounded, sanitized role activity. Never includes IDs, paths, prompts, args, or model text. */
-export interface HarnessBoundedActivity {
-	phase: HarnessActivityPhase;
-	toolName?: string;
-	turnCount: number;
-	toolCount: number;
-	label: string;
-}
-
-export interface ManagedAgentToolPolicyCall {
-	toolName: string;
-	args: unknown;
-}
-
-export interface ManagedAgentToolPolicyResult {
-	block: true;
-	reason: string;
-	terminate?: boolean;
-}
-
-export type ManagedAgentToolPolicy = (
-	call: ManagedAgentToolPolicyCall,
-	signal?: AbortSignal,
-) => ManagedAgentToolPolicyResult | undefined | Promise<ManagedAgentToolPolicyResult | undefined>;
-
-export interface ManagedRequiredResult {
-	/** True only after the controller-owned result tool accepts a valid result. */
-	isSatisfied(): boolean;
-	/** One same-session finalization prompt after an otherwise clean prose return. */
-	repairPrompt: string;
-	/** The only tools active during finalization. */
-	toolNames: string[];
-}
-
-export interface ManagedAgentRequest {
-	type: string;
-	description: string;
-	prompt: string;
-	agentConfig: AgentConfig;
-	model?: Model<any>;
-	/** Invocation-specific system overlay appended after the agent definition. */
-	systemPrompt?: string;
-	maxTurns?: number;
-	/** Per-invocation live usage ceiling; the service aborts before another tool/turn after it is reached. */
-	maxTokens?: number;
-	/** Abort immediately at maxTurns instead of using the public soft-limit grace window. */
-	hardTurnLimit?: boolean;
-	toolExecution?: "sequential" | "parallel";
-	thinkingLevel?: ThinkingLevel;
-	cwd?: string;
-	signal?: AbortSignal;
-	toolPolicy?: ManagedAgentToolPolicy;
-	/** Controller-supplied typed result tools, available even when extensions are disabled. */
-	customTools?: ToolDefinition[];
-	/** Controller-owned structured outcome that receives one bounded same-session repair. */
-	requiredResult?: ManagedRequiredResult;
-	/** Keep only mandatory child safety extensions when false. */
-	loadStandardChildExtensions?: boolean;
-	internalOwner?: string;
-	onStarted?: (agentId: string) => void;
-	onAssistantUsage?: (usage: AssistantUsageDelta) => void;
-	onCompaction?: (info: { reason: "manual" | "threshold" | "overflow"; tokensBefore: number }) => void;
-	/** Sanitized activity for owning harness controllers. Does not change public visibility. */
-	onActivity?: (activity: HarnessBoundedActivity) => void;
-}
+import type { EventBus, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { AgentRecord, AssistantUsageDelta, HarnessBoundedActivity } from "./types.js";
 
 export interface ManagedBackgroundRequest {
 	type: string;
@@ -90,14 +12,6 @@ export interface ManagedBackgroundRequest {
 	onAssistantUsage?: (usage: AssistantUsageDelta) => void;
 }
 
-export interface ManagedConsultationRequest {
-	context: ConsultationContext;
-	/** Optional explicit inference override. Pair programmer consultations use the consultant's configured deep profile. */
-	profile?: string;
-	signal?: AbortSignal;
-	onActivity?: (activity: HarnessBoundedActivity) => void;
-}
-
 export interface ManagedBackgroundRun {
 	id: string;
 	completion: Promise<AgentRecord>;
@@ -105,11 +19,7 @@ export interface ManagedBackgroundRun {
 }
 
 export interface ManagedSubagentService {
-	runFresh(ctx: ExtensionContext, request: ManagedAgentRequest): Promise<AgentRecord>;
-	/** Start one ordinary public background AgentRecord through the owned manager. */
 	startBackground(ctx: ExtensionContext, request: ManagedBackgroundRequest): ManagedBackgroundRun;
-	/** Run one hidden, read-only consultant adjudication with pair programmer and nesting disabled. */
-	runConsultation(ctx: ExtensionContext, request: ManagedConsultationRequest): Promise<ConsultantConsultationResult>;
 	abort(agentId: string): boolean;
 }
 

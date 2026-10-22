@@ -19,7 +19,7 @@ import {
 import { buildFullParentContext } from "../src/context.js";
 import { getAgentConversation, TRANSCRIPT_TAIL_MAX_CHARS } from "../src/conversation.js";
 import { loadCustomAgents } from "../src/custom-agents.js";
-import { CONSULTANT, DEFAULT_AGENTS } from "../src/default-agents.js";
+import { DEFAULT_AGENTS } from "../src/default-agents.js";
 import installSubagents from "../src/installer.js";
 import { getAgentResumeError, resolveAgentInvocationConfig } from "../src/invocation-config.js";
 import { resolveAgentProfile } from "../src/model-routing.js";
@@ -400,7 +400,7 @@ describe("owned subagent surface", () => {
 	});
 
 	it("gives advisory roles every built-in except direct file editing", () => {
-		for (const config of [DEFAULT_AGENTS.get("explorer"), DEFAULT_AGENTS.get("researcher"), CONSULTANT]) {
+		for (const config of [DEFAULT_AGENTS.get("explorer"), DEFAULT_AGENTS.get("researcher")]) {
 			expect(config?.builtinToolNames).toEqual(
 				BUILTIN_TOOL_NAMES.filter((name) => name !== "edit" && name !== "write"),
 			);
@@ -506,7 +506,7 @@ describe("owned subagent surface", () => {
 		expect(buildBtwInjection(exchange!)).not.toContain("Because the guard is inverted.");
 	});
 
-	it("registers the two interns and the unlisted builder as built-ins; the consultant is the pair's alone", () => {
+	it("registers the two interns and the unlisted builder as built-ins", () => {
 		expect(DEFAULT_AGENT_NAMES).toEqual(["explorer", "researcher", "builder"]);
 		expect([...DEFAULT_AGENTS.keys()]).toEqual([...DEFAULT_AGENT_NAMES]);
 		expect([...DEFAULT_AGENTS.values()].map((config) => config.displayName)).toEqual([
@@ -536,15 +536,7 @@ describe("owned subagent surface", () => {
 		expect(DEFAULT_AGENTS.get("researcher")?.systemPrompt).toMatch(/cheap research intern/);
 		expect(DEFAULT_AGENTS.get("researcher")?.systemPrompt).toMatch(/retrieved primary sources/);
 		expect(DEFAULT_AGENTS.get("researcher")?.description).toMatch(/Researches external sources/);
-		expect(CONSULTANT).toMatchObject({
-			name: "consultant",
-			profile: "deep",
-			builtinToolNames: BUILTIN_TOOL_NAMES.filter((name) => name !== "edit" && name !== "write"),
-			promptMode: "replace",
-		});
-		expect(CONSULTANT.systemPrompt).toMatch(/senior software architect/);
-		for (const config of [...DEFAULT_AGENTS.values(), CONSULTANT])
-			expect(config.systemPrompt).not.toMatch(/planner|designer/);
+		for (const config of DEFAULT_AGENTS.values()) expect(config.systemPrompt).not.toMatch(/planner|designer/);
 	});
 
 	it("fails unknown, disabled, missing, and ambiguous dispatch closed", () => {

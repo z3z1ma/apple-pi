@@ -1,10 +1,7 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { abortable } from "../../../components/shared/src/abortable.js";
-import type {
-	HarnessBoundedActivity,
-	ManagedBackgroundRun,
-	ManagedSubagentService,
-} from "../../../components/subagents/src/service.js";
+import type { ManagedBackgroundRun, ManagedSubagentService } from "../../../components/subagents/src/service.js";
+import type { HarnessBoundedActivity } from "../../../components/subagents/src/types.js";
 import type { TodoController } from "./controller.js";
 import type { TodoView } from "./types.js";
 

@@ -2,11 +2,9 @@ import { defineTool, type ExtensionAPI, getMarkdownTheme } from "@earendil-works
 import { Container, Markdown, Spacer, Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { getSharedNotebook } from "../../notebook/src/shared-notebook.js";
-import { bindPrimaryRecallTools } from "../../pair-programmer/src/recall.js";
 import { abortable } from "../../shared/src/abortable.js";
 import { getActiveWorkSurface } from "../../shared/src/active-work.js";
 import { INFERENCE_PROFILE_CATALOG } from "../../shared/src/model-profiles.js";
-import { recordSidecarUsage, withSidecarUsageContext } from "../../shared/src/sidecar-usage.js";
 import { setSystemPromptSection } from "../../shared/src/system-prompt-section.js";
 import { registerWorkSection } from "../../shared/src/work-manager.js";
 import { type ResultWaitMode, resolveResultWaitMode, waitForAgentSettlement } from "./abortable.js";
@@ -17,7 +15,6 @@ import {
 	getAgentConversation,
 	getDefaultMaxTurns,
 	normalizeMaxTurns,
-	resumeAgent,
 	SUBAGENT_TOOL_NAMES,
 	setDefaultMaxTurns,
 	setGraceTurns,
@@ -32,14 +29,7 @@ import {
 } from "./agent-types.js";
 import { registerBtwCommand } from "./btw.js";
 import { inChildSessionContext } from "./child-context.js";
-import {
-	CONSULTANT_CONSULTATION_OVERLAY,
-	CONSULTANT_RESULT_REPAIR_PROMPT,
-	type ConsultantFinding,
-	renderConsultationContext,
-} from "./consultation.js";
 import { loadCustomAgents } from "./custom-agents.js";
-import { CONSULTANT } from "./default-agents.js";
 import { GroupJoinManager } from "./group-join.js";
 import { getAgentResumeError, resolveAgentInvocationConfig, resolveJoinMode } from "./invocation-config.js";
 import { INFERENCE_PROFILE_PARAMETER_SCHEMA, resolveAgentProfile } from "./model-routing.js";
@@ -54,7 +44,6 @@ import {
 import { frameOutcome } from "./outcome-framing.js";
 import { resolveAgentOutputPath } from "./output-file.js";
 import { installManagedSubagentService, type ManagedSubagentService } from "./service.js";
-import { disposeAgentSession } from "./session-lifecycle.js";
 import { applyCompleteSettings, loadSettings } from "./settings.js";
 import {
 	buildInferenceProfilesSection,
@@ -78,7 +67,6 @@ import {
 	renderRunningAgentStatus,
 	SPINNER,
 } from "./ui/agent-widget.js";
-import { addUsage } from "./usage.js";
 
 function textResult(text: string, details?: AgentDetails, isError = false) {
 	return { content: [{ type: "text" as const, text }], details: details as any, isError };
@@ -321,269 +309,7 @@ export default function installSubagents(pi: ExtensionAPI): void {
 				abort: () => manager.abort(id),
 			};
 		},
-		async runConsultation(ctx, request) {
-			bindSessionContext(ctx);
-			const agentConfig = {
-				...CONSULTANT,
-				builtinToolNames: ["read", "grep", "find", "ls"],
-				pair: false,
-				allowedSubagents: undefined,
-				persistSession: false,
-			};
-			const resolved = resolveAgentProfile({
-				registry: ctx.modelRegistry,
-				parentModel: ctx.model,
-				parentThinking: ctx.thinkingLevel,
-				config: agentConfig,
-				explicitProfile: request.profile,
-			});
-			if (resolved.error) throw new Error(resolved.error);
-			let finding: ConsultantFinding | undefined;
-			const reportTool = defineTool({
-				name: "give_second_opinion",
-				label: "Report Consultation",
-				description:
-					"Share your independent architectural assessment with the programmers. You MUST use this as your last action; assistant prose is not a result.",
-				promptSnippet: "Give the programmers your typed second opinion and end the consultation",
-				promptGuidelines: [
-					"Finish by calling give_second_opinion exactly once with arguments matching its schema.",
-					"This call is the second opinion that returns to the programmers. Do not put the disposition in assistant prose.",
-				],
-				parameters: Type.Object({
-					disposition: Type.Union([
-						Type.Literal("confirm"),
-						Type.Literal("refute"),
-						Type.Literal("refine"),
-						Type.Literal("uncertain"),
-					]),
-					severity: Type.Optional(Type.Union([Type.Literal("concern"), Type.Literal("blocker")])),
-					finding: Type.String({ minLength: 1 }),
-					evidence: Type.Array(Type.String()),
-					recommended_action: Type.Optional(Type.String()),
-					uncertainty: Type.Optional(Type.String()),
-				}),
-				constrainedSampling: { type: "json_schema", strict: "prefer" },
-				async execute(_toolCallId, params) {
-					if (finding) return textResult("A consultation disposition was already recorded.", undefined, true);
-					finding = {
-						disposition: params.disposition,
-						...(params.severity ? { severity: params.severity } : {}),
-						finding: params.finding,
-						evidence: params.evidence,
-						...(params.recommended_action ? { recommendedAction: params.recommended_action } : {}),
-						...(params.uncertainty ? { uncertainty: params.uncertainty } : {}),
-					};
-					return { ...textResult("Consultation disposition recorded."), terminate: true };
-				},
-			});
-			const usage = { input: 0, cacheRead: 0, cacheWrite: 0, output: 0, cost: 0 };
-			const startedAt = Date.now();
-			let record: AgentRecord | undefined;
-			let thrown: unknown;
-			try {
-				record = await managedService.runFresh(ctx, {
-					type: CONSULTANT.name,
-					description: "consultant consultation",
-					prompt: renderConsultationContext(request.context),
-					agentConfig,
-					model: resolved.model,
-					thinkingLevel: resolved.thinkingLevel,
-					systemPrompt: CONSULTANT_CONSULTATION_OVERLAY,
-					customTools: [reportTool, ...bindPrimaryRecallTools(ctx.sessionManager)],
-					requiredResult: {
-						isSatisfied: () => finding !== undefined,
-						repairPrompt: CONSULTANT_RESULT_REPAIR_PROMPT,
-						toolNames: [reportTool.name],
-					},
-					toolExecution: "sequential",
-					loadStandardChildExtensions: false,
-					internalOwner: `consultation:${request.context.metadata.createdAt}`,
-					cwd: request.context.metadata.cwd,
-					signal: request.signal,
-					onActivity: request.onActivity,
-					onAssistantUsage(delta) {
-						usage.input += delta.input;
-						usage.cacheRead += delta.cacheRead;
-						usage.cacheWrite += delta.cacheWrite;
-						usage.output += delta.output;
-						usage.cost += delta.cost;
-					},
-				});
-			} catch (error) {
-				thrown = error;
-			}
-			const durationMs = Date.now() - startedAt;
-			const resultStatus = finding
-				? "completed"
-				: request.signal?.aborted
-					? "cancelled"
-					: thrown || !record || ["error", "stopped", "aborted"].includes(record.status)
-						? "failed"
-						: "malformed";
-			const error =
-				thrown instanceof Error
-					? thrown.message
-					: thrown
-						? String(thrown)
-						: (record?.error ??
-							(resultStatus === "malformed" ? "The consultant returned without a typed disposition." : undefined));
-			const sessionId = ctx.sessionManager.getSessionId?.() ?? ctx.sessionManager.getSessionFile?.() ?? undefined;
-			withSidecarUsageContext({ sessionId }, () => {
-				recordSidecarUsage({
-					agent: "consultant",
-					trigger: `consultation:${request.context.metadata.source}`,
-					status: finding?.disposition ?? resultStatus,
-					provider: resolved.model?.provider,
-					model: resolved.model?.id,
-					durationMs,
-					...usage,
-				});
-			});
-			return {
-				status: resultStatus,
-				...(resultStatus === "completed" && finding ? { finding } : {}),
-				...(error ? { error } : {}),
-				usage: { ...usage, durationMs, toolCalls: record?.toolUses ?? 0 },
-			};
-		},
-		async runFresh(ctx, request) {
-			let id: string | undefined;
-			let liveTokens = 0;
-			let tokenCeilingReached = false;
-			let compacted = false;
-			const internalOwner = request.internalOwner ?? `managed:${request.type}`;
-			const tracker = createActivityTracker(
-				normalizeMaxTurns(request.maxTurns ?? request.agentConfig.maxTurns ?? getDefaultMaxTurns()),
-				() => widget.update(),
-				request.onActivity,
-			);
-			const recordUsage = (usage: Parameters<typeof tracker.callbacks.onAssistantUsage>[0]) => {
-				tracker.callbacks.onAssistantUsage(usage);
-				request.onAssistantUsage?.(usage);
-				liveTokens += usage.input + usage.output + usage.cacheWrite;
-			};
-			const { record } = await manager.spawnAndWait(
-				pi,
-				ctx,
-				request.type,
-				request.prompt,
-				{
-					description: request.description,
-					model: request.model ?? ctx.model,
-					maxTurns: request.maxTurns,
-					hardTurnLimit: request.hardTurnLimit ?? true,
-					toolExecution: request.toolExecution,
-					agentConfig: request.agentConfig,
-					systemPrompt: request.systemPrompt,
-					toolPolicy: request.toolPolicy,
-					customTools: request.customTools,
-					loadStandardChildExtensions: request.loadStandardChildExtensions,
-					internalOwner,
-					inheritContext: false,
-					thinkingLevel: request.thinkingLevel,
-					cwd: request.cwd,
-					signal: request.signal,
-					invocation: {
-						modelName: request.model ? `${request.model.provider}/${request.model.id}` : undefined,
-						thinking: request.thinkingLevel,
-						maxTurns: request.maxTurns,
-						isolated: false,
-						inheritContext: false,
-						pair: false,
-						runInBackground: false,
-					},
-					onToolActivity: tracker.callbacks.onToolActivity,
-					onTextDelta: tracker.callbacks.onTextDelta,
-					onTurnEnd: tracker.callbacks.onTurnEnd,
-					onAssistantUsage: (usage) => {
-						recordUsage(usage);
-						if (request.maxTokens !== undefined && liveTokens >= request.maxTokens && id) {
-							tokenCeilingReached = true;
-							manager.abort(id, "token_ceiling");
-						}
-					},
-					onCompaction: (info) => {
-						compacted = true;
-						request.onCompaction?.(info);
-						if (id) manager.abort(id, "compaction");
-					},
-					onSessionCreated: tracker.callbacks.onSessionCreated,
-					maxSubagentDepth: 0,
-				},
-				(agentId) => {
-					id = agentId;
-					activityById.set(agentId, tracker.state);
-					request.onStarted?.(agentId);
-				},
-			);
-			if (id) activityById.set(id, tracker.state);
-			const session = record.session;
-			try {
-				const required = request.requiredResult;
-				const canRepair =
-					required &&
-					!required.isSatisfied() &&
-					session &&
-					["completed", "steered"].includes(record.status) &&
-					!request.signal?.aborted &&
-					!tokenCeilingReached &&
-					!compacted;
-				if (canRepair) {
-					const available = new Set(session.getAllTools().map((tool) => tool.name));
-					const missing = required.toolNames.filter((name) => !available.has(name));
-					if (missing.length > 0) throw new Error(`Required result tools are unavailable: ${missing.join(", ")}`);
-					session.setActiveToolsByName(required.toolNames);
-					const repair = await resumeAgent(session, required.repairPrompt, {
-						signal: request.signal,
-						onToolActivity: (activity) => {
-							tracker.callbacks.onToolActivity(activity);
-							if (activity.type === "end") record.toolUses++;
-						},
-						onAssistantUsage: (usage) => {
-							addUsage(record.lifetimeUsage, usage);
-							recordUsage(usage);
-							if (request.maxTokens !== undefined && liveTokens >= request.maxTokens) {
-								tokenCeilingReached = true;
-								session.abort();
-							}
-						},
-						onCompaction: (info) => {
-							compacted = true;
-							record.compactionCount++;
-							request.onCompaction?.(info);
-							session.abort();
-						},
-					});
-					record.result = repair.text;
-					record.completedAt = Date.now();
-					if (required.isSatisfied()) {
-						record.status = "completed";
-						record.error = undefined;
-						record.terminationCause = undefined;
-					} else if (repair.failure) {
-						record.status = "error";
-						record.error = repair.failure;
-						record.terminationCause = "provider_error";
-					}
-				}
-				if (request.requiredResult?.isSatisfied()) {
-					record.status = "completed";
-					record.error = undefined;
-					record.terminationCause = undefined;
-				} else if (tokenCeilingReached) record.terminationCause = "token_ceiling";
-				else if (compacted || record.compactionCount > 0) record.terminationCause = "compaction";
-				else if (request.signal?.aborted) record.terminationCause = "external_cancellation";
-				else if (record.status === "steered" || record.status === "aborted") record.terminationCause = "turn_ceiling";
-				else if (record.status === "error") record.terminationCause = "provider_error";
-				return record;
-			} finally {
-				record.session = undefined;
-				await disposeAgentSession(session);
-			}
-		},
-		abort(agentId) {
-			return manager.abort(agentId);
-		},
+		abort: (id) => manager.abort(id),
 	};
 	const uninstallManagedService = installManagedSubagentService(managedService, pi.events);
 

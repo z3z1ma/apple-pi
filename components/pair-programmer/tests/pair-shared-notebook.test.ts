@@ -9,9 +9,9 @@ import { afterAll, afterEach, describe, expect, it } from "vitest";
 import { fauxModelBackend } from "../../../tests/helpers/faux-model.js";
 import { fauxSession } from "../../../tests/helpers/faux-session.js";
 import { getChildPairNotebook, getSharedNotebook, offerChildPairNotebook } from "../../notebook/src/shared-notebook.js";
+import { disposeAgentSession } from "../../subagents/src/session-lifecycle.js";
 import installPair from "../src/extension.js";
 import { createPairSession } from "../src/session.js";
-import { disposeAgentSession } from "../../subagents/src/session-lifecycle.js";
 
 const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
 const agentDir = mkdtempSync(join(tmpdir(), "apple-pi-pair-shared-agent-"));
@@ -110,7 +110,8 @@ async function childPair(childPi: ExtensionAPI, child: AgentSession, script: Arr
 		model,
 		systemPrompt: "Pair fixture.",
 		adviseTool: inertTool("share_note"),
-		escalateTool: inertTool("ask_consultant"),
+		secondOpinionTool: inertTool("ask_for_second_opinion"),
+		directoryTool: inertTool("directory"),
 		receiptTool: inertTool("expand_receipt"),
 		attentionTool: inertTool("set_pair_attention"),
 		sharedNotebook: getChildPairNotebook(childPi.events),

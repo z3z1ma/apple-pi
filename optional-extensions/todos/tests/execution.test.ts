@@ -24,7 +24,6 @@ describe("TodoExecution", () => {
 						throw new Error("disabled");
 					},
 					abort: () => false,
-					runFresh: async () => null,
 				}) as any,
 		);
 		expect(execution.execute([1]).errors).toEqual([{ id: 1, error: "disabled" }]);
@@ -52,7 +51,6 @@ describe("TodoExecution", () => {
 						abort: () => true,
 					}),
 					abort: () => false,
-					runFresh: async () => null,
 				}) as any,
 		);
 		const batch = execution.execute([1, 2, 99]);
@@ -113,7 +111,6 @@ describe("TodoExecution", () => {
 						};
 					},
 					abort: () => false,
-					runFresh: async () => null,
 				}) as any,
 			{ onManagedCompletion: managedCompletions },
 		);

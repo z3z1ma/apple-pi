@@ -48,10 +48,9 @@ import {
 } from "./nested-tools.js";
 import { addToolGuidanceSections, buildAgentPrompt, type PromptExtras } from "./prompts.js";
 import { assistantMessageMarker } from "./response-marker.js";
-import type { AssistantUsageDelta, ManagedAgentToolPolicy } from "./service.js";
 import { disposeAgentSession } from "./session-lifecycle.js";
 import { preloadSkills } from "./skill-loader.js";
-import type { AgentConfig, SubagentType, ThinkingLevel } from "./types.js";
+import type { AgentConfig, AgentToolPolicy, AssistantUsageDelta, SubagentType, ThinkingLevel } from "./types.js";
 
 export { getAgentConversation } from "./conversation.js";
 
@@ -197,7 +196,7 @@ export interface RunOptions {
 	/** Invocation-level guidance appended after the selected definition and skills. */
 	systemPrompt?: string;
 	/** Enforcement that runs before the session's existing beforeToolCall hook. */
-	toolPolicy?: ManagedAgentToolPolicy;
+	toolPolicy?: AgentToolPolicy;
 	/** Controller-supplied SDK tools, independent of extension discovery. */
 	customTools?: ToolDefinition[];
 	/** Disable ledger, session-search, MCP, and optional pair programmer; fast mode and both safety guards remain mandatory. */

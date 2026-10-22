@@ -1,15 +1,15 @@
 # The pair programmer
 
-The pair programmer gives the main agent a persistent, read-only pair programming partner. They follow the same work with the economical `pair` inference profile, keep a sourced notebook, share concise notes when they spot a concrete problem, and can ask the **consultant** teammate, using the deep profile, for an independent architectural opinion.
+The pair programmer gives the main agent a persistent, read-only pair programming partner. They follow the same work with the economical `pair` inference profile, keep a sourced notebook, share concise notes when they spot a concrete problem, and can ask a colleague in the [organization](organization.md) for an independent opinion by mail.
 
 The responsibilities are distinct:
 
 1. **Main agent** has the keyboard, speaks to the user, implements, decides, and validates.
 2. The **pair programmer** keeps a second line of thought while following the work. Both programmers curate the shared notebook.
-3. The **consultant** is a senior software architect who joins episodically for difficult, consequential questions.
+3. **Colleagues** answer second-opinion requests as ordinary people in the organization, using their roles and minds.
 4. **Review** remains a separate end-to-end activity when requested.
 
-The two programmers are peers with different capabilities in this session. The main agent does not direct or manage its partner. There is no mode selector for the pair programmer and no second persistent pairing role.
+The two programmers work together with different capabilities in this session. The pair is a sidecar, not a separate person in the organization. The main agent does not direct or manage its partner. There is no mode selector for the pair programmer and no second persistent pairing role.
 
 ## Configuration
 
@@ -21,7 +21,7 @@ The pair programmer's state lives at `${PI_CODING_AGENT_DIR:-~/.pi/agent}/.pair-
 }
 ```
 
-The pair programmer always uses the user-global `pair` model profile. The consultant uses the `deep` profile.
+The pair programmer always uses the user-global `pair` model profile. A colleague uses its catalog role's mind, not a separate consultant profile.
 
 ```json
 {
@@ -29,10 +29,6 @@ The pair programmer always uses the user-global `pair` model profile. The consul
     "pair": {
       "model": "provider/economical-model",
       "thinking": "medium"
-    },
-    "deep": {
-      "model": "provider/deep-model",
-      "thinking": "high"
     }
   }
 }
@@ -45,7 +41,7 @@ Commands:
 - `/pair off`
 - `/pair notebook [full]`
 
-Disabling the pair programmer cancels queued and active consultant consultations.
+Disabling the pair programmer drops its staged requests and stops waiting for in-flight sends. Mail already accepted by the runtime remains ordinary mail.
 
 ## Behavior
 
@@ -53,16 +49,17 @@ The pair programming partner shares the main agent's screen rather than operatin
 
 - recent user requests from the main session;
 - the main agent's reasoning, text, tool calls, successful write previews, edit diffs, failures, and compact work receipts;
-- active task and assumption context;
-- the current shared learnings, refreshed before each model request;
+- mail received by the main session, labeled as mail rather than user direction;
+- the current shared learnings;
 - optional global or trusted-project `PAIR.md` guidance.
 
-`PAIR.md` is contextual pairing input. It cannot grant tools or force the partner to ask the consultant.
+`PAIR.md` is contextual pairing input. It cannot grant tools or force the partner to ask for a second opinion.
 
 The partner has a deliberately narrow typed toolset:
 
 - `share_note` stages one useful intervention for frontier confirmation: either a current, actionable `nit`, `concern`, or `blocker`, or a precise `question` that asks the driver to explain something or expose specific missing evidence;
-- `ask_consultant` asks the software architect for an independent opinion on a consequential `concern` or `blocker`;
+- `ask_for_second_opinion(question, to?)` asks a colleague for an independent opinion;
+- `directory` reads the main session's organization, including roles, managers, tasks, and track records;
 - `update_notebook` records learnings the driver missed and merges duplicates; full reviews list every open learning to retain;
 - `expand_receipt` opens one historical payload folded behind a receipt already shown on the shared trajectory;
 - `revisit_note` follows a known notebook ID to its primary-session source evidence;
@@ -72,13 +69,11 @@ A receipt is a host-issued capability, not a path or query. It is bound to the i
 
 Visual inspection requires the model selected by the `pair` profile to declare image input support. Pi replaces image blocks with its normal unsupported-image placeholder for a text-only model.
 
-A review attempt commits its staged notes, consultant requests, and notebook update only after one complete successful response. Failed, aborted, truncated, timed-out, and stale attempts publish none of those effects. The pair programmer's instructions require distinct findings to be ordered by severity and shared once, while findings with one root cause are consolidated. The host does not silently discard findings by count.
+A review attempt commits its staged notes, second-opinion requests, and notebook update only after one complete successful response. Failed, aborted, truncated, timed-out, and stale attempts publish none of those effects. The pair programmer's instructions require distinct findings to be ordered by severity and shared once, while findings with one root cause are consolidated. The host does not silently discard findings by count.
 
-The partner can curate the notebook but cannot navigate the repository, search the primary transcript, invoke arbitrary agents, run shell commands, call MCP or `pi_exec`, mutate repository state, or use arbitrary extension tools. This keeps its attention on user intent and the driver's trajectory. Broader repository investigation belongs to the main agent, the episodic consultant, or explicit review. `ask_consultant` requests a host-owned consultation rather than directly dispatching a sub-agent. The host retains routing, context assembly, throttling, cancellation, stale-result checks, and delivery.
+The partner can curate the notebook but cannot navigate the repository, search the primary transcript, invoke arbitrary agents, run shell commands, call MCP or `pi_exec`, mutate repository state, or use arbitrary extension tools. This keeps its attention on user intent and the driver's trajectory. Broader repository investigation belongs to the main agent, its colleagues, or explicit review. The pair can read the directory and compose a question; it has no peer-management tools.
 
-Free-form prose does not start a consultant consultation. The pair prompt gives the model room to exercise independent technical judgment while asking it to calibrate certainty and preserve the value of an interruption. A note is appropriate only when, without it, the main agent would likely deliver a wrong result or waste significant effort. A question is appropriate only when the absent evidence could materially change that judgment and no shown receipt answers it. The prompt asks for the lowest fitting severity, one or two sentences per note, and each issue raised once. Ordinary uncertainty, progress narration, praise, resolved issues, and an all-clear remain silent.
-
-One conservative repeated-failure gate may also ask the consultant for help: the exact same failing bash command must fail three times in the recent work. A successful run resets that signal.
+Free-form prose does not send mail. The pair prompt gives the model room to exercise independent technical judgment while asking it to calibrate certainty and preserve the value of an interruption. A note is appropriate only when, without it, the main agent would likely deliver a wrong result or waste significant effort. A question is appropriate only when the absent evidence could materially change that judgment and no shown receipt answers it. The prompt asks for the lowest fitting severity, one or two sentences per note, and each issue raised once. Ordinary uncertainty, progress narration, praise, resolved issues, and an all-clear remain silent.
 
 ### Pair of a coding child
 
@@ -100,7 +95,7 @@ Consecutive exploration, execution, mutation, or verification steps accumulate r
 
 The pair can use `set_pair_attention` as its final action to select `close`, `routine`, or `relaxed` attention and choose normal wake conditions such as mutation, verification, delegated result, or another phase transition. The host always retains orientation, failure, terminal, starvation, and frontier-confirmation wakeups. Failed, aborted, truncated, or stale attempts commit no attention change.
 
-A claim remains owned until its complete transactional response succeeds, then commits in order. Failed or incomplete claims remain exact retry work and never advance the committed frontier. Newer evidence or a later starvation checkpoint can retry that claim; the runtime does not spin a whole-review retry loop. Every main-agent turn returns without awaiting pair construction, model work, tool calls, retry delay, consultant work, or delivery preparation.
+A claim remains owned until its complete transactional response succeeds, then commits in order. Failed or incomplete claims remain exact retry work and never advance the committed frontier. Newer evidence or a later starvation checkpoint can retry that claim; the runtime does not spin a whole-review retry loop. Every main-agent turn returns without awaiting pair construction, model work, tool calls, retry delay, mail delivery, or delivery preparation.
 
 Every direct finding or question is initially held with a stable host id. A newly raised intervention expedites the next frontier review: queued newer evidence is reviewed immediately, otherwise the next completed primary step bypasses normal pacing. Repeating the finding with its id confirms it for nonterminal delivery; silence withdraws it. A confirmed intervention steers at the next safe assistant boundary. Interventions first raised by the successful review covering the terminal turn are already current and can trigger a correction run without an impossible extra review.
 
@@ -116,44 +111,21 @@ The pair programmer also uses:
 
 Construction failure remains visible and retryable; the pair programmer does not fall back to a weaker raw-agent path.
 
-## Consultant consultation
+## Second opinions
 
-The host assembles consultation context from the main session and current checkout. The pair programming partner supplies the concern, not the packet.
+The pair asks with `ask_for_second_opinion(question, to?)`. With no `to`, the recipient is the main session's manager. With no manager, the tool refuses and asks the pair to name someone; it says when there is nobody else in the organization. The operator is contacted only when explicitly named. Names and session ids use the same addressing rules as ordinary mail.
 
-The packet includes:
+The question is staged until the pair finishes a complete, current review. It then starts a mail thread in the main session's name, marked as from its pair. Delivery status is appended to the private pair conversation without starting another review; a failed send also gives the operator a warning. The main session and recipient are participants, so a reply reaches the main session through the normal mail path. The pair sees that reply in the live trajectory and in later reseeds, labeled as mail rather than as operator instructions.
 
-- the current and immediately relevant prior requests;
-- compact trajectory, validation, and failure receipts;
-- Git status, changed paths, diff stat, and full current diff;
-- demand-paged evidence handles;
-- the partner's concern, clearly labeled as a colleague's hypothesis rather than evidence.
-
-The extension imposes no character ceiling on consultation packets or Git diffs. Pi and the selected model own context-window behavior.
-
-The consultant joins as a fresh, foreground, hidden managed teammate. The consultation prompt presents the consultant as a senior software architect giving two programmers an independent second opinion. The consultant receives only read-only repository tools, primary-bound `revisit_note` and `search_session`, and the private typed `give_second_opinion` result tool. It does not receive the pair programmer sidecar, nested agents, `pi_exec`, mutation tools, ledger mutation tools, MCP, or project extension discovery.
-
-The host accepts only a validated `give_second_opinion` call as the consultation result. If the consultant ends with prose instead, the managed runner keeps the same session alive, disables every tool except `give_second_opinion`, and allows one finalization turn. Prose is never parsed into a disposition.
-
-The consultant returns exactly one disposition:
-
-- `confirm`
-- `refute`
-- `refine`
-- `uncertain`
-
-Only typed `confirm` and `refine` findings are eligible for delivery. Refutations and uncertain dispositions are recorded but are not delivered as warnings.
+There is no hidden consultant process, typed disposition, automatic repeated-failure gate, hypothesis packet, consultation throttle, or working-tree fingerprint check. A colleague answers the question as normal work, and the main session judges its evidence.
 
 ## Routing and delivery
 
-Only one consultant consultation runs at a time. Distinct requests queue. Equivalent concerns with unchanged evidence are collapsed; materially new evidence or higher severity remains eligible. Consultation starts are separated by four main-session turns. There is no lifetime or per-task consultation maximum.
+Input review and output delivery are separate. The pair keeps consuming the trajectory during an advisory-triggered correction run. Frontier-confirmed findings of every severity are steered at assistant-turn boundaries. Terminal delivery waits for a successful pair review that covers the final turn. Findings raised by that review can trigger a correction run after settlement. Delivery bookkeeping changes only after Pi accepts the send; a send failure leaves findings ready for retry without another confirmation.
 
-Input review and output delivery are separate. The pair programmer continues consuming every trajectory delta, including an advisory-triggered correction run. Frontier-confirmed findings of every severity are sent through Pi's `steer` path at assistant-turn boundaries, so they can enter an active run before its next model step without aborting the response in flight. Terminal delivery waits until a successful pair programmer review covers the final turn; findings raised by that current review can trigger a correction run after settlement. Direct pair programmer findings do not wait for consultant consultation, working-state recapture, or consultant validation. Before a consultant finding is delivered, the host recaptures working-state fingerprints for the whole checkout or implicated paths. A stale result is recorded but not delivered. Equivalent direct and consultant findings collapse across sources, while distinct material findings remain visible. Delivery bookkeeping changes only after Pi accepts the send; a send failure leaves direct findings ready for retry without requiring another confirmation.
+An advisory-triggered correction episode suppresses further outbound advice, while input consumption continues. The next user message reopens advice delivery. Second-opinion replies are ordinary mail, not a second path for injecting pair findings.
 
-An advisory-triggered correction episode suppresses further outbound advice to avoid recursive steering, but it never suppresses pair programmer input consumption. The next user message reopens outbound delivery.
-
-Asking the consultant is a request to investigate, not a finding. If the consultant fails, is cancelled, or does not submit a valid typed disposition after finalization, the host records the operational outcome and delivers nothing to the main agent. It never promotes the original concern or harness failure text into a note. Shutdown, session replacement, handoff, and pair programmer disablement cancel late delivery.
-
-In the TUI, each note occupies one plain bullet row: `● TYPE text`, with a color-coded circle and `CONCERN`, `BLOCKER`, `QUESTION`, or `NIT` label. Consultant findings also identify their source. Single notes and batches use the same rows, without a heading, border, or leading or trailing blank lines. Whitespace is flattened and long text is truncated to the terminal width. Pi's expand toggle for tool output leaves these rows unchanged. The main agent always receives the full text.
+In the TUI, each note occupies one plain bullet row: `● TYPE text`, with a color-coded circle and `CONCERN`, `BLOCKER`, `QUESTION`, or `NIT` label. Historical consultant findings keep their source label. Single notes and batches use the same rows, without a heading, border, or leading or trailing blank lines. Whitespace is flattened and long text is truncated to the terminal width. Pi's expand toggle for tool output leaves these rows unchanged. The main agent always receives the full text.
 
 A delivered note remains a colleague's judgment. The main agent gives it serious consideration, inspects the current code, decides whether to act, implements, and validates.
 
@@ -167,16 +139,10 @@ Every direct finding or question receives a stable host-generated id for frontie
 
 Acknowledgment does not claim implementation or validation. The acknowledgment tool call, including its disposition and reason, is presented to the pair programmer in the next trajectory delta as direct feedback. The first subsequent assistant run is the normal acknowledgment opportunity. Once Pi reports the primary session settled, the host sends one reminder for any remaining material findings. If they remain open after the reminder run, the host records them as unacknowledged and stops; it does not create a third reminder or an autonomous loop. Acknowledgment and unacknowledged outcomes are append-only session telemetry and are restored across session reload or branch selection.
 
-## Direct consultant use
-
-The main agent can invoke the consultant through `agent` as an ordinary advisory sub-agent. That public path has the standard child extensions and all built-in tools except `edit` and `write`, uses the normal agent prompt and optional `inherit_context`, and does not expose the pair programmer's harness context or typed adjudication protocol. The hidden consultation remains restricted to its own read-only tools.
-
-The partner's `ask_consultant` path uses a separate, hidden host operation. It cannot be selected through `agent` parameters.
-
 ## Status and accounting
 
-The footer uses `q-pair` and shows pair programmer review plus consultant queued, running, or ready state. `/pair` reports direct findings, pending material acknowledgments, consultant dispositions, suppressions, stale results, usage, cost, and duration.
+The footer uses `q-pair` and shows pair review activity and cost. `/pair` reports findings, pending material acknowledgments, review pacing, notebook state, usage, and context size.
 
-Sidecar telemetry records `pair` and `consultant` calls separately. Every provider request made within one logical pair review carries the same privacy-safe review id, checkpoint reason, accumulated item/token counts, active wait, and attention level. This distinguishes review frequency from pair-side tool continuations without persisting trajectory, command, path, receipt, hypothesis, or finding text. Consultation outcomes remain structural session entries with source, disposition, delivery/staleness state, trigger features, usage, and explicit unknown adoption and validation outcomes.
+Sidecar telemetry records the pair's model calls. Every request within one review carries the same privacy-safe review id, checkpoint reason, batch item/token counts, active wait, and attention level. This distinguishes review frequency from pair-side tool continuations without persisting trajectory, command, path, receipt, question, or finding text. Colleagues' work is accounted for in their own sessions.
 
-The pair programmer and the consultant use primary-bound recall. Neither starts another notebook-maintenance actor. Pi owns provider prompt caching; the extension only keeps stable prompt prefixes.
+The pair programmer uses primary-bound recall and starts no second notebook-maintenance actor. Pi owns provider prompt caching; the extension only keeps stable prompt prefixes.
