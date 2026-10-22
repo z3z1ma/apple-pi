@@ -19,6 +19,7 @@ export default defineConfig({
 			"components/server-compaction/tests/**/*.test.ts",
 			"components/subagents/tests/**/*.test.ts",
 			"components/interns/tests/**/*.test.ts",
+			"components/btw/tests/**/*.test.ts",
 			"components/notify/tests/**/*.test.ts",
 			"components/tmux-sessions/tests/**/*.test.ts",
 			"components/session-state/tests/**/*.test.ts",

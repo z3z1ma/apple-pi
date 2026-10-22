@@ -27,7 +27,6 @@ import {
 	resolveSpawnType,
 	setDefaultsDisabled,
 } from "./agent-types.js";
-import { registerBtwCommand } from "./btw.js";
 import { inChildSessionContext } from "./child-context.js";
 import { loadCustomAgents } from "./custom-agents.js";
 import { GroupJoinManager } from "./group-join.js";
@@ -244,7 +243,6 @@ export default function installSubagents(pi: ExtensionAPI): void {
 		},
 	);
 	widget = new AgentWidget(manager, activityById, getActiveWorkSurface(pi));
-	registerBtwCommand(pi, manager);
 
 	const managedService: ManagedSubagentService = {
 		startBackground(ctx, request) {

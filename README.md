@@ -337,7 +337,7 @@ Meanwhile, when you genuinely *do* need multiple agents—either to offload a no
 flowchart TB
     subgraph SwapSpace["A. Context Swap Space (components/subagents)"]
         Parent["Primary Agent"] -->|Spawns scoped teammate| Child["Subagent Session<br/>(agent-manager.ts / agent-runner.ts)"]
-        Parent -.->|Private read-only side conversation| BTW["/btw<br/>(btw.ts / btw-viewer.ts)"]
+        Parent -.->|Private read-only side conversation| BTW["/btw<br/>(components/btw)"]
         Child -->|Works in its own persisted Pi session| Child
         Child -->|"Final report after in-band review<br/>(completion-reflection.ts / outcome-framing.ts)"| Parent
     end
@@ -358,7 +358,7 @@ flowchart TB
 1. **Subagents as Context Swap Space (`components/subagents`):**
    * When the main agent needs to investigate a gnarly bug or audit a subsystem, it brings in a named teammate (`agent-manager.ts`, `agent-runner.ts`) in its own foreground or background Pi session, with tool scope, skills, and model profile set by the teammate's definition and an optional turn limit.
    * The child works in its own persisted session context, and hands the parent a framed result (`outcome-framing.ts`). A child with `edit` or `write` tools first reviews its own changes and records learnings in the primary notebook (`completion-reflection.ts`).
-   * For the human operator, `/btw` (`btw.ts`, `ui/btw-viewer.ts`) opens a private, read-only side conversation seeded with recent parent text, so you can ask a tangent question without adding its turns to the main agent's context. You can inject an answer into the main conversation when you want it there.
+   * For the human operator, `/btw` (`components/btw`) directly owns a private, read-only SDK side conversation seeded with recent parent text, so you can ask a tangent question without adding its turns to the main agent's context. You can inject an answer into the main conversation when you want it there.
 2. **Parallel Branch Tournaments (`components/branch-search`):**
    * Ousterhout’s *A Philosophy of Software Design* argues that you should **Design It Twice**—because your first design is rarely the cleanest. When creation is cheap, why only *design* it twice when you can *implement* it three times in parallel?
    * The `search_branches` tool (`orchestrator.ts`, `workspace.ts`) snapshots the workspace, asks a fork of the conversation for distinct approaches, and runs each one as its own conversation fork in an isolated git worktree. It then runs the agent's gate commands (such as the test suite) and numeric judge commands (time, size, any score a command can print), ranks the attempts that pass by the judges' medians, optionally lets a `judge.profile` model choose among them (`judge.ts`), applies the winner's diff, and keeps a `record.json` of every attempt (`record.ts`). It stays off until `~/.pi/agent/branch-search.json` exists (copy `branch-search.example.json`).
@@ -421,7 +421,8 @@ The codebase enforces a strict separation between **implementation machinery** (
 | *(none)* | `ledger.ts` | `ledger_add` and `ledger_status` tools and the `.ledger` workbench prompt contract. |
 | `pair-programmer` | `pi-pair.ts` | Asynchronous pair programming partner. Turn deltas and receipts (`receipts.ts`), receipt expansion (`receipt-expansion.ts`), checkpoint review scheduling (`review-scheduler.ts`), second-opinion mail (`second-opinion.ts`), and finding acknowledgments (`acknowledgments.ts`). |
 | `interns` | `interns.ts` | Cheap one-shot `explore` and `research` tools: fixed reading prompts, the `quick` profile, live tool activity, cancellation, and no retained process or transcript. See [interns](docs/interns.md). |
-| `subagents` | `subagents.ts` | The older `explorer`, `researcher`, and unlisted `builder` types (`default-agents.ts`); scoped child agent lifecycle (`agent-manager.ts`, `agent-runner.ts`), outcome framing (`outcome-framing.ts`), completion reflection (`completion-reflection.ts`), the private read-only `/btw` side conversation (`btw.ts`), clarify dialogs, and TUI conversation viewers. |
+| `btw` | `btw.ts` | One directly owned private, read-only SDK conversation and answer-first overlay (`session.ts`, `ui/viewer.ts`). See [BTW](docs/btw.md). |
+| `subagents` | `subagents.ts` | The older `explorer`, `researcher`, and unlisted `builder` types (`default-agents.ts`); scoped child agent lifecycle (`agent-manager.ts`, `agent-runner.ts`), outcome framing (`outcome-framing.ts`), completion reflection (`completion-reflection.ts`), clarify dialogs, and public TUI conversation viewers. |
 | `branch-search` | `branch-search.ts` | `search_branches`: parallel approach attempts as conversation forks in isolated git worktrees (`workspace.ts`, `orchestrator.ts`), scored by caller-written gates and numeric judge commands, with an optional judge-profile model (`judge.ts`, `report.ts`). |
 | `code-context` | `code-context.ts` | Delivers `.context/<path>.md` context files on top-level reads and blocks a top-level `edit`/`write` of a file only while its context file exists and its current marker is not in context (`installer.ts`); `context_lint` (`lint.ts`). |
 | `session-search` | `context.ts` (via `session-search.ts`) | `search_session` over this session's transcript, tool calls, and write/edit payloads: active lineage by default (`lineage.ts`), file scopes (`recall-scope.ts`), and progressive drill-down (`drill-down.ts`). |

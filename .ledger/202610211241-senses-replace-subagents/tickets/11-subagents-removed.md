@@ -11,7 +11,7 @@
 **Scope change approved during 11:** The operator approved deleting `optional-extensions/` and its related tests. Remove the Todos and Backlog implementations, packaging and validation entries, and documentation. This supersedes the earlier plan to migrate Todos from the managed background service to peers; that dependency disappears with its consumer.
 
 - [ ] The package-load test shows none of the four subagent tools and no `<subagent-team>` section, with `explore` and `research` present.
-- [ ] `/btw` opens, answers, takes a follow-up, and is dismissed as before (its existing tests pass against the new owner).
+- [x] `/btw` opens, answers, takes a follow-up, and is dismissed as before (its existing tests pass against the new owner). Twenty-eight checks cover the preserved view and the directly owned SDK session, including startup/compaction cancellation and late cleanup; see [implementation notes](../implementation-11.md).
 - [ ] The work panel has the Tasks and Pi Exec tabs only, and no active-agent widget appears.
 - [ ] No session writes a `child` row to the runtime.
 - [ ] No skill or prompt names a removed tool (a repository grep in the test suite).

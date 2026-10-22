@@ -35,7 +35,7 @@ apple-pi contains modified source imports and pinned runtime dependencies. apple
 - Imported commit: `377f1d2a04c038d934903eeffb0dcc1c4edb3697`
 - Upstream version at import: `0.1.9`
 - Author named by the source package: Thomas Mustier
-- Local paths: `extensions/compaction-safety.ts`, `extensions/auto-compact.ts`; explicit child/worker loading in `components/subagents/src/agent-runner.ts` and `components/pi-exec/src/agent-workers.ts`
+- Local paths: `extensions/compaction-safety.ts`, `extensions/auto-compact.ts`; explicit loading in `components/interns/src/runner.ts`, `components/btw/src/session.ts`, and the legacy `components/subagents/src/agent-runner.ts`
 - License: MIT
 - Original notice: `Copyright (c) 2026 Thomas Mustier`
 - apple-pi retains the upstream fail-closed goal, but no longer replaces provider streams, produces a synthetic assistant response, or supplies a cut-point fallback. Pi owns automatic compaction and oversized-result cut-point selection; Apple Pi aborts the active continuation when automatic compaction fails or is cancelled. The implementation omits upstream's provider interception, separate config file, rules engine, status command, dedicated compaction-model selection, and policy event protocol.
@@ -54,7 +54,7 @@ apple-pi contains modified source imports and pinned runtime dependencies. apple
 - Imported commit: `5f8dedad1e8d80322b71020f2b5ddc8ab348c30f`
 - Upstream version at import: `0.16.1`
 - Author named by the source package: tintinweb
-- Local paths: `components/subagents/`, `extensions/subagents.ts`
+- Local paths: `components/subagents/`, `extensions/subagents.ts`; retained presentation helpers in `components/btw/src/ui/`
 - License: MIT
 - Original notice: `Copyright (c) 2026 tintinweb`
 - Adopted code was substantially reduced and integrated. Retained responsibilities include Markdown agent discovery, Pi AgentSession execution, foreground/background management, nested delegation, result/steering tools, usage and compaction tracking, passive above-editor activity, and the conversation viewer. Worktree isolation, scheduling, prompt mentions, plugin-local memory, duplicate output transcripts, cross-extension RPC, below-editor Fleet navigation, and model-scope policy were removed.
@@ -161,6 +161,6 @@ No source code was copied from these projects:
 
 - `pi-blackhole` (`49ab560`) and Sting8k's `pi-vcc` (`09c4a74`) informed the single compaction owner and progressive touched-file / `#N:path` recall design. Their unified and reverse-recall implementations were not adopted.
 - `pi-fabric` (`843dadb`) informed `pi_exec`'s guest program, host-tool and registered-extension bridge, programmable subagents, durable nested traces, code preview, live-call rendering, and activity-widget concepts. apple-pi independently implements the execution-focused runtime with Node's standard worker and VM modules.
-- `pi-btw` (`763850adf8c51e1dbc13765ad1197e20853ab631`, <https://github.com/QuangThai/pi-btw>) informed the private `/btw` side-conversation, answer-first UI, and explicit injection behavior. apple-pi independently implements them on the existing owned child-session manager and Pi TUI primitives; no upstream source code, RPC process layer, slot system, settings, logs, fallback inference, or history store was copied.
+- `pi-btw` (`763850adf8c51e1dbc13765ad1197e20853ab631`, <https://github.com/QuangThai/pi-btw>) informed the private `/btw` side-conversation, answer-first UI, and explicit injection behavior. apple-pi independently implements them with one directly owned private Pi SDK session and Pi TUI primitives; no upstream source code, RPC process layer, slot system, settings, logs, fallback inference, or history store was copied.
 - Plannotator (<https://github.com/backnotprop/plannotator>) informed the browser review pages: a local page that returns anchored feedback to the agent, and the rule that every changed file appears in a guide. No source code was copied.
 - Geoffrey Huntley's Ralph writings (<https://ghuntley.com/ralph/> and <https://ghuntley.com/loop/>) informed the fresh-context, one-increment-per-loop, deterministic-stack, backpressure, and outer-harness model. No source code was copied.

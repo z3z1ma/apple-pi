@@ -14,9 +14,16 @@ The intern tools now own `components/interns/src/runner.ts`. The old worker reso
 
 The move exposed a concrete mismatch: the existing prompt and `docs/interns.md` promise a shell for inspection and source retrieval, but the reused read/grep/find/ls constant omitted it. The CLI assertion failed before the correction (`/tmp/apc11-intern-shell-red.log`); the new fixed tool set includes bash and excludes edit/write. All 20 focused tests passed, including real fixture process death on Esc and shutdown (`/tmp/apc11-intern-green.log`). Context lint passed (127 files), and Node/web typecheck and loader passed. The six intern checks were rerun after strengthening shutdown coverage to await the second of two overlapping shutdown events (`/tmp/apc11-intern-lifecycle-final.log`).
 
+## Private BTW session
+
+`components/btw/` and `extensions/btw.ts` now directly own one in-memory SDK session. The old manager no longer registers the command; its BTW source, viewer, and two test files are removed. The overlay retains its layout, streaming answers, follow-up composer, copy/injection, stop, clear, and dismiss behavior. Parent context remains an append-only per-visit delta. The selected parent model runtime is borrowed, not disposed; only fast mode and mandatory safety extensions load. Native SDK statistics replace the old lifetime accumulator.
+
+Lifecycle tests cover a session created after navigation, overlapping clear/shutdown, active-turn cancellation, cancellation during prompt preparation and automatic compaction, and parent usability after BTW closes. A failed preflight originally reported the question as accepted; the red test is `/tmp/apc11-btw-accept-red.log`. Acceptance now follows the native run-start event, so failed questions retain their parent snapshot for retry. Stop aborts both before and after that boundary: compaction may already be active, or a prompt may still be preparing before cancellation can reach its run. Slash-led questions remain literal during steering.
+
+All 28 BTW checks passed (`/tmp/apc11-btw-startup.log`), including real SDK turns and compaction on the faux model. The preceding run passed 88 checks across BTW and the surviving legacy subagent suite, plus Node/web typecheck and package loading (`/tmp/apc11-btw-{final,types-final,loader}.log`). Post-change Node/web typecheck and loader passed (`/tmp/apc11-btw-{types-complete,loader-complete}.log`); the package dry run lists all six new runtime files and no removed BTW source paths (`/tmp/apc11-btw-pack.log`). Repository format/lint checks passed with the existing notch-test warning; context lint passed for 129 files. No paid model or live runtime was used.
+
 ## Remaining owners
 
-- `/btw` keeps one private read-only session directly. Preserve its view, follow-up, stop, dismiss, and lifecycle tests while removing its dependence on AgentManager and AgentRecord.
 - The work panel keeps Tasks and Pi Exec. Remove the Agents view, active-agent rendering/count, public conversation inspection, four tools, and team/profile prompt sections.
 - Remove the in-process child context, notebook capability, completion reflection, nesting, and clarify paths. Update root-only guards and bridge behavior at their owners; ordinary peers are root sessions.
 - Remove the approved global `grafana-debugger.md` definition. Update packaging, current docs, and tests for the surviving behavior.

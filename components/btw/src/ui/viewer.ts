@@ -17,19 +17,10 @@ import {
 	visibleWidth,
 	wrapTextWithAnsi,
 } from "@earendil-works/pi-tui";
-import { extractText } from "../context.js";
-import type { AgentRecord } from "../types.js";
-import { getLifetimeTotal, getSessionContextPercent } from "../usage.js";
-import {
-	type AgentActivity,
-	buildInvocationTags,
-	describeActivity,
-	fgPreservingNestedStyles,
-	formatDuration,
-	formatSessionTokens,
-	type Theme,
-} from "./agent-widget.js";
 import { createViewerKeys, type ViewerKeybindings, type ViewerKeys } from "../../../shared/src/viewer-keys.js";
+import { extractText } from "../context.js";
+import type { BtwViewState } from "../session.js";
+import { fgPreservingNestedStyles, formatDuration, formatSessionTokens, type Theme } from "./presentation.js";
 
 /** Base lines consumed by chrome: top border + header + header sep + footer sep + footer + bottom border. */
 const CHROME_LINES_BASE = 6;
@@ -83,16 +74,15 @@ export class BtwViewer implements Component {
 	constructor(
 		private tui: TUI,
 		private session: AgentSession,
-		private record: AgentRecord,
+		private record: BtwViewState,
 		private theme: Theme,
 		private done: (result: undefined) => void,
 		keybindings?: ViewerKeybindings,
 		actionsOrOptions?: BtwViewerActions,
-		private activity?: AgentActivity,
 	) {
 		this.keys = createViewerKeys(keybindings);
 		this.actions = actionsOrOptions ?? {};
-		this.unsubscribe = session.subscribe(() => {
+		this.unsubscribe = record.subscribe(() => {
 			if (this.closed) return;
 			this.tui.requestRender();
 		});
@@ -227,11 +217,12 @@ export class BtwViewer implements Component {
 		const duration = formatDuration(this.record.startedAt, this.record.completedAt);
 
 		const headerParts: string[] = [duration];
-		const toolUses = this.activity?.toolUses ?? this.record.toolUses;
+		const toolUses = this.record.toolUses;
 		if (toolUses > 0) headerParts.unshift(`${toolUses} tool${toolUses === 1 ? "" : "s"}`);
-		const tokens = getLifetimeTotal(this.activity?.lifetimeUsage ?? this.record.lifetimeUsage);
+		const usage = this.record.lifetimeUsage;
+		const tokens = usage.input + usage.output + usage.cacheWrite;
 		if (tokens > 0) {
-			const percent = getSessionContextPercent(this.activity?.session ?? this.record.session);
+			const percent = this.session.getContextUsage()?.percent ?? null;
 			headerParts.push(formatSessionTokens(tokens, percent, th, this.record.compactionCount));
 		}
 
@@ -318,7 +309,7 @@ export class BtwViewer implements Component {
 	// ---- State Helpers ----
 
 	private isStoppable(): boolean {
-		return !!this.actions.onStop && (this.record.status === "running" || this.record.status === "queued");
+		return !!this.actions.onStop && this.record.status === "running";
 	}
 
 	private canAsk(): boolean {
@@ -355,8 +346,8 @@ export class BtwViewer implements Component {
 	}
 
 	private invocationLine(): string | undefined {
-		const { modelName, tags } = buildInvocationTags(this.record.invocation);
-		const parts = modelName ? [modelName, ...tags] : tags;
+		const { modelName, thinking } = this.record.invocation;
+		const parts = [modelName, `thinking: ${thinking}`, "isolated"].filter(Boolean);
 		if (parts.length === 0) return undefined;
 		return this.theme.fg("muted", `  ↳ ${parts.join(" · ")}`);
 	}
@@ -407,7 +398,9 @@ export class BtwViewer implements Component {
 		const lines: string[] = [];
 
 		if (messages.length === 0 && !streaming) {
-			lines.push(th.fg("muted", "(waiting for first question...)"));
+			lines.push(
+				this.record.error ? th.fg("error", this.record.error) : th.fg("muted", "(waiting for first question...)"),
+			);
 			return lines.map((l) => truncateToWidth(l, width));
 		}
 
@@ -486,9 +479,13 @@ export class BtwViewer implements Component {
 			}
 		}
 
+		if (this.record.status === "error" && this.record.error) {
+			lines.push(...wrapTextWithAnsi(this.record.error, width).map((line) => th.fg("error", line)));
+		}
+
 		// Live generating indicator
 		if (this.record.status === "running") {
-			const act = this.activity ? describeActivity(this.activity.activeTools, this.activity.responseText) : "thinking…";
+			const act = this.record.activity === "thinking" ? "thinking\u2026" : this.record.activity;
 			lines.push("");
 			lines.push(truncateToWidth(th.fg("accent", "▍ ") + th.fg("thinkingText", act), width));
 		}

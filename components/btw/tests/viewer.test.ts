@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import type { AgentRecord } from "../src/types.js";
+import type { BtwViewState } from "../src/session.js";
 
 const { visibleWidth } = await import("@earendil-works/pi-tui");
-const { BtwViewer, defaultFormatBtwPrompt, BTW_VIEWPORT_HEIGHT_PCT } = await import("../src/ui/btw-viewer.js");
+const { BtwViewer, defaultFormatBtwPrompt, BTW_VIEWPORT_HEIGHT_PCT } = await import("../src/ui/viewer.js");
 
 // ── Test Helpers ────────────────────────────────────────────────────────
 
@@ -19,15 +19,15 @@ function mockSession(messages: any[] = [], state: any = {}) {
 		state,
 		subscribe: vi.fn(() => vi.fn()),
 		dispose: vi.fn(),
+		getContextUsage: () => undefined,
 		getSessionStats: () => ({ tokens: { input: 0, output: 0, cacheWrite: 0 } }),
 	} as any;
 }
 
-function mockRecord(overrides: Partial<AgentRecord> = {}): AgentRecord {
+function mockRecord(overrides: Partial<BtwViewState> = {}): BtwViewState {
 	return {
-		id: "btw-1",
-		type: "BTW" as any,
-		description: "BTW side conversation",
+		subscribe: vi.fn(() => vi.fn()),
+		activity: "thinking",
 		status: "completed",
 		toolUses: 0,
 		startedAt: Date.now() - 1500,
@@ -36,11 +36,10 @@ function mockRecord(overrides: Partial<AgentRecord> = {}): AgentRecord {
 		lifetimeUsage: { input: 120, output: 80, cacheWrite: 0 },
 		invocation: {
 			modelName: "claude-3-7-sonnet",
-			inheritContext: false,
-			pair: false,
+			thinking: "medium",
 		},
 		...overrides,
-	} as AgentRecord;
+	};
 }
 
 function ansiTheme() {
@@ -309,6 +308,17 @@ describe("BtwViewer", () => {
 		});
 	});
 
+	it("shows an actionable failure even when no assistant reply was created", () => {
+		const viewer = new BtwViewer(
+			mockTui(),
+			mockSession(),
+			mockRecord({ status: "error", error: "Authentication failed" }),
+			ansiTheme(),
+			vi.fn(),
+		);
+		expect(viewer.render(80).join("\n")).toContain("Authentication failed");
+	});
+
 	describe("render width safety", () => {
 		const widths = [40, 60, 80, 120, 200];
 
@@ -332,7 +342,12 @@ describe("BtwViewer", () => {
 				const viewer = new BtwViewer(
 					mockTui(30, w),
 					mockSession(messages),
-					mockRecord({ status: "running" }),
+					mockRecord({
+						status: "running",
+						activity: "read very/long/path/to/file.ts",
+						toolUses: 3,
+						lifetimeUsage: { input: 500, output: 250, cacheWrite: 0 },
+					}),
 					ansiTheme(),
 					vi.fn(),
 					undefined,
@@ -341,13 +356,6 @@ describe("BtwViewer", () => {
 						onInjectLatestAnswer: vi.fn(),
 						onClearConversation: vi.fn(),
 						onStop: vi.fn(),
-					},
-					{
-						activeTools: new Map([["read", "very/long/path/to/file.ts"]]),
-						toolUses: 3,
-						responseText: "generating detailed explanation...",
-						turnCount: 2,
-						lifetimeUsage: { input: 500, output: 250, cacheWrite: 0 },
 					},
 				);
 

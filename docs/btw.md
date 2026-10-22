@@ -16,7 +16,7 @@
 - Press `Ctrl+X` to copy the latest completed answer to the clipboard. BTW follows Pi's configurable `app.message.copy` binding.
 - Press `i` or `Option-I` (`Alt+I`) to inject the latest completed answer into the main conversation.
 - Press `Option-X` (`Alt+X`) to clear the side conversation, or `x` twice to stop only the active response.
-- Press `Esc` or `q` to close the overlay. The side agent keeps working.
+- Press `Esc` or `q` to close the overlay. The conversation keeps running.
 
 If the main agent is busy, injection is delivered as a follow-up after its current work settles rather than steering or interrupting it. Injection does not clear BTW, so the side conversation can continue.
 
@@ -30,10 +30,12 @@ Context is captured per overlay visit:
 2. Follow-ups asked while that overlay remains open use the same snapshot.
 3. After the overlay is closed and reopened, the next question appends only new parent conversation text since the previous snapshot.
 
-Tool results and extension state are excluded. Explicit BTW injection messages are also excluded from later snapshots. The child conversation itself is append-only: prior prompts are never rewritten when parent context is refreshed. This keeps the provider-cache prefix stable while making a reopened BTW conversation current with the main thread.
+Tool results and extension state are excluded. Explicit BTW injection messages are also excluded from later snapshots. The side conversation itself is append-only: prior prompts are never rewritten when parent context is refreshed. This keeps the provider-cache prefix stable while making a reopened BTW conversation current with the main thread.
 
 BTW state is intentionally session-local and in-memory. Clearing, switching, forking, navigating the parent conversation tree, reloading, or ending the parent session stops and discards it.
 
 ## Design boundary
 
-BTW reuses apple-pi's owned child-session manager, model routing, cancellation, and usage accounting with a dedicated answer-first Markdown overlay. It does not add another RPC protocol, process manager, settings file, history store, slot system, fallback model path, or logging subsystem.
+`components/btw/` directly owns one private, in-memory Pi SDK session and its answer-first overlay. It shares the parent's selected model runtime without owning or disposing that runtime. Native Pi statistics supply lifetime usage, including compaction. Only fast mode and the mandatory compaction and search safety extensions load; BTW has no organization identity, directory row, or subagent manager.
+
+Dismissing the overlay releases only its view. Clearing or ending the parent session waits for cancellation, extension shutdown, and disposal, including a session still being created. Questions are literal text, including leading slash commands. BTW adds no RPC protocol, process manager, settings file, history store, slot system, or fallback model path.

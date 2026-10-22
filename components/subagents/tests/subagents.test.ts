@@ -3,19 +3,18 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { fakeCustom, fakeTui } from "../../../tests/helpers/fake-tui.js";
-import { installWorkManager } from "../../shared/src/work-manager.js";
-import { resolveResultWaitMode, waitForAgentSettlement } from "../src/abortable.js";
-import { AgentManager } from "../src/agent-manager.js";
-import { selectAgentModel } from "../src/agent-runner.js";
-import { BUILTIN_TOOL_NAMES, buildAgentRegistry, getToolNamesForType, resolveSpawnTypeIn } from "../src/agent-types.js";
 import {
-	BTW_AGENT_CONFIG,
 	buildBtwInjection,
 	buildBtwParentSnapshot,
 	buildBtwPrompt,
 	formatBtwUserMessage,
 	getLatestBtwExchange,
-} from "../src/btw.js";
+} from "../../btw/src/context.js";
+import { installWorkManager } from "../../shared/src/work-manager.js";
+import { resolveResultWaitMode, waitForAgentSettlement } from "../src/abortable.js";
+import { AgentManager } from "../src/agent-manager.js";
+import { selectAgentModel } from "../src/agent-runner.js";
+import { BUILTIN_TOOL_NAMES, buildAgentRegistry, getToolNamesForType, resolveSpawnTypeIn } from "../src/agent-types.js";
 import { buildFullParentContext } from "../src/context.js";
 import { getAgentConversation, TRANSCRIPT_TAIL_MAX_CHARS } from "../src/conversation.js";
 import { loadCustomAgents } from "../src/custom-agents.js";
@@ -408,17 +407,6 @@ describe("owned subagent surface", () => {
 			expect(config?.systemPrompt).toContain("Keep repository files and external resources unchanged");
 			expect(config?.systemPrompt).not.toContain("Read-only access is enforced structurally");
 		}
-	});
-
-	it("keeps BTW private and read-only", () => {
-		expect(BTW_AGENT_CONFIG).toMatchObject({
-			builtinToolNames: ["read", "grep", "find", "ls"],
-			extensions: false,
-			skills: false,
-			pair: false,
-			persistSession: false,
-			promptMode: "replace",
-		});
 	});
 
 	it("gives each BTW visit an append-only, bounded conversation snapshot", () => {
