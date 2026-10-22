@@ -175,7 +175,7 @@ export type Command =
 	 */
 	| { kind: "transfer"; manager: string; by: string }
 	/** Record that the person left (when and why) and close it when it runs. Applied by the runtime. */
-	| { kind: "retire"; reason: string }
+	| { kind: "retire"; reason: string; by?: string }
 	/** The operator saw the session: it no longer needs them unless a prompt is open. Applied by the runtime. */
 	| { kind: "mark_seen" }
 	/**

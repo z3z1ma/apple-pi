@@ -56,10 +56,10 @@ const JSON_FACTS = new Set<string>(["prompt", "queue", "config", "previousSessio
 
 import { type AttentionRow, jumpTarget, statusSummary } from "./attention.js";
 import { syncChannels } from "./channels.js";
-import { RETRY_MS } from "./client.js";
+import { RETRY_MS, sendCommand } from "./client.js";
 import { discardProgramPeople, programDescendants } from "./program-peers.js";
 import { migrate } from "./schema.js";
-import { markRead, OPERATOR, postToThread, type ThreadPost } from "./threads.js";
+import { markRead, messagesOf, nameOf, OPERATOR, postToThread, type ThreadPost, threadOf } from "./threads.js";
 import {
 	canonicalSocket,
 	killPane,
@@ -218,6 +218,7 @@ export class Runtime {
 	/** Sessions this runtime opened a window for, until their bridge connects or the window closes. */
 	private readonly starting = new Map<string, SessionStart>();
 	private readonly headless = new Map<string, ChildProcess>();
+	private readonly retiring = new Map<string, { person: string; controller: AbortController }>();
 	private readonly programs = new Map<string, Connection>();
 	private readonly discarding = new Set<string>();
 	private readonly discardRequests = new Map<string, Set<string>>();
@@ -253,6 +254,7 @@ export class Runtime {
 		syncChannels(this.db, Date.now());
 		this.recoverThreadPosts();
 		this.recoverWorkCommands();
+		this.recoverRetirements();
 		for (const row of this.db.prepare("select session_id as id from program_peers").all() as { id: string }[])
 			this.discarding.add(row.id);
 		rmSync(this.paths.socket, { force: true }); // we hold the lock, so any socket file is stale
@@ -509,14 +511,19 @@ export class Runtime {
 		// A (re)connecting bridge reports the tool it runs now; one that ended while the bridge was away just clears.
 		if (hello.tool) this.startTool(session.id, generation, hello.tool);
 		else this.clearTool(session.id, generation);
-		// Mail not yet in the session's transcript goes to every new bridge; the bridge skips what it already has.
-		const mail = db
+		// Replay unread deliveries before startup work; a committed retirement's close stays bound to its incarnation.
+		const pending = db
 			.prepare(
-				`select command_id, command from commands where session_id = ? and kind = 'mail' and stage in ('accepted', 'delivered')
-					and (bound_generation is null or bound_generation = ?) order by created_at`,
+				`select command_id, command from commands where session_id = ? and stage in ('accepted', 'delivered')
+					and ((kind = 'mail' and (bound_generation is null or bound_generation = ?))
+					or (kind = 'close' and bound_generation = ?)) order by case kind when 'close' then 0 else 1 end, created_at`,
 			)
-			.all(session.id, generation) as { command_id: string; command: string }[];
-		for (const { command_id, command } of mail) this.dispatch(connection, command_id, JSON.parse(command), true);
+			.all(session.id, generation, generation) as { command_id: string; command: string }[];
+		for (const { command_id, command } of pending) {
+			const delivery = JSON.parse(command) as Command;
+			this.dispatch(connection, command_id, delivery, true);
+			if (delivery.kind === "close") break;
+		}
 		const start = this.starting.get(session.id);
 		if (start) {
 			this.starting.delete(session.id);
@@ -616,21 +623,9 @@ export class Runtime {
 		}
 		if (command.kind === "retire") {
 			receipt("accepted");
-			if (!current) this.setCommandStage(commandId, "failed", "unknown session");
-			else if (typeof command.reason !== "string" || !command.reason)
-				this.setCommandStage(commandId, "failed", "retire needs a reason");
-			else {
-				db.prepare("update sessions set retired_at = ?, retired_reason = ?, updated_at = ? where id = ?").run(
-					now,
-					command.reason,
-					now,
-					sessionId,
-				);
-				syncChannels(db, now);
-				this.event("client", sessionId, current.generation, "retired", { reason: command.reason });
-				this.setCommandStage(commandId, "applied");
-				if (target) this.issue(target, { kind: "close" });
-			}
+			void this.retireSession(commandId, sessionId, command).catch((error) => {
+				if (this.db) this.setCommandStage(commandId, "failed", error instanceof Error ? error.message : String(error));
+			});
 			return;
 		}
 		if (command.kind === "set_preference") {
@@ -794,6 +789,120 @@ export class Runtime {
 		}
 	}
 
+	private async retireSession(
+		commandId: string,
+		sessionId: string,
+		command: Extract<Command, { kind: "retire" }>,
+	): Promise<void> {
+		const db = this.db!;
+		const person = db.prepare("select reports_to, retired_at from sessions where id = ?").get(sessionId) as
+			| { reports_to: string | null; retired_at: number | null }
+			| undefined;
+		if (!person) throw new Error("unknown session");
+		if (typeof command.reason !== "string" || !command.reason.trim()) throw new Error("retire needs a reason");
+		if (command.by === sessionId)
+			throw new Error("Ask your manager or the operator to let you go; your own call cannot wait for you to be idle.");
+		if (person.retired_at !== null) {
+			this.setCommandStage(commandId, "applied", "This person has already left.");
+			return;
+		}
+		if ([...this.retiring.values()].some((job) => job.person === sessionId))
+			throw new Error("This person's handover is already in progress.");
+		const controller = new AbortController();
+		this.retiring.set(commandId, { person: sessionId, controller });
+		const signal = AbortSignal.any([controller.signal, this.stopping.signal]);
+		const send = (request: Command, id?: string) =>
+			sendCommand(sessionId, request, {
+				socketPath: this.paths.socket,
+				signal,
+				commandId: id,
+			});
+		try {
+			if (![...this.connections].some((connection) => !connection.shutdown && connection.sessionId === sessionId)) {
+				const wake = await send({ kind: "start", prompt: "" });
+				if (wake.stage === "failed") throw new Error(`Could not wake the person for its handover: ${wake.reason}`);
+			}
+			signal.throwIfAborted();
+			const channel = `team:${person.reports_to ?? sessionId}`;
+			const turnId = randomUUID();
+			const answer = await send(
+				{
+					kind: "run_turn",
+					task: [
+						`Prepare your handover before leaving the organization. Reason: ${command.reason}`,
+						`Your final reply will be posted verbatim, in your name, to the team channel ${channel} before you leave.`,
+						"Tell the team what is done, what is open, and where the useful context and files are. Say what you verified and what you believe.",
+					].join("\n\n"),
+				},
+				turnId,
+			);
+			signal.throwIfAborted();
+			if (answer.stage !== "applied" || answer.result?.status !== "completed" || !answer.result.text.trim())
+				throw new Error(
+					`The person has not left: ${answer.reason ?? answer.result?.error ?? "no handover was returned"}`,
+				);
+			const turn = db.prepare("select generation from commands where command_id = ?").get(turnId) as {
+				generation: number;
+			};
+			const current = db.prepare("select generation, reports_to from sessions where id = ?").get(sessionId) as
+				| { generation: number; reports_to: string | null }
+				| undefined;
+			if (!current || current.generation !== turn.generation || current.reports_to !== person.reports_to)
+				throw new Error("The person changed session or team during the handover; it has not been retired.");
+			const now = Date.now();
+			let pending: ReturnType<Runtime["preparePost"]>;
+			let close: Connection | undefined;
+			const closeId = `${commandId}:close`;
+			db.exec("begin");
+			try {
+				pending = this.preparePost(
+					`${commandId}:handover`,
+					sessionId,
+					{ thread: channel, body: answer.result.text },
+					now,
+				);
+				db.prepare("update sessions set retired_at = ?, retired_reason = ?, updated_at = ? where id = ?").run(
+					now,
+					command.reason.trim(),
+					now,
+					sessionId,
+				);
+				syncChannels(db, now);
+				close = this.queueDelivery(closeId, sessionId, { kind: "close" }, current.generation);
+				this.event("client", sessionId, current.generation, "retired", { reason: command.reason });
+				db.exec("commit");
+			} catch (error) {
+				db.exec("rollback");
+				throw error;
+			}
+			for (const { target, id, mail } of pending.deliveries) this.dispatch(target, id, mail);
+			this.setCommandStage(commandId, "applied");
+			if (close) this.dispatch(close, closeId, { kind: "close" });
+		} finally {
+			this.retiring.delete(commandId);
+		}
+	}
+
+	private recoverRetirements(): void {
+		const rows = this.db!.prepare(`select c.command_id, m.id as posted, s.retired_at from commands c
+			left join thread_messages m on m.id = c.command_id || ':handover'
+			left join sessions s on s.id = c.session_id
+			where c.kind = 'retire' and c.stage in ('accepted', 'delivered')`).all() as {
+			command_id: string;
+			posted: string | null;
+			retired_at: number | null;
+		}[];
+		for (const row of rows) {
+			if (row.posted && row.retired_at !== null) this.setCommandStage(row.command_id, "applied");
+			else
+				this.setCommandStage(
+					row.command_id,
+					"failed",
+					"The runtime restarted before the handover and retirement committed; inspect the person before retrying.",
+				);
+		}
+	}
+
 	private preparePost(
 		commandId: string,
 		sender: string,
@@ -823,7 +932,7 @@ export class Runtime {
 				...(changed?.person === participant && changed.goal ? { taskGoal: true } : {}),
 			};
 			const id = `${commandId}:${participant}`;
-			const target = this.queueMail(id, participant, mail);
+			const target = this.queueDelivery(id, participant, mail);
 			if (target) deliveries.push({ target, id, mail });
 			else
 				asleep.push(
@@ -877,7 +986,12 @@ export class Runtime {
 	}
 
 	/** Persist an outgoing delivery in the post's transaction; its bridge is notified only after commit. */
-	private queueMail(commandId: string, recipient: string, mail: Command): Connection | undefined {
+	private queueDelivery(
+		commandId: string,
+		recipient: string,
+		command: Extract<Command, { kind: "mail" | "close" }>,
+		generation?: number,
+	): Connection | undefined {
 		const db = this.db!;
 		const current = db.prepare("select generation from sessions where id = ?").get(recipient) as
 			| { generation: number }
@@ -885,12 +999,23 @@ export class Runtime {
 		const now = Date.now();
 		db.prepare(
 			`insert into commands (command_id, session_id, generation, bound_generation, kind, command, stage, created_at, updated_at)
-			values (?, ?, null, null, 'mail', ?, 'accepted', ?, ?) on conflict (command_id) do nothing`,
-		).run(commandId, recipient, JSON.stringify(mail), now, now);
-		this.event("runtime", recipient, null, "command_accepted", { commandId, command: mail });
+			values (?, ?, ?, ?, ?, ?, 'accepted', ?, ?) on conflict (command_id) do nothing`,
+		).run(
+			commandId,
+			recipient,
+			generation ?? null,
+			generation ?? null,
+			command.kind,
+			JSON.stringify(command),
+			now,
+			now,
+		);
+		this.event("runtime", recipient, generation ?? null, "command_accepted", { commandId, command });
 		const target = [...this.connections].find(
 			(connection) =>
-				!connection.shutdown && connection.sessionId === recipient && connection.generation === current?.generation,
+				!connection.shutdown &&
+				connection.sessionId === recipient &&
+				connection.generation === (generation ?? current?.generation),
 		);
 		return target;
 	}
@@ -1213,6 +1338,30 @@ export class Runtime {
 		}
 	}
 
+	/** Queued in the new person's assignment transaction, before its first bridge or model turn. */
+	private queueTeamHistory(commandId: string, person: string, manager: string | undefined): void {
+		const db = this.db!;
+		syncChannels(db, Date.now());
+		if (!manager) return;
+		const channel = `team:${manager}`;
+		const history = messagesOf(db, channel);
+		if (history.length === 0) return;
+		this.queueDelivery(`${commandId}:team-history`, person, {
+			kind: "mail",
+			from: manager,
+			fromName: nameOf(db, manager),
+			sentAt: new Date().toISOString(),
+			thread: channel,
+			subject: threadOf(db, channel)!.subject,
+			seq: history.at(-1)!.seq,
+			body: `Team context at your arrival, from ${channel}. Use read_thread to catch up later.\n\n${history
+				.map(
+					(message) => `${message.fromName} (${message.from}), ${new Date(message.at).toISOString()}:\n${message.body}`,
+				)
+				.join("\n\n")}`,
+		});
+	}
+
 	/** The bridge connecting applies a launch, whether it opened a terminal or a headless RPC process. */
 	private async startSession(
 		commandId: string,
@@ -1298,7 +1447,7 @@ export class Runtime {
 		if (row) db.prepare("update sessions set retired_at = null, retired_reason = null where id = ?").run(sessionId);
 		if (command.goal) {
 			const prepare = () => {
-				if (!row)
+				if (!row) {
 					db.prepare(`insert into sessions (id, kind, cwd, name, run_state, generation, reports_to, role, source, updated_at)
 					values (?, 'root', ?, ?, 'idle', 0, ?, ?, 'runtime', ?)`).run(
 						sessionId,
@@ -1308,6 +1457,8 @@ export class Runtime {
 						command.role ?? null,
 						Date.now(),
 					);
+					this.queueTeamHistory(commandId, sessionId, reportsTo);
+				}
 			};
 			if (
 				!this.applyWork(
@@ -1347,12 +1498,12 @@ export class Runtime {
 			...(name ? ["--name", name] : []),
 			...(reportsTo ? ["--reports-to", reportsTo] : []),
 			...(role ? ["--role", role] : []),
-			...(prompt && launch.tmux ? ["--", prompt] : []),
 		];
 		const env = { [PROGRAM_ID_ENV]: programId ?? "", [PROGRAM_PARENT_ENV]: programParent ?? "" };
 		const start: SessionStart = {
 			commandId,
-			...(launch.tmux ? { socket: canonicalSocket(launch.tmux.socket) } : { prompt }),
+			prompt,
+			...(launch.tmux ? { socket: canonicalSocket(launch.tmux.socket) } : {}),
 		};
 		this.starting.set(sessionId, start); // the bridge may connect before the launch returns
 		if (!launch.tmux) {
@@ -1444,6 +1595,7 @@ export class Runtime {
 				| { kind: string }
 				| undefined;
 			if (target && row?.kind === "run_turn") this.issue(target, { kind: "cancel_turn", turn: commandId });
+			this.retiring.get(commandId)?.controller.abort(new Error("The retirement request was cancelled."));
 			this.commandClients.delete(commandId);
 		}
 		for (const [commandId, target] of this.dispatched) {

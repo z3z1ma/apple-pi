@@ -12,6 +12,7 @@ import {
 	close,
 	fakeBridge,
 	query,
+	replyToTurns,
 	runtimePid,
 	sendCommand,
 	standInProcess,
@@ -20,6 +21,8 @@ import {
 	tempStateDir,
 } from "../../../components/session-state/tests/helpers.js";
 import { fauxSession } from "../../../tests/helpers/faux-session.js";
+import { openCommands } from "../src/backend/commands.js";
+import { openLifecycle } from "../src/backend/lifecycle.js";
 import {
 	leaveOutUnchanged,
 	openWorldBackend,
@@ -94,6 +97,7 @@ async function session(
 	heartbeats.push(beat);
 	await soon(() => expect(character(id)).toBeDefined());
 	return {
+		link,
 		async stop() {
 			link.send({ type: "shutdown", reason: "quit" });
 			clearInterval(beat);
@@ -211,8 +215,14 @@ test("an organization is one headquarters: the root at its desk, a manager's tea
 	});
 	expect(character("org-root")?.facts).toMatchObject({ title: null, soul: null, selfHeadings: [] });
 
-	const receipts = await sendCommand(state.socketPath, "org-b", { kind: "retire", reason: "the burst passed" });
-	expect(receipts.at(-1)?.stage).toBe("applied");
+	replyToTurns(skeptic.link, "Verified the claims; open questions are in the team channel.");
+	const commands = openCommands(state.socketPath);
+	try {
+		const lifecycle = openLifecycle({ db: state.dbPath, agentDir: state.agentDir }, commands, () => world.snapshot());
+		expect(await lifecycle.retire("org-b", "the burst passed")).toEqual({ ok: true, stage: "applied" });
+	} finally {
+		commands.close();
+	}
 	await skeptic.stop(); // the runtime asked it to close; a fake bridge quits only when told
 	await soon(() => expect(character("org-b")).toBeUndefined());
 	await soon(() =>

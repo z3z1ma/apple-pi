@@ -4,7 +4,16 @@ import { fauxSession, type Reply } from "../../../tests/helpers/faux-session.js"
 import type { Member } from "../../organization/src/directory.js";
 import { sendCommand } from "../src/client.js";
 import bridge from "../src/index.js";
-import { close, fakeBridge, query, standInProcess, startRuntime, stopRuntime, tempStateDir } from "./helpers.js";
+import {
+	close,
+	fakeBridge,
+	query,
+	replyToTurns,
+	standInProcess,
+	startRuntime,
+	stopRuntime,
+	tempStateDir,
+} from "./helpers.js";
 
 const state = tempStateDir();
 const processes: ReturnType<typeof standInProcess>[] = [];
@@ -137,6 +146,7 @@ test("a leaf sees its named manager, teammates, and itself, with former members 
 	try {
 		await fake("leaf-boss", { session: { name: "Ada" } });
 		const sibling = await fake("leaf-sibling", { session: { name: "Grace" }, facts: { reportsTo: "leaf-boss" } });
+		replyToTurns(sibling, "Assignment complete. The task has the result.");
 		run.session.extensionRunner.setFlagValue("reports-to", "leaf-boss");
 		await run.session.bindExtensions({});
 		await vi.waitFor(

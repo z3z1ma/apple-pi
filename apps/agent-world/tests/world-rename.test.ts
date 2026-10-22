@@ -406,7 +406,7 @@ describe.each(PACKS)("%s", (id) => {
 				say("recruit-role"),
 				"Repository",
 				"Directory",
-				"Brief",
+				"Goal",
 			]);
 			expect(boxes.scrollsSideways).toBe(false);
 			expect(boxes.dialog.left).toBeGreaterThanOrEqual(0);

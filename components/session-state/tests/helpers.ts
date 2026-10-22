@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { expect, vi } from "vitest";
-import type { Command } from "../src/protocol.js";
+import { type Command, lineReader } from "../src/protocol.js";
 
 /**
  * A temporary agent directory for one test file, with session state enabled and pointed at it. tmux is
@@ -87,6 +87,23 @@ export async function fakeBridge(
 		facts: hello.facts ?? {},
 	});
 	return { socket, send };
+}
+
+/** Give a socket stand-in a scripted reply to correlated turns; lifecycle commands stay under the test's control. */
+export function replyToTurns(link: Awaited<ReturnType<typeof fakeBridge>>, text: string): void {
+	link.socket.on(
+		"data",
+		lineReader((line) => {
+			const message = JSON.parse(line) as { type: string; commandId: string; command?: Command };
+			if (message.type === "command" && message.command?.kind === "run_turn")
+				link.send({
+					type: "command_progress",
+					commandId: message.commandId,
+					stage: "applied",
+					result: { status: "completed", text, operations: [], changes: [] },
+				});
+		}),
+	);
 }
 
 export function runtimePid(pidPath: string): number | undefined {

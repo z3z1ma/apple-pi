@@ -87,10 +87,14 @@ export async function connectRuntime(signal?: AbortSignal): Promise<Socket> {
 export async function sendCommand(
 	sessionId: string,
 	command: Command,
-	options: { commandId?: string; signal?: AbortSignal; until?: "accepted" | "applied" } = {},
+	options: { commandId?: string; signal?: AbortSignal; until?: "accepted" | "applied"; socketPath?: string } = {},
 ): Promise<Receipt> {
 	const commandId = options.commandId ?? randomUUID();
-	const socket = await connectRuntime(options.signal);
+	options.signal?.throwIfAborted();
+	const socket =
+		options.socketPath === undefined
+			? await connectRuntime(options.signal)
+			: await open(options.socketPath, options.signal);
 	const { signal } = options;
 	let abort = () => {};
 	try {

@@ -6,9 +6,13 @@
 
 **Blocked by:** 03 Team channels, 06 Tasks are assigned
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] A hire into a team whose channel has posts receives the recent posts in its first turn.
-- [ ] `let_go` produces a handover post from the person in the team channel before the person is retired.
-- [ ] The `<manager>` section mentions the standup option, and no tool for standups exists.
-- [ ] `directory` lists each person's finished assignments.
+Implementation and evidence: [notes](../implementation-12.md).
+
+- [x] A hire into a team whose channel has posts receives the recent posts in its first turn.
+- [x] `let_go` produces a handover post from the person in the team channel before the person is retired.
+- [x] The `<manager>` section mentions the standup option, and no tool for standups exists.
+- [x] `directory` lists each person's finished assignments.
+
+Deviations: No contract changes. The runtime publishes the person's final prose verbatim as its handover, atomically with retirement and the close outbox; it reuses the correlated-turn mechanism instead of adding another runner or handoff artifact. The existing directory record needed no new implementation.

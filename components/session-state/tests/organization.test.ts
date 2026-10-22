@@ -5,7 +5,16 @@ import { fauxSession, type Reply } from "../../../tests/helpers/faux-session.js"
 type DirectoryMember = { id: string; manager: string | null; left?: { at: number; reason: string } };
 
 import bridge from "../src/index.js";
-import { close, fakeBridge, query, standInProcess, startRuntime, stopRuntime, tempStateDir } from "./helpers.js";
+import {
+	close,
+	fakeBridge,
+	query,
+	replyToTurns,
+	standInProcess,
+	startRuntime,
+	stopRuntime,
+	tempStateDir,
+} from "./helpers.js";
 
 const state = tempStateDir();
 const processes: ReturnType<typeof standInProcess>[] = [];
@@ -89,6 +98,7 @@ test("a manager transfers a person with its team, is refused a cycle or a strang
 		const m2 = await fake("m2", rootId);
 		const p1 = await fake("p1", "m1");
 		const p2 = await fake("p2", "p1");
+		replyToTurns(p2, "The burst is complete. Context is in the task bundle.");
 		await fake("stranger", "nobody");
 
 		await root.session.prompt("move p1");

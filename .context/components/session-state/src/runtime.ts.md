@@ -47,6 +47,7 @@ Verify: components/session-state/tests/history.test.ts
 The hello's `reportsTo` is applied only while the record's `reports_to` is null; afterwards the record wins, and a bridge whose flag disagrees is sent a `transfer` command with its recorded manager.
 Why: the flag is what the session was started with, and `move` changes the manager after that; a reconnect or hand restart carrying the old flag would otherwise undo the move, and the bridge addresses its close notice from its own copy of the manager.
 A same-process reconnect keeps its incarnation's original tmux binding. A test that adds a pane needs a new incarnation, rather than a second hello from the same PID and start time.
+A committed retirement's pending close takes precedence over mail replay and stays bound to the retired incarnation. Old mail waits for a later reopening; replaying it before closing could start new work in a person who has already left.
 Coupled: components/session-state/src/bridge.ts, components/session-state/src/coordinator.ts
 Verify: components/session-state/tests/organization.test.ts, components/session-state/tests/program-peers.test.ts
 
@@ -72,10 +73,10 @@ Verify: components/session-state/tests/work-recovery.test.ts
 
 ## symbol:Runtime.startSession
 
-A new hire's provisional person, goal bundle, assignment, task thread, and outbox commit before opening its process. Pi starts with a pointer to its focused task; startup mail carries the file itself. Reopening keeps the stored role and work, while a supplied new goal adds an assignment.
+A new hire's provisional person, goal bundle, assignment, task thread, team-history snapshot, and outbox commit before opening its process. The history uses the existing channel reader, with no separate summary or invented message-count cap. Pi starts with a pointer to its focused task; startup mail carries the file itself. Reopening keeps the stored role and work, while a supplied new goal adds an assignment.
 Why: passing only a prompt leaves the first turn without an explicit job; failing to preserve the role changes the person's mind on rehire.
 Coupled: components/session-state/src/work.ts, components/session-state/src/bridge.ts
-Verify: components/session-state/tests/coordinator.test.ts, apps/agent-world/tests/recruit.test.ts
+Verify: components/session-state/tests/coordinator.test.ts, components/session-state/tests/workplace.test.ts, apps/agent-world/tests/recruit.test.ts
 
 ## symbol:Runtime.closeProgram
 
@@ -93,9 +94,19 @@ Verify: components/session-state/tests/program-peers.test.ts
 
 ## symbol:Runtime.launchSession
 
-RPC mode ignores positional CLI prompts. An ordinary headless hire therefore receives its startup prompt through the existing bridge steer command after hello. A program peer starts with an empty startup prompt: replayed assignment mail rides its next turn, and only the correlated program request starts that turn. Passing a second startup goal would produce unobserved, duplicate work.
+Both tmux and headless launches receive startup work through a bridge steer after hello and mail replay. A positional CLI prompt can start before onboarding context arrives, and RPC mode ignores it anyway. A program peer or a person woken for handover starts with an empty startup prompt: replayed mail rides its next turn, and only the correlated request starts that turn. Passing a second startup goal would produce unobserved, duplicate work.
 Coupled: components/session-state/src/bridge.ts, components/session-state/src/mail.ts, components/session-state/src/peer-turns.ts
 Verify: components/session-state/tests/program-peers.test.ts, components/session-state/tests/coordinator.test.ts
+
+## symbol:Runtime.retireSession
+
+Retirement asks for a correlated turn in the person's own session, waits for idle, and wakes a sleeper with its stored identity. The model is told that its final prose becomes its handover post; the runtime publishes that reply verbatim rather than inventing a summary or requiring another handoff artifact. Ordinary work already in progress is left alone.
+
+The handover, retirement, membership change, and incarnation-bound close outbox commit together. Startup recognizes the committed post and completes the receipt; an interrupted uncommitted request fails for inspection instead of rerunning paid model work. A reconnect replays the close only to that incarnation, preserving later rehire.
+
+Caller disconnection cancels only the owned handover. Failure leaves the person unretired; a sleeper woken for a failed handover stays available for inspection. Internal commands use this runtime's explicit socket, so a scratch runtime cannot accidentally reach or start the operator's default daemon.
+Coupled: components/session-state/src/client.ts, components/session-state/src/peer-turns.ts, apps/agent-world/src/backend/lifecycle.ts
+Verify: components/session-state/tests/workplace.test.ts, components/session-state/tests/workplace-wake.test.ts, components/session-state/tests/workplace-recovery.test.ts
 
 ## symbol:Runtime.transfer
 

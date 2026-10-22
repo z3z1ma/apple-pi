@@ -1219,15 +1219,18 @@ function openLifecycle(paths, commands, snapshot) {
 				reason: "Say why it leaves."
 			};
 			const world = snapshot();
-			const person = world.characters.find((character) => character.id === characterId) ?? world.dormant?.find((agent) => agent.id === characterId);
-			if (!person) return {
+			if (!(world.characters.find((character) => character.id === characterId) ?? world.dormant?.find((agent) => agent.id === characterId))) return {
 				ok: false,
 				reason: "No session has that id."
 			};
-			return follow(commands, characterId, {
+			const result = await commands.send(characterId, {
 				kind: "retire",
 				reason
-			}, CLOSE_MS, (stage) => stage === "applied", () => `${person.name} has not left yet.`);
+			});
+			return result.ok ? {
+				ok: true,
+				stage: "applied"
+			} : result;
 		},
 		...openMailbox(paths.db, commands)
 	};

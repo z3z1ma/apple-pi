@@ -15,10 +15,10 @@ Why: the first turn must already have an assignment. Keeping the goal in its fil
 Coupled: components/session-state/src/runtime.ts, components/session-state/src/coordinator.ts, apps/agent-world/src/backend/roles.ts, apps/agent-world/web/overlay/places/recruit-state.ts
 Verify: apps/agent-world/tests/recruit.test.ts, apps/agent-world/tests/world-recruit.test.ts
 
-Retiring (`retire`) sends the runtime's `retire` with a non-blank reason for an awake or a dormant character and resolves at `applied`; the runtime records the retirement and asks a running session to close itself, so the character leaves the world when its bridge goes, not when the receipt arrives.
+Retiring (`retire`) sends the runtime's `retire` with a non-blank reason for an awake or a dormant character and waits for `applied`, without the ordinary close-wait deadline. The runtime waits for the person's own handover (waking it if asleep), posts that reply, and commits retirement before asking it to close. The character leaves the world when its bridge goes, not when the receipt arrives; a failed handover leaves it in the team.
 Why: the runtime's `retire` is the one path that records `retired_at` and `retired_reason` (what the inn's leaving mark and the directory's former members read); sending `close` here instead would stop the session without marking it.
 Coupled: components/session-state/src/runtime.ts, apps/agent-world/web/overlay/places/retire-state.ts, apps/agent-world/src/backend/inn.ts
-Verify: apps/agent-world/tests/backend.test.ts, apps/agent-world/tests/world-rename.test.ts
+Verify: apps/agent-world/tests/backend.test.ts, apps/agent-world/tests/rename.test.ts, apps/agent-world/tests/world-rename.test.ts
 
 Renaming (`rename`, ticket 12) collapses whitespace to one line, refuses a blank name, a name over `NAME_MAX` (60, in `world.ts`), or a character not in the snapshot before anything is sent, and resolves at `applied`. The world, the side panel, and the conversation panel show the new name only from the session's own `name` fact, which the bridge updates through `pi.setSessionName`; nothing here edits the snapshot.
 Why: the rename form reads the same `NAME_MAX` for its `maxLength`, so the form and the backend cannot disagree; the recruit form still hard-codes 60.

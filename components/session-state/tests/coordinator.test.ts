@@ -6,7 +6,8 @@ import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai/compat
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
 import { fauxSession, type Reply } from "../../../tests/helpers/faux-session.js";
 import bridge from "../src/index.js";
-import { close, query, startRuntime, stopRuntime, tempStateDir } from "./helpers.js";
+import type { Command } from "../src/protocol.js";
+import { close, query, sendCommand, startRuntime, stopRuntime, tempStateDir } from "./helpers.js";
 
 // A scratch tmux server under its own TMUX_TMPDIR, whose windows find a fake `pi` first on PATH. The fake records
 // how it was started and connects to the runtime as that session's bridge, as a real Pi would.
@@ -43,6 +44,15 @@ const name = args.includes("--name") ? args[args.indexOf("--name") + 1] : "Ada L
 execFileSync("tmux", ["rename-window", "-t", process.env.TMUX_PANE, name]);
 const startedAt = Date.parse(execFileSync("ps", ["-o", "lstart=", "-p", String(process.pid)], { encoding: "utf8" }).trim());
 const socket = createConnection(process.env.PI_CODING_AGENT_DIR + "/state/apple-pi.sock");
+let buffer = "";
+socket.on("data", (chunk) => {
+	buffer += chunk.toString();
+	for (let end = buffer.indexOf("\\n"); end >= 0; end = buffer.indexOf("\\n")) {
+		const message = JSON.parse(buffer.slice(0, end));
+		buffer = buffer.slice(end + 1);
+		if (message.type === "command") appendFileSync(process.env.FAKE_PI_LOG + ".commands", JSON.stringify({ id, command: message.command }) + "\\n");
+	}
+});
 socket.on("connect", () => {
 	socket.write(JSON.stringify({
 		type: "hello",
@@ -86,6 +96,13 @@ const starts = () =>
 		.trim()
 		.split("\n")
 		.map((line) => JSON.parse(line) as { args: string[]; cwd: string; goal: string | null });
+const commandsOf = (id: string) =>
+	readFileSync(`${piLog}.commands`, "utf8")
+		.trim()
+		.split("\n")
+		.map((line) => JSON.parse(line) as { id: string; command: Command })
+		.filter((entry) => entry.id === id)
+		.map((entry) => entry.command);
 const incarnation = (id: string) =>
 	query<{ generation: number; ended_at: number | null; end_reason: string | null; process_state: string }>(
 		state.dbPath,
@@ -133,22 +150,22 @@ test("a coordinator starts a session in a new tmux window, and reopens it by id 
 	]);
 	const coordinatorId = run.session.sessionManager.getSessionId();
 	try {
+		expect(
+			(
+				await sendCommand(state.socketPath, coordinatorId, {
+					kind: "thread_post",
+					thread: `team:${coordinatorId}`,
+					body: "Team context: the boundary notes are in brief.md.",
+				})
+			).at(-1)?.stage,
+		).toBe("applied");
 		await run.session.prompt("start a docs worker");
 		expect(toolResults(run)[0]).toMatchObject({
 			isError: false,
 			text: expect.stringContaining("Hired a new person (worker-1) as repository-archaeologist."),
 		});
 		expect(starts()[0]).toEqual({
-			args: [
-				"--session-id",
-				"worker-1",
-				"--reports-to",
-				coordinatorId,
-				"--role",
-				"repository-archaeologist",
-				"--",
-				"You have assigned work. Begin with your focused task.",
-			],
+			args: ["--session-id", "worker-1", "--reports-to", coordinatorId, "--role", "repository-archaeologist"],
 			cwd: workDir,
 			goal: expect.stringContaining("Read brief.md and document the interfaces."),
 		});
@@ -157,6 +174,16 @@ test("a coordinator starts a session in a new tmux window, and reopens it by id 
 			{ stage: "applied" },
 		]);
 		expect(incarnation("worker-1")).toMatchObject({ generation: 1, ended_at: null });
+		await vi.waitFor(() => {
+			const delivered = commandsOf("worker-1");
+			const begins = delivered.findIndex((command) => command.kind === "steer");
+			expect(begins).toBeGreaterThan(0);
+			expect(
+				delivered
+					.slice(0, begins)
+					.some((command) => command.kind === "mail" && command.body.includes("the boundary notes are in brief.md")),
+			).toBe(true);
+		});
 
 		tmux("kill-window", "-t", "Ada Lovelace");
 		await vi.waitFor(() => expect(incarnation("worker-1").ended_at).not.toBeNull(), { timeout: 15000 });
@@ -175,8 +202,6 @@ test("a coordinator starts a session in a new tmux window, and reopens it by id 
 				coordinatorId,
 				"--role",
 				"repository-archaeologist",
-				"--",
-				"You have assigned work. Begin with your focused task.",
 			],
 			cwd: workDir,
 			goal: expect.stringContaining("Read brief.md and document the interfaces."),
@@ -239,7 +264,12 @@ test("assigning a sleeping report opens its window with the goal waiting in its 
 		await manager.session.prompt("assign the goal");
 		expect(toolResults(manager).at(-1)).toMatchObject({ isError: false });
 		expect(incarnation(workerId)).toMatchObject({ generation: 2, ended_at: null });
-		expect(starts().at(-1)?.args).toContain("You have assigned work. Begin with your focused task.");
+		await vi.waitFor(() =>
+			expect(commandsOf(workerId)).toContainEqual({
+				kind: "steer",
+				text: "You have assigned work. Begin with your focused task.",
+			}),
+		);
 		const focus = query<{ bundle: string; thread: string }>(
 			state.dbPath,
 			"select t.bundle, t.thread from work_tasks t join work_focus f on f.task_id = t.id where f.person = ?",

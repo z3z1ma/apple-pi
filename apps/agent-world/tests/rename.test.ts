@@ -12,7 +12,7 @@ import { fauxSession } from "../../../tests/helpers/faux-session.js";
 import { type Commands, openCommands } from "../src/backend/commands.js";
 import { type Lifecycle, openLifecycle } from "../src/backend/lifecycle.js";
 import { openWorldBackend, type WorldBackend } from "../src/backend/world-backend.js";
-import type { FeedLine } from "../src/world.js";
+import type { CommandResult, FeedLine } from "../src/world.js";
 
 // Seam 1 for renaming an agent (ticket 12): the backend API over a real session-state runtime, with a faux Pi session
 // running the real bridge. Rename sends the runtime's `rename` command and resolves with its receipt; the new name is
@@ -65,6 +65,41 @@ test("Rename on an awake agent sends rename with the new name, resolves with its
 	// The chatbox line, from the runtime's own record of the command.
 	await soon(() => expect(lines.map((line) => line.text)).toContain("Rename for Ada the builder: Ada the builder"));
 }, 40000);
+
+test("retirement waits for its handover rather than returning accepted when the ordinary close wait expires", async () => {
+	const { id } = await awake();
+	let release = (_value: CommandResult) => {};
+	const handover = new Promise<CommandResult>((resolve) => {
+		release = resolve;
+	});
+	const controlled: Commands = {
+		...commands,
+		send: vi.fn<Commands["send"]>((_id, _command, options) => {
+			options?.onReceipt?.("accepted", undefined);
+			return handover;
+		}),
+	};
+	const people = openLifecycle({ db: state.dbPath, agentDir: state.agentDir }, controlled, () => world.snapshot());
+	vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+	try {
+		let settled = false;
+		const pending = people.retire(id, "The work ended.").then((receipt) => {
+			settled = true;
+			return receipt;
+		});
+		await vi.advanceTimersByTimeAsync(10_001);
+		expect(settled).toBe(false);
+		expect(vi.mocked(controlled.send).mock.calls[0]?.slice(0, 2)).toEqual([
+			id,
+			{ kind: "retire", reason: "The work ended." },
+		]);
+		release({ ok: true });
+		expect(await pending).toEqual({ ok: true, stage: "applied" });
+	} finally {
+		release({ ok: false, reason: "Test finished" });
+		vi.useRealTimers();
+	}
+});
 
 test("Renaming to a blank name, or a character that is not awake, is refused and sends nothing", async () => {
 	const { id } = await awake();

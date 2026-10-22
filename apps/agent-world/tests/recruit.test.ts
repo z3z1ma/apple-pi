@@ -211,8 +211,14 @@ test("recruiting a worker sends start reporting to the coordinator; its window o
 		"lead",
 		"--role",
 		"technical-writer",
-		"You have assigned work. Begin with your focused task.",
 	]);
+	expect(
+		query<{ command: string }>(
+			state.dbPath,
+			"select command from commands where session_id = ? and kind = 'steer'",
+			id,
+		).map((row) => JSON.parse(row.command)),
+	).toEqual([{ kind: "steer", text: "You have assigned work. Begin with your focused task." }]);
 	expect(realpathSync(start.cwd)).toBe(workDir);
 	// After the coordinator's window (1), not after the window the operator's client shows (0).
 	expect(windows().slice(1)).toEqual(["1:lead", "2:docs"]);

@@ -236,6 +236,7 @@ test("everyone gets the org section; only a managing role gets the manager chart
 		const prompt = manager.session.agent.state.systemPrompt;
 		expect(prompt).toContain("<org>\nYou are Coordinator, a person");
 		expect(prompt).toContain("<manager>\nYou are a manager: the operator brings you work");
+		expect(prompt).toMatch(/standup[\s\S]*remind_me[\s\S]*meet/);
 	} finally {
 		manager.dispose();
 	}

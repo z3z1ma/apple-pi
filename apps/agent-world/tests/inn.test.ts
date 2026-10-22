@@ -220,15 +220,13 @@ test("waking starts a new incarnation in a new tmux window after the operator's 
 		.trim()
 		.split("\n")
 		.map((line) => JSON.parse(line) as { args: string[]; cwd: string });
-	expect(start.args).toEqual([
-		"--session-id",
-		"w-docs",
-		"--name",
-		"w-docs",
-		"--reports-to",
-		"lead",
-		"You have assigned work. Begin with your focused task.",
-	]);
+	expect(start.args).toEqual(["--session-id", "w-docs", "--name", "w-docs", "--reports-to", "lead"]);
+	expect(
+		query<{ command: string }>(
+			state.dbPath,
+			"select command from commands where session_id = 'w-docs' and kind = 'steer'",
+		).map((row) => JSON.parse(row.command)),
+	).toEqual([{ kind: "steer", text: "You have assigned work. Begin with your focused task." }]);
 	// The new window opens right after the window the operator's client shows (window 1 of `home`).
 	const windows = tmux("list-windows", "-t", "home", "-F", "#{window_index}:#{window_name}").split("\n");
 	expect(windows).toHaveLength(before.length + 1);

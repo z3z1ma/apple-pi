@@ -238,14 +238,8 @@ export function openLifecycle(
 				world.characters.find((character) => character.id === characterId) ??
 				world.dormant?.find((agent) => agent.id === characterId);
 			if (!person) return { ok: false, reason: "No session has that id." };
-			return follow(
-				commands,
-				characterId,
-				{ kind: "retire", reason },
-				CLOSE_MS,
-				(stage) => stage === "applied",
-				() => `${person.name} has not left yet.`,
-			);
+			const result = await commands.send(characterId, { kind: "retire", reason });
+			return result.ok ? { ok: true, stage: "applied" } : result;
 		},
 
 		...openMailbox(paths.db, commands),

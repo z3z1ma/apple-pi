@@ -207,6 +207,7 @@ try {
 		"get_subagent_result",
 		"steer_subagent",
 		"stop_subagent",
+		"standup",
 		"schedule",
 		"list_peer_sessions",
 		"start_peer_session",

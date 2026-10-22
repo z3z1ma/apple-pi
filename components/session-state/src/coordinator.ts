@@ -204,7 +204,7 @@ export function installCoordinator(pi: ExtensionAPI): void {
 			name: "let_go",
 			label: "let_go",
 			description:
-				"Let a person go: record that it left your organization, with the date and reason, and close it if it runs. Its history stays, the directory lists it among former members, and rehire brings it back. Let go reluctantly: a person's accumulated context is expensive to rebuild.",
+				"Let a person go: wait until it is idle (waking it if asleep), ask for its handover, post that reply in its team channel, then record why it left and close it. A failed or cancelled handover leaves it in the team. Its history stays, the directory lists it among former members, and rehire brings it back. Let go reluctantly: a person's accumulated context is expensive to rebuild.",
 			parameters: Type.Object(
 				{
 					person: personParameter,
@@ -214,7 +214,7 @@ export function installCoordinator(pi: ExtensionAPI): void {
 			),
 			async execute(_toolCallId, params, signal, _onUpdate, ctx) {
 				const id = resolvePerson(ctx.sessionManager.getSessionId(), params.person);
-				await run(id, { kind: "retire", reason: params.reason }, signal);
+				await run(id, { kind: "retire", reason: params.reason, by: ctx.sessionManager.getSessionId() }, signal);
 				return reply(`${params.person} left: ${params.reason}`, { sessionId: id });
 			},
 		}),

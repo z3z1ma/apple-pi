@@ -17,7 +17,7 @@ interface Request extends PeerTurn {
 
 const failed = (error: string): TurnResult => ({ status: "failed", text: "", error, operations: [], changes: [] });
 
-/** Runs program requests in this person's session; it owns no person or process. */
+/** Runs correlated requests in this person's session; it owns no person or process. */
 export function installPeerTurns(pi: ExtensionAPI) {
 	let current: ExtensionContext | undefined;
 	let active: { request: Request; observer: ReturnType<typeof createTurnObserver> } | undefined;
@@ -49,10 +49,10 @@ export function installPeerTurns(pi: ExtensionAPI) {
 				{
 					customType: "organization.program-request",
 					content: [
-						"A colleague's program is awaiting this turn's result. Say what you verified and what you believe.",
+						"A colleague is awaiting this turn's result. Say what you verified and what you believe.",
 						request.outputSchema
 							? "Finish by calling pi_exec_return with the requested value. That call returns it directly to the program."
-							: "Your final reply returns directly to the program.",
+							: "Your final reply returns directly to the caller.",
 						request.contextFile ? `Bound context: read ${request.contextFile} as the data for this request.` : "",
 						request.task,
 					]
