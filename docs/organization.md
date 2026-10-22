@@ -2,7 +2,7 @@
 
 A Pi session is not a throwaway process. It is a **person**: a stable id, a human name, a role it cannot shake, a mind, a soul, a self, a record, a mailbox, and a place in an **organization**. The organization is a tree rooted at the session you start; managers hire from a **role catalog**, build teams of colliding perspectives, and bring in managers under them when their own attention would become the bottleneck. Everyone can read the whole directory and mail anyone in the organization; the tree carries only assignment, reporting, and escalation. Nobody is deleted: closing is sleep, retiring is leaving. The terminal is the organization; the [tmux sidebar](tmux-sessions.md) and [Agent World](agent-world.md) are its pictures.
 
-This page is the product contract. The runtime mechanics (the database, the commands, the facts) are in [session-state](session-state.md); the self's place among the session's memories is in [context](context.md#the-self); the senses that are not people are in [subagents](subagents.md).
+This page is the product contract. The runtime mechanics (the database, the commands, the facts) are in [session-state](session-state.md); the self's place among the session's memories is in [context](context.md#the-self); the one-shot reading helpers are in [interns](interns.md).
 
 ## Terms
 
@@ -17,7 +17,7 @@ This page is the product contract. The runtime mechanics (the database, the comm
 | Self | One Markdown document the person keeps about itself and its teammates, written with `update_self`. Never distilled, never capped. |
 | Record | What the harness knows a person did: assignments and their outcomes, manager history, hire and retire dates. |
 | Hire, transfer, close, reopen, retire | Start a new person with a role under a manager; move a person under another manager; stop the process (the person sleeps); start it again with its history; record that the person has left (it stays reopenable). |
-| Senses | The two subagents every session keeps, `explorer` and `researcher`, to spend less of its own context. They are not people. |
+| Interns | `explore` and `research`: cheap, one-shot reading tools that return a lossy summary outside the caller's context. They are not people. |
 
 ## The person
 
@@ -111,4 +111,4 @@ The two managing roles differ in principal: a `coordinator` is your chief of sta
 | The tree, the record, and the facts (`role`, `title`, `manages`, `soul`, `self`, `retired_at`, `retired_reason`) | the session-state runtime and database, [session-state](session-state.md) |
 | The terminal views | [tmux-sessions](tmux-sessions.md): organizations as indented trees with role titles and folded former members |
 | The picture | [agent-world](agent-world.md): headquarters per root, a team room per manager, cards, the hire form, retiring, former members at the inn |
-| The senses | [subagents](subagents.md): `explorer` and `researcher`; `builder` stays unlisted for programs |
+| Interns | [interns](interns.md): `explore` and `research`, fixed prompts and the `quick` profile |

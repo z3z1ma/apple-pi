@@ -1,18 +1,16 @@
 /**
  * default-agents.ts — Embedded default agent configurations.
  *
- * The senses (explorer, researcher) are listed in the team prompt; the builder is callable by name for `pi_exec`
+ * The interns (explorer, researcher) are listed in the team prompt; the builder is callable by name for `pi_exec`
  * programs and the skills that use it, but not listed. Each can be overridden by a user .md file with the same name.
  * The consultant is not an agent type at all: the pair programmer's consultation runs it from `CONSULTANT`.
  */
 
+import { INVESTIGATION_GUIDANCE as ADVISORY_CONTRACT, INTERN_PROMPTS } from "../../interns/src/prompts.js";
 import { BUILTIN_TOOL_NAMES } from "./builtin-tools.js";
 import type { AgentConfig } from "./types.js";
 
 const ADVISORY_TOOLS = BUILTIN_TOOL_NAMES.filter((name) => name !== "edit" && name !== "write");
-
-const ADVISORY_CONTRACT = `# Investigation without implementation
-Keep repository files and external resources unchanged; leave modifications to the implementing teammate. Use any available tool, including the shell, to inspect code, run checks, and gather evidence.`;
 
 export const DEFAULT_AGENTS: Map<string, AgentConfig> = new Map([
 	[
@@ -26,12 +24,7 @@ export const DEFAULT_AGENTS: Map<string, AgentConfig> = new Map([
 			extensions: false,
 			skills: true,
 			profile: "quick",
-			systemPrompt: `${ADVISORY_CONTRACT}
-
-# Role
-You are the team's codebase scout. Map existing local code so your teammate can orient quickly.
-
-Match the breadth your teammate asked for: quick, medium, or very thorough. Run independent searches in parallel. Report file paths with line numbers and the snippets that matter, and say what you did not check. External documentation belongs to the researcher.`,
+			systemPrompt: INTERN_PROMPTS.explore,
 			promptMode: "replace",
 			isDefault: true,
 		},
@@ -47,12 +40,7 @@ Match the breadth your teammate asked for: quick, medium, or very thorough. Run 
 			extensions: false,
 			skills: false,
 			profile: "quick",
-			systemPrompt: `${ADVISORY_CONTRACT}
-
-# Role
-You are the team's external research partner. Bring back current, cited facts from official documentation, library sources, and real examples. Local code mapping belongs to the explorer.
-
-Prefer retrieved primary sources over memory. Quote the relevant snippet and name its source, separate official documentation from community advice, and state the version you used. Mark a claim you could not verify as Not verified.`,
+			systemPrompt: INTERN_PROMPTS.research,
 			promptMode: "replace",
 			isDefault: true,
 		},

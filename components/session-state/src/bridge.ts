@@ -12,6 +12,7 @@ import {
 	sessionSoulLine,
 } from "../../organization/src/index.js";
 import { type OpenQuestionnaire, QUESTIONNAIRE_CHANNEL } from "../../shared/src/questionnaire-events.js";
+import { mainToolArgument } from "../../shared/src/tool-activity.js";
 import { childSessionParent, inChildSessionContext } from "../../subagents/src/child-context.js";
 import { RETRY_MS, spawnRuntime } from "./client.js";
 import { installCoordinator } from "./coordinator.js";
@@ -217,17 +218,6 @@ class StateLink {
 const isConversation = (entry: SessionEntry) =>
 	entry.type === "message" && (entry.message.role === "user" || entry.message.role === "assistant");
 
-/** The argument that says what a tool call does, by the same rule the tmux sidebar has always used. */
-const MAIN_ARGS = ["command", "path", "pattern", "query", "description", "task", "name", "code"];
-function mainArg(args: unknown): string | undefined {
-	if (!args || typeof args !== "object") return undefined;
-	for (const key of MAIN_ARGS) {
-		const value = (args as Record<string, unknown>)[key];
-		if (typeof value === "string" && value.trim()) return value.trim().split("\n")[0];
-	}
-	return undefined;
-}
-
 function modelName(ctx: ExtensionContext): string | null {
 	return ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : null;
 }
@@ -384,7 +374,7 @@ function indexRows(entry: { type: string; id: string; timestamp: string } & Reco
 			role: "tool_call",
 			tool: part.name,
 			size: args.length,
-			preview: preview(mainArg(part.arguments) ?? args),
+			preview: preview(mainToolArgument(part.arguments) ?? args),
 		});
 	}
 	return rows;
@@ -727,7 +717,12 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 
 	pi.on("tool_execution_start", (event) => {
 		if (event.parentToolCallId || !link) return;
-		const tool: Tool = { id: event.toolCallId, name: event.toolName, arg: mainArg(event.args), since: Date.now() };
+		const tool: Tool = {
+			id: event.toolCallId,
+			name: event.toolName,
+			arg: mainToolArgument(event.args),
+			since: Date.now(),
+		};
 		tools.set(tool.id, tool);
 		link.run("running_tool");
 		link.toolStart(tool);

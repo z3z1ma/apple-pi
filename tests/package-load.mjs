@@ -205,6 +205,8 @@ try {
 		"revisit_note",
 		"pi_exec",
 		"agent",
+		"explore",
+		"research",
 		"get_subagent_result",
 		"steer_subagent",
 		"ledger_add",

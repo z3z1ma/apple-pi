@@ -506,7 +506,7 @@ describe("owned subagent surface", () => {
 		expect(buildBtwInjection(exchange!)).not.toContain("Because the guard is inverted.");
 	});
 
-	it("registers the two senses and the unlisted builder as built-ins; the consultant is the pair's alone", () => {
+	it("registers the two interns and the unlisted builder as built-ins; the consultant is the pair's alone", () => {
 		expect(DEFAULT_AGENT_NAMES).toEqual(["explorer", "researcher", "builder"]);
 		expect([...DEFAULT_AGENTS.keys()]).toEqual([...DEFAULT_AGENT_NAMES]);
 		expect([...DEFAULT_AGENTS.values()].map((config) => config.displayName)).toEqual([
@@ -533,7 +533,7 @@ describe("owned subagent surface", () => {
 			listed: false,
 		});
 		expect(DEFAULT_AGENTS.get("builder")?.builtinToolNames).toBeUndefined();
-		expect(DEFAULT_AGENTS.get("researcher")?.systemPrompt).toMatch(/external research partner/);
+		expect(DEFAULT_AGENTS.get("researcher")?.systemPrompt).toMatch(/cheap research intern/);
 		expect(DEFAULT_AGENTS.get("researcher")?.systemPrompt).toMatch(/retrieved primary sources/);
 		expect(DEFAULT_AGENTS.get("researcher")?.description).toMatch(/Researches external sources/);
 		expect(CONSULTANT).toMatchObject({

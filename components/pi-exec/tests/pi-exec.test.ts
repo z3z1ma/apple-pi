@@ -209,7 +209,7 @@ describe("pi_exec agent binding", () => {
 			expect(explore.model).toBe("xai/fast");
 			expect(explore.thinking).toBe("medium");
 			expect(explore.systemPrompt).toContain("Agent type: explorer");
-			expect(explore.systemPrompt).toMatch(/team's codebase scout/i);
+			expect(explore.systemPrompt).toMatch(/cheap local-reading intern/i);
 
 			const guided = await resolveExecWorker(
 				{ task: "where is X?", type: "explorer", systemPrompt: "Prefer src/ over tests/." },

@@ -6,12 +6,21 @@ import { fileURLToPath } from "node:url";
 import type { Usage } from "@earendil-works/pi-ai";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Value } from "typebox/value";
+import { AUTO_COMPACT_EXTENSION_PATH } from "../../../extensions/auto-compact.js";
+import { CODE_CONTEXT_EXTENSION_PATH, CONTEXT_LINT_TOOL_NAME } from "../../../extensions/code-context.js";
+import { HOME_SEARCH_GUARD_EXTENSION_PATH } from "../../../extensions/home-search-guard.js";
+import { LEDGER_EXTENSION_PATH } from "../../../extensions/ledger.js";
+import { PAIR_EXTENSION_PATH } from "../../../extensions/pi-pair.js";
+import { SESSION_SEARCH_EXTENSION_PATH } from "../../../extensions/session-search.js";
+import { VROOM_EXTENSION_PATH } from "../../../extensions/vroom.js";
+import { WIKI_EXTENSION_PATH, WIKI_TOOL_NAMES } from "../../../extensions/wiki.js";
 import { createFileChangeTracker, type FileChange } from "../../shared/src/file-changes.js";
 import {
 	INFERENCE_PROFILE_NAMES,
 	type InferenceProfileName,
 	isInferenceProfileName,
 } from "../../shared/src/model-profiles.js";
+import { mainToolArgument } from "../../shared/src/tool-activity.js";
 import {
 	BUILTIN_TOOL_NAMES,
 	buildAgentRegistry,
@@ -23,26 +32,17 @@ import { loadCustomAgents } from "../../subagents/src/custom-agents.js";
 import { resolveAgentPair } from "../../subagents/src/invocation-config.js";
 import { resolveAgentProfile } from "../../subagents/src/model-routing.js";
 import type { AgentConfig, SubagentConfigScope } from "../../subagents/src/types.js";
-
-import { AUTO_COMPACT_EXTENSION_PATH } from "../../../extensions/auto-compact.js";
-import { VROOM_EXTENSION_PATH } from "../../../extensions/vroom.js";
-import { HOME_SEARCH_GUARD_EXTENSION_PATH } from "../../../extensions/home-search-guard.js";
-import { LEDGER_EXTENSION_PATH } from "../../../extensions/ledger.js";
-import { PAIR_EXTENSION_PATH } from "../../../extensions/pi-pair.js";
 import { CORE_TOOL_NAMES, isCoreToolName, READ_ONLY_CORE_TOOL_NAMES } from "./core-tools.js";
 import { containsContextMarks, fitContext } from "./evidence.js";
 import { aggregateUsage, resultText, traceValue } from "./results.js";
 import type { ExecutionOperation } from "./types.js";
 import type { ExecActivityCall } from "./ui.js";
 import { PI_EXEC_OUTPUT_SCHEMA_ENV, PI_EXEC_RETURN_TOOL } from "./worker-return.js";
-import { SESSION_SEARCH_EXTENSION_PATH } from "../../../extensions/session-search.js";
-import { WIKI_EXTENSION_PATH, WIKI_TOOL_NAMES } from "../../../extensions/wiki.js";
-import { CODE_CONTEXT_EXTENSION_PATH, CONTEXT_LINT_TOOL_NAME } from "../../../extensions/code-context.js";
 
 export { PI_EXEC_OUTPUT_SCHEMA_ENV, PI_EXEC_RETURN_TOOL } from "./worker-return.js";
 
 export const WORKER_GUIDANCE =
-	"You are a worker inside a pi_exec program. Complete the assigned task with only the tools provided, then return concise findings or results with concrete evidence. Do not ask follow-up questions.";
+	"Complete the assigned task with only the tools provided, then return concise findings or results with concrete evidence. Use the supplied task and sources to resolve missing context.";
 
 export const CONTEXT_GUIDANCE =
 	"An attached JSON file is a bound argument from the parent program. Treat it as the data for this task; do not ask the parent to resend it.";
@@ -52,14 +52,14 @@ export const OUTPUT_SCHEMA_GUIDANCE = `You must finish by calling ${PI_EXEC_RETU
 export const WORKER_RETURN_EXTENSION_PATH = fileURLToPath(new URL("./worker-return.ts", import.meta.url));
 export {
 	AUTO_COMPACT_EXTENSION_PATH,
-	VROOM_EXTENSION_PATH,
+	CODE_CONTEXT_EXTENSION_PATH,
+	CONTEXT_LINT_TOOL_NAME,
 	HOME_SEARCH_GUARD_EXTENSION_PATH,
 	LEDGER_EXTENSION_PATH,
 	SESSION_SEARCH_EXTENSION_PATH,
+	VROOM_EXTENSION_PATH,
 	WIKI_EXTENSION_PATH,
 	WIKI_TOOL_NAMES,
-	CODE_CONTEXT_EXTENSION_PATH,
-	CONTEXT_LINT_TOOL_NAME,
 };
 
 export interface AgentRequest {
@@ -390,7 +390,7 @@ export function buildAgentCliArgs(
 	if (options.model) args.push("--model", options.model);
 	if (options.thinking) args.push("--thinking", options.thinking);
 	if (options.contextPath) args.push(`@${options.contextPath}`);
-	args.push(request.task);
+	args.push("--", request.task);
 	return args;
 }
 
@@ -503,6 +503,7 @@ async function runWorkerProcess(
 		return await new Promise((resolve) => {
 			const child = spawn(pi.command, [...pi.prefix, ...prepared.args], {
 				cwd: ctx.cwd,
+				detached: process.platform !== "win32",
 				shell: false,
 				stdio: ["ignore", "pipe", "pipe"],
 				...(prepared.env ? { env: { ...process.env, ...prepared.env } } : {}),
@@ -553,7 +554,7 @@ async function runWorkerProcess(
 					const event = JSON.parse(line);
 					fileChanges.observe(event);
 					if (event.type === "tool_execution_start") {
-						onActivity?.(`using ${String(event.toolName ?? "tool")}`);
+						onActivity?.([String(event.toolName ?? "tool"), mainToolArgument(event.args)].filter(Boolean).join(" "));
 						if (event.toolName === PI_EXEC_RETURN_TOOL) pendingReturn = event.args;
 						return;
 					}
@@ -614,6 +615,7 @@ async function runWorkerProcess(
 
 			const abort = () => {
 				aborted = true;
+				// Pi handles SIGTERM by killing its detached tool processes before disposing the session.
 				child.kill("SIGTERM");
 			};
 			if (signal?.aborted) abort();
