@@ -1,7 +1,6 @@
 /** Human names for root people, drawn without a model. Explicit task assignments own what people work on. */
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { livePeers } from "../../session-state/src/peers.js";
-import { inChildSessionContext } from "../../subagents/src/child-context.js";
 import { pickName } from "./names.js";
 
 export const SESSION_TITLE_ENTRY = "session-title";
@@ -44,7 +43,6 @@ function loadState(ctx: ExtensionContext): SessionState {
 }
 
 export default function registerSessionTitle(pi: ExtensionAPI): void {
-	if (inChildSessionContext()) return;
 	let current: SessionState | undefined;
 	const stateOf = (ctx: ExtensionContext): SessionState => {
 		const id = ctx.sessionManager.getSessionId();

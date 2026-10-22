@@ -3,15 +3,9 @@ import { createConnection, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fauxAssistantMessage, fauxText } from "@earendil-works/pi-ai";
-import { registerFauxProvider } from "@earendil-works/pi-ai/compat";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
-import { fauxModelBackend } from "../../../tests/helpers/faux-model.js";
 import { fauxSession } from "../../../tests/helpers/faux-session.js";
-import { runAgent } from "../../subagents/src/agent-runner.js";
-import { registerAgents } from "../../subagents/src/agent-types.js";
-import { disposeAgentSession } from "../../subagents/src/session-lifecycle.js";
-import type { AgentConfig } from "../../subagents/src/types.js";
 import bridge from "../src/index.js";
 import { close, fakeBridge, query, standInProcess, startRuntime, stopRuntime, tempStateDir } from "./helpers.js";
 
@@ -249,78 +243,5 @@ test("a paused program caller receives bounded progress and one final result, wi
 		caller.socket.destroy();
 		link.socket.destroy();
 		proc.child.kill();
-	}
-}, 30000);
-
-test("a subagent's reply streams to clients subscribed to the child session", async () => {
-	const faux = registerFauxProvider({ provider: "faux", models: [{ id: "faux-child", contextWindow: 200_000 }] });
-	const reply = "The child session writes this reply a few characters at a time.";
-	let child: unknown;
-	let subscribed: Awaited<ReturnType<typeof subscriber>> | undefined;
-	let ready!: () => void;
-	const subscribedFirst = new Promise<void>((resolve) => {
-		ready = resolve;
-	});
-	try {
-		faux.setResponses([
-			async () => {
-				await subscribedFirst;
-				return fauxAssistantMessage([fauxText(reply)]);
-			},
-		]);
-		const model = faux.getModel();
-		const backend = fauxModelBackend(model);
-		registerAgents(
-			new Map<string, AgentConfig>([
-				[
-					"writer",
-					{
-						name: "writer",
-						description: "writes",
-						builtinToolNames: [],
-						extensions: false,
-						skills: false,
-						persistSession: false,
-						systemPrompt: "Write.",
-						promptMode: "replace",
-					},
-				],
-			]),
-		);
-		const parent = {
-			cwd,
-			model,
-			modelRegistry: backend.modelRegistry,
-			getSystemPrompt: () => "parent",
-			sessionManager: { getSessionFile: () => undefined, getSessionId: () => "parent-session-2" },
-		};
-		const result = await runAgent(parent as never, "writer", "write", {
-			pi: { exec: async () => ({ code: 1, stdout: "", stderr: "" }) } as never,
-			model,
-			onSessionCreated: (session) => {
-				child = session;
-				const id = session.sessionManager.getSessionId();
-				void vi
-					.waitFor(() => expect(query(state.dbPath, "select id from sessions where id = ?", id)).toHaveLength(1), {
-						timeout: 10000,
-					})
-					.then(() => subscriber([id]))
-					.then((s) => {
-						subscribed = s;
-						ready();
-					});
-			},
-		});
-		expect(result.responseText).toBe(reply);
-		const childId = result.session.sessionManager.getSessionId();
-		await vi.waitFor(() => expect(streamed(subscribed!.messages).at(-1)?.type).toBe("reply_end"), { timeout: 5000 });
-		const stream = streamed(subscribed!.messages);
-		expect(stream.filter((m) => m.type === "reply_delta").length).toBeGreaterThan(1);
-		expect(textOf(stream)).toBe(reply);
-		expect(stream.at(-1)).toMatchObject({ sessionId: childId, messageEntryId: expect.any(String) });
-	} finally {
-		subscribed?.socket.destroy();
-		await disposeAgentSession(child as never);
-		faux.unregister();
 	}
 }, 30000);

@@ -26,12 +26,12 @@ Keep one coherent change in the root when delegation would add no value.
 
 When the user selects several frontier tickets that were identified during the approved sequencing as dependency-free and non-overlapping, they may run in parallel. Before dispatch, confirm concrete write ownership from the tickets and current code; an absent blocking edge alone does not establish non-overlap.
 
-- Start one direct Builder subagent per ticket. Each subagent is already a fresh Pi session and works in the current worktree; create no extra worktrees.
-- Give each Builder one complete ticket, its confirmed TDD seams, the applicable red → green procedure, and exclusive ownership of its writes. If it discovers another seam, it must return the proposal to the root and wait for operator confirmation before editing that test.
+- Use `directory` to find colleagues with the right catalog roles. Managers can `hire` an `implementation-engineer` when needed and `assign` each colleague a written ticket goal. Keep each colleague's write ownership separate.
+- Give each colleague one complete ticket, its confirmed TDD seams, the applicable red → green procedure, and exclusive ownership of its writes. If it discovers another seam, it must return the proposal to the root and wait for operator confirmation before editing that test.
 - If a newly discovered dependency, shared generated output, or overlapping write makes two lanes conflict, serialize the affected work.
-- Builders implement and run focused checks. They do not stage, commit, switch branches, stash, reset, clean, change repository-global Git state, or mutate shared outputs outside their ownership. The root owns reconciliation, shared Git state, the final suite, review, the index, and any authorized commit.
+- Colleagues implement and run focused checks, then report the outcome and evidence in the task thread. Keep reconciliation, shared Git state and generated outputs, the final suite, review, the index, and authorized commits with the root.
 
-Use direct `agent` fan-out for these independent lanes, not Pi Exec. This is explicit parallel work, not automatic queue dispatch or a persistent scheduler.
+For a program that must wait for colleagues' answers, attach their sessions through `pi_exec`'s named `peers` mapping. When a ticket needs a fresh, bounded context instead of a lasting colleague, use `agent(role="implementation-engineer", task=...)` inside `pi_exec`; that temporary peer closes after its call. Give either form the same goal and write ownership.
 
 ## Build with feedback
 
@@ -41,7 +41,7 @@ Before writing or editing any test, list the exact public seams, what each seam 
 
 After confirmation, work one test → intended red → minimal green vertical slice at a time. When TDD does not fit, explain why and follow the repository's applicable test requirements.
 
-Run typechecking regularly when the repository provides it, run focused single test files regularly, and run the full repository-required test suite once at the end of implementation. In a parallel batch, Builders run their focused checks and the root runs the final combined suite after reconciliation. If review corrections mutate the code afterward, rerun the affected checks and the full required suite on the corrected tree; the final suite evidence must match the final code.
+Run typechecking regularly when the repository provides it, run focused single test files regularly, and run the full repository-required test suite once at the end of implementation. In a parallel batch, colleagues run their focused checks and the root runs the final combined suite after reconciliation. If review corrections mutate the code afterward, rerun the affected checks and the full required suite on the corrected tree; the final suite evidence must match the final code.
 
 ## Review the working tree
 
@@ -51,7 +51,7 @@ Reconcile the findings in the root. The user's invocation of `implement` authori
 
 ## Finish
 
-If a blocker, failed required check, partial Builder result, incomplete review boundary, or unresolved in-scope material finding remains, preserve the partial work and report that implementation is incomplete. Do not commit or change ticket state while that evidence is incomplete.
+If a blocker, failed required check, partial colleague result, incomplete review boundary, or unresolved in-scope material finding remains, preserve the partial work and report that implementation is incomplete. Do not commit or change ticket state while that evidence is incomplete.
 
 Stay on the current branch. Create or switch no branch automatically. Commit the implemented work to the current branch only when the user authorized a commit for this run. Otherwise leave the reviewed and validated change commit-ready and say that no commit was made.
 

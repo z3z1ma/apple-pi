@@ -165,8 +165,8 @@ const EXPLORATION_TOOLS = new Set([
 	"wiki_references",
 ]);
 const VERIFICATION_TOOLS = new Set(["test", "lint", "typecheck", "check", "build"]);
-const DELEGATION_TOOLS = new Set(["agent", "steer_subagent", "stop_subagent"]);
-const DELEGATED_RESULT_TOOLS = new Set(["get_subagent_result"]);
+const DELEGATION_TOOLS = new Set(["hire", "rehire", "assign"]);
+const DELEGATED_RESULT_TOOLS = new Set(["explore", "research"]);
 const PACKAGE_MANAGERS = new Set(["npm", "pnpm", "yarn", "bun", "npx"]);
 const VERIFICATION_BINS = new Set([
 	"test",
@@ -312,17 +312,6 @@ function toolCommand(call: PairToolCallView, results: readonly PairToolResultVie
 	return commandOf(call.arguments) ?? results.map((result) => commandOf(result.details)).find(Boolean);
 }
 
-function delegatedStatus(value: unknown): string | undefined {
-	if (!isRecord(value)) return undefined;
-	const status = value.status ?? value.state;
-	return typeof status === "string" ? status.toLowerCase() : undefined;
-}
-
-function isCompletedDelegatedResult(result: PairToolResultView): boolean {
-	const status = delegatedStatus(result.details);
-	return status === undefined || !["queued", "running", "background"].includes(status);
-}
-
 function classifiedPhase(flags: {
 	failure: boolean;
 	verification: boolean;
@@ -363,10 +352,9 @@ export function classifyPairWork(input: {
 	const consider = (name: string, call: PairToolCallView | undefined, result: PairToolResultView | undefined) => {
 		if (DELEGATED_RESULT_TOOLS.has(name)) {
 			delegation = true;
-			if (result && isCompletedDelegatedResult(result)) delegatedResult = true;
+			if (result && !result.isError) delegatedResult = true;
 		} else if (DELEGATION_TOOLS.has(name)) {
 			delegation = true;
-			if (name === "agent" && result && delegatedStatus(result.details) === "completed") delegatedResult = true;
 		} else if (MUTATION_TOOLS.has(name) || detailsHaveDiff(call?.details) || detailsHaveDiff(result?.details)) {
 			mutation = true;
 		} else if (VERIFICATION_TOOLS.has(name)) verification = true;

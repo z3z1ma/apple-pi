@@ -27,7 +27,7 @@ Snapshot `git status --short` before the survey. Preserve every pre-existing sta
 
 Read the relevant domain language and governing ADRs before scanning.
 
-Start one direct read-only Explorer subagent with a very thorough brief to walk the selected code. Give it the scope, hot spots, domain and ADR paths, complete deep-module vocabulary, and deletion test. Ask for evidence-backed candidate locations and observed friction, not interface proposals. Use a direct `agent` session; flat exploration does not need Pi Exec.
+Ask the `explore` intern to walk the selected code. Give it the scope, hot spots, domain and ADR paths, deep-module vocabulary, and deletion test. Ask for evidence-backed candidate locations and observed friction. Treat its answer as a cheap, lossy scouting report: verify the source before making an architectural judgment. The root develops the interface proposals.
 
 Explore organically and note where understanding creates friction:
 

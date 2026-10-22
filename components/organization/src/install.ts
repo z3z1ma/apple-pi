@@ -6,7 +6,6 @@
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { setSystemPromptSection } from "../../shared/src/system-prompt-section.js";
-import { inChildSessionContext } from "../../subagents/src/child-context.js";
 import {
 	CATALOG_SYSTEM_PROMPT_TAG,
 	catalogSection,
@@ -32,7 +31,6 @@ export function managesPeople(pi: ExtensionAPI, ctx: ExtensionContext): boolean 
 }
 
 export function installOrganization(pi: ExtensionAPI): void {
-	if (inChildSessionContext()) return;
 	installSessionRole(pi);
 	installSelf(pi);
 	pi.on("before_agent_start", (event, ctx) => {

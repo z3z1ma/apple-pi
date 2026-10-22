@@ -212,26 +212,6 @@ describe("terse tool formatters", () => {
 			}),
 		).toBe("address c1, decline c2");
 
-		expect(
-			formatToolArgs("agent", {
-				subagent_type: "explorer",
-				description: "Search for symbols across repo",
-			}),
-		).toBe("explorer: Search for symbols across repo");
-		expect(
-			formatToolArgs("agent", {
-				subagent_type: "builder",
-				description: "Implement tests",
-				run_in_background: true,
-			}),
-		).toBe("builder (bg): Implement tests");
-
-		expect(formatToolArgs("get_subagent_result", { agent_id: "agent-123", verbose: false })).toBe("agent-123");
-		expect(formatToolArgs("steer_subagent", { agent_id: "agent-123", message: "Focus on index.ts" })).toBe(
-			"agent-123: Focus on index.ts",
-		);
-		expect(formatToolArgs("stop_subagent", { agent_id: "agent-123" })).toBe("agent-123");
-
 		expect(formatToolArgs("search_session", { query: "export function" })).toBe("export function");
 		expect(formatToolArgs("search_session", { query: "#1:src/index.ts", mode: "file" })).toBe("#1:src/index.ts (file)");
 		expect(formatToolArgs("search_session", { mode: "touched" })).toBe("mode: touched");

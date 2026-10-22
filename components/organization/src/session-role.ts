@@ -10,7 +10,6 @@
 import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { setSystemPromptSection } from "../../shared/src/system-prompt-section.js";
-import { inChildSessionContext } from "../../subagents/src/child-context.js";
 import { loadRoles, type Role } from "./roles.js";
 import { drawSoul, renderSoul, type Soul, soulLine } from "./soul.js";
 
@@ -73,7 +72,6 @@ async function applyMind(pi: ExtensionAPI, ctx: ExtensionContext, role: Role, wa
 
 /** Installs the role of root sessions. The `role` flag is registered by the caller, with its other flags. */
 export function installSessionRole(pi: ExtensionAPI): void {
-	if (inChildSessionContext()) return;
 	pi.on("session_start", async (_event, ctx) => {
 		const sessionId = ctx.sessionManager.getSessionId();
 		resolved.set(sessionId, undefined);

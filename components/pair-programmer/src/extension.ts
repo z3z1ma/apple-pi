@@ -61,11 +61,9 @@ import {
 	NOTEBOOK_OBSERVATIONS_RECORDED,
 	rawTokensSinceObservationCoverage,
 } from "../../notebook/src/session-ledger/index.js";
-import { getChildPairNotebook, registerSharedNotebook } from "../../notebook/src/shared-notebook.js";
 import { registerRecallTool as registerNotebookSourceTool } from "../../notebook/src/tools/notebook-source.js";
 import { resolveModelProfile } from "../../shared/src/model-profiles.js";
 import { recordSidecarUsage, usageFieldsFromUnknown, withSidecarUsageContext } from "../../shared/src/sidecar-usage.js";
-import { inChildSessionContext } from "../../subagents/src/child-context.js";
 import {
 	formatPairAcknowledgmentReminder,
 	identifyMaterialPairNotes,
@@ -1234,17 +1232,14 @@ import {
 export { loadSystemPrompt, PAIR_MODEL_PROFILE, PRIMARY_PAIR_PROTOCOL, PRIMARY_PAIR_PROTOCOL_TAG } from "./config.js";
 
 export default function (pi: ExtensionAPI) {
-	const rootNotebook = inChildSessionContext() ? undefined : new NotebookRuntime();
-	if (rootNotebook) {
-		registerCompactionTrigger(pi, rootNotebook);
-		registerNotebookCompactionPacket(pi);
-		registerNotebookSourceTool(pi);
-		registerMainNotebookTool(pi, rootNotebook);
-		registerSharedNotebook(pi, rootNotebook);
-		registerLearningCycle(pi);
-		registerOpenLearnings(pi);
-		registerProjectLearnings(pi);
-	}
+	const rootNotebook = new NotebookRuntime();
+	registerCompactionTrigger(pi, rootNotebook);
+	registerNotebookCompactionPacket(pi);
+	registerNotebookSourceTool(pi);
+	registerMainNotebookTool(pi, rootNotebook);
+	registerLearningCycle(pi);
+	registerOpenLearnings(pi);
+	registerProjectLearnings(pi);
 
 	let enabled = loadEnabled();
 
@@ -1661,7 +1656,7 @@ export default function (pi: ExtensionAPI) {
 	}
 
 	function prepareNotebookBatch(ctx: ExtensionContext): PairNotebookBatch | undefined {
-		if (!rootNotebook || !enabled) return undefined;
+		if (!enabled) return undefined;
 		const config = rootNotebook.ensureConfig(ctx.cwd, ctx.isProjectTrusted());
 		if (config.passive) return undefined;
 		const getBranch = (ctx.sessionManager as { getBranch?: () => unknown }).getBranch;
@@ -1691,7 +1686,7 @@ export default function (pi: ExtensionAPI) {
 	}
 
 	function commitNotebookUpdate(update: PairNotebookUpdate): void {
-		if (!rootNotebook || !latestCtx) throw new Error("pair programmer notebook context is unavailable");
+		if (!latestCtx) throw new Error("pair programmer notebook context is unavailable");
 		if (update.sessionIdentity && update.sessionIdentity !== sessionIdFromCtx(latestCtx)) {
 			throw new Error("pair programmer notebook update belongs to a replaced session");
 		}
@@ -1794,15 +1789,13 @@ export default function (pi: ExtensionAPI) {
 			self,
 			(request) => runtime === builtRuntime && builtRuntime.stageSecondOpinion(request),
 		);
-		const builtNotebookTool = rootNotebook ? new UpdateNotebookTool() : undefined;
-		// A coding child's runner offers its primary-owned notebook on the child's private event bus.
-		const sharedNotebook = rootNotebook ? undefined : getChildPairNotebook(pi.events);
+		const builtNotebookTool = new UpdateNotebookTool();
 		const builtReceiptStore = ensureReceiptStore(ctx.sessionManager);
 		const builtReceiptTool = createExpandReceiptTool(builtReceiptStore);
 		const builtAttentionTool = createSetPairAttentionTool({
 			stage: (lease) => builtRuntime?.stageAttention(lease) ?? false,
 		});
-		const systemPrompt = loadSystemPrompt(ctx.cwd, projectTrusted, sharedNotebook !== undefined);
+		const systemPrompt = loadSystemPrompt(ctx.cwd, projectTrusted);
 		const unresolvedNotebook = () => {
 			if (!latestCtx) return "";
 			const batch = prepareNotebookBatch(latestCtx);
@@ -1837,8 +1830,7 @@ export default function (pi: ExtensionAPI) {
 				directoryTool: organizationTools.directory,
 				receiptTool: builtReceiptTool as never,
 				attentionTool: builtAttentionTool as never,
-				...(builtNotebookTool ? { notebookTool: builtNotebookTool as never } : {}),
-				...(sharedNotebook ? { sharedNotebook } : {}),
+				notebookTool: builtNotebookTool as never,
 				seedSource,
 				primarySessionManager: ctx.sessionManager,
 				modelRuntime: (ctx.modelRegistry as { runtime?: unknown }).runtime,
@@ -2131,7 +2123,7 @@ export default function (pi: ExtensionAPI) {
 		teardown();
 		reviewScheduler.dispose();
 		acknowledgments.reset();
-		rootNotebook?.dispose();
+		rootNotebook.dispose();
 		(ctx as { ui?: { setStatus?: (k: string, t: string | undefined) => void } }).ui?.setStatus?.(STATUS_KEY, undefined);
 	});
 
@@ -2173,10 +2165,6 @@ export default function (pi: ExtensionAPI) {
 			const arg = args.trim().toLowerCase();
 
 			if (arg === "notebook" || arg === "notebook full") {
-				if (!rootNotebook) {
-					ctx.ui.notify("Pair programmer notebook is available only in the root session.", "warning");
-					return;
-				}
 				const entries = ctx.sessionManager.getBranch() as Entry[];
 				ctx.ui.notify(renderNotebookView(entries, arg === "notebook full" ? "full" : "visible"), "info");
 				return;
@@ -2207,7 +2195,7 @@ export default function (pi: ExtensionAPI) {
 				const pacingState = rt.reviewing ? "reviewing" : pacing.pendingItems > 0 ? "watching" : "idle";
 				const entries = ctx.sessionManager.getBranch() as Entry[];
 				const notebook = foldLedger(entries);
-				const notebookProgress = rootNotebook ? rawTokensSinceObservationCoverage(entries) : 0;
+				const notebookProgress = rawTokensSinceObservationCoverage(entries);
 				ctx.ui.notify(
 					`Pair programmer enabled — profile ${PAIR_MODEL_PROFILE}, model ${activeModelLabel}, state ${pacingState}, backlog ${rt.backlog}, reviews ${rt.reviewCount}, attention ${pacing.attention}, wake ${pacing.wakeOn.join("/") || "mandatory-only"}, unseen ~${pacing.pendingTokens} tok, last ${lastReviewReason ?? "none"}, findings ${directFindings.nit}n/${directFindings.concern}c/${directFindings.blocker}b, acknowledgments ${acknowledgments.pendingCount} pending, tokens ${u.input}in/${u.output}out, cost $${u.cost.toFixed(4)}, ctx ${ctxStr}\n` +
 						`Notebook — ${notebook.currentReflections.length} working conclusions, ~${notebookProgress.toLocaleString()} uncovered source tokens`,

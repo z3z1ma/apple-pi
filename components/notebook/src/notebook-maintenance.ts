@@ -21,7 +21,6 @@ import {
 	reflectionToSummaryLine,
 } from "./session-ledger/index.js";
 import { notebookSourceEntries } from "./session-ledger/sources.js";
-import type { ChildSources } from "./session-ledger/types.js";
 import { estimateStringTokens } from "./tokens.js";
 
 export const UPDATE_NOTEBOOK_TOOL_NAME = "update_notebook";
@@ -80,7 +79,6 @@ export type NotebookUpdate = {
 	sourceTokens?: number;
 	priorCoverageId?: string;
 	sessionIdentity?: string;
-	childSources?: ChildSources;
 };
 
 export type PairNotebookUpdate = NotebookUpdate & {
@@ -266,7 +264,6 @@ export function commitNotebookUpdate(
 		reflections: update.reflections,
 		retiredReflectionIds: update.retiredIds.filter((id) => currentIds.includes(id)),
 		droppedObservationIds: [],
-		...(update.childSources ? { childSources: update.childSources } : {}),
 	});
 	if (!data) return false;
 	pi.appendEntry(NOTEBOOK_MAINTENANCE, data);

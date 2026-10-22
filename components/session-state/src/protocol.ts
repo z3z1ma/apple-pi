@@ -221,8 +221,8 @@ export type EntriesReply =
 	| { type: "entries"; requestId: string; error: string };
 
 /**
- * A client asks for the live reply streams of `sessionIds` (children are sessions of their own and are named
- * explicitly). Each subscribe replaces the connection's earlier one; an empty list ends it. The runtime confirms with
+ * A client asks for the live reply streams of `sessionIds`. Each subscribe replaces the connection's earlier
+ * one; an empty list ends it. The runtime confirms with
  * `Subscribed` before relaying anything.
  */
 export interface Subscribe {
@@ -261,7 +261,7 @@ export interface ReplyEnd {
 
 export interface Hello {
 	type: "hello";
-	/** A child is a subagent session; `spawnedBy` is the session that started it. */
+	/** Current bridges report root sessions; child identity remains readable for historical records. */
 	session: {
 		id: string;
 		kind: "root" | "child";

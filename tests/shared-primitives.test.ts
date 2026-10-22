@@ -1,13 +1,12 @@
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { parseArgv } from "../components/shared/src/argv.js";
 import { acquireExclusiveLease, activeExclusiveLease } from "../components/shared/src/exclusive-lease.js";
-import { applyCompleteSettings, applySettings, loadSettings } from "../components/subagents/src/settings.js";
 
 const roots: string[] = [];
 const priorAgentDir = process.env.PI_CODING_AGENT_DIR;
@@ -134,55 +133,5 @@ setInterval(() => {}, 1000);`,
 		const recovered = acquireExclusiveLease("reviews", project, "parent", messages);
 		expect(activeExclusiveLease("reviews", project)?.runId).toBe("parent");
 		recovered();
-	});
-});
-
-describe("subagent settings rebinding", () => {
-	it("resets an override that the next project omitted", () => {
-		const agentDir = mkdtempSync(join(tmpdir(), "apple-pi-settings-agent-"));
-		const first = mkdtempSync(join(tmpdir(), "apple-pi-settings-a-"));
-		const second = mkdtempSync(join(tmpdir(), "apple-pi-settings-b-"));
-		roots.push(agentDir, first, second);
-		process.env.PI_CODING_AGENT_DIR = agentDir;
-		mkdirSync(join(first, ".pi"), { recursive: true });
-		writeFileSync(join(first, ".pi", "subagents.json"), JSON.stringify({ maxConcurrent: 9 }));
-
-		const applied: Record<string, unknown> = {};
-		const appliers = {
-			setMaxConcurrent: (value: number) => {
-				applied.maxConcurrent = value;
-			},
-			setDefaultMaxTurns: (value: number) => {
-				applied.defaultMaxTurns = value;
-			},
-			setGraceTurns: (value: number) => {
-				applied.graceTurns = value;
-			},
-			setDefaultJoinMode: (value: string) => {
-				applied.defaultJoinMode = value;
-			},
-			setStrictAgentFiles: (value: boolean) => {
-				applied.strictAgentFiles = value;
-			},
-			setDisableDefaultAgents: (value: boolean) => {
-				applied.disableDefaultAgents = value;
-			},
-			setPersistAgentSessions: (value: boolean) => {
-				applied.persistAgentSessions = value;
-			},
-			setMaxSubagentDepth: (value: number) => {
-				applied.maxSubagentDepth = value;
-			},
-		};
-
-		applyCompleteSettings(loadSettings({ cwd: first, projectTrusted: true }), appliers);
-		expect(applied).toMatchObject({ maxConcurrent: 9 });
-		applySettings({ persistAgentSessions: false }, appliers);
-		expect(applied.persistAgentSessions).toBe(false);
-		applyCompleteSettings(loadSettings({ cwd: second, projectTrusted: true }), appliers);
-		expect(applied).toMatchObject({
-			maxConcurrent: 4,
-			persistAgentSessions: true,
-		});
 	});
 });

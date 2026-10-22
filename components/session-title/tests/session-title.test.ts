@@ -3,11 +3,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { fauxAssistantMessage } from "@earendil-works/pi-ai/compat";
-import { type ExtensionAPI, SessionManager } from "@earendil-works/pi-coding-agent";
+import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fauxSession } from "../../../tests/helpers/faux-session.js";
 import { migrate } from "../../session-state/src/schema.js";
-import { runInChildSessionContext } from "../../subagents/src/child-context.js";
 import registerSessionTitle, { SESSION_TITLE_ENTRY } from "../src/index.js";
 import { FAMILY_NAMES, FIRST_NAMES, pickName } from "../src/names.js";
 
@@ -52,14 +51,13 @@ function liveSessions(names: string[]): void {
 interface Options {
 	tui?: boolean;
 	mode?: "tui" | "rpc";
-	factory?: (pi: ExtensionAPI) => void;
 	cwd?: string;
 	sessionManager?: SessionManager;
 	beforeStart?: () => void;
 }
 
 async function harness(options: Options = {}) {
-	const run = await fauxSession([options.factory ?? registerSessionTitle], () => fauxAssistantMessage("Done."), [], {
+	const run = await fauxSession([registerSessionTitle], () => fauxAssistantMessage("Done."), [], {
 		cwd: options.cwd,
 		sessionManager: options.sessionManager,
 	});
@@ -177,16 +175,12 @@ describe("session names", () => {
 		parts(run.name());
 	});
 
-	it("does nothing in a child session or outside the TUI", async () => {
-		const child = await harness({ factory: (pi) => runInChildSessionContext(() => registerSessionTitle(pi)) });
-		await child.session.prompt("Fix the parser.");
+	it("does nothing in print mode", async () => {
 		const print = await harness({ tui: false });
 		await print.session.prompt("Fix the parser.");
 
 		await settle();
-		expect(child.requests).toHaveLength(1);
 		expect(print.requests).toHaveLength(1);
-		expect(child.name()).toBeUndefined();
 		expect(print.name()).toBeUndefined();
 	});
 });

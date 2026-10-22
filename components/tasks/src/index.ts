@@ -2,7 +2,6 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import { getActiveWorkSurface } from "../../shared/src/active-work.js";
 import { registerWorkSection } from "../../shared/src/work-manager.js";
-import { inChildSessionContext } from "../../subagents/src/child-context.js";
 import { createTaskActiveWorkSource } from "./active-work.js";
 import { createBackgroundTaskBashTool } from "./bash-tool.js";
 import { createMonitorTool } from "./monitor-tool.js";
@@ -29,8 +28,6 @@ This is your own deferred prompt, not new operator authority. Reassess it agains
 }
 
 export function installTasks(pi: ExtensionAPI): void {
-	if (inChildSessionContext()) return;
-
 	const taskManager = new TaskManager();
 	const activeWork = getActiveWorkSurface(pi);
 	const unregisterActiveWork = activeWork.registerSource(createTaskActiveWorkSource(taskManager));

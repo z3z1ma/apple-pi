@@ -8,7 +8,6 @@
 import { defineTool, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { setSystemPromptSection } from "../../shared/src/system-prompt-section.js";
-import { inChildSessionContext } from "../../subagents/src/child-context.js";
 
 export const SELF_ENTRY = "organization-self";
 export const SELF_SYSTEM_PROMPT_TAG = "self";
@@ -52,7 +51,6 @@ function storedSelf(ctx: ExtensionContext): string | undefined {
 }
 
 export function installSelf(pi: ExtensionAPI): void {
-	if (inChildSessionContext()) return;
 	// Pi restores the active tool set from the transcript, which lacks this tool in sessions older than it.
 	const activate = () => {
 		const active = pi.getActiveTools();

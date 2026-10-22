@@ -11,8 +11,6 @@ import {
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { loadExtensions } from "../node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/loader.js";
 import { buildSystemPrompt } from "../node_modules/@earendil-works/pi-coding-agent/dist/core/system-prompt.js";
-import { addToolGuidanceSections, buildAgentPrompt } from "../components/subagents/src/prompts.js";
-import type { AgentConfig } from "../components/subagents/src/types.js";
 
 const ROOT = join(import.meta.dirname, "..");
 const PACKAGE_EXTENSIONS: string[] = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")).pi.extensions;
@@ -52,14 +50,13 @@ async function runBeforeAgentStart(cwd: string, options: Partial<BuildSystemProm
 }
 
 describe("package system prompt", () => {
-	it("adds structured sections without forcing an opaque prompt", async () => {
+	it("adds structured sections without an opaque prompt or a subagent catalog", async () => {
 		const options = await runBeforeAgentStart(ROOT);
 		expect(options.forceSystemPrompt).toBeUndefined();
-		expect(Object.keys(options.sections)).toEqual(
-			expect.arrayContaining(["pair-protocol", "subagent-team", "inference-profiles", "ledger-workbench"]),
-		);
-		const prompt = buildSystemPrompt(options);
-		expect(prompt.match(/<ledger-workbench>/g)).toHaveLength(1);
+		expect(Object.keys(options.sections)).toEqual(expect.arrayContaining(["pair-protocol", "ledger-workbench"]));
+		expect(options.sections["subagent-team"]).toBeUndefined();
+		expect(options.sections["inference-profiles"]).toBeUndefined();
+		expect(buildSystemPrompt(options).match(/<ledger-workbench>/g)).toHaveLength(1);
 	});
 
 	it("adds the wiki workbench only to a project that has a wiki", async () => {
@@ -71,64 +68,10 @@ describe("package system prompt", () => {
 		expect((await runBeforeAgentStart(withWiki)).sections["wiki-workbench"]).toContain("wiki_lint");
 	});
 
-	it("does not repeat sections an append-mode child inherits from its parent prompt", async () => {
-		const parentPrompt = buildSystemPrompt(await runBeforeAgentStart(ROOT));
-		const config: AgentConfig = {
-			name: "twin",
-			description: "test",
-			systemPrompt: "",
-			extensions: false,
-			skills: false,
-			promptMode: "append",
-		};
-		const childPreamble = buildAgentPrompt(config, { isGitRepo: false, branch: "", platform: "test" }, parentPrompt);
-		const child = await runBeforeAgentStart(ROOT, { customPrompt: childPreamble });
-		expect(child.sections["ledger-workbench"]).toBeUndefined();
-		expect(buildSystemPrompt(child).match(/<ledger-workbench>/g)).toHaveLength(1);
-	});
-});
-
-describe("child tool guidance", () => {
-	const base = {
-		cwd: "/repo",
-		selectedTools: ["read", "search_session"],
-		hiddenTools: [],
-		toolSnippets: { read: "Read files", search_session: "Recover earlier conversation" },
-		toolGuidelines: { search_session: ["Use search_session for earlier work."] },
-		promptGuidelines: ["Use search_session for earlier work.", "Keep reports short."],
-		appendSystemPrompt: "",
-		contextFiles: [],
-		skills: [],
-	};
-
-	it("renders tool summaries and deduplicated rules under a custom preamble", () => {
-		const options = { ...base, customPrompt: "You are a teammate.", sections: {} };
-		addToolGuidanceSections(options);
-		expect(options.sections).toEqual({
-			tools: "- read: Read files\n- search_session: Recover earlier conversation",
-			rules: "- Use search_session for earlier work.\n- Keep reports short.",
-		});
-	});
-
-	it("leaves out tools whose declarations Pi hides", () => {
-		const options = { ...base, hiddenTools: ["search_session"], customPrompt: "You are a teammate.", sections: {} };
-		addToolGuidanceSections(options);
-		expect(options.sections).toEqual({
-			tools: "- read: Read files",
-			rules: "- Use search_session for earlier work.\n- Keep reports short.",
-		});
-	});
-
-	it("leaves Pi's default prompt and an inherited parent prompt unchanged", () => {
-		const defaultPrompt = { ...base, sections: {} };
-		addToolGuidanceSections(defaultPrompt);
-		expect(defaultPrompt.sections).toEqual({});
-		const inherited = {
-			...base,
-			customPrompt: "Parent\n\n<tools>\n- bash: Run\n</tools>\n\n<rules>\n- x\n</rules>",
-			sections: {},
-		};
-		addToolGuidanceSections(inherited);
-		expect(inherited.sections).toEqual({});
+	it("does not repeat the ledger contract already supplied in a custom prompt", async () => {
+		const customPrompt = buildSystemPrompt(await runBeforeAgentStart(ROOT));
+		const options = await runBeforeAgentStart(ROOT, { customPrompt });
+		expect(options.sections["ledger-workbench"]).toBeUndefined();
+		expect(buildSystemPrompt(options).match(/<ledger-workbench>/g)).toHaveLength(1);
 	});
 });

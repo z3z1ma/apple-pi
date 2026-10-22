@@ -6,13 +6,15 @@
 
 **Blocked by:** 08 Interns, 09 The pair asks the organization, 10 `pi_exec` on peers
 
-**Status:** in-progress
+**Status:** done
 
 **Scope change approved during 11:** The operator approved deleting `optional-extensions/` and its related tests. Remove the Todos and Backlog implementations, packaging and validation entries, and documentation. This supersedes the earlier plan to migrate Todos from the managed background service to peers; that dependency disappears with its consumer.
 
-- [ ] The package-load test shows none of the four subagent tools and no `<subagent-team>` section, with `explore` and `research` present.
+- [x] The package-load test shows none of the four subagent tools and no `<subagent-team>` section, with `explore` and `research` present.
 - [x] `/btw` opens, answers, takes a follow-up, and is dismissed as before (its existing tests pass against the new owner). Twenty-eight checks cover the preserved view and the directly owned SDK session, including startup/compaction cancellation and late cleanup; see [implementation notes](../implementation-11.md).
-- [ ] The work panel has the Tasks and Pi Exec tabs only, and no active-agent widget appears.
-- [ ] No session writes a `child` row to the runtime.
-- [ ] No skill or prompt names a removed tool (a repository grep in the test suite).
-- [ ] `grafana-debugger.md` is gone from the operator's agent directory.
+- [x] The work panel has the Tasks and Pi Exec tabs only, and no active-agent widget appears.
+- [x] No session writes a `child` row to the runtime.
+- [x] No skill or prompt names a removed tool (a repository grep in the test suite).
+- [x] `grafana-debugger.md` is gone from the operator's agent directory.
+
+**Evidence and deviations:** [Implementation notes](../implementation-11.md) record the focused suites, lifecycle checks, loader, typecheck, format/lint, context lint, and package inspection. Historical child rows and notebook source records remain readable; new sessions no longer produce them. Optional extensions were deleted by the operator's explicit scope change. Broad product documentation follows in ticket 14.

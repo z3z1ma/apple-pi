@@ -7,7 +7,7 @@ import { registerForkedContinuation } from "../../shared/src/forked-continuation
 export const CHANGE_REFLECTION_MESSAGE_TYPE = "change-reflection";
 
 const MUTATION_TOOLS = new Set(["edit", "write"]);
-const EXECUTION_TOOLS = new Set(["bash", "pi_exec", "agent", "get_subagent_result"]);
+const EXECUTION_TOOLS = new Set(["bash", "pi_exec"]);
 const PROSE_EXTENSIONS = new Set([".md", ".mdx", ".markdown", ".txt", ".rst", ".adoc"]);
 
 const CONTEXT_FILE_UPKEEP = `Keep the context files of these files, \`.context/<path>.md\`, true to the changes. Record a non-obvious invariant, ordering hazard, or cross-file coupling this work revealed that the code cannot show, with its reason as \`Why:\`; create the context file when it is missing. Add \`Coupled:\` or \`Verify:\` when they apply. Update a constraint this work changed on purpose, and move a context file with its renamed file. Run \`context_lint\` after context file changes. In your reply, name each context file you create as \`Created context file: <path>\` and each existing invariant you change or remove as \`Changed invariant: <file>#<section>, because <reason>\`.`;

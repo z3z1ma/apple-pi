@@ -293,8 +293,8 @@ function createReadThreadTool() {
 	});
 }
 
-/** Show delivered mail; root sessions also get the mail tools. */
-export function installMail(pi: ExtensionAPI, withTools: boolean): void {
+/** Show delivered mail and register the person's communication tools. */
+export function installMail(pi: ExtensionAPI): void {
 	pi.registerMessageRenderer<Mail>(MAIL_CUSTOM_TYPE, (message, _options, theme) => {
 		const details = message.details;
 		if (!details) return undefined;
@@ -307,7 +307,6 @@ export function installMail(pi: ExtensionAPI, withTools: boolean): void {
 			.join("\n");
 		return new Text(`${header}\n${body}`, 0, 0);
 	});
-	if (!withTools) return;
 	pi.registerTool(createSendMailTool());
 	pi.registerTool(createReplyTool());
 	pi.registerTool(createInboxTool());

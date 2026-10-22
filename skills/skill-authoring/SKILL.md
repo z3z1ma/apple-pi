@@ -72,9 +72,9 @@ For guidance governing destructive operations, security boundaries, costly migra
 
 Validation stays cheaper than the guidance it supports. When the harness becomes the project, return to the direct validation path.
 
-## Subagents
+## Independent evaluation
 
-The root model authors and inspects normal skills directly. When independent evaluation is genuinely valuable, commission one complete evaluation with all relevant scenarios, then validate the response and make ordinary edits yourself.
+The root model authors and inspects normal skills directly. When independent evaluation is genuinely valuable, ask a suitable peer for one complete evaluation with all relevant scenarios, then validate the response and make ordinary edits yourself.
 
 ## Compose packaged skills
 

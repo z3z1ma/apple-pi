@@ -130,11 +130,8 @@ try {
 		"default package must not load a workflow extension",
 	);
 	assert(
-		result.extensions.some(
-			(extension) =>
-				extension.path.endsWith("subagents.ts") && (extension.handlers.get("before_agent_start")?.length ?? 0) > 0,
-		),
-		"missing live subagent-team system-prompt injection",
+		!result.extensions.some((extension) => extension.path.endsWith("subagents.ts")),
+		"the package must not load the removed subagent system",
 	);
 	assert(
 		result.extensions.some((extension) => extension.path.endsWith("rtk.ts")),
@@ -153,7 +150,6 @@ try {
 	for (const command of [
 		"pair",
 		"work",
-		"agents",
 		"tasks",
 		"btw",
 		"fast",
@@ -188,11 +184,8 @@ try {
 		"search_session",
 		"revisit_note",
 		"pi_exec",
-		"agent",
 		"explore",
 		"research",
-		"get_subagent_result",
-		"steer_subagent",
 		"ledger_add",
 		"ledger_status",
 		"wiki_lint",
@@ -210,6 +203,10 @@ try {
 		"pi_exec_program",
 		"ask_for_second_opinion",
 		"ask_consultant",
+		"agent",
+		"get_subagent_result",
+		"steer_subagent",
+		"stop_subagent",
 		"schedule",
 		"list_peer_sessions",
 		"start_peer_session",
@@ -221,7 +218,7 @@ try {
 	]) {
 		assert(!tools.has(name), `default package must not expose ${name}`);
 	}
-	for (const name of ["mcp", "mcp-auth"]) assert(!commands.has(name), `package must not register /${name}`);
+	for (const name of ["agents", "mcp", "mcp-auth"]) assert(!commands.has(name), `package must not register /${name}`);
 	const scheduleTool = result.extensions
 		.flatMap((extension) => [...extension.tools.values()])
 		.find((tool) => tool.definition.name === "remind_me");
@@ -461,48 +458,12 @@ try {
 		.flatMap((extension) => [...extension.tools.values()])
 		.find((tool) => tool.definition.name === "ask_user_question");
 	assert(askUserTool, "missing ask_user_question tool definition");
-	const agentTool = result.extensions
-		.flatMap((extension) => [...extension.tools.values()])
-		.find((tool) => tool.definition.name === "agent");
-	assert(agentTool, "missing agent tool definition");
-	const agentGuidance = agentTool.definition.promptGuidelines.join("\n");
-	assert.match(agentGuidance, /<subagent-team>/);
-	assert.match(agentGuidance, /type in pi_exec\) chooses the teammate/);
-	assert.match(agentGuidance, /system_prompt adds guidance without changing capabilities/);
-	assert.doesNotMatch(agentGuidance, /agent\.run/);
 	const piExecCodeDescription = piExecTool.definition.parameters.properties.code.description;
 	assert.doesNotMatch(piExecTool.definition.description, /<subagent-team>/);
 	assert.doesNotMatch(piExecTool.definition.description, /<inference-profiles>/);
 	assert.doesNotMatch(piExecCodeDescription, /<subagent-team>/);
 	assert.doesNotMatch(piExecCodeDescription, /<inference-profiles>/);
 	assert.match(piExecCodeDescription, /type-checked before execution/);
-	const agentProperties = agentTool.definition.parameters.properties;
-	assert("profile" in agentProperties, "Agent schema omits the inference profile selector");
-	assert.deepEqual(
-		agentProperties.profile.anyOf.map((entry) => entry.const),
-		["quick", "balanced", "pair", "deep", "coding", "visual-engineering", "background"],
-	);
-	assert("system_prompt" in agentProperties, "Agent schema omits invocation-level system guidance");
-	assert.match(
-		agentProperties.system_prompt.description,
-		/appended after the selected definition and preloaded skills/,
-	);
-	assert.match(agentProperties.system_prompt.description, /cannot change capabilities/);
-	assert("output_path" in agentProperties, "Agent schema omits host-written output files");
-	assert.match(agentProperties.output_path.description, /final response verbatim/);
-	assert.match(agentProperties.output_path.description, /root session's working directory/);
-	assert(!agentTool.definition.parameters.required.includes("output_path"), "output_path must remain optional");
-	assert(!agentTool.definition.parameters.required.includes("pair"), "pair must remain optional for config defaults");
-	const resultTool = result.extensions
-		.flatMap((extension) => [...extension.tools.values()])
-		.find((tool) => tool.definition.name === "get_subagent_result");
-	assert(!resultTool.definition.parameters.required.includes("yield_seconds"));
-	assert(!("maximum" in resultTool.definition.parameters.properties.yield_seconds));
-	assert.match(resultTool.definition.parameters.properties.yield_seconds.description, /very large positive value/);
-	assert.match(resultTool.definition.parameters.properties.yield_seconds.description, /not an agent timeout/);
-	assert(!("wait_seconds" in resultTool.definition.parameters.properties));
-	assert.match(resultTool.definition.description, /use a very large value/);
-	assert.match(resultTool.definition.description, /leaves them working in the background/);
 	assert(existsSync("skills/code-review/references/plan-review-verify.py"), "missing code-review planned reference");
 	assert(existsSync("skills/code-review/references/multi-lens-review.py"), "missing code-review multi-lens reference");
 	assert(existsSync("skills/code-review/references/residual-review-loop.py"), "missing code-review residual reference");

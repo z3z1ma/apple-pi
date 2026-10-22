@@ -1,6 +1,5 @@
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
-import { runInChildSessionContext } from "../../subagents/src/child-context.js";
 import installPromptStash, {
 	handleExternalEditor,
 	handleStashPop,
@@ -57,16 +56,6 @@ function createMockContext(options?: { editorText?: string; mode?: "tui" | "rpc"
 }
 
 describe("prompt stash installer", () => {
-	it("skips registration when inside child session context", () => {
-		const { pi, shortcuts, commands } = createMockExtensionAPI();
-		runInChildSessionContext(() => {
-			installPromptStash(pi);
-		});
-
-		expect(shortcuts.size).toBe(0);
-		expect(commands.size).toBe(0);
-	});
-
 	it("registers all expected shortcuts and commands in root session", () => {
 		const { pi, shortcuts, commands } = createMockExtensionAPI();
 		installPromptStash(pi);

@@ -1,7 +1,7 @@
 {
   "name": "apple-pi",
   "version": "0.1.0",
-  "description": "Alex's integrated Pi system: advice, context, execution, subagents, code review with pi_exec, and bounded Ralph loops with pi_exec.",
+  "description": "Alex's integrated Pi system: advice, context, execution, peers and interns, code review with pi_exec, and bounded Ralph loops with pi_exec.",
   "type": "module",
   "license": "MIT",
   "keywords": [
@@ -13,7 +13,8 @@
     "compaction",
     "notebook",
     "mcp",
-    "subagents",
+    "organization",
+    "interns",
     "ralph",
     "code-review",
     "work-graph"
@@ -28,7 +29,6 @@
     "components/shared/src/",
     "components/session-search/src/",
     "components/notebook/src/",
-    "components/subagents/src/",
     "components/interns/src/",
     "components/btw/src/",
     "components/xai-hosted-tools/src/",
@@ -80,7 +80,6 @@
       "./extensions/home-search-guard.ts",
       "./extensions/pi-exec.ts",
       "./extensions/work.ts",
-      "./extensions/subagents.ts",
       "./extensions/interns.ts",
       "./extensions/btw.ts",
       "./extensions/ledger.ts",

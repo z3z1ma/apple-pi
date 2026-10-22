@@ -13,7 +13,6 @@ import {
 	SessionManager,
 	SettingsManager,
 } from "@earendil-works/pi-coding-agent";
-import type { ChildPairNotebook } from "../../notebook/src/shared-notebook.js";
 import {
 	activeTools,
 	compactOnServer,
@@ -107,8 +106,6 @@ export async function createPairSession(opts: {
 	receiptTool: ToolDefinition;
 	attentionTool: ToolDefinition;
 	notebookTool?: ToolDefinition;
-	/** A coding child's pair reads and recalls the primary notebook instead of its partner's session. */
-	sharedNotebook?: ChildPairNotebook;
 	seedSource: PairSeedSource;
 	primarySessionManager: PrimarySessionManager;
 	modelRuntime?: unknown;
@@ -146,23 +143,8 @@ export async function createPairSession(opts: {
 	});
 	await loader.reload();
 
-	const shared = opts.sharedNotebook;
-	const sharedTools = shared?.tools ?? [];
-	const recallTools = shared
-		? bindPairRecallTools(
-				{
-					getBranch: () => shared.entries(),
-					getEntries: () => shared.entries(),
-					getSessionFile: () => undefined,
-				} as unknown as PrimarySessionManager,
-				"This revisits a known learning in the primary notebook shared by your partner's delegation tree, including archived evidence from child sessions.",
-			)
-		: bindPairRecallTools(opts.primarySessionManager);
-	const toolNames: string[] = [
-		...PAIR_SESSION_TOOLS,
-		...(opts.notebookTool ? ["update_notebook"] : []),
-		...sharedTools.map((tool) => tool.name),
-	];
+	const recallTools = bindPairRecallTools(opts.primarySessionManager);
+	const toolNames: string[] = [...PAIR_SESSION_TOOLS, ...(opts.notebookTool ? ["update_notebook"] : [])];
 	const customTools = [
 		opts.adviseTool,
 		opts.secondOpinionTool,
@@ -170,7 +152,6 @@ export async function createPairSession(opts: {
 		opts.receiptTool,
 		opts.attentionTool,
 		...(opts.notebookTool ? [opts.notebookTool] : []),
-		...sharedTools,
 		...recallTools,
 	];
 	const { session } = await createAgentSession({

@@ -13,7 +13,6 @@ import { fileURLToPath } from "node:url";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { agentDir } from "../../session-state/src/paths.js";
 import { PROGRAM_ID_ENV } from "../../session-state/src/protocol.js";
-import { inChildSessionContext } from "../../subagents/src/child-context.js";
 
 const PLUGIN = fileURLToPath(new URL("../pi_session_manager.tmux", import.meta.url));
 const NOTCH = fileURLToPath(new URL("../scripts/notch.sh", import.meta.url));
@@ -44,8 +43,7 @@ async function ensurePlugin(pi: ExtensionAPI): Promise<void> {
 }
 
 export default function piTmuxSessions(pi: ExtensionAPI): void {
-	// In-process children have no pane of their own.
-	if (inChildSessionContext() || isDisabled()) return;
+	if (isDisabled()) return;
 	let tty: Promise<string | undefined> | undefined;
 
 	pi.on("session_start", (event, ctx) => {

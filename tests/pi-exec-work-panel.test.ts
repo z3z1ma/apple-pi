@@ -2,8 +2,6 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { createServer, type ServerResponse } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fauxAssistantMessage, fauxText } from "@earendil-works/pi-ai";
-import { registerFauxProvider } from "@earendil-works/pi-ai/compat";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { visibleWidth } from "@earendil-works/pi-tui";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -22,7 +20,6 @@ import {
 	loadExtensions,
 } from "../node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/loader.js";
 import { fakeCustom, fakeTui, plainTheme } from "./helpers/fake-tui.js";
-import { fauxModelBackend } from "./helpers/faux-model.js";
 
 const cleanups: Array<() => Promise<void>> = [];
 const gateClosures: Array<() => Promise<void>> = [];
@@ -37,7 +34,6 @@ afterEach(async () => {
 async function harness(
 	setup?: (cwd: string) => void,
 	extensions = ["./extensions/pi-exec.ts", "./extensions/work.ts"],
-	context: Record<string, unknown> = {},
 ) {
 	const cwd = mkdtempSync(join(tmpdir(), "apple-pi-exec-panel-"));
 	const previous = process.env.PI_CODING_AGENT_DIR;
@@ -94,8 +90,6 @@ async function harness(
 		mode: "tui",
 		isProjectTrusted: () => true,
 		tools: [],
-		getSystemPrompt: () => "parent",
-		...context,
 		ui: {
 			custom: fakeCustom(screen).custom,
 			notify: vi.fn(),
@@ -212,53 +206,12 @@ async function peerRuntime(cwd: string, caller: string): Promise<() => Promise<v
 const gatedTask = (gate: string, tool: string, args: Record<string, unknown>, holdTerm = false) =>
 	JSON.stringify(JSON.stringify({ gate, tool, args, ...(holdTerm ? { holdTerm } : {}) }));
 
-/** The registered package loads with public agents and managed tasks beside Pi Exec, on a gated scripted model. */
+/** The registered package loads managed tasks beside Pi Exec. */
 async function mixedHarness() {
-	const faux = registerFauxProvider({ provider: "faux", models: [{ id: "faux-mixed", contextWindow: 200_000 }] });
-	let release!: () => void;
-	const gate = new Promise<void>((resolve) => {
-		release = resolve;
-	});
-	let started = false;
-	faux.setResponses([
-		async () => {
-			started = true;
-			await gate;
-			return fauxAssistantMessage([fauxText("PUBLIC-AGENT-DONE")]);
-		},
-	]);
-	cleanups.push(async () => {
-		release();
-		faux.unregister();
-	});
-	const model = faux.getModel();
-	const { modelRegistry } = fauxModelBackend(model);
-	const h = await harness(
-		(cwd) => {
-			mkdirSync(join(cwd, ".pi", "agents"), { recursive: true });
-			writeFileSync(
-				join(cwd, ".pi", "agents", "mixed-test.md"),
-				"---\nname: mixed-test\ndescription: mixed test role\ntools: read\nextensions: false\nskills: false\npersist_session: false\n---\nAnswer the task.\n",
-			);
-		},
-		["./extensions/pi-exec.ts", "./extensions/work.ts", "./extensions/subagents.ts", "./extensions/tasks.ts"],
-		{ model, modelRegistry },
-	);
-	const launchAgent = async () => {
-		await h
-			.tool("agent")
-			.execute(
-				"public-agent",
-				{ prompt: "public work", description: "Public reviewer", subagent_type: "mixed-test", run_in_background: true },
-				undefined,
-				undefined,
-				h.ctx,
-			);
-		await vi.waitFor(() => expect(started).toBe(true));
-	};
+	const h = await harness(undefined, ["./extensions/pi-exec.ts", "./extensions/work.ts", "./extensions/tasks.ts"]);
 	const scheduleTask = () =>
 		h.tool("remind_me").execute("task", { text: "Deferred check", delay_seconds: 600 }, undefined, undefined, h.ctx);
-	return { ...h, launchAgent, scheduleTask, releaseAgent: () => release() };
+	return { ...h, scheduleTask };
 }
 
 describe("Pi Exec work panel", () => {
@@ -873,12 +826,11 @@ describe("Pi Exec shared passive activity", () => {
 		expect(resultText(await run)).toContain("RPC result");
 	});
 
-	it("presents one multi-peer program beside a public agent and a managed task, then leaves on settlement", async () => {
+	it("presents one multi-peer program beside a managed task, then leaves on settlement", async () => {
 		enablePeerFixture();
 		const gate = await gateServer();
 		const h = await mixedHarness();
 		await h.scheduleTask();
-		await h.launchAgent();
 		const alpha = gatedTask(`${gate.url}/alpha`, "read", { path: "alpha.txt" });
 		const beta = gatedTask(`${gate.url}/beta`, "grep", { pattern: "beta-pattern" });
 		const code = `import asyncio\nawait asyncio.gather(agent_run(role="implementation-engineer", task=${alpha}, name="alpha-peer"), agent_run(role="implementation-engineer", task=${beta}, name="beta-peer"))`;
@@ -894,17 +846,15 @@ describe("Pi Exec shared passive activity", () => {
 		void run.catch(() => {});
 		await vi.waitFor(() => expect(gate.responses.size).toBe(2));
 
-		// One shared surface carries all three kinds of work; Pi Exec mounts no widget of its own.
+		// One shared surface carries both kinds of work; Pi Exec mounts no widget of its own.
 		await vi.waitFor(() => expect(h.passiveText()).toContain("2 running"));
 		expect(h.passive().map((widget) => widget.key)).toEqual(["active-work"]);
 		const active = h.passiveText();
 		expect(active).toContain("● Active work");
 		expect(active).toContain("Mixed program");
-		expect(active).toContain("Public reviewer");
 		expect(active).toContain("Deferred check");
-		// The program is one unit of work: its peers are not public agents.
+		// The program is one unit of work, independent of its number of peers.
 		expect(active.match(/Mixed program/g)).toHaveLength(1);
-		expect(h.statuses.get("subagents")).toBe("agents:1");
 		expect(h.statuses.get("tasks")).toBe("tasks:1");
 		expect(h.statuses.get("pi-exec")).toBe("exec:1");
 		for (const line of h.passive()[0]!.lines) expect(visibleWidth(line)).toBeLessThanOrEqual(200);
@@ -923,7 +873,6 @@ describe("Pi Exec shared passive activity", () => {
 		await run;
 		const settled = h.passiveText();
 		expect(settled).not.toContain("Mixed program");
-		expect(settled).toContain("Public reviewer");
 		expect(settled).toContain("Deferred check");
 		expect(h.statuses.has("pi-exec")).toBe(false);
 		await h.open();
@@ -987,8 +936,7 @@ describe("Pi Exec shared passive activity", () => {
 
 	it("clears passive activity on branch change and keeps late old-context updates from restoring it", async () => {
 		const gate = await gateServer();
-		const h = await mixedHarness();
-		await h.launchAgent();
+		const h = await harness();
 		const code = `import asyncio\nawait asyncio.gather(fetch(url="${gate.url}/old"), fetch(url="${gate.url}/later"))`;
 		const run = h
 			.tool()
@@ -1009,9 +957,7 @@ describe("Pi Exec shared passive activity", () => {
 		expect(h.passiveText()).not.toContain("Old context");
 		await run.catch(() => {});
 		expect(h.passiveText()).not.toContain("Old context");
-		// The current context's public agent stays as it was.
-		expect(h.passiveText()).toContain("Public reviewer");
-		expect(h.statuses.get("subagents")).toBe("agents:1");
+		expect(h.passive()).toEqual([]);
 		expect(h.statuses.has("pi-exec")).toBe(false);
 	});
 });

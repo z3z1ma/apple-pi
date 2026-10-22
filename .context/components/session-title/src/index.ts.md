@@ -1,6 +1,6 @@
 ## file
 
-Names are checked against other live sessions by reading the session-state database directly (`livePeers` from `components/session-state/src/peers.ts`); any failure to read it just picks a name. Naming makes no model request. TUI and RPC roots are people; passive headless forks and in-process children are not. Explicit task assignments own what a person works on.
+Names are checked against other live sessions by reading the session-state database directly (`livePeers` from `components/session-state/src/peers.ts`); any failure to read it just picks a name. Naming makes no model request. Naming runs for TUI and RPC people. Interns and the private BTW conversation omit this extension; passive continuations share a person's context rather than create a new person. Explicit task assignments own what a person works on.
 Why: the runtime may be down or not yet started when a session starts, and naming must never wait for it or fail because of it.
 Coupled: components/session-state/src/peers.ts
 Verify: components/session-title/tests/session-title.test.ts

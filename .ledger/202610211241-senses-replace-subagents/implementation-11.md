@@ -22,10 +22,23 @@ Lifecycle tests cover a session created after navigation, overlapping clear/shut
 
 All 28 BTW checks passed (`/tmp/apc11-btw-startup.log`), including real SDK turns and compaction on the faux model. The preceding run passed 88 checks across BTW and the surviving legacy subagent suite, plus Node/web typecheck and package loading (`/tmp/apc11-btw-{final,types-final,loader}.log`). Post-change Node/web typecheck and loader passed (`/tmp/apc11-btw-{types-complete,loader-complete}.log`); the package dry run lists all six new runtime files and no removed BTW source paths (`/tmp/apc11-btw-pack.log`). Repository format/lint checks passed with the existing notch-test warning; context lint passed for 129 files. No paid model or live runtime was used.
 
-## Remaining owners
+## Removal complete
 
-- The work panel keeps Tasks and Pi Exec. Remove the Agents view, active-agent rendering/count, public conversation inspection, four tools, and team/profile prompt sections.
-- Remove the in-process child context, notebook capability, completion reflection, nesting, and clarify paths. Update root-only guards and bridge behavior at their owners; ordinary peers are root sessions.
-- Remove the approved global `grafana-debugger.md` definition. Update packaging, current docs, and tests for the surviving behavior.
+The remaining `components/subagents/` tree and extension are deleted, along with public delegation tools, definition/settings loading, child context, nesting, clarification, completion reflection, shared notebook writes, and the Agents panel/widget/count. The work panel keeps Tasks and Pi Exec. `/btw` owns its separate overlay. Bridges now report root sessions only; the native BTW test proves its private session creates no extra person or incarnation. Interns omit the bridge. Historical child rows and notebook source decoders remain readable rather than rewriting or discarding old evidence.
+
+Skills now use intern tools, explicit peer assignments, or Python peer calls. A repository guidance test catches obsolete native-tool instructions, including the hyphenated `sub-agents` spelling, while allowing Python's retained `agent` function. The approved global `grafana-debugger.md` file is deleted. Package entries and attribution paths match the remaining owners. The comprehensive product documentation pass is ticket 14.
+
+Two replacement consumers needed more than deletion. The pair scheduler now recognizes explicit hiring/assignment and successful intern answers instead of polling states. Search forks keep the parent's identity and handlers, so new workplace actions and interns must be blocked there: otherwise an isolated candidate can hire, send mail, consume unread markers, or run an intern in the parent's directory. The native fork test failed with those actions executing before the correction (`/tmp/apc11-fork-policy-red.log`). The fixed policy and intern-review tests passed in the focused run.
+
+## Final checks
+
+- Work panel, status line, private session, and prompt sections: 78 checks across five files (`/tmp/apc11-removal-ui.log`).
+- Pair scheduling, notebook recall, search forks, reflection, formatting, Python tool boundaries, skills, MCP, and prompt integration: 235 checks across 21 files (`/tmp/apc11-removal-focused.log`).
+- Runtime, organization, naming, tasks, prompt stash, tmux integration, BTW, and interns: 270 checks across 44 files (`/tmp/apc11-root-owners.log`).
+- Offline pair harness: 112/112, networked E2E intentionally skipped (`/tmp/apc11-pair-harness.log`).
+- Node/web typecheck, repository formatting, lint, and package loading passed. Lint retains the existing notch-test template-string warning. Logs: `/tmp/apc11-removal-{types-final,format,lint,loader-final}.log`.
+- Package dry run includes the intern and BTW runtime files and contains no subagent or optional-extension source (`/tmp/apc11-removal-pack.log`). Context lint passed for 131 files.
+
+No full `npm test` has run yet; it remains the end-of-task check. No paid model or live operator runtime/session was used or restarted. This long-running session still has its old tool declarations, so current registrations and the specification, rather than that cached catalog, govern renamed tools.
 
 The dependency inventory covered `components`, `extensions`, `optional-extensions`, `apps`, `tests`, `scripts`, `skills`, and `docs`, plus package/build declarations. Scratch inventories: `/tmp/apc11-inventory-paths.txt`, `/tmp/apc11-dependencies.txt`, and `/tmp/apc11-optional-references.txt`. Keep historical ledger records as history rather than rewriting them to pretend subagents never existed.

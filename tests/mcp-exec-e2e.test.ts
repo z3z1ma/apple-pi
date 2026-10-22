@@ -1,4 +1,4 @@
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fauxAssistantMessage, fauxToolCall, registerFauxProvider } from "@earendil-works/pi-ai/compat";
@@ -12,7 +12,6 @@ import {
 	SettingsManager,
 } from "@earendil-works/pi-coding-agent";
 import { afterEach, describe, expect, it } from "vitest";
-import { disposeAgentSession } from "../components/subagents/src/session-lifecycle.js";
 import { fauxModelBackend } from "./helpers/faux-model.js";
 
 const directories: string[] = [];
@@ -159,7 +158,12 @@ describe("native MCP through Python pi_exec", () => {
 				const denied = results.find((message) => message.toolCallId === "mcp-denied");
 				expect(denied?.content.find((part) => part.type === "text")?.text).toContain("denied by policy");
 			} finally {
-				await disposeAgentSession(session);
+				try {
+					await session.abort();
+					await session.extensionRunner.emit({ type: "session_shutdown", reason: "quit" });
+				} finally {
+					session.dispose();
+				}
 			}
 		},
 		30_000,

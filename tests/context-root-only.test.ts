@@ -3,7 +3,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { runInChildSessionContext } from "../components/subagents/src/child-context.js";
 import { createEventBus } from "../node_modules/@earendil-works/pi-coding-agent/dist/core/event-bus.js";
 import {
 	createExtensionRuntime,
@@ -48,15 +47,4 @@ describe("standalone context extension", () => {
 		expect(loaded.handlers.has("turn_end")).toBe(false);
 		expect(loaded.handlers.has("context")).toBe(false);
 	}, 30_000);
-
-	it("registers the same search-only surface in a child session", async () => {
-		isolate();
-		const loaded = surfaces(await runInChildSessionContext(() => loadContextExtension()));
-		expect(loaded.errors).toEqual([]);
-		expect(loaded.tools.has("search_session")).toBe(true);
-		expect(loaded.tools.has("revisit_note")).toBe(false);
-		expect(loaded.commands.size).toBe(0);
-		expect(loaded.handlers.has("turn_end")).toBe(false);
-		expect(loaded.handlers.has("context")).toBe(false);
-	});
 });

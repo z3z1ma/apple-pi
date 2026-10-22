@@ -174,7 +174,6 @@ function compactEditorStatus(snapshot: FooterSnapshot, width: number): string | 
 	if (snapshot.cacheHitRate !== undefined) parts.push(`hit:${snapshot.cacheHitRate.toFixed(0)}%`);
 
 	for (const [key, label] of [
-		["subagents", "agents"],
 		["tasks", "tasks"],
 		["learnings", "learnings"],
 	] as const) {

@@ -317,17 +317,14 @@ describe("pi_exec tool", () => {
 		]);
 	});
 
-	it("rejects root-only and interactive manager tools at the Python type-check boundary", async () => {
+	it("rejects root-only reminders at the Python type-check boundary", async () => {
 		const { tool, resultHandler } = register();
 		const id = "excluded-tools";
 		await expect(
-			tool.execute(
-				id,
-				{ code: 'await remind_me(delay_seconds=1, text="later")\nawait get_subagent_result(agent_id="x")' },
-				undefined,
-				undefined,
-				{ cwd: process.cwd(), sessionManager: { getSessionId: () => id } },
-			),
+			tool.execute(id, { code: 'await remind_me(delay_seconds=1, text="later")' }, undefined, undefined, {
+				cwd: process.cwd(),
+				sessionManager: { getSessionId: () => id },
+			}),
 		).rejects.toThrow(/unresolved-reference/);
 		expect(resultHandler({ toolName: "pi_exec", isError: true, toolCallId: id }).details.trace.operations).toEqual([]);
 	});

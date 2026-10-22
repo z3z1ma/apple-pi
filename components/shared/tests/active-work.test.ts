@@ -29,7 +29,7 @@ describe("ActiveWorkSurface", () => {
 
 	it("combines domains above the editor and publishes each non-zero active count", () => {
 		const surface = new ActiveWorkSurface();
-		surface.registerSource(source("subagents", "agents", ["agent-1", "agent-2"]));
+		surface.registerSource(source("pi-exec", "exec", ["program-1", "program-2"]));
 		surface.registerSource(source("tasks", "tasks", ["task-1", "task-2"]));
 		const setStatus = vi.fn();
 		const setWidget = vi.fn();
@@ -42,12 +42,12 @@ describe("ActiveWorkSurface", () => {
 			},
 		});
 
-		expect(setStatus).toHaveBeenCalledWith("subagents", "agents:2");
+		expect(setStatus).toHaveBeenCalledWith("pi-exec", "exec:2");
 		expect(setStatus).toHaveBeenCalledWith("tasks", "tasks:2");
 		expect(setWidget).toHaveBeenCalledWith("active-work", expect.any(Function), { placement: "aboveEditor" });
 		const lines = factory({ terminal: { columns: 30 }, requestRender: vi.fn() }, theme).render();
 		expect(lines.join("\n")).toContain("Active work");
-		expect(lines.join("\n")).toMatch(/agent-1[\s\S]*task-1[\s\S]*agent-2[\s\S]*task-2/);
+		expect(lines.join("\n")).toMatch(/program-1[\s\S]*task-1[\s\S]*program-2[\s\S]*task-2/);
 		for (const line of lines) expect(visibleWidth(line)).toBeLessThanOrEqual(30);
 		surface.clearUI();
 	});

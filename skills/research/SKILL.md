@@ -1,23 +1,16 @@
 ---
 name: research
-description: Investigate a question against high-trust primary sources and capture the findings as a Markdown file in the repo. Use when the user wants a topic researched, docs or API facts gathered, or reading legwork delegated to a background agent.
+description: Investigate a question against high-trust primary sources and capture the findings as a Markdown file in the repo. Use when the user wants a topic researched, docs or API facts gathered, or external reading kept out of the main context.
 ---
 
-The built-in `researcher` teammate is read-only and has no general MCP or fetch capability. Before delegating an external question, the root agent must acquire the primary-source material with available root-level tools and supply or bind content the teammate can actually read. An unfetched URL alone is not readable evidence.
+Use the `research` tool to give a cheap intern a bounded external question. Name the relevant versions and primary sources, and supply source material when access depends on the root's integrations or credentials. The intern keeps reading out of the main context and returns once; its summary is lossy and can miss or misread details.
 
-Spin up the `researcher` as a background `agent` session to do the research, so you keep working while it reads.
+Ask it to:
 
-Its job:
+1. Investigate against **primary sources**: official docs, source code, specs, and first-party APIs. Follow each claim to the source that owns it.
+2. Return findings with citations and enough source identity to revisit each claim.
+3. Mark missing evidence **Not verified**, and distinguish what it checked from what it believes.
 
-1. Investigate the question against **primary sources** (official docs, source code, specs, first-party APIs), not a secondary write-up of them. Follow every claim back to the source that owns it.
-2. Return the findings to the root agent with a citation for each claim and enough source identity to revisit it.
-3. If the required source material is unavailable, return an explicit **Not verified** result that names the missing evidence. Do not substitute memory for research.
+The root verifies the details that decide the outcome against the cited sources, then writes the findings to one Markdown file. Match the repository's existing convention for such notes. Otherwise use the active ledger task for undertaking-specific research, or read and follow [`llm-wiki`](../llm-wiki/SKILL.md) for reusable knowledge. If neither fits, choose a sensible location and report it.
 
-The root agent's job:
-
-1. Write the returned findings to a single Markdown file.
-2. Save it where the repo already keeps such notes and match the existing convention. Otherwise use the active ledger task for bounded undertaking-specific research or read and follow [`llm-wiki`](../llm-wiki/SKILL.md) for reusable supporting knowledge. If neither fits, put it somewhere sensible and say where.
-
-When a question splits into genuinely independent research areas, it is acceptable to start multiple `researcher` sessions in parallel. Give each one a distinct scope and readable source material, start every background session before waiting for results, and reconcile their findings into the same single Markdown artifact. Do not split one search merely to create parallel work.
-
-Use direct `agent` sessions for this flat delegation. Reach for `pi_exec` only when the research actually composes agents, tools, branching, or reduction into a graph.
+When the question has independent parts, call several research interns in parallel with distinct questions and readable material, then reconcile their answers into the same artifact. Use `pi_exec` when source acquisition, tool calls, and result reduction benefit from a program; ordinary parallel reading needs only the intern tools.

@@ -7,7 +7,6 @@ import { Value } from "typebox/value";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { fakeCustom, fakeTui } from "../../../tests/helpers/fake-tui.js";
 import { installWorkManager } from "../../shared/src/work-manager.js";
-import { runInChildSessionContext } from "../../subagents/src/child-context.js";
 import { createTaskActiveWorkSource } from "../src/active-work.js";
 import { createBackgroundTaskBashTool, createExecBashToolDefinition } from "../src/bash-tool.js";
 import installTasks from "../src/index.js";
@@ -1053,22 +1052,6 @@ describe("tasks component", () => {
 			expect(fresh.detailRenders[0]).not.toContain("Command: node");
 			expect(fresh.pi.appendEntry).not.toHaveBeenCalled();
 			fresh.shutdown();
-		});
-
-		it("skips installation in child sessions", () => {
-			const registeredTools: any[] = [];
-			const mockPi = {
-				registerTool: (tool: any) => registeredTools.push(tool),
-				registerMessageRenderer: vi.fn(),
-				sendMessage: vi.fn(),
-				on: vi.fn(),
-			};
-
-			runInChildSessionContext(() => {
-				installTasks(mockPi as any);
-			});
-
-			expect(registeredTools.length).toBe(0);
 		});
 	});
 

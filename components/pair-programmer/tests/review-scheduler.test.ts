@@ -145,6 +145,15 @@ describe("classifyPairWork", () => {
 		);
 	});
 
+	it.each(["explore", "research"])("observes a one-shot %s intern and its answer", (name) => {
+		expect(classifyPairWork({ toolCalls: [{ name }] })).toMatchObject({ phase: "delegation", delegatedResult: false });
+		expect(classifyPairWork({ toolResults: [{ toolName: name }] }).delegatedResult).toBe(true);
+		expect(classifyPairWork({ toolResults: [{ toolName: name, isError: true }] })).toMatchObject({
+			failure: true,
+			delegatedResult: false,
+		});
+	});
+
 	it("detects exploration, execution, delegation, and delegated results", () => {
 		expect(classifyPairWork({ toolCalls: [{ name: "read" }] }).phase).toBe("exploration");
 		expect(classifyPairWork({ toolCalls: [{ name: "wiki_lint" }] }).phase).toBe("exploration");
@@ -160,16 +169,10 @@ describe("classifyPairWork", () => {
 		).toBe("exploration");
 		expect(classifyPairWork({ toolCalls: [{ name: "pi_exec" }] }).phase).toBe("execution");
 		expect(classifyPairWork({ toolCalls: [{ name: "mystery" }] }).phase).toBe("execution");
-		expect(classifyPairWork({ toolCalls: [{ name: "agent" }] }).phase).toBe("delegation");
-		expect(classifyPairWork({ toolCalls: [{ name: "get_subagent_result" }] }).delegatedResult).toBe(false);
-		expect(
-			classifyPairWork({ toolResults: [{ toolName: "get_subagent_result", details: { status: "completed" } }] })
-				.delegatedResult,
-		).toBe(true);
-		expect(
-			classifyPairWork({ toolResults: [{ toolName: "get_subagent_result", details: { status: "running" } }] })
-				.delegatedResult,
-		).toBe(false);
+		for (const name of ["hire", "rehire", "assign"]) {
+			expect(classifyPairWork({ toolCalls: [{ name }] }).phase).toBe("delegation");
+			expect(classifyPairWork({ toolResults: [{ toolName: name }] }).delegatedResult).toBe(false);
+		}
 		expect(classifyPairWork({ assistant: { content: [{ type: "text" }] } }).phase).toBe("response");
 	});
 
@@ -182,12 +185,12 @@ describe("classifyPairWork", () => {
 		).toBe("recovery");
 		expect(
 			classifyPairWork({
-				toolCalls: [{ name: "get_subagent_result" }, { name: "bash", arguments: { command: "npm test" } }],
+				toolCalls: [{ name: "explore" }, { name: "bash", arguments: { command: "npm test" } }],
 			}).phase,
 		).toBe("verification");
 		expect(classifyPairWork({ toolCalls: [{ name: "write" }, { name: "typecheck" }] }).phase).toBe("verification");
-		expect(classifyPairWork({ toolCalls: [{ name: "agent" }, { name: "edit" }] }).phase).toBe("mutation");
-		expect(classifyPairWork({ toolCalls: [{ name: "agent" }, { name: "pi_exec" }] }).phase).toBe("delegation");
+		expect(classifyPairWork({ toolCalls: [{ name: "assign" }, { name: "edit" }] }).phase).toBe("mutation");
+		expect(classifyPairWork({ toolCalls: [{ name: "assign" }, { name: "pi_exec" }] }).phase).toBe("delegation");
 		expect(classifyPairWork({ toolCalls: [{ name: "read" }, { name: "pi_exec" }] }).phase).toBe("execution");
 	});
 });
@@ -211,7 +214,7 @@ describe("sticky phases", () => {
 
 	it("keeps sticky phase across delegated-result-only turns", () => {
 		const result = classifyPairWork({
-			toolResults: [{ toolName: "get_subagent_result", details: { status: "completed" } }],
+			toolResults: [{ toolName: "research" }],
 		});
 		expect(nextPairWorkPhase("mutation", result)).toBe("mutation");
 		expect(nextPairWorkPhase(undefined, result)).toBeUndefined();
@@ -321,7 +324,7 @@ describe("PairReviewScheduler", () => {
 		h.due.length = 0;
 		h.scheduler.observe(
 			observation(2, 10, {
-				toolResults: [{ toolName: "get_subagent_result", details: { status: "completed" } }],
+				toolResults: [{ toolName: "research" }],
 			}),
 		);
 		expect(h.take().reason).toBe("delegated_result");
@@ -436,7 +439,7 @@ describe("PairReviewScheduler", () => {
 		h.due.length = 0;
 		h.scheduler.observe(
 			observation(2, 10, {
-				toolResults: [{ toolName: "get_subagent_result", details: { status: "completed" } }],
+				toolResults: [{ toolName: "explore" }],
 			}),
 		);
 		expect(h.scheduler.snapshot().attention).toBe("close");

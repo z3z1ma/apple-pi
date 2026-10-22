@@ -1,11 +1,10 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Container } from "@earendil-works/pi-tui";
-import { inChildSessionContext } from "../../subagents/src/child-context.js";
 import { openInExternalEditor } from "./external-editor.js";
 import { DEFAULT_STASH_CAPACITY, PromptStash } from "./stash.js";
 
-export { DEFAULT_STASH_CAPACITY, PromptStash } from "./stash.js";
 export { openInExternalEditor, resolveEditorCommand } from "./external-editor.js";
+export { DEFAULT_STASH_CAPACITY, PromptStash } from "./stash.js";
 
 function formatStashSnippet(text: string, maxLength = 60): string {
 	const firstLine = text.split(/\r?\n/)[0]?.trim() || "";
@@ -126,8 +125,6 @@ export function handleStashPop(stash: PromptStash, ctx: ExtensionContext): void 
 }
 
 export default function installPromptStash(pi: ExtensionAPI): void {
-	if (inChildSessionContext()) return;
-
 	const stash = new PromptStash(DEFAULT_STASH_CAPACITY);
 
 	// Shortcuts for stashing the current prompt

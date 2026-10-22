@@ -14,7 +14,6 @@ import {
 import { type OpenQuestionnaire, QUESTIONNAIRE_CHANNEL } from "../../shared/src/questionnaire-events.js";
 import { mainToolArgument } from "../../shared/src/tool-activity.js";
 import type { TurnProgress, TurnResult } from "../../shared/src/turn-observer.js";
-import { childSessionParent, inChildSessionContext } from "../../subagents/src/child-context.js";
 import { RETRY_MS, spawnRuntime } from "./client.js";
 import { installCoordinator } from "./coordinator.js";
 import { deliverMail, installMail, mailRecordedIn } from "./mail.js";
@@ -313,23 +312,20 @@ function helloFor(
 	previousSession: Facts["previousSession"],
 ): Hello {
 	const sessions = ctx.sessionManager;
-	const child = inChildSessionContext();
 	return {
 		type: "hello",
 		session: {
 			id: sessions.getSessionId(),
-			kind: child ? "child" : "root",
-			...(child ? { spawnedBy: childSessionParent() } : {}),
+			kind: "root",
 			file: sessions.getSessionFile(),
 			cwd: ctx.cwd,
 			name: sessions.getSessionName(),
-			...(!child && process.env[PROGRAM_ID_ENV] && process.env[PROGRAM_PARENT_ENV]
+			...(process.env[PROGRAM_ID_ENV] && process.env[PROGRAM_PARENT_ENV]
 				? { program: { id: process.env[PROGRAM_ID_ENV]!, parent: process.env[PROGRAM_PARENT_ENV]! } }
 				: {}),
 		},
 		process: { pid: process.pid, startedAt: Math.round(Date.now() - process.uptime() * 1000) },
-		// A subagent runs in its parent's process and pane; the pane belongs to the parent.
-		tmux: child ? undefined : tmuxPane(),
+		tmux: tmuxPane(),
 		run: ctx.isIdle() ? "idle" : "thinking",
 		facts: {
 			model: modelName(ctx),
@@ -476,15 +472,13 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 		description: "Role from the role catalog this session takes for life at its first start",
 	});
 	if (process.env.PI_SESSION_STATE_DISABLED === "1") return;
-	installMail(pi, !inChildSessionContext());
-	if (!inChildSessionContext()) {
-		// The role resolves at session start before the hello below reads it and the manager tools reconcile on it.
-		installOrganization(pi);
-		installPeers(pi);
-		installCoordinator(pi);
-		installWork(pi);
-	}
-	const peerTurns = inChildSessionContext() ? undefined : installPeerTurns(pi);
+	installMail(pi);
+	// The role resolves at session start before the hello below reads it and the manager tools reconcile on it.
+	installOrganization(pi);
+	installPeers(pi);
+	installCoordinator(pi);
+	installWork(pi);
+	const peerTurns = installPeerTurns(pi);
 	let link: StateLink | undefined;
 	let current: ExtensionContext | undefined;
 	let skills: string[] = [];
@@ -576,7 +570,6 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 		try {
 			switch (command.kind) {
 				case "run_turn":
-					if (!peerTurns) return fail("Program turns require a root peer session");
 					peerTurns.enqueue({
 						...command,
 						id: commandId,
@@ -586,7 +579,7 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 					});
 					return;
 				case "cancel_turn":
-					peerTurns?.cancel(command.turn);
+					peerTurns.cancel(command.turn);
 					break;
 				case "talk":
 					if (!ctx.isIdle()) return fail("busy: send steer or follow_up while a run is active");
@@ -691,7 +684,7 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 			(from, commandId, command, replay) => {
 				void apply(from, commandId, command, replay);
 			},
-			() => peerTurns?.disconnect(),
+			() => peerTurns.disconnect(),
 		);
 		refreshGit(ctx);
 		indexNew(ctx);

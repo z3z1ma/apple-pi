@@ -55,8 +55,6 @@ export interface WorkSectionComponent extends Component {
 	focused: boolean;
 	/** Rows available below the panel header, set before each render. */
 	rowBudget: number;
-	/** True while a text input owns the keyboard; the panel then forwards every key. */
-	isComposing?(): boolean;
 	/** Current record, restored when the panel reopens. */
 	getSelectedId?(): string | undefined;
 	/** Tab label with live counts. */
@@ -145,21 +143,19 @@ export class WorkPanel implements Component {
 			return;
 		}
 		const active = this.children[this.activeIndex];
-		if (!active?.isComposing?.()) {
-			if (matchesKey(data, Key.escape)) {
-				this.callbacks.unfocus();
-				return;
-			}
-			if (matchesKey(data, "q")) {
-				this.callbacks.close();
-				return;
-			}
-			if (this.sections.length > 1 && (matchesKey(data, Key.left) || matchesKey(data, Key.right))) {
-				const step = matchesKey(data, Key.right) ? 1 : -1;
-				const next = this.sections[(this.activeIndex + step + this.sections.length) % this.sections.length];
-				if (next) this.selectSection(next.key);
-				return;
-			}
+		if (matchesKey(data, Key.escape)) {
+			this.callbacks.unfocus();
+			return;
+		}
+		if (matchesKey(data, "q")) {
+			this.callbacks.close();
+			return;
+		}
+		if (this.sections.length > 1 && (matchesKey(data, Key.left) || matchesKey(data, Key.right))) {
+			const step = matchesKey(data, Key.right) ? 1 : -1;
+			const next = this.sections[(this.activeIndex + step + this.sections.length) % this.sections.length];
+			if (next) this.selectSection(next.key);
+			return;
 		}
 		active?.handleInput?.(data);
 		this.ui.tui.requestRender();
@@ -257,12 +253,8 @@ export class WorkManager {
 
 	constructor(private readonly pi: ExtensionAPI) {
 		this.pi.registerCommand("work", {
-			description: "Open the Agents, Tasks, and Pi Exec work panel",
+			description: "Open the Tasks and Pi Exec work panel",
 			handler: async (_args, ctx) => this.open(ctx),
-		});
-		this.pi.registerCommand("agents", {
-			description: "Open the work panel on its Agents tab",
-			handler: async (_args, ctx) => this.open(ctx, "agents"),
 		});
 		this.pi.registerCommand("tasks", {
 			description: "Open the work panel on its Tasks tab",

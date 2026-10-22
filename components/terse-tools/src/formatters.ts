@@ -332,27 +332,6 @@ function formatAcknowledgeFindingsArgs(args: any): string {
 		.join(", ");
 }
 
-function formatAgentArgs(args: any): string {
-	const type = args.subagent_type || args.type || "";
-	const desc =
-		args.description || (typeof args.prompt === "string" ? args.prompt.split(/[\r\n]+/)[0]?.trim() : "") || "";
-	const bg = args.run_in_background ? " (bg)" : "";
-	if (type && desc) return `${type}${bg}: ${desc}`;
-	if (type) return `${type}${bg}`;
-	return desc;
-}
-
-function formatSubagentArgs(args: any): string {
-	const id = args.agent_id || args.id || "";
-	if (args.message) {
-		const msg = String(args.message)
-			.replace(/[\r\n]+/g, " ")
-			.trim();
-		return id ? `${id}: ${msg}` : msg;
-	}
-	return String(id);
-}
-
 function formatSearchSessionArgs(args: any): string {
 	if (args.query) {
 		const mode = args.mode && args.mode !== "history" ? ` (${args.mode})` : "";
@@ -442,12 +421,6 @@ export function formatToolArgs(toolName: string, args: any, _cwd?: string): stri
 			return formatUpdateNotebookArgs(args);
 		case "acknowledge_pair_findings":
 			return formatAcknowledgeFindingsArgs(args);
-		case "agent":
-			return formatAgentArgs(args);
-		case "get_subagent_result":
-		case "steer_subagent":
-		case "stop_subagent":
-			return formatSubagentArgs(args);
 		case "search_session":
 			return formatSearchSessionArgs(args);
 		case "ledger_status":
