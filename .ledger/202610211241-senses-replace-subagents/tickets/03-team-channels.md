@@ -1,5 +1,7 @@
 # 03: Team channels
 
+**Context:** [spec.md](../spec.md) defines the terms used here (person, operator, runtime, thread, push and pull, ephemeral task, intern) and records the decisions this ticket implements.
+
 **What to build:** Each manager has a team channel whose participants are the manager and its reports, all pulled. `post(channel, body)` writes there (or in a team channel the caller was invited to). Naming a participant in a post pushes that post to them. Channels are read with `read_thread` and appear in `inbox`.
 
 **Blocked by:** 01 Mail is threads

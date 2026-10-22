@@ -1,5 +1,7 @@
 # 12: Workplace extras
 
+**Context:** [spec.md](../spec.md) defines the terms used here (person, operator, runtime, thread, push and pull, ephemeral task, intern) and records the decisions this ticket implements.
+
 **What to build:** A new hire's first turn includes its team channel's recent history. `let_go` first asks the person to post a handover in the team channel (what is done, what is open, where things are), then retires them. The `<manager>` charter suggests a recurring short standup through `remind_me` and `meet` when the team needs one. The directory shows each person's track record.
 
 **Blocked by:** 03 Team channels, 06 Tasks are assigned

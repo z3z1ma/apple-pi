@@ -1,5 +1,7 @@
 # 07: Hiring is assigning; inferred binding goes
 
+**Context:** [spec.md](../spec.md) defines the terms used here (person, operator, runtime, thread, push and pull, ephemeral task, intern) and records the decisions this ticket implements.
+
 **What to build:** `hire(role, name?, goal)` and `rehire(person, goal?)` create the task from the goal and assign it. A session the operator started is told to take its first request as a task before working. The bridge no longer binds a ledger touch to the session (`history.json` still records touches), and session-title's quick-model intent is deleted. The directory shows each person's tasks, focus, track record (assignments finished), and "available" when it holds none; unassigned live ledger tasks are the backlog. The sidebar and dashboard title each card by its focused task.
 
 **Blocked by:** 06 Tasks are assigned

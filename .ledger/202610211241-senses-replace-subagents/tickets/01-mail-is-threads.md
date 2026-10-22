@@ -1,5 +1,7 @@
 # 01: Mail is threads
 
+**Context:** [spec.md](../spec.md) defines the terms used here (person, operator, runtime, thread, push and pull, ephemeral task, intern) and records the decisions this ticket implements.
+
 **What to build:** Every exchange between people is a thread stored by the runtime: a subject, participants (each with push or pull delivery), and ordered messages. Every person gets `send_mail(to, cc?, subject, body)` (people, `my-team`, or `my-manager`), `reply(thread, body)` (to everyone in the thread), `inbox()` (threads with what is new), and `read_thread(thread)`. A pushed message arrives as mail does today (queued while asleep, recorded on disk when delivered, sent again on reopen) and shows its thread id, subject, and sender. `mailbox_send` is removed. The `<org>` charter teaches the tools and push versus pull.
 
 **Blocked by:** None (can start immediately)

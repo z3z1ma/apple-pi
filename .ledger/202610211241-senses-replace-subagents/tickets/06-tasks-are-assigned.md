@@ -1,5 +1,7 @@
 # 06: Tasks are assigned
 
+**Context:** [spec.md](../spec.md) defines the terms used here (person, operator, runtime, thread, push and pull, ephemeral task, intern) and records the decisions this ticket implements.
+
 **What to build:** The runtime records assignments (person, task, assigned by, when, ended when) and each person's focused task. A task is a ledger bundle or an ephemeral task bundle under the state directory, with the same shape (`task.md` goal, room for context, `retrospective.md`). Tools: `take_task(goal or task)`, `assign(person, task or goal)` and `unassign` (managers), `focus(task)`, `finish_task(outcome)`, `promote_task(task)`. Assigning wakes a sleeping person. On assignment, on focus, and after each compaction, the focused task's `task.md` is appended to the person's context. Each task has a thread with its assignees and assigner; `finish_task` writes the outcome into `task.md`, ends the assignment, posts there, and archives an ephemeral task with its retrospective.
 
 **Blocked by:** 01 Mail is threads, 02 The directory and human-named manager tools
