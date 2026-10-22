@@ -6,7 +6,7 @@ import { SUBAGENT_TOOL_NAMES } from "../../subagents/src/nested-tools.js";
 const EXCLUDED_TOOL_NAMES = new Set([
 	"pi_exec",
 	"monitor",
-	"schedule",
+	"remind_me",
 	"task",
 	"search_branches",
 	...Object.values(SUBAGENT_TOOL_NAMES),

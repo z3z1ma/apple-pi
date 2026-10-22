@@ -2,17 +2,11 @@ import { randomUUID } from "node:crypto";
 import { defineTool, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { loadRoles, managesPeople, organizationOf } from "../../organization/src/index.js";
+import { resolvePerson } from "./addresses.js";
 import { sendCommand } from "./client.js";
 import type { Command, Receipt } from "./protocol.js";
 
-const TOOLS = [
-	"start_peer_session",
-	"reopen_peer_session",
-	"close_peer_session",
-	"rename_peer_session",
-	"transfer_peer_session",
-	"retire_peer_session",
-];
+const MANAGER_TOOLS = ["hire", "rehire", "send_home", "rename", "move", "let_go"];
 
 /** The tmux pane this session runs in, which new windows open next to. */
 function ownPane(): { socket: string; pane: string } {
@@ -34,20 +28,24 @@ const reply = (text: string, details: Record<string, unknown>) => ({
 	details,
 });
 
-/** Peer management tools, active only in a session whose role manages. */
+const personParameter = Type.String({
+	minLength: 1,
+	description: "The person: a name in your organization or a session id.",
+});
+
+/** The manager tools, active only in a root session or one whose role manages. */
 export function installCoordinator(pi: ExtensionAPI): void {
 	pi.registerTool(
 		defineTool({
-			name: "start_peer_session",
-			label: "start_peer_session",
+			name: "hire",
+			label: "hire",
 			description:
-				"Hire a person: start a new peer session, a top-level Pi session in its own tmux window next to yours, which reports to you (it mails you when it closes, and list_peer_sessions shows you as its manager). Give it a role from the catalog; it keeps that role, mind, and posture for life. Its session-title extension assigns a unique two-part human name automatically. Returns once the session is running. Pass a brief file as the prompt with @path.",
+				"Hire a person into your organization: a new lasting colleague, a top-level Pi session in its own tmux window next to yours, which reports to you (directory shows you as its manager, and it mails you when it closes). It holds its role, mind, and posture for life, and receives a unique two-part human name unless you give one. Returns once the person runs. Pass a brief file as the prompt with @path.",
 			parameters: Type.Object(
 				{
-					cwd: Type.String({ minLength: 1, description: "Directory the session works in." }),
-					role: Type.Optional(
-						Type.String({ minLength: 1, description: "Role catalog name, such as staff-engineer-simplicity." }),
-					),
+					role: Type.String({ minLength: 1, description: "Role catalog name, such as staff-engineer-simplicity." }),
+					cwd: Type.String({ minLength: 1, description: "Directory the person works in." }),
+					name: Type.Optional(Type.String({ minLength: 1, description: "A name to give instead of a drawn one." })),
 					prompt: Type.Optional(Type.String({ description: "First prompt, such as @/path/to/brief.md." })),
 					session_id: Type.Optional(Type.String({ description: "Session id to use; a new one by default." })),
 				},
@@ -55,11 +53,9 @@ export function installCoordinator(pi: ExtensionAPI): void {
 			),
 			async execute(_toolCallId, params, signal, _onUpdate, ctx) {
 				const sessionId = params.session_id ?? randomUUID();
-				if (params.role) {
-					const catalog = loadRoles(ctx.cwd);
-					if (!catalog.roles.has(params.role))
-						throw new Error(`Unknown role "${params.role}"; known roles: ${[...catalog.roles.keys()].join(", ")}.`);
-				}
+				const catalog = loadRoles(ctx.cwd);
+				if (!catalog.roles.has(params.role))
+					throw new Error(`Unknown role "${params.role}"; known roles: ${[...catalog.roles.keys()].join(", ")}.`);
 				await run(
 					sessionId,
 					{
@@ -67,119 +63,95 @@ export function installCoordinator(pi: ExtensionAPI): void {
 						tmux: ownPane(),
 						cwd: params.cwd,
 						reportsTo: ctx.sessionManager.getSessionId(),
-						...(params.role ? { role: params.role } : {}),
+						role: params.role,
+						...(params.name ? { name: params.name } : {}),
 						...(params.prompt ? { prompt: params.prompt } : {}),
 					},
 					signal,
 				);
-				return reply(`Started session ${sessionId}${params.role ? ` as ${params.role}` : ""}.`, { sessionId });
+				return reply(`Hired ${params.name ?? "a new person"} (${sessionId}) as ${params.role}.`, { sessionId });
 			},
 		}),
 	);
 	pi.registerTool(
 		defineTool({
-			name: "reopen_peer_session",
-			label: "reopen_peer_session",
+			name: "rehire",
+			label: "rehire",
 			description:
-				"Reopen a stopped peer session by id in a new tmux window next to yours, in its own directory and with its full history; it reports to you. Give it new work by mail, not its first brief again. Returns once the session is running.",
+				"Bring back a person who is asleep or has left: it reopens in a new tmux window next to yours, in its own directory and with its full history, and reports to you. Give it new work by mail, not its first brief again. Returns once it runs.",
+			parameters: Type.Object({ person: personParameter }, { additionalProperties: false }),
+			async execute(_toolCallId, params, signal, _onUpdate, ctx) {
+				const self = ctx.sessionManager.getSessionId();
+				const id = resolvePerson(self, params.person);
+				await run(id, { kind: "start", tmux: ownPane(), reportsTo: self }, signal);
+				return reply(`${params.person} is back (${id}).`, { sessionId: id });
+			},
+		}),
+	);
+	pi.registerTool(
+		defineTool({
+			name: "send_home",
+			label: "send_home",
+			description:
+				"Send a person home: its Pi process quits, it stays in your organization asleep, and rehire brings it back with its history. Check first with directory that it is idle; sending a working person home stops its work.",
+			parameters: Type.Object({ person: personParameter }, { additionalProperties: false }),
+			async execute(_toolCallId, params, signal, _onUpdate, ctx) {
+				const id = resolvePerson(ctx.sessionManager.getSessionId(), params.person);
+				await run(id, { kind: "close" }, signal);
+				return reply(`${params.person} went home (${id}).`, { sessionId: id });
+			},
+		}),
+	);
+	pi.registerTool(
+		defineTool({
+			name: "rename",
+			label: "rename",
+			description: "Give a running person a new name. Its id and history stay the same.",
 			parameters: Type.Object(
-				{ session_id: Type.String({ minLength: 1, description: "Id of the stopped session." }) },
+				{ person: personParameter, name: Type.String({ minLength: 1, description: "The new name." }) },
 				{ additionalProperties: false },
 			),
 			async execute(_toolCallId, params, signal, _onUpdate, ctx) {
-				await run(
-					params.session_id,
-					{ kind: "start", tmux: ownPane(), reportsTo: ctx.sessionManager.getSessionId() },
-					signal,
-				);
-				return reply(`Reopened session ${params.session_id}.`, { sessionId: params.session_id });
+				const id = resolvePerson(ctx.sessionManager.getSessionId(), params.person);
+				await run(id, { kind: "rename", name: params.name }, signal);
+				return reply(`${params.person} is now ${params.name}.`, { sessionId: id });
 			},
 		}),
 	);
 	pi.registerTool(
 		defineTool({
-			name: "close_peer_session",
-			label: "close_peer_session",
+			name: "move",
+			label: "move",
 			description:
-				"Close a running peer session by id: its Pi process quits, and it can be reopened later with its history. Check first with list_peer_sessions that it is idle; closing a busy session stops its work.",
-			parameters: Type.Object(
-				{ session_id: Type.String({ minLength: 1, description: "Id of the running session." }) },
-				{ additionalProperties: false },
-			),
-			async execute(_toolCallId, params, signal) {
-				await run(params.session_id, { kind: "close" }, signal);
-				return reply(`Closed session ${params.session_id}.`, { sessionId: params.session_id });
-			},
-		}),
-	);
-	pi.registerTool(
-		defineTool({
-			name: "rename_peer_session",
-			label: "rename_peer_session",
-			description:
-				"Rename a running peer session by id. Use list_peer_sessions to find its id; its id and history stay the same.",
+				"Move a person under another manager in your organization; a manager moves with its whole team. From then on the person takes work from, reports to, and escalates to the new manager. The move is refused when it would make a cycle or leave the organization. The person and both managers get one mail naming the move.",
 			parameters: Type.Object(
 				{
-					session_id: Type.String({ minLength: 1, description: "Id of the running session." }),
-					name: Type.String({ minLength: 1, description: "New session name." }),
-				},
-				{ additionalProperties: false },
-			),
-			async execute(_toolCallId, params, signal) {
-				await run(params.session_id, { kind: "rename", name: params.name }, signal);
-				return reply(`Renamed session ${params.session_id} to ${params.name}.`, { sessionId: params.session_id });
-			},
-		}),
-	);
-	pi.registerTool(
-		defineTool({
-			name: "transfer_peer_session",
-			label: "transfer_peer_session",
-			description:
-				"Move a person under another manager in your organization; a manager moves with its whole team. From then on the person takes work from, reports to, and escalates to the new manager. The move is refused when it would make a cycle or leave the organization. The person and both managers get mail naming the move.",
-			parameters: Type.Object(
-				{
-					session_id: Type.String({ minLength: 1, description: "Id of the person to move." }),
-					manager: Type.String({ minLength: 1, description: "Session id of the new manager." }),
+					person: personParameter,
+					manager: Type.String({ minLength: 1, description: "The new manager: a name or a session id." }),
 				},
 				{ additionalProperties: false },
 			),
 			async execute(_toolCallId, params, signal, _onUpdate, ctx) {
 				const by = ctx.sessionManager.getSessionId();
-				const from = organizationOf(by).members.find((member) => member.id === params.session_id)?.reportsTo;
-				await run(params.session_id, { kind: "transfer", manager: params.manager, by }, signal);
-				const note = (text: string) => ({
-					kind: "mail" as const,
-					from: by,
-					body: text,
-					sentAt: new Date().toISOString(),
-				});
-				const mails = [
-					sendCommand(
-						params.session_id,
-						note(
-							`You now report to ${params.manager}: take work from, report to, and escalate to that session from now on.`,
-						),
-						{ signal, until: "accepted" },
-					),
-					sendCommand(
-						params.manager,
-						note(`${params.session_id} now reports to you${from ? ` (moved from ${from})` : ""}.`),
-						{ signal, until: "accepted" },
-					),
-					...(from && from !== by
-						? [
-								sendCommand(from, note(`${params.session_id} now reports to ${params.manager}, not to you.`), {
-									signal,
-									until: "accepted",
-								}),
-							]
-						: []),
-				];
-				await Promise.all(mails);
-				return reply(`${params.session_id} now reports to ${params.manager}.`, {
-					sessionId: params.session_id,
-					manager: params.manager,
+				const id = resolvePerson(by, params.person);
+				const manager = resolvePerson(by, params.manager);
+				const from = organizationOf(by).members.find((member) => member.id === id)?.reportsTo;
+				await run(id, { kind: "transfer", manager, by }, signal);
+				const told = [...new Set([id, manager, ...(from ? [from] : [])])].filter((who) => who !== by);
+				await run(
+					by,
+					{
+						kind: "thread_post",
+						thread: `t-${randomUUID().slice(0, 8)}`,
+						subject: `${params.person} moves to ${params.manager}`,
+						body: `${params.person} now reports to ${params.manager}${from ? ` (moved from ${from})` : ""}: take work from, report to, and escalate to that manager from now on.`,
+						to: told,
+					},
+					signal,
+				);
+				return reply(`${params.person} now reports to ${params.manager}.`, {
+					sessionId: id,
+					manager,
 					from: from ?? null,
 				});
 			},
@@ -187,28 +159,29 @@ export function installCoordinator(pi: ExtensionAPI): void {
 	);
 	pi.registerTool(
 		defineTool({
-			name: "retire_peer_session",
-			label: "retire_peer_session",
+			name: "let_go",
+			label: "let_go",
 			description:
-				"Record that a person has left your organization, with the date and reason, and close it if it runs. Its history stays, and the directory lists it among former members; reopen_peer_session brings it back. Retire reluctantly: a person's accumulated context is expensive to rebuild.",
+				"Let a person go: record that it left your organization, with the date and reason, and close it if it runs. Its history stays, the directory lists it among former members, and rehire brings it back. Let go reluctantly: a person's accumulated context is expensive to rebuild.",
 			parameters: Type.Object(
 				{
-					session_id: Type.String({ minLength: 1, description: "Id of the person." }),
+					person: personParameter,
 					reason: Type.String({ minLength: 1, description: "Why it leaves, in one sentence." }),
 				},
 				{ additionalProperties: false },
 			),
-			async execute(_toolCallId, params, signal) {
-				await run(params.session_id, { kind: "retire", reason: params.reason }, signal);
-				return reply(`${params.session_id} retired: ${params.reason}`, { sessionId: params.session_id });
+			async execute(_toolCallId, params, signal, _onUpdate, ctx) {
+				const id = resolvePerson(ctx.sessionManager.getSessionId(), params.person);
+				await run(id, { kind: "retire", reason: params.reason }, signal);
+				return reply(`${params.person} left: ${params.reason}`, { sessionId: id });
 			},
 		}),
 	);
 	const reconcile = (ctx: ExtensionContext) => {
 		const active = pi.getActiveTools();
 		const next = managesPeople(pi, ctx)
-			? [...new Set([...active, ...TOOLS])]
-			: active.filter((name) => !TOOLS.includes(name));
+			? [...new Set([...active, ...MANAGER_TOOLS])]
+			: active.filter((name) => !MANAGER_TOOLS.includes(name));
 		if (next.length !== active.length) pi.setActiveTools(next);
 	};
 	pi.on("session_start", (_event, ctx) => reconcile(ctx));

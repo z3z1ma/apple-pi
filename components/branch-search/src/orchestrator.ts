@@ -5,8 +5,8 @@ import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { AgentSession } from "@earendil-works/pi-coding-agent";
 import { abortable } from "../../shared/src/abortable.js";
 import type { ForkWorktree } from "../../shared/src/fork-context.js";
-import { cloneIgnoredDirs, git, repoRoot } from "../../shared/src/git.js";
 import { type ForkHandle, type ForkRequest, startFork } from "../../shared/src/forked-continuation.js";
+import { cloneIgnoredDirs, git, repoRoot } from "../../shared/src/git.js";
 import type { ProfileRequest } from "../../shared/src/model-profiles.js";
 import { relativePathsProblem } from "../../shared/src/relative-paths.js";
 import { type BranchSearchConfig, normalizePaths, validateBranchSearchConfig } from "./config.js";
@@ -52,7 +52,7 @@ export const SEARCH_BLOCKED_TOOLS: ReadonlySet<string> = new Set([
 	"get_subagent_result",
 	"steer_subagent",
 	"stop_subagent",
-	"schedule",
+	"remind_me",
 	"monitor",
 	"task",
 	"pi_exec",

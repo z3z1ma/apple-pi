@@ -44,7 +44,7 @@ Verify: components/session-state/tests/history.test.ts
 ## symbol:Runtime.hello
 
 The hello's `reportsTo` is applied only while the record's `reports_to` is null; afterwards the record wins, and a bridge whose flag disagrees is sent a `transfer` command with its recorded manager.
-Why: the flag is what the session was started with, and `transfer_peer_session` changes the manager after that; a reconnect or hand restart carrying the old flag would otherwise undo the move, and the bridge addresses its close notice from its own copy of the manager.
+Why: the flag is what the session was started with, and `move` changes the manager after that; a reconnect or hand restart carrying the old flag would otherwise undo the move, and the bridge addresses its close notice from its own copy of the manager.
 Coupled: components/session-state/src/bridge.ts, components/session-state/src/coordinator.ts
 Verify: components/session-state/tests/organization.test.ts
 

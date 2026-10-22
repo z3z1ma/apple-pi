@@ -7,7 +7,7 @@ The tasks extension owns immediate background commands, command monitors, one-sh
 Choose the entrypoint by intent:
 
 1. **`bash`** runs work now. `run_in_background: true` is for finite or quiet work that should wake the agent only when it completes or fails.
-2. **`schedule`** arranges one prompt or command to start after a relative delay.
+2. **`remind_me`** arranges one prompt or command to start after a relative delay.
 3. **`monitor`** starts a continuing shell event source now. Every newline-terminated stdout line immediately steers the agent while the command keeps running.
 4. **`task`** lists, inspects, waits for, or cancels any managed command, monitor, or schedule.
 
@@ -47,14 +47,14 @@ Use `x` twice to confirm cancellation of the selected scheduled, due, or running
 - `expect`: The exit status the agent predicts for a foreground command, `success` (exit 0) or `failure`. When the prediction misses, the result ends with a `Surprise:` line. The prediction is recorded before the result, so it cannot be rewritten afterwards. A predicted failure, such as a red test, is not evidence for the learning reflection; a success that was predicted to fail is. Background commands ignore it.
 - While a foreground command executes, the operator can press `Ctrl+B` to detach it into the same managed-task lifecycle.
 
-### `schedule`
+### `remind_me`
 
 Schedule exactly one prompt or command:
 
 ```json
 {
   "delay_seconds": 300,
-  "prompt": "Check whether the deployment finished."
+  "text": "Check whether the deployment finished."
 }
 ```
 
@@ -133,4 +133,4 @@ Output:
 - **Session local**: Schedules and monitors are in memory. Session start, fork, tree navigation, switch, and shutdown stop active work and clear the prior session's task roster without terminal notifications.
 - **Process cleanup**: Cancellation terminates the complete process tree and removes temporary output files during lifecycle cleanup.
 - **Memory bounded**: Command output keeps a rolling tail. Full truncated output streams to a temporary file.
-- **Pi Exec isolation**: `schedule`, `monitor`, and `task` are excluded from captured extension tools. Programs may call `send_mail` and `reply` ([mail](session-state.md#mail-and-threads)), because it wakes another session, not this one. Pi Exec's `pi.bash` remains direct, verbatim, and without background, scheduling, or monitoring parameters.
+- **Pi Exec isolation**: `remind_me`, `monitor`, and `task` are excluded from captured extension tools. Programs may call `send_mail` and `reply` ([mail](session-state.md#mail-and-threads)), because it wakes another session, not this one. Pi Exec's `pi.bash` remains direct, verbatim, and without background, scheduling, or monitoring parameters.

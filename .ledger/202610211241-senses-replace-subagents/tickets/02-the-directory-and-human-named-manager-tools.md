@@ -6,9 +6,13 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] `directory` from a leaf lists exactly its organization with each field; with former members requested, retired people appear with when and why they left.
-- [ ] Each renamed manager tool does what its predecessor did (the existing organization tests pass against the new names), and only managers and roots have them.
-- [ ] `remind_me` delivers its text as a turn at the given time, as `schedule` did.
-- [ ] None of `list_peer_sessions`, `*_peer_session`, or `schedule` exists (package-load test), and no prompt or doc names them.
+- [x] `directory` from a leaf lists exactly its organization with each field; with former members requested, retired people appear with when and why they left.
+- [x] Each renamed manager tool does what its predecessor did (the existing organization tests pass against the new names), and only managers and roots have them.
+- [x] `remind_me` delivers its text as a turn at the given time, as `schedule` did.
+- [x] None of `list_peer_sessions`, `*_peer_session`, or `schedule` exists (package-load test), and no prompt or doc names them.
+
+**Evidence:** Typecheck passed (Node and web). The affected session-state, organization, task, terse-tools, Pi Exec, and work-panel suites passed except one Pi Exec cancellation timeout in the combined run; that file passed in isolation. The added leaf-directory scenario and package-loader check passed. Runtime behavior remains unchanged for the operator until rollout.
+
+**Deviations:** `remind_me` retains the explicit relative `delay_seconds` field and optional delayed `command` from the scheduling tool; the note is `text`. This avoids a second time parser or loss of existing scheduling behavior. Task assignment and focus fields arrive in tickets 06/07; this ticket still shows the existing ledger-touch record. Transfers now notify everyone in one shared mail thread rather than three unrelated messages.

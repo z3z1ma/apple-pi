@@ -1,20 +1,22 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { createServer } from "node:http";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { describe, expect, it } from "vitest";
 import { PAIR_EXTENSION_PATH } from "../../../extensions/pi-pair.js";
-import { deriveProgramEnvelope, PROGRAM_ENVELOPE_MAXIMA } from "../src/envelope.js";
-import runtime from "../src/index.js";
-import { aggregateUsage } from "../src/results.js";
-import { listSkills, readSkillBody } from "../src/skills.js";
+import { createEventBus } from "../../../node_modules/@earendil-works/pi-coding-agent/dist/core/event-bus.js";
+import {
+	createExtensionRuntime,
+	loadExtensions,
+} from "../../../node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/loader.js";
 import {
 	AUTO_COMPACT_EXTENSION_PATH,
 	agentOperationArgs,
-	VROOM_EXTENSION_PATH,
+	CODE_CONTEXT_EXTENSION_PATH,
 	CONTEXT_GUIDANCE,
+	CONTEXT_LINT_TOOL_NAME,
 	HOME_SEARCH_GUARD_EXTENSION_PATH,
 	LEDGER_EXTENSION_PATH,
 	OUTPUT_SCHEMA_GUIDANCE,
@@ -26,18 +28,16 @@ import {
 	resolveStructuredOutput,
 	SESSION_SEARCH_EXTENSION_PATH,
 	serializeAgentContext,
+	VROOM_EXTENSION_PATH,
 	WIKI_EXTENSION_PATH,
 	WIKI_TOOL_NAMES,
-	CODE_CONTEXT_EXTENSION_PATH,
-	CONTEXT_LINT_TOOL_NAME,
 	WORKER_RETURN_EXTENSION_PATH,
 } from "../src/agent-workers.js";
+import { deriveProgramEnvelope, PROGRAM_ENVELOPE_MAXIMA } from "../src/envelope.js";
+import runtime from "../src/index.js";
+import { aggregateUsage } from "../src/results.js";
+import { listSkills, readSkillBody } from "../src/skills.js";
 import { renderExecCall, renderExecResult } from "../src/ui.js";
-import { createEventBus } from "../../../node_modules/@earendil-works/pi-coding-agent/dist/core/event-bus.js";
-import {
-	createExtensionRuntime,
-	loadExtensions,
-} from "../../../node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/loader.js";
 
 const theme = {
 	fg: (_color: string, value: string) => value,
@@ -880,7 +880,7 @@ describe("pi_exec tool", () => {
 		await expect(
 			tool.execute(
 				id,
-				{ code: 'await schedule(delay_seconds=1, prompt="later")\nawait get_subagent_result(agent_id="x")' },
+				{ code: 'await remind_me(delay_seconds=1, text="later")\nawait get_subagent_result(agent_id="x")' },
 				undefined,
 				undefined,
 				{ cwd: process.cwd(), sessionManager: { getSessionId: () => id } },

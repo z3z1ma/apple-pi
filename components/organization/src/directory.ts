@@ -32,7 +32,7 @@ export interface Member {
 
 export interface Organization {
 	root: string;
-	/** Every member but `self`: the root first, then by manager and name. */
+	/** The root first, then by manager and name; excludes the caller unless includeSelf was requested. */
 	members: Member[];
 }
 
@@ -81,7 +81,7 @@ function rootOf(id: string, managerOf: Map<string, string | null>): string {
 }
 
 /** The organization of `self`: its root and every other member, or `self` alone when the database is unreadable. */
-export function organizationOf(self: string): Organization {
+export function organizationOf(self: string, includeSelf = false): Organization {
 	const path = statePaths().db;
 	if (!existsSync(path)) return { root: self, members: [] };
 	const db = new DatabaseSync(path, { readOnly: true });
@@ -102,7 +102,7 @@ export function organizationOf(self: string): Organization {
 		const root = rootOf(self, managerOf);
 		const tasks = db.prepare("select distinct task_id from session_tasks where session_id = ? order by at desc");
 		const members: Member[] = rows
-			.filter((row) => row.id !== self && rootOf(row.id, managerOf) === root)
+			.filter((row) => (includeSelf || row.id !== self) && rootOf(row.id, managerOf) === root)
 			.map((row) => ({
 				id: row.id,
 				name: row.name,

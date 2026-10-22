@@ -28,13 +28,13 @@ function scheduledResult(taskId: string, kind: "prompt" | "command", dueAt: numb
 
 export function createScheduleTool(taskManager: TaskManager) {
 	return defineTool<typeof scheduleParameters, ScheduleToolDetails>({
-		name: "schedule",
-		label: "schedule",
+		name: "remind_me",
+		label: "remind_me",
 		description:
-			"Schedule one self-authored prompt or bash command after a relative delay. A due prompt steers the agent at once, entering an active run at its next safe boundary or starting a turn while idle; a due command starts silently and wakes the agent only when it finishes. Scheduled work is session-local and managed with the task tool.",
-		promptSnippet: "Schedule a one-shot prompt or bash command for later in this root session.",
+			"Remind yourself later, after a relative delay: a note to yourself (text), or a bash command to start then. A due note steers you at once, entering an active run at its next safe boundary or starting a turn while idle; a due command starts silently and wakes you only when it finishes. Reminders live in this session and are managed with the task tool.",
+		promptSnippet: "Remind yourself later with a note, or start a bash command later.",
 		promptGuidelines: [
-			"Use a schedule prompt to wake yourself with deferred guidance, and a schedule command to start bash later without an inference turn.",
+			"Use remind_me with text to wake yourself with deferred guidance, and with a command to start bash later without an inference turn.",
 			"Scheduled work is cancelled on fork, tree navigation, session switch, or shutdown.",
 		],
 		parameters: scheduleParameters,
@@ -46,13 +46,13 @@ export function createScheduleTool(taskManager: TaskManager) {
 			if (params.delay_seconds > MAX_SCHEDULE_DELAY_SECONDS) {
 				throw new Error(`delay_seconds must be at most ${MAX_SCHEDULE_DELAY_SECONDS} (the platform timer limit)`);
 			}
-			const hasPrompt = typeof params.prompt === "string";
+			const hasPrompt = typeof params.text === "string";
 			const hasCommand = typeof params.command === "string";
-			if (hasPrompt === hasCommand) throw new Error("schedule requires exactly one prompt or command");
+			if (hasPrompt === hasCommand) throw new Error("remind_me requires exactly one text or command");
 
 			const delayMs = params.delay_seconds * 1000;
 			if (hasPrompt) {
-				const task = taskManager.schedulePrompt(params.prompt!, delayMs);
+				const task = taskManager.schedulePrompt(params.text!, delayMs);
 				return scheduledResult(task.id, task.kind, task.dueAt, params.delay_seconds);
 			}
 
@@ -61,9 +61,9 @@ export function createScheduleTool(taskManager: TaskManager) {
 			return scheduledResult(task.id, task.kind, task.dueAt, params.delay_seconds);
 		},
 		renderCall(args, theme) {
-			const kind = typeof args.prompt === "string" ? "prompt" : "command";
+			const kind = typeof args.text === "string" ? "note" : "command";
 			return new Text(
-				theme.fg("toolTitle", theme.bold(`schedule ${kind}`)) + theme.fg("muted", ` (in ${args.delay_seconds ?? 0}s)`),
+				theme.fg("toolTitle", theme.bold(`remind_me ${kind}`)) + theme.fg("muted", ` (in ${args.delay_seconds ?? 0}s)`),
 				0,
 				0,
 			);

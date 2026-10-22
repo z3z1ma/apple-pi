@@ -2,6 +2,7 @@ import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai/compat
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
 import { fauxSession, type Reply } from "../../../tests/helpers/faux-session.js";
 import type { Member } from "../../organization/src/directory.js";
+import { sendCommand } from "../src/client.js";
 import bridge from "../src/index.js";
 import { close, fakeBridge, query, standInProcess, startRuntime, stopRuntime, tempStateDir } from "./helpers.js";
 
@@ -33,15 +34,15 @@ test("a session lists its organization, awake and asleep, not subagents or stran
 		[bridge],
 		(context) => {
 			const last = context.messages.at(-1) as { role: string; toolName?: string; details?: { members?: Member[] } };
-			if (last.role === "user") return call("list_peer_sessions", {});
-			if (last.toolName === "list_peer_sessions") {
+			if (last.role === "user") return call("directory", {});
+			if (last.toolName === "directory") {
 				listed = last.details?.members ?? [];
 				const worker = listed.find((peer) => peer.name === "docs-worker");
 				return call("send_mail", { to: [worker?.id ?? "none"], subject: "Status", body: "status please" });
 			}
 			return fauxAssistantMessage("done");
 		},
-		["list_peer_sessions", "send_mail"],
+		["directory", "send_mail"],
 	);
 	try {
 		const callerId = caller.session.sessionManager.getSessionId();
@@ -94,20 +95,21 @@ test("a session lists its organization, awake and asleep, not subagents or stran
 		);
 
 		await caller.session.prompt("check on the docs worker");
-		expect(listed).toEqual([
+		expect(listed).toContainEqual(expect.objectContaining({ id: callerId, manager: null }));
+		expect(listed.filter((member) => member.id !== callerId)).toEqual([
 			{
 				id: "peer-1",
 				name: "docs-worker",
 				role: "technical-writer",
 				title: "Technical Writer",
 				soul: "You count the callers; habit: you reread the ask.",
-				reportsTo: callerId,
-				status: "waiting",
-				cwd: "/work/docs",
-				currentTask: "202610180001-docs",
-				tasks: ["202610180001-docs", "202610170001-old"],
+				manager: callerId,
+				team: `team:${callerId}`,
+				status: "asking the operator",
+				directory: "/work/docs",
+				workingOn: "202610180001-docs",
+				record: ["202610180001-docs", "202610170001-old"],
 				since: expect.any(Number),
-				retired: null,
 			},
 			{
 				id: "asleep-1",
@@ -115,13 +117,13 @@ test("a session lists its organization, awake and asleep, not subagents or stran
 				role: null,
 				title: null,
 				soul: null,
-				reportsTo: "peer-1",
+				manager: "docs-worker",
+				team: "team:peer-1",
 				status: "asleep",
-				cwd: expect.any(String),
-				currentTask: null,
-				tasks: [],
+				directory: expect.any(String),
+				workingOn: null,
+				record: [],
 				since: expect.any(Number),
-				retired: null,
 			},
 		]);
 		expect(await mail).toMatchObject({
@@ -133,12 +135,55 @@ test("a session lists its organization, awake and asleep, not subagents or stran
 	}
 }, 30000);
 
+test("a leaf sees its named manager, teammates, and itself, with former members only on request", async () => {
+	const results: { members: { id: string; manager: string | null; team: string }[]; former: { id: string }[] }[] = [];
+	const run = await fauxSession(
+		[bridge],
+		(context) => {
+			const last = context.messages.at(-1) as { role: string; details?: (typeof results)[number] };
+			if (last.role === "user") return call("directory", { former: results.length > 0 });
+			if (last.details) results.push(last.details);
+			return fauxAssistantMessage("done");
+		},
+		[],
+	);
+	const id = run.session.sessionManager.getSessionId();
+	try {
+		await fake("leaf-boss", { session: { name: "Ada" } });
+		const sibling = await fake("leaf-sibling", { session: { name: "Grace" }, facts: { reportsTo: "leaf-boss" } });
+		run.session.extensionRunner.setFlagValue("reports-to", "leaf-boss");
+		await run.session.bindExtensions({});
+		await vi.waitFor(
+			() =>
+				expect(query(state.dbPath, "select reports_to from sessions where id = ?", id)).toEqual([
+					{ reports_to: "leaf-boss" },
+				]),
+			{ timeout: 15000 },
+		);
+		await sendCommand("leaf-sibling", { kind: "retire", reason: "Assignment complete." });
+		sibling.send({ type: "shutdown", reason: "quit" });
+		await run.session.prompt("who is here?");
+		expect(results[0].members.map((member) => member.id).sort()).toEqual(["leaf-boss", id].sort());
+		expect(results[0].members.find((member) => member.id === id)).toMatchObject({
+			manager: "Ada",
+			team: "team:leaf-boss",
+		});
+		expect(results[0].former).toEqual([]);
+		await run.session.prompt("and who left?");
+		expect(results[1].former).toEqual([
+			expect.objectContaining({ id: "leaf-sibling", left: { at: expect.any(Number), reason: "Assignment complete." } }),
+		]);
+	} finally {
+		await close(run);
+	}
+}, 30000);
+
 test("the discovery and mail tools tell peer sessions from subagents", async () => {
 	const run = await fauxSession([bridge], [], []);
 	try {
 		const tools = run.session.getAllTools();
 		const description = (name: string) => tools.find((tool) => tool.name === name)?.description ?? "";
-		expect(description("list_peer_sessions")).toMatch(/organization.*send_mail.*subagents are not people.*agent/is);
+		expect(description("directory")).toMatch(/organization.*former.*send_mail/is);
 		expect(description("send_mail")).toMatch(/organization.*thread.*my-team/is);
 	} finally {
 		await close(run);

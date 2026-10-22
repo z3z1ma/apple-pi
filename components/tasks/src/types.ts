@@ -144,14 +144,14 @@ export const scheduleParameters = Type.Object(
 		delay_seconds: Type.Number({
 			minimum: 0,
 			maximum: MAX_SCHEDULE_DELAY_SECONDS,
-			description: "Seconds to wait before the prompt steers the agent or the command starts.",
+			description: "Seconds to wait before the note steers you or the command starts.",
 		}),
-		prompt: Type.Optional(Type.String({ minLength: 1, description: "Self-authored prompt to deliver when due." })),
+		text: Type.Optional(Type.String({ minLength: 1, description: "A note to yourself, delivered when due." })),
 		command: Type.Optional(Type.String({ minLength: 1, description: "Bash command to start when due." })),
 	},
 	{
 		additionalProperties: false,
-		description: "Schedule exactly one self-authored prompt or bash command.",
+		description: "Remind yourself with exactly one note or bash command.",
 	},
 );
 

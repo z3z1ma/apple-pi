@@ -193,7 +193,7 @@ try {
 		"acknowledge_pair_findings",
 		"update_notebook",
 		"ask_user_question",
-		"schedule",
+		"remind_me",
 		"monitor",
 		"send_mail",
 		"reply",
@@ -220,7 +220,14 @@ try {
 		"mcp",
 		"mcpScript",
 		"pi_exec_program",
-		"remind_me",
+		"schedule",
+		"list_peer_sessions",
+		"start_peer_session",
+		"reopen_peer_session",
+		"close_peer_session",
+		"rename_peer_session",
+		"transfer_peer_session",
+		"retire_peer_session",
 		"backlog_add",
 		"backlog_list",
 		"backlog_take",
@@ -239,11 +246,11 @@ try {
 		assert(!commands.has(name), `package must not register /${name}`);
 	const scheduleTool = result.extensions
 		.flatMap((extension) => [...extension.tools.values()])
-		.find((tool) => tool.definition.name === "schedule");
-	assert(scheduleTool, "missing schedule tool");
+		.find((tool) => tool.definition.name === "remind_me");
+	assert(scheduleTool, "missing remind_me tool");
 	const scheduleSchema = scheduleTool.definition.parameters;
 	assert.equal(scheduleSchema.type, "object");
-	assert.deepEqual(Object.keys(scheduleSchema.properties), ["delay_seconds", "prompt", "command"]);
+	assert.deepEqual(Object.keys(scheduleSchema.properties), ["delay_seconds", "text", "command"]);
 	assert.deepEqual(scheduleSchema.required, ["delay_seconds"]);
 	assert.equal(scheduleSchema.oneOf, undefined);
 	const monitorTool = result.extensions
@@ -260,11 +267,11 @@ try {
 		result.extensions.some(
 			(extension) =>
 				extension.path.endsWith("tasks.ts") &&
-				extension.tools.has("schedule") &&
+				extension.tools.has("remind_me") &&
 				extension.tools.has("monitor") &&
 				extension.tools.has("task"),
 		),
-		"tasks extension must own schedule, monitor, and task",
+		"tasks extension must own remind_me, monitor, and task",
 	);
 	assert(
 		result.extensions.some(
@@ -274,13 +281,13 @@ try {
 				extension.tools.has("reply") &&
 				extension.tools.has("inbox") &&
 				extension.tools.has("read_thread") &&
-				extension.tools.has("list_peer_sessions") &&
-				extension.tools.has("start_peer_session") &&
-				extension.tools.has("reopen_peer_session") &&
-				extension.tools.has("close_peer_session") &&
-				extension.tools.has("rename_peer_session") &&
-				extension.tools.has("transfer_peer_session") &&
-				extension.tools.has("retire_peer_session") &&
+				extension.tools.has("directory") &&
+				extension.tools.has("hire") &&
+				extension.tools.has("rehire") &&
+				extension.tools.has("send_home") &&
+				extension.tools.has("rename") &&
+				extension.tools.has("move") &&
+				extension.tools.has("let_go") &&
 				extension.tools.has("update_self"),
 		),
 		"session-state extension must own the mail, directory, manager, and self tools",

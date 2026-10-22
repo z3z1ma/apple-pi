@@ -1,21 +1,21 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { createServer, type ServerResponse } from "node:http";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fauxAssistantMessage, fauxText } from "@earendil-works/pi-ai";
+import { registerFauxProvider } from "@earendil-works/pi-ai/compat";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { visibleWidth } from "@earendil-works/pi-tui";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { resultText } from "../components/pi-exec/src/results.js";
+import { registerWorkSection } from "../components/shared/src/work-manager.js";
 import { createEventBus } from "../node_modules/@earendil-works/pi-coding-agent/dist/core/event-bus.js";
 import {
 	createExtensionRuntime,
 	loadExtensions,
 } from "../node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/loader.js";
 import { fakeCustom, fakeTui, plainTheme } from "./helpers/fake-tui.js";
-import { fauxAssistantMessage, fauxText } from "@earendil-works/pi-ai";
-import { registerFauxProvider } from "@earendil-works/pi-ai/compat";
 import { fauxModelBackend } from "./helpers/faux-model.js";
-import { resultText } from "../components/pi-exec/src/results.js";
-import { registerWorkSection } from "../components/shared/src/work-manager.js";
 
 const cleanups: Array<() => Promise<void>> = [];
 afterEach(async () => {
@@ -201,7 +201,7 @@ async function mixedHarness() {
 		await vi.waitFor(() => expect(started).toBe(true));
 	};
 	const scheduleTask = () =>
-		h.tool("schedule").execute("task", { prompt: "Deferred check", delay_seconds: 600 }, undefined, undefined, h.ctx);
+		h.tool("remind_me").execute("task", { text: "Deferred check", delay_seconds: 600 }, undefined, undefined, h.ctx);
 	return { ...h, launchAgent, scheduleTask, releaseAgent: () => release() };
 }
 

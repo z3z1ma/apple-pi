@@ -17,7 +17,7 @@ const TOOL_NAME_MAP: Record<string, string> = {
 	ls: "Ls",
 	task: "ManageTask",
 	manage_task: "ManageTask",
-	schedule: "Schedule",
+	remind_me: "RemindMe",
 	monitor: "Monitor",
 	pi_exec: "Exec",
 	ask_user_question: "AskUserQuestion",
@@ -275,7 +275,7 @@ function formatScheduleArgs(args: any): string {
 		args.cron ||
 		args.CronExpression ||
 		"";
-	const work = args.prompt || args.Prompt || args.message || args.command || "";
+	const work = args.text || args.prompt || args.Prompt || args.message || args.command || "";
 	return dur ? `${dur}: ${work}` : work;
 }
 
@@ -428,7 +428,7 @@ export function formatToolArgs(toolName: string, args: any, _cwd?: string): stri
 			const cmd = args.command || "";
 			return [action, target, cmd].filter(Boolean).join(" ");
 		}
-		case "schedule":
+		case "remind_me":
 			return formatScheduleArgs(args);
 		case "pi_exec":
 			return formatExecArgs(args);

@@ -115,21 +115,21 @@ async function withRole(run: Awaited<ReturnType<typeof fauxSession>>, role: stri
 
 test("a coordinator starts a session in a new tmux window, and reopens it by id once it stopped", async () => {
 	const run = await coordinator([
-		call("start_peer_session", {
+		call("hire", {
 			cwd: workDir,
 			role: "repository-archaeologist",
 			prompt: "@brief.md",
 			session_id: "worker-1",
 		}),
 		fauxAssistantMessage("started"),
-		call("reopen_peer_session", { session_id: "worker-1" }),
+		call("rehire", { person: "worker-1" }),
 	]);
 	const coordinatorId = run.session.sessionManager.getSessionId();
 	try {
 		await run.session.prompt("start a docs worker");
 		expect(toolResults(run)[0]).toMatchObject({
 			isError: false,
-			text: expect.stringContaining("Started session worker-1"),
+			text: expect.stringContaining("Hired a new person (worker-1) as repository-archaeologist."),
 		});
 		expect(starts()[0]).toEqual({
 			args: [
@@ -154,7 +154,7 @@ test("a coordinator starts a session in a new tmux window, and reopens it by id 
 		await run.session.prompt("bring it back");
 		expect(toolResults(run)[1]).toMatchObject({
 			isError: false,
-			text: expect.stringContaining("Reopened session worker-1"),
+			text: expect.stringContaining("worker-1 is back (worker-1)."),
 		});
 		expect(starts()[1]).toEqual({
 			args: ["--session-id", "worker-1", "--name", "Ada Lovelace", "--reports-to", coordinatorId],
@@ -170,7 +170,7 @@ test("a coordinator starts a session in a new tmux window, and reopens it by id 
 }, 40000);
 
 test("starting a session fails when its window closes before the session connects", async () => {
-	const run = await coordinator([call("start_peer_session", { cwd: workDir, prompt: "@fail" })]);
+	const run = await coordinator([call("hire", { cwd: workDir, role: "repository-archaeologist", prompt: "@fail" })]);
 	try {
 		await run.session.prompt("start a broken worker");
 		expect(toolResults(run)[0]).toMatchObject({
@@ -188,7 +188,7 @@ test("a coordinator closes a running session, which records its exit", async () 
 	await worker.session.bindExtensions({
 		shutdownHandler: () => void worker.session.extensionRunner.emit({ type: "session_shutdown", reason: "quit" }),
 	});
-	const run = await coordinator([call("close_peer_session", { session_id: workerId })]);
+	const run = await coordinator([call("send_home", { person: workerId })]);
 	try {
 		await vi.waitFor(() => expect(incarnation(workerId)).toMatchObject({ ended_at: null }), { timeout: 15000 });
 		await run.session.prompt("close the worker");
@@ -205,7 +205,7 @@ test("a coordinator closes a running session, which records its exit", async () 
 test("a coordinator renames a running peer through its bridge", async () => {
 	const worker = await fauxSession([bridge], [], []);
 	const workerId = worker.session.sessionManager.getSessionId();
-	const run = await coordinator([call("rename_peer_session", { session_id: workerId, name: "Renamed worker" })]);
+	const run = await coordinator([call("rename", { person: workerId, name: "Renamed worker" })]);
 	try {
 		await vi.waitFor(() => expect(incarnation(workerId)).toMatchObject({ ended_at: null }), { timeout: 15000 });
 		await run.session.prompt("rename the worker");
@@ -217,18 +217,21 @@ test("a coordinator renames a running peer through its bridge", async () => {
 	}
 }, 30000);
 
-test("renaming a stopped peer reports the command failure", async () => {
-	const run = await coordinator([call("rename_peer_session", { session_id: "missing-worker", name: "New name" })]);
+test("renaming an unknown person reports that it does not exist", async () => {
+	const run = await coordinator([call("rename", { person: "missing-worker", name: "New name" })]);
 	try {
 		await run.session.prompt("rename a missing worker");
-		expect(toolResults(run)[0]).toMatchObject({ isError: true, text: expect.stringContaining("not running") });
+		expect(toolResults(run)[0]).toMatchObject({
+			isError: true,
+			text: expect.stringContaining("no session has that id"),
+		});
 	} finally {
 		await close(run);
 	}
 }, 20000);
 
 test("hiring into a role the catalog lacks fails before any window opens", async () => {
-	const run = await coordinator([call("start_peer_session", { cwd: workDir, role: "court-jester" })]);
+	const run = await coordinator([call("hire", { cwd: workDir, role: "court-jester" })]);
 	try {
 		await run.session.prompt("hire a jester");
 		expect(toolResults(run)[0]).toMatchObject({
@@ -241,33 +244,30 @@ test("hiring into a role the catalog lacks fails before any window opens", async
 }, 20000);
 
 test("a hired person whose role does not manage loses the lifecycle tools; a hired manager keeps them", async () => {
-	const tools = [
-		"start_peer_session",
-		"reopen_peer_session",
-		"close_peer_session",
-		"rename_peer_session",
-		"transfer_peer_session",
-		"retire_peer_session",
-	];
+	const tools = ["hire", "rehire", "send_home", "rename", "move", "let_go"];
 	const run = await fauxSession(
 		[bridge],
 		[fauxAssistantMessage("ok"), fauxAssistantMessage("ok")],
-		[...tools, "list_peer_sessions"],
+		[...tools, "directory"],
 	);
 	try {
 		run.session.extensionRunner.setFlagValue("reports-to", "boss");
 		await withRole(run, "staff-engineer-simplicity");
 		await run.session.prompt("hi");
-		expect(run.session.getActiveToolNames()).toEqual(["list_peer_sessions", "update_self"]);
+		expect(run.session.getActiveToolNames().sort()).toEqual(
+			["directory", "send_mail", "reply", "inbox", "read_thread", "update_self"].sort(),
+		);
 	} finally {
 		await close(run);
 	}
-	const manager = await fauxSession([bridge], [fauxAssistantMessage("ok")], ["list_peer_sessions"]);
+	const manager = await fauxSession([bridge], [fauxAssistantMessage("ok")], ["directory"]);
 	try {
 		manager.session.extensionRunner.setFlagValue("reports-to", "boss");
 		await withRole(manager, "coordinator");
 		await manager.session.prompt("hi");
-		expect(manager.session.getActiveToolNames().sort()).toEqual([...tools, "list_peer_sessions", "update_self"].sort());
+		expect(manager.session.getActiveToolNames().sort()).toEqual(
+			[...tools, "directory", "send_mail", "reply", "inbox", "read_thread", "update_self"].sort(),
+		);
 	} finally {
 		await close(manager);
 	}
@@ -276,7 +276,7 @@ test("a hired person whose role does not manage loses the lifecycle tools; a hir
 test.each([false, true])(
 	"a root holds the manager tools whether or not its role manages, even when its initial tool set lacks them (role=%s)",
 	async (enabled) => {
-		const run = await fauxSession([bridge], [call("list_peer_sessions", {}), fauxAssistantMessage("done")], ["read"]);
+		const run = await fauxSession([bridge], [call("directory", {}), fauxAssistantMessage("done")], ["read"]);
 		await withRole(run, enabled ? "coordinator" : undefined);
 		try {
 			await run.session.prompt("list my peers");
@@ -284,13 +284,17 @@ test.each([false, true])(
 			expect(run.session.getActiveToolNames().sort()).toEqual(
 				[
 					"read",
-					"list_peer_sessions",
-					"start_peer_session",
-					"reopen_peer_session",
-					"close_peer_session",
-					"rename_peer_session",
-					"transfer_peer_session",
-					"retire_peer_session",
+					"directory",
+					"send_mail",
+					"reply",
+					"inbox",
+					"read_thread",
+					"hire",
+					"rehire",
+					"send_home",
+					"rename",
+					"move",
+					"let_go",
 					"update_self",
 				].sort(),
 			);

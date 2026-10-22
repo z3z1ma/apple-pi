@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { organizationColumns, organizationOf } from "../../organization/src/directory.js";
+import { type Member, organizationColumns, organizationOf } from "../../organization/src/directory.js";
 import { statePaths } from "./paths.js";
 
 export interface Peer {
@@ -52,11 +52,34 @@ export function livePeers(self: string | null): Peer[] {
 	}
 }
 
-/** `list_peer_sessions` (the directory of the session's organization) for the model and `/pi-sessions` (every live session on the machine) for the operator, in root sessions. */
+/** The tools every person has, restored after a resume replaces the tool loadout with the transcript's older one. */
+const PERSON_TOOLS = ["directory", "send_mail", "reply", "inbox", "read_thread"];
+
+/** A person as the directory shows it: who, what it does, and to whom it reports. */
+function entry(member: Member, names: Map<string, string>) {
+	return {
+		name: member.name ?? member.id,
+		id: member.id,
+		title: member.title,
+		role: member.role,
+		manager: member.reportsTo ? (names.get(member.reportsTo) ?? member.reportsTo) : null,
+		team: `team:${member.reportsTo ?? member.id}`,
+		status: member.status === "busy" ? "working" : member.status === "waiting" ? "asking the operator" : member.status,
+		workingOn: member.currentTask,
+		directory: member.cwd,
+		soul: member.soul,
+		record: member.tasks,
+		since: member.since,
+		...(member.retired ? { left: member.retired } : {}),
+	};
+}
+
+/** `directory` (your organization) for the model and `/pi-sessions` (every live session on the machine) for the operator, in root sessions. */
 export function installPeers(pi: ExtensionAPI): void {
 	const activate = () => {
 		const active = pi.getActiveTools();
-		if (!active.includes("list_peer_sessions")) pi.setActiveTools([...active, "list_peer_sessions"]);
+		const missing = PERSON_TOOLS.filter((name) => !active.includes(name));
+		if (missing.length) pi.setActiveTools([...active, ...missing]);
 	};
 	pi.on("session_start", activate);
 	pi.on("before_agent_start", activate);
@@ -72,19 +95,26 @@ export function installPeers(pi: ExtensionAPI): void {
 	});
 	pi.registerTool(
 		defineTool({
-			name: "list_peer_sessions",
-			label: "list_peer_sessions",
+			name: "directory",
+			label: "directory",
 			description:
-				"The directory of your organization: every other person in it, awake or asleep. A person is a lasting top-level Pi session, often in its own tmux window, which you write to with send_mail by name or id. Each has an id, name, role and its title, one line of its soul, manager (reportsTo), status (busy, idle, waiting for the user, or asleep), directory, current ledger task, the ledger tasks it has worked on (newest first), and when it was hired. Former members (retired, with when and why) are listed apart. Your subagents are not people: they are children you start with agent and reach with steer_subagent and get_subagent_result.",
-			promptSnippet: "The directory of your organization: the people (not your subagents) you can mail.",
-			parameters: Type.Object({}, { additionalProperties: false }),
-			async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
-				const all = organizationOf(ctx.sessionManager.getSessionId()).members;
-				const members = all.filter((member) => !member.retired);
-				const former = all.filter((member) => member.retired);
+				"Your organization's directory: everyone in it including you, awake or asleep, with name, id, title, manager, whether they are working, idle, asking the operator, or asleep, what they work on, their directory, one line of their soul, and their record (the ledger tasks they have worked on, newest first). Former members, who left, are listed only with former: true. Write to anyone with send_mail by name.",
+			promptSnippet: "Your organization's directory: who is in it, what each does, and whom each reports to.",
+			parameters: Type.Object(
+				{ former: Type.Optional(Type.Boolean({ description: "Also list the people who left, with when and why." })) },
+				{ additionalProperties: false },
+			),
+			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+				const self = ctx.sessionManager.getSessionId();
+				const all = organizationOf(self, true).members;
+				const names = new Map(all.map((member) => [member.id, member.name ?? member.id]));
+				const members = all.filter((member) => !member.retired).map((member) => entry(member, names));
+				const former = params.former
+					? all.filter((member) => member.retired).map((member) => entry(member, names))
+					: [];
 				const text =
-					all.length > 0
-						? JSON.stringify(former.length > 0 ? { members, former } : members, null, 2)
+					members.length || former.length
+						? JSON.stringify(params.former ? { members, former } : members, null, 2)
 						: "Nobody else is in your organization.";
 				return { content: [{ type: "text", text }], details: { members, former } };
 			},

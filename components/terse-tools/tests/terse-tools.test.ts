@@ -92,7 +92,7 @@ describe("terse tool formatters", () => {
 		expect(stripAnsi(formatToolName("ls", testTheme))).toBe("Ls");
 		expect(stripAnsi(formatToolName("task", testTheme))).toBe("ManageTask");
 		expect(stripAnsi(formatToolName("manage_task", testTheme))).toBe("ManageTask");
-		expect(stripAnsi(formatToolName("schedule", testTheme))).toBe("Schedule");
+		expect(stripAnsi(formatToolName("remind_me", testTheme))).toBe("RemindMe");
 		expect(stripAnsi(formatToolName("monitor", testTheme))).toBe("Monitor");
 		expect(stripAnsi(formatToolName("pi_exec", testTheme))).toBe("Exec");
 		expect(stripAnsi(formatToolName("ask_user_question", testTheme))).toBe("AskUserQuestion");
@@ -147,7 +147,7 @@ describe("terse tool formatters", () => {
 		expect(formatToolArgs("manage_task", { action: "cancel", taskId: "task-58" })).toBe("cancel task-58");
 
 		expect(
-			formatToolArgs("schedule", {
+			formatToolArgs("remind_me", {
 				delay_seconds: 10,
 				command: "npm test",
 			}),

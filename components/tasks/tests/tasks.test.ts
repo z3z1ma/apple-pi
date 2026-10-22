@@ -259,14 +259,12 @@ describe("tasks component", () => {
 
 		it("keeps the provider schema structural and Bedrock-compatible", () => {
 			expect(scheduleParameters).not.toHaveProperty("oneOf");
-			expect(Value.Check(scheduleParameters, { delay_seconds: 0, prompt: "Continue." })).toBe(true);
+			expect(Value.Check(scheduleParameters, { delay_seconds: 0, text: "Continue." })).toBe(true);
 			expect(Value.Check(scheduleParameters, { delay_seconds: 1, command: "npm test" })).toBe(true);
 			expect(Value.Check(scheduleParameters, { delay_seconds: 0 })).toBe(true);
-			expect(Value.Check(scheduleParameters, { delay_seconds: 0, prompt: "Continue.", command: "npm test" })).toBe(
-				true,
-			);
-			expect(Value.Check(scheduleParameters, { delay_seconds: -1, prompt: "Continue." })).toBe(false);
-			expect(Value.Check(scheduleParameters, { delay_seconds: 30 * 24 * 60 * 60, prompt: "Next month." })).toBe(false);
+			expect(Value.Check(scheduleParameters, { delay_seconds: 0, text: "Continue.", command: "npm test" })).toBe(true);
+			expect(Value.Check(scheduleParameters, { delay_seconds: -1, text: "Continue." })).toBe(false);
+			expect(Value.Check(scheduleParameters, { delay_seconds: 30 * 24 * 60 * 60, text: "Next month." })).toBe(false);
 		});
 
 		it("does not schedule a command after its call was interrupted", async () => {
@@ -290,17 +288,17 @@ describe("tasks component", () => {
 			const tool = createScheduleTool(createManager());
 			const context = { cwd: process.cwd() } as any;
 			await expect(tool.execute("missing", { delay_seconds: 0 }, undefined, undefined, context)).rejects.toThrow(
-				"schedule requires exactly one prompt or command",
+				"remind_me requires exactly one text or command",
 			);
 			await expect(
 				tool.execute(
 					"both",
-					{ delay_seconds: 0, prompt: "Continue.", command: "npm test" },
+					{ delay_seconds: 0, text: "Continue.", command: "npm test" },
 					undefined,
 					undefined,
 					context,
 				),
-			).rejects.toThrow("schedule requires exactly one prompt or command");
+			).rejects.toThrow("remind_me requires exactly one text or command");
 		});
 	});
 
@@ -730,7 +728,7 @@ describe("tasks component", () => {
 			installTasks(mockPi as any);
 
 			expect(registeredTools.some((t) => t.name === "bash")).toBe(true);
-			expect(registeredTools.some((t) => t.name === "schedule")).toBe(true);
+			expect(registeredTools.some((t) => t.name === "remind_me")).toBe(true);
 			expect(registeredTools.some((t) => t.name === "monitor")).toBe(true);
 			expect(registeredTools.some((t) => t.name === "task")).toBe(true);
 
@@ -810,12 +808,12 @@ describe("tasks component", () => {
 				on: (event: string, handler: any) => handlers.set(event, [...(handlers.get(event) ?? []), handler]),
 			} as any);
 			for (const handler of handlers.get("agent_start") ?? []) handler();
-			const scheduleTool = registeredTools.find((tool) => tool.name === "schedule");
+			const scheduleTool = registeredTools.find((tool) => tool.name === "remind_me");
 			const taskTool = registeredTools.find((tool) => tool.name === "task");
 			const context = { cwd: process.cwd() };
 			await scheduleTool.execute(
 				"prompt",
-				{ delay_seconds: 0.02, prompt: "Run the focused test." },
+				{ delay_seconds: 0.02, text: "Run the focused test." },
 				undefined,
 				undefined,
 				context,
@@ -823,7 +821,7 @@ describe("tasks component", () => {
 
 			await scheduleTool.execute(
 				"second-prompt",
-				{ delay_seconds: 0.02, prompt: "Then inspect the diff." },
+				{ delay_seconds: 0.02, text: "Then inspect the diff." },
 				undefined,
 				undefined,
 				context,
@@ -859,10 +857,10 @@ describe("tasks component", () => {
 				sendMessage: (msg: any, opts: any) => sentMessages.push({ msg, opts }),
 				on: (event: string, handler: any) => handlers.set(event, [...(handlers.get(event) ?? []), handler]),
 			} as any);
-			const scheduleTool = registeredTools.find((tool) => tool.name === "schedule");
+			const scheduleTool = registeredTools.find((tool) => tool.name === "remind_me");
 			const bashTool = registeredTools.find((tool) => tool.name === "bash");
 			const context = { cwd: process.cwd() };
-			await scheduleTool.execute("prompt", { delay_seconds: 60, prompt: "Later." }, undefined, undefined, context);
+			await scheduleTool.execute("prompt", { delay_seconds: 60, text: "Later." }, undefined, undefined, context);
 			await bashTool.execute(
 				"background",
 				{ command: 'node -e "setInterval(() => {}, 1000);"', run_in_background: true },
@@ -883,7 +881,7 @@ describe("tasks component", () => {
 			await expect(
 				createScheduleTool(manager).execute(
 					"too-late",
-					{ delay_seconds: 30 * 24 * 60 * 60, prompt: "Next month." },
+					{ delay_seconds: 30 * 24 * 60 * 60, text: "Next month." },
 					undefined,
 					undefined,
 					{ cwd: process.cwd() } as any,
@@ -905,7 +903,7 @@ describe("tasks component", () => {
 				on: (event: string, handler: any) => handlers.set(event, [...(handlers.get(event) ?? []), handler]),
 			} as any);
 
-			const scheduleTool = registeredTools.find((tool) => tool.name === "schedule");
+			const scheduleTool = registeredTools.find((tool) => tool.name === "remind_me");
 			await scheduleTool.execute(
 				"schedule-command",
 				{ delay_seconds: 0.02, command: "node -e \"console.log('scheduled wake');\"" },
@@ -931,11 +929,11 @@ describe("tasks component", () => {
 				sendMessage: (msg: any, opts: any) => sentMessages.push({ msg, opts }),
 				on: vi.fn(),
 			} as any);
-			const scheduleTool = registeredTools.find((tool) => tool.name === "schedule");
+			const scheduleTool = registeredTools.find((tool) => tool.name === "remind_me");
 			const taskTool = registeredTools.find((tool) => tool.name === "task");
 			await scheduleTool.execute(
 				"schedule-prompt",
-				{ delay_seconds: 60, prompt: "Do not run this." },
+				{ delay_seconds: 60, text: "Do not run this." },
 				undefined,
 				undefined,
 				{ cwd: process.cwd() },
