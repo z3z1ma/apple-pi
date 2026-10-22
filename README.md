@@ -154,7 +154,7 @@ You are using a frontier reasoning model as a $15-per-million-token `for`-loop. 
 Instead of forcing the model to chain individual tool calls across twenty round-trips, `pi_exec` gives the agent a bounded, type-checked Python runtime: a subset of Python executed by Monty in a worker subprocess (`program.ts`, `guest-api.ts`, `guest-functions.ts`), whose tool calls are served by the host harness (`host-calls.ts`). It has no third-party imports and no ambient Node or OS access, and every call shares explicit call, concurrency, agent, and wall-clock budgets.
 
 1. **Host Tools as Awaitable Python Functions (`callable-tools.ts`, `core-tools.ts`):** Inside a single `pi_exec` snippet, the model can `await` host tools (`read`, `grep`, `bash`, MCP tools, or other extension tools), run independent calls concurrently with `asyncio.gather`, filter the results in Python memory, and discard the intermediate noise. Extension, MCP, and active core tools other than `bash` run through Pi's normal tool pipeline, so their hooks and guards still apply.
-2. **Subagent Workers as Futures (`agent-workers.ts`, `worker-return.ts`):** A Python snippet can spawn scoped model workers, pass them structured context, await their completion, and programmatically inspect their status records or schema-shaped return values.
+2. **Peers as Awaitable Colleagues (`peer-calls.ts`, `peer-python.ts`):** A Python snippet can attach an awake colleague or create a temporary person in a catalog role. Each request runs in that person's session and returns prose or a validated value directly. The role owns the model and thinking level; temporary people are discarded after the call or program, while attached colleagues stay alive.
 3. **Compact Results, Evidence Helpers, and Checkpoints (`evidence.ts`, `checkpoint.ts`, `envelope.ts`):** Only the snippet's last expression, which must be JSON-compatible, and its captured `print` output enter the conversation. Optional evidence helpers (`evidence.ts`) collect scoped Git changes and relevant tests, the interpreter's state is checkpointed along Pi's session tree (`checkpoint.ts`), and `envelope.ts` defines the resource limits each call runs under.
 4. **Saved Programs (`saved-programs.ts`):** In a trusted project, a `.pi/programs/<name>.py` file with a leading docstring and `@param` tags (`python-schema.ts`) is registered as a `program_<name>` tool, turning a useful snippet into a named, reusable workspace procedure.
 
@@ -173,14 +173,14 @@ flowchart LR
 
     subgraph Bridge["Host Bridge (host-calls.ts)"]
         Tools["Core & Callable Tools<br/>(read / grep / bash / MCP / fetch)"]
-        Workers["Model Worker Pool<br/>(agent-workers.ts)"]
+        Peers["Role Peers<br/>(peer-calls.ts)"]
         Panel["Work Panel Pi Exec Tab<br/>(work-panel.ts / active-work.ts)"]
     end
 
     Turn --> Py
     Py <-->|Loop, filter & branch in Python| Tools
-    Py <-->|Fan-out & join| Workers
-    Workers --> Panel
+    Py <-->|Fan-out & join| Peers
+    Peers --> Panel
     Tools --> Panel
     Py -->|2. Intermediate results stay in Python| Py
     Py -->|3. Returns its last expression| Env
@@ -190,7 +190,7 @@ flowchart LR
 When I first wired `pi-exec`, I thought of it merely as a token-saving batch runner. In sustained use, three much larger behaviors emerged:
 
 * **The Workspace Grows an Executable Vocabulary:** There is an old Lisp ideal where you grow an application by talking to it: you write a function, register it in the image, and never have to re-derive that capability again. Saved programs bring a version of that dynamic to the coding harness. When an agent writes a Python program to trace SQLMesh lineage, audit BigQuery schema drift, or verify Looker dashboard references, and it is saved to `.pi/programs/`, **ad-hoc reasoning crystallizes into a reusable tool**. Three days later, the agent doesn't "think" about how to audit the schema; it calls `program_<name>`. The repository accumulates its own library of project procedures through daily work.
-* **Data-Dependent Work Graphs:** Static multi-agent frameworks force you to define orchestration graphs *ahead of time* in YAML or TypeScript. Because `pi_exec` exposes model workers inside Python, the model can synthesize **dynamic, data-dependent work graphs on the fly**, within Monty's Python subset and the call's budgets. A single 35-line snippet can parse a dependency tree, spin up five parallel workers for the leaf nodes, run a deterministic test suite as a barrier step, and conditionally spawn a repair worker only for the branch that failed—while the Pi Exec tab of the `/work` panel shows each host call as it runs.
+* **Data-Dependent Work Graphs:** Static multi-agent frameworks force you to define orchestration graphs *ahead of time* in YAML or TypeScript. Because `pi_exec` exposes peers inside Python, the model can synthesize **dynamic, data-dependent work graphs on the fly**, within Monty's Python subset and the call's budgets. A single 35-line snippet can parse a dependency tree, ask five peers about the leaf nodes in parallel, run a deterministic test suite as a barrier step, and conditionally bring in an Implementation Engineer only for the branch that failed—while the Pi Exec tab of the `/work` panel shows each host call as it runs.
 * **Epistemic Compression:** Because the Python snippet acts as a loss-absorbing membrane between the messy filesystem and the primary context window, the root agent's transcript stays almost eerily quiet. A program can grep through megabytes of logs and return a few counts and excerpts; only what it returns or prints enters the context, so the program has to do the reducing.
 
 ---
@@ -415,7 +415,7 @@ The codebase enforces a strict separation between **implementation machinery** (
 
 | Component (`components/`) | Extension (`extensions/`) | Primary Mechanism & Boundary |
 | :--- | :--- | :--- |
-| `pi-exec` | `pi-exec.ts` | Bounded Monty Python guest runtime (`program.ts`, `guest-api.ts`), host call bridge (`host-calls.ts`), model worker fan-out (`agent-workers.ts`), resource limits (`envelope.ts`), evidence helpers (`evidence.ts`), session checkpoints (`checkpoint.ts`), and saved programs (`saved-programs.ts`). |
+| `pi-exec` | `pi-exec.ts` | Bounded Monty Python guest runtime (`program.ts`, `guest-api.ts`), host call bridge (`host-calls.ts`), role-peer calls (`peer-calls.ts`, `peer-python.ts`), resource limits (`envelope.ts`), evidence helpers (`evidence.ts`), session checkpoints (`checkpoint.ts`), and saved programs (`saved-programs.ts`). |
 | `notebook` | *(installed by `pi-pair.ts`)* | Session learnings folded from sourced observations and reflections (`session-ledger/fold.ts`, `progress.ts`), learning reflection (`learning-cycle.ts`), distillation into project files (`distillation.ts`), `.pi/LEARNINGS.md` loading (`project-learnings.ts`), and the post-compaction learnings packet (`compaction-packet.ts`). |
 | *(none)* | `auto-compact.ts` → `compaction-safety.ts` | Fail-closed automatic compaction: a failed or cancelled automatic compaction aborts the run before the next provider request. |
 | *(none)* | `ledger.ts` | `ledger_add` and `ledger_status` tools and the `.ledger` workbench prompt contract. |

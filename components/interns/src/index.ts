@@ -1,17 +1,22 @@
 import { stripVTControlCharacters } from "node:util";
 import { Type } from "@earendil-works/pi-ai";
 import { defineTool, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { runAgentWorker } from "../../pi-exec/src/agent-workers.js";
-import { READ_ONLY_CORE_TOOL_NAMES } from "../../pi-exec/src/core-tools.js";
 import { getActiveWorkSurface } from "../../shared/src/active-work.js";
-import { INTERN_PROMPTS } from "./prompts.js";
+import { runIntern } from "./runner.js";
 
 const NAMES = ["explore", "research"] as const;
 const TRADEOFF =
 	"A cheap intern is fast and keeps reading out of your context, but returns a lossy summary of only what it chose to report. It can miss, misread, or state a belief as fact. Verify findings before acting and read the source yourself when the detail decides.";
 
+interface ActiveIntern {
+	name: string;
+	activity: string;
+	controller: AbortController;
+	done?: ReturnType<typeof runIntern>;
+}
+
 export function installInterns(pi: ExtensionAPI): void {
-	const active = new Map<string, { name: string; activity: string; controller: AbortController }>();
+	const active = new Map<string, ActiveIntern>();
 	const surface = getActiveWorkSurface(pi);
 	let tui = false;
 	const unregister = surface.registerSource({
@@ -20,32 +25,35 @@ export function installInterns(pi: ExtensionAPI): void {
 		countLabel: "interns",
 		getEntries: () =>
 			tui
-				? [...active].map(([id, call]) => ({
-						id,
-						render: (_width, theme, frame) => [
-							`${theme.fg("dim", "\u251c\u2500")} ${theme.fg("accent", frame)} ${theme.bold(`Intern: ${call.name}`)} ${theme.fg("muted", stripVTControlCharacters(call.activity).replace(/\s+/g, " "))}`,
-						],
-					}))
+				? [...active]
+						.filter(([, call]) => !call.controller.signal.aborted)
+						.map(([id, call]) => ({
+							id,
+							render: (_width, theme, frame) => [
+								`${theme.fg("dim", "\u251c\u2500")} ${theme.fg("accent", frame)} ${theme.bold(`Intern: ${call.name}`)} ${theme.fg("muted", stripVTControlCharacters(call.activity).replace(/\s+/g, " "))}`,
+							],
+						}))
 				: [],
 	});
-	const cancel = () => {
-		for (const call of active.values()) call.controller.abort();
-		active.clear();
+	const cancel = async () => {
+		const calls = [...active.values()];
+		for (const call of calls) call.controller.abort();
 		surface.update();
+		await Promise.allSettled(calls.map((call) => call.done));
 	};
 	const activate = (ctx: ExtensionContext) => {
 		tui = ctx.mode === "tui";
 		if (tui) surface.setUICtx(ctx.ui);
 		pi.setActiveTools([...new Set([...pi.getActiveTools(), ...NAMES])]);
 	};
-	pi.on("session_start", (_event, ctx) => {
-		cancel();
+	pi.on("session_start", async (_event, ctx) => {
+		await cancel();
 		activate(ctx);
 	});
 	pi.on("before_agent_start", (_event, ctx) => activate(ctx));
 	pi.on("session_tree", cancel);
-	pi.on("session_shutdown", () => {
-		cancel();
+	pi.on("session_shutdown", async () => {
+		await cancel();
 		unregister();
 	});
 
@@ -83,33 +91,26 @@ export function installInterns(pi: ExtensionAPI): void {
 							}),
 				async execute(id, params, signal, onUpdate, ctx) {
 					if (!params.question.trim()) throw new Error("Give the intern a non-empty question.");
-					const call = { name, activity: "starting", controller: new AbortController() };
+					const call: ActiveIntern = { name, activity: "starting", controller: new AbortController() };
 					active.set(id, call);
 					surface.update();
 					const combinedSignal = signal ? AbortSignal.any([signal, call.controller.signal]) : call.controller.signal;
 					try {
-						const outcome = await runAgentWorker(
-							0,
-							{
-								task: params.question,
-								profile: "quick",
-								pair: false,
-								tools: [...READ_ONLY_CORE_TOOL_NAMES],
-								systemPrompt: INTERN_PROMPTS[name],
-								...("material" in params && params.material !== undefined
-									? { context: { material: params.material } }
-									: {}),
-							},
+						call.done = runIntern(
+							name,
+							params.question,
+							"material" in params && typeof params.material === "string" ? params.material : undefined,
 							ctx,
 							combinedSignal,
 							(activity) => {
-								if (active.get(id) !== call) return;
+								if (active.get(id) !== call || combinedSignal.aborted) return;
 								call.activity = activity;
 								surface.update();
 								onUpdate?.({ content: [{ type: "text", text: activity }], details: undefined });
 							},
 						);
-						const text = String(outcome.record.text ?? "");
+						const outcome = await call.done;
+						const text = outcome.text;
 						return {
 							content: [{ type: "text", text: outcome.error ? `${outcome.error}\n\n${text}` : text }],
 							details: undefined,

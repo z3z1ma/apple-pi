@@ -21,10 +21,8 @@ const CORE_TOOL_FACTORIES = {
 
 export type CoreToolName = keyof typeof CORE_TOOL_FACTORIES;
 
-/** Pi core tools callable from programs and grantable to agent workers. */
+/** Pi core tools callable from programs. */
 export const CORE_TOOL_NAMES = Object.keys(CORE_TOOL_FACTORIES) as CoreToolName[];
-
-export const READ_ONLY_CORE_TOOL_NAMES: readonly CoreToolName[] = ["read", "grep", "find", "ls"];
 
 /** Core tools that report failure to the program as `{ ok: false, output }` instead of raising. */
 export const ENVELOPE_TOOL_NAMES: ReadonlySet<string> = new Set<CoreToolName>(["bash", "edit", "write"]);

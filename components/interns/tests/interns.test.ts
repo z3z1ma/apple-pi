@@ -81,6 +81,7 @@ test("a one-shot intern returns its answer, exposes current tool activity, and l
 	expect(worker.args[worker.args.indexOf("--thinking") + 1]).toBe("off");
 	const tools = worker.args[worker.args.indexOf("--tools") + 1].split(",");
 	expect(tools).toContain("read");
+	expect(tools).toContain("bash");
 	expect(tools).not.toContain("edit");
 	expect(tools).not.toContain("write");
 	expect(worker.material).toEqual({ material: "Read https://example.test/docs" });
@@ -96,43 +97,48 @@ test("two intern calls in one assistant message overlap and both exit", async ()
 	for (const question of ["parallel-one", "parallel-two"]) expect(gone(started(question).pid)).toBe(true);
 }, 15000);
 
-test("aborting the tool stops the worker and the tool process it owns", async () => {
-	const run = await session([call("explore", "waiting")]);
-	let render: (() => string[]) | undefined;
-	const statuses = new Map<string, string | undefined>();
-	await run.session.bindExtensions({
-		mode: "tui",
-		uiContext: {
-			setStatus: (key: string, text: string | undefined) => statuses.set(key, text),
-			setWidget: (_key: string, factory: unknown) => {
-				render =
-					typeof factory === "function"
-						? factory(
-								{ terminal: { columns: 100 }, requestRender: () => {} },
-								{ fg: (_color: string, text: string) => text, bold: (text: string) => text },
-							).render
-						: undefined;
-			},
-		} as never,
-	});
-	const turn = run.session.prompt("read until interrupted");
-	await vi.waitFor(() => expect(existsSync(join(dir, "waiting.json"))).toBe(true), { timeout: 10000 });
-	const worker = started("waiting");
-	await vi.waitFor(() => expect(render?.().join("\n")).toContain("read src/sample.ts"));
-	expect(statuses.get("interns")).toBe("interns:1");
-	await run.session.abort();
-	await turn;
-	await vi.waitFor(
-		() => {
-			expect(gone(worker.pid)).toBe(true);
-			expect(gone(worker.child!)).toBe(true);
-		},
-		{ timeout: 10000 },
-	);
-	expect(existsSync(join(dir, "waiting.stopped"))).toBe(true);
-	expect(render).toBeUndefined();
-	expect(statuses.get("interns")).toBeUndefined();
-}, 15000);
+test.each(["abort", "shutdown"] as const)(
+	"%s waits for the intern and its tool process to stop",
+	async (reason) => {
+		const run = await session([call("explore", "waiting")]);
+		let render: (() => string[]) | undefined;
+		const statuses = new Map<string, string | undefined>();
+		await run.session.bindExtensions({
+			mode: "tui",
+			uiContext: {
+				setStatus: (key: string, text: string | undefined) => statuses.set(key, text),
+				setWidget: (_key: string, factory: unknown) => {
+					render =
+						typeof factory === "function"
+							? factory(
+									{ terminal: { columns: 100 }, requestRender: () => {} },
+									{ fg: (_color: string, text: string) => text, bold: (text: string) => text },
+								).render
+							: undefined;
+				},
+			} as never,
+		});
+		const turn = run.session.prompt("read until interrupted");
+		await vi.waitFor(() => expect(existsSync(join(dir, "waiting.json"))).toBe(true), { timeout: 10000 });
+		const worker = started("waiting");
+		await vi.waitFor(() => expect(render?.().join("\n")).toContain("read src/sample.ts"));
+		expect(statuses.get("interns")).toBe("interns:1");
+		let firstShutdown: Promise<unknown> | undefined;
+		if (reason === "abort") await run.session.abort();
+		else {
+			firstShutdown = run.session.extensionRunner.emit({ type: "session_shutdown", reason: "quit" });
+			await run.session.extensionRunner.emit({ type: "session_shutdown", reason: "quit" });
+		}
+		expect(gone(worker.pid)).toBe(true);
+		expect(gone(worker.child!)).toBe(true);
+		await firstShutdown;
+		await turn;
+		expect(existsSync(join(dir, "waiting.stopped"))).toBe(true);
+		expect(render).toBeUndefined();
+		expect(statuses.get("interns")).toBeUndefined();
+	},
+	15000,
+);
 
 test("a failed or truncated intern report is an error, not a completed finding", async () => {
 	const run = await session([call("explore", "failed"), call("research", "truncated")]);

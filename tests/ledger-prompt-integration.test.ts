@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { buildInternCliArgs } from "../components/interns/src/runner.js";
 import { loadSystemPrompt as loadPairSystemPrompt } from "../components/pair-programmer/src/config.js";
-import { buildAgentCliArgs } from "../components/pi-exec/src/agent-workers.js";
 import { LEDGER_SYSTEM_PROMPT_TAG } from "../components/shared/src/ledger-system-prompt.js";
 import { childSessionExtensions } from "../components/subagents/src/agent-runner.js";
 import { AUTO_COMPACT_EXTENSION_PATH } from "../extensions/auto-compact.js";
@@ -16,11 +16,12 @@ import { WIKI_EXTENSION_PATH } from "../extensions/wiki.js";
 
 const marker = `<${LEDGER_SYSTEM_PROMPT_TAG}>`;
 describe("ledger system prompt distribution", () => {
-	it("loads the ledger extension on workers instead of pasting the contract", () => {
-		const args = buildAgentCliArgs(
-			{ task: "Inspect the task", systemPrompt: "Custom worker guidance" },
-			{ tools: ["read"], projectTrusted: false, model: "provider/model", thinking: "high" },
-		);
+	it("loads the ledger extension on interns instead of pasting the contract", () => {
+		const args = buildInternCliArgs("explore", "Inspect the task", {
+			projectTrusted: false,
+			model: "provider/model",
+			thinking: "off",
+		});
 		const guidance = args[args.indexOf("--append-system-prompt") + 1];
 		expect(guidance).not.toContain(marker);
 		expect(args).toContain("--no-extensions");

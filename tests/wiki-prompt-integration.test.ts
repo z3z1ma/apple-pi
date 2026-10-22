@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { buildInternCliArgs } from "../components/interns/src/runner.js";
 import { loadSystemPrompt as loadPairSystemPrompt } from "../components/pair-programmer/src/config.js";
-import { buildAgentCliArgs } from "../components/pi-exec/src/agent-workers.js";
 import { WIKI_SYSTEM_PROMPT_TAG } from "../components/wiki/src/system-prompt.js";
 import { AUTO_COMPACT_EXTENSION_PATH } from "../extensions/auto-compact.js";
 import { CODE_CONTEXT_EXTENSION_PATH } from "../extensions/code-context.js";
@@ -12,14 +12,17 @@ import { WIKI_EXTENSION_PATH } from "../extensions/wiki.js";
 
 const marker = `<${WIKI_SYSTEM_PROMPT_TAG}>`;
 describe("wiki workbench distribution", () => {
-	it("loads the wiki extension on workers instead of pasting the contract", () => {
-		const args = buildAgentCliArgs(
-			{ task: "Inspect the wiki", systemPrompt: "Custom worker guidance" },
-			{ tools: ["read"], projectTrusted: false, model: "provider/model", thinking: "high" },
-		);
+	it("loads the wiki extension on interns instead of pasting the contract", () => {
+		const args = buildInternCliArgs("explore", "Inspect the wiki", {
+			projectTrusted: false,
+			model: "provider/model",
+			thinking: "off",
+		});
 		const guidance = args[args.indexOf("--append-system-prompt") + 1];
 		expect(guidance).not.toContain(marker);
-		expect(args[args.indexOf("--tools") + 1]).toBe("read,wiki_lint,wiki_references,context_lint");
+		expect(args[args.indexOf("--tools") + 1].split(",")).toEqual(
+			expect.arrayContaining(["wiki_lint", "wiki_references", "context_lint"]),
+		);
 		expect(args.filter((_, index, all) => all[index - 1] === "--extension")).toEqual([
 			AUTO_COMPACT_EXTENSION_PATH,
 			VROOM_EXTENSION_PATH,

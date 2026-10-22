@@ -12,4 +12,4 @@ Independent calls in one assistant message run in parallel. The shared Active wo
 
 The answer returns directly from the tool. There is no resume, steering, background handle, conversation viewer, or saved intern transcript. Bound material is removed after the process exits, whether it completed, failed, or was cancelled. A failed or truncated report is an error, not a verified finding.
 
-Implementation: `components/interns/` owns the tools and fixed prompts. The tools use the existing one-shot runner in `components/pi-exec/src/agent-workers.ts`; no second worker manager is created. The runner loads an explicit extension list with discovery disabled and `--no-session`. The interns do not load their own extension, so they cannot delegate to more interns.
+Implementation: `components/interns/` owns the tools, fixed prompts, and one-shot process runner (`src/runner.ts`). There is no worker manager or custom agent catalog. The runner loads an explicit extension list with discovery disabled and `--no-session`. The interns do not load their own extension, so they cannot delegate to more interns.
