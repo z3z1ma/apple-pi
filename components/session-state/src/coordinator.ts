@@ -23,11 +23,10 @@ const MANAGER_TOOLS = [
 ];
 
 /** The tmux pane this session runs in, which new windows open next to. */
-function ownPane(): { socket: string; pane: string } {
+function ownPane(): { socket: string; pane: string } | undefined {
 	const socket = process.env.TMUX?.split(",")[0];
 	const pane = process.env.TMUX_PANE;
-	if (!socket || !pane)
-		throw new Error("This session does not run in tmux, so it cannot open a window for another one.");
+	if (!socket || !pane) return undefined;
 	return { socket, pane };
 }
 
@@ -56,7 +55,7 @@ export function installCoordinator(pi: ExtensionAPI): void {
 			name: "hire",
 			label: "hire",
 			description:
-				"Hire a person into your organization: a new lasting colleague, a top-level Pi session in its own tmux window next to yours, which reports to you (directory shows you as its manager, and it mails you when it closes). It holds its role, mind, and posture for life, and receives a unique two-part human name unless you give one. Give a written goal: an ephemeral task is assigned before its first turn. Returns once the person runs.",
+				"Hire a person into your organization: a new lasting colleague, a top-level Pi session in its own tmux window next to yours (headless outside tmux), which reports to you (directory shows you as its manager, and it mails you when it closes). It holds its role, mind, and posture for life, and receives a unique two-part human name unless you give one. Give a written goal: an ephemeral task is assigned before its first turn. Returns once the person runs.",
 			parameters: Type.Object(
 				{
 					role: Type.String({ minLength: 1, description: "Role catalog name, such as staff-engineer-simplicity." }),
@@ -104,7 +103,7 @@ export function installCoordinator(pi: ExtensionAPI): void {
 			name: "rehire",
 			label: "rehire",
 			description:
-				"Bring back a person who is asleep or has left: it reopens in a new tmux window next to yours, in its own directory and with its full history, and reports to you. An optional goal becomes a new assigned task; otherwise it keeps its existing work. Returns once it runs.",
+				"Bring back a person who is asleep or has left: it reopens in a new tmux window next to yours (headless outside tmux), in its own directory and with its full history, and reports to you. An optional goal becomes a new assigned task; otherwise it keeps its existing work. Returns once it runs.",
 			parameters: Type.Object(
 				{
 					person: personParameter,

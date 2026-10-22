@@ -29,6 +29,8 @@ import {
 	type Hello,
 	type IndexRow,
 	lineReader,
+	PROGRAM_ID_ENV,
+	PROGRAM_PARENT_ENV,
 	type RunState,
 	type Tool,
 } from "./protocol.js";
@@ -321,6 +323,9 @@ function helloFor(
 			file: sessions.getSessionFile(),
 			cwd: ctx.cwd,
 			name: sessions.getSessionName(),
+			...(!child && process.env[PROGRAM_ID_ENV] && process.env[PROGRAM_PARENT_ENV]
+				? { program: { id: process.env[PROGRAM_ID_ENV]!, parent: process.env[PROGRAM_PARENT_ENV]! } }
+				: {}),
 		},
 		process: { pid: process.pid, startedAt: Math.round(Date.now() - process.uptime() * 1000) },
 		// A subagent runs in its parent's process and pane; the pane belongs to the parent.
@@ -698,7 +703,7 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 		stop();
 		for (const resolve of settledWaiters.splice(0)) resolve();
 		const reportsTo = link?.hello.facts.reportsTo;
-		if (link && current && reportsTo && event.reason !== "reload") {
+		if (link && current && reportsTo && !link.hello.session.program && event.reason !== "reload") {
 			const name = current.sessionManager.getSessionName();
 			const status = link.hello.facts.prompt ? "waiting" : link.hello.run === "idle" ? "idle" : "busy";
 			const body = `Session${name ? ` "${name}"` : ""} closed (${event.reason}) while ${status}. Directory: ${current.cwd}`;

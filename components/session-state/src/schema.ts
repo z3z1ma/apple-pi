@@ -242,6 +242,27 @@ const MIGRATIONS = [
 		action text not null,
 		previous_bundle text
 	) strict;`,
+	// A program owns a launch before the person or process exists. Creation ancestry is not the reporting tree.
+	`create table program_scopes (
+		id text primary key,
+		caller text not null,
+		parent text,
+		closing integer not null default 0,
+		last_error text
+	) strict;
+	create table program_peers (
+		session_id text primary key,
+		program_id text not null,
+		created_by text not null,
+		task_id text not null,
+		socket text,
+		pane text,
+		pid integer,
+		process_started_at integer
+	) strict;
+	create index peers_by_program on program_peers(program_id);
+	alter table commands add column program_id text;
+	create index commands_by_program on commands(program_id) where program_id is not null;`,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

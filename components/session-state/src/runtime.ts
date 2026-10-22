@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { type ChildProcess, execFileSync, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { chmodSync, createReadStream, mkdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server, type Socket } from "node:net";
@@ -16,6 +16,8 @@ import {
 	type Hello,
 	type IndexRow,
 	lineReader,
+	PROGRAM_ID_ENV,
+	PROGRAM_PARENT_ENV,
 	type ProcessState,
 	type ReadEntries,
 	type ReadEntry,
@@ -54,10 +56,13 @@ const JSON_FACTS = new Set<string>(["prompt", "queue", "config", "previousSessio
 
 import { type AttentionRow, jumpTarget, statusSummary } from "./attention.js";
 import { syncChannels } from "./channels.js";
+import { RETRY_MS } from "./client.js";
+import { discardProgramPeople, programDescendants } from "./program-peers.js";
 import { migrate } from "./schema.js";
 import { markRead, OPERATOR, postToThread, type ThreadPost } from "./threads.js";
 import {
 	canonicalSocket,
+	killPane,
 	listClients,
 	listPanes,
 	openWindow,
@@ -124,6 +129,24 @@ interface Connection {
 	held?: Map<string, { end?: ReplyEnd; delta?: ReplyDelta }>;
 	heldTurns?: Map<string, Extract<BridgeMessage, { type: "turn_progress" }>>;
 	turnsAwaitingDrain?: boolean;
+	program?: { id: string; caller: string; closing: boolean; created: Set<string>; discarded: Set<string> };
+}
+
+interface SessionLaunch {
+	cwd: string;
+	name?: string;
+	reportsTo?: string;
+	role?: string;
+	prompt?: string;
+	tmux?: Hello["tmux"];
+	program?: { id: string; parent: string };
+}
+
+interface SessionStart {
+	commandId: string;
+	socket?: string;
+	pane?: string;
+	prompt?: string;
 }
 
 interface IncarnationRow {
@@ -156,18 +179,22 @@ export function checkProcess(pid: number, startedAt: number): ProcessCheck {
 		if (code === "ESRCH") return "gone";
 		if (code !== "EPERM") return "unknown";
 	}
+	const time = processStart(pid);
+	if (typeof time !== "number") return time;
+	return sameStart(time, startedAt) ? "running" : "gone";
+}
+
+function processStart(pid: number): number | "gone" | "unknown" {
 	let started: string;
 	try {
 		started = execFileSync("ps", ["-o", "lstart=", "-p", String(pid)], { encoding: "utf8" }).trim();
 	} catch (error) {
-		// `ps` exits 1 with no output when the pid is gone; anything else is a failed check.
 		const result = error as { status?: number; stdout?: string };
 		return result.status === 1 && !result.stdout?.trim() ? "gone" : "unknown";
 	}
 	if (started === "") return "gone";
 	const time = Date.parse(started);
-	if (Number.isNaN(time)) return "unknown";
-	return sameStart(time, startedAt) ? "running" : "gone";
+	return Number.isNaN(time) ? "unknown" : time;
 }
 
 /**
@@ -189,7 +216,14 @@ export class Runtime {
 	/** The status-line options last written to each tmux server, so they are written only when they change. */
 	private readonly attentionShown = new Map<string, string>();
 	/** Sessions this runtime opened a window for, until their bridge connects or the window closes. */
-	private readonly starting = new Map<string, { commandId: string; socket: string; pane?: string }>();
+	private readonly starting = new Map<string, SessionStart>();
+	private readonly headless = new Map<string, ChildProcess>();
+	private readonly programs = new Map<string, Connection>();
+	private readonly discarding = new Set<string>();
+	private readonly discardRequests = new Map<string, Set<string>>();
+	private readonly signalled = new Map<string, Set<string>>();
+	private programTimer?: NodeJS.Timeout;
+	private cleaningPrograms = false;
 	/** The bridge connection each unsettled command was handed to. */
 	private readonly dispatched = new Map<string, Connection>();
 	private readonly connections = new Set<Connection>();
@@ -209,13 +243,18 @@ export class Runtime {
 		this.db.exec("pragma journal_mode = wal");
 		migrate(this.db);
 		for (const row of this.db
-			.prepare("select command_id from commands where kind = 'run_turn' and stage in ('accepted', 'delivered')")
+			.prepare(
+				"select command_id from commands where kind in ('run_turn', 'discard_peer') and stage in ('accepted', 'delivered')",
+			)
 			.all() as { command_id: string }[])
 			this.setCommandStage(row.command_id, "failed", "The runtime restarted before the program received a result");
+		this.db.prepare("update program_scopes set closing = 1").run();
 		cleanMovedBundles(this.db);
 		syncChannels(this.db, Date.now());
 		this.recoverThreadPosts();
 		this.recoverWorkCommands();
+		for (const row of this.db.prepare("select session_id as id from program_peers").all() as { id: string }[])
+			this.discarding.add(row.id);
 		rmSync(this.paths.socket, { force: true }); // we hold the lock, so any socket file is stale
 		const server = createServer((socket) => this.accept(socket));
 		this.server = server;
@@ -228,12 +267,15 @@ export class Runtime {
 		this.tmuxTimer = setInterval(() => void this.pollTmux(), TMUX_POLL_MS);
 		this.checkLiveness();
 		void this.pollTmux();
+		void this.cleanPrograms();
 		return true;
 	}
 
 	stop(): void {
 		clearInterval(this.timer);
 		clearInterval(this.tmuxTimer);
+		clearTimeout(this.programTimer);
+		for (const child of this.headless.values()) child.kill("SIGTERM");
 		for (const connection of this.connections) connection.socket.destroy();
 		this.stopping.abort();
 		this.server?.close();
@@ -285,11 +327,20 @@ export class Runtime {
 		socket.on("close", () => {
 			this.connections.delete(connection);
 			this.dropCommandsOf(connection);
+			if (this.db && connection.program) this.closeProgram(connection);
 			this.checkLiveness();
 		});
 	}
 
 	private handle(connection: Connection, message: BridgeMessage): void {
+		if (message.type === "program_open") {
+			this.openProgram(connection, message);
+			return;
+		}
+		if (message.type === "program_close") {
+			this.closeProgram(connection);
+			return;
+		}
 		if (message.type === "hello") {
 			this.hello(connection, message);
 			return;
@@ -357,6 +408,26 @@ export class Runtime {
 		const db = this.db!;
 		const now = Date.now();
 		const { session, process: proc } = hello;
+		const recorded = db
+			.prepare("select program_id, created_by as program_parent from program_peers where session_id = ?")
+			.get(session.id) as { program_id: string; program_parent: string } | undefined;
+		if (recorded || session.program) {
+			const owner = session.program && this.programs.get(session.program.id)?.program;
+			if (
+				!session.program ||
+				!owner ||
+				owner.closing ||
+				owner.discarded.has(session.id) ||
+				this.discarding.has(session.id) ||
+				recorded?.program_id !== session.program.id ||
+				recorded.program_parent !== session.program.parent
+			) {
+				connection.socket.write(
+					`${JSON.stringify({ type: "command", commandId: randomUUID(), sessionId: session.id, command: { kind: "close" } })}\n`,
+				);
+				return;
+			}
+		}
 		const latest = db
 			.prepare("select * from incarnations where session_id = ? order by generation desc limit 1")
 			.get(session.id) as IncarnationRow | undefined;
@@ -416,6 +487,11 @@ export class Runtime {
 			generation,
 			now,
 		);
+		if (session.program) {
+			db.prepare(
+				"update program_peers set pid = ?, process_started_at = ?, pane = coalesce(pane, ?) where session_id = ?",
+			).run(proc.pid, proc.startedAt, hello.tmux?.pane ?? null, session.id);
+		}
 		connection.sessionId = session.id;
 		connection.generation = generation;
 		this.setRunState(session.id, generation, hello.run);
@@ -444,6 +520,7 @@ export class Runtime {
 		const start = this.starting.get(session.id);
 		if (start) {
 			this.starting.delete(session.id);
+			if (start.prompt) this.issue(connection, { kind: "steer", text: start.prompt });
 			this.setCommandStage(start.commandId, "applied");
 		}
 	}
@@ -462,6 +539,10 @@ export class Runtime {
 			);
 		if (typeof commandId !== "string" || typeof sessionId !== "string" || typeof command?.kind !== "string") {
 			receipt("failed", "commandId, sessionId, and command.kind are required");
+			return;
+		}
+		if (client.program?.closing) {
+			receipt("failed", "The program is closing");
 			return;
 		}
 		const existing = db.prepare("select stage, reason from commands where command_id = ?").get(commandId) as
@@ -484,8 +565,8 @@ export class Runtime {
 		const waits = !target && command.kind === "mail" && generation === undefined;
 		const now = Date.now();
 		db.prepare(
-			`insert into commands (command_id, session_id, generation, bound_generation, kind, command, stage, created_at, updated_at)
-			values (?, ?, ?, ?, ?, ?, 'accepted', ?, ?)`,
+			`insert into commands (command_id, session_id, generation, bound_generation, kind, command, stage, created_at, updated_at, program_id)
+			values (?, ?, ?, ?, ?, ?, 'accepted', ?, ?, ?)`,
 		).run(
 			commandId,
 			sessionId,
@@ -495,16 +576,18 @@ export class Runtime {
 			JSON.stringify(command),
 			now,
 			now,
+			client.program?.id ?? null,
 		);
 		this.event("client", sessionId, generation ?? null, "command_accepted", { commandId, command });
 		this.commandClients.set(commandId, client);
+		if (command.kind === "discard_peer") {
+			receipt("accepted");
+			this.discardPeer(client, commandId, sessionId);
+			return;
+		}
 		if (command.kind === "start") {
 			receipt("accepted");
-			if (typeof command.tmux?.socket !== "string" || typeof command.tmux?.pane !== "string") {
-				this.setCommandStage(commandId, "failed", "start needs tmux.socket and tmux.pane");
-				return;
-			}
-			this.startSession(commandId, sessionId, command).catch((error) => {
+			this.startSession(commandId, sessionId, command, client.program).catch((error) => {
 				console.error(`start ${sessionId} failed: ${(error as Error).stack ?? error}`);
 				if (this.db) this.setCommandStage(commandId, "failed", (error as Error).message);
 			});
@@ -864,8 +947,279 @@ export class Runtime {
 		return undefined;
 	}
 
-	/** Run `pi` for a session in a new tmux window; the session's bridge connecting applies the command. */
-	private async startSession(commandId: string, sessionId: string, command: Extract<Command, { kind: "start" }>) {
+	private discardPeer(client: Connection, commandId: string, sessionId: string): void {
+		const row = this.db!.prepare("select program_id from program_peers where session_id = ?").get(sessionId) as
+			| { program_id: string }
+			| undefined;
+		if (!client.program || (row?.program_id !== client.program.id && !client.program.created.has(sessionId))) {
+			this.setCommandStage(commandId, "failed", "This program does not own that peer");
+			return;
+		}
+		this.discardRequests.set(commandId, this.markDiscarded([sessionId]));
+		void this.cleanPrograms();
+	}
+
+	private openProgram(connection: Connection, request: Extract<BridgeMessage, { type: "program_open" }>): void {
+		const db = this.db!;
+		const caller = db
+			.prepare("select 1 from sessions where id = ? and kind = 'root' and retired_at is null")
+			.get(request.caller);
+		if (
+			connection.program ||
+			!request.id?.trim() ||
+			db.prepare("select 1 from program_scopes where id = ?").get(request.id) ||
+			!caller ||
+			this.discarding.has(request.caller)
+		) {
+			connection.socket.end(
+				`${JSON.stringify({ type: "program_error", error: "A program needs a unique id and an available calling person" })}\n`,
+			);
+			return;
+		}
+		const parent = (
+			db.prepare("select program_id from program_peers where session_id = ?").get(request.caller) as
+				| { program_id: string }
+				| undefined
+		)?.program_id;
+		db.prepare("insert into program_scopes (id, caller, parent) values (?, ?, ?)").run(
+			request.id,
+			request.caller,
+			parent ?? null,
+		);
+		connection.program = {
+			id: request.id,
+			caller: request.caller,
+			closing: false,
+			created: new Set(),
+			discarded: new Set(),
+		};
+		this.programs.set(request.id, connection);
+		connection.socket.write(`${JSON.stringify({ type: "program_ready", id: request.id })}\n`);
+	}
+
+	private programTurns(connection: Connection): string[] {
+		return (
+			this.db!.prepare(
+				"select command_id from commands where program_id = ? and kind = 'run_turn' and stage in ('accepted', 'delivered')",
+			).all(connection.program!.id) as { command_id: string }[]
+		).map((row) => row.command_id);
+	}
+
+	private cancelProgramTurns(connection: Connection): void {
+		for (const id of this.programTurns(connection)) {
+			const target = this.dispatched.get(id);
+			if (target) this.issue(target, { kind: "cancel_turn", turn: id });
+		}
+	}
+
+	private closeProgram(connection: Connection): void {
+		const program = connection.program;
+		if (!program || !this.db) return;
+		if (!program.closing) this.cancelProgramTurns(connection);
+		program.closing = true;
+		this.db.prepare("update program_scopes set closing = 1 where id = ?").run(program.id);
+		const ids = this.markDiscarded(
+			(
+				this.db.prepare("select session_id from program_peers where program_id = ?").all(program.id) as {
+					session_id: string;
+				}[]
+			).map((row) => row.session_id),
+		);
+		for (const id of ids) program.discarded.add(id);
+		void this.cleanPrograms();
+	}
+
+	private markDiscarded(roots: Iterable<string>): Set<string> {
+		if (!this.db) return new Set();
+		const ids = programDescendants(this.db, roots);
+		for (const id of ids) {
+			this.discarding.add(id);
+			this.db.prepare("update program_scopes set closing = 1 where caller = ?").run(id);
+		}
+		for (const connection of this.programs.values()) {
+			const program = connection.program!;
+			for (const id of ids)
+				if (program.created.has(id))
+					for (const child of programDescendants(this.db, [id])) program.discarded.add(child);
+			if (ids.has(program.caller) && !program.closing) {
+				this.cancelProgramTurns(connection);
+				program.closing = true;
+			}
+		}
+		return ids;
+	}
+
+	/** A program may end between process creation and hello, so the launch record is independent of incarnations. */
+	private async stopProgramPeer(
+		id: string,
+		db: DatabaseSync,
+		servers: Map<string, PaneRow[] | "absent">,
+	): Promise<boolean> {
+		const launch = db.prepare("select * from program_peers where session_id = ?").get(id) as
+			| { socket: string | null; pane: string | null; pid: number | null; process_started_at: number | null }
+			| undefined;
+		if (!launch) return true;
+		let pane: PaneRow | undefined;
+		const isLaunch = (p: PaneRow) => p.windowName === id || p.startCommand.includes(`--session-id ${id} `);
+		if (launch.socket) {
+			if (this.starting.has(id) && !launch.pane) return false;
+			if (!servers.has(launch.socket))
+				servers.set(
+					launch.socket,
+					await listPanes(launch.socket, { timeout: TMUX_POLL_MS, signal: this.stopping.signal }),
+				);
+			if (this.db !== db) return false;
+			const panes = servers.get(launch.socket)!;
+			if (panes !== "absent") pane = panes.find((p) => (launch.pane ? p.paneId === launch.pane : isLaunch(p)));
+			if (pane && launch.pid === null && !pane.dead) {
+				// The initial command survives a window rename before the daemon records the pane or receives hello.
+				const started = processStart(pane.pid);
+				if (started === "gone") return false;
+				if (started === "unknown") throw new Error(`Cannot identify the process in temporary peer ${id}'s pane`);
+				launch.pid = pane.pid;
+				launch.process_started_at = started;
+				launch.pane = pane.paneId;
+				db.prepare("update program_peers set pane = ?, pid = ?, process_started_at = ? where session_id = ?").run(
+					pane.paneId,
+					pane.pid,
+					started,
+					id,
+				);
+			}
+		}
+		const processes = db.prepare("select pid, process_started_at from incarnations where session_id = ?").all(id) as {
+			pid: number;
+			process_started_at: number;
+		}[];
+		if (launch.pid !== null && launch.process_started_at !== null)
+			processes.push({ pid: launch.pid, process_started_at: launch.process_started_at });
+		let waiting = this.headless.has(id);
+		for (const proc of processes) {
+			const state = checkProcess(proc.pid, proc.process_started_at);
+			if (state === "gone") continue;
+			waiting = true;
+			if (state === "unknown") throw new Error(`Cannot verify process ${proc.pid} of temporary peer ${id}`);
+			const key = `${proc.pid}:${proc.process_started_at}`;
+			let sent = this.signalled.get(id);
+			if (!sent) {
+				sent = new Set();
+				this.signalled.set(id, sent);
+			}
+			if (!sent.has(key)) {
+				try {
+					process.kill(proc.pid, "SIGTERM");
+				} catch (error) {
+					if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
+				}
+				sent.add(key);
+			}
+		}
+		if (waiting) return false;
+		// Remove a dead program pane too (servers may keep exited panes); leave a pane the operator respawned.
+		if (pane && (pane.pid === launch.pid || (launch.pid === null && isLaunch(pane)))) {
+			await killPane(
+				launch.socket!,
+				pane.paneId,
+				AbortSignal.any([this.stopping.signal, AbortSignal.timeout(TMUX_POLL_MS)]),
+			);
+			if (this.db !== db) return false;
+		}
+		const start = this.starting.get(id);
+		if (start) {
+			this.starting.delete(id);
+			this.setCommandStage(start.commandId, "failed", "The program discarded the peer before it connected");
+		}
+		return true;
+	}
+
+	private async cleanPrograms(): Promise<void> {
+		const db = this.db;
+		if (!db || this.cleaningPrograms) return;
+		clearTimeout(this.programTimer);
+		this.programTimer = undefined;
+		this.cleaningPrograms = true;
+		try {
+			this.markDiscarded(this.discarding);
+			const stopped = new Set<string>();
+			const servers = new Map<string, PaneRow[] | "absent">();
+			for (const id of this.discarding) if (await this.stopProgramPeer(id, db, servers)) stopped.add(id);
+			if (this.db !== db) return;
+			if (stopped.size) {
+				for (const id of stopped) {
+					if (!db.prepare("select 1 from program_peers where session_id = ?").get(id)) continue;
+					const pending = db
+						.prepare(
+							"select command_id from commands where session_id = ? and kind != 'discard_peer' and stage in ('accepted', 'delivered')",
+						)
+						.all(id) as { command_id: string }[];
+					for (const row of pending) this.setCommandStage(row.command_id, "failed", "The temporary peer was discarded");
+				}
+				const transfers = discardProgramPeople(db, this.paths.dir, stopped, Date.now());
+				for (const { person, manager } of transfers) {
+					const generation = (
+						db.prepare("select generation from sessions where id = ?").get(person) as { generation: number }
+					).generation;
+					const target = [...this.connections].find(
+						(c) => !c.shutdown && c.sessionId === person && c.generation === generation,
+					);
+					if (target) this.issue(target, { kind: "transfer", manager, by: "runtime" });
+				}
+				for (const id of stopped) {
+					this.discarding.delete(id);
+					this.signalled.delete(id);
+				}
+			}
+			for (const [command, people] of this.discardRequests) {
+				if ([...people].some((person) => this.discarding.has(person))) continue;
+				this.setCommandStage(command, "applied");
+				this.discardRequests.delete(command);
+			}
+			this.finishClosedPrograms(db);
+		} catch (error) {
+			if (this.db !== db) return;
+			console.error(`Program cleanup failed: ${error instanceof Error ? error.message : String(error)}`);
+			db.prepare("update program_scopes set last_error = ? where closing = 1").run(String(error));
+			for (const command of this.discardRequests.keys()) this.setCommandStage(command, "failed", String(error));
+			this.discardRequests.clear();
+			for (const [id, connection] of this.programs) {
+				if (!connection.program!.closing) continue;
+				this.programs.delete(id);
+				connection.socket.end(`${JSON.stringify({ type: "program_error", error: String(error) })}\n`);
+			}
+		} finally {
+			this.cleaningPrograms = false;
+			if (this.db && this.discarding.size) this.programTimer = setTimeout(() => void this.cleanPrograms(), RETRY_MS);
+		}
+	}
+
+	private finishClosedPrograms(db: DatabaseSync): void {
+		for (;;) {
+			const leaves = db
+				.prepare(`select s.id from program_scopes s where s.closing = 1
+				and not exists (select 1 from program_peers p where p.program_id = s.id)
+				and not exists (select 1 from program_scopes c where c.parent = s.id)
+				and not exists (select 1 from commands c where c.program_id = s.id and c.kind = 'run_turn' and c.stage in ('accepted', 'delivered'))`)
+				.all() as { id: string }[];
+			let closed = false;
+			for (const { id } of leaves) {
+				const connection = this.programs.get(id);
+				if ([...(connection?.program?.discarded ?? [])].some((person) => this.discarding.has(person))) continue;
+				db.prepare("delete from program_scopes where id = ?").run(id);
+				this.programs.delete(id);
+				connection?.socket.end(`${JSON.stringify({ type: "program_closed", id })}\n`);
+				closed = true;
+			}
+			if (!closed) return;
+		}
+	}
+
+	/** The bridge connecting applies a launch, whether it opened a terminal or a headless RPC process. */
+	private async startSession(
+		commandId: string,
+		sessionId: string,
+		command: Extract<Command, { kind: "start" }>,
+		program?: Connection["program"],
+	) {
 		const db = this.db!;
 		const fail = (reason: string) => this.setCommandStage(commandId, "failed", reason);
 		const row = db
@@ -882,6 +1236,27 @@ export class Runtime {
 				.get(sessionId, row.generation);
 		if (live) return fail("already running");
 		if (this.starting.has(sessionId)) return fail("already starting");
+		if (program?.discarded.has(sessionId)) return fail("That peer was discarded; create a new handle");
+		if (db.prepare("select 1 from program_peers where session_id = ?").get(sessionId))
+			return fail("Program peers cannot be reopened; create a new handle");
+		if (program) {
+			if (row) return fail("A program must create a new peer, not take ownership of an existing person");
+			if (!command.role || !command.goal?.text.trim()) return fail("A program peer needs a role and a goal");
+			const caller = db
+				.prepare(`select s.cwd, i.tmux_socket, i.pane_id from sessions s
+				left join incarnations i on i.session_id = s.id and i.generation = s.generation where s.id = ?`)
+				.get(program.caller) as { cwd: string; tmux_socket: string | null; pane_id: string | null } | undefined;
+			if (!caller) return fail("The calling person no longer exists");
+			program.created.add(sessionId);
+			command = {
+				...command,
+				cwd: caller.cwd,
+				reportsTo: program.caller,
+				prompt: "",
+				goal: { by: program.caller, text: command.goal.text },
+				tmux: caller.tmux_socket && caller.pane_id ? { socket: caller.tmux_socket, pane: caller.pane_id } : undefined,
+			};
+		}
 		const directory = command.cwd ?? row?.cwd;
 		if (!directory) return fail("unknown session; give a directory to start it in");
 		const cwd = realpathSync(directory);
@@ -889,6 +1264,37 @@ export class Runtime {
 		const name = command.name ?? row?.name ?? undefined;
 		// A stopped person keeps its manager; a reopen by a manager is a return from retirement.
 		const reportsTo = row?.reports_to ?? command.reportsTo;
+		const inherited =
+			!row && reportsTo
+				? (
+						db.prepare("select program_id from program_peers where session_id = ?").get(reportsTo) as
+							| { program_id: string }
+							| undefined
+					)?.program_id
+				: undefined;
+		const programId = program?.id ?? inherited;
+		const programParent = programId ? reportsTo : undefined;
+		if (
+			programId &&
+			(!this.programs.has(programId) ||
+				this.programs.get(programId)!.program!.closing ||
+				!programParent ||
+				this.discarding.has(programParent))
+		)
+			return fail("The owning program is closing");
+		if (programId) {
+			if (!command.role || !command.goal?.text.trim()) return fail("A program peer needs a role and a goal");
+			this.programs.get(programId)!.program!.created.add(sessionId);
+			db.prepare(
+				"insert into program_peers (session_id, program_id, created_by, task_id, socket) values (?, ?, ?, ?, ?)",
+			).run(
+				sessionId,
+				programId,
+				programParent!,
+				`work-${commandId}`,
+				command.tmux ? canonicalSocket(command.tmux.socket) : null,
+			);
+		}
 		if (row) db.prepare("update sessions set retired_at = null, retired_reason = null where id = ?").run(sessionId);
 		if (command.goal) {
 			const prepare = () => {
@@ -914,29 +1320,76 @@ export class Runtime {
 			)
 				return;
 		}
-		const role = row?.role ?? command.role;
-		const prompt =
-			command.prompt ??
-			(focusedTask(db, sessionId) ? "You have assigned work. Begin with your focused task." : undefined);
+		return this.launchSession(commandId, sessionId, {
+			cwd,
+			name,
+			reportsTo,
+			role: row?.role ?? command.role,
+			prompt:
+				command.prompt ??
+				(focusedTask(db, sessionId) ? "You have assigned work. Begin with your focused task." : undefined),
+			tmux: command.tmux,
+			...(programId ? { program: { id: programId, parent: programParent! } } : {}),
+		});
+	}
+
+	private async launchSession(commandId: string, sessionId: string, launch: SessionLaunch): Promise<void> {
+		const db = this.db!;
+		const fail = (reason: string) => this.setCommandStage(commandId, "failed", reason);
+		const { cwd, name, reportsTo, role, prompt } = launch;
+		const programId = launch.program?.id;
+		const programParent = launch.program?.parent;
 		const pi = [
 			"pi",
+			...(!launch.tmux ? ["--mode", "rpc"] : []),
 			"--session-id",
 			sessionId,
 			...(name ? ["--name", name] : []),
 			...(reportsTo ? ["--reports-to", reportsTo] : []),
 			...(role ? ["--role", role] : []),
-			...(prompt ? [prompt] : []),
+			...(prompt && launch.tmux ? ["--", prompt] : []),
 		];
-		const start: { commandId: string; socket: string; pane?: string } = {
+		const env = { [PROGRAM_ID_ENV]: programId ?? "", [PROGRAM_PARENT_ENV]: programParent ?? "" };
+		const start: SessionStart = {
 			commandId,
-			socket: canonicalSocket(command.tmux.socket),
+			...(launch.tmux ? { socket: canonicalSocket(launch.tmux.socket) } : { prompt }),
 		};
-		this.starting.set(sessionId, start); // the bridge may connect before tmux answers
+		this.starting.set(sessionId, start); // the bridge may connect before the launch returns
+		if (!launch.tmux) {
+			const startedAt = Date.now();
+			const child = spawn(pi[0]!, pi.slice(1), {
+				cwd,
+				env: { ...process.env, ...env, TMUX: "", TMUX_PANE: "" },
+				stdio: ["pipe", "ignore", "inherit"],
+				detached: process.platform !== "win32",
+			});
+			this.headless.set(sessionId, child);
+			if (programId && child.pid)
+				db.prepare("update program_peers set pid = ?, process_started_at = ? where session_id = ?").run(
+					child.pid,
+					startedAt,
+					sessionId,
+				);
+			child.once("error", (error) => {
+				if (this.db === db) fail(`Pi could not start: ${error.message}`);
+			});
+			child.once("close", (code) => {
+				if (this.headless.get(sessionId) === child) this.headless.delete(sessionId);
+				if (this.db !== db) return;
+				if (this.starting.get(sessionId) === start) {
+					this.starting.delete(sessionId);
+					fail(`Pi exited before connecting (code ${code}); see the runtime log`);
+				}
+				void this.cleanPrograms();
+			});
+			this.setCommandStage(commandId, "delivered");
+			return;
+		}
 		try {
 			start.pane = await openWindow(
-				command.tmux.socket,
-				command.tmux.pane,
-				{ cwd, name, command: pi },
+				launch.tmux.socket,
+				launch.tmux.pane,
+				{ cwd, name: programId ? sessionId : name, command: pi, env },
 				AbortSignal.any([this.stopping.signal, AbortSignal.timeout(TMUX_POLL_MS)]),
 			);
 		} catch (error) {
@@ -945,7 +1398,11 @@ export class Runtime {
 			if (this.db === db) fail(`tmux could not open a window: ${stderr?.trim() || message}`);
 			return;
 		}
-		if (this.db === db && this.starting.get(sessionId) === start) this.setCommandStage(commandId, "delivered");
+		if (this.db === db) {
+			if (programId) db.prepare("update program_peers set pane = ? where session_id = ?").run(start.pane, sessionId);
+			if (this.starting.get(sessionId) === start) this.setCommandStage(commandId, "delivered");
+			if (this.discarding.has(sessionId)) void this.cleanPrograms();
+		}
 	}
 
 	/** A command of the runtime's own to a running bridge, recorded like a client's but with nobody waiting on it. */
@@ -1042,9 +1499,16 @@ export class Runtime {
 	private setCommandStage(commandId: string, stage: ReceiptStage, reason?: string, result?: TurnResult): void {
 		const db = this.db!;
 		const row = db
-			.prepare("select session_id, generation, stage, kind, command from commands where command_id = ?")
+			.prepare("select session_id, generation, stage, kind, command, program_id from commands where command_id = ?")
 			.get(commandId) as
-			| { session_id: string; generation: number | null; stage: ReceiptStage; kind: string; command: string }
+			| {
+					session_id: string;
+					generation: number | null;
+					stage: ReceiptStage;
+					kind: string;
+					command: string;
+					program_id: string | null;
+			  }
 			| undefined;
 		if (!row || row.stage === "applied" || row.stage === "failed") return;
 		// Mail of a thread that reached the transcript has been read there.
@@ -1070,6 +1534,7 @@ export class Runtime {
 		if (stage === "applied" || stage === "failed") {
 			this.commandClients.delete(commandId);
 			this.dispatched.delete(commandId);
+			if (row.program_id) void this.cleanPrograms();
 		}
 	}
 
@@ -1357,10 +1822,10 @@ export class Runtime {
 		);
 		this.event("bridge", sessionId, generation, "run_state", { from: row.run_state, to: run });
 		if (run === "idle" && row.run_state !== "compacting") {
-			// A settle needs the operator until they see it; a compaction outside a run brings no reply.
+			// A program consumes its temporary person's reply; only lasting roots need the operator to see a settle.
 			const now = Date.now();
 			db.prepare(
-				"update sessions set settled_at = ?, needs_you_since = case when kind = 'root' then coalesce(needs_you_since, ?) end where id = ?",
+				"update sessions set settled_at = ?, needs_you_since = case when kind = 'root' and not exists (select 1 from program_peers p where p.session_id = sessions.id) then coalesce(needs_you_since, ?) end where id = ?",
 			).run(now, now, sessionId);
 		}
 	}
@@ -1449,7 +1914,7 @@ export class Runtime {
 				)
 				.all() as { socket: string }[];
 			for (const row of known) sockets.add(row.socket);
-			for (const start of this.starting.values()) sockets.add(start.socket);
+			for (const start of this.starting.values()) if (start.socket) sockets.add(start.socket);
 			const options = { timeout: TMUX_POLL_MS, signal: this.stopping.signal };
 			// Only a start whose window existed before this read began can be missing from it.
 			const startsBeforeRead = new Set([...this.starting.values()].filter((start) => start.pane));

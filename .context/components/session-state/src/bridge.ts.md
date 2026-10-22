@@ -1,3 +1,9 @@
+## file
+
+A program-created person's hello carries the launch ownership identifiers. The runtime requires the recorded owner and creation parent to match and rejects late hellos after disposal, before they can recreate a person. These peers skip routine close mail: their caller consumes the correlated result, while ordinary mail and task threads retain their normal behavior.
+Coupled: components/session-state/src/runtime.ts, components/session-state/src/program-client.ts
+Verify: components/session-state/tests/program-peers.test.ts, components/session-state/tests/peer-turns.test.ts
+
 ## symbol:StateLink.close
 
 A link closed without a reason (a reload, or a new `session_start` replacing the link) sends no shutdown, so the next bridge in the same process resumes the same incarnation; only a real session end sends one.

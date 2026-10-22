@@ -20,6 +20,7 @@ export interface PaneRow {
 	tty: string;
 	pid: number;
 	command: string;
+	startCommand: string;
 	path: string;
 	active: number;
 	dead: number;
@@ -38,6 +39,7 @@ const FIELDS = [
 	"pane_current_path",
 	"pane_active",
 	"pane_dead",
+	"pane_start_command",
 ];
 // tmux prints a tab written in the format as is, but escapes control characters inside values (a tab in a
 // session name comes out as \011), so a tab cannot appear inside a field.
@@ -123,6 +125,7 @@ export async function listPanes(
 				path: v[9],
 				active: Number(v[10]),
 				dead: Number(v[11]),
+				startCommand: v[12],
 			};
 		});
 }
@@ -168,11 +171,21 @@ export async function setServerOptions(
 	});
 }
 
+/** Remove an owned pane after its process stops, including a dead pane kept by remain-on-exit. */
+export async function killPane(socket: string, pane: string, signal: AbortSignal): Promise<void> {
+	try {
+		await run("tmux", ["-S", socket, "kill-pane", "-t", pane], { encoding: "utf8", signal });
+	} catch (error) {
+		const stderr = String((error as { stderr?: string }).stderr ?? "");
+		if (!noServer(stderr) && !/can't find pane/i.test(stderr)) throw error;
+	}
+}
+
 /** Open a window after `pane`'s window on server `socket`, running `command` in `cwd`; returns the new pane's id. */
 export async function openWindow(
 	socket: string,
 	pane: string,
-	window: { cwd: string; name?: string; command: string[] },
+	window: { cwd: string; name?: string; command: string[]; env?: Record<string, string> },
 	signal: AbortSignal,
 ): Promise<string> {
 	// new-window takes a window, not a pane, as its target.
@@ -196,6 +209,7 @@ export async function openWindow(
 			"-c",
 			window.cwd,
 			...(window.name ? ["-n", window.name] : []),
+			...Object.entries(window.env ?? {}).flatMap(([key, value]) => ["-e", `${key}=${value}`]),
 			...window.command,
 		],
 		{ encoding: "utf8", signal },

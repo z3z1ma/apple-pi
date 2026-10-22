@@ -106,7 +106,8 @@ function rootOf(db: DatabaseSync, person: string): string {
 function mayManage(db: DatabaseSync, actor: string, person: string): void {
 	if (actor === OPERATOR) return;
 	const manager = member(db, actor);
-	if (manager.reports_to && !manager.manages)
+	const helper = db.prepare("select 1 from program_peers where session_id = ? and created_by = ?").get(person, actor);
+	if (manager.reports_to && !manager.manages && !helper)
 		throw new Error("Only a manager can assign or unassign someone else's work");
 	if (rootOf(db, actor) !== rootOf(db, person)) throw new Error("The person is in another organization");
 }

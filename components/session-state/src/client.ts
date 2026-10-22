@@ -59,7 +59,7 @@ function open(path: string, signal?: AbortSignal): Promise<Socket> {
 }
 
 /** Connect to the runtime, starting one when none answers. */
-async function connectRuntime(signal?: AbortSignal): Promise<Socket> {
+export async function connectRuntime(signal?: AbortSignal): Promise<Socket> {
 	let started = false;
 	let failure: string | undefined;
 	for (;;) {

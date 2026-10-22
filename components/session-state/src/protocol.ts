@@ -6,6 +6,9 @@ import type { PeerTurn } from "./peer-turns.js";
 import type { ThreadPost } from "./threads.js";
 import type { WorkCommand } from "./work.js";
 
+export const PROGRAM_ID_ENV = "PI_PROGRAM_ID";
+export const PROGRAM_PARENT_ENV = "PI_PROGRAM_PARENT";
+
 export type RunState = "idle" | "thinking" | "writing_reply" | "running_tool" | "compacting";
 export type ProcessState = "starting" | "alive" | "alive_bridge_lost" | "exited" | "lost";
 
@@ -111,6 +114,8 @@ export type Command =
 	| ({ kind: "run_turn" } & PeerTurn)
 	/** Cancel only this program request, whether queued or currently running. */
 	| { kind: "cancel_turn"; turn: string }
+	/** Discard only a temporary peer owned by this program connection. */
+	| { kind: "discard_peer" }
 	| { kind: "abort" }
 	| { kind: "rename"; name: string }
 	| { kind: "set_model"; provider: string; id: string }
@@ -151,7 +156,7 @@ export type Command =
 	 */
 	| {
 			kind: "start";
-			tmux: { socket: string; pane: string };
+			tmux?: { socket: string; pane: string };
 			cwd?: string;
 			name?: string;
 			reportsTo?: string;
@@ -257,7 +262,15 @@ export interface ReplyEnd {
 export interface Hello {
 	type: "hello";
 	/** A child is a subagent session; `spawnedBy` is the session that started it. */
-	session: { id: string; kind: "root" | "child"; spawnedBy?: string; file?: string; cwd: string; name?: string };
+	session: {
+		id: string;
+		kind: "root" | "child";
+		spawnedBy?: string;
+		file?: string;
+		cwd: string;
+		name?: string;
+		program?: { id: string; parent: string };
+	};
 	process: { pid: number; startedAt: number };
 	/** The tmux server socket and pane this session runs in, from its `TMUX` and `TMUX_PANE`; absent outside tmux. */
 	tmux?: { socket: string; pane: string };
@@ -267,6 +280,8 @@ export interface Hello {
 }
 
 export type BridgeMessage =
+	| { type: "program_open"; id: string; caller: string }
+	| { type: "program_close" }
 	| Hello
 	| { type: "heartbeat" }
 	| { type: "run"; run: RunState }

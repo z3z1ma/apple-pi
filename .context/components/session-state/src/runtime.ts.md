@@ -8,7 +8,8 @@ Verify: components/session-state/tests/singleton.test.ts
 
 Only the connection of the session's current generation may change its run state; messages from a superseded process are dropped.
 Why: an old process that is still connected would otherwise overwrite the new incarnation's activity and stamp its events with the new generation.
-Verify: components/session-state/tests/liveness.test.ts
+A temporary program peer's settled reply is consumed by its program, so settling records the time without creating operator attention. Open questionnaires keep their normal attention path.
+Verify: components/session-state/tests/liveness.test.ts, components/session-state/tests/program-peers.test.ts
 
 ## symbol:Runtime.pollTmux
 
@@ -45,8 +46,9 @@ Verify: components/session-state/tests/history.test.ts
 
 The hello's `reportsTo` is applied only while the record's `reports_to` is null; afterwards the record wins, and a bridge whose flag disagrees is sent a `transfer` command with its recorded manager.
 Why: the flag is what the session was started with, and `move` changes the manager after that; a reconnect or hand restart carrying the old flag would otherwise undo the move, and the bridge addresses its close notice from its own copy of the manager.
+A same-process reconnect keeps its incarnation's original tmux binding. A test that adds a pane needs a new incarnation, rather than a second hello from the same PID and start time.
 Coupled: components/session-state/src/bridge.ts, components/session-state/src/coordinator.ts
-Verify: components/session-state/tests/organization.test.ts
+Verify: components/session-state/tests/organization.test.ts, components/session-state/tests/program-peers.test.ts
 
 ## symbol:Runtime.commandProgress
 
@@ -74,6 +76,26 @@ A new hire's provisional person, goal bundle, assignment, task thread, and outbo
 Why: passing only a prompt leaves the first turn without an explicit job; failing to preserve the role changes the person's mind on rehire.
 Coupled: components/session-state/src/work.ts, components/session-state/src/bridge.ts
 Verify: components/session-state/tests/coordinator.test.ts, apps/agent-world/tests/recruit.test.ts
+
+## symbol:Runtime.closeProgram
+
+A program scope stays until its temporary people, nested scopes, and requested turns have ended. The scope tree follows the temporary caller's ownership, while person cleanup follows immutable creation ancestry. Both survive reporting transfers. Startup closes abandoned scopes; their records let a disconnected caller confirm cleanup rather than treating a closed socket as proof.
+Coupled: components/session-state/src/program-client.ts, components/session-state/src/program-peers.ts, components/session-state/src/schema.ts
+Verify: components/session-state/tests/program-peers.test.ts
+
+## symbol:Runtime.stopProgramPeer
+
+Prove OS process death before discarding ownership, including ended or superseded incarnations. A bridge shutdown can precede process exit. SIGTERM lets native Pi clean its detached tool processes; PID/start-time checks protect reused PIDs.
+
+Before the first hello, recovery may have only a launch record. The tmux initial command identifies a window even if its name changed before the returned pane id was recorded. A renamed-window crash test caught disposal falsely succeeding while the process still ran when recovery used only the name.
+Coupled: components/session-state/src/tmux.ts, components/session-state/src/program-peers.ts
+Verify: components/session-state/tests/program-peers.test.ts
+
+## symbol:Runtime.launchSession
+
+RPC mode ignores positional CLI prompts. An ordinary headless hire therefore receives its startup prompt through the existing bridge steer command after hello. A program peer starts with an empty startup prompt: replayed assignment mail rides its next turn, and only the correlated program request starts that turn. Passing a second startup goal would produce unobserved, duplicate work.
+Coupled: components/session-state/src/bridge.ts, components/session-state/src/mail.ts, components/session-state/src/peer-turns.ts
+Verify: components/session-state/tests/program-peers.test.ts, components/session-state/tests/coordinator.test.ts
 
 ## symbol:Runtime.transfer
 
