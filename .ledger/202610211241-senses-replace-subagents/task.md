@@ -42,7 +42,7 @@ The operator approved the specification and all 14 tickets on 2026-10-22, then a
 
 Ticket 10 is done. Its shared turn mechanism is implemented and tested: ordinary peers accept correlated program turns, wait when busy, return prose or validated structured values, and cancel only the requested run. Runtime loss also stops the owned turn without stopping unrelated work. Program-scoped process ownership is implemented too: temporary peers and nested scopes are cleaned after completion, cancellation, or daemon loss, while lasting people, shared work, and transcripts survive. Ten lifecycle tests include headless launches, transfers, pre-hello cancellation and crash recovery, and ten tmux iterations without leftover panes. The Python handles and named attachments are now wired, and the review/Ralph reference programs use catalog roles. Focused tests, typecheck, loader, formatting, lint, context lint, and packaging passed; see [implementation notes](implementation-10.md).
 
-Next: ticket 11 removes the old subagent machinery and migrates its retained consumers, then the remaining tickets in order. Live organization rollout remains separate until the implementation is complete.
+Ticket 11 is in progress. The operator approved deleting the optional Todos and Backlog extensions and their tests instead of migrating Todos to peers. Their implementation, packaging and validation entries, and documentation are removed. Next: finish removing the old subagent machinery, preserve `/btw` and the intern runner under their own owners, then continue with tickets 12 to 14. Live organization rollout remains separate until the implementation is complete.
 
 ## Outcome
 

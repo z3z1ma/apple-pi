@@ -26,22 +26,6 @@ try {
 	);
 	assert.deepEqual(result.errors, []);
 	assert.equal(result.extensions.length, manifest.pi.extensions.length);
-	const optionalResult = await loadExtensions(
-		["optional-extensions/backlog/index.ts", "optional-extensions/todos/index.ts"],
-		process.cwd(),
-		createEventBus(),
-		createExtensionRuntime(),
-	);
-	assert.deepEqual(optionalResult.errors, []);
-	assert.equal(optionalResult.extensions.length, 2);
-	assert(
-		optionalResult.extensions.some((extension) => extension.tools.has("backlog_add")),
-		"optional backlog is not loadable",
-	);
-	assert(
-		optionalResult.extensions.some((extension) => extension.tools.has("todo_create")),
-		"optional todos are not loadable",
-	);
 	assert(
 		result.extensions.some(
 			(extension) =>
@@ -234,22 +218,10 @@ try {
 		"rename_peer_session",
 		"transfer_peer_session",
 		"retire_peer_session",
-		"backlog_add",
-		"backlog_list",
-		"backlog_take",
-		"todo_create",
-		"todo_list",
-		"todo_get",
-		"todo_update",
-		"todo_delete",
-		"todo_execute",
-		"todo_output",
-		"todo_stop",
 	]) {
 		assert(!tools.has(name), `default package must not expose ${name}`);
 	}
-	for (const name of ["backlog", "todos", "mcp", "mcp-auth"])
-		assert(!commands.has(name), `package must not register /${name}`);
+	for (const name of ["mcp", "mcp-auth"]) assert(!commands.has(name), `package must not register /${name}`);
 	const scheduleTool = result.extensions
 		.flatMap((extension) => [...extension.tools.values()])
 		.find((tool) => tool.definition.name === "remind_me");
@@ -398,16 +370,6 @@ try {
 		manifest.files.includes("components/change-reflection/src/"),
 		"package manifest omits change reflection source",
 	);
-	assert(
-		manifest.files.includes("optional-extensions/todos/index.ts"),
-		"package manifest omits optional todos entrypoint",
-	);
-	assert(manifest.files.includes("optional-extensions/todos/src/"), "package manifest omits optional todos source");
-	assert(
-		manifest.files.includes("optional-extensions/backlog/index.ts"),
-		"package manifest omits optional backlog entrypoint",
-	);
-	assert(manifest.files.includes("optional-extensions/backlog/src/"), "package manifest omits optional backlog source");
 	for (const path of ["apps/agent-world/src/", "apps/agent-world/dist/", "apps/agent-world/themes/"])
 		assert(manifest.files.includes(path), `package manifest omits ${path}`);
 	assert(

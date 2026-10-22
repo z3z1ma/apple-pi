@@ -444,11 +444,6 @@ The codebase enforces a strict separation between **implementation machinery** (
 | `apps/agent-world` | `agent-world.ts` | `/world` opens Agent World, a desktop world in which every live Pi session is a character: an Electron app (installed on first use under `~/.pi/agent/agent-world/`) whose main process reads the session-state database (`src/backend/`) and hands snapshots to a Phaser and React UI through a narrow preload API (`src/electron/`, built UI in `dist/`, art in `themes/`). From it you talk to and steer agents, and work GitHub, Jira, Confluence, and Slack, writing outside only after you confirm. See [docs/agent-world.md](docs/agent-world.md). |
 | `shared` | *(Internal library)* | Cross-component primitives: `work-manager.ts`, `exclusive-lease.ts`, `forked-continuation.ts`, `fork-context.ts`, `model-profiles.ts`, `sidecar-usage.ts`, `file-changes.ts`, and `git.ts`. |
 
-### Optional Extensions (`optional-extensions/`)
-Excluded from the default autoload path, enabled when I want self-contained in-session tracking without external issue trackers:
-* **`backlog`**: In-terminal backlog state store and TUI manager (`ui/backlog-manager.ts`).
-* **`todos`**: Session todo controller with configurable reminder cadence (`reminder-cadence.ts`), auto-clear (`auto-clear.ts`), and TUI widget (`ui/todo-widget.ts`).
-
 ---
 
 ## Skills: Codified Procedural Judgment (`skills/`)
@@ -588,4 +583,4 @@ Then, inside Pi, run `/notify-setup` to create the optional `~/Applications/Pi N
 
 Built and maintained by **Alexander Butler** for daily production use.
 
-Behavior across `extensions/`, `components/`, and `optional-extensions/` is pinned by tests in `tests/` and `components/*/tests/`; coverage varies by feature, and the procedural workflows in `skills/` are prose rather than tested code. If you disagree with an architectural judgment here—whether it is how `notebook` folds learnings, how `pi-exec` isolates tool loops, or how `pair-programmer` schedules reviews—you don't have to take my word for it. Read the test fixtures, inspect the state transitions, and remix whichever parts survive contact with your own work.
+Behavior across `extensions/`, `components/`, and `apps/` is pinned by tests in `tests/`, `components/*/tests/`, and `apps/agent-world/tests/`; coverage varies by feature, and the procedural workflows in `skills/` are prose rather than tested code. If you disagree with an architectural judgment here—whether it is how `notebook` folds learnings, how `pi-exec` isolates tool loops, or how `pair-programmer` schedules reviews—you don't have to take my word for it. Read the test fixtures, inspect the state transitions, and remix whichever parts survive contact with your own work.

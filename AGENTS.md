@@ -19,7 +19,6 @@ Authority is split deliberately:
 - `docs/` owns user-facing feature contracts. `docs/boundaries.md` records adopted and deliberately rejected ideas.
 - `docs/development.md` owns coding and module conventions.
 - `docs/ledger.md` owns the durable `.ledger` workflow.
-- `docs/optional-extensions.md`, `docs/todos.md`, and `docs/backlog.md` own the retained opt-in extension contracts.
 - Tests own executable invariants, but a test can still encode an obsolete contract; compare it with current product documentation and instructions.
 - This file explains how those pieces fit together. Keep it conceptual so ordinary feature additions do not require updating it.
 
@@ -66,7 +65,6 @@ When debugging a missing tool or duplicated lifecycle effect, first establish wh
 | `components/terse-tools/` | Replaces default bulky tool boxes with terse Antigravity-style single-line TUI rendering (`● Tool(args)`) and tree-style expansion | Interactive TUI sessions. Patches `ToolExecutionComponent.prototype.render` and `Container.prototype.addChild` to eliminate box borders and format collapsed/expanded views with theme colors. |
 | `components/change-reflection/` | After a completed run, reflects on the main agent's `edit`/`write` changes in a forked continuation: simplicity for code, reader clarity for prose | Root sessions reflect in a passive fork once per completed run; edits made during the reflection do not start another. Public interactive coding children instead run the same lenses plus learning reflection in-band before handoff (`components/subagents/src/completion-reflection.ts`), once per invocation. |
 | `components/input-editor/` | Custom left-rail editor with model metadata and right-justified status (pair review, MCP count, context %), replacing Pi's default footer with a zero-line component | Root TUI sessions only. |
-| `optional-extensions/` | Retained backlog and to-do implementations that are packaged and tested but not loaded by default | Keep these extensions self-contained and opt-in; they must not add tools, commands, widgets, or prompt guidance to the default harness. |
 | `components/session-search/` | Transcript history search (`search_session`) | Search only. Compaction is provider server-side or Pi's default summarizer, plus the pair programmer's post-compaction notebook packet. |
 | `components/notebook/` | Session learnings, token-spaced learning reflection in a forked continuation, in-band `/reflect`, and exact source recall | Primary programmers curate sourced learnings through one validated append path; public coding children contribute add-only through the primary owner, retaining only cited originals for exact recall. The main agent places learnings in durable owners. Live context reflects the current branch; historical observations remain recallable but are not injected. |
 | `components/server-compaction/` | Server-side compaction for OpenAI, xAI, and Anthropic | Owns `session_before_compact` for those providers; replays the newest server result on later requests to the same provider. Other routes fall back to Pi's summarizer. |
@@ -155,7 +153,6 @@ Use the narrowest production owner:
 - User-facing package behavior and configuration: the relevant `docs/` page. Keep `README.md` as the catalog and install path.
 - Deferred and reactive root-session execution: `components/tasks/`; keep scheduling one-shot and relative, keep monitor stdout line-oriented and steering, reuse the managed-task lifecycle, and keep `schedule`, `monitor`, and `task` outside Pi Exec.
 - RTK command rewriting and prompt injection: `components/rtk/` for detector, rewriter, and prompt; `extensions/rtk.ts` for Pi event wiring.
-- Optional backlog and to-do behavior: `optional-extensions/`; preserve loadability and tests without adding them to the default package surface.
 - Stable maintainer conventions or architecture rationale: `docs/`.
 - organization behavior: roles, souls, selves, charters, and the directory in `components/organization/`; a new role is a Markdown file in `roles/`; the tree and its facts in the session-state runtime; the manager tools in `components/session-state/src/coordinator.ts`; the contract in `docs/organization.md`. Do not add a roster file, a role-change path, a handoff schema, or caps.
 - ledger behavior: keep add/status/prompt wiring in `extensions/ledger.ts`, shared contract text in `components/shared/src/ledger-system-prompt.ts`, lifecycle procedures in their owning descriptively named skill directories, and semantics in `docs/ledger.md`. Do not recreate a ledger domain component, parser/catalog, operations hub, or active-task pointer without an explicit new product contract.

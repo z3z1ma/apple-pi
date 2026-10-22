@@ -6,9 +6,9 @@
 
 **Blocked by:** 08 Interns, 09 The pair asks the organization, 10 `pi_exec` on peers
 
-**Status:** ready-for-agent
+**Status:** in-progress
 
-**Dependency found during 09:** The shipped opt-in Todos extension consumes the managed background service. Move its execution and agent selection to the peer runner/catalog from 10, then delete the remaining background service with the manager. Keep Todos opt-in and its observable execution checks working; 09 removes the consultant and `runFresh`, not this still-used background path.
+**Scope change approved during 11:** The operator approved deleting `optional-extensions/` and its related tests. Remove the Todos and Backlog implementations, packaging and validation entries, and documentation. This supersedes the earlier plan to migrate Todos from the managed background service to peers; that dependency disappears with its consumer.
 
 - [ ] The package-load test shows none of the four subagent tools and no `<subagent-team>` section, with `explore` and `research` present.
 - [ ] `/btw` opens, answers, takes a follow-up, and is dismissed as before (its existing tests pass against the new owner).

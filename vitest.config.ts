@@ -9,7 +9,6 @@ export default defineConfig({
 		},
 		include: [
 			"components/pair-programmer/tests/**/*.test.ts",
-			"optional-extensions/backlog/tests/**/*.test.ts",
 			"components/vroom/tests/**/*.test.ts",
 			"components/home-search-guard/tests/**/*.test.ts",
 			"components/ask-user-question/tests/**/*.test.ts",
@@ -36,7 +35,6 @@ export default defineConfig({
 			"components/pi-exec/tests/**/*.test.ts",
 			"components/branch-search/tests/**/*.test.ts",
 			"components/browser-pages/tests/**/*.test.ts",
-			"optional-extensions/todos/tests/**/*.test.ts",
 			"apps/agent-world/tests/**/*.test.ts",
 			"tests/**/*.test.ts",
 		],

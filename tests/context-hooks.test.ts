@@ -3,7 +3,7 @@ import { join, relative } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const ROOT = join(import.meta.dirname, "..");
-const SOURCE_ROOTS = ["components", "extensions", "optional-extensions"];
+const SOURCE_ROOTS = ["components", "extensions"];
 
 /**
  * Provider prompt caches match on an exact prefix. A `context` hook that
