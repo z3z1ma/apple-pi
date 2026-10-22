@@ -71,6 +71,12 @@ Why: SQLite and the filesystem have no shared atomic commit, so claiming success
 Coupled: components/session-state/src/work.ts, components/shared/src/ledger-files.ts
 Verify: components/session-state/tests/work-recovery.test.ts
 
+## symbol:Runtime.finishWorkCommand
+
+An awake assignee needs no launch. A sleeping assignee wakes beside the assigning session's pane; an operator assignment instead uses the terminal supplied by the UI, because `operator` has no session row or incarnation. The wake target stays in the persisted command for recovery. A wake failure reports that the assignment was already saved rather than claiming it rolled back.
+Coupled: components/session-state/src/work.ts, apps/agent-world/src/backend/workplace.ts, apps/agent-world/src/backend/inn.ts
+Verify: apps/agent-world/tests/inn.test.ts, components/session-state/tests/work.test.ts
+
 ## symbol:Runtime.startSession
 
 A new hire's provisional person, goal bundle, assignment, task thread, team-history snapshot, and outbox commit before opening its process. The history uses the existing channel reader, with no separate summary or invented message-count cap. Pi starts with a pointer to its focused task; startup mail carries the file itself. Reopening keeps the stored role and work, while a supplied new goal adds an assignment.

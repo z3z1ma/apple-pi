@@ -3,6 +3,8 @@
 // after that pane's window, running `pi --session-id <id>` (with the name and coordinator it had), and the session's
 // next incarnation joins the world awake.
 import { execFile } from "node:child_process";
+import { existsSync } from "node:fs";
+import { DatabaseSync } from "node:sqlite";
 import { promisify } from "node:util";
 import type { DormantAgent } from "../world.js";
 import { parseShared } from "./facts.js";
@@ -91,7 +93,18 @@ export interface WakePane {
  * The pane of the operator's most recently active tmux client, across the servers the runtime knows. Undefined when
  * no terminal is attached to any of them.
  */
-export async function operatorPane(sockets: string[]): Promise<WakePane | undefined> {
+export async function operatorPane(path: string): Promise<WakePane | undefined> {
+	if (!existsSync(path)) return undefined;
+	const db = new DatabaseSync(path);
+	let sockets: string[];
+	try {
+		db.exec("pragma query_only = 1");
+		sockets = (
+			db.prepare("select socket from tmux_servers order by updated_at desc").all() as { socket: string }[]
+		).map((row) => row.socket);
+	} finally {
+		db.close();
+	}
 	const clients = await Promise.all(
 		sockets.map(async (socket) => {
 			try {

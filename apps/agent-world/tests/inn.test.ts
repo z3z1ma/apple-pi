@@ -14,6 +14,7 @@ import {
 } from "../../../components/session-state/tests/helpers.js";
 import { type Commands, openCommands } from "../src/backend/commands.js";
 import { type Lifecycle, openLifecycle } from "../src/backend/lifecycle.js";
+import { openWorkplace } from "../src/backend/workplace.js";
 import { openWorldBackend, type WorldBackend } from "../src/backend/world-backend.js";
 import type { WorldSnapshot } from "../src/world.js";
 
@@ -246,6 +247,21 @@ test("waking starts a new incarnation in a new tmux window after the operator's 
 	);
 	expect(generations.map((row) => row.generation)).toEqual([1, 2]);
 	expect(await lifecycle.wake("w-docs")).toEqual({ ok: false, reason: "w-docs is already awake." });
+}, 40000);
+
+test("giving a task as the operator wakes the sleeper beside the operator's terminal, without a manager pane", async () => {
+	task("202610220000-audit-guide", "Audit the style guide", "ready");
+	await soon(() => expect(latest().workplace?.tasks.some((item) => item.title === "Audit the style guide")).toBe(true));
+	const goal = latest().workplace!.tasks.find((item) => item.title === "Audit the style guide")!;
+	expect(awake("lead")?.facts?.tmux).toBeNull();
+	const workplace = openWorkplace(state.dbPath, commands, latest);
+	expect(await workplace.assignTask("w-tests", goal.id)).toEqual({ ok: true, stage: "applied" });
+	await soon(() => expect(awake("w-tests")?.facts?.task?.title).toBe("Audit the style guide"));
+	expect(sleeper("w-tests")).toBeUndefined();
+	expect(tmux("list-windows", "-t", "home", "-F", "#{window_index}:#{window_name}").split("\n")[2]).toBe("2:w-tests");
+	expect(
+		query(state.dbPath, "select assigned_by from assignments where person = 'w-tests' and ended_at is null"),
+	).toEqual([{ assigned_by: "operator" }]);
 }, 40000);
 
 test("ending a busy session asks to confirm first; ending an idle one, or a confirmed busy one, closes it and it sleeps at the inn", async () => {

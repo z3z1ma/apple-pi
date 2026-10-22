@@ -12,7 +12,12 @@ export type WorkAction =
 	| { action: "unassign"; person: string; task: string }
 	| { action: "finish"; outcome: string }
 	| { action: "promote"; task: string; title?: string; description?: string };
-export type WorkCommand = { kind: "work"; cwd: string } & WorkAction;
+export type WorkCommand = {
+	kind: "work";
+	cwd: string;
+	/** The operator has no incarnation; its UI supplies the attached terminal to wake beside. */
+	tmux?: { socket: string; pane: string };
+} & WorkAction;
 
 export interface WorkTask {
 	id: string;

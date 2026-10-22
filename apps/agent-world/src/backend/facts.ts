@@ -115,13 +115,22 @@ function asking(prompt: string | null): CharacterFacts["asking"] {
  * even checked for changes: the inn's thousands of sleepers are checked only on the backend's task rereads.
  */
 export function taskReader(): (currentTask: string | null, recheck?: boolean) => CharacterFacts["task"] {
-	const cache = new Map<string, { mtime: number; title: string | null; status: string | null }>();
+	const cache = new Map<
+		string,
+		{ mtime: number; title: string | null; status: string | null; goalMissing?: boolean }
+	>();
 	return (currentTask, recheck = true) => {
 		const task = parseShared<{ bundle?: unknown; taskId?: unknown }>(currentTask);
 		if (typeof task?.bundle !== "string" || typeof task.taskId !== "string") return null;
 		const file = join(task.bundle, "task.md");
 		let read = cache.get(file);
-		if (read && !recheck) return { title: read.title || task.taskId, status: read.status || null, bundle: task.bundle };
+		if (read && !recheck)
+			return {
+				title: read.title || task.taskId,
+				status: read.status || null,
+				bundle: task.bundle,
+				...(read.goalMissing ? { goalMissing: true } : {}),
+			};
 		try {
 			const mtime = statSync(file).mtimeMs;
 			if (read?.mtime !== mtime) {
@@ -137,10 +146,15 @@ export function taskReader(): (currentTask: string | null, recheck?: boolean) =>
 			}
 		} catch {
 			// Gone, as after the task is archived: remembered as unread, so the next check stats it again.
-			read = { mtime: -1, title: null, status: null };
+			read = { mtime: -1, title: null, status: null, goalMissing: true };
 			cache.set(file, read);
 		}
-		return { title: read?.title || task.taskId, status: read?.status || null, bundle: task.bundle };
+		return {
+			title: read?.title || task.taskId,
+			status: read?.status || null,
+			bundle: task.bundle,
+			...(read?.goalMissing ? { goalMissing: true } : {}),
+		};
 	};
 }
 

@@ -1,12 +1,12 @@
-import { appendFileSync, chmodSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, readdirSync, renameSync, rmSync, statSync, watch, writeFileSync, writeSync } from "node:fs";
+import { appendFileSync, chmodSync, closeSync, existsSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync, watch, writeFileSync, writeSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, normalize, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { BrowserWindow, app, ipcMain, net, protocol, shell } from "electron";
 import { homedir } from "node:os";
 import { randomUUID } from "node:crypto";
 import { createConnection } from "node:net";
-import { DatabaseSync } from "node:sqlite";
 import { execFile } from "node:child_process";
+import { DatabaseSync } from "node:sqlite";
 import { promisify } from "node:util";
 import { inflateSync } from "node:zlib";
 //#region components/session-state/src/paths.ts
@@ -713,7 +713,8 @@ function taskReader() {
 		if (read && !recheck) return {
 			title: read.title || task.taskId,
 			status: read.status || null,
-			bundle: task.bundle
+			bundle: task.bundle,
+			...read.goalMissing ? { goalMissing: true } : {}
 		};
 		try {
 			const mtime = statSync(file).mtimeMs;
@@ -733,14 +734,16 @@ function taskReader() {
 			read = {
 				mtime: -1,
 				title: null,
-				status: null
+				status: null,
+				goalMissing: true
 			};
 			cache.set(file, read);
 		}
 		return {
 			title: read?.title || task.taskId,
 			status: read?.status || null,
-			bundle: task.bundle
+			bundle: task.bundle,
+			...read?.goalMissing ? { goalMissing: true } : {}
 		};
 	};
 }
@@ -828,7 +831,16 @@ function made(sleeper, row, readTask) {
 * The pane of the operator's most recently active tmux client, across the servers the runtime knows. Undefined when
 * no terminal is attached to any of them.
 */
-async function operatorPane(sockets) {
+async function operatorPane(path) {
+	if (!existsSync(path)) return void 0;
+	const db = new DatabaseSync(path);
+	let sockets;
+	try {
+		db.exec("pragma query_only = 1");
+		sockets = db.prepare("select socket from tmux_servers order by updated_at desc").all().map((row) => row.socket);
+	} finally {
+		db.close();
+	}
 	const latest = (await Promise.all(sockets.map(async (socket) => {
 		try {
 			const { stdout } = await run$1("tmux", [
@@ -949,8 +961,12 @@ function readOperatorMail(db) {
 /** Read a thread only if the operator participates. The caller marks the returned sequence read through the runtime. */
 function readOperatorThread(db, id) {
 	if (!hasThreads(db)) return void 0;
-	const row = db.prepare(`select t.subject, t.closed_at from threads t join thread_participants p on p.thread_id = t.id
-		where t.id = ? and p.participant = ?`).get(id, OPERATOR);
+	if (!db.prepare("select 1 from thread_participants where thread_id = ? and participant = ?").get(id, "operator")) return void 0;
+	return readStoredThread(db, id);
+}
+/** The stored conversation. Its caller decides whether this is a participant read or a shared-board observation. */
+function readStoredThread(db, id) {
+	const row = db.prepare("select subject, closed_at from threads where id = ?").get(id);
 	if (!row) return void 0;
 	const participants = db.prepare(`select p.participant as id, coalesce(s.name, p.participant) as name
 		from thread_participants p left join sessions s on s.id = p.participant where p.thread_id = ? order by p.joined_at`).all(id);
@@ -1075,19 +1091,6 @@ function follow(commands, sessionId, command, ms, enough, late) {
 	});
 }
 function openLifecycle(paths, commands, snapshot) {
-	/** The tmux servers the runtime knows, read from its database. */
-	const servers = () => {
-		if (!existsSync(paths.db)) return [];
-		const db = new DatabaseSync(paths.db);
-		try {
-			db.exec("pragma query_only = 1");
-			return db.prepare("select socket from tmux_servers order by updated_at desc").all().map((row) => row.socket);
-		} catch {
-			return [];
-		} finally {
-			db.close();
-		}
-	};
 	return {
 		async wake(characterId) {
 			const world = snapshot();
@@ -1099,7 +1102,7 @@ function openLifecycle(paths, commands, snapshot) {
 					reason: awake ? `${awake.name} is already awake.` : "No stopped session has that id."
 				};
 			}
-			const pane = await operatorPane(servers());
+			const pane = await operatorPane(paths.db);
 			if (!pane) return {
 				ok: false,
 				reason: `No terminal is attached to tmux, so there is nowhere to open ${sleeper.name}'s window.`
@@ -1169,7 +1172,7 @@ function openLifecycle(paths, commands, snapshot) {
 					pane: tmux.pane
 				};
 			} else {
-				pane = await operatorPane(servers());
+				pane = await operatorPane(paths.db);
 				if (!pane) return {
 					ok: false,
 					reason: `No terminal is attached to tmux, so there is nowhere to open ${name}'s window.`
@@ -2960,103 +2963,23 @@ async function listThemes(themesDir, options) {
 		};
 	}));
 }
-/** New events of `FEED_TYPES` after a sequence number, with their session's name; `?` is the last seq read. */
-var FEED_SINCE = `select e.seq, e.at, e.session_id as sessionId, e.generation, e.type, e.data,
-	s.name, s.cwd, s.kind as sessionKind
-from events e left join sessions s on s.id = e.session_id
-where e.seq > ? and e.type in (${[
-	"incarnation_started",
-	"incarnation_ended",
-	"run_state",
-	"prompt_opened",
-	"prompt_closed",
-	"command_accepted",
-	"command_applied",
-	"command_failed"
-].map((type) => `'${type}'`).join(", ")})
-order by e.seq limit 500`;
-/** How a command reads in a line, as "<label> for <name>". Commands the views send for themselves have none. */
-var LABELS = {
-	talk: "Message",
-	steer: "Redirect",
-	follow_up: "Follow-up",
-	abort: "Stop",
-	close: "Close",
-	answer: "Answer",
-	rename: "Rename",
-	set_model: "Model change",
-	set_thinking: "Thinking change",
-	start: "Start"
-};
-var PREVIEW$2 = 120;
-function preview$2(text) {
-	const flat = typeof text === "string" ? text.replace(/\s+/g, " ").trim() : "";
-	return flat.length > PREVIEW$2 ? `${flat.slice(0, 119)}\u2026` : flat;
-}
-function parse$2(json) {
-	if (!json) return {};
-	try {
-		const value = JSON.parse(json);
-		return value && typeof value === "object" ? value : {};
-	} catch {
-		return {};
-	}
-}
-/** What a command says beyond its label: the text it carries. */
-function detail(command) {
-	if (command.kind === "rename") return preview$2(command.name);
-	if (command.kind === "set_model") return preview$2(command.id);
-	if (command.kind === "set_thinking") return preview$2(command.level);
-	return preview$2(command.text ?? command.prompt);
-}
-/** The line for one event, or undefined when it is not one the operator follows. */
-function feedLine(row, lookup) {
-	if (row.sessionKind === "child") return void 0;
-	const name = row.name || (row.cwd ? basename(row.cwd) : null) || row.sessionId;
-	const data = parse$2(row.data);
-	const line = (kind, text) => ({
-		seq: row.seq,
-		at: row.at,
-		kind,
-		character: row.sessionId,
-		name,
-		text
-	});
-	switch (row.type) {
-		case "incarnation_started": return line("agents", (row.generation ?? 1) > 1 ? `${name} started again.` : `${name} started.`);
-		case "incarnation_ended":
-			if (data.reason === "superseded") return void 0;
-			return line("agents", `${name} stopped${typeof data.reason === "string" ? ` (${data.reason})` : ""}.`);
-		case "run_state": return data.to === "idle" && data.from !== "compacting" ? line("agents", `${name} finished its turn.`) : void 0;
-		case "prompt_opened": {
-			const prompt = data.to ?? {};
-			const first = Array.isArray(prompt.questions) ? prompt.questions[0] : void 0;
-			const asks = preview$2(prompt.title ?? first?.question);
-			return line("agents", asks ? `${name} asks: ${asks}` : `${name} asks you something.`);
-		}
-		case "prompt_closed": return line("agents", `${name}'s question was answered.`);
-		case "command_accepted": {
-			const command = data.command ?? {};
-			if (command.kind === "mail") return line("mail", `Mail from ${command.from === "operator" ? "you" : typeof command.from === "string" ? lookup.name(command.from) ?? command.from : "someone"} to ${name}: ${preview$2(command.body)}`);
-			const label = LABELS[String(command.kind)];
-			if (!label) return void 0;
-			const said = detail(command);
-			return line("commands", said ? `${label} for ${name}: ${said}` : `${label} for ${name}.`);
-		}
-		case "command_applied":
-		case "command_failed": {
-			const command = typeof data.commandId === "string" ? lookup.command(data.commandId) : void 0;
-			const label = command ? LABELS[command.kind] : void 0;
-			if (!label) return void 0;
-			if (row.type === "command_failed") return line("commands", `${label} for ${name} failed: ${preview$2(data.reason) || "no reason given"}.`);
-			return command?.kind === "start" ? void 0 : line("commands", `${name} took the ${label.toLowerCase()}.`);
-		}
-	}
-}
 //#endregion
 //#region apps/agent-world/src/backend/projection.ts
 /** The key of a manager's team room among a headquarters' wings. */
 var teamRoom = (manager) => `team:${manager}`;
+/** The organization each person belongs to, including sleepers; missing parents and cycles end the walk. */
+function organizationRoots(people) {
+	const parents = new Map(people.map((person) => [person.id, person.reportsTo]));
+	return new Map(people.map(({ id }) => {
+		const seen = /* @__PURE__ */ new Set([id]);
+		let root = id;
+		for (let parent = parents.get(root); parent && parents.has(parent) && !seen.has(parent); parent = parents.get(root)) {
+			seen.add(parent);
+			root = parent;
+		}
+		return [id, root];
+	}));
+}
 var byStart = (a, b) => (a.firstStartedAt ?? Number.MAX_SAFE_INTEGER) - (b.firstStartedAt ?? Number.MAX_SAFE_INTEGER) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 /**
 * The organization is a tree of managers: a session reports to the one named by `reportsTo`, and the tree ends at a
@@ -3069,16 +2992,8 @@ var byStart = (a, b) => (a.firstStartedAt ?? Number.MAX_SAFE_INTEGER) - (b.first
 function projectWorld(sessions, remembered) {
 	const byId = new Map(sessions.map((session) => [session.id, session]));
 	const managerOf = (session) => session.reportsTo && session.reportsTo !== session.id && byId.has(session.reportsTo) ? byId.get(session.reportsTo) : void 0;
-	/** The root of the tree a session is in, stopping at a cycle. */
-	const rootOf = (session) => {
-		const seen = /* @__PURE__ */ new Set([session.id]);
-		let current = session;
-		for (let manager = managerOf(current); manager && !seen.has(manager.id); manager = managerOf(current)) {
-			seen.add(manager.id);
-			current = manager;
-		}
-		return current;
-	};
+	const roots = organizationRoots(sessions);
+	const rootOf = (session) => byId.get(roots.get(session.id));
 	const managers = /* @__PURE__ */ new Set();
 	for (const session of sessions) {
 		if (session.manages) managers.add(session.id);
@@ -3175,6 +3090,299 @@ function projectWorld(sessions, remembered) {
 		wings,
 		dormant
 	};
+}
+//#endregion
+//#region apps/agent-world/src/backend/workplace.ts
+var hasTable = (db, name) => Boolean(db.prepare("select 1 from sqlite_master where type = 'table' and name = ?").get(name));
+/** Same scope as the native directory: live bundles in this directory's ancestors, never a recursive search. */
+function visibleBundles(directory) {
+	if (!existsSync(directory)) return [];
+	const result = [];
+	let current = realpathSync(directory);
+	while (true) {
+		const ledger = join(current, ".ledger");
+		if (lstatSync(ledger, { throwIfNoEntry: false })?.isDirectory()) {
+			for (const entry of readdirSync(ledger, { withFileTypes: true })) if (entry.isDirectory() && /^\d{12}-[a-z0-9]+(?:-[a-z0-9]+)*$/.test(entry.name)) result.push(join(ledger, entry.name));
+		}
+		const parent = dirname(current);
+		if (parent === current) return result;
+		current = parent;
+	}
+}
+function readThreads(db, roots) {
+	if (!hasTable(db, "threads")) return [];
+	const members = /* @__PURE__ */ new Map();
+	for (const row of db.prepare(`select p.thread_id, p.participant from thread_participants p join threads t on t.id = p.thread_id
+			where t.kind = 'channel' or (t.kind = 'meeting' and t.closed_at is null) order by p.joined_at, p.participant`).all()) {
+		const list = members.get(row.thread_id) ?? [];
+		list.push(row.participant);
+		members.set(row.thread_id, list);
+	}
+	return db.prepare(`select t.id, t.kind, t.subject, t.created_by as createdBy, t.closed_at,
+		coalesce(max(m.seq), 0) as lastSeq, coalesce(max(m.at), t.created_at) as lastAt
+		from threads t left join thread_messages m on m.thread_id = t.id
+		where t.kind = 'channel' or (t.kind = 'meeting' and t.closed_at is null) group by t.id
+		order by lastSeq desc, t.id`).all().map(({ closed_at, ...row }) => ({
+		...row,
+		headquarters: roots.get(row.createdBy) ?? row.createdBy,
+		closed: closed_at !== null,
+		participants: members.get(row.id) ?? []
+	}));
+}
+function readEscalations(db, roots) {
+	if (!hasTable(db, "threads")) return [];
+	return db.prepare(`select distinct t.id, t.created_by from threads t
+		join thread_participants p on p.thread_id = t.id and p.participant = ?
+		join thread_messages m on m.thread_id = t.id and m.seq > p.read_up_to and m.sender != ?
+		where t.kind = 'mail' and t.subject = 'Escalation' and t.closed_at is null`).all(OPERATOR, OPERATOR).map((row) => ({
+		thread: row.id,
+		person: row.created_by,
+		headquarters: roots.get(row.created_by) ?? row.created_by
+	}));
+}
+/** Files are rediscovered on the backend's task reread, not on each tool or streaming event. */
+function workplaceReader(readTask) {
+	let directoryKey;
+	const bundles = /* @__PURE__ */ new Map();
+	return (db, sessions, rereadFiles) => {
+		const roots = organizationRoots(sessions);
+		const threads = readThreads(db, roots);
+		const escalations = readEscalations(db, roots);
+		if (!hasTable(db, "work_tasks")) return {
+			threads,
+			escalations,
+			tasks: []
+		};
+		const stored = db.prepare("select * from work_tasks").all();
+		const held = /* @__PURE__ */ new Map();
+		for (const row of db.prepare(`select a.task_id, a.person, coalesce(f.task_id = a.task_id, 0) as focused
+			from assignments a left join work_focus f on f.person = a.person where a.ended_at is null order by a.id`).all()) {
+			const list = held.get(row.task_id) ?? [];
+			list.push({
+				person: row.person,
+				focused: row.focused === 1
+			});
+			held.set(row.task_id, list);
+		}
+		const tasks = [];
+		for (const row of stored) {
+			if (row.archived_at !== null) continue;
+			const goal = readTask(JSON.stringify({
+				bundle: row.bundle,
+				taskId: row.id
+			}), rereadFiles);
+			if (!held.has(row.id) && (goal.status === "done" || goal.status === "cancelled")) continue;
+			tasks.push({
+				...goal,
+				id: row.id,
+				project: row.project,
+				headquarters: row.organization,
+				ephemeral: Boolean(row.ephemeral),
+				thread: row.thread,
+				assignees: held.get(row.id) ?? []
+			});
+		}
+		const active = new Set(sessions.filter((person) => person.awake).map((person) => roots.get(person.id)));
+		for (const task of tasks) active.add(task.headquarters);
+		const directories = /* @__PURE__ */ new Map();
+		const add = (organization, directory) => {
+			if (!active.has(organization)) return;
+			const list = directories.get(organization) ?? /* @__PURE__ */ new Set();
+			list.add(directory);
+			directories.set(organization, list);
+		};
+		for (const person of sessions) if (person.retiredAt === null) add(roots.get(person.id), person.cwd);
+		for (const row of stored) add(row.organization, row.project);
+		const key = JSON.stringify([...directories].map(([org, dirs]) => [org, [...dirs].sort()]));
+		if (rereadFiles || key !== directoryKey) {
+			bundles.clear();
+			for (const [org, dirs] of directories) bundles.set(org, [...new Set([...dirs].flatMap(visibleBundles))].sort());
+			directoryKey = key;
+		}
+		const registered = new Set(stored.map((row) => row.bundle));
+		for (const [headquarters, paths] of bundles) for (const bundle of paths) {
+			if (registered.has(bundle)) continue;
+			const goal = readTask(JSON.stringify({
+				bundle,
+				taskId: basename(bundle)
+			}), rereadFiles);
+			if (goal.goalMissing || goal.status === "done" || goal.status === "cancelled") continue;
+			tasks.push({
+				...goal,
+				id: bundle,
+				project: dirname(dirname(bundle)),
+				headquarters,
+				ephemeral: false,
+				thread: null,
+				assignees: []
+			});
+		}
+		return {
+			threads: threads.filter((thread) => thread.kind === "meeting" || active.has(thread.headquarters)),
+			escalations,
+			tasks
+		};
+	};
+}
+/** The operator observes shared workplace conversations; only a participant marks them read or replies. */
+function openWorkplace(path, commands, snapshot) {
+	const mailbox = openMailbox(path, commands);
+	const findTask = (id) => snapshot().workplace?.tasks.find((task) => task.id === id || task.bundle === id);
+	return {
+		async readTask(id) {
+			const task = findTask(id);
+			if (!task) return {
+				ok: false,
+				reason: "That task is no longer on the board."
+			};
+			try {
+				return {
+					ok: true,
+					text: readFileSync(join(task.bundle, "task.md"), "utf8")
+				};
+			} catch (error) {
+				return {
+					ok: false,
+					reason: `The goal could not be read: ${String(error)}`
+				};
+			}
+		},
+		async assignTask(person, id) {
+			const task = findTask(id);
+			if (!task) return {
+				ok: false,
+				reason: "That task is no longer on the board."
+			};
+			const tmux = await operatorPane(path);
+			const result = await commands.send(OPERATOR, {
+				kind: "work",
+				...tmux ? { tmux } : {},
+				action: "assign",
+				person,
+				task: task.id,
+				cwd: task.project
+			});
+			return result.ok ? {
+				ok: true,
+				stage: "applied"
+			} : result;
+		},
+		async readWorkplaceThread(id) {
+			if (!existsSync(path)) return {
+				ok: false,
+				reason: "The session database is not available."
+			};
+			const db = new DatabaseSync(path);
+			let thread;
+			try {
+				db.exec("pragma query_only = 1");
+				if (hasTable(db, "threads") && db.prepare("select 1 from threads where id = ? and kind in ('channel', 'meeting', 'task')").get(id)) thread = readStoredThread(db, id);
+			} finally {
+				db.close();
+			}
+			if (!thread) return {
+				ok: false,
+				reason: "That shared workplace conversation does not exist."
+			};
+			return thread.participants.some((person) => person.id === "operator") ? mailbox.readThread(id) : {
+				ok: true,
+				thread
+			};
+		}
+	};
+}
+/** New events of `FEED_TYPES` after a sequence number, with their session's name; `?` is the last seq read. */
+var FEED_SINCE = `select e.seq, e.at, e.session_id as sessionId, e.generation, e.type, e.data,
+	s.name, s.cwd, s.kind as sessionKind
+from events e left join sessions s on s.id = e.session_id
+where e.seq > ? and e.type in (${[
+	"incarnation_started",
+	"incarnation_ended",
+	"run_state",
+	"prompt_opened",
+	"prompt_closed",
+	"command_accepted",
+	"command_applied",
+	"command_failed"
+].map((type) => `'${type}'`).join(", ")})
+order by e.seq limit 500`;
+/** How a command reads in a line, as "<label> for <name>". Commands the views send for themselves have none. */
+var LABELS = {
+	talk: "Message",
+	steer: "Redirect",
+	follow_up: "Follow-up",
+	abort: "Stop",
+	close: "Close",
+	answer: "Answer",
+	rename: "Rename",
+	set_model: "Model change",
+	set_thinking: "Thinking change",
+	start: "Start"
+};
+var PREVIEW$2 = 120;
+function preview$2(text) {
+	const flat = typeof text === "string" ? text.replace(/\s+/g, " ").trim() : "";
+	return flat.length > PREVIEW$2 ? `${flat.slice(0, 119)}\u2026` : flat;
+}
+function parse$2(json) {
+	if (!json) return {};
+	try {
+		const value = JSON.parse(json);
+		return value && typeof value === "object" ? value : {};
+	} catch {
+		return {};
+	}
+}
+/** What a command says beyond its label: the text it carries. */
+function detail(command) {
+	if (command.kind === "rename") return preview$2(command.name);
+	if (command.kind === "set_model") return preview$2(command.id);
+	if (command.kind === "set_thinking") return preview$2(command.level);
+	return preview$2(command.text ?? command.prompt);
+}
+/** The line for one event, or undefined when it is not one the operator follows. */
+function feedLine(row, lookup) {
+	if (row.sessionKind === "child") return void 0;
+	const name = row.name || (row.cwd ? basename(row.cwd) : null) || row.sessionId;
+	const data = parse$2(row.data);
+	const line = (kind, text) => ({
+		seq: row.seq,
+		at: row.at,
+		kind,
+		character: row.sessionId,
+		name,
+		text
+	});
+	switch (row.type) {
+		case "incarnation_started": return line("agents", (row.generation ?? 1) > 1 ? `${name} started again.` : `${name} started.`);
+		case "incarnation_ended":
+			if (data.reason === "superseded") return void 0;
+			return line("agents", `${name} stopped${typeof data.reason === "string" ? ` (${data.reason})` : ""}.`);
+		case "run_state": return data.to === "idle" && data.from !== "compacting" ? line("agents", `${name} finished its turn.`) : void 0;
+		case "prompt_opened": {
+			const prompt = data.to ?? {};
+			const first = Array.isArray(prompt.questions) ? prompt.questions[0] : void 0;
+			const asks = preview$2(prompt.title ?? first?.question);
+			return line("agents", asks ? `${name} asks: ${asks}` : `${name} asks you something.`);
+		}
+		case "prompt_closed": return line("agents", `${name}'s question was answered.`);
+		case "command_accepted": {
+			const command = data.command ?? {};
+			if (command.kind === "mail") return line("mail", `Mail from ${command.from === "operator" ? "you" : typeof command.from === "string" ? lookup.name(command.from) ?? command.from : "someone"} to ${name}: ${preview$2(command.body)}`);
+			const label = LABELS[String(command.kind)];
+			if (!label) return void 0;
+			const said = detail(command);
+			return line("commands", said ? `${label} for ${name}: ${said}` : `${label} for ${name}.`);
+		}
+		case "command_applied":
+		case "command_failed": {
+			const command = typeof data.commandId === "string" ? lookup.command(data.commandId) : void 0;
+			const label = command ? LABELS[command.kind] : void 0;
+			if (!label) return void 0;
+			if (row.type === "command_failed") return line("commands", `${label} for ${name} failed: ${preview$2(data.reason) || "no reason given"}.`);
+			return command?.kind === "start" ? void 0 : line("commands", `${name} took the ${label.toLowerCase()}.`);
+		}
+	}
 }
 //#endregion
 //#region apps/agent-world/src/backend/terminal.ts
@@ -3349,6 +3557,7 @@ function openWorldBackend(paths) {
 	let dormant = [];
 	let mail = [];
 	let operatorMail = [];
+	let workplace;
 	let db;
 	let socket;
 	let socketOpen = false;
@@ -3373,6 +3582,7 @@ function openWorldBackend(paths) {
 	};
 	let retryAt = 0;
 	const readTask = taskReader();
+	const readWorkplace = workplaceReader(readTask);
 	let polls = 0;
 	const feedListeners = /* @__PURE__ */ new Set();
 	let recent = [];
@@ -3463,6 +3673,13 @@ function openWorldBackend(paths) {
 			if (full) {
 				rowsById.clear();
 				sessionsById.clear();
+			} else {
+				const removed = db.prepare(`select distinct e.session_id as id from events e where e.seq > ?
+					and e.session_id is not null and not exists (select 1 from sessions s where s.id = e.session_id and s.kind = 'root')`).all(rowsSeq);
+				for (const { id } of removed) {
+					rowsById.delete(id);
+					sessionsById.delete(id);
+				}
 			}
 			for (const row of changed) {
 				rowsById.set(row.id, row);
@@ -3486,6 +3703,7 @@ function openWorldBackend(paths) {
 			};
 			dormant = dormantAgents(world.dormant, byId, (task) => readTask(task, rereadTasks), dormant, !rereadTasks);
 			operatorMail = readOperatorMail(db);
+			workplace = readWorkplace(db, [...sessionsById.values()], rereadTasks);
 			const nextMail = readMail(db);
 			if (JSON.stringify(nextMail) !== JSON.stringify(mail)) mail = nextMail;
 			seen = mergeWings(seen, world.wings);
@@ -3551,7 +3769,8 @@ function openWorldBackend(paths) {
 			theme: chosen.theme ?? stored.theme,
 			dormant,
 			mail,
-			operatorMail
+			operatorMail,
+			workplace
 		});
 	};
 	const onLine = (line) => {
@@ -5839,6 +6058,19 @@ function start() {
 	ipcMain.handle("world:reply-thread", (_event, thread, body) => typeof thread === "string" && typeof body === "string" ? lifecycle.replyThread(thread, body) : {
 		ok: false,
 		reason: "A thread and reply are required."
+	});
+	const workplace = openWorkplace(statePaths().db, commands, () => world.snapshot());
+	ipcMain.handle("world:read-task", (_event, task) => typeof task === "string" ? workplace.readTask(task) : {
+		ok: false,
+		reason: "No task was named."
+	});
+	ipcMain.handle("world:assign-task", (_event, person, task) => typeof person === "string" && typeof task === "string" ? workplace.assignTask(person, task) : {
+		ok: false,
+		reason: "A person and task are required."
+	});
+	ipcMain.handle("world:workplace-thread", (_event, thread) => typeof thread === "string" ? workplace.readWorkplaceThread(thread) : {
+		ok: false,
+		reason: "No thread was named."
 	});
 	ipcMain.handle("world:recruit", (_event, request) => {
 		const { name, cwd, brief, reportsTo, role } = request ?? {};

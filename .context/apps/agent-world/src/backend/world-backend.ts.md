@@ -30,6 +30,15 @@ Why: measured in ticket 30 with 3,000 and 10,000 stopped root sessions, reading 
 Coupled: apps/agent-world/src/backend/inn.ts, apps/agent-world/src/backend/facts.ts, components/session-state/src/runtime.ts
 Verify: apps/agent-world/tests/backend.test.ts, apps/agent-world/tests/inn.test.ts
 
+A newer event naming an id with no remaining root row evicts that id from both session caches. Program disposal emits these deletion events and named facts for lasting reports that move managers, in its cleanup transaction.
+Why: a changed-row query alone cannot return a deleted row; it left discarded peers at the inn until the full reread, while the database had already removed them.
+Coupled: components/session-state/src/program-peers.ts
+Verify: apps/agent-world/tests/workplace-disposal.test.ts
+
+Workplace summaries share this poll and the existing task-file reread cadence; bodies are read on demand through `openWorkplace`. Table guards keep an unmigrated runtime readable.
+Coupled: apps/agent-world/src/backend/workplace.ts
+Verify: apps/agent-world/tests/workplace.test.ts
+
 The feed keeps its own sequence cursor, apart from the world's: the first read starts from a short backlog (the last `FEED_BACKLOG` lines within the last `FEED_BACKLOG_EVENTS` events), and a database whose sequence is behind the cursor (a new database) starts again from a backlog.
 Why: the world's read skips when nothing changed, but every line must reach the chatbox once and in order, within a second.
 Coupled: apps/agent-world/src/backend/feed.ts

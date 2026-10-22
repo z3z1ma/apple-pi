@@ -108,10 +108,16 @@ export function readOperatorMail(db: DatabaseSync): MailThreadSummary[] {
 /** Read a thread only if the operator participates. The caller marks the returned sequence read through the runtime. */
 export function readOperatorThread(db: DatabaseSync, id: string): MailThread | undefined {
 	if (!hasThreads(db)) return undefined;
-	const row = db
-		.prepare(`select t.subject, t.closed_at from threads t join thread_participants p on p.thread_id = t.id
-		where t.id = ? and p.participant = ?`)
-		.get(id, OPERATOR) as { subject: string; closed_at: number | null } | undefined;
+	if (!db.prepare("select 1 from thread_participants where thread_id = ? and participant = ?").get(id, OPERATOR))
+		return undefined;
+	return readStoredThread(db, id);
+}
+
+/** The stored conversation. Its caller decides whether this is a participant read or a shared-board observation. */
+export function readStoredThread(db: DatabaseSync, id: string): MailThread | undefined {
+	const row = db.prepare("select subject, closed_at from threads where id = ?").get(id) as
+		| { subject: string; closed_at: number | null }
+		| undefined;
 	if (!row) return undefined;
 	const participants = db
 		.prepare(`select p.participant as id, coalesce(s.name, p.participant) as name

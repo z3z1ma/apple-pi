@@ -14,6 +14,7 @@ import type {
 	MailItem,
 	MailThreadSummary,
 	TerminalResult,
+	Workplace,
 	WorldSnapshot,
 	WorldUpdate,
 } from "../world.js";
@@ -23,6 +24,7 @@ import { dormantAgents } from "./inn.js";
 import { readMail, readOperatorMail } from "./mail.js";
 import { type Projection, projectWorld, type RememberedWings, type SessionRow } from "./projection.js";
 import { switchToPane } from "./terminal.js";
+import { workplaceReader } from "./workplace.js";
 
 export interface WorldBackend {
 	snapshot(): WorldSnapshot;
@@ -179,6 +181,7 @@ export function openWorldBackend(paths: { db: string; socket: string }): WorldBa
 	let dormant: DormantAgent[] = [];
 	let mail: MailItem[] = [];
 	let operatorMail: MailThreadSummary[] = [];
+	let workplace: Workplace | undefined;
 	let db: DatabaseSync | undefined;
 	let socket: Socket | undefined;
 	let socketOpen = false;
@@ -205,6 +208,7 @@ export function openWorldBackend(paths: { db: string; socket: string }): WorldBa
 	};
 	let retryAt = 0;
 	const readTask = taskReader();
+	const readWorkplace = workplaceReader(readTask);
 	let polls = 0;
 	const feedListeners = new Set<(lines: FeedLine[]) => void>();
 	let recent: FeedLine[] = [];
@@ -292,6 +296,15 @@ export function openWorldBackend(paths: { db: string; socket: string }): WorldBa
 			if (full) {
 				rowsById.clear();
 				sessionsById.clear();
+			} else {
+				const removed = db
+					.prepare(`select distinct e.session_id as id from events e where e.seq > ?
+					and e.session_id is not null and not exists (select 1 from sessions s where s.id = e.session_id and s.kind = 'root')`)
+					.all(rowsSeq) as { id: string }[];
+				for (const { id } of removed) {
+					rowsById.delete(id);
+					sessionsById.delete(id);
+				}
 			}
 			for (const row of changed) {
 				rowsById.set(row.id, row);
@@ -324,6 +337,7 @@ export function openWorldBackend(paths: { db: string; socket: string }): WorldBa
 			};
 			dormant = dormantAgents(world.dormant, byId, (task) => readTask(task, rereadTasks), dormant, !rereadTasks);
 			operatorMail = readOperatorMail(db);
+			workplace = readWorkplace(db, [...sessionsById.values()], rereadTasks);
 			const nextMail = readMail(db);
 			if (JSON.stringify(nextMail) !== JSON.stringify(mail)) mail = nextMail;
 			seen = mergeWings(seen, world.wings);
@@ -395,6 +409,7 @@ export function openWorldBackend(paths: { db: string; socket: string }): WorldBa
 			dormant,
 			mail,
 			operatorMail,
+			workplace,
 		});
 	};
 

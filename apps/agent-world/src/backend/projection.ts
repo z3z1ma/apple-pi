@@ -54,6 +54,26 @@ export interface Projection {
 	dormant: Sleeper[];
 }
 
+/** The organization each person belongs to, including sleepers; missing parents and cycles end the walk. */
+export function organizationRoots(people: { id: string; reportsTo: string | null }[]): Map<string, string> {
+	const parents = new Map(people.map((person) => [person.id, person.reportsTo]));
+	return new Map(
+		people.map(({ id }) => {
+			const seen = new Set<string>([id]);
+			let root = id;
+			for (
+				let parent = parents.get(root);
+				parent && parents.has(parent) && !seen.has(parent);
+				parent = parents.get(root)
+			) {
+				seen.add(parent);
+				root = parent;
+			}
+			return [id, root];
+		}),
+	);
+}
+
 const byStart = (a: { firstStartedAt?: number; id: string }, b: { firstStartedAt?: number; id: string }) =>
 	(a.firstStartedAt ?? Number.MAX_SAFE_INTEGER) - (b.firstStartedAt ?? Number.MAX_SAFE_INTEGER) ||
 	(a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
@@ -72,16 +92,8 @@ export function projectWorld(sessions: SessionRow[], remembered: RememberedWings
 		session.reportsTo && session.reportsTo !== session.id && byId.has(session.reportsTo)
 			? byId.get(session.reportsTo)!
 			: undefined;
-	/** The root of the tree a session is in, stopping at a cycle. */
-	const rootOf = (session: SessionRow): SessionRow => {
-		const seen = new Set<string>([session.id]);
-		let current = session;
-		for (let manager = managerOf(current); manager && !seen.has(manager.id); manager = managerOf(current)) {
-			seen.add(manager.id);
-			current = manager;
-		}
-		return current;
-	};
+	const roots = organizationRoots(sessions);
+	const rootOf = (session: SessionRow): SessionRow => byId.get(roots.get(session.id)!)!;
 	const managers = new Set<string>();
 	for (const session of sessions) {
 		if (session.manages) managers.add(session.id);

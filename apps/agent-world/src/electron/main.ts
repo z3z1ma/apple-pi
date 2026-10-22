@@ -17,6 +17,7 @@ import { openLifecycle } from "../backend/lifecycle.js";
 import { openFileLink, openLink } from "../backend/links.js";
 import { openNotepads } from "../backend/notepad.js";
 import { listThemes, themeBackdrop } from "../backend/theme-packs.js";
+import { openWorkplace } from "../backend/workplace.js";
 import { leaveOutUnchanged, openWorldBackend } from "../backend/world-backend.js";
 import { wireIntegrations } from "./integrations-ipc.js";
 
@@ -123,6 +124,18 @@ function start() {
 		typeof thread === "string" && typeof body === "string"
 			? lifecycle.replyThread(thread, body)
 			: { ok: false, reason: "A thread and reply are required." },
+	);
+	const workplace = openWorkplace(statePaths().db, commands, () => world.snapshot());
+	ipcMain.handle("world:read-task", (_event, task: unknown) =>
+		typeof task === "string" ? workplace.readTask(task) : { ok: false, reason: "No task was named." },
+	);
+	ipcMain.handle("world:assign-task", (_event, person: unknown, task: unknown) =>
+		typeof person === "string" && typeof task === "string"
+			? workplace.assignTask(person, task)
+			: { ok: false, reason: "A person and task are required." },
+	);
+	ipcMain.handle("world:workplace-thread", (_event, thread: unknown) =>
+		typeof thread === "string" ? workplace.readWorkplaceThread(thread) : { ok: false, reason: "No thread was named." },
 	);
 	// Recruiting a new agent: a worker at its coordinator's desk, an independent one at the square's recruiter.
 	ipcMain.handle("world:recruit", (_event, request: unknown) => {

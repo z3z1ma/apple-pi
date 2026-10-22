@@ -747,15 +747,18 @@ export class Runtime {
 			this.setCommandStage(commandId, "applied");
 			return;
 		}
-		const pane = db
-			.prepare(`select i.tmux_socket as socket, i.pane_id as pane from incarnations i join sessions s
-			on s.id = i.session_id and s.generation = i.generation where s.id = ?`)
-			.get(actor) as { socket: string | null; pane: string | null } | undefined;
+		const pane =
+			actor === OPERATOR
+				? command.tmux
+				: (db
+						.prepare(`select i.tmux_socket as socket, i.pane_id as pane from incarnations i join sessions s
+				on s.id = i.session_id and s.generation = i.generation where s.id = ?`)
+						.get(actor) as { socket: string | null; pane: string | null } | undefined);
 		if (!pane?.socket || !pane.pane) {
 			this.setCommandStage(
 				commandId,
 				"failed",
-				"Assignment saved, but waking this person needs a manager's tmux pane. Rehire it to begin.",
+				"Assignment saved, but waking this person needs a tmux pane. Wake or rehire it to begin.",
 			);
 			return;
 		}

@@ -5,10 +5,9 @@
 // command client (`commands.ts`); each resolves with the receipt stage that answers the operator's question (is it
 // awake, is it ended, did the letter arrive or does it wait), not necessarily the last.
 import { randomUUID } from "node:crypto";
-import { existsSync, statSync } from "node:fs";
+import { statSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, join } from "node:path";
-import { DatabaseSync } from "node:sqlite";
 import type { Command } from "../../../../components/session-state/src/protocol.js";
 import {
 	type CommandReceipt,
@@ -90,22 +89,6 @@ export function openLifecycle(
 	commands: Commands,
 	snapshot: () => WorldSnapshot,
 ): Lifecycle {
-	/** The tmux servers the runtime knows, read from its database. */
-	const servers = (): string[] => {
-		if (!existsSync(paths.db)) return [];
-		const db = new DatabaseSync(paths.db);
-		try {
-			db.exec("pragma query_only = 1");
-			return (db.prepare("select socket from tmux_servers order by updated_at desc").all() as { socket: string }[]).map(
-				(row) => row.socket,
-			);
-		} catch {
-			return [];
-		} finally {
-			db.close();
-		}
-	};
-
 	return {
 		async wake(characterId) {
 			const world = snapshot();
@@ -114,7 +97,7 @@ export function openLifecycle(
 				const awake = world.characters.find((character) => character.id === characterId);
 				return { ok: false, reason: awake ? `${awake.name} is already awake.` : "No stopped session has that id." };
 			}
-			const pane = await operatorPane(servers());
+			const pane = await operatorPane(paths.db);
 			if (!pane)
 				return {
 					ok: false,
@@ -182,7 +165,7 @@ export function openLifecycle(
 					};
 				pane = { socket: tmux.socket, pane: tmux.pane };
 			} else {
-				pane = await operatorPane(servers());
+				pane = await operatorPane(paths.db);
 				if (!pane)
 					return {
 						ok: false,

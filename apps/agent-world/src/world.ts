@@ -51,7 +51,7 @@ export interface CharacterFacts {
 	/** The top-level tool running now, with its main argument (command, path, ...). */
 	tool: { name: string; arg: string | null; since: number | null } | null;
 	/** Its explicitly focused task: the title and status from task.md, whether ledger or ephemeral. */
-	task: { title: string; status: string | null; bundle: string } | null;
+	task: { title: string; status: string | null; bundle: string; goalMissing?: boolean } | null;
 	git: { repository: string; worktree: string; branch: string } | null;
 	cwd: string;
 	reportsTo: string | null;
@@ -129,7 +129,43 @@ export interface WorldSnapshot {
 	mail?: MailItem[];
 	/** The operator's threaded inbox. Unread threads need the operator, independently of session attention. */
 	operatorMail?: MailThreadSummary[];
+	/** Open meetings, team channels, live work, and read-only ledger discovery. Mail stays in the inbox/traffic views. */
+	workplace?: Workplace;
 }
+
+export interface WorkplaceThread {
+	id: string;
+	kind: "channel" | "meeting";
+	subject: string;
+	createdBy: string;
+	headquarters: string;
+	closed: boolean;
+	lastSeq: number;
+	lastAt: number;
+	participants: string[];
+}
+
+export interface WorkplaceTask {
+	/** A registered task id, or the absolute bundle path of an unregistered backlog item. */
+	id: string;
+	bundle: string;
+	project: string;
+	headquarters: string;
+	title: string;
+	status: string | null;
+	ephemeral: boolean;
+	thread: string | null;
+	goalMissing?: boolean;
+	assignees: { person: string; focused: boolean }[];
+}
+
+export interface Workplace {
+	threads: WorkplaceThread[];
+	tasks: WorkplaceTask[];
+	escalations: { thread: string; person: string; headquarters: string }[];
+}
+
+export type TaskRead = { ok: true; text: string } | { ok: false; reason: string };
 
 /** The parts of a snapshot an update may leave out while they are the same as in the update before. */
 export type KeptPart = "dormant" | "mail";
@@ -436,6 +472,12 @@ export interface AgentWorldApi extends IntegrationsApi {
 	readThread(thread: string): Promise<ThreadRead>;
 	/** Reply as the operator to everyone in the thread, not as a session prompt. */
 	replyThread(thread: string, body: string): Promise<CommandReceipt>;
+	/** Read a goal from a task on the board, not from an arbitrary renderer-supplied file path. */
+	readTask(task: string): Promise<TaskRead>;
+	/** Hand a task to a person as the operator. The runtime owns assignment, focus, notification, and waking. */
+	assignTask(person: string, task: string): Promise<CommandReceipt>;
+	/** Observe a shared channel, meeting, or task thread; only an operator participant marks it read. */
+	readWorkplaceThread(thread: string): Promise<ThreadRead>;
 	/**
 	 * Recruit a new agent (`start` for a new session id): a worker's window opens after its coordinator's pane, an
 	 * independent agent's after the operator's current one.

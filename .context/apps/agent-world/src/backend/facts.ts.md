@@ -11,6 +11,10 @@ A task's title and status are read from the bundle's `task.md` as the sidebar's 
 Why: goals belong to task files, while `work_focus` and `work_tasks` supply identity and the current path. Ledger archival updates that registered path; missing files remain visible by task id.
 Coupled: components/tmux-sessions/sidebar/model.py
 
+An unreadable goal still returns its task-id fallback but carries `goalMissing`. A focused assignment stays visible for recovery; backlog discovery excludes a directory without a readable goal.
+Coupled: apps/agent-world/src/backend/workplace.ts
+Verify: apps/agent-world/tests/workplace.test.ts
+
 With `recheck` false a file read before is returned from the cache without a `stat`, and a missing file is cached too (as unread), so only the backend's task rereads stat the inn's sleepers' files.
 Why: with thousands of sleepers, a `stat` per sleeper on every event was a large share of each read.
 Coupled: apps/agent-world/src/backend/world-backend.ts

@@ -56,6 +56,8 @@ export function discardProgramPeople(
 	const transfers: { person: string; manager: string }[] = [];
 	db.exec("begin");
 	try {
+		const changed = db.prepare(`insert into events (at, source, session_id, generation, type, data)
+			select ?, 'runtime', id, generation, ?, ? from sessions where id = ?`);
 		for (const person of people) {
 			if (gone.has(person.id) || !person.reports_to || !gone.has(person.reports_to)) continue;
 			const manager = replacement(person.reports_to);
@@ -64,6 +66,7 @@ export function discardProgramPeople(
 			db.prepare(
 				"insert into manager_changes (session_id, from_manager, to_manager, by, at) values (?, ?, ?, ?, ?)",
 			).run(person.id, person.reports_to, manager, "runtime", now);
+			changed.run(now, "facts", JSON.stringify({ reportsTo: manager }), person.id);
 			transfers.push({ person: person.id, manager });
 		}
 		const tasks = db.prepare("select id, bundle, ephemeral, thread from work_tasks").all() as {
@@ -104,6 +107,7 @@ export function discardProgramPeople(
 				).run(randomUUID(), peer.task_id, peer.session_id, bundle);
 		}
 		for (const id of gone) {
+			changed.run(now, "person_discarded", "{}", id);
 			const manager = replacement(id);
 			if (manager)
 				db.prepare(`insert into thread_participants (thread_id, participant, delivery, read_up_to, joined_at)

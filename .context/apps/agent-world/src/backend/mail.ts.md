@@ -6,3 +6,7 @@ Why: using a sender's `needs_you_since` conflates human mail with that session's
 The old `mail` view remains the traffic view for pushed deliveries (including script messages); the operator inbox is one row per conversation. A runtime older than threads yields an empty inbox rather than breaking the rest of the world.
 Coupled: components/session-state/src/threads.ts, components/session-state/src/runtime.ts, apps/agent-world/web/overlay/places/operator-inbox.tsx, components/tmux-sessions/sidebar/mailbox_view.py
 Verify: apps/agent-world/tests/operator-mail.test.ts, apps/agent-world/tests/rookery.test.ts
+
+`readStoredThread` is a database reader, not an authorization check. The operator inbox checks membership before using it; the workplace observer restricts it to shared channel, meeting, and task threads and changes no cursor unless the operator participates.
+Coupled: apps/agent-world/src/backend/workplace.ts
+Verify: apps/agent-world/tests/workplace.test.ts
