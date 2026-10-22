@@ -11,6 +11,8 @@ import {
 	createExtensionRuntime,
 	loadExtensions,
 } from "../../../node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/loader.js";
+import { aggregateUsage } from "../../shared/src/model-results.js";
+import { resolveStructuredOutput } from "../../shared/src/structured-output.js";
 import {
 	AUTO_COMPACT_EXTENSION_PATH,
 	agentOperationArgs,
@@ -25,7 +27,6 @@ import {
 	parseAgentRequest,
 	prepareAgentSpawn,
 	resolveExecWorker,
-	resolveStructuredOutput,
 	SESSION_SEARCH_EXTENSION_PATH,
 	serializeAgentContext,
 	VROOM_EXTENSION_PATH,
@@ -35,7 +36,6 @@ import {
 } from "../src/agent-workers.js";
 import { deriveProgramEnvelope, PROGRAM_ENVELOPE_MAXIMA } from "../src/envelope.js";
 import runtime from "../src/index.js";
-import { aggregateUsage } from "../src/results.js";
 import { listSkills, readSkillBody } from "../src/skills.js";
 import { renderExecCall, renderExecResult } from "../src/ui.js";
 
@@ -671,7 +671,7 @@ describe("pi_exec tool", () => {
 			);
 			expect(JSON.parse(result.content[0].text)).toMatchObject({
 				status: "failed",
-				error: "Agent hit its output token limit; its text is partial",
+				error: expect.stringContaining("hit its output token limit; its text is partial"),
 				text: "first half",
 			});
 		} finally {

@@ -7,7 +7,7 @@ import { registerFauxProvider } from "@earendil-works/pi-ai/compat";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { visibleWidth } from "@earendil-works/pi-tui";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { resultText } from "../components/pi-exec/src/results.js";
+import { resultText } from "../components/shared/src/model-results.js";
 import { registerWorkSection } from "../components/shared/src/work-manager.js";
 import { createEventBus } from "../node_modules/@earendil-works/pi-coding-agent/dist/core/event-bus.js";
 import {

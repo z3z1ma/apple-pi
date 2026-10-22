@@ -8,6 +8,12 @@ A link whose connection drops starts a runtime once and keeps reconnecting. Test
 Why: a disposed session's link stays connected; when the test stops the runtime, the link starts a new one into a directory the test is deleting, leaving a stray daemon.
 Coupled: components/session-state/tests/helpers.ts
 
+## symbol:StateLink.turnProgress
+
+Program progress is a replaceable snapshot per command. While the socket is backed up, keep only its newest snapshot; a terminal result drops that snapshot. Disconnect clears transient progress and tells the peer-turn controller to stop its owned run, while ordinary work continues. A result belongs to the original waiting caller, so reconnecting cannot safely continue that request.
+Coupled: components/session-state/src/peer-turns.ts, components/session-state/src/runtime.ts
+Verify: components/session-state/tests/peer-turns.test.ts, components/session-state/tests/streaming.test.ts
+
 ## symbol:handedOver
 
 Mail ids handed to Pi but not yet in the transcript live on `globalThis` per session id. They are cleared on every `session_start` except `reload`, and on every `agent_settled` that was not aborted.

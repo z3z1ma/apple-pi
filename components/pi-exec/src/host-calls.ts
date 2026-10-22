@@ -1,10 +1,10 @@
 import type { Usage } from "@earendil-works/pi-ai";
 import type { ExtensionToolContext } from "@earendil-works/pi-coding-agent";
 import { Value } from "typebox/value";
+import { aggregateUsage, resultText, traceValue } from "../../shared/src/model-results.js";
 import type { ProgramEnvelope } from "./envelope.js";
 import { type HostCallScope, hostFunction } from "./guest-functions.js";
 import { serializeJsonValue } from "./json.js";
-import { aggregateUsage, resultText, traceValue } from "./results.js";
 import type { ExecutionOperation, ExecutionOutcome, ProgramHostCall } from "./types.js";
 import type { ExecActivityCall } from "./ui.js";
 

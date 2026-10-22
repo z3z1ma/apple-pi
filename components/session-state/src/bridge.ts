@@ -13,11 +13,13 @@ import {
 } from "../../organization/src/index.js";
 import { type OpenQuestionnaire, QUESTIONNAIRE_CHANNEL } from "../../shared/src/questionnaire-events.js";
 import { mainToolArgument } from "../../shared/src/tool-activity.js";
+import type { TurnProgress, TurnResult } from "../../shared/src/turn-observer.js";
 import { childSessionParent, inChildSessionContext } from "../../subagents/src/child-context.js";
 import { RETRY_MS, spawnRuntime } from "./client.js";
 import { installCoordinator } from "./coordinator.js";
 import { deliverMail, installMail, mailRecordedIn } from "./mail.js";
 import { statePaths } from "./paths.js";
+import { installPeerTurns } from "./peer-turns.js";
 import { installPeers } from "./peers.js";
 import {
 	type BridgeMessage,
@@ -49,22 +51,52 @@ class StateLink {
 	private readonly rows: IndexRow[] = [];
 	private heldDelta?: { type: "reply_delta"; streamId: string; seq: number; delta: string };
 	private awaitingDrain = false;
+	private readonly heldTurns = new Map<string, TurnProgress>();
+	private turnsAwaitingDrain = false;
 	private readonly warn: (message: string) => void;
 	private readonly onCommand: (link: StateLink, commandId: string, command: Command, replay: boolean) => void;
+	private readonly onDisconnect: () => void;
 
 	constructor(
 		hello: Hello,
 		warn: (message: string) => void,
 		onCommand: (link: StateLink, commandId: string, command: Command, replay: boolean) => void,
+		onDisconnect: () => void,
 	) {
 		this.hello = hello;
 		this.warn = warn;
 		this.onCommand = onCommand;
+		this.onDisconnect = onDisconnect;
 		this.connect();
 	}
 
-	progress(commandId: string, stage: "delivered" | "applied" | "failed", reason?: string): void {
-		this.send({ type: "command_progress", commandId, stage, ...(reason ? { reason } : {}) });
+	progress(commandId: string, stage: "delivered" | "applied" | "failed", reason?: string, result?: TurnResult): void {
+		if (stage !== "delivered") this.heldTurns.delete(commandId);
+		this.send({
+			type: "command_progress",
+			commandId,
+			stage,
+			...(reason ? { reason } : {}),
+			...(result ? { result } : {}),
+		});
+	}
+
+	turnProgress(commandId: string, progress: TurnProgress): void {
+		if (!this.connected || this.closed || !this.socket) return;
+		if (this.socket.writableNeedDrain) {
+			this.heldTurns.set(commandId, progress);
+			if (!this.turnsAwaitingDrain) {
+				this.turnsAwaitingDrain = true;
+				this.socket.once("drain", () => {
+					this.turnsAwaitingDrain = false;
+					const held = [...this.heldTurns];
+					this.heldTurns.clear();
+					for (const [id, value] of held) this.turnProgress(id, value);
+				});
+			}
+			return;
+		}
+		this.send({ type: "turn_progress", commandId, progress });
 	}
 
 	run(run: RunState): void {
@@ -188,8 +220,11 @@ class StateLink {
 			this.connected = false;
 			this.heldDelta = undefined;
 			this.awaitingDrain = false;
+			this.heldTurns.clear();
+			this.turnsAwaitingDrain = false;
 			clearInterval(this.heartbeat);
 			if (this.closed) return;
+			this.onDisconnect();
 			if (!this.spawned) {
 				this.spawned = true;
 				spawnRuntime(this.warn);
@@ -444,6 +479,7 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 		installCoordinator(pi);
 		installWork(pi);
 	}
+	const peerTurns = inChildSessionContext() ? undefined : installPeerTurns(pi);
 	let link: StateLink | undefined;
 	let current: ExtensionContext | undefined;
 	let skills: string[] = [];
@@ -534,6 +570,19 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 			return fail("no model selected");
 		try {
 			switch (command.kind) {
+				case "run_turn":
+					if (!peerTurns) return fail("Program turns require a root peer session");
+					peerTurns.enqueue({
+						...command,
+						id: commandId,
+						progress: (progress) => target.turnProgress(commandId, progress),
+						finish: (result) =>
+							target.progress(commandId, result.status === "completed" ? "applied" : "failed", result.error, result),
+					});
+					return;
+				case "cancel_turn":
+					peerTurns?.cancel(command.turn);
+					break;
 				case "talk":
 					if (!ctx.isIdle()) return fail("busy: send steer or follow_up while a run is active");
 					pi.sendUserMessage(command.text);
@@ -631,9 +680,14 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 		};
 		// A switch, resume, or fork in this process names the session file that ran here before.
 		const previous = event.previousSessionFile ? { file: event.previousSessionFile, reason: event.reason } : null;
-		link = new StateLink(helloFor(pi, ctx, skills, mcpServers, previous), warn, (from, commandId, command, replay) => {
-			void apply(from, commandId, command, replay);
-		});
+		link = new StateLink(
+			helloFor(pi, ctx, skills, mcpServers, previous),
+			warn,
+			(from, commandId, command, replay) => {
+				void apply(from, commandId, command, replay);
+			},
+			() => peerTurns?.disconnect(),
+		);
 		refreshGit(ctx);
 		indexNew(ctx);
 		// Messages can be appended while the session is idle (passive forks, extensions); look for them each second.

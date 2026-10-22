@@ -48,6 +48,12 @@ Why: the flag is what the session was started with, and `move` changes the manag
 Coupled: components/session-state/src/bridge.ts, components/session-state/src/coordinator.ts
 Verify: components/session-state/tests/organization.test.ts
 
+## symbol:Runtime.commandProgress
+
+A `run_turn` result travels only to its waiting command connection; Pi's transcript remains the durable reply owner. Progress snapshots are coalesced for a slow reader, and a terminal receipt drops any held snapshot. Losing the caller cancels that request, not unrelated work in the recipient. Startup fails unfinished turn commands because their waiting connections and transient results cannot be recovered.
+Coupled: components/session-state/src/bridge.ts, components/session-state/src/peer-turns.ts
+Verify: components/session-state/tests/peer-turns.test.ts, components/session-state/tests/streaming.test.ts
+
 ## symbol:Runtime.threadPost
 
 The message, any meeting closure, and every outgoing delivery commit in one transaction before a bridge receives the mail. Startup completes accepted `thread_post` commands: a stored message means its outbox committed; an absent message means the post still needs applying.

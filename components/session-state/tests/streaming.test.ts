@@ -205,6 +205,53 @@ test("a client that stops reading does not hold up the bridge or other clients; 
 	}
 }, 30000);
 
+test("a paused program caller receives bounded progress and one final result, with no result copy in events", async () => {
+	const proc = standInProcess();
+	const link = await fakeBridge(state.socketPath, "bursty-turn", proc.pid, proc.startedAt);
+	const caller = await client();
+	try {
+		await vi.waitFor(() =>
+			expect(query(state.dbPath, "select id from sessions where id = 'bursty-turn'")).toHaveLength(1),
+		);
+		caller.send({
+			type: "command",
+			commandId: "turn-burst",
+			sessionId: "bursty-turn",
+			command: { kind: "run_turn", task: "work" },
+		});
+		await vi.waitFor(() =>
+			expect(caller.messages).toContainEqual({ type: "receipt", commandId: "turn-burst", stage: "accepted" }),
+		);
+		caller.socket.pause();
+		for (let i = 0; i < 400; i++)
+			link.send({
+				type: "turn_progress",
+				commandId: "turn-burst",
+				progress: { activity: `${i}:${"x".repeat(2000)}`, children: [] },
+			});
+		const result = { status: "completed", text: "PROGRAM_REPLY_NOT_EVENT", operations: [], changes: [] };
+		link.send({ type: "command_progress", commandId: "turn-burst", stage: "applied", result });
+		link.send({ type: "run", run: "thinking" });
+		await vi.waitFor(() =>
+			expect(query(state.dbPath, "select run_state from sessions where id = 'bursty-turn'")).toEqual([
+				{ run_state: "thinking" },
+			]),
+		);
+		caller.socket.resume();
+		await vi.waitFor(
+			() =>
+				expect(caller.messages.at(-1)).toEqual({ type: "receipt", commandId: "turn-burst", stage: "applied", result }),
+			{ timeout: 5000 },
+		);
+		expect(caller.messages.filter((message) => message.type === "turn_progress").length).toBeLessThan(200);
+		expect(query(state.dbPath, "select seq from events where data like '%PROGRAM_REPLY_NOT_EVENT%'")).toEqual([]);
+	} finally {
+		caller.socket.destroy();
+		link.socket.destroy();
+		proc.child.kill();
+	}
+}, 30000);
+
 test("a subagent's reply streams to clients subscribed to the child session", async () => {
 	const faux = registerFauxProvider({ provider: "faux", models: [{ id: "faux-child", contextWindow: 200_000 }] });
 	const reply = "The child session writes this reply a few characters at a time.";

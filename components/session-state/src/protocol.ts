@@ -1,6 +1,8 @@
 // The runtime's socket protocol: bridges send one JSON object per line.
 
 import type { QuestionnaireReply } from "../../shared/src/questionnaire-events.js";
+import type { TurnProgress, TurnResult } from "../../shared/src/turn-observer.js";
+import type { PeerTurn } from "./peer-turns.js";
 import type { ThreadPost } from "./threads.js";
 import type { WorkCommand } from "./work.js";
 
@@ -105,6 +107,10 @@ export type Command =
 	| { kind: "talk"; text: string }
 	| { kind: "steer"; text: string }
 	| { kind: "follow_up"; text: string }
+	/** Wait for idle, run a program's request, and return that run's reply on its command receipt. */
+	| ({ kind: "run_turn" } & PeerTurn)
+	/** Cancel only this program request, whether queued or currently running. */
+	| { kind: "cancel_turn"; turn: string }
 	| { kind: "abort" }
 	| { kind: "rename"; name: string }
 	| { kind: "set_model"; provider: string; id: string }
@@ -193,6 +199,8 @@ export interface Receipt {
 	commandId: string;
 	stage: ReceiptStage;
 	reason?: string;
+	/** A run's return value, sent once to its waiting caller; the transcript remains its durable record. */
+	result?: TurnResult;
 }
 
 export type EntryReply =
@@ -268,7 +276,14 @@ export type BridgeMessage =
 	| { type: "index"; rows: IndexRow[] }
 	| CommandRequest
 	/** A bridge reporting how far a command it was given got. */
-	| { type: "command_progress"; commandId: string; stage: "delivered" | "applied" | "failed"; reason?: string }
+	| {
+			type: "command_progress";
+			commandId: string;
+			stage: "delivered" | "applied" | "failed";
+			reason?: string;
+			result?: TurnResult;
+	  }
+	| { type: "turn_progress"; commandId: string; progress: TurnProgress }
 	| ReadEntry
 	| ReadEntries
 	| Subscribe

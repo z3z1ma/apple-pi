@@ -6,5 +6,7 @@ Cancellation uses SIGTERM deliberately: Pi's print/JSON handler kills its tracke
 
 Pi supports `--` before the final positional task. Preserve it so a question beginning with `-` remains text rather than a CLI option.
 
-Coupled: components/interns/src/index.ts
+Native event observation and structured-value validation are shared with peer turns. Keep process creation and SIGTERM cleanup here, and outcome/usage/file-change interpretation in the shared observer.
+
+Coupled: components/interns/src/index.ts, components/shared/src/turn-observer.ts
 Verify: components/interns/tests/interns.test.ts, components/pi-exec/tests/pi-exec.test.ts

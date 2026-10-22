@@ -4,8 +4,7 @@ import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Usage } from "@earendil-works/pi-ai";
-import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { Value } from "typebox/value";
+import type { AgentSessionEvent, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { AUTO_COMPACT_EXTENSION_PATH } from "../../../extensions/auto-compact.js";
 import { CODE_CONTEXT_EXTENSION_PATH, CONTEXT_LINT_TOOL_NAME } from "../../../extensions/code-context.js";
 import { HOME_SEARCH_GUARD_EXTENSION_PATH } from "../../../extensions/home-search-guard.js";
@@ -14,13 +13,14 @@ import { PAIR_EXTENSION_PATH } from "../../../extensions/pi-pair.js";
 import { SESSION_SEARCH_EXTENSION_PATH } from "../../../extensions/session-search.js";
 import { VROOM_EXTENSION_PATH } from "../../../extensions/vroom.js";
 import { WIKI_EXTENSION_PATH, WIKI_TOOL_NAMES } from "../../../extensions/wiki.js";
-import { createFileChangeTracker, type FileChange } from "../../shared/src/file-changes.js";
+import type { FileChange } from "../../shared/src/file-changes.js";
 import {
 	INFERENCE_PROFILE_NAMES,
 	type InferenceProfileName,
 	isInferenceProfileName,
 } from "../../shared/src/model-profiles.js";
-import { mainToolArgument } from "../../shared/src/tool-activity.js";
+import { normalizeOutputSchema } from "../../shared/src/structured-output.js";
+import { createTurnObserver } from "../../shared/src/turn-observer.js";
 import {
 	BUILTIN_TOOL_NAMES,
 	buildAgentRegistry,
@@ -34,7 +34,6 @@ import { resolveAgentProfile } from "../../subagents/src/model-routing.js";
 import type { AgentConfig, SubagentConfigScope } from "../../subagents/src/types.js";
 import { CORE_TOOL_NAMES, isCoreToolName, READ_ONLY_CORE_TOOL_NAMES } from "./core-tools.js";
 import { containsContextMarks, fitContext } from "./evidence.js";
-import { aggregateUsage, resultText, traceValue } from "./results.js";
 import type { ExecutionOperation } from "./types.js";
 import type { ExecActivityCall } from "./ui.js";
 import { PI_EXEC_OUTPUT_SCHEMA_ENV, PI_EXEC_RETURN_TOOL } from "./worker-return.js";
@@ -240,50 +239,6 @@ export function serializeAgentContext(context: unknown): string {
 	return json;
 }
 
-export function normalizeOutputSchema(value: unknown): Record<string, unknown> {
-	if (!value || typeof value !== "object" || Array.isArray(value)) {
-		throw new Error("agent.run outputSchema must be a JSON Schema object");
-	}
-	const schema = JSON.parse(serializeAgentContext(value)) as Record<string, unknown>;
-	const types = typeof schema.type === "string" ? [schema.type] : Array.isArray(schema.type) ? schema.type : [];
-	if (!types.includes("object") && schema.properties === undefined) {
-		throw new Error("agent.run outputSchema must describe an object");
-	}
-	if (!types.includes("object")) schema.type = "object";
-	if (schema.additionalProperties === undefined) schema.additionalProperties = false;
-	return schema;
-}
-
-export function resolveStructuredOutput(
-	schema: Record<string, unknown> | undefined,
-	returnedValue: unknown,
-): { value?: unknown; error?: string } {
-	if (!schema) return {};
-	if (returnedValue === undefined) {
-		return { error: `agent.run outputSchema was not satisfied: ${PI_EXEC_RETURN_TOOL} was not called` };
-	}
-	if (!returnedValue || typeof returnedValue !== "object" || Array.isArray(returnedValue)) {
-		return { error: "agent.run outputSchema validation failed: return arguments must be an object" };
-	}
-	const value = structuredClone(returnedValue);
-	Value.Convert(schema as never, value);
-	if (!Value.Check(schema as never, value)) {
-		const issues = [...Value.Errors(schema as never, value)]
-			.slice(0, 3)
-			.map((issue) => `${issue.instancePath || "/"}: ${issue.message}`)
-			.join("; ");
-		return { error: `agent.run outputSchema validation failed: ${issues || "value does not match schema"}` };
-	}
-	try {
-		JSON.stringify(value);
-	} catch (error) {
-		return {
-			error: `agent.run outputSchema result is not JSON-serializable: ${error instanceof Error ? error.message : String(error)}`,
-		};
-	}
-	return { value };
-}
-
 function summarizeBound(value: unknown): { bound: true; chars?: number } {
 	try {
 		const json = JSON.stringify(value, (_key, nested) => (typeof nested === "bigint" ? String(nested) : nested));
@@ -456,14 +411,6 @@ function invocation(): { command: string; prefix: string[] } {
 	return { command: "pi", prefix: [] };
 }
 
-function textFromAssistant(message: any): string {
-	if (message?.role !== "assistant" || !Array.isArray(message.content)) return "";
-	return message.content
-		.filter((part: any) => part?.type === "text" && typeof part.text === "string")
-		.map((part: any) => part.text)
-		.join("\n");
-}
-
 async function runWorkerProcess(
 	index: number,
 	request: AgentRequest,
@@ -508,98 +455,20 @@ async function runWorkerProcess(
 				stdio: ["ignore", "pipe", "pipe"],
 				...(prepared.env ? { env: { ...process.env, ...prepared.env } } : {}),
 			});
-			let stdout = "";
 			let stderr = "";
 			let buffered = "";
-			let stopReason: string | undefined;
 			let error: string | undefined;
-			const usages: Usage[] = [];
-			const operations: ExecutionOperation[] = [];
-			const operationByCallId = new Map<string, ExecutionOperation>();
-			const childTimes = new Map<ExecutionOperation, { startedAt: number; finishedAt?: number }>();
-			let closed = false;
-			/** Publish a detached snapshot of the worker's child tools; unfinished tools are running until close. */
-			const publishChildren = () =>
-				onChildren?.(
-					operations.map((operation) => {
-						const times = childTimes.get(operation)!;
-						const running = !closed && times.finishedAt === undefined;
-						return {
-							sequence: operation.sequence,
-							ref: operation.ref,
-							args: structuredClone(operation.args),
-							status: running ? "running" : operation.outcome,
-							...times,
-							...(operation.result !== undefined ? { result: structuredClone(operation.result) } : {}),
-							...(operation.error ? { error: operation.error } : {}),
-						};
-					}),
-				);
-			const finishChild = (operation: ExecutionOperation, isError: boolean, result: unknown) => {
-				operation.outcome = isError ? "failed" : "succeeded";
-				operation.result = traceValue(resultText(result));
-				if (isError) operation.error = resultText(result).slice(0, 500);
-				childTimes.get(operation)!.finishedAt ??= Date.now();
-				publishChildren();
-			};
-			const fileChanges = createFileChangeTracker(ctx.cwd);
 			let aborted = false;
-			let pendingReturn: unknown;
-			let acceptedReturn: unknown;
-
-			// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one JSON event decoder owns child-process operation correlation.
+			const observer = createTurnObserver(ctx.cwd, (progress) => {
+				onActivity?.(progress.activity);
+				onChildren?.(progress.children);
+			});
 			const consume = (line: string) => {
 				if (!line.trim()) return;
 				try {
-					const event = JSON.parse(line);
-					fileChanges.observe(event);
-					if (event.type === "tool_execution_start") {
-						onActivity?.([String(event.toolName ?? "tool"), mainToolArgument(event.args)].filter(Boolean).join(" "));
-						if (event.toolName === PI_EXEC_RETURN_TOOL) pendingReturn = event.args;
-						return;
-					}
-					if (event.type === "tool_execution_end") {
-						const operation = operationByCallId.get(event.toolCallId);
-						if (operation) finishChild(operation, event.isError, event.result);
-						if (event.toolName === PI_EXEC_RETURN_TOOL) {
-							if (event.isError) pendingReturn = undefined;
-							else acceptedReturn = pendingReturn;
-						}
-						return;
-					}
-					if (event.type === "message_start" && event.message?.role === "assistant") {
-						onActivity?.("thinking");
-						return;
-					}
-					if (event.type !== "message_end" || !event.message) return;
-					const text = textFromAssistant(event.message);
-					if (text) stdout = text;
-					if (event.message.role === "assistant") {
-						stopReason = event.message.stopReason;
-						if (event.message.usage) usages.push(event.message.usage as Usage);
-						if (typeof event.message.errorMessage === "string") error = event.message.errorMessage;
-						if (Array.isArray(event.message.content)) {
-							for (const part of event.message.content) {
-								if (part?.type !== "toolCall" || typeof part.name !== "string") continue;
-								const operation: ExecutionOperation = {
-									sequence: operations.length,
-									ref: part.name === PI_EXEC_RETURN_TOOL ? PI_EXEC_RETURN_TOOL : `pi.${part.name}`,
-									args: part.arguments && typeof part.arguments === "object" ? part.arguments : {},
-									outcome: "aborted",
-								};
-								operations.push(operation);
-								childTimes.set(operation, { startedAt: Date.now() });
-								if (typeof part.id === "string") operationByCallId.set(part.id, operation);
-							}
-							publishChildren();
-						}
-						onActivity?.(event.message.stopReason === "toolUse" ? "using tools" : "finishing");
-					} else if (event.message.role === "toolResult") {
-						const operation = operationByCallId.get(event.message.toolCallId);
-						if (operation) finishChild(operation, event.message.isError, event.message);
-					}
-				} catch {
-					// Pi JSON mode is line-delimited; diagnostics remain on stderr.
+					observer.observe(JSON.parse(line) as AgentSessionEvent);
+				} catch (cause) {
+					error = `Invalid Pi event: ${cause instanceof Error ? cause.message : String(cause)}`;
 				}
 			};
 
@@ -627,35 +496,20 @@ async function runWorkerProcess(
 			child.on("close", (code) => {
 				signal?.removeEventListener("abort", abort);
 				if (buffered.trim()) consume(buffered);
-				const closedAt = Date.now();
-				for (const times of childTimes.values()) times.finishedAt ??= closedAt;
-				closed = true;
-				if (operations.length > 0) publishChildren();
 				const exitCode = code ?? 1;
-				if (aborted) error = "Agent aborted";
 				if (!error && exitCode !== 0) error = stderr.trim() || `Agent exited with code ${exitCode}`;
-				if (!error && stopReason && ["error", "aborted"].includes(stopReason)) {
-					error = stderr.trim() || `Agent stopped with ${stopReason}`;
-				}
-				// JSON mode exits 0 at the output-token limit; the text is a partial report.
-				if (!error && stopReason === "length") error = "Agent hit its output token limit; its text is partial";
-				const structured = resolveStructuredOutput(request.outputSchema, acceptedReturn);
-				if (!error && structured.error) error = structured.error;
-				const output =
-					structured.value !== undefined && !error
-						? JSON.stringify(structured.value)
-						: stdout || error || "(agent returned no text)";
+				const result = observer.finish({ aborted, error, outputSchema: request.outputSchema });
 				resolve({
 					index,
 					task: request.task,
-					output,
+					output: result.value !== undefined ? JSON.stringify(result.value) : result.text || result.error || "",
 					exitCode,
-					stopReason,
-					error,
-					...(structured.value !== undefined && !error ? { value: structured.value } : {}),
-					...(usages.length > 0 ? { usage: aggregateUsage(usages) } : {}),
-					operations,
-					fileChanges: fileChanges.changes(),
+					stopReason: result.stopReason,
+					error: result.error,
+					...(result.value !== undefined ? { value: result.value } : {}),
+					...(result.usage ? { usage: result.usage } : {}),
+					operations: result.operations,
+					fileChanges: result.changes,
 				});
 			});
 		});

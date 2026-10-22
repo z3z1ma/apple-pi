@@ -4,6 +4,7 @@ import { chmodSync, createReadStream, mkdirSync, realpathSync, rmSync, writeFile
 import { createServer, type Server, type Socket } from "node:net";
 import { createInterface } from "node:readline";
 import { DatabaseSync } from "node:sqlite";
+import type { TurnResult } from "../../shared/src/turn-observer.js";
 import type { StatePaths } from "./paths.js";
 import {
 	type BridgeMessage,
@@ -121,6 +122,8 @@ interface Connection {
 	 * stream's text coalesced into one delta.
 	 */
 	held?: Map<string, { end?: ReplyEnd; delta?: ReplyDelta }>;
+	heldTurns?: Map<string, Extract<BridgeMessage, { type: "turn_progress" }>>;
+	turnsAwaitingDrain?: boolean;
 }
 
 interface IncarnationRow {
@@ -205,6 +208,10 @@ export class Runtime {
 		this.db = new DatabaseSync(this.paths.db);
 		this.db.exec("pragma journal_mode = wal");
 		migrate(this.db);
+		for (const row of this.db
+			.prepare("select command_id from commands where kind = 'run_turn' and stage in ('accepted', 'delivered')")
+			.all() as { command_id: string }[])
+			this.setCommandStage(row.command_id, "failed", "The runtime restarted before the program received a result");
 		cleanMovedBundles(this.db);
 		syncChannels(this.db, Date.now());
 		this.recoverThreadPosts();
@@ -292,7 +299,12 @@ export class Runtime {
 			return;
 		}
 		if (message.type === "command_progress") {
-			this.commandProgress(connection, message.commandId, message.stage, message.reason);
+			this.commandProgress(connection, message.commandId, message.stage, message.reason, message.result);
+			return;
+		}
+		if (message.type === "turn_progress") {
+			const client = this.commandClients.get(message.commandId);
+			if (client && this.dispatched.get(message.commandId) === connection) this.turnProgress(client, message);
 			return;
 		}
 		if (message.type === "read_entry") {
@@ -968,8 +980,15 @@ export class Runtime {
 	 * whether they were applied; mail stays, and the session's next bridge gets it again.
 	 */
 	private dropCommandsOf(connection: Connection): void {
-		for (const [commandId, client] of this.commandClients)
-			if (client === connection) this.commandClients.delete(commandId);
+		for (const [commandId, client] of this.commandClients) {
+			if (client !== connection) continue;
+			const target = this.dispatched.get(commandId);
+			const row = this.db?.prepare("select kind from commands where command_id = ?").get(commandId) as
+				| { kind: string }
+				| undefined;
+			if (target && row?.kind === "run_turn") this.issue(target, { kind: "cancel_turn", turn: commandId });
+			this.commandClients.delete(commandId);
+		}
 		for (const [commandId, target] of this.dispatched) {
 			if (target !== connection) continue;
 			this.dispatched.delete(commandId);
@@ -985,16 +1004,42 @@ export class Runtime {
 		}
 	}
 
+	/** A slow program reader retains only the latest snapshot per run, never a growing stream of snapshots. */
+	private turnProgress(client: Connection, message: Extract<BridgeMessage, { type: "turn_progress" }>): void {
+		if (client.socket.destroyed || this.commandClients.get(message.commandId) !== client) return;
+		if (client.socket.writableNeedDrain) {
+			client.heldTurns ??= new Map();
+			client.heldTurns.set(message.commandId, message);
+			if (!client.turnsAwaitingDrain) {
+				client.turnsAwaitingDrain = true;
+				client.socket.once("drain", () => {
+					client.turnsAwaitingDrain = false;
+					const held = [...(client.heldTurns?.values() ?? [])];
+					client.heldTurns?.clear();
+					for (const value of held) this.turnProgress(client, value);
+				});
+			}
+			return;
+		}
+		client.socket.write(`${JSON.stringify(message)}\n`);
+	}
+
 	/** A bridge reports progress only for commands handed to its own incarnation. */
-	private commandProgress(bridge: Connection, commandId: string, stage: ReceiptStage, reason?: string): void {
+	private commandProgress(
+		bridge: Connection,
+		commandId: string,
+		stage: ReceiptStage,
+		reason?: string,
+		result?: TurnResult,
+	): void {
 		const row = this.db!.prepare("select session_id, generation from commands where command_id = ?").get(commandId) as
 			| { session_id: string; generation: number | null }
 			| undefined;
 		if (!row || row.session_id !== bridge.sessionId || row.generation !== bridge.generation) return;
-		this.setCommandStage(commandId, stage, reason);
+		this.setCommandStage(commandId, stage, reason, result);
 	}
 
-	private setCommandStage(commandId: string, stage: ReceiptStage, reason?: string): void {
+	private setCommandStage(commandId: string, stage: ReceiptStage, reason?: string, result?: TurnResult): void {
 		const db = this.db!;
 		const row = db
 			.prepare("select session_id, generation, stage, kind, command from commands where command_id = ?")
@@ -1018,8 +1063,9 @@ export class Runtime {
 			...(reason ? { reason } : {}),
 		});
 		const client = this.commandClients.get(commandId);
+		if (stage === "applied" || stage === "failed") client?.heldTurns?.delete(commandId);
 		client?.socket.write(
-			`${JSON.stringify({ type: "receipt", commandId, stage, ...(reason ? { reason } : {}) } satisfies Receipt)}\n`,
+			`${JSON.stringify({ type: "receipt", commandId, stage, ...(reason ? { reason } : {}), ...(result ? { result } : {}) } satisfies Receipt)}\n`,
 		);
 		if (stage === "applied" || stage === "failed") {
 			this.commandClients.delete(commandId);

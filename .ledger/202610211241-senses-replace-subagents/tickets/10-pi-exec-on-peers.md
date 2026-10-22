@@ -6,7 +6,7 @@
 
 **Blocked by:** 02 The directory and human-named manager tools, 06 Tasks are assigned
 
-**Status:** ready-for-agent
+**Status:** in-progress
 
 - [ ] With an attached peer, `peers["x"].run(task)` returns that turn's final text, the turn is in the peer's transcript, and the peer is still running afterwards.
 - [ ] A run on a busy attached peer starts only after its own run settles.

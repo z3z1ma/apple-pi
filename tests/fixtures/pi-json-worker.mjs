@@ -53,7 +53,13 @@ if (controlled) {
 			},
 		});
 		send({ type: "tool_execution_start", toolCallId: "return-1", toolName: "pi_exec_return", args: value });
-		send({ type: "tool_execution_end", toolCallId: "return-1", toolName: "pi_exec_return", isError: false });
+		send({
+			type: "tool_execution_end",
+			toolCallId: "return-1",
+			toolName: "pi_exec_return",
+			isError: false,
+			result: { details: value },
+		});
 		const accepted = [{ type: "text", text: "accepted" }];
 		send({ type: "message_end", message: { role: "toolResult", toolCallId: "return-1", content: accepted } });
 	}
@@ -102,8 +108,14 @@ if (controlled) {
 				content: [{ type: "toolCall", id: `return-${task}`, name: "pi_exec_return", arguments: { id } }],
 			},
 		});
-		send({ type: "tool_execution_start", toolName: "pi_exec_return", args: { id } });
-		send({ type: "tool_execution_end", toolName: "pi_exec_return", isError: false });
+		send({ type: "tool_execution_start", toolCallId: `return-${task}`, toolName: "pi_exec_return", args: { id } });
+		send({
+			type: "tool_execution_end",
+			toolCallId: `return-${task}`,
+			toolName: "pi_exec_return",
+			isError: false,
+			result: { details: { id } },
+		});
 		send({
 			type: "message_end",
 			message: { role: "toolResult", toolCallId: `return-${task}`, content: [{ type: "text", text: "accepted" }] },

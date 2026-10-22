@@ -4,6 +4,7 @@ import type { Usage } from "@earendil-works/pi-ai";
 import type { ExtensionToolContext, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { loadSearchRootGuardConfig } from "../../home-search-guard/src/config.js";
 import { searchRootBlockReason } from "../../home-search-guard/src/index.js";
+import { bounded, resultText, traceValue } from "../../shared/src/model-results.js";
 import { agentOperationArgs, runAgentWorker } from "./agent-workers.js";
 import { callableTools } from "./callable-tools.js";
 import {
@@ -16,7 +17,6 @@ import {
 import { EVIDENCE_FUNCTION_NAMES, runEvidenceFunction } from "./evidence.js";
 import { executeFetch, fetchOperationArgs, traceFetchUrl } from "./fetch.js";
 import { fromPythonValue, serializeJsonValue } from "./json.js";
-import { bounded, resultText, traceValue } from "./results.js";
 import { listSkills, readSkillBody } from "./skills.js";
 import type { ExecutionOperation } from "./types.js";
 import type { ExecActivityCall } from "./ui.js";
