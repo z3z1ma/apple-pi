@@ -1,7 +1,7 @@
 // The world projection: who is a character, what role each has, and where each one is. Pure, so the rules read in
 // one place; the backend feeds it rows from the session-state database and the wings it remembers.
 import { basename } from "node:path";
-import { type Character, type Headquarters, isOutside, type PlaceRef, type Role } from "../world.js";
+import { type Character, type Headquarters, isOutside, type PlaceRef, type Role, type Workplace } from "../world.js";
 
 /** One top-level session as the projection needs it. */
 export interface SessionRow {
@@ -197,4 +197,36 @@ export function projectWorld(sessions: SessionRow[], remembered: RememberedWings
 		};
 	});
 	return { headquarters, characters, wings, dormant };
+}
+
+/** Meetings and escalations change where a person is drawn, not its role, manager, or assignments. */
+export function placeWorkplace(world: Projection, sessions: SessionRow[], workplace: Workplace): Projection {
+	const people = new Map(sessions.map((person) => [person.id, person]));
+	const headquarters = new Map(world.headquarters.map((hq) => [hq.id, hq]));
+	const roomFor = (id: string) => {
+		const owner = people.get(id);
+		if (!owner) return false;
+		if (!headquarters.has(id)) headquarters.set(id, { id, name: owner.name || basename(owner.cwd) || id, wings: [] });
+		return true;
+	};
+	// Work keeps its board reachable even when its whole organization sleeps.
+	for (const task of workplace.tasks) roomFor(task.headquarters);
+	const places = new Map<string, PlaceRef>();
+	for (const meeting of [...workplace.threads].sort(
+		(a, b) => b.lastSeq - a.lastSeq || b.lastAt - a.lastAt || a.id.localeCompare(b.id),
+	)) {
+		if (meeting.kind !== "meeting" || meeting.closed || !roomFor(meeting.headquarters)) continue;
+		for (const person of meeting.participants)
+			if (!places.has(person)) places.set(person, { kind: "meeting-room", headquarters: meeting.headquarters });
+	}
+	for (const escalation of workplace.escalations)
+		if (roomFor(escalation.headquarters))
+			places.set(escalation.person, { kind: "headquarters", headquarters: escalation.headquarters });
+	return {
+		...world,
+		headquarters: [...headquarters.values()],
+		characters: world.characters.map((person) =>
+			places.has(person.id) ? { ...person, place: places.get(person.id)! } : person,
+		),
+	};
 }

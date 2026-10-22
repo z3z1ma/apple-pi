@@ -11,9 +11,12 @@ export interface Strip {
 	at: number;
 }
 
-/** A wing door in the gallery, in the composed place's tiles. */
+/** A room door in the gallery, in the composed place's tiles. */
 export interface NicheDoor {
-	wing: Wing;
+	name: string;
+	title: string;
+	to: PlaceRef;
+	door: "open" | "closed" | "boarded";
 	/** The niche's centre. */
 	x: number;
 }
@@ -135,14 +138,40 @@ export function layoutFor(ref: PlaceRef, world: WorldSnapshot | undefined, theme
 		const data = ref.kind;
 		return { ref, key, data, place: theme.places[data], title: labels[data], subtitle: owner, signature: key };
 	}
+	if (ref.kind === "meeting-room") {
+		const base = theme.places["common-room"];
+		const place = {
+			...base,
+			ambient: [],
+			entries: { ...base.entries, gallery: base.entries.headquarters },
+			doors: base.doors.map((door) =>
+				door.to === "headquarters" ? { ...door, to: "gallery", name: labels.gallery } : door,
+			),
+			enterBy: labels.gallery,
+		};
+		return { ref, key, data: "common-room", place, title: labels["meeting-room"], subtitle: owner, signature: key };
+	}
 	if (ref.kind === "gallery") {
 		const base = theme.places.gallery;
-		const strips = stripsFor(base.niches!, hq.wings.length);
+		const strips = stripsFor(base.niches!, hq.wings.length + 1);
 		const place = composeStrips(base, strips);
 		const centres = strips.flatMap((strip, i) =>
 			base.niches!.at.filter((x) => inStrip(x, strip, i === strips.length - 1)).map((x) => x - strip.from + strip.at),
 		);
-		const niches = hq.wings.slice(0, centres.length).map((wing, i) => ({ wing, x: centres[i] }));
+		const niches: NicheDoor[] = hq.wings.map((wing, i) => ({
+			name: wing.name,
+			title: `${wing.name} ${labels.wing}`,
+			to: { kind: "wing", headquarters: hq.id, repository: wing.repository },
+			door: doorOf(wing),
+			x: centres[i],
+		}));
+		niches.push({
+			name: labels["meeting-room"],
+			title: labels["meeting-room"],
+			to: { kind: "meeting-room", headquarters: hq.id },
+			door: "open",
+			x: centres[hq.wings.length],
+		});
 		const signature = `${key}|${hq.wings.map((w) => `${w.repository}:${doorOf(w)}`).join("|")}`;
 		return { ref, key, data: "gallery", place, title: labels.gallery, subtitle: owner, strips, niches, signature };
 	}

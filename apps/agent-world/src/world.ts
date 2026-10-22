@@ -10,7 +10,7 @@ export type Role = "coordinator" | "worker" | "independent";
 
 /** Where an awake character is. Headquarters, and the places inside them, are keyed by their coordinator's id. */
 export type PlaceRef =
-	| { kind: "headquarters" | "common-room" | "gallery"; headquarters: string }
+	| { kind: "headquarters" | "common-room" | "meeting-room" | "gallery"; headquarters: string }
 	| { kind: "wing"; headquarters: string; repository: string }
 	/**
 	 * Outside: the village square, the inn where dormant agents sleep, the rookery where mail comes and goes, and the

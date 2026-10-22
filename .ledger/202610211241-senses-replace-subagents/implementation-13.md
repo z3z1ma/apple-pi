@@ -22,7 +22,7 @@ The backend test also caught a bad fixture: `fakeBridge` takes `reportsTo` in `f
 
 Two boundary checks also failed first, then passed. A file's `Status: done` had hidden a still-held assignment; the reader now preserves it until the runtime ends ownership (`/tmp/apc13-assigned-done-red.log`, `/tmp/apc13-assigned-done-green.log`). Giving work as `operator` to a sleeper saved the assignment but could never wake it, because the operator has no incarnation or pane. The UI now supplies its attached terminal through the existing wake-pane lookup, and the runtime uses that target for operator assignments (`/tmp/apc13-operator-wake-red.log`, `/tmp/apc13-operator-wake-green.log`). Other assigning sessions continue to use their own panes.
 
-The physical objects and their panels are next; this backend slice does not mark ticket 13 done.
+The remaining physical objects and panels are next; neither slice marks ticket 13 done.
 
 ## Verification
 
@@ -30,4 +30,10 @@ The backend slice passed 34 tests across five suites, including native program c
 
 The later operator-wake check passed 18 tests across the inn, recruit, workplace, and native work suites (`/tmp/apc13-operator-wake-green.log`). The final foundation build, build-freshness test, and Node/web typecheck passed (`/tmp/apc13-foundation-{build,built,types}.log`); scoped Biome, context lint, and diff checks passed too.
 
-Next prove the visible interactions in headless Chrome, inspect screenshots, and rebuild the World output again. Full repository validation belongs to ticket 14. No live operator runtime or session is changed.
+### Meeting-room slice
+
+Open meetings now place awake participants in their organizer's meeting room; closing a meeting restores their home. Unread operator escalations take their authors to headquarters, and reading them restores home or the latest open meeting. This is a projection, not a change to the directory. Work keeps the headquarters board reachable when the organization sleeps.
+
+Every headquarters has a meeting-room door after its wing doors. It uses the common-room painting with a gallery exit and without duplicated named crew. All three themes name the room. The native workplace and theme-pack checks passed (23 tests, `/tmp/apc13-room-model.log`); Node/web typecheck and build passed. The first three Chrome suites passed 23 tests, with three outdated place/banner inventories; those now include the room and all three passed on rerun (`/tmp/apc13-room-browser{,-green}.log`). The gallery and room screenshots were read from `/tmp/apc13-room-shots/`. The existing backend, disposal, and build checks also passed (21 tests, `/tmp/apc13-room-backend.log`), as did scoped Biome, diff checks, and context lint (133 files).
+
+Next build the task boards, team notices, meeting agenda panel, carried goal, and operator desk affordance. Prove the handover in headless Chrome through the real runtime path, and review screenshots in each theme. Full repository validation belongs to ticket 14. No live operator runtime or session is changed.

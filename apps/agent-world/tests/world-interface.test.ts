@@ -446,6 +446,7 @@ test("Places travels anywhere at once, and Settings toggles the walk grid", asyn
 					"Guild hall",
 					"Common room",
 					"Gallery of wings",
+					"Council room",
 					"apple-pi wing",
 					"billing-service wing",
 					"legacy-auth wing",

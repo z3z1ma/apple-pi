@@ -320,7 +320,7 @@ test("banner names fit their banners and stay legible, even for long repository 
 			fits: boolean;
 			abbreviated: boolean;
 		}[];
-		expect(banners.map((b) => b.name)).toEqual(names);
+		expect(banners.map((b) => b.name)).toEqual([...names, "Council room"]);
 		for (const banner of banners) {
 			expect(banner.fits, banner.name).toBe(true);
 			// Never smaller than reads at the default zoom.
@@ -468,7 +468,7 @@ test("in the tech office the corridor's sign plates hang clear of the door frame
 	try {
 		await travel(page, /^Project corridor/, `gallery:${HQ}`);
 		const banners = (await view(page, "banners()")) as { name: string; fits: boolean; size: number }[];
-		expect(banners.map((b) => b.name)).toEqual(names);
+		expect(banners.map((b) => b.name)).toEqual([...names, "Meeting room"]);
 		for (const banner of banners) {
 			expect(banner.fits, banner.name).toBe(true);
 			expect(banner.size, banner.name).toBeGreaterThanOrEqual(12);

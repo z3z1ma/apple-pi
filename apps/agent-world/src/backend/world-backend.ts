@@ -22,7 +22,7 @@ import { FACTS_JOINS, type FactsRow, factsColumns, factsOf, parseShared, taskRea
 import { FEED_SINCE, type FeedLookup, type FeedRow, feedLine } from "./feed.js";
 import { dormantAgents } from "./inn.js";
 import { readMail, readOperatorMail } from "./mail.js";
-import { type Projection, projectWorld, type RememberedWings, type SessionRow } from "./projection.js";
+import { type Projection, placeWorkplace, projectWorld, type RememberedWings, type SessionRow } from "./projection.js";
 import { switchToPane } from "./terminal.js";
 import { workplaceReader } from "./workplace.js";
 
@@ -338,6 +338,7 @@ export function openWorldBackend(paths: { db: string; socket: string }): WorldBa
 			dormant = dormantAgents(world.dormant, byId, (task) => readTask(task, rereadTasks), dormant, !rereadTasks);
 			operatorMail = readOperatorMail(db);
 			workplace = readWorkplace(db, [...sessionsById.values()], rereadTasks);
+			world = placeWorkplace(world, [...sessionsById.values()], workplace);
 			const nextMail = readMail(db);
 			if (JSON.stringify(nextMail) !== JSON.stringify(mail)) mail = nextMail;
 			seen = mergeWings(seen, world.wings);

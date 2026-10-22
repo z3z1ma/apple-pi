@@ -7,7 +7,7 @@ Verify: apps/agent-world/tests/theme-pack.test.ts, apps/agent-world/tests/world-
 `TEXT_KEYS`, `STYLE_TOKENS`, and `SKIN_CLASSES` are the contract with every pack: a new key or class makes every existing pack fail the check until it supplies it, which is the point (a pack never shows a blank line or a bare widget), so add one to all three packs in the same change.
 Coupled: apps/agent-world/themes/fantasy/theme.json, apps/agent-world/themes/fantasy/interface/skin.css
 
-`PLACE_FILES` and `PLACE_LABELS` are the same kind of contract for places: `street` (ticket 09, the second exterior) is required in every pack, with its `street.json`, its painting, and a `street` label, and `OUTSIDE_KINDS` in `src/world.ts` and `OUTSIDE` in `web/overlay/interface/model.ts` list it after the square. A new place goes into all four lists and all three packs in one change, or every world falls back to fantasy.
+`PLACE_FILES` and `PLACE_LABELS` are the same kind of contract for places: `street` (ticket 09, the second exterior) is required in every pack, with its `street.json`, its painting, and a `street` label, and `OUTSIDE_KINDS` in `src/world.ts` and `OUTSIDE` in `web/overlay/interface/model.ts` list it after the square. A new painted exterior goes into all four lists and all three packs in one change, or every world falls back to fantasy. An interior is listed by `placesOf` instead of `OUTSIDE`. The meeting room is a deliberate painting alias: every pack supplies its label, while `layoutFor` reuses `common-room` data with a gallery exit and without the duplicated crew; it needs no new `PLACE_FILES` entry.
 Coupled: apps/agent-world/src/world.ts, apps/agent-world/web/overlay/interface/model.ts
 Verify: apps/agent-world/tests/street.test.ts
 

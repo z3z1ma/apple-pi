@@ -1558,6 +1558,7 @@ var PLACE_FILES = [
 var PLACE_LABELS = [
 	"headquarters",
 	"common-room",
+	"meeting-room",
 	"gallery",
 	"wing",
 	"square",
@@ -3091,6 +3092,42 @@ function projectWorld(sessions, remembered) {
 		dormant
 	};
 }
+/** Meetings and escalations change where a person is drawn, not its role, manager, or assignments. */
+function placeWorkplace(world, sessions, workplace) {
+	const people = new Map(sessions.map((person) => [person.id, person]));
+	const headquarters = new Map(world.headquarters.map((hq) => [hq.id, hq]));
+	const roomFor = (id) => {
+		const owner = people.get(id);
+		if (!owner) return false;
+		if (!headquarters.has(id)) headquarters.set(id, {
+			id,
+			name: owner.name || basename(owner.cwd) || id,
+			wings: []
+		});
+		return true;
+	};
+	for (const task of workplace.tasks) roomFor(task.headquarters);
+	const places = /* @__PURE__ */ new Map();
+	for (const meeting of [...workplace.threads].sort((a, b) => b.lastSeq - a.lastSeq || b.lastAt - a.lastAt || a.id.localeCompare(b.id))) {
+		if (meeting.kind !== "meeting" || meeting.closed || !roomFor(meeting.headquarters)) continue;
+		for (const person of meeting.participants) if (!places.has(person)) places.set(person, {
+			kind: "meeting-room",
+			headquarters: meeting.headquarters
+		});
+	}
+	for (const escalation of workplace.escalations) if (roomFor(escalation.headquarters)) places.set(escalation.person, {
+		kind: "headquarters",
+		headquarters: escalation.headquarters
+	});
+	return {
+		...world,
+		headquarters: [...headquarters.values()],
+		characters: world.characters.map((person) => places.has(person.id) ? {
+			...person,
+			place: places.get(person.id)
+		} : person)
+	};
+}
 //#endregion
 //#region apps/agent-world/src/backend/workplace.ts
 var hasTable = (db, name) => Boolean(db.prepare("select 1 from sqlite_master where type = 'table' and name = ?").get(name));
@@ -3704,6 +3741,7 @@ function openWorldBackend(paths) {
 			dormant = dormantAgents(world.dormant, byId, (task) => readTask(task, rereadTasks), dormant, !rereadTasks);
 			operatorMail = readOperatorMail(db);
 			workplace = readWorkplace(db, [...sessionsById.values()], rereadTasks);
+			world = placeWorkplace(world, [...sessionsById.values()], workplace);
 			const nextMail = readMail(db);
 			if (JSON.stringify(nextMail) !== JSON.stringify(mail)) mail = nextMail;
 			seen = mergeWings(seen, world.wings);

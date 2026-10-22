@@ -35,7 +35,7 @@ import {
 } from "./character-life.js";
 import { floorFidgets } from "./fidget-spots.js";
 import { Fidgets, type FidgetView, type Glow } from "./fidgets.js";
-import { assignSpots, charactersIn, doorOf, type Layout, layoutFor, startPlace, walkGrid } from "./layout.js";
+import { assignSpots, charactersIn, type Layout, layoutFor, startPlace, walkGrid } from "./layout.js";
 import { cellOf, clearanceAt, findPath, type Grid, gridFor, isOpen } from "./pathing.js";
 import { ForgeBenches, type WorkView } from "./places/forge.js";
 import { type NoticeView, QuestBoard } from "./places/quest-office.js";
@@ -412,7 +412,7 @@ export class PlaceScene extends Phaser.Scene {
 		this.drawPainting();
 		this.drawForeground();
 		this.drawOverlays();
-		this.drawWingDoors();
+		this.drawRoomDoors();
 		this.drawBanners();
 		this.doors.unshift(...this.layout.place.doors);
 		this.wander = new Wander({
@@ -793,7 +793,9 @@ export class PlaceScene extends Phaser.Scene {
 		);
 		return {
 			niches: count,
-			wings: niches.map(({ wing }) => ({ name: wing.name, boarded: doorOf(wing) === "boarded", door: doorOf(wing) })),
+			wings: niches
+				.filter(({ to }) => to.kind === "wing")
+				.map(({ name, door }) => ({ name, boarded: door === "boarded", door })),
 		};
 	}
 
@@ -1303,16 +1305,14 @@ export class PlaceScene extends Phaser.Scene {
 	}
 
 	/**
-	 * Each wing's door in its niche: open while agents work there, closed while its agents sleep at the inn, and
-	 * boarded up while it is remembered with nobody at all.
+	 * Each room's door in its niche. Wing doors follow their team's state; the meeting room stays open.
 	 */
-	private drawWingDoors() {
+	private drawRoomDoors() {
 		const { niches } = this.layout;
 		const template = this.theme.places.gallery.niches;
 		if (!niches || !template) return;
 		const [dx, dy, dw, dh] = template.door;
-		for (const { wing, x } of niches) {
-			const door = doorOf(wing);
+		for (const { name, title, to, door, x } of niches) {
 			const image = this.add
 				.image((x + dx + dw / 2) * TILE, (dy + dh) * TILE, `overlay:door-${door}`)
 				.setOrigin(0.5, 1)
@@ -1323,13 +1323,13 @@ export class PlaceScene extends Phaser.Scene {
 			// along their sides and foot, which drew a pink line down the door frame.
 			image.setCrop(1, 0, image.width - 2, image.height - 1);
 			if (door === "open") this.addGlow({ kind: "glow", at: [x + dx + dw / 2, dy + dh - 0.35], r: dw * 0.75 }, 0.32);
-			this.banner(x, template.banner[1], wing.name);
+			this.banner(x, template.banner[1], name);
 			this.doors.push({
-				name: `${wing.name} ${this.theme.labels.wing}`,
+				name: title,
 				rect: [x + dx, dy, dw, dh],
 				standAt: [x + template.standAt[0], template.standAt[1]],
-				to: "wing",
-				repository: wing.repository,
+				to: to.kind,
+				...(to.kind === "wing" ? { repository: to.repository } : {}),
 				boarded: door === "boarded",
 			});
 		}
@@ -2506,7 +2506,13 @@ export class PlaceScene extends Phaser.Scene {
 			});
 			return false;
 		}
-		if ((door.to === "headquarters" || door.to === "common-room" || door.to === "gallery") && headquarters)
+		if (
+			(door.to === "headquarters" ||
+				door.to === "common-room" ||
+				door.to === "meeting-room" ||
+				door.to === "gallery") &&
+			headquarters
+		)
 			return this.travel({ kind: door.to, headquarters });
 		this.view.notify(`${this.theme.labels[door.to] ?? door.name} is not open yet.`);
 		return false;
@@ -2536,9 +2542,13 @@ export class PlaceScene extends Phaser.Scene {
 	/** Where the avatar arrives: the entry for where it came from, a wing's own door, or the place's start. */
 	private arrival(): Point {
 		const { place, niches } = this.layout;
-		if (this.from?.startsWith("wing:") && niches) {
-			const repository = this.from.slice("wing:".length);
-			const door = this.doors.find((d) => d.repository === repository);
+		if (niches && this.from) {
+			const door =
+				this.from === "meeting-room"
+					? this.doors.find((d) => d.to === "meeting-room")
+					: this.from.startsWith("wing:")
+						? this.doors.find((d) => d.repository === this.from!.slice("wing:".length))
+						: undefined;
 			if (door) return door.standAt;
 		}
 		return (this.from && place.entries[this.from]) || place.entries.start || [place.cols / 2, place.rows / 2];

@@ -50,6 +50,7 @@ export const PLACE_FILES = [
 export const PLACE_LABELS = [
 	"headquarters",
 	"common-room",
+	"meeting-room",
 	"gallery",
 	"wing",
 	"square",

@@ -105,6 +105,10 @@ test("the workplace reads shared threads and goals, discovers backlog without re
 				),
 			{ timeout: 10000 },
 		);
+		expect(world.snapshot().characters.map((person) => person.place)).toEqual([
+			{ kind: "meeting-room", headquarters: "lead" },
+			{ kind: "meeting-room", headquarters: "lead" },
+		]);
 		const cursors = query(
 			state.dbPath,
 			"select participant, read_up_to from thread_participants where thread_id = 'team:lead'",
@@ -151,6 +155,10 @@ test("the workplace reads shared threads and goals, discovers backlog without re
 			{ timeout: 10000 },
 		);
 		expect(await workplace.readWorkplaceThread("meeting")).toMatchObject({ ok: true, thread: { closed: true } });
+		expect(world.snapshot().characters.find((person) => person.id === "worker")?.place).toEqual({
+			kind: "common-room",
+			headquarters: "lead",
+		});
 		const newBundle = ledger(project, "202610220004-follow-up", "Check receipts");
 		writeFileSync(join(bundle, "task.md"), "# Retry invoices safely\n\nStatus: in-progress\n");
 		await vi.waitFor(
@@ -240,9 +248,14 @@ test("a native escalation appears until the operator reads it, without depending
 				]),
 			{ timeout: 10000 },
 		);
+		expect(world.snapshot().characters.find((person) => person.id === id)).toMatchObject({
+			role: "independent",
+			place: { kind: "headquarters", headquarters: id },
+		});
 		const escalation = world.snapshot().workplace!.escalations[0];
 		expect(await mailbox.readThread(escalation.thread)).toMatchObject({ ok: true });
 		await vi.waitFor(() => expect(world.snapshot().workplace?.escalations).toEqual([]), { timeout: 10000 });
+		expect(world.snapshot().characters.find((person) => person.id === id)?.place).toEqual({ kind: "square" });
 	} finally {
 		await close(author);
 		world.close();

@@ -151,7 +151,7 @@ test("the world opens in the headquarters with its coordinator, and follows upda
 	}
 }, 30000);
 
-test("doors travel between the hall, common room, gallery, wings, and square", async () => {
+test("doors travel between the hall, common room, meeting room, gallery, wings, and square", async () => {
 	const cast = [
 		coordinator(),
 		worker("pi-docs", "/r/apple-pi", 1),
@@ -164,7 +164,7 @@ test("doors travel between the hall, common room, gallery, wings, and square", a
 	try {
 		await enter(page, "Archway to the gallery", `gallery:${HQ}`);
 		expect(await gallery(page)).toEqual({
-			niches: 3,
+			niches: 4,
 			wings: [
 				{ name: "apple-pi", boarded: false, door: "open" },
 				{ name: "legacy-auth", boarded: true, door: "boarded" },
@@ -177,6 +177,11 @@ test("doors travel between the hall, common room, gallery, wings, and square", a
 		expect(await view(page, "painting()")).toBe("wing-small");
 		await shot(page, "wing-small");
 		await enter(page, "Door to the gallery", `gallery:${HQ}`);
+		await enter(page, "Council room", `meeting-room:${HQ}`);
+		expect(await view(page, "painting()")).toBe("common-room");
+		expect(await view(page, "ambient()")).toEqual([]);
+		await shot(page, "meeting-room");
+		await enter(page, "Gallery of wings", `gallery:${HQ}`);
 		await enter(page, "Archway to the hall", `headquarters:${HQ}`);
 		await enter(page, "Archway to the common room", `common-room:${HQ}`);
 		expect(await characters(page)).toEqual(["loose"]);
@@ -194,7 +199,7 @@ test("doors travel between the hall, common room, gallery, wings, and square", a
 	}
 }, 60000);
 
-test("the gallery shows one niche per wing, repeating its painted niche beyond five", async () => {
+test("the gallery shows a meeting room and one niche per wing, repeating its painted niche beyond five", async () => {
 	const repos = ["alpha", "beta", "gamma", "delta", "epsilon", "zeta", "a-very-long-repository-name"].map(
 		(r) => `/r/${r}`,
 	);
@@ -203,7 +208,7 @@ test("the gallery shows one niche per wing, repeating its painted niche beyond f
 	try {
 		await enter(page, "Archway to the gallery", `gallery:${HQ}`);
 		const seven = await gallery(page);
-		expect(seven?.niches).toBe(7);
+		expect(seven?.niches).toBe(8);
 		expect(seven?.wings.map((w) => `${w.name}${w.boarded ? " (boarded)" : ""}`)).toEqual([
 			"alpha",
 			"beta (boarded)",
@@ -218,7 +223,7 @@ test("the gallery shows one niche per wing, repeating its painted niche beyond f
 		await shot(page, "gallery-seven-east");
 		// Fewer wings, fewer niches; the view stays in the gallery.
 		await push(world([coordinator(), worker("w0", "/r/alpha", 1)], ["/r/alpha", "/r/beta"]));
-		await vi.waitFor(async () => expect((await gallery(page))?.niches).toBe(2), { timeout: 3000 });
+		await vi.waitFor(async () => expect((await gallery(page))?.niches).toBe(3), { timeout: 3000 });
 		await shot(page, "gallery-two");
 		expect(errors).toEqual([]);
 	} finally {

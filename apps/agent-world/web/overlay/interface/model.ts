@@ -45,6 +45,7 @@ export function orbCounts(world: WorldSnapshot | undefined): { needsYou: number;
 const DEFAULT_LABELS: Record<string, string> = {
 	headquarters: "Headquarters",
 	"common-room": "Common room",
+	"meeting-room": "Meeting room",
 	gallery: "Gallery",
 	wing: "wing",
 	square: "Square",
@@ -91,6 +92,7 @@ export function placesOf(world: WorldSnapshot | undefined): PlaceRef[] {
 		places.push({ kind: "headquarters", headquarters: hq.id });
 		places.push({ kind: "common-room", headquarters: hq.id });
 		places.push({ kind: "gallery", headquarters: hq.id });
+		places.push({ kind: "meeting-room", headquarters: hq.id });
 		for (const wing of hq.wings) places.push({ kind: "wing", headquarters: hq.id, repository: wing.repository });
 	}
 	places.push(...OUTSIDE);
