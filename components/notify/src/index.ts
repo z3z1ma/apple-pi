@@ -22,6 +22,7 @@ import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { PROGRAM_ID_ENV } from "../../session-state/src/protocol.js";
 
 const HOME = homedir();
 const PI_HOME = process.env.PI_CODING_AGENT_DIR || join(HOME, ".pi", "agent");
@@ -590,6 +591,7 @@ export default function piNotifyExtension(pi: ExtensionAPI): void {
 	});
 
 	pi.on("agent_settled", (event, ctx) => {
+		if (process.env[PROGRAM_ID_ENV]) return;
 		if (process.platform !== "darwin" || notificationsDisabled() || ctx.mode !== "tui" || !ctx.isIdle()) return;
 
 		const sessionId = ctx.sessionManager.getSessionId();

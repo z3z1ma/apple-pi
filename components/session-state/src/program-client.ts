@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
-import type { TurnProgress } from "../../shared/src/turn-observer.js";
+import type { TurnProgress, TurnResult } from "../../shared/src/turn-observer.js";
 import { connectRuntime, RETRY_MS } from "./client.js";
 import { statePaths } from "./paths.js";
 import { type Command, lineReader, type Receipt } from "./protocol.js";
@@ -19,7 +19,12 @@ export interface PeerProgram {
 	command(
 		sessionId: string,
 		command: Command,
-		options?: { signal?: AbortSignal; progress?: (value: TurnProgress) => void },
+		options?: {
+			signal?: AbortSignal;
+			progress?: (value: TurnProgress) => void;
+			/** Observe final usage and changes even when cancellation rejects the command. */
+			result?: (value: TurnResult) => void;
+		},
 	): Promise<Receipt>;
 	close(): Promise<void>;
 }
@@ -158,6 +163,7 @@ export async function openPeerProgram(caller: string, signal?: AbortSignal): Pro
 				const finish = (receipt?: Receipt, error?: unknown) => {
 					options.signal?.removeEventListener("abort", abort);
 					pending.delete(commandId);
+					if (receipt?.result) options.result?.(receipt.result);
 					if (error !== undefined) reject(error);
 					else if (options.signal?.aborted) reject(options.signal.reason);
 					else resolve(receipt!);

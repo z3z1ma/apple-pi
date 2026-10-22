@@ -4,7 +4,6 @@ import { Type } from "typebox";
 import { getActiveWorkSurface } from "../../shared/src/active-work.js";
 import { registerWorkSection } from "../../shared/src/work-manager.js";
 import { createExecActiveWorkSource } from "./active-work.js";
-import { ExecPanel, type ExecInvocation } from "./work-panel.js";
 import { deriveProgramEnvelope, PROGRAM_ENVELOPE_MAXIMA } from "./envelope.js";
 import {
 	attachLiveDescription,
@@ -18,6 +17,7 @@ import { createHostCalls } from "./host-calls.js";
 import { installSavedProgramTools, SAVED_PROGRAM_PROMPT_GUIDELINE } from "./saved-programs.js";
 import { installProgramSession } from "./session.js";
 import { type ExecActivitySnapshot, renderExecCall, renderExecResult } from "./ui.js";
+import { type ExecInvocation, ExecPanel } from "./work-panel.js";
 
 function errorText(error: unknown): string {
 	return error instanceof Error ? error.message : String(error);
@@ -95,6 +95,12 @@ export default function piExec(pi: ExtensionAPI): void {
 					description: "Named strings available to the program as inputs.<key>.",
 				}),
 			),
+			peers: Type.Optional(
+				Type.Record(Type.String(), Type.String({ minLength: 1 }), {
+					description:
+						"Named awake colleagues: map names to session ids, then await peers[name].run(task). Attached sessions stay alive; the program owns only its requested turns.",
+				}),
+			),
 			reset: Type.Optional(
 				Type.Boolean({ description: "Start a fresh Monty session on this branch before running the snippet." }),
 			),
@@ -116,7 +122,7 @@ export default function piExec(pi: ExtensionAPI): void {
 							Type.Integer({
 								minimum: 1,
 								maximum: PROGRAM_ENVELOPE_MAXIMA.agentBudget,
-								description: "Max nested agent() / agent.run workers for this program.",
+								description: "Max peer turns for this program, including attached colleagues and reused handles.",
 							}),
 						),
 						callBudget: Type.Optional(
@@ -189,20 +195,47 @@ export default function piExec(pi: ExtensionAPI): void {
 					},
 				});
 			};
-			const host = createHostCalls({ ctx, toolCallId, envelope, onChange: emit });
+			const host = createHostCalls({ ctx, toolCallId, envelope, peers: params.peers, onChange: emit });
 			activeWork.update();
 
 			try {
-				const { execution: result, notice: callNotice } = await programSession.run(ctx, {
-					code: params.code,
-					inputs: params.inputs ?? {},
-					timeoutMs: envelope.timeoutSeconds * 1_000,
-					callBudget: envelope.callBudget,
-					reset: params.reset === true,
-					hostCall: host.hostCall,
-					signal,
-					onLog: (values) => logs.push(values.map(displayValue).join(" ")),
-				});
+				const { execution: result, notice: callNotice } = await programSession
+					.run(ctx, {
+						code: params.code,
+						inputs: params.inputs ?? {},
+						peerBindings: host.peerBindings,
+						timeoutMs: envelope.timeoutSeconds * 1_000,
+						callBudget: envelope.callBudget,
+						reset: params.reset === true,
+						hostCall: host.hostCall,
+						signal,
+						onLog: (values) => logs.push(values.map(displayValue).join(" ")),
+					})
+					.then(
+						async (run) => {
+							try {
+								await host.close();
+							} catch (error) {
+								run.execution = {
+									...run.execution,
+									outcome: "failed",
+									error: [run.execution.error, `Peer cleanup failed: ${errorText(error)}`].filter(Boolean).join("\n"),
+								};
+							}
+							return run;
+						},
+						async (error: unknown) => {
+							try {
+								await host.close();
+							} catch (cleanup) {
+								throw new AggregateError(
+									[error, cleanup],
+									`${errorText(error)}\nPeer cleanup failed: ${errorText(cleanup)}`,
+								);
+							}
+							throw error;
+						},
+					);
 				finishedAt = Date.now();
 				const trace = {
 					kind: "apple-pi.execution" as const,
@@ -255,6 +288,15 @@ export default function piExec(pi: ExtensionAPI): void {
 					invocation.status = "failed";
 					invocation.trace = host.finish("failed");
 					invocation.activity = activity();
+					failedDetails.set(toolCallId, {
+						details: {
+							trace: { kind: "apple-pi.execution", version: 1, outcome: "failed", operations: invocation.trace },
+							logs,
+							activity: detailsActivity(invocation.activity),
+							policy: envelope,
+						},
+						usage: host.usage(),
+					});
 				}
 				throw error;
 			} finally {

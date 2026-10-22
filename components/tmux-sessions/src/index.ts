@@ -12,6 +12,7 @@ import { appendFile, stat } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { agentDir } from "../../session-state/src/paths.js";
+import { PROGRAM_ID_ENV } from "../../session-state/src/protocol.js";
 import { inChildSessionContext } from "../../subagents/src/child-context.js";
 
 const PLUGIN = fileURLToPath(new URL("../pi_session_manager.tmux", import.meta.url));
@@ -43,7 +44,7 @@ async function ensurePlugin(pi: ExtensionAPI): Promise<void> {
 }
 
 export default function piTmuxSessions(pi: ExtensionAPI): void {
-	// Subagents and pi_exec workers have no pane of their own.
+	// In-process children have no pane of their own.
 	if (inChildSessionContext() || isDisabled()) return;
 	let tty: Promise<string | undefined> | undefined;
 
@@ -59,7 +60,7 @@ export default function piTmuxSessions(pi: ExtensionAPI): void {
 
 	// Writing BEL to the pane's own pty makes tmux count a bell for that pane, which marks its window.
 	pi.on("agent_settled", async (_event, ctx) => {
-		if (!ctx.isIdle() || bellDisabled() || !tty) return;
+		if (process.env[PROGRAM_ID_ENV] || !ctx.isIdle() || bellDisabled() || !tty) return;
 		const path = await tty;
 		if (path) await appendFile(path, "\x07").catch(() => {});
 	});

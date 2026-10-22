@@ -3,8 +3,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it } from "vitest";
-import runtime from "../src/index.js";
 import { sealCheckpoint } from "../src/checkpoint.js";
+import { guestPythonStubs } from "../src/guest-api.js";
+import runtime from "../src/index.js";
 import { createProgramSession, isOwnedMontyWorker } from "../src/program.js";
 
 function harness(manager: SessionManager) {
@@ -243,7 +244,7 @@ describe("pi_exec Monty session tree", () => {
 		expect(isOwnedMontyWorker(1)).toBe(false); // PID 1 (init/launchd)
 		expect(isOwnedMontyWorker(process.pid)).toBe(false); // Our own process (not a child subprocess)
 		expect(isOwnedMontyWorker(999_999_999)).toBe(false); // Non-existent PID
-		const live = await createProgramSession("");
+		const live = await createProgramSession(guestPythonStubs(process.cwd(), []));
 		const pid = live.session.workerPid;
 		try {
 			expect(isOwnedMontyWorker(pid)).toBe(true);

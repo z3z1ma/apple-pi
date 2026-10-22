@@ -6,6 +6,7 @@ import { RETRY_MS } from "./client.js";
 export interface PeerTurn {
 	task: string;
 	outputSchema?: Record<string, unknown>;
+	contextFile?: string;
 }
 
 interface Request extends PeerTurn {
@@ -47,7 +48,16 @@ export function installPeerTurns(pi: ExtensionAPI) {
 			pi.sendMessage(
 				{
 					customType: "organization.program-request",
-					content: request.task,
+					content: [
+						"A colleague's program is awaiting this turn's result. Say what you verified and what you believe.",
+						request.outputSchema
+							? "Finish by calling pi_exec_return with the requested value. That call returns it directly to the program."
+							: "Your final reply returns directly to the program.",
+						request.contextFile ? `Bound context: read ${request.contextFile} as the data for this request.` : "",
+						request.task,
+					]
+						.filter(Boolean)
+						.join("\n\n"),
 					display: true,
 					details: { requestId: request.id },
 				},

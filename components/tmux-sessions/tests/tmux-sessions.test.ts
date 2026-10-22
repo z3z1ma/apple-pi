@@ -68,6 +68,17 @@ test("a run that settles idle rings the pane's bell, unless the bell is off or t
 	vi.stubEnv("PI_TMUX_SESSION_BELL", "");
 });
 
+test("a temporary peer leaves routine completion attention to the calling program", async () => {
+	vi.stubEnv("PI_PROGRAM_ID", "program-scope");
+	try {
+		const pi = startPi();
+		await pi.settle();
+		expect(readFileSync(pi.tty, "utf8")).toBe("");
+	} finally {
+		vi.stubEnv("PI_PROGRAM_ID", "");
+	}
+});
+
 test("each root Pi session start in tmux starts the notch panel on macOS and nowhere else, and a failing start breaks nothing", async () => {
 	const mac = startPi({ platform: "darwin" });
 	const linux = startPi({ platform: "linux" });

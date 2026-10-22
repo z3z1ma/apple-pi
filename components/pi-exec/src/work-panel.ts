@@ -2,16 +2,16 @@ import {
 	isKeyRelease,
 	Key,
 	matchesKey,
+	type TuiMouseEvent,
+	type TuiMouseEventResult,
 	truncateToWidth,
 	visibleWidth,
 	wrapTextWithAnsi,
-	type TuiMouseEvent,
-	type TuiMouseEventResult,
 } from "@earendil-works/pi-tui";
 import { createViewerKeys, type ViewerKeys } from "../../shared/src/viewer-keys.js";
 import type { WorkSectionComponent, WorkSectionUI } from "../../shared/src/work-manager.js";
 import type { ExecutionOperation, ExecutionOutcome } from "./types.js";
-import { callLabel, type ExecActivityCall, formatDuration, safeText, type ExecActivitySnapshot } from "./ui.js";
+import { callLabel, type ExecActivityCall, type ExecActivitySnapshot, formatDuration, safeText } from "./ui.js";
 
 const VIEWS = ["calls", "source", "result", "trace"] as const;
 type View = (typeof VIEWS)[number];
@@ -210,7 +210,7 @@ export class ExecPanel implements WorkSectionComponent {
 	}
 }
 
-/** Detail for the selected host call, including a model worker's identity and its live or settled child tools. */
+/** Detail for the selected host call, including its peer and live or settled tool calls. */
 function callDetail(
 	selected: ExecActivityCall,
 	programFinishedAt: number | undefined,
@@ -219,8 +219,10 @@ function callDetail(
 	add(`Selected call ${selected.sequence + 1}: ${callLabel(selected)}`);
 	const now = selected.finishedAt ?? programFinishedAt ?? Date.now();
 	add(`Status: ${selected.status}`);
-	if (selected.ref === "agent.run") {
-		if (typeof selected.args.name === "string") add(`Worker: ${selected.args.name}`);
+	if (selected.ref === "agent.run" || selected.ref === "peer.run") {
+		if (typeof selected.args.name === "string") add(`Call: ${selected.args.name}`);
+		if (typeof selected.args.role === "string") add(`Role: ${selected.args.role}`);
+		if (typeof selected.args.peer === "string") add(`Peer: ${selected.args.peer}`);
 		if (typeof selected.args.task === "string") add(`Task: ${selected.args.task}`);
 	}
 	if (selected.activity) add(`Activity: ${selected.activity}`);
@@ -230,12 +232,12 @@ function callDetail(
 	add(`Arguments: ${JSON.stringify(selected.args, null, 2)}`);
 	if (selected.error) add(`Error: ${selected.error}`);
 	if (selected.children) {
-		add("Worker tools:");
+		add("Peer tools:");
 		for (const child of selected.children) {
 			add(`  ${child.sequence + 1} ${child.status} · ${callLabel(child)}`);
 			if (child.error) add(`    Error: ${child.error}`);
 		}
-		if (selected.children.length === 0) add("  No worker tools started.");
+		if (selected.children.length === 0) add("  No peer tools started.");
 	}
 	if (selected.result !== undefined) add(`Result: ${JSON.stringify(selected.result, null, 2)}`);
 }

@@ -51,6 +51,7 @@ function liveSessions(names: string[]): void {
 
 interface Options {
 	tui?: boolean;
+	mode?: "tui" | "rpc";
 	factory?: (pi: ExtensionAPI) => void;
 	cwd?: string;
 	sessionManager?: SessionManager;
@@ -67,7 +68,7 @@ async function harness(options: Options = {}) {
 	options.beforeStart?.();
 	if (options.tui !== false)
 		await run.session.bindExtensions({
-			mode: "tui",
+			mode: options.mode ?? "tui",
 			uiContext: {
 				notify: (message: string, level?: string) => {
 					if (level === "warning") warnings.push(message);
@@ -125,6 +126,15 @@ describe("session names", () => {
 		expect(run.requests).toHaveLength(1);
 		expect(run.warnings).toEqual([]);
 		expect(run.name()).toBe(name);
+	});
+
+	it("gives a headless RPC peer a human name and respects its operator rename", async () => {
+		const run = await harness({ mode: "rpc" });
+		parts(run.name());
+		expect(run.recorded()).toEqual([{ title: run.name(), stage: "name" }]);
+		run.session.setSessionName("Named colleague");
+		await run.session.bindExtensions({ mode: "rpc" });
+		expect(run.name()).toBe("Named colleague");
 	});
 
 	it("keeps the name across a resume and never replaces one set by /name", async () => {

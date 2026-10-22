@@ -5,6 +5,7 @@ import { aggregateUsage, resultText, traceValue } from "../../shared/src/model-r
 import type { ProgramEnvelope } from "./envelope.js";
 import { type HostCallScope, hostFunction } from "./guest-functions.js";
 import { serializeJsonValue } from "./json.js";
+import { createPeerCalls } from "./peer-calls.js";
 import type { ExecutionOperation, ExecutionOutcome, ProgramHostCall } from "./types.js";
 import type { ExecActivityCall } from "./ui.js";
 
@@ -12,6 +13,7 @@ export interface HostCallsOptions {
 	ctx: ExtensionToolContext;
 	toolCallId: string;
 	envelope: ProgramEnvelope;
+	peers?: Record<string, string>;
 	onChange(): void;
 }
 
@@ -21,6 +23,7 @@ export interface HostCallsOptions {
  */
 export function createHostCalls(options: HostCallsOptions) {
 	const { ctx, toolCallId, envelope, onChange } = options;
+	const peers = createPeerCalls(ctx, options.peers);
 	const operations: ExecutionOperation[] = [];
 	const pending = new Set<ExecutionOperation>();
 	const running = new Set<ExecutionOperation>();
@@ -64,6 +67,7 @@ export function createHostCalls(options: HostCallsOptions) {
 	};
 	const scopeFor = (operation: ExecutionOperation, signal: AbortSignal): HostCallScope => ({
 		ctx,
+		peers,
 		signal,
 		operation,
 		changed: onChange,
@@ -118,8 +122,13 @@ export function createHostCalls(options: HostCallsOptions) {
 		onChange();
 		let acquired = false;
 		try {
-			await acquire(signal);
-			acquired = true;
+			signal.throwIfAborted();
+			// Closing must be able to cancel a turn that holds the last work slot.
+			if (ref !== "peer.close") {
+				await acquire(signal);
+				acquired = true;
+			}
+			signal.throwIfAborted();
 			running.add(operation);
 			timings.get(operation)!.startedAt = Date.now();
 			onChange();
@@ -129,7 +138,8 @@ export function createHostCalls(options: HostCallsOptions) {
 			operation.result = fn.traceResult ? fn.traceResult(value) : traceValue(value);
 			return value;
 		} catch (error) {
-			operation.outcome = signal.aborted ? "aborted" : "failed";
+			operation.outcome =
+				signal.aborted || (error instanceof Error && error.name === "AbortError") ? "aborted" : "failed";
 			operation.error = error instanceof Error ? error.message : String(error);
 			throw error;
 		} finally {
@@ -144,6 +154,8 @@ export function createHostCalls(options: HostCallsOptions) {
 
 	return {
 		hostCall,
+		peerBindings: peers.bindings,
+		close: () => peers.close(),
 		/** Calls the program attempted, including calls refused by the call budget. */
 		attempted: () => attempted,
 		completedOperations: () => operations.filter((operation) => !pending.has(operation)),

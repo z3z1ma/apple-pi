@@ -5,7 +5,6 @@ import type { ExtensionToolContext, ToolDefinition } from "@earendil-works/pi-co
 import { loadSearchRootGuardConfig } from "../../home-search-guard/src/config.js";
 import { searchRootBlockReason } from "../../home-search-guard/src/index.js";
 import { bounded, resultText, traceValue } from "../../shared/src/model-results.js";
-import { agentOperationArgs, runAgentWorker } from "./agent-workers.js";
 import { callableTools } from "./callable-tools.js";
 import {
 	CORE_TOOL_NAMES,
@@ -17,6 +16,8 @@ import {
 import { EVIDENCE_FUNCTION_NAMES, runEvidenceFunction } from "./evidence.js";
 import { executeFetch, fetchOperationArgs, traceFetchUrl } from "./fetch.js";
 import { fromPythonValue, serializeJsonValue } from "./json.js";
+import { type PeerCalls, peerOperationArgs } from "./peer-calls.js";
+import { PEER_INTERNAL_NAMES, PEER_PYTHON_NAMES } from "./peer-python.js";
 import { listSkills, readSkillBody } from "./skills.js";
 import type { ExecutionOperation } from "./types.js";
 import type { ExecActivityCall } from "./ui.js";
@@ -28,6 +29,7 @@ export type Args = Record<string, unknown>;
 /** What a host function may use while serving one call. */
 export interface HostCallScope {
 	ctx: ExtensionToolContext;
+	peers: PeerCalls;
 	signal: AbortSignal;
 	operation: ExecutionOperation;
 	/** Publish a change to the operation's trace or activity. */
@@ -95,18 +97,17 @@ const named = (value: unknown, key: string) =>
 	value && typeof value === "object" && !(value instanceof Map) ? (value as Args)[key] : value;
 
 const AGENT_PARAMETERS =
-	"task: str, type: str = ..., name: str = ..., profile: str = ..., tools: list[str] = ..., pair: bool = ..., system_prompt: str = ..., context: Any = ..., output_schema: dict[str, Any] = ...";
+	"role: str, task: str, name: str = ..., context: Any = ..., output_schema: dict[str, Any] = ...";
 
 function agentRunBinding(
 	call: (args?: Args) => Promise<unknown>,
 	interruption: () => Error | undefined,
 ): (args?: Args) => Promise<Args> {
 	return async (args = {}) => {
-		const { system_prompt, output_schema, ...rest } = args;
+		const { output_schema, ...rest } = args;
 		try {
 			return (await call({
 				...rest,
-				...(system_prompt !== undefined ? { systemPrompt: system_prompt } : {}),
 				...(output_schema !== undefined ? { outputSchema: output_schema } : {}),
 			})) as Args;
 		} catch (error) {
@@ -119,6 +120,18 @@ function agentRunBinding(
 				toolCalls: 0,
 			};
 		}
+	};
+}
+
+function agentValueBinding(
+	call: (args?: Args) => Promise<unknown>,
+	interruption: () => Error | undefined,
+): PythonCallable {
+	const agentRun = agentRunBinding(call, interruption);
+	return async (args: Args = {}) => {
+		const result = await agentRun(args);
+		if (result.status !== "completed") throw new Error(String(result.error ?? "Peer failed"));
+		return result.value === undefined ? result.text : result.value;
 	};
 }
 
@@ -162,37 +175,30 @@ const HOST_FUNCTIONS: Record<string, HostFunction> = {
 			{
 				name: "agent",
 				stub: `async def agent(*, ${AGENT_PARAMETERS}) -> Any: ...`,
-				bind: (call, interruption) => {
-					const agentRun = agentRunBinding(call, interruption);
-					return async (args: Args = {}) => {
-						const result = await agentRun(args);
-						if (result.status !== "completed") throw new Error(String(result.error ?? "Agent failed"));
-						return result.value === undefined ? result.text : result.value;
-					};
-				},
+				bind: agentValueBinding,
 			},
 		],
-		traceArgs: agentOperationArgs,
-		async run(args, scope) {
-			const result = await runAgentWorker(
-				scope.claimAgent(),
-				args,
-				scope.ctx,
-				scope.signal,
-				(activity) => {
-					scope.operation.activity = activity;
-					scope.changed();
-				},
-				(children) => scope.setChildren(children),
-			);
-			if (result.usage) scope.addUsage(result.usage);
-			scope.operation.children = result.operations;
-			if (result.error) {
-				scope.operation.outcome = "failed";
-				scope.operation.error = result.error;
-			}
-			return result.record;
-		},
+		traceArgs: peerOperationArgs,
+		run: (args, scope) => scope.peers.agent(args, scope),
+	},
+	"peer.open": {
+		python: [{ name: "peer_open", stub: "async def peer_open(*, role: str) -> str: ...", bind: (call) => call }],
+		run: (args, scope) => scope.peers.create(args.role),
+	},
+	"peer.run": {
+		python: [
+			{
+				name: "peer_run",
+				stub: "async def peer_run(*, key: str, task: str, output_schema: dict[str, Any] = ...) -> Any: ...",
+				bind: agentValueBinding,
+			},
+		],
+		traceArgs: peerOperationArgs,
+		run: (args, scope) => scope.peers.run(stringArg(args, "key"), args, scope),
+	},
+	"peer.close": {
+		python: [{ name: "peer_close", stub: "async def peer_close(*, key: str) -> None: ...", bind: (call) => call }],
+		run: (args, scope) => scope.peers.closePeer(stringArg(args, "key")),
 	},
 	"tools.list": {
 		python: [
@@ -314,6 +320,10 @@ export const HOST_FUNCTION_STUBS: readonly string[] = Object.values(HOST_FUNCTIO
 	(fn.python ?? []).map((python) => python.stub),
 );
 
+export const HOST_PROMPT_STUBS: readonly string[] = Object.values(HOST_FUNCTIONS).flatMap((fn) =>
+	(fn.python ?? []).filter((python) => !PEER_INTERNAL_NAMES.has(python.name)).map((python) => python.stub),
+);
+
 function evidenceFunction(name: string): HostFunction {
 	const run: HostFunction["run"] = (args, scope) =>
 		runEvidenceFunction(name, args, { cwd: scope.ctx.cwd, signal: scope.signal });
@@ -378,6 +388,7 @@ export function hostFunction(ref: string): HostFunction | undefined {
 export function extensionPythonTools(tools: readonly AgentTool[]): readonly AgentTool[] {
 	return tools.filter(
 		(tool) =>
+			!PEER_PYTHON_NAMES.has(tool.name) &&
 			!CORE_TOOL_NAMES.includes(tool.name as CoreToolName) &&
 			!EVIDENCE_FUNCTION_NAMES.includes(tool.name as (typeof EVIDENCE_FUNCTION_NAMES)[number]) &&
 			/^[A-Za-z_]\w*$/.test(tool.name),

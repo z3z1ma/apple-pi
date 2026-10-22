@@ -30,7 +30,17 @@ The ten lifecycle tests cover headless role/goal delivery, graceful termination,
 
 Checks: 68 tests passed across ten focused files (`/tmp/apc10-ownership-tests-final.log`); Node and web typecheck passed (`/tmp/apc10-ownership-types-final.log`). The renamed-window test has a recorded red/green pair (`/tmp/apc10-window-recovery-red.log`, `/tmp/apc10-window-recovery-green.log`). All processes, tmux servers, and state directories used in these checks were isolated from the operator's sessions.
 
-Remaining in ticket 10: wire the Python handles and named attachments, preserve context fitting/budgets/traces/usage, teach the receiving model the request's origin and direct-reply contract, prevent temporary peers' automatic completion alerts from duplicating the caller's, and migrate review/Ralph consumers. Check RPC naming with the remaining root-only guards. The public Python API still uses the old worker path until that integration lands.
+## Third slice: public integration
+
+The Python API now uses these peers. Named attachments and ID-only `Peer` objects run through the existing host-call trace and budget bridge; `agent` and `agent_run` create and discard a catalog-role person per call. Handle reuse, explicit close, stale-handle rejection after checkpoint restore, context fitting, large bound values, private context files, partial usage on cancellation, and cleanup on failure are exercised through the real registered tool and an isolated runtime. The ten-window test now uses the same one-shot call implementation as Python, rather than manually discarding each person.
+
+Model-facing requests identify the waiting program and direct-reply convention. RPC roots get human names; temporary peers skip routine completion notifications and bells, while operator questions still notify. Review programs use Code Review Specialists, Principal Engineers for planning, and Scientific Skeptics for final verification. Ralph uses a new Implementation Engineer per iteration. Procedure text is part of the assigned goal, not a role or model override.
+
+A focused control test exposed a deadlock: with one concurrency slot, a running turn held the slot needed by its own `close()`. Close is now a control request outside the work semaphore, still charged to call budget. The test failed with a timeout before the change and passed afterwards (`/tmp/apc10-close-slot-red.log`, `/tmp/apc10-close-slot-green.log`). Cleanup is awaited before the final trace and usage snapshot, including effects that finish during cancellation.
+
+Checkpoint compatibility now includes the Python prelude as well as stubs; dumps retain class implementations, so signature-only compatibility would preserve an obsolete handle method. The public interface has no per-call type, profile, tool-list, pairing, or system-prompt override.
+
+Final focused validation passed 196 tests across 16 files (`/tmp/apc10-final-focused.log`). The strengthened API suite then passed all 12 tests, with attached and temporary cancellation retaining usage and checking real process survival/death (`/tmp/apc10-cancel-final.log`). Node and web typecheck, loader, format check, lint (one existing warning), context lint (126 files), and package dry run passed. The package includes both new peer modules and the five migrated Python references. No paid model call was used, and no live operator runtime or session has been restarted.
 
 ## Monty handles
 

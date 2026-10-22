@@ -31,7 +31,7 @@ git log <fixed-point>..HEAD --oneline
 
 For an unmistakable working-tree review, `HEAD` is the fixed point. Include normalized status, staged and unstaged changes, and every untracked file in scope. For a branch or pull request with no sound base, ask rather than guessing.
 
-Confirm the revision resolves and the requested change is non-empty before spawning reviewers. Keep changed paths, untracked paths, commits, diff statistics, and the exact comparison visible. A bad reference or empty boundary fails here, not inside parallel workers.
+Confirm the revision resolves and the requested change is non-empty before spawning reviewers. Keep changed paths, untracked paths, commits, diff statistics, and the exact comparison visible. A bad reference or empty boundary fails here, not inside parallel peers.
 
 ## 2. Identify the Intent / Spec source
 
@@ -85,15 +85,15 @@ Cite the relevant requirement for every mismatch. When intent exists only in the
 
 Use for one very small, explicitly narrow question where delegation adds no useful isolation. This preserves the targeted-question pattern without packaging a separate graph. Do not present it as a complete branch or pull-request review unless both axes were independently considered.
 
-### Flat direct-agent fan-out
+### Flat peer fan-out
 
-This is the normal complete review shape. Dispatch one read-only Standards reviewer and one read-only Intent / Spec reviewer in parallel. Give each the complete boundary, commit list, changed paths, axis-specific sources, checks already run, and one independent brief. If no Intent / Spec source exists, skip that lane and report it as not assessed.
+This is the normal complete review shape. Ask one Code Review Specialist to review Standards and another to review Intent / Spec in parallel. Give each the complete boundary, commit list, changed paths, axis-specific sources, checks already run, and one independent goal. If no Intent / Spec source exists, skip that lane and report it as not assessed.
 
-Use direct `agent` sessions because neither lane determines the other and the root can reconcile both results directly.
+Use `pi_exec` with `asyncio.gather` and `agent(role="code-review-specialist", task=...)` for fresh temporary colleagues. When existing colleagues own the review, bind their session ids through `pi_exec`'s `peers` argument and call `peers[name].run(task)`. Their replies return directly to the program; attached people keep their sessions.
 
 ### Pi Exec review graphs
 
-Author and adapt the Python reference snippets from the live `pi_exec` tool contract. Inline the referenced role prompts before running. Each snippet uses top-level `await`, keyword host arguments (`git_change`, `git_patch`, `context_fit`, `context_pack`, `agent_run`, and `agent`), `schema` for strict outputs, and a trailing result expression. Independent work uses `asyncio.gather`; Monty does not support `create_task`. Coverage and ID reconciliation are ordinary Python sets and dicts, not host-library functions.
+Author and adapt the Python reference snippets from the live `pi_exec` tool contract. Inline the referenced procedure into each assigned goal before running. The catalog role supplies the person's identity, model, thinking level, and tool posture: `code-review-specialist` for investigation and reduction, `principal-engineer` for a review plan, and `scientific-skeptic` for final independent verification. Each snippet uses top-level `await`, keyword host arguments (`git_change`, `git_patch`, `context_fit`, `context_pack`, `agent_run`, and `agent`), `schema` for strict outputs, and a trailing result expression. Independent work uses `asyncio.gather`; Monty does not support `create_task`. Coverage and ID reconciliation are ordinary Python sets and dicts, not host-library functions.
 
 Pass the comparison explicitly; planned and fixed-lens graphs also receive the axes the root intends to assess, plus the applicable standards and intent source paths. Use a graph only when composition adds real value:
 
@@ -132,7 +132,7 @@ Reviewer and reducer output is a set of hypotheses, not proof. The root independ
 
 Recognize shared causes across axes without deduplicating, merging, or reranking the findings themselves. A Standards violation and an Intent / Spec violation remain separate decisions, each ranked only inside its axis. Attach the same stable shared-cause reference to affected findings and retain every axis-specific citation. An optional unranked shared-cause index may list linked finding IDs and one non-authoritative correction direction; implementation prioritization is a separate follow-on artifact, not part of the review verdict.
 
-A deep verifier worker improves evidence quality but is not final authority. The root owns the final report, any checks it runs, and all mutation. A review request is report-only unless the operator also requested fixes or authorizes them afterward.
+A Scientific Skeptic improves evidence quality but is not final authority. The root owns the final report, any checks it runs, and all mutation. A review request is report-only unless the operator also requested fixes or authorizes them afterward.
 
 ## 8. Report
 

@@ -1,7 +1,8 @@
+import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { CORE_TOOL_NAMES, coreToolDefinition, ENVELOPE_TOOL_NAMES } from "./core-tools.js";
 import { evidencePythonStubs } from "./evidence.js";
-import type { AgentTool } from "@earendil-works/pi-agent-core";
-import { extensionPythonTools, HOST_FUNCTION_STUBS } from "./guest-functions.js";
+import { extensionPythonTools, HOST_FUNCTION_STUBS, HOST_PROMPT_STUBS } from "./guest-functions.js";
+import { PEER_PYTHON_STUBS } from "./peer-python.js";
 
 type Schema = {
 	type?: string | string[];
@@ -98,6 +99,7 @@ export function guestPythonStubs(cwd: string, callable: readonly AgentTool[]): s
 	);
 	return [
 		corePythonStubs(cwd, callable),
+		"peer_bindings: dict[str, str]",
 		...declarations,
 		...extensions,
 		...HOST_PYTHON_STUBS,
@@ -109,22 +111,26 @@ export function guestPythonStubs(cwd: string, callable: readonly AgentTool[]): s
 function guestPromptStubs(cwd = "."): string {
 	return [
 		corePythonStubs(cwd),
-		...HOST_PYTHON_STUBS,
+		"def schema(shape: Any) -> dict[str, Any]: ...",
+		PEER_PYTHON_STUBS,
+		...HOST_PROMPT_STUBS,
 		evidencePythonStubs(),
 		'Captured extension tools are async functions here too, with keyword arguments type-checked against their schemas. Find one with tools_list() or tools_search(query) and read its parameters with await tools_describe(name="...").',
 	].join("\n");
 }
 
 export const PI_EXEC_PROMPT_SNIPPET =
-	"Compose tools and model workers in Python; compute over results before returning evidence";
+	"Compose tools and peer turns in Python; compute over results before returning evidence";
 
 export const PI_EXEC_DESCRIPTION =
-	"Run type-checked Python in bounded Monty to compose tools, model workers, and HTTP requests, and compute over their results. Return a JSON-compatible trailing expression; printed output is also captured. See code for live signatures and runtime constraints.";
+	"Run type-checked Python in bounded Monty to compose tools, peer turns, and HTTP requests, and compute over their results. Return a JSON-compatible trailing expression; printed output is also captured. See code for live signatures and runtime constraints.";
 
 export const PI_EXEC_PROMPT_GUIDELINES = [
 	"Use pi_exec to compose tool calls or compute over their results. Use direct tools for a single operation that needs neither.",
 	"Keep intermediate results inside the program. Return the smallest result that preserves the evidence needed for the next decision: aggregate counts, select relevant excerpts, or report exceptions instead of dumping raw output.",
-	"Check tool and worker outcomes before using their results. Surface failures and missing evidence explicitly.",
+	"Check tool and peer outcomes before using their results. Surface failures and missing evidence explicitly.",
+	"Attach awake colleagues with pi_exec peers={name: session_id}; peers[name].run(task) waits for their own session to be idle. Their role owns their model and thinking. They stay alive after the program.",
+	"Use agent(role=..., task=...) for a fresh temporary colleague, or p = await peer(role) for several turns with one. await p.close() releases it early; program completion, failure, or cancellation cleans every remaining temporary peer. Handles belong to one execution, even when Python globals persist.",
 ];
 
 export function piExecGuestApiContract(): string {
@@ -134,8 +140,8 @@ export function piExecGuestApiContract(): string {
 		"Host functions are async; pass keyword arguments. schema(shape) is pure local Python. Type-checking stubs:",
 		guestPromptStubs(),
 		"tools_search/tools_call support dynamic discovery. fetch handles HTTP; skills_list/skills_body expose model-invocable skills.",
-		"git_change/git_patch and repo_change_neighborhood collect scoped evidence; context_* fits worker context; dev_find_relevant_tests/dev_run_relevant_tests locate and run focused checks.",
-		'agent_run returns a status record (including errors, and per-file edit/write changes); agent returns text or the output_schema value and raises on failure. Context is bound as a file, not included in the task. Use schema({"id": "int"}) for strict object schemas.',
+		"git_change/git_patch and repo_change_neighborhood collect scoped evidence; context_* fits peer context; dev_find_relevant_tests/dev_run_relevant_tests locate and run focused checks.",
+		'agent_run returns a status record (including errors, and per-file edit/write changes); agent returns text or the output_schema value and raises on failure. Both create a fresh catalog-role peer, assign the goal, and discard the peer when the call ends. Context is bound as a file beside that goal, not copied into its text. Use schema({"id": "int"}) for strict object schemas.',
 		'Inputs is a dict of caller-supplied strings. Python globals persist across calls on the current Pi session branch and keep their first type, so give each program\'s variables specific names; reset is a tool parameter that starts fresh. bash, edit, and write return {"ok": bool, "output": str}. Print is captured. Return only JSON-compatible values; display and limits are tool parameters, not globals.',
 	].join("\n");
 }

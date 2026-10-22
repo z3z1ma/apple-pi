@@ -4,6 +4,8 @@ A program request is a run in this person's existing Pi session, not mail and no
 
 Start queued work outside `agent_settled`: it is notification-only, and `isIdle` remains false while its handlers run. The delayed drain rechecks idle instead of relying on a single settlement callback. Session replacement and tree navigation invalidate requests, rather than attributing a later session's reply to them.
 
+The request teaches the receiving model that its final reply returns directly to a waiting program. Bound context is a file reference, separate from the supplied goal; ordinary peer communication remains available.
+
 The structured-return tool exists only for a schema-bearing run and is hidden before the result is returned. Preserve other tools activated during that run; restoring an old whole-tool snapshot would undo legitimate MCP discovery.
 
 Coupled: components/session-state/src/bridge.ts, components/shared/src/turn-observer.ts, components/shared/src/structured-output.ts

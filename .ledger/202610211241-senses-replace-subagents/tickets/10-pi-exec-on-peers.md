@@ -6,12 +6,16 @@
 
 **Blocked by:** 02 The directory and human-named manager tools, 06 Tasks are assigned
 
-**Status:** in-progress
+**Status:** done
 
-- [ ] With an attached peer, `peers["x"].run(task)` returns that turn's final text, the turn is in the peer's transcript, and the peer is still running afterwards.
-- [ ] A run on a busy attached peer starts only after its own run settles.
-- [ ] A loop of ten `agent(role=..., task=...)` calls never has more than one ephemeral window open, and leaves no ephemeral session record.
-- [ ] An `output_schema` call returns a value that matches the schema; a reply that does not match fails the call.
-- [ ] A cancelled program leaves no ephemeral peer running and no record behind.
-- [ ] Outside tmux, `agent()` runs headless and still returns.
-- [ ] The review and Ralph reference programs run with roles (no `builder`, no `type`).
+- [x] With an attached peer, `peers["x"].run(task)` returns that turn's final text, the turn is in the peer's transcript, and the peer is still running afterwards.
+- [x] A run on a busy attached peer starts only after its own run settles.
+- [x] A loop of ten `agent(role=..., task=...)` calls never has more than one ephemeral window open, and leaves no ephemeral session record.
+- [x] An `output_schema` call returns a value that matches the schema; a reply that does not match fails the call.
+- [x] A cancelled program leaves no ephemeral peer running and no record behind.
+- [x] Outside tmux, `agent()` runs headless and still returns.
+- [x] The review and Ralph reference programs run with roles (no `builder`, no `type`).
+
+**Evidence:** [Implementation notes](../implementation-10.md) record the three slices and their proof. The final focused run passed 196 tests across 16 files; the strengthened API suite then passed all 12 tests, including cancellation of both attached and temporary people with actual process-lifetime assertions. Node/web typecheck, loader, format check, lint, context lint (126 files), and package dry run passed. Lint retains one existing warning. Fixtures used isolated runtimes and tmux servers; no paid model turn or live-session rollout was performed.
+
+**Deviations:** Kept the existing `agent_run` status form and bound-context fitting for real review/Ralph consumers. Per-call inference, posture, and system-prompt overrides are removed. Peer close bypasses work concurrency but still consumes call budget, preventing cancellation from waiting behind the turn it must stop. Cleanup completes before the final result; failures remain visible.

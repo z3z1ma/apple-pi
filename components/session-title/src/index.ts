@@ -1,4 +1,4 @@
-/** Human names for root TUI sessions, drawn without a model. Explicit task assignments own what people work on. */
+/** Human names for root people, drawn without a model. Explicit task assignments own what people work on. */
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { livePeers } from "../../session-state/src/peers.js";
 import { inChildSessionContext } from "../../subagents/src/child-context.js";
@@ -59,7 +59,7 @@ export default function registerSessionTitle(pi: ExtensionAPI): void {
 
 	pi.on("session_start", (_event, ctx) => {
 		current = undefined;
-		if (ctx.mode !== "tui") return;
+		if (ctx.mode !== "tui" && ctx.mode !== "rpc") return;
 		const state = stateOf(ctx);
 		noticeRename(state);
 		if (state.stopped || state.lastStage === "name") return;
@@ -70,6 +70,6 @@ export default function registerSessionTitle(pi: ExtensionAPI): void {
 		pi.appendEntry<SessionTitleEntry>(SESSION_TITLE_ENTRY, { title: name, stage: "name" });
 	});
 	pi.on("session_info_changed", (_event, ctx) => {
-		if (ctx.mode === "tui") noticeRename(stateOf(ctx));
+		if (ctx.mode === "tui" || ctx.mode === "rpc") noticeRename(stateOf(ctx));
 	});
 }

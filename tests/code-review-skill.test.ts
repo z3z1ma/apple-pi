@@ -4,8 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { getShellConfig, loadSkills } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it } from "vitest";
-import { guestPythonStubs } from "../components/pi-exec/src/guest-api.js";
 import { runEvidenceFunction } from "../components/pi-exec/src/evidence.js";
+import { guestPythonStubs } from "../components/pi-exec/src/guest-api.js";
 import { createProgramSession, executeProgram } from "../components/pi-exec/src/program.js";
 
 const PROGRAMS = ["plan-review-verify.py", "multi-lens-review.py", "residual-review-loop.py"];
@@ -111,8 +111,14 @@ function verdict(candidates: any[]): any {
 function fixtureHost(tweak?: (args: any, value: any) => any): Host {
 	return async (name, args) => {
 		if (name !== "agent.run") throw new Error(`Unexpected host call ${name}`);
-		expect(args.tools).toEqual(["read", "grep", "find", "ls"]);
-		expect(args.systemPrompt).toContain("do not invoke code-review");
+		expect(args.role).toBe(
+			args.name === "review-planner"
+				? "principal-engineer"
+				: args.name.endsWith("-final-verifier")
+					? "scientific-skeptic"
+					: "code-review-specialist",
+		);
+		expect(args.task).toContain("Work read-only within this assigned review");
 		let value: any;
 		if (args.name === "review-planner") {
 			value = {
@@ -250,7 +256,7 @@ describe("code-review Python programs", () => {
 				"multi-lens-review.py",
 				INPUTS,
 				async (name, args) =>
-					args.name === "lens-1" ? { status: "failed", error: "fixture worker failed" } : successful(name, args),
+					args.name === "lens-1" ? { status: "failed", error: "fixture peer failed" } : successful(name, args),
 				cwd,
 			);
 			expect(failed.coverageComplete).toBe(false);
@@ -340,7 +346,7 @@ describe("code-review Python programs", () => {
 
 describe("Ralph Python programs", () => {
 	for (const program of ["ralph-simple.py", "ralph-ledger.py"]) {
-		it(`${program} typechecks, sequences fresh workers, and stops on low mutation`, async () => {
+		it(`${program} typechecks, sequences fresh peers, and stops on low mutation`, async () => {
 			const cwd = checkout();
 			let calls = 0;
 			try {
@@ -355,11 +361,10 @@ describe("Ralph Python programs", () => {
 					async (name, args) => {
 						if (name === "pi.read") return "Status: open\n";
 						expect(name).toBe("agent.run");
-						expect(args.profile).toBe("coding");
-						expect(args.type).toBeUndefined();
+						expect(args.role).toBe("implementation-engineer");
 						expect(args.outputSchema).toBeUndefined();
-						expect(args.systemPrompt).toContain("Never commit");
-						expect(args.tools).toEqual(["read", "grep", "find", "ls", "bash", "edit", "write"]);
+						expect(args.task).toContain("Never commit");
+						expect(args.task).toContain("One coherent increment");
 						if (program === "ralph-ledger.py")
 							expect(args.context.stack).toEqual([".ledger/task/task.md", "README.md"]);
 						calls++;
@@ -422,7 +427,7 @@ describe("Ralph Python programs", () => {
 			const failed = await run(
 				"ralph-simple.py",
 				inputs,
-				async () => ({ status: "failed", error: "worker failed" }),
+				async () => ({ status: "failed", error: "peer failed" }),
 				cwd,
 				"ralph",
 			);
@@ -430,7 +435,7 @@ describe("Ralph Python programs", () => {
 				status: "failed",
 				completedIterations: 0,
 				failedAt: 1,
-				failures: [{ iteration: 1, error: "worker failed" }],
+				failures: [{ iteration: 1, error: "peer failed" }],
 			});
 			const stopped = await run(
 				"ralph-ledger.py",

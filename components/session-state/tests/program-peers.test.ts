@@ -5,6 +5,7 @@ import { createConnection } from "node:net";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { createPeerCalls } from "../../pi-exec/src/peer-calls.js";
 import { sendCommand } from "../src/client.js";
 import { openPeerProgram, type PeerProgram } from "../src/program-client.js";
 import { fakeBridge, query, runtimePid, standInProcess, startRuntime, stopRuntime, tempStateDir } from "./helpers.js";
@@ -294,23 +295,33 @@ test("a caller can confirm cleanup after a runtime crash without losing the peer
 	expect(existsSync(join(state.agentDir, "peer-records", `${id}.jsonl`))).toBe(true);
 }, 15000);
 
-test("ten tmux iterations leave one caller pane, no former people and no temporary task bundles", async () => {
+test("ten one-shot agent calls automatically leave one caller pane, no former people and no temporary task bundles", async () => {
 	const pane = await callerInTmux();
-	const program = await programFor();
-	for (let i = 0; i < 10; i++) {
-		const id = await createPeer(program);
-		const result = await program.command(id, { kind: "run_turn", task: `Verify iteration ${i}.` });
-		expect(result.result?.status).toBe("completed");
-		expect((await program.command(id, { kind: "discard_peer" })).stage).toBe("applied");
-		const panes = execFileSync("tmux", ["-S", tmuxSocket!, "list-panes", "-a", "-F", "#{pane_id}"], {
-			timeout: 5000,
-			encoding: "utf8",
-		})
-			.trim()
-			.split("\n");
-		expect(panes).toEqual([pane]);
+	const peers = createPeerCalls({ cwd: state.agentDir, sessionManager: { getSessionId: () => "caller" } } as never);
+	try {
+		for (let i = 0; i < 10; i++) {
+			const args = { role: "implementation-engineer", task: `Verify iteration ${i}.` };
+			const result = await peers.agent(args, {
+				signal: new AbortController().signal,
+				operation: { sequence: i, ref: "agent.run", args, outcome: "succeeded" },
+				claimAgent: () => i,
+				addUsage() {},
+				setChildren() {},
+				changed() {},
+			});
+			expect(result.status).toBe("completed");
+			const panes = execFileSync("tmux", ["-S", tmuxSocket!, "list-panes", "-a", "-F", "#{pane_id}"], {
+				timeout: 5000,
+				encoding: "utf8",
+			})
+				.trim()
+				.split("\n");
+			expect(panes).toEqual([pane]);
+			expect(query(state.dbPath, "select * from program_peers")).toEqual([]);
+		}
+	} finally {
+		await peers.close();
 	}
-	await program.close();
 	cleanOwnership();
 }, 30000);
 

@@ -7,6 +7,13 @@ import { registerFauxProvider } from "@earendil-works/pi-ai/compat";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { visibleWidth } from "@earendil-works/pi-tui";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+	fakeBridge,
+	query,
+	standInProcess,
+	startRuntime,
+	stopRuntime,
+} from "../components/session-state/tests/helpers.js";
 import { resultText } from "../components/shared/src/model-results.js";
 import { registerWorkSection } from "../components/shared/src/work-manager.js";
 import { createEventBus } from "../node_modules/@earendil-works/pi-coding-agent/dist/core/event-bus.js";
@@ -18,9 +25,13 @@ import { fakeCustom, fakeTui, plainTheme } from "./helpers/fake-tui.js";
 import { fauxModelBackend } from "./helpers/faux-model.js";
 
 const cleanups: Array<() => Promise<void>> = [];
+const gateClosures: Array<() => Promise<void>> = [];
+let peerFixture = false;
 afterEach(async () => {
+	for (const close of gateClosures.splice(0)) await close();
 	for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
 	vi.restoreAllMocks();
+	vi.unstubAllEnvs();
 });
 
 async function harness(
@@ -32,9 +43,13 @@ async function harness(
 	const previous = process.env.PI_CODING_AGENT_DIR;
 	process.env.PI_CODING_AGENT_DIR = cwd;
 	let shutdown = async () => {};
+	let peerShutdown = async () => {};
+	const running = new Set<Promise<unknown>>();
 	cleanups.push(async () => {
 		try {
 			await shutdown();
+			await Promise.allSettled([...running]);
+			await peerShutdown();
 		} finally {
 			if (previous === undefined) delete process.env.PI_CODING_AGENT_DIR;
 			else process.env.PI_CODING_AGENT_DIR = previous;
@@ -43,6 +58,7 @@ async function harness(
 	});
 	setup?.(cwd);
 	const manager = SessionManager.inMemory(cwd);
+	if (peerFixture) peerShutdown = await peerRuntime(cwd, manager.getSessionId());
 	const runtime = createExtensionRuntime();
 	runtime.appendEntry = (type, data) => {
 		manager.appendCustomEntry(type, data);
@@ -54,6 +70,19 @@ async function harness(
 	const events = createEventBus();
 	const loaded = await loadExtensions(paths, cwd, events, runtime);
 	expect(loaded.errors).toEqual([]);
+	for (const extension of loaded.extensions)
+		for (const { definition } of extension.tools.values()) {
+			const execute = definition.execute;
+			definition.execute = (...args) => {
+				const result = execute(...args);
+				running.add(result);
+				void result.then(
+					() => running.delete(result),
+					() => running.delete(result),
+				);
+				return result;
+			};
+		}
 	const screen = fakeTui(200, 50);
 	// The above-editor widgets Pi would currently mount, keyed as Pi keys them: a later mount replaces an earlier one.
 	const widgets = new Map<string, { factory: any; instance?: { render(): string[] } }>();
@@ -136,23 +165,50 @@ async function gateServer() {
 		responses.set(request.url!, response);
 	});
 	await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-	cleanups.push(async () => {
-		server.closeAllConnections();
-		await new Promise<void>((resolve) => server.close(() => resolve()));
-	});
+	let closing: Promise<void> | undefined;
+	const close = () =>
+		(closing ??= (async () => {
+			server.closeAllConnections();
+			await new Promise<void>((resolve) => server.close(() => resolve()));
+		})());
+	gateClosures.push(close);
+	cleanups.push(close);
 	const address = server.address() as { port: number };
 	return { url: `http://127.0.0.1:${address.port}`, responses };
 }
 
-function useWorkerFixture() {
-	const previous = process.argv[1];
-	process.argv[1] = join(process.cwd(), "tests", "fixtures", "pi-json-worker.mjs");
+function enablePeerFixture() {
+	peerFixture = true;
 	cleanups.push(async () => {
-		process.argv[1] = previous;
+		peerFixture = false;
 	});
 }
 
-/** A Python literal for a controlled fixture-worker task that runs one tool until its gate responds. */
+async function peerRuntime(cwd: string, caller: string): Promise<() => Promise<void>> {
+	const bin = join(cwd, "bin");
+	mkdirSync(bin);
+	const fixture = join(process.cwd(), "tests", "fixtures", "peer-pi.mjs");
+	writeFileSync(join(bin, "pi"), `#!/bin/sh\nexec '${process.execPath}' '${fixture}' "$@"\n`, { mode: 0o700 });
+	vi.stubEnv("PATH", `${bin}:${process.env.PATH}`);
+	vi.stubEnv("PI_SESSION_STATE_DISABLED", "");
+	vi.stubEnv("TMUX", "");
+	vi.stubEnv("TMUX_PANE", "");
+	vi.stubEnv("TMUX_TMPDIR", join(cwd, "tmux"));
+	const socket = join(cwd, "state", "apple-pi.sock");
+	await startRuntime(socket);
+	const parent = standInProcess();
+	const bridge = await fakeBridge(socket, caller, parent.pid, parent.startedAt, { session: { cwd } });
+	await vi.waitFor(() =>
+		expect(query(join(cwd, "state", "apple-pi.db"), "select id from sessions where id = ?", caller)).toHaveLength(1),
+	);
+	return async () => {
+		bridge.socket.destroy();
+		parent.child.kill();
+		await stopRuntime({ agentDir: cwd, pidPath: join(cwd, "state", "apple-pi-runtime.pid") });
+	};
+}
+
+/** A Python literal for a controlled fixture-peer task that runs one tool until its gate responds. */
 const gatedTask = (gate: string, tool: string, args: Record<string, unknown>, holdTerm = false) =>
 	JSON.stringify(JSON.stringify({ gate, tool, args, ...(holdTerm ? { holdTerm } : {}) }));
 
@@ -488,18 +544,24 @@ describe("Pi Exec work panel", () => {
 		expect(h.text()).toContain("long-output-finished");
 	}, 30_000);
 
-	it("shows a worker's active child tool before the worker returns", async () => {
-		useWorkerFixture();
+	it("shows a peer's active child tool before the peer returns", async () => {
+		enablePeerFixture();
 		const gate = await gateServer();
 		const h = await harness();
 		await h.open();
 		const task = gatedTask(`${gate.url}/alpha`, "read", { path: "alpha-target.txt" });
 		const run = h
 			.tool()
-			.execute("live-worker", { code: `await agent_run(task=${task}, name="alpha")` }, undefined, undefined, h.ctx);
+			.execute(
+				"live-peer",
+				{ code: `await agent_run(role="implementation-engineer", task=${task}, name="alpha")` },
+				undefined,
+				undefined,
+				h.ctx,
+			);
 		void run.catch(() => {});
 		await vi.waitFor(() => expect(gate.responses.has("/alpha")).toBe(true));
-		await vi.waitFor(() => expect(h.text()).toContain("Worker tools:"));
+		await vi.waitFor(() => expect(h.text()).toContain("Peer tools:"));
 		expect(h.text()).toMatch(/running · read alpha-target\.txt/);
 		expect(h.text()).toContain("alpha");
 		gate.responses.get("/alpha")!.end("alpha contents");
@@ -508,22 +570,22 @@ describe("Pi Exec work panel", () => {
 		expect(h.text()).not.toMatch(/running · read/);
 	});
 
-	it("keeps interleaved parallel worker tools under the worker that issued them", async () => {
-		useWorkerFixture();
+	it("keeps interleaved parallel peer tools under the peer that issued them", async () => {
+		enablePeerFixture();
 		const gate = await gateServer();
 		const h = await harness();
 		await h.open();
 		const alpha = gatedTask(`${gate.url}/alpha`, "read", { path: "alpha.txt" });
 		const beta = gatedTask(`${gate.url}/beta`, "grep", { pattern: "beta-pattern" });
-		const code = `import asyncio\nawait asyncio.gather(agent_run(task=${alpha}, name="alpha"), agent_run(task=${beta}, name="beta"))`;
+		const code = `import asyncio\nawait asyncio.gather(agent_run(role="implementation-engineer", task=${alpha}, name="alpha"), agent_run(role="implementation-engineer", task=${beta}, name="beta"))`;
 		const run = h
 			.tool()
 			.execute("parallel", { code, limits: { agentBudget: 2, concurrency: 2 } }, undefined, undefined, h.ctx);
 		void run.catch(() => {});
 		await vi.waitFor(() => expect(gate.responses.size).toBe(2));
 		const select = (name: string) => {
-			if (!h.text().includes(`Worker: ${name}`)) h.input("]");
-			expect(h.text()).toContain(`Worker: ${name}`);
+			if (!h.text().includes(`Call: ${name}`)) h.input("]");
+			expect(h.text()).toContain(`Call: ${name}`);
 			return h.text();
 		};
 		await vi.waitFor(() => expect(select("alpha")).toMatch(/running \u00b7 read alpha\.txt/));
@@ -546,8 +608,8 @@ describe("Pi Exec work panel", () => {
 		expect(betaSettled).not.toContain("alpha.txt");
 	});
 
-	it("shows a finished child tool before its same-worker sibling settles", async () => {
-		useWorkerFixture();
+	it("shows a finished child tool before its same-peer sibling settles", async () => {
+		enablePeerFixture();
 		const gate = await gateServer();
 		const h = await harness();
 		const task = JSON.stringify(
@@ -560,7 +622,13 @@ describe("Pi Exec work panel", () => {
 		);
 		const run = h
 			.tool()
-			.execute("batch", { code: `await agent_run(name="Batch worker", task=${task})` }, undefined, undefined, h.ctx);
+			.execute(
+				"batch",
+				{ code: `await agent_run(role="implementation-engineer", name="Batch peer", task=${task})` },
+				undefined,
+				undefined,
+				h.ctx,
+			);
 		void run.catch(() => {});
 		await vi.waitFor(() => expect(gate.responses.size).toBe(2));
 		await h.open();
@@ -575,101 +643,113 @@ describe("Pi Exec work panel", () => {
 		expect(h.text()).toMatch(/succeeded · bash wait-for-slow/);
 	});
 
-	it("keeps a failed worker status visible when the script handles it and succeeds", async () => {
-		useWorkerFixture();
+	it("keeps a failed peer status visible when the script handles it and succeeds", async () => {
+		enablePeerFixture();
 		const h = await harness();
-		const result = await h
-			.tool()
-			.execute(
-				"failed-worker",
-				{ code: 'row = await agent_run(task="bad", name="broken")\n"handled " + row["status"]' },
-				undefined,
-				undefined,
-				h.ctx,
-			);
+		const result = await h.tool().execute(
+			"failed-peer",
+			{
+				code: 'row = await agent_run(role="implementation-engineer", task="fail", name="broken")\n"handled " + row["status"]',
+			},
+			undefined,
+			undefined,
+			h.ctx,
+		);
 		expect(resultText(result)).toBe("handled failed");
 		await h.open();
 		expect(h.text()).toMatch(/^\u2502 succeeded \u00b7/m);
-		expect(h.text()).toContain("Worker: broken");
+		expect(h.text()).toContain("Call: broken");
 		expect(h.text()).toContain("Status: failed");
-		expect(h.text()).toContain("Error: worker failed");
+		expect(h.text()).toContain("Error: The peer failed");
 		expect(h.text()).toContain("1 failed");
 		h.input("v");
 		h.input("v");
 		expect(h.text()).toContain("handled failed");
 	});
 
-	it.each(["aborted", "timed_out"])(
-		"leaves terminal worker tool detail when a worker program is %s",
-		async (outcome) => {
-			useWorkerFixture();
-			const gate = await gateServer();
-			const h = await harness();
-			const controller = new AbortController();
-			const task = gatedTask(`${gate.url}/stuck`, "read", { path: "stuck.txt" });
-			const run = h
-				.tool()
-				.execute(
-					outcome,
-					{ code: `await agent_run(task=${task}, name="stuck")`, limits: { timeoutSeconds: 1 } },
-					controller.signal,
-					undefined,
-					h.ctx,
-				);
-			void run.catch(() => {});
-			await h.open();
-			await vi.waitFor(() => expect(h.text()).toMatch(/running \u00b7 read stuck\.txt/));
-			if (outcome === "aborted") controller.abort();
-			await expect(run).rejects.toThrow();
-			await new Promise((resolve) => setTimeout(resolve, 100));
-			gate.responses.get("/stuck")?.end("late contents");
-			await new Promise((resolve) => setTimeout(resolve, 100));
-			expect(h.text()).toMatch(/^\u2502 (aborted|timed_out) \u00b7/m);
-			expect(h.text()).toContain("Worker tools:");
-			// The killed worker's unfinished tool is aborted under either program outcome.
-			expect(h.text()).toMatch(/aborted \u00b7 read stuck\.txt/);
-			expect(h.text()).toContain("0 running");
-			expect(h.text()).not.toMatch(/running \u00b7 read/);
-			expect(h.text()).not.toContain("late contents");
-		},
-	);
+	it.each(["aborted", "timed_out"])("leaves terminal peer tool detail when a peer program is %s", async (outcome) => {
+		enablePeerFixture();
+		const gate = await gateServer();
+		const h = await harness();
+		const controller = new AbortController();
+		const task = gatedTask(`${gate.url}/stuck`, "read", { path: "stuck.txt" });
+		const run = h.tool().execute(
+			outcome,
+			{
+				code: `await agent_run(role="implementation-engineer", task=${task}, name="stuck")`,
+				limits: { timeoutSeconds: 1 },
+			},
+			controller.signal,
+			undefined,
+			h.ctx,
+		);
+		void run.catch(() => {});
+		await h.open();
+		await vi.waitFor(() => expect(h.text()).toMatch(/running \u00b7 read stuck\.txt/));
+		if (outcome === "aborted") controller.abort();
+		await expect(run).rejects.toThrow();
+		await new Promise((resolve) => setTimeout(resolve, 100));
+		gate.responses.get("/stuck")?.end("late contents");
+		await new Promise((resolve) => setTimeout(resolve, 100));
+		expect(h.text()).toMatch(/^\u2502 (aborted|timed_out) \u00b7/m);
+		expect(h.text()).toContain("Peer tools:");
+		// The killed peer's unfinished tool is aborted under either program outcome.
+		expect(h.text()).toMatch(/aborted \u00b7 read stuck\.txt/);
+		expect(h.text()).toContain("0 running");
+		expect(h.text()).not.toMatch(/running \u00b7 read/);
+		expect(h.text()).not.toContain("late contents");
+	});
 
-	it("settles a cancelled worker's tools even when the worker reports after the program ends", async () => {
-		useWorkerFixture();
+	it("waits for cancelled peer cleanup and retains tool effects that finish during cancellation", async () => {
+		enablePeerFixture();
 		const gate = await gateServer();
 		const h = await harness();
 		const controller = new AbortController();
 		const task = gatedTask(`${gate.url}/held`, "read", { path: "held.txt" }, true);
 		const run = h
 			.tool()
-			.execute("held", { code: `await agent_run(task=${task}, name="held")` }, controller.signal, undefined, h.ctx);
+			.execute(
+				"held",
+				{ code: `await agent_run(role="implementation-engineer", task=${task}, name="held")` },
+				controller.signal,
+				undefined,
+				h.ctx,
+			);
 		void run.catch(() => {});
 		await h.open();
 		await vi.waitFor(() => expect(h.text()).toMatch(/running \u00b7 read held\.txt/));
 		await vi.waitFor(() => expect(gate.responses.has("/held")).toBe(true));
+		let settled = false;
+		void run.then(
+			() => {
+				settled = true;
+			},
+			() => {
+				settled = true;
+			},
+		);
 		controller.abort();
+		await vi.waitFor(() =>
+			expect(
+				query(join(h.cwd, "state", "apple-pi.db"), "select id from program_scopes where closing = 1"),
+			).toHaveLength(1),
+		);
+		expect(settled).toBe(false);
+		gate.responses.get("/held")!.end("late contents");
 		await expect(run).rejects.toThrow();
 		expect(h.text()).toMatch(/^\u2502 aborted \u00b7/m);
-		expect(h.text()).toMatch(/aborted \u00b7 read held\.txt/);
-		gate.responses.get("/held")!.end("late contents");
-		await new Promise((resolve) => setTimeout(resolve, 200));
-		expect(h.text()).toMatch(/aborted \u00b7 read held\.txt/);
-		expect(h.text()).not.toContain("late contents");
-		expect(h.text()).not.toMatch(/succeeded \u00b7 read held/);
+		expect(h.text()).toMatch(/succeeded \u00b7 read held\.txt/);
+		expect(query(join(h.cwd, "state", "apple-pi.db"), "select * from program_peers")).toEqual([]);
 	});
 
-	it("keeps bound worker payloads out of live and settled detail and workers out of the Agents roster", async () => {
-		useWorkerFixture();
+	it("keeps bound peer payloads out of live and settled detail", async () => {
+		enablePeerFixture();
 		const gate = await gateServer();
-		const h = await harness(undefined, [
-			"./extensions/pi-exec.ts",
-			"./extensions/work.ts",
-			"./extensions/subagents.ts",
-		]);
+		const h = await harness();
 		const task = gatedTask(`${gate.url}/bound`, "read", { path: "bound.txt" });
 		// Private values arrive through inputs so the inspectable source does not contain them.
 		const schema = '{"type": "object", "properties": {"id": {"type": "string", "description": inputs["note"]}}}';
-		const code = `await agent_run(task=${task}, name="bound-worker", context={"id": "public-id", "secret": inputs["secret"]}, output_schema=${schema})`;
+		const code = `await agent_run(role="implementation-engineer", task=${task}, name="bound-peer", context={"id": "public-id", "secret": inputs["secret"]}, output_schema=${schema})`;
 		const inputs = { secret: "private-context", note: "private-schema" };
 		const run = h.tool().execute("bound", { code, inputs }, undefined, undefined, h.ctx);
 		void run.catch(() => {});
@@ -679,48 +759,54 @@ describe("Pi Exec work panel", () => {
 		};
 		h.focus();
 		toExec();
-		await vi.waitFor(() => expect(h.text()).toMatch(/running \u00b7 read bound\.txt/));
 		await vi.waitFor(() => expect(gate.responses.has("/bound")).toBe(true));
+		h.text();
+		h.input("\x1b[F");
+		await vi.waitFor(() => expect(h.text()).toMatch(/running \u00b7 read bound\.txt/));
 		const views = () =>
-			[0, 1, 2, 3].map(() => {
-				const text = h.text();
+			[0, 1, 2, 3].flatMap(() => {
+				const top = h.text();
+				h.input("\x1b[F");
+				const bottom = h.text();
 				h.input("v");
-				return text;
+				return [top, bottom];
 			});
 		for (const text of views()) expect(text).not.toMatch(/private-(context|schema)/);
-		for (let index = 0; index < 3 && !h.text().includes("(no agents)"); index++) h.input("\x1b[C");
-		expect(h.text()).toContain("(no agents)");
-		expect(h.text()).not.toContain("bound-worker");
-		toExec();
 		gate.responses.get("/bound")!.end("bound contents");
 		const result = await run;
 		expect(JSON.parse(resultText(result))).toMatchObject({ status: "completed", value: { id: "public-id" } });
 		expect(resultText(result)).not.toMatch(/private-(context|schema)/);
 		const settled = views();
-		expect(settled.join("\n")).toContain("bound-worker");
+		expect(settled.join("\n")).toContain("bound-peer");
 		expect(settled.join("\n")).toMatch(/succeeded \u00b7 read bound\.txt/);
 		expect(settled.join("\n")).toContain('"bound": true');
 		expect(settled.join("\n")).toMatch(/succeeded \u00b7 pi_exec_return/);
 		for (const text of settled) expect(text).not.toMatch(/private-(context|schema)/);
 	});
 
-	it("does not recreate old worker detail after a branch change", async () => {
-		useWorkerFixture();
+	it("does not recreate old peer detail after a branch change", async () => {
+		enablePeerFixture();
 		const gate = await gateServer();
 		const h = await harness();
-		const task = gatedTask(`${gate.url}/old`, "read", { path: "old-worker.txt" });
+		const task = gatedTask(`${gate.url}/old`, "read", { path: "old-peer.txt" });
 		const run = h
 			.tool()
-			.execute("old-worker", { code: `await agent_run(task=${task}, name="old-worker")` }, undefined, undefined, h.ctx);
+			.execute(
+				"old-peer",
+				{ code: `await agent_run(role="implementation-engineer", task=${task}, name="old-peer")` },
+				undefined,
+				undefined,
+				h.ctx,
+			);
 		void run.catch(() => {});
 		await h.open();
-		await vi.waitFor(() => expect(h.text()).toMatch(/running \u00b7 read old-worker\.txt/));
+		await vi.waitFor(() => expect(h.text()).toMatch(/running \u00b7 read old-peer\.txt/));
 		await h.emit("session_tree");
 		gate.responses.get("/old")?.end("late contents");
 		await expect(run).rejects.toThrow();
 		await new Promise((resolve) => setTimeout(resolve, 100));
 		expect(h.text()).toContain("no programs");
-		expect(h.text()).not.toContain("old-worker");
+		expect(h.text()).not.toContain("old-peer");
 	});
 
 	it("uses redacted host-call arguments in detail and trace views", async () => {
@@ -787,15 +873,15 @@ describe("Pi Exec shared passive activity", () => {
 		expect(resultText(await run)).toContain("RPC result");
 	});
 
-	it("presents one multi-worker program beside a public agent and a managed task, then leaves on settlement", async () => {
-		useWorkerFixture();
+	it("presents one multi-peer program beside a public agent and a managed task, then leaves on settlement", async () => {
+		enablePeerFixture();
 		const gate = await gateServer();
 		const h = await mixedHarness();
 		await h.scheduleTask();
 		await h.launchAgent();
 		const alpha = gatedTask(`${gate.url}/alpha`, "read", { path: "alpha.txt" });
 		const beta = gatedTask(`${gate.url}/beta`, "grep", { pattern: "beta-pattern" });
-		const code = `import asyncio\nawait asyncio.gather(agent_run(task=${alpha}, name="alpha-worker"), agent_run(task=${beta}, name="beta-worker"))`;
+		const code = `import asyncio\nawait asyncio.gather(agent_run(role="implementation-engineer", task=${alpha}, name="alpha-peer"), agent_run(role="implementation-engineer", task=${beta}, name="beta-peer"))`;
 		const run = h
 			.tool()
 			.execute(
@@ -816,7 +902,7 @@ describe("Pi Exec shared passive activity", () => {
 		expect(active).toContain("Mixed program");
 		expect(active).toContain("Public reviewer");
 		expect(active).toContain("Deferred check");
-		// The program is one unit of work: its workers are not public agents.
+		// The program is one unit of work: its peers are not public agents.
 		expect(active.match(/Mixed program/g)).toHaveLength(1);
 		expect(h.statuses.get("subagents")).toBe("agents:1");
 		expect(h.statuses.get("tasks")).toBe("tasks:1");

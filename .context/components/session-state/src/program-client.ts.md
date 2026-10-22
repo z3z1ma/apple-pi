@@ -4,6 +4,8 @@ The connection is the execution's ownership boundary, not one connection per mod
 
 A lost connection cannot acknowledge cleanup. The caller reconnects the runtime and waits for the persisted scope to disappear; scopes outlive their nested scopes and every owned process and bundle. Cleanup errors remain visible. Results themselves are transient receipts, with the Pi transcript as their durable owner.
 
+Observe the terminal result before rejecting a cancelled request. Its model usage and file changes still happened, and the caller needs those facts even though it cannot use the reply as a successful return value.
+
 The schema check reports an old running daemon rather than sending a protocol message it would ignore. Updating the checkout alone leaves a daemon on its loaded code; restarting the operator's runtime is a separate rollout decision.
 Coupled: components/session-state/src/runtime.ts, components/session-state/src/protocol.ts, components/session-state/src/schema.ts
 Verify: components/session-state/tests/program-peers.test.ts

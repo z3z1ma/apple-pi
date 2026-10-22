@@ -257,6 +257,28 @@ test("notifies when ask_user_question starts but not for other tools", async () 
 	expect(call.args.slice(2, 6)).toEqual(["-subtitle", "help me pick a backend", "-message", "Which storage backend?"]);
 });
 
+test("temporary program peers stay quiet on completion but still notify when they need the operator", async () => {
+	const previous = process.env.PI_PROGRAM_ID;
+	process.env.PI_PROGRAM_ID = "program-scope";
+	try {
+		const { calls, ctx, handlers } = createLifecycleHarness();
+		handlers.get("agent_settled")?.({ type: "agent_settled" }, ctx);
+		expect(calls).toEqual([]);
+		handlers.get("tool_execution_start")?.(
+			{
+				toolName: "ask_user_question",
+				args: { questions: [{ question: "May I change the contract?" }] },
+			},
+			ctx,
+		);
+		await flushUntil(() => Boolean(notifierCall(calls)));
+		expect(notifierCall(calls)?.args).toContain("May I change the contract?");
+	} finally {
+		if (previous === undefined) delete process.env.PI_PROGRAM_ID;
+		else process.env.PI_PROGRAM_ID = previous;
+	}
+});
+
 test("reports terminal cyber_policy errors instead of completion", async () => {
 	const { calls, ctx, handlers } = createLifecycleHarness();
 	handlers.get("input")?.({ text: "continue the current task", source: "interactive" });

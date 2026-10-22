@@ -6,7 +6,7 @@ import { sealCheckpoint, verifyCheckpoint } from "./checkpoint.js";
 import { PROGRAM_ENVELOPE_MAXIMA } from "./envelope.js";
 import { guestPythonStubs } from "./guest-api.js";
 import { extensionPythonTools } from "./guest-functions.js";
-import { createProgramSession, executeProgram, isOwnedMontyWorker } from "./program.js";
+import { createProgramSession, executeProgram, isOwnedMontyWorker, PROGRAM_PRELUDE } from "./program.js";
 import type { ProgramExecution, ProgramHostCall } from "./types.js";
 
 const MONTY_ENTRY_TYPE = "apple-pi:monty-session";
@@ -19,6 +19,7 @@ type BranchCheckpoint = { found: boolean; data?: unknown };
 export interface ProgramRunRequest {
 	code: string;
 	inputs: Record<string, string>;
+	peerBindings?: Record<string, string>;
 	timeoutMs: number;
 	callBudget: number;
 	/** Start from empty Python state and checkpoint it before running. */
@@ -105,7 +106,7 @@ export function installProgramSession(pi: ExtensionAPI): {
 	const checkout = async (ctx: ExtensionContext, callable: readonly AgentTool[]): Promise<LiveSession> => {
 		if (owner) return owner;
 		const stubs = guestPythonStubs(ctx.cwd, callable);
-		const hash = createHash("sha256").update(stubs).digest("hex");
+		const hash = createHash("sha256").update(stubs).update(PROGRAM_PRELUDE).digest("hex");
 		const checkpoint = selected ?? branchCheckpoint(ctx);
 		selected = undefined;
 		if (checkpoint.found) {
@@ -181,6 +182,7 @@ export function installProgramSession(pi: ExtensionAPI): {
 					request.onLog,
 					() => stopWorker(live, workerPid),
 					extensionPythonTools(callable),
+					request.peerBindings,
 				);
 				hostCalls += calls;
 				if (execution.sessionUsable && runGeneration === generation && owner === live) {

@@ -13,8 +13,11 @@ import {
 import { PROGRAM_ENVELOPE_MAXIMA } from "./envelope.js";
 import { guestFunctions } from "./guest-functions.js";
 import { fromPythonValue } from "./json.js";
+import { PEER_PYTHON_PRELUDE } from "./peer-python.js";
 import { PYTHON_SCHEMA_PRELUDE } from "./python-schema.js";
 import type { ProgramExecution, ProgramHostCall } from "./types.js";
+
+export const PROGRAM_PRELUDE = `${PYTHON_SCHEMA_PRELUDE}\n${PEER_PYTHON_PRELUDE}`;
 
 function keyboardInterrupt(): Error {
 	const error = new Error("pi_exec aborted");
@@ -40,7 +43,7 @@ export async function createProgramSession(
 			typeCheckStubs: stubs,
 		});
 		if (dump) await session.loadSession(dump);
-		else await session.feedRun(PYTHON_SCHEMA_PRELUDE);
+		else await session.feedRun(PROGRAM_PRELUDE);
 		const live = session;
 		return {
 			session: live,
@@ -73,6 +76,7 @@ export async function executeProgram(
 	onLog?: (values: unknown[]) => void,
 	onInterrupt?: () => void,
 	extensionTools: readonly AgentTool[] = [],
+	peerBindings: Record<string, string> = {},
 ): Promise<ProgramExecution> {
 	if (signal?.aborted) return { outcome: "aborted", error: "pi_exec aborted", sessionUsable: false };
 	const controller = new AbortController();
@@ -125,7 +129,11 @@ export async function executeProgram(
 	);
 	try {
 		if (controller.signal.aborted) throw keyboardInterrupt();
-		const feed = session.feedRun(code, { inputs: { inputs }, externalLookup, printCallback: collector });
+		const feed = session.feedRun(`peers = {name: Peer(key) for name, key in peer_bindings.items()}\n${code}`, {
+			inputs: { inputs, peer_bindings: peerBindings },
+			externalLookup,
+			printCallback: collector,
+		});
 		feedSettled = false;
 		void feed.then(
 			() => {

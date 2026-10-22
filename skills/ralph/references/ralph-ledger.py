@@ -2,7 +2,6 @@ import asyncio
 import re
 from typing import Any
 
-RALPH_TOOLS = ["read", "grep", "find", "ls", "bash", "edit", "write"]
 # Adapt the increment prompt to the caller's goal and inline it before running.
 RALPH = "<adapt references/ledger-increment.md for this goal and inline it here>"
 RALPH += " Implement one coherent increment. Never commit, push, merge, deploy, publish, reset, or invoke review. The caller owns validation and integration."
@@ -65,8 +64,8 @@ async def main() -> dict[str, Any]:
             return {"status": "stopped", "stopReason": "task-" + status.group(1), "requestedIterations": iterations,
                     "completedIterations": iteration - 1, "failures": failures}
         before = await mutationSnapshot()
-        result = await agent_run(name=f"ralph-{iteration}", profile="coding", pair=True, tools=RALPH_TOOLS,
-                                 system_prompt=RALPH, task="Goal:\n" + goal, context={"stack": stack})
+        result = await agent_run(role="implementation-engineer", name=f"ralph-{iteration}",
+                                 task=RALPH + "\n\nGoal:\n" + goal, context={"stack": stack})
         if result["status"] != "completed":
             failures.append({"iteration": iteration, "error": result.get("error") or "increment failed"})
             return {"status": "failed", "requestedIterations": iterations, "completedIterations": iteration - 1,

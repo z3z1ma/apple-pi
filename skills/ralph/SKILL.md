@@ -6,7 +6,7 @@ disable-model-invocation: true
 
 # Ralph
 
-Ralph is a caller-controlled outer loop around fresh coding workers. The repository carries implementation state between iterations; the caller supplies the goal, bounds the run, interprets the result, and retains review and integration authority.
+Ralph is a caller-controlled outer loop around fresh Implementation Engineer peers. Each iteration gets an assigned ephemeral task, returns its result directly to the program, and is discarded before the next iteration starts. The repository carries implementation state between iterations; the caller supplies the goal, bounds the run, interprets the result, and retains review and integration authority.
 
 Ralph can operate with or without ledger. Use the smallest program matching the goal's real state owner rather than inventing a task solely to run the loop.
 
@@ -17,7 +17,7 @@ Ralph can operate with or without ledger. Use the smallest program matching the 
 
 Adapt [`references/simple-increment.md`](references/simple-increment.md) for the general program or [`references/ledger-increment.md`](references/ledger-increment.md) for the ledger program. Inline the adapted prompt in the chosen Python snippet before calling `pi_exec`; do not dynamically load these prompts with `skills_body`.
 
-The snippets call `agent_run`, `git_change`, `bash`, and (for ledger status) `read` with keyword arguments against the live signature contract. The final `await main()` expression is the result. Only independent untracked-file fingerprints use `asyncio.gather`; workers remain strictly sequential. Monty does not support `create_task`.
+The snippets call `agent_run`, `git_change`, `bash`, and (for ledger status) `read` with keyword arguments against the live signature contract. The final `await main()` expression is the result. Only independent untracked-file fingerprints use `asyncio.gather`; peers remain strictly sequential. Monty does not support `create_task`.
 
 ## Shared inputs and outputs
 
@@ -29,7 +29,7 @@ Every program requires:
 
 The ledger programs additionally require:
 
-- `task`: the prepared `.ledger/<id>/task.md` whose status governs terminal task stops. The controller adds it to every worker's context stack.
+- `task`: the prepared `.ledger/<id>/task.md` whose status governs terminal task stops. The controller adds it to every peer's context stack.
 
 The simple and default ledger programs return:
 
@@ -46,18 +46,19 @@ The simple and default ledger programs return:
 }
 ```
 
-`completedIterations` counts only workers that returned successfully. `failedAt` identifies the first failed worker. Low-mutation stopping is an adaptable escape hatch, not a completion judgment. ledger task stops report the task status they observed; they do not independently prove that status is correct.
+`completedIterations` counts only peers that returned successfully. `failedAt` identifies the first failed peer. Low-mutation stopping is an adaptable escape hatch, not a completion judgment. ledger task stops report the task status they observed; they do not independently prove that status is correct.
 
-## Worker contract
+## Iteration contract
 
-Each iteration starts only after the previous one settles:
+Each iteration starts only after the previous peer is discarded:
 
-- **Role:** an untyped fresh worker using the adapted `RALPH` system prompt; do not select a catalog agent type.
-- **Profile:** `coding`.
-- **Tools:** `read`, `grep`, `find`, `ls`, `bash`, `edit`, and `write`.
-- **Context:** only the caller-supplied stack.
+- **Role:** `implementation-engineer`; its catalog definition owns the model, thinking level, and tool posture.
+- **Goal:** the caller's outcome with the adapted `RALPH` increment procedure, written into the peer's assigned ephemeral task.
+- **Context:** the caller-supplied stack, bound as a file beside that goal. The peer also has its ordinary role and organization context.
 
-Workers inspect current repository state, choose one coherent increment, implement it, run relevant checks, and stop. They never commit, push, merge, deploy, publish, reset, or decide final integration.
+`agent_run` owns the temporary person's lifetime. Completion, failure, and cancellation clean its process, window, and private work; the Pi transcript remains. A loop therefore leaves neither a growing roster nor a window per past iteration.
+
+Peers inspect current repository state, choose one coherent increment, implement it, run relevant checks, and stop. They never commit, push, merge, deploy, publish, reset, or decide final integration.
 
 ## General bounded loop
 
@@ -78,7 +79,7 @@ Use `ralph-simple.py` when the user wants repeated fresh iterations over a bound
 }
 ```
 
-The repository is the shared memory. The caller must make the goal concrete enough that a fresh worker can choose a useful increment without inventing product semantics. When the next step needs an operator decision, the worker stops and reports it.
+The repository is the shared memory. The caller must make the goal concrete enough that a fresh peer can choose a useful increment without inventing product semantics. When the next step needs an operator decision, the peer stops and reports it.
 
 ## ledger loop
 
@@ -106,6 +107,6 @@ Adapt `ledger-increment.md` with the task terminology, acceptance criteria, rele
 
 Default Ralph supplies bounded fresh-context implementation increments. After a batch, the caller inspects the repository state, runs the relevant checks, handles ordinary fixes in the root session, and decides whether another batch is useful. ledger progress or evidence is persisted only when it has continuity value for a later session.
 
-Caller validation is the default. Ask the operator to invoke `/skill:code-review` after a coherent batch when they request independent review. Keeping review outside the implementation loop preserves root reconciliation and avoids feeding unverified reviewer output into later writing workers. Nits conclude in the root session.
+Caller validation is the default. Ask the operator to invoke `/skill:code-review` after a coherent batch when they request independent review. Keeping review outside the implementation loop preserves root reconciliation and avoids feeding unverified reviewer output into later writing peers. Nits conclude in the root session.
 
 Ordinary Ralph uses the prepared goal or task artifacts directly. `ledger_add` creates task bundles and `ledger_status` moves them through their lifecycle; it archives them as `done` or `cancelled` only when the operator authorizes closure.

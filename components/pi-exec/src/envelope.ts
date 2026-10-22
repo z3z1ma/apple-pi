@@ -30,7 +30,7 @@ function clampLimit(value: number | undefined, fallback: number, min: number, ma
 
 /** Default envelope from program shape. Optional limits scale capacity up to package maxima. */
 export function deriveProgramEnvelope(code: string, limits: ProgramEnvelopeLimits = {}): ProgramEnvelope {
-	const hasWorkers = /\bagent(?:_run)?\s*\(/.test(code);
+	const hasPeers = /\b(?:agent(?:_run)?|peer)\s*\(|\.run\s*\(/.test(code);
 	const hasFanout = /\basyncio\.gather\s*\(/.test(code);
 	const callBudget = Math.min(DEFAULT_CALL_BUDGET, Math.max(64, 64 + Math.ceil(Buffer.byteLength(code) / 2_048) * 8));
 	const derived: ProgramEnvelope = {
@@ -38,7 +38,7 @@ export function deriveProgramEnvelope(code: string, limits: ProgramEnvelopeLimit
 		concurrency: hasFanout ? DEFAULT_CONCURRENCY : Math.min(8, DEFAULT_CONCURRENCY),
 		agentBudget: DEFAULT_AGENT_BUDGET,
 		memoryMb: PROGRAM_ENVELOPE_MAXIMA.memoryMb,
-		timeoutSeconds: hasWorkers ? 600 : 300,
+		timeoutSeconds: hasPeers ? 600 : 300,
 	};
 	return {
 		callBudget: clampLimit(limits.callBudget, derived.callBudget, 1, PROGRAM_ENVELOPE_MAXIMA.callBudget),

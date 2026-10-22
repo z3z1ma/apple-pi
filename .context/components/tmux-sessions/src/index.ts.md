@@ -1,3 +1,9 @@
+## file
+
+Temporary program peers keep normal tmux integration but leave routine completion attention to their caller. Their automatic bell is quiet; the notify extension still reports a question needing the operator.
+Coupled: components/notify/src/index.ts, components/session-state/src/protocol.ts
+Verify: components/tmux-sessions/tests/tmux-sessions.test.ts
+
 ## symbol:ensurePlugin
 
 The `@pi_sessions_plugin` stamp is the plugin's path plus its modification time.

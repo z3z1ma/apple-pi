@@ -3,11 +3,10 @@ import json
 import re
 from typing import Any
 
-READ_ONLY = ["read", "grep", "find", "ls"]
 PLANNER = "<inline adapted references/planner.md>"
 REVIEWER = "<inline adapted references/reviewer.md>"
 VERIFIER = "<inline adapted references/verifier.md>"
-GUARD = " Read-only: do not invoke code-review, spawn reviewers, or re-enter this graph. Findings are hypotheses; the root owns reconciliation and all mutation."
+GUARD = " Work read-only within this assigned review and return to the calling program. Findings are hypotheses; the root owns reconciliation and all mutation."
 AXES = ["standards", "intent"]
 
 def lines(key: str) -> list[str]:
@@ -141,8 +140,8 @@ async def investigate(focus: Any) -> dict[str, Any]:
             "patch": await context_clippable(value=patch, max_chars=16000, strategy="head-tail")})
         context = fitted["value"]
         context["patchTruncated"] = bool(fitted["truncated"]) or bounded["patchTruncated"]
-        result = await agent_run(name=focus["id"], profile="quick", tools=READ_ONLY,
-            system_prompt=REVIEWER + GUARD, task="Perform the assigned read-only, evidence-backed focus investigation.",
+        result = await agent_run(role="code-review-specialist", name=focus["id"],
+            task=REVIEWER + GUARD + "\n\nPerform the assigned read-only, evidence-backed focus investigation.",
             context=context, output_schema=findingSchema)
         value = result.get("value") or {}
         return {"focus": focus, "status": result["status"], "findings": value.get("findings", []),
@@ -158,8 +157,8 @@ async def verifyGroup(axis: str, groupId: str, members: list[Any]) -> dict[str, 
     batch = await candidatePack(members)
     if batch["omitted"]:
         raise ValueError("coverage failure: semantic group omitted candidates: " + groupId)
-    verdict = await agent(name=axis + "-" + groupId + "-reducer", profile="balanced", tools=READ_ONLY,
-        system_prompt=VERIFIER + GUARD, task="Independently inspect and decide this complete same-axis semantic group.",
+    verdict = await agent(role="code-review-specialist", name=axis + "-" + groupId + "-reducer",
+        task=VERIFIER + GUARD + "\n\nIndependently inspect and decide this complete same-axis semantic group.",
         context={**bounded, "axis": axis, "candidates": batch["items"]}, output_schema=decisionSchema)
     validateDecisions(members, verdict["decisions"])
     return {"groupId": groupId, "candidateReceipts": members, **verdict}
@@ -182,12 +181,11 @@ async def verifyAxis(axis: str, candidates: list[Any], reviews: list[Any], extra
     notes = [{**note, "id": f"{review['focus']['id']}-note-{index + 1}", "focusId": review["focus"]["id"]}
              for review in axisReviews for index, note in enumerate(review["notes"])]
     packedNotes = await context_pack(items=notes, fields={"topic": 160, "observation": 400}, max_serialized_chars=8000)
-    failedFocuses = [{"id": review["focus"]["id"], "error": review["error"] or "worker failed"} for review in axisReviews if review["status"] != "completed"]
+    failedFocuses = [{"id": review["focus"]["id"], "error": review["error"] or "peer failed"} for review in axisReviews if review["status"] != "completed"]
     truncatedFocuses = [review["focus"]["id"] for review in axisReviews if review["patchTruncated"]]
     focusCoverage = [{**review["focus"], "status": review["status"], "patchTruncated": review["patchTruncated"]} for review in axisReviews]
-    finalVerdict = await agent(name=axis + "-final-verifier", profile="deep", tools=READ_ONLY,
-        system_prompt=VERIFIER + GUARD,
-        task="Independently decide every original same-axis candidate exactly once and assess coverage. Never merge or rerank across axes.",
+    finalVerdict = await agent(role="scientific-skeptic", name=axis + "-final-verifier",
+        task=VERIFIER + GUARD + "\n\nIndependently decide every original same-axis candidate exactly once and assess coverage. Keep decisions and rankings within each axis.",
         context={**bounded, **extra, "axis": axis, "candidateIds": [item["candidateId"] for item in members],
                  "candidates": [] if reductionEvidence else packed["items"], "reductionEvidence": reductionEvidence,
                  "focusCoverage": focusCoverage, "notes": packedNotes["items"], "noteIdsOmitted": packedNotes["omittedIds"],
@@ -195,7 +193,7 @@ async def verifyAxis(axis: str, candidates: list[Any], reviews: list[Any], extra
     reconciliation = validateDecisions(members, finalVerdict["decisions"])
     gaps = list(finalVerdict["coverageGaps"])
     if failedFocuses:
-        gaps.append("One or more review workers failed.")
+        gaps.append("One or more review peers failed.")
     if truncatedFocuses or bounded["patchTruncated"]:
         gaps.append("Review evidence was truncated.")
     if packedNotes["omittedIds"] or packedNotes["clipped"]:
