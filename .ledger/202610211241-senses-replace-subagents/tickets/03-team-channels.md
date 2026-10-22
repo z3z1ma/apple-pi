@@ -6,9 +6,13 @@
 
 **Blocked by:** 01 Mail is threads
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] A post in a team channel does not start a turn for any member; each member's `inbox` shows it as new.
-- [ ] A post naming one member is delivered to that member as a turn, and to nobody else.
-- [ ] A person moved to another manager leaves the old channel and joins the new one.
-- [ ] A person not in a channel and not invited cannot post there and is told why.
+- [x] A post in a team channel does not start a turn for any member; each member's `inbox` shows it as new.
+- [x] A post naming one member is delivered to that member as a turn, and to nobody else.
+- [x] A person moved to another manager leaves the old channel and joins the new one.
+- [x] A person not in a channel and not invited cannot post there and is told why.
+
+**Evidence:** The new channels suite exercises pull-only posts, inbox/read_thread, a named participant receiving a turn, later unaddressed replies staying pulled, transfers, outsider refusal, and invitation. Session-state and organization: 26 files / 108 tests passed. Node and web typecheck and package loader passed.
+
+**Deviations:** `post` has an optional `invite` list so the approved cross-team invitation has an actual tool path, without introducing another tool. Mentions match complete names or ids, case-insensitively, with an optional `@`; substring matches do not notify someone.

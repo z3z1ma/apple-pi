@@ -5,7 +5,7 @@ import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { resolveAddresses } from "./addresses.js";
 import { sendCommand } from "./client.js";
-import { messagesOf, threadOf, threadsOf, withThreads } from "./threads.js";
+import { messagesOf, type ThreadPost, threadOf, threadsOf, withThreads } from "./threads.js";
 
 /** The custom message type of delivered mail; earlier transcripts use it too, so their mail renders and counts as delivered. */
 export const MAIL_CUSTOM_TYPE = "apple-pi.mailbox-message";
@@ -58,11 +58,7 @@ export function deliverMail(pi: ExtensionAPI, mail: Mail, startingUp: boolean): 
 const THREADS_MISSING =
 	"The session-state runtime predates threads; it migrates when it restarts (kill the pid in ~/.pi/agent/state/apple-pi-runtime.pid).";
 
-async function post(
-	self: string,
-	post: { thread: string; body: string; subject?: string; to?: string[]; cc?: string[] },
-	signal: AbortSignal | undefined,
-): Promise<string | undefined> {
+async function post(self: string, post: ThreadPost, signal: AbortSignal | undefined): Promise<string | undefined> {
 	if (withThreads(() => true) === undefined) throw new Error(THREADS_MISSING);
 	const receipt = await sendCommand(self, { kind: "thread_post", ...post }, { signal });
 	if (receipt.stage === "failed") throw new Error(`Not sent: ${receipt.reason}`);
@@ -122,7 +118,7 @@ function createReplyTool() {
 		name: "reply",
 		label: "reply",
 		description:
-			"Answer in a thread you are in. Everyone in the thread receives the reply, as with reply-all in email.",
+			"Answer in a thread you are in. Mail and meetings push the reply to everyone; team channels stay pulled except for people you name.",
 		promptSnippet: "Answer everyone in a thread.",
 		parameters: Type.Object(
 			{
@@ -137,6 +133,36 @@ function createReplyTool() {
 			return {
 				content: [{ type: "text", text: `Replied in ${params.thread}.${sentence(note)}` }],
 				details: { thread: params.thread },
+			};
+		},
+	});
+}
+
+function createPostTool() {
+	return defineTool({
+		name: "post",
+		label: "post",
+		description:
+			"Post in a team channel you belong to. Channels are pulled: people read them with inbox and read_thread when they choose. Naming a participant (their full name or id, optionally with @) pushes only that message to them. Your directory shows team channel ids; inbox with all: true shows every channel you belong to. You can invite colleagues by name or id with invite; they join as readers, not as pushed mail recipients.",
+		promptSnippet: "Post to a team channel; name someone to get their attention.",
+		promptGuidelines: [
+			"Use channels for shared context, mail for a conversation that should reach everyone in it. Read your channels when catching up; a post starts no turn unless it names you.",
+		],
+		parameters: Type.Object(
+			{
+				channel: Type.String({ minLength: 1, description: "The team channel id, such as team:<manager-id>." }),
+				body: Type.String({ minLength: 1, description: "The post. Name a participant to push it to them." }),
+				invite: Type.Optional(addressList("Colleagues to invite into the channel as readers.")),
+			},
+			{ additionalProperties: false },
+		),
+		async execute(_toolCallId, params, signal, _onUpdate, ctx) {
+			const self = ctx.sessionManager.getSessionId();
+			const to = resolveAddresses(self, params.invite ?? []);
+			const note = await post(self, { thread: params.channel, threadKind: "channel", body: params.body, to }, signal);
+			return {
+				content: [{ type: "text", text: `Posted in ${params.channel}.${sentence(note)}` }],
+				details: { thread: params.channel },
 			};
 		},
 	});
@@ -236,4 +262,5 @@ export function installMail(pi: ExtensionAPI, withTools: boolean): void {
 	pi.registerTool(createReplyTool());
 	pi.registerTool(createInboxTool());
 	pi.registerTool(createReadThreadTool());
+	pi.registerTool(createPostTool());
 }

@@ -199,6 +199,7 @@ try {
 		"reply",
 		"inbox",
 		"read_thread",
+		"post",
 		"search_session",
 		"revisit_note",
 		"pi_exec",
@@ -281,6 +282,7 @@ try {
 				extension.tools.has("reply") &&
 				extension.tools.has("inbox") &&
 				extension.tools.has("read_thread") &&
+				extension.tools.has("post") &&
 				extension.tools.has("directory") &&
 				extension.tools.has("hire") &&
 				extension.tools.has("rehire") &&

@@ -211,6 +211,8 @@ const MIGRATIONS = [
 		at integer not null
 	) strict;
 	create index thread_messages_by_thread on thread_messages (thread_id, seq);`,
+	// Team membership follows the tree; an explicit invitation survives a change of manager.
+	`alter table thread_participants add column invited integer not null default 0;`,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

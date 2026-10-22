@@ -54,6 +54,7 @@ const FACT_COLUMNS: Record<keyof Facts, string> = {
 const JSON_FACTS = new Set<string>(["prompt", "queue", "config", "previousSession", "git", "currentTask"]);
 
 import { type AttentionRow, jumpTarget, statusSummary } from "./attention.js";
+import { syncChannels } from "./channels.js";
 import { migrate } from "./schema.js";
 import { markRead, OPERATOR, postToThread } from "./threads.js";
 import {
@@ -205,6 +206,7 @@ export class Runtime {
 		this.db = new DatabaseSync(this.paths.db);
 		this.db.exec("pragma journal_mode = wal");
 		migrate(this.db);
+		syncChannels(this.db, Date.now());
 		rmSync(this.paths.socket, { force: true }); // we hold the lock, so any socket file is stale
 		const server = createServer((socket) => this.accept(socket));
 		this.server = server;
@@ -418,6 +420,7 @@ export class Runtime {
 		// A bridge started with a stale flag learns its manager from the record.
 		if (stored.reports_to !== null && reportsTo !== undefined && stored.reports_to !== reportsTo)
 			this.issue(connection, { kind: "transfer", manager: stored.reports_to, by: "runtime" });
+		syncChannels(db, now);
 		this.resolveParents();
 		// A (re)connecting bridge reports the tool it runs now; one that ended while the bridge was away just clears.
 		if (hello.tool) this.startTool(session.id, generation, hello.tool);
@@ -532,6 +535,7 @@ export class Runtime {
 					now,
 					sessionId,
 				);
+				syncChannels(db, now);
 				this.event("client", sessionId, current.generation, "retired", { reason: command.reason });
 				this.setCommandStage(commandId, "applied");
 				if (target) this.issue(target, { kind: "close" });
@@ -692,6 +696,7 @@ export class Runtime {
 			command.by,
 			now,
 		);
+		syncChannels(db, now);
 		this.event("client", sessionId, null, "transferred", { from, to: command.manager, by: command.by });
 		return undefined;
 	}
@@ -1058,6 +1063,12 @@ export class Runtime {
 		// The name has its own column, which a rename must change too.
 		if (facts.config && facts.config.name !== row.name)
 			db.prepare("update sessions set name = ? where id = ?").run(facts.config.name, sessionId);
+		if (
+			(facts.reportsTo !== undefined && facts.reportsTo !== row.reports_to) ||
+			(facts.manages !== undefined && (facts.manages === null ? null : Number(facts.manages)) !== row.manages) ||
+			(facts.config && facts.config.name !== row.name)
+		)
+			syncChannels(db, Date.now());
 	}
 
 	private isCurrent(sessionId: string, generation: number): boolean {

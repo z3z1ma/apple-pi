@@ -51,9 +51,10 @@ export function postToThread(
 		`insert into thread_participants (thread_id, participant, delivery, read_up_to, joined_at)
 		values (?, ?, ?, 0, ?) on conflict (thread_id, participant) do nothing`,
 	);
-	const thread = db.prepare("select subject, closed_at from threads where id = ?").get(post.thread) as
-		| { subject: string; closed_at: number | null }
+	const thread = db.prepare("select subject, kind, closed_at from threads where id = ?").get(post.thread) as
+		| { subject: string; kind: ThreadKind; closed_at: number | null }
 		| undefined;
+	if (post.threadKind === "channel" && thread?.kind !== "channel") return "no team channel with that id";
 	if (!thread) {
 		if (!post.subject) return "a new thread needs a subject";
 		if (addresses.length === 0) return "a new thread needs someone to write to";
@@ -65,20 +66,38 @@ export function postToThread(
 		if (thread.closed_at !== null) return "the thread is closed";
 		if (!isParticipant(db, post.thread, sender)) return "you are not in this thread";
 	}
-	for (const id of addresses) join.run(post.thread, id, "push", now);
+	for (const id of addresses) {
+		join.run(post.thread, id, thread?.kind === "channel" ? "pull" : "push", now);
+		if (thread?.kind === "channel")
+			db.prepare("update thread_participants set invited = 1 where thread_id = ? and participant = ?").run(
+				post.thread,
+				id,
+			);
+	}
 	const { lastInsertRowid } = db
 		.prepare("insert into thread_messages (id, thread_id, sender, body, at) values (?, ?, ?, ?, ?)")
 		.run(messageId, post.thread, sender, post.body, now);
 	const seq = Number(lastInsertRowid);
 	markRead(db, post.thread, sender, seq);
-	const push = (
-		db
-			.prepare(
-				"select participant from thread_participants where thread_id = ? and delivery = 'push' and participant != ?",
-			)
-			.all(post.thread, sender) as { participant: string }[]
-	).map((row) => row.participant);
+	const participants = db
+		.prepare("select participant, delivery from thread_participants where thread_id = ? and participant != ?")
+		.all(post.thread, sender) as { participant: string; delivery: Delivery }[];
+	const push = participants
+		.filter(
+			({ participant, delivery }) =>
+				delivery === "push" ||
+				(thread?.kind === "channel" && mentions(post.body, [participant, nameOf(db, participant)])),
+		)
+		.map((row) => row.participant);
 	return { thread: post.thread, subject: thread?.subject ?? (post.subject as string), seq, push };
+}
+
+/** A complete name or id, not a substring of another word. An @ prefix is welcome but not required. */
+function mentions(body: string, names: string[]): boolean {
+	return names.some((name) => {
+		const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+		return new RegExp(`(?<![\\p{L}\\p{N}_-])${escaped}(?![\\p{L}\\p{N}_-])`, "iu").test(body);
+	});
 }
 
 export function isParticipant(db: DatabaseSync, thread: string, participant: string): boolean {

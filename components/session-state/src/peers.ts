@@ -53,7 +53,7 @@ export function livePeers(self: string | null): Peer[] {
 }
 
 /** The tools every person has, restored after a resume replaces the tool loadout with the transcript's older one. */
-const PERSON_TOOLS = ["directory", "send_mail", "reply", "inbox", "read_thread"];
+const PERSON_TOOLS = ["directory", "send_mail", "reply", "inbox", "read_thread", "post"];
 
 /** A person as the directory shows it: who, what it does, and to whom it reports. */
 function entry(member: Member, names: Map<string, string>) {
