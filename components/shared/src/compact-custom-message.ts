@@ -27,3 +27,12 @@ export function renderInline(customType: string): void {
 	}
 	types.add(customType);
 }
+
+/** Whether `component` is a custom message rendered inline, so the tool after it stays on the next line. */
+export function rendersInline(component: unknown): boolean {
+	if (!(component instanceof CustomMessageComponent)) return false;
+	const { message } = component as unknown as { message?: { customType?: string } };
+	return Boolean(
+		message?.customType && (CustomMessageComponent.prototype as Patched)[COMPACT_TYPES]?.has(message.customType),
+	);
+}

@@ -9,6 +9,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { Container, Spacer, Text, visibleWidth } from "@earendil-works/pi-tui";
 import { beforeAll, describe, expect, it } from "vitest";
+import { renderInline } from "../../shared/src/compact-custom-message.js";
 import {
 	formatCollapsedLine,
 	formatCompactionRule,
@@ -421,8 +422,10 @@ describe("terse tool renderer integration with ToolExecutionComponent", () => {
 		expect(stripAnsi(lines[2])).toBe("● Bash(npm test) (ctrl+o to expand)");
 	});
 
-	it("keeps the next tool adjacent to a pair note", () => {
-		for (const customType of ["advisory", "other"]) {
+	it("keeps the next tool adjacent to a custom message rendered inline, such as a pair note or mail", () => {
+		renderInline("advisory");
+		renderInline("apple-pi.mailbox-message");
+		for (const customType of ["advisory", "apple-pi.mailbox-message", "other"]) {
 			const container = new Container();
 			const note = new CustomMessageComponent(
 				{
@@ -448,7 +451,7 @@ describe("terse tool renderer integration with ToolExecutionComponent", () => {
 			const lines = container.render(100).map((line) => stripAnsi(line).trimEnd());
 			const noteRow = lines.indexOf("● CONCERN check the lock");
 			expect(noteRow).toBeGreaterThanOrEqual(0);
-			expect(lines[noteRow + 1]).toBe(customType === "advisory" ? "● Bash(git status) (ctrl+o to expand)" : "");
+			expect(lines[noteRow + 1]).toBe(customType === "other" ? "" : "● Bash(git status) (ctrl+o to expand)");
 		}
 	});
 

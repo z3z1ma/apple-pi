@@ -2,14 +2,14 @@ import {
 	AssistantMessageComponent,
 	BranchSummaryMessageComponent,
 	CompactionSummaryMessageComponent,
-	CustomMessageComponent,
 	ExtensionRunner,
 	getMarkdownTheme,
 	Theme,
 	ToolExecutionComponent,
 	UserMessageComponent,
 } from "@earendil-works/pi-coding-agent";
-import { Container, sliceByColumn, Spacer, Text, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
+import { Container, Spacer, sliceByColumn, Text, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
+import { rendersInline } from "../../shared/src/compact-custom-message.js";
 import {
 	formatCollapsedLine,
 	formatCompactionSummary,
@@ -167,9 +167,7 @@ export function precedingHasTextDelta(component: ToolExecutionComponent): boolea
 	for (let i = index - 1; i >= 0; i--) {
 		const prev = children[i];
 		if (prev?.constructor?.name === "Spacer") continue;
-		if (prev instanceof CustomMessageComponent && (prev as any).message?.customType === "advisory") {
-			return false;
-		}
+		if (rendersInline(prev)) return false;
 		if (prev instanceof ToolExecutionComponent || prev?.constructor?.name === "ToolExecutionComponent") {
 			return false;
 		}
