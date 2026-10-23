@@ -98,7 +98,16 @@
     "retire-reason": "Their send-off…",
     "retire-send": "Graduate",
     "retire-done": "{name} has graduated! Farewell!",
-    "retired": "Graduated"
+    "retired": "Graduated",
+    "task-board": "Class board",
+    "team-board": "Club notices",
+    "meeting-agenda": "Council agenda",
+    "work-notes": "Study notes",
+    "carrying-task": "Carrying assignment",
+    "carry-task": "Take the assignment",
+    "give-task": "Hand over",
+    "task-giving": "Handing it to {name}…",
+    "task-given": "{name} took “{title}”!"
   },
   "style": {
     "--aw-font-body": "\"Hiragino Maru Gothic ProN\", \"Hiragino Maru Gothic Pro\", \"Avenir Next\", \"Helvetica Neue\", sans-serif",

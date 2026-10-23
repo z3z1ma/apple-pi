@@ -98,7 +98,16 @@
     "retire-reason": "Why they leave…",
     "retire-send": "Bid farewell",
     "retire-done": "{name} has left the guild.",
-    "retired": "Left the guild"
+    "retired": "Left the guild",
+    "task-board": "Quest board",
+    "team-board": "Guild notices",
+    "meeting-agenda": "Council agenda",
+    "work-notes": "Field notes",
+    "carrying-task": "Carrying quest",
+    "carry-task": "Take the quest",
+    "give-task": "Hand over",
+    "task-giving": "Handing the quest to {name}…",
+    "task-given": "{name} took up “{title}”."
   },
   "style": {
     "--aw-font-body": "\"Iowan Old Style\", Georgia, serif",

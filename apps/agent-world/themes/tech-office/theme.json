@@ -98,7 +98,16 @@
     "retire-reason": "Why they resign…",
     "retire-send": "Accept resignation",
     "retire-done": "{name} has resigned.",
-    "retired": "Resigned"
+    "retired": "Resigned",
+    "task-board": "Task board",
+    "team-board": "Team board",
+    "meeting-agenda": "Meeting agenda",
+    "work-notes": "Working notes",
+    "carrying-task": "Carrying task",
+    "carry-task": "Pick up task",
+    "give-task": "Assign",
+    "task-giving": "Assigning to {name}…",
+    "task-given": "{name} owns “{title}”."
   },
   "style": {
     "--aw-font-body": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", Inter, \"Helvetica Neue\", Arial, sans-serif",

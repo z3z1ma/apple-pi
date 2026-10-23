@@ -18,6 +18,7 @@ import { RenamePanels } from "./rename.js";
 import { RetirePanels } from "./retire.js";
 import { RookeryView } from "./rookery.js";
 import { SquarePanels } from "./square.js";
+import { WorkplacePanels } from "./workplace.js";
 
 export function PlacesOverlay({ store }: { store: WorldStore }) {
 	const state = useSyncExternalStore(placePanels.subscribe, placePanels.get);
@@ -35,6 +36,7 @@ export function PlacesOverlay({ store }: { store: WorldStore }) {
 			<RenamePanels world={world} />
 			<RetirePanels world={world} />
 			<NotepadPanels world={world} />
+			<WorkplacePanels world={world} />
 			{state.confirmEnd && <ConfirmEnd {...state.confirmEnd} />}
 		</div>
 	);

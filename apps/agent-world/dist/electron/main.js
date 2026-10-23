@@ -1883,7 +1883,16 @@ var TEXT_KEYS = [
 	"retire-reason",
 	"retire-send",
 	"retire-done",
-	"retired"
+	"retired",
+	"task-board",
+	"team-board",
+	"meeting-agenda",
+	"work-notes",
+	"carrying-task",
+	"carry-task",
+	"give-task",
+	"task-giving",
+	"task-given"
 ];
 /**
 * Style tokens every pack sets: CSS custom properties put on the page's root, which the pack's skin and the world

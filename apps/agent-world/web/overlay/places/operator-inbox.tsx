@@ -2,6 +2,16 @@ import { useEffect, useRef, useState } from "react";
 import type { MailThread, MailThreadSummary } from "../../../src/world.js";
 import "./operator-inbox.css";
 
+export function ThreadMessages({ thread }: { thread: MailThread }) {
+	return thread.messages.map((message) => (
+		<div className="aw-thread-message" key={message.seq}>
+			<strong>{message.from === "operator" ? "You" : message.name}</strong>
+			<time dateTime={new Date(message.at).toISOString()}>{new Date(message.at).toLocaleString()}</time>
+			<p>{message.body}</p>
+		</div>
+	));
+}
+
 /** Reading clears only the displayed messages; a later arrival keeps its unread badge until Read latest. */
 export function OperatorInbox({ threads }: { threads: MailThreadSummary[] }) {
 	const [thread, setThread] = useState<MailThread>();
@@ -82,13 +92,7 @@ export function OperatorInbox({ threads }: { threads: MailThreadSummary[] }) {
 					<button type="button" className="aw-button" disabled={pending} onClick={() => void read(thread.id)}>
 						Read latest
 					</button>
-					{thread.messages.map((message) => (
-						<div className="aw-thread-message" key={message.seq}>
-							<strong>{message.from === "operator" ? "You" : message.name}</strong>
-							<time dateTime={new Date(message.at).toISOString()}>{new Date(message.at).toLocaleString()}</time>
-							<p>{message.body}</p>
-						</div>
-					))}
+					<ThreadMessages thread={thread} />
 					{thread.closed ? (
 						<p>Conversation closed.</p>
 					) : (

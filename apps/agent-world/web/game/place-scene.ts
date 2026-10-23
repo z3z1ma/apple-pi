@@ -9,6 +9,7 @@ import { recruiterLook, recruiting } from "../overlay/places/recruit-state.js";
 import { renaming } from "../overlay/places/rename-state.js";
 import { retiring } from "../overlay/places/retire-state.js";
 import { squarePanels } from "../overlay/places/square-panels.js";
+import { workplacePanels } from "../overlay/places/workplace-state.js";
 import { ClickMarks, type MarkView } from "../overlay/pointer/click-marks.js";
 import { type CursorArt, type CursorKind, cursorArt, cursorCss } from "../overlay/pointer/cursor.js";
 import { pointer } from "../overlay/pointer/pointer-state.js";
@@ -2071,11 +2072,60 @@ export class PlaceScene extends Phaser.Scene {
 
 	/** A banner: its whole name, however short it had to be stitched. */
 	private bannerTarget(name: string): Target {
+		const ref = this.layout.ref;
+		const notices =
+			ref.kind === "wing"
+				? [
+						action(say(this.theme, "team-board"), () =>
+							workplacePanels.open({ kind: "team", headquarters: ref.headquarters, team: ref.headquarters }),
+						),
+					]
+				: [];
 		return {
 			name,
 			tone: "object",
-			actions: [action("Read", () => this.view.notify(say(this.theme, "banner-reads", { name })), name, "object")],
+			actions: [
+				...notices,
+				action("Read", () => this.view.notify(say(this.theme, "banner-reads", { name })), name, "object"),
+			],
 		};
+	}
+
+	private workplaceActions(): Action[] {
+		const ref = this.layout.ref;
+		if (isOutside(ref)) return [];
+		return [
+			action(say(this.theme, "task-board"), () =>
+				workplacePanels.open({ kind: "tasks", headquarters: ref.headquarters }),
+			),
+			action(say(this.theme, "team-board"), () =>
+				workplacePanels.open({ kind: "team", headquarters: ref.headquarters, team: ref.headquarters }),
+			),
+		];
+	}
+
+	private agendaAction(): Action[] {
+		const ref = this.layout.ref;
+		if (isOutside(ref)) return [];
+		return [
+			action(say(this.theme, "meeting-agenda"), () =>
+				workplacePanels.open({ kind: "meetings", headquarters: ref.headquarters }),
+			),
+		];
+	}
+
+	private giveAction(character: Character, walk: boolean): Action[] {
+		const carried = workplacePanels.get().carrying;
+		if (!carried) return [];
+		const give = () => void workplacePanels.give(character);
+		return [
+			action(
+				`${say(this.theme, "give-task")} \u201c${carried.title}\u201d to`,
+				walk ? () => this.walkUpTo(character, give) : give,
+				character.name,
+				"character",
+			),
+		];
 	}
 
 	/** The host: talking to it opens its place's panel (the innkeeper's register). */
@@ -2138,7 +2188,8 @@ export class PlaceScene extends Phaser.Scene {
 	private furnitureTarget(piece: { name: string; rect: Rect; use: string }): Target {
 		// The coordinator's desk recruits a worker (ticket 10).
 		if (piece.use === "recruit") return { name: piece.name, tone: "object", actions: this.recruitWorker() };
-		if (piece.use === "notes") return { name: piece.name, tone: "object", actions: this.readNotes() };
+		if (piece.use === "notes")
+			return { name: piece.name, tone: "object", actions: [...this.workplaceActions(), ...this.readNotes()] };
 		const actions =
 			piece.use === "innkeeper"
 				? [action(say(this.theme, "ask-host"), () => placePanels.open("innkeeper"))]
@@ -2176,6 +2227,7 @@ export class PlaceScene extends Phaser.Scene {
 			name,
 			tone: "character",
 			actions: [
+				...this.giveAction(character, false),
 				action(
 					"Read last talk with",
 					() => {
@@ -2198,6 +2250,7 @@ export class PlaceScene extends Phaser.Scene {
 			name,
 			tone: "character",
 			actions: [
+				...this.giveAction(character, true),
 				// The conversation panel and the interface's character card answer these intents.
 				action(
 					"Talk to",
@@ -2206,6 +2259,7 @@ export class PlaceScene extends Phaser.Scene {
 					"character",
 				),
 				action("Examine", () => this.view.intend({ kind: "examine", character: character.id }), name, "character"),
+				...(this.layout.ref.kind === "meeting-room" ? this.agendaAction() : []),
 				// A coordinator recruits workers who report to it (ticket 10).
 				...(character.role === "coordinator"
 					? [
@@ -2241,7 +2295,10 @@ export class PlaceScene extends Phaser.Scene {
 		return {
 			name: door.name,
 			tone: "object",
-			actions: [action(open ? "Go to" : "Enter", () => this.useDoor(door), door.name, "object")],
+			actions: [
+				action(open ? "Go to" : "Enter", () => this.useDoor(door), door.name, "object"),
+				...(door.to === "meeting-room" ? this.agendaAction() : []),
+			],
 		};
 	}
 

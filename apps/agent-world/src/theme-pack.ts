@@ -391,6 +391,16 @@ export const TEXT_KEYS = [
 	"retire-send",
 	"retire-done",
 	"retired",
+	/** The workplace: its goal board, team notices, meeting agenda, notes, carried goal, and giving it to {name}. */
+	"task-board",
+	"team-board",
+	"meeting-agenda",
+	"work-notes",
+	"carrying-task",
+	"carry-task",
+	"give-task",
+	"task-giving",
+	"task-given",
 ] as const;
 
 /**
