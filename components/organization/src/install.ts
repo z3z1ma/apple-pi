@@ -30,9 +30,10 @@ export function managesPeople(pi: ExtensionAPI, ctx: ExtensionContext): boolean 
 	return sessionRole(ctx)?.manages === true || managerOf(pi) === null;
 }
 
-export function installOrganization(pi: ExtensionAPI): void {
+/** `reflects` is false for a person with no future to carry a self into, such as a program's temporary peer. */
+export function installOrganization(pi: ExtensionAPI, { reflects }: { reflects: boolean } = { reflects: true }): void {
 	installSessionRole(pi);
-	installSelf(pi);
+	installSelf(pi, { reflects });
 	pi.on("before_agent_start", (event, ctx) => {
 		const id = ctx.sessionManager.getSessionId();
 		const role = sessionRole(ctx);

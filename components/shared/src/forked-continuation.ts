@@ -295,12 +295,14 @@ export function startFork(session: AgentSession, request: ForkRequest): ForkHand
  * Register a passive continuation that runs in a headless fork and returns one
  * message. The message joins the parent's context without starting or steering a
  * turn: at once when idle, or at the end of the current turn while one streams.
- * The returned promise settles once that fork does; it never rejects.
+ * The returned promise settles once that fork does; it never rejects. `compose` turns the fork's reply into the
+ * message, or into none.
  */
 export function registerForkedContinuation(
 	pi: ExtensionAPI,
 	customType: string,
 	label: string,
+	compose: (reply: string) => string | undefined = (reply) => `${label}: ${reply}`,
 ): (ctx: ExtensionContext, prompt: string) => Promise<void> {
 	liveSessions();
 	const running = new Set<ForkHandle>();
@@ -343,8 +345,8 @@ export function registerForkedContinuation(
 			})
 			.then(
 				(reply) => {
-					if (!running.has(fork)) return;
-					pi.sendMessage({ customType, content: `${label}: ${reply}`, display: true }, { triggerTurn: false });
+					const content = running.has(fork) ? compose(reply) : undefined;
+					if (content) pi.sendMessage({ customType, content, display: true }, { triggerTurn: false });
 				},
 				(error: unknown) => {
 					if (!running.has(fork)) return;

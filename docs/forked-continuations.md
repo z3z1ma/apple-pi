@@ -1,6 +1,6 @@
 # Forked continuations
 
-A forked continuation runs a prompt in a separate, in-memory copy of a live conversation without continuing or steering that session. Change review, automatic learning reflection, and distillation after compaction use it for passive prompts, shown as `Change review:`, `Reflection:`, and `Distill:`. Branch search and page questions use the same fork implementation with their own result delivery and tool restrictions, described below. Prompts such as `/reflect` and `/distill` stay in the main conversation.
+A forked continuation runs a prompt in a separate, in-memory copy of a live conversation without continuing or steering that session. Change review, automatic learning reflection, distillation after compaction, and self-reflection use it for passive prompts, shown as `Change review:`, `Reflection:`, `Distill:`, and `Self:`. Self-reflection adds a message only when the self changed. Branch search and page questions use the same fork implementation with their own result delivery and tool restrictions, described below. Prompts such as `/reflect` and `/distill` stay in the main conversation.
 
 ## Passive reflection behavior
 

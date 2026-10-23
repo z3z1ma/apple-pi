@@ -27,7 +27,11 @@ async function person(manager?: string) {
 				installLedger(pi);
 			},
 		],
-		() => script.shift() ?? fauxAssistantMessage("noted"),
+		// A finished task starts a self-reflection fork; it answers without taking the script's next call.
+		(context) =>
+			JSON.stringify(context.messages.at(-1)).includes("You have finished a task.")
+				? fauxAssistantMessage("Nothing changed.")
+				: (script.shift() ?? fauxAssistantMessage("noted")),
 		["ledger_status"],
 	);
 	const id = run.session.sessionManager.getSessionId();

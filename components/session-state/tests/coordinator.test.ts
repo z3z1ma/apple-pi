@@ -516,22 +516,33 @@ test.each([false, true])(
 );
 
 test("a hired person's soul and self reach the runtime, and the self follows the session through a restart", async () => {
-	const self = "# The people I work with\n- The coordinator: terse, fair.";
+	const story = "Three articles came with me; I read them as a warning about haste.";
 	const run = await fauxSession(
 		[bridge],
-		[call("update_self", { text: self }), fauxAssistantMessage("written"), fauxAssistantMessage("back")],
+		(context) => {
+			const text = JSON.stringify(context.messages.at(-1));
+			if (text.includes("<conversation>")) return fauxAssistantMessage("The summary.");
+			if (text.includes("about to be compacted")) return call("update_self", { story });
+			if (text.includes("Self rewritten")) return fauxAssistantMessage("Wrote my story.");
+			return fauxAssistantMessage("ok");
+		},
 		["read"],
 	);
 	const id = run.session.sessionManager.getSessionId();
 	try {
+		run.session.settingsManager.applyOverrides({ compaction: { enabled: false, keepRecentTokens: 1 } });
 		run.session.extensionRunner.setFlagValue("reports-to", "boss");
 		await withRole(run, "repository-archaeologist");
 		const facts = () =>
 			query(state.dbPath, "select soul, self from sessions where id = ?", id)[0] as Record<string, unknown>;
-		expect(facts()).toMatchObject({ soul: expect.stringMatching(/^You .+; habit: you .+\.$/), self: null });
+		expect(facts()).toMatchObject({
+			soul: expect.stringMatching(/^Article \d+; Article \d+; Article \d+$/),
+			self: null,
+		});
 
-		await run.session.prompt("write your self");
-		expect(toolResults(run)[0]).toMatchObject({ isError: false });
+		await run.session.prompt("work");
+		await run.session.compact();
+		const self = `## My story\n${story}`;
 		await vi.waitFor(() => expect(facts().self).toBe(self));
 
 		// A new process of the same session (a rebind here) reports the self and soul its transcript holds.

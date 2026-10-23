@@ -4,14 +4,15 @@
  * (the first of the role's models the registry knows, at the role's thinking level), its posture (`writes: false`
  * drops the built-in `edit` and `write` tools, which Pi restores from the transcript on every start, so posture is
  * re-applied before each run), and a `<role>` system prompt section. The first start with a role also draws the
- * person's soul, stored in the same entry and rendered under the role body.
+ * person's soul, stored in the same entry and rendered under the role body; a start whose draw fails warns and draws
+ * again at the next start.
  */
 
 import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { setSystemPromptSection } from "../../shared/src/system-prompt-section.js";
 import { loadRoles, type Role } from "./roles.js";
-import { drawSoul, renderSoul, type Soul, soulLine } from "./soul.js";
+import { drawSoul, isSoul, renderSoul, type Soul, soulLine } from "./soul.js";
 
 export const ROLE_ENTRY = "organization-role";
 export const ROLE_SYSTEM_PROMPT_TAG = "role";
@@ -90,8 +91,14 @@ export function installSessionRole(pi: ExtensionAPI): void {
 			warn(`Unknown role "${name}"; known roles: ${[...catalog.roles.keys()].join(", ")}.`);
 			return;
 		}
-		const soul = stored ? stored.soul : drawSoul();
-		if (!stored) pi.appendEntry<RoleEntry>(ROLE_ENTRY, { role: name, soul });
+		let soul = isSoul(stored?.soul) ? stored.soul : undefined;
+		if (!soul) {
+			soul = await drawSoul().catch((error: unknown) => {
+				warn(`No soul drawn; the next start tries again: ${error instanceof Error ? error.message : String(error)}`);
+				return undefined;
+			});
+			if (soul || !stored) pi.appendEntry<RoleEntry>(ROLE_ENTRY, { role: name, ...(soul ? { soul } : {}) });
+		}
 		resolved.set(sessionId, { role, soul });
 		applyPosture(pi, role);
 		await applyMind(pi, ctx, role, warn);

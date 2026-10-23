@@ -193,9 +193,9 @@ test("a resumed session takes its role from its transcript, with no flag", async
 		expect(resumed.session.getActiveToolNames()).toEqual(["read", "update_self"]);
 		expect(resumed.session.agent.state.systemPrompt).toContain("<role>\nYou are a Staff Software Engineer");
 		// The soul drawn at the first start is the one the resumed session has.
-		const soulOf = (prompt: string) => /As a person: [^\n]+/.exec(prompt)?.[0];
-		expect(soulOf(resumed.session.agent.state.systemPrompt)).toBe(soulOf(first.session.agent.state.systemPrompt));
-		expect(soulOf(resumed.session.agent.state.systemPrompt)).toMatch(/^As a person: You .+ One habit: you .+\.$/);
+		const soulOf = (prompt: string) => prompt.match(/\*\*Article \d+\*\*/g);
+		expect(soulOf(resumed.session.agent.state.systemPrompt)).toEqual(soulOf(first.session.agent.state.systemPrompt));
+		expect(soulOf(resumed.session.agent.state.systemPrompt)).toHaveLength(3);
 	} finally {
 		resumed.dispose();
 	}

@@ -474,7 +474,7 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 	if (process.env.PI_SESSION_STATE_DISABLED === "1") return;
 	installMail(pi);
 	// The role resolves at session start before the hello below reads it and the manager tools reconcile on it.
-	installOrganization(pi);
+	installOrganization(pi, { reflects: !process.env[PROGRAM_ID_ENV] });
 	installPeers(pi);
 	installCoordinator(pi);
 	installWork(pi);

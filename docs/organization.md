@@ -14,8 +14,8 @@ This page is the product contract. The runtime mechanics (the database, the comm
 | Manager | A person whose role manages, or the root of an organization. Only managers hire, rehire, send home, rename, move, and let go people, assign and unassign work, and hold meetings. |
 | Role | A catalog entry: an obligation, what the role leaves to others, what it delivers, its mind, its tool posture, and whether it manages. Fixed for a person's whole life. |
 | Mind | The role's ordered list of models and a thinking level; the first model the session's registry has is used. |
-| Soul | A temperament the harness draws at hire from local lists, like a name. Never edited. |
-| Self | One Markdown document the person keeps about itself and its colleagues, written with `update_self`. Never distilled, never capped. |
+| Soul | Three fragments of the world (random encyclopedia articles) drawn at hire, outside any model, and left unexplained. Never edited. |
+| Self | The person's account of itself in four parts (story, practice, commitments, colleagues), rewritten only in reflection. Never distilled, never capped. |
 | Record | What the harness knows a person did: assignments and their outcomes, manager history, hire and leave dates. |
 | Hire, rehire, send home, move, let go | Start a new person with a role and a goal under a manager; start a person again with its history; stop its process (the person sleeps); put it under another manager; record that it has left (a manager can rehire it). |
 | Thread | One conversation: a subject, its participants, and its messages in order. Mail, team channels, meetings, and task discussions are all threads. |
@@ -29,9 +29,22 @@ This page is the product contract. The runtime mechanics (the database, the comm
 
 **Mind.** At every start the role's mind is applied: the first model in its list that the registry knows, at the role's thinking level, recorded as the session's `model` fact. A person whose role names no model the registry has starts anyway and warns once. Minds are named by exact model id in the role file, never through a profile, so a role's mind is the same on every machine that has the model.
 
-**Soul.** Drawn at hire with no model call (`components/organization/src/soul.ts`): a stance (contrarian, consensus-seeking, independent), an evidence taste (first principles, measurement, precedent), a risk appetite, a length, an outlook on estimates, and one habit from a long list. It is rendered as one paragraph under the role in the system prompt, stored with the role, and shown as one line in the directory and on the person's card. Two people in one role differ by soul. The person cannot edit it.
+**Soul.** At its first start, a person with a role draws three random Wikipedia articles (`components/organization/src/soul.ts`) and keeps their titles, descriptions, and lead paragraphs. The soul is rendered under the role, unexplained: the person is told only that these are fragments of the world it came to this work with, that they are not instructions, and that their meaning is its own to find. It is stored with the role, shown as the three titles in the directory and on the person's card, and never edited. A start whose draw fails (offline) warns and draws at the next start. A soul from before fragments is drawn again.
 
-**Self.** One Markdown document per person, replaced whole with `update_self` and shown as the `<self>` section at every run; a person that has never written one sees suggested headings (the people it works with and what it thinks of them, who has done what, standing agreements, what it is on, what it has learned about this organization). It lives in the person's transcript and is reported to the runtime as the `self` fact, so the views show its headings. The [notebook](context.md) keeps its own job, sourced learnings about the work; the self is the person's own account of itself and its colleagues.
+**Self.** Four fields, each one kind of claim with its own standard of evidence:
+
+| Field | Heading | Kind of claim | Standard |
+| --- | --- | --- | --- |
+| `story` | My story | Interpretive: who I am, my reading of my soul and of what has happened to me | Mine to decide; may be reread |
+| `practice` | How I work | Descriptive: how I actually work | A source outside me for each claim: a correction, a review finding, an outcome, a colleague's words. Open contradictions stay, marked open |
+| `commitments` | What I hold myself to | Normative: what I choose to hold to | None; a choice, which never widens what the person may do |
+| `colleagues` | The people I work with | Relational: how each colleague reasons and how to work with them | What they did and said; need not match their own view |
+
+Task status, receipts, and plans stay out; tasks and the ledger hold them. The person does not choose when to rewrite its self. The harness starts a reflection, a [forked continuation](forked-continuations.md) of the person's own conversation, after a run in which it finished a task (`finish_task`) and when its context is about to be compacted, before the detail behind its recent work is gone. In the fork the person calls `update_self` with the fields it changes (omitted fields stay), or leaves the self as it is. `update_self` outside a reflection is refused. A program's temporary peer does not reflect.
+
+The `<self>` section shows the self as it stood at the session's start or its last compaction. A rewritten self reaches the conversation at once as one appended message (`Self: …`, expanded to the whole self), so the cached prompt prefix stays valid until the compaction rebuilds it. The self lives in the person's transcript and is reported to the runtime as the `self` fact (the fields as `##` sections), so the views show its headings. A self written before the four fields is ignored, and the first reflection writes a new one. The [notebook](context.md) keeps its own job, sourced learnings about the work; the self is the person's own account of itself and its colleagues.
+
+Why it is built this way: every person runs on a few aligned models that converge on the same answers, so differences between people must be pushed in from outside and then kept. The soul is that push. It comes from outside any model, because a model asked to invent a character writes the most likely one, and it is left unexplained, because an unexplained seed keeps giving new readings where an explained one settles into one. The self keeps the difference: each reflection turns what happened into the person's reading of itself, which shapes what it does next. The person interprets its soul in its story. Its practice must come from evidence outside itself, because a model's account of its own behavior is unreliable, and corrections from others are the best evidence it gets. Its commitments carry what it chose across context windows. Its view of colleagues is its own, so disagreement between people survives. People differ in what they consider; the shared rules decide what counts as proof and what anyone may do.
 
 **Record.** The directory (`directory`) shows every member of the caller's organization with its id, name, role and title, manager, status, directory, held tasks and focus, availability (no held tasks), finished assignments and their outcomes, when it first started, and, on request (`former: true`), when and why a former member left. Managers also see the backlog: unassigned live ledger tasks in the organization's working directories, discovered without assigning them. Every manager change is kept (`manager_changes`). The record is public to the organization; Agent World's card shows the focused task and titles of finished tasks.
 
@@ -55,7 +68,7 @@ Every root session has these tools. Each sends a command to the runtime or reads
 | `post` (`channel`, `body`, `invite?`) | Posts in a team channel. Posts are pulled; a post that names a participant is pushed to that person. |
 | `escalate` (`body`) | Mails the caller's manager with the subject `Escalation`. At a root it goes to the operator. It does not block. |
 | `remind_me` (`delay_seconds`, `text` or `command`) | Sends the caller a note, or starts a bash command, after a delay. See [scheduling](scheduling.md). |
-| `update_self` | Replaces the person's self. |
+| `update_self` (`story?`, `practice?`, `commitments?`, `colleagues?`) | Rewrites the named fields of the person's self. Accepted only in a reflection the harness starts. |
 | `take_task`, `focus`, `finish_task`, `promote_task` | The task tools. See [Tasks and assignments](#tasks-and-assignments). |
 
 ## Manager tools

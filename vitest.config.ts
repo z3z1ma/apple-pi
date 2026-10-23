@@ -3,6 +3,9 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
 	test: {
 		environment: "node",
+		// The default (one worker per core) saturates the machine the operator also works on.
+		maxWorkers: "25%",
+		setupFiles: ["tests/helpers/random-article.ts"],
 		env: {
 			// Only the session-state suites start a runtime daemon, each in its own temporary directory.
 			PI_SESSION_STATE_DISABLED: "1",
