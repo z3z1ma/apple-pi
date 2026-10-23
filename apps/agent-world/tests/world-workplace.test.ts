@@ -143,7 +143,7 @@ const world = (theme: string): WorldSnapshot => ({
 	},
 });
 
-async function openWorld(theme: string) {
+async function openWorld(theme: string, snapshot: WorldSnapshot = world(theme)) {
 	const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
 	const errors: string[] = [];
 	page.on("pageerror", (error) => errors.push(error.message));
@@ -208,7 +208,7 @@ async function openWorld(theme: string) {
 				},
 			};
 		},
-		[world(theme), themes] as const,
+		[snapshot, themes] as const,
 	);
 	await page.goto(`${ORIGIN}/index.html`);
 	await vi.waitFor(async () => expect(await page.evaluate(() => document.documentElement.dataset.theme)).toBe(theme), {
@@ -346,3 +346,71 @@ test("the meeting room door reads the agenda, and a participant is drawn inside"
 		await page.close();
 	}
 });
+
+test.each(PACKS)(
+	"in %s the focused quest sits in the badge row over the head, standing, seated, or asking",
+	{
+		timeout: 60_000,
+	},
+	async (id) => {
+		const task = { title: "Fix login", status: "in-progress", bundle: "/r/apple-pi/.ledger/fix-login" };
+		const posed = (name: string, status: CharacterFacts["status"]): Character => ({
+			...character(name.toLowerCase(), name, "worker", { kind: "headquarters", headquarters: HQ }),
+			facts: facts({
+				status,
+				run: status === "working" ? "running_tool" : "idle",
+				asking: status === "asking" ? { kind: "select", text: "Ship it?" } : null,
+				task,
+			}),
+		});
+		const snapshot: WorldSnapshot = {
+			...world(id),
+			characters: [
+				character(HQ, "Orla", "coordinator", { kind: "headquarters", headquarters: HQ }),
+				posed("Standing", "idle"),
+				posed("Seated", "working"),
+				posed("Asking", "asking"),
+			],
+		};
+		const { page, errors } = await openWorld(id, snapshot);
+		try {
+			type Figure = {
+				name: string;
+				x: number;
+				y: number;
+				pose: string;
+				badge: string | null;
+				questAt: [number, number] | null;
+			};
+			const figures = await view<Figure[]>(page, "figures()");
+			const questers = figures.filter((figure) => figure.questAt);
+			expect(questers.map(({ name, pose }) => [name, pose])).toEqual([
+				["Standing", "standing"],
+				["Seated", "seated"],
+				["Asking", "asking"],
+			]);
+			for (const figure of questers) {
+				const [qx, qy] = figure.questAt!;
+				// Over the head, in the badge row: never down at the hip or the chair.
+				expect(figure.y - qy, figure.name).toBeGreaterThan(1.9);
+				// Beside the status badge when there is one, else centred.
+				if (figure.badge) expect(qx - figure.x, figure.name).toBeGreaterThan(0.3);
+				else expect(Math.abs(qx - figure.x), figure.name).toBeLessThan(0.01);
+			}
+			if (SHOTS) {
+				await page.addStyleTag({ content: ".aw-interface { visibility: hidden !important; }" });
+				for (const figure of questers) {
+					const [sx, sy] = await screen(page, figure.x, figure.y - 1.2);
+					await page.screenshot({
+						path: join(SHOTS, `aw-quest-${id}-${figure.pose}.png`),
+						clip: { x: Math.max(0, sx - 90), y: Math.max(0, sy - 120), width: 180, height: 200 },
+						animations: "disabled",
+					});
+				}
+			}
+			expect(errors).toEqual([]);
+		} finally {
+			await page.close();
+		}
+	},
+);

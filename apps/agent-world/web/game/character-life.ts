@@ -249,6 +249,24 @@ export function drawBadge(scene: Phaser.Scene, kind: BadgeKind): Phaser.GameObje
 	return scene.add.container(0, 0, [mark]);
 }
 
+export const QUEST_RADIUS = 9.5;
+
+/**
+ * The focused quest, drawn as a smaller badge holding the theme's quest notice (`notice`, a texture key), centred on
+ * (0, 0) of its container. It sits in the badge row over the head, so it reads the same in every pose.
+ */
+export function drawQuestToken(scene: Phaser.Scene, notice: string): Phaser.GameObjects.Container {
+	const { world } = worn();
+	const r = QUEST_RADIUS;
+	const disc = scene.add.graphics();
+	disc.fillStyle(0x000000, 0.3).fillCircle(0.8, 1.6, r + 1.6);
+	disc.fillStyle(hex(world.badge.edge), 1).fillCircle(0, 0, r + 1.6);
+	disc.fillStyle(hex(world.badge.rim), 1).fillCircle(0, 0, r + 0.5);
+	const paper = scene.add.image(0, 0, notice);
+	paper.setScale((2 * (r - 1.5) * 0.82) / Math.max(paper.width, paper.height));
+	return scene.add.container(0, 0, [disc, paper]);
+}
+
 /** A bark as drawn: its container (the tail's tip at its (0, 0)), the bubble that can slide sideways, and its size. */
 export interface BarkShape {
 	container: Phaser.GameObjects.Container;

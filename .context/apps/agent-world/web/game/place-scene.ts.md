@@ -42,9 +42,9 @@ Verify: apps/agent-world/tests/world-places.test.ts
 
 ## symbol:PlaceScene.dress
 
-A character with a focused task (`facts.task`) carries the pack's `notice-progress` art, cut by `noticeTexture` from `quest-office.ts`, at its hip; `figureViews` reports its title as `quest`. No pack needs new art for it. Sleepers at the inn are dressed by `sleep` instead and carry nothing.
-Why: the operator accepted the quest-office notice as the carried-quest token rather than commissioning new art for three themes.
-Coupled: apps/agent-world/web/game/places/quest-office.ts
+A character with a focused task (`facts.task`) shows a quest token (`drawQuestToken`: a small badge holding the pack's `notice-progress` art, cut by `noticeTexture` from `quest-office.ts`) in the badge row over its head: beside the status badge when there is one, else where the badge would be. `figureViews` reports its title as `quest` and its place as `questAt`. No pack needs new art for it. Sleepers at the inn are dressed by `sleep` instead and carry nothing.
+Why: the first token hung at a fixed hip offset, which only fits a standing figure facing the camera; on a seated figure seen from behind it floated over the chair. The badge row follows every pose (`BADGE_LIFT`).
+Coupled: apps/agent-world/web/game/places/quest-office.ts, apps/agent-world/web/game/character-life.ts
 Verify: apps/agent-world/tests/world-workplace.test.ts
 
 ## symbol:PlaceScene.furnitureTarget
