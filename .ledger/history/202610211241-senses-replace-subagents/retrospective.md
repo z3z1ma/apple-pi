@@ -30,12 +30,14 @@ The largest risks were lifecycle ownership (peer turns, cancellation, and cleanu
 
 - Search spelling variants and distinguish execution surfaces when removing APIs. The guidance inventory missed `sub-agents` in the design-it-twice procedure, while a blanket ban on bare `agent` also rejected a valid reference to the retained Python function. The regression test in `tests/workplace-guidance.test.ts` checks hyphenated variants and removed native-tool wording while allowing `pi_exec`'s peer functions. Inspect both false negatives and false positives before widening a textual guard.
 
-- Run the whole browser step before you call a World change done. Focused runs skipped a quest-office test whose loose place-name pattern the new meeting room matched, and two stale movement tests had failed since an earlier commit. A full `test:world` run and a baseline worktree at the earlier commit separated the new break from the old ones.
+- Run the whole browser step (`npm run test:world`) before you call an Agent World change done. Focused runs skipped a quest-office test whose loose place-name pattern the new meeting room matched, and two stale movement tests had already failed before the ticket started. A full run, plus a worktree at the commit before the ticket, separated the new break from the old ones.
 
 - Split a documentation sweep by file ownership and give each lane the same banned-term search. Three parallel lanes rewrote about 45 files without conflict, and each lane reported the code-vs-spec differences it found. The lead still had to sweep files that no lane owned.
 
 ## Improvements
 
+Open follow-ups:
+
 - Live rollout of the organization onto the new tools remains a separate step for the operator.
-- A former member at the inn no longer offers the give action; no test covers it yet.
+- A former member asleep at the inn no longer offers the action that hands it a goal; no test covers that yet.
 - A wing banner opens the headquarters' team channel, which is not the wing manager's channel in a nested team.
