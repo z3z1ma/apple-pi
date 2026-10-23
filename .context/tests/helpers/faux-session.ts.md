@@ -1,5 +1,9 @@
 ## symbol:fauxSession
 
+Use the callback form returning a Promise to hold a request, including multi-turn scripts; the array form holds complete assistant messages. Run typecheck alongside these integration tests.
+Why: Vitest transpiles without typechecking. A callback mistakenly put in the array was emitted as a malformed message and settled the supposedly busy turn, so timing assertions were testing an invalid fixture.
+Verify: components/session-state/tests/workplace.test.ts
+
 The provider context the faux stream receives has only `messages`, so each recorded request has no `tools`. An assertion that a fork's tool list equals the parent's compares `undefined` with `undefined` and proves nothing. To prove a fork blocks a tool, have the fork call it, then assert the `This tool is not available in this fork.` result and the missing side effect.
 Why: an ask-agent test passed on such a tool-list comparison until a debug dump showed the recorded request keys were only `messages`.
 

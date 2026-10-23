@@ -12,24 +12,13 @@ Updated: 2026-10-20
 
 ## Learnings
 
-- `components/session-state/tests/activity.test.ts` asserts the recorded `activeTools` of a root session. Every new root-session tool (here `list_peer_sessions`, `update_self`) breaks it; it was already red on `main` before this task began. Use `expect.arrayContaining` for the tools the test is about, and check with `git stash` whether a red session-surface test is red on base before blaming a change.
+- `components/session-state/tests/activity.test.ts` asserts the recorded `activeTools` of a root session. New root-session tools (here `list_peer_sessions`, `update_self`) exposed an overly strict inventory. Use `expect.arrayContaining` for the tools the test is about; check a suspected baseline failure in a separate worktree so another lane's edits stay intact.
 - Agent World's headless recruit tests add click-through style tags that block the side panel; put card and row checks in `world-interface.test.ts` or `world-rename.test.ts`, whose fixtures leave the panel usable.
-- A `Status: done
-Created: 2026-10-20
-Updated: 2026-10-20
-
-# Retrospective
-
-## What Mattered
-
-- Settling the model early that roles are lasting people and senses are subagents, with mail open and the tree carrying only assignment: every later ticket fell out of that split without debate.
-- Keeping the catalog in Markdown files with exact model ids. The manager prompt, Agent World's hire form, and the docs table all read the same front matter, and the backend reads it without importing Pi.
-- The runtime owning the tree (`reports_to` seeded once, changed only by transfer) and reporting booleans like `manages` as facts, so every view (sidebar, dashboard, Agent World) draws the organization from columns with a pragma guard and never needs the catalog.
-
-## Learnings
-
- before `${...}` inside a template literal in a Node edit script is swallowed twice (the script's own template and the payload's); write such lines with the Edit tool.
+- Nested template literals and replacement strings can reinterpret dollar signs in a Node edit script. Use exact-text edits for template-bearing source; check the written file before treating the edit as complete.
 - Re-serializing a theme manifest with `JSON.stringify(json, null, 2)` reflows every array; splice new keys into the text instead.
+- For an authorized live rollout, close the affected people before sending new-code briefings: mail to a running session starts a turn under the code it already loaded. Restart the runtime by its exact pid, verify the new schema, then reopen the people through the runtime's `start` command. The first role assigned to an existing unroled person becomes its lifelong role; verify the choice before reopening.
+- Mail queued during startup can remain `delivered` until a turn persists it in the transcript; closing first causes a resend on the next open. Verify `applied` before assuming a briefing is durable. A login shell may be needed for the operator's environment; target tmux pane ids because closing windows can renumber window indices.
+- An idle colleague sent home by the coordinator after reopening is not evidence that migration failed. Closing is sleep, with identity, role, and history retained; the coordinator decides when to wake the colleague for more work.
 
 ## Improvements
 
