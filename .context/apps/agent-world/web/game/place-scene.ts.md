@@ -40,6 +40,13 @@ Verify: apps/agent-world/tests/world-forge.test.ts
 Coupled: apps/agent-world/web/overlay/interface/interface.css
 Verify: apps/agent-world/tests/world-places.test.ts
 
+## symbol:PlaceScene.dress
+
+A character with a focused task (`facts.task`) carries the pack's `notice-progress` art, cut by `noticeTexture` from `quest-office.ts`, at its hip; `figureViews` reports its title as `quest`. No pack needs new art for it. Sleepers at the inn are dressed by `sleep` instead and carry nothing.
+Why: the operator accepted the quest-office notice as the carried-quest token rather than commissioning new art for three themes.
+Coupled: apps/agent-world/web/game/places/quest-office.ts
+Verify: apps/agent-world/tests/world-workplace.test.ts
+
 ## symbol:PlaceScene.furnitureTarget
 
 The headquarters' desk (`furniture` with `use: "recruit"`) recruits a worker on a left click, so it is not plain furniture that a click just walks up to. While a character is under the pointer, `targetsAt` leaves the desk out, so the coordinator standing at it lists Recruit once (its own action), not twice.

@@ -784,7 +784,7 @@ describe("the board in every pack", () => {
 	for (const theme of Object.keys(BOARDS))
 		test(`${theme}: each notice is drawn smaller than its share of the board, so board shows around it`, async () => {
 			const { page, errors } = await openWorld(world(theme), true, MANY);
-			await travel(page, /quest|planning|council/i, "quest-office");
+			await travel(page, /^The (quest office|planning studio|student council)/, "quest-office");
 			await vi.waitFor(async () => expect(await notices(page)).toHaveLength(10));
 			await page.waitForTimeout(500);
 			const pinned = await notices(page);
@@ -815,7 +815,7 @@ describe.skipIf(!SHOTS)("in every theme", () => {
 	for (const theme of ["fantasy", "tech-office", "anime-school"])
 		test(`the quest office and the library in ${theme}`, async () => {
 			const { page, errors } = await openWorld(world(theme), true, MANY);
-			await travel(page, /quest|planning|council/i, "quest-office");
+			await travel(page, /^The (quest office|planning studio|student council)/, "quest-office");
 			await vi.waitFor(async () => expect(await notices(page)).toHaveLength(10));
 			await page.waitForTimeout(500);
 			await shot(page, `aw-24-${theme}-board`);

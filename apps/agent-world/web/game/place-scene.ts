@@ -39,7 +39,7 @@ import { Fidgets, type FidgetView, type Glow } from "./fidgets.js";
 import { assignSpots, charactersIn, type Layout, layoutFor, startPlace, walkGrid } from "./layout.js";
 import { cellOf, clearanceAt, findPath, type Grid, gridFor, isOpen } from "./pathing.js";
 import { ForgeBenches, type WorkView } from "./places/forge.js";
-import { type NoticeView, QuestBoard } from "./places/quest-office.js";
+import { type NoticeView, noticeTexture, QuestBoard } from "./places/quest-office.js";
 import { drawSigns, type SignView, SquareLife, type TownsfolkView } from "./places/square.js";
 import { type Facing, PERSON_TILES, type Pose, Walker, type WalkerView } from "./walker.js";
 import { Wander, type WanderView } from "./wander.js";
@@ -137,6 +137,9 @@ const BARK_FADE_MS = 320;
 const BARK_RISE = 5;
 /** Space kept round a bark on screen (CSS px): from other barks and from the interface. */
 const BARK_MARGIN = 6;
+/** A focused goal is a small notice held at the hip: its width and its foot relative to the character's feet (tiles). */
+const QUEST_TILES = 0.32;
+const QUEST_AT: Point = [0.3, -0.42];
 /** A bark that has no room waits this long (ms) before it tries again. */
 const BARK_RETRY_MS = 2500;
 
@@ -152,6 +155,8 @@ interface Figure {
 	/** Fading in from, or out toward, this point in a doorway. */
 	fade?: { at: Point; out: boolean };
 	badge?: { kind: BadgeKind; container: Phaser.GameObjects.Container };
+	/** The focused goal it carries at its side. */
+	quest?: Phaser.GameObjects.Image;
 	/**
 	 * Its bark: the line, its shape, when it starts to fade out, how far its bubble slides sideways (px) to keep clear,
 	 * and how much of it shows (eased toward 1 while it has room, toward 0 while it is covered or going).
@@ -190,6 +195,7 @@ export interface FigureView {
 	moving: boolean;
 	frame: number;
 	badge: BadgeKind | null;
+	quest: string | null;
 	bark: string | null;
 	/** Where its bark's bubble is on screen (CSS px) while it shows. */
 	barkBox: Box | null;
@@ -644,7 +650,7 @@ export class PlaceScene extends Phaser.Scene {
 		return [...this.figures.values()].filter((f) => f.leaving).map((figure) => this.figureView(figure));
 	}
 
-	private figureView({ character, walker, look, badge, bark, sleep }: Figure): FigureView {
+	private figureView({ character, walker, look, badge, quest, bark, sleep }: Figure): FigureView {
 		const view = walker.view();
 		return {
 			id: character.id,
@@ -656,6 +662,7 @@ export class PlaceScene extends Phaser.Scene {
 			moving: view.moving,
 			frame: view.frame,
 			badge: badge?.kind ?? null,
+			quest: quest ? (character.facts?.task?.title ?? null) : null,
 			bark: (bark && !bark.going ? bark.line : null) ?? (sleep ? "z" : null),
 			barkBox: bark && bark.shown > 0 ? this.barkBox(bark) : null,
 			alpha: walker.sprite.alpha,
@@ -1694,6 +1701,8 @@ export class PlaceScene extends Phaser.Scene {
 		figure.spot = undefined;
 		figure.nextBark = undefined;
 		this.dropBadge(figure);
+		figure.quest?.destroy();
+		figure.quest = undefined;
 		if (animate) this.hushBark(figure);
 		this.wakeUp(figure);
 		const gone = () => {
@@ -1759,6 +1768,13 @@ export class PlaceScene extends Phaser.Scene {
 		if (figure.badge?.kind !== kind) {
 			this.dropBadge(figure);
 			if (kind) figure.badge = { kind, container: drawBadge(this, kind) };
+		}
+		if (character.facts?.task && !figure.quest) {
+			figure.quest = this.add.image(0, 0, noticeTexture(this, "progress")).setOrigin(0.5, 1);
+			figure.quest.setScale((QUEST_TILES * TILE) / figure.quest.width);
+		} else if (!character.facts?.task && figure.quest) {
+			figure.quest.destroy();
+			figure.quest = undefined;
 		}
 		if (!needsYou(character)) {
 			figure.nextBark = undefined;
@@ -1884,6 +1900,10 @@ export class PlaceScene extends Phaser.Scene {
 					.setScale(ui);
 			}
 			figure.badge?.container.setPosition(x, top).setDepth(depth).setScale(ui).setAlpha(walker.sprite.alpha);
+			figure.quest
+				?.setPosition((walker.x + QUEST_AT[0]) * TILE, (walker.y + QUEST_AT[1]) * TILE)
+				.setDepth(depth + 0.01)
+				.setAlpha(walker.sprite.alpha);
 		}
 		this.liveBarks(time, delta, ui);
 	}

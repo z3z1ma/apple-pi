@@ -62,7 +62,11 @@ const character = (id: string, name: string, role: Character["role"], place: Cha
 	role,
 	place,
 	startedAt: NOW - (id === HQ ? 9_000 : 8_000),
-	facts: facts({ reportsTo: id === HQ ? null : HQ }),
+	facts: facts({
+		reportsTo: id === HQ ? null : HQ,
+		task:
+			id === "tests" ? { title: "Fix login", status: "in-progress", bundle: "/r/apple-pi/.ledger/fix-login" } : null,
+	}),
 });
 const world = (theme: string): WorldSnapshot => ({
 	connected: true,
@@ -273,6 +277,8 @@ describe.each(PACKS)("%s", (id) => {
 			await dialog.locator("strong", { hasText: "the guide" }).waitFor({ timeout: 5000 });
 			await dialog.getByRole("button", { name: text["carry-task"] }).click();
 			await page.getByRole("complementary", { name: text["carrying-task"] }).waitFor({ timeout: 5000 });
+			// Picking a goal up assigns it to nobody; only handing it over does.
+			expect((await calls(page)).assigned).toEqual([]);
 
 			const docs = (await view<{ id: string; x: number; y: number }[]>(page, "figures()")).find(
 				(figure) => figure.id === "docs",
@@ -321,7 +327,20 @@ test("the meeting room door reads the agenda, and a participant is drawn inside"
 		await page.getByRole("menuitem", { name: /^Enter/ }).click();
 		await vi.waitFor(async () => expect(await view(page, "place()")).toBe(`meeting-room:${HQ}`), { timeout: 10000 });
 		expect(await view(page, "characters()")).toEqual(["Tests"]);
+		await vi.waitFor(async () =>
+			expect((await view<{ name: string; quest: string | null }[]>(page, "figures()"))[0]?.quest).toBe("Fix login"),
+		);
 		await shot(page, "aw-workplace-meeting");
+		if (SHOTS) {
+			await page.addStyleTag({ content: ".aw-interface { visibility: hidden !important; }" });
+			const [tests] = await view<{ x: number; y: number }[]>(page, "figures()");
+			const [sx, sy] = await screen(page, tests.x, tests.y - 0.6);
+			await page.screenshot({
+				path: join(SHOTS, "aw-workplace-quest-token.png"),
+				clip: { x: Math.max(0, sx - 90), y: Math.max(0, sy - 110), width: 180, height: 180 },
+				animations: "disabled",
+			});
+		}
 		expect(errors).toEqual([]);
 	} finally {
 		await page.close();

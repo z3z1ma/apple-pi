@@ -70,7 +70,7 @@ const opaque = new Map<string, Rect>();
  * The notice sprite as pinned: the pack's `world.notice.paper` part of it, with the board around the paper cut away
  * when the pack asks (`cutOut`: whatever touches the part's edge and looks like the board). Made once per pack.
  */
-function noticeTexture(scene: Phaser.Scene, kind: NoticeKind): string {
+export function noticeTexture(scene: Phaser.Scene, kind: NoticeKind): string {
 	const key = `notice:${kind}`;
 	if (scene.textures.exists(key)) return key;
 	const source = scene.textures.get(`overlay:notice-${kind}`).getSourceImage() as HTMLImageElement;

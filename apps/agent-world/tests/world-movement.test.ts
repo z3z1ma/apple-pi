@@ -215,9 +215,9 @@ test("a click on furniture walks to the nearest open floor; a second click mid-w
 		expect(isOpen(gridFor(HALL), [end.x, end.y])).toBe(true);
 		expect(Math.hypot(end.x - table[0], end.y - table[1])).toBeLessThan(1.6);
 
-		// Walk west, then click east while still walking.
+		// Walk west (open floor east of the notice board, whose click opens a panel), then click east while still walking.
 		await record(page);
-		await clickAt(page, [5, 11]);
+		await clickAt(page, [7.5, 11]);
 		await page.waitForTimeout(700);
 		const before = (await avatar(page))!;
 		expect(before.moving).toBe(true);
@@ -249,7 +249,7 @@ test("hover text names the left-click action; right click lists every action and
 		const orla = await figure(page, HQ);
 		const body: Point = [orla.x, orla.y - 0.9];
 		await pointAt(page, body);
-		await vi.waitFor(async () => expect(await hoverText(page)).toBe("Talk to Orla the Wise / 5 more options"));
+		await vi.waitFor(async () => expect(await hoverText(page)).toBe("Talk to Orla the Wise / 6 more options"));
 		await shot(page, "hover-character");
 		const archway = HALL.doors.find((d) => d.name === "Archway to the gallery")!;
 		const [dx, dy, dw, dh] = archway.rect;
@@ -268,6 +268,7 @@ test("hover text names the left-click action; right click lists every action and
 			"Talk to Orla the Wise",
 			"Examine Orla the Wise",
 			"Recruit a guild member",
+			"Read the notes of Orla the Wise",
 			"Rename Orla the Wise",
 			"End session of Orla the Wise",
 			"Walk here",
