@@ -12,4 +12,3 @@
 
 - `.ledger/202610150034-code-context-evaluation/task.md` — planning — Evaluate code context sidecars on replayed failure tasks — Phase 5 of code-context sidecars: replay 3–5 historical failure tasks under Baseline, Read-only injection, and Full v1 (gate) and compare pre-edit constraint awareness, plan changes after blocks, violation rates, and token overhead.
 
-- `.ledger/202610211241-senses-replace-subagents/task.md` — in-progress — Senses and peers replace subagents — Remove the agent tool and subagent manager; explorer and researcher become first-class one-shot tools; all other cross-agent work, including pi_exec model workers, runs through peers; /btw owns its session.

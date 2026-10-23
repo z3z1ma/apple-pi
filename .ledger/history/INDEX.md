@@ -139,3 +139,5 @@
 - `.ledger/history/202610191114-agent-world-alive/task.md` — done — Agent World: a more alive world — Follow-up to the Agent World build: cursor and click feel, depth and grounding in every place, varied pets and NPCs with idle animations and wandering, fun ambient NPCs, a second exterior per theme, recruiting agents in theme, Slack reading fixes, and an aliveness pass.
 
 - `.ledger/history/202610202140-organization/task.md` — done — Organization: Pi sessions as people with roles, souls, selves, and an org tree — Turn peer sessions into lasting people: a role catalog with fixed minds, harness-drawn souls, harness-kept selves, an org tree rooted at the operator's session with managers hired from the catalog, open mail across the org, and Agent World as the view.
+
+- `.ledger/history/202610211241-senses-replace-subagents/task.md` — done — Senses and peers replace subagents — Remove the agent tool and subagent manager; explorer and researcher become first-class one-shot tools; all other cross-agent work, including pi_exec model workers, runs through peers; /btw owns its session.
