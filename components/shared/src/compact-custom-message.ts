@@ -18,8 +18,7 @@ export function renderInline(customType: string): void {
 		const render = prototype.render;
 		prototype.render = function (this: CustomMessageComponent, width: number): string[] {
 			const lines = render.call(this, width);
-			const { message } = this as unknown as { message: { customType: string } };
-			if (!(prototype as Patched)[COMPACT_TYPES]?.has(message.customType)) return lines;
+			if (!rendersInline(this)) return lines;
 			while (lines.length && !lines[0]?.trim()) lines.shift();
 			while (lines.length && !lines.at(-1)?.trim()) lines.pop();
 			return lines.map((line) => line.trimEnd());
