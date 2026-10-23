@@ -6,6 +6,10 @@ Coupled: components/tmux-sessions/scripts/sidebar.sh, components/session-state/s
 
 ## symbol:live
 
+Every list is in arrival order (first start, then session id), never by state or recency.
+Why: attention order (needs-you first, then most recently updated) reshuffled cards on every fact update; the operator found that unusable. State shows on each card and in the lanes.
+Verify: components/tmux-sessions/sidebar/tests/test_sidebar.py
+
 This server's socket from tmux is compared after `os.path.realpath`.
 Why: the runtime stores tmux sockets by resolved path (`/tmp` is `/private/tmp` on macOS); the raw path matches nothing.
 Verify: components/tmux-sessions/sidebar/tests/test_sidebar.py

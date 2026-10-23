@@ -122,6 +122,11 @@ class World:
         self.db, self.runtime, self.tmux, self.tmp_path = db, runtime, tmux, tmp_path
         self.socket = os.path.realpath(SOCKET)
 
+    def arrival(self, started_at: float | None) -> int:
+        """When a session first started (ms); by default sessions arrive in the order the test adds them."""
+        self.added = getattr(self, "added", 0) + 1
+        return self.added if started_at is None else int(started_at * 1000)
+
     def execute(self, sql: str, *params) -> None:
         with sqlite3.connect(self.db) as db:
             db.execute(sql, params)
@@ -145,6 +150,7 @@ class World:
         ended: bool = False,
         socket: str | None = None,
         focus: dict | None = None,
+        started_at: float | None = None,
         **facts,
     ) -> None:
         """A session with one incarnation in `pane` (added to fake tmux too); times are in seconds."""
@@ -168,10 +174,11 @@ class World:
         )
         self.execute(
             "insert into incarnations (session_id, generation, pid, process_started_at, process_state, started_at, "
-            "ended_at, source, updated_at, tmux_socket, pane_id) values (?, ?, 1, 0, ?, 0, ?, 'bridge', 0, ?, ?)",
+            "ended_at, source, updated_at, tmux_socket, pane_id) values (?, ?, 1, 0, ?, ?, ?, 'bridge', 0, ?, ?)",
             session_id,
             incarnation or generation,
             process_state,
+            self.arrival(started_at),
             now if ended else None,
             socket or self.socket,
             pane,

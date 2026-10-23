@@ -29,39 +29,49 @@ def test_lists_only_live_root_sessions_in_panes_of_this_tmux_server(world, monke
     assert model.live() == []
 
 
-def test_status_needs_you_and_attention_order_follow_the_recorded_facts(world):
+def test_status_and_needs_you_follow_the_recorded_facts_and_the_order_is_arrival(world):
     now = time.time()
-    world.add("quiet-old", "%1", updated_at=now - 900)
-    world.add("quiet-new", "%2", updated_at=now - 60)
-    world.add("working", "%3", "running_tool", updated_at=now - 30)
-    world.add("done", "%4", needs_you_since=now - 100, updated_at=now - 100)
-    world.add("asking", "%5", "running_tool", prompt={"id": "q1"}, needs_you_since=now - 300)
+    # Started in this order; their states and updates would have reshuffled an attention order.
+    world.add("quiet-old", "%1", updated_at=now - 900, started_at=now - 3000)
+    world.add("quiet-new", "%2", updated_at=now - 60, started_at=now - 2500)
+    world.add("working", "%3", "running_tool", updated_at=now - 30, started_at=now - 2000)
+    world.add("done", "%4", needs_you_since=now - 100, updated_at=now - 100, started_at=now - 1500)
+    world.add("asking", "%5", "running_tool", prompt={"id": "q1"}, needs_you_since=now - 300, started_at=now - 1000)
     # Settled unseen, then mail started another run: it works, waits for nobody, and keeps its unseen result.
-    world.add("working-again", "%6", "running_tool", needs_you_since=now - 400, updated_at=now - 20)
+    world.add(
+        "working-again", "%6", "running_tool", needs_you_since=now - 400, updated_at=now - 20, started_at=now - 500
+    )
 
     agents = model.live()
 
-    assert ids(agents) == ["asking", "done", "working-again", "working", "quiet-new", "quiet-old"]
+    order = ["quiet-old", "quiet-new", "working", "done", "asking", "working-again"]
+    assert ids(agents) == order
     by_id = {agent.session_id: agent for agent in agents}
-    assert [(by_id[key].status, by_id[key].unseen, by_id[key].needs_you) for key in ids(agents)] == [
-        ("waiting", False, True),
-        ("idle", True, True),
-        ("busy", True, False),
+    assert [(by_id[key].status, by_id[key].unseen, by_id[key].needs_you) for key in order] == [
+        ("idle", False, False),
+        ("idle", False, False),
         ("busy", False, False),
-        ("idle", False, False),
-        ("idle", False, False),
+        ("idle", True, True),
+        ("waiting", False, True),
+        ("busy", True, False),
     ]
-    assert [presentation.state(by_id[key]) for key in ids(agents)] == [
-        "waiting",
+    assert [presentation.state(by_id[key]) for key in order] == [
+        "quiet",
+        "quiet",
+        "working",
         "done",
+        "waiting",
         "working",
-        "working",
-        "quiet",
-        "quiet",
     ]
     assert presentation.state_label(by_id["working-again"]) == "working · result unseen"
     assert presentation.state_label(by_id["working"]) == "working"
     assert by_id["working"].updated_at == int(now - 30)
+
+    # New activity on the oldest session moves nothing.
+    world.execute(
+        "update sessions set updated_at = ?, run_state = 'running_tool' where id = 'quiet-old'", int(now * 1000)
+    )
+    assert ids(model.live()) == order
 
 
 def test_last_tool_falls_back_to_the_latest_tool_event_and_the_spark_counts_recent_tools(world):

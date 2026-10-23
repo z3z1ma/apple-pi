@@ -20,7 +20,7 @@ def setup_agents(world):
     return world.tmux
 
 
-def test_table_lists_agents_in_attention_order_and_previews_the_selected_pane(world):
+def test_table_lists_agents_in_arrival_order_and_previews_the_selected_pane(world):
     setup_agents(world)
 
     async def scenario():

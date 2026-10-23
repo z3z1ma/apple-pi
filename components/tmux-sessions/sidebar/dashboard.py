@@ -6,7 +6,7 @@
 """Pi agent dashboard: a tmux window with every root Pi agent in a table and a live view of the selected one.
 
 Organizations come first, each root followed by its people indented under their managers with their role titles;
-sessions on their own follow in attention order."""
+sessions on their own follow in arrival order."""
 
 from __future__ import annotations
 

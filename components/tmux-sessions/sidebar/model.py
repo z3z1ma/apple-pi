@@ -61,6 +61,8 @@ class Agent:
     pane_id: str
     updated_at: int
     needs_you_since: int | None = None
+    # When the session first started (ms): the order it keeps in every list.
+    since: int = 0
     tmux_session: str = ""
     window_index: str = ""
     pane_index: str = ""
@@ -115,6 +117,7 @@ def connect() -> sqlite3.Connection | None:
 LIVE_SESSIONS = """
 select s.id, s.generation, s.run_state, s.prompt, s.cwd, s.name, s.updated_at, s.needs_you_since, s.model,
     s.context_tokens, s.cost, s.current_tool, s.current_tool_arg, {focus} as focused_task, {optional}, i.pane_id,
+    (select min(f.started_at) from incarnations f where f.session_id = s.id) as since,
     (select ts.name from tmux_window_links l join tmux_sessions ts on ts.socket = l.socket and ts.id = l.session_id
         where l.socket = p.socket and l.window_id = p.window_id order by l.window_index limit 1) as tmux_session,
     (select l.window_index from tmux_window_links l
@@ -168,8 +171,8 @@ def optional_columns(db: sqlite3.Connection) -> set[str]:
 
 
 def live() -> list[Agent]:
-    """This tmux server's live top-level sessions in attention order: needs-you first, the longest-waiting first;
-    then working, then idle, most recently changed first."""
+    """This tmux server's live top-level sessions in arrival order: the first to start first. The order never changes
+    with state or activity; state shows on each card, and lanes group sessions by it."""
     server, focused, pane_index = "", set(), {}
     for line in tmux(
         "display-message",
@@ -221,6 +224,7 @@ def live() -> list[Agent]:
             pane_id=row["pane_id"],
             updated_at=row["updated_at"] // 1000,
             needs_you_since=row["needs_you_since"],
+            since=row["since"] or 0,
             tmux_session=row["tmux_session"] or "",
             window_index="" if row["window_index"] is None else str(row["window_index"]),
             pane_index=pane_index.get(row["pane_id"], ""),
@@ -238,19 +242,13 @@ def live() -> list[Agent]:
             ),
         )
         agents.append(agent)
-    agents.sort(key=attention_order)
+    agents.sort(key=lambda agent: (agent.since, agent.session_id))
     return agents
 
 
-def attention_order(agent: Agent) -> tuple[int, int]:
-    if agent.needs_you:
-        return (0, agent.needs_you_since or 0)
-    return (1 if agent.status == "busy" else 2, -agent.updated_at)
-
-
 def trees(agents: list[Agent]) -> list[list[Agent]]:
-    """The live agents as organizations: one list per live root, in attention order, each root first and its people
-    after it depth-first in attention order, with `depth` set. A person whose manager is not live is a root here."""
+    """The live agents as organizations: one list per live root, in arrival order, each root first and its people
+    after it depth-first in arrival order, with `depth` set. A person whose manager is not live is a root here."""
     by_id = {agent.session_id: agent for agent in agents}
     reports: dict[str, list[Agent]] = {}
     roots: list[Agent] = []
