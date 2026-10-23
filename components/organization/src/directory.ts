@@ -1,6 +1,6 @@
 /**
  * The organization a session belongs to, read from the session-state database: the tree of `reports_to` that ends
- * at one root (a top-level session with no manager). Everyone in the tree is a member, awake or asleep; sessions in
+ * at one root (a top-level session with no manager). Everyone in the tree is a member, at work or at home; sessions in
  * other trees are other organizations.
  */
 
@@ -20,7 +20,7 @@ export interface Member {
 	soul: string | null;
 	/** The manager's session id; null for the root. */
 	reportsTo: string | null;
-	status: "busy" | "idle" | "waiting" | "asleep";
+	status: "busy" | "idle" | "waiting" | "at home";
 	cwd: string;
 	/** Work explicitly held, with one focus and a record of finished assignments. */
 	tasks: AssignedTask[];
@@ -109,7 +109,7 @@ export function organizationOf(self: string, includeSelf = false): Organization 
 				title: row.role_title,
 				soul: row.soul,
 				reportsTo: row.reports_to,
-				status: !row.awake ? "asleep" : row.prompt ? "waiting" : row.run_state === "idle" ? "idle" : "busy",
+				status: !row.awake ? "at home" : row.prompt ? "waiting" : row.run_state === "idle" ? "idle" : "busy",
 				cwd: row.cwd,
 				...workOf(db, row.id),
 				since: row.since,

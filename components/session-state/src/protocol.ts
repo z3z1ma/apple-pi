@@ -144,7 +144,7 @@ export type Command =
 	| { kind: "task_moved"; from: string; to: string }
 	/**
 	 * Post a message from the request's session (or a named outside sender) to a thread, creating it when new. Applied
-	 * by the runtime, which pushes the message as mail to each pushed participant; the reason names who is asleep.
+	 * by the runtime, which pushes the message as mail to each pushed participant; the reason names who is at home.
 	 */
 	| ({ kind: "thread_post" } & ThreadPost)
 	/** The session has read `thread` up to message `seq`. Applied by the runtime. */

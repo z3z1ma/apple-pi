@@ -142,7 +142,7 @@ export function installPeers(pi: ExtensionAPI): void {
 			name: "directory",
 			label: "directory",
 			description:
-				"Your organization's directory: everyone in it including you, awake or asleep, with the operator at the top, name, id, title, manager, whether they are working, idle, asking the operator, or asleep, their explicit tasks and focused goal, whether they are available for work, their directory, one line of their soul, and the record of finished assignments and outcomes. Managers also see unassigned live ledger tasks in the backlog. Former members, who left, are listed only with former: true. Write to anyone with send_mail by name.",
+				"Your organization's directory: everyone in it including you, at work or at home, with the operator at the top, name, id, title, manager, whether they are working, idle, asking the operator, or at home, their explicit tasks and focused goal, whether they are available for work, their directory, one line of their soul, and the record of finished assignments and outcomes. Managers also see unassigned live ledger tasks in the backlog. Former members, who left, are listed only with former: true. Write to anyone with send_mail by name.",
 			promptSnippet: "Your organization's directory: who is in it, what each does, and whom each reports to.",
 			parameters: Type.Object(
 				{ former: Type.Optional(Type.Boolean({ description: "Also list the people who left, with when and why." })) },

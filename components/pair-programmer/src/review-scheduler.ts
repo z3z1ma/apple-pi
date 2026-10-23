@@ -165,7 +165,7 @@ const EXPLORATION_TOOLS = new Set([
 	"wiki_references",
 ]);
 const VERIFICATION_TOOLS = new Set(["test", "lint", "typecheck", "check", "build"]);
-const DELEGATION_TOOLS = new Set(["hire", "rehire", "assign"]);
+const DELEGATION_TOOLS = new Set(["hire", "call_in", "rehire", "assign"]);
 const DELEGATED_RESULT_TOOLS = new Set(["explore", "research"]);
 const PACKAGE_MANAGERS = new Set(["npm", "pnpm", "yarn", "bun", "npx"]);
 const VERIFICATION_BINS = new Set([

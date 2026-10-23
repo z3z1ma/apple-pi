@@ -169,7 +169,7 @@ describe("classifyPairWork", () => {
 		).toBe("exploration");
 		expect(classifyPairWork({ toolCalls: [{ name: "pi_exec" }] }).phase).toBe("execution");
 		expect(classifyPairWork({ toolCalls: [{ name: "mystery" }] }).phase).toBe("execution");
-		for (const name of ["hire", "rehire", "assign"]) {
+		for (const name of ["hire", "call_in", "rehire", "assign"]) {
 			expect(classifyPairWork({ toolCalls: [{ name }] }).phase).toBe("delegation");
 			expect(classifyPairWork({ toolResults: [{ toolName: name }] }).delegatedResult).toBe(false);
 		}

@@ -145,8 +145,9 @@ test("a coordinator starts a session in a new tmux window, and reopens it by id 
 		}),
 		fauxAssistantMessage("started"),
 		call("rehire", { person: "worker-1" }),
-		fauxAssistantMessage("rehired"),
-		call("rehire", { person: "worker-1", goal: "Check the rewritten interfaces." }),
+		call("call_in", { person: "worker-1" }),
+		fauxAssistantMessage("called in"),
+		call("call_in", { person: "worker-1", goal: "Check the rewritten interfaces." }),
 	]);
 	const coordinatorId = run.session.sessionManager.getSessionId();
 	try {
@@ -188,7 +189,12 @@ test("a coordinator starts a session in a new tmux window, and reopens it by id 
 		tmux("kill-window", "-t", "Ada Lovelace");
 		await vi.waitFor(() => expect(incarnation("worker-1").ended_at).not.toBeNull(), { timeout: 15000 });
 		await run.session.prompt("bring it back");
+		// A person sent home is still a member: it is called in, not rehired.
 		expect(toolResults(run)[1]).toMatchObject({
+			isError: true,
+			text: expect.stringContaining("worker-1 is still a member; call_in brings it back from home."),
+		});
+		expect(toolResults(run)[2]).toMatchObject({
 			isError: false,
 			text: expect.stringContaining("worker-1 is back (worker-1)."),
 		});
@@ -210,7 +216,7 @@ test("a coordinator starts a session in a new tmux window, and reopens it by id 
 		tmux("kill-window", "-t", "Ada Lovelace");
 		await vi.waitFor(() => expect(incarnation("worker-1").ended_at).not.toBeNull(), { timeout: 15000 });
 		await run.session.prompt("bring it back with the next goal");
-		expect(toolResults(run)[2]).toMatchObject({ isError: false });
+		expect(toolResults(run)[3]).toMatchObject({ isError: false });
 		expect(starts().at(-1)?.goal).toContain("Check the rewritten interfaces.");
 		expect(
 			query(state.dbPath, "select count(*) as count from assignments where person = 'worker-1' and ended_at is null"),
@@ -389,6 +395,7 @@ test("hiring into a role the catalog lacks fails before any window opens", async
 test("a hired person whose role does not manage loses the lifecycle tools; a hired manager keeps them", async () => {
 	const tools = [
 		"hire",
+		"call_in",
 		"rehire",
 		"send_home",
 		"rename",
@@ -473,6 +480,7 @@ test.each([false, true])(
 					"post",
 					"escalate",
 					"hire",
+					"call_in",
 					"rehire",
 					"send_home",
 					"rename",

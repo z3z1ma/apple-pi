@@ -112,7 +112,7 @@ test("a session lists its organization, awake and asleep, not subagents or stran
 				soul: null,
 				manager: "docs-worker",
 				team: "team:peer-1",
-				status: "asleep",
+				status: "at home",
 				directory: expect.any(String),
 				availability: "available",
 				focus: null,

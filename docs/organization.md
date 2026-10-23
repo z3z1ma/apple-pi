@@ -11,13 +11,13 @@ This page is the product contract. The runtime mechanics (the database, the comm
 | Person | A root Pi session with a stable session id. `pi --session-id X` reopens the same person; `/fork` and `/clone` make a new one. Your own sessions are people too. |
 | Organization | Every person whose chain of managers ends at one root. The **root** is a person with no manager. Two roots on one machine are two organizations. |
 | Operator | The human. The operator is a person at the top of every organization, listed in the directory as `operator`, with no Pi session. Anyone can mail the operator. |
-| Manager | A person whose role manages, or the root of an organization. Only managers hire, rehire, send home, rename, move, and let go people, assign and unassign work, and hold meetings. |
+| Manager | A person whose role manages, or the root of an organization. Only managers hire, send home, call in, let go, rehire, rename, and move people, assign and unassign work, and hold meetings. |
 | Role | A catalog entry: an obligation, what the role leaves to others, what it delivers, its mind, its tool posture, and whether it manages. Fixed for a person's whole life. |
 | Mind | The role's ordered list of models and a thinking level; the first model the session's registry has is used. |
 | Soul | Three fragments of the world (random encyclopedia articles) drawn at hire, outside any model, and left unexplained. Never edited. |
 | Self | The person's account of itself in four parts (story, practice, commitments, colleagues), rewritten only in reflection. Never distilled, never capped. |
 | Record | What the harness knows a person did: assignments and their outcomes, manager history, hire and leave dates. |
-| Hire, rehire, send home, move, let go | Start a new person with a role and a goal under a manager; start a person again with its history; stop its process (the person sleeps); put it under another manager; record that it has left (a manager can rehire it). |
+| Hire, send home, call in, let go, rehire, move | Start a new person with a role and a goal under a manager; stop its process (the person is at home); start a person at home again with its history; record that it has left the organization; bring a former member back; put it under another manager. Hiring and letting go change membership; sending home and calling in change only whether the person is at work. |
 | Thread | One conversation: a subject, its participants, and its messages in order. Mail, team channels, meetings, and task discussions are all threads. |
 | Push, pull | How a participant gets a thread's messages. A pushed message arrives as mail (a turn). A pulled message waits until the participant reads the thread. |
 | Task | A bundle with a `task.md` goal: a ledger task in a project's `.ledger/`, or an ephemeral task in the state directory. A person works only on tasks assigned to it or taken by it. |
@@ -78,7 +78,8 @@ A root, and a person whose role manages, also has ten manager tools:
 | Tool | What it does |
 | --- | --- |
 | `hire` (`role`, `goal`, `cwd?`, `name?`, `session_id?`) | Starts a new person in a role, reporting to the caller, with the goal assigned as a task before its first turn. |
-| `rehire` (`person`, `goal?`) | Reopens an asleep or former person with its history. A goal adds an assignment. |
+| `call_in` (`person`, `goal?`) | Reopens a person at home with its history. A goal adds an assignment. Refused for a former member. |
+| `rehire` (`person`, `goal?`) | Brings a former member back into the organization with its history. A goal adds an assignment. Refused for a member. |
 | `send_home` (`person`) | Quits the person's process. The person sleeps and stays in the organization. |
 | `rename` (`person`, `name`) | Renames a running person. Its id and history stay. |
 | `move` (`person`, `manager`) | Puts a person, with everyone under it, under another manager of the same organization. |
@@ -94,13 +95,13 @@ The `<org>` section teaches the push and pull model. A new hire's first turn inc
 
 ## Threads
 
-Every exchange is a thread that the runtime stores. Mail and meetings push every message to every participant. Team channels are pulled: a post waits until the participant reads it, unless the post names that person. Each task has a task thread for its assignees and assigners, also pushed. A pushed message to an asleep person waits and arrives when the person wakes. The sender is told who is asleep.
+Every exchange is a thread that the runtime stores. Mail and meetings push every message to every participant. Team channels are pulled: a post waits until the participant reads it, unless the post names that person. Each task has a task thread for its assignees and assigners, also pushed. A pushed message to a person at home waits and arrives when the person wakes. The sender is told who is asleep.
 
 Each manager has a team channel, `team:<manager-id>`, for the manager and its direct reports. Members follow the tree. An invited reader stays when its reporting line changes. Former members leave every channel.
 
 ## Tasks and assignments
 
-Work is explicit. Hiring creates and assigns a task before the person's first turn; rehiring without a new goal preserves its work, while a new goal adds an assignment and becomes its focus. `take_task` takes a written `goal` (creating an ephemeral task) or an existing `task` (its id or ledger path). Managers use `assign(person, goal or task)` and `unassign(person, task)`. An assignment records who gave whom what, when, and how it ended; assigning an asleep person opens its session and starts the work. A wake failure reports that the assignment was saved, so the manager can rehire without duplicating it.
+Work is explicit. Hiring creates and assigns a task before the person's first turn; calling a person in or rehiring it without a new goal preserves its work, while a new goal adds an assignment and becomes its focus. `take_task` takes a written `goal` (creating an ephemeral task) or an existing `task` (its id or ledger path). Managers use `assign(person, goal or task)` and `unassign(person, task)`. An assignment records who gave whom what, when, and how it ended; assigning a person at home opens its session and starts the work. A wake failure reports that the assignment was saved, so the manager can rehire without duplicating it.
 
 A person can hold several tasks, with one in focus. `focus(task)` rereads its `task.md`; the file is the goal, not a database copy. The goal is appended to context on assignment or focus, and again after compaction. Editing the file and refocusing brings its revision into context. Each task has a thread shared by its assignees and assigners; taking work also tells the person's manager there.
 
@@ -155,7 +156,7 @@ The two managing roles differ in principal: a `coordinator` is your chief of sta
 ## Rules of the organization
 
 - Roles never change. A person who needs another role is a new hire; the old one sleeps or retires.
-- Nobody is deleted. `send_home` is sleep (the person keeps its id, transcript, self, and record); `let_go` records when and why it left, and a manager can `rehire` it. The only exception is a temporary peer of a `pi_exec` program, whose record is deleted when the program discards it ([exec](exec.md#peers-and-schemas)).
+- Nobody is deleted. `send_home` sends the person home (it keeps its id, transcript, self, and record); `let_go` records when and why it left, and a manager can `rehire` it. The only exception is a temporary peer of a `pi_exec` program, whose record is deleted when the program discards it ([exec](exec.md#peers-and-schemas)).
 - The tree carries assignment, reporting, and escalation; it does not gate mail. A manager that only forwards mail is a relay, which the charter forbids.
 - There is no handoff schema. People give each other goals and say what they verified and what they believe.
 - There are no caps: not on team size, self length, or the catalog. Managers size teams with judgment, and the charter names the one signal to watch (fan-in).

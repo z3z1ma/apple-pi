@@ -11,6 +11,7 @@ import { installAssignments } from "./work-tools.js";
 
 const MANAGER_TOOLS = [
 	"hire",
+	"call_in",
 	"rehire",
 	"send_home",
 	"rename",
@@ -74,7 +75,7 @@ export function installCoordinator(pi: ExtensionAPI): void {
 			async execute(_toolCallId, params, signal, _onUpdate, ctx) {
 				const sessionId = params.session_id ?? randomUUID();
 				if (withWork((db) => db.prepare("select 1 from sessions where id = ?").get(sessionId)))
-					throw new Error("This person already exists; use rehire.");
+					throw new Error("This person already exists; use call_in, or rehire for a former member.");
 				const catalog = loadRoles(ctx.cwd);
 				if (!catalog.roles.has(params.role))
 					throw new Error(`Unknown role "${params.role}"; known roles: ${[...catalog.roles.keys()].join(", ")}.`);
@@ -98,17 +99,16 @@ export function installCoordinator(pi: ExtensionAPI): void {
 			},
 		}),
 	);
-	pi.registerTool(
+	const returnTool = (name: "call_in" | "rehire", description: string, former: boolean) =>
 		defineTool({
-			name: "rehire",
-			label: "rehire",
-			description:
-				"Bring back a person who is asleep or has left: it reopens in a new tmux window next to yours (headless outside tmux), in its own directory and with its full history, and reports to you. An optional goal becomes a new assigned task; otherwise it keeps its existing work. Returns once it runs.",
+			name,
+			label: name,
+			description,
 			parameters: Type.Object(
 				{
 					person: personParameter,
 					goal: Type.Optional(
-						Type.String({ minLength: 1, description: "New work to assign before the person wakes." }),
+						Type.String({ minLength: 1, description: "New work to assign before the person starts." }),
 					),
 				},
 				{ additionalProperties: false },
@@ -116,6 +116,13 @@ export function installCoordinator(pi: ExtensionAPI): void {
 			async execute(_toolCallId, params, signal, _onUpdate, ctx) {
 				const self = ctx.sessionManager.getSessionId();
 				const id = resolvePerson(self, params.person);
+				const left = withWork(
+					(db) =>
+						(db.prepare("select retired_at from sessions where id = ?").get(id) as { retired_at: number | null })
+							?.retired_at != null,
+				);
+				if (left && !former) throw new Error(`${params.person} has left the organization; rehire brings it back.`);
+				if (!left && former) throw new Error(`${params.person} is still a member; call_in brings it back from home.`);
 				await run(
 					id,
 					{
@@ -128,14 +135,27 @@ export function installCoordinator(pi: ExtensionAPI): void {
 				);
 				return reply(`${params.person} is back (${id}).`, { sessionId: id });
 			},
-		}),
+		});
+	pi.registerTool(
+		returnTool(
+			"call_in",
+			"Call in a person you sent home: it reopens in a new tmux window next to yours (headless outside tmux), in its own directory and with its full history, and reports to you. An optional goal becomes a new assigned task; otherwise it keeps its existing work. Returns once it runs.",
+			false,
+		),
+	);
+	pi.registerTool(
+		returnTool(
+			"rehire",
+			"Rehire a person who was let go: it rejoins your organization, reopens in a new tmux window next to yours (headless outside tmux) with its full history, and reports to you. An optional goal becomes a new assigned task. Returns once it runs.",
+			true,
+		),
 	);
 	pi.registerTool(
 		defineTool({
 			name: "send_home",
 			label: "send_home",
 			description:
-				"Send a person home: its Pi process quits, it stays in your organization asleep, and rehire brings it back with its history. Check first with directory that it is idle; sending a working person home stops its work.",
+				"Send a person home: its Pi process quits, it stays in your organization at home, and call_in brings it back with its history. Check first with directory that it is idle; sending a working person home stops its work.",
 			parameters: Type.Object({ person: personParameter }, { additionalProperties: false }),
 			async execute(_toolCallId, params, signal, _onUpdate, ctx) {
 				const id = resolvePerson(ctx.sessionManager.getSessionId(), params.person);
@@ -204,7 +224,7 @@ export function installCoordinator(pi: ExtensionAPI): void {
 			name: "let_go",
 			label: "let_go",
 			description:
-				"Let a person go: wait until it is idle (waking it if asleep), ask for its handover, post that reply in its team channel, then record why it left and close it. A failed or cancelled handover leaves it in the team. Its history stays, the directory lists it among former members, and rehire brings it back. Let go reluctantly: a person's accumulated context is expensive to rebuild.",
+				"Let a person go: wait until it is idle (calling it in if it is at home), ask for its handover, post that reply in its team channel, then record why it left and close it. A failed or cancelled handover leaves it in the team. Its history stays, the directory lists it among former members, and rehire brings it back. Let go reluctantly: a person's accumulated context is expensive to rebuild.",
 			parameters: Type.Object(
 				{
 					person: personParameter,

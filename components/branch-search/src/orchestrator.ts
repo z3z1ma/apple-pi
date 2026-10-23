@@ -56,6 +56,7 @@ export const SEARCH_BLOCKED_TOOLS: ReadonlySet<string> = new Set([
 	"post",
 	"escalate",
 	"hire",
+	"call_in",
 	"rehire",
 	"send_home",
 	"let_go",

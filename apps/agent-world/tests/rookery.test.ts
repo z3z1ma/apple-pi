@@ -104,7 +104,7 @@ test("mail to a dormant agent waits until it wakes, and says so in its receipt",
 	expect(await lifecycle.sendMail("sleepy", "Rebase on main when you wake.")).toEqual({
 		ok: true,
 		stage: "applied",
-		note: "asleep, the mail waits: sleepy",
+		note: "at home, the mail waits: sleepy",
 	});
 	await soon(() =>
 		expect(mailItem("Rebase on main when you wake.")).toMatchObject({

@@ -123,7 +123,7 @@ export function installAssignments(pi: ExtensionAPI): void {
 			executionMode: "sequential",
 			label: "assign",
 			description:
-				"Assign a person in your organization a task or a plain goal. It becomes their focused work, with a goal file and a shared task thread. An asleep person wakes and begins; an awake person receives it at the next safe boundary. It keeps its other assignments.",
+				"Assign a person in your organization a task or a plain goal. It becomes their focused work, with a goal file and a shared task thread. A person at home is called in and begins; an awake person receives it at the next safe boundary. It keeps its other assignments.",
 			parameters: Type.Object(
 				{
 					person: Type.String({ minLength: 1, description: "A name in your organization or session id." }),

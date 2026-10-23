@@ -758,7 +758,7 @@ export class Runtime {
 			this.setCommandStage(
 				commandId,
 				"failed",
-				"Assignment saved, but waking this person needs a tmux pane. Wake or rehire it to begin.",
+				"Assignment saved, but waking this person needs a tmux pane. Call it in to begin.",
 			);
 			return;
 		}
@@ -946,7 +946,7 @@ export class Runtime {
 		return { asleep, deliveries };
 	}
 
-	/** Store a thread message and push it as mail to each pushed participant; the receipt names who is asleep. */
+	/** Store a thread message and push it as mail to each pushed participant; the receipt names who is at home. */
 	private threadPost(
 		commandId: string,
 		sessionId: string,
@@ -969,7 +969,7 @@ export class Runtime {
 		this.setCommandStage(
 			commandId,
 			"applied",
-			asleep.length ? `asleep, the mail waits: ${asleep.join(", ")}` : undefined,
+			asleep.length ? `at home, the mail waits: ${asleep.join(", ")}` : undefined,
 		);
 	}
 
