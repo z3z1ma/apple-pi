@@ -22,7 +22,7 @@ By default, every tool execution renders as a single, terse line:
 - **Arguments**: Concise, single-line string representation (e.g. `Bash(git status --short --branch)`, `Read(~/src/index.ts:10-40)`, `Search(pattern in path)`). File paths shorten `$HOME` to `~`.
 - **Contiguous sequence spacing**: Consecutive collapsed tool calls sit directly on adjacent lines without blank separators or padding boxes across multi-turn agent execution loops.
 - **Expansion hint**: Only the very last tool call in a contiguous block displays `(ctrl+o to expand)` in muted text.
-- **Mail and pair notes join the stream**: delivered [mail](organization.md) renders as one blue line, `✉ Mail(<sender> · <subject>: <start of the body>...)`, truncated to the terminal width; with tools expanded (`ctrl+o`) it shows the whole body. Pair notes render as one bullet line each. Neither adds the blank lines Pi puts around other custom messages (`components/shared/src/compact-custom-message.ts`).
+- **Mail and pair notes join the stream**: delivered [mail](organization.md) renders as one line in the theme's link color, `✉ Mail(<sender> · <subject>: <start of the body>...)`, truncated to the terminal width; with tools expanded (`ctrl+o`) it shows the whole body. Pair notes render as one bullet line each. Neither adds the blank lines Pi puts around other custom messages (`components/shared/src/compact-custom-message.ts`).
 
 ### Antigravity Thought Cards and Thinking Spinner
 
