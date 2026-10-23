@@ -5,6 +5,7 @@ import { Type } from "typebox";
 import { type Member, organizationColumns, organizationOf } from "../../organization/src/directory.js";
 import { managesPeople } from "../../organization/src/install.js";
 import { statePaths } from "./paths.js";
+import { OPERATOR } from "./threads.js";
 import { withWork } from "./work.js";
 import { backlogOf, hasWork } from "./work-read.js";
 
@@ -81,7 +82,6 @@ function entry(member: Member, names: Map<string, string>) {
 }
 
 type Entry = ReturnType<typeof entry>;
-const OPERATOR_ID = "operator";
 type Directory = ReturnType<typeof readDirectory>;
 
 /** One read-only directory projection, shared by the person and its pair. */
@@ -100,7 +100,7 @@ export function readDirectory(self: string, includeFormer = false, includeBacklo
 	const names = new Map(all.map((member) => [member.id, member.name ?? member.id]));
 	const members = [
 		{
-			id: "operator",
+			id: OPERATOR,
 			name: "Operator",
 			title: "Operator",
 			role: null,
@@ -122,8 +122,7 @@ export function readDirectory(self: string, includeFormer = false, includeBacklo
 }
 
 /** The members who are people in the tree; the operator heads the roster as its own line. */
-const people = (members: Directory["members"]) =>
-	members.filter((member): member is Entry => member.id !== OPERATOR_ID);
+const people = (members: Directory["members"]) => members.filter((member): member is Entry => member.id !== OPERATOR);
 
 const day = (ms: number | null) => (ms ? new Date(ms).toISOString().slice(0, 10) : "never");
 
