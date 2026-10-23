@@ -116,10 +116,8 @@ export function installCoordinator(pi: ExtensionAPI): void {
 			async execute(_toolCallId, params, signal, _onUpdate, ctx) {
 				const self = ctx.sessionManager.getSessionId();
 				const id = resolvePerson(self, params.person);
-				const left = withWork(
-					(db) =>
-						(db.prepare("select retired_at from sessions where id = ?").get(id) as { retired_at: number | null })
-							?.retired_at != null,
+				const left = withWork((db) =>
+					Boolean(db.prepare("select 1 from sessions where id = ? and retired_at is not null").get(id)),
 				);
 				if (left && !former) throw new Error(`${params.person} has left the organization; rehire brings it back.`);
 				if (!left && former) throw new Error(`${params.person} is still a member; call_in brings it back from home.`);
