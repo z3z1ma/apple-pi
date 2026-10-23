@@ -3,7 +3,7 @@ import { defineTool } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { managerAddress, resolveAddresses } from "../../session-state/src/addresses.js";
 import { sendThreadMessage } from "../../session-state/src/mail.js";
-import { readDirectory } from "../../session-state/src/peers.js";
+import { directoryView, readDirectory } from "../../session-state/src/peers.js";
 import { OPERATOR } from "../../session-state/src/threads.js";
 
 export type SecondOpinionRequest = { thread: string; to: string; question: string };
@@ -64,15 +64,17 @@ export function createSecondOpinionTools(self: string, stage: (request: SecondOp
 		name: "directory",
 		label: "Directory",
 		description:
-			"Read your partner's organization: the operator and colleagues, their names and ids, roles, managers, current tasks, and track records. Use it to choose whom to ask for a second opinion. This only reads the directory.",
+			"Read your partner's organization: one line per person with name, id, title, manager, status, and focus. Give person for one colleague in full: held tasks and the record of finished work with outcomes. Use it to choose whom to ask for a second opinion. This only reads the directory.",
 		parameters: Type.Object(
-			{ former: Type.Optional(Type.Boolean({ description: "Include former members." })) },
+			{
+				former: Type.Optional(Type.Boolean({ description: "Include former members." })),
+				person: Type.Optional(
+					Type.String({ minLength: 1, description: "A name or session id: show that one person in full." }),
+				),
+			},
 			{ additionalProperties: false },
 		),
-		async execute(_id, params) {
-			const details = readDirectory(self, params.former);
-			return { content: [{ type: "text", text: JSON.stringify(details, null, 2) }], details };
-		},
+		execute: async (_id, params) => directoryView(self, params),
 	});
 	return { ask, directory };
 }

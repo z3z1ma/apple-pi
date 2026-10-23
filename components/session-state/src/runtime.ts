@@ -1467,7 +1467,14 @@ export class Runtime {
 				!this.applyWork(
 					commandId,
 					command.goal.by,
-					{ kind: "work", action: "assign", person: sessionId, goal: command.goal.text, cwd },
+					{
+						kind: "work",
+						action: "assign",
+						person: sessionId,
+						goal: command.goal.text,
+						...(command.goal.title ? { title: command.goal.title } : {}),
+						cwd,
+					},
 					Date.now(),
 					prepare,
 				)

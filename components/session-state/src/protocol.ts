@@ -163,7 +163,7 @@ export type Command =
 			/** The role a new session is hired into; a stopped session keeps the role its transcript records. */
 			role?: string;
 			/** Written work, assigned before the new process starts so its first turn receives the goal. */
-			goal?: { text: string; by: string };
+			goal?: { text: string; by: string; title?: string };
 			prompt?: string;
 	  }
 	/** Quit the session's Pi process. */

@@ -6,8 +6,8 @@ import { statePaths } from "./paths.js";
 import { nameOf, OPERATOR, type ThreadPost } from "./threads.js";
 
 export type WorkAction =
-	| { action: "take"; goal?: string; task?: string }
-	| { action: "assign"; person: string; goal?: string; task?: string }
+	| { action: "take"; goal?: string; title?: string; task?: string }
+	| { action: "assign"; person: string; goal?: string; title?: string; task?: string }
 	| { action: "focus"; task: string }
 	| { action: "unassign"; person: string; task: string }
 	| { action: "finish"; outcome: string }
@@ -185,7 +185,7 @@ function createTask(
 		mkdirSync(bundle, { recursive: true, mode: 0o700 });
 		rollback.push(() => rmSync(bundle, { recursive: true, force: true }));
 		const goal = command.goal!.trim();
-		const title = goal.split("\n")[0].replace(/^#+\s*/, "");
+		const title = command.title?.trim() || goal.split("\n")[0].replace(/^#+\s*/, "");
 		const date = new Date(now).toISOString().slice(0, 10);
 		writeFileSync(
 			join(bundle, "task.md"),

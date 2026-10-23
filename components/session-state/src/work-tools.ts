@@ -8,15 +8,26 @@ import { goalText, type WorkAction, type WorkTask, withWork } from "./work.js";
 const PERSON_TASK_TOOLS = ["take_task", "focus", "finish_task", "promote_task"];
 export const TASK_GOAL_CUSTOM_TYPE = "apple-pi.task-goal";
 const taskParameter = Type.String({ minLength: 1, description: "Task id or path to its bundle or task.md." });
+export const goalTitle = Type.String({
+	minLength: 1,
+	description: "A short title for the goal, a few words, as it shows in lists. Required with goal.",
+});
 const goalOrTask = {
 	goal: Type.Optional(
 		Type.String({ minLength: 1, description: "A written goal for a new ephemeral task. Give goal or task, not both." }),
 	),
+	title: Type.Optional(goalTitle),
 	task: Type.Optional(taskParameter),
 };
 
+/** A goal needs its own short title: the goal's text is too long to name the task wherever it is listed. */
+export function requireTitle(goal: string | undefined, title: string | undefined): void {
+	if (goal && !title?.trim()) throw new Error("Give a short title with the goal.");
+}
+
 async function change(ctx: ExtensionContext, command: WorkAction, signal: AbortSignal | undefined) {
 	if (!ctx.isProjectTrusted()) throw new Error("Task changes require a trusted project");
+	if (command.action === "take" || command.action === "assign") requireTitle(command.goal, command.title);
 	if (withWork(() => true) === undefined)
 		throw new Error("The runtime predates assignments; restart it before using task tools.");
 	const commandId = randomUUID();

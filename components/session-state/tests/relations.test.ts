@@ -143,9 +143,12 @@ test("editing other ledger bundles records their touch history without changing 
 	const run = await fauxSession(
 		[bridge, installLedger],
 		[
-			fauxAssistantMessage([fauxToolCall("take_task", { goal: "Verify the session lifecycle." })], {
-				stopReason: "toolUse",
-			}),
+			fauxAssistantMessage(
+				[fauxToolCall("take_task", { goal: "Verify the session lifecycle.", title: "Session lifecycle" })],
+				{
+					stopReason: "toolUse",
+				},
+			),
 			write(".ledger/202610180001-alpha/notes.md", "first"),
 			write(".ledger/202610180002-beta/notes.md", "second"),
 			fauxAssistantMessage("done"),

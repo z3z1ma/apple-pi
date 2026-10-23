@@ -80,6 +80,10 @@ function entry(member: Member, names: Map<string, string>) {
 	};
 }
 
+type Entry = ReturnType<typeof entry>;
+const OPERATOR_ID = "operator";
+type Directory = ReturnType<typeof readDirectory>;
+
 /** One read-only directory projection, shared by the person and its pair. */
 export function readDirectory(self: string, includeFormer = false, includeBacklog = false) {
 	const organization = organizationOf(self, true);
@@ -114,8 +118,83 @@ export function readDirectory(self: string, includeFormer = false, includeBacklo
 		...all.filter((member) => !member.retired).map((member) => entry(member, names)),
 	];
 	const former = includeFormer ? all.filter((member) => member.retired).map((member) => entry(member, names)) : [];
-	const details = { members, former, ...(backlog ? { backlog } : {}) };
-	return details;
+	return { members, former, ...(backlog ? { backlog } : {}) };
+}
+
+/** The members who are people in the tree; the operator heads the roster as its own line. */
+const people = (members: Directory["members"]) =>
+	members.filter((member): member is Entry => member.id !== OPERATOR_ID);
+
+const day = (ms: number | null) => (ms ? new Date(ms).toISOString().slice(0, 10) : "never");
+
+function rosterLine(person: Entry): string {
+	const who = `${person.name} (${person.id})${person.title ? `, ${person.title}` : ""}, reports to ${person.manager}`;
+	if (person.left) return `- ${who}: left ${day(person.left.at)}: ${person.left.reason}`;
+	const focus = person.focus ? `; focus: ${person.focus.title} [${person.focus.id}]` : "";
+	return `- ${who}: ${person.status}, ${person.availability}${focus}; ${person.tasks.length} held, ${person.record.length} finished`;
+}
+
+/** The roster: one line per person, the backlog for a manager, and how to see one person in full. */
+function rosterText(directory: Directory): string {
+	const lines = [
+		"Operator (operator): the human at the top of the organization.",
+		...people(directory.members).map(rosterLine),
+	];
+	if (directory.former.length) lines.push("", "Former members:", ...directory.former.map(rosterLine));
+	if (directory.backlog)
+		lines.push(
+			"",
+			directory.backlog.length ? "Backlog (unassigned live ledger tasks):" : "Backlog: empty.",
+			...directory.backlog.map((task) => `- ${task.title} [${task.id}]${task.status ? ` (${task.status})` : ""}`),
+		);
+	lines.push(
+		"",
+		"directory with person: <name or id> shows one person's tasks, record with outcomes, directory, and soul.",
+	);
+	return lines.join("\n");
+}
+
+function personText(person: Entry): string {
+	const task = (held: Entry["tasks"][number]) =>
+		`- ${held.title} [${held.id}]${person.focus?.id === held.id ? " (focus)" : ""}: ${held.bundle}/task.md, thread ${held.thread ?? "none"}`;
+	const finished = (done: Entry["record"][number]) =>
+		`- ${done.title} [${done.id}] (${day(done.endedAt)}, ${done.endReason ?? "ended"}): ${done.outcome ?? "no outcome"}`;
+	return [
+		`${person.name} (${person.id})${person.title ? `, ${person.title} (${person.role})` : ""}, reports to ${person.manager}; team channel ${person.team}`,
+		person.left
+			? `Left ${day(person.left.at)}: ${person.left.reason}`
+			: `Status: ${person.status}, ${person.availability}`,
+		`Directory: ${person.directory}`,
+		`Soul: ${person.soul ?? "none"}`,
+		`Since: ${day(person.since)}`,
+		"",
+		person.tasks.length ? "Held tasks:" : "Held tasks: none.",
+		...person.tasks.map(task),
+		"",
+		person.record.length ? "Record:" : "Record: nothing finished yet.",
+		...person.record.map(finished),
+	].join("\n");
+}
+
+/**
+ * The directory as the model reads it: a roster of one line per person, or one person in full. `details` keeps the
+ * structured projection for programs and views.
+ */
+export function directoryView(
+	self: string,
+	options: { former?: boolean; person?: string; backlog?: boolean },
+): { content: { type: "text"; text: string }[]; details: unknown } {
+	if (options.person) {
+		const wanted = options.person.trim().toLowerCase();
+		const directory = readDirectory(self, true);
+		const person = [...people(directory.members), ...directory.former].find(
+			(member) => member.id.toLowerCase() === wanted || member.name.toLowerCase() === wanted,
+		);
+		if (!person) throw new Error(`Nobody in your organization is called ${options.person}.`);
+		return { content: [{ type: "text", text: personText(person) }], details: person };
+	}
+	const directory = readDirectory(self, options.former, options.backlog);
+	return { content: [{ type: "text", text: rosterText(directory) }], details: directory };
 }
 
 /** `directory` (your organization) for the model and `/pi-sessions` (every live session on the machine) for the operator, in root sessions. */
@@ -142,16 +221,20 @@ export function installPeers(pi: ExtensionAPI): void {
 			name: "directory",
 			label: "directory",
 			description:
-				"Your organization's directory: everyone in it including you, at work or at home, with the operator at the top, name, id, title, manager, whether they are working, idle, asking the operator, or at home, their explicit tasks and focused goal, whether they are available for work, their directory, one line of their soul, and the record of finished assignments and outcomes. Managers also see unassigned live ledger tasks in the backlog. Former members, who left, are listed only with former: true. Write to anyone with send_mail by name.",
+				"Your organization's directory: one line per person, with the operator at the top: name, id, title, manager, whether they are working, idle, asking the operator, or at home, whether they are available, their focus, and how many tasks they hold and have finished. Managers also see unassigned live ledger tasks in the backlog. Give person for one person in full: held tasks, the record of finished assignments with outcomes, working directory, and soul. Former members, who left, are listed only with former: true. Write to anyone with send_mail by name.",
 			promptSnippet: "Your organization's directory: who is in it, what each does, and whom each reports to.",
 			parameters: Type.Object(
-				{ former: Type.Optional(Type.Boolean({ description: "Also list the people who left, with when and why." })) },
+				{
+					former: Type.Optional(Type.Boolean({ description: "Also list the people who left, with when and why." })),
+					person: Type.Optional(
+						Type.String({ minLength: 1, description: "A name or session id: show that one person in full." }),
+					),
+				},
 				{ additionalProperties: false },
 			),
 			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 				const self = ctx.sessionManager.getSessionId();
-				const details = readDirectory(self, params.former, managesPeople(pi, ctx));
-				return { content: [{ type: "text", text: JSON.stringify(details, null, 2) }], details };
+				return directoryView(self, { ...params, backlog: managesPeople(pi, ctx) });
 			},
 		}),
 	);

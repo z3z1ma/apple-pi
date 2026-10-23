@@ -141,13 +141,14 @@ test("a coordinator starts a session in a new tmux window, and reopens it by id 
 			cwd: workDir,
 			role: "repository-archaeologist",
 			goal: "Read brief.md and document the interfaces.",
+			title: "Document the interfaces",
 			session_id: "worker-1",
 		}),
 		fauxAssistantMessage("started"),
 		call("rehire", { person: "worker-1" }),
 		call("call_in", { person: "worker-1" }),
 		fauxAssistantMessage("called in"),
-		call("call_in", { person: "worker-1", goal: "Check the rewritten interfaces." }),
+		call("call_in", { person: "worker-1", goal: "Check the rewritten interfaces.", title: "Check the interfaces" }),
 	]);
 	const coordinatorId = run.session.sessionManager.getSessionId();
 	try {
@@ -236,7 +237,7 @@ test("assigning a sleeping report opens its window with the goal waiting in its 
 		(context) => {
 			const last = context.messages.at(-1);
 			return last?.role === "user" && JSON.stringify(last.content).includes("assign the goal")
-				? call("assign", { person: workerId, goal: "Verify the reconnect boundary." })
+				? call("assign", { person: workerId, goal: "Verify the reconnect boundary.", title: "Verify reconnects" })
 				: fauxAssistantMessage("noted");
 		},
 		[],
@@ -305,6 +306,7 @@ test("starting a session fails when its window closes before the session connect
 			role: "repository-archaeologist",
 			name: "Failing hire",
 			goal: "Exercise failed startup.",
+			title: "Failed startup",
 		}),
 	]);
 	try {
@@ -379,7 +381,7 @@ test("a hire without a written goal is refused before creating a person", async 
 
 test("hiring into a role the catalog lacks fails before any window opens", async () => {
 	const run = await coordinator([
-		call("hire", { cwd: workDir, role: "court-jester", goal: "Review the release plan." }),
+		call("hire", { cwd: workDir, role: "court-jester", goal: "Review the release plan.", title: "Release plan" }),
 	]);
 	try {
 		await run.session.prompt("hire a jester");

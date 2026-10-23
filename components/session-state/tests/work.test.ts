@@ -66,13 +66,26 @@ async function packets(run: Awaited<ReturnType<typeof fauxSession>>, count: numb
 test("taking, switching, rereading, and compaction append the explicit goal; finishing archives informal work and its retrospective", async () => {
 	const who = await person();
 	try {
-		const first = await who.invoke("take_task", { goal: "Find why requests stall.\nVerify the slow path." });
+		const first = await who.invoke("take_task", {
+			goal: "Find why requests stall.\nVerify the slow path.",
+			title: "Requests stall",
+		});
 		expect(first.ephemeral).toBe(1);
 		expect(first.bundle).toContain("/state/tasks/");
+		// The short title names the task; the goal keeps every line.
+		expect(readFileSync(join(first.bundle, "task.md"), "utf8")).toContain(
+			"# Requests stall\n\n## Intent\n\nFind why requests stall.\nVerify the slow path.",
+		);
+		who.script.push(call("take_task", { goal: "Untitled work." }));
+		await who.run.session.prompt("take untitled work");
+		expect(who.run.session.messages.filter((m) => m.role === "toolResult").at(-1)).toMatchObject({
+			isError: true,
+			content: [{ text: "Give a short title with the goal." }],
+		});
 		expect(readFileSync(join(first.bundle, "task.md"), "utf8")).toContain("Verify the slow path.");
 		expect(existsSync(join(first.bundle, "retrospective.md"))).toBe(true);
 		await packets(who.run, 1);
-		const second = await who.invoke("take_task", { goal: "Compare the retry policy." });
+		const second = await who.invoke("take_task", { goal: "Compare the retry policy.", title: "Retry policy" });
 		await packets(who.run, 2);
 		expect(
 			query(state.dbPath, "select task_id from assignments where person = ? and ended_at is null order by id", who.id),
@@ -125,6 +138,7 @@ test("assignments are shared task conversations, unassigning reports the change,
 		const task = await manager.invoke("assign", {
 			person: engineer.id,
 			goal: "Prove the cache invalidation boundary.",
+			title: "Cache invalidation",
 		});
 		await packets(engineer.run, 1);
 		expect(query(state.dbPath, "select assigned_by from assignments where person = ?", engineer.id)).toEqual([
@@ -182,7 +196,7 @@ test("assignments are shared task conversations, unassigning reports the change,
 test("promotion keeps files, assignment identity and conversation, while ledger tasks can be taken by path", async () => {
 	const who = await person();
 	try {
-		const task = await who.invoke("take_task", { goal: "Measure the queue" });
+		const task = await who.invoke("take_task", { goal: "Measure the queue", title: "Queue" });
 		await packets(who.run, 1);
 		writeFileSync(join(task.bundle, "evidence.md"), "Observed ten queued requests.\n");
 		const promoted = await who.invoke("promote_task", { task: task.id });

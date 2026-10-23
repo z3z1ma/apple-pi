@@ -7,7 +7,7 @@ import { sendCommand } from "./client.js";
 import { installMeetings } from "./meetings.js";
 import type { Command, Receipt } from "./protocol.js";
 import { focusedTask, withWork } from "./work.js";
-import { installAssignments } from "./work-tools.js";
+import { goalTitle, installAssignments, requireTitle } from "./work-tools.js";
 
 const MANAGER_TOOLS = [
 	"hire",
@@ -67,6 +67,7 @@ export function installCoordinator(pi: ExtensionAPI): void {
 						minLength: 1,
 						description: "The written goal to assign, with context and what done looks like.",
 					}),
+					title: goalTitle,
 					name: Type.Optional(Type.String({ minLength: 1, description: "A name to give instead of a drawn one." })),
 					session_id: Type.Optional(Type.String({ description: "Session id to use; a new one by default." })),
 				},
@@ -88,7 +89,7 @@ export function installCoordinator(pi: ExtensionAPI): void {
 						reportsTo: ctx.sessionManager.getSessionId(),
 						role: params.role,
 						...(params.name ? { name: params.name } : {}),
-						goal: { text: params.goal, by: ctx.sessionManager.getSessionId() },
+						goal: { text: params.goal, by: ctx.sessionManager.getSessionId(), title: params.title },
 					},
 					signal,
 				);
@@ -110,10 +111,12 @@ export function installCoordinator(pi: ExtensionAPI): void {
 					goal: Type.Optional(
 						Type.String({ minLength: 1, description: "New work to assign before the person starts." }),
 					),
+					title: Type.Optional(goalTitle),
 				},
 				{ additionalProperties: false },
 			),
 			async execute(_toolCallId, params, signal, _onUpdate, ctx) {
+				requireTitle(params.goal, params.title);
 				const self = ctx.sessionManager.getSessionId();
 				const id = resolvePerson(self, params.person);
 				const left = withWork((db) =>
@@ -127,7 +130,7 @@ export function installCoordinator(pi: ExtensionAPI): void {
 						kind: "start",
 						tmux: ownPane(),
 						reportsTo: self,
-						...(params.goal ? { goal: { text: params.goal, by: self } } : {}),
+						...(params.goal ? { goal: { text: params.goal, by: self, title: params.title } } : {}),
 					},
 					signal,
 				);

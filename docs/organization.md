@@ -46,7 +46,7 @@ The `<self>` section shows the self as it stood at the session's start or its la
 
 Why it is built this way: every person runs on a few aligned models that converge on the same answers, so differences between people must be pushed in from outside and then kept. The soul is that push. It comes from outside any model, because a model asked to invent a character writes the most likely one, and it is left unexplained, because an unexplained seed keeps giving new readings where an explained one settles into one. The self keeps the difference: each reflection turns what happened into the person's reading of itself, which shapes what it does next. The person interprets its soul in its story. Its practice must come from evidence outside itself, because a model's account of its own behavior is unreliable, and corrections from others are the best evidence it gets. Its commitments carry what it chose across context windows. Its view of colleagues is its own, so disagreement between people survives. People differ in what they consider; the shared rules decide what counts as proof and what anyone may do.
 
-**Record.** The directory (`directory`) shows every member of the caller's organization with its id, name, role and title, manager, status, directory, held tasks and focus, availability (no held tasks), finished assignments and their outcomes, when it first started, and, on request (`former: true`), when and why a former member left. Managers also see the backlog: unassigned live ledger tasks in the organization's working directories, discovered without assigning them. Every manager change is kept (`manager_changes`). The record is public to the organization; Agent World's card shows the focused task and titles of finished tasks.
+**Record.** The directory (`directory`) shows every member of the caller's organization as one line: id, name, title, manager, status, availability (no held tasks), focus, and how many tasks it holds and has finished; on request (`former: true`) it adds when and why former members left. Asked for one `person`, it shows that member in full: role, team channel, working directory, soul, when it first started, held tasks with their files and threads, and every finished assignment with its outcome. The roster stays small however long the record grows. Managers also see the backlog: unassigned live ledger tasks in the organization's working directories, discovered without assigning them. Every manager change is kept (`manager_changes`). The record is public to the organization; Agent World's card shows the focused task and titles of finished tasks.
 
 ## The tree
 
@@ -60,7 +60,7 @@ Every root session has these tools. Each sends a command to the runtime or reads
 
 | Tool | What it does |
 | --- | --- |
-| `directory` (`former?`) | Lists the organization, with the operator at the top. See [Record](#the-person). |
+| `directory` (`former?`, `person?`) | Lists the organization, one line per person with the operator at the top: name, id, title, manager, status, availability, focus, and held and finished counts; managers also see the backlog. `person` (a name or id) shows one person in full: held tasks, the record with outcomes, working directory, soul, and since when. The tool result's details keep the full structured projection. See [Record](#the-person). |
 | `send_mail` (`to`, `cc?`, `subject`, `body`) | Starts a mail thread. Addresses are names, session ids, `operator`, `my-team`, and `my-manager`. Every participant is pushed each message. |
 | `reply` (`thread`, `body`) | Answers everyone in a thread. In a team channel, the reply stays pulled except for people it names. |
 | `inbox` (`all?`) | Lists threads with unread messages, or every thread with `all: true`. |
@@ -77,14 +77,14 @@ A root, and a person whose role manages, also has ten manager tools:
 
 | Tool | What it does |
 | --- | --- |
-| `hire` (`role`, `goal`, `cwd?`, `name?`, `session_id?`) | Starts a new person in a role, reporting to the caller, with the goal assigned as a task before its first turn. |
+| `hire` (`role`, `goal`, `title`, `cwd?`, `name?`, `session_id?`) | Starts a new person in a role, reporting to the caller, with the goal assigned as a task before its first turn. |
 | `call_in` (`person`, `goal?`) | Reopens a person at home with its history. A goal adds an assignment. Refused for a former member. |
 | `rehire` (`person`, `goal?`) | Brings a former member back into the organization with its history. A goal adds an assignment. Refused for a member. |
 | `send_home` (`person`) | Quits the person's process. The person sleeps and stays in the organization. |
 | `rename` (`person`, `name`) | Renames a running person. Its id and history stay. |
 | `move` (`person`, `manager`) | Puts a person, with everyone under it, under another manager of the same organization. |
 | `let_go` (`person`, `reason`) | Asks the person for a handover, posts it in the team channel, then records why it left and closes it. |
-| `assign` (`person`, `goal` or `task`) | Gives a person a task or a written goal. It becomes the person's focus. |
+| `assign` (`person`, `goal` and `title`, or `task`) | Gives a person a task or a written goal. It becomes the person's focus. |
 | `unassign` (`person`, `task`) | Takes an assignment back without finishing it. |
 | `meet` (`people`, `agenda`) | Opens a meeting thread. Every message is pushed to every participant. |
 | `end_meeting` (`thread`, `summary`) | Sends the summary and closes the meeting. Only the organizer can end it. |
@@ -101,7 +101,7 @@ Each manager has a team channel, `team:<manager-id>`, for the manager and its di
 
 ## Tasks and assignments
 
-Work is explicit. Hiring creates and assigns a task before the person's first turn; calling a person in or rehiring it without a new goal preserves its work, while a new goal adds an assignment and becomes its focus. `take_task` takes a written `goal` (creating an ephemeral task) or an existing `task` (its id or ledger path). Managers use `assign(person, goal or task)` and `unassign(person, task)`. An assignment records who gave whom what, when, and how it ended; assigning a person at home opens its session and starts the work. A wake failure reports that the assignment was saved, so the manager can rehire without duplicating it.
+Work is explicit. Hiring creates and assigns a task before the person's first turn; calling a person in or rehiring it without a new goal preserves its work, while a new goal adds an assignment and becomes its focus. `take_task` takes a written `goal` with a short `title` (creating an ephemeral task whose `task.md` heading is the title) or an existing `task` (its id or ledger path). A goal without a title is refused: the goal is too long to name the task wherever it is listed. Managers use `assign(person, goal and title, or task)` and `unassign(person, task)`. An assignment records who gave whom what, when, and how it ended; assigning a person at home opens its session and starts the work. A wake failure reports that the assignment was saved, so the manager can call the person in without duplicating it.
 
 A person can hold several tasks, with one in focus. `focus(task)` rereads its `task.md`; the file is the goal, not a database copy. The goal is appended to context on assignment or focus, and again after compaction. Editing the file and refocusing brings its revision into context. Each task has a thread shared by its assignees and assigners; taking work also tells the person's manager there.
 

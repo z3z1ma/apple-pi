@@ -11,3 +11,9 @@ The person tool and its pair share this read-only projection. The pair passes th
 
 Coupled: components/pair-programmer/src/second-opinion.ts
 Verify: components/pair-programmer/tests/second-opinion.test.ts
+
+## symbol:directoryView
+
+The model reads a roster, one line per person, and the full record only for one `person` at a time; `details` keeps the whole projection.
+Why: the record grows with every finished assignment and was printed whole for everyone. One manager's directory call reached 242K characters (about 60K tokens), mostly outcome text, while the charter tells managers to check the directory often.
+Verify: components/session-state/tests/peers.test.ts

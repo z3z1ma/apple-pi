@@ -39,13 +39,23 @@ const call = (name: string, args: Parameters<typeof fauxToolCall>[1]): Reply =>
 
 test("a session lists its organization, awake and asleep, not subagents or strangers, and mails one using only these tools", async () => {
 	let listed: Member[] = [];
+	const texts: string[] = [];
 	const caller = await fauxSession(
 		[bridge],
 		(context) => {
-			const last = context.messages.at(-1) as { role: string; toolName?: string; details?: { members?: Member[] } };
+			const last = context.messages.at(-1) as {
+				role: string;
+				toolName?: string;
+				details?: { members?: Member[] };
+				content?: { text: string }[];
+			};
 			if (last.role === "user") return call("directory", {});
-			if (last.toolName === "directory") {
+			if (last.toolName === "directory") texts.push(last.content?.[0]?.text ?? "");
+			if (last.toolName === "directory" && texts.length === 1) {
 				listed = last.details?.members ?? [];
+				return call("directory", { person: "docs-worker" });
+			}
+			if (last.toolName === "directory") {
 				const worker = listed.find((peer) => peer.name === "docs-worker");
 				return call("send_mail", { to: [worker?.id ?? "none"], subject: "Status", body: "status please" });
 			}
@@ -86,6 +96,18 @@ test("a session lists its organization, awake and asleep, not subagents or stran
 		);
 
 		await caller.session.prompt("check on the docs worker");
+		// The model reads one line per person; the structured projection stays in details.
+		const [roster, person] = texts as [string, string];
+		expect(roster).toContain(
+			"- docs-worker (peer-1), Technical Writer, reports to " +
+				callerId +
+				": asking the operator, available; 0 held, 0 finished",
+		);
+		expect(roster).toContain("- reviewer (asleep-1), reports to docs-worker: at home, available; 0 held, 0 finished");
+		expect(roster).not.toContain("stranger");
+		expect(person).toContain("Soul: You count the callers; habit: you reread the ask.");
+		expect(person).toContain("Directory: /work/docs");
+		expect(person).toContain("Record: nothing finished yet.");
 		expect(listed).toContainEqual(expect.objectContaining({ id: callerId, manager: "Operator" }));
 		expect(listed.filter((member) => member.id !== callerId && member.id !== "operator")).toEqual([
 			{
