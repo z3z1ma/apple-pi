@@ -40,13 +40,6 @@ Verify: apps/agent-world/tests/world-forge.test.ts
 Coupled: apps/agent-world/web/overlay/interface/interface.css
 Verify: apps/agent-world/tests/world-places.test.ts
 
-## symbol:PlaceScene.dress
-
-A character with a focused task (`facts.task`) shows a quest token (`drawQuestToken`: a small badge holding the pack's `notice-progress` art, cut by `noticeTexture` from `quest-office.ts`) in the badge row over its head: beside the status badge when there is one, else where the badge would be. `figureViews` reports its title as `quest` and its place as `questAt`. No pack needs new art for it. Sleepers at the inn are dressed by `sleep` instead and carry nothing.
-Why: the first token hung at a fixed hip offset, which only fits a standing figure facing the camera; on a seated figure seen from behind it floated over the chair. The badge row follows every pose (`BADGE_LIFT`).
-Coupled: apps/agent-world/web/game/places/quest-office.ts, apps/agent-world/web/game/character-life.ts
-Verify: apps/agent-world/tests/world-workplace.test.ts
-
 ## symbol:PlaceScene.furnitureTarget
 
 The headquarters' desk (`furniture` with `use: "recruit"`) recruits a worker on a left click, so it is not plain furniture that a click just walks up to. While a character is under the pointer, `targetsAt` leaves the desk out, so the coordinator standing at it lists Recruit once (its own action), not twice.

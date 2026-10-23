@@ -51,7 +51,6 @@ The world shows the organization's [threads and tasks](organization.md#threads) 
 - **Task board.** A left click on the headquarters' notice board opens the task board: assigned work (ledger tasks with their assignees, focus marked), the backlog (unassigned live ledger tasks in the organization's working directories; looking does not assign them), and notes (ephemeral tasks). The board's menu also opens the team board and the notes.
 - **Team board.** The headquarters board and each wing's banner open the team board: the root's team channel and the team's ephemeral notes. You read a channel without joining it and without marking it read for anyone.
 - **Goals.** Opening a task shows its `task.md` as Markdown, its path, and its discussion thread. **Carry** it to pick it up; while you carry a goal, every character, and each sleeper at the inn, offers to take it from you. Choose **Give to** in the goal, or the give action on a person. Giving sends the runtime an ordinary `assign` as `operator` and shows the receipt. An asleep person wakes in a new window beside your attached tmux pane. Put down drops the goal without changing anything.
-- **Carried quest.** A character with a focused task holds the theme's in-progress quest notice at its hip.
 
 Each theme names these things in its own words. For example, the meeting room is the council room, the task board is the quest board, and giving is Hand over in Fantasy; in the tech office they are the meeting room, the task board, and Assign.
 

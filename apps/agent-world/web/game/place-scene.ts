@@ -22,19 +22,16 @@ import { AmbientCast, type AmbientView } from "./ambient.js";
 import { AtmosphereLayer, type AtmosphereView, glowDepth, keepLit } from "./atmosphere.js";
 import { Birds, type BirdView, type Perch } from "./birds.js";
 import {
-	BADGE_RADIUS,
 	type BadgeKind,
 	type BarkShape,
 	badgeFor,
 	barkFor,
 	drawBadge,
 	drawBark,
-	drawQuestToken,
 	drawTag,
 	drawZzz,
 	needsYou,
 	poseFor,
-	QUEST_RADIUS,
 	tempoFor,
 } from "./character-life.js";
 import { floorFidgets } from "./fidget-spots.js";
@@ -42,7 +39,7 @@ import { Fidgets, type FidgetView, type Glow } from "./fidgets.js";
 import { assignSpots, charactersIn, type Layout, layoutFor, startPlace, walkGrid } from "./layout.js";
 import { cellOf, clearanceAt, findPath, type Grid, gridFor, isOpen } from "./pathing.js";
 import { ForgeBenches, type WorkView } from "./places/forge.js";
-import { type NoticeView, noticeTexture, QuestBoard } from "./places/quest-office.js";
+import { type NoticeView, QuestBoard } from "./places/quest-office.js";
 import { drawSigns, type SignView, SquareLife, type TownsfolkView } from "./places/square.js";
 import { type Facing, PERSON_TILES, type Pose, Walker, type WalkerView } from "./walker.js";
 import { Wander, type WanderView } from "./wander.js";
@@ -140,8 +137,6 @@ const BARK_FADE_MS = 320;
 const BARK_RISE = 5;
 /** Space kept round a bark on screen (CSS px): from other barks and from the interface. */
 const BARK_MARGIN = 6;
-/** Space between the status badge and the quest token beside it (CSS px). */
-const QUEST_GAP = 4;
 /** A bark that has no room waits this long (ms) before it tries again. */
 const BARK_RETRY_MS = 2500;
 
@@ -157,8 +152,6 @@ interface Figure {
 	/** Fading in from, or out toward, this point in a doorway. */
 	fade?: { at: Point; out: boolean };
 	badge?: { kind: BadgeKind; container: Phaser.GameObjects.Container };
-	/** Its focused quest, in the badge row over its head. */
-	quest?: Phaser.GameObjects.Container;
 	/**
 	 * Its bark: the line, its shape, when it starts to fade out, how far its bubble slides sideways (px) to keep clear,
 	 * and how much of it shows (eased toward 1 while it has room, toward 0 while it is covered or going).
@@ -197,9 +190,6 @@ export interface FigureView {
 	moving: boolean;
 	frame: number;
 	badge: BadgeKind | null;
-	quest: string | null;
-	/** Where the quest token is drawn, in tiles. */
-	questAt: Point | null;
 	bark: string | null;
 	/** Where its bark's bubble is on screen (CSS px) while it shows. */
 	barkBox: Box | null;
@@ -654,7 +644,7 @@ export class PlaceScene extends Phaser.Scene {
 		return [...this.figures.values()].filter((f) => f.leaving).map((figure) => this.figureView(figure));
 	}
 
-	private figureView({ character, walker, look, badge, quest, bark, sleep }: Figure): FigureView {
+	private figureView({ character, walker, look, badge, bark, sleep }: Figure): FigureView {
 		const view = walker.view();
 		return {
 			id: character.id,
@@ -666,8 +656,6 @@ export class PlaceScene extends Phaser.Scene {
 			moving: view.moving,
 			frame: view.frame,
 			badge: badge?.kind ?? null,
-			quest: quest ? (character.facts?.task?.title ?? null) : null,
-			questAt: quest ? [quest.x / TILE, quest.y / TILE] : null,
 			bark: (bark && !bark.going ? bark.line : null) ?? (sleep ? "z" : null),
 			barkBox: bark && bark.shown > 0 ? this.barkBox(bark) : null,
 			alpha: walker.sprite.alpha,
@@ -1706,8 +1694,6 @@ export class PlaceScene extends Phaser.Scene {
 		figure.spot = undefined;
 		figure.nextBark = undefined;
 		this.dropBadge(figure);
-		figure.quest?.destroy();
-		figure.quest = undefined;
 		if (animate) this.hushBark(figure);
 		this.wakeUp(figure);
 		const gone = () => {
@@ -1773,12 +1759,6 @@ export class PlaceScene extends Phaser.Scene {
 		if (figure.badge?.kind !== kind) {
 			this.dropBadge(figure);
 			if (kind) figure.badge = { kind, container: drawBadge(this, kind) };
-		}
-		if (character.facts?.task && !figure.quest) {
-			figure.quest = drawQuestToken(this, noticeTexture(this, "progress"));
-		} else if (!character.facts?.task && figure.quest) {
-			figure.quest.destroy();
-			figure.quest = undefined;
 		}
 		if (!needsYou(character)) {
 			figure.nextBark = undefined;
@@ -1904,9 +1884,6 @@ export class PlaceScene extends Phaser.Scene {
 					.setScale(ui);
 			}
 			figure.badge?.container.setPosition(x, top).setDepth(depth).setScale(ui).setAlpha(walker.sprite.alpha);
-			// Beside the status badge when there is one, else where the badge would be.
-			const questX = figure.badge ? x + (BADGE_RADIUS + QUEST_GAP + QUEST_RADIUS) * ui : x;
-			figure.quest?.setPosition(questX, top).setDepth(depth).setScale(ui).setAlpha(walker.sprite.alpha);
 		}
 		this.liveBarks(time, delta, ui);
 	}
@@ -1922,7 +1899,7 @@ export class PlaceScene extends Phaser.Scene {
 		const placed: Box[] = [];
 		const anchor = (figure: Figure): Point => {
 			const { walker } = figure;
-			return [walker.x, walker.y - BADGE_LIFT[walker.pose] - ((figure.badge || figure.quest ? 14 : 2) * ui) / TILE];
+			return [walker.x, walker.y - BADGE_LIFT[walker.pose] - ((figure.badge ? 14 : 2) * ui) / TILE];
 		};
 		/** The first slide (px) at which the bark's bubble has room on screen, preferring where it already is. */
 		const room = (shape: BarkShape, at: Point, prefer: number): number | undefined => {
