@@ -1,8 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { defineTool, type ExtensionAPI, type SessionEntry } from "@earendil-works/pi-coding-agent";
-import { Text } from "@earendil-works/pi-tui";
+import { Text, TruncatedText } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
+import { renderInline } from "../../shared/src/compact-custom-message.js";
 import { liveSession, trackLiveSessions } from "../../shared/src/forked-continuation.js";
 import { managerAddress, resolveAddresses } from "./addresses.js";
 import { sendCommand } from "./client.js";
@@ -303,17 +304,23 @@ export function installMail(pi: ExtensionAPI): void {
 		const session = liveSession(ctx);
 		if (session) session.agent.steeringMode = "all";
 	});
-	pi.registerMessageRenderer<Mail>(MAIL_CUSTOM_TYPE, (message, _options, theme) => {
+	// Collapsed, a mail is one line in the stream like a tool call; expanded (ctrl+o), it shows the whole body.
+	renderInline(MAIL_CUSTOM_TYPE);
+	pi.registerMessageRenderer<Mail>(MAIL_CUSTOM_TYPE, (message, { expanded }, theme) => {
 		const details = message.details;
 		if (!details) return undefined;
 		const from = details.fromName ?? details.from;
-		const subject = details.subject ? ` ${theme.fg("dim", `\u00b7 ${details.subject}`)}` : "";
-		const header = `${theme.fg("accent", "\u2709")} ${theme.bold(from)}${subject} ${theme.fg("dim", details.ts)}`;
+		const about = details.subject ? `${from} \u00b7 ${details.subject}` : from;
+		const label = `${theme.fg("mdLink", "\u2709")} ${theme.bold(theme.fg("mdLink", "Mail"))}`;
+		if (!expanded) {
+			const preview = details.body.replace(/\s+/g, " ").trim();
+			return new TruncatedText(`${label}(${about}: ${theme.fg("muted", preview)})`, 0, 0);
+		}
 		const body = details.body
 			.split("\n")
 			.map((line) => `  ${theme.fg("muted", line)}`)
 			.join("\n");
-		return new Text(`${header}\n${body}`, 0, 0);
+		return new Text(`${label}(${about}) ${theme.fg("dim", details.ts)}\n${body}`, 0, 0);
 	});
 	pi.registerTool(createSendMailTool());
 	pi.registerTool(createReplyTool());

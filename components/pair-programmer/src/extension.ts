@@ -33,7 +33,7 @@
 
 import type { Agent, AgentToolResult } from "@earendil-works/pi-agent-core";
 import type { AssistantMessage, ToolResultMessage, UserMessage } from "@earendil-works/pi-ai";
-import { CustomMessageComponent, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Container, TruncatedText } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 
@@ -62,6 +62,7 @@ import {
 	rawTokensSinceObservationCoverage,
 } from "../../notebook/src/session-ledger/index.js";
 import { registerRecallTool as registerNotebookSourceTool } from "../../notebook/src/tools/notebook-source.js";
+import { renderInline } from "../../shared/src/compact-custom-message.js";
 import { resolveModelProfile } from "../../shared/src/model-profiles.js";
 import { recordSidecarUsage, usageFieldsFromUnknown, withSidecarUsageContext } from "../../shared/src/sidecar-usage.js";
 import {
@@ -2128,20 +2129,7 @@ export default function (pi: ExtensionAPI) {
 	});
 
 	// ---- advisory bullet rendering ----
-	// Pi adds a spacer outside the registered renderer, so compact the advisory wrapper itself.
-	const prototype = CustomMessageComponent.prototype;
-	const marker = Symbol.for("apple-pi.pair-compact-rendering");
-	if (!(prototype as any)[marker]) {
-		(prototype as any)[marker] = true;
-		const render = prototype.render;
-		prototype.render = function (width: number): string[] {
-			const lines = render.call(this, width);
-			if ((this as any).message?.customType !== ADVISORY_TYPE) return lines;
-			while (lines.length && !lines[0].trim()) lines.shift();
-			while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
-			return lines.map((line) => line.trimEnd());
-		};
-	}
+	renderInline(ADVISORY_TYPE);
 	pi.registerMessageRenderer<{ notes: PairNote[] }>(ADVISORY_TYPE, (message, _options, theme) => {
 		const notes = message.details?.notes;
 		if (!notes?.length) return undefined;
