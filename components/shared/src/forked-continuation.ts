@@ -24,7 +24,8 @@ const SESSIONS_KEY = Symbol.for("apple-pi.forked-continuation.sessions");
 
 /**
  * Pi gives extensions no handle on their AgentSession. Remember each session
- * by its session manager, which is the object extension contexts expose.
+ * by its session manager, which is the object extension contexts expose, when
+ * it starts a run: from a prompt, or from an extension message that triggers one.
  */
 function liveSessions(): WeakMap<object, AgentSession> {
 	const prototype = AgentSession.prototype as AgentSession & Record<PropertyKey, unknown>;
@@ -36,6 +37,11 @@ function liveSessions(): WeakMap<object, AgentSession> {
 	prototype.prompt = function (this: AgentSession, ...args: Parameters<AgentSession["prompt"]>) {
 		sessions.set(this.sessionManager, this);
 		return prompt.apply(this, args);
+	};
+	const sendCustomMessage = prototype.sendCustomMessage;
+	prototype.sendCustomMessage = function (this: AgentSession, ...args: Parameters<AgentSession["sendCustomMessage"]>) {
+		sessions.set(this.sessionManager, this);
+		return sendCustomMessage.apply(this, args);
 	};
 	return sessions;
 }

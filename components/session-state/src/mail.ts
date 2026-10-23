@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { defineTool, type ExtensionAPI, type SessionEntry } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
+import { liveSession, trackLiveSessions } from "../../shared/src/forked-continuation.js";
 import { managerAddress, resolveAddresses } from "./addresses.js";
 import { sendCommand } from "./client.js";
 import { messagesOf, type ThreadPost, threadOf, threadsOf, withThreads } from "./threads.js";
@@ -295,6 +296,13 @@ function createReadThreadTool() {
 
 /** Show delivered mail and register the person's communication tools. */
 export function installMail(pi: ExtensionAPI): void {
+	// Pi drains one queued steer per model request by default: a busy person's backlog of mail would cost one request
+	// per mail and keep the run going after the model wanted to stop. Every waiting mail arrives at the next boundary.
+	trackLiveSessions();
+	pi.on("before_agent_start", (_event, ctx) => {
+		const session = liveSession(ctx);
+		if (session) session.agent.steeringMode = "all";
+	});
 	pi.registerMessageRenderer<Mail>(MAIL_CUSTOM_TYPE, (message, _options, theme) => {
 		const details = message.details;
 		if (!details) return undefined;

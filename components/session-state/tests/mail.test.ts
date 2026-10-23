@@ -18,7 +18,14 @@ afterAll(async () => {
 	for (const dir of dirs) rmSync(dir, { recursive: true, force: true });
 });
 
-type MailRow = { sender: string; receiver: string; body: string; sent_at: number; delivered_at: number | null };
+type MailRow = {
+	sender: string;
+	receiver: string;
+	body: string;
+	sent_at: number;
+	delivered_at: number | null;
+	stage: string;
+};
 const mail = (receiver: string) =>
 	query<MailRow>(state.dbPath, "select * from mail where receiver = ? order by sent_at", receiver);
 const seen = (id: string) =>
@@ -110,6 +117,49 @@ test("mail between sessions starts a turn when idle and steers a running turn, a
 			expect(row).toMatchObject({ sender: from, receiver: to });
 			expect(row.delivered_at).toBeGreaterThanOrEqual(row.sent_at);
 		}
+	} finally {
+		await close(sender);
+		await close(receiver);
+	}
+}, 40000);
+
+test("mail that piles up during a run arrives together at the next boundary, in one model request", async () => {
+	let release: (reply: Reply) => void = () => {};
+	const receiver = await fauxSession(
+		[bridge],
+		(context) => {
+			const last = JSON.stringify(context.messages.at(-1));
+			if (last.includes("work long")) return new Promise<Reply>((resolve) => (release = resolve));
+			return fauxAssistantMessage("noted");
+		},
+		[],
+	);
+	const to = receiver.session.sessionManager.getSessionId();
+	const notes = ["first note", "second note", "third note"];
+	const sender = await fauxSession(
+		[bridge],
+		[
+			fauxAssistantMessage(
+				notes.map((body) => fauxToolCall("send_mail", { to: [to], subject: "Note", body })),
+				{ stopReason: "toolUse" },
+			),
+			fauxAssistantMessage("sent"),
+		],
+		["send_mail"],
+	);
+	try {
+		await seen(to);
+		await seen(sender.session.sessionManager.getSessionId());
+		const turn = receiver.session.prompt("work long");
+		await vi.waitFor(() => expect(receiver.session.isStreaming).toBe(true));
+		await sender.session.prompt("send three notes");
+		await vi.waitFor(() => expect(mail(to).filter((row) => row.stage === "delivered")).toHaveLength(3));
+		const before = receiver.requests.length;
+		release(fauxAssistantMessage("working"));
+		await turn;
+		const after = receiver.requests.slice(before);
+		expect(after).toHaveLength(1);
+		for (const note of notes) expect(sawText(after, note)).toBe(true);
 	} finally {
 		await close(sender);
 		await close(receiver);

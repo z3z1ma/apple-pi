@@ -140,7 +140,7 @@ test("my-team and my-manager follow the tree; mail to a sleeping person waits an
 		await lead.session.prompt("ask the team");
 		const [sent] = results(lead);
 		expect(sent).toMatchObject({ isError: false });
-		expect(sent.text).toContain("Asleep, the mail waits: Dee.");
+		expect(sent.text).toContain("At home, the mail waits: Dee.");
 		await vi.waitFor(() => expect(cy.mail.map((m) => m.body)).toEqual(["Status, please."]));
 		const waiting = query(state.dbPath, "select stage from commands where session_id = 'thr-dee' and kind = 'mail'");
 		expect(waiting).toEqual([{ stage: "accepted" }]);
