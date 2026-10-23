@@ -27,7 +27,7 @@ Programs use the same people as the [organization](organization.md), with catalo
 
 | Call | Lifetime |
 | --- | --- |
-| `peers["reviewer"].run(task)` | Attach an awake colleague through the tool argument `peers: {"reviewer": "session-id"}`. Wait for their session to be idle, then run one turn. The person stays alive afterwards. |
+| `peers["reviewer"].run(task, output_schema=...)` | Attach an awake colleague through the tool argument `peers: {"reviewer": "session-id"}`. Wait for their session to be idle, then run one turn. The person stays alive afterwards. |
 | `agent(role=..., task=...)` | Create a fresh temporary colleague, assign the goal, return the reply, and discard the person before the call returns. |
 | `p = await peer(role)`; `await p.run(task)`; `await p.close()` | Reuse one temporary colleague for several turns. The first turn starts the person with an assigned goal; `close()` releases it early. |
 
@@ -52,7 +52,7 @@ Peer turns share the host call, concurrency, agent, and wall-clock budgets. Each
 
 ## Extensions, fetch, and skills
 
-Each tool Pi lists as callable for the running call is callable by its registered name with schema-checked keyword arguments, for example `await mcp__test__echo(value="hello")` for a connected native MCP server. Use `tools_list()`, `tools_search(query)`, `tools_describe(name)`, and `tools_call(name, args)` for dynamic discovery. The interactive subagent manager and root-only task tools remain unavailable inside Monty. Pi owns MCP transport and authentication; the adapter gateway is gone.
+Each tool Pi lists as callable for the running call is callable by its registered name with schema-checked keyword arguments, for example `await mcp__test__echo(value="hello")` for a connected native MCP server. Use `tools_list()`, `tools_search(query)`, `tools_describe(name)`, and `tools_call(name, args)` for dynamic discovery. `pi_exec` itself, saved `program_*` tools, `monitor`, `remind_me`, `task`, and `search_branches` are not callable inside Monty. Pi owns MCP transport and authentication; the adapter gateway is gone.
 
 The `code` description lists extension tools by name only, so it follows Pi's MCP exposure choice. With `deferred` exposure (recommended, see [MCP](mcp.md)) or Pi's default `codemode` exposure, MCP schemas are absent from the model's direct tool declarations. A program must then call `tools_describe(name)` before first use, or Monty rejects arguments that do not match. Set a server's `exposure` to `direct` in `mcp.json` to show its schemas natively. Monty always type-checks against full signatures for every callable tool.
 
@@ -85,7 +85,7 @@ Parameters are typed tool arguments and arrive as strings in `inputs`; convert n
 
 `limits` can adjust call budget, concurrency, agent budget, and timeout within package maxima. The host queues gathered calls above the concurrency limit. Monty enforces a fixed 512 MiB memory limit, feed/turn execution time, recursion, and a session-wide suspension ceiling; the host enforces the per-call wall deadline and call budget. On cancellation, pending host calls are rejected and new calls are refused. Peer cleanup is awaited before the tool reports settlement, so cleanup can outlast the Python deadline; a cleanup failure is reported rather than treated as a successful release. Terminal failures discard the worker and restore the preceding checkpoint on the next call. Completed tool, file, and process effects are **not** undone by that rollback.
 
-Each tool call has a durable trace and live TUI activity. Error results retain the trace through Pi's `tool_result` hook. In a TUI, the card shows a bounded Python preview, active calls, and elapsed time. While a program runs, including a saved `program_*` execution, it appears as one entry in the shared above-editor active-work surface beside other active work, with its name, observed call progress, and elapsed time, and the input card shows `exec:1`. Its peer turns belong to that entry; the people themselves also appear in the organization while they are alive. The entry does not open or focus the work panel, and it leaves the surface when the program settles; its outcome and trace stay inspectable in `Ctrl+W`.
+Each tool call has a durable trace and live TUI activity. Error results retain the trace through Pi's `tool_result` hook. In a TUI, the card shows a bounded Python preview, active calls, and elapsed time. While a program runs, including a saved `program_*` execution, it appears as one entry in the shared above-editor active-work surface beside other active work, with its name, observed call progress, and elapsed time. Its peer turns belong to that entry; the people themselves also appear in the organization while they are alive. The entry does not open or focus the work panel, and it leaves the surface when the program settles; its outcome and trace stay inspectable in `Ctrl+W`.
 
 ## Work-panel inspection
 
@@ -100,7 +100,7 @@ With focus in the panel:
 | `[` / `]` | Select the previous or next host call and return to Calls |
 | Configured scroll keys, `k`/`j`, page keys, `Home`/`End` | Scroll detail; `End` follows the live tail |
 
-The [shared work-panel controls](subagents.md#work-panel) handle tabs, focus, closing, and responsive placement. Keyboard inspection and fullscreen mouse-wheel scrolling preserve the main editor draft. Each invocation retains its view and scroll position through tab changes, resizing, and panel reopening.
+The [shared work-panel controls](tasks.md#work-panel) handle tabs, focus, closing, and responsive placement. Keyboard inspection and fullscreen mouse-wheel scrolling preserve the main editor draft. Each invocation retains its view and scroll position through tab changes, resizing, and panel reopening.
 
 Successful, failed, aborted, and timed-out programs remain inspectable after settlement, with their available result, error, captured output, and operation trace. A failed call remains visible even if the script handles it and succeeds. This inspection history is in memory for the current session/branch only; session replacement, reload, tree navigation, and shutdown clear it. It is not rebuilt from checkpoint or transcript entries.
 

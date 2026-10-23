@@ -9,15 +9,15 @@ Choose the entrypoint by intent:
 1. **`bash`** runs work now. `run_in_background: true` is for finite or quiet work that should wake the agent only when it completes or fails.
 2. **`remind_me`** arranges one prompt or command to start after a relative delay.
 3. **`monitor`** starts a continuing shell event source now. Every newline-terminated stdout line immediately steers the agent while the command keeps running.
-4. **`task`** lists, inspects, waits for, or cancels any managed command, monitor, or schedule.
+4. **`task`** lists, inspects, waits for, or cancels any managed command, monitor, or reminder.
 
 All command forms share the same `TaskManager`, `task-*` IDs, rolling output, process-tree cancellation, completion notification, and session lifecycle. A monitor is a managed command with stdout event delivery, not a second task system.
 
 ## Interactive visibility and management
 
-Scheduled, due, and running tasks join public subagents in one width-bounded active-work widget above the editor. Prompt, command, and monitor rows show their kind and current timing; monitor rows also show delivered events and whether delivery is active or silent. The editor metadata shows `tasks:N` only while active tasks exist. Terminal tasks leave these passive surfaces because their delivered prompts and transcript notifications remain the outcome record.
+Scheduled, due, and running tasks join running [Pi Exec programs](exec.md) and [intern](interns.md) calls in one width-bounded active-work widget above the editor. Prompt, command, and monitor rows show their kind and current timing; monitor rows also show delivered events and whether delivery is active or silent. The editor metadata shows `tasks:N` only while active tasks exist. Terminal tasks leave these passive surfaces because their delivered prompts and transcript notifications remain the outcome record.
 
-`/tasks` opens the shared [work panel](subagents.md#work-panel) directly on its Tasks tab; `/work` opens it on its last-used tab. `Ctrl+W` toggles it closed or reopens it on that tab. `Ctrl+W` intentionally replaces Pi's default delete-word-backward editor shortcut. The panel's placement, focus, tab, and close keys are described there. The Tasks tab lists the session-local task roster, active work before settled outcomes, and shows the selected task's detail below the list. Use `Tab`/`Shift+Tab` to select a task. Task detail shows:
+`/tasks` opens the shared [work panel](#work-panel) directly on its Tasks tab. The Tasks tab lists the session-local task roster, active work before settled outcomes, and shows the selected task's detail below the list. Use `Tab`/`Shift+Tab` to select a task. Task detail shows:
 
 - complete prompt text, creation/due timing, and delivery state;
 - command text, working directory, timing, PID, exit state, and a live rolling output tail;
@@ -25,6 +25,22 @@ Scheduled, due, and running tasks join public subagents in one width-bounded act
 - an explicit truncation notice and full-output path when the rolling output is incomplete.
 
 Use `x` twice to confirm cancellation of the selected scheduled, due, or running task; the confirmation is dropped when focus leaves the panel, the tab changes, or another task is selected. Settled tasks remain readable and offer no cancellation action. Detail scrolling follows the configured selection and page keys and the mouse wheel; `Home` and `End` move to the start or live tail. Selecting a task again, or reopening the panel, returns its detail to where you left it; if it was following the live tail, it keeps following new output. This restored state lives in memory for the Pi process only and is never written to the session, so a restart starts fresh. Task detail positions clear with the task roster at session start, switch, fork, tree navigation, and shutdown.
+
+## Work panel
+
+The work panel is one glanceable overlay with two tabs: Tasks (described above) and [Pi Exec](exec.md#work-panel-inspection). `/work` opens it on its last-used tab, and `/tasks` opens it on the Tasks tab. There is no picker or pin step. When the panel is open, these commands reuse it and only select the tab. `Ctrl+W` closes the panel, or reopens it on the last-used tab with its saved selection. `Ctrl+W` intentionally replaces Pi's default delete-word-backward editor shortcut. The panel never opens by itself and does not take keyboard focus, so you keep typing to the main agent. It stays open when no work is running. A modal can open above it and close without removing it.
+
+Placement follows the terminal width. At 120 columns or more, the panel sits at the top right, one third of the width and at most 70% of the height. On narrower terminals, it drops down from the top center like [`/btw`](btw.md), 90% of the width and at most half the height. It never hides because of width. Resizing keeps the same panel, so the tab, the selected task or program, the scroll position, and the follow-tail state stay the same.
+
+`Alt+G` moves keyboard focus into the panel. `Alt+G` again or `Esc` returns focus to the editor, with your draft unchanged. With focus, these keys apply on every tab:
+
+| Key | Action |
+| --- | --- |
+| `←` / `→` | Switch between the Tasks and Pi Exec tabs |
+| `Esc` or `Alt+G` | Return focus to the editor |
+| `q` | Close the panel |
+
+Each tab adds its own keys, which the panel header shows while it has focus. In fullscreen mode, a left click on the panel focuses it, and a click on a tab label selects that tab. The mouse wheel scrolls the active tab's detail, with or without focus. When you close and reopen the panel, it returns to the last tab and to each tab's selected record. This state lasts for the Pi process and is never written to the session. Session shutdown closes the panel.
 
 ## Tools
 
@@ -49,7 +65,7 @@ Use `x` twice to confirm cancellation of the selected scheduled, due, or running
 
 ### `remind_me`
 
-Schedule exactly one prompt or command:
+Arrange exactly one prompt or command:
 
 ```json
 {
@@ -129,8 +145,8 @@ Output:
 
 ## Lifecycle and safety
 
-- **Root session only**: Child sessions and subagents do not load the extension.
-- **Session local**: Schedules and monitors are in memory. Session start, fork, tree navigation, switch, and shutdown stop active work and clear the prior session's task roster without terminal notifications.
+- **Top-level sessions only**: [Interns](interns.md) and the [`/btw`](btw.md) session do not load the extension.
+- **Session local**: Reminders and monitors are in memory. Session start, fork, tree navigation, switch, and shutdown stop active work and clear the prior session's task roster without terminal notifications.
 - **Process cleanup**: Cancellation terminates the complete process tree and removes temporary output files during lifecycle cleanup.
 - **Memory bounded**: Command output keeps a rolling tail. Full truncated output streams to a temporary file.
 - **Pi Exec isolation**: `remind_me`, `monitor`, and `task` are excluded from captured extension tools. Programs may call `send_mail` and `reply` ([mail](session-state.md#mail-and-threads)), because it wakes another session, not this one. Pi Exec's `pi.bash` remains direct, verbatim, and without background, scheduling, or monitoring parameters.

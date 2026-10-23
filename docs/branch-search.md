@@ -12,7 +12,7 @@ When the agent calls the tool, the harness:
 6. Applies the winner's diff when the workspace still holds the base, otherwise reports a merge command.
 7. Returns the report as the tool result.
 
-The extension loads only in the root session. Subagents and `pi_exec` workers do not load it, and `pi_exec` programs cannot call `search_branches`.
+The extension loads in top-level sessions. [Interns](interns.md) and the [`/btw`](btw.md) session do not load it, and `pi_exec` programs cannot call `search_branches`.
 
 ## The tool call
 

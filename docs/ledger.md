@@ -64,7 +64,7 @@ A Pi session is linked the first time it calls `ledger_add` or `ledger_status` f
 
 - A `write` or `edit` links through its path, resolved as those tools resolve it (`~/`, `file://`, and `@` included). The ledger is the nearest `.ledger/<task-id>/` holding the file, so a session working in a repository below a parent-directory ledger links to that ledger.
 - A `bash` or `pi_exec` call links when, after it, a live bundle has a file added, removed, or changed (by modification time, status-change time, or size) compared with just before it. Only bundles under the session's directory and its ancestors' `.ledger/` directories are compared, and `history.json` itself is ignored.
-- Only sessions with a session file (a persisted transcript) link. Sessions without one, such as Pi Exec workers and in-memory children, link nothing, since their IDs would point at no transcript.
+- Only sessions with a session file (a persisted transcript) link. Sessions without one, such as interns, link nothing, since their IDs would point at no transcript.
 
 A closing session's link is written before the bundle moves to `.ledger/history/`, so the archive keeps `history.json`. Updates are atomic and share the add/status lease. A link waits while another ledger transaction holds the lease, until it is free or the session aborts. A link that was waiting when the task closed is written into the archived bundle.
 

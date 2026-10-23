@@ -20,7 +20,7 @@
 
 If the main agent is busy, injection is delivered as a follow-up after its current work settles rather than steering or interrupting it. Injection does not clear BTW, so the side conversation can continue.
 
-The conversation uses the model and thinking level that were active when it started. It has only `read`, `grep`, `find`, and `ls`; it cannot change files or call apple-pi's task, notebook, MCP, exec, or delegation tools. It loads neither the pair programmer nor its notebook.
+The conversation uses the model and thinking level that were active when it started. It has only `read`, `grep`, `find`, and `ls`; it cannot change files or call apple-pi's task, notebook, MCP, exec, intern, or workplace tools. It loads neither the pair programmer nor its notebook.
 
 ## Context and caching
 
@@ -36,6 +36,6 @@ BTW state is intentionally session-local and in-memory. Clearing, switching, for
 
 ## Design boundary
 
-`components/btw/` directly owns one private, in-memory Pi SDK session and its answer-first overlay. It shares the parent's selected model runtime without owning or disposing that runtime. Native Pi statistics supply lifetime usage, including compaction. Only fast mode and the mandatory compaction and search safety extensions load; BTW has no organization identity, directory row, or subagent manager.
+`components/btw/` directly owns one private, in-memory Pi SDK session and its answer-first overlay. It shares the parent's selected model runtime without owning or disposing that runtime. Native Pi statistics supply lifetime usage, including compaction. Only fast mode and the mandatory compaction and search safety extensions load; BTW has no organization identity or directory row.
 
 Dismissing the overlay releases only its view. Clearing or ending the parent session waits for cancellation, extension shutdown, and disposal, including a session still being created. Questions are literal text, including leading slash commands. BTW adds no RPC protocol, process manager, settings file, history store, slot system, or fallback model path.

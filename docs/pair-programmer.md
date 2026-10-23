@@ -21,7 +21,7 @@ The pair programmer's state lives at `${PI_CODING_AGENT_DIR:-~/.pi/agent}/.pair-
 }
 ```
 
-The pair programmer always uses the user-global `pair` model profile. A colleague uses its catalog role's mind, not a separate consultant profile.
+The pair programmer always uses the user-global `pair` model profile. A colleague uses its catalog role's mind.
 
 ```json
 {
@@ -75,10 +75,6 @@ The partner can curate the notebook but cannot navigate the repository, search t
 
 Free-form prose does not send mail. The pair prompt gives the model room to exercise independent technical judgment while asking it to calibrate certainty and preserve the value of an interruption. A note is appropriate only when, without it, the main agent would likely deliver a wrong result or waste significant effort. A question is appropriate only when the absent evidence could materially change that judgment and no shown receipt answers it. The prompt asks for the lowest fitting severity, one or two sentences per note, and each issue raised once. Ordinary uncertainty, progress narration, praise, resolved issues, and an all-clear remain silent.
 
-### Pair of a coding child
-
-When a public interactive child with active built-in `edit` or `write` capability runs with `pair: true`, including a nested one, its partner shares the primary notebook rather than keeping one of its own. `read_notebook` shows the current shared learnings, `revisit_note` follows a known learning to its original primary or archived child evidence, and `expand_receipt` still opens only folded payloads from the child's own trajectory. Its `update_notebook` is add-only and commits immediately: it cites the child's source-entry IDs from the trajectory or an expanded receipt, never receipt handles, and the primary validates them against the child's actual session. An accepted addition stays in the primary notebook even if that review, the child, or its pair later fails or is cancelled. Supersede, retire, and retention-sweep attempts are rejected, so the primary and its own pair keep curation. Access belongs to the child session and its original primary owner; after the child closes, or the primary navigates or shuts down, a late addition is rejected. The child pair receives no maintenance prompts. See [Context and notebook](context.md#interactive-coding-children). Advisory and internal children keep the ordinary pair toolset.
-
 ## Review timing and retries
 
 The pair programmer uses an in-memory producer/consumer spool. Each `turn_end` synchronously appends one immutable, sequenced trajectory delta before pair construction or model work begins. Capturing a delta does not itself invoke the pair model. A review scheduler grants one permit for the complete accumulated prefix at meaningful checkpoints inside the active run:
@@ -117,7 +113,7 @@ The pair asks with `ask_for_second_opinion(question, to?)`. With no `to`, the re
 
 The question is staged until the pair finishes a complete, current review. It then starts a mail thread in the main session's name, marked as from its pair. Delivery status is appended to the private pair conversation without starting another review; a failed send also gives the operator a warning. The main session and recipient are participants, so a reply reaches the main session through the normal mail path. The pair sees that reply in the live trajectory and in later reseeds, labeled as mail rather than as operator instructions.
 
-There is no hidden consultant process, typed disposition, automatic repeated-failure gate, hypothesis packet, consultation throttle, or working-tree fingerprint check. A colleague answers the question as normal work, and the main session judges its evidence.
+The pair starts no model run of its own for a second opinion. A colleague answers the question as normal work, and the main session judges its evidence.
 
 ## Routing and delivery
 
@@ -125,7 +121,7 @@ Input review and output delivery are separate. The pair keeps consuming the traj
 
 An advisory-triggered correction episode suppresses further outbound advice, while input consumption continues. The next user message reopens advice delivery. Second-opinion replies are ordinary mail, not a second path for injecting pair findings.
 
-In the TUI, each note occupies one plain bullet row: `● TYPE text`, with a color-coded circle and `CONCERN`, `BLOCKER`, `QUESTION`, or `NIT` label. Historical consultant findings keep their source label. Single notes and batches use the same rows, without a heading, border, or leading or trailing blank lines. Whitespace is flattened and long text is truncated to the terminal width. Pi's expand toggle for tool output leaves these rows unchanged. The main agent always receives the full text.
+In the TUI, each note occupies one plain bullet row: `● TYPE text`, with a color-coded circle and `CONCERN`, `BLOCKER`, `QUESTION`, or `NIT` label. Notes restored from older transcripts keep their original source label. Single notes and batches use the same rows, without a heading, border, or leading or trailing blank lines. Whitespace is flattened and long text is truncated to the terminal width. Pi's expand toggle for tool output leaves these rows unchanged. The main agent always receives the full text.
 
 A delivered note remains a colleague's judgment. The main agent gives it serious consideration, inspects the current code, decides whether to act, implements, and validates.
 

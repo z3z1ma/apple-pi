@@ -13,7 +13,7 @@ export interface ForkWorktree {
 }
 
 interface ForkContext {
-	/** The session whose tools the fork reuses, so its trackers can distinguish real child sessions. */
+	/** The session whose tools the fork reuses, so its trackers can tell the fork from that session. */
 	readonly sessionId: string;
 	/** The fork's working directory, when it is bound to a worktree. */
 	readonly cwd?: string;

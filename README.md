@@ -4,7 +4,7 @@
 
 This repository is my personal coding harness built on top of `pi`. It is not a product, a VC-backed framework seeking adoption, or a generalized starter kit for "agentic workflows." It is the cumulative result of spending months living inside terminal-based coding agents, hitting the exact same failure modes every afternoon, and building the mechanical back-pressure required to make them stop.
 
-If you are looking for a zero-config wrapper that promises to turn your terminal into an autonomous software company while you sip an oat milk cortado on the beach, you are in the wrong place. If you spend six hours a day in `tmux` arguing with language models over diffs, and you want to inspect how another practitioner solved context rot, tool-call thrashing, unverified mutations, and subagent amnesia, read on.
+If you are looking for a zero-config wrapper that promises to turn your terminal into an autonomous software company while you sip an oat milk cortado on the beach, you are in the wrong place. If you spend six hours a day in `tmux` arguing with language models over diffs, and you want to inspect how another practitioner solved context rot, tool-call thrashing, unverified mutations, and delegation amnesia, read on.
 
 I publish this in the spirit of **closed to pull requests, open to remix**. The code is here so you can inspect the decisions, steal the patterns, or point your own agent at this repo to extract what you need.
 
@@ -18,7 +18,7 @@ That belief survived right up until the sessions got long and the codebases got 
 
 The models stopped being the primary constraint a long time ago. Language models are mirrors of operator skill and harness design. When an agent spirals on turn thirty-five, it is almost never because the underlying transformer lacks reasoning capacity. It spirals because **prevailing agent harnesses treat the model like an oracle and the context window like a dumpster.**
 
-Think of an LLM's effective context window not as a 200k-token hard drive, but as RAM in an IBM 8086 XT. It is a scarce, volatile, high-contention resource. Yet watch how a standard coding agent operates: every raw `stdout` dump, every 4,000-line test trace, every 128-tool MCP schema, every dead-end file exploration, and every half-baked subagent tangent gets shoveled straight into the main transcript.
+Think of an LLM's effective context window not as a 200k-token hard drive, but as RAM in an IBM 8086 XT. It is a scarce, volatile, high-contention resource. Yet watch how a standard coding agent operates: every raw `stdout` dump, every 4,000-line test trace, every 128-tool MCP schema, every dead-end file exploration, and every half-baked delegated tangent gets shoveled straight into the main transcript.
 
 In DJing, there is an old saying: *if you are redlining the mixer, you aren't headlining.* Push the gain into the red and the audio clips into mud. The exact same physics apply to autoregressive models. Once you redline the context window past its effective attention threshold—or let a bad assumption pollute the prefix—the model becomes an autoregressive queen of failure. Every subsequent token is conditioned on the garbage already in the window. Once the bowling ball is in the gutter, no amount of screaming `"CRITICAL: DO NOT MAKE MISTAKES"` in the system prompt will bring it back onto the lane.
 
@@ -55,9 +55,9 @@ flowchart TB
 
     subgraph Execution["2. Execution & Search Substrate"]
         PIEXEC["Programmatic Sandbox<br/>(pi-exec Monty Python + Saved Programs)"]
-        SUB["Scoped Subagents & Swap Space<br/>(subagents / /btw side conversation)"]
+        SUB["Interns, Peers & Swap Space<br/>(interns / organization / /btw side conversation)"]
         BSEARCH["Parallel Attempt Worktrees<br/>(branch-search + command judges)"]
-        TASKS["Background Process Manager<br/>(tasks / schedule / monitor)"]
+        TASKS["Background Process Manager<br/>(tasks / remind_me / monitor)"]
     end
 
     subgraph Bicameral["3. Asynchronous Oversight Sidecar"]
@@ -233,7 +233,7 @@ sequenceDiagram
 
 #### The Extrapolated & Emergent Implications
 * **Anti-Fragile Long Horizons:** In a normal harness, an agent gets *dumber* the longer a session runs because signal-to-noise degrades monotonically. Here, a compaction cycle loses less of what matters. The compaction summary handles conversation history, the learnings packet keeps the falsified conclusions that were recorded as open learnings ("Approach X failed because of Y") right after it, and the dead-end `stdout` exhaust is gone from the window but still searchable through `search_session` when an exact detail matters again.
-* **The Death of "Cold Start" Amnesia:** Because distillation writes durable learnings into `.pi/LEARNINGS.md`, wiki pages, and retrospectives, and coding subagents receive snapshots of the primary session's open learnings and add their own to the same notebook (`subagent-notebook-e2e.test.ts`), the harness stops acting like a contractor with an 8-second memory. A mistake made on Tuesday afternoon can become a standing instruction on Wednesday morning.
+* **The Death of "Cold Start" Amnesia:** Because distillation writes durable learnings into `.pi/LEARNINGS.md`, wiki pages, retrospectives, and context files that every later session loads or reads, the harness stops acting like a contractor with an 8-second memory. A mistake made on Tuesday afternoon can become a standing instruction on Wednesday morning.
 
 ---
 
@@ -315,7 +315,7 @@ stateDiagram-v2
 * **`code-context` (`installer.ts`, `lint.ts`):** A context file at `.context/<path>.md` mirrors one source file and holds what its code cannot show: invariants, hazards, rationale, and cross-file couplings. A top-level `read` of the file appends the whole context file and a hash marker, unless that marker is already in context. A top-level `edit` or `write` of that file, or of its context file, **fails** only when the context file exists and its current marker is not in the model's context; a file with no context file is never blocked. The refusal does not contain the context file; it tells the model which file to read, and the model reads it, replans, and retries. A changed context file has a new hash, and a marker that compaction removed no longer counts. Only top-level calls are gated: nested calls from `pi_exec` and shell commands are outside it, so it is a workflow guardrail, not a sandbox. `lint.ts` implements the separate `context_lint` check for orphaned context files, unknown headings and symbols, and dead `Coupled:`, `Verify:`, and wiki links. Change reflection and `/distill` may create a missing context file for a non-obvious invariant the work revealed, and name it in their reply for review.
 * **`home-search-guard` (`components/home-search-guard`):** Intercepts Pi's `grep`, `find`, and `glob` tools and recognized bash searches (`rg`, `grep`, `find`, `fd`, ...) rooted at `/`, `$HOME`, or a configured protected root, and asks for a specific repository, worktree, or subdirectory instead. Bash detection is best-effort.
 * **`rtk` (`components/rtk`):** When the `rtk` binary is installed (`detector.ts`), passes each bash command that is not marked `verbatim` to `rtk rewrite` (`rewrite.ts`) and runs RTK's rewritten command when it returns one (`git status`, test runners, build tools), so RTK's own filters compress the output. Without RTK, or with `RTK_DISABLED=1`, the original command runs.
-* **`change-reflection` (`components/change-reflection`):** After a completed run with successful `edit` or `write` calls, starts one review of the changed files in a forked continuation: tests are checked for asserting behavior the user wants, other code for a simpler shape and for which commands ran after its last change, prose for reader clarity, and context files for staying true to the change. The fork may apply a clear improvement and revalidate it, and its one-line reply joins the conversation. Coding subagents run the same review in-band before they hand off.
+* **`change-reflection` (`components/change-reflection`):** After a completed run with successful `edit` or `write` calls, starts one review of the changed files in a forked continuation: tests are checked for asserting behavior the user wants, other code for a simpler shape and for which commands ran after its last change, prose for reader clarity, and context files for staying true to the change. The fork may apply a clear improvement and revalidate it, and its one-line reply joins the conversation.
 
 #### The Extrapolated & Emergent Implications
 * **Documentation Becomes an Executable Lock:** In almost every software company, architecture docs rot because they are passive artifacts disconnected from the edit loop. With `code-context`, a context file is no longer passive advice—it is **a lock on the file it describes**. An agent cannot make a top-level edit to that file without the current version of its invariants in context, and `context_lint` catches structural rot in them (orphaned files, unknown symbols, dead paths and links), though not whether an invariant is still true.
@@ -323,7 +323,7 @@ stateDiagram-v2
 
 ---
 
-### 5. `subagents`, `branch-search`, & `ralph`: Swap Space, Tournaments, and Loops
+### 5. `interns`, `organization`, `branch-search`, & `ralph`: Swap Space, Colleagues, Tournaments, and Loops
 
 #### The Observed Dysfunction
 Most multi-agent setups are theatrical roleplay ("You are a Senior PM arguing with a QA Engineer"). They burn 5x the tokens to produce the exact same bugs a single agent produces, while creating race conditions on the git working tree.
@@ -331,15 +331,15 @@ Most multi-agent setups are theatrical roleplay ("You are a Senior PM arguing wi
 Meanwhile, when you genuinely *do* need multiple agents—either to offload a noisy investigation, explore two competing approaches in parallel, or grind through a 50-file migration—standard harnesses give you no isolation primitives.
 
 #### The Mechanical Response
-`apple-pi` treats multi-agent execution as a systems engineering problem—providing **Swap Space** (`subagents`), **Speculative Branch Tournaments** (`branch-search`), and **Fresh-Context Loops** (the `ralph` skill).
+`apple-pi` treats multi-agent execution as a systems engineering problem—providing **Swap Space** (`interns`), **Colleagues** (peers in the `organization`), **Speculative Branch Tournaments** (`branch-search`), and **Fresh-Context Loops** (the `ralph` skill).
 
 ```mermaid
 flowchart TB
-    subgraph SwapSpace["A. Context Swap Space (components/subagents)"]
-        Parent["Primary Agent"] -->|Spawns scoped teammate| Child["Subagent Session<br/>(agent-manager.ts / agent-runner.ts)"]
+    subgraph SwapSpace["A. Context Swap Space & Colleagues (components/interns, components/organization)"]
+        Parent["Primary Agent"] -->|One question| Intern["Intern: explore / research<br/>(runner.ts: one headless pi, then exit)"]
+        Intern -->|One lossy summary| Parent
         Parent -.->|Private read-only side conversation| BTW["/btw<br/>(components/btw)"]
-        Child -->|Works in its own persisted Pi session| Child
-        Child -->|"Final report after in-band review<br/>(completion-reflection.ts / outcome-framing.ts)"| Parent
+        Parent <-->|"Threads: mail, channels, meetings<br/>(send_mail / post / meet / escalate)"| Peer["Peer: a lasting colleague in a role<br/>(own Pi session, assigned task)"]
     end
 
     subgraph Tournament["B. Speculative Tournaments (components/branch-search)"]
@@ -351,21 +351,24 @@ flowchart TB
     end
 
     subgraph Loops["C. Fresh-Context Loops (skills/ralph)"]
-        Ralph["ralph pi_exec program<br/>(ralph-simple.py / ralph-ledger.py)"] <-->|One increment per fresh worker| LState[("Repository<br/>+ optional .ledger task")]
+        Ralph["ralph pi_exec program<br/>(ralph-simple.py / ralph-ledger.py)"] <-->|One increment per fresh temporary peer| LState[("Repository<br/>+ optional .ledger task")]
     end
 ```
 
-1. **Subagents as Context Swap Space (`components/subagents`):**
-   * When the main agent needs to investigate a gnarly bug or audit a subsystem, it brings in a named teammate (`agent-manager.ts`, `agent-runner.ts`) in its own foreground or background Pi session, with tool scope, skills, and model profile set by the teammate's definition and an optional turn limit.
-   * The child works in its own persisted session context, and hands the parent a framed result (`outcome-framing.ts`). A child with `edit` or `write` tools first reviews its own changes and records learnings in the primary notebook (`completion-reflection.ts`).
+1. **Interns as Context Swap Space (`components/interns`):**
+   * When the main agent needs to find where something lives or read up on an external API, it hands one question to a cheap intern: `explore` for the local repository, `research` for outside sources. Each call runs one headless Pi process on the `quick` profile with a fixed reading prompt and no `edit` or `write` (`runner.ts`), shows its current tool as a live activity line, returns one summary, and exits. Several calls in one reply run in parallel; Esc stops them.
+   * The tool descriptions say the quiet part out loud: the summary is lossy, holds only what the intern chose to report, and can state a belief as fact. The agent verifies before it acts. See [docs/interns.md](docs/interns.md).
    * For the human operator, `/btw` (`components/btw`) directly owns a private, read-only SDK side conversation seeded with recent parent text, so you can ask a tangent question without adding its turns to the main agent's context. You can inject an answer into the main conversation when you want it there.
-2. **Parallel Branch Tournaments (`components/branch-search`):**
+2. **Peers as Colleagues (`components/organization`, `components/session-state`):**
+   * Lasting work goes to a person, not a disposable child: a top-level Pi session in a catalog role, with its own transcript, a written goal as an assigned task (`assign`, `take_task`, `focus`, `finish_task`), and threads anyone can read. Managers `hire`, `meet`, and `let_go`; everyone uses `send_mail`, `reply`, `post` to the team channel, and `escalate` up the tree, which ends at your desk. See [docs/organization.md](docs/organization.md).
+   * `pi_exec` programs call the same people: attach an awake colleague by session id under a name the program chooses, or start a temporary peer in a role that is discarded when its call or the program ends (`peer-calls.ts`).
+3. **Parallel Branch Tournaments (`components/branch-search`):**
    * Ousterhout’s *A Philosophy of Software Design* argues that you should **Design It Twice**—because your first design is rarely the cleanest. When creation is cheap, why only *design* it twice when you can *implement* it three times in parallel?
    * The `search_branches` tool (`orchestrator.ts`, `workspace.ts`) snapshots the workspace, asks a fork of the conversation for distinct approaches, and runs each one as its own conversation fork in an isolated git worktree. It then runs the agent's gate commands (such as the test suite) and numeric judge commands (time, size, any score a command can print), ranks the attempts that pass by the judges' medians, optionally lets a `judge.profile` model choose among them (`judge.ts`), applies the winner's diff, and keeps a `record.json` of every attempt (`record.ts`). It stays off until `~/.pi/agent/branch-search.json` exists (copy `branch-search.example.json`).
-3. **Ledger-Backed Ralph Loops (`skills/ralph`):**
-   * A raw `while true; do agent; done` loop ("Ralph loop") works great until context resets cause the agent to thrash on the same half-finished item. The `ralph` skill guides the agent to write a `pi_exec` program that runs bounded, sequential, fresh coding workers, one increment each. `skills/ralph/references/ralph-simple.py` works over any caller-owned goal with no ledger, and `ralph-ledger.py` (`ledger-increment.md`) works over a prepared `.ledger` task as its durable memory, stopping when that task is `done` or `blocked`. Every worker boots with a fresh context; the repository and ledger carry the state, and the caller keeps review and integration authority.
+4. **Ledger-Backed Ralph Loops (`skills/ralph`):**
+   * A raw `while true; do agent; done` loop ("Ralph loop") works great until context resets cause the agent to thrash on the same half-finished item. The `ralph` skill guides the agent to write a `pi_exec` program that runs bounded, sequential, fresh Implementation Engineer peers, one increment each, each discarded before the next starts. `skills/ralph/references/ralph-simple.py` works over any caller-owned goal with no ledger, and `ralph-ledger.py` (`ledger-increment.md`) works over a prepared `.ledger` task as its durable memory, stopping when that task is `done` or `blocked`. Every peer boots with a fresh context; the repository and ledger carry the state, and the caller keeps review and integration authority.
 #### The Extrapolated & Emergent Implications
-* **Stochastic Search with Deterministic Selection:** When you combine `branch-search` with Ralph, you stop treating the LLM as a deterministic compiler that must get the answer right on the first try. Instead, you use `branch-search` to sample the solution space across multiple isolated git worktrees, let your gates and judge commands select the survivor, and then let a Ralph loop grind out the remaining increments of a ledger task with clean-context workers.
+* **Stochastic Search with Deterministic Selection:** When you combine `branch-search` with Ralph, you stop treating the LLM as a deterministic compiler that must get the answer right on the first try. Instead, you use `branch-search` to sample the solution space across multiple isolated git worktrees, let your gates and judge commands select the survivor, and then let a Ralph loop grind out the remaining increments of a ledger task with clean-context peers.
 
 ---
 
@@ -380,14 +383,14 @@ An illustrative layout; the work panel (`/work` or `Ctrl+W`) and the `/btw` over
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────┐
-│ tmux status: [0:floqast-api ●] [1:apple-pi ⏳(2 subagents)] [2:dbt-osmosis 🔔]│
+│ tmux status: [0:floqast-api ●] [1:apple-pi ⏳] [2:dbt-osmosis 🔔]             │
 ├──────────────────────────────────────┬───────────────────────────────────────┤
 │ Primary Turn Stream (terse-tools)    │ Live Inspection & Sidecars            │
 │                                      │                                       │
-│ ▸ read components/notebook/fold.ts   │ ┌─ Agent / Work Panel ──────────────┐ │
-│ ▸ pi-exec: audit_ledger_tokens.py    │ │ ● worker-1 (research)    [12.4s]  │ │
-│   └─ ✓ 14 files checked, 0 leaks     │ │ ● worker-2 (test-verify) [ 8.1s]  │ │
-│ ● CONCERN token cap edge case is     │ │ ○ worker-3 (lint)        [queued] │ │
+│ ▸ read components/notebook/fold.ts   │ ┌─ Work Panel · Pi Exec ────────────┐ │
+│ ▸ pi-exec: audit_ledger_tokens.py    │ │ ● reviewer (peer)        [12.4s]  │ │
+│   └─ ✓ 14 files checked, 0 leaks     │ │ ● test-runner (peer)     [ 8.1s]  │ │
+│ ● CONCERN token cap edge case is     │ │ ○ read (core tool)       [queued] │ │
 │   untested                           │ └───────────────────────────────────┘ │
 │ ▸ edit src/model-budget.ts (+18/-4)  │ ┌─ /btw Side Conversation ──────────┐ │
 │ ▸ bash (rtk): vitest run             │ │ Q: Does fold.ts preserve source   │ │
@@ -402,7 +405,7 @@ An illustrative layout; the work panel (`/work` or `Ctrl+W`) and the `/btw` over
 * **Dense, Inspectable TUI (`components/terse-tools`):** Monkey-patches default verbose tool blocks (`patch.ts`, `formatters.ts`) into compact, single-line summaries with tree-style expansion and a read-only inspector (`inspector.ts`, `tool-viewer.ts`). In fullscreen mode you click a tool name to inspect it or its header to toggle it; in a regular terminal, `/inspect-tool` is the entry point. You see the *shape* of the agent's actions at a glance without scrolling past 800 lines of JSON.
 * **Focus-Aware Native Notifications (`components/notify` & `components/tmux-sessions`):** When a run settles or the `ask_user_question` tool (`components/ask-user-question`) starts waiting on you, `notify` sends a native macOS notification. It stays silent, best-effort, when Ghostty is frontmost and the most recently active tmux client is showing the window that contains the Pi pane (`focus-check.sh`). Clicking the notification focuses Ghostty and selects the original tmux pane (`focus-tmux.sh`). Separately, `tmux-sessions` publishes each session's busy/idle/waiting status to a Textual agent sidebar (`prefix` + `u`) that follows you across tmux windows, a full agent dashboard with a live view of each pane (`prefix` + `A`), a status-line count, and a key that jumps to the agent that has waited longest (`prefix` + `y`). On a Mac, the same agents also live in the notch: hover it to see each tmux session as a themed pixel room (office, cozy, nature, anime, ocean, or fantasy), with one worker per agent, posed by state.
 * **Frictionless Prompt Composition (`components/prompt-stash`, `components/input-editor`):** Halfway through writing a complex architectural spec in the prompt box and realize you need to ask the agent a quick question first? `prompt-stash` (`stash.ts`) stashes your draft in memory and pops it back into Pi's prompt when you're ready, and `Ctrl+E` or `/edit-prompt` (`external-editor.ts`) opens the current prompt in `$VISUAL`/`$EDITOR` (Neovim/Vim) for real editing and writes the result back.
-* **Sessions as People (`components/organization`, `roles/`, `components/session-state`):** A root Pi session is not a throwaway UUID but a person: a stable id, a human name, a self it keeps about itself and its colleagues (`update_self`), a record, a mailbox, and a place in an organization rooted at the session you sit in. Managers (you, a `coordinator`, a `director-of-engineering`) hire from a catalog of thirty-one roles, each with an obligation it cannot shake, a mind named by exact model and thinking level (a Distinguished MTS on `claude-fable-5-1` at high, a Test and CI Operator on `claude-haiku-5-5` at low), a tool posture, and a soul drawn at hire, so a team of four sees what one would not. Everyone reads the whole directory and mails anyone; the tree carries only assignment and escalation. Nobody is deleted: closing is sleep, retiring is leaving. The sidebar draws the tree; Agent World gives each manager a room. See [docs/organization.md](docs/organization.md).
+* **Sessions as People (`components/organization`, `roles/`, `components/session-state`):** A root Pi session is not a throwaway UUID but a person: a stable id, a human name, a self it keeps about itself and its colleagues (`update_self`), a record, an inbox of threads, and a place in an organization rooted at the session you sit in. Managers (you, a `coordinator`, a `director-of-engineering`) hire from a catalog of thirty-one roles, each with an obligation it cannot shake, a mind named by exact model and thinking level (a Distinguished MTS on `claude-fable-5-1` at high, a Test and CI Operator on `claude-haiku-5-5` at low), a tool posture, and a soul drawn at hire, so a team of four sees what one would not. Everyone reads the whole directory and mails anyone; teams share a channel and managers call meetings; the tree carries only assignment and escalation. Work is assigned, not guessed: each person holds tasks with one in focus, and its goal is in its context. Nobody is deleted: closing is sleep, retiring is leaving. The sidebar draws the tree; Agent World gives each manager a room. See [docs/organization.md](docs/organization.md).
 * **Graph-Backed Local Wiki (`components/wiki` & `skills/llm-wiki`):** `.wiki/` Markdown pages persist across months of work, and the interlinked page graph is derived from them on each tool call (`graph.ts`); nothing else is stored. When `.wiki/` exists, a compact workbench contract is added to the system prompt (`system-prompt.ts`), and the `llm-wiki` skill routes to ingest, maintain, and query procedures under `references/`.
 
 ---
@@ -422,12 +425,11 @@ The codebase enforces a strict separation between **implementation machinery** (
 | `pair-programmer` | `pi-pair.ts` | Asynchronous pair programming partner. Turn deltas and receipts (`receipts.ts`), receipt expansion (`receipt-expansion.ts`), checkpoint review scheduling (`review-scheduler.ts`), second-opinion mail (`second-opinion.ts`), and finding acknowledgments (`acknowledgments.ts`). |
 | `interns` | `interns.ts` | Cheap one-shot `explore` and `research` tools: fixed reading prompts, the `quick` profile, live tool activity, cancellation, and no retained process or transcript. See [interns](docs/interns.md). |
 | `btw` | `btw.ts` | One directly owned private, read-only SDK conversation and answer-first overlay (`session.ts`, `ui/viewer.ts`). See [BTW](docs/btw.md). |
-| `subagents` | `subagents.ts` | The older `explorer`, `researcher`, and unlisted `builder` types (`default-agents.ts`); scoped child agent lifecycle (`agent-manager.ts`, `agent-runner.ts`), outcome framing (`outcome-framing.ts`), completion reflection (`completion-reflection.ts`), clarify dialogs, and public TUI conversation viewers. |
 | `branch-search` | `branch-search.ts` | `search_branches`: parallel approach attempts as conversation forks in isolated git worktrees (`workspace.ts`, `orchestrator.ts`), scored by caller-written gates and numeric judge commands, with an optional judge-profile model (`judge.ts`, `report.ts`). |
 | `code-context` | `code-context.ts` | Delivers `.context/<path>.md` context files on top-level reads and blocks a top-level `edit`/`write` of a file only while its context file exists and its current marker is not in context (`installer.ts`); `context_lint` (`lint.ts`). |
 | `session-search` | `context.ts` (via `session-search.ts`) | `search_session` over this session's transcript, tool calls, and write/edit payloads: active lineage by default (`lineage.ts`), file scopes (`recall-scope.ts`), and progressive drill-down (`drill-down.ts`). |
 | `server-compaction` | `server-compaction.ts` | Provider server-side compaction for OpenAI and Codex Responses, xAI Responses (`responses.ts`), and Anthropic (`anthropic.ts`), with message conversion and replay of the newest result (`convert.ts`, `hooks.ts`); other routes fall back to Pi's summarizer. |
-| `tasks` | `tasks.ts`, `work.ts` | Asynchronous bash process manager (`task-manager.ts`, `process-killer.ts`), output capture (`output-buffer.ts`), one-shot scheduling (`schedule-tool.ts`), monitoring (`monitor-tool.ts`), and the `/work` panel commands. |
+| `tasks` | `tasks.ts`, `work.ts` | Asynchronous bash process manager (`task-manager.ts`, `process-killer.ts`), output capture (`output-buffer.ts`), one-shot reminders (`remind_me`, `schedule-tool.ts`), monitoring (`monitor-tool.ts`), and the `/work` panel commands. |
 | `terse-tools` | `terse-tools.ts` | TUI renderer patches (`patch.ts`, `formatters.ts`) that compress verbose tool output into dense one-liners, mouse-navigable in fullscreen mode, with an interactive modal inspector (`inspector.ts`, `tool-viewer.ts`). |
 | `rtk` | `rtk.ts` | RTK binary detector (`detector.ts`) and `rtk rewrite` wrapper (`rewrite.ts`) that routes eligible bash commands through `rtk` for token compression. |
 | `wiki` | `wiki.ts` | Project-local Markdown knowledge base with a derived page-link graph (`graph.ts`), `wiki_lint` and `wiki_references` tools (`installer.ts`), and a compact workbench prompt (`system-prompt.ts`). |
@@ -438,7 +440,7 @@ The codebase enforces a strict separation between **implementation machinery** (
 | `browser-pages` | `browser-pages.ts` | `review_code`: a code review page in the browser. The agent supplies the structure (`code-review.ts`); the server reads the diff from git and highlights it (`git-diff.ts`, `highlight.ts`), serves the page on 127.0.0.1 behind a token (`page-server.ts`), and returns the verdict and comments. `review_markdown`: a rendered Markdown document the user annotates and signs off (`markdown-review.ts`). `review_ledger_task`: a ledger task bundle with its ticket graph and graph checks (`ledger-review.ts`, `tickets.ts`), every document annotatable, other files read on demand. `explain_change`: an explanation of any change (`explain-change.ts`) with real code from git, figures, a quiz, and a Socratic tutor sidebar; it returns at once with a shareable copy. Every submitted review is saved as a self-contained HTML page (`saved-page.ts`). The React pages (`web/`) are built into committed single files in `dist/`. See [`docs/browser-pages.md`](docs/browser-pages.md). |
 | `ask-user-question` | `ask-user-question.ts` | Structured TUI/RPC disambiguation dialog (`dialog.ts`, `rpc.ts`) when human judgment is required mid-turn. |
 | `tmux-sessions` | `tmux-sessions.ts` | A tmux plugin it loads itself (`pi_session_manager.tmux`, `sidebar.sh`), the Textual agent sidebar and dashboard (`sidebar/`), a pane bell when a run settles, and the macOS notch panel (`notch/`, started by `notch.sh`); the sidebar, dashboard, and notch read the session-state database. |
-| `session-state` | `session-state.ts` | A bridge in every root session (`bridge.ts`) that reports its session to one runtime daemon per Mac (`runtime.ts`, started on demand), which keeps the shared session state database (`schema.ts`); mail threads between sessions (`mail.ts`, `send_mail`, `reply`, `inbox`, and `read_thread`, plus `scripts/pi-send.mjs`); peer discovery (`peers.ts`, `directory`), and the organization (`components/organization/` with the `roles/` catalog): every root session is a person with a name, a self it keeps with `update_self`, and a place in a tree; a session started with `--role <name>` is hired into that role for life, with the role's models, thinking level, tool posture, obligation, and a drawn soul as system prompt sections; a root, and a role that manages, holds the tools to hire from the catalog, reopen, close, rename, transfer, and retire people (`coordinator.ts`). A coordinator is a long-lived chief-of-staff session started in its own directory with its own session id (for example `pi --role coordinator --session-id coordinator` in `~/coordinator`); it hires its own team. See [docs/organization.md](docs/organization.md) and [docs/session-state.md](docs/session-state.md). |
+| `session-state` | `session-state.ts` | A bridge in every root session (`bridge.ts`) that reports its session to one runtime daemon per Mac (`runtime.ts`, started on demand), which keeps the shared session state database (`schema.ts`); mail threads between sessions (`mail.ts`, `send_mail`, `reply`, `inbox`, and `read_thread`, plus `scripts/pi-send.mjs`); team channels (`channels.ts`) and escalation, with `post` and `escalate`, meetings (`meetings.ts`, `meet`, `end_meeting`), assigned tasks with one in focus (`work.ts`, `work-tools.ts`: `take_task`, `assign`, `unassign`, `focus`, `finish_task`, `promote_task`), peer discovery (`peers.ts`, `directory`), and the organization (`components/organization/` with the `roles/` catalog): every root session is a person with a name, a self it keeps with `update_self`, and a place in a tree; a session started with `--role <name>` is hired into that role for life, with the role's models, thinking level, tool posture, obligation, and a drawn soul as system prompt sections; a root, and a role that manages, holds the tools to hire from the catalog, reopen, close, rename, transfer, and retire people (`coordinator.ts`). A coordinator is a long-lived chief-of-staff session started in its own directory with its own session id (for example `pi --role coordinator --session-id coordinator` in `~/coordinator`); it hires its own team. See [docs/organization.md](docs/organization.md) and [docs/session-state.md](docs/session-state.md). |
 | `notify` | `notify.ts` | Native macOS completion notifications, optional `Pi Notifier.app` setup (`install-notifier-app.sh`, run by `/notify-setup`), and best-effort focus detection with click-to-focus (`focus-check.sh`, `focus-tmux.sh`). |
 | `vroom` | `vroom.ts` | `/fast`: priority service tier for OpenAI, Codex, and xAI requests. |
 | `xai-hosted-tools` | `xai-hosted-tools.ts` | Injects xAI's hosted web and X search tools into eligible xAI Responses requests (`payload.ts`). |
@@ -468,7 +470,7 @@ flowchart LR
 | Skill | Scripts & Reference Machinery | What It Does |
 | :--- | :--- | :--- |
 | `code-review` | `multi-lens-review.py`, `plan-review-verify.py`, `residual-review-loop.py`, `planner.md`, `reviewer.md`, `verifier.md`, `smell-baseline.md` | Reviews changes against repository standards and originating intent. Adaptable `pi_exec` programs run fixed-lens, planned, or residual investigations; planner, reviewer, and verifier roles appear only where the chosen program needs them, a residual wave is one bounded extra pass, and reviewers report findings rather than fix them. |
-| `ralph` | `ralph-ledger.py`, `ralph-simple.py`, `ledger-increment.md`, `simple-increment.md` | Adaptable `pi_exec` programs that run bounded, sequential fresh-worker increments: the ledger variant over a prepared `.ledger` task, the simple variant over any goal without a ledger. |
+| `ralph` | `ralph-ledger.py`, `ralph-simple.py`, `ledger-increment.md`, `simple-increment.md` | Adaptable `pi_exec` programs that run bounded, sequential increments, each by a fresh temporary peer: the ledger variant over a prepared `.ledger` task, the simple variant over any goal without a ledger. |
 | `codebase-design` & `improve-codebase-architecture` | `deepening.md`, `design-it-twice.md`, `html-report.md` | Teaches Ousterhout's deep-module vocabulary (radically simple interfaces hiding deep implementation), with optional Design It Twice exploration of alternative interfaces; the architecture survey produces an HTML report of deepening opportunities rather than production changes. |
 | `interrogate-to-design` & `to-spec` | `SKILL.md` | Stops the contractor anti-pattern ("build whatever satisfies the literal prompt"). `interrogate-to-design` interviews you to resolve open decisions and unstated assumptions; `to-spec` synthesizes already-settled decisions into a task-local specification without an interview. |
 | `to-tickets` | `SKILL.md` | Breaks a plan or specification into approved tracer-bullet tickets with explicit blocking edges. |
@@ -486,7 +488,7 @@ flowchart LR
 
 A system's character is defined by what it refuses to include.
 
-* **No theatrical agent swarms.** There is no "CEO Agent" delegating to a "Product Manager Agent" in a simulated Slack channel. Subagents here are scoped functional workers with explicit tasks, scoped tools, optional turn limits, and outcome framing.
+* **No theatrical agent swarms.** There is no "CEO Agent" delegating to a "Product Manager Agent" for show, and no fleet of disposable children running in the background. One-shot reading goes to interns that answer once and exit; lasting work goes to people with a role, an assigned task, their own transcript, and threads anyone can read.
 * **No vector-database RAG over source code.** Chunking source files into 512-token embeddings destroys call graphs, type definitions, and lexical precision. Between live file and search tools, `code-context` context files, `session-search`, the `wiki` page graph, and `pi-exec` programs that compose those tools, exact structural and lexical lookup is what I reach for.
 * **No silent auto-remediation magic.** When a guard triggers (`home-search-guard`, `code-context`), it fails loudly and tells the model *why* so the model updates its plan in-context. Invisible retry middleware just burns tokens in the dark while hiding architectural friction.
 * **No lowest-common-denominator OS abstractions.** The cockpit layer (`notify`, `tmux-sessions`) is built unapologetically for macOS, `tmux`, and a terminal-first workflow.

@@ -2247,7 +2247,8 @@ export class PlaceScene extends Phaser.Scene {
 			name,
 			tone: "character",
 			actions: [
-				...this.giveAction(character, false),
+				// A former member must be rehired before it can take work.
+				...(agent()?.retiredAt ? [] : this.giveAction(character, false)),
 				action(
 					"Read last talk with",
 					() => {

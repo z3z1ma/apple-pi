@@ -64,7 +64,7 @@ A context file is **live** when its marker, for example `<context-ref path="app/
 - **Forks and branches.** Each branch checks its own messages. A [forked continuation](forked-continuations.md) checks the fork's own conversation, so reads inside the fork unlock edits inside the fork.
 - **Unreadable context files.** An empty or non-UTF-8 context file, or one that cannot be read, does not gate. A `read` of its file reports that it could not be loaded.
 
-The extension loads in root sessions, ordinary subagent children, and `pi_exec` model workers; each checks its own context. Only top-level calls are covered. Calls a tool makes through `ctx.executeTool()`, such as reads and edits in a `pi_exec` program, carry `parentToolCallId`; they return raw file content and are not gated. Shell commands and other processes can also change files without the gate. The gate is a workflow guardrail, not a filesystem sandbox.
+The extension loads in every top-level session, including each peer that `pi_exec` runs, and in [interns](interns.md); each checks its own context. Only top-level calls are covered. Calls a tool makes through `ctx.executeTool()`, such as reads and edits in a `pi_exec` program, carry `parentToolCallId`; they return raw file content and are not gated. Shell commands and other processes can also change files without the gate. The gate is a workflow guardrail, not a filesystem sandbox.
 
 ## `context_lint`
 

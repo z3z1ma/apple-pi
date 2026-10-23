@@ -1,6 +1,6 @@
-import { getAgentDir, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { type ExtensionAPI, type ExtensionContext, getAgentDir } from "@earendil-works/pi-coding-agent";
 
 const STATUS_ID = "fast-mode";
 const CODEX_PROVIDER = "openai-codex";
@@ -151,9 +151,9 @@ export function registerVroom(pi: ExtensionAPI, storage: FastModeStorage = globa
 	pi.on("model_select", (_event, ctx) => updateStatus(ctx));
 
 	pi.on("before_provider_request", async (event, ctx) => {
-		// Every root, child, and exec worker refreshes the shared setting before
+		// Every session that loads fast mode refreshes the shared setting before
 		// each request. A mid-turn toggle therefore affects its next continuation,
-		// including agents that were already running when the setting changed.
+		// including sessions that were already running when the setting changed.
 		if (!pendingSave) {
 			try {
 				const stored = await storage.load();

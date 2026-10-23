@@ -12,7 +12,7 @@ Root sessions only; a run without an attached user gets a message instead of a p
 
 ## Working directory
 
-All four tools accept optional `cwd`: an absolute directory or a directory relative to the session's working directory. It defaults to the session's working directory. Use it to open a page for another repository or Git worktree directly from the root session; browser tools are not available in subagents.
+All four tools accept optional `cwd`: an absolute directory or a directory relative to the session's working directory. It defaults to the session's working directory. Use it to open a page for another repository or Git worktree directly from the session. [Interns](interns.md) and the [`/btw`](btw.md) session do not have browser tools.
 
 For example, a session in `work` can explain a commit in a nested worktree with `cwd: "worktrees/DATA-16966"`, `base: "<commit>^"`, and `head: "<commit>"`. `review_code` accepts the same `cwd` to review that worktree's changes. Git refs are resolved in the selected repository, and code references use paths relative to its root, even when `cwd` selects a subdirectory. An invalid target fails rather than falling back to the session's repository.
 
@@ -80,7 +80,7 @@ The tool call carries structure and prose, never code:
   | `?` | Show all keys |
 
 - **Comments:** click a line number to comment on it, and shift-click another to extend the range. Each comment has a kind: change, question, concern, nit, or praise. A comment can also reply to an agent note.
-- **Ask the agent:** the composer's second mode (or `A` on a hunk) asks a question about the selected lines. A read-only fork of the live conversation answers it, the way `clarify` does: it shares the session's request prefix, sees the pending `review_code` call as a placeholder, can use only `read`, `grep`, `find`, and `ls`, and records its usage as "Review question". The answer appears under the lines; the agent's main task is not interrupted. An answer can become a comment, or be dismissed. A page opened from a session that cannot fork has no ask mode.
+- **Ask the agent:** the composer's second mode (or `A` on a hunk) asks a question about the selected lines. A read-only [fork](forked-continuations.md#page-questions) of the live conversation answers it: it shares the session's request prefix, sees the pending `review_code` call as a placeholder, can use only `read`, `grep`, `find`, and `ls`, and records its usage as "Review question". The answer appears under the lines; the agent's main task is not interrupted. An answer can become a comment, or be dismissed. A page opened from a session that cannot fork has no ask mode.
 
 ## The result
 

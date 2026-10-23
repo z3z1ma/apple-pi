@@ -24,7 +24,7 @@ When its delay ends, a prompt is sent at once as a visible steering message: dur
 
 A due command starts without an inference turn. Its managed task moves from `scheduled` to `running`; completion, failure, cancellation, or external termination sends the same steering notification used by an immediately backgrounded bash command. Use `bash` with `run_in_background: true` when a command should start immediately.
 
-Every schedule returns a `task-*` ID and resolved due time. Use `task` to list, inspect, wait for, or cancel it.
+Every reminder returns a `task-*` ID and resolved due time. Use `task` to list, inspect, wait for, or cancel it.
 
 ## Boundaries
 

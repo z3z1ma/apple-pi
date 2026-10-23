@@ -55,9 +55,9 @@ Discover tools with `tools_search(query)`, inspect them with `tools_describe(nam
 
 Nested calls from `pi_exec` go through Pi's tool pipeline, so exposure rules and `tool_call`/`tool_result` permission hooks apply to them as to native calls. `pi_exec` and saved `program_*` tools declare `reachesTools`, so a program waits for servers that are still connecting. Pi registers both `codemode` and `deferred` server tools as deferred tools; the exposure only selects whether Pi activates native `codemode` or `tool_search`. Pi does not treat `pi_exec` as a replacement for `codemode`, so keep servers on `deferred` or `direct` exposure. In Python, an MCP call's `structuredContent` holds the whole `CallToolResult`.
 
-## Children and SDK sessions
+## Other sessions
 
-Ordinary interactive children explicitly load Pi's native MCP and tool-search factories alongside their Apple Pi extensions. They do not load `codemode`, so they reach MCP tools through `direct` or `deferred` exposure. Internal BTW, clarification, and consultation sessions remain limited to their existing tools and safety hooks. Pi Exec model workers retain their existing extension scope; they do not gain MCP discovery.
+Every person, including a peer a `pi_exec` program starts, is a root Pi session and gets MCP from the Pi CLI as above. Interns and the internal `/btw` session do not load MCP; they keep their fixed tools and safety hooks.
 
 SDK sessions do not discover built-in extensions automatically. Supply Pi's `createMcpExtension()` and `createToolSearchExtension()` through `DefaultResourceLoader.extensionFactories`, then bind the session extensions. The Pi CLI supplies its built-ins itself, which is why the root session needs the settings entry above.
 

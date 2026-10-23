@@ -22,11 +22,11 @@ An agent is a live top-level Pi session whose process runs in a pane of this tmu
 | working | a run is in progress |
 | idle | settled and seen |
 
-Subagents and `pi_exec` workers are not agents here. On settle the extension rings its pane's bell (opt out with `PI_TMUX_SESSION_BELL=off`), so tmux marks the window in its status line.
+[Interns](interns.md) and the [`/btw`](btw.md) session are not agents here. On settle the extension rings its pane's bell (opt out with `PI_TMUX_SESSION_BELL=off`), so tmux marks the window in its status line. A temporary peer that a `pi_exec` program starts is an agent while it lives, but it does not ring the bell (its `PI_PROGRAM_ID` is set).
 
 ### Supervised sessions
 
-A session that another session started and watches, such as a [coordinator](session-state.md#coordinator-tools) worker, is started with `pi --reports-to <supervisor id>` (the coordinator's `hire` does this). When it closes (quit, `/new`, `/resume` or `/fork`, but not `/reload`) the session-state bridge [mails](session-state.md#mail-and-threads) the supervisor from its own session id:
+A session that another session started and watches, such as a person that a manager hired, is started with `pi --reports-to <supervisor id>` (the [manager tool](organization.md#manager-tools) `hire` does this). When it closes (quit, `/new`, `/resume` or `/fork`, but not `/reload`) the session-state bridge [mails](session-state.md#mail-and-threads) the supervisor from its own session id:
 
 ```text
 Session "JEM review" closed (quit) while busy. Directory: /path/to/repo

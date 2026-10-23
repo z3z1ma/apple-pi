@@ -1,6 +1,6 @@
 # Model profiles
 
-Model profiles are the user-owned inference policy for apple-pi. Agent types and sidecars select semantic workload names; the profile file maps those names to a provider model and thinking level.
+Model profiles are the user-owned inference policy for apple-pi. Interns, the pair programmer, and branch search select semantic workload names; the profile file maps those names to a provider model and thinking level.
 
 The only authority is the user-global file:
 
@@ -64,7 +64,7 @@ The inference profiles have these intended inference characteristics:
 | `visual-engineering` | Model strong in UI, spatial, and multimodal reasoning, with moderate-to-high effort. |
 | `background` | Low-cost model with low reasoning effort for asynchronous work. |
 
-Built-in and custom Markdown teammates may select one of these known names with `profile:`. The interactive `agent` tool and `pi_exec` workers may override a type's default with the same `profile` enum. A generic `agent_run` worker may select a profile without selecting a type; without either, it inherits the parent session's model and thinking. The persistent pair programming partner always uses `pair`; intern tools use `quick`. Second opinions go to colleagues, whose catalog roles name their minds directly.
+The intern tools (`explore`, `research`) use `quick`. The persistent pair programming partner always uses `pair`. Branch search's optional judge uses the profile its configuration names. People in the organization, including the peers of `pi_exec` programs, do not use profiles: their catalog roles name their minds directly ([organization](organization.md#the-person)). The other names are valid in the file but have no built-in user.
 
 Profiles select only model and thinking. They never grant tools, write access, extensions, skills, pair programmer use, persistence, or any other capability.
 

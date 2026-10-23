@@ -6,9 +6,9 @@
 
 **Blocked by:** 11 Subagents removed, 12 Workplace extras, 13 Agent World shows the workplace
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] No doc, AGENTS.md line, or README line names a removed tool, the subagent team, custom agents, or senses.
-- [ ] Each new tool is described in the doc that owns its area.
-- [ ] `docs/boundaries.md` lists the rejected ideas with their reasons.
-- [ ] `wiki_lint` and `context_lint` pass.
+- [x] No doc, AGENTS.md line, or README line names a removed tool, the subagent team, custom agents, or senses.
+- [x] Each new tool is described in the doc that owns its area.
+- [x] `docs/boundaries.md` lists the rejected ideas with their reasons.
+- [x] `wiki_lint` and `context_lint` pass.

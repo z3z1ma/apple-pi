@@ -22,7 +22,7 @@ export interface ForkPrompt {
 }
 
 /**
- * Answers from a read-only fork of the live conversation, the way `clarify` does: the fork shares the session's
+ * Answers from a read-only fork of the live conversation: the fork shares the session's
  * request prefix, a still-running tool call gets a placeholder result, and only the answer leaves the fork. Its
  * usage is recorded in the session under `label`.
  */

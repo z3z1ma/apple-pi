@@ -10,12 +10,13 @@ every `openai`, `openai-codex`, or `xai` request receives:
 The setting is stored at `~/.pi/agent/vroom.json` (or the configured Pi agent directory) and
 persists across sessions and restarts. On first load after upgrading from the earlier
 Codex-only extension, it falls back once to the legacy `codex-fast.json` so an existing
-toggle is not silently reset. The extension is loaded explicitly in the root session,
-interactive subagents, and `pi_exec` agents.
+toggle is not silently reset. Every top-level session loads the extension,
+including each peer and the temporary peers that `pi_exec` starts. [Interns](interns.md) and
+the [`/btw`](btw.md) session load it explicitly.
 
-The command runs immediately even while an agent is streaming. The root uses the new value
-immediately, and already-running subagents refresh the shared setting before each provider
-continuation. An HTTP request already in flight cannot be changed; the next request in the
+The command runs immediately even while an agent is streaming. The session that ran `/fast` uses
+the new value immediately. Every other running session reads the shared setting again before
+each provider request. An HTTP request already in flight cannot be changed; the next request in the
 same agentic run uses the new mode.
 
 When fast mode is active on an OpenAI or xAI model, the input card shows `⚡` beside

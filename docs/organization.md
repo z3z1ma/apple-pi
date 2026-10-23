@@ -10,13 +10,17 @@ This page is the product contract. The runtime mechanics (the database, the comm
 | --- | --- |
 | Person | A root Pi session with a stable session id. `pi --session-id X` reopens the same person; `/fork` and `/clone` make a new one. Your own sessions are people too. |
 | Organization | Every person whose chain of managers ends at one root. The **root** is a person with no manager. Two roots on one machine are two organizations. |
-| Manager | A person whose role manages, or the root of an organization. Only managers hire, reopen, close, rename, transfer, and retire people. |
+| Operator | The human. The operator is a person at the top of every organization, listed in the directory as `operator`, with no Pi session. Anyone can mail the operator. |
+| Manager | A person whose role manages, or the root of an organization. Only managers hire, rehire, send home, rename, move, and let go people, assign and unassign work, and hold meetings. |
 | Role | A catalog entry: an obligation, what the role leaves to others, what it delivers, its mind, its tool posture, and whether it manages. Fixed for a person's whole life. |
 | Mind | The role's ordered list of models and a thinking level; the first model the session's registry has is used. |
 | Soul | A temperament the harness draws at hire from local lists, like a name. Never edited. |
-| Self | One Markdown document the person keeps about itself and its teammates, written with `update_self`. Never distilled, never capped. |
-| Record | What the harness knows a person did: assignments and their outcomes, manager history, hire and retire dates. |
-| Hire, transfer, close, reopen, retire | Start a new person with a role under a manager; move a person under another manager; stop the process (the person sleeps); start it again with its history; record that the person has left (it stays reopenable). |
+| Self | One Markdown document the person keeps about itself and its colleagues, written with `update_self`. Never distilled, never capped. |
+| Record | What the harness knows a person did: assignments and their outcomes, manager history, hire and leave dates. |
+| Hire, rehire, send home, move, let go | Start a new person with a role and a goal under a manager; start a person again with its history; stop its process (the person sleeps); put it under another manager; record that it has left (a manager can rehire it). |
+| Thread | One conversation: a subject, its participants, and its messages in order. Mail, team channels, meetings, and task discussions are all threads. |
+| Push, pull | How a participant gets a thread's messages. A pushed message arrives as mail (a turn). A pulled message waits until the participant reads the thread. |
+| Task | A bundle with a `task.md` goal: a ledger task in a project's `.ledger/`, or an ephemeral task in the state directory. A person works only on tasks assigned to it or taken by it. |
 | Interns | `explore` and `research`: cheap, one-shot reading tools that return a lossy summary outside the caller's context. They are not people. |
 
 ## The person
@@ -37,9 +41,49 @@ A session started with `--reports-to <id>` has that session as its manager; a se
 
 Every root session's system prompt carries an `<org>` section: who it is, its id as its mail address, its manager and root, how the directory and mail work, and the norms (work, reports, and escalation follow the tree; a manager is never a relay; say what you verified and what you believe). A hired person is told to ask its manager for people it lacks and when to escalate. A manager also gets the `<manager>` charter (hire colliding perspectives, give independent thinkers the problem before the preferred answer, delegate whole outcomes, name disagreements, escalate by uncertainty times consequence, hire a manager under itself when fan-in would make it the bottleneck, reconcile against the directory, sweep) and the `<role-catalog>` section, one line per role. The charters are in `components/organization/src/charters.ts`.
 
+## Workplace tools
+
+Every root session has these tools. Each sends a command to the runtime or reads its database; the details are in [session-state](session-state.md#mail-and-threads).
+
+| Tool | What it does |
+| --- | --- |
+| `directory` (`former?`) | Lists the organization, with the operator at the top. See [Record](#the-person). |
+| `send_mail` (`to`, `cc?`, `subject`, `body`) | Starts a mail thread. Addresses are names, session ids, `operator`, `my-team`, and `my-manager`. Every participant is pushed each message. |
+| `reply` (`thread`, `body`) | Answers everyone in a thread. In a team channel, the reply stays pulled except for people it names. |
+| `inbox` (`all?`) | Lists threads with unread messages, or every thread with `all: true`. |
+| `read_thread` (`thread`) | Shows a thread in full and marks it read. |
+| `post` (`channel`, `body`, `invite?`) | Posts in a team channel. Posts are pulled; a post that names a participant is pushed to that person. |
+| `escalate` (`body`) | Mails the caller's manager with the subject `Escalation`. At a root it goes to the operator. It does not block. |
+| `remind_me` (`delay_seconds`, `text` or `command`) | Sends the caller a note, or starts a bash command, after a delay. See [scheduling](scheduling.md). |
+| `update_self` | Replaces the person's self. |
+| `take_task`, `focus`, `finish_task`, `promote_task` | The task tools. See [Tasks and assignments](#tasks-and-assignments). |
+
 ## Manager tools
 
-A root, and a person whose role manages, holds six tools besides the directory: `hire` (required `role` and `goal`; optional `cwd`, `name`, `session_id`), `rehire` (`person`, optional `goal`), `send_home`, `rename`, `move` (a person with everyone under it, to another manager of the same organization), and `let_go` (`reason`). The same acts are available to you from Agent World (hire at a manager's desk, retire from a person's actions) and the retire and transfer commands of the runtime. The details are in [session-state](session-state.md#manager-tools).
+A root, and a person whose role manages, also has ten manager tools:
+
+| Tool | What it does |
+| --- | --- |
+| `hire` (`role`, `goal`, `cwd?`, `name?`, `session_id?`) | Starts a new person in a role, reporting to the caller, with the goal assigned as a task before its first turn. |
+| `rehire` (`person`, `goal?`) | Reopens an asleep or former person with its history. A goal adds an assignment. |
+| `send_home` (`person`) | Quits the person's process. The person sleeps and stays in the organization. |
+| `rename` (`person`, `name`) | Renames a running person. Its id and history stay. |
+| `move` (`person`, `manager`) | Puts a person, with everyone under it, under another manager of the same organization. |
+| `let_go` (`person`, `reason`) | Asks the person for a handover, posts it in the team channel, then records why it left and closes it. |
+| `assign` (`person`, `goal` or `task`) | Gives a person a task or a written goal. It becomes the person's focus. |
+| `unassign` (`person`, `task`) | Takes an assignment back without finishing it. |
+| `meet` (`people`, `agenda`) | Opens a meeting thread. Every message is pushed to every participant. |
+| `end_meeting` (`thread`, `summary`) | Sends the summary and closes the meeting. Only the organizer can end it. |
+
+`person` and `manager` accept a name in the caller's organization or a session id. You can do the same acts from Agent World (hire at a manager's desk, give a goal to a person, let go from a person's actions). The details are in [session-state](session-state.md#manager-tools).
+
+The `<org>` section teaches the push and pull model. A new hire's first turn includes its team channel's history, when the channel has any. The `<manager>` charter suggests a short regular meeting, arranged with `remind_me` and held with `meet`, when the team benefits from one.
+
+## Threads
+
+Every exchange is a thread that the runtime stores. Mail and meetings push every message to every participant. Team channels are pulled: a post waits until the participant reads it, unless the post names that person. Each task has a task thread for its assignees and assigners, also pushed. A pushed message to an asleep person waits and arrives when the person wakes. The sender is told who is asleep.
+
+Each manager has a team channel, `team:<manager-id>`, for the manager and its direct reports. Members follow the tree. An invited reader stays when its reporting line changes. Former members leave every channel.
 
 ## Tasks and assignments
 
@@ -48,6 +92,8 @@ Work is explicit. Hiring creates and assigns a task before the person's first tu
 A person can hold several tasks, with one in focus. `focus(task)` rereads its `task.md`; the file is the goal, not a database copy. The goal is appended to context on assignment or focus, and again after compaction. Editing the file and refocusing brings its revision into context. Each task has a thread shared by its assignees and assigners; taking work also tells the person's manager there.
 
 Ephemeral tasks live under the Pi state directory in `tasks/<id>/`, with `task.md`, `retrospective.md`, and any useful context files. They survive restarts. `finish_task(outcome)` writes the outcome, ends the focused assignment, clears focus, and posts the outcome in the thread. Once all assignees finish, an ephemeral bundle moves to `tasks/history/<id>/`, including its retrospective. Ledger tasks keep the ledger's separate status and archive workflow.
+
+Only a root or a managing role can `assign` and `unassign`, and only inside its own organization. The operator can assign anyone. `take_task` with an existing task works only when nobody else holds that task.
 
 `promote_task(task)` moves a live ephemeral bundle into its project's `.ledger/`, through the same index transaction as `ledger_add`. Files, assignment identity, and thread stay together. Its heading supplies the ledger title and summary; optional `title` and `description` can name it more clearly. The runtime alone writes assignments and focus. Editing a ledger bundle still records a transcript pointer in `history.json`, but never assigns work. Archiving a registered ledger task updates its bundle path without ending assignments or changing their identity. Views read the explicit focus, never old inferred intent or ledger touches.
 
@@ -96,7 +142,7 @@ The two managing roles differ in principal: a `coordinator` is your chief of sta
 ## Rules of the organization
 
 - Roles never change. A person who needs another role is a new hire; the old one sleeps or retires.
-- Nobody is deleted. `close` is sleep (the person keeps its id, transcript, self, and record); `retire` records when and why it left and keeps it reopenable by a manager.
+- Nobody is deleted. `send_home` is sleep (the person keeps its id, transcript, self, and record); `let_go` records when and why it left, and a manager can `rehire` it. The only exception is a temporary peer of a `pi_exec` program, whose record is deleted when the program discards it ([exec](exec.md#peers-and-schemas)).
 - The tree carries assignment, reporting, and escalation; it does not gate mail. A manager that only forwards mail is a relay, which the charter forbids.
 - There is no handoff schema. People give each other goals and say what they verified and what they believe.
 - There are no caps: not on team size, self length, or the catalog. Managers size teams with judgment, and the charter names the one signal to watch (fan-in).
@@ -106,7 +152,8 @@ The two managing roles differ in principal: a `coordinator` is your chief of sta
 | Piece | Owner |
 | --- | --- |
 | Roles, minds, souls, the self tool, the charters, and the directory | `components/organization/` (`roles.ts`, `soul.ts`, `self.ts`, `charters.ts`, `directory.ts`, `install.ts`), installed by `extensions/session-state.ts` in every root session |
-| The manager tools and the directory tool | `components/session-state/src/coordinator.ts` and `peers.ts` |
+| The workplace tools | `components/session-state/src/`: `mail.ts` (mail, channels, escalation), `meetings.ts`, `peers.ts` (the directory), `coordinator.ts` (manager tools), and `work-tools.ts` (task tools); `remind_me` in `components/tasks/` |
+| Threads, assignments, and ephemeral tasks | the runtime: `threads.ts`, `channels.ts`, `work.ts`, and `runtime.ts` in `components/session-state/src/` |
 | The package catalog | `roles/*.md` |
 | The tree, the record, and the facts (`role`, `title`, `manages`, `soul`, `self`, `retired_at`, `retired_reason`) | the session-state runtime and database, [session-state](session-state.md) |
 | The terminal views | [tmux-sessions](tmux-sessions.md): organizations as indented trees with role titles and folded former members |

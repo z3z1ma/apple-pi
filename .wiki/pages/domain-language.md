@@ -2,7 +2,7 @@
 
 Apple Pi is an integrated environment for agent-assisted software engineering. This working glossary covers the active harness. Optional modules retained for others to reuse are outside its domain.
 
-The groups are vocabulary areas, not established bounded contexts. Public subagents and Pi Exec model workers are distinct participant kinds. Task names an undertaking; job names runtime-managed work. Conventions for unqualified “agent” and “background” remain unsettled.
+The groups are vocabulary areas, not established bounded contexts. Persons, interns, the pair programmer, and the BTW conversation are distinct participant kinds. Task names an undertaking; job names runtime-managed work. Conventions for unqualified “agent” and “background” remain unsettled.
 
 ## Language
 
@@ -14,14 +14,17 @@ The agent responsible for the operator's active request, implementation decision
 **Pair programmer**:
 The persistent advisory partner that follows the main agent's presented work and shares sourced learnings. Its findings are advice, not authorization to act.
 
-**Consultant**:
-An advisory specialist whose independent opinion helps resolve a consequential question. The main agent retains responsibility for the decision and its validation.
+**Second opinion**:
+An independent view on a consequential question, asked of a colleague in the organization by mail. The main agent sees the question and the answer and keeps responsibility for the decision and its validation.
 
-**Public subagent**:
-A delegated teammate with its own resumable, steerable, and inspectable conversation. It is a distinct participant kind from a Pi Exec model worker, the pair programmer, and private side conversations.
+**Person**:
+A lasting top-level Pi session with a stable id, a human name, and a place in an organization. A hired person also has a role. People hold assigned tasks and talk through threads. Also called a peer when one person works with another.
 
-**Agent type**:
-A named teammate role with a defined purpose and default working guidance.
+**Role**:
+A catalog entry that defines a kind of person: its obligation, what it delivers, its model, and its tool posture. A person's role never changes.
+
+**Intern**:
+A one-shot reading helper, `explore` or `research`, that runs one headless process, returns one lossy summary, and exits. It is not a person.
 
 **Model profile**:
 A named choice of model and thinking level for a workload. It conveys no permissions or capabilities.
@@ -30,25 +33,22 @@ _Avoid_: Permission profile
 **Pair finding**:
 An observation from the pair programmer about the main agent's work. A concern or blocker requires explicit consideration, but is not itself proof that the work is wrong.
 
-**Child clarification**:
-Advice to a public subagent drawn from an independent snapshot of its immediate parent's conversation. It is not new authorization from the operator.
-
 **BTW conversation**:
 The operator's private, read-only side conversation about the current work. Its answer joins the main conversation only by explicit operator choice.
 
 ### Execution and continuity
 
 **Root session**:
-The top-level Pi conversation that owns the operator's work and its delegated activities.
+A top-level Pi conversation. Every person is one, including the sessions the operator starts. Interns, the BTW conversation, and forked continuations are not.
 
-**Interactive child session**:
-A Pi conversation owned by a parent session for delegated collaboration. It is distinct from a model worker inside a composed program.
+**Assignment**:
+The record that a person holds a task, given by a manager or taken by the person. Only assignments bind work to a person.
 
 **Pi Exec**:
 The harness capability for bounded, type-checked programmatic composition of tools and model work.
 
-**Pi Exec model worker**:
-A model participant invoked within a composed program to return a result to that program. It is distinct from a public subagent and from the runtime that executes the program.
+**Program peer**:
+A person a Pi Exec program attaches, or starts in a role, to run turns that return results to the program. A temporary program peer is discarded when its call or the program ends. It is distinct from the runtime that executes the program.
 
 **Job**:
 A session-owned command or deferred prompt with an inspectable lifecycle. A job finishing does not establish that the task it serves is complete.
@@ -88,7 +88,7 @@ The proposal-first placement of session learnings into their appropriate durable
 The project-local workbench for operational context about bounded undertakings. It is distinct from the notebook and the wiki.
 
 **Task**:
-An undertaking with its own intent, status, current state, and outcome. The ledger is its operational workbench; “ledger task” is a qualifier for explaining that relationship, not a separate kind of task.
+An undertaking with its own intent, status, current state, and outcome. The ledger is its operational workbench; “ledger task” is a qualifier for explaining that relationship, not a separate kind of task. An ephemeral task has the same shape and lives in the state directory until it finishes or is promoted to the ledger.
 
 **Retrospective**:
 A task's concise account of what mattered and which lessons remain worth retrieving after the task ends.
@@ -111,7 +111,7 @@ Reduction of the conversation's active context while retaining a usable account 
 A structured set of related operator decisions with described choices and custom answers. It seeks a decision rather than supplying new authority on its own.
 
 **Active work**:
-The public subagents and jobs presented together for operator inspection. Their shared presentation does not make them one lifecycle or one kind of work.
+The jobs, running Pi Exec programs, and intern calls presented together for operator inspection. Their shared presentation does not make them one lifecycle or one kind of work.
 
 **Prompt stash**:
 The operator's temporary collection of unsubmitted prompts. It is distinct from conversation history and scheduled prompts.
@@ -126,7 +126,7 @@ The compact presentation of tool activity with expandable detail. Presentation b
 An operator-facing signal that a run has settled or attention is required. It is not proof that the requested work succeeded.
 
 **Session status**:
-The operator-facing indication that a root session is busy, idle, or waiting for input. An idle session can have unfinished delegated work.
+The operator-facing indication that a root session is busy, idle, or waiting for input. An idle session can have unfinished jobs or assigned tasks.
 
 ### Session state
 
@@ -141,7 +141,7 @@ _Avoid_: Instance, run
 The part of every Pi session that reports the session's activity to the session state model and carries commands back into it.
 
 **Supervision**:
-The relation from a session to the session that started it and watches over it, such as a coordinator session (the operator's chief-of-staff session) and its workers.
+The relation from a session to the session that started it and watches over it, such as a manager and a person it hired.
 
 **Lineage**:
 The relation from a session to the session it was forked or cloned from.

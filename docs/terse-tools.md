@@ -18,7 +18,7 @@ By default, every tool execution renders as a single, terse line:
   - Yellow / Warning: Running or in-progress tool execution.
   - Green / Success: Tool execution completed successfully.
   - Red / Error: Tool execution failed.
-- **`<ToolName>`**: PascalCase name in bold warm yellow/gold `warning` color (`Bash`, `Read`, `Edit`, `Write`, `Search`, `Find`, `Ls`, `ManageTask`, `Schedule`, `Exec`, `AskUserQuestion`).
+- **`<ToolName>`**: PascalCase name in bold warm yellow/gold `warning` color (`Bash`, `Read`, `Edit`, `Write`, `Search`, `Find`, `Ls`, `ManageTask`, `RemindMe`, `Monitor`, `Exec`, `AskUserQuestion`).
 - **Arguments**: Concise, single-line string representation (e.g. `Bash(git status --short --branch)`, `Read(~/src/index.ts:10-40)`, `Search(pattern in path)`). File paths shorten `$HOME` to `~`.
 - **Contiguous sequence spacing**: Consecutive collapsed tool calls sit directly on adjacent lines without blank separators or padding boxes across multi-turn agent execution loops.
 - **Expansion hint**: Only the very last tool call in a contiguous block displays `(ctrl+o to expand)` in muted text.

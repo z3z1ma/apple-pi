@@ -88,7 +88,7 @@ Add `-l` to either `pi install` command to activate apple-pi only for the curren
 
 ## 4. Configure model profiles
 
-Apple-pi will not start its pair programmer or teammates without `~/.pi/agent/model-profiles.json`. Copy the example that matches your provider:
+Apple-pi will not start its pair programmer or interns without `~/.pi/agent/model-profiles.json`. Copy the example that matches your provider:
 
 ```bash
 mkdir -p ~/.pi/agent
@@ -156,7 +156,7 @@ In a tmux pane inside a project directory, start `pi` and check:
 1. The editor shows the model and context status line.
 2. `/pair status` reports the pair programmer as on.
 3. `/pi-sessions` lists the current session.
-4. Ask: `Use an explorer teammate to list the top-level directories.` A teammate starts and reports back. A model-profile error here means a model name in `model-profiles.json` is wrong or not logged in.
+4. Ask: `Use the explore intern to list the top-level directories.` The intern runs and reports back. A model-profile error here means a model name in `model-profiles.json` is wrong or not logged in.
 5. `/notify-test` shows a notification.
 
 For a checkout install, also run the repository checks:

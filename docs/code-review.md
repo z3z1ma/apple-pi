@@ -39,7 +39,7 @@ Use the live `pi_exec` tool contract when adapting a program. Pass the compariso
 
 ## Evidence and authority
 
-Every finding establishes the changed location, reachable trigger, evidence chain, violated standard or intent, observable impact, and smallest correction direction. Reviewer, reducer, and verifier workers are read-only; their outputs are hypotheses. Failed lanes, truncation, omitted candidates, unknown IDs, and uncovered paths remain visible coverage failures.
+Every finding establishes the changed location, reachable trigger, evidence chain, violated standard or intent, observable impact, and smallest correction direction. Reviewer, reducer, and verifier peers are told to stay read-only; their outputs are hypotheses. Failed lanes, truncation, omitted candidates, unknown IDs, and uncovered paths remain visible coverage failures.
 
 The root independently checks candidates against current source and governing evidence, writes the final axis-separated report, and owns any checks. Code review is report-only unless the operator also requests or later authorizes fixes.
 

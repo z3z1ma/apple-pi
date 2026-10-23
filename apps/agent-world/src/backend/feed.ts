@@ -82,7 +82,7 @@ function detail(command: Record<string, unknown>): string {
 
 /** The line for one event, or undefined when it is not one the operator follows. */
 export function feedLine(row: FeedRow, lookup: FeedLookup): FeedLine | undefined {
-	if (row.sessionKind === "child") return undefined; // subagents are not characters
+	if (row.sessionKind === "child") return undefined; // rows left by older child sessions are not characters
 	const name = row.name || (row.cwd ? basename(row.cwd) : null) || row.sessionId;
 	const data = parse(row.data);
 	const line = (kind: FeedLine["kind"], text: string): FeedLine => ({

@@ -3,7 +3,7 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { installSessionSearch } from "./session-search.js";
 
 /**
- * Transcript search is available in root sessions, child sessions, and workers.
+ * Transcript search for root sessions; interns load `session-search.ts` by path.
  * The pair programmer owns the root-only notebook ledger, packet, recall, and compaction
  * integration so there is one model-facing companion rather than a second persistent notebook actor.
  */

@@ -1896,8 +1896,8 @@ export class Runtime {
 				db.prepare("update sessions set parent_session_id = null where id = ?").run(sessionId);
 			if (key === "previousSession")
 				db.prepare("update sessions set previous_session_id = null where id = ?").run(sessionId);
-			// An open prompt needs the operator; once it closes, only a settle they have not seen still does. A subagent
-			// never needs them: its parent takes its result, and no view shows it.
+			// An open prompt needs the operator; once it closes, only a settle they have not seen still does. Rows left by
+			// older child sessions never need them.
 			if (key === "prompt" && value)
 				db.prepare(
 					"update sessions set needs_you_since = coalesce(needs_you_since, ?) where id = ? and kind = 'root'",
