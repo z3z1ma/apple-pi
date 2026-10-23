@@ -117,7 +117,7 @@ describe("OpenAI server-side compaction", () => {
 		expect(result?.serverCompaction).toEqual({ api: "openai-responses", provider: "openai", items: [item] });
 	});
 
-	it("chains the previous items after the developer prompt", async () => {
+	it("chains the previous items ahead of the developer prompt", async () => {
 		const previous = {
 			api: "openai-responses",
 			provider: "openai",
@@ -128,8 +128,8 @@ describe("OpenAI server-side compaction", () => {
 		]);
 		await compactOnServer(event(previous), ctx("openai", "openai-responses", complete), []);
 		expect(seen.payload?.input).toEqual([
-			{ role: "developer", content: "system" },
 			...previous.items,
+			{ role: "developer", content: "system" },
 			{ type: "compaction_trigger" },
 		]);
 	});

@@ -1,3 +1,7 @@
+import type { Context, Model } from "@earendil-works/pi-ai";
+import { OPENAI_MODELS } from "@earendil-works/pi-ai/providers/openai.models";
+import { OPENAI_CODEX_MODELS } from "@earendil-works/pi-ai/providers/openai-codex.models";
+import { XAI_MODELS } from "@earendil-works/pi-ai/providers/xai.models";
 import { describe, expect, it } from "vitest";
 
 import { injectAnthropicCompaction } from "../src/anthropic.js";
@@ -23,24 +27,49 @@ const summaryMessage = (text: string) => ({
 	content: [{ type: "input_text", text: `The conversation history before this point was compacted:\n${text}` }],
 });
 
-describe("Responses replay", () => {
-	it("puts the items after a leading developer prompt", () => {
-		const result = injectResponsesCompaction(
+/** Pi's own request for a session whose transcript declares one tool, as the provider would receive it. */
+async function piRequest(model: Model<any>): Promise<Record<string, unknown>> {
+	const { stream } = await import(`@earendil-works/pi-ai/api/${model.api}`);
+	const context = {
+		messages: [
 			{
-				input: [
-					{ role: "developer", content: "You are helpful." },
-					{ role: "user", content: "Next" },
-				],
+				role: "system",
+				content: "You are helpful.",
+				toolsAdded: [{ name: "bash", description: "Run a command", parameters: { type: "object", properties: {} } }],
+				timestamp: 0,
 			},
-			responses() as never,
-			undefined,
-		) as { input: unknown[] };
-		expect(result.input).toEqual([
-			{ role: "developer", content: "You are helpful." },
-			item,
-			{ role: "user", content: "Next" },
-		]);
+			{ role: "user", content: "Run it", timestamp: 1 },
+		],
+	} as unknown as Context;
+	// The Codex adapter reads the ChatGPT account from the token before it builds the request.
+	const claims = btoa(JSON.stringify({ "https://api.openai.com/auth": { chatgpt_account_id: "account" } }));
+	let payload: Record<string, unknown> | undefined;
+	const events = stream(model, context, {
+		apiKey: `header.${claims}.signature`,
+		onPayload: (built: Record<string, unknown>) => {
+			payload = built;
+			throw new Error("request captured");
+		},
 	});
+	for await (const _event of events);
+	if (!payload) throw new Error(`no request was built for ${model.provider}/${model.id}`);
+	return payload;
+}
+
+describe("Responses replay", () => {
+	it.each([
+		["openai", OPENAI_MODELS["gpt-6.1-sol"]],
+		["openai-codex", OPENAI_CODEX_MODELS["gpt-6.1-sol"]],
+		["xai", XAI_MODELS["grok-4.5"]],
+	])(
+		"puts the items ahead of everything in a real %s request, so its instructions and tools stay",
+		async (_provider, model) => {
+			const request = await piRequest(model as Model<any>);
+			const result = injectResponsesCompaction(request, responses() as never, undefined) as { input: unknown[] };
+			expect(result.input).toEqual([item, ...(request.input as unknown[])]);
+			expect(JSON.stringify([request.tools, request.input])).toContain('"bash"');
+		},
+	);
 
 	it("leaves out the text summary only when it copies the server result", () => {
 		const payload = { input: [summaryMessage("FALLBACK"), { role: "user", content: "Next" }] };

@@ -102,11 +102,7 @@ export async function compactInRequest(options: {
 			transport: "sse",
 			onPayload: (payload) => {
 				const record = payload as Record<string, unknown>;
-				const input = Array.isArray(record.input) ? [...record.input] : [];
-				if (options.previousItems?.length) {
-					const insertAt = input[0]?.role === "system" || input[0]?.role === "developer" ? 1 : 0;
-					input.splice(insertAt, 0, ...options.previousItems);
-				}
+				const input = withCompactionFirst(Array.isArray(record.input) ? record.input : [], options.previousItems ?? []);
 				if (options.subscriptionLogin) {
 					return {
 						...record,
@@ -133,6 +129,11 @@ export async function compactInRequest(options: {
 	throw new Error(result.errorMessage ?? `no compaction item (stop reason ${result.stopReason})`);
 }
 
+/** The server drops input that precedes a compaction item, so instructions and tool declarations go after it. */
+function withCompactionFirst(input: unknown[], items: ResponsesCompactionItem[]): unknown[] {
+	return [...items, ...input];
+}
+
 function itemKey(item: ResponsesCompactionItem): unknown {
 	return item.id ?? item.encrypted_content;
 }
@@ -145,8 +146,8 @@ function inputText(item: unknown): string {
 }
 
 /**
- * Put the compaction items after a leading system or developer prompt. When the
- * entry's text summary only copies the server result, leave that message out.
+ * Put the compaction items first. When the entry's text summary only copies the
+ * server result, leave that message out.
  */
 export function injectResponsesCompaction(
 	payload: unknown,
@@ -166,7 +167,5 @@ export function injectResponsesCompaction(
 	const input = (record.input as Record<string, unknown>[]).filter(
 		(item) => !(compaction.replacesSummary && summary && item.role === "user" && inputText(item).includes(summary)),
 	);
-	const insertAt = input[0]?.role === "system" || input[0]?.role === "developer" ? 1 : 0;
-	input.splice(insertAt, 0, ...compaction.items);
-	return { ...record, input };
+	return { ...record, input: withCompactionFirst(input, compaction.items) };
 }
