@@ -8,6 +8,13 @@ Verify: components/session-state/tests/mail.test.ts
 The custom type keeps its old name, `apple-pi.mailbox-message`.
 Why: transcripts written before mail moved onto the database use it; they must still render and count as delivered.
 
+## symbol:installMail
+
+Steering is set to `all` on the live `AgentSession` at every `before_agent_start`, not once.
+Why: extensions have no API for it, `AgentSession.setSteeringMode` would write the user's global settings, and Pi resets the mode from settings on reload; the session handle is known only once a run starts, which is why `liveSessions()` records sessions on `sendCustomMessage` as well as `prompt` (a session whose first run is mail-triggered).
+Coupled: components/shared/src/forked-continuation.ts
+Verify: components/session-state/tests/mail.test.ts
+
 ## symbol:deliverMail
 
 While the process is starting up (a `startup` session start, before its first run), mail the runtime replays (mail that waited for this process) rides the next turn; live mail still starts a turn instead of a steer with `triggerTurn`.
