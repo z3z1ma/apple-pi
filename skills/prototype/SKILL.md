@@ -23,4 +23,10 @@ The two branches produce very different artifacts, so getting this wrong wastes 
 3. **No persistence by default.** State lives in memory. Persistence is the thing the prototype is _checking_, not something it should depend on. If the question explicitly involves a database, hit a scratch DB or a local file with a clear "PROTOTYPE, wipe me" name.
 4. **Skip the polish.** No tests, no error handling beyond what makes the prototype _runnable_, no abstractions. The point is to learn something fast.
 5. **Surface the state.** After every action (logic) or on every variant switch (UI), print or render the full relevant state so the user can see what changed.
-6. **Capture it when done.** Keep the question, verdict, run instructions, and runnable prototype together in the active ledger task as the **primary source**. Fold any validated decision into the real code only when production adoption is authorized, then remove temporary UI wiring and working copies from the production tree so main keeps only the validated decision. If the operator also wants upstream-style branch capture, commit the ledger artifact to a throwaway `prototype/<name>` branch only when repository storage policy permits and commit approval is explicit; record that pointer in the ledger and in an external implementation issue only when its update is authorized.
+6. **Capture it when done.** Keep the question, the verdict, run instructions, and the runnable prototype together in the active ledger task. Fold a validated decision into production code, or capture the prototype on a branch, only when the operator authorizes it; then remove any temporary wiring from the production tree.
+
+## A first user before the operator
+
+Build the prototype yourself. Before the operator sees it, give it to a standing first user with only the question at its top and the run instructions (call in one who has tried your prototypes before; hire one when none exists): a `skeptical-first-time-user` for a UI, who reports where it confused them, or a `scientific-skeptic` for logic, who pushes the hardest cases and reports any the prototype cannot express. Fix what they found, then show the operator.
+
+The operator runs it and gives the verdict in conversation: ask, with `ask_user_question`, the question the prototype exists to answer. Record the verdict with the artifact.
