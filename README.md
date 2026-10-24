@@ -464,12 +464,12 @@ flowchart LR
     Domain --> Design["codebase-design<br/>(Deep Modules / optional Design It Twice)"]
     Design --> Spec["to-spec & to-tickets<br/>(Settled decisions → Dependency-Ordered Slices)"]
     Spec --> Loop["ralph / implement / tdd<br/>(Fresh-Context Increments, Red-Green Where It Fits)"]
-    Loop --> Review["code-review<br/>(Fixed Lenses & Optional Residual Wave)"]
+    Loop --> Review["code-review<br/>(Review Board on Two Axes)"]
 ```
 
 | Skill | Scripts & Reference Machinery | What It Does |
 | :--- | :--- | :--- |
-| `code-review` | `multi-lens-review.py`, `plan-review-verify.py`, `residual-review-loop.py`, `planner.md`, `reviewer.md`, `verifier.md`, `smell-baseline.md` | Reviews changes against repository standards and originating intent. Adaptable `pi_exec` programs run fixed-lens, planned, or residual investigations; planner, reviewer, and verifier roles appear only where the chosen program needs them, a residual wave is one bounded extra pass, and reviewers report findings rather than fix them. |
+| `code-review` | `SKILL.md` | A review board judges a change on two separate axes, repository standards and originating intent: reviewers report first findings alone, a skeptic and the author challenge them in one thread, and a chair who is never the author rules on each. The board reports; it does not fix. |
 | `ralph` | `ralph-ledger.py`, `ralph-simple.py`, `ledger-increment.md`, `simple-increment.md` | Adaptable `pi_exec` programs that run bounded, sequential increments, each by a fresh temporary peer: the ledger variant over a prepared `.ledger` task, the simple variant over any goal without a ledger. |
 | `codebase-design` & `improve-codebase-architecture` | `deepening.md`, `design-it-twice.md`, `html-report.md` | Teaches Ousterhout's deep-module vocabulary (radically simple interfaces hiding deep implementation), with optional Design It Twice exploration of alternative interfaces; the architecture survey produces an HTML report of deepening opportunities rather than production changes. |
 | `interrogate-to-design` & `to-spec` | `SKILL.md` | Stops the contractor anti-pattern ("build whatever satisfies the literal prompt"). `interrogate-to-design` interviews you to resolve open decisions and unstated assumptions; `to-spec` synthesizes already-settled decisions into a task-local specification without an interview. |

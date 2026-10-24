@@ -466,18 +466,7 @@ try {
 	assert.doesNotMatch(piExecCodeDescription, /<subagent-team>/);
 	assert.doesNotMatch(piExecCodeDescription, /<inference-profiles>/);
 	assert.match(piExecCodeDescription, /type-checked before execution/);
-	assert(existsSync("skills/code-review/references/plan-review-verify.py"), "missing code-review planned reference");
-	assert(existsSync("skills/code-review/references/multi-lens-review.py"), "missing code-review multi-lens reference");
-	assert(existsSync("skills/code-review/references/residual-review-loop.py"), "missing code-review residual reference");
-	assert(existsSync("skills/code-review/references/planner.md"), "missing code-review planner reference");
-	assert(existsSync("skills/code-review/references/reviewer.md"), "missing code-review reviewer reference");
-	assert(existsSync("skills/code-review/references/verifier.md"), "missing code-review verifier reference");
 	assert(!existsSync("skills/review"), "legacy review skill directory must be absent");
-	assert(!existsSync("skills/code-review/references/targeted-review.js"), "targeted review graph should be removed");
-	assert(
-		!existsSync("skills/code-review/references/security-baseline-review.js"),
-		"security review should use the fixed multi-lens graph",
-	);
 	assert(existsSync("skills/ralph/references/ralph-simple.py"), "missing general Ralph reference");
 	assert(existsSync("skills/ralph/references/ralph-ledger.py"), "missing ledger Ralph reference");
 	assert(

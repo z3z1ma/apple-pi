@@ -1,180 +1,52 @@
 ---
 name: code-review
-description: "Review a branch, pull request, work in progress, working-tree change, or anything since a named revision against repository standards and originating intent. Use for code review, review since X, audit, critique, or sanity-check requests."
+description: "Review a change with a review board on two axes, repository standards and originating intent. Use when asked to review a branch, a pull request, the working tree, or the changes since a revision."
 ---
 
-# Code Review
+# Code review
 
-Review the change along two independent axes:
+A review board decides whether a change is well made (**Standards**) and whether it is the right change (**Intent**). The two axes stay separate from first look to final report, so success on one cannot hide failure on the other.
 
-- **Standards**: does the code conform to this repository's documented standards and engineering constraints?
-- **Intent / Spec**: does the change faithfully implement what the originating request, issue, task, or specification asked for?
+## Prepare the brief
 
-A review succeeds when it establishes whether the change is well made **and** whether it is the right change. It does not succeed by creating more review work.
+The requester (whoever runs this skill) pins the boundary and gathers the sources before anyone is staffed:
 
-## Review posture and cadence
+- **Boundary**: the comparison (`git diff <base>...HEAD` and its commit list, or `HEAD` plus staged, unstaged, and untracked files for the working tree), resolved and non-empty. Ask when a branch has no sound base.
+- **Standards sources**: the repository instructions and documents that govern the changed area.
+- **Intent source**: the governing ledger task, specification, issue, or the request itself. When none exists, the Intent axis is reported as not assessed.
 
-Prefer a fresh root session: reviewing in the authoring context preserves the assumptions that produced the change and invites confirmation bias. Delegated roles must perform only their assigned review; they must not invoke `code-review`, spawn another reviewer, or recursively re-enter a review graph.
+The brief holds the boundary, the changed paths, the sources, and the checks already run. It leaves out the author's reasoning: reviewers judge what the change does, not what it was meant to do.
 
-Treat every finding as a hypothesis until the root checks its citation and evidence against current source. Do not rerun review until it becomes clean; fixes create new surface and judgment calls do not converge deterministically.
+## Staff the board
 
-Reviewing each coherent ticket keeps the diff and Intent / Spec source narrow. A final review against the branch point catches interactions between tickets. For work in progress, explicitly choose working-tree scope; branch comparisons otherwise see committed changes only. This skill belongs after a coherent implementation batch and may also stand alone on any selected diff. It does not replace `diagnosing-bugs` for an unexplained failure or `codebase-design` for whole-codebase design work.
+| Change | Board |
+| --- | --- |
+| Small | one `code-review-specialist` covering both axes |
+| Normal | one `code-review-specialist` per axis, a `scientific-skeptic`, and the author |
+| Risky area | the normal board plus a domain lens, such as `staff-security-engineer`, `database-reliability-architect`, or `performance-engineering-lead` |
 
-## 1. Pin and validate the boundary
+The **chair** runs the board and rules on findings. The chair is never the author: when the requester wrote the change, a standing `code-review-specialist` chairs, and the requester takes part only as author. Staff with standing people as [handbook-writing](../handbook-writing/SKILL.md) describes, and give a large change's paths to reviewers so the chair can check that every changed path was covered. Staff the whole board before briefing anyone, and give every member the names of the others.
 
-Honor a fixed point the operator supplied: a commit, branch, tag, merge-base, or other revision. Resolve it before delegation. For a branch or pull request, inspect the merge-base comparison and retain both commands as review evidence:
+## Run the board
 
-```text
-git diff <fixed-point>...HEAD
-git log <fixed-point>..HEAD --oneline
-```
+1. **First findings, alone.** Each reviewer works only from the brief and sends findings for one axis to the chair privately, before seeing anyone else's.
+2. **Challenge.** The chair posts all findings in one review thread, a `send_mail` thread to the whole board; each member's assignment has its own task thread, so none of those reaches everyone. The skeptic challenges each finding's evidence; the author answers what the change was for and what it guards. Use `meet` only for a dispute that needs live exchange.
+3. **Ruling.** Once every reviewer, the skeptic, and the author have replied, the chair checks each finding against current source and rules it **confirmed**, **rejected**, or **unresolved**.
+4. **Close.** The board spends a short exchange on what made this review harder or easier, and the chair records it in the task's `retrospective.md`.
 
-For an unmistakable working-tree review, `HEAD` is the fixed point. Include normalized status, staged and unstaged changes, and every untracked file in scope. For a branch or pull request with no sound base, ask rather than guessing.
+A finding states its location, the standard or requirement it breaks, the input or path that triggers it, the evidence, the impact, and the smallest fix. Severity is **critical** (security compromise, data loss, outage), **significant** (a reachable failure that should block completion), or **minor** (bounded and worth fixing). Style preferences and speculative defenses are not findings. Report every supported finding and nothing else.
 
-Confirm the revision resolves and the requested change is non-empty before spawning reviewers. Keep changed paths, untracked paths, commits, diff statistics, and the exact comparison visible. A bad reference or empty boundary fails here, not inside parallel peers.
-
-## 2. Identify the Intent / Spec source
-
-Look for originating intent in this order:
-
-1. Issue or change references in commit messages or the branch, resolved only through the repository's documented tracker workflow.
-2. A path or issue the operator supplied.
-3. The governing ledger task, approved specification, or decision record.
-4. A matching file under the repository's documentation or specification conventions.
-5. The operator's request and current conversation.
-
-If the source remains ambiguous, ask. If the operator confirms there is no source, do not invent one: report **Intent / Spec not assessed — no source was available**. That axis is neither a pass nor zero findings.
-
-## 3. Identify the standards sources
-
-Find the repository instructions and documents that govern the changed area, such as `AGENTS.md`, `CONTRIBUTING.md`, coding standards, architecture decisions, and module-local guidance.
-
-Apply the complete [smell baseline](references/smell-baseline.md) in addition to documented standards:
-
-- Repository rules override the baseline.
-- A documented-standard breach may be a hard violation.
-- A smell is always a labelled judgment call and matters only when it creates a concrete cost in this change.
-- Skip formatter, linter, and other issues tooling already enforces; inspect or run the tool instead.
-
-## 4. Review two independent axes
-
-Keep the axes isolated while investigating. Good style must not hide wrong behavior, and correct behavior must not excuse a broken repository contract.
-
-### Standards
-
-Report:
-
-- material violations of documented repository standards, citing the governing file and rule;
-- baseline smells with the smell named, the relevant changed code cited, and the concrete maintenance or correctness cost;
-- mismatches between changed interfaces, callers, tests, configuration, lifecycle paths, or error semantics that violate repository contracts.
-
-### Intent / Spec
-
-Report:
-
-- requirements that are missing or only partially implemented;
-- behavior that was not requested when it creates scope, compatibility, or maintenance risk;
-- requirements that appear implemented but whose reachable behavior is wrong;
-- acceptance criteria that cannot be established from the available change and evidence.
-
-Cite the relevant requirement for every mismatch. When intent exists only in the operator request or conversation, state that coverage limit.
-
-## 5. Choose the cheapest sound topology
-
-### Root-only inspection
-
-Use for one very small, explicitly narrow question where delegation adds no useful isolation. This preserves the targeted-question pattern without packaging a separate graph. Do not present it as a complete branch or pull-request review unless both axes were independently considered.
-
-### Flat peer fan-out
-
-This is the normal complete review shape. Ask one Code Review Specialist to review Standards and another to review Intent / Spec in parallel. Give each the complete boundary, commit list, changed paths, axis-specific sources, checks already run, and one independent goal. If no Intent / Spec source exists, skip that lane and report it as not assessed.
-
-Use `pi_exec` with `asyncio.gather` and `agent(role="code-review-specialist", task=...)` for fresh temporary colleagues. When existing colleagues own the review, bind their session ids through `pi_exec`'s `peers` argument and call `peers[name].run(task)`. Their replies return directly to the program; attached people keep their sessions.
-
-### Pi Exec review graphs
-
-Author and adapt the Python reference snippets from the live `pi_exec` tool contract. Inline the referenced procedure into each assigned goal before running. The catalog role supplies the person's identity, model, thinking level, and tool posture: `code-review-specialist` for investigation and reduction, `principal-engineer` for a review plan, and `scientific-skeptic` for final independent verification. Each snippet uses top-level `await`, keyword host arguments (`git_change`, `git_patch`, `context_fit`, `context_pack`, `agent_run`, and `agent`), `schema` for strict outputs, and a trailing result expression. Independent work uses `asyncio.gather`; Monty does not support `create_task`. Coverage and ID reconciliation are ordinary Python sets and dicts, not host-library functions.
-
-Pass the comparison explicitly; planned and fixed-lens graphs also receive the axes the root intends to assess, plus the applicable standards and intent source paths. Use a graph only when composition adds real value:
-
-- [Fixed multi-lens review](references/multi-lens-review.py): known independent risk questions need typed fan-in and independent candidate verification. Security-sensitive changes may use paired attacker and defender lenses over the same boundary rather than a separate security graph.
-- [Planned review](references/plan-review-verify.py): the change is broad or structurally uncertain, so a planner must create cohesive partitions and focused investigations before fan-out.
-- [Residual review](references/residual-review-loop.py): a first reducer identifies specific material coverage gaps that justify one bounded additional investigation wave.
-
-A planner partitions and asks questions; it does not pre-review, suppress risks, or decide findings. Every planner, reviewer, reducer, and verifier is read-only and may not invoke `code-review`, spawn another reviewer, or re-enter the graph.
-
-Use one reducer layer when one axis's complete candidate evidence fits one trustworthy fan-in. Use semantic partition or axis reducers followed by a final axis reducer when actual context fitting or independent partitions make one fan-in incomplete. Do not select two layers from an arbitrary candidate count.
-
-Concurrency may queue work; it must not discard work. Candidate omission, failed lanes, truncated evidence, unknown or undecided IDs, and incomplete changed-path or axis coverage are explicit coverage failures. Process another complete semantic batch or report the gap. Never turn bounded context into a clean result.
-
-## 6. Apply the finding standard
-
-Every candidate finding must establish:
-
-- the changed or omitted location;
-- a `contract` citation to the violated repository standard or Intent / Spec requirement;
-- a concrete input, state, or call path that triggers it;
-- an evidence chain through relevant guards, callers, consumers, and tests;
-- the observable impact;
-- the smallest coherent correction direction.
-
-Severity:
-
-- `critical`: realistic security compromise, data loss or corruption, or catastrophic outage;
-- `significant`: reachable functional, compatibility, or operational failure that should block completion;
-- `minor`: bounded correctness issue worth fixing but not worth another review cycle.
-
-Style preferences, speculative defenses, unrelated cleanup, and unsupported smells stay outside the findings. Report every material supported defect; do not pad the review and do not stop at an arbitrary count.
-
-## 7. Reconcile evidence in the root
-
-Reviewer and reducer output is a set of hypotheses, not proof. The root independently checks every candidate against current source and governing evidence, rejects false positives, and records unresolved material uncertainty honestly.
-
-Recognize shared causes across axes without deduplicating, merging, or reranking the findings themselves. A Standards violation and an Intent / Spec violation remain separate decisions, each ranked only inside its axis. Attach the same stable shared-cause reference to affected findings and retain every axis-specific citation. An optional unranked shared-cause index may list linked finding IDs and one non-authoritative correction direction; implementation prioritization is a separate follow-on artifact, not part of the review verdict.
-
-A Scientific Skeptic improves evidence quality but is not final authority. The root owns the final report, any checks it runs, and all mutation. A review request is report-only unless the operator also requested fixes or authorizes them afterward.
-
-## 8. Report
-
-Use this shape:
+## Report
 
 ```markdown
 ## Standards
+Confirmed findings, worst first. Unresolved. Coverage limits.
 
-[Confirmed findings ordered by severity within this axis.]
+## Intent
+Intent source: <source, or not assessed>
+Confirmed findings, worst first. Unresolved. Coverage limits.
 
-### Unresolved
-[Material questions the evidence could not decide.]
-
-### Coverage limits
-[Failed lanes, omissions, truncation, unavailable standards, or unreviewed paths.]
-
-## Intent / Spec
-
-Intent source: <issue, path, task, request, conversation, or unavailable>
-
-[Confirmed findings ordered by severity within this axis.]
-
-### Unresolved
-...
-
-### Coverage limits
-...
-
-## Shared-cause index (unranked, optional)
-
-[Stable shared-cause references with linked Standards and Intent / Spec finding IDs and citations. Do not prioritize or merge the findings here.]
-
-Summary: Standards — N confirmed, worst: ...; Intent / Spec — M confirmed, worst: ...
+Verdict: Standards: <clean, or N confirmed, worst ...>; Intent: <...>
 ```
 
-If an assessed axis has no material findings, say so directly. If both axes are complete and clean, finish. Do not manufacture follow-up work.
-
-## Why the axes remain separate
-
-A change can pass one axis and fail the other:
-
-- Code that follows every standard but implements the wrong thing → **Standards pass, Intent / Spec fail.**
-- Code that does exactly what was requested but breaks the repository's contracts → **Intent / Spec pass, Standards fail.**
-
-Separate investigation and reporting prevent either success from masking the other failure.
+Coverage limits name every path, axis, or reviewer the board did not complete. A clean axis says so plainly. The review reports; fixes follow only when the requester holds that authority.

@@ -22,6 +22,7 @@ You are not responsible for the design decision behind the change, for its style
 - Judge maintainability by the next reader: a name that misleads, a comment that is now false, a duplicate of something that exists, a boundary blurred.
 - Give every finding a location, the failing case, and the severity. Separate a defect from a preference, and keep preferences short or absent.
 - Verify where you can: run the tests, run the check, reproduce the case. A finding you reproduced outranks ten you suspect.
+- After the repository's own standards, look for the classic smells: Mysterious Name, Duplicated Code, Feature Envy, Data Clumps, Primitive Obsession, Repeated Switches, Shotgun Surgery, Divergent Change, Speculative Generality, Message Chains, Middle Man, Refused Bequest. Repository conventions win, and what the formatter or linter enforces is not yours. A smell is a judgment call: name it, and report it only when it costs this change something concrete.
 
 ## What you deliver
 

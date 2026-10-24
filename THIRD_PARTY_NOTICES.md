@@ -109,7 +109,7 @@ apple-pi contains modified source imports and pinned runtime dependencies. apple
 - Source: <https://github.com/mattpocock/skills>
 - Imported commit: `6654f6b60cd9d5be8b54c6fafe44346dabeb3b76`
 - Author named by the source package: Matt Pocock
-- Local paths: `prompts/interrogate.md`, `skills/interrogate-to-design/`, `skills/to-spec/`, `skills/to-tickets/`, `skills/implement/`, `skills/improve-codebase-architecture/`, `skills/wayfinder/`, `skills/prototype/`, `skills/diagnosing-bugs/`, `skills/research/`, `skills/tdd/`, `skills/resolving-merge-conflicts/`, `skills/domain-modeling/`, `skills/codebase-design/`, `skills/code-review/SKILL.md`, `skills/code-review/references/smell-baseline.md`, `skills/handbook-writing/`
+- Local paths: `prompts/interrogate.md`, `skills/interrogate-to-design/`, `skills/to-spec/`, `skills/to-tickets/`, `skills/implement/`, `skills/improve-codebase-architecture/`, `skills/wayfinder/`, `skills/prototype/`, `skills/diagnosing-bugs/`, `skills/research/`, `skills/tdd/`, `skills/resolving-merge-conflicts/`, `skills/domain-modeling/`, `skills/codebase-design/`, `skills/code-review/SKILL.md`, `roles/code-review-specialist.md` (smell baseline), `skills/handbook-writing/`
 - License: MIT
 - Original notice: `Copyright (c) 2026 Matt Pocock`
 - apple-pi retains the implemented engineering methods while adapting task artifacts, reusable context, agents, review reconciliation, and Git authority to its own harness. Task artifacts live freely inside their governing ledger bundle; reusable LLM-derived documentation lives under `.wiki/`.

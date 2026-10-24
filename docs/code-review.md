@@ -1,6 +1,6 @@
 # Code Review
 
-`code-review` is an optional risk-control skill, not an automatic lifecycle gate. Load it when the operator requests a review of a branch, pull request, working tree, or bounded diff:
+`code-review` is a business process, not an automatic lifecycle gate. The model loads it when asked to review a branch, a pull request, the working tree, or the changes since a revision, and `implement` uses it before committing:
 
 ```text
 /skill:code-review
@@ -10,39 +10,27 @@
 
 A complete review asks:
 
-1. **Standards** — does the implementation follow the repository's documented conventions and engineering constraints?
-2. **Intent / Spec** — does the change faithfully deliver the originating request, issue, task, or specification?
+1. **Standards**: does the change follow the repository's documented conventions and engineering constraints?
+2. **Intent**: does the change deliver what the originating request, task, or specification asked for?
 
-The axes use independent investigation contexts and remain separate in the report. A polished implementation cannot hide wrong behavior, and correct behavior cannot excuse a broken repository contract. Findings are verified and deduplicated within an axis, not ranked against the other axis.
+The axes stay separate from the first findings to the report. When no intent source exists, the report says the Intent axis was not assessed rather than calling it a pass.
 
-When no Intent / Spec source exists, the report says that axis was not assessed. It does not call the missing evidence a pass.
+## The review board
 
-## Review shapes
+The requester pins the boundary and the sources, then staffs a board with standing people (see [organization](organization.md#processes)):
 
-Use the cheapest sound topology:
+| Change | Board |
+| --- | --- |
+| Small | one Code Review Specialist covering both axes |
+| Normal | one Code Review Specialist per axis, a Scientific Skeptic, and the author |
+| Risky area | the normal board plus a domain lens from the role catalog |
 
-1. **Root inspection** — one very small, narrow question.
-2. **Flat direct-agent fan-out** — the normal complete review: one Standards lane and one Intent / Spec lane in parallel.
-3. **Fixed-lens Pi Exec** — known independent risk questions with typed fan-in and candidate verification.
-4. **Dynamic planned Pi Exec** — a planner partitions a broad or structurally uncertain change into focused investigations.
-5. **Hierarchical or residual Pi Exec** — semantic partition reducers or one bounded second investigation wave when one trustworthy fan-in cannot carry the complete evidence.
+The chair runs the board and rules on findings, and is never the author. Reviewers send their first findings to the chair alone, so no view is shaped by another. The chair then posts them in one review thread, where the skeptic challenges the evidence and the author answers; the chair rules each finding confirmed, rejected, or unresolved against current source. The board closes with a short exchange recorded in the task's retrospective.
 
-Pi Exec is for a real graph, not merely because a change spans files. Two reducer layers require a semantic or actual context-fit boundary, never an arbitrary finding-count threshold.
-
-The examples under [`skills/code-review/references`](../skills/code-review/references) are adaptable program bodies rather than hidden review engines:
-
-- `plan-review-verify.py` — dynamic partitions and focuses;
-- `multi-lens-review.py` — fixed independent lenses;
-- `residual-review-loop.py` — one bounded verifier-directed coverage pass.
-
-Use the live `pi_exec` tool contract when adapting a program. Pass the comparison explicitly. Planned and fixed-lens programs also require the axes the root intends to assess; pass applicable standards and intent source paths so reducers can inspect the governing evidence.
+How a reviewer thinks, including the smell baseline, lives in the `code-review-specialist` role. The skill holds only the process.
 
 ## Evidence and authority
 
-Every finding establishes the changed location, reachable trigger, evidence chain, violated standard or intent, observable impact, and smallest correction direction. Reviewer, reducer, and verifier peers are told to stay read-only; their outputs are hypotheses. Failed lanes, truncation, omitted candidates, unknown IDs, and uncovered paths remain visible coverage failures.
+Every finding states its location, the broken standard or requirement, the trigger, the evidence, the impact, and the smallest fix, with severity critical, significant, or minor. The report lists confirmed findings, unresolved questions, and coverage limits per axis. The review reports; fixes follow only when the requester holds that authority.
 
-The root independently checks candidates against current source and governing evidence, writes the final axis-separated report, and owns any checks. Code review is report-only unless the operator also requests or later authorizes fixes.
-
-Ralph remains an implementation loop. Run `code-review` after Ralph when independent review is warranted rather than embedding a duplicate review controller inside Ralph.
-
-See [`skills/code-review`](../skills/code-review) for the full procedure and [`docs/exec.md`](exec.md) for Pi Exec composition.
+Ralph remains an implementation loop. Run `code-review` after Ralph when independent review is warranted.
