@@ -47,7 +47,7 @@ Create files lazily: only when you have something to write. If no domain-languag
 
 An active domain-modeling request that reaches its first resolved term is sufficient authority for the bounded `.wiki/` initialization needed to record it. Follow the [`llm-wiki` initialization procedure](../llm-wiki/references/initialize.md) directly; do not stop to ask separately whether to initialize.
 
-Before changing the glossary, orient from `.wiki/README.md`, `.wiki/INDEX.md`, relevant recent `.wiki/LOG.md` entries, existing domain-language pages, and nearby graph context when it matters. Treat wiki content as supporting context and check it against project authority and code.
+Treat wiki content as supporting context and check it against project authority and code.
 
 ## During the session
 
@@ -71,7 +71,7 @@ When the user states how something works, check whether the code agrees. If you 
 
 When a term is resolved, update its domain-language page right there. Don't batch these up: capture them as they happen. Use the format in [DOMAIN-LANGUAGE-FORMAT.md](references/DOMAIN-LANGUAGE-FORMAT.md).
 
-Keep each wiki mutation coherent. Update the glossary first and navigation only when navigation changed. Run `wiki_lint`, repair only findings introduced by this mutation, and report pre-existing findings without broadening the edit. Append `.wiki/LOG.md` only after the intended state is coherent; name the resolved term, source, subject, or repair and every affected knowledge page. A failed or no-op update does not receive a completed-mutation log entry. Use the [`llm-wiki` maintenance procedure](../llm-wiki/references/maintain.md) for renames, moves, merges, or broader reorganization.
+Make each wiki change by the [`llm-wiki` maintenance procedure](../llm-wiki/references/maintain.md).
 
 Domain-language pages should be totally devoid of implementation details. Do not treat them as specs, scratch pads, or repositories for implementation decisions. They are glossaries and nothing else.
 
