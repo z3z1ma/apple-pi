@@ -428,7 +428,7 @@ try {
 		"codebase-design",
 	];
 	const fundamentalSkills = ["code-review", "handbook-writing", "llm-wiki"];
-	const browserSkills = ["human-review-code", "human-review-markdown", "human-review-ledger-task", "explain-change"];
+	const browserSkills = ["operator-sign-off", "explain-change"];
 	const packagedSkills = [...explicitWorkflowSkills, ...engineeringSkills, ...fundamentalSkills, ...browserSkills];
 	const loadedSkills = loadSkills({
 		cwd: process.cwd(),

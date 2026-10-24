@@ -20,14 +20,12 @@ For `review_markdown`, a relative `path` is resolved against `cwd`; an absolute 
 
 ## Activation skills
 
-Four model-invoked skills supplement the tools' always-present usage guidance:
+Two model-invoked skills supplement the tools' always-present usage guidance:
 
-- `human-review-code`: present a coherent implementation for the user's judgment. The separate `code-review` skill audits code for defects and conformance.
-- `human-review-markdown`: open a prepared document for passage-level feedback or sign-off.
-- `human-review-ledger-task`: open the whole undertaking at a plan/ticket approval or outcome-review boundary.
-- `explain-change`: teach a change the user needs to understand well enough to build on.
+- `operator-sign-off`: ask the operator to judge or sign off on a code change (`review_code`), a document (`review_markdown`), or a ledger task (`review_ledger_task`). Its body holds the fundamentals of presenting to a person (answer first, progressive disclosure, pictures with words, concrete before abstract, a cold `new-team-member` read before the page opens); one reference per type sets that type's goal and rigor. The separate `code-review` process audits code for defects and conformance.
+- `explain-change`: teach a change the operator needs to understand well enough to build on, tested on a cold `new-team-member` reader before the page opens.
 
-Their descriptions advertise the handoff moments, including proactive use when that judgment or understanding is the next useful step. The tools' own guidance owns invocation mechanics. The skills own what the tools cannot enforce. For the two pages the agent writes, `human-review-code` and `explain-change`, that is the homework that produces a real model of the change (mechanism, motive, invariant, failure mode, trade-off) and the voice that transfers it (concrete before abstract, one true sentence per concept, plain technical English). For the two pages that show existing files, `human-review-markdown` and `human-review-ledger-task`, it is how to frame the review: which judgment is being asked for, when the material is ready, how to orient the user, and what the verdict does and does not cover. Each skill is self-contained. They can also be invoked explicitly with `/skill:<name>`. These skills are intended to improve recognition; they do not enforce that a page opens on every matching turn. Loader checks establish availability, while improved activation needs observation in actual agent use.
+The tools' own guidance owns invocation mechanics; the skills own what the tools cannot enforce. They can also be invoked explicitly with `/skill:<name>`. They improve recognition; they do not enforce that a page opens on every matching turn.
 
 ## What the agent supplies
 
