@@ -1,6 +1,10 @@
-import type { Attention, Chapter, Decision } from "../src/page-data";
+import { memo, useEffect } from "react";
+
+import type { Attention, Chapter, Decision, MarkdownBlock } from "../src/page-data";
 import { useReview } from "./context";
 import { answerText, COMMENT_KINDS, Units } from "./diff";
+import { drawDiagrams } from "./markdown/mermaid";
+import { renderBlock } from "./markdown/render";
 import { anchorLabel, ATT_LABEL, ATTENTION, hunkRange, KIND_LABEL, UNPLACED } from "./model";
 import {
 	chapterStep,
@@ -17,6 +21,17 @@ import {
 	toResult,
 } from "./state";
 import { AttBars, baseName, CodeLine, Diamond, dirName, Icon, Kbd, Md, pad, plain, plural } from "./ui";
+
+/** The agent's Markdown (lists, tables, code, Mermaid) rendered the way the document pages render it. */
+const Prose = memo(function Prose({ blocks, className }: { blocks: MarkdownBlock[]; className: string }) {
+	const { s } = useReview();
+	useEffect(() => {
+		void drawDiagrams(s.theme);
+	}, [s.theme]);
+	const html = blocks.map((b) => renderBlock(b)).join("");
+	// biome-ignore lint/security/noDangerouslySetInnerHtml: renderBlock escapes all agent text and drops unsafe URLs.
+	return <div className={`doc ${className}`} dangerouslySetInnerHTML={{ __html: html }} />;
+});
 
 const blockWidth = (lines: number, k: number, min: number) => Math.max(min, Math.round(Math.sqrt(lines) * k));
 
@@ -539,7 +554,7 @@ export function Overview() {
 			<h1 className="ov-title">
 				<Md text={page.title} />
 			</h1>
-			<Md as="p" className="ov-intent" text={page.intent} />
+			<Prose className="ov-intent" blocks={page.intent} />
 			{page.warnings.length ? (
 				<section className="card warnings">
 					<div className="card-k">
@@ -560,7 +575,7 @@ export function Overview() {
 						<Icon.spark /> If you only have two minutes
 					</div>
 					{page.focus ? (
-						<Md as="p" className="focus-text" text={page.focus.text} />
+						<Prose className="focus-text" blocks={page.focus.blocks} />
 					) : (
 						<p className="focus-text">The agent named no starting point.</p>
 					)}
@@ -659,7 +674,7 @@ function Brief({ chapter, briefKey, defaultClosed }: { chapter: Chapter; briefKe
 			<button type="button" className="brief closed" onClick={toggle}>
 				<Icon.spark />
 				<span className="brief-k">Brief</span>
-				<span className="brief-1">{plain(chapter.brief[0] ?? "").split(/(?<=\.)\s/)[0]}</span>
+				<span className="brief-1">{plain(chapter.brief[0]?.raw ?? "").split(/(?<=\.)\s/)[0]}</span>
 				<span className="sp" />
 				<span className="kbd-hint">
 					Show <Kbd>B</Kbd>
@@ -678,11 +693,7 @@ function Brief({ chapter, briefKey, defaultClosed }: { chapter: Chapter; briefKe
 					Hide <Kbd>B</Kbd>
 				</button>
 			</div>
-			<div className="brief-prose">
-				{chapter.brief.map((p) => (
-					<Md as="p" key={p} text={p} />
-				))}
-			</div>
+			<Prose className="brief-prose" blocks={chapter.brief} />
 			{chapter.callouts.map((c) => (
 				<div className="callout" key={c.title + c.text}>
 					<span className="co-ic">

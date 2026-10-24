@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
 	buildCodeReviewPage,
+	codeReviewTemplate,
 	formatReviewResult,
 	parseReviewResult,
 	type ReviewCodeParams,
@@ -98,7 +99,18 @@ describe("buildCodeReviewPage", () => {
 		expect(unplaced.map((id) => page.hunks[id].file)).toEqual(["src/old.ts"]);
 		expect(page.files.find((f) => f.path === "src/retry.ts")?.status).toBe("A");
 		expect(page.files.find((f) => f.path === "src/old.ts")?.status).toBe("D");
-		expect(page.chapters[0].brief).toEqual(["First paragraph.", "Second paragraph."]);
+		expect(page.chapters[0].brief.map((b) => b.raw.trim())).toEqual(["First paragraph.", "Second paragraph."]);
+	});
+
+	it("renders the agent's Markdown, and inlines Mermaid only when a brief draws a diagram", async () => {
+		const plain = await buildCodeReviewPage(params(), repo, "token");
+		const drawn = params();
+		drawn.chapters[0].brief =
+			"| Input | Result |\n| --- | --- |\n| a | b |\n\n```mermaid\nflowchart LR\n  A --> B\n```";
+		const { page } = await buildCodeReviewPage(drawn, repo, "token");
+		expect(page.chapters[0].brief.some((b) => b.mermaid)).toBe(true);
+		expect(page.chapters[0].brief.map((b) => b.raw)).toContainEqual(expect.stringContaining("| Input | Result |"));
+		expect((await codeReviewTemplate(page)).length).toBeGreaterThan((await codeReviewTemplate(plain.page)).length);
 	});
 
 	it("reads code from git, highlighted, with word-level marks", async () => {

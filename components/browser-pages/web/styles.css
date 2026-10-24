@@ -1214,6 +1214,28 @@ h2 code,
 .brief-prose p:last-child {
 	margin-bottom: 0;
 }
+.doc.ov-intent {
+	font-size: 16.5px;
+	line-height: 1.65;
+}
+.doc.focus-text {
+	font-size: 15px;
+	line-height: 1.6;
+}
+.doc.brief-prose {
+	font-size: 15.5px;
+	line-height: 1.68;
+}
+.doc.ov-intent > *,
+.doc.focus-text > *,
+.doc.brief-prose > * {
+	margin: 0;
+}
+.doc.ov-intent > * + *,
+.doc.focus-text > * + *,
+.doc.brief-prose > * + * {
+	margin-top: 10px;
+}
 .brief-decs {
 	display: flex;
 	flex-wrap: wrap;

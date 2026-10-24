@@ -49,7 +49,7 @@ export interface Chapter {
 	title: string;
 	kind: ChapterKind;
 	attention: Attention;
-	brief: string[];
+	brief: MarkdownBlock[];
 	callouts: { title: string; text: string }[];
 	changes: ChapterChange[];
 }
@@ -93,11 +93,11 @@ export interface Verification {
 export interface CodeReviewPage {
 	kind: "code-review";
 	title: string;
-	intent: string;
+	intent: MarkdownBlock[];
 	base: string;
 	head: string;
 	createdAt: string;
-	focus?: { text: string; hunks: string[] };
+	focus?: { blocks: MarkdownBlock[]; hunks: string[] };
 	verification: Verification[];
 	files: DiffFile[];
 	hunks: Record<string, Hunk>;

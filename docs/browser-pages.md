@@ -34,7 +34,7 @@ The tool call carries structure and prose, never code:
 - `title`, `intent`, and optional `base`: the git ref to compare with (default `HEAD`).
 - `focus`: the two-minute path, with references to the changes to read first.
 - `verification`: what was run or checked, and what was not verified.
-- `chapters`: the change in reasoning order. Each chapter has a `kind` (`core`, `consequence`, `support`), an `attention` level (`high`, `medium`, `low`), a Markdown `brief`, optional `callouts`, and `changes`.
+- `chapters`: the change in reasoning order. Each chapter has a `kind` (`core`, `consequence`, `support`), an `attention` level (`high`, `medium`, `low`), a Markdown `brief` (lists, tables, code fences, and `mermaid` diagrams render; the page inlines Mermaid only when the agent's prose has a diagram), optional `callouts`, and `changes`.
 - Each change names a `file` and an optional new-side `lines` range such as `"41-53"`, with a one-sentence `summary`. A change repeated in several places lists them under `places` instead.
 - `notes`: short notes pinned to a file and line.
 - `decisions`: real judgment calls, with options and the agent's `chosen` index. Omit `chosen` to ask the reviewer.

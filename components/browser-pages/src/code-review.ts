@@ -5,6 +5,8 @@ import { type Static, Type } from "typebox";
 
 import { generatedPaths, readBaseFile, readRepoDiff, type RawLine } from "./git-diff.js";
 import { highlightLines, markRange } from "./highlight.js";
+import { blocksOf, withDiagrams } from "./markdown-review.js";
+import { readTemplate } from "./saved-page.js";
 import type {
 	Attention,
 	Chapter,
@@ -40,7 +42,7 @@ export const ReviewCodeParamsSchema = Type.Object({
 	),
 	title: Type.String({ description: "What the change does, as a short headline" }),
 	intent: Type.String({
-		description: "Why the change exists and what it achieves, in two to four sentences (Markdown)",
+		description: "The judgment you need and why the change exists, in two to four sentences (Markdown)",
 	}),
 	base: Type.Optional(
 		Type.String({
@@ -51,7 +53,9 @@ export const ReviewCodeParamsSchema = Type.Object({
 	focus: Type.Optional(
 		Type.Object(
 			{
-				text: Type.String({ description: "Where to look first if the reviewer only has two minutes, and why" }),
+				text: Type.String({
+					description: "Where to look first if the reviewer only has two minutes, and why (Markdown)",
+				}),
 				refs: Type.Optional(Type.Array(RefSchema, { description: "The changes to read first" })),
 			},
 			{ description: "The two-minute path through the change" },
@@ -76,7 +80,7 @@ export const ReviewCodeParamsSchema = Type.Object({
 			attention: AttentionSchema,
 			brief: Type.String({
 				description:
-					"Your explanation of this chapter for the reviewer: why, how, and what to watch (Markdown; blank lines separate paragraphs)",
+					"Your explanation of this chapter for the reviewer: why, how, and what to watch. Markdown: lists, tables, code fences, and `mermaid` diagrams render",
 			}),
 			callouts: Type.Optional(
 				Type.Array(
@@ -476,6 +480,7 @@ export async function buildCodeReviewPage(
 	const owned = (owner: string) => [...new Set(islands.filter((i) => i.owner === owner).map((i) => i.hunk!))];
 
 	const patterns: Record<string, Pattern> = {};
+	const briefs = await Promise.all(params.chapters.map((c) => blocksOf(c.brief)));
 	const chapters: Chapter[] = params.chapters.map((c, ci) => {
 		const changes: Chapter["changes"] = [];
 		c.changes.forEach((change, k) => {
@@ -504,10 +509,7 @@ export async function buildCodeReviewPage(
 			title: c.title,
 			kind: c.kind,
 			attention: c.attention,
-			brief: c.brief
-				.split(/\n\s*\n/)
-				.map((p) => p.trim())
-				.filter(Boolean),
+			brief: briefs[ci],
 			callouts: c.callouts ?? [],
 			changes,
 		};
@@ -545,11 +547,11 @@ export async function buildCodeReviewPage(
 	const page: CodeReviewPage = {
 		kind: "code-review",
 		title: params.title,
-		intent: params.intent,
+		intent: await blocksOf(params.intent),
 		base: params.base ?? "HEAD",
 		head: diff.head,
 		createdAt: new Date().toISOString(),
-		focus: params.focus ? { text: params.focus.text, hunks: focusHunks } : undefined,
+		focus: params.focus ? { blocks: await blocksOf(params.focus.text), hunks: focusHunks } : undefined,
 		verification: params.verification ?? [],
 		files,
 		hunks,
@@ -578,6 +580,15 @@ export interface Question {
 }
 
 /** A question about lines the page actually shows, or undefined. */
+/** The page app, with Mermaid inlined only when the agent's prose has a diagram. */
+export async function codeReviewTemplate(page: CodeReviewPage): Promise<string> {
+	return withDiagrams(await readTemplate("code-review"), [
+		...page.intent,
+		...(page.focus?.blocks ?? []),
+		...page.chapters.flatMap((c) => c.brief),
+	]);
+}
+
 export function parseQuestion(body: unknown, page: CodeReviewPage): Question | undefined {
 	if (!isObject(body) || typeof body.hunk !== "string" || typeof body.question !== "string" || !body.question.trim())
 		return undefined;

@@ -7,6 +7,7 @@ import { liveSession, trackLiveSessions } from "../../shared/src/forked-continua
 import { askAgent, askFork, type Passage } from "./ask-agent.js";
 import {
 	buildCodeReviewPage,
+	codeReviewTemplate,
 	formatReviewResult,
 	parseQuestion,
 	parseReviewResult,
@@ -50,7 +51,7 @@ import {
 } from "./explain-change.js";
 import type { PageData } from "./page-data.js";
 import { openPageSession } from "./page-server.js";
-import { embedPage, readTemplate, savePage } from "./saved-page.js";
+import { embedPage, savePage } from "./saved-page.js";
 
 function openInBrowser(url: string): void {
 	const command = process.platform === "darwin" ? "open" : process.platform === "win32" ? "explorer" : "xdg-open";
@@ -122,6 +123,7 @@ export default function browserPages(pi: ExtensionAPI): void {
 			"Use review_code when the user asks to review your work or when a finished change deserves their review before you continue. It blocks until they submit, so call it at a natural stopping point.",
 			"Pass `cwd` to review another repository or worktree directly from this root session. It may be absolute or relative to the session directory. File references are relative to the target repository root; browser tools run in the root session only.",
 			"Tell the change as a story: core chapters first, consequences next, tests and docs last. Give every change a one-sentence summary and set attention to where a mistake would hurt.",
+			"Put a picture where prose would make the reviewer build one in their head: a `mermaid` fence in a chapter brief for a flow, a sequence, or a state before and after, and a table for cases with their results.",
 			"When one change repeats across many places, list them under one change with `places`; the page shows one example and flags any place that is more than a rename.",
 			"Use notes for what the code cannot show. Add decisions only for real judgment calls the user may want to override.",
 		],
@@ -137,7 +139,7 @@ export default function browserPages(pi: ExtensionAPI): void {
 			return review(
 				{
 					page,
-					template: await readTemplate("code-review"),
+					template: await codeReviewTemplate(page),
 					root,
 					parse: (body) => parseReviewResult(body, page),
 					question: (body) => {
