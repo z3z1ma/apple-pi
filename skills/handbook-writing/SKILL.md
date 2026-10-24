@@ -40,7 +40,7 @@ Write the process in prose. Add a `pi_exec` program only when it does what prose
 
 - Frontmatter has `name` (lowercase letters, numbers, hyphens; matches the directory) and `description`.
 - A user-invoked skill starts a process and sets `disable-model-invocation: true`. A model-invoked skill gives a discipline or vocabulary that any process can use.
-- A user-invoked skill names another user-invoked skill as the next step (`/skill:<name>`) rather than running it. To use a model-invoked skill, link its `SKILL.md` with a relative path and tell the reader to read and follow it.
+- A user-invoked skill names another user-invoked skill as the next step (`/skill:<name>`) rather than handing it the workflow. It may use another skill's method for one step of its own process, as `wayfinder` uses the interview for one ticket. To use a model-invoked skill, link its `SKILL.md` with a relative path and tell the reader to read and follow it.
 - Add a supporting file only when the skill links to it and it holds a part that only some cases need. A skill with several workflows is a short router to one file per workflow.
 
 ## Verify

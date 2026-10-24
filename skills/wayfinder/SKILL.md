@@ -18,7 +18,7 @@ Wayfinder is **planning** by default: each ticket resolves a decision, and the m
 
 The agent may write **Notes**, but Notes are context, not authority. They may record a user-approved execution scope, but they cannot create one. When existing Notes say the map carries execution, verify that current conversation or source-addressed prior user approval supports them; otherwise stop and ask. Treat any `task` that looks like a slice of the destination as mis-typed.
 
-This invocation authorizes charting and working the map files, ticket-linked research and prototype artifacts inside the resolved ledger bundle, and bounded wiki curation while decisions settle. ADRs still need explicit approval. Temporary production-tree prototype wiring, production implementation, implementation tickets, commits, pushes, PRs, deployment, external tracker mutation, and other external effects require separate user authority regardless of Notes.
+This invocation authorizes the map files, research and prototype artifacts inside the ledger bundle, and bounded wiki curation as decisions settle. ADRs, production code, implementation tickets, commits, and any external effect need separate authority, whatever the Notes say.
 
 ## Refer by name
 
@@ -27,8 +27,6 @@ Every map and ticket has a **name**: its title. In everything the human reads (n
 ## Resolve the destination
 
 Use a destination explicitly supplied by the user. Otherwise inspect `.ledger/INDEX.md` and the candidate live `task.md` files. Write the map only in a bundle whose intent and current state clearly govern this undertaking; one live ledger row alone does not establish ownership. If no bundle governs the work or ownership is ambiguous, ask the user to select or create a task, supply another destination, or stop. Call `ledger_add` only after explicit approval, and never invent a detached map path.
-
-A documented issue-tracker convention does not silently redirect the artifact. An external destination requires explicit authority.
 
 The local shape, owned by this skill:
 
@@ -91,7 +89,9 @@ Blocked by:
 
 `Type:` is one of `research`, `prototype`, `interrogation`, `task` (see [Ticket Types](#ticket-types)). `Status:` is `open`, `claimed`, `resolved`, or `out-of-scope`. `Blocked by:` lists blocker numbers such as `01, 02`, or is empty.
 
-A session **claims** a ticket by setting `Status: claimed` **first**, before any work. This file claim is advisory, not an atomic lock. Only one session may select a frontier ticket automatically at a time. For parallel work, the user or coordinating root assigns distinct named tickets before the sessions start; each session verifies its ticket is still open and unblocked before claiming it. A claiming session may return an untouched ticket to `open` on a clean abort; never steal or clear another session's claim without operator confirmation.
+A session **claims** a ticket by setting `Status: claimed` **first**, before any work. The claim is advisory, not a lock: only one session picks from the frontier automatically, and parallel work runs on distinct tickets assigned by name. Return an untouched ticket to `open` on a clean abort; never clear another session's claim without the operator.
+
+**Who works a ticket.** HITL tickets (interviews, prototypes) stay with the root and the operator. AFK tickets can go to standing people: a research ticket to someone running the [`research`](../research/SKILL.md) process, a task ticket to an `implementation-engineer`. Assign each its named ticket; the person claims it, records the answer in the ticket, and reports in its task thread, and the root adds the map gist.
 
 Blocking uses the `Blocked by:` line. A ticket is **unblocked** when every listed blocker file is `resolved` or `out-of-scope`; the **frontier** is the open, unblocked, unclaimed children, the edge of the known. Scan `decisions/` for that set; first by number wins.
 
@@ -103,7 +103,7 @@ Every ticket is either **HITL** (human in the loop, worked _with_ a human who sp
 
 - **Research** (AFK): Reading documentation, third-party APIs, or local resources like knowledge bases to surface a fact a decision waits on. Read and follow the installed [`research`](../research/SKILL.md) skill. Persist findings as Markdown in the governing ledger bundle and link that file from the ticket. Do not create throwaway Git branches. Use when knowledge outside the current working directory is required.
 - **Prototype** (HITL): Raise the fidelity of the discussion by making a cheap, rough, concrete artifact to react to (an outline, a rough take, a stub, or UI/logic code) by reading and following the installed [`prototype`](../prototype/SKILL.md) skill. Link the prototype as an asset. Use when "how should it look" or "how should it behave" is the key question.
-- **Grilling** (HITL): Conversation. The default case. Read and follow the installed [`interrogate-to-design`](../interrogate-to-design/SKILL.md) and [`domain-modeling`](../domain-modeling/SKILL.md) skills. This explicit human invocation supplies the bounded map and knowledge-curation authority; the referenced procedures supply the method.
+- **Grilling** (HITL): Conversation. The default case. Use the interview in [`interrogate-to-design`](../interrogate-to-design/SKILL.md) as the method for this one ticket, with [`domain-modeling`](../domain-modeling/SKILL.md) for terms; wayfinder stays the workflow.
 - **Task** (HITL or AFK): Manual work that must happen before a _decision_ can be made: nothing to decide, prototype, or research, but the discussion is blocked until it's done. Signing up for a service so its API can be judged, provisioning access, moving data so its shape can be seen. This is the one type that _does_ rather than decides, and it earns its place by unblocking a decision, not by delivering the destination. The agent drives it alone where it can (AFK); otherwise it hands the human a precise checklist (HITL). External, destructive, or privileged work still needs explicit user authority. Resolved when the work is done; the answer records what was done and any resulting non-secret facts (credentials location, new URLs, row counts) later tickets depend on.
 
 ## Fog of war
@@ -151,8 +151,6 @@ User invokes with a map (path or governing task). A ticket is **optional**: with
 3. Resolve it. **Zoom as needed**: fetch the full body of any related or closed ticket on demand; use whichever model-visible installed skills the `## Notes` block names. For the default conversation, read and follow [`interrogate-to-design`](../interrogate-to-design/SKILL.md) and [`domain-modeling`](../domain-modeling/SKILL.md).
 4. Record the resolution: append the answer under `## Answer`, set `Status: resolved`, and **append a context pointer** to the map's Decisions-so-far.
 5. Add newly-surfaced tickets (create-then-wire); graduate any fog the answer has made specifiable, clearing each graduated patch from **Not yet specified** so it lives only as its new ticket. If the answer reveals that a ticket (this one or another) sits beyond the destination, **rule it out of scope** rather than resolving it on the route. If the decision invalidates other parts of the map, update or delete those tickets.
-
-The user may run explicitly assigned, distinct unblocked tickets in parallel, so expect other sessions to edit the same bundle. File claims make ownership visible but cannot prevent simultaneous claim races; never let parallel sessions independently choose the first frontier ticket.
 
 ## Finish
 
