@@ -427,7 +427,7 @@ try {
 		"domain-modeling",
 		"codebase-design",
 	];
-	const fundamentalSkills = ["code-review", "skill-authoring", "llm-wiki"];
+	const fundamentalSkills = ["code-review", "handbook-writing", "llm-wiki"];
 	const browserSkills = ["human-review-code", "human-review-markdown", "human-review-ledger-task", "explain-change"];
 	const packagedSkills = [...explicitWorkflowSkills, ...engineeringSkills, ...fundamentalSkills, ...browserSkills];
 	const loadedSkills = loadSkills({

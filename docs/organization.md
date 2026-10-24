@@ -153,6 +153,12 @@ The package ships thirty-one roles. `advises` means the role has no `edit` or `w
 
 The two managing roles differ in principal: a `coordinator` is your chief of staff, started once in its own directory with its own id (`pi --role coordinator --session-id coordinator` in `~/coordinator`) and kept for good; a `director-of-engineering` is hired under a root or another manager to run a team. Both hire from the same catalog.
 
+## Processes
+
+The packaged skills are the organization's handbook: roles are its jobs, and skills are its processes. A process skill names the perspectives the work needs (each with a default role), who chairs it, the handoffs and the threads that carry them, the points where the operator signs off, and what done means. Roles own how a person thinks; skills own how people work together. `skills/handbook-writing/` is the guide for writing both.
+
+Processes staff with standing people first: people with matching experience, called in from home, and hired only when nobody fits. The coordinator holds the standing teams; a working session staffs a process with its own manager tools, or asks its manager for the perspectives. The operator takes part at the named sign-off points and reads everything else in threads.
+
 ## Rules of the organization
 
 - Roles never change. A person who needs another role is a new hire; the old one sleeps or retires.

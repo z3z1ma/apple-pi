@@ -480,7 +480,7 @@ flowchart LR
 | `llm-wiki` | `references/initialize.md`, `references/ingest.md`, `references/maintain.md`, `references/query.md` | Procedures for curating and querying the repository's local knowledge graph (`components/wiki`). |
 | `prototype` | `logic.md`, `ui.md` | Explicitly separates throwaway spike rules (fast feedback, exploratory UI/logic) from production hardening. |
 | `resolving-merge-conflicts` | `SKILL.md` | Intent-aware git conflict resolution—reconstructing the semantic goal of both branches rather than blind `ours`/`theirs` picking. |
-| `wayfinder`, `research`, `implement`, `skill-authoring` | `SKILL.md` | Mapping work too large for one session as decision tickets and resolving them one at a time, grounded technical research, disciplined implementation execution, and authoring new procedural skills. |
+| `wayfinder`, `research`, `implement`, `handbook-writing` | `SKILL.md` | Mapping work too large for one session as decision tickets and resolving them one at a time, grounded technical research, disciplined implementation execution, and writing the organization's handbook: process skills, roles, and agent guidance. |
 
 ---
 

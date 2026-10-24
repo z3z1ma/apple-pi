@@ -41,4 +41,4 @@ In this first response, change no human-owned file. Present a concise set of can
 
 Ask the user which proposals to approve, change, or reject.
 
-After the user confirms, re-check each destination, use the relevant skill-authoring or `pi_exec` procedure when applicable, write only the approved changes, and remove each promoted line from `.pi/LEARNINGS.md`.
+After the user confirms, re-check each destination, use the relevant handbook-writing or `pi_exec` procedure when applicable, write only the approved changes, and remove each promoted line from `.pi/LEARNINGS.md`.
