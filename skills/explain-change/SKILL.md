@@ -25,7 +25,7 @@ Then plan backward: choose the two or three ideas the reader must leave with. Wr
 
 ## Draft, then test it on a cold reader
 
-`explain_change` opens the page for the operator at once, so test the draft first. Write the page's fields (title, summary, background, primer, intuition, steps with their `code` fences, and the quiz, with the answer key kept out of the file) into a Markdown draft in the task's directory. Give a standing `new-team-member` only the draft's path and the repository, never the conversation, the task, or the ideas you chose, and ask for its report.
+`explain_change` opens the page for the operator at once, so test the draft first. Write the page's fields (title, summary, background, primer, intuition, steps with their `code` fences, and the quiz) into a Markdown draft in the task's directory, and keep the answer key out of every file the reader can reach. Give a `new-team-member` from the organization (call in one who has read for you before; hire one when none exists) only the draft's path and the repository, never the conversation, the task, or the ideas you chose, and ask for its report.
 
 Revise and send the new draft back until the reader's one-sentence summary carries the ideas you chose, it answers the quiz without guessing, and it names no place it got lost or wanted a picture. Then call `explain_change` with the final draft.
 
@@ -46,4 +46,4 @@ Explain the way Feynman and Kleppmann do.
 - **Orient first.** Background says what was there before, in terms the reader already has; deep context for a newcomer goes in the primer.
 - **Honest confidence.** Say what was verified and what was not. Mark a guess as a guess.
 
-Open the page as part of the answer and give a short summary in the conversation. Use the reader's quiz misses and questions, when they arrive, to close the gap before work builds on the change.
+Open the page as part of the answer and give a short summary in the conversation. Use the operator's quiz misses and questions, when they arrive, to close the gap before work builds on the change.
