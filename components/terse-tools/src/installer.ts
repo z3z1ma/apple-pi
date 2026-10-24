@@ -1,10 +1,12 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { formatThinkingSpinnerMessage } from "./formatters.js";
 import { installToolInspector } from "./inspector.js";
+import { installModalDismissal } from "./modal-dismissal.js";
 import { installTerseToolRenderer } from "./patch.js";
 
 export default function (pi?: ExtensionAPI): void {
 	installTerseToolRenderer();
+	installModalDismissal();
 
 	if (!pi || typeof pi.on !== "function") {
 		return;
