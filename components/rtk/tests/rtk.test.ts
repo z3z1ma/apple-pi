@@ -1,8 +1,11 @@
+import { spawnSync } from "node:child_process";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { isRtkAvailable, parseSemver, probeRtk, resetRtkCache, rewriteCommand } from "../src/index.js";
-import { formatCollapsedLine, formatStatusBullet, stripAnsi } from "../../terse-tools/src/formatters.js";
 import { createBashToolDefinition, createExecBashToolDefinition } from "../../tasks/src/bash-tool.js";
-import installRtk from "../../../extensions/rtk.js";
+import { formatCollapsedLine, formatStatusBullet } from "../../terse-tools/src/formatters.js";
+import { isRtkAvailable, parseSemver, probeRtk, resetRtkCache, rewriteCommand } from "../src/index.js";
+
+const hasRtk = spawnSync("rtk", ["--version"]).status === 0;
+const itWithRtk = (name: string, fn: () => Promise<void>) => (hasRtk ? it : it.skip)(`${name} (needs rtk on PATH)`, fn);
 
 const mockTheme = {
 	fg: (_color: string, text: string) => text,
@@ -47,10 +50,10 @@ describe("RTK detector", () => {
 
 	it("does not probe or cache availability after cancellation", async () => {
 		await expect(probeRtk({ signal: AbortSignal.abort() })).rejects.toMatchObject({ name: "AbortError" });
-		expect((await probeRtk()).available).toBe(true);
+		expect((await probeRtk()).available).toBe(hasRtk);
 	});
 
-	it("detects RTK when installed on the host", async () => {
+	itWithRtk("detects RTK when installed on the host", async () => {
 		const status = await probeRtk();
 		expect(status.available).toBe(true);
 		expect(status.version).toBeDefined();
@@ -107,7 +110,7 @@ describe("RTK rewriteCommand", () => {
 		expect(await rewriteCommand("git status")).toBeNull();
 	});
 
-	it("rewrites standard commands supported by RTK", async () => {
+	itWithRtk("rewrites standard commands supported by RTK", async () => {
 		const rewritten = await rewriteCommand("git status");
 		expect(rewritten).toBe("rtk git status");
 	});
@@ -161,81 +164,6 @@ describe("Terse tools RTK bullet rendering", () => {
 		// Also verify command is clean (git status)
 		expect(lineRtk).toContain("git status");
 	});
-
-	it("uses _rawCommand in formatCollapsedLine when command was rewritten", () => {
-		const line = formatCollapsedLine(
-			"bash",
-			{ command: "rtk git status", _rawCommand: "git status" },
-			"success",
-			true,
-			mockTheme,
-			undefined,
-			undefined,
-			true,
-		);
-		expect(line).toContain("▲");
-		expect(stripAnsi(line)).toContain("Bash(git status)");
-		expect(line).not.toContain("rtk git status");
-	});
-});
-
-describe("RTK extension tool_call lifecycle", () => {
-	it("intercepts and rewrites bash tool_call when verbatim is omitted", async () => {
-		const handlers = new Map<string, (...args: any[]) => any>();
-		const mockPi: any = {
-			on: (event: string, handler: (...args: any[]) => any) => {
-				handlers.set(event, handler);
-			},
-		};
-
-		await installRtk(mockPi);
-		const toolCallHandler = handlers.get("tool_call");
-		expect(toolCallHandler).toBeDefined();
-
-		const input = { command: "git status" };
-		await toolCallHandler!({ toolName: "bash", input }, { signal: undefined });
-
-		expect(input.command).toContain("rtk git status");
-		expect((input as any)._rawCommand).toBe("git status");
-		expect((input as any)._rtk).toBe(true);
-	});
-
-	it("does not rewrite bash tool_call when verbatim is true", async () => {
-		const handlers = new Map<string, (...args: any[]) => any>();
-		const mockPi: any = {
-			on: (event: string, handler: (...args: any[]) => any) => {
-				handlers.set(event, handler);
-			},
-		};
-
-		await installRtk(mockPi);
-		const toolCallHandler = handlers.get("tool_call");
-
-		const input = { command: "git status", verbatim: true };
-		await toolCallHandler!({ toolName: "bash", input }, { signal: undefined });
-
-		expect(input.command).toBe("git status");
-		expect((input as any)._rawCommand).toBeUndefined();
-		expect((input as any)._rtk).toBeUndefined();
-	});
-
-	it("ignores non-bash tool calls", async () => {
-		const handlers = new Map<string, (...args: any[]) => any>();
-		const mockPi: any = {
-			on: (event: string, handler: (...args: any[]) => any) => {
-				handlers.set(event, handler);
-			},
-		};
-
-		await installRtk(mockPi);
-		const toolCallHandler = handlers.get("tool_call");
-
-		const input = { path: "some/file.ts" };
-		await toolCallHandler!({ toolName: "read", input }, { signal: undefined });
-
-		expect(input.path).toBe("some/file.ts");
-		expect((input as any)._rtk).toBeUndefined();
-	});
 });
 
 describe("Bash tool RTK rewriting vs Pi Exec isolation", () => {
@@ -247,7 +175,7 @@ describe("Bash tool RTK rewriting vs Pi Exec isolation", () => {
 		expect(tool.promptGuidelines?.some((g: string) => g.includes("verbatim"))).toBe(false);
 	});
 
-	it("createBashToolDefinition rewrites commands by default when verbatim is omitted", async () => {
+	itWithRtk("createBashToolDefinition rewrites commands by default when verbatim is omitted", async () => {
 		const tool = createBashToolDefinition();
 		const result = await tool.execute("call-1", { command: "git status" }, undefined, undefined, {
 			cwd: process.cwd(),
@@ -255,7 +183,7 @@ describe("Bash tool RTK rewriting vs Pi Exec isolation", () => {
 		expect(result.details?.rtk).toBe(true);
 	});
 
-	it("createBashToolDefinition rewrites commands when verbatim is false", async () => {
+	itWithRtk("createBashToolDefinition rewrites commands when verbatim is false", async () => {
 		const tool = createBashToolDefinition();
 		const result = await tool.execute("call-2", { command: "git status", verbatim: false }, undefined, undefined, {
 			cwd: process.cwd(),
@@ -266,6 +194,14 @@ describe("Bash tool RTK rewriting vs Pi Exec isolation", () => {
 	it("createBashToolDefinition runs verbatim when verbatim is true", async () => {
 		const tool = createBashToolDefinition();
 		const result = await tool.execute("call-3", { command: "git status", verbatim: true }, undefined, undefined, {
+			cwd: process.cwd(),
+		} as any);
+		expect(result.details?.rtk).toBe(false);
+	});
+
+	itWithRtk("createBashToolDefinition leaves rtk-prefixed commands unrewritten", async () => {
+		const tool = createBashToolDefinition();
+		const result = await tool.execute("call-5", { command: "rtk --version" }, undefined, undefined, {
 			cwd: process.cwd(),
 		} as any);
 		expect(result.details?.rtk).toBe(false);

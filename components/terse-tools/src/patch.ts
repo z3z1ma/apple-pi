@@ -426,7 +426,7 @@ export function installTerseToolRenderer(): void {
 				: "success";
 		const isLast = isLastToolInSequence(this);
 		const hasTextBefore = precedingHasTextDelta(this);
-		const isRtk = Boolean((this as any).result?.details?.rtk || (this as any).args?._rtk);
+		const isRtk = Boolean((this as any).result?.details?.rtk);
 
 		let lines: string[];
 		if ((this as any).expanded) {

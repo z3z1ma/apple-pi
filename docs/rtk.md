@@ -5,12 +5,12 @@
 ## How It Works
 
 1. **Automatic Rewrite**:
-   When RTK is available on the system (`>= 0.23.0`), shell commands executed via the `bash` tool are rewritten through `rtk rewrite <command>`.
+   When RTK is available on the system (`>= 0.23.0`), the tasks `bash` tool (`prepareShellCommand` in `components/tasks/src/bash-tool.ts`, the only rewriter) rewrites commands through `rtk rewrite <command>`.
    - If RTK provides an optimized command (exit codes 0 or 3), the rewritten command executes.
    - If RTK cannot optimize the command, execution falls back to the original command without errors (fail-open).
 
 2. **System Prompt Guidance**:
-   The `rtk` extension adds a `<shell-output>` section to the system prompt during `before_agent_start`. The model is informed that commands may be rewritten or filtered to save tokens, and that the `verbatim: true` parameter on `bash` can bypass this when exact raw output is required.
+   The `rtk` extension only adds a `<shell-output>` section to the system prompt during `before_agent_start`. The model is informed that commands may be rewritten or filtered to save tokens, and that the `verbatim: true` parameter on `bash` can bypass this when exact raw output is required.
 
 3. **Clean Terminal UI**:
    The TUI displays the original intended command (e.g. `Bash(git status)`) instead of the rewritten wrapper (e.g. `Bash(rtk git status)`). The underlying compression operates transparently.

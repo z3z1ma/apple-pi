@@ -1,4 +1,4 @@
-Status: ready
+Status: in-progress
 Created: 2026-10-24
 Updated: 2026-10-24
 
@@ -32,3 +32,9 @@ Ready: design confirmed; acceptance is the full list above, with the rtk, tasks,
 ## Outcome
 
 Pending shaping.
+
+## Progress
+
+- Implemented the whole design in one increment: removed the `tool_call` hook and `_rtk`/`_rawCommand` (extensions/rtk.ts, bash-tool.ts, formatters.ts, patch.ts); dropped `executablePath`, `timeoutMs` options, the second `rtk ` check, and the `RTK_DISABLED` check in rewrite.ts; binary-dependent rtk tests skip when `rtk` is absent; hook tests deleted, `_rawCommand` test deleted, rtk-prefix case added to bash-tool tests; AGENTS.md and docs/rtk.md updated.
+- Checks: vitest rtk/tasks/terse-tools 149 passed; `npm run typecheck` passed; Biome check --write on touched files (1 pre-existing-style warning left). Not run: full suite, `npm run lint`.
+- Remaining: caller validation (full suite) and commit.

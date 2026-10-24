@@ -14,4 +14,4 @@
 
 - `.ledger/202610232305-handbook-org-runtime/task.md` — planning — Organization runtime for the handbook model — Runtime changes the skill handbook needs: <manager> guidance for unroled roots, working sessions reporting to the coordinator by default, and plain workplace tool renames added as skills come up.
 
-- `.ledger/202610241039-rtk-one-rewrite-owner/task.md` — ready — Delete the rtk tool_call hook: one rewrite owner — Delete extensions/rtk.ts's tool_call hook and its _rtk/_rawCommand fields so prepareShellCommand is the only command rewriter; fold the duplicate guards, drop unused rtk options, skip host-binary tests when rtk is absent, update docs.
+- `.ledger/202610241039-rtk-one-rewrite-owner/task.md` — in-progress — Delete the rtk tool_call hook: one rewrite owner — Delete extensions/rtk.ts's tool_call hook and its _rtk/_rawCommand fields so prepareShellCommand is the only command rewriter; fold the duplicate guards, drop unused rtk options, skip host-binary tests when rtk is absent, update docs.

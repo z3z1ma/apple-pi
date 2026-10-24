@@ -1,15 +1,17 @@
 import { spawn } from "node:child_process";
 import {
+	type AgentToolResult,
 	createBashToolDefinition as createDefaultBashToolDefinition,
 	DEFAULT_MAX_BYTES,
 	DEFAULT_MAX_LINES,
+	type ExtensionContext,
 	formatSize,
 	getShellConfig,
-	type AgentToolResult,
-	type ExtensionContext,
 	type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
 import { matchesKey, Text } from "@earendil-works/pi-tui";
+import { rewriteCommand } from "../../rtk/src/index.js";
+import { forkCwd, forkTmpDir, trackForkProcessGroup } from "../../shared/src/fork-context.js";
 import { OutputBuffer } from "./output-buffer.js";
 import { killProcessTree } from "./process-killer.js";
 import type { TaskManager } from "./task-manager.js";
@@ -20,8 +22,6 @@ import {
 	type ExecBashParameters,
 	execBashParameters,
 } from "./types.js";
-import { rewriteCommand } from "../../rtk/src/index.js";
-import { forkCwd, forkTmpDir, trackForkProcessGroup } from "../../shared/src/fork-context.js";
 
 const BASH_UPDATE_THROTTLE_MS = 100;
 
@@ -78,8 +78,7 @@ export async function prepareShellCommand(
 	let isRtk = false;
 
 	if (allowRtk) {
-		isRtk = Boolean((params as any)._rtk);
-		if (!verbatim && !isRtk && !command.startsWith("rtk ")) {
+		if (!verbatim) {
 			const rewritten = await rewriteCommand(command, { signal });
 			if (rewritten && rewritten !== command) {
 				executionCommand = rewritten;
@@ -123,7 +122,7 @@ export async function prepareShellCommand(
 }
 
 function renderBashCall(args: any, theme: any, context: any, defaultBashDef: any) {
-	const displayCmd = args?._rawCommand || args?.command || "...";
+	const displayCmd = args?.command || "...";
 	if (args?.run_in_background) {
 		return new Text(theme.fg("toolTitle", theme.bold(`$ ${displayCmd}`)) + theme.fg("muted", " (background)"), 0, 0);
 	}
@@ -203,7 +202,7 @@ async function executeBashImpl(
 				truncated: snapshot.truncated,
 				fullOutputPath: snapshot.fullOutputPath,
 				rtk: isRtk,
-				originalCommand: (params as any)._rawCommand || command,
+				originalCommand: command,
 			},
 		});
 	};
@@ -365,7 +364,7 @@ async function executeBashImpl(
 				truncated: snapshot.truncated,
 				fullOutputPath: snapshot.fullOutputPath,
 				rtk: isRtk,
-				originalCommand: (params as any)._rawCommand || command,
+				originalCommand: command,
 				...(surprise ? { surprise: true } : {}),
 			},
 		};

@@ -386,7 +386,7 @@ export function formatToolArgs(toolName: string, args: any, _cwd?: string): stri
 		case "bash":
 		case "powershell":
 		case "monitor": {
-			const cmd = args._rawCommand || args.command || args.cmd || "";
+			const cmd = args.command || args.cmd || "";
 			return typeof cmd === "string" ? cmd.replace(/[\r\n]+/g, " ").trim() : "";
 		}
 		case "read":

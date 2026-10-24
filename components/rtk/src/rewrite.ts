@@ -45,10 +45,6 @@ export async function rewriteCommand(command: string, options?: RewriteOptions):
 		return null;
 	}
 
-	if (process.env.RTK_DISABLED === "1") {
-		return null;
-	}
-
 	const available = await isRtkAvailable(options?.signal);
 	options?.signal?.throwIfAborted();
 	if (!available) {
@@ -56,8 +52,7 @@ export async function rewriteCommand(command: string, options?: RewriteOptions):
 	}
 
 	try {
-		const timeoutMs = options?.timeoutMs ?? DEFAULT_REWRITE_TIMEOUT_MS;
-		const result = await execRtkRewrite(command, timeoutMs, options?.signal);
+		const result = await execRtkRewrite(command, DEFAULT_REWRITE_TIMEOUT_MS, options?.signal);
 		options?.signal?.throwIfAborted();
 
 		if (result.code === 0 || result.code === 3) {
