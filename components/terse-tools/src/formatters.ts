@@ -666,19 +666,19 @@ function formatToolSuccessExpanded(
 		}
 
 		case "grep": {
-			const lines = fileTextLines(contentText.trim(), undefined, theme).filter((line) => stripAnsi(line));
+			const lines = outputTextLines(contentText.trim(), theme).filter((line) => stripAnsi(line));
 			const summaryLine = `  └ Found ${lines.length} matches${lines.length === 0 && isLast ? collapseHint : ""}`;
 			return formatLineListDetail(headerLine, summaryLine, lines, isLast, collapseHint, width);
 		}
 
 		case "find": {
-			const lines = fileTextLines(contentText.trim(), undefined, theme).filter((line) => stripAnsi(line));
+			const lines = outputTextLines(contentText.trim(), theme).filter((line) => stripAnsi(line));
 			const summaryLine = `  └ Found ${lines.length} files${lines.length === 0 && isLast ? collapseHint : ""}`;
 			return formatLineListDetail(headerLine, summaryLine, lines, isLast, collapseHint, width);
 		}
 
 		case "ls": {
-			const lines = fileTextLines(contentText.trim(), undefined, theme).filter((line) => stripAnsi(line));
+			const lines = outputTextLines(contentText.trim(), theme).filter((line) => stripAnsi(line));
 			const summaryLine = `  └ ${lines.length} entries${lines.length === 0 && isLast ? collapseHint : ""}`;
 			return formatLineListDetail(headerLine, summaryLine, lines, isLast, collapseHint, width);
 		}
@@ -696,7 +696,7 @@ function formatToolSuccessExpanded(
 						: summaryLine;
 				return [safeHeader, safeSummary];
 			}
-			const lines = fileTextLines(contentText.trim(), undefined, theme);
+			const lines = outputTextLines(contentText.trim(), theme);
 			const summaryLine = `  └ ${lines[0]}${lines.length === 1 && isLast ? collapseHint : ""}`;
 			return formatLineListDetail(headerLine, summaryLine, lines.slice(1), isLast, collapseHint, width);
 		}

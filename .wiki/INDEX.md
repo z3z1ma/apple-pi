@@ -16,6 +16,8 @@
 
 - [[session-log-analysis]]: measuring agent behavior from Pi session JSONL, and the traps.
 
+- [[terminal-rendering-visual-checks]]: synthetic ANSI renderer checks with Bun, Rich SVG conversion, and the HTML-embedded SVG screenshot fallback.
+
 ## Pi internals
 
 - [[pi-request-internals]]: how Pi builds a provider request, and how to continue a conversation with an identical one.

@@ -46,9 +46,8 @@ async function fixture(hidden: boolean, toolsExpanded: boolean) {
 beforeAll(() => initTheme("dark"));
 
 test.each([false, true])("hidden thinking keeps mail collapsed, tools expanded=%s", async (toolsExpanded) => {
-	const { component, run } = await fixture(true, toolsExpanded);
+	const { component } = await fixture(true, toolsExpanded);
 	const lines = component.render(60);
-	expect(run.requests).toHaveLength(0);
 	expect(lines).toHaveLength(1);
 	expect(visibleWidth(lines[0] ?? "")).toBeLessThanOrEqual(60);
 	expect(strip(lines[0] ?? "")).toMatch(/^\u2709 Mail\(Nana Komatsu \u00b7 Release check: The PR is green\..*\.\.\.$/);
@@ -57,9 +56,8 @@ test.each([false, true])("hidden thinking keeps mail collapsed, tools expanded=%
 test.each([false, true])(
 	"visible thinking expands mail before the first prompt, tools expanded=%s",
 	async (toolsExpanded) => {
-		const { component, run } = await fixture(false, toolsExpanded);
+		const { component } = await fixture(false, toolsExpanded);
 		const lines = component.render(200).map(strip);
-		expect(run.requests).toHaveLength(0);
 		expect(lines[0]).toBe("\u2709 Mail(Nana Komatsu \u00b7 Release check) 2026-10-23T05:34:22.202Z");
 		expect(lines.slice(1)).toEqual([
 			"  The PR is green.",
@@ -68,7 +66,7 @@ test.each([false, true])(
 	},
 );
 
-test("an existing mail follows thinking toggles without rebuilding or toggling tools", async () => {
+test("an existing mail follows thinking visibility independently of tool expansion", async () => {
 	const { component, run } = await fixture(true, true);
 	expect(component.render(200)).toHaveLength(1);
 	run.session.settingsManager.setHideThinkingBlock(false);

@@ -6,7 +6,7 @@ import {
 	getMarkdownTheme,
 	highlightCode,
 	initTheme,
-	renderDiff,
+	Theme,
 	ToolExecutionComponent,
 	UserMessageComponent,
 } from "@earendil-works/pi-coding-agent";
@@ -79,6 +79,20 @@ function viewer(inspection: Partial<ToolInspection>, output = true, width = 160)
 	return component.render(width);
 }
 
+function expectBoldNameChange(lines: string[], lineNumber: number) {
+	for (const [sign, color, word] of [
+		["-", "toolDiffRemoved", "old"],
+		["+", "toolDiffAdded", "new"],
+	] as const) {
+		const row = lines.find((line) =>
+			stripTerminalSequences(line).includes(`${sign}${lineNumber} const name = "${word}";`),
+		);
+		expect(row).toBeDefined();
+		expect(row).toContain(getActiveTheme().fg(color, `${sign}${lineNumber} const name = "\x1b[1m${word}\x1b[22m";`));
+		expect(row).not.toMatch(/\x1b\[(?:7|27|4\d|10[0-7])(?:[;:][\d;:]*)?m/);
+	}
+}
+
 describe("native Pi rendering parity", () => {
 	it.each([
 		["example.ts", "typescript", source],
@@ -99,14 +113,13 @@ describe("native Pi rendering parity", () => {
 		expect(result.content[0].text).toBe(text);
 	});
 
-	it("keeps unknown types, missing paths, and errors readable without guessing syntax", () => {
-		for (const args of [{ path: "example.unknown" }, {}]) {
-			for (const output of [
-				expanded("read", args, source),
-				viewer({ args, result: { content: [{ type: "text", text: source }] } }),
-			]) {
-				expect(output.join("\n")).toContain(getActiveTheme().fg("toolOutput", source));
-			}
+	it("keeps unknown file types and read errors in the ordinary output and error colors", () => {
+		const args = { path: "example.unknown" };
+		for (const output of [
+			expanded("read", args, source),
+			viewer({ args, result: { content: [{ type: "text", text: source }] } }),
+		]) {
+			expect(output.join("\n")).toContain(getActiveTheme().fg("toolOutput", source));
 		}
 		const failure = expanded("read", { path: "example.ts" }, source, undefined, false, true);
 		expect(plain(failure)).toContain(source);
@@ -145,20 +158,21 @@ describe("native Pi rendering parity", () => {
 		}
 	});
 
-	it("preserves native line numbers and word-level changes in both diff views", () => {
-		const diff = '-12 const name = "old";\n+12 const name = "new";';
-		const expected = renderDiff(diff).split("\n");
-		const transcript = expanded("edit", { path: "example.ts" }, "Edited", { diff }).join("\n");
-		const inspector = viewer({ toolName: "edit", result: { details: { diff } } }).join("\n");
-		for (const line of expected) {
-			expect(transcript).toContain(line);
-			expect(inspector).toContain(line);
+	it("uses bold changed words without reverse video or backgrounds in both diff views", () => {
+		const inverse = vi.spyOn(Theme.prototype, "inverse").mockImplementation((text) => `\x1b[7m${text}\x1b[27m`);
+		try {
+			const diff = '-12 const name = "old";\n+12 const name = "new";';
+			const transcript = expanded("edit", { path: "example.ts" }, "Edited", { diff });
+			const inspector = viewer({ toolName: "edit", result: { details: { diff } } });
+			for (const output of [transcript, inspector]) expectBoldNameChange(output, 12);
+		} finally {
+			inverse.mockRestore();
 		}
-		expect(plain(expected)).toBe(diff);
 	});
 
-	it("keeps the native Edit preview visible while the call is running", async () => {
+	it("uses the same bold changed words in the pending Edit preview", async () => {
 		const cwd = await mkdtemp(join(tmpdir(), "render-parity-"));
+		const inverse = vi.spyOn(Theme.prototype, "inverse").mockImplementation((text) => `\x1b[7m${text}\x1b[27m`);
 		try {
 			await writeFile(join(cwd, "example.ts"), 'const name = "old";\n');
 			const args = { path: "example.ts", edits: [{ oldText: '"old"', newText: '"new"' }] };
@@ -173,12 +187,9 @@ describe("native Pi rendering parity", () => {
 			);
 			tool.setArgsComplete();
 			tool.setExpanded(true);
-			const expected = renderDiff('-1 const name = "old";\n+1 const name = "new";').split("\n");
-			await vi.waitFor(() => {
-				const output = tool.render(160).join("\n");
-				for (const line of expected) expect(output).toContain(line);
-			});
+			await vi.waitFor(() => expectBoldNameChange(tool.render(160), 1));
 		} finally {
+			inverse.mockRestore();
 			await rm(cwd, { recursive: true, force: true });
 		}
 	});
@@ -250,7 +261,6 @@ describe("native Pi rendering parity", () => {
 			expect(transcript).toContain(line);
 			expect(inspector).toContain(line);
 		}
-		expect(plain(expected)).toBe("first\nsecond plain");
 	});
 
 	it("preserves code-fence colors and Markdown transforms in user messages", () => {

@@ -54,16 +54,6 @@ describe("tasks component", () => {
 			expect(snapshot.truncated).toBe(false);
 		});
 
-		it("retains command ANSI bytes across captured chunks", () => {
-			const buffer = new OutputBuffer();
-			const text = "\x1b[31mred\ncontinued\x1b[0m\n";
-			buffer.append(text.slice(0, 4));
-			buffer.append(Buffer.from(text.slice(4)));
-			buffer.finish();
-			expect(buffer.getSnapshot().content).toBe(text);
-			buffer.cleanup();
-		});
-
 		it("truncates head when capacity is exceeded and saves full output", () => {
 			const buffer = new OutputBuffer({ maxBytes: 50, maxLines: 5 });
 			for (let i = 1; i <= 20; i++) {
@@ -1066,6 +1056,18 @@ describe("tasks component", () => {
 	});
 
 	describe("createExecBashToolDefinition", () => {
+		it("returns command ANSI colors intact", async () => {
+			const tool = createExecBashToolDefinition();
+			const result = await tool.execute(
+				"ansi-output",
+				{ command: "node -e \"process.stdout.write('\\u001b[31mred\\ncontinued\\u001b[0m\\n')\"", timeout: 5 },
+				undefined,
+				undefined,
+				{ cwd: process.cwd() } as any,
+			);
+			expect(getResultText(result)).toContain("\x1b[31mred\ncontinued\x1b[0m\n");
+		});
+
 		it("excludes run_in_background and verbatim from parameter schema", () => {
 			const tool = createExecBashToolDefinition();
 			const props = (tool.parameters as any).properties;

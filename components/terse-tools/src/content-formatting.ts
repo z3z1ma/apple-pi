@@ -41,7 +41,9 @@ export function outputWarningLines(details: unknown, theme: Theme): string[] {
 
 export function diffLines(text: string, theme: Theme): string[] {
 	// Pi's edit diffs carry line numbers; other tools can return ordinary unified patches.
-	if (/^[+-]\s*\d+ /m.test(text)) return renderDiff(text).split("\n");
+	if (/^[+-]\s*\d+ /m.test(text)) {
+		return renderDiff(text).replaceAll("\x1b[7m", "\x1b[1m").replaceAll("\x1b[27m", "\x1b[22m").split("\n");
+	}
 	return text
 		.split("\n")
 		.map((line) =>
