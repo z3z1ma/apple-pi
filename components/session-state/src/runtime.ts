@@ -922,7 +922,7 @@ export class Runtime {
 		const asleep: string[] = [];
 		const deliveries: { target: Connection; id: string; mail: Command }[] = [];
 		for (const participant of new Set([...posted.push, ...(changed ? [changed.person] : [])])) {
-			if (participant === OPERATOR) continue;
+			if (participant === OPERATOR || participant === sender) continue;
 			const mail: Command = {
 				kind: "mail",
 				from: sender,

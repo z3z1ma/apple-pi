@@ -53,8 +53,8 @@ async function person(manager?: string) {
 function goalPackets(run: Awaited<ReturnType<typeof fauxSession>>) {
 	return run.session.messages.filter(
 		(m) =>
-			m.role === "custom" &&
-			(m.customType === MAIL_CUSTOM_TYPE || m.customType === TASK_GOAL_CUSTOM_TYPE) &&
+			(m.role === "toolResult" ||
+				(m.role === "custom" && (m.customType === MAIL_CUSTOM_TYPE || m.customType === TASK_GOAL_CUSTOM_TYPE))) &&
 			JSON.stringify(m.content).includes("Focused task:"),
 	);
 }
@@ -85,6 +85,7 @@ test("taking, switching, rereading, and compaction append the explicit goal; fin
 		expect(readFileSync(join(first.bundle, "task.md"), "utf8")).toContain("Verify the slow path.");
 		expect(existsSync(join(first.bundle, "retrospective.md"))).toBe(true);
 		await packets(who.run, 1);
+		expect(query(state.dbPath, "select sender, receiver from mail where receiver = ?", who.id)).toEqual([]);
 		const second = await who.invoke("take_task", { goal: "Compare the retry policy.", title: "Retry policy" });
 		await packets(who.run, 2);
 		expect(
@@ -110,6 +111,7 @@ test("taking, switching, rereading, and compaction append the explicit goal; fin
 		const finished = await who.invoke("finish_task", {
 			outcome: "Queue blockage verified against the trace; no retry cause found.",
 		});
+		expect(query(state.dbPath, "select sender, receiver from mail where receiver = ?", who.id)).toEqual([]);
 		expect(finished.bundle).toContain("/tasks/history/");
 		expect(existsSync(first.bundle)).toBe(false);
 		expect(readFileSync(join(finished.bundle, "task.md"), "utf8")).toContain("Queue blockage verified");
@@ -159,11 +161,28 @@ test("assignments are shared task conversations, unassigning reports the change,
 		await vi.waitFor(() => expect(engineer.run.session.isStreaming).toBe(false));
 		await engineer.invoke("take_task", { task: task.id });
 		await packets(engineer.run, 2);
+		expect(
+			query(
+				state.dbPath,
+				"select sender, receiver from mail where sender = ? and receiver = ?",
+				engineer.id,
+				engineer.id,
+			),
+		).toEqual([]);
+		await vi.waitFor(() => expect(JSON.stringify(manager.run.customMessages(MAIL_CUSTOM_TYPE))).toContain("assigned"));
 		await manager.invoke("assign", { person: reviewer.id, task: task.id });
 		await packets(reviewer.run, 1);
 		const partial = await engineer.invoke("finish_task", {
 			outcome: "Verified invalidation after every write; confidence high.",
 		});
+		expect(
+			query(
+				state.dbPath,
+				"select sender, receiver from mail where sender = ? and receiver = ?",
+				engineer.id,
+				engineer.id,
+			),
+		).toEqual([]);
 		expect(partial.archived_at).toBeNull();
 		expect(existsSync(join(task.bundle, "task.md"))).toBe(true);
 		expect(query(state.dbPath, "select task_id from work_focus where person = ?", reviewer.id)).toEqual([

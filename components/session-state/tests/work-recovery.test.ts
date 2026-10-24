@@ -16,6 +16,10 @@ beforeAll(async () => {
 		"insert into sessions (id, kind, cwd, run_state, generation, source, updated_at) values ('person', 'root', ?, 'idle', 1, 'fixture', 0)",
 	).run(project);
 	db.prepare(
+		"insert into sessions (id, kind, cwd, run_state, generation, source, updated_at) values ('manager', 'root', ?, 'idle', 1, 'fixture', 0)",
+	).run(project);
+	db.exec("update sessions set reports_to = 'manager' where id = 'person'");
+	db.prepare(
 		"insert into commands (command_id, session_id, kind, command, stage, created_at, updated_at) values ('recover', 'person', 'work', ?, 'accepted', 1, 1)",
 	).run(JSON.stringify({ kind: "work", action: "take", goal: "An accepted goal survives a restart.", cwd: project }));
 	db.prepare(
@@ -24,7 +28,7 @@ beforeAll(async () => {
 	mkdirSync(join(state.stateDir, "tasks", "work-interrupted"), { recursive: true });
 	writeFileSync(join(state.stateDir, "tasks", "work-interrupted", "task.md"), "# Original goal retained\n");
 	db.exec(
-		"create trigger refuse_work_mail before insert on commands when new.command_id in ('broken:post:person', 'promote-fails:post:person', 'finish-fails:post:person') begin select raise(abort, 'outbox unavailable'); end",
+		"create trigger refuse_work_mail before insert on commands when new.command_id in ('broken:post:manager', 'promote-fails:post:manager', 'finish-fails:post:manager') begin select raise(abort, 'outbox unavailable'); end",
 	);
 	const source = join(state.stateDir, "tasks", "moved-task");
 	const destination = join(state.stateDir, "tasks", "history", "moved-task");
@@ -73,7 +77,7 @@ test("an accepted task change recovers once with its assignment, goal and outgoi
 	expect(readFileSync(join(state.stateDir, "tasks/work-recover/task.md"), "utf8")).toContain(
 		"An accepted goal survives",
 	);
-	expect(query(state.dbPath, "select stage from commands where command_id = 'recover:post:person'")).toEqual([
+	expect(query(state.dbPath, "select stage from commands where command_id = 'recover:post:manager'")).toEqual([
 		{ stage: "accepted" },
 	]);
 	const repeat = await sendCommand(

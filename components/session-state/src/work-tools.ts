@@ -44,11 +44,13 @@ async function change(ctx: ExtensionContext, command: WorkAction, signal: AbortS
 				.get(commandId) as unknown as WorkTask,
 	);
 	if (!task) throw new Error("The runtime returned no task for this change");
+	const person = "person" in command && command.person ? command.person : ctx.sessionManager.getSessionId();
+	const goal = person === ctx.sessionManager.getSessionId() ? goalText(person) : undefined;
 	return {
 		content: [
 			{
 				type: "text" as const,
-				text: `${command.action}: ${task.id}\nGoal: ${task.bundle}/task.md\nThread: ${task.thread}`,
+				text: `${command.action}: ${task.id}\nGoal: ${task.bundle}/task.md\nThread: ${task.thread}${goal ? `\n\n${goal}` : ""}`,
 			},
 		],
 		details: task,
