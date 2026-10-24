@@ -51,7 +51,7 @@ beforeEach(() => {
 });
 afterEach(() => rmSync(base, { recursive: true, force: true }));
 
-// ---------------------------------------------------------------------------- review_code
+// ---------------------------------------------------------------------------- sign_off_code
 
 const review = (file: string, over: Partial<ReviewCodeParams> = {}): ReviewCodeParams => ({
 	title: "Change",
@@ -185,7 +185,7 @@ describe("buildExplainPage with cwd", () => {
 	});
 });
 
-// ---------------------------------------------------------------------------- review_markdown
+// ---------------------------------------------------------------------------- sign_off_document
 
 describe("buildMarkdownPage with cwd", () => {
 	it("without cwd, reads the path from the session's directory as before", async () => {
@@ -234,7 +234,7 @@ describe("buildMarkdownPage with cwd", () => {
 	});
 });
 
-// ---------------------------------------------------------------------------- review_ledger_task
+// ---------------------------------------------------------------------------- sign_off_task
 
 describe("buildLedgerPage with cwd", () => {
 	it("without cwd, finds the task in the session's repository as before", async () => {

@@ -1,6 +1,6 @@
 ---
 name: operator-sign-off
-description: "Ask the operator to judge, approve, or decide in the browser: a code change (`review_code`), a document (`review_markdown`), or a ledger task (`review_ledger_task`). Use whenever work needs the operator's judgment before it continues, and when the operator asks to inspect, review, or sign off."
+description: "Ask the operator to judge, approve, or decide in the browser: a code change (`sign_off_code`), a document (`sign_off_document`), or a ledger task (`sign_off_task`). Use whenever work needs the operator's judgment before it continues, and when the operator asks to inspect, review, or sign off."
 ---
 
 # Operator sign-off
@@ -30,9 +30,9 @@ Before the page opens, give a `new-team-member` (call in one who has read for yo
 
 Read the reference for the type and follow it:
 
-- [A code change](references/code.md): the operator judges whether a change is right and safe to build on, with `review_code`.
-- [A document](references/document.md): the operator decides on what a spec, plan, proposal, or README says, with `review_markdown`.
-- [A ledger task](references/ledger-task.md): the operator approves a plan and its tickets, or confirms an outcome, with `review_ledger_task`.
+- [A code change](references/code.md): the operator judges whether a change is right and safe to build on, with `sign_off_code`.
+- [A document](references/document.md): the operator decides on what a spec, plan, proposal, or README says, with `sign_off_document`.
+- [A ledger task](references/ledger-task.md): the operator approves a plan and its tickets, or confirms an outcome, with `sign_off_task`.
 
 ## After the verdict
 

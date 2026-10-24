@@ -2,9 +2,9 @@
 
 Four tools open a page in the user's browser. Three are reviews and wait for the verdict:
 
-- `review_code`: a code review. The agent writes the structure; the page shows the real diff from git.
-- `review_markdown`: a Markdown document, rendered, for the user to annotate and sign off. See [Markdown review](#markdown-review).
-- `review_ledger_task`: a whole ledger task bundle, with its ticket graph. See [Ledger task review](#ledger-task-review).
+- `sign_off_code`: a code review. The agent writes the structure; the page shows the real diff from git.
+- `sign_off_document`: a Markdown document, rendered, for the user to annotate and sign off. See [Markdown review](#markdown-review).
+- `sign_off_task`: a whole ledger task bundle, with its ticket graph. See [Ledger task review](#ledger-task-review).
 
 The fourth, `explain_change`, opens an explanation of a change for the user to understand, and returns at once. See [Explain change](#explain-change).
 
@@ -14,15 +14,15 @@ Root sessions only; a run without an attached user gets a message instead of a p
 
 All four tools accept optional `cwd`: an absolute directory or a directory relative to the session's working directory. It defaults to the session's working directory. Use it to open a page for another repository or Git worktree directly from the session. [Interns](interns.md) and the [`/btw`](btw.md) session do not have browser tools.
 
-For example, a session in `work` can explain a commit in a nested worktree with `cwd: "worktrees/DATA-16966"`, `base: "<commit>^"`, and `head: "<commit>"`. `review_code` accepts the same `cwd` to review that worktree's changes. Git refs are resolved in the selected repository, and code references use paths relative to its root, even when `cwd` selects a subdirectory. An invalid target fails rather than falling back to the session's repository.
+For example, a session in `work` can explain a commit in a nested worktree with `cwd: "worktrees/DATA-16966"`, `base: "<commit>^"`, and `head: "<commit>"`. `sign_off_code` accepts the same `cwd` to review that worktree's changes. Git refs are resolved in the selected repository, and code references use paths relative to its root, even when `cwd` selects a subdirectory. An invalid target fails rather than falling back to the session's repository.
 
-For `review_markdown`, a relative `path` is resolved against `cwd`; an absolute `path` works independently of the session directory. For `review_ledger_task`, `cwd` selects the project whose `.ledger` holds the task. Returned file anchors use the target repository's paths. Page questions and the explanation tutor receive the page's absolute source directory and instructions to use absolute file paths, while retaining the parent session's conversation and working directory.
+For `sign_off_document`, a relative `path` is resolved against `cwd`; an absolute `path` works independently of the session directory. For `sign_off_task`, `cwd` selects the project whose `.ledger` holds the task. Returned file anchors use the target repository's paths. Page questions and the explanation tutor receive the page's absolute source directory and instructions to use absolute file paths, while retaining the parent session's conversation and working directory.
 
 ## Activation skills
 
 Two model-invoked skills supplement the tools' always-present usage guidance:
 
-- `operator-sign-off`: ask the operator to judge or sign off on a code change (`review_code`), a document (`review_markdown`), or a ledger task (`review_ledger_task`). Its body holds the fundamentals of presenting to a person (answer first, progressive disclosure, pictures with words, concrete before abstract, a cold `new-team-member` read before the page opens); one reference per type sets that type's goal and rigor. The separate `code-review` process audits code for defects and conformance.
+- `operator-sign-off`: ask the operator to judge or sign off on a code change (`sign_off_code`), a document (`sign_off_document`), or a ledger task (`sign_off_task`). Its body holds the fundamentals of presenting to a person (answer first, progressive disclosure, pictures with words, concrete before abstract, a cold `new-team-member` read before the page opens); one reference per type sets that type's goal and rigor. The separate `code-review` process audits code for defects and conformance.
 - `explain-change`: teach a change the operator needs to understand well enough to build on, tested on a cold `new-team-member` reader before the page opens.
 
 The tools' own guidance owns invocation mechanics; the skills own what the tools cannot enforce. They can also be invoked explicitly with `/skill:<name>`. They improve recognition; they do not enforce that a page opens on every matching turn.
@@ -78,7 +78,7 @@ The tool call carries structure and prose, never code:
   | `?` | Show all keys |
 
 - **Comments:** click a line number to comment on it, and shift-click another to extend the range. Each comment has a kind: change, question, concern, nit, or praise. A comment can also reply to an agent note.
-- **Ask the agent:** the composer's second mode (or `A` on a hunk) asks a question about the selected lines. A read-only [fork](forked-continuations.md#page-questions) of the live conversation answers it: it shares the session's request prefix, sees the pending `review_code` call as a placeholder, can use only `read`, `grep`, `find`, and `ls`, and records its usage as "Review question". The answer appears under the lines; the agent's main task is not interrupted. An answer can become a comment, or be dismissed. A page opened from a session that cannot fork has no ask mode.
+- **Ask the agent:** the composer's second mode (or `A` on a hunk) asks a question about the selected lines. A read-only [fork](forked-continuations.md#page-questions) of the live conversation answers it: it shares the session's request prefix, sees the pending `sign_off_code` call as a placeholder, can use only `read`, `grep`, `find`, and `ls`, and records its usage as "Review question". The answer appears under the lines; the agent's main task is not interrupted. An answer can become a comment, or be dismissed. A page opened from a session that cannot fork has no ask mode.
 
 ## The result
 
@@ -98,7 +98,7 @@ Aborting the tool call or ending the session closes the page server.
 
 ## Markdown review
 
-`review_markdown` takes the `path` of a Markdown file and an optional one-sentence `note` shown above the document, such as what changed since the last review. The page renders the document first: an outline with section counts, code fences highlighted like the code review, tables, task lists, GitHub alerts, and Mermaid diagrams drawn in the page's colours.
+`sign_off_document` takes the `path` of a Markdown file and an optional one-sentence `note` shown above the document, such as what changed since the last review. The page renders the document first: an outline with section counts, code fences highlighted like the code review, tables, task lists, GitHub alerts, and Mermaid diagrams drawn in the page's colours.
 
 The reviewer gives feedback on the text itself:
 
@@ -114,12 +114,12 @@ The agent receives the verdict, the overall comment, each annotation with its ki
 
 ## Ledger task review
 
-`review_ledger_task` takes `task`: a ledger task's id, `.ledger/<id>`, or any path inside the bundle, under `.ledger/` or `.ledger/history/`. An optional one-sentence `note` sits above the task. The server reads the whole bundle; the agent curates nothing.
+`sign_off_task` takes `task`: a ledger task's id, `.ledger/<id>`, or any path inside the bundle, under `.ledger/` or `.ledger/history/`. An optional one-sentence `note` sits above the task. The server reads the whole bundle; the agent curates nothing.
 
 - **The tree** on the left is the bundle: the overview, `task.md`, the spec or plan, other documents, `tickets/` (number, title, acceptance boxes ticked, and status), `retrospective.md`, then other folders, closed, with their file counts. The open document's sections nest under it. Files the reviewer opened carry a tick; annotation counts show on files and folders.
 - **The overview** shows the task's Intent and the ticket graph. Tickets stand in columns by dependency depth, with arrows from each blocker to the tickets it blocks, read from each ticket's `**Blocked by:**` line. A ticket whose blockers are all done can start now; it carries a ring and is listed under the graph. Hover a ticket to light what it waits on and what waits on it; click it to open it.
 - **Graph checks** follow the `to-tickets` rules: a blocker that is not a ticket in the bundle, a blocker numbered after the ticket it blocks, a cycle (a ticket that names itself included), and no ticket that can start. They show above the graph; edges that run backwards are red. A ticket waiting on a missing ticket counts as blocked.
-- **Every Markdown document** opens in the same reader and takes the same annotations as `review_markdown`. A ticket opens with its neighbourhood: blocked by, the ticket, and what it unblocks.
+- **Every Markdown document** opens in the same reader and takes the same annotations as `sign_off_document`. A ticket opens with its neighbourhood: blocked by, the ticket, and what it unblocks.
 - **Other files**, such as JSON records and logs, are evidence. The page lists them and reads one from disk only when the reviewer opens it, through the page server and only from the bundle's own list. It shows line numbers and takes annotations by line. A file that is not text says so.
 - **Finish review** lists the documents the reviewer has not opened.
 - **Keys:** `G` overview, `[` and `]` previous and next document in reading order, `J` and `K` sections, `?` keys.
@@ -130,7 +130,7 @@ The agent receives the verdict, the overall comment, each annotation with its re
 
 `explain_change` helps the user understand a change well enough to build on it, after Geoffrey Litt's ["Understanding is the new bottleneck"](https://www.geoffreylitt.com/2026/07/02/understanding-is-the-new-bottleneck). The agent writes the explanation; the page supplies the real code.
 
-- **The change.** Without `head`, the working tree compared with `base` (default `HEAD`: the uncommitted changes), as `review_code` does. With `head`, the change from where `head` meets `base` up to `head`, as a pull request shows it: `base: "X^"` with `head: "X"` explains the single commit `X`.
+- **The change.** Without `head`, the working tree compared with `base` (default `HEAD`: the uncommitted changes), as `sign_off_code` does. With `head`, the change from where `head` meets `base` up to `head`, as a pull request shows it: `base: "X^"` with `head: "X"` explains the single commit `X`.
 - **How the agent prepares.** The tool's guidance has the agent find why the change exists before it writes: the ledger task that governs it, the discussion that led to it when that happened in the same session as the explanation, the context files and docs for the rules it must keep, the wiki for its terms, and the tests for its behavior. The agent then plans backward: it chooses the few ideas the reader must leave with, writes the quiz to test them, and writes the explanation that teaches them.
 - **What the agent writes**, each part as Markdown: `title`, `summary` (the change in one minute), an optional `primer` for a reader new to the area (shown closed), `background` (what was there before), `intuition` (the idea before the code), `steps` (a walkthrough, each a `title` and a `body`), and `quiz`: exactly five questions, three or four options each, one right answer by index, and a `why`. The server rejects an answer that is not one of its options.
 - **Three fences** add what Markdown cannot:

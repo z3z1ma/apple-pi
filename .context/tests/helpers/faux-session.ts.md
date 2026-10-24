@@ -10,7 +10,7 @@ Why: an ask-agent test passed on such a tool-list comparison until a debug dump 
 The `tools` argument selects custom tools too. Include the fixture's names when checking a fork's execution policy. An empty list produces `Tool ... not found`, which is not evidence that the policy blocked an available tool.
 Verify: components/branch-search/tests/fork-tools.test.ts
 
-`bindExtensions({})` binds no UI, so `ctx.hasUI` is false and a tool that needs a user (such as `review_code` or `review_markdown`) returns before its flow starts. Test that flow's parts directly: install `trackLiveSessions()` and call the fork helper from a stand-in tool, and cover the HTTP routes with page-server tests.
+`bindExtensions({})` binds no UI, so `ctx.hasUI` is false and a tool that needs a user (such as `sign_off_code` or `sign_off_document`) returns before its flow starts. Test that flow's parts directly: install `trackLiveSessions()` and call the fork helper from a stand-in tool, and cover the HTTP routes with page-server tests.
 
 The session starts in `print` mode. For an extension that acts only in the TUI, call `session.bindExtensions({ mode: "tui", uiContext: { notify } as never })` again after `fauxSession(...)`; that also captures `ctx.ui.notify` warnings. `session.setSessionName` fires `session_info_changed`, which simulates an operator rename. For resume, create the session with `SessionManager.create(cwd, dir)`, then open its file with `SessionManager.open(file)` in a second `fauxSession` on the same cwd.
 

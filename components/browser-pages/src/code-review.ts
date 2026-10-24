@@ -21,7 +21,7 @@ import type {
 	Segment,
 } from "./page-data.js";
 
-export const REVIEW_CODE_TOOL_NAME = "review_code";
+export const SIGN_OFF_CODE_TOOL_NAME = "sign_off_code";
 
 const AttentionSchema = Type.Union([Type.Literal("high"), Type.Literal("medium"), Type.Literal("low")], {
 	description: "How closely the reviewer should read: high = where a mistake would hurt, low = tests, docs, wiring",

@@ -167,7 +167,7 @@ describe("results", () => {
 	});
 });
 
-describe("review_ledger_task tool", () => {
+describe("sign_off_task tool", () => {
 	// A page server, a browser subprocess, and a cold Shiki start: slower than 5 s under full-suite load.
 	it("opens the page, serves an evidence file, and saves the page with it and the result", {
 		timeout: 30_000,
@@ -187,7 +187,7 @@ describe("review_ledger_task tool", () => {
 			let tool: any;
 			browserPages({
 				registerTool: (definition: any) => {
-					if (definition.name === "review_ledger_task") tool = definition;
+					if (definition.name === "sign_off_task") tool = definition;
 				},
 				on: () => {},
 			} as any);

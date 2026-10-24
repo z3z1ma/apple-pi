@@ -23,7 +23,7 @@ import type { LedgerAnnotation, LedgerResult, LedgerReviewPage, TextSpan } from 
 import { readTemplate } from "./saved-page.js";
 import { parseTickets, ticketNumber } from "./tickets.js";
 
-export const REVIEW_LEDGER_TASK_TOOL_NAME = "review_ledger_task";
+export const SIGN_OFF_TASK_TOOL_NAME = "sign_off_task";
 
 export const ReviewLedgerTaskParamsSchema = Type.Object({
 	cwd: Type.Optional(

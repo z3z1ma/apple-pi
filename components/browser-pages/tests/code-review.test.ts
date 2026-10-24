@@ -199,7 +199,7 @@ describe("buildCodeReviewPage", () => {
 	});
 });
 
-describe("review_code tool", () => {
+describe("sign_off_code tool", () => {
 	// A page server, a browser subprocess, and a cold Shiki start: slower than 5 s under full-suite load.
 	it("opens the page, waits for the submission, saves the page, and returns the review", {
 		timeout: 30_000,
@@ -219,7 +219,7 @@ describe("review_code tool", () => {
 			let tool: any;
 			browserPages({
 				registerTool: (definition: any) => {
-					if (definition.name === "review_code") tool = definition;
+					if (definition.name === "sign_off_code") tool = definition;
 				},
 				on: () => {},
 			} as any);
@@ -254,7 +254,7 @@ describe("review_code tool", () => {
 		let tool: any;
 		browserPages({
 			registerTool: (definition: any) => {
-				if (definition.name === "review_code") tool = definition;
+				if (definition.name === "sign_off_code") tool = definition;
 			},
 			on: () => {},
 		} as any);

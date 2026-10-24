@@ -21,7 +21,7 @@ import { readTemplate } from "./saved-page.js";
 
 const run = promisify(execFile);
 
-export const REVIEW_MARKDOWN_TOOL_NAME = "review_markdown";
+export const SIGN_OFF_DOCUMENT_TOOL_NAME = "sign_off_document";
 
 export const ReviewMarkdownParamsSchema = Type.Object({
 	cwd: Type.Optional(

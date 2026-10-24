@@ -44,7 +44,7 @@ it("answers a reviewer's question from a read-only fork of the live conversation
 		pi.registerTool({
 			name: "review",
 			label: "Review",
-			description: "Stands in for review_code while its page is open",
+			description: "Stands in for sign_off_code while its page is open",
 			parameters: Type.Object({}),
 			async execute(_id, _params, _signal, _onUpdate, ctx) {
 				const { page } = await buildCodeReviewPage(
