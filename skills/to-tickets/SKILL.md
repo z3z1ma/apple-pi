@@ -18,9 +18,7 @@ Work from whatever is already in the conversation context. If the user passes a 
 
 Honor an explicit output destination. When the source is `.ledger/<task>/spec.md`, inspect that bundle's `task.md` and confirm that its intent and current state still govern the undertaking. Otherwise inspect `.ledger/INDEX.md` and candidate live `task.md` files. One live ledger row alone does not establish ownership.
 
-If no bundle governs the work or ownership is ambiguous, include a destination choice when presenting the ticket breakdown. Ask the user to select or create a task, supply another destination, or stop. Call `ledger_add` only after explicit approval, and never invent a detached ticket location.
-
-The default local destination is one file per ticket under `.ledger/<task>/tickets/`. A repository-defined external tracker does not silently redirect the output. Remote publication requires an exact target and explicit authority.
+If no bundle governs the work or ownership is ambiguous, ask the operator to choose or create a task, or to name another destination; call `ledger_add` only after approval. Tickets go one file per ticket under `.ledger/<task>/tickets/`; publishing to an external tracker needs an exact target and explicit authority.
 
 ### 2. Explore the codebase (optional)
 
@@ -53,38 +51,15 @@ Describing an integration branch does not authorize creating it, committing to i
 
 Before presenting the graph, verify that every blocker names a proposed ticket, no ticket blocks itself, the graph has no cycles, blockers precede their dependents in the numbering, and at least one ticket has no blockers. Ticket numbers are identities in topological order, not global implementation priority or a requirement that independent frontier tickets run serially.
 
-### 4. Quiz the user
+### 4. Write the drafts, check them, and get sign-off
 
-Present the proposed breakdown as a numbered list. For each ticket, show:
+Write the drafts into the bundle, one file per ticket under `.ledger/<task>/tickets/<NN>-<slug>.md`, numbered from `01` in dependency order with blockers first, using the template below. A ticket that cannot answer "what can I demo or verify when this is done?" is a horizontal slice and must be redrafted. Each acceptance criterion grades observable behavior the ticket owns, is false just before the ticket starts (after its blockers are done), names the observation that would show it false, and does not merely restate the request.
 
-- **Title**: short descriptive name
-- **Blocked by**: which other tickets, if any, must complete first
-- **What it delivers**: the end-to-end behavior this ticket makes work
+Before the operator sees them, give a standing `principal-engineer` (call in one who has checked your tickets before, or hire one) the bundle path and ask it to check the slicing, the blocking edges, and the acceptance criteria against the repository. Fix what it finds.
 
-Ask the user:
+Then read and apply [`operator-sign-off`](../operator-sign-off/SKILL.md) for a ledger task (plan boundary): a cold reader, then `sign_off_task`. The verdict is the approval; apply its annotations to the ticket files. Until it is approved, the tickets are drafts and nobody implements them.
 
-- Does the granularity feel right? Too coarse or too fine?
-- Are the blocking edges correct: does each ticket only depend on tickets that genuinely gate it?
-- Should any tickets be merged or split further?
-
-A ticket that cannot answer "What can I demo or independently verify when this is done?" is a horizontal slice and must be redrafted.
-
-Before approval, review every acceptance criterion. It must grade observable behavior owned entirely by that ticket, be false immediately before the ticket starts after its blockers are done, name an observation that would show it false, and not merely restate the request. Keep the local template literal; these are review checks rather than additional fields.
-
-Iterate until the user approves the complete graph, then **stop and wait for explicit approval** before writing or publishing any ticket. When the destination or remote publication authority also needs confirmation, combine those choices into this checkpoint.
-
-### 5. Publish the approved tickets
-
-Publish one ticket per file or remote issue. The tickets are the same either way; only the representation of blocking edges changes.
-
-- **Local files** → write one file per ticket under `.ledger/<task>/tickets/<NN>-<slug>.md`, numbered from `01` in dependency order with blockers first. Each file's `Blocked by` field lists the numbers and titles it depends on. Use the local template below: one ticket per file, never a single combined ticket document.
-- **A remote issue tracker** → publish one issue per ticket in dependency order with blockers first so each ticket's blocking edges can reference real identifiers. Use the platform's native blocking or sub-issue relationship where it has one; otherwise put the blocking issues in the body. Apply a `ready-for-agent` label only when the repository defines that exact label and the approved publication includes it.
-
-Keep one canonical ticket set rather than mirroring full ticket bodies locally and remotely.
-
-Work the **frontier**: any ticket whose blockers are all done. For a purely linear chain that means top to bottom. `Status: ready-for-agent` means a local ticket is sufficiently specified for a fresh agent; it does not mean the ticket is currently on the frontier. These tickets are agent-ready by construction and do not need a separate triage workflow. Later status transitions belong to the implementation workflow.
-
-Do **not** close or modify any parent specification or issue.
+Work the **frontier**: any ticket whose blockers are all done. `Status: ready-for-agent` means a ticket is specified well enough for a fresh agent, not that it is on the frontier. Later status changes belong to the implementation workflow. Leave the parent specification or issue unchanged.
 
 <local-ticket-template>
 
@@ -101,52 +76,12 @@ Do **not** close or modify any parent specification or issue.
 
 </local-ticket-template>
 
-<issue-template>
-
-## Parent
-
-A reference to the parent issue on the tracker. Omit this section when the source was not an existing issue.
-
-## What to build
-
-The end-to-end behavior this ticket makes work, from the user's perspective, not layer-by-layer implementation.
-
-## Acceptance criteria
-
-- [ ] Criterion 1
-- [ ] Criterion 2
-
-## Blocked by
-
-- A reference to each blocking ticket, or "None (can start immediately)".
-
-</issue-template>
-
-In either form, avoid specific implementation file paths or code snippets: they go stale fast. Exception: if a prototype produced a snippet that encodes a decision more precisely than prose can—a state machine, reducer, schema, or type shape—inline it and note briefly that it came from a prototype. Trim it to the decision-rich parts, not a working demo, just the important bits.
+Avoid specific implementation file paths or code snippets: they go stale fast. Exception: if a prototype produced a snippet that encodes a decision more precisely than prose can—a state machine, reducer, schema, or type shape—inline it and note briefly that it came from a prototype. Trim it to the decision-rich parts, not a working demo, just the important bits.
 
 ## Regeneration after a specification pivot
 
-When an amended specification makes existing tickets stale, re-read the complete specification and current repository state, then present the complete replacement or removal plan through the same approval checkpoint.
-
-Before implementation starts, replace the generated local ticket set in place after approval. Remove stale files and recompute numbering, blockers, acceptance criteria, and the frontier so the task bundle presents one coherent current graph.
-
-After implementation starts:
-
-- preserve completed tickets that remain valid;
-- ask the user before changing any in-progress ticket;
-- replace affected unstarted tickets and update their blocking edges; and
-- preserve an invalidated completed ticket as execution history and represent the required correction with a new ticket.
-
-Any remotely published ticket edit, closure, replacement, or blocker mutation requires explicit authority.
+When an amended specification makes tickets stale, re-read it and the repository, redraft the affected tickets in place, and take the new graph through the same check and sign-off. Before implementation starts, replace the set and recompute numbering and blockers. After it starts, keep completed tickets that still hold, ask before changing an in-progress ticket, replace unstarted ones, and record a correction to completed work as a new ticket.
 
 ## Finish
 
-Report:
-
-- the canonical ticket paths or remote identifiers;
-- the approved blocker graph;
-- the initial frontier;
-- any prefactor or expand–contract sequence; and
-- whether the tickets are ready for separately invoked `/skill:implement`.
-
-This skill produces the artifact. Do not dispatch agents, implement tickets, commit work, close parent work, or create an integration branch.
+Report the ticket paths, the approved graph and its initial frontier, any prefactor or expand-contract sequence, and that the next step is `/skill:implement`. This skill writes tickets only: it implements, commits, and dispatches nothing.
