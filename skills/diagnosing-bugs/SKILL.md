@@ -9,21 +9,12 @@ A discipline for hard bugs. Skip phases only when explicitly justified.
 
 When exploring the codebase, read relevant domain-language pages in `.wiki/` (if they exist) to get a clear mental model of the relevant modules, and check ADRs in the area you're touching.
 
-## Authority and working record
+## Ground rules
 
-Follow the request's intent. A request to diagnose or explain why something fails stops after the confirmed cause and proposed fix. A request to fix or debug it authorizes the smallest local causal change after diagnosis. Ask when that intent is materially ambiguous. Neither path authorizes commits, pull requests, deployment, publication, production instrumentation, or other external effects.
-
-When an active ledger task governs the work, keep a compact redacted record of repro commands, minimised inputs, replay data, profiles, hypotheses, harnesses, and captured observations only when they have resume, handoff, or audit value. If that continuity requires persistence and no task governs the work, ask whether to create one or which existing task owns it before writing. Otherwise keep the exchange transient and do not create a task or evidence file solely for ceremony. Durable regression tests and their fixtures belong in the repository's normal test tree.
-
-Default loops to local or disposable environments. Replaying state-changing requests, stressing or fuzzing shared systems, profiling production, and adding production instrumentation require explicit authorization. Protect existing work when bisection changes a worktree or checked-out revision.
-
-## Redact
-
-This skill has you show commands, outputs and captured artifacts. **Redact every secret first**: write `<REDACTED>` in its place. Build loops against env vars, so the credential stays in the environment rather than in what you show. Captured artifacts carry auth headers: quote only the lines that carry the signal.
-
-Raw secret-bearing HAR files, logs, core dumps, and similar captures do not belong in the ledger. Keep them only in an explicitly approved secure or ephemeral location, and retain a redacted signal or pointer.
-
-If the redacted output is not enough to diagnose the bug, say so and ask the user.
+- Follow the request's intent: "diagnose" or "why" stops at the confirmed cause and a proposed fix; "fix" or "debug" authorizes the smallest local fix. Ask when it is unclear. Commits and other external effects need their own authority.
+- Run loops locally or in disposable environments. Replaying state-changing requests, load on shared systems, and production profiling or instrumentation need explicit authorization.
+- Write `<REDACTED>` for every secret you show, and keep credentials in environment variables. Keep secret-bearing captures out of the ledger.
+- When a ledger task governs the work, record what helps a later session resume: repro commands, minimised inputs, hypotheses, and the confirmed cause. Regression tests go in the normal test tree.
 
 ## Phase 1: Build a feedback loop
 
@@ -42,7 +33,7 @@ Spend disproportionate effort here. **Be aggressive. Be creative. Refuse to give
 7. **Property / fuzz loop.** If the bug is "sometimes wrong output", run 1000 random inputs and look for the failure mode.
 8. **Bisection harness.** If the bug appeared between two known states (commit, dataset, version), automate "boot at state X, check, repeat" so you can `git bisect run` it.
 9. **Differential loop.** Run the same input through old-version vs new-version (or two configs) and diff outputs.
-10. **Structured HITL loop.** Last resort. If a human must click, the root defines numbered operator actions, named observation fields with redaction rules, and an explicit predicate that turns those observations into a red or green verdict. Present the protocol through ordinary conversation; use `ask_user_question` only when it is available and a response fits its bounded structured-choice contract. Incorporate every returned observation into the diagnosis. A read-only child returns the exact protocol to its parent for presentation through ordinary chat. An interactive shell helper is operator-run in a real terminal outside agent `bash`. Any script run through Pi is non-interactive and limited to setup, probing, or normalising observations already supplied. Persist a compact redacted record under an existing active ledger task only when continuity warrants it. Never capture credentials.
+10. **Human-in-the-loop.** Last resort. Give the operator numbered actions, the observations to report, and the rule that turns them into red or green. Never ask for credentials.
 
 Build the right feedback loop, and the bug is 90% fixed.
 
@@ -66,12 +57,12 @@ Stop and say so explicitly. List what you tried. Ask the user for: (a) access to
 
 ### Completion criterion: a tight loop that goes red
 
-Phase 1 is done when the loop is **tight** and **red-capable**: you can name **one loop**—normally a command such as a script path, test invocation, or curl; a structured HITL procedure is the sole exception—that you have **already run at least once** (show its invocation and output or its named captured observations and interpreted verdict, redacted), and that is:
+Phase 1 is done when the loop is **tight** and **red-capable**: you can name **one loop**—normally a command such as a script path, test invocation, or curl; a human-in-the-loop procedure is the sole exception—that you have **already run at least once** (show its invocation and output or its named captured observations and interpreted verdict, redacted), and that is:
 
 - [ ] **Red-capable**: it drives the actual bug code path and asserts the **user's exact symptom**, so it can go red on this bug and green once fixed. Not "runs without erroring"; it must be able to _catch this specific bug_.
 - [ ] **Deterministic**: same verdict every run (flaky bugs: a pinned, high reproduction rate, per above).
 - [ ] **Fast**: seconds, not minutes.
-- [ ] **Agent-runnable**: commands run unattended; the sole exception is the structured HITL procedure above.
+- [ ] **Agent-runnable**: commands run unattended; the sole exception is the human-in-the-loop procedure above.
 
 If you catch yourself reading code to build a theory before this loop exists, **stop: jumping straight to a hypothesis is the exact failure this skill prevents.** No red-capable loop, no Phase 2.
 
@@ -106,6 +97,15 @@ Each hypothesis must be **falsifiable**: state the prediction it makes.
 If you cannot state the prediction, the hypothesis is a vibe: discard or sharpen it.
 
 **Show the ranked list to the user before testing.** They often have domain knowledge that re-ranks instantly ("we just deployed a change to #3"), or know hypotheses they've already ruled out. Cheap checkpoint, big time saver. Don't block on it; proceed with your ranking if the user is AFK.
+
+### When solo stalls: the hypothesis board
+
+When your first hypotheses fall without finding the cause, or the operator asks, convene a hypothesis board. You chair it. Staff the whole board with standing people, as [handbook-writing](../handbook-writing/SKILL.md) describes, before briefing anyone, and give every member the names of the others:
+
+- 2–3 investigators (default `code-review-specialist`; for a performance regression, `performance-engineering-lead`). Each gets the red loop, the minimised repro, and the hypotheses already ruled out with their evidence, but not your current favourite.
+- A `scientific-skeptic`, who checks before the probes start that the loop asserts the user's exact symptom, down to the input bytes and a control that should pass, and challenges each claimed cause and the scope of the fix.
+
+Each investigator writes ranked, falsifiable hypotheses alone, sends them to you privately, then probes its own top hypothesis against the shared loop, changing one variable at a time. Post the hypotheses and probe results in one `send_mail` thread to the board. A cause is confirmed when the narrowest probe flips the loop red, green, and red again as its prediction said, and the skeptic's challenge is answered. Then continue with Phase 5 yourself. Close with a short exchange on what made the diagnosis harder or easier, recorded in the task's `retrospective.md`.
 
 ## Phase 4: Instrument
 
