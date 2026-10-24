@@ -13,3 +13,5 @@
 - `.ledger/202610150034-code-context-evaluation/task.md` — planning — Evaluate code context sidecars on replayed failure tasks — Phase 5 of code-context sidecars: replay 3–5 historical failure tasks under Baseline, Read-only injection, and Full v1 (gate) and compare pre-edit constraint awareness, plan changes after blocks, violation rates, and token overhead.
 
 - `.ledger/202610232305-handbook-org-runtime/task.md` — planning — Organization runtime for the handbook model — Runtime changes the skill handbook needs: <manager> guidance for unroled roots, working sessions reporting to the coordinator by default, and plain workplace tool renames added as skills come up.
+
+- `.ledger/202610241039-rtk-one-rewrite-owner/task.md` — ready — Delete the rtk tool_call hook: one rewrite owner — Delete extensions/rtk.ts's tool_call hook and its _rtk/_rawCommand fields so prepareShellCommand is the only command rewriter; fold the duplicate guards, drop unused rtk options, skip host-binary tests when rtk is absent, update docs.
