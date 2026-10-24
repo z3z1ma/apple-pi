@@ -16,7 +16,7 @@ If a substantive product or architecture decision is still open, stop and return
 
 Use a destination explicitly supplied by the user. Otherwise inspect `.ledger/INDEX.md` and the candidate live `task.md` files. Use `spec.md` only in a bundle whose intent and current state clearly govern this undertaking; one live ledger row alone does not establish ownership. If no bundle governs the work or ownership is ambiguous, ask the user to select or create a task, supply another destination, or stop. When possible, combine that destination choice with the test-seam checkpoint below. Call `ledger_add` only after explicit approval, and never invent a detached specification path.
 
-This invocation authorizes the bounded local specification write after seam confirmation. It does not authorize remote issue creation, triage labels, commits, ticket generation, implementation, publication, or other external effects. A documented issue-tracker convention does not silently redirect the artifact; an external destination requires explicit authority.
+This invocation authorizes the local specification write after seam confirmation, and nothing beyond it: an external destination such as an issue tracker needs explicit authority.
 
 Explore the repository if its current implementation, test precedent, or vocabulary is not already known. Read relevant code, tests, task artifacts, domain-language and design pages in `.wiki/`, ADRs, repository documentation, and maintainer instructions. Use the project's domain vocabulary throughout. Treat wiki pages as supporting context and repository documentation, tests, ADRs, and maintainer instructions according to their established authority.
 
@@ -26,9 +26,9 @@ Link stable governing sources where they support a decision: relevant ADRs, repo
 
 Sketch the seams at which the feature will be tested. Prefer existing seams to new ones and use the highest useful observable seam. The fewer seams across the change, the better; the ideal number is one. If a new seam is needed, propose it at the highest point you can.
 
-Present the proposed seams to the user, then **stop and wait for confirmation** before writing the specification. This is the one bounded confirmation in `to-spec`, not a new design interview.
+Ask the operator to confirm the proposed seams with `ask_user_question` before writing the specification. This is the one confirmation in `to-spec`, not a new design interview.
 
-Record the confirmed seams in the specification. A later TDD invocation still requires its own fresh seam confirmation before writing or editing tests.
+Record the confirmed seams in the specification; later `tdd` and `implement` runs use them without asking again.
 
 ### 3. Write the specification
 
@@ -91,16 +91,9 @@ Any further settled context needed by a fresh reader. Put stable governing-sourc
 
 </spec-template>
 
-### 4. Report the result
+### 4. Sign-off
 
-Report:
-
-- the specification path;
-- the confirmed seams;
-- any unresolved factual blockers; and
-- whether the specification is ready for `/skill:to-tickets`.
-
-Do not start ticketing or implementation automatically.
+Read and apply [`operator-sign-off`](../operator-sign-off/SKILL.md) for a document: a cold reader, then `sign_off_document` on the specification. The operator's approval marks it ready for `/skill:to-tickets`. Report the path, the confirmed seams, the verdict, and any unresolved factual blockers. Start no ticketing or implementation yourself.
 
 ## Material redesign
 
