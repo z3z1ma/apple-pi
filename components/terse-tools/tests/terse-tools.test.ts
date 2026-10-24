@@ -36,6 +36,8 @@ import {
 	setActiveTheme,
 } from "../src/patch.js";
 
+beforeAll(() => initTheme());
+
 const HOME = homedir();
 
 const testTheme = {

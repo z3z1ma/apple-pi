@@ -11,7 +11,7 @@ Why: transcripts written before mail moved onto the database use it; they must s
 ## symbol:installMail
 
 Steering is set to `all` on the live `AgentSession` at every `before_agent_start`, not once.
-Why: extensions have no API for it, `AgentSession.setSteeringMode` would write the user's global settings, and Pi resets the mode from settings on reload; the session handle is known only once a run starts, which is why `liveSessions()` records sessions on `sendCustomMessage` as well as `prompt` (a session whose first run is mail-triggered).
+Why: extensions have no API for it, `AgentSession.setSteeringMode` would write the user's global settings, and Pi resets the mode from settings on reload. The shared session tracker registers before extension binding as well as on `sendCustomMessage` and `prompt`, so mail can read the live thinking-visibility setting on resume before any run. The renderer reads that setting when drawing, because tool expansion rebuilds custom messages but thinking toggles need not.
 Coupled: components/shared/src/forked-continuation.ts
 Verify: components/session-state/tests/mail.test.ts
 

@@ -1,22 +1,14 @@
-import { CustomMessageComponent, type ExtensionAPI, initTheme } from "@earendil-works/pi-coding-agent";
+import { CustomMessageComponent, initTheme } from "@earendil-works/pi-coding-agent";
 import { visibleWidth } from "@earendil-works/pi-tui";
-import { beforeAll, expect, test } from "vitest";
+import { afterEach, beforeAll, expect, test } from "vitest";
+import { fauxSession } from "../../../tests/helpers/faux-session.js";
 import { installMail, MAIL_CUSTOM_TYPE, type Mail } from "../src/mail.js";
 
 const strip = (text: string) => text.replace(/\x1b\[[0-9;]*m/g, "");
-
-function mailRenderer() {
-	let renderer: ConstructorParameters<typeof CustomMessageComponent>[1];
-	const pi = {
-		on: () => {},
-		registerTool: () => {},
-		registerMessageRenderer: (_type: string, render: typeof renderer) => {
-			renderer = render;
-		},
-	} as unknown as ExtensionAPI;
-	installMail(pi);
-	return renderer;
-}
+const cleanup: Array<() => Promise<void>> = [];
+afterEach(async () => {
+	for (const dispose of cleanup.splice(0)) await dispose();
+});
 
 const mail: Mail = {
 	id: "m-1",
@@ -27,34 +19,62 @@ const mail: Mail = {
 	body: "The PR is green.\nNext, verify the dashboard against the canary before Friday and report what you could not check.",
 };
 
-const component = (expanded: boolean) => {
-	const message = {
-		role: "custom",
-		customType: MAIL_CUSTOM_TYPE,
-		content: "",
-		display: true,
-		details: mail,
-		timestamp: 0,
-	};
-	const rendered = new CustomMessageComponent(message as never, mailRenderer());
-	rendered.setExpanded(expanded);
-	return rendered;
-};
+async function fixture(hidden: boolean, toolsExpanded: boolean) {
+	const run = await fauxSession([installMail], [], []);
+	cleanup.push(async () => {
+		await run.session.extensionRunner?.emit({ type: "session_shutdown", reason: "quit" });
+		run.dispose();
+	});
+	run.session.settingsManager.setHideThinkingBlock(hidden);
+	const renderer = run.session.extensionRunner?.getMessageRenderer(MAIL_CUSTOM_TYPE);
+	expect(renderer).toBeDefined();
+	const component = new CustomMessageComponent(
+		{
+			role: "custom",
+			customType: MAIL_CUSTOM_TYPE,
+			content: "",
+			display: true,
+			details: mail,
+			timestamp: 0,
+		},
+		renderer,
+	);
+	component.setExpanded(toolsExpanded);
+	return { component, run };
+}
 
 beforeAll(() => initTheme("dark"));
 
-test("collapsed mail is one line in the stream: the label, sender and subject, and the start of the body", () => {
-	const lines = component(false).render(60);
+test.each([false, true])("hidden thinking keeps mail collapsed, tools expanded=%s", async (toolsExpanded) => {
+	const { component, run } = await fixture(true, toolsExpanded);
+	const lines = component.render(60);
+	expect(run.requests).toHaveLength(0);
 	expect(lines).toHaveLength(1);
 	expect(visibleWidth(lines[0] ?? "")).toBeLessThanOrEqual(60);
 	expect(strip(lines[0] ?? "")).toMatch(/^\u2709 Mail\(Nana Komatsu \u00b7 Release check: The PR is green\..*\.\.\.$/);
 });
 
-test("expanded mail shows the whole body under the label", () => {
-	const lines = component(true).render(200).map(strip);
-	expect(lines[0]).toBe("\u2709 Mail(Nana Komatsu \u00b7 Release check) 2026-10-23T05:34:22.202Z");
-	expect(lines.slice(1)).toEqual([
-		"  The PR is green.",
-		"  Next, verify the dashboard against the canary before Friday and report what you could not check.",
-	]);
+test.each([false, true])(
+	"visible thinking expands mail before the first prompt, tools expanded=%s",
+	async (toolsExpanded) => {
+		const { component, run } = await fixture(false, toolsExpanded);
+		const lines = component.render(200).map(strip);
+		expect(run.requests).toHaveLength(0);
+		expect(lines[0]).toBe("\u2709 Mail(Nana Komatsu \u00b7 Release check) 2026-10-23T05:34:22.202Z");
+		expect(lines.slice(1)).toEqual([
+			"  The PR is green.",
+			"  Next, verify the dashboard against the canary before Friday and report what you could not check.",
+		]);
+	},
+);
+
+test("an existing mail follows thinking toggles without rebuilding or toggling tools", async () => {
+	const { component, run } = await fixture(true, true);
+	expect(component.render(200)).toHaveLength(1);
+	run.session.settingsManager.setHideThinkingBlock(false);
+	expect(component.render(200).map(strip).join("\n")).toContain("  The PR is green.\n  Next, verify");
+	component.setExpanded(false);
+	expect(component.render(200)).toHaveLength(3);
+	run.session.settingsManager.setHideThinkingBlock(true);
+	expect(component.render(200)).toHaveLength(1);
 });

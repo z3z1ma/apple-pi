@@ -1,6 +1,7 @@
 import { homedir } from "node:os";
-import type { Theme } from "@earendil-works/pi-coding-agent";
+import { highlightCode, type Theme } from "@earendil-works/pi-coding-agent";
 import { Markdown, type MarkdownTheme, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
+import { diffLines, fileTextLines, outputTextLines, outputWarningLines } from "./content-formatting.js";
 import type { EditDiffSummary, ToolStatus } from "./types.js";
 
 const HOME = homedir();
@@ -552,16 +553,8 @@ function formatEditExpanded(
 	}
 	const { added, removed, lines } = parseDiff(diffText);
 	const summaryLine = `  └ ${theme.fg("toolDiffAdded", `+${added}`)} / ${theme.fg("toolDiffRemoved", `-${removed} lines`)}${lines.length === 0 && isLast ? collapseHint : ""}`;
-	const displayLines = lines.slice(0, MAX_PREVIEW_LINES);
-	const detailLines = displayLines.map((line, idx) => {
-		let styled: string;
-		if (line.type === "added") {
-			styled = theme.fg("toolDiffAdded", line.content);
-		} else if (line.type === "removed") {
-			styled = theme.fg("toolDiffRemoved", line.content);
-		} else {
-			styled = theme.fg("dim", line.content);
-		}
+	const displayLines = diffLines(diffText, theme).slice(0, MAX_PREVIEW_LINES);
+	const detailLines = displayLines.map((styled, idx) => {
 		const isVeryLast = isLast && idx === displayLines.length - 1 && lines.length <= MAX_PREVIEW_LINES;
 		const formatted = `    ${styled}${isVeryLast ? collapseHint : ""}`;
 		return width !== undefined && width > 0 && visibleWidth(formatted) > width
@@ -593,10 +586,15 @@ function formatErrorExpanded(
 	result: { content?: Array<{ type: string; text?: string }> },
 	isLast: boolean,
 	collapseHint: string,
+	theme: Theme,
 	width?: number,
 ): string[] {
-	const errorText = result.content?.find((c) => c.type === "text")?.text || "Command failed";
-	const errorLines = errorText.trim().split("\n");
+	const errorText =
+		result.content
+			?.filter((c) => c.type === "text")
+			.map((c) => c.text ?? "")
+			.join("\n") || "Command failed";
+	const errorLines = outputTextLines(errorText.trim(), theme, "error");
 	const summaryLine = `  └ ${errorLines[0]}${errorLines.length === 1 && isLast ? collapseHint : ""}`;
 	const detailLines = errorLines.slice(1, MAX_PREVIEW_LINES).map((line, idx, arr) => {
 		const isVeryLast = isLast && idx === arr.length - 1;
@@ -644,38 +642,43 @@ function formatToolSuccessExpanded(
 	collapseHint: string,
 	width?: number,
 ): string[] {
-	const contentText = result.content?.find((c) => c.type === "text")?.text || "";
+	const contentText =
+		result.content
+			?.filter((c) => c.type === "text")
+			.map((c) => c.text ?? "")
+			.join("\n") || "";
 
 	switch (toolName) {
 		case "edit":
 			return formatEditExpanded(headerLine, args, result, isLast, theme, collapseHint, width);
 
 		case "read": {
-			const lines = contentText.split("\n");
+			const lines = fileTextLines(contentText, args, theme);
 			const summaryLine = `  └ Read ${lines.length} lines${lines.length === 0 && isLast ? collapseHint : ""}`;
 			return formatLineListDetail(headerLine, summaryLine, lines, isLast, collapseHint, width);
 		}
 
 		case "write": {
-			const lines = contentText.split("\n");
+			const lines =
+				typeof args?.content === "string" ? fileTextLines(args.content, args, theme) : contentText.split("\n");
 			const summaryLine = `  └ Wrote ${lines.length} lines${lines.length === 0 && isLast ? collapseHint : ""}`;
 			return formatLineListDetail(headerLine, summaryLine, lines, isLast, collapseHint, width);
 		}
 
 		case "grep": {
-			const lines = contentText.trim().split("\n").filter(Boolean);
+			const lines = fileTextLines(contentText.trim(), undefined, theme).filter((line) => stripAnsi(line));
 			const summaryLine = `  └ Found ${lines.length} matches${lines.length === 0 && isLast ? collapseHint : ""}`;
 			return formatLineListDetail(headerLine, summaryLine, lines, isLast, collapseHint, width);
 		}
 
 		case "find": {
-			const lines = contentText.trim().split("\n").filter(Boolean);
+			const lines = fileTextLines(contentText.trim(), undefined, theme).filter((line) => stripAnsi(line));
 			const summaryLine = `  └ Found ${lines.length} files${lines.length === 0 && isLast ? collapseHint : ""}`;
 			return formatLineListDetail(headerLine, summaryLine, lines, isLast, collapseHint, width);
 		}
 
 		case "ls": {
-			const lines = contentText.trim().split("\n").filter(Boolean);
+			const lines = fileTextLines(contentText.trim(), undefined, theme).filter((line) => stripAnsi(line));
 			const summaryLine = `  └ ${lines.length} entries${lines.length === 0 && isLast ? collapseHint : ""}`;
 			return formatLineListDetail(headerLine, summaryLine, lines, isLast, collapseHint, width);
 		}
@@ -693,7 +696,7 @@ function formatToolSuccessExpanded(
 						: summaryLine;
 				return [safeHeader, safeSummary];
 			}
-			const lines = contentText.trim().split("\n");
+			const lines = fileTextLines(contentText.trim(), undefined, theme);
 			const summaryLine = `  └ ${lines[0]}${lines.length === 1 && isLast ? collapseHint : ""}`;
 			return formatLineListDetail(headerLine, summaryLine, lines.slice(1), isLast, collapseHint, width);
 		}
@@ -710,6 +713,7 @@ export function formatExpandedLines(
 	cwd?: string,
 	width?: number,
 	isRtk = false,
+	previewDiff?: string,
 ): string[] {
 	const status: ToolStatus = isPartial ? "running" : result?.isError ? "error" : "success";
 	const bullet = formatStatusBullet(status, theme, isRtk);
@@ -718,6 +722,28 @@ export function formatExpandedLines(
 	const headerLine = formatHeaderLine(bullet, name, argStr, width);
 
 	if (isPartial || !result) {
+		if (toolName === "edit" && previewDiff) {
+			return formatEditExpanded(
+				headerLine,
+				args,
+				{ details: { diff: previewDiff } },
+				isLast,
+				theme,
+				` ${theme.fg("muted", "(ctrl+o to collapse)")}`,
+				width,
+			);
+		}
+		if (toolName === "write" && typeof args?.content === "string") {
+			const lines = fileTextLines(args.content, args, theme);
+			return formatLineListDetail(
+				headerLine,
+				"  └ Writing...",
+				lines,
+				isLast,
+				` ${theme.fg("muted", "(ctrl+o to collapse)")}`,
+				width,
+			);
+		}
 		const summaryLine = `  └ running...${isLast ? ` ${theme.fg("muted", "(ctrl+o to collapse)")}` : ""}`;
 		const safeHeader =
 			width !== undefined && width > 0 && visibleWidth(headerLine) > width
@@ -732,11 +758,14 @@ export function formatExpandedLines(
 
 	const collapseHint = ` ${theme.fg("muted", "(ctrl+o to collapse)")}`;
 
-	if (result.isError) {
-		return formatErrorExpanded(headerLine, result, isLast, collapseHint, width);
+	const lines = result.isError
+		? formatErrorExpanded(headerLine, result, isLast, collapseHint, theme, width)
+		: formatToolSuccessExpanded(toolName, args, result, headerLine, isLast, theme, collapseHint, width);
+	for (const warning of outputWarningLines(result.details, theme)) {
+		const line = `    ${warning}`;
+		lines.push(width !== undefined && width > 0 ? truncateToWidth(line, width, "...") : line);
 	}
-
-	return formatToolSuccessExpanded(toolName, args, result, headerLine, isLast, theme, collapseHint, width);
+	return lines;
 }
 
 export function formatCompactionRule(title: string, width: number, theme: Theme): string {
@@ -834,6 +863,7 @@ export function makeMarkdownTheme(theme: Theme): MarkdownTheme {
 		italic: (text) => theme.italic(text),
 		underline: (text) => theme.underline(text),
 		strikethrough: (text) => theme.strikethrough(text),
+		highlightCode,
 	};
 }
 

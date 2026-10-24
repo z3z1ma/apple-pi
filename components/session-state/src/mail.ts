@@ -300,27 +300,39 @@ export function installMail(pi: ExtensionAPI): void {
 	// Pi drains one queued steer per model request by default: a busy person's backlog of mail would cost one request
 	// per mail and keep the run going after the model wanted to stop. Every waiting mail arrives at the next boundary.
 	trackLiveSessions();
+	let session: ReturnType<typeof liveSession>;
+	pi.on("session_start", (_event, ctx) => {
+		session = liveSession(ctx);
+	});
+	pi.on("session_shutdown", () => {
+		session = undefined;
+	});
 	pi.on("before_agent_start", (_event, ctx) => {
 		const session = liveSession(ctx);
 		if (session) session.agent.steeringMode = "all";
 	});
-	// Collapsed, a mail is one line in the stream like a tool call; expanded (ctrl+o), it shows the whole body.
+	// Mail follows thinking visibility, independently of tool expansion.
 	renderInline(MAIL_CUSTOM_TYPE);
-	pi.registerMessageRenderer<Mail>(MAIL_CUSTOM_TYPE, (message, { expanded }, theme) => {
+	pi.registerMessageRenderer<Mail>(MAIL_CUSTOM_TYPE, (message, _options, theme) => {
 		const details = message.details;
 		if (!details) return undefined;
 		const from = details.fromName ?? details.from;
 		const about = details.subject ? `${from} \u00b7 ${details.subject}` : from;
 		const label = `${theme.fg("mdLink", "\u2709")} ${theme.bold(theme.fg("mdLink", "Mail"))}`;
-		if (!expanded) {
-			const preview = details.body.replace(/\s+/g, " ").trim();
-			return new TruncatedText(`${label}(${about}: ${theme.fg("muted", preview)})`, 0, 0);
-		}
-		const body = details.body
-			.split("\n")
-			.map((line) => `  ${theme.fg("muted", line)}`)
-			.join("\n");
-		return new Text(`${label}(${about}) ${theme.fg("dim", details.ts)}\n${body}`, 0, 0);
+		return {
+			invalidate() {},
+			render(width) {
+				if (!session || session.settingsManager.getHideThinkingBlock()) {
+					const preview = details.body.replace(/\s+/g, " ").trim();
+					return new TruncatedText(`${label}(${about}: ${theme.fg("muted", preview)})`, 0, 0).render(width);
+				}
+				const body = details.body
+					.split("\n")
+					.map((line) => `  ${theme.fg("muted", line)}`)
+					.join("\n");
+				return new Text(`${label}(${about}) ${theme.fg("dim", details.ts)}\n${body}`, 0, 0).render(width);
+			},
+		};
 	});
 	pi.registerTool(createSendMailTool());
 	pi.registerTool(createReplyTool());

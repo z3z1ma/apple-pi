@@ -1,4 +1,4 @@
-import type { Theme } from "@earendil-works/pi-coding-agent";
+import { highlightCode, type Theme } from "@earendil-works/pi-coding-agent";
 import {
 	type Component,
 	isKeyRelease,
@@ -12,6 +12,12 @@ import {
 	wrapTextWithAnsi,
 } from "@earendil-works/pi-tui";
 import { createViewerKeys, type ViewerKeys } from "../../shared/src/viewer-keys.js";
+import {
+	fileTextLines,
+	outputTextLines,
+	outputWarningLines,
+	diffLines as renderedDiffLines,
+} from "./content-formatting.js";
 import { formatStatusBullet, formatToolName, parseDiff } from "./formatters.js";
 import type { ToolStatus } from "./types.js";
 
@@ -38,7 +44,7 @@ export interface ToolInspection {
 
 type ToolViewerTab = "inputs" | "output";
 
-function formatInputsLines(args: unknown, theme: Theme): string[] {
+function formatInputsLines(args: unknown, theme: Theme, toolName: string, fileArgs = args): string[] {
 	if (!args || (typeof args === "object" && Object.keys(args).length === 0)) {
 		return [theme.fg("muted", "(no arguments)")];
 	}
@@ -50,15 +56,26 @@ function formatInputsLines(args: unknown, theme: Theme): string[] {
 	for (let i = 0; i < entries.length; i++) {
 		const [key, val] = entries[i];
 		const header = theme.bold(theme.fg("accent", `${key}:`));
-		if (typeof val === "string" && val.includes("\n")) {
-			lines.push(header, ...val.split("\n").map((l) => `  ${l}`));
+		const source =
+			(toolName === "write" && key === "content") || (toolName === "edit" && (key === "oldText" || key === "newText"));
+		const python = toolName === "pi_exec" && key === "code";
+		if (typeof val === "string" && (val.includes("\n") || source || python)) {
+			const body = python
+				? highlightCode(val.replace(/\t/g, "   "), "python")
+				: source
+					? fileTextLines(val, fileArgs, theme)
+					: val.split("\n");
+			lines.push(header, ...body.map((l) => `  ${l}`));
+		} else if (toolName === "edit" && key === "edits" && Array.isArray(val)) {
+			lines.push(header);
+			for (const [index, edit] of val.entries()) {
+				lines.push(
+					theme.fg("muted", `  Edit ${index + 1}`),
+					...formatInputsLines(edit, theme, toolName, fileArgs).map((line) => `    ${line}`),
+				);
+			}
 		} else if (typeof val === "object" && val !== null) {
-			lines.push(
-				header,
-				...JSON.stringify(val, null, 2)
-					.split("\n")
-					.map((l) => `  ${l}`),
-			);
+			lines.push(header, ...highlightCode(JSON.stringify(val, null, 2), "json").map((l) => `  ${l}`));
 		} else {
 			const textVal =
 				val === undefined ? theme.fg("dim", "undefined") : val === null ? theme.fg("dim", "null") : String(val);
@@ -78,14 +95,12 @@ function formatDiffSection(details: unknown, theme: Theme): string[] {
 		theme.bold(`Diff: ${theme.fg("toolDiffAdded", `+${added}`)} / ${theme.fg("toolDiffRemoved", `-${removed}`)} lines`),
 		"",
 	];
-	for (const dl of lines) {
-		const color = dl.type === "added" ? "toolDiffAdded" : dl.type === "removed" ? "toolDiffRemoved" : "dim";
-		diffLines.push(theme.fg(color, dl.content));
-	}
+	diffLines.push(...renderedDiffLines(diffText, theme));
 	return diffLines;
 }
 
-function formatOutputLines(result: ToolInspection["result"], isPartial: boolean, theme: Theme): string[] {
+function formatOutputLines(inspection: ToolInspection, theme: Theme): string[] {
+	const { result, isPartial, toolName, args } = inspection;
 	if (!result) {
 		return [
 			isPartial
@@ -100,7 +115,11 @@ function formatOutputLines(result: ToolInspection["result"], isPartial: boolean,
 	if (result.content) {
 		for (const block of result.content) {
 			if (block.type === "text" && block.text) {
-				lines.push(...block.text.split("\n"));
+				lines.push(
+					...(toolName === "read" && !result.isError
+						? fileTextLines(block.text, args, theme)
+						: outputTextLines(block.text, theme, result.isError ? "error" : "toolOutput")),
+				);
 			} else if (block.type === "image") {
 				const size = block.data ? `, ~${Math.round((block.data.length * 3) / 4096)} KB` : "";
 				lines.push(theme.fg("accent", `[Image: ${block.mimeType || "image"}${size}]`));
@@ -109,6 +128,7 @@ function formatOutputLines(result: ToolInspection["result"], isPartial: boolean,
 			}
 		}
 	}
+	lines.push(...outputWarningLines(result.details, theme));
 	const diffLines = formatDiffSection(result.details, theme);
 	if (diffLines.length > 0) {
 		if (lines.length > 0) lines.push("");
@@ -121,9 +141,7 @@ function formatOutputLines(result: ToolInspection["result"], isPartial: boolean,
 			if (lines.length > 0) lines.push("");
 			lines.push(
 				theme.bold(theme.fg("accent", "Details:")),
-				...JSON.stringify(extra, null, 2)
-					.split("\n")
-					.map((l) => `  ${l}`),
+				...highlightCode(JSON.stringify(extra, null, 2), "json").map((l) => `  ${l}`),
 			);
 		}
 	}
@@ -332,8 +350,8 @@ export class ToolViewer implements Component {
 
 		const raw =
 			this._activeTab === "inputs"
-				? formatInputsLines(inspection.args, th)
-				: formatOutputLines(inspection.result, inspection.isPartial, th);
+				? formatInputsLines(inspection.args, th, inspection.toolName)
+				: formatOutputLines(inspection, th);
 
 		const wrapped: string[] = [];
 		for (const r of raw) {

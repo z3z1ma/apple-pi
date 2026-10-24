@@ -22,7 +22,7 @@ By default, every tool execution renders as a single, terse line:
 - **Arguments**: Concise, single-line string representation (e.g. `Bash(git status --short --branch)`, `Read(~/src/index.ts:10-40)`, `Search(pattern in path)`). File paths shorten `$HOME` to `~`.
 - **Contiguous sequence spacing**: Consecutive collapsed tool calls sit directly on adjacent lines without blank separators or padding boxes across multi-turn agent execution loops.
 - **Expansion hint**: Only the very last tool call in a contiguous block displays `(ctrl+o to expand)` in muted text.
-- **Mail and pair notes join the stream**: delivered [mail](organization.md) renders as one line in the theme's link color, `✉ Mail(<sender> · <subject>: <start of the body>...)`, truncated to the terminal width; with tools expanded (`ctrl+o`) it shows the whole body. Pair notes render as one bullet line each. Neither adds the blank lines Pi puts around other custom messages (`components/shared/src/compact-custom-message.ts`).
+- **Mail and pair notes join the stream**: delivered [mail](organization.md) renders as one line in the theme's link color, `✉ Mail(<sender> · <subject>: <start of the body>...)`, truncated to the terminal width; it shows the whole body when thinking blocks are visible (`Ctrl+T` by default), independently of tool expansion. Existing mail follows that setting immediately, including restored history. Pair notes render as one bullet line each. Neither adds the blank lines Pi puts around other custom messages (`components/shared/src/compact-custom-message.ts`).
 
 ### Antigravity Thought Cards and Thinking Spinner
 
@@ -54,10 +54,15 @@ Pressing `Ctrl+O` (`app.tools.expand`) toggles inline previews for all tool call
 ```
 
 - **Branch indicator**: Detail lines are anchored by `  └ <summary>` followed by 4-space indented detail lines.
-- **Diff rendering**: `Edit` tool calls display `  └ +<added> / -<removed> lines` with syntax-highlighted diff lines using theme colors (`toolDiffAdded`, `toolDiffRemoved`, `dim`).
+- **Source rendering**: expanded `Read` output and `Write` content use Pi's extension-based, theme-aware syntax highlighting. Write content is also visible while the call is running. Unknown file types use the normal output color; errors stay in the error color.
+- **Diff rendering**: native `Edit` diffs keep Pi's line numbers and word-level change emphasis, including Pi's preview while the call is running. `Edit` tool calls display `  └ +<added> / -<removed> lines` with syntax-highlighted diff lines using theme colors (`toolDiffAdded`, `toolDiffRemoved`, `dim`).
 - **Failure rendering**: Errors clearly display the error message on the summary line followed by stderr lines.
-- **Collapse hint**: Only the very last line of the last expanded tool displays `(ctrl+o to collapse)` in muted text.
+- **Command colors**: emitted ANSI colors and text styles survive in the transcript and inspector, including styles that span multiple output lines. Each output line resets styling before the UI adds its hints or borders. Commands still run with piped output, so programs that disable automatic colors may need their own option, such as `--color=always`; Apple Pi leaves that choice to the command.
+- **Warnings**: output truncation, search/list limits, and retained full-output paths remain visible in the warning color, even when the compact preview omits the output tail.
+- **Collapse hint**: The last expanded tool displays `(ctrl+o to collapse)` in muted text; output warnings follow its preview.
 - **Expanded spacing**: Expanded tool calls are separated by a blank line for visual clarity.
+
+User messages keep Pi's Markdown theme, fenced-code syntax colors, and Markdown transforms inside the accent-rail layout. Assistant Markdown and native image rendering remain with Pi.
 
 ## Tool Inspector and Mouse Interaction
 
@@ -65,7 +70,7 @@ Use the inspector to read one tool call's inputs and retained output without exp
 
 In fullscreen mode, left-click the gold tool name to open a read-only inspector. Clicking anywhere else in that tool's header row expands or collapses only that call. Clicking expanded output also collapses that call. Blank separator rows do not toggle calls, and dragging remains available for transcript text selection. `Ctrl+O` still controls global tool expansion.
 
-The inspector has **Inputs** and **Output** tabs. Inputs show every argument. Top-level multiline strings, such as commands and prompts, display as readable text; nested objects and arrays display as formatted JSON. Output shows all retained text blocks and structured result details, including edit diffs, without the transcript preview's line limit. Image results are identified but are not rendered inside the inspector. Running calls update while the inspector is open.
+The inspector has **Inputs** and **Output** tabs. Inputs show every argument. Read output, Write content, and Edit source arguments use the same syntax colors as Pi's native renderer; `pi_exec`'s `code` argument uses Python syntax colors, structured arguments and details use JSON highlighting, and native edit diffs retain word-level change emphasis. Top-level multiline strings, such as commands and prompts, display as readable text; nested objects and arrays display as formatted JSON. Output shows all retained text blocks and structured result details, including edit diffs, without the transcript preview's line limit. Image results are identified but are not rendered inside the inspector. Running calls update while the inspector is open.
 
 Use Tab or Shift+Tab to switch tabs, the mouse wheel or arrow keys to scroll, Page Up/Page Down to page, and Home/End to jump. Esc or `q` closes the inspector and returns to the transcript.
 

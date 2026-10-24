@@ -440,6 +440,7 @@ export function installTerseToolRenderer(): void {
 				(this as any).cwd,
 				width,
 				isRtk,
+				(this as any).rendererState?.callComponent?.preview?.diff,
 			);
 			if (hasTextBefore) {
 				lines.unshift("");
@@ -537,8 +538,8 @@ export function installTerseToolRenderer(): void {
 		}
 
 		try {
-			const childMarkdown = (this as any).children?.[0]?.children?.[0];
-			const mdTheme = makeMarkdownTheme(theme);
+			const childMarkdown = (this as any).children?.[0];
+			const mdTheme = (this as any).markdownTheme ?? makeMarkdownTheme(theme);
 			const defaultTextStyle = {
 				color: (content: string) => theme.fg("userMessageText", content),
 			};

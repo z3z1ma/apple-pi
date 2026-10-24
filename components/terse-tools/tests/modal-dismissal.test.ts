@@ -19,7 +19,7 @@ afterEach(() => {
 
 function fixture() {
 	let input = (_data: string) => {};
-	const terminal: Terminal = {
+	const terminal = {
 		columns: 100,
 		rows: 30,
 		kittyProtocolActive: false,
@@ -38,7 +38,7 @@ function fixture() {
 		setTitle() {},
 		setProgress() {},
 		setProgramStatus() {},
-	};
+	} satisfies Terminal;
 	const tui = new TuiAltScreen(terminal);
 	running.push(tui);
 	const backgroundClick = vi.fn();

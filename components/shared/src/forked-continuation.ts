@@ -26,7 +26,7 @@ const SESSIONS_KEY = Symbol.for("apple-pi.forked-continuation.sessions");
 /**
  * Pi gives extensions no handle on their AgentSession. Remember each session
  * by its session manager, which is the object extension contexts expose, when
- * it starts a run: from a prompt, or from an extension message that triggers one.
+ * the host binds extensions or it starts a run.
  */
 function liveSessions(): WeakMap<object, AgentSession> {
 	const prototype = AgentSession.prototype as AgentSession & Record<PropertyKey, unknown>;
@@ -34,6 +34,11 @@ function liveSessions(): WeakMap<object, AgentSession> {
 	if (existing) return existing;
 	const sessions = new WeakMap<object, AgentSession>();
 	Object.defineProperty(prototype, SESSIONS_KEY, { value: sessions });
+	const bindExtensions = prototype.bindExtensions;
+	prototype.bindExtensions = function (this: AgentSession, ...args: Parameters<AgentSession["bindExtensions"]>) {
+		sessions.set(this.sessionManager, this);
+		return bindExtensions.apply(this, args);
+	};
 	const prompt = prototype.prompt;
 	prototype.prompt = function (this: AgentSession, ...args: Parameters<AgentSession["prompt"]>) {
 		sessions.set(this.sessionManager, this);
@@ -84,7 +89,7 @@ export function liveSession(ctx: ExtensionContext): AgentSession | undefined {
 	return liveSessions().get(ctx.sessionManager);
 }
 
-/** Start remembering sessions as they prompt; call while installing, so `liveSession` finds the session later. */
+/** Track sessions before binding and prompting, so startup handlers can find them too. */
 export function trackLiveSessions(): void {
 	liveSessions();
 }
