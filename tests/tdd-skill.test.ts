@@ -4,8 +4,6 @@ import { join } from "node:path";
 import { loadSkills } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it } from "vitest";
 
-const skillPath = "skills/tdd/SKILL.md";
-
 describe("tdd skill", () => {
 	it("loads as a model-invoked skill", () => {
 		const agentDir = mkdtempSync(join(tmpdir(), "apple-pi-tdd-"));
