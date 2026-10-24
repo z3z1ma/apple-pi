@@ -42,5 +42,5 @@ The `bash` tool includes an optional `verbatim` parameter:
 
 ## Configuration & Environment Variables
 
-- **`RTK_DISABLED`**: Set `RTK_DISABLED=1` or `RTK_DISABLED=true` in the environment to completely disable RTK detection, command rewriting, and system prompt injection.
+- **`RTK_DISABLED`**: Set `RTK_DISABLED=1` in the environment to completely disable RTK detection, command rewriting, and system prompt injection.
 - **Fail-Open Behavior**: If the `rtk` binary is missing from the system `PATH`, all features disable cleanly. Commands run normally with zero overhead or execution failures.
