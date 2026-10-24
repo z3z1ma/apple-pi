@@ -27,7 +27,7 @@ See [tests.md](references/tests.md) for examples and [mocking.md](references/moc
 
 A **seam** is the public boundary you test at: the interface where you observe behavior without reaching inside. Tests live at seams, never against internals. "Public" means the interface presented to the behavior's real callers; it does not require a package-wide export.
 
-**Test only at explicitly confirmed seams.** On every TDD invocation, before writing or editing any test, list the exact seams you propose and explain what each catches, what it misses, and its feedback cost. Stop and wait for the operator to confirm them. An approved specification, repository convention, existing test, wiki page, or ledger task may inform the proposal but does not replace that fresh confirmation. If the work later needs a new seam, stop and confirm that addition before writing its test.
+**Test only at confirmed seams.** Use the seams the specification or ticket confirmed. For a seam nobody confirmed, including one the work reveals mid-loop, propose it with what it catches, what it misses, and its feedback cost, and ask the operator with `ask_user_question` before writing its test.
 
 Ask: "What's the public interface, and which seams should we test?"
 
@@ -43,4 +43,4 @@ When the shape of that interface is itself in question—how deep the module is,
 
 - **Red before green.** Write one failing test, run it, and confirm it fails for the intended missing behavior. Then write only enough code to pass it. A test that fails because its setup, import, fixture, or assertion is broken has not established red.
 - **One slice at a time.** One confirmed seam, one test, and one minimal implementation per cycle. Run the test green before selecting the next behavior.
-- **Refactoring is not part of the loop.** It belongs to the later independent `/skill:code-review` stage, not the red → green implementation cycle.
+- **Refactoring is not part of the loop.** It belongs to the later independent `code-review` stage, not the red → green implementation cycle.
