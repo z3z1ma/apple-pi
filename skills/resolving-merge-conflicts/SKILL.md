@@ -5,82 +5,38 @@ description: "Use when you need to resolve an in-progress git merge/rebase confl
 
 # Resolving Merge Conflicts
 
-Resolve the current merge or rebase by recovering why both sides exist, not by making conflict markers disappear. Preserve both intents where they are compatible. Where they conflict, follow the confirmed integration goal and report the behavior dropped and the trade-off.
+Resolve the current merge or rebase by recovering why each side exists, not by making markers disappear. Keep both intents where they are compatible; where they conflict, follow the confirmed integration goal and report what was dropped and why.
 
-This skill applies only when Git reports an active merge or rebase with unmerged index entries. A cherry-pick, revert, stash apply/pop conflict, or non-conflict interactive-rebase stop has different continuation semantics: stop and report that this skill does not own it. A merge that completed but now misbehaves belongs to `diagnosing-bugs`.
+This skill covers an active merge or rebase with unmerged index entries. A cherry-pick, revert, or stash conflict, or a non-conflict rebase stop, has different continuation rules: report that this skill does not own it. A completed merge that misbehaves belongs to `diagnosing-bugs`. Resolve alone, one entry at a time: one writer in the index.
 
-Keep this work root-owned and sequential. It needs no agent fan-out or Pi Exec graph.
+## 1. Establish the baseline
 
-## 1. Establish the operation and baseline
+Inspect `git status`, the operation, `HEAD`, the merge side and base (or the commit being replayed and the remaining rebase plan), and every unmerged entry, including modify/delete, rename, binary, mode, and submodule conflicts without markers. Record the paths already staged, unstaged, or untracked, and preserve them.
 
-Before editing:
+Name commits, never labels: in a rebase, `ours` is the destination plus the commits already replayed and `theirs` the commit being replayed, the reverse of a merge.
 
-1. Inspect `git status`, history, and every unmerged index entry.
-2. Identify the exact operation, current `HEAD`, merge side and merge base, or the commit currently being replayed by a rebase. Inspect the remaining rebase plan when it exists.
-3. Record the staged, unstaged, and untracked paths already present. Preserve work outside the operation.
+## 2. Find each side's intent
 
-Not every conflict has `<<<<<<<` markers. Include modify/delete, add/add, rename, file/directory, binary, symlink, mode, and submodule/gitlink conflicts represented in the unmerged index.
+Read both sides' commit messages and diffs, the documentation, ADRs, and tests that govern the area, and the operator's goal for this integration. When a side was written by a person in the organization who is still in the directory, mail them for that side's intent; their answer joins the commits as evidence, it does not overrule them. Ask the operator when the goal or a material intent stays unclear.
 
-Name commits directly. In a merge, `ours` usually names the current `HEAD` and `theirs` the incoming side. During a rebase those intuitive roles reverse: `ours` is the destination plus commits already replayed, while `theirs` is the stopped original commit. Never choose a resolution from the label alone.
+## 3. Resolve every entry
 
-## 2. Find the primary sources
+- Keep both behaviors when they are compatible.
+- When they are not, choose the one the integration goal asks for and record what was dropped.
+- Add only the glue needed for two approved behaviors to coexist; leave cleanup and redesign out.
+- Resolve source manifests before regenerating lockfiles or other derived files by the repository's procedure.
+- Ask for ownership guidance on a binary, submodule, or generated result the sources cannot settle.
 
-For each conflict, understand why each side changed before resolving it:
+Resolve by intent, entry by entry. Bulk `ours`/`theirs`, hard reset, broad checkout or restore, clean, and automatic stash discard intent or other work; they are not resolution methods.
 
-- read both commits' messages and diffs;
-- follow the repository's documented workflow for operator-supplied pull requests, issues, or specifications;
-- inspect authoritative ADRs, documentation, tests, and maintainer instructions governing the area;
-- use the current request to confirm the integration goal.
+## 4. Stage and check
 
-Wiki and ledger material may help locate terminology or intent, but they do not override repository authority, commit evidence, or the operator. If the goal or a material intent remains ambiguous, stop and ask instead of guessing.
+Stage only paths whose resolution you inspected, by name (never `git add -A`, which sweeps in unrelated work), and keep what the sequencer staged. Before continuing: no unmerged entry remains, every staged path and deletion is inspected, `git diff --cached --check` is clean, and the repository's cheapest meaningful checks pass (the full relevant gate after the final continuation). Fix only failures the resolution caused. If the index holds a path that is neither sequencer-owned nor an inspected resolution, stop and ask the operator; leave it as it is rather than committing, unstaging, stashing, or resetting it.
 
-## 3. Resolve every unmerged entry
+## 5. Finish only what was authorized
 
-Resolve each entry and hunk by intent:
+A request to resolve conflicts authorizes editing and staging the conflicted paths, and loading this skill authorizes no commit. Continuing (`merge --continue`, `rebase --continue`) needs the operator's word to finish the operation; finish a rebase through the sequencer, never with a plain commit, and repeat this loop at each new stop. Ask before a non-pick rebase command or a ref update, skipping, amending, or creating a commit outside continuation, continuing with an unexpected staged path, and anything else whose intent or destructive effect is unclear. Abort and skip are the operator's decisions: before an abort, say what resolution and replay work it discards; before a skip, confirm the stopped commit is meant to be dropped. Finishing locally never authorizes a push.
 
-- Preserve both behaviors when they are compatible.
-- When they are incompatible, choose the behavior matching the confirmed integration goal and state what was dropped and why.
-- Add only the smallest integration glue needed to make two already-approved behaviors coexist. Explain why it is integration rather than new product behavior.
-- Keep unrelated cleanup, redesign, and speculative compatibility work outside the resolution.
-- Resolve source manifests or definitions before regenerating lockfiles or derived artifacts through the repository's documented procedure.
-- Ask for ownership guidance when a binary, submodule, generated artifact, or other non-text result cannot be established from primary sources.
+After continuing, confirm the operation ended or find the next stop, inspect the resulting history, compare status with the baseline, and run the final checks; say so plainly when the tree is not clean.
 
-Bulk `ours`/`theirs`, hard reset, broad restore/checkout, clean, and automatic stash are not resolution methods. They can discard intent or pre-existing work.
-
-## 4. Stage and validate safely
-
-Preserve changes already staged by Git's merge or rebase sequencer. Add or remove only paths whose resolution you inspected; never use blanket `git add -A`.
-
-Before continuation:
-
-1. Verify that no unmerged index entry remains.
-2. Inspect every staged path, deletion, and cached diff.
-3. Run `git diff --cached --check` or the repository's equivalent residual-conflict check.
-4. Discover the repository's automated checks. Run the cheapest meaningful checks at each rebase stop and the full relevant gate after the final continuation.
-5. Fix only failures caused by the resolution and covered by the request. Report unrelated or pre-existing failures instead of expanding scope.
-
-If the cached index contains a path that is neither sequencer-owned nor an inspected resolution, stop. The operator must decide whether it belongs in the result or how its prior state should be preserved. Do not silently commit, unstage, stash, reset, or discard it.
-
-## 5. Finish only the authorized operation
-
-A request to resolve conflicts authorizes path-scoped edits and selective staging of the conflicted paths. Loading this skill, including implicit model invocation, is not authority to create or rewrite commits.
-
-Explicit operator language to finish or continue the current operation authorizes its ordinary operation-specific completion: `merge --continue` for a merge or repeated ordinary `rebase --continue` steps for that rebase. Do not substitute a normal commit for the rebase sequencer. If a rebase stops on another conflict, repeat this entire evidence and resolution loop before continuing.
-
-Pause before:
-
-- non-pick rebase commands or additional-ref updates;
-- deciding whether to skip or keep a commit;
-- amending or creating a commit outside ordinary continuation;
-- continuing with an unexpected staged path;
-- any material ambiguity about intent or destructive effect.
-
-After continuation, confirm that the operation ended or identify the next stop, inspect the resulting history and topology, compare status with the initial baseline, and run the final relevant checks. The correct result may retain pre-existing unrelated work; do not claim a clean tree when it is not clean.
-
-Abort is an operator-only cancellation action, never an escape from a difficult resolution. Before an authorized abort, explain the resolution and replay work it will discard and any autostash risk. Rebase skip is also operator-only and requires explicit confirmation that the stopped commit should be dropped.
-
-Finishing a local merge or rebase never authorizes pushing it.
-
-## Report
-
-Report the operation and commits resolved, primary sources used, conflict decisions and trade-offs, checks actually run, final operation state, and any preserved unrelated work or unresolved uncertainty. Record that evidence in an existing governing ledger task only when it has real resume, handoff, or audit value; create no conflict-resolution artifact for ceremony.
+Report the operation and commits, the sources and authors consulted, each decision and trade-off, the checks run, the final state, and any preserved unrelated work.
