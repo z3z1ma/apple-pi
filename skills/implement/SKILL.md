@@ -1,68 +1,37 @@
 ---
 name: implement
-description: "Implement decided work from a ticket, small specification, or plan settled in the current conversation, with TDD, regular feedback, final review, and an authorized commit."
+description: "Implement decided work from a ticket, small specification, or plan settled in the current conversation, with TDD, a review board, the operator's sign-off, and an authorized commit."
 disable-model-invocation: true
 ---
 
 # Implement
 
-Implement the work described by the user in the specification, ticket, or current conversation.
-
-The work is already decided. Read it, restate the behavior you will build, and implement it without reopening the plan or proposing a different architecture. Use ordinary engineering judgment for small implementation discoveries. If a material product or design decision is missing or contradictory, report the blocker rather than redesigning the work.
+Build the work the operator already decided, from a ticket, a small specification, or a plan settled in this conversation. Restate the behavior you will build, then build it without reopening the plan. Use judgment for small discoveries; report a missing or contradictory product or design decision as a blocker instead of redesigning the work.
 
 ## Select the work
 
-Honor an explicit path, issue reference, URL, or task reference. A bare local ticket number such as `03` may resolve against the ledger task already named or unambiguously governing the current work. Confirm the ticket title before mutation. If several ticket sets make the reference ambiguous, ask which one the user means.
+- Read the whole ticket or specification. Confirm the ticket's title, and check its blockers against the canonical ticket state or the operator's word; report an incomplete or unknown blocker instead of picking other work. A ticket made stale by a changed specification waits for regeneration.
+- One run builds one ticket or one small specification. Work that spans fresh contexts goes to `/skill:to-tickets` first.
+- Record the working tree's staged, unstaged, and untracked state before you edit. Preserve every pre-existing change; ask before touching a dirty path you cannot keep apart.
 
-Read the complete ticket or specification. For a ticket, check its blocking edges before implementation. `Status: ready-for-agent` means the ticket is sufficiently specified; it does not prove that its blockers are complete. Use the canonical ticket state or the user's explicit confirmation. Report an incomplete or unknown blocker instead of silently choosing different work. If a governing specification materially changed and left the ticket stale, stop for ticket regeneration rather than implementing the obsolete artifact.
+## Staff it
 
-Before mutation, inspect the working tree and retain the initial staged, unstaged, and untracked state as the ownership baseline. Preserve every pre-existing change. If the selected work must overlap a dirty path and the new edits cannot be distinguished safely, ask the user before continuing. Never revert, stage, or commit unrelated pre-existing work.
+Build one coherent ticket yourself. When the operator selects several frontier tickets that are independent and write different files, run them in parallel: give each to a standing `implementation-engineer` (find one in the directory with matching experience, call them in, or hire one) with its whole ticket, its seams, and exclusive ownership of its files. You lead: engineers report in their task threads, and you reconcile, run the final suite, and own review and the commit. Serialize any two lanes that turn out to touch the same files.
 
-One normal run implements one ticket or one small specification. If a specification spans fresh contexts, stop and ask the user to invoke `/skill:to-tickets` first.
+## Build test-first
 
-## Choose the execution shape
+Read and apply [`tdd`](../tdd/SKILL.md) where the behavior has observable input and output. Use the test seams the specification or ticket confirmed; for a seam nobody confirmed, propose it with what it catches and misses, and ask the operator with `ask_user_question` before writing that test. Where TDD does not fit, say why and follow the repository's test rules.
 
-Keep one coherent change in the root when delegation would add no value.
+Run typechecking and focused tests as you go, and the repository's full required suite once at the end. The final suite runs on the final code.
 
-When the user selects several frontier tickets that were identified during the approved sequencing as dependency-free and non-overlapping, they may run in parallel. Before dispatch, confirm concrete write ownership from the tickets and current code; an absent blocking edge alone does not establish non-overlap.
+## Review and sign-off
 
-- Use `directory` to find colleagues with the right catalog roles. Managers can `hire` an `implementation-engineer` when needed and `assign` each colleague a written ticket goal. Keep each colleague's write ownership separate.
-- Give each colleague one complete ticket, its confirmed TDD seams, the applicable red → green procedure, and exclusive ownership of its writes. If it discovers another seam, it must return the proposal to the root and wait for operator confirmation before editing that test.
-- If a newly discovered dependency, shared generated output, or overlapping write makes two lanes conflict, serialize the affected work.
-- Colleagues implement and run focused checks, then report the outcome and evidence in the task thread. Keep reconciliation, shared Git state and generated outputs, the final suite, review, the index, and authorized commits with the root.
+Read and apply [`code-review`](../code-review/SKILL.md) on the working tree against `HEAD`, scoped to this work and its intent source. Fix the confirmed findings this run needs; report the rest.
 
-For a program that must wait for colleagues' answers, attach their sessions through `pi_exec`'s named `peers` mapping. When a ticket needs a fresh, bounded context instead of a lasting colleague, use `agent(role="implementation-engineer", task=...)` inside `pi_exec`; that temporary peer closes after its call. Give either form the same goal and write ownership.
-
-## Build with feedback
-
-Use TDD where possible, at confirmed seams. Read and apply [`tdd`](../tdd/SKILL.md) when the work has concrete behavior, observable input and output, and an independent expected result.
-
-Before writing or editing any test, list the exact public seams, what each seam catches, what it misses, and its feedback cost. Stop and wait for fresh operator confirmation. A specification, ticket, existing test, or previous agreement informs the proposal but does not replace this checkpoint. For a parallel batch, the root may present every selected ticket's seam proposal in one checkpoint before dispatch; every seam must still be explicit.
-
-After confirmation, work one test → intended red → minimal green vertical slice at a time. When TDD does not fit, explain why and follow the repository's applicable test requirements.
-
-Run typechecking regularly when the repository provides it, run focused single test files regularly, and run the full repository-required test suite once at the end of implementation. In a parallel batch, colleagues run their focused checks and the root runs the final combined suite after reconciliation. If review corrections mutate the code afterward, rerun the affected checks and the full required suite on the corrected tree; the final suite evidence must match the final code.
-
-## Review the working tree
-
-Once done, read and apply [`code-review`](../code-review/SKILL.md) to review the work before committing. Use `HEAD` as the explicit working-tree fixed point and scope the review to the selected implementation paths and intent sources. Include staged, unstaged, and in-scope untracked changes. An unexpectedly empty boundary is not a successful review.
-
-Reconcile the findings in the root. The user's invocation of `implement` authorizes correction of confirmed findings required to satisfy the selected ticket or specification. Fix those in-scope defects and rerun the affected checks. Keep unrelated findings report-only. Follow code-review's bounded policy rather than rerunning reviews until they become clean.
+Then, for a substantial change, read and apply [`operator-sign-off`](../operator-sign-off/SKILL.md) for a code sign-off before committing. Skip it when the operator waived sign-off for this run, for example for unattended overnight work, and say in the report that you did.
 
 ## Finish
 
-If a blocker, failed required check, partial colleague result, incomplete review boundary, or unresolved in-scope material finding remains, preserve the partial work and report that implementation is incomplete. Do not commit or change ticket state while that evidence is incomplete.
+Commit to the current branch only when the operator authorized a commit for this run; otherwise leave the change commit-ready and say so. Ticket state, pushes, pull requests, and anything beyond the commit need their own authorization. With a failed check, a blocker, or an unresolved in-scope finding, keep the partial work and report it as incomplete.
 
-Stay on the current branch. Create or switch no branch automatically. Commit the implemented work to the current branch only when the user authorized a commit for this run. Otherwise leave the reviewed and validated change commit-ready and say that no commit was made.
-
-Do not close the ticket, check its acceptance boxes, mutate blocker edges, advance local or remote ticket state, modify a parent specification or issue, push, publish, deploy, merge, or open a pull request unless the user separately authorizes that action. Local implementation or commit authority does not imply any of those effects.
-
-Report:
-
-- the selected ticket, specification, or conversation plan and the behavior implemented;
-- changed paths and any parallel ticket ownership;
-- confirmed TDD seams and red → green evidence, or why TDD did not fit;
-- focused checks, typechecking, and final-suite results;
-- the code-review boundary, findings, corrections, and remaining uncertainty;
-- the commit identifier, or that commit authority was absent; and
-- that ticket state was unchanged unless separately authorized.
+Report the work built, changed paths and lane owners, seams with red → green evidence, check and suite results, review findings and fixes, the sign-off verdict or its waiver, and the commit or its absence.
