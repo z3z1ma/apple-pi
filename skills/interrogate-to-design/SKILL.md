@@ -6,37 +6,31 @@ disable-model-invocation: true
 
 # Interrogate to Design
 
-Interrogate the user about the plan, decision, or idea they supplied while turning settled knowledge into durable project context.
+Interrogate the operator about the plan, decision, or idea they supplied, and turn settled knowledge into durable project context as it settles.
 
-Map the subject as a **design tree**: every decision branches into the decisions that depend on it. Establish the scope, then work the tree in rounds. The **frontier** is every in-scope decision whose prerequisites are settled now. Ask the whole frontier in one numbered round and give your recommended answer for every question. Put questions with unresolved prerequisites in a later round. Then stop and wait for the user's answers before starting the next round.
+## The interview
 
-Facts are your job: use available tools or suitable read-only agents instead of asking the user for information you can establish yourself. If fact-finding or a prototype is still running, leave only its dependent branch unsettled and continue with the rest of the frontier. Decisions are the user's job: never answer their side of the interview.
+Map the subject as a **design tree**: every decision branches into the decisions that depend on it. Establish the scope, then work the tree in rounds. The **frontier** is every in-scope decision whose prerequisites are settled now. Ask the whole frontier in each round, with your recommended answer for every question, and put questions with unresolved prerequisites in a later round. Then wait for the answers.
 
-After each response, recompute the tree and frontier. Name out-of-scope branches and empirical questions that need a separate research, prototype, or hand-off step. Use no question cap and no "clear enough" shortcut.
+Ask each round with `ask_user_question`: put what you found and why it matters in your message, and ask the questions as short structured choices, four per call, with as many calls as the frontier needs. Use prose only for a question whose answer does not fit a few options.
 
-The interview is complete only when the in-scope frontier is empty. Then summarize the shared understanding, remaining hand-offs, and scope boundary, and wait for the user's explicit confirmation. Documentation described below happens as knowledge crystallizes; implementation and downstream workflows wait for that final confirmation.
+Facts are your job: use tools, interns, or people in the organization (such as a standing `repository-archaeologist` for this codebase) instead of asking the operator for what can be established. If fact-finding is still running, leave only its dependent branch open and continue with the rest. Decisions are the operator's: never answer their side.
 
-## Capture durable knowledge inline
+After each round, recompute the tree and frontier. Name out-of-scope branches and empirical questions that need research, a prototype, or a hand-off. Use no question cap and no "clear enough" shortcut.
 
-Explicit invocation authorizes bounded `.wiki/` curation for this interview's subject. If the wiki is absent when the first durable knowledge emerges, follow the [initialization procedure](../llm-wiki/references/initialize.md). Before other wiki writes, orient from its README, index, recent relevant log, existing pages, and nearby references when useful.
+The interview is complete only when the in-scope frontier is empty. Before you present the summary, give it to a colleague in the organization with the right lens (for example `vp-of-product` for what to build, `chief-architect` for system shape; call in one who has worked with you before, or hire one), without the conversation, and ask which branch is missing; open a new round for any real gap. Then summarize the shared understanding, remaining hand-offs, and scope boundary, and wait for explicit confirmation. Implementation and downstream workflows wait for that confirmation.
 
-As decisions settle:
+## Capture knowledge as it settles
 
-- Update resolved domain terms in the relevant domain-language page. Keep glossary entries free of implementation details, specifications, and scratch notes; follow the [domain-language format](../domain-modeling/references/DOMAIN-LANGUAGE-FORMAT.md).
-- Integrate broader reusable design knowledge into existing wiki pages when that is clearer. Create a page only for a distinct durable subject with cross-task value. Synthesize the decisions and evidence rather than copying the conversation.
-- Preserve provenance, uncertainty, disagreement, and source authority. Repository documentation, tests, ADRs, and maintainer instructions remain authoritative.
-- Keep task-specific implementation context, specifications, tickets, and plans in their established repository or ledger owners rather than the wiki.
-- Offer an ADR only when the decision is hard to reverse, surprising without context, and the result of a real trade-off. Explain why it qualifies and get approval before creating or editing it; follow the repository convention or the [ADR format](../domain-modeling/references/ADR-FORMAT.md).
+Starting this skill authorizes bounded `.wiki/` curation for this subject. Make each wiki change by the [`llm-wiki`](../llm-wiki/SKILL.md) procedures, including initialization when the wiki is absent.
 
-For each coherent wiki mutation, update knowledge first and navigation only when navigation changed. Run `wiki_lint`, repair only findings introduced by the mutation, and append `.wiki/LOG.md` only after the intended state is coherent. Read and follow the relevant [`llm-wiki`](../llm-wiki/SKILL.md) procedure for initialization, ingestion, or broader maintenance.
+- Record resolved domain terms in the domain-language page, in the [domain-language format](../domain-modeling/references/DOMAIN-LANGUAGE-FORMAT.md), free of implementation detail.
+- Fold broader reusable design knowledge into existing pages, and create a page only for a distinct subject with value beyond this task. Synthesize; never copy the conversation.
+- Keep task-specific specifications, tickets, and plans in their ledger or repository owners.
+- Offer an ADR only when the decision is hard to reverse, surprising without context, and the result of a real trade-off. Say why it qualifies and get approval before writing it, following the repository's convention or the [ADR format](../domain-modeling/references/ADR-FORMAT.md).
 
-Do not turn the wiki into a transcript, implementation specification, or competing source of truth. Invocation does not authorize commits, publication, deployment, external effects, or implementation of the resulting design.
+This skill authorizes no commits, publication, deployment, or implementation.
 
 ## Finish
 
-After the user confirms shared understanding, report:
-
-- the settled design and scope;
-- the durable knowledge and ADR paths changed;
-- unresolved research, prototype, or hand-off branches; and
-- the next appropriate workflow, if the user asks to continue.
+After the operator confirms, report the settled design and scope, the wiki pages and ADRs changed, the open research, prototype, or hand-off branches, and the next workflow if they want to continue (for example `/skill:to-spec`).
