@@ -115,7 +115,7 @@ Only a root or a managing role can `assign` and `unassign`, and only inside its 
 
 A role is a Markdown file: front matter (`title`, `mandate`, `models`, `thinking`, `writes`, `manages`) and a body that is the role's obligation, what it is not responsible for, how it works, and what it delivers, ending with the one standing rule: say what you verified and what you believe. The catalog is the package's `roles/` directory, then `~/.pi/agent/roles/`, then `<cwd>/.pi/roles/`, a later file replacing an earlier one of the same name. A malformed file is reported by path and skipped. Managers see the whole catalog in their prompt and hire by name.
 
-The package ships thirty-one roles. `advises` means the role has no `edit` or `write` tool: it reads, runs, and reports, and someone who writes carries its findings into code.
+The package ships thirty-two roles. `advises` means the role has no `edit` or `write` tool: it reads, runs, and reports, and someone who writes carries its findings into code.
 
 | Role | Title | Mandate | Mind, in order | Thinking | Posture |
 | --- | --- | --- | --- | --- | --- |
@@ -134,6 +134,7 @@ The package ships thirty-one roles. `advises` means the role has no `edit` or `w
 | `implementation-engineer` | Implementation Engineer | Make bounded, tested changes with no extra scope | `anthropic/claude-sonnet-5-5`, `openai/gpt-6-luna` | medium | writes |
 | `infrastructure-cfo` | Infrastructure CFO | Price decisions in spend, hours, lock-in, maintenance | `openai/gpt-6.1-sol`, `anthropic/claude-sonnet-5-5` | medium | advises |
 | `maintainer-from-three-years-ahead` | Maintainer From Three Years Ahead | Judge comprehensibility, upgrade cost, operational burden | `anthropic/claude-sonnet-5-5`, `openai/gpt-6.1-sol` | medium | advises |
+| `new-team-member` | New Team Member | Read a document cold and say whether it teaches | `anthropic/claude-sonnet-5-5`, `openai/gpt-6.1-sol` | medium | advises |
 | `paradigm-outsider` | Paradigm Outsider | Solve it without the current stack or conventions | `anthropic/claude-fable-5-1`, `openai/gpt-6-astra` | high | advises |
 | `performance-engineering-lead` | Performance Engineering Lead | Find complexity, tail latency, contention, limits | `openai/gpt-6.1-sol`, `anthropic/claude-opus-5-5` | medium | advises |
 | `principal-engineer` | Principal Engineer | Turn a design into a plan grounded in the repository | `anthropic/claude-sonnet-5-5`, `openai/gpt-6.1-sol` | medium | advises |

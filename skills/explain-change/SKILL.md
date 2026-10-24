@@ -23,11 +23,22 @@ Done means you can say what the change does, why, and what would break if it wer
 
 Then plan backward: choose the two or three ideas the reader must leave with. Write the quiz against those ideas first; a question a skimmer passes tests nothing. Then write the explanation that teaches them.
 
+## Draft, then test it on a cold reader
+
+`explain_change` opens the page for the operator at once, so test the draft first. Write the page's fields (title, summary, background, primer, intuition, steps with their `code` fences, and the quiz, with the answer key kept out of the file) into a Markdown draft in the task's directory. Give a standing `new-team-member` only the draft's path and the repository, never the conversation, the task, or the ideas you chose, and ask for its report.
+
+Revise and send the new draft back until the reader's one-sentence summary carries the ideas you chose, it answers the quiz without guessing, and it names no place it got lost or wanted a picture. Then call `explain_change` with the final draft.
+
+## Picture first
+
+The operator learns by seeing. Show the idea as a `mermaid` diagram or a `figure` before any code: the flow, the sequence, or the state before and after. Give every step that moves data or changes state its own picture. A picture with toy data beats a paragraph of rules, and a table of measured inputs and results beats both when the change is about cases.
+
 ## Write to teach
 
 Explain the way Feynman and Kleppmann do.
 
-- **Concrete before abstract.** Intuition is one worked example with toy data, told before any code. State the general rule only after the example has made it obvious. Draw the flow if a picture helps; give a figure if playing with the idea teaches faster than reading.
+- **Concrete before abstract.** Intuition is one worked example with toy data, told before any code. State the general rule only after the example has made it obvious.
+- **Disclose progressively.** Each section answers the next question the reader has, and no sooner. Basics a newcomer lacks go in the primer, not in the way of everyone else.
 - **Follow the data, not the file list.** Each walkthrough step is one idea with the few lines that carry it. Cite the lines the reader must see; summarize the rest.
 - **Name the guarantee and where it stops.** "Writes are ordered per key, not across keys." A guarantee with its boundary is worth ten adjectives.
 - **One true sentence per concept.** The sentence the reader will repeat to a colleague. The summary is that sentence, expanded to a paragraph.

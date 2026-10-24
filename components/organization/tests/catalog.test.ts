@@ -39,7 +39,7 @@ afterEach(() => {
 test("every package role loads with a mandate, known minds, a thinking level, and a body written to the bar", () => {
 	const catalog = loadRoles(tempDir());
 	expect(catalog.problems).toEqual([]);
-	expect(catalog.roles.size).toBe(31);
+	expect(catalog.roles.size).toBe(32);
 	const managers = [...catalog.roles.values()].filter((role) => role.manages).map((role) => role.name);
 	expect(managers.sort()).toEqual(["coordinator", "director-of-engineering"]);
 	for (const role of catalog.roles.values()) {
