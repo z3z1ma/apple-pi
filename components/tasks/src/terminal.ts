@@ -4,6 +4,7 @@ import { closeSync } from "node:fs";
 import { createRequire } from "node:module";
 import type { Readable, Writable } from "node:stream";
 import tty from "node:tty";
+import { fileURLToPath } from "node:url";
 
 /** The part of a child process the shell tools use; a terminal-backed process provides the same. */
 export interface ShellProcess {
@@ -85,19 +86,28 @@ export function terminalEnvironment(env: NodeJS.ProcessEnv, size: TerminalSize):
 		// A pager waits for keys that never come.
 		PAGER: "cat",
 		GIT_PAGER: "cat",
+		BASH_ENV: COLOR_WRAPPERS,
+		PI_TERMINAL_PREVIOUS_BASH_ENV: env.BASH_ENV ?? "",
 	};
 }
+
+const COLOR_WRAPPERS = fileURLToPath(new URL("./terminal-bash-env.sh", import.meta.url));
+
+/** Pi's own wait after a shell exits for output a lingering descendant still writes (`waitForChildProcess`). */
+const EXIT_OUTPUT_GRACE_MS = 100;
 
 /**
  * A child whose stdout and stderr share a pseudo-terminal, read as `stdout`. The parent's copy of the
  * terminal's child end is closed here; `close` fires once the child exited and the terminal reached
- * the end of its output.
+ * the end of its output, or fell quiet: a descendant left running in the background (`cmd &`) keeps
+ * the terminal open and must not hold the command.
  */
 export class TerminalProcess extends EventEmitter implements ShellProcess {
 	readonly stdout: tty.ReadStream;
 	readonly stderr = null;
 	private outputOpen = true;
 	private exit?: { code: number | null; signal: NodeJS.Signals | null };
+	private exitGrace?: NodeJS.Timeout;
 
 	constructor(
 		private readonly child: ChildProcess,
@@ -111,12 +121,17 @@ export class TerminalProcess extends EventEmitter implements ShellProcess {
 		this.stdout.once("end", () => this.stdout.destroy());
 		this.stdout.once("close", () => {
 			this.outputOpen = false;
+			clearTimeout(this.exitGrace);
 			this.closeWhenDone();
 		});
 		child.once("error", (error) => this.emit("error", error));
 		child.once("exit", (code, signal) => this.emit("exit", code, signal));
 		child.once("close", (code, signal) => {
 			this.exit = { code, signal };
+			if (this.outputOpen) {
+				this.stdout.on("data", () => this.endOutputWhenQuiet());
+				this.endOutputWhenQuiet();
+			}
 			this.closeWhenDone();
 		});
 	}
@@ -132,6 +147,11 @@ export class TerminalProcess extends EventEmitter implements ShellProcess {
 	unref(): void {
 		this.child.unref();
 		this.stdout.unref();
+	}
+
+	private endOutputWhenQuiet(): void {
+		clearTimeout(this.exitGrace);
+		this.exitGrace = setTimeout(() => this.stdout.destroy(), EXIT_OUTPUT_GRACE_MS);
 	}
 
 	private closeWhenDone(): void {

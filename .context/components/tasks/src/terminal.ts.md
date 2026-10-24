@@ -7,10 +7,16 @@ Why: the package's spawn makes the terminal the child's controlling terminal and
 One terminal carries both stdout and stderr, read as `stdout`.
 Why: two separate terminals reorder interleaved stdout and stderr, which a terminal user never sees. Monitor needs stderr apart from its stdout events and stays on pipes.
 
-`close` waits for both the child's exit and the end of the terminal's output.
-Why: the child's own `close` fires at exit because it has no piped stdio; reading the snapshot then would lose output still in the terminal. Linux ends the output with EIO, macOS with EOF.
+`close` waits for both the child's exit and the end of the terminal's output, or, after exit, for the output to stay quiet for Pi's own post-exit grace.
+Why: the child's own `close` fires at exit because it has no piped stdio; reading the snapshot then would lose output still in the terminal. Linux ends the output with EIO, macOS with EOF. A descendant left in the background (`cmd &`) holds the terminal open forever, so waiting for the end alone would hang the command; the grace is re-armed on each chunk, as in Pi's `waitForChildProcess`, so a descendant still writing is not cut off mid-burst.
 Coupled: components/tasks/src/bash-tool.ts, components/tasks/src/task-manager.ts
 Verify: components/tasks/tests/terminal.test.ts, components/tasks/tests/terminal-fallback.test.ts
+
+## symbol:terminalEnvironment
+
+`BASH_ENV` points at `terminal-bash-env.sh`, which wraps `ls`, `grep`, and `diff` with `--color=auto` and then restores the operator's `BASH_ENV` (or unsets it) for nested shells.
+Why: the operator's fish terminal colors these through shell functions; the programs default to no color, so a terminal alone left them plain (2026-10-24 comparison). Restoring the variable keeps the wrappers and their capability checks (about 17 ms) out of every nested bash a build or script starts. It only applies when Pi's shell is bash.
+Verify: components/tasks/tests/terminal.test.ts
 
 ## symbol:terminalSize
 

@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -6,6 +6,7 @@ import { createBackgroundTaskBashTool } from "../src/bash-tool.js";
 import { createMonitorTool } from "../src/monitor-tool.js";
 import { TaskManager } from "../src/task-manager.js";
 import { terminalSize } from "../src/terminal.js";
+import { terminalShellOperations } from "../src/user-bash.js";
 
 const ESC = "\x1b";
 const greenWhenTerminal = `node -e "process.stdout.write(process.stdout.isTTY ? '\\x1b[32mgreen\\x1b[0m\\n' : 'plain\\n')"`;
@@ -109,6 +110,64 @@ describe.skipIf(process.platform === "win32")("Bash on a pseudo-terminal", () =>
 		const snapshot = task?.kind === "command" ? task.output.getSnapshot() : undefined;
 		expect(snapshot?.content).toBe("green\n");
 		expect(snapshot?.styled).toBe(`${ESC}[32mgreen${ESC}[0m\n`);
+	});
+
+	it("colors grep as an interactive shell does, and only where its output reaches the terminal", async () => {
+		const file = "components/tasks/src/terminal.ts";
+		const shown = await bash({ command: `grep -n "export class" ${file}` }).result;
+		expect(shown.details.styledOutput).toContain(ESC);
+		expect(text(shown)).not.toContain(ESC);
+		const piped = await bash({ command: `grep -n "export class" ${file} | cat` }).result;
+		expect(piped.details.styledOutput).not.toContain(ESC);
+	});
+
+	it("gives nested bash scripts the operator's own BASH_ENV and no color wrappers", async () => {
+		const dir = mkdtempSync(join(tmpdir(), "pty-bash-env-"));
+		dirs.push(dir);
+		const own = join(dir, "env.sh");
+		writeFileSync(own, "greet() { echo hello; }\n");
+		const nested = "bash -c 'echo $BASH_ENV; type -t greet; type -t grep'";
+		const previous = process.env.BASH_ENV;
+		try {
+			delete process.env.BASH_ENV;
+			expect(text(await bash({ command: nested }).result)).toBe("\nfile\n");
+			process.env.BASH_ENV = own;
+			expect(text(await bash({ command: `greet; ${nested}` }).result)).toBe(`hello\n${own}\nfunction\nfile\n`);
+		} finally {
+			if (previous === undefined) delete process.env.BASH_ENV;
+			else process.env.BASH_ENV = previous;
+		}
+	});
+
+	it("does not wait for a descendant left running in the background", async () => {
+		const dir = mkdtempSync(join(tmpdir(), "pty-background-"));
+		dirs.push(dir);
+		const pidFile = join(dir, "pid");
+		const started = Date.now();
+		const result = await bash({ command: `sleep 30 & echo $! > ${pidFile}; echo started` }).result;
+		expect(text(result)).toBe("started\n");
+		expect(Date.now() - started).toBeLessThan(5000);
+		process.kill(Number(readFileSync(pidFile, "utf8")), "SIGKILL");
+	});
+
+	it("runs the operator's ! commands on the terminal, passing final plain lines to Pi", async () => {
+		const operations = terminalShellOperations({ cwd: process.cwd() } as any);
+		const run = async (command: string, timeout?: number) => {
+			const chunks: string[] = [];
+			const result = await operations.exec(command, process.cwd(), {
+				onData: (data) => chunks.push(data.toString()),
+				timeout,
+			});
+			return { output: chunks.join(""), exitCode: result.exitCode };
+		};
+		expect(
+			await run(`test -t 1 && echo terminal; printf '10%%\\r100%%\\n'; ${greenWhenTerminal}; printf tail`),
+		).toEqual({
+			output: "terminal\n100%\ngreen\ntail",
+			exitCode: 0,
+		});
+		expect((await run("exit 3")).exitCode).toBe(3);
+		await expect(run("sleep 30", 1)).rejects.toThrow("timeout:1");
 	});
 
 	it("keeps monitors on pipes so their stdout lines stay plain events", async () => {

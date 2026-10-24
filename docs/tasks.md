@@ -65,13 +65,16 @@ Each tab adds its own keys, which the panel header shows while it has focus. In 
 
 #### Terminal
 
-Foreground, background, and scheduled commands write stdout and stderr to one pseudo-terminal, so programs behave as in the operator's terminal: `git`, `bat`, `ls`, and test runners emit their usual colors and layout, and stdout and stderr keep their order.
+Foreground, background, and scheduled commands, and the operator's own `!` commands, write stdout and stderr to one pseudo-terminal, so programs behave as in the operator's terminal: `git`, `bat`, `rg`, and test runners emit their usual colors and layout, and stdout and stderr keep their order. Programs that never color (`sed`, `cat`, `head`) and commands piped into another stay plain, as they do in a terminal.
 
 - The terminal is as wide as Pi's terminal less the transcript indent (80 by 24 without a terminal). `TERM`, `COLUMNS`, and `LINES` describe it.
+- `ls`, `grep`, and `diff` default to no color; interactive shells such as fish wrap them with `--color=auto`. Bash loads the same wrappers for each command's own shell through `BASH_ENV` (each only when the installed program accepts the option). Nested bash scripts get the operator's own `BASH_ENV` back, without the wrappers.
 - Stdin stays a pipe (the `stdin` text, or empty), and the command has no controlling terminal: a program that asks for a password on `/dev/tty`, such as `sudo` or `ssh`, fails at once instead of waiting. `PAGER` and `GIT_PAGER` are `cat`, because a pager would wait for keys.
 - Output is read as a terminal shows it: carriage returns, erasures, and cursor movement redraw lines in place, so a progress bar leaves its final state rather than every frame. Full-screen (alternate screen) output is dropped, other control sequences are removed, and colors are kept.
 - The model receives plain text. The transcript, the tool inspector, and `/work` show the colors, which the result carries in `details.styledOutput`. Truncation and the full-output file count plain text.
 - A failed or timed-out command returns an error result with its output, rather than a thrown error.
+- A process left running in the background (`server &`) keeps the terminal open; the command still finishes once its shell exits and the output falls quiet.
+- `!` and `!!` commands get the same terminal, without RTK. Pi shows their output without colors, as before, and receives each line's final text.
 - When no pseudo-terminal can be opened (Windows, a platform without the prebuilt `@lydell/node-pty` binary, or none free), the command runs on pipes as before and `details.terminalUnavailable` says why.
 - `monitor` and Pi Exec's `pi.bash` keep pipes: programs read their output. Their text also reaches the model without colors.
 - With [RTK](rtk.md) enabled (`RTK_ENABLED=1`), RTK rewrites some commands (for example `git status`) into its own compact output, which has no colors; `verbatim: true` runs the original command.

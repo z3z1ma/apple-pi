@@ -5,6 +5,7 @@ import { registerWorkSection } from "../../shared/src/work-manager.js";
 import { createTaskActiveWorkSource } from "./active-work.js";
 import { createBackgroundTaskBashTool } from "./bash-tool.js";
 import { createMonitorTool } from "./monitor-tool.js";
+import { terminalShellOperations } from "./user-bash.js";
 import { formatMonitorEvent, formatTaskNotification } from "./notifications.js";
 import { createScheduleTool } from "./schedule-tool.js";
 import { TaskManager } from "./task-manager.js";
@@ -133,6 +134,7 @@ export function installTasks(pi: ExtensionAPI): void {
 	});
 
 	pi.registerTool(createBackgroundTaskBashTool(taskManager));
+	pi.on("user_bash", (_event, ctx) => ({ operations: terminalShellOperations(ctx) }));
 	pi.registerTool(createScheduleTool(taskManager));
 	pi.registerTool(createMonitorTool(taskManager));
 	pi.registerTool(createTaskManagementTool(taskManager));
