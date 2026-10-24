@@ -22,7 +22,7 @@ Coding has what most open-world fields lack: an environment that executes. Compi
 | --- | --- |
 | Belief state | Notebook (learnings), ledger (task state), wiki. No live record of hypotheses for the current problem; the `diagnosing-bugs` skill keeps one only transiently. |
 | Knowledge and reasoning mixed | Partial mitigation only. Wiki, `AGENTS.md`, and skills externalize project guidance; the model's own knowledge and reasoning stay mixed. |
-| Evaluator that gates beliefs | Tests and the runtime; the pair; the consultant's typed confirm/refute/refine/uncertain verdict. |
+| Evaluator that gates beliefs | Tests and the runtime; the pair; the second opinion's typed confirm/refute/refine/uncertain verdict. |
 | Post-hoc reasoning | Predictions are now recorded before results (below). |
 
 ## Adopted
