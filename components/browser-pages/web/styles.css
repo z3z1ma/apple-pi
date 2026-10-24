@@ -1204,15 +1204,7 @@ h2 code,
 }
 .brief-prose {
 	max-width: 76ch;
-}
-.brief-prose p {
-	margin: 0 0 10px;
-	font-size: 15.5px;
-	line-height: 1.68;
 	text-wrap: pretty;
-}
-.brief-prose p:last-child {
-	margin-bottom: 0;
 }
 .doc.ov-intent {
 	font-size: 16.5px;

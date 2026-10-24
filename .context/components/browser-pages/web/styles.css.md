@@ -6,4 +6,7 @@ Why: when this sheet came after `markdown/styles.css` through a module import, i
 Page sheets load together with this sheet (the code review, ledger, and explain pages also load `markdown/styles.css`), so its broad selectors style their markup too. Prefix page-specific classes (the ledger page uses `lt-`) and scope layout selectors to direct children (`.graph > svg`).
 Why: a ledger `.file` took the code review's `.file` styles, `.ov-intent` inherited a 760px cap, and `.graph svg` caught the icon SVGs inside graph cards.
 
-Coupled: components/browser-pages/web/code-review.tsx, components/browser-pages/web/markdown-review.tsx, components/browser-pages/web/ledger-review.tsx, components/browser-pages/web/explain-change.tsx, components/browser-pages/web/markdown/styles.css, components/browser-pages/web/ledger/styles.css, components/browser-pages/web/explain/styles.css
+The code review's agent prose (`.ov-intent`, `.focus-text`, `.brief-prose`) is wrapped in `.doc`, so its size and spacing rules are written as `.doc.<class>`.
+Why: `markdown/styles.css` loads after this sheet, so its plain `.doc` font size and paragraph margins beat a single-class rule here.
+
+Coupled: components/browser-pages/web/pages.tsx, components/browser-pages/web/code-review.tsx, components/browser-pages/web/markdown-review.tsx, components/browser-pages/web/ledger-review.tsx, components/browser-pages/web/explain-change.tsx, components/browser-pages/web/markdown/styles.css, components/browser-pages/web/ledger/styles.css, components/browser-pages/web/explain/styles.css
