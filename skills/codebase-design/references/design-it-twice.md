@@ -19,7 +19,7 @@ Whoever runs this process chairs the board. Before staffing it, write the proble
 | Outside the stack | `paradigm-outsider` | the design without the current conventions |
 | Attack | `architecture-prosecutor` | the strongest case against the favourite |
 
-Add or swap a designer when the module needs another lens, such as ports and adapters for cross-seam dependencies, or the most common caller. Staff the whole board with standing people before briefing anyone, and give every member the names of the others.
+Add or swap a designer when the module needs another lens, such as ports and adapters for cross-seam dependencies, or the most common caller. Staff the whole board with standing people, as [handbook-writing](../../handbook-writing/SKILL.md) describes, before briefing anyone, and give every member the names of the others.
 
 ## Run the board
 
