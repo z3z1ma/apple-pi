@@ -21,7 +21,7 @@ export function createMonitorTool(taskManager: TaskManager) {
 			if (params.max_events !== undefined && (!Number.isSafeInteger(params.max_events) || params.max_events < 1)) {
 				throw new Error("max_events must be a positive integer");
 			}
-			const prepared = await prepareShellCommand(process.cwd(), { command: params.command }, signal, ctx, false);
+			const prepared = await prepareShellCommand(process.cwd(), { command: params.command }, signal, ctx, false, false);
 			const task = taskManager.createMonitor(prepared.command, prepared.cwd, prepared.start, params.max_events);
 			const limit = params.max_events === undefined ? "open-ended" : `limited to ${params.max_events}`;
 			return {

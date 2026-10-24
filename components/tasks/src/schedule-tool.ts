@@ -56,7 +56,7 @@ export function createScheduleTool(taskManager: TaskManager) {
 				return scheduledResult(task.id, task.kind, task.dueAt, params.delay_seconds);
 			}
 
-			const prepared = await prepareShellCommand(process.cwd(), { command: params.command! }, signal, ctx, true);
+			const prepared = await prepareShellCommand(process.cwd(), { command: params.command! }, signal, ctx, true, true);
 			const task = taskManager.scheduleCommand(prepared.command, prepared.cwd, delayMs, prepared.start);
 			return scheduledResult(task.id, task.kind, task.dueAt, params.delay_seconds);
 		},

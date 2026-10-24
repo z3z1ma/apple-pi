@@ -417,7 +417,7 @@ export class TaskDetailViewer implements Component {
 		}
 		lines.push("", this.theme.bold("Output"));
 		const snapshot = this.task.output.getSnapshot();
-		const output = snapshot.content || "(no output yet)";
+		const output = snapshot.styled || "(no output yet)";
 		for (const outputLine of output.split("\n")) lines.push(...wrapTextWithAnsi(outputLine, width));
 		if (snapshot.truncated) {
 			add(this.theme.fg("warning", "Output is truncated."));

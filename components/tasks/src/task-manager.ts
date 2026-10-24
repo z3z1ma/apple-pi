@@ -1,7 +1,7 @@
-import type { ChildProcess } from "node:child_process";
 import { OutputBuffer } from "./output-buffer.js";
 import { killProcessTree } from "./process-killer.js";
-import { isActiveTask, type CommandTask, type ManagedTask, type MonitorEvent, type PromptTask } from "./types.js";
+import type { ShellProcess } from "./terminal.js";
+import { type CommandTask, isActiveTask, type ManagedTask, type MonitorEvent, type PromptTask } from "./types.js";
 
 export interface CreateTaskOptions {
 	detachedByOperator?: boolean;
@@ -9,7 +9,7 @@ export interface CreateTaskOptions {
 }
 
 interface TaskControl {
-	child?: ChildProcess;
+	child?: ShellProcess;
 	timer?: NodeJS.Timeout;
 	graceTimer?: NodeJS.Timeout;
 	stdoutRemainder?: string;
@@ -25,11 +25,11 @@ export class TaskManager {
 	private readonly promptDueListeners = new Set<(task: PromptTask) => void>();
 	private readonly monitorEventListeners = new Set<(event: MonitorEvent) => void>();
 
-	createTask(command: string, cwd: string, child: ChildProcess, options: CreateTaskOptions = {}): CommandTask {
+	createTask(command: string, cwd: string, child: ShellProcess, options: CreateTaskOptions = {}): CommandTask {
 		return this.createRunningCommand(command, cwd, child, options);
 	}
 
-	createMonitor(command: string, cwd: string, start: () => ChildProcess, maxEvents?: number): CommandTask {
+	createMonitor(command: string, cwd: string, start: () => ShellProcess, maxEvents?: number): CommandTask {
 		if (maxEvents !== undefined && (!Number.isSafeInteger(maxEvents) || maxEvents < 1)) {
 			throw new Error("maxEvents must be a positive integer");
 		}
@@ -38,7 +38,7 @@ export class TaskManager {
 		});
 	}
 
-	scheduleCommand(command: string, cwd: string, delayMs: number, start: () => ChildProcess): CommandTask {
+	scheduleCommand(command: string, cwd: string, delayMs: number, start: () => ShellProcess): CommandTask {
 		const now = Date.now();
 		const dueAt = now + delayMs;
 		const task = this.createCommandRecord(command, cwd, dueAt, { status: "scheduled" });
@@ -226,7 +226,7 @@ export class TaskManager {
 	private createRunningCommand(
 		command: string,
 		cwd: string,
-		child: ChildProcess,
+		child: ShellProcess,
 		options: CreateTaskOptions & { monitor?: CommandTask["monitor"] },
 	): CommandTask {
 		const now = Date.now();
@@ -275,7 +275,7 @@ export class TaskManager {
 		return task;
 	}
 
-	private attachChild(task: CommandTask, child: ChildProcess, control: TaskControl): void {
+	private attachChild(task: CommandTask, child: ShellProcess, control: TaskControl): void {
 		if (task.monitor && child.stdout) child.stdout.setEncoding("utf8");
 		child.stdout?.on("data", (chunk: Buffer | string) => {
 			task.output.append(chunk);

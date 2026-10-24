@@ -1,6 +1,13 @@
 ## symbol:prepareShellCommand
 
-ANSI capture and color emission are separate contracts: the child has piped stdout/stderr, so programs such as Git with `color.ui=auto` can emit no color codes even when capture and rendering preserve them.
-Why: the Git comparison on 2026-10-24 produced plain output with pipes and colored output with a pseudo-terminal; explicit Git color settings survived both Bash capture and the tested RTK rewrite. A pseudo-terminal changes pager, prompt, and terminal-control behavior as well as color detection, so it is a behavioral change rather than a renderer fix.
-Coupled: components/terse-tools/src/content-formatting.ts, components/rtk/src/index.ts
-Verify: components/tasks/tests/tasks.test.ts, components/terse-tools/tests/render-parity.test.ts
+Bash commands the operator reads (foreground, background, scheduled) run on a pseudo-terminal; monitor and Pi Exec's bash keep pipes. Falling back to pipes when no terminal opens is deliberate (operator decision, 2026-10-24), and the reason travels in `details.terminalUnavailable`.
+Why: programs such as Git and bat choose colors and layout from `isatty`; capturing and rendering ANSI correctly did not make piped commands colorful. Monitor events and program-read output need plain, separate stdout.
+Coupled: components/tasks/src/terminal.ts, components/tasks/src/monitor-tool.ts, components/pi-exec/src/core-tools.ts
+Verify: components/tasks/tests/terminal.test.ts, components/tasks/tests/terminal-fallback.test.ts
+
+## symbol:executeBashImpl
+
+Failed and timed-out commands return `isError` results instead of throwing; only an abort throws.
+Why: a thrown error keeps only its message, so the styled output in `details.styledOutput` would be lost for exactly the failing runs (test failures) where colors help most.
+Coupled: components/terse-tools/src/content-formatting.ts
+Verify: components/tasks/tests/terminal.test.ts, components/tasks/tests/tasks.test.ts

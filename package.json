@@ -161,6 +161,7 @@
     "node": ">=22.19.0"
   },
   "dependencies": {
+    "@lydell/node-pty": "1.1.0",
     "@pydantic/monty": "1.0.0",
     "marked": "^18.1.1",
     "shiki": "^4.5.0"

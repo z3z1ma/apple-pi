@@ -63,6 +63,19 @@ Each tab adds its own keys, which the panel header shows while it has focus. In 
 - `expect`: The exit status the agent predicts for a foreground command, `success` (exit 0) or `failure`. When the prediction misses, the result ends with a `Surprise:` line. The prediction is recorded before the result, so it cannot be rewritten afterwards. A predicted failure, such as a red test, is not evidence for the learning reflection; a success that was predicted to fail is. Background commands ignore it.
 - While a foreground command executes, the operator can press `Ctrl+B` to detach it into the same managed-task lifecycle.
 
+#### Terminal
+
+Foreground, background, and scheduled commands write stdout and stderr to one pseudo-terminal, so programs behave as in the operator's terminal: `git`, `bat`, `ls`, and test runners emit their usual colors and layout, and stdout and stderr keep their order.
+
+- The terminal is as wide as Pi's terminal less the transcript indent (80 by 24 without a terminal). `TERM`, `COLUMNS`, and `LINES` describe it.
+- Stdin stays a pipe (the `stdin` text, or empty), and the command has no controlling terminal: a program that asks for a password on `/dev/tty`, such as `sudo` or `ssh`, fails at once instead of waiting. `PAGER` and `GIT_PAGER` are `cat`, because a pager would wait for keys.
+- Output is read as a terminal shows it: carriage returns, erasures, and cursor movement redraw lines in place, so a progress bar leaves its final state rather than every frame. Full-screen (alternate screen) output is dropped, other control sequences are removed, and colors are kept.
+- The model receives plain text. The transcript, the tool inspector, and `/work` show the colors, which the result carries in `details.styledOutput`. Truncation and the full-output file count plain text.
+- A failed or timed-out command returns an error result with its output, rather than a thrown error.
+- When no pseudo-terminal can be opened (Windows, a platform without the prebuilt `@lydell/node-pty` binary, or none free), the command runs on pipes as before and `details.terminalUnavailable` says why.
+- `monitor` and Pi Exec's `pi.bash` keep pipes: programs read their output. Their text also reaches the model without colors.
+- RTK rewrites some commands (for example `git status`) into its own compact output, which has no colors; `verbatim: true` runs the original command.
+
 ### `remind_me`
 
 Arrange exactly one prompt or command:

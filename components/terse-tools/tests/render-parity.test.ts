@@ -263,6 +263,20 @@ describe("native Pi rendering parity", () => {
 		}
 	});
 
+	it.each([false, true])("shows Bash's styled output while the model's text stays plain, error=%s", (isError) => {
+		const text = "green\n\nCommand exited with code 1";
+		const details = { styledOutput: "\x1b[32mgreen\x1b[0m\n\nCommand exited with code 1" };
+		const transcript = expanded("bash", {}, text, details, false, isError).join("\n");
+		const inspector = viewer({
+			toolName: "bash",
+			result: { content: [{ type: "text", text }], details, isError },
+		}).join("\n");
+		for (const output of [transcript, inspector]) {
+			expect(output).toContain("\x1b[32mgreen\x1b[0m");
+			expect(stripTerminalSequences(output).match(/green/g)).toHaveLength(1);
+		}
+	});
+
 	it("preserves code-fence colors and Markdown transforms in user messages", () => {
 		const text = `before\n\n\`\`\`typescript\n${source}\n\`\`\``;
 		const component = new UserMessageComponent(text, undefined, 1, [(markdown) => markdown.replace("before", "after")]);

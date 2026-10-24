@@ -1,7 +1,13 @@
 import { homedir } from "node:os";
 import { highlightCode, type Theme } from "@earendil-works/pi-coding-agent";
 import { Markdown, type MarkdownTheme, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
-import { diffLines, fileTextLines, outputTextLines, outputWarningLines } from "./content-formatting.js";
+import {
+	diffLines,
+	displayedOutputText,
+	fileTextLines,
+	outputTextLines,
+	outputWarningLines,
+} from "./content-formatting.js";
 import type { EditDiffSummary, ToolStatus } from "./types.js";
 
 const HOME = homedir();
@@ -583,17 +589,13 @@ function formatEditExpanded(
 
 function formatErrorExpanded(
 	headerLine: string,
-	result: { content?: Array<{ type: string; text?: string }> },
+	result: { content?: Array<{ type: string; text?: string }>; details?: unknown },
 	isLast: boolean,
 	collapseHint: string,
 	theme: Theme,
 	width?: number,
 ): string[] {
-	const errorText =
-		result.content
-			?.filter((c) => c.type === "text")
-			.map((c) => c.text ?? "")
-			.join("\n") || "Command failed";
+	const errorText = displayedOutputText(result) || "Command failed";
 	const errorLines = outputTextLines(errorText.trim(), theme, "error");
 	const summaryLine = `  └ ${errorLines[0]}${errorLines.length === 1 && isLast ? collapseHint : ""}`;
 	const detailLines = errorLines.slice(1, MAX_PREVIEW_LINES).map((line, idx, arr) => {
@@ -642,11 +644,7 @@ function formatToolSuccessExpanded(
 	collapseHint: string,
 	width?: number,
 ): string[] {
-	const contentText =
-		result.content
-			?.filter((c) => c.type === "text")
-			.map((c) => c.text ?? "")
-			.join("\n") || "";
+	const contentText = displayedOutputText(result);
 
 	switch (toolName) {
 		case "edit":

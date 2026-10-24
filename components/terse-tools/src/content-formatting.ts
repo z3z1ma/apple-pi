@@ -10,6 +10,30 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { visibleWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
 
+/**
+ * A result's content for display: its text replaced by the styled rendition in `details.styledOutput`
+ * (Bash's terminal colors) when it has one.
+ */
+export function displayedContent<Block extends { type: string; text?: string }>(result: {
+	content?: Block[];
+	details?: unknown;
+}): Array<Block | { type: "text"; text: string }> {
+	const styled = (result.details as { styledOutput?: unknown } | undefined)?.styledOutput;
+	const content = result.content ?? [];
+	if (typeof styled !== "string") return content;
+	return [{ type: "text", text: styled }, ...content.filter((block) => block.type !== "text")];
+}
+
+export function displayedOutputText(result: {
+	content?: Array<{ type: string; text?: string }>;
+	details?: unknown;
+}): string {
+	return displayedContent(result)
+		.filter((block) => block.type === "text")
+		.map((block) => block.text ?? "")
+		.join("\n");
+}
+
 export function outputTextLines(text: string, theme: Theme, color: "toolOutput" | "error" = "toolOutput"): string[] {
 	const normalized = text.replace(/\t/g, "   ");
 	const width = normalized.split(/\r\n|\r|\n/).reduce((max, line) => Math.max(max, visibleWidth(line)), 1);

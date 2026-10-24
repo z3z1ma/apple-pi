@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { type ChildProcess, spawn } from "node:child_process";
 import {
 	type AgentToolResult,
 	createBashToolDefinition as createDefaultBashToolDefinition,
@@ -15,6 +15,14 @@ import { forkCwd, forkTmpDir, trackForkProcessGroup } from "../../shared/src/for
 import { OutputBuffer } from "./output-buffer.js";
 import { killProcessTree } from "./process-killer.js";
 import type { TaskManager } from "./task-manager.js";
+import {
+	closeTerminal,
+	openTerminal,
+	type ShellProcess,
+	type Terminal,
+	TerminalProcess,
+	terminalEnvironment,
+} from "./terminal.js";
 import {
 	type BackgroundTask,
 	type BashParameters,
@@ -56,7 +64,9 @@ export interface PreparedShellCommand {
 	readonly command: string;
 	readonly cwd: string;
 	readonly isRtk: boolean;
-	start(): ReturnType<typeof spawn>;
+	/** Why the last start ran on pipes although a terminal was requested. */
+	readonly terminalUnavailable?: string;
+	start(): ShellProcess;
 }
 
 export async function prepareShellCommand(
@@ -65,6 +75,7 @@ export async function prepareShellCommand(
 	signal: AbortSignal | undefined,
 	ctx: ExtensionContext | undefined,
 	allowRtk: boolean,
+	useTerminal: boolean,
 ): Promise<PreparedShellCommand> {
 	signal?.throwIfAborted();
 	const { command, stdin } = params;
@@ -88,22 +99,45 @@ export async function prepareShellCommand(
 	}
 
 	signal?.throwIfAborted();
+	let terminalUnavailable: string | undefined;
 	return {
 		command,
 		cwd: effectiveCwd,
 		isRtk,
+		get terminalUnavailable() {
+			return terminalUnavailable;
+		},
 		start() {
-			const child = spawn(
-				shellConfig.shell,
-				commandFromStdin ? shellConfig.args : [...shellConfig.args, executionCommand],
-				{
-					cwd: effectiveCwd,
-					detached: process.platform !== "win32",
-					env,
-					stdio: [stdinPipe ? "pipe" : "ignore", "pipe", "pipe"],
-					windowsHide: true,
-				},
-			);
+			let terminal: Terminal | undefined;
+			terminalUnavailable = undefined;
+			if (useTerminal) {
+				try {
+					terminal = openTerminal();
+				} catch (error) {
+					terminalUnavailable = error instanceof Error ? error.message : String(error);
+				}
+			}
+			let child: ChildProcess;
+			try {
+				child = spawn(
+					shellConfig.shell,
+					commandFromStdin ? shellConfig.args : [...shellConfig.args, executionCommand],
+					{
+						cwd: effectiveCwd,
+						detached: process.platform !== "win32",
+						env: terminal ? terminalEnvironment(env, terminal.size) : env,
+						stdio: [
+							stdinPipe ? "pipe" : "ignore",
+							terminal ? terminal.slave : "pipe",
+							terminal ? terminal.slave : "pipe",
+						],
+						windowsHide: true,
+					},
+				);
+			} catch (error) {
+				if (terminal) closeTerminal(terminal);
+				throw error;
+			}
 			// Detached, so the child leads its own process group; a fork kills it, and anything it left behind, on settle.
 			if (process.platform !== "win32") {
 				const release = trackForkProcessGroup(child.pid);
@@ -116,7 +150,7 @@ export async function prepareShellCommand(
 				child.stdin?.on("error", () => {});
 				child.stdin?.end(stdin);
 			}
-			return child;
+			return terminal ? new TerminalProcess(child, terminal) : child;
 		},
 	};
 }
@@ -151,11 +185,12 @@ async function executeBashImpl(
 	onUpdate: any,
 	ctx: ExtensionContext | undefined,
 	taskManager?: TaskManager,
-	allowRtk = false,
+	shownToOperator = false,
 ): Promise<AgentToolResult<any>> {
 	const { command, timeout } = params;
 	const run_in_background = "run_in_background" in params ? Boolean(params.run_in_background) : false;
-	const prepared = await prepareShellCommand(cwd, params, signal, ctx, allowRtk);
+	// Commands the operator reads get RTK and a terminal; program-read output (pi_exec) stays exact and piped.
+	const prepared = await prepareShellCommand(cwd, params, signal, ctx, shownToOperator, shownToOperator);
 	const { cwd: effectiveCwd, isRtk } = prepared;
 
 	if (run_in_background) {
@@ -180,6 +215,7 @@ async function executeBashImpl(
 				status: "running",
 				backgrounded: true,
 				rtk: isRtk,
+				...(prepared.terminalUnavailable ? { terminalUnavailable: prepared.terminalUnavailable } : {}),
 			},
 		};
 	}
@@ -199,6 +235,7 @@ async function executeBashImpl(
 		onUpdate({
 			content: [{ type: "text", text: snapshot.content || "" }],
 			details: {
+				styledOutput: snapshot.styled,
 				truncated: snapshot.truncated,
 				fullOutputPath: snapshot.fullOutputPath,
 				rtk: isRtk,
@@ -261,7 +298,7 @@ async function executeBashImpl(
 						const currentSnapshot = output.getSnapshot();
 						detachedTask = taskManager.createTask(command, effectiveCwd, child, {
 							detachedByOperator: true,
-							initialText: currentSnapshot.content,
+							initialText: currentSnapshot.styled,
 						});
 						backgroundedTask = detachedTask;
 						ctx.ui?.notify?.(`Backgrounded command (${detachedTask.id})`, "info");
@@ -337,36 +374,39 @@ async function executeBashImpl(
 		clearUpdateTimer();
 
 		const snapshot = output.getSnapshot();
-		let outputText = snapshot.content || "(no output)";
-
+		const notes: string[] = [];
 		if (snapshot.truncated && snapshot.fullOutputPath) {
-			outputText += `\n\n[Truncated (${formatSize(DEFAULT_MAX_BYTES)} / ${DEFAULT_MAX_LINES} lines limit). Full output: ${snapshot.fullOutputPath}]`;
+			notes.push(
+				`[Truncated (${formatSize(DEFAULT_MAX_BYTES)} / ${DEFAULT_MAX_LINES} lines limit). Full output: ${snapshot.fullOutputPath}]`,
+			);
 		}
+		const withNotes = (text: string) => [text, ...notes].filter(Boolean).join("\n\n");
 
 		if (signal?.aborted) {
-			throw new Error(`${outputText ? `${outputText}\n\n` : ""}Command aborted`);
-		}
-
-		if (timedOut) {
-			throw new Error(`${outputText ? `${outputText}\n\n` : ""}Command timed out after ${timeout} seconds`);
+			notes.push("Command aborted");
+			throw new Error(withNotes(snapshot.content));
 		}
 
 		const exitCode = (processResult as { exitCode: number | null }).exitCode;
-		const failed = exitCode !== 0 && exitCode !== null;
-		if (failed) outputText = `${outputText ? `${outputText}\n\n` : ""}Command exited with code ${exitCode}`;
+		const failed = timedOut || (exitCode !== 0 && exitCode !== null);
+		if (timedOut) notes.push(`Command timed out after ${timeout} seconds`);
+		else if (failed) notes.push(`Command exited with code ${exitCode}`);
 		const surprise = surpriseNote((params as BashParameters).expect, failed);
-		if (surprise) outputText += `\n\n${surprise}`;
-		if (failed) throw new Error(outputText);
+		if (surprise) notes.push(surprise);
 
+		// Failures are results rather than thrown errors so the styled output in details survives.
 		return {
-			content: [{ type: "text", text: outputText }],
+			content: [{ type: "text", text: withNotes(snapshot.content || "(no output)") }],
 			details: {
 				truncated: snapshot.truncated,
 				fullOutputPath: snapshot.fullOutputPath,
+				styledOutput: withNotes(snapshot.styled || "(no output)"),
 				rtk: isRtk,
 				originalCommand: command,
+				...(prepared.terminalUnavailable ? { terminalUnavailable: prepared.terminalUnavailable } : {}),
 				...(surprise ? { surprise: true } : {}),
 			},
+			...(failed ? { isError: true } : {}),
 		};
 	} finally {
 		unsubscribeInput?.();

@@ -475,11 +475,15 @@ describe("tasks component", () => {
 			const fail = 'node -e "process.exit(3)"';
 
 			expect(getResultText(await run(pass, "success"))).not.toContain("Surprise");
-			await expect(run(fail, "failure")).rejects.toThrow(/exited with code 3$/);
+			const expectedFailure = await run(fail, "failure");
+			expect(expectedFailure.isError).toBe(true);
+			expect(getResultText(expectedFailure)).toMatch(/exited with code 3$/);
 			expect(getResultText(await run(pass, "failure"))).toMatch(
 				/ran\n+Surprise: you predicted this command would fail\.$/,
 			);
-			await expect(run(fail, "success")).rejects.toThrow(
+			const surprisingFailure = await run(fail, "success");
+			expect(surprisingFailure.isError).toBe(true);
+			expect(getResultText(surprisingFailure)).toMatch(
 				/exited with code 3\n\nSurprise: you predicted this command would succeed\.$/,
 			);
 
@@ -1056,7 +1060,7 @@ describe("tasks component", () => {
 	});
 
 	describe("createExecBashToolDefinition", () => {
-		it("returns command ANSI colors intact", async () => {
+		it("returns plain text to the model and the command's colors in details", async () => {
 			const tool = createExecBashToolDefinition();
 			const result = await tool.execute(
 				"ansi-output",
@@ -1065,7 +1069,8 @@ describe("tasks component", () => {
 				undefined,
 				{ cwd: process.cwd() } as any,
 			);
-			expect(getResultText(result)).toContain("\x1b[31mred\ncontinued\x1b[0m\n");
+			expect(getResultText(result)).toBe("red\ncontinued\n");
+			expect(result.details.styledOutput).toBe("\x1b[31mred\x1b[0m\n\x1b[31mcontinued\x1b[0m\n");
 		});
 
 		it("excludes run_in_background and verbatim from parameter schema", () => {

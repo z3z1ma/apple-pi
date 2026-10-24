@@ -13,6 +13,7 @@ import {
 } from "@earendil-works/pi-tui";
 import { createViewerKeys, type ViewerKeys } from "../../shared/src/viewer-keys.js";
 import {
+	displayedContent,
 	fileTextLines,
 	outputTextLines,
 	outputWarningLines,
@@ -113,7 +114,7 @@ function formatOutputLines(inspection: ToolInspection, theme: Theme): string[] {
 		lines.push(theme.bold(theme.fg("error", "● Execution failed with error:")), "");
 	}
 	if (result.content) {
-		for (const block of result.content) {
+		for (const block of displayedContent(result)) {
 			if (block.type === "text" && block.text) {
 				lines.push(
 					...(toolName === "read" && !result.isError
@@ -136,7 +137,9 @@ function formatOutputLines(inspection: ToolInspection, theme: Theme): string[] {
 	}
 	const details = result.details as any;
 	if (details && typeof details === "object") {
-		const extra = Object.fromEntries(Object.entries(details).filter(([k]) => k !== "diff" && k !== "patch"));
+		const extra = Object.fromEntries(
+			Object.entries(details).filter(([k]) => !["diff", "patch", "styledOutput"].includes(k)),
+		);
 		if (Object.keys(extra).length > 0) {
 			if (lines.length > 0) lines.push("");
 			lines.push(

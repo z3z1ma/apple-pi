@@ -88,6 +88,10 @@ apple-pi contains modified source imports and pinned runtime dependencies. apple
 - Integration: `pi_exec` executes type-checked Python snippets in Monty's local subprocess pool. The upstream package and platform-specific worker binaries remain normal npm dependencies; no Monty source is copied into apple-pi.
 - Monty supplies the Python subset, worker isolation, and resource limits. apple-pi owns the Pi tool bridge, tool-call policy, cancellation, result conversion, and traces. Monty's local worker is not an OS-level security boundary.
 
+## Terminal dependency
+
+- @lydell/node-pty (<https://github.com/lydell/node-pty>), MIT, a prebuilt distribution of Microsoft's node-pty (Copyright (c) 2012-2015 Christopher Jeffrey, (c) 2016 Daniel Imms, (c) 2018 Microsoft Corporation): a runtime npm dependency, pinned at `1.1.0`, whose native module opens the pseudo-terminals Bash commands write to. No source is copied.
+
 ## Browser page dependencies
 
 - Shiki (<https://github.com/shikijs/shiki>), MIT: a runtime npm dependency that highlights code for `review_code`. No source is copied.
