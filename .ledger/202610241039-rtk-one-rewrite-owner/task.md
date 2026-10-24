@@ -27,11 +27,11 @@ Settled by an architecture survey (operator-approved report) and an interview th
 
 ## Current State
 
-Ready: design confirmed; acceptance is the full list above, with the rtk, tasks, and terse-tools tests passing.
+Done.
 
 ## Outcome
 
-Pending shaping.
+Committed 9be61a5c. The tasks bash tool is the only command rewriter; the hook and its fields are gone, the unused rtk surface and duplicate guards removed, binary-dependent tests skip with "(needs rtk on PATH)", docs updated. Built by a Ralph loop (two fresh engineers), reviewed by a code-review board (one significant finding: the suite failed without rtk; fixed), approved by the operator in sign_off_code with every hunk seen. Checks: rtk/tasks/terse-tools 149/149 with rtk; the rtk file 17 pass, 5 skipped without rtk; typecheck, lint, format, loader. Not run: full npm test; marker timing in a real terminal.
 
 ## Progress
 
