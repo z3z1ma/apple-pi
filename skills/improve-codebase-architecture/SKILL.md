@@ -1,102 +1,38 @@
 ---
 name: improve-codebase-architecture
-description: "Scan a codebase for deepening opportunities, present them as a visual HTML report, then interrogate the selected candidate."
+description: "Survey a codebase for deepening opportunities with an architecture board, present them as a report for the operator, and hand the chosen candidate to a design interview."
 disable-model-invocation: true
 ---
 
 # Improve Codebase Architecture
 
-Surface architectural friction and propose **deepening opportunities**: refactors that turn shallow modules into deep ones. The aim is testability and AI-navigability.
+Find **deepening opportunities**: refactors that turn shallow modules into deep ones, for testability and AI-navigability. This is a survey: it changes no production code, and zero candidates is a valid result.
 
-This is an architecture survey, not a refactoring command. It may write one temporary HTML report and, after the user selects a candidate, curate bounded wiki/domain knowledge or an explicitly approved ADR. It does not change production code.
+Read and follow [`codebase-design`](../codebase-design/SKILL.md) for the vocabulary (**module**, **interface**, **implementation**, **depth**, **seam**, **adapter**, **leverage**, **locality**) and its principles. Use those terms exactly. Read the relevant domain-language pages in `.wiki/` and the ADRs that govern the area; reopen an ADR only when the observed friction justifies it, and say so.
 
-Read and follow the installed [`codebase-design`](../codebase-design/SKILL.md) skill for the architecture vocabulary (**module**, **interface**, **implementation**, **depth**, **seam**, **adapter**, **leverage**, **locality**) and its principles (the deletion test, “the interface is the test surface,” “one adapter = hypothetical seam, two = real”). Use these terms exactly in every suggestion, and do not drift into “component,” “service,” “API,” or “boundary” for those meanings.
+## Scope
 
-Read relevant domain-language and architecture pages in `.wiki/` when they exist. Use `wiki_references` when nearby context matters. Repository documentation, tests, ADRs, and maintainer instructions remain authoritative; do not re-litigate an ADR unless observed friction is strong enough to justify explicitly reopening it.
+Take the operator's direction when given: a module, a pain point, an incoming specification. Otherwise walk back a good stretch of `git log` and let the hot spots (the files that keep changing) pull attention first; deepening pays off where change keeps coming. Record `git status` before you start and leave every pre-existing change as it is.
 
-## Process
+## The survey board
 
-### 1. Explore
+You chair. Staff with standing people as [`handbook-writing`](../handbook-writing/SKILL.md) describes, the whole board before briefing anyone:
 
-Snapshot `git status --short` before the survey. Preserve every pre-existing staged, unstaged, and untracked path. This is a path-level guard, not proof against concurrent edits within an already-dirty path. Before changing a wiki or ADR destination that was initially dirty or has changed since inspection, stop and ask the user how to proceed.
+- A `repository-archaeologist` scouts the scope: where understanding one concept means bouncing between small modules, where an interface is nearly as complex as its implementation, where extracted pure functions moved the bugs into their callers, where modules leak across seams, and what is hard to test through its current interface. It reports candidate locations with evidence. The same person returns for later surveys of this codebase and keeps learning it.
+- A `chief-architect` challenges each candidate with the **two-stage deletion test**: deleting the existing module makes little complexity reappear (it is shallow), and deleting the proposed deep module would make its hidden behavior reappear across callers. A candidate that fails either stage is out.
 
-**Scope before you scan: YAGNI.** Deepening a module pays off by making future changes to it easier, so put extra weight on the parts of the codebase that have recently changed. Decide _where_ to look before you look:
+Check every surviving candidate against current source yourself.
 
-- If the user named a direction—a module, subsystem, pain point, or incoming specification—take it and skip the inference below.
-- Otherwise, walk back a good stretch of commit history (`git log --oneline`) to find the codebase’s hot spots: the files and areas that keep coming up. Let those paths pull your attention first. If the changes are scattered with no clear hot spot, widen the net.
+## Report
 
-Read the relevant domain language and governing ADRs before scanning.
+Write the report as Markdown in the task's directory, and open it with `sign_off_document`, following [`operator-sign-off`](../operator-sign-off/SKILL.md). Lead with the top recommendation, or with the plain statement that no candidate qualified. Then one section per candidate:
 
-Ask the `explore` intern to walk the selected code. Give it the scope, hot spots, domain and ADR paths, deep-module vocabulary, and deletion test. Ask for evidence-backed candidate locations and observed friction. Treat its answer as a cheap, lossy scouting report: verify the source before making an architectural judgment. The root develops the interface proposals.
+- **Files** involved, **problem** (the friction), **solution** in plain words, and **benefits** (locality, leverage, how tests improve);
+- a **before / after** `mermaid` diagram showing the shallowness and the deepening;
+- the **dependency category** from [deepening.md](../codebase-design/references/deepening.md) and the **strength**: `Strong`, `Worth exploring`, or `Speculative`.
 
-Explore organically and note where understanding creates friction:
+Describe the change, not a detailed interface; the interface is designed after the operator chooses. Mark a candidate that conflicts with an ADR. Ask the operator to choose one candidate on the page.
 
-- Where does understanding one concept require bouncing between many small modules?
-- Where are modules **shallow**, with an interface nearly as complex as the implementation?
-- Where have pure functions been extracted just for testability, but the real bugs hide in how they are called—no **locality**?
-- Where do tightly coupled modules leak across their seams?
-- Which parts of the codebase are untested, or hard to test through their current interface?
+## Hand-off
 
-Apply the **deletion test** in two stages. First test the existing module: if deleting it makes little complexity reappear, it is shallow or pass-through and may be absorbed. Then test the proposed deep module: deleting that proposal must make the hidden behavior reappear across its callers. Only proposals that shrink the interface and concentrate the implementation qualify for the report. `Speculative` means the payoff is uncertain; it does not admit a proposal that fails either stage.
-
-The root verifies every candidate against current source and governing evidence. Reject unsupported claims and proposals that fail the two-stage deletion test. A valid survey may find zero candidates; report that result plainly instead of inventing a recommendation.
-
-### 2. Present candidates as an HTML report
-
-The root writes a fresh HTML file to the OS temp directory so nothing lands in the repository. Resolve the temp directory from `$TMPDIR`, falling back to `/tmp`, or `%TEMP%` on Windows. Write `<tmpdir>/architecture-review-<timestamp>.html` so every run gets a fresh file.
-
-Open it for the user with the platform command (`xdg-open <path>` on Linux, `open <path>` on macOS, `start <path>` on Windows) and report the absolute path. If opening is unavailable, report the path without treating the report itself as failed.
-
-Use Tailwind via CDN for layout and styling and Mermaid via CDN for diagrams where a graph, flow, or sequence communicates the structure reliably. Mix Mermaid with hand-crafted CSS and inline SVG visuals: Mermaid for graph-shaped relationships, hand-built visuals for mass diagrams, cross-sections, and call-graph collapse. Each candidate gets a **before/after visualization**. Be visual.
-
-Keep secrets, source bodies, transcript content, and other private bytes out of the report. Summarize only the architecture evidence needed for the candidate cards. HTML-escape every repository-derived value used in ordinary HTML. Do not interpolate arbitrary filenames, symbols, or domain text into Mermaid source: use generated node IDs and short author-controlled neutral labels there, and show exact escaped names in adjacent HTML or hand-built HTML/SVG when needed. Initialize Mermaid with `securityLevel: "strict"`. Opening the report loads third-party CDN scripts that can inspect the report DOM; keep private bytes out and treat that network effect as part of the chosen rendering. CDN rendering may fail in offline, SRI-enforced, or locked-down environments. When it is blocked, report that limitation and offer to rerender with inline CSS/SVG rather than claiming the rendered page was verified.
-
-For every candidate, render a card with:
-
-- **Files**: which files/modules are involved
-- **Problem**: why the current architecture causes friction
-- **Solution**: a plain-English description of what would change
-- **Benefits**: locality, leverage, and how tests improve
-- **Before / After diagram**: side by side, illustrating the shallowness and deepening
-- **Dependency category**: `in-process`, `local-substitutable`, `ports & adapters`, or `mock`
-- **Recommendation strength**: `Strong`, `Worth exploring`, or `Speculative`
-
-When at least one candidate qualifies, end with a **Top recommendation**: which candidate to tackle first and why. When none qualifies, render an explicit no-candidate result and omit the recommendation card.
-
-Use domain vocabulary for the subject and `codebase-design` vocabulary for the architecture. If an ADR conflicts with a candidate, surface it only when the observed friction warrants reconsideration and mark the conflict clearly.
-
-Follow [the complete report format](references/html-report.md). Inspect the generated source for complete cards, supported claims, current paths, and safe escaping. Before presenting it, compare `git status --short` with the initial snapshot. The report phase owns no repository writes: report any unexpected change, preserve it, and never claim or revert it.
-
-Do **not** propose detailed interfaces yet. When at least one candidate qualifies and the user did not request report-only mode, ask: **“Which of these would you like to explore?”** Then stop and wait. If none qualify, or the user requested report-only mode, finish after delivering the report and path.
-
-### 3. Interrogate the selected candidate
-
-Continue with one selected candidate per conversation. Read and follow the installed [`interrogate-to-design`](../interrogate-to-design/SKILL.md) skill for the design-tree/frontier interview and bounded knowledge curation. This explicit human invocation supplies the survey and knowledge-curation authority; the referenced skill supplies the method. Keep this architecture-specific frame:
-
-- constraints and dependencies;
-- the shape of the deepened module;
-- what belongs behind the seam;
-- which tests survive through the interface; and
-- which facts need exploration, research, or a prototype.
-
-Ask the complete current frontier with recommendations, then stop and wait after every round. Finish only when the frontier is empty and the user confirms shared understanding.
-
-Read and follow [`domain-modeling`](../domain-modeling/SKILL.md) when the design introduces or sharpens domain language or when an ADR may qualify. Update reusable `.wiki/` knowledge as it crystallizes, preserving source authority and keeping implementation specifications out of the wiki. Offer an ADR for a rejected candidate only when the load-bearing reason is durable enough that future surveys should not suggest it again; write it only after explicit approval.
-
-When alternative interfaces need exploration, read and follow [`codebase-design`](../codebase-design/SKILL.md) and its Design It Twice procedure.
-
-After shared understanding is confirmed, hand the decision to `/skill:to-spec`. Do not implement the refactor, create tickets, or automatically file the unselected candidates.
-
-## Finish
-
-Report:
-
-- the temporary report’s absolute path;
-- the selected candidate and settled deepening decision, if one was explored;
-- durable wiki or approved ADR paths changed;
-- unresolved research or prototype hand-offs; and
-- when a candidate was selected and settled, that the next build step is `/skill:to-spec`; otherwise, that no build handoff was created.
-
-Compare final repository status with the initial snapshot. Attribute only exact edits made to paths that were clean and unchanged before the workflow touched them. Preserve and report every pre-existing or concurrent change; do not claim ownership of an ambiguous same-path change.
-
-This workflow does not authorize production-code changes, commits, publication, deployment, tracker mutation, or other external effects beyond writing and opening the temporary report and the bounded knowledge mutations described above.
+When the operator chooses a candidate, name the next step: `/skill:interrogate-to-design` with that candidate, which designs the deepened module through an interview and Design It Twice where alternatives matter. Report the report's path, the choice, and that no production code changed.
