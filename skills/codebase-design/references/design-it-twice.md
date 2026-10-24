@@ -1,44 +1,30 @@
 # Design It Twice
 
-When the user wants to explore alternative interfaces for a chosen deepening candidate, ask peers for independent designs. Based on "Design It Twice" (Ousterhout): your first idea is unlikely to be the best.
+Your first interface is unlikely to be the best. When a module's interface is worth exploring, a design board produces several radically different designs, attacks the favourite, and the operator chooses. Everyone uses the vocabulary in [SKILL.md](../SKILL.md) and, when present, the project's domain language in `.wiki/`.
 
-Uses the vocabulary in [SKILL.md](../SKILL.md): **module**, **interface**, **seam**, **adapter**, **leverage**.
+## Frame the problem
 
-## Process
+Whoever runs this process chairs the board. Before staffing it, write the problem space for the chosen module and show it to the operator:
 
-### 1. Frame the problem space
+- the constraints any interface must satisfy;
+- the dependencies, each with its category from [deepening.md](deepening.md);
+- a rough code sketch that makes the constraints concrete. It is not a proposal.
 
-Before commissioning designs, write a user-facing explanation of the problem space for the chosen candidate:
+## Staff the board
 
-- The constraints any new interface would need to satisfy
-- The dependencies it would rely on, and which category they fall into (see [DEEPENING.md](deepening.md))
-- A rough illustrative code sketch to ground the constraints, not a proposal, just a way to make the constraints concrete
+| Perspective | Default role | Design goal |
+| --- | --- | --- |
+| Minimal interface | `principal-engineer` | 1–3 entry points, the most leverage per entry point |
+| Widest options | `distinguished-member-of-technical-staff` | the design the others would not consider |
+| Outside the stack | `paradigm-outsider` | the design without the current conventions |
+| Attack | `architecture-prosecutor` | the strongest case against the favourite |
 
-Show this to the user, then immediately proceed to Step 2. The user reads and thinks while the peers work in parallel.
+Add or swap a designer when the module needs another lens, such as ports and adapters for cross-seam dependencies, or the most common caller. Staff the whole board with standing people before briefing anyone, and give every member the names of the others.
 
-### 2. Commission independent designs
+## Run the board
 
-Use `pi_exec` with concurrent `agent(role="principal-engineer", task=...)` calls for the contrasting goals below. Each call has fresh context and closes its temporary peer when the proposal returns. Ask each peer for a **radically different** interface for the deepened module.
-
-Give each peer a self-contained technical goal: file paths, coupling details, dependency category from [DEEPENING.md](deepening.md), and what sits behind the seam. Include the problem-space context from Step 1 and a different design constraint:
-
-- Agent 1: "Minimize the interface: aim for 1–3 entry points max. Maximise leverage per entry point."
-- Agent 2: "Maximise flexibility: support many use cases and extension."
-- Agent 3: "Optimise for the most common caller: make the default case trivial."
-- Agent 4 (if applicable): "Design around ports & adapters for cross-seam dependencies."
-
-Include [SKILL.md](../SKILL.md) vocabulary and, when present, the relevant domain-language vocabulary from `.wiki/` in the brief so each peer names things consistently with the architecture language and the project's domain language.
-
-Ask each peer to cover:
-
-1. Interface (types, methods, params, plus invariants, ordering, error modes)
-2. Usage example showing how callers use it
-3. What the implementation hides behind the seam
-4. Dependency strategy and adapters (see [DEEPENING.md](deepening.md))
-5. Trade-offs: where leverage is high, where it's thin
-
-### 3. Present and compare
-
-Present designs sequentially so the user can absorb each one, then compare them in prose. Contrast by **depth** (leverage at the interface), **locality** (where change concentrates), and **seam placement**.
-
-After comparing, give your own recommendation: which design you think is strongest and why. If elements from different designs would combine well, propose a hybrid. Be opinionated: the user wants a strong read, not a menu.
+1. **Designs, alone.** Each designer gets the problem space and its design goal, not the chair's preference, and sends the chair privately: the interface (types, methods, parameters, invariants, ordering, error modes), a caller's usage example, what hides behind the seam, the dependency strategy and adapters, and where leverage is high or thin.
+2. **Challenge.** The chair posts all designs, in full, in one `send_mail` thread to the board and names a favourite. The prosecutor attacks it; designers answer.
+3. **Compare.** Once every designer has answered the attack, or the board has converged, the chair ends the challenge and compares the designs on depth, locality, and seam placement, and recommends one, or a hybrid when parts combine well. Be opinionated: the operator wants a strong read, not a menu.
+4. **Choose.** The chair presents each design, the attack, and the recommendation, together with any question the board found that only the operator can answer, then asks the operator to choose with `ask_user_question`, and records the choice in the task.
+5. **Close.** The board spends a short exchange on what made this design harder or easier, and the chair records it in the task's `retrospective.md`.
