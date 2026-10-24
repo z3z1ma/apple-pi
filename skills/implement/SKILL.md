@@ -28,7 +28,7 @@ Run typechecking and focused tests as you go, and the repository's full required
 
 Read and apply [`code-review`](../code-review/SKILL.md) on the working tree against `HEAD`, scoped to this work and its intent source. Fix the confirmed findings this run needs; report the rest.
 
-Then, for a substantial change, read and apply [`operator-sign-off`](../operator-sign-off/SKILL.md) for a code sign-off before committing. Skip it when the operator waived sign-off for this run, for example for unattended overnight work, and say in the report that you did.
+Then, for a substantial change, read and apply [`operator-sign-off`](../operator-sign-off/SKILL.md) for a code sign-off before committing. Skip it when the operator waived sign-off for this run, for example for unattended overnight work, and say in the report that you did. Changes the operator requests always block the commit, waived or not: apply them, rerun the checks and the board, and ask again. Checks, review, and sign-off count only for the code as it now stands.
 
 ## Finish
 
