@@ -62,7 +62,7 @@ describe("pi_exec skills", () => {
 			expect(() => readSkillBody("to-tickets", { cwd: dir, includeDefaults: false })).toThrow(/Unknown skill/);
 			expect(() => readSkillBody("wayfinder", { cwd: dir, includeDefaults: false })).toThrow(/Unknown skill/);
 			const body = readSkillBody("code-review", { cwd: dir, includeDefaults: false });
-			expect(body.startsWith("# Code Review")).toBe(true);
+			expect(body.startsWith("# Code review")).toBe(true);
 			expect(body).not.toMatch(/^---/);
 			const tddBody = readSkillBody("tdd", { cwd: dir, includeDefaults: false });
 			expect(tddBody.startsWith("# Test-Driven Development")).toBe(true);
@@ -615,7 +615,7 @@ describe("pi_exec tool", () => {
 		const result = await tool.execute(
 			"skills",
 			{
-				code: 'names = [item["name"] for item in await skills_list()]\nbody = await skills_body(name="code-review")\n["code-review" in names, body.startswith("---"), "Review" in body]',
+				code: 'names = [item["name"] for item in await skills_list()]\nbody = await skills_body(name="code-review")\n["code-review" in names, body.startswith("---"), "review board" in body]',
 			},
 			undefined,
 			undefined,
