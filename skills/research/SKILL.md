@@ -11,6 +11,6 @@ Ask it to:
 2. Return findings with citations and enough source identity to revisit each claim.
 3. Mark missing evidence **Not verified**, and distinguish what it checked from what it believes.
 
-The root verifies the details that decide the outcome against the cited sources, then writes the findings to one Markdown file. Match the repository's existing convention for such notes. Otherwise use the active ledger task for undertaking-specific research, or read and follow [`llm-wiki`](../llm-wiki/SKILL.md) for reusable knowledge. If neither fits, choose a sensible location and report it.
+The root verifies the details that decide the outcome against the cited sources. When a finding decides something costly or hard to reverse, also give a standing `scientific-skeptic` (call in one who has checked for you before, or hire one) the findings and their citations, and ask which decisive claim the sources do not support. Then write the findings to one Markdown file. Match the repository's existing convention for such notes. Otherwise use the active ledger task for undertaking-specific research, or read and follow [`llm-wiki`](../llm-wiki/SKILL.md) for reusable knowledge. If neither fits, choose a sensible location and report it.
 
 When the question has independent parts, call several research interns in parallel with distinct questions and readable material, then reconcile their answers into the same artifact. Use `pi_exec` when source acquisition, tool calls, and result reduction benefit from a program; ordinary parallel reading needs only the intern tools.
