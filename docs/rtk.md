@@ -1,11 +1,13 @@
 # RTK (Rust Token Killer) Integration
 
-`apple-pi` integrates [RTK (Rust Token Killer)](https://github.com/rtk-ai/rtk) seamlessly to compress CLI command outputs (e.g. `git`, `cargo`, `npm`, `vitest`, linters, directory listings) and reduce token consumption.
+`apple-pi` integrates [RTK (Rust Token Killer)](https://github.com/rtk-ai/rtk) to compress CLI command outputs (e.g. `git`, `cargo`, `npm`, `vitest`, linters, directory listings) and reduce token consumption.
+
+RTK is off by default. Set `RTK_ENABLED=1` in the environment Pi starts with to turn it on. RTK's compact output replaces the colors and layout that Bash's [terminal](tasks.md#terminal) gives commands, so it is opt-in for now.
 
 ## How It Works
 
 1. **Automatic Rewrite**:
-   When RTK is available on the system (`>= 0.23.0`), the tasks `bash` tool (`prepareShellCommand` in `components/tasks/src/bash-tool.ts`, the only rewriter) rewrites commands through `rtk rewrite <command>`.
+   When RTK is enabled and available on the system (`>= 0.23.0`), the tasks `bash` tool (`prepareShellCommand` in `components/tasks/src/bash-tool.ts`, the only rewriter) rewrites commands through `rtk rewrite <command>`.
    - If RTK provides an optimized command (exit codes 0 or 3), the rewritten command executes.
    - If RTK cannot optimize the command, execution falls back to the original command without errors (fail-open).
 
@@ -42,5 +44,5 @@ The `bash` tool includes an optional `verbatim` parameter:
 
 ## Configuration & Environment Variables
 
-- **`RTK_DISABLED`**: Set `RTK_DISABLED=1` in the environment to completely disable RTK detection, command rewriting, and system prompt injection.
-- **Fail-Open Behavior**: If the `rtk` binary is missing from the system `PATH`, all features disable cleanly. Commands run normally with zero overhead or execution failures.
+- **`RTK_ENABLED`**: Set `RTK_ENABLED=1` in the environment to turn on RTK detection, command rewriting, and system prompt injection. Any other value, or none, leaves RTK off.
+- **Fail-Open Behavior**: If RTK is enabled but the `rtk` binary is missing from the system `PATH`, all features disable cleanly. Commands run normally with zero overhead or execution failures.

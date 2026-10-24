@@ -74,7 +74,7 @@ Foreground, background, and scheduled commands write stdout and stderr to one ps
 - A failed or timed-out command returns an error result with its output, rather than a thrown error.
 - When no pseudo-terminal can be opened (Windows, a platform without the prebuilt `@lydell/node-pty` binary, or none free), the command runs on pipes as before and `details.terminalUnavailable` says why.
 - `monitor` and Pi Exec's `pi.bash` keep pipes: programs read their output. Their text also reaches the model without colors.
-- RTK rewrites some commands (for example `git status`) into its own compact output, which has no colors; `verbatim: true` runs the original command.
+- With [RTK](rtk.md) enabled (`RTK_ENABLED=1`), RTK rewrites some commands (for example `git status`) into its own compact output, which has no colors; `verbatim: true` runs the original command.
 
 ### `remind_me`
 

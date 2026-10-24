@@ -7,6 +7,18 @@ import { isRtkAvailable, parseSemver, probeRtk, resetRtkCache, rewriteCommand } 
 const hasRtk = spawnSync("rtk", ["--version"]).status === 0;
 const itWithRtk = (name: string, fn: () => Promise<void>) => (hasRtk ? it : it.skip)(`${name} (needs rtk on PATH)`, fn);
 
+// RTK is opt-in; these tests run with it enabled unless a test turns it off.
+const originalEnabled = process.env.RTK_ENABLED;
+beforeEach(() => {
+	resetRtkCache();
+	process.env.RTK_ENABLED = "1";
+});
+afterEach(() => {
+	resetRtkCache();
+	if (originalEnabled === undefined) delete process.env.RTK_ENABLED;
+	else process.env.RTK_ENABLED = originalEnabled;
+});
+
 const mockTheme = {
 	fg: (_color: string, text: string) => text,
 	bg: (_color: string, text: string) => text,
@@ -32,22 +44,6 @@ describe("RTK semver parsing", () => {
 });
 
 describe("RTK detector", () => {
-	const originalEnv = process.env.RTK_DISABLED;
-
-	beforeEach(() => {
-		resetRtkCache();
-		delete process.env.RTK_DISABLED;
-	});
-
-	afterEach(() => {
-		resetRtkCache();
-		if (originalEnv !== undefined) {
-			process.env.RTK_DISABLED = originalEnv;
-		} else {
-			delete process.env.RTK_DISABLED;
-		}
-	});
-
 	it("does not probe or cache availability after cancellation", async () => {
 		await expect(probeRtk({ signal: AbortSignal.abort() })).rejects.toMatchObject({ name: "AbortError" });
 		expect((await probeRtk()).available).toBe(hasRtk);
@@ -62,32 +58,30 @@ describe("RTK detector", () => {
 		expect(available).toBe(true);
 	});
 
-	it("disables RTK when RTK_DISABLED is set to 1", async () => {
-		process.env.RTK_DISABLED = "1";
-		const status = await probeRtk();
-		expect(status.available).toBe(false);
+	it("keeps RTK off unless RTK_ENABLED is 1", async () => {
+		for (const value of [undefined, "0", "true"]) {
+			resetRtkCache();
+			if (value === undefined) delete process.env.RTK_ENABLED;
+			else process.env.RTK_ENABLED = value;
+			expect((await probeRtk()).available).toBe(false);
+		}
 	});
 
 	it("caches probe result until resetRtkCache is called", async () => {
 		const first = await probeRtk();
-		process.env.RTK_DISABLED = "1";
+		delete process.env.RTK_ENABLED;
 		// Cached result should still return available
 		const second = await probeRtk();
 		expect(second).toBe(first);
 
 		resetRtkCache();
-		// Now it should re-probe and see RTK_DISABLED=1
+		// Now it should re-probe and see RTK switched off
 		const third = await probeRtk();
 		expect(third.available).toBe(false);
 	});
 });
 
 describe("RTK rewriteCommand", () => {
-	beforeEach(() => {
-		resetRtkCache();
-		delete process.env.RTK_DISABLED;
-	});
-
 	it("propagates cancellation rather than failing open", async () => {
 		await expect(rewriteCommand("git status", { signal: AbortSignal.abort() })).rejects.toMatchObject({
 			name: "AbortError",
@@ -105,8 +99,8 @@ describe("RTK rewriteCommand", () => {
 		expect(await rewriteCommand("rtk vitest run")).toBeNull();
 	});
 
-	it("returns null when RTK_DISABLED is set", async () => {
-		process.env.RTK_DISABLED = "1";
+	it("returns null unless RTK_ENABLED is 1", async () => {
+		delete process.env.RTK_ENABLED;
 		expect(await rewriteCommand("git status")).toBeNull();
 	});
 
@@ -189,6 +183,15 @@ describe("Bash tool RTK rewriting vs Pi Exec isolation", () => {
 			cwd: process.cwd(),
 		} as any);
 		expect(result.details?.rtk).toBe(true);
+	});
+
+	itWithRtk("createBashToolDefinition runs commands unchanged when RTK is not enabled", async () => {
+		delete process.env.RTK_ENABLED;
+		const tool = createBashToolDefinition();
+		const result = await tool.execute("call-6", { command: "git status" }, undefined, undefined, {
+			cwd: process.cwd(),
+		} as any);
+		expect(result.details?.rtk).toBe(false);
 	});
 
 	it("createBashToolDefinition runs verbatim when verbatim is true", async () => {

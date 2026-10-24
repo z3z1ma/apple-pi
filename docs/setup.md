@@ -140,7 +140,7 @@ Inside Pi:
 - **Validation:** add `"$schema"` to Pi's configuration files so your editor validates and completes them: `https://pi.dev/schemas/settings.schema.json` in `settings.json`, and `models`, `keybindings`, or `theme` in place of `settings` for the others. The settings schema accepts apple-pi's own keys, such as `pair`, but does not check them.
 - **Remote clipboard:** when you attach to tmux from another machine, set `PI_CLIPBOARD_OSC52=1` so copies (including `/btw`'s `Ctrl+X`) also reach that machine's clipboard.
 - **Editor:** set `EDITOR` in your shell profile (for example `export EDITOR=nvim`) for `Ctrl+E` prompt editing.
-- **RTK:** set `RTK_DISABLED=1` to turn RTK off. See [RTK](rtk.md).
+- **RTK:** off by default; set `RTK_ENABLED=1` to turn it on. See [RTK](rtk.md).
 - **Branch search:** the main agent's `search_branches` tool stays off until a configuration exists. Copy the example, then run `/reload`:
 
   ```bash

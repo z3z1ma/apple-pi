@@ -24,7 +24,8 @@ export async function probeRtk(options?: { signal?: AbortSignal }): Promise<RtkS
 		return cachedStatus;
 	}
 
-	if (process.env.RTK_DISABLED === "1") {
+	// Off unless the operator opts in: RTK's compact output replaces the colors and layout Bash's terminal gives.
+	if (process.env.RTK_ENABLED !== "1") {
 		cachedStatus = { available: false };
 		return cachedStatus;
 	}
