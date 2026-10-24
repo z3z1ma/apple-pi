@@ -105,7 +105,7 @@ export function trackChanges(pi: ExtensionAPI): Map<string, string[]> {
 }
 
 export default function registerChangeReflection(pi: ExtensionAPI): void {
-	const reflect = registerForkedContinuation(pi, CHANGE_REFLECTION_MESSAGE_TYPE, "Change review");
+	const reflect = registerForkedContinuation(pi, CHANGE_REFLECTION_MESSAGE_TYPE, "Review");
 	const changed = trackChanges(pi);
 	let completed = false;
 

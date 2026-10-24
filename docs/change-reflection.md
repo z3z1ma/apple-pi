@@ -6,7 +6,7 @@ After a run that changed files, change review looks once more at those files in 
 - **Other code and non-prose files:** Is there a simpler way to preserve the required behavior and fit the surrounding code? The prompt also lists what ran after each file's last change: `bash` commands and `pi_exec` calls, with failures and background launches marked. The extension does not decide which runs count as checks. The agent claims only what those runs check, runs what is missing, or says what stays unverified. The lens also asks the agent to keep [code context files](code-context.md) true to the change. The agent may create a missing context file, but only for a non-obvious invariant, hazard, or cross-file coupling the work revealed that the code cannot show, with its reason as `Why:`; `Coupled:` and `Verify:` are optional. Its reply names each context file it creates as `Created context file: <path>` and each changed or removed invariant as `Changed invariant: <file>#<section>, because <reason>`.
 - **Prose (`.md`, `.mdx`, `.markdown`, `.txt`, `.rst`, `.adoc`):** Can the intended reader understand the purpose, terms, and next steps without this conversation?
 
-The fork applies a clear improvement and revalidates what it affects, or keeps the result. Leaving the change as it is counts as a valid outcome. Its one-line reply, such as `Change review: Simplified parseArgs; npm test passes.`, reaches the main conversation as one passive message.
+The fork applies a clear improvement and revalidates what it affects, or keeps the result. Leaving the change as it is counts as a valid outcome. Its one-line reply, such as `Review: Simplified parseArgs; npm test passes.`, reaches the main conversation as one passive message.
 
 ## Behavior
 

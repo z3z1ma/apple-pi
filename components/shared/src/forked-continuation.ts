@@ -6,6 +6,7 @@ import { AgentSession, type ExtensionAPI, type ExtensionContext } from "@earendi
 import { truncateToWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
 
 import { ASK_USER_QUESTION_TOOL_NAME } from "../../ask-user-question/src/types.js";
+import { renderInline } from "./compact-custom-message.js";
 import { type ForkWorktree, runInFork } from "./fork-context.js";
 import { canonical, within } from "./real-path.js";
 
@@ -109,6 +110,7 @@ export function closePendingCalls(messages: AgentMessage[], note: string): void 
 
 /** Render a passive message as its first line, collapsed, and its whole text, expanded. */
 function registerPassiveMessageRenderer(pi: ExtensionAPI, customType: string): void {
+	renderInline(customType);
 	pi.registerMessageRenderer(customType, (message, { expanded }, theme) => {
 		const text =
 			typeof message.content === "string"
