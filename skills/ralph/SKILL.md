@@ -10,7 +10,7 @@ Ralph is a bounded loop of fresh implementation engineers. Each iteration starts
 
 ## Why temporary peers here
 
-Elsewhere the handbook staffs work with standing people. Ralph is the named exception: its value is a fresh context every iteration, which a standing person cannot give, and the loop's bounds, mutation scoring, and stop conditions are code that prose cannot run reliably. So Ralph runs as a `pi_exec` program whose iterations are temporary peers (`agent_run`); each is discarded before the next starts, leaving no growing roster.
+Other processes staff work with standing people: lasting colleagues who keep what they learn across jobs (see [`handbook-writing`](../handbook-writing/SKILL.md)). Ralph is the named exception: its value is a fresh context every iteration, which a standing person cannot give, and the loop's bounds, mutation scoring, and stop conditions are code that prose cannot run reliably. So Ralph runs as a `pi_exec` program whose iterations are temporary peers (`agent_run`); each is discarded before the next starts, leaving no growing roster.
 
 ## Choose a program
 
