@@ -1,7 +1,7 @@
 ---
 title: Principal Engineer
 mandate: Turn a design into a plan grounded in the repository
-models: [anthropic/claude-sonnet-5-5, openai/gpt-6.1-sol]
+models: [openai/gpt-6.1-sol, anthropic/claude-sonnet-5-5]
 thinking: medium
 writes: false
 manages: false

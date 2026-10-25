@@ -119,36 +119,36 @@ The package ships thirty-two roles. `advises` means the role has no `edit` or `w
 
 | Role | Title | Mandate | Mind, in order | Thinking | Posture |
 | --- | --- | --- | --- | --- | --- |
-| `accessibility-specialist` | Accessibility Specialist | Find keyboard, screen reader, semantic, inclusive failures | `anthropic/claude-sonnet-5-5`, `openai/gpt-6.1-sol` | medium | advises |
+| `accessibility-specialist` | Accessibility Specialist | Find keyboard, screen reader, semantic, inclusive failures | `openai/gpt-6.1-sol`, `anthropic/claude-sonnet-5-5` | medium | advises |
 | `architecture-prosecutor` | Architecture Prosecutor | Build the strongest evidence that the design is wrong | `anthropic/claude-opus-5-5`, `openai/gpt-6-astra` | high | advises |
-| `chaos-engineering-specialist` | Chaos Engineering Specialist | Design failure injection, partial outage, retry, degradation | `anthropic/claude-sonnet-5-5`, `openai/gpt-6.1-sol` | medium | advises |
+| `chaos-engineering-specialist` | Chaos Engineering Specialist | Design failure injection, partial outage, retry, degradation | `openai/gpt-6.1-sol`, `anthropic/claude-sonnet-5-5` | medium | advises |
 | `chief-architect` | Chief Architect | Judge boundaries, invariants, evolution, coherence | `anthropic/claude-opus-5-5`, `openai/gpt-6-astra` | high | advises |
-| `code-review-specialist` | Code Review Specialist | Find real defects, regressions, maintainability problems in diffs | `anthropic/claude-sonnet-5-5`, `openai/gpt-6.1-sol` | medium | advises |
+| `code-review-specialist` | Code Review Specialist | Find real defects, regressions, maintainability problems in diffs | `openai/gpt-6.1-sol`, `anthropic/claude-sonnet-5-5` | medium | advises |
 | `coordinator` | Coordinator | Chief of staff for the operator; runs the org, keeps threads, sweeps | `openai/gpt-6.1-sol`, `anthropic/claude-opus-5-5` | high | manages, writes |
 | `database-reliability-architect` | Database Reliability Architect | Attack migrations, locking, isolation, corruption, rollback | `anthropic/claude-opus-5-5`, `openai/gpt-6.1-sol` | high | advises |
-| `developer-experience-lead` | Developer Experience Lead | Judge APIs, naming, errors, docs, integration friction | `anthropic/claude-sonnet-5-5`, `openai/gpt-6.1-sol` | medium | advises |
+| `developer-experience-lead` | Developer Experience Lead | Judge APIs, naming, errors, docs, integration friction | `antigravity/gemini-3.8-flash`, `openai/gpt-6.1-sol` | medium | advises |
 | `director-of-engineering` | Director of Engineering | Route work, set decision gates, resolve conflicts, own delivery | `openai/gpt-6.1-sol`, `anthropic/claude-opus-5-5` | high | manages, writes |
 | `distinguished-member-of-technical-staff` | Distinguished Member of Technical Staff | Widen the solution space before the org commits | `anthropic/claude-fable-5-1`, `anthropic/claude-opus-5-5`, `openai/gpt-6-astra` | high | advises |
 | `distributed-systems-researcher` | Distributed Systems Researcher | Attack consistency, concurrency, fault, and recovery assumptions | `anthropic/claude-fable-5-1`, `openai/gpt-6-astra` | high | advises |
 | `end-user-customer-advocate` | End-User Customer Advocate | Protect the user from engineering convenience | `openai/gpt-6-astra`, `anthropic/claude-opus-5-5` | high | advises |
-| `implementation-engineer` | Implementation Engineer | Make bounded, tested changes with no extra scope | `anthropic/claude-sonnet-5-5`, `openai/gpt-6-luna` | medium | writes |
-| `infrastructure-cfo` | Infrastructure CFO | Price decisions in spend, hours, lock-in, maintenance | `openai/gpt-6.1-sol`, `anthropic/claude-sonnet-5-5` | medium | advises |
-| `maintainer-from-three-years-ahead` | Maintainer From Three Years Ahead | Judge comprehensibility, upgrade cost, operational burden | `anthropic/claude-sonnet-5-5`, `openai/gpt-6.1-sol` | medium | advises |
-| `new-team-member` | New Team Member | Read a document cold and say whether it teaches | `anthropic/claude-sonnet-5-5`, `openai/gpt-6.1-sol` | medium | advises |
+| `implementation-engineer` | Implementation Engineer | Make bounded, tested changes with no extra scope | `openai/gpt-6.1-sol`, `openai/gpt-6-luna` | medium | writes |
+| `infrastructure-cfo` | Infrastructure CFO | Price decisions in spend, hours, lock-in, maintenance | `xai/grok-4.7`, `openai/gpt-6.1-sol` | medium | advises |
+| `maintainer-from-three-years-ahead` | Maintainer From Three Years Ahead | Judge comprehensibility, upgrade cost, operational burden | `openai/gpt-6.1-sol`, `anthropic/claude-sonnet-5-5` | medium | advises |
+| `new-team-member` | New Team Member | Read a document cold and say whether it teaches | `antigravity/gemini-3.8-flash`, `openai/gpt-6.1-sol` | medium | advises |
 | `paradigm-outsider` | Paradigm Outsider | Solve it without the current stack or conventions | `anthropic/claude-fable-5-1`, `openai/gpt-6-astra` | high | advises |
 | `performance-engineering-lead` | Performance Engineering Lead | Find complexity, tail latency, contention, limits | `openai/gpt-6.1-sol`, `anthropic/claude-opus-5-5` | medium | advises |
-| `principal-engineer` | Principal Engineer | Turn a design into a plan grounded in the repository | `anthropic/claude-sonnet-5-5`, `openai/gpt-6.1-sol` | medium | advises |
+| `principal-engineer` | Principal Engineer | Turn a design into a plan grounded in the repository | `openai/gpt-6.1-sol`, `anthropic/claude-sonnet-5-5` | medium | advises |
 | `principal-site-reliability-engineer` | Principal Site Reliability Engineer | Ask what fails at 3 a.m. and how it recovers | `openai/gpt-6.1-sol`, `anthropic/claude-sonnet-5-5` | medium | advises |
 | `principal-ux-researcher` | Principal UX Researcher | Form usability, mental-model, and discoverability hypotheses | `anthropic/claude-opus-5-5`, `openai/gpt-6-astra` | medium | advises |
-| `quality-engineering-director` | Quality Engineering Director | Find missing test dimensions; turn risk into checks | `anthropic/claude-sonnet-5-5`, `openai/gpt-6.1-sol` | medium | advises |
-| `release-engineering-lead` | Release Engineering Lead | Plan rollouts, rollback, flags, compatibility | `anthropic/claude-sonnet-5-5`, `openai/gpt-6.1-sol` | medium | writes |
+| `quality-engineering-director` | Quality Engineering Director | Find missing test dimensions; turn risk into checks | `openai/gpt-6.1-sol`, `anthropic/claude-sonnet-5-5` | medium | advises |
+| `release-engineering-lead` | Release Engineering Lead | Plan rollouts, rollback, flags, compatibility | `openai/gpt-6.1-sol`, `anthropic/claude-sonnet-5-5` | medium | writes |
 | `repository-archaeologist` | Repository Archaeologist | Dig out hidden assumptions, prior art, conventions | `anthropic/claude-haiku-5-5`, `openai/gpt-6-luna` | low | advises |
 | `scientific-skeptic` | Scientific Skeptic | Separate fact from assumption; design the cheapest falsifying test | `openai/gpt-6-astra`, `anthropic/claude-fable-5-1` | high | advises |
-| `skeptical-first-time-user` | Skeptical First-Time User | Use the product with no knowledge of its internals | `anthropic/claude-haiku-5-5`, `openai/gpt-6-luna` | low | advises |
+| `skeptical-first-time-user` | Skeptical First-Time User | Use the product with no knowledge of its internals | `xai/grok-4.7`, `openai/gpt-6-luna` | low | advises |
 | `staff-engineer-simplicity` | Staff Engineer, Simplicity | Remove accidental complexity without losing correctness | `openai/gpt-6.1-sol`, `anthropic/claude-sonnet-5-5` | medium | advises |
 | `staff-security-engineer` | Staff Security Engineer | Threat-model trust boundaries, authorization, exposure, abuse | `anthropic/claude-opus-5-5`, `openai/gpt-6-astra` | high | advises |
 | `technical-due-diligence-partner` | Technical Due Diligence Partner | Find hidden dependencies, migration traps, irreversible commitments | `anthropic/claude-opus-5-5`, `openai/gpt-6-astra` | high | advises |
-| `technical-writer` | Technical Writer | Keep decision records, references, handoffs, runbooks | `anthropic/claude-haiku-5-5`, `openai/gpt-6-luna` | low | writes |
+| `technical-writer` | Technical Writer | Keep decision records, references, handoffs, runbooks | `antigravity/gemini-3.8-flash`, `openai/gpt-6-luna` | low | writes |
 | `test-and-ci-operator` | Test and CI Operator | Run checks and report failures exactly | `anthropic/claude-haiku-5-5`, `openai/gpt-6-luna` | low | advises |
 | `vp-of-product` | VP of Product | Ask whether this is the right thing to build | `openai/gpt-6-astra`, `anthropic/claude-opus-5-5` | high | advises |
 

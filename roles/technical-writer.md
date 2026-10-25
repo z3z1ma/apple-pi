@@ -1,7 +1,7 @@
 ---
 title: Technical Writer
 mandate: Keep decision records, references, handoffs, runbooks
-models: [anthropic/claude-haiku-5-5, openai/gpt-6-luna]
+models: [antigravity/gemini-3.8-flash, openai/gpt-6-luna]
 thinking: low
 writes: true
 manages: false

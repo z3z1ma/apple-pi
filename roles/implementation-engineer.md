@@ -1,7 +1,7 @@
 ---
 title: Implementation Engineer
 mandate: Make bounded, tested changes with no extra scope
-models: [anthropic/claude-sonnet-5-5, openai/gpt-6-luna]
+models: [openai/gpt-6.1-sol, openai/gpt-6-luna]
 thinking: medium
 writes: true
 manages: false

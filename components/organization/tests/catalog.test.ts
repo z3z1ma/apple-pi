@@ -9,6 +9,8 @@ import { installOrganization, loadRoles } from "../src/index.js";
 
 /** The models Pi lists on this machine; every role's mind must be among them, or the role runs on the default. */
 const KNOWN_MODELS = new Set([
+	"antigravity/gemini-3.8-flash",
+	"xai/grok-4.7",
 	"anthropic/claude-fable-5-1",
 	"anthropic/claude-opus-5-5",
 	"anthropic/claude-sonnet-5-5",
@@ -59,6 +61,45 @@ test("every package role loads with a mandate, known minds, a thinking level, an
 		models: ["anthropic/claude-haiku-5-5", "openai/gpt-6-luna"],
 		thinking: "low",
 	});
+});
+
+test("the package catalog balances advisory subscriptions while preferring Sol for engineering work", () => {
+	const { roles } = loadRoles(tempDir());
+	for (const name of [
+		"accessibility-specialist",
+		"chaos-engineering-specialist",
+		"code-review-specialist",
+		"maintainer-from-three-years-ahead",
+		"principal-engineer",
+		"quality-engineering-director",
+		"release-engineering-lead",
+	]) {
+		expect(roles.get(name)?.models, name).toEqual(["openai/gpt-6.1-sol", "anthropic/claude-sonnet-5-5"]);
+	}
+	expect(roles.get("implementation-engineer")?.models).toEqual(["openai/gpt-6.1-sol", "openai/gpt-6-luna"]);
+	expect(roles.get("technical-writer")).toMatchObject({
+		models: ["antigravity/gemini-3.8-flash", "openai/gpt-6-luna"],
+		thinking: "low",
+		writes: true,
+		manages: false,
+	});
+	for (const name of ["new-team-member", "developer-experience-lead"]) {
+		expect(roles.get(name), name).toMatchObject({
+			models: ["antigravity/gemini-3.8-flash", "openai/gpt-6.1-sol"],
+			writes: false,
+			manages: false,
+		});
+	}
+	for (const [name, fallback] of [
+		["infrastructure-cfo", "openai/gpt-6.1-sol"],
+		["skeptical-first-time-user", "openai/gpt-6-luna"],
+	]) {
+		expect(roles.get(name), name).toMatchObject({
+			models: ["xai/grok-4.7", fallback],
+			writes: false,
+			manages: false,
+		});
+	}
 });
 
 test("a manager's prompt carries the catalog's titles and mandates; a hired non-manager's does not", async () => {
