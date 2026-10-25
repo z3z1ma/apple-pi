@@ -113,17 +113,27 @@ export function closePendingCalls(messages: AgentMessage[], note: string): void 
 		});
 }
 
-/** Render a passive message as its first line, collapsed, and its whole text, expanded. */
+/** Passive notices follow thinking visibility, independently of tool expansion. */
 function registerPassiveMessageRenderer(pi: ExtensionAPI, customType: string): void {
+	let session: AgentSession | undefined;
+	pi.on("session_start", (_event, ctx) => {
+		session = liveSession(ctx);
+	});
+	pi.on("session_shutdown", () => {
+		session = undefined;
+	});
 	renderInline(customType);
-	pi.registerMessageRenderer(customType, (message, { expanded }, theme) => {
+	pi.registerMessageRenderer(customType, (message, _options, theme) => {
 		const text =
 			typeof message.content === "string"
 				? message.content
 				: message.content.flatMap((block) => (block.type === "text" ? [block.text] : [])).join("\n");
-		const shown = theme.fg("muted", `↳ ${expanded ? text : (text.split("\n")[0] ?? "")}`);
 		return {
-			render: (width: number) => (expanded ? wrapTextWithAnsi(shown, width) : [truncateToWidth(shown, width)]),
+			render(width: number) {
+				const expanded = session !== undefined && !session.settingsManager.getHideThinkingBlock();
+				const shown = theme.fg("muted", `\u21b3 ${expanded ? text : (text.split("\n")[0] ?? "")}`);
+				return expanded ? wrapTextWithAnsi(shown, width) : [truncateToWidth(shown, width)];
+			},
 			invalidate: () => {},
 		};
 	});
