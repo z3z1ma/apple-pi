@@ -74,7 +74,7 @@ Foreground, background, and scheduled commands, and the operator's own `!` comma
 - The model receives plain text. The transcript, the tool inspector, and `/work` show the colors, which the result carries in `details.styledOutput`. Truncation and the full-output file count plain text.
 - A failed or timed-out command returns an error result with its output, rather than a thrown error.
 - A process left running in the background (`server &`) keeps the terminal open; the command still finishes once its shell exits and the output falls quiet.
-- `!` and `!!` commands get the same terminal, without RTK. Pi shows their output without colors, as before, and receives each line's final text.
+- `!` and `!!` commands get the same terminal, without RTK. Their live TUI output keeps colors through a display-only patch; Pi records each line's final plain text, so model context and output files remain plain. Colors are held by the UI component only; resuming a session shows the recorded plain output.
 - When no pseudo-terminal can be opened (Windows, a platform without the prebuilt `@lydell/node-pty` binary, or none free), the command runs on pipes as before and `details.terminalUnavailable` says why.
 - `monitor` and Pi Exec's `pi.bash` keep pipes: programs read their output. Their text also reaches the model without colors.
 - With [RTK](rtk.md) enabled (`RTK_ENABLED=1`), RTK rewrites some commands (for example `git status`) into its own compact output, which has no colors; `verbatim: true` runs the original command.

@@ -3,6 +3,7 @@ import type { BashOperations, ExtensionContext } from "@earendil-works/pi-coding
 import { prepareShellCommand } from "./bash-tool.js";
 import { killProcessTree } from "./process-killer.js";
 import { TerminalTranscript } from "./terminal-transcript.js";
+import { withUserBashStyle } from "./ui/user-bash.js";
 
 /**
  * Runs the operator's `!` commands on the same pseudo-terminal as the Bash tool, without RTK, and
@@ -13,7 +14,12 @@ export function terminalShellOperations(ctx: ExtensionContext): BashOperations {
 		async exec(command, cwd, { onData, signal, timeout }) {
 			const prepared = await prepareShellCommand(cwd, { command }, signal, ctx, false, true);
 			const child = prepared.start();
-			const transcript = new TerminalTranscript(1, (line) => onData(Buffer.from(`${line.plain}\n`)));
+			const emit = (plain: string, styled: string) => {
+				const send = () => onData(Buffer.from(plain));
+				if (ctx.mode === "tui") withUserBashStyle(styled, send);
+				else send();
+			};
+			const transcript = new TerminalTranscript(1, (line) => emit(`${line.plain}\n`, `${line.styled}\n`));
 			const decoder = new TextDecoder();
 			const write = (chunk: Buffer) => transcript.write(decoder.decode(chunk, { stream: true }));
 			child.stdout?.on("data", write);
@@ -39,8 +45,8 @@ export function terminalShellOperations(ctx: ExtensionContext): BashOperations {
 				});
 				transcript.write(decoder.decode());
 				transcript.finish();
-				const last = transcript.screenLines()[0]?.plain;
-				if (last) onData(Buffer.from(last));
+				const last = transcript.screenLines()[0];
+				if (last?.plain) emit(last.plain, last.styled);
 				if (signal?.aborted) throw new Error("aborted");
 				if (timedOut) throw new Error(`timeout:${timeout}`);
 				return { exitCode };
