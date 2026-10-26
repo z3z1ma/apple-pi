@@ -6,9 +6,15 @@ Part of the approved spec [../spec.md](../spec.md), as redirected by [../directi
 
 **Blocked by:** 16 (`/org` for the operator).
 
-**Status:** ready-for-agent
+**Status:** done (04f3a320; live rollout/session refresh separate)
 
-- [ ] A manager's system prompt contains the moments to reshape (operator request, planning and implementing, arriving updates, constrained work, sweeps), the inspection habit, staffing by context, investigate-then-act, fitness as optional, recording reasoning, stability, the fan-in guidance, and the listed principles; it contains no requirement to forecast or compute fitness before acting, and no longer the rule to hire a manager when fan-in would make it the bottleneck.
-- [ ] Every root session's `<org>` section names `org_waits`, `org_work`, `org_communication`, `org_expertise`, `org_fitness`, and `link`.
-- [ ] A scripted faux manager session over an organization with a ready task, a blocked decision, and an idle person who knows the area calls `org_work` and `org_expertise`, assigns the ready task to that person with `assign`, and a second `org_work` shows the change (direction.md section 9).
-- [ ] `docs/boundaries.md`, `docs/organization.md`, and `docs/session-state.md` describe links and the inspection tools as stated.
+- [x] A manager's system prompt contains the moments to reshape (operator request, planning and implementing, arriving updates, constrained work, sweeps), the inspection habit, staffing by context, investigate-then-act, fitness as optional, recording reasoning, stability, the fan-in guidance, and the listed principles; it contains no requirement to forecast or compute fitness before acting, and no longer the rule to hire a manager when fan-in would make it the bottleneck.
+- [x] Every root session's `<org>` section names `org_waits`, `org_work`, `org_communication`, `org_expertise`, `org_fitness`, and `link`.
+- [x] A scripted faux manager session over an organization with a ready task, a blocked decision, and an idle person who knows the area calls `org_work` and `org_expertise`, assigns the ready task to that person with `assign`, and a second `org_work` shows the change (direction.md section 9).
+- [x] `docs/boundaries.md`, `docs/organization.md`, and `docs/session-state.md` describe links and the inspection tools as stated.
+
+## Closure evidence
+
+Lucette's final Standards/Intent review (`t-c36ec8d0`) cleared all nine paths with independent 60/60 tests across six relevant suites, Node/web typechecks, loader, Biome on three files, whitespace, context lint on 160 files and stable hashes. The author's 60-test run and earlier snapshots remain separate. Agnieszka's subsequent eight-file cross-slice run passed 124/124 with `--maxWorkers=2`; nine hashes matched before/after. Maeve's cold read checked clarity, not execution.
+
+The actual scripted managing-role session exercises indexed read experience and native observations/assignment/reinspection, preserving refs and the unrelated blocker. It proves integration, not autonomous judgment or optimality. The operator approved 16/16 hunks; commit 04f3a320 contains exactly nine scoped files, whose committed blobs match the independent checked hashes. No full-suite, installed-package/native CLI, paid-model/real-peer or `pi_exec` composition proof is inferred from this scripted test. The separately authorized [backend rollout](../rollout.md) verified the replacement daemon and live schema; client refresh remains.

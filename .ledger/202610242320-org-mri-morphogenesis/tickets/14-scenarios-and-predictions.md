@@ -6,11 +6,26 @@ Part of the approved spec [../spec.md](../spec.md); its Terms table defines obli
 
 **Blocked by:** 12 (Impacts, defects, and review findings).
 
-**Status:** ready-for-agent
+**Status:** done (d0a0f6dc)
 
-- [ ] A scenario that reproduces an observed history (same tasks, opens, closes, compute, and impacts) evaluates to exactly that history's realized fitness.
-- [ ] A $300 change with no cost of delay: without a reviewer, 70% clean ($10 compute, U = $290) and 30% a defect with an incurred impact of -$300 (U = -$10) gives $200; with a reviewer costing $6, 90% clean (U = $284) and 10% defect (U = -$16) gives $254: the reviewer adds $54 of expected fitness.
-- [ ] A scenario whose probabilities sum to 0.9 is refused; two scenarios whose decision points, starting work states, opportunities, valuations, or horizons differ are refused for comparison with the difference named.
-- [ ] A scenario recorded through `link` keeps its data exactly; `predictions` lists it as pending until its horizon passes, then shows realized minus expected for a known history.
-- [ ] After an edit of one task's value, and separately of its cost of delay, the prediction shows "valuation changed" and no error; a `predicts` link with data that is not a scenario is listed as unreadable with its raw data.
-- [ ] Through a faux session a person without manager tools calls `org_fitness` with two scenarios and calls `predictions`; the package-load smoke test lists `predictions`.
+Final independent checks: 110/110 tests across scenarios/fitness/work/coordinator/cost-history, loader, Node/web typecheck, Biome on 7 files and context lint on 159 files, with twelve file hashes stable. Waylon independently verified production history/calibration/replay cases; Lucette verified numeric boundaries. The operator approved 22/22 scoped diff hunks; Agnieszka verified that the reviewed copies matched the final checked bytes before committing. No full-suite, installed-tarball, live-rollout or pi_exec-composition claim. All four board findings closed; inherited history/source limits retained.
+
+## Reading guide
+
+`U` is the existing pure dollar evaluator: earned value minus modeled delay and compute, plus signed incurred impacts. A scenario supplies possible histories to that evaluator; it does not ask the harness to invent a forecast. `t` is the prediction link's recording time, and `H` is its horizon duration. Once `t + H` is reached, the observation window `[t, t + H)` is complete; an event exactly at its end belongs to the next window.
+
+The implemented data shape and integration plan are in [scenario implementation notes](../scenario-implementation-notes.md). The acceptance cases below were checked before independent review, operator approval and commit. The completed approval/evidence record is [scenarios sign-off](../scenarios-sign-off.md). No new optimizer or prediction storage is required: existing links hold the raw scenario.
+
+## Approved clock and valuation rules
+
+Operator clarification (2026-10-26, questionnaire after t-3d3a641e): relative forecast histories bind to one captured preview time in an org_fitness comparison, and to immutable link.created_at for recorded predictions. Fixed absolute historical what-ifs may be previewed but remain unscored predictions when their origin differs from recording time; never silently shift them. Anticipated/unmapped/missing/unvalued opportunity valuations are unverifiable: show expected and realized figures when available, withhold numerical forecast error with that reason. Known changed valuations withhold error as valuation changed. No new identity/binding store. Listing is limited to the caller's recorded organization target, with historical-origin admission; a later merge does not silently import a former root's forecasts. Observation uses that recorded target, not a larger current root. Task opening at or before recording is checked separately from historical ownership, before reading valuations; a later-created task does not verify an earlier unmapped prediction. Observed coverage and measurement limits remain visible. Incomplete observed valuation withholds error; static source exclusions alone do not. Bound intervals must advance at machine precision, and nonrepresentable observation/error values are explicitly unavailable. These are adapter qualifications, not changes to the evaluator.
+
+## Acceptance checks
+
+- [x] A scenario that reproduces an observed history (same tasks, opens, closes, compute, and impacts) evaluates to exactly that history's realized fitness.
+- [x] A $300 change with no cost of delay: without a reviewer, 70% clean ($10 compute, U = $290) and 30% a defect with an incurred impact of -$300 (U = -$10) gives $200; with a reviewer costing $6, 90% clean (U = $284) and 10% defect (U = -$16) gives $254: the reviewer adds $54 of expected fitness.
+- [x] A scenario whose probabilities sum to 0.9 is refused; two scenarios whose decision points, starting work states, opportunities, valuations, or horizons differ are refused for comparison with the difference named.
+- [x] A scenario recorded through `link` keeps its data exactly; `predictions` lists it as pending until its horizon passes, then shows realized minus expected for a known history.
+- [x] After an edit of one task's value, and separately of its cost of delay, the prediction shows "valuation changed" and no error; a `predicts` link with data that is not a scenario is listed as unreadable with its raw data.
+- [x] A relative forecast binds to recording time; a fixed-clock mismatch and unverifiable valuations retain available expected/observed figures but show an explicit reason and no numerical forecast error. A later organizational merge does not import another target's predictions.
+- [x] Through a faux session a person without manager tools calls `org_fitness` with two scenarios and calls `predictions`; the package-load smoke test lists `predictions`.

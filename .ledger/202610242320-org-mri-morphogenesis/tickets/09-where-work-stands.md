@@ -6,10 +6,12 @@ Part of the approved spec [../spec.md](../spec.md), as redirected by [../directi
 
 **Blocked by:** 08 (What blocks what).
 
-**Status:** ready-for-agent
+**Status:** done (248c300d; stale ticket status reconciled at final closure)
 
-- [ ] Against a temporary state database with two ready tasks nobody holds, a waiting task, two in-progress tasks, and one person holding three tasks, every open task appears under exactly one state with its age and holders, and the person holding three is listed.
-- [ ] With a window, tasks opened and closed inside it are counted by status; those outside are not.
-- [ ] After a ready task is assigned, the next call shows it in progress, not ready.
-- [ ] Person, task, and subtree scopes keep only their work.
-- [ ] Through a faux session a person calls `org_work`; the package-load smoke test lists it.
+- [x] Against a temporary state database with two ready tasks nobody holds, a waiting task, two in-progress tasks, and one person holding three tasks, every open task appears under exactly one state with its age and holders, and the person holding three is listed.
+- [x] With a window, tasks opened and closed inside it are counted by status; those outside are not.
+- [x] After a ready task is assigned, the next call shows it in progress, not ready.
+- [x] Person, task, and subtree scopes keep only their work.
+- [x] Through a faux session a person calls `org_work`; the package-load smoke test lists it.
+
+Closure: existing implementation/review was already complete; this corrects bookkeeping, not code. Current final chair checks include org-work/work suites and loader; all passed. The final scripted manager demonstration also verifies the native ready-to-held transition, and the refreshed root's live org_work call succeeded.

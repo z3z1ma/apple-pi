@@ -6,8 +6,10 @@ Part of the approved spec [../spec.md](../spec.md), as redirected by [../directi
 
 **Blocked by:** 10 (Who talks to whom).
 
-**Status:** ready-for-agent
+**Status:** done (53303ff9)
 
-- [ ] Through a faux session a person calls `org_fitness` with a window and gets the same result `fitness` gave; no tool named `fitness` remains.
-- [ ] The tool description presents fitness as one instrument beside the four inspection tools and says it is not an objective.
-- [ ] The package-load smoke test lists `org_fitness` and not `fitness`; docs and context files use the new name.
+Verified: work/coordinator/fitness49/49, loader, Node/web typecheck, Biome and context lint154/154. Independent review found no open finding in this bounded rename; evaluator/handler/schema unchanged. Operator approved16/16 hunks. No live reload/full-suite claim.
+
+- [x] Through a faux session a person calls `org_fitness` with a window and gets the same result `fitness` gave; no tool named `fitness` remains.
+- [x] The tool description presents fitness as one instrument beside the four inspection tools and says it is not an objective.
+- [x] The package-load smoke test lists `org_fitness` and not `fitness`; docs and context files use the new name.

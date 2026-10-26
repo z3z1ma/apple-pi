@@ -6,10 +6,12 @@ Part of the approved spec [../spec.md](../spec.md), as redirected by [../directi
 
 **Blocked by:** 07 (Who knows what), for the shared inspection module and its scope handling.
 
-**Status:** ready-for-agent
+**Status:** done (4f93312c; stale ticket status reconciled at final closure)
 
-- [ ] Against a temporary state database with two tasks waiting on one person's decision and one waiting on another task, the result groups the first two under that person, ordered first, each with its age and reason; a resolved wait is absent.
-- [ ] A wait whose waiter and target report to different managers is marked as crossing teams.
-- [ ] With a window, waits resolved inside it are listed as unblocked; those resolved outside it are not.
-- [ ] Person, task, and subtree scopes keep only their waits.
-- [ ] Through a faux session a person calls `org_waits`; the package-load smoke test lists it.
+- [x] Against a temporary state database with two tasks waiting on one person's decision and one waiting on another task, the result groups the first two under that person, ordered first, each with its age and reason; a resolved wait is absent.
+- [x] A wait whose waiter and target report to different managers is marked as crossing teams.
+- [x] With a window, waits resolved inside it are listed as unblocked; those resolved outside it are not.
+- [x] Person, task, and subtree scopes keep only their waits.
+- [x] Through a faux session a person calls `org_waits`; the package-load smoke test lists it.
+
+Closure: existing implementation/review was already complete; this corrects bookkeeping, not code. Current final chair checks include inspect/work suites and loader; all passed. Historical membership/eligibility refinements remain qualified in later closure records.
