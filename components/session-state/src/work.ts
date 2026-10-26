@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { cpSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -26,7 +27,11 @@ export interface WorkTask {
 	organization: string;
 	ephemeral: number;
 	thread: string;
+	/** When it closed: an ephemeral task's archive, or a ledger task's move to history. */
 	archived_at: number | null;
+	/** When it became the organization's obligation; null for a task recorded before this column existed. */
+	opened_at: number | null;
+	close_status: "done" | "cancelled" | null;
 }
 
 export interface Assignment {
@@ -193,18 +198,43 @@ function createTask(
 		);
 		writeFileSync(join(bundle, "retrospective.md"), retrospectiveTemplate(date));
 	}
+	return recordTask(
+		db,
+		id,
+		bundle,
+		ephemeral ? project : dirname(dirname(bundle)),
+		organization,
+		ephemeral,
+		actor,
+		now,
+	);
+}
+
+/** The task becomes the organization's obligation now, with its own thread. */
+function recordTask(
+	db: DatabaseSync,
+	id: string,
+	bundle: string,
+	project: string,
+	organization: string,
+	ephemeral: number,
+	actor: string,
+	now: number,
+): WorkTask {
 	const task: WorkTask = {
 		id,
 		bundle,
-		project: ephemeral ? project : dirname(dirname(bundle)),
+		project,
 		organization,
 		ephemeral,
 		thread: `task:${id}`,
 		archived_at: null,
+		opened_at: now,
+		close_status: null,
 	};
 	db.prepare(
-		"insert into work_tasks (id, bundle, project, organization, ephemeral, thread) values (?, ?, ?, ?, ?, ?)",
-	).run(task.id, task.bundle, task.project, task.organization, task.ephemeral, task.thread);
+		"insert into work_tasks (id, bundle, project, organization, ephemeral, thread, opened_at) values (?, ?, ?, ?, ?, ?, ?)",
+	).run(task.id, task.bundle, task.project, task.organization, task.ephemeral, task.thread, now);
 	db.prepare("insert into threads (id, kind, subject, created_by, created_at) values (?, 'task', ?, ?, ?)").run(
 		task.thread,
 		taskTitle(task),
@@ -305,8 +335,12 @@ export function changeWork(
 			mkdirSync(dirname(archived), { recursive: true });
 			rollback.push(() => rmSync(archived, { recursive: true, force: true }));
 			cpSync(previous, archived, { recursive: true });
-			task = { ...task, bundle: archived, archived_at: now };
-			db.prepare("update work_tasks set bundle = ?, archived_at = ? where id = ?").run(archived, now, task.id);
+			task = { ...task, bundle: archived, archived_at: now, close_status: "done" };
+			db.prepare("update work_tasks set bundle = ?, archived_at = ?, close_status = 'done' where id = ?").run(
+				archived,
+				now,
+				task.id,
+			);
 			committed.push(() => rmSync(previous, { recursive: true, force: true }));
 		}
 		body = `${nameOf(db, person)} finished ${taskTitle(task)}.\n\n${command.outcome}`;
@@ -352,17 +386,42 @@ export function changeWork(
 	return { task, person, post: { thread: task.thread, body }, notify: person, goal };
 }
 
-/** Follow a ledger archive without taking, finishing, or focusing work on anyone's behalf. */
-export function moveTask(db: DatabaseSync, from: string, to: string): string[] {
+/** A new ledger task is its creator's organization's obligation from now, assigned or not. */
+export function openLedgerTask(db: DatabaseSync, sender: string, bundle: string, now: number): WorkTask {
+	const path = realpathSync(bundle);
+	const known = db.prepare("select * from work_tasks where bundle = ?").get(path) as unknown as WorkTask | undefined;
+	if (known) return known;
+	return recordTask(db, `work-${randomUUID()}`, path, dirname(dirname(path)), rootOf(db, sender), 0, sender, now);
+}
+
+/**
+ * Follow a ledger archive without taking, finishing, or focusing work on anyone's behalf, and record the close once.
+ * A task the runtime never heard of opens and closes now, for the sender's organization.
+ */
+export function closeLedgerTask(
+	db: DatabaseSync,
+	sender: string,
+	from: string,
+	to: string,
+	status: "done" | "cancelled",
+	now: number,
+): string[] {
 	const source = join(realpathSync(dirname(from)), basename(from));
-	const task = db.prepare("select id from work_tasks where bundle = ?").get(source) as { id: string } | undefined;
-	if (!task) return [];
 	const destination = realpathSync(to);
 	readFileSync(join(destination, "task.md"), "utf8");
-	db.prepare("update work_tasks set bundle = ? where id = ?").run(destination, task.id);
-	return (
-		db.prepare("select distinct person from assignments where task_id = ?").all(task.id) as { person: string }[]
-	).map((row) => row.person);
+	const known = db.prepare("select id from work_tasks where bundle in (?, ?)").get(source, destination) as
+		| { id: string }
+		| undefined;
+	const id =
+		known?.id ??
+		recordTask(db, `work-${randomUUID()}`, destination, dirname(dirname(source)), rootOf(db, sender), 0, sender, now)
+			.id;
+	db.prepare(
+		"update work_tasks set bundle = ?, archived_at = coalesce(archived_at, ?), close_status = coalesce(close_status, ?) where id = ?",
+	).run(destination, now, status, id);
+	return (db.prepare("select distinct person from assignments where task_id = ?").all(id) as { person: string }[]).map(
+		(row) => row.person,
+	);
 }
 
 /** A committed move may have lost power before removing its source. The destination and assignments already agree. */

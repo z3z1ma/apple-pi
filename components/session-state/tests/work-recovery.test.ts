@@ -42,8 +42,50 @@ beforeAll(async () => {
 	db.prepare(
 		"insert into work_changes (command_id, task_id, person, action, previous_bundle) values ('moved', 'moved-task', 'person', 'finish', ?)",
 	).run(source);
+	// A runtime that stopped after accepting a ledger task's open and another's close, before applying either.
+	const ledgerProject = join(state.agentDir, "ledger-project");
+	const opened = join(ledgerProject, ".ledger", "202601010000-opened");
+	const closed = join(ledgerProject, ".ledger", "history", "202601010000-closed");
+	for (const bundle of [opened, closed]) {
+		mkdirSync(bundle, { recursive: true });
+		writeFileSync(join(bundle, "task.md"), "Status: in-progress\n\n# Ledger task\n");
+	}
+	db.prepare(
+		"insert into commands (command_id, session_id, kind, command, stage, created_at, updated_at) values ('open-pending', 'person', 'task_opened', ?, 'accepted', 100, 100)",
+	).run(JSON.stringify({ kind: "task_opened", bundle: opened }));
+	db.prepare(
+		"insert into commands (command_id, session_id, kind, command, stage, created_at, updated_at) values ('close-pending', 'person', 'task_moved', ?, 'accepted', 200, 200)",
+	).run(
+		JSON.stringify({
+			kind: "task_moved",
+			from: join(ledgerProject, ".ledger", "202601010000-closed"),
+			to: closed,
+			status: "cancelled",
+		}),
+	);
 	db.close();
 	await startRuntime(state.socketPath);
+});
+
+test("accepted task opens and closes are applied once at startup, at the time they were accepted", () => {
+	expect(
+		query(
+			state.dbPath,
+			"select command_id, stage from commands where command_id in ('open-pending', 'close-pending') order by command_id",
+		),
+	).toEqual([
+		{ command_id: "close-pending", stage: "applied" },
+		{ command_id: "open-pending", stage: "applied" },
+	]);
+	expect(
+		query(
+			state.dbPath,
+			"select opened_at, archived_at, close_status from work_tasks where bundle like '%202601010000-%' order by opened_at",
+		),
+	).toEqual([
+		{ opened_at: 100, archived_at: null, close_status: null },
+		{ opened_at: 200, archived_at: 200, close_status: "cancelled" },
+	]);
 });
 afterAll(() => stopRuntime(state));
 

@@ -71,6 +71,13 @@ Why: SQLite and the filesystem have no shared atomic commit, so claiming success
 Coupled: components/session-state/src/work.ts, components/shared/src/ledger-files.ts
 Verify: components/session-state/tests/work-recovery.test.ts
 
+## symbol:Runtime.taskLifecycle
+
+A task's open or close and its effects commit in one transaction, and the command turns `applied` only after the commit. Startup replays every lifecycle command still `accepted` at its accepted time; both operations are idempotent (a known task is returned, a close is recorded once).
+Why: the ledger files are already archived when `task_moved` arrives, so a lost close cannot be retried from the old live path, and fitness history would keep an obligation open forever. A review reproduced a seeded accepted `task_opened` staying accepted with no record after restart.
+Coupled: components/session-state/src/work.ts, extensions/ledger.ts
+Verify: components/session-state/tests/work-recovery.test.ts
+
 ## symbol:Runtime.finishWorkCommand
 
 An awake assignee needs no launch. A sleeping assignee wakes beside the assigning session's pane; an operator assignment instead uses the terminal supplied by the UI, because `operator` has no session row or incarnation. The wake target stays in the persisted command for recovery. A wake failure reports that the assignment was already saved rather than claiming it rolled back.

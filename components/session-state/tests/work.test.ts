@@ -1,5 +1,7 @@
-import { existsSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { basename, join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai/compat";
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
 import installLedger from "../../../extensions/ledger.js";
@@ -7,6 +9,7 @@ import { fauxSession, type Reply } from "../../../tests/helpers/faux-session.js"
 import { addLedgerTask } from "../../shared/src/ledger-files.js";
 import bridge from "../src/index.js";
 import { MAIL_CUSTOM_TYPE } from "../src/mail.js";
+import { migrate, SCHEMA_VERSION } from "../src/schema.js";
 import type { WorkTask } from "../src/work.js";
 import { TASK_GOAL_CUSTOM_TYPE } from "../src/work-tools.js";
 import { close, query, startRuntime, stopRuntime, tempStateDir } from "./helpers.js";
@@ -32,7 +35,7 @@ async function person(manager?: string) {
 			JSON.stringify(context.messages.at(-1)).includes("You have finished a task.")
 				? fauxAssistantMessage("Nothing changed.")
 				: (script.shift() ?? fauxAssistantMessage("noted")),
-		["ledger_status"],
+		["ledger_add", "ledger_status"],
 	);
 	const id = run.session.sessionManager.getSessionId();
 	await vi.waitFor(() => expect(query(state.dbPath, "select 1 from sessions where id = ?", id)).toHaveLength(1), {
@@ -263,6 +266,99 @@ test("archiving a ledger bundle updates its path without changing the assignment
 		await close(who.run);
 	}
 }, 30000);
+
+test("the runtime records once when each task opens and how it closes, even for ledger tasks nobody was assigned", async () => {
+	const manager = await person();
+	const engineer = await person(manager.id);
+	const reviewer = await person(manager.id);
+	type Lifecycle = { opened_at: number | null; archived_at: number | null; close_status: string | null };
+	const lifecycle = (bundle: string) =>
+		query<Lifecycle>(
+			state.dbPath,
+			"select opened_at, archived_at, close_status from work_tasks where bundle = ?",
+			realpathSync(bundle),
+		);
+	try {
+		const shared = await manager.invoke("assign", { person: engineer.id, goal: "Fix the cache.", title: "Cache" });
+		await packets(engineer.run, 1);
+		await manager.invoke("assign", { person: reviewer.id, task: shared.id });
+		await packets(reviewer.run, 1);
+		const [opened] = query<Lifecycle>(
+			state.dbPath,
+			"select opened_at, archived_at, close_status from work_tasks where id = ?",
+			shared.id,
+		);
+		expect(opened.opened_at).not.toBeNull();
+		await engineer.invoke("finish_task", { outcome: "Fixed." });
+		expect(query(state.dbPath, "select archived_at, close_status from work_tasks where id = ?", shared.id)).toEqual([
+			{ archived_at: null, close_status: null },
+		]);
+		await reviewer.invoke("finish_task", { outcome: "Checked." });
+		const [closed] = query<Lifecycle>(
+			state.dbPath,
+			"select opened_at, archived_at, close_status from work_tasks where id = ?",
+			shared.id,
+		);
+		expect(closed).toMatchObject({ opened_at: opened.opened_at, close_status: "done" });
+		expect(closed.archived_at).not.toBeNull();
+
+		// Created through the tool: open at creation, though nobody is ever assigned.
+		await manager.invoke("ledger_add", { title: "Drop the old flag", description: "Remove it", slug: "drop-flag" });
+		await manager.invoke("ledger_add", { title: "Rewrite the parser", description: "Maybe", slug: "rewrite" });
+		const ledger = join(manager.run.cwd, ".ledger");
+		const bundleOf = (slug: string) => join(ledger, readdirSync(ledger).find((name) => name.endsWith(`-${slug}`))!);
+		const dropFlag = bundleOf("drop-flag");
+		const rewrite = bundleOf("rewrite");
+		const [unassigned] = lifecycle(dropFlag);
+		expect(unassigned).toMatchObject({ archived_at: null, close_status: null });
+		expect(unassigned.opened_at).not.toBeNull();
+		await manager.invoke("ledger_status", { task: basename(dropFlag), status: "done" });
+		await manager.invoke("ledger_status", { task: basename(rewrite), status: "cancelled" });
+		const [done] = lifecycle(join(ledger, "history", basename(dropFlag)));
+		expect(done).toMatchObject({ opened_at: unassigned.opened_at, close_status: "done" });
+		expect(done.archived_at).not.toBeNull();
+		expect(lifecycle(join(ledger, "history", basename(rewrite)))[0]).toMatchObject({ close_status: "cancelled" });
+
+		// Created before the runtime heard of it: opens when first recorded, here when taken.
+		const older = await addLedgerTask(manager.run.cwd, "Old backlog item", "Predates the records");
+		expect(lifecycle(join(manager.run.cwd, older.bundlePath))).toEqual([]);
+		const taken = await engineer.invoke("take_task", { task: join(manager.run.cwd, older.bundlePath) });
+		await packets(engineer.run, 2);
+		const [before] = lifecycle(taken.bundle);
+		expect(before.opened_at).not.toBeNull();
+		await manager.invoke("ledger_status", { task: older.taskId, status: "done" });
+		const [after] = lifecycle(join(ledger, "history", older.taskId));
+		expect(after).toMatchObject({ opened_at: before.opened_at, close_status: "done" });
+	} finally {
+		await close(reviewer.run);
+		await close(engineer.run);
+		await close(manager.run);
+	}
+}, 45000);
+
+test("a database at the previous schema version gains the task lifecycle columns and keeps its rows", () => {
+	const path = join(mkdtempSync(join(tmpdir(), "apple-pi-lifecycle-")), "state.db");
+	const db = new DatabaseSync(path);
+	try {
+		migrate(db);
+		db.exec(
+			"insert into work_tasks (id, bundle, project, organization, ephemeral, thread, archived_at) values ('t', '/b', '/p', 'o', 1, 'task:t', 900), ('u', '/c', '/p', 'o', 0, 'task:u', null)",
+		);
+		db.exec(
+			"insert into assignments (person, task_id, assigned_by, assigned_at) values ('a', 't', 'm', 700), ('b', 't', 'm', 500), ('a', 'u', 'm', 800)",
+		);
+		db.exec("alter table work_tasks drop column opened_at; alter table work_tasks drop column close_status");
+		db.exec(`pragma user_version = ${SCHEMA_VERSION - 1}`);
+		migrate(db);
+		// Opened at the first assignment; an archived ephemeral task closed done.
+		expect(db.prepare("select id, opened_at, close_status from work_tasks order by id").all()).toEqual([
+			{ id: "t", opened_at: 500, close_status: "done" },
+			{ id: "u", opened_at: 800, close_status: null },
+		]);
+	} finally {
+		db.close();
+	}
+});
 
 test("the directory shows availability, assigned work, focus, ended outcomes, and the unassigned ledger backlog", async () => {
 	const who = await person();

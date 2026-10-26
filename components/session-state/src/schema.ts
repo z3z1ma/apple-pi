@@ -263,6 +263,12 @@ const MIGRATIONS = [
 	create index peers_by_program on program_peers(program_id);
 	alter table commands add column program_id text;
 	create index commands_by_program on commands(program_id) where program_id is not null;`,
+	// When a task became the organization's obligation, and how it closed; `archived_at` is when it closed.
+	// A task recorded before this column opened when it was first assigned, the first time the runtime recorded it.
+	`alter table work_tasks add column opened_at integer;
+	alter table work_tasks add column close_status text;
+	update work_tasks set opened_at = (select min(assigned_at) from assignments where task_id = work_tasks.id);
+	update work_tasks set close_status = 'done' where ephemeral = 1 and archived_at is not null;`,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

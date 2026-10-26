@@ -70,7 +70,14 @@ import {
 	setServerOptions,
 	socketFiles,
 } from "./tmux.js";
-import { changeWork, cleanMovedBundles, focusedTask, moveTask, type WorkCommand } from "./work.js";
+import {
+	changeWork,
+	cleanMovedBundles,
+	closeLedgerTask,
+	focusedTask,
+	openLedgerTask,
+	type WorkCommand,
+} from "./work.js";
 
 /** How often the runtime reads tmux, and how long one server may take to answer before the read counts as failed. */
 const TMUX_POLL_MS = 1000;
@@ -254,6 +261,7 @@ export class Runtime {
 		syncChannels(this.db, Date.now());
 		this.recoverThreadPosts();
 		this.recoverWorkCommands();
+		this.recoverTaskLifecycle();
 		this.recoverRetirements();
 		for (const row of this.db.prepare("select session_id as id from program_peers").all() as { id: string }[])
 			this.discarding.add(row.id);
@@ -642,9 +650,9 @@ export class Runtime {
 			}
 			return;
 		}
-		if (command.kind === "task_moved") {
+		if (command.kind === "task_opened" || command.kind === "task_moved") {
 			receipt("accepted");
-			this.taskMoved(commandId, command.from, command.to);
+			this.taskLifecycle(commandId, sessionId, command, now);
 			return;
 		}
 		if (command.kind === "work") {
@@ -680,14 +688,35 @@ export class Runtime {
 		this.dispatch(target, commandId, command);
 	}
 
-	private taskMoved(commandId: string, from: string, to: string): void {
+	/** One transaction per open or close; both are idempotent, so startup replays any that stayed accepted. */
+	private taskLifecycle(
+		commandId: string,
+		sender: string,
+		command: Extract<Command, { kind: "task_opened" | "task_moved" }>,
+		now: number,
+	): void {
+		const db = this.db!;
 		try {
-			for (const person of moveTask(this.db!, from, to))
-				this.event("runtime", person, null, "task_moved", { from, to });
-			this.setCommandStage(commandId, "applied");
+			db.exec("begin");
+			if (command.kind === "task_opened") openLedgerTask(db, sender, command.bundle, now);
+			else
+				for (const person of closeLedgerTask(db, sender, command.from, command.to, command.status, now))
+					this.event("runtime", person, null, "task_moved", { from: command.from, to: command.to });
+			db.exec("commit");
 		} catch (error) {
+			if (db.isTransaction) db.exec("rollback");
 			this.setCommandStage(commandId, "failed", (error as Error).message);
+			return;
 		}
+		this.setCommandStage(commandId, "applied");
+	}
+
+	private recoverTaskLifecycle(): void {
+		const pending = this.db!.prepare(
+			"select command_id, session_id, command, created_at from commands where kind in ('task_opened', 'task_moved') and stage = 'accepted'",
+		).all() as { command_id: string; session_id: string; command: string; created_at: number }[];
+		for (const row of pending)
+			this.taskLifecycle(row.command_id, row.session_id, JSON.parse(row.command), row.created_at);
 	}
 
 	private workCommand(commandId: string, actor: string, command: WorkCommand, now: number): void {

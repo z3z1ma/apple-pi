@@ -140,8 +140,10 @@ export type Command =
 			taskGoal?: boolean;
 	  }
 	| WorkCommand
-	/** A ledger archive changes a known task's path, never its assignments. */
-	| { kind: "task_moved"; from: string; to: string }
+	/** A new ledger task becomes the sending session's organization's obligation. */
+	| { kind: "task_opened"; bundle: string }
+	/** A ledger archive closes the task and changes its path, never its assignments. */
+	| { kind: "task_moved"; from: string; to: string; status: "done" | "cancelled" }
 	/**
 	 * Post a message from the request's session (or a named outside sender) to a thread, creating it when new. Applied
 	 * by the runtime, which pushes the message as mail to each pushed participant; the reason names who is at home.

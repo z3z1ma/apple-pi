@@ -5,6 +5,12 @@ Why: moving the source before recording the new path can leave an assignment poi
 Coupled: components/session-state/src/runtime.ts, components/shared/src/ledger-files.ts, components/session-state/src/work-tools.ts
 Verify: components/session-state/tests/work.test.ts, components/session-state/tests/work-recovery.test.ts
 
+## symbol:closeLedgerTask
+
+The close is recorded once (`coalesce`), and `archived_at` means "closed" for ledger tasks too, not only "moved to the state history". A ledger task the runtime never recorded opens and closes in the same call, for the sender's organization, so a never-assigned task still leaves its record.
+Coupled: extensions/ledger.ts, docs/session-state.md
+Verify: components/session-state/tests/work.test.ts
+
 ## symbol:writeOutcome
 
 The assignment id identifies its outcome section. A task shared by several assignees archives only after its last open assignment finishes; finishing one person's assignment leaves the other person's goal in place.

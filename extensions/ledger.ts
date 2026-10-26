@@ -5,6 +5,7 @@ import { defineTool, type ExtensionAPI, type ExtensionContext } from "@earendil-
 import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { sendCommand } from "../components/session-state/src/client.js";
+import type { Command } from "../components/session-state/src/protocol.js";
 import { withWork } from "../components/session-state/src/work.js";
 import {
 	addLedgerTask,
@@ -21,6 +22,18 @@ import { setSystemPromptSection } from "../components/shared/src/system-prompt-s
 export { addLedgerTask, transitionLedgerTask } from "../components/shared/src/ledger-files.js";
 export const LEDGER_EXTENSION_PATH = fileURLToPath(import.meta.url);
 const OPAQUE_CHANGE_TOOLS = new Set(["bash", "pi_exec"]);
+
+/** Tell the runtime about a task's open or close, unless session state is off or has never run here. */
+async function recordInRuntime(
+	ctx: ExtensionContext,
+	command: Extract<Command, { kind: "task_opened" | "task_moved" }>,
+	signal: AbortSignal | undefined,
+	failure: string,
+): Promise<void> {
+	if (process.env.PI_SESSION_STATE_DISABLED === "1" || !withWork(() => true)) return;
+	const receipt = await sendCommand(ctx.sessionManager.getSessionId(), command, { signal });
+	if (receipt.stage === "failed") throw new Error(`${failure}: ${receipt.reason}`);
+}
 
 /** Only sessions with a persisted transcript link; an ID without a session file would point at nothing. */
 function linkableSession(ctx: ExtensionContext): string | undefined {
@@ -44,7 +57,7 @@ function createLedgerAddTool() {
 				Type.String({ description: "Optional lowercase kebab slug. Defaults to a slug derived from the title." }),
 			),
 		}),
-		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+		async execute(_toolCallId, params, signal, _onUpdate, ctx) {
 			if (!ctx.isProjectTrusted()) throw new Error("Adding a ledger task requires a trusted session repository");
 			const result = await addLedgerTask(
 				ctx.cwd,
@@ -53,6 +66,12 @@ function createLedgerAddTool() {
 				params.slug,
 				new Date(),
 				linkableSession(ctx),
+			);
+			await recordInRuntime(
+				ctx,
+				{ kind: "task_opened", bundle: join(realpathSync(ctx.cwd), result.bundlePath) },
+				signal,
+				"The ledger task was added, but the runtime did not record it as an obligation",
 			);
 			return {
 				content: [{ type: "text" as const, text: `Added ${result.taskPath}` }],
@@ -90,18 +109,13 @@ function createLedgerStatusTool() {
 			const root = realpathSync(ctx.cwd);
 			const result = await transitionLedgerTask(root, params.task, params.status, linkableSession(ctx));
 			const from = join(root, ".ledger", result.taskId);
-			if (
-				!isLiveStatus(result.status) &&
-				withWork((db) => db.prepare("select 1 from work_tasks where bundle = ?").get(from))
-			) {
-				const receipt = await sendCommand(
-					ctx.sessionManager.getSessionId(),
-					{ kind: "task_moved", from, to: join(root, result.bundlePath) },
-					{ signal },
+			if (result.status === "done" || result.status === "cancelled")
+				await recordInRuntime(
+					ctx,
+					{ kind: "task_moved", from, to: join(root, result.bundlePath), status: result.status },
+					signal,
+					"The ledger task was archived, but the runtime did not record its close",
 				);
-				if (receipt.stage === "failed")
-					throw new Error(`The ledger task was archived, but its assignment path was not updated: ${receipt.reason}`);
-			}
 			const verb = isLiveStatus(result.status) ? "Moved" : "Archived";
 			return {
 				content: [{ type: "text" as const, text: `${verb} ${result.taskPath} to ${result.status}` }],

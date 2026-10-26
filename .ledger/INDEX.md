@@ -16,4 +16,4 @@
 
 - `.ledger/202610241552-run-bash-through-a-pty-by-default/task.md` — in-progress — Run Bash through a PTY by default — Bash stdout/stderr on PTY slaves (no controlling terminal) so programs emit terminal colors; plain text to the model, styled view in the UI, pipe fallback.
 
-- `.ledger/202610242320-org-mri-morphogenesis/task.md` — ready — Organizational MRI and morphogenesis — Architecture decision for a self-optimizing organization: diagnose where the org of Pi sessions wastes cognition and coordination (MRI) from session-state facts, and adapt staffing, routing, authority, and topology through reviewable org changes (morphogenesis). Wayfinder map in map.md.
+- `.ledger/202610242320-org-mri-morphogenesis/task.md` — in-progress — Organizational MRI and morphogenesis — Architecture decision for a self-optimizing organization: diagnose where the org of Pi sessions wastes cognition and coordination (MRI) from session-state facts, and adapt staffing, routing, authority, and topology through reviewable org changes (morphogenesis). Wayfinder map in map.md.
