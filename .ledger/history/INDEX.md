@@ -143,3 +143,5 @@
 - `.ledger/history/202610211241-senses-replace-subagents/task.md` — done — Senses and peers replace subagents — Remove the agent tool and subagent manager; explorer and researcher become first-class one-shot tools; all other cross-agent work, including pi_exec model workers, runs through peers; /btw owns its session.
 
 - `.ledger/history/202610241039-rtk-one-rewrite-owner/task.md` — done — Delete the rtk tool_call hook: one rewrite owner — Delete extensions/rtk.ts's tool_call hook and its _rtk/_rawCommand fields so prepareShellCommand is the only command rewriter; fold the duplicate guards, drop unused rtk options, skip host-binary tests when rtk is absent, update docs.
+
+- `.ledger/history/202610242320-org-mri-morphogenesis/task.md` — done — Organizational MRI and morphogenesis — Architecture decision for a self-optimizing organization: diagnose where the org of Pi sessions wastes cognition and coordination (MRI) from session-state facts, and adapt staffing, routing, authority, and topology through reviewable org changes (morphogenesis). Wayfinder map in map.md.
