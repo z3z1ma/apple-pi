@@ -384,7 +384,7 @@ test("anyone reads their organization's realized fitness over a window they name
 			cost_of_delay: 5,
 		});
 		await packets(engineer.run, 1);
-		await engineer.invoke("take_task", { goal: "Tidy up.", title: "Tidy" });
+		const tidy = await engineer.invoke("take_task", { goal: "Tidy up.", title: "Tidy" });
 		await engineer.invoke("focus", { task: flaky.id });
 		await engineer.invoke("finish_task", { outcome: "Fixed." });
 		type Fitness = { value: number; delay: number; total: number; coverage: { unvalued: number }; incomplete: boolean };
@@ -405,10 +405,17 @@ test("anyone reads their organization's realized fitness over a window they name
 			relation: "finds",
 			data: { impact: { dollars: -120, kind: "estimated" } },
 		});
+		const replacement = await engineer.invoke<{ id: string }>("link", {
+			from: `task:${tidy.id}`,
+			to: `task:${flaky.id}`,
+			relation: "supersedes",
+		});
 		const evidence = await engineer.attempt("org_fitness", { since: "1h" });
 		expect(evidence.isError).not.toBe(true);
 		const text = JSON.stringify(evidence.content);
 		expect(text).toContain("estimated $-120.00");
+		expect(text).toContain("not an extra charge or waste verdict");
+		expect(text).toContain("estimate from focus at compute observation time");
 		expect(text).toContain(`person:${engineer.id}`);
 		expect(text).toContain(`task:${flaky.id}`);
 		expect(evidence.details).toMatchObject({
@@ -421,6 +428,18 @@ test("anyone reads their organization's realized fitness over a window they name
 					to: `task:${flaky.id}`,
 				},
 			],
+			droppedWork: {
+				tasks: [
+					{
+						task: `task:${flaky.id}`,
+						compute: 0,
+						delay: fitness.delay,
+						cancelled: false,
+						supersededBy: [`link:${replacement.id}`],
+					},
+				],
+				unattributedCompute: 0,
+			},
 			findings: {
 				byTask: [{ task: `task:${flaky.id}`, findings: [{ person: `person:${engineer.id}`, resolution: null }] }],
 				byPerson: [{ person: `person:${engineer.id}`, findings: [{ task: `task:${flaky.id}`, resolution: null }] }],

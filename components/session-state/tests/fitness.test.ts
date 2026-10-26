@@ -7,6 +7,8 @@ import { type EconomicEvent, evaluate, realizedFitness } from "../src/fitness.js
 import { waitsIn } from "../src/inspect.js";
 import { recordLink, resolveLink } from "../src/links.js";
 import { migrate } from "../src/schema.js";
+import { participateIn, postToThread } from "../src/threads.js";
+import { changeWork } from "../src/work.js";
 
 const HOUR = 3_600_000;
 
@@ -62,8 +64,174 @@ function organization() {
 		db
 			.prepare("insert into events (at, source, session_id, type, data) values (?, 'runtime', ?, ?, ?)")
 			.run(at, session, type, JSON.stringify(data));
-	return { db, dir, task, event };
+	const change = (
+		id: string,
+		taskId: string,
+		action: "take" | "assign" | "focus" | "finish" | "unassign" | "promote",
+		at: number,
+		person = "dev",
+	) => {
+		const thread = `task:${taskId}`;
+		db.prepare(
+			"insert or ignore into threads (id, kind, subject, created_by, created_at) values (?, 'task', ?, 'root', 0)",
+		).run(thread, taskId);
+		participateIn(db, thread, person, 0, "push");
+		db.exec("begin");
+		const changed = changeWork(
+			db,
+			dir,
+			id,
+			action === "assign" || action === "unassign" ? "root" : person,
+			{
+				kind: "work",
+				cwd: dir,
+				...(action === "finish"
+					? { action, outcome: "Done." }
+					: action === "assign" || action === "unassign"
+						? { action, task: taskId, person }
+						: { action, task: taskId }),
+			},
+			at,
+			[],
+			[],
+		);
+		expect(
+			postToThread(db, action === "assign" || action === "unassign" ? "root" : person, `${id}:post`, changed.post, at),
+		).not.toBeTypeOf("string");
+		db.exec("commit");
+	};
+	return { db, dir, task, event, change };
 }
+
+test("cancelled work shows already-counted compute and delay using focus before the window, never another charge", () => {
+	const { db, task, event, change } = organization();
+	task("dropped", "Value: $50\nCost of delay: $5/hour", 0, { at: 4 * HOUR, status: "cancelled" }, ["dev"]);
+	change("focus", "dropped", "focus", HOUR);
+	event(2 * HOUR, "dev", "cost_changed", { from: 0, to: 12 });
+	const fitness = realizedFitness(db, "root", 2 * HOUR, 3 * HOUR);
+	expect(fitness).toMatchObject({
+		total: -17,
+		compute: 12,
+		delay: 5,
+		droppedWork: {
+			tasks: [{ task: "task:dropped", compute: 12, delay: 5, cancelled: true, supersededBy: [] }],
+			unattributedCompute: 0,
+			computeAttribution: "estimate from focus at compute observation time",
+		},
+	});
+	expect(realizedFitness(db, "root", 2 * HOUR, 3 * HOUR, { subtree: "dev" }).droppedWork.tasks).toHaveLength(1);
+	expect(realizedFitness(db, "root", 2 * HOUR, 3 * HOUR, { subtree: "root" }).total).toBe(fitness.total);
+});
+
+test("a supersedes target explains its prior spend; duplicate links and changing the annotation never charge twice", () => {
+	const { db, task, event, change } = organization();
+	task("old", "Value: $50\nCost of delay: $5/hour", 0, undefined, ["dev"]);
+	task("replacement", "Value: $0", 0);
+	change("focus", "old", "focus", HOUR);
+	event(2 * HOUR, "dev", "cost_changed", { from: 0, to: 12 });
+	const before = realizedFitness(db, "root", HOUR, 3 * HOUR);
+	expect(before.droppedWork).toMatchObject({ tasks: [], unattributedCompute: 0 });
+	for (const id of ["replace", "again"])
+		recordLink(
+			db,
+			id,
+			"dev",
+			{ from: { kind: "task", id: "replacement" }, to: { kind: "task", id: "old" }, relation: "supersedes" },
+			4 * HOUR,
+		);
+	const after = realizedFitness(db, "root", HOUR, 3 * HOUR);
+	expect(after.total).toBe(before.total);
+	expect(after.droppedWork.tasks).toEqual([
+		{ task: "task:old", compute: 12, delay: 10, cancelled: false, supersededBy: ["link:again", "link:replace"] },
+	]);
+	expect(after.droppedWork.classification).toContain("may postdate the window");
+});
+
+test("focus changes and clears are replayed, while no focus stays unattributed rather than guessed dropped", () => {
+	const { db, task, event, change } = organization();
+	for (const id of ["a", "b"]) task(id, "Value: $0", 0, undefined, ["dev"]);
+	event(0.5 * HOUR, "dev", "cost_changed", { from: 0, to: 1 });
+	change("take", "a", "take", HOUR);
+	event(1.5 * HOUR, "dev", "cost_changed", { from: 1, to: 3 });
+	change("assign", "b", "assign", 2 * HOUR);
+	change("unassign-other", "a", "unassign", 2.5 * HOUR);
+	event(3 * HOUR, "dev", "cost_changed", { from: 3, to: 7 });
+	change("finish", "b", "finish", 4 * HOUR);
+	event(5 * HOUR, "dev", "cost_changed", { from: 7, to: 15 });
+	change("take-again", "b", "take", 6 * HOUR);
+	change("unassign-focused", "b", "unassign", 7 * HOUR);
+	event(8 * HOUR, "dev", "cost_changed", { from: 15, to: 31 });
+	db.prepare("update work_tasks set archived_at = ?, close_status = 'cancelled'").run(10 * HOUR);
+	const fitness = realizedFitness(db, "root", 0, 9 * HOUR);
+	expect(fitness).toMatchObject({
+		total: -31,
+		compute: 31,
+		droppedWork: {
+			tasks: [
+				{ task: "task:a", compute: 2, delay: 0 },
+				{ task: "task:b", compute: 4, delay: 0 },
+			],
+			unattributedCompute: 25,
+		},
+	});
+});
+
+test("focus ties include the latest retained post, while foreign or ineligible focus remains unattributed", () => {
+	const { db, task, event, change } = organization();
+	for (const id of ["a", "b", "foreign", "internal"]) task(id, "Value: $0", 0, undefined, ["dev"]);
+	change("first", "a", "focus", HOUR);
+	change("second", "b", "focus", HOUR);
+	event(HOUR, "dev", "cost_changed", { from: 0, to: 2 });
+	change("foreign", "foreign", "focus", 2 * HOUR);
+	event(2 * HOUR, "dev", "cost_changed", { from: 2, to: 6 });
+	change("internal", "internal", "focus", 3 * HOUR);
+	event(3 * HOUR, "dev", "cost_changed", { from: 6, to: 14 });
+	db.prepare("update work_tasks set organization = 'unrelated' where id = 'foreign'").run();
+	db.prepare("update work_tasks set ephemeral = 1 where id = 'internal'").run();
+	db.prepare("delete from assignments where task_id = 'internal'").run();
+	db.prepare(
+		"insert into assignments (person, task_id, assigned_by, assigned_at) values ('temporary', 'internal', 'root', 0)",
+	).run();
+	db.prepare(
+		"insert into program_peers (session_id, created_by, program_id, task_id) values ('temporary', 'root', 'program', 'internal')",
+	).run();
+	db.prepare("update work_tasks set archived_at = ?, close_status = 'cancelled'").run(5 * HOUR);
+	const fitness = realizedFitness(db, "root", HOUR, 4 * HOUR);
+	expect(fitness).toMatchObject({
+		total: -14,
+		droppedWork: { tasks: [{ task: "task:b", compute: 2 }], unattributedCompute: 12 },
+	});
+	expect(realizedFitness(db, "root", HOUR, 4 * HOUR, { subtree: "lead" }).droppedWork.tasks).toEqual(
+		fitness.droppedWork.tasks,
+	);
+	expect(realizedFitness(db, "root", HOUR, 4 * HOUR, { subtree: "unrelated" })).toMatchObject({
+		total: -14,
+		droppedWork: { tasks: [], unattributedCompute: 0 },
+	});
+	expect(realizedFitness(db, "root", 0, HOUR).compute).toBe(0);
+});
+
+test("promotion retains focus, while today's focus without a retained change/post pair is unknown", () => {
+	const { db, task, event, change } = organization();
+	task("promoted", "Value: $0", 0, undefined, ["dev"]);
+	db.prepare("update work_tasks set ephemeral = 1 where id = 'promoted'").run();
+	change("focus", "promoted", "focus", HOUR);
+	change("promote", "promoted", "promote", 2 * HOUR);
+	event(3 * HOUR, "dev", "cost_changed", { from: 0, to: 12 });
+	db.prepare("update work_tasks set archived_at = ?, close_status = 'cancelled'").run(4 * HOUR);
+	expect(realizedFitness(db, "root", 0, 4 * HOUR).droppedWork).toMatchObject({
+		tasks: [{ task: "task:promoted", compute: 12 }],
+		unattributedCompute: 0,
+	});
+	db.prepare("delete from thread_messages where id = 'focus:post'").run();
+	expect(db.prepare("select task_id from work_focus where person = 'dev'").get()).toMatchObject({
+		task_id: "promoted",
+	});
+	expect(realizedFitness(db, "root", 0, 4 * HOUR)).toMatchObject({
+		total: -12,
+		droppedWork: { tasks: [], unattributedCompute: 12 },
+	});
+});
 
 test("incurred link impacts count once at their time, with recorder provenance; estimates remain evidence", () => {
 	const { db, task } = organization();

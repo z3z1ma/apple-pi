@@ -348,10 +348,10 @@ interface Finding {
 }
 
 /** Link assertions are evidence, not verified facts. Explicit ownership wins over endpoint or recorder fallbacks. */
-function recordedEvidence(db: DatabaseSync, organization: string, from: number, to: number) {
+function linkOwnership(db: DatabaseSync, organization: string) {
 	const { managerAt, memberAt } = membership(db, organization);
 	const { owns } = taskOwnership(db, organization);
-	const belongs = (link: Link, at: number) => {
+	return (link: Link, at: number) => {
 		if (link.organization) {
 			const seen = new Set<string>();
 			for (let anchor: string | null = link.organization; anchor && !seen.has(anchor); anchor = managerAt(anchor, at)) {
@@ -363,6 +363,10 @@ function recordedEvidence(db: DatabaseSync, organization: string, from: number, 
 		const task = link.from_kind === "task" ? link.from_id : link.to_kind === "task" ? link.to_id : undefined;
 		return task ? owns(task, at) : memberAt(link.recorded_by, at);
 	};
+}
+
+function recordedEvidence(db: DatabaseSync, organization: string, from: number, to: number) {
+	const belongs = linkOwnership(db, organization);
 	const impacts: RecordedImpact[] = [];
 	const findings: Finding[] = [];
 	for (const link of db.prepare("select * from links order by created_at, id").all() as unknown as Link[]) {
@@ -403,6 +407,88 @@ function recordedEvidence(db: DatabaseSync, organization: string, from: number, 
 	return { impacts, findings };
 }
 
+interface DroppedSpend {
+	task: string;
+	compute: number;
+	delay: number;
+	cancelled: boolean;
+	supersededBy: string[];
+}
+
+/** Explains already-counted spend; current outcomes annotate history without changing its economic events. */
+function droppedSpend(
+	db: DatabaseSync,
+	organization: string,
+	events: EconomicEvent[],
+	contributions: Contribution[],
+	eligible: ReadonlySet<string>,
+	from: number,
+	to: number,
+	scope?: ReadonlySet<string>,
+) {
+	const transitions = db
+		.prepare(`select w.person, w.task_id, w.action, m.at from work_changes w
+		join thread_messages m on m.id = w.command_id || ':post'
+		order by m.at, m.seq`)
+		.all() as { person: string; task_id: string; action: string; at: number }[];
+	const focus = new Map<string, string>();
+	const compute = new Map<string, number>();
+	const { owns } = taskOwnership(db, organization);
+	let next = 0;
+	let unattributedCompute = 0;
+	for (const event of events
+		.filter(
+			(event): event is Extract<EconomicEvent, { at: number }> =>
+				event.kind === "compute" && event.at >= from && event.at < to,
+		)
+		.sort((a, b) => a.at - b.at)) {
+		while (next < transitions.length && transitions[next].at <= event.at) {
+			const change = transitions[next++];
+			if (["take", "assign", "focus"].includes(change.action)) focus.set(change.person, change.task_id);
+			else if (
+				change.action === "finish" ||
+				(change.action === "unassign" && focus.get(change.person) === change.task_id)
+			)
+				focus.delete(change.person);
+		}
+		const task = focus.get(event.source.slice("person:".length));
+		if (task && eligible.has(task) && owns(task, event.at)) compute.set(task, (compute.get(task) ?? 0) + event.amount);
+		else if (!scope || scope.has(event.source)) unattributedCompute += event.amount;
+	}
+	const replaced = new Map<string, string[]>();
+	const belongs = linkOwnership(db, organization);
+	for (const link of db
+		.prepare("select * from links where relation = 'supersedes' and to_kind = 'task' order by created_at, id")
+		.all() as unknown as Link[]) {
+		if (!eligible.has(link.to_id) || !belongs(link, link.created_at)) continue;
+		const refs = replaced.get(link.to_id) ?? [];
+		refs.push(`link:${link.id}`);
+		replaced.set(link.to_id, refs);
+	}
+	const delay = new Map(contributions.map((part) => [part.source, part.delay]));
+	const tasks: DroppedSpend[] = [];
+	for (const row of db.prepare("select id, close_status from work_tasks").all() as {
+		id: string;
+		close_status: string | null;
+	}[]) {
+		const task = `task:${row.id}`;
+		if (!eligible.has(row.id) || (scope && !scope.has(task))) continue;
+		const cancelled = row.close_status === "cancelled";
+		const supersededBy = replaced.get(row.id) ?? [];
+		const spentCompute = compute.get(row.id) ?? 0;
+		const spentDelay = delay.get(task) ?? 0;
+		if ((cancelled || supersededBy.length) && (spentCompute || spentDelay))
+			tasks.push({ task, compute: spentCompute, delay: spentDelay, cancelled, supersededBy });
+	}
+	return {
+		tasks,
+		unattributedCompute,
+		computeAttribution: "estimate from focus at compute observation time",
+		classification:
+			"current recorded cancellation or replacement, which may postdate the window; explanation only, not an extra charge or waste verdict",
+	};
+}
+
 /** Realized fitness of one organization over `[from, to)`, recomputed from recorded facts and current valuations. */
 export function realizedFitness(
 	db: DatabaseSync,
@@ -428,6 +514,7 @@ export function realizedFitness(
 	let contributions = result.contributions;
 	let impacts = evidence.impacts;
 	let findings = evidence.findings;
+	let scope: Set<string> | undefined;
 	if (options.subtree) {
 		const people = subtreeOf(db, options.subtree);
 		const held = new Set(
@@ -436,6 +523,7 @@ export function realizedFitness(
 				.map((row) => `task:${row.task_id}`),
 		);
 		for (const person of people) held.add(`person:${person}`);
+		scope = held;
 		impacts = impacts.filter((impact) => held.has(impact.from) || held.has(impact.to) || held.has(impact.recordedBy));
 		findings = findings.filter((finding) => held.has(finding.task) || held.has(finding.person));
 		for (const impact of impacts) held.add(impact.link);
@@ -445,6 +533,7 @@ export function realizedFitness(
 		...result,
 		contributions,
 		impacts,
+		droppedWork: droppedSpend(db, organization, events, result.contributions, eligibleTasks, from, to, scope),
 		findings: {
 			byTask: [...new Set(findings.map((finding) => finding.task))].map((task) => ({
 				task,

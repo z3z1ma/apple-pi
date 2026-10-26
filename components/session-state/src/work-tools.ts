@@ -286,6 +286,12 @@ function readFitness(ctx: ExtensionContext, args: { since: string; until?: strin
 			(w) =>
 				`- open wait ${w.id}: ${w.from_kind}:${w.from_id} ${w.relation} ${w.to_kind}:${w.to_id}, ${w.ageHours.toFixed(1)}h${w.reason ? ` (${w.reason})` : ""}`,
 		),
+		`Spend on dropped work: ${fitness.droppedWork.classification}. Compute attribution is an ${fitness.droppedWork.computeAttribution}.`,
+		...fitness.droppedWork.tasks.map(
+			(task) =>
+				`- ${task.task}: compute ${dollars(task.compute)}, delay ${dollars(task.delay)}${task.cancelled ? "; cancelled" : ""}${task.supersededBy.length ? `; replaced via ${task.supersededBy.join(", ")}` : ""}`,
+		),
+		`Unattributed compute (unknown, absent or ineligible focus): ${dollars(fitness.droppedWork.unattributedCompute)}.`,
 		"Recorded impacts (assertions, not verified; estimates are not charged):",
 		...fitness.impacts.map(
 			(impact) =>
@@ -466,7 +472,7 @@ export function installWork(pi: ExtensionAPI): void {
 			name: "org_fitness",
 			label: "org_fitness",
 			description:
-				"Compare recorded value, delay and compute in dollars over a past window. This is one optional analytical instrument beside org_waits, org_work, org_communication and org_expertise, not an objective for every management decision. Shows total and rate per hour, task/person/link contributions, recorded impacts with their recorders, findings created in the window by task and recorder with resolution at cutoff, and unvalued coverage. Estimates and findings never change the total. Narrow contributions to a person's subtree; the total stays the organization's.",
+				"Compare recorded value, delay and compute in dollars over a past window. This is one optional analytical instrument beside org_waits, org_work, org_communication and org_expertise, not an objective for every management decision. Shows total and rate per hour, task/person/link contributions, recorded impacts with their recorders, findings created in the window by task and recorder with resolution at cutoff, and unvalued coverage. Spend on dropped work explains compute and delay already counted on currently recorded cancelled/replaced tasks, even when that outcome postdates the window; it is not another charge or a waste verdict. Task compute attribution estimates focus at observation time; unknown/no/ineligible focus is unattributed. Estimates and findings never change the total. Narrow contributions to a person's subtree; the total stays the organization's.",
 			promptSnippet:
 				"Use optional economic comparison with org_fitness alongside direct organizational signals and judgment.",
 			parameters: Type.Object(
