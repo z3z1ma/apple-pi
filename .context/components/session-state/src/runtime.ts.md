@@ -78,6 +78,13 @@ Why: the ledger files are already archived when `task_moved` arrives, so a lost 
 Coupled: components/session-state/src/work.ts, components/session-state/src/links.ts, extensions/ledger.ts
 Verify: components/session-state/tests/work-recovery.test.ts, components/session-state/tests/links.test.ts
 
+## symbol:Runtime.applyFacts
+
+A session snapshot change and its `<column>_changed` event commit in one transaction, and a move's snapshot, `manager_changes` row, and `transferred` event likewise. A hello's cost is marked `hello: true` when no `cost_changed` was ever recorded for the session, checked inside that same transaction.
+Why: fitness replays these events as history. A crash between snapshot and event lost the event for good, because the next report finds the snapshot already equal; review reproduced an independent session's $4 entering an organization that way. Row existence was not a durable first-sight marker: hello writes the row before its facts, and a hire creates it before any hello.
+Coupled: components/session-state/src/fitness.ts
+Verify: components/session-state/tests/cost-history.test.ts
+
 ## symbol:Runtime.finishWorkCommand
 
 An awake assignee needs no launch. A sleeping assignee wakes beside the assigning session's pane; an operator assignment instead uses the terminal supplied by the UI, because `operator` has no session row or incarnation. The wake target stays in the persisted command for recovery. A wake failure reports that the assignment was already saved rather than claiming it rolled back.

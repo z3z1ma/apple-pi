@@ -89,7 +89,64 @@ function historyEvents(db: DatabaseSync, organization: string, until: number) {
 		}
 		return { task, valuation, closed };
 	});
+	events.push(...computeEvents(db, organization));
 	return { events, valued };
+}
+
+/**
+ * Each member's spend, counted when the spender's manager chain reached the organization at that moment and the spender
+ * had not been let go. The runtime's events are replayed in the order it recorded them (`seq`): a hello seeding a manager
+ * (`reports_to_changed`), a move (`transferred`), a departure (`retired`), a rehire (`rehired`), and spend
+ * (`cost_changed`), so a later join or move, even in the same millisecond, never rewrites earlier spend. A cost change
+ * marked `hello` is spend the transcript already held before any cost was recorded for the session: a baseline. A temporary
+ * pi_exec peer's spend is left out with its tasks, because disposal deletes the peer.
+ */
+function computeEvents(db: DatabaseSync, organization: string): EconomicEvent[] {
+	const peers = new Set(
+		(db.prepare("select session_id from program_peers").all() as { session_id: string }[]).map((r) => r.session_id),
+	);
+	const stream = db
+		.prepare(
+			"select session_id, at, type, data from events where type in ('reports_to_changed', 'transferred', 'retired', 'rehired', 'cost_changed') order by seq",
+		)
+		.all() as { session_id: string; at: number; type: string; data: string | null }[];
+	// Before its first recorded change a person had the manager that change replaced; with none, its current one.
+	const manager = new Map(
+		(db.prepare("select id, reports_to from sessions").all() as { id: string; reports_to: string | null }[]).map(
+			(row) => [row.id, row.reports_to],
+		),
+	);
+	const seeded = new Set<string>();
+	for (const row of stream)
+		if ((row.type === "reports_to_changed" || row.type === "transferred") && !seeded.has(row.session_id)) {
+			seeded.add(row.session_id);
+			manager.set(row.session_id, JSON.parse(row.data ?? "{}").from ?? null);
+		}
+	const inOrganization = (person: string) => {
+		const seen = new Set<string>();
+		for (let link: string | null | undefined = person; link && !seen.has(link); link = manager.get(link)) {
+			if (link === organization) return true;
+			seen.add(link);
+		}
+		return false;
+	};
+	const departed = new Set<string>();
+	const events: EconomicEvent[] = [];
+	for (const row of stream) {
+		const data = JSON.parse(row.data ?? "{}");
+		if (row.type === "reports_to_changed" || row.type === "transferred") manager.set(row.session_id, data.to ?? null);
+		else if (row.type === "retired") departed.add(row.session_id);
+		else if (row.type === "rehired") departed.delete(row.session_id);
+		else if (
+			!peers.has(row.session_id) &&
+			!departed.has(row.session_id) &&
+			!data.hello &&
+			data.to > data.from &&
+			inOrganization(row.session_id)
+		)
+			events.push({ kind: "compute", at: row.at, amount: data.to - data.from, source: `person:${row.session_id}` });
+	}
+	return events;
 }
 
 /** Everyone at or below `person` in the reporting tree. */
@@ -136,6 +193,7 @@ export function realizedFitness(
 				.filter((row) => people.has(row.person))
 				.map((row) => `task:${row.task_id}`),
 		);
+		for (const person of people) held.add(`person:${person}`);
 		contributions = contributions.filter((c) => held.has(c.source));
 	}
 	return {
@@ -152,5 +210,7 @@ export function realizedFitness(
 			unattributedValueShare: totalValue ? 1 - estimatedValue / totalValue : 0,
 		},
 		incomplete: unvalued > 0,
+		// Disposal deletes a temporary peer, so its spend cannot be charged to its caller afterwards.
+		computeExcludes: "spend of temporary pi_exec peers",
 	};
 }

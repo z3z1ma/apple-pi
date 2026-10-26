@@ -163,7 +163,7 @@ function readFitness(ctx: ExtensionContext, args: { since: string; until?: strin
 	const dollars = (n: number) => `$${n.toFixed(2)}`;
 	const lines = [
 		`Realized fitness ${dollars(fitness.total)} (${dollars(fitness.perHour)} per hour) from ${new Date(from).toISOString()} to ${new Date(to).toISOString()}${fitness.incomplete ? "; incomplete: some work has no value" : ""}.`,
-		`Value earned ${dollars(fitness.value)}, delay ${dollars(fitness.delay)}, compute ${dollars(fitness.compute)}, impacts ${dollars(fitness.impact)}.`,
+		`Value earned ${dollars(fitness.value)}, delay ${dollars(fitness.delay)}, compute ${dollars(fitness.compute)} (excludes ${fitness.computeExcludes}), impacts ${dollars(fitness.impact)}.`,
 		`Tasks in the window: ${fitness.coverage.tasks}, unvalued ${fitness.coverage.unvalued}; ${Math.round(fitness.coverage.estimatedValueShare * 100)}% of value is agents' estimates.`,
 		...fitness.contributions.map(
 			(c) =>

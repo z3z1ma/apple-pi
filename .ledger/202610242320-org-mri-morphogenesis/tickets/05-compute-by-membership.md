@@ -6,9 +6,9 @@ Part of the approved spec [../spec.md](../spec.md); its Terms table defines obli
 
 **Blocked by:** 04 (One evaluator and realized fitness from work).
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Against a temporary state database built from real runtime event shapes, a person's spend before it joined and after it was let go does not count, and spend after its rehire counts again.
-- [ ] A reopen of a sleeping member that reports earlier spend at hello adds no compute; new spend after it does.
-- [ ] The spec's worked example now gives -$13, +$40.50, and +$27.50 for hours 0 to 2, 2 to 4, and 0 to 4, and windows still add up with compute in both.
-- [ ] Contributions list compute per person, and the compute total equals their sum.
+- [x] Against a temporary state database built from real runtime event shapes, a person's spend before it joined and after it was let go does not count, and spend after its rehire counts again.
+- [x] A reopen of a sleeping member that reports earlier spend at hello adds no compute; new spend after it does.
+- [x] The spec's worked example now gives -$13, +$40.50, and +$27.50 for hours 0 to 2, 2 to 4, and 0 to 4, and windows still add up with compute in both.
+- [x] Contributions list compute per person, and the compute total equals their sum.

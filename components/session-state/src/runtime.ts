@@ -514,7 +514,12 @@ export class Runtime {
 		const stored = db.prepare("select reports_to from sessions where id = ?").get(session.id) as {
 			reports_to: string | null;
 		};
-		this.applyFacts(session.id, generation, stored.reports_to === null && reportsTo ? { ...facts, reportsTo } : facts);
+		this.applyFacts(
+			session.id,
+			generation,
+			stored.reports_to === null && reportsTo ? { ...facts, reportsTo } : facts,
+			true,
+		);
 		// A bridge started with a stale flag learns its manager from the record.
 		if (stored.reports_to !== null && reportsTo !== undefined && stored.reports_to !== reportsTo)
 			this.issue(connection, { kind: "transfer", manager: stored.reports_to, by: "runtime" });
@@ -1097,16 +1102,18 @@ export class Runtime {
 		const from = managerOf.get(sessionId) ?? null;
 		if (from === command.manager) return `already reports to ${command.manager}`;
 		const now = Date.now();
-		db.prepare("update sessions set reports_to = ?, updated_at = ? where id = ?").run(command.manager, now, sessionId);
-		db.prepare("insert into manager_changes (session_id, from_manager, to_manager, by, at) values (?, ?, ?, ?, ?)").run(
-			sessionId,
-			from,
-			command.manager,
-			command.by,
-			now,
-		);
-		syncChannels(db, now);
-		this.event("client", sessionId, null, "transferred", { from, to: command.manager, by: command.by });
+		this.atomically(() => {
+			db.prepare("update sessions set reports_to = ?, updated_at = ? where id = ?").run(
+				command.manager,
+				now,
+				sessionId,
+			);
+			db.prepare(
+				"insert into manager_changes (session_id, from_manager, to_manager, by, at) values (?, ?, ?, ?, ?)",
+			).run(sessionId, from, command.manager, command.by, now);
+			syncChannels(db, now);
+			this.event("client", sessionId, null, "transferred", { from, to: command.manager, by: command.by });
+		});
 		return undefined;
 	}
 
@@ -1410,9 +1417,16 @@ export class Runtime {
 		const db = this.db!;
 		const fail = (reason: string) => this.setCommandStage(commandId, "failed", reason);
 		const row = db
-			.prepare("select cwd, name, generation, reports_to, role from sessions where id = ?")
+			.prepare("select cwd, name, generation, reports_to, role, retired_at from sessions where id = ?")
 			.get(sessionId) as
-			| { cwd: string; name: string | null; generation: number; reports_to: string | null; role: string | null }
+			| {
+					cwd: string;
+					name: string | null;
+					generation: number;
+					reports_to: string | null;
+					role: string | null;
+					retired_at: number | null;
+			  }
 			| undefined;
 		const live =
 			row &&
@@ -1482,6 +1496,7 @@ export class Runtime {
 				command.tmux ? canonicalSocket(command.tmux.socket) : null,
 			);
 		}
+		if (row?.retired_at) this.event("runtime", sessionId, null, "rehired", {});
 		if (row) db.prepare("update sessions set retired_at = null, retired_reason = null where id = ?").run(sessionId);
 		if (command.goal) {
 			const prepare = () => {
@@ -1914,7 +1929,34 @@ export class Runtime {
 	}
 
 	/** The current generation's facts, each change an event of its own. */
-	private applyFacts(sessionId: string, generation: number, facts: Partial<Facts>): void {
+	/**
+	 * A hello's cost is spend the transcript already held when no cost was ever recorded for the session: it is marked so
+	 * fitness takes it as a baseline. Once a cost is recorded, a reconnect after an outage reports real spend.
+	 */
+	private applyFacts(sessionId: string, generation: number, facts: Partial<Facts>, atHello = false): void {
+		// A snapshot change and its event commit together: a crash between them would lose the event for good, because the
+		// next report finds the snapshot already equal.
+		this.atomically(() => this.writeFacts(sessionId, generation, facts, atHello));
+	}
+
+	/** Run inside the current transaction, or in a new one. */
+	private atomically(write: () => void): void {
+		const db = this.db!;
+		if (db.isTransaction) {
+			write();
+			return;
+		}
+		db.exec("begin");
+		try {
+			write();
+			db.exec("commit");
+		} catch (error) {
+			db.exec("rollback");
+			throw error;
+		}
+	}
+
+	private writeFacts(sessionId: string, generation: number, facts: Partial<Facts>, atHello: boolean): void {
 		const db = this.db!;
 		const row = db.prepare("select * from sessions where id = ?").get(sessionId) as Record<string, unknown> | undefined;
 		if (!row || row.generation !== generation) return;
@@ -1951,7 +1993,15 @@ export class Runtime {
 					"update sessions set needs_you_since = case when coalesce(settled_at, 0) > coalesce(seen_at, 0) then needs_you_since end where id = ?",
 				).run(sessionId);
 			const type = key === "prompt" ? (value ? "prompt_opened" : "prompt_closed") : `${column}_changed`;
-			this.event("bridge", sessionId, generation, type, { from: before, to: value });
+			this.event("bridge", sessionId, generation, type, {
+				from: before,
+				to: value,
+				...(atHello &&
+				key === "cost" &&
+				!db.prepare("select 1 from events where session_id = ? and type = 'cost_changed'").get(sessionId)
+					? { hello: true }
+					: {}),
+			});
 		}
 		// The name has its own column, which a rename must change too.
 		if (facts.config && facts.config.name !== row.name)
