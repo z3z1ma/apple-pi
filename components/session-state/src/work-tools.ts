@@ -4,7 +4,7 @@ import { Type } from "typebox";
 import { resolvePerson } from "./addresses.js";
 import { sendCommand } from "./client.js";
 import { realizedFitness } from "./fitness.js";
-import { areasOf, expertsOn, type Scope, waitsIn } from "./inspect.js";
+import { areasOf, expertsOn, type Scope, waitsIn, workIn } from "./inspect.js";
 import { ENTITY_KINDS, type Entity, type Link, relations } from "./links.js";
 import type { Command } from "./protocol.js";
 import { taskOrganization } from "./tree.js";
@@ -19,6 +19,7 @@ const PERSON_TASK_TOOLS = [
 	"fitness",
 	"org_expertise",
 	"org_waits",
+	"org_work",
 ];
 const UNITS: Record<string, number> = { m: 60_000, h: 3_600_000, d: 86_400_000 };
 
@@ -293,6 +294,59 @@ function readFitness(ctx: ExtensionContext, args: { since: string; until?: strin
 }
 
 export function installWork(pi: ExtensionAPI): void {
+	pi.registerTool(
+		defineTool({
+			name: "org_work",
+			label: "org_work",
+			description:
+				"See where work stands: ready without an owner, waiting on explicit links, or held without an open wait. Shows task age, holders and people holding several tasks. Give since for arrivals and closes (done or cancelled) in a window; until selects the snapshot time. Narrow to a subtree, person or task. Read-only facts with task/person/link references, not a judgment of productivity.",
+			promptSnippet: "Inspect ready work, waiting work, assignments and arrivals versus completions.",
+			parameters: Type.Object(
+				{
+					since: Type.Optional(
+						Type.String({ minLength: 1, description: "List arrivals and closes since: 30m, 8h, 7d, or a date." }),
+					),
+					until: Type.Optional(Type.String({ minLength: 1, description: "Snapshot time; now by default." })),
+					subtree: Type.Optional(Type.String({ minLength: 1 })),
+					person: Type.Optional(Type.String({ minLength: 1 })),
+					task: Type.Optional(Type.String({ minLength: 1 })),
+				},
+				{ additionalProperties: false },
+			),
+			execute: async (_id, args, _signal, _update, ctx) => {
+				const now = Date.now();
+				const from = args.since ? pointInTime(args.since, now) : undefined;
+				const to = args.until ? pointInTime(args.until, now) : now;
+				if (to > now || (from !== undefined && from >= to))
+					throw new Error("Choose a past window whose start precedes its end");
+				const scope = scopeOf(ctx, args);
+				const result = withWork((db) =>
+					workIn(db, rootOf(db, ctx.sessionManager.getSessionId()), { cwd: ctx.cwd, from, to }, scope),
+				);
+				if (!result) throw new Error("The runtime has no records yet");
+				const lines = [
+					...(["ready", "waiting", "inProgress"] as const).flatMap((state) => [
+						`${state}: ${result[state].length}`,
+						...result[state].map(
+							(task) =>
+								`- ${task.ref}: ${task.ageHours.toFixed(1)}h old; holders: ${task.holders.join(", ") || "none"}${task.waits.length ? `; waits: ${task.waits.join(", ")}` : ""}`,
+						),
+					]),
+					...result.multiple.map(
+						(load) => `- ${load.person} holds ${load.tasks.length} tasks: ${load.tasks.join(", ")}`,
+					),
+					...(from === undefined
+						? []
+						: [
+								`Opened: ${result.opened.length}; closed done: ${result.closed.filter((task) => task.status === "done").length}; cancelled: ${result.closed.filter((task) => task.status === "cancelled").length}`,
+								...result.opened.map((task) => `- opened ${task.ref} at ${new Date(task.at).toISOString()}`),
+								...result.closed.map((task) => `- ${task.status} ${task.ref} at ${new Date(task.at).toISOString()}`),
+							]),
+				];
+				return { content: [{ type: "text" as const, text: lines.join("\n") }], details: result };
+			},
+		}),
+	);
 	pi.registerTool(
 		defineTool({
 			name: "org_waits",

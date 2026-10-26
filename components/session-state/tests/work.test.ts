@@ -424,6 +424,19 @@ test("anyone finds who has context on an area from what people actually read", a
 	}
 }, 30000);
 
+test("a person inspects held work through org_work", async () => {
+	const who = await person();
+	try {
+		const task = await who.invoke("take_task", { goal: "Ship the change.", title: "Change" });
+		const work = await who.invoke<{ inProgress: { ref: string; holders: string[] }[] }>("org_work", { task: task.id });
+		expect(work.inProgress).toEqual([
+			expect.objectContaining({ ref: `task:${task.id}`, holders: [`person:${who.id}`] }),
+		]);
+	} finally {
+		await close(who.run);
+	}
+}, 30000);
+
 test("a manager sees a wait its report recorded, grouped under what it waits on", async () => {
 	const manager = await person();
 	const engineer = await person(manager.id);

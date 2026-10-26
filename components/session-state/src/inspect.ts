@@ -261,10 +261,90 @@ export function waitsIn(db: DatabaseSync, organization: string, window: Window, 
 	};
 }
 
-/**
- * Whether a link belongs to the scope at a moment: recorded by, aimed at, or attached to a task held by its people,
- * where a subtree is the one the recorded manager chain gave at that moment.
- */
+/** Open task states at the cutoff, plus arrivals and closes inside the requested window. */
+export function workIn(db: DatabaseSync, organization: string, window: Window, scope: Scope = {}) {
+	const at = window.to ?? Date.now();
+	const { owns } = taskOwnership(db, organization);
+	const { managerAt } = membership(db, organization);
+	const assignments = db.prepare(
+		"select person from assignments where task_id = ? and assigned_at <= ? and (ended_at is null or ended_at > ? or (? and ended_at = ?)) order by person",
+	);
+	const holders = (id: string, when: number, closing = false) => [
+		...new Set(
+			(assignments.all(id, when, when, Number(closing), when) as { person: string }[]).map((row) => row.person),
+		),
+	];
+	const within = (id: string, when: number, closing = false) => {
+		if (scope.task) return id === scope.task;
+		if (!scope.person && !scope.subtree) return true;
+		return holders(id, when, closing).some((person) => {
+			if (scope.person) return person === scope.person;
+			const seen = new Set<string>();
+			for (let current: string | null = person; current && !seen.has(current); current = managerAt(current, when)) {
+				if (current === scope.subtree) return true;
+				seen.add(current);
+			}
+			return false;
+		});
+	};
+	const tasks = db
+		.prepare(
+			"select id, opened_at, archived_at, close_status from work_tasks where opened_at is not null order by opened_at, id",
+		)
+		.all() as { id: string; opened_at: number; archived_at: number | null; close_status: string | null }[];
+	const waits = openWaits(db, organization, at);
+	const open = tasks
+		.filter(
+			(task) =>
+				task.opened_at < at &&
+				(task.archived_at === null || task.archived_at > at) &&
+				owns(task.id, at) &&
+				within(task.id, at),
+		)
+		.map((task) => ({
+			ref: `task:${task.id}`,
+			ageHours: (at - task.opened_at) / 3_600_000,
+			holders: holders(task.id, at).map((person) => `person:${person}`),
+			waits: waits
+				.filter((wait) => wait.from_kind === "task" && wait.from_id === task.id)
+				.map((wait) => `link:${wait.id}`),
+		}));
+	const load = new Map<string, string[]>();
+	for (const task of open) for (const person of task.holders) load.set(person, [...(load.get(person) ?? []), task.ref]);
+	return {
+		opened:
+			window.from === undefined
+				? []
+				: tasks
+						.filter(
+							(task) =>
+								task.opened_at >= window.from! &&
+								task.opened_at < at &&
+								owns(task.id, task.opened_at) &&
+								within(task.id, task.opened_at),
+						)
+						.map((task) => ({ ref: `task:${task.id}`, at: task.opened_at })),
+		closed:
+			window.from === undefined
+				? []
+				: tasks
+						.filter(
+							(task) =>
+								task.archived_at !== null &&
+								task.archived_at >= window.from! &&
+								task.archived_at < at &&
+								owns(task.id, task.archived_at) &&
+								within(task.id, task.archived_at, true),
+						)
+						.map((task) => ({ ref: `task:${task.id}`, at: task.archived_at!, status: task.close_status })),
+		ready: open.filter((task) => !task.waits.length && !task.holders.length),
+		waiting: open.filter((task) => task.waits.length > 0),
+		inProgress: open.filter((task) => !task.waits.length && task.holders.length > 0),
+		multiple: [...load].filter(([, tasks]) => tasks.length > 1).map(([person, tasks]) => ({ person, tasks })),
+	};
+}
+
+/** Scope a wait by its recorder, endpoint people, or task holders at the judged moment. */
 function scoped(
 	scope: Scope,
 	holdersAt: (task: string, when: number) => string[],
