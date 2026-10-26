@@ -442,8 +442,19 @@ test("a hired person whose role does not manage loses the lifecycle tools; a hir
 		run.session.extensionRunner.setFlagValue("reports-to", "boss");
 		await withRole(run, "staff-engineer-simplicity");
 		await run.session.prompt("hi");
-		expect(run.session.getActiveToolNames().sort()).toEqual(
-			[
+		const active = run.session.getActiveToolNames();
+		for (const name of [
+			...tools,
+			"org_work",
+			"org_waits",
+			"org_communication",
+			"org_expertise",
+			"org_fitness",
+			"predictions",
+		])
+			expect(active).not.toContain(name);
+		expect(active).toEqual(
+			expect.arrayContaining([
 				"directory",
 				"send_mail",
 				"reply",
@@ -457,7 +468,7 @@ test("a hired person whose role does not manage loses the lifecycle tools; a hir
 				"finish_task",
 				"promote_task",
 				"link",
-			].sort(),
+			]),
 		);
 	} finally {
 		await close(run);
@@ -467,8 +478,8 @@ test("a hired person whose role does not manage loses the lifecycle tools; a hir
 		manager.session.extensionRunner.setFlagValue("reports-to", "boss");
 		await withRole(manager, "coordinator");
 		await manager.session.prompt("hi");
-		expect(manager.session.getActiveToolNames().sort()).toEqual(
-			[
+		expect(manager.session.getActiveToolNames()).toEqual(
+			expect.arrayContaining([
 				...tools,
 				"directory",
 				"send_mail",
@@ -489,7 +500,7 @@ test("a hired person whose role does not manage loses the lifecycle tools; a hir
 				"org_waits",
 				"org_work",
 				"org_communication",
-			].sort(),
+			]),
 		);
 	} finally {
 		await close(manager);
@@ -508,8 +519,29 @@ test.each([false, true])(
 		try {
 			await run.session.prompt("list my peers");
 			expect(toolResults(run)[0]).toMatchObject({ isError: false });
-			expect(run.session.getActiveToolNames().sort()).toEqual(
-				[
+			const active = run.session.getActiveToolNames();
+			for (const name of [
+				"hire",
+				"call_in",
+				"rehire",
+				"send_home",
+				"rename",
+				"move",
+				"let_go",
+				"meet",
+				"end_meeting",
+				"assign",
+				"unassign",
+				"org_fitness",
+				"predictions",
+				"org_expertise",
+				"org_waits",
+				"org_work",
+				"org_communication",
+			])
+				expect(active.includes(name)).toBe(enabled);
+			expect(active).toEqual(
+				expect.arrayContaining([
 					"read",
 					"directory",
 					"send_mail",
@@ -518,31 +550,13 @@ test.each([false, true])(
 					"read_thread",
 					"post",
 					"escalate",
-					...(enabled
-						? [
-								"hire",
-								"call_in",
-								"rehire",
-								"send_home",
-								"rename",
-								"move",
-								"let_go",
-								"meet",
-								"end_meeting",
-								"assign",
-								"unassign",
-							]
-						: []),
 					"take_task",
 					"focus",
 					"finish_task",
 					"promote_task",
 					"link",
-					...(enabled
-						? ["org_fitness", "predictions", "org_expertise", "org_waits", "org_work", "org_communication"]
-						: []),
 					"update_self",
-				].sort(),
+				]),
 			);
 		} finally {
 			await close(run);

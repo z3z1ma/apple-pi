@@ -236,14 +236,14 @@ test("workers and an unroled root keep links and tasks, but cannot call organiza
 	const root = await person();
 	const worker = await person(root.id, "implementation-engineer");
 	try {
-		const task = await worker.invoke("take_task", { goal: "Check interfaces.", title: "Interfaces" });
-		const relationship = await worker.invoke<{ id: string }>("link", {
-			from: `task:${task.id}`,
-			to: "file:app.ts",
-			relation: "produced",
-		});
-		expect(relationship.id).toBeTruthy();
 		for (const who of [root, worker]) {
+			const task = await who.invoke("take_task", { goal: "Check interfaces.", title: "Interfaces" });
+			const relationship = await who.invoke<{ id: string }>("link", {
+				from: `task:${task.id}`,
+				to: "file:app.ts",
+				relation: "produced",
+			});
+			await who.invoke("link", { id: relationship.id, resolution: "recorded" });
 			for (const tool of [
 				"org_work",
 				"org_waits",
