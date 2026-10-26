@@ -1,0 +1,10 @@
+{
+  "blocks": "The first cannot go on until the second is done.",
+  "requires_decision": "The first waits on a decision the second must make.",
+  "produced": "The first produced the second: a commit, a PR, a file, or another result.",
+  "verifies": "The first, a check run or a review, verifies the second.",
+  "supersedes": "The first replaces the second; nobody's fitness changes.",
+  "predicts": "The first, a message stating a change, holds a scenario forecasting the second's fitness.",
+  "fixes": "The first fixes a defect in the second, earlier work.",
+  "finds": "The first found a problem in the second; the second's owner resolves it accepted or rejected."
+}

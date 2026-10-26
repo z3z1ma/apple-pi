@@ -275,6 +275,7 @@ try {
 				extension.tools.has("focus") &&
 				extension.tools.has("finish_task") &&
 				extension.tools.has("promote_task") &&
+				extension.tools.has("link") &&
 				extension.tools.has("update_self"),
 		),
 		"session-state extension must own the mail, directory, manager, and self tools",

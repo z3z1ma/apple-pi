@@ -3,9 +3,11 @@ import { defineTool, type ExtensionAPI, type ExtensionContext } from "@earendil-
 import { Type } from "typebox";
 import { resolvePerson } from "./addresses.js";
 import { sendCommand } from "./client.js";
-import { goalText, type WorkAction, type WorkTask, withWork } from "./work.js";
+import { ENTITY_KINDS, type Entity, type Link, relations } from "./links.js";
+import type { Command } from "./protocol.js";
+import { goalText, taskIdOf, type WorkAction, type WorkTask, withWork } from "./work.js";
 
-const PERSON_TASK_TOOLS = ["take_task", "focus", "finish_task", "promote_task"];
+const PERSON_TASK_TOOLS = ["take_task", "focus", "finish_task", "promote_task", "link"];
 export const TASK_GOAL_CUSTOM_TYPE = "apple-pi.task-goal";
 const taskParameter = Type.String({ minLength: 1, description: "Task id or path to its bundle or task.md." });
 export const goalTitle = Type.String({
@@ -74,7 +76,106 @@ async function change(ctx: ExtensionContext, command: WorkAction, signal: AbortS
 	};
 }
 
+function entity(ctx: ExtensionContext, ref: string): Entity {
+	const split = ref.indexOf(":");
+	const kind = ref.slice(0, split);
+	const id = ref.slice(split + 1).trim();
+	if (split < 1 || !id) throw new Error(`Name a thing as kind:id, such as task:work-1 or person:Ada (got "${ref}")`);
+	if (kind === "person") return { kind, id: resolvePerson(ctx.sessionManager.getSessionId(), id) };
+	if (kind === "task") {
+		const task = withWork((db) => taskIdOf(db, ctx.cwd, id));
+		if (!task) throw new Error("The runtime has no tasks yet");
+		return { kind, id: task };
+	}
+	return { kind, id };
+}
+
+async function changeLink(
+	ctx: ExtensionContext,
+	args: {
+		id?: string;
+		resolution?: string;
+		from?: string;
+		to?: string;
+		relation?: string;
+		reason?: string;
+		data?: unknown;
+		inferred?: boolean;
+		confidence?: number;
+	},
+	signal: AbortSignal | undefined,
+) {
+	const hasLinks = () =>
+		withWork((db) => Boolean(db.prepare("select 1 from sqlite_master where name = 'links' and type = 'table'").get()));
+	if (!hasLinks()) throw new Error("The runtime predates links; restart it before recording one.");
+	const commandId = randomUUID();
+	const command: Command = args.id
+		? { kind: "link_resolve", id: args.id, ...(args.resolution ? { resolution: args.resolution } : {}) }
+		: {
+				kind: "link_record",
+				from: entity(ctx, args.from ?? ""),
+				to: entity(ctx, args.to ?? ""),
+				relation: args.relation ?? "",
+				reason: args.reason,
+				data: args.data,
+				inferred: args.inferred,
+				confidence: args.confidence,
+			};
+	const receipt = await sendCommand(ctx.sessionManager.getSessionId(), command, { commandId, signal });
+	if (receipt.stage === "failed") throw new Error(receipt.reason);
+	const link = withWork((db) => db.prepare("select * from links where id = ?").get(args.id ?? commandId)) as
+		| Link
+		| undefined;
+	if (!link) throw new Error("The runtime returned no link");
+	const verb = link.resolved_at === null ? "Recorded" : "Resolved";
+	return {
+		content: [
+			{
+				type: "text" as const,
+				text: `${verb} link ${link.id}: ${link.from_kind}:${link.from_id} ${link.relation} ${link.to_kind}:${link.to_id}`,
+			},
+		],
+		details: link,
+	};
+}
+
 export function installWork(pi: ExtensionAPI): void {
+	const vocabulary = Object.entries(relations())
+		.map(([word, meaning]) => `${word}: ${meaning}`)
+		.join(" ");
+	pi.registerTool(
+		defineTool({
+			name: "link",
+			executionMode: "sequential",
+			label: "link",
+			description: `Record a relationship between two things, or resolve one by id. Name each thing as kind:id with kind one of ${ENTITY_KINDS.join(", ")} (a task by id or ledger path, a person by name or id, a commit by SHA, a PR by URL, a file by path, a check run by its command and time or CI URL, the organization by its root's id). Relations: ${vocabulary} A wait (blocks, requires_decision) on a task ends on its own when that task closes done; resolve any other link yourself.`,
+			promptSnippet: "Record or resolve a link between tasks, people, threads, and results.",
+			parameters: Type.Object(
+				{
+					id: Type.Optional(Type.String({ minLength: 1, description: "Resolve this link instead of recording one." })),
+					resolution: Type.Optional(
+						Type.String({
+							minLength: 1,
+							description: "With id: a word for how it ended, such as accepted or rejected.",
+						}),
+					),
+					from: Type.Optional(Type.String({ minLength: 3, description: "The first thing, as kind:id." })),
+					to: Type.Optional(Type.String({ minLength: 3, description: "The second thing, as kind:id." })),
+					relation: Type.Optional(Type.String({ minLength: 1, description: "A relation from the list." })),
+					reason: Type.Optional(Type.String({ description: "A short reason or evidence reference." })),
+					data: Type.Optional(Type.Unknown({ description: "Structured data, such as an impact or a scenario." })),
+					inferred: Type.Optional(
+						Type.Boolean({ description: "True when you infer the relationship rather than know it." }),
+					),
+					confidence: Type.Optional(
+						Type.Number({ minimum: 0, maximum: 1, description: "With inferred: how sure you are, 0 to 1." }),
+					),
+				},
+				{ additionalProperties: false },
+			),
+			execute: (_id, args, signal, _update, ctx) => changeLink(ctx, args, signal),
+		}),
+	);
 	pi.registerTool(
 		defineTool({
 			name: "take_task",

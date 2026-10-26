@@ -57,6 +57,7 @@ const JSON_FACTS = new Set<string>(["prompt", "queue", "config", "previousSessio
 import { type AttentionRow, jumpTarget, statusSummary } from "./attention.js";
 import { syncChannels } from "./channels.js";
 import { RETRY_MS, sendCommand } from "./client.js";
+import { recordLink, resolveLink } from "./links.js";
 import { discardProgramPeople, programDescendants } from "./program-peers.js";
 import { migrate } from "./schema.js";
 import { markRead, messagesOf, nameOf, OPERATOR, postToThread, type ThreadPost, threadOf } from "./threads.js";
@@ -78,6 +79,9 @@ import {
 	openLedgerTask,
 	type WorkCommand,
 } from "./work.js";
+
+/** Commands that only record facts about work, applied in one transaction and replayed after a restart. */
+type WorkRecord = Extract<Command, { kind: "task_opened" | "task_moved" | "link_record" | "link_resolve" }>;
 
 /** How often the runtime reads tmux, and how long one server may take to answer before the read counts as failed. */
 const TMUX_POLL_MS = 1000;
@@ -261,7 +265,7 @@ export class Runtime {
 		syncChannels(this.db, Date.now());
 		this.recoverThreadPosts();
 		this.recoverWorkCommands();
-		this.recoverTaskLifecycle();
+		this.recoverWorkRecords();
 		this.recoverRetirements();
 		for (const row of this.db.prepare("select session_id as id from program_peers").all() as { id: string }[])
 			this.discarding.add(row.id);
@@ -650,9 +654,14 @@ export class Runtime {
 			}
 			return;
 		}
-		if (command.kind === "task_opened" || command.kind === "task_moved") {
+		if (
+			command.kind === "task_opened" ||
+			command.kind === "task_moved" ||
+			command.kind === "link_record" ||
+			command.kind === "link_resolve"
+		) {
 			receipt("accepted");
-			this.taskLifecycle(commandId, sessionId, command, now);
+			this.workRecord(commandId, sessionId, command, now);
 			return;
 		}
 		if (command.kind === "work") {
@@ -688,17 +697,14 @@ export class Runtime {
 		this.dispatch(target, commandId, command);
 	}
 
-	/** One transaction per open or close; both are idempotent, so startup replays any that stayed accepted. */
-	private taskLifecycle(
-		commandId: string,
-		sender: string,
-		command: Extract<Command, { kind: "task_opened" | "task_moved" }>,
-		now: number,
-	): void {
+	/** One transaction per record; every kind is idempotent, so startup replays any that stayed accepted. */
+	private workRecord(commandId: string, sender: string, command: WorkRecord, now: number, replay = false): void {
 		const db = this.db!;
 		try {
 			db.exec("begin");
 			if (command.kind === "task_opened") openLedgerTask(db, sender, command.bundle, now);
+			else if (command.kind === "link_record") recordLink(db, commandId, sender, command, now);
+			else if (command.kind === "link_resolve") resolveLink(db, command.id, command.resolution, now, replay);
 			else
 				for (const person of closeLedgerTask(db, sender, command.from, command.to, command.status, now))
 					this.event("runtime", person, null, "task_moved", { from: command.from, to: command.to });
@@ -711,12 +717,12 @@ export class Runtime {
 		this.setCommandStage(commandId, "applied");
 	}
 
-	private recoverTaskLifecycle(): void {
+	private recoverWorkRecords(): void {
 		const pending = this.db!.prepare(
-			"select command_id, session_id, command, created_at from commands where kind in ('task_opened', 'task_moved') and stage = 'accepted'",
+			"select command_id, session_id, command, created_at from commands where kind in ('task_opened', 'task_moved', 'link_record', 'link_resolve') and stage = 'accepted'",
 		).all() as { command_id: string; session_id: string; command: string; created_at: number }[];
 		for (const row of pending)
-			this.taskLifecycle(row.command_id, row.session_id, JSON.parse(row.command), row.created_at);
+			this.workRecord(row.command_id, row.session_id, JSON.parse(row.command), row.created_at, true);
 	}
 
 	private workCommand(commandId: string, actor: string, command: WorkCommand, now: number): void {

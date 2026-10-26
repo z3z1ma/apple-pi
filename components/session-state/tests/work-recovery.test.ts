@@ -63,6 +63,16 @@ beforeAll(async () => {
 			status: "cancelled",
 		}),
 	);
+	db.prepare(
+		"insert into commands (command_id, session_id, kind, command, stage, created_at, updated_at) values ('link-pending', 'person', 'link_record', ?, 'accepted', 300, 300)",
+	).run(
+		JSON.stringify({
+			kind: "link_record",
+			from: { kind: "person", id: "person" },
+			to: { kind: "file", id: "README.md" },
+			relation: "finds",
+		}),
+	);
 	db.close();
 	await startRuntime(state.socketPath);
 });
@@ -180,4 +190,13 @@ test("failed completion restores the outcome and keeps the assignment open", asy
 		{ ended_at: null },
 	]);
 	expect(existsSync(join(state.stateDir, "tasks/history/work-recover"))).toBe(false);
+});
+
+test("an accepted link is recorded once at startup, with the command id as its id", () => {
+	expect(query(state.dbPath, "select stage from commands where command_id = 'link-pending'")).toEqual([
+		{ stage: "applied" },
+	]);
+	expect(query(state.dbPath, "select relation, recorded_by, created_at from links where id = 'link-pending'")).toEqual([
+		{ relation: "finds", recorded_by: "person", created_at: 300 },
+	]);
 });

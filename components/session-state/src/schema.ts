@@ -269,6 +269,24 @@ const MIGRATIONS = [
 	alter table work_tasks add column close_status text;
 	update work_tasks set opened_at = (select min(assigned_at) from assignments where task_id = work_tasks.id);
 	update work_tasks set close_status = 'done' where ephemeral = 1 and archived_at is not null;`,
+	// Relationships between work, people, and results; the relation comes from the vocabulary in relations.json.
+	`create table links (
+		id text primary key,
+		from_kind text not null,
+		from_id text not null,
+		to_kind text not null,
+		to_id text not null,
+		relation text not null,
+		reason text,
+		data text,
+		recorded_by text not null,
+		inferred integer not null,
+		confidence real,
+		created_at integer not null,
+		resolved_at integer,
+		resolution text
+	) strict;
+	create index links_by_target on links (to_kind, to_id);`,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

@@ -71,12 +71,12 @@ Why: SQLite and the filesystem have no shared atomic commit, so claiming success
 Coupled: components/session-state/src/work.ts, components/shared/src/ledger-files.ts
 Verify: components/session-state/tests/work-recovery.test.ts
 
-## symbol:Runtime.taskLifecycle
+## symbol:Runtime.workRecord
 
-A task's open or close and its effects commit in one transaction, and the command turns `applied` only after the commit. Startup replays every lifecycle command still `accepted` at its accepted time; both operations are idempotent (a known task is returned, a close is recorded once).
+A task's open or close, and a link's record or resolution, commit in one transaction with their effects, and the command turns `applied` only after the commit. Startup replays every such command still `accepted` at its accepted time; each is idempotent (a known task is returned, a close is recorded once, a link id is the command id, and a replayed resolution with the same word is accepted).
 Why: the ledger files are already archived when `task_moved` arrives, so a lost close cannot be retried from the old live path, and fitness history would keep an obligation open forever. A review reproduced a seeded accepted `task_opened` staying accepted with no record after restart.
-Coupled: components/session-state/src/work.ts, extensions/ledger.ts
-Verify: components/session-state/tests/work-recovery.test.ts
+Coupled: components/session-state/src/work.ts, components/session-state/src/links.ts, extensions/ledger.ts
+Verify: components/session-state/tests/work-recovery.test.ts, components/session-state/tests/links.test.ts
 
 ## symbol:Runtime.finishWorkCommand
 

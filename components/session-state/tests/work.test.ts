@@ -376,8 +376,11 @@ test("a database at the previous schema version gains the task lifecycle columns
 		db.exec(
 			"insert into assignments (person, task_id, assigned_by, assigned_at) values ('a', 't', 'm', 700), ('b', 't', 'm', 500), ('a', 'u', 'm', 800)",
 		);
-		db.exec("alter table work_tasks drop column opened_at; alter table work_tasks drop column close_status");
-		db.exec(`pragma user_version = ${SCHEMA_VERSION - 1}`);
+		// Back to the version before the lifecycle columns: the links table came after them.
+		db.exec(
+			"drop table links; alter table work_tasks drop column opened_at; alter table work_tasks drop column close_status",
+		);
+		db.exec(`pragma user_version = ${SCHEMA_VERSION - 2}`);
 		migrate(db);
 		// Opened at the first assignment; an archived ephemeral task closed done.
 		expect(db.prepare("select id, opened_at, close_status from work_tasks order by id").all()).toEqual([

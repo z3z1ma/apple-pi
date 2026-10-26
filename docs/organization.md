@@ -70,6 +70,7 @@ Every root session has these tools. Each sends a command to the runtime or reads
 | `remind_me` (`delay_seconds`, `text` or `command`) | Sends the caller a note, or starts a bash command, after a delay. See [scheduling](scheduling.md). |
 | `update_self` (`story?`, `practice?`, `commitments?`, `colleagues?`) | Rewrites the named fields of the person's self. Accepted only in a reflection the harness starts. |
 | `take_task`, `focus`, `finish_task`, `promote_task` | The task tools. See [Tasks and assignments](#tasks-and-assignments). |
+| `link` (`from`, `to`, `relation`, `reason?`, `data?`, `inferred?`, `confidence?`; or `id`, `resolution?`) | Records a relationship between two things (a task waits on another or on a decision, produced a result, verifies, supersedes, fixes, or finds a problem in other work), or resolves one by id. Relations come from one vocabulary file; see [session-state](session-state.md#what-it-records). |
 
 ## Manager tools
 

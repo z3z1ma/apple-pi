@@ -1,0 +1,8 @@
+## file
+
+The vocabulary in `relations.json` is read fresh on every call, and the runtime, not the tool, refuses an unlisted relation. Adding a relation is one line in that file. The `link` tool's description lists the vocabulary as it stood when the session started, so a new word reaches a running session's prompt only after a reload. Recording already works.
+Why: the operator wants a defined vocabulary that is easy to extend, with no code beyond the list. Validating in the runtime keeps scripts and programs that send `link_record` directly under the same list.
+Only `blocks` and `requires_decision` carry behaviour here: `resolveWaitsOn` ends them when their target task closes `done`, and never on cancellation. Other relations are stored and read. A link's id is its `link_record` command id, so a replay after a restart inserts nothing twice.
+Things the runtime records (task, person, thread, message, organization) must exist; commits, PRs, files, and check runs are outside it and taken as named. A new wait on a task already closed `done` is refused, because nothing would ever resolve it. An inferred link must carry a confidence, so a guess never reads as a known fact. Who resolves a link (for example a finding's owner) is a convention, not enforced: the spec keeps verification out of the substrate.
+Coupled: components/session-state/src/relations.json, components/session-state/src/work-tools.ts, components/session-state/src/work.ts, components/session-state/src/runtime.ts
+Verify: components/session-state/tests/links.test.ts, components/session-state/tests/work-recovery.test.ts

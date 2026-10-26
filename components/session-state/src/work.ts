@@ -3,6 +3,7 @@ import { cpSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writ
 import { basename, dirname, join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { promoteLedgerTask, retrospectiveTemplate, writeAtomicTextFile } from "../../shared/src/ledger-files.js";
+import { resolveWaitsOn } from "./links.js";
 import { statePaths } from "./paths.js";
 import { nameOf, OPERATOR, type ThreadPost } from "./threads.js";
 import { type Worth, worthLines } from "./valuation.js";
@@ -138,6 +139,13 @@ function findTask(db: DatabaseSync, cwd: string, input: string): WorkTask | unde
 	return db.prepare("select * from work_tasks where bundle = ?").get(bundlePath(cwd, input)) as unknown as
 		| WorkTask
 		| undefined;
+}
+
+/** The runtime's id for a task named by its id, its bundle, its task.md, or its ledger id. */
+export function taskIdOf(db: DatabaseSync, cwd: string, input: string): string {
+	const task = findTask(db, cwd, input);
+	if (!task) throw new Error(`No task ${input}`);
+	return task.id;
 }
 
 function requireTask(db: DatabaseSync, cwd: string, input: string): WorkTask {
@@ -342,6 +350,7 @@ export function changeWork(
 				now,
 				task.id,
 			);
+			resolveWaitsOn(db, task.id, now);
 			committed.push(() => rmSync(previous, { recursive: true, force: true }));
 		}
 		body = `${nameOf(db, person)} finished ${taskTitle(task)}.\n\n${command.outcome}`;
@@ -420,6 +429,7 @@ export function closeLedgerTask(
 	db.prepare(
 		"update work_tasks set bundle = ?, archived_at = coalesce(archived_at, ?), close_status = coalesce(close_status, ?) where id = ?",
 	).run(destination, now, status, id);
+	if (status === "done") resolveWaitsOn(db, id, now);
 	return (db.prepare("select distinct person from assignments where task_id = ?").all(id) as { person: string }[]).map(
 		(row) => row.person,
 	);

@@ -2,6 +2,7 @@
 
 import type { QuestionnaireReply } from "../../shared/src/questionnaire-events.js";
 import type { TurnProgress, TurnResult } from "../../shared/src/turn-observer.js";
+import type { LinkRecord } from "./links.js";
 import type { PeerTurn } from "./peer-turns.js";
 import type { ThreadPost } from "./threads.js";
 import type { Worth } from "./valuation.js";
@@ -141,6 +142,10 @@ export type Command =
 			taskGoal?: boolean;
 	  }
 	| WorkCommand
+	/** Record a link from the sending session; its id is the command id. */
+	| ({ kind: "link_record" } & LinkRecord)
+	/** Resolve a link once, optionally with a word such as `accepted` or `rejected`. */
+	| { kind: "link_resolve"; id: string; resolution?: string }
 	/** A new ledger task becomes the sending session's organization's obligation. */
 	| { kind: "task_opened"; bundle: string }
 	/** A ledger archive closes the task and changes its path, never its assignments. */

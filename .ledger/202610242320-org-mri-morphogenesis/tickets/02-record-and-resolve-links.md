@@ -6,11 +6,11 @@ Part of the approved spec [../spec.md](../spec.md); its Terms table defines obli
 
 **Blocked by:** 01 (Record when tasks open and close).
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Through a faux session against a spawned runtime, a person without manager tools calls `link` and one row holds both entities, the relation, reason, data, recorder, asserted or inferred, confidence, and creation time; before this ticket the tool does not exist.
-- [ ] A link with an unlisted relation word (for example `mentors`) is refused with the list of allowed words; after one line for `mentors` is added to the list file, the same call is stored and returned exactly as given, data included.
-- [ ] A `blocks` link and a `requires_decision` link to an ephemeral task, and the same to a ledger task, get a resolution time when that task closes `done`; a ledger task closed `cancelled` leaves them open.
-- [ ] A `requires_decision` link to a person stays open after that person posts in a thread with the recorder.
-- [ ] Resolving by id with `accepted` stores the resolution time and word once; resolving an unknown id fails with a clear message.
-- [ ] The package-load smoke test lists `link`.
+- [x] Through a faux session against a spawned runtime, a person without manager tools calls `link` and one row holds both entities, the relation, reason, data, recorder, asserted or inferred, confidence, and creation time; before this ticket the tool does not exist.
+- [x] A link with an unlisted relation word (for example `mentors`) is refused with the list of allowed words; after one line for `mentors` is added to the list file, the same call is stored and returned exactly as given, data included.
+- [x] A `blocks` link and a `requires_decision` link to an ephemeral task, and the same to a ledger task, get a resolution time when that task closes `done`; a ledger task closed `cancelled` leaves them open.
+- [x] A `requires_decision` link to a person stays open after that person posts in a thread with the recorder.
+- [x] Resolving by id with `accepted` stores the resolution time and word once; resolving an unknown id fails with a clear message.
+- [x] The package-load smoke test lists `link`.
