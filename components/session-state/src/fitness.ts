@@ -326,7 +326,7 @@ export function realizedFitness(
 		interruptions: interruptions(db, organization, from, to),
 		// The operator's time is part of the model, but nothing measures it honestly yet; waiting for him is already delay.
 		attention: { pricePerMinute: 1, measured: false },
-		// Disposal deletes a temporary peer, so its spend cannot be charged to its caller afterwards.
-		computeExcludes: "spend of temporary pi_exec peers",
+		// Disposal deletes a temporary peer, so what it spent and asked cannot be charged to its caller afterwards.
+		excludes: "the spend, questions, and operator mail of temporary pi_exec peers",
 	};
 }

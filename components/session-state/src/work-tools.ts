@@ -163,9 +163,10 @@ function readFitness(ctx: ExtensionContext, args: { since: string; until?: strin
 	const dollars = (n: number) => `$${n.toFixed(2)}`;
 	const lines = [
 		`Realized fitness ${dollars(fitness.total)} (${dollars(fitness.perHour)} per hour) from ${new Date(from).toISOString()} to ${new Date(to).toISOString()}${fitness.incomplete ? "; incomplete: some work has no value" : ""}.`,
-		`Value earned ${dollars(fitness.value)}, delay ${dollars(fitness.delay)}, compute ${dollars(fitness.compute)} (excludes ${fitness.computeExcludes}), impacts ${dollars(fitness.impact)}.`,
+		`Value earned ${dollars(fitness.value)}, delay ${dollars(fitness.delay)}, compute ${dollars(fitness.compute)}, impacts ${dollars(fitness.impact)}.`,
 		`Tasks in the window: ${fitness.coverage.tasks}, unvalued ${fitness.coverage.unvalued}; ${Math.round(fitness.coverage.estimatedValueShare * 100)}% of value is agents' estimates.`,
 		`Delay by state: queued ${dollars(fitness.delayByState.queued)} (needs people), waiting ${dollars(fitness.delayByState.waiting)} (needs a decision or another task), in progress ${dollars(fitness.delayByState.inProgress)}.`,
+		`Not counted yet: ${fitness.excludes}.`,
 		`Interruptions of the operator: ${fitness.interruptions}; the operator's time is priced at $${fitness.attention.pricePerMinute}/minute but not measured, so it is not in the total.`,
 		...fitness.openWaits.map(
 			(w) =>
