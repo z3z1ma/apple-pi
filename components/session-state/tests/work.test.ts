@@ -388,8 +388,8 @@ test("anyone reads their organization's realized fitness over a window they name
 		await engineer.invoke("focus", { task: flaky.id });
 		await engineer.invoke("finish_task", { outcome: "Fixed." });
 		type Fitness = { value: number; delay: number; total: number; coverage: { unvalued: number }; incomplete: boolean };
-		const fitness = await engineer.invoke<Fitness>("fitness", { since: "1h" });
-		const ahead = await engineer.attempt("fitness", {
+		const fitness = await engineer.invoke<Fitness>("org_fitness", { since: "1h" });
+		const ahead = await engineer.attempt("org_fitness", {
 			since: "1h",
 			until: new Date(Date.now() + 3_600_000).toISOString(),
 		});

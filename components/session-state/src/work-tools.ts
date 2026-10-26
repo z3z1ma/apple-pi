@@ -16,7 +16,7 @@ const PERSON_TASK_TOOLS = [
 	"finish_task",
 	"promote_task",
 	"link",
-	"fitness",
+	"org_fitness",
 	"org_expertise",
 	"org_waits",
 	"org_work",
@@ -443,11 +443,12 @@ export function installWork(pi: ExtensionAPI): void {
 	);
 	pi.registerTool(
 		defineTool({
-			name: "fitness",
-			label: "fitness",
+			name: "org_fitness",
+			label: "org_fitness",
 			description:
-				"Read your organization's realized fitness in dollars over a window you name: value earned when tasks completed, minus delay accrued while valued work was outstanding, minus compute. Shows the rate per hour, each task's and person's contribution, and how much work has no value yet. Narrow the contributions to one person's subtree to explain its part; the total stays the organization's.",
-			promptSnippet: "Read the organization's realized fitness and what contributes to it.",
+				"Compare recorded value, delay and compute in dollars over a past window. This is one optional analytical instrument beside org_waits, org_work, org_communication and org_expertise, not an objective for every management decision. Shows total and rate per hour, task/person contributions and unvalued coverage. Narrow contributions to a person's subtree; the total stays the organization's.",
+			promptSnippet:
+				"Use optional economic comparison with org_fitness alongside direct organizational signals and judgment.",
 			parameters: Type.Object(
 				{
 					since: Type.String({ minLength: 1, description: "Start: a span back from now (30m, 8h, 7d) or a date." }),

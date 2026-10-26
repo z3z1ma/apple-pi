@@ -276,7 +276,8 @@ try {
 				extension.tools.has("finish_task") &&
 				extension.tools.has("promote_task") &&
 				extension.tools.has("link") &&
-				extension.tools.has("fitness") &&
+				extension.tools.has("org_fitness") &&
+				!extension.tools.has("fitness") &&
 				extension.tools.has("org_expertise") &&
 				extension.tools.has("org_waits") &&
 				extension.tools.has("org_work") &&
@@ -284,6 +285,18 @@ try {
 				extension.tools.has("update_self"),
 		),
 		"session-state extension must own the mail, directory, manager, and self tools",
+	);
+
+	const fitnessTool = result.extensions
+		.flatMap((extension) => [...extension.tools.values()])
+		.find((tool) => tool.definition.name === "org_fitness");
+	assert(
+		fitnessTool?.definition.description.includes("optional analytical instrument") &&
+			fitnessTool.definition.description.includes("not an objective") &&
+			["org_waits", "org_work", "org_communication", "org_expertise"].every((name) =>
+				fitnessTool.definition.description.includes(name),
+			),
+		"org_fitness must teach optional economic comparison alongside inspection",
 	);
 
 	const searchBranchesTool = result.extensions
