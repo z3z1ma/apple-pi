@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
+import { WAITS } from "./links.js";
 import { readValuation } from "./valuation.js";
 
 const HOUR = 3_600_000;
@@ -8,15 +9,23 @@ const HOUR = 3_600_000;
 /** One fact the evaluator adds up; `source` names what produced it, such as `task:<id>` or `person:<id>`. */
 export type EconomicEvent =
 	| { kind: "value" | "compute" | "impact"; at: number; amount: number; source: string }
-	| { kind: "delay"; from: number; to: number; perHour: number; source: string };
+	| { kind: "delay"; from: number; to: number; perHour: number; source: string; state?: DelayState };
+
+/** Why work waited: nobody had it and nothing blocked it, an open wait blocked it, or someone was working on it. */
+export type DelayState = "queued" | "waiting" | "inProgress";
+const noDelay = (): Record<DelayState, number> => ({ queued: 0, waiting: 0, inProgress: 0 });
 
 export interface Contribution {
 	source: string;
 	value: number;
 	delay: number;
+	delayByState: Record<DelayState, number>;
 	compute: number;
 	impact: number;
 }
+
+/** The wait relations as an SQL list; `links.ts` owns which relations are waits. */
+const WAIT_LIST = WAITS.map((relation) => `'${relation}'`).join(", ");
 
 /**
  * The pure evaluator U: sums what falls in `[from, to)`. Every event is a point or an interval charged by its overlap,
@@ -25,14 +34,18 @@ export interface Contribution {
 export function evaluate(events: EconomicEvent[], from: number, to: number) {
 	const parts = new Map<string, Contribution>();
 	const part = (source: string) => {
-		const found = parts.get(source) ?? { source, value: 0, delay: 0, compute: 0, impact: 0 };
+		const found = parts.get(source) ?? { source, value: 0, delay: 0, delayByState: noDelay(), compute: 0, impact: 0 };
 		parts.set(source, found);
 		return found;
 	};
 	for (const event of events) {
 		if (event.kind === "delay") {
 			const hours = Math.max(0, Math.min(event.to, to) - Math.max(event.from, from)) / HOUR;
-			if (hours > 0) part(event.source).delay += hours * event.perHour;
+			if (hours > 0) {
+				const charged = part(event.source);
+				charged.delay += hours * event.perHour;
+				if (event.state) charged.delayByState[event.state] += hours * event.perHour;
+			}
 		} else if (event.at >= from && event.at < to) part(event.source)[event.kind] += event.amount;
 	}
 	const contributions = [...parts.values()];
@@ -41,7 +54,10 @@ export function evaluate(events: EconomicEvent[], from: number, to: number) {
 	const delay = sum("delay");
 	const compute = sum("compute");
 	const impact = sum("impact");
-	return { total: value - delay - compute + impact, value, delay, compute, impact, contributions };
+	const delayByState = noDelay();
+	for (const c of contributions)
+		for (const state of Object.keys(delayByState) as DelayState[]) delayByState[state] += c.delayByState[state];
+	return { total: value - delay - compute + impact, value, delay, delayByState, compute, impact, contributions };
 }
 
 interface TaskRow {
@@ -79,13 +95,8 @@ function historyEvents(db: DatabaseSync, organization: string, until: number) {
 			if (task.close_status === "done" && task.archived_at !== null)
 				events.push({ kind: "value", at: task.archived_at, amount: valuation.value, source });
 			if (valuation.costOfDelayPerHour > 0)
-				events.push({
-					kind: "delay",
-					from: task.opened_at!,
-					to: closed,
-					perHour: valuation.costOfDelayPerHour,
-					source,
-				});
+				for (const span of delayStates(db, task.id, task.opened_at!, closed))
+					events.push({ kind: "delay", ...span, perHour: valuation.costOfDelayPerHour, source });
 		}
 		return { task, valuation, closed };
 	});
@@ -93,25 +104,55 @@ function historyEvents(db: DatabaseSync, organization: string, until: number) {
 	return { events, valued };
 }
 
+/** A task's delay interval cut where its state changed: an assignment began or ended, or a wait on it opened or closed. */
+function delayStates(db: DatabaseSync, task: string, from: number, to: number) {
+	const held = db
+		.prepare("select assigned_at as start, ended_at as stop from assignments where task_id = ?")
+		.all(task) as { start: number; stop: number | null }[];
+	const waits = db
+		.prepare(
+			`select created_at as start, resolved_at as stop from links where from_kind = 'task' and from_id = ? and relation in (${WAIT_LIST})`,
+		)
+		.all(task) as { start: number; stop: number | null }[];
+	const during = (spans: { start: number; stop: number | null }[], at: number) =>
+		spans.some((span) => span.start <= at && (span.stop === null || at < span.stop));
+	const cuts = [...new Set([from, to, ...[...held, ...waits].flatMap((s) => [s.start, s.stop ?? to])])]
+		.filter((at) => at >= from && at <= to)
+		.sort((a, b) => a - b);
+	const spans: { from: number; to: number; state: DelayState }[] = [];
+	for (let i = 0; i + 1 < cuts.length; i++) {
+		const at = cuts[i];
+		const state: DelayState = during(waits, at) ? "waiting" : during(held, at) ? "inProgress" : "queued";
+		spans.push({ from: at, to: cuts[i + 1], state });
+	}
+	return spans;
+}
+
+interface Recorded {
+	session_id: string;
+	at: number;
+	type: string;
+	data: string | null;
+}
+
 /**
- * Each member's spend, counted when the spender's manager chain reached the organization at that moment and the spender
- * had not been let go. The runtime's events are replayed in the order it recorded them (`seq`): a hello seeding a manager
- * (`reports_to_changed`), a move (`transferred`), a departure (`retired`), a rehire (`rehired`), and spend
- * (`cost_changed`), so a later join or move, even in the same millisecond, never rewrites earlier spend. A cost change
- * marked `hello` is spend the transcript already held before any cost was recorded for the session: a baseline. A temporary
- * pi_exec peer's spend is left out with its tasks, because disposal deletes the peer.
+ * Who belonged to the organization, replayed from the runtime's events in the order it recorded them (`seq`): a hello
+ * seeding a manager (`reports_to_changed`), a move (`transferred`), a departure (`retired`), and a rehire
+ * (`rehired`). A person is a member while its manager chain reaches the organization and it has not been let go; a
+ * temporary pi_exec peer never is, because disposal deletes it. Before its first recorded change a person had the manager
+ * that change replaced, and a person with none has its current manager throughout. So a later join or move, even in the
+ * same millisecond, never rewrites who belonged earlier.
  */
-function computeEvents(db: DatabaseSync, organization: string): EconomicEvent[] {
+function membership(db: DatabaseSync, organization: string) {
 	const peers = new Set(
 		(db.prepare("select session_id from program_peers").all() as { session_id: string }[]).map((r) => r.session_id),
 	);
 	const stream = db
 		.prepare(
-			"select session_id, at, type, data from events where type in ('reports_to_changed', 'transferred', 'retired', 'rehired', 'cost_changed') order by seq",
+			"select session_id, at, type, data from events where type in ('reports_to_changed', 'transferred', 'retired', 'rehired', 'cost_changed', 'prompt_opened') order by seq",
 		)
-		.all() as { session_id: string; at: number; type: string; data: string | null }[];
-	// Before its first recorded change a person had the manager that change replaced; with none, its current one.
-	const manager = new Map(
+		.all() as unknown as Recorded[];
+	const seeds = new Map(
 		(db.prepare("select id, reports_to from sessions").all() as { id: string; reports_to: string | null }[]).map(
 			(row) => [row.id, row.reports_to],
 		),
@@ -120,33 +161,99 @@ function computeEvents(db: DatabaseSync, organization: string): EconomicEvent[] 
 	for (const row of stream)
 		if ((row.type === "reports_to_changed" || row.type === "transferred") && !seeded.has(row.session_id)) {
 			seeded.add(row.session_id);
-			manager.set(row.session_id, JSON.parse(row.data ?? "{}").from ?? null);
+			seeds.set(row.session_id, JSON.parse(row.data ?? "{}").from ?? null);
 		}
-	const inOrganization = (person: string) => {
-		const seen = new Set<string>();
-		for (let link: string | null | undefined = person; link && !seen.has(link); link = manager.get(link)) {
-			if (link === organization) return true;
-			seen.add(link);
+	/** Replays every event recorded at or before `until`, calling `visit` after each with membership at that point. */
+	const replay = (
+		until: number,
+		visit: (row: Recorded, data: Record<string, unknown>, isMember: (person: string) => boolean) => void = () => {},
+	) => {
+		const manager = new Map(seeds);
+		const departed = new Set<string>();
+		const isMember = (person: string) => {
+			if (peers.has(person) || departed.has(person)) return false;
+			const seen = new Set<string>();
+			for (let link: string | null | undefined = person; link && !seen.has(link); link = manager.get(link)) {
+				if (link === organization) return true;
+				seen.add(link);
+			}
+			return false;
+		};
+		for (const row of stream) {
+			if (row.at > until) continue;
+			const data = JSON.parse(row.data ?? "{}");
+			if (row.type === "reports_to_changed" || row.type === "transferred") manager.set(row.session_id, data.to ?? null);
+			else if (row.type === "retired") departed.add(row.session_id);
+			else if (row.type === "rehired") departed.delete(row.session_id);
+			visit(row, data, isMember);
 		}
-		return false;
+		return isMember;
 	};
-	const departed = new Set<string>();
+	return { replay, memberAt: (person: string, at: number) => replay(at)(person) };
+}
+
+/**
+ * Each member's spend at the moment it was recorded. A cost change marked `hello` is spend the transcript already held
+ * before any cost was recorded for the session: a baseline.
+ */
+function computeEvents(db: DatabaseSync, organization: string): EconomicEvent[] {
 	const events: EconomicEvent[] = [];
-	for (const row of stream) {
-		const data = JSON.parse(row.data ?? "{}");
-		if (row.type === "reports_to_changed" || row.type === "transferred") manager.set(row.session_id, data.to ?? null);
-		else if (row.type === "retired") departed.add(row.session_id);
-		else if (row.type === "rehired") departed.delete(row.session_id);
-		else if (
-			!peers.has(row.session_id) &&
-			!departed.has(row.session_id) &&
-			!data.hello &&
-			data.to > data.from &&
-			inOrganization(row.session_id)
-		)
-			events.push({ kind: "compute", at: row.at, amount: data.to - data.from, source: `person:${row.session_id}` });
-	}
+	membership(db, organization).replay(Number.POSITIVE_INFINITY, (row, data, isMember) => {
+		if (row.type !== "cost_changed" || data.hello || !isMember(row.session_id)) return;
+		const amount = (data.to as number) - (data.from as number);
+		if (amount > 0) events.push({ kind: "compute", at: row.at, amount, source: `person:${row.session_id}` });
+	});
 	return events;
+}
+
+/** Waits still open at the window's end, from the organization's tasks or recorded by a member at that time. */
+function openWaits(db: DatabaseSync, organization: string, tasks: string[], at: number) {
+	const { memberAt } = membership(db, organization);
+	const ours = new Set(tasks);
+	return (
+		db
+			.prepare(
+				`select id, from_kind, from_id, to_kind, to_id, relation, reason, recorded_by, created_at from links
+				where relation in (${WAIT_LIST}) and created_at < ? and (resolved_at is null or resolved_at > ?) order by created_at, id`,
+			)
+			.all(at, at) as {
+			id: string;
+			from_kind: string;
+			from_id: string;
+			to_kind: string;
+			to_id: string;
+			relation: string;
+			reason: string | null;
+			recorded_by: string;
+			created_at: number;
+		}[]
+	)
+		.filter((link) => (link.from_kind === "task" && ours.has(link.from_id)) || memberAt(link.recorded_by, at))
+		.map((link) => ({ ...link, ageHours: (at - link.created_at) / HOUR }));
+}
+
+/**
+ * Demands on the operator: questions opened, and messages sent in mail threads the operator is in, by people who were
+ * members when they did it.
+ */
+function interruptions(db: DatabaseSync, organization: string, from: number, to: number): number {
+	const { replay, memberAt } = membership(db, organization);
+	let questions = 0;
+	replay(to, (row, _data, isMember) => {
+		if (row.type === "prompt_opened" && row.at >= from && row.at < to && isMember(row.session_id)) questions++;
+	});
+	const mail = (
+		db
+			.prepare(
+				`select m.sender, m.at from thread_messages m join threads t on t.id = m.thread_id
+				where t.kind = 'mail' and m.at >= ? and m.at < ?
+				and exists (
+					select 1 from thread_participants p where p.thread_id = t.id and p.participant = 'operator' and p.joined_at <= m.at
+				)`,
+			)
+			.all(from, to) as { sender: string; at: number }[]
+	).filter((row) => memberAt(row.sender, row.at)).length;
+	return questions + mail;
 }
 
 /** Everyone at or below `person` in the reporting tree. */
@@ -210,6 +317,15 @@ export function realizedFitness(
 			unattributedValueShare: totalValue ? 1 - estimatedValue / totalValue : 0,
 		},
 		incomplete: unvalued > 0,
+		openWaits: openWaits(
+			db,
+			organization,
+			valued.map(({ task }) => task.id),
+			to,
+		),
+		interruptions: interruptions(db, organization, from, to),
+		// The operator's time is part of the model, but nothing measures it honestly yet; waiting for him is already delay.
+		attention: { pricePerMinute: 1, measured: false },
 		// Disposal deletes a temporary peer, so its spend cannot be charged to its caller afterwards.
 		computeExcludes: "spend of temporary pi_exec peers",
 	};

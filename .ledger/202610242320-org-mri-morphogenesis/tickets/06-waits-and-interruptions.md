@@ -6,9 +6,9 @@ Part of the approved spec [../spec.md](../spec.md); its Terms table defines obli
 
 **Blocked by:** 02 (Record and resolve links between work), 04 (One evaluator and realized fitness from work).
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] A task that sits unassigned for an hour, then waits an hour on an open link, then is worked for an hour shows one hour each of queued, waiting, and in-progress delay, summing to its delay.
-- [ ] A task with three open `blocks` links shows three open waits with their ages, and resolving one removes it from the list.
-- [ ] In one window, two questions opened by members, one escalation, and one ordinary mail from a member to the operator give an interruption count of 4; a message the operator sent, a message from a non-member, and ones outside the window do not count.
-- [ ] The result names the attention term as unmeasured; adding interruptions or waits does not change the total.
+- [x] A task that sits unassigned for an hour, then waits an hour on an open link, then is worked for an hour shows one hour each of queued, waiting, and in-progress delay, summing to its delay.
+- [x] A task with three open `blocks` links shows three open waits with their ages, and resolving one removes it from the list.
+- [x] In one window, two questions opened by members, one escalation, and one ordinary mail from a member to the operator give an interruption count of 4; a message the operator sent, a message from a non-member, and ones outside the window do not count.
+- [x] The result names the attention term as unmeasured; adding interruptions or waits does not change the total.

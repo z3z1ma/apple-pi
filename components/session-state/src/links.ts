@@ -53,7 +53,7 @@ const KNOWN: Record<string, string> = {
 };
 
 /** Waits keep work open until their target task is done. */
-const WAITS = ["blocks", "requires_decision"];
+export const WAITS = ["blocks", "requires_decision"];
 
 /** The defined vocabulary, one relation and its meaning per line, read fresh so a new line needs no other code. */
 export function relations(): Record<string, string> {

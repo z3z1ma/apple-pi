@@ -230,3 +230,116 @@ test("narrowing to a subtree lists only its people's tasks and keeps the organiz
 	expect(narrowed.contributions.map((c) => c.source)).toEqual(["task:mine"]);
 	expect(whole.contributions.map((c) => c.source).sort()).toEqual(["task:mine", "task:theirs"]);
 });
+
+test("delay splits into queued, waiting, and in progress, and adds up to the task's delay", () => {
+	const { db, task } = organization();
+	task("staged", "Value: $20\nCost of delay: $5/hour", 0, { at: 3 * HOUR, status: "done" });
+	db.prepare(
+		"insert into links (id, from_kind, from_id, to_kind, to_id, relation, recorded_by, inferred, created_at, resolved_at) values ('w', 'task', 'staged', 'person', 'lead', 'requires_decision', 'dev', 0, ?, ?)",
+	).run(HOUR, 2 * HOUR);
+	db.prepare(
+		"insert into assignments (person, task_id, assigned_by, assigned_at) values ('dev', 'staged', 'lead', ?)",
+	).run(2 * HOUR);
+	const result = realizedFitness(db, "root", 0, 4 * HOUR);
+	expect(result.delay).toBeCloseTo(15, 9);
+	expect(result.delayByState).toEqual({ queued: 5, waiting: 5, inProgress: 5 });
+	const [staged] = result.contributions.filter((c) => c.source === "task:staged");
+	expect(staged.delayByState).toEqual({ queued: 5, waiting: 5, inProgress: 5 });
+	const halves = [realizedFitness(db, "root", 0, 1.5 * HOUR), realizedFitness(db, "root", 1.5 * HOUR, 4 * HOUR)];
+	expect(halves[0].delayByState.waiting + halves[1].delayByState.waiting).toBeCloseTo(5, 9);
+});
+
+test("open waits show with their age, and several waits charge a task's delay once", () => {
+	const { db, task } = organization();
+	task("blocked", "Value: $20\nCost of delay: $2/hour", 0, undefined, ["dev"]);
+	const wait = (id: string, resolved: number | null) =>
+		db
+			.prepare(
+				"insert into links (id, from_kind, from_id, to_kind, to_id, relation, recorded_by, inferred, created_at, resolved_at) values (?, 'task', 'blocked', 'person', 'lead', 'blocks', 'dev', 0, ?, ?)",
+			)
+			.run(id, HOUR, resolved);
+	const before = realizedFitness(db, "root", 0, 4 * HOUR).total;
+	wait("a", null);
+	wait("b", null);
+	wait("c", null);
+	wait("d", 2 * HOUR);
+	const result = realizedFitness(db, "root", 0, 4 * HOUR);
+	expect(result.total).toBeCloseTo(before, 9);
+	expect(result.openWaits.map((w) => [w.id, w.ageHours])).toEqual([
+		["a", 3],
+		["b", 3],
+		["c", 3],
+	]);
+});
+
+test("interruptions count members' questions and mail to the operator, never the operator's own or a stranger's", () => {
+	const { db, event } = organization();
+	db.prepare(
+		"insert into sessions (id, kind, cwd, run_state, generation, source, updated_at) values ('stranger', 'root', '/', 'idle', 1, 'test', 0)",
+	).run();
+	event(1 * HOUR, "dev", "prompt_opened", { from: null, to: { kind: "questionnaire" } });
+	event(2 * HOUR, "lead", "prompt_opened", { from: null, to: { kind: "questionnaire" } });
+	event(9 * HOUR, "dev", "prompt_opened", { from: null, to: { kind: "questionnaire" } });
+	event(1 * HOUR, "stranger", "prompt_opened", { from: null, to: { kind: "questionnaire" } });
+	const thread = (id: string, subject: string, messages: [string, number][]) => {
+		db.prepare("insert into threads (id, kind, subject, created_by, created_at) values (?, 'mail', ?, ?, 0)").run(
+			id,
+			subject,
+			messages[0][0],
+		);
+		db.prepare(
+			"insert into thread_participants (thread_id, participant, delivery, read_up_to, joined_at) values (?, 'operator', 'push', 0, 0)",
+		).run(id);
+		for (const [sender, at] of messages)
+			db.prepare("insert into thread_messages (id, thread_id, sender, body, at) values (?, ?, ?, 'x', ?)").run(
+				`${id}-${at}-${sender}`,
+				id,
+				sender,
+				at,
+			);
+	};
+	thread("esc", "Escalation", [["lead", 3 * HOUR]]);
+	thread("mail", "Release", [
+		["dev", 4 * HOUR],
+		["operator", 5 * HOUR],
+		["stranger", 5 * HOUR],
+	]);
+	const result = realizedFitness(db, "root", 0, 8 * HOUR);
+	expect(result.interruptions).toBe(4);
+	expect(result.attention).toEqual({ pricePerMinute: 1, measured: false });
+	expect(result.total).toBe(realizedFitness(db, "root", 0, 8 * HOUR).total);
+});
+
+test("a later join never pulls a newcomer's earlier questions or waits into a past window", () => {
+	const { db, event } = organization();
+	db.prepare(
+		"insert into sessions (id, kind, cwd, run_state, generation, source, updated_at, reports_to) values ('joining', 'root', '/', 'idle', 1, 'test', 0, 'root')",
+	).run();
+	event(1 * HOUR, "joining", "prompt_opened", { from: null, to: { kind: "questionnaire" } });
+	db.prepare(
+		"insert into links (id, from_kind, from_id, to_kind, to_id, relation, recorded_by, inferred, created_at) values ('w', 'person', 'joining', 'person', 'lead', 'requires_decision', 'joining', 0, ?)",
+	).run(HOUR);
+	event(5 * HOUR, "joining", "reports_to_changed", { from: null, to: "root" });
+	const past = realizedFitness(db, "root", 0, 4 * HOUR);
+	expect(past.interruptions).toBe(0);
+	expect(past.openWaits).toEqual([]);
+	expect(realizedFitness(db, "root", 0, 6 * HOUR).openWaits.map((w) => w.id)).toEqual(["w"]);
+});
+
+test("a message counts as an interruption only if the operator was in its thread when it was sent", () => {
+	const { db } = organization();
+	db.prepare(
+		"insert into threads (id, kind, subject, created_by, created_at) values ('t', 'mail', 'Plan', 'dev', 0)",
+	).run();
+	db.prepare(
+		"insert into thread_participants (thread_id, participant, delivery, read_up_to, joined_at) values ('t', 'operator', 'push', 0, ?)",
+	).run(5 * HOUR);
+	db.prepare("insert into thread_messages (id, thread_id, sender, body, at) values ('early', 't', 'dev', 'x', ?)").run(
+		HOUR,
+	);
+	db.prepare("insert into thread_messages (id, thread_id, sender, body, at) values ('late', 't', 'dev', 'x', ?)").run(
+		6 * HOUR,
+	);
+	expect(realizedFitness(db, "root", 0, 4 * HOUR).interruptions).toBe(0);
+	expect(realizedFitness(db, "root", 0, 8 * HOUR).interruptions).toBe(1);
+});
