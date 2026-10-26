@@ -12,12 +12,29 @@ export const goalTitle = Type.String({
 	minLength: 1,
 	description: "A short title for the goal, a few words, as it shows in lists. Required with goal.",
 });
+/** What a new goal is worth, written into its task.md as the writer's estimate. */
+export const goalWorth = {
+	value: Type.Optional(
+		Type.Number({
+			minimum: 0,
+			description:
+				"With a goal: what the finished work is worth, in dollars, as your estimate. Splitting work never adds value; give each part its share.",
+		}),
+	),
+	cost_of_delay: Type.Optional(
+		Type.Number({
+			minimum: 0,
+			description: "With a goal: dollars the work loses for each hour it stays unfinished.",
+		}),
+	),
+};
 const goalOrTask = {
 	goal: Type.Optional(
 		Type.String({ minLength: 1, description: "A written goal for a new ephemeral task. Give goal or task, not both." }),
 	),
 	title: Type.Optional(goalTitle),
 	task: Type.Optional(taskParameter),
+	...goalWorth,
 };
 
 /** A goal needs its own short title: the goal's text is too long to name the task wherever it is listed. */

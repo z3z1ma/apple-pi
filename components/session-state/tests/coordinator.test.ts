@@ -143,13 +143,26 @@ test("a coordinator starts a session in a new tmux window, and reopens it by id 
 			goal: "Read brief.md and document the interfaces.",
 			title: "Document the interfaces",
 			session_id: "worker-1",
+			value: 80,
+			cost_of_delay: 4,
 		}),
 		fauxAssistantMessage("started"),
 		call("rehire", { person: "worker-1" }),
 		call("call_in", { person: "worker-1" }),
 		fauxAssistantMessage("called in"),
-		call("call_in", { person: "worker-1", goal: "Check the rewritten interfaces.", title: "Check the interfaces" }),
+		call("call_in", {
+			person: "worker-1",
+			goal: "Check the rewritten interfaces.",
+			title: "Check the interfaces",
+			value: 20,
+		}),
 	]);
+	const goalsOf = (who: string) =>
+		query<{ bundle: string }>(
+			state.dbPath,
+			"select t.bundle from assignments a join work_tasks t on t.id = a.task_id where a.person = ? order by a.id",
+			who,
+		).map((row) => readFileSync(join(row.bundle, "task.md"), "utf8"));
 	const coordinatorId = run.session.sessionManager.getSessionId();
 	try {
 		expect(
@@ -176,6 +189,7 @@ test("a coordinator starts a session in a new tmux window, and reopens it by id 
 			{ stage: "applied" },
 		]);
 		expect(incarnation("worker-1")).toMatchObject({ generation: 1, ended_at: null });
+		expect(goalsOf("worker-1")[0]).toMatch(/^Value: \$80 \(estimated by .+\)\nCost of delay: \$4\/hour$/m);
 		await vi.waitFor(() => {
 			const delivered = commandsOf("worker-1");
 			const begins = delivered.findIndex((command) => command.kind === "steer");
@@ -219,6 +233,7 @@ test("a coordinator starts a session in a new tmux window, and reopens it by id 
 		await run.session.prompt("bring it back with the next goal");
 		expect(toolResults(run)[3]).toMatchObject({ isError: false });
 		expect(starts().at(-1)?.goal).toContain("Check the rewritten interfaces.");
+		expect(goalsOf("worker-1")[1]).toMatch(/^Value: \$20 \(estimated by .+\)$/m);
 		expect(
 			query(state.dbPath, "select count(*) as count from assignments where person = 'worker-1' and ended_at is null"),
 		).toEqual([{ count: 2 }]);

@@ -4,6 +4,7 @@ import type { QuestionnaireReply } from "../../shared/src/questionnaire-events.j
 import type { TurnProgress, TurnResult } from "../../shared/src/turn-observer.js";
 import type { PeerTurn } from "./peer-turns.js";
 import type { ThreadPost } from "./threads.js";
+import type { Worth } from "./valuation.js";
 import type { WorkCommand } from "./work.js";
 
 export const PROGRAM_ID_ENV = "PI_PROGRAM_ID";
@@ -165,7 +166,7 @@ export type Command =
 			/** The role a new session is hired into; a stopped session keeps the role its transcript records. */
 			role?: string;
 			/** Written work, assigned before the new process starts so its first turn receives the goal. */
-			goal?: { text: string; by: string; title?: string };
+			goal?: { text: string; by: string; title?: string } & Worth;
 			prompt?: string;
 	  }
 	/** Quit the session's Pi process. */

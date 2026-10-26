@@ -10,6 +10,7 @@ import { addLedgerTask } from "../../shared/src/ledger-files.js";
 import bridge from "../src/index.js";
 import { MAIL_CUSTOM_TYPE } from "../src/mail.js";
 import { migrate, SCHEMA_VERSION } from "../src/schema.js";
+import { readValuation } from "../src/valuation.js";
 import type { WorkTask } from "../src/work.js";
 import { TASK_GOAL_CUSTOM_TYPE } from "../src/work-tools.js";
 import { close, query, startRuntime, stopRuntime, tempStateDir } from "./helpers.js";
@@ -335,6 +336,34 @@ test("the runtime records once when each task opens and how it closes, even for 
 		await close(manager.run);
 	}
 }, 45000);
+
+test("a new task carries the value and cost of delay its writer estimated, and the next read sees an edit", async () => {
+	const manager = await person();
+	const engineer = await person(manager.id);
+	try {
+		const valued = await manager.invoke("assign", {
+			person: engineer.id,
+			goal: "Fix the flaky test.",
+			title: "Flaky test",
+			value: 50,
+			cost_of_delay: 5,
+		});
+		await packets(engineer.run, 1);
+		const path = join(valued.bundle, "task.md");
+		const header = readFileSync(path, "utf8").split("\n# ")[0];
+		expect(header).toMatch(/^Value: \$50 \(estimated by .+\)$/m);
+		expect(header).toContain("Cost of delay: $5/hour");
+		const taken = await engineer.invoke("take_task", { goal: "Tidy imports.", title: "Imports", value: 3 });
+		expect(readFileSync(join(taken.bundle, "task.md"), "utf8")).toMatch(/^Value: \$3 \(estimated by .+\)$/m);
+		const plain = await engineer.invoke("take_task", { goal: "Read the logs.", title: "Logs" });
+		expect(readFileSync(join(plain.bundle, "task.md"), "utf8")).not.toMatch(/^(Value|Cost of delay):/m);
+		writeFileSync(path, readFileSync(path, "utf8").replace(/^Value: .*$/m, "Value: $80"));
+		expect(readValuation(readFileSync(path, "utf8"))).toEqual({ value: 80, costOfDelayPerHour: 5, estimatedBy: null });
+	} finally {
+		await close(engineer.run);
+		await close(manager.run);
+	}
+}, 30000);
 
 test("a database at the previous schema version gains the task lifecycle columns and keeps its rows", () => {
 	const path = join(mkdtempSync(join(tmpdir(), "apple-pi-lifecycle-")), "state.db");

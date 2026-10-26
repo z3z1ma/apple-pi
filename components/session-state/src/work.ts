@@ -5,10 +5,11 @@ import { DatabaseSync } from "node:sqlite";
 import { promoteLedgerTask, retrospectiveTemplate, writeAtomicTextFile } from "../../shared/src/ledger-files.js";
 import { statePaths } from "./paths.js";
 import { nameOf, OPERATOR, type ThreadPost } from "./threads.js";
+import { type Worth, worthLines } from "./valuation.js";
 
 export type WorkAction =
-	| { action: "take"; goal?: string; title?: string; task?: string }
-	| { action: "assign"; person: string; goal?: string; title?: string; task?: string }
+	| ({ action: "take"; goal?: string; title?: string; task?: string } & Worth)
+	| ({ action: "assign"; person: string; goal?: string; title?: string; task?: string } & Worth)
 	| { action: "focus"; task: string }
 	| { action: "unassign"; person: string; task: string }
 	| { action: "finish"; outcome: string }
@@ -194,7 +195,7 @@ function createTask(
 		const date = new Date(now).toISOString().slice(0, 10);
 		writeFileSync(
 			join(bundle, "task.md"),
-			`Status: in-progress\nCreated: ${date}\n\n# ${title}\n\n## Intent\n\n${goal}\n\n## Outcome\n\nPending completion.\n`,
+			`Status: in-progress\nCreated: ${date}\n${worthLines(command, nameOf(db, actor))}\n# ${title}\n\n## Intent\n\n${goal}\n\n## Outcome\n\nPending completion.\n`,
 		);
 		writeFileSync(join(bundle, "retrospective.md"), retrospectiveTemplate(date));
 	}

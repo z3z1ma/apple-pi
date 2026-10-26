@@ -6,10 +6,10 @@ Part of the approved spec [../spec.md](../spec.md); its Terms table defines obli
 
 **Blocked by:** None (can start immediately).
 
-**Status:** ready-for-agent
+**Status:** done (c53cb61a)
 
-- [ ] Through faux sessions against a spawned runtime, `ledger_add` records an open for the creating session's organization at creation time; before this ticket nothing in the database shows it.
-- [ ] An ephemeral task with three assignees gets one close record, `done`, at the time the last one finishes, and none before.
-- [ ] Closing a registered ledger task `done` and another `cancelled` with `ledger_status` gives each one close record with that status and time; the bundle path update still happens.
-- [ ] An unassigned ledger task that is later assigned, completed, and archived has the same open and close records whether read before or after the archive; a task never assigned and closed directly also gets both records.
-- [ ] A fresh database and one at the previous schema version both migrate to the new version without losing rows.
+- [x] Through faux sessions against a spawned runtime, `ledger_add` records an open for the creating session's organization at creation time; before this ticket nothing in the database shows it.
+- [x] An ephemeral task with three assignees gets one close record, `done`, at the time the last one finishes, and none before.
+- [x] Closing a registered ledger task `done` and another `cancelled` with `ledger_status` gives each one close record with that status and time; the bundle path update still happens.
+- [x] An unassigned ledger task that is later assigned, completed, and archived has the same open and close records whether read before or after the archive; a task never assigned and closed directly also gets both records.
+- [x] A fresh database and one at the previous schema version both migrate to the new version without losing rows.

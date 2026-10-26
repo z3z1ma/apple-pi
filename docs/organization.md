@@ -77,14 +77,14 @@ A root, and a person whose role manages, also has ten manager tools:
 
 | Tool | What it does |
 | --- | --- |
-| `hire` (`role`, `goal`, `title`, `cwd?`, `name?`, `session_id?`) | Starts a new person in a role, reporting to the caller, with the goal assigned as a task before its first turn. |
-| `call_in` (`person`, `goal?`) | Reopens a person at home with its history. A goal adds an assignment. Refused for a former member. |
-| `rehire` (`person`, `goal?`) | Brings a former member back into the organization with its history. A goal adds an assignment. Refused for a member. |
+| `hire` (`role`, `goal`, `title`, `value?`, `cost_of_delay?`, `cwd?`, `name?`, `session_id?`) | Starts a new person in a role, reporting to the caller, with the goal assigned as a task before its first turn. |
+| `call_in` (`person`, `goal?`, `value?`, `cost_of_delay?`) | Reopens a person at home with its history. A goal adds an assignment. Refused for a former member. |
+| `rehire` (`person`, `goal?`, `value?`, `cost_of_delay?`) | Brings a former member back into the organization with its history. A goal adds an assignment. Refused for a member. |
 | `send_home` (`person`) | Quits the person's process. The person sleeps and stays in the organization. |
 | `rename` (`person`, `name`) | Renames a running person. Its id and history stay. |
 | `move` (`person`, `manager`) | Puts a person, with everyone under it, under another manager of the same organization. |
 | `let_go` (`person`, `reason`) | Asks the person for a handover, posts it in the team channel, then records why it left and closes it. |
-| `assign` (`person`, `goal` and `title`, or `task`) | Gives a person a task or a written goal. It becomes the person's focus. |
+| `assign` (`person`, `goal` and `title`, or `task`; `value?`, `cost_of_delay?`) | Gives a person a task or a written goal. It becomes the person's focus. |
 | `unassign` (`person`, `task`) | Takes an assignment back without finishing it. |
 | `meet` (`people`, `agenda`) | Opens a meeting thread. Every message is pushed to every participant. |
 | `end_meeting` (`thread`, `summary`) | Sends the summary and closes the meeting. Only the organizer can end it. |
