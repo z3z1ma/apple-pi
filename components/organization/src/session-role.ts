@@ -32,7 +32,14 @@ const resolved = new Map<string, Person | undefined>();
 
 /** The role of the session `ctx` runs, resolved at its start; undefined for an unroled session. */
 export function sessionRole(ctx: ExtensionContext): Role | undefined {
-	return resolved.get(ctx.sessionManager.getSessionId())?.role;
+	const id = ctx.sessionManager.getSessionId();
+	if (resolved.has(id)) return resolved.get(id)?.role;
+	// Separate extension-loader graphs do not share this cache; the transcript carries the role across them.
+	const stored = storedRole(ctx);
+	if (!stored) return undefined;
+	const role = loadRoles(ctx.cwd).roles.get(stored.role);
+	resolved.set(id, role ? { role, soul: isSoul(stored.soul) ? stored.soul : undefined } : undefined);
+	return role;
 }
 
 /** The one-line soul of the session `ctx` runs, for the directory; undefined without a role. */

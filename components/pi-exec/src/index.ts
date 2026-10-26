@@ -1,7 +1,9 @@
 import type { Usage } from "@earendil-works/pi-ai";
-import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { Type } from "typebox";
+import { defineTool, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { type TSchema, Type } from "typebox";
+import { managesPeople } from "../../organization/src/install.js";
 import { getActiveWorkSurface } from "../../shared/src/active-work.js";
+import { setSystemPromptSection } from "../../shared/src/system-prompt-section.js";
 import { registerWorkSection } from "../../shared/src/work-manager.js";
 import { createExecActiveWorkSource } from "./active-work.js";
 import { deriveProgramEnvelope, PROGRAM_ENVELOPE_MAXIMA } from "./envelope.js";
@@ -9,6 +11,7 @@ import {
 	attachLiveDescription,
 	PI_EXEC_DESCRIPTION,
 	PI_EXEC_DISPLAY_PARAMETER_DESCRIPTION,
+	PI_EXEC_PEER_PROMPT_GUIDELINES,
 	PI_EXEC_PROMPT_GUIDELINES,
 	PI_EXEC_PROMPT_SNIPPET,
 	piExecGuestApiContract,
@@ -41,6 +44,7 @@ function displayValue(value: unknown): string {
 export default function piExec(pi: ExtensionAPI): void {
 	const failedDetails = new Map<string, { details: unknown; usage?: Usage }>();
 	let executing = false;
+	let peerAccess = false;
 	const programSession = installProgramSession(pi);
 	const invocations = new Map<string, ExecInvocation>();
 	// Running programs share the above-editor surface with public agents and managed tasks.
@@ -89,7 +93,9 @@ export default function piExec(pi: ExtensionAPI): void {
 		promptSnippet: PI_EXEC_PROMPT_SNIPPET,
 		promptGuidelines: [...PI_EXEC_PROMPT_GUIDELINES, SAVED_PROGRAM_PROMPT_GUIDELINE],
 		parameters: Type.Object({
-			code: attachLiveDescription(Type.String({ minLength: 1, maxLength: 100_000 }), piExecGuestApiContract),
+			code: attachLiveDescription(Type.String({ minLength: 1, maxLength: 100_000 }), () =>
+				piExecGuestApiContract(peerAccess),
+			),
 			inputs: Type.Optional(
 				Type.Record(Type.String(), Type.String({ maxLength: 200_000 }), {
 					description: "Named strings available to the program as inputs.<key>.",
@@ -129,7 +135,7 @@ export default function piExec(pi: ExtensionAPI): void {
 							Type.Integer({
 								minimum: 1,
 								maximum: PROGRAM_ENVELOPE_MAXIMA.callBudget,
-								description: "Max host calls (tools, fetch, agents) for this program.",
+								description: "Max host calls for this program.",
 							}),
 						),
 						concurrency: Type.Optional(
@@ -161,6 +167,8 @@ export default function piExec(pi: ExtensionAPI): void {
 			return renderExecResult(result as any, options, theme, context);
 		},
 		async execute(toolCallId, params, signal, onUpdate, ctx) {
+			if (params.peers && Object.keys(params.peers).length && !managesPeople(ctx))
+				throw new Error("Peer delegation requires a managing role");
 			if (executing) throw new Error("pi_exec already has a running program in this session");
 			executing = true;
 			const startedAt = Date.now();
@@ -306,7 +314,40 @@ export default function piExec(pi: ExtensionAPI): void {
 			}
 		},
 	});
-	pi.registerTool(piExecTool);
+	let registeredAccess: boolean | undefined;
+	let programLimits: TSchema = piExecTool.parameters.properties.limits;
+	const registerForRole = (ctx?: ExtensionContext) => {
+		const allowed = ctx ? managesPeople(ctx) : false;
+		if (registeredAccess === allowed) return;
+		peerAccess = allowed;
+		const { peers: _peers, ...common } = piExecTool.parameters.properties;
+		const { agentBudget: _agentBudget, ...limits } = common.limits.properties;
+		const parameters = allowed
+			? piExecTool.parameters
+			: Type.Object({ ...common, limits: Type.Optional(Type.Object(limits)) });
+		programLimits = parameters.properties.limits;
+		pi.registerTool({
+			...piExecTool,
+			description: PI_EXEC_DESCRIPTION + (allowed ? " Managing roles can also delegate peer turns." : ""),
+			promptSnippet: PI_EXEC_PROMPT_SNIPPET + (allowed ? "; delegate peer turns when useful" : ""),
+			promptGuidelines: [...PI_EXEC_PROMPT_GUIDELINES, SAVED_PROGRAM_PROMPT_GUIDELINE],
+			parameters,
+		});
+		registeredAccess = allowed;
+	};
+	registerForRole();
+	pi.on("session_start", (_event, ctx) => registerForRole(ctx));
+	pi.on("before_agent_start", (event, ctx) => {
+		registerForRole(ctx);
+		// Pi has already assembled tool-derived guidance; this section reaches the first managing-role turn too.
+		if (peerAccess)
+			setSystemPromptSection(event.systemPromptOptions, "pi-exec-peers", PI_EXEC_PEER_PROMPT_GUIDELINES.join("\n"));
+	});
 
-	installSavedProgramTools(pi, piExecTool);
+	installSavedProgramTools(pi, {
+		get parameters() {
+			return { properties: { reset: piExecTool.parameters.properties.reset, limits: programLimits } };
+		},
+		execute: piExecTool.execute,
+	});
 }

@@ -257,6 +257,7 @@ test("assigning a sleeping report opens its window with the goal waiting in its 
 		},
 		[],
 	);
+	await withRole(manager, "coordinator");
 	const managerId = manager.session.sessionManager.getSessionId();
 	const worker = await fauxSession(
 		[
@@ -426,7 +427,16 @@ test("a hired person whose role does not manage loses the lifecycle tools; a hir
 	const run = await fauxSession(
 		[bridge],
 		[fauxAssistantMessage("ok"), fauxAssistantMessage("ok")],
-		[...tools, "directory"],
+		[
+			...tools,
+			"directory",
+			"org_work",
+			"org_waits",
+			"org_communication",
+			"org_expertise",
+			"org_fitness",
+			"predictions",
+		],
 	);
 	try {
 		run.session.extensionRunner.setFlagValue("reports-to", "boss");
@@ -447,12 +457,6 @@ test("a hired person whose role does not manage loses the lifecycle tools; a hir
 				"finish_task",
 				"promote_task",
 				"link",
-				"org_fitness",
-				"predictions",
-				"org_expertise",
-				"org_waits",
-				"org_work",
-				"org_communication",
 			].sort(),
 		);
 	} finally {
@@ -493,9 +497,13 @@ test("a hired person whose role does not manage loses the lifecycle tools; a hir
 }, 30000);
 
 test.each([false, true])(
-	"a root holds the manager tools whether or not its role manages, even when its initial tool set lacks them (role=%s)",
+	"root position grants no management or insights; a managing role restores both (role=%s)",
 	async (enabled) => {
-		const run = await fauxSession([bridge], [call("directory", {}), fauxAssistantMessage("done")], ["read"]);
+		const run = await fauxSession(
+			[bridge],
+			[call("directory", {}), fauxAssistantMessage("done")],
+			["read", "hire", "org_work"],
+		);
 		await withRole(run, enabled ? "coordinator" : undefined);
 		try {
 			await run.session.prompt("list my peers");
@@ -510,28 +518,29 @@ test.each([false, true])(
 					"read_thread",
 					"post",
 					"escalate",
-					"hire",
-					"call_in",
-					"rehire",
-					"send_home",
-					"rename",
-					"move",
-					"let_go",
-					"meet",
-					"end_meeting",
-					"assign",
-					"unassign",
+					...(enabled
+						? [
+								"hire",
+								"call_in",
+								"rehire",
+								"send_home",
+								"rename",
+								"move",
+								"let_go",
+								"meet",
+								"end_meeting",
+								"assign",
+								"unassign",
+							]
+						: []),
 					"take_task",
 					"focus",
 					"finish_task",
 					"promote_task",
 					"link",
-					"org_fitness",
-					"predictions",
-					"org_expertise",
-					"org_waits",
-					"org_work",
-					"org_communication",
+					...(enabled
+						? ["org_fitness", "predictions", "org_expertise", "org_waits", "org_work", "org_communication"]
+						: []),
 					"update_self",
 				].sort(),
 			);

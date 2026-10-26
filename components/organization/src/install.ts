@@ -1,7 +1,6 @@
 /**
  * The organization in a root session: its role (mind, posture, `<role>`), the `<org>` section everyone gets, and the
- * `<manager>` charter of a managing role. A session with no manager is the root of its organization and holds the
- * manager tools as the operator's seat, whether or not its role manages.
+ * `<manager>` charter and role catalog of a managing role. Root position alone grants no management capabilities.
  */
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
@@ -25,9 +24,9 @@ export function managerOf(pi: ExtensionAPI): string | null {
 	return typeof flag === "string" && flag ? flag : null;
 }
 
-/** Whether this session may hire, reopen, close, and rename people: its role manages, or it is a root. */
-export function managesPeople(pi: ExtensionAPI, ctx: ExtensionContext): boolean {
-	return sessionRole(ctx)?.manages === true || managerOf(pi) === null;
+/** Management capabilities follow the role, including in an organization-root session. */
+export function managesPeople(ctx: ExtensionContext): boolean {
+	return sessionRole(ctx)?.manages === true;
 }
 
 /** `reflects` is false for a person with no future to carry a self into, such as a program's temporary peer. */
@@ -45,13 +44,14 @@ export function installOrganization(pi: ExtensionAPI, { reflects }: { reflects: 
 				id,
 				name: ctx.sessionManager.getSessionName() ?? null,
 				title: role?.title ?? null,
+				manages: managesPeople(ctx),
 				managerId,
 				rootId: managerId ? organizationOf(id).root : id,
 			}),
 		);
 		if (role?.manages)
 			setSystemPromptSection(event.systemPromptOptions, MANAGER_SYSTEM_PROMPT_TAG, managerCharter(managerId));
-		if (managesPeople(pi, ctx))
+		if (managesPeople(ctx))
 			setSystemPromptSection(
 				event.systemPromptOptions,
 				CATALOG_SYSTEM_PROMPT_TAG,

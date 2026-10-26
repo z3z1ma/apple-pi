@@ -1,14 +1,19 @@
 import { describe, expect, it } from "vitest";
 import { sessionSearchTool } from "../../session-search/src/tool.js";
-import { PI_EXEC_DESCRIPTION, PI_EXEC_PROMPT_GUIDELINES, piExecGuestApiContract } from "../src/guest-api.js";
+import {
+	PI_EXEC_DESCRIPTION,
+	PI_EXEC_PEER_PROMPT_GUIDELINES,
+	PI_EXEC_PROMPT_GUIDELINES,
+	piExecGuestApiContract,
+} from "../src/guest-api.js";
 
 describe("runtime capability guidance", () => {
 	it("teaches evidence reduction, dependency ordering, and outcome checks", () => {
-		const guidance = PI_EXEC_PROMPT_GUIDELINES.join("\n");
+		const guidance = [...PI_EXEC_PROMPT_GUIDELINES, ...PI_EXEC_PEER_PROMPT_GUIDELINES].join("\n");
 		expect(guidance).toContain("Use direct tools for a single operation");
 		expect(guidance).toContain("Keep intermediate results inside the program");
 		expect(guidance).toContain("preserves the evidence");
-		expect(guidance).toContain("Check tool and peer outcomes");
+		expect(guidance).toContain("Check tool outcomes");
 		expect(guidance).toContain("Surface failures and missing evidence");
 		expect(guidance).toContain("Their role owns their model and thinking");
 		expect(guidance).toContain("They stay alive after the program");
@@ -28,6 +33,15 @@ describe("runtime capability guidance", () => {
 		expect(contract).toContain("keep their first type");
 		expect(contract).toContain('bash, edit, and write return {"ok": bool, "output": str}');
 		expect(PI_EXEC_DESCRIPTION).toContain("printed output is also captured");
+	});
+
+	it("gives workers composition guidance without peer APIs", () => {
+		const contract = piExecGuestApiContract(false);
+		expect(contract).toContain("tools_call");
+		expect(contract).toContain("fetch");
+		for (const peerApi of ["class Peer", "async def peer(", "async def agent(", "async def agent_run(", "peers:"])
+			expect(contract).not.toContain(peerApi);
+		expect(PI_EXEC_PROMPT_GUIDELINES.join("\n")).not.toContain("Attach awake colleagues");
 	});
 
 	it("distinguishes transcript recall from current files and known notebook sources", () => {

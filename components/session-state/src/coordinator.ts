@@ -47,7 +47,7 @@ const personParameter = Type.String({
 	description: "The person: a name in your organization or a session id.",
 });
 
-/** The manager tools, active only in a root session or one whose role manages. */
+/** Manager tools are active only for managing roles. */
 export function installCoordinator(pi: ExtensionAPI): void {
 	installMeetings(pi);
 	installAssignments(pi);
@@ -260,7 +260,7 @@ export function installCoordinator(pi: ExtensionAPI): void {
 	);
 	const reconcile = (ctx: ExtensionContext) => {
 		const active = pi.getActiveTools();
-		const next = managesPeople(pi, ctx)
+		const next = managesPeople(ctx)
 			? [...new Set([...active, ...MANAGER_TOOLS])]
 			: active.filter((name) => !MANAGER_TOOLS.includes(name));
 		if (next.length !== active.length) pi.setActiveTools(next);

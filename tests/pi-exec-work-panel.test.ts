@@ -24,6 +24,7 @@ import { fakeCustom, fakeTui, plainTheme } from "./helpers/fake-tui.js";
 const cleanups: Array<() => Promise<void>> = [];
 const gateClosures: Array<() => Promise<void>> = [];
 let peerFixture = false;
+let peerFixtureRole = "coordinator";
 afterEach(async () => {
 	for (const close of gateClosures.splice(0)) await close();
 	for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
@@ -63,22 +64,24 @@ async function harness(
 	const paths = manifest.pi.extensions
 		.filter((path: string) => extensions.includes(path))
 		.map((path: string) => join(process.cwd(), path));
+	if (peerFixture) {
+		// Resolve the role in the same real extension-loader graph as pi_exec, not Vitest's module graph.
+		const roleExtension = join(cwd, "manager-extension.ts");
+		writeFileSync(
+			roleExtension,
+			`import { installSessionRole } from ${JSON.stringify(join(process.cwd(), "components/organization/src/session-role.ts"))};
+export default function(pi) {
+	pi.registerFlag("role", { type: "string", description: "Fixture role" });
+	const getFlag = pi.getFlag.bind(pi);
+	pi.getFlag = (name) => name === "role" ? ${JSON.stringify(peerFixtureRole)} : getFlag(name);
+	installSessionRole(pi);
+}`,
+		);
+		paths.push(roleExtension);
+	}
 	const events = createEventBus();
 	const loaded = await loadExtensions(paths, cwd, events, runtime);
 	expect(loaded.errors).toEqual([]);
-	for (const extension of loaded.extensions)
-		for (const { definition } of extension.tools.values()) {
-			const execute = definition.execute;
-			definition.execute = (...args) => {
-				const result = execute(...args);
-				running.add(result);
-				void result.then(
-					() => running.delete(result),
-					() => running.delete(result),
-				);
-				return result;
-			};
-		}
 	const screen = fakeTui(200, 50);
 	// The above-editor widgets Pi would currently mount, keyed as Pi keys them: a later mount replaces an earlier one.
 	const widgets = new Map<string, { factory: any; instance?: { render(): string[] } }>();
@@ -89,6 +92,7 @@ async function harness(
 		hasUI: true,
 		mode: "tui",
 		isProjectTrusted: () => true,
+		modelRegistry: { find: () => undefined },
 		tools: [],
 		ui: {
 			custom: fakeCustom(screen).custom,
@@ -115,6 +119,20 @@ async function harness(
 	};
 	shutdown = () => emit("session_shutdown");
 	await emit("session_start");
+	// Role-aware registration can replace definitions during startup; track the settled tools.
+	for (const extension of loaded.extensions)
+		for (const { definition } of extension.tools.values()) {
+			const execute = definition.execute;
+			definition.execute = (...args) => {
+				const result = execute(...args);
+				running.add(result);
+				void result.then(
+					() => running.delete(result),
+					() => running.delete(result),
+				);
+				return result;
+			};
+		}
 	const command = (name: string) =>
 		loaded.extensions
 			.flatMap((extension) => [...extension.commands.values()])
@@ -171,10 +189,12 @@ async function gateServer() {
 	return { url: `http://127.0.0.1:${address.port}`, responses };
 }
 
-function enablePeerFixture() {
+function enablePeerFixture(role = "coordinator") {
 	peerFixture = true;
+	peerFixtureRole = role;
 	cleanups.push(async () => {
 		peerFixture = false;
+		peerFixtureRole = "coordinator";
 	});
 }
 
@@ -191,7 +211,10 @@ async function peerRuntime(cwd: string, caller: string): Promise<() => Promise<v
 	const socket = join(cwd, "state", "apple-pi.sock");
 	await startRuntime(socket);
 	const parent = standInProcess();
-	const bridge = await fakeBridge(socket, caller, parent.pid, parent.startedAt, { session: { cwd } });
+	const bridge = await fakeBridge(socket, caller, parent.pid, parent.startedAt, {
+		session: { cwd },
+		facts: { ...(peerFixtureRole ? { role: peerFixtureRole } : {}), manages: peerFixtureRole === "coordinator" },
+	});
 	await vi.waitFor(() =>
 		expect(query(join(cwd, "state", "apple-pi.db"), "select id from sessions where id = ?", caller)).toHaveLength(1),
 	);
@@ -496,6 +519,29 @@ describe("Pi Exec work panel", () => {
 		h.input("\x1b[F");
 		expect(h.text()).toContain("long-output-finished");
 	}, 30_000);
+
+	it.each(["", "implementation-engineer"])(
+		"the actual extension-loader path rejects nonmanaging peer creation (role=%s)",
+		async (role) => {
+			enablePeerFixture(role);
+			const h = await harness();
+			await expect(
+				h
+					.tool()
+					.execute(
+						"denied",
+						{ code: 'await agent(role="implementation-engineer", task="Denied")' },
+						undefined,
+						undefined,
+						h.ctx,
+					),
+			).rejects.toThrow("managing role");
+			const db = join(h.cwd, "state", "apple-pi.db");
+			expect(query(db, "select * from program_scopes")).toEqual([]);
+			expect(query(db, "select * from program_peers")).toEqual([]);
+			expect(query(db, "select id from sessions")).toEqual([{ id: h.ctx.sessionManager.getSessionId() }]);
+		},
+	);
 
 	it("shows a peer's active child tool before the peer returns", async () => {
 		enablePeerFixture();

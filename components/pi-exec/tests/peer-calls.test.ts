@@ -3,6 +3,8 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 
 import { join } from "node:path";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { loadRoles } from "../../organization/src/roles.js";
+import * as roleState from "../../organization/src/session-role.js";
 import { sendCommand } from "../../session-state/src/client.js";
 import {
 	fakeBridge,
@@ -26,6 +28,7 @@ const lasting: string[] = [];
 const fixture = new URL("../../../tests/fixtures/peer-pi.mjs", import.meta.url).pathname;
 
 beforeEach(async () => {
+	vi.spyOn(roleState, "sessionRole").mockReturnValue(loadRoles(process.cwd()).roles.get("coordinator"));
 	state = tempStateDir();
 	const bin = join(state.agentDir, "bin");
 	mkdirSync(bin);
@@ -36,7 +39,7 @@ beforeEach(async () => {
 	parent = standInProcess();
 	bridge = await fakeBridge(state.socketPath, manager.getSessionId(), parent.pid, parent.startedAt, {
 		session: { cwd: state.agentDir },
-		facts: { manages: false },
+		facts: { manages: true },
 	});
 	await vi.waitFor(() => expect(query(state.dbPath, "select id from sessions")).toHaveLength(1));
 	events = new Map();
@@ -53,6 +56,8 @@ beforeEach(async () => {
 	} as any);
 	ctx = { cwd: state.agentDir, sessionManager: manager, tools: [] };
 	invocation = 0;
+	for (const handler of events.get("before_agent_start") ?? [])
+		await handler({ systemPromptOptions: { sections: {} } }, ctx);
 });
 
 afterEach(async () => {
@@ -62,6 +67,7 @@ afterEach(async () => {
 	parent?.child.kill();
 	await stopRuntime(state);
 	vi.unstubAllEnvs();
+	vi.restoreAllMocks();
 });
 
 function run(code: string, options: Record<string, unknown> = {}, signal?: AbortSignal) {
@@ -91,6 +97,28 @@ async function colleague() {
 	lasting.push(id);
 	return id;
 }
+
+test.each([undefined, "implementation-engineer"])(
+	"only managing roles can delegate; ordinary composition remains available (role=%s)",
+	async (role) => {
+		vi.mocked(roleState.sessionRole).mockReturnValue(role ? loadRoles(process.cwd()).roles.get(role) : undefined);
+		for (const handler of events.get("before_agent_start") ?? [])
+			await handler({ systemPromptOptions: { sections: {} } }, ctx);
+		expect(tool.parameters.properties).not.toHaveProperty("peers");
+		expect(tool.parameters.properties.limits.properties).not.toHaveProperty("agentBudget");
+		expect(tool.parameters.properties.code.description).not.toContain("async def peer(");
+		expect(tool.parameters.properties.code.description).not.toContain("async def agent_run(");
+		expect(tool.promptGuidelines.join("\n")).not.toContain("Attach awake colleagues");
+		await expect(run('await agent(role="implementation-engineer", task="not allowed")')).rejects.toThrow(
+			"managing role",
+		);
+		await expect(run('await peer("implementation-engineer")')).rejects.toThrow("managing role");
+		await expect(run("1", { peers: { colleague: "someone" } })).rejects.toThrow("managing role");
+		expect(JSON.parse((await run("1 + 2")).content[0].text)).toBe(3);
+		expect(launches()).toEqual([]);
+		clean();
+	},
+);
 
 test("one-shot role peers return bound values and usage; their people and private task files disappear", async () => {
 	const result = await run(`import asyncio

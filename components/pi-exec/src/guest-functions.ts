@@ -320,9 +320,13 @@ export const HOST_FUNCTION_STUBS: readonly string[] = Object.values(HOST_FUNCTIO
 	(fn.python ?? []).map((python) => python.stub),
 );
 
-export const HOST_PROMPT_STUBS: readonly string[] = Object.values(HOST_FUNCTIONS).flatMap((fn) =>
-	(fn.python ?? []).filter((python) => !PEER_INTERNAL_NAMES.has(python.name)).map((python) => python.stub),
-);
+export function hostPromptStubs(includePeers: boolean): string[] {
+	return Object.entries(HOST_FUNCTIONS)
+		.filter(([ref]) => includePeers || (!ref.startsWith("agent.") && !ref.startsWith("peer.")))
+		.flatMap(([, fn]) =>
+			(fn.python ?? []).filter((python) => !PEER_INTERNAL_NAMES.has(python.name)).map((python) => python.stub),
+		);
+}
 
 function evidenceFunction(name: string): HostFunction {
 	const run: HostFunction["run"] = (args, scope) =>

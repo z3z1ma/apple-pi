@@ -352,22 +352,25 @@ try {
 	const piExecGuidance = piExecTool.definition.promptGuidelines.join("\n");
 	assert.match(piExecGuidance, /Keep intermediate results inside the program/);
 	assert.match(piExecGuidance, /preserves the evidence/);
-	assert.match(piExecGuidance, /Check tool and peer outcomes/);
-	assert.match(piExecGuidance, /Their role owns their model and thinking/);
-	assert.match(piExecGuidance, /Handles belong to one execution/);
+	assert.match(piExecGuidance, /Check tool outcomes/);
+	assert.doesNotMatch(piExecGuidance, /Their role owns their model and thinking/);
+	assert.doesNotMatch(piExecGuidance, /Handles belong to one execution/);
 	assert.match(piExecTool.definition.parameters.properties.code.description, /top-level await/);
 	assert.match(piExecTool.definition.parameters.properties.code.description, /asyncio\.gather/);
 	assert.match(piExecTool.definition.parameters.properties.code.description, /type-checked before execution/);
 	assert.match(piExecTool.definition.parameters.properties.code.description, /async def read\(\*, path: str/);
 	assert.match(piExecTool.definition.parameters.properties.code.description, /async def git_change\(/);
-	assert.match(piExecTool.definition.parameters.properties.code.description, /async def agent_run\(\*, role: str/);
-	assert.match(piExecTool.definition.parameters.properties.code.description, /class Peer:/);
-	assert(piExecTool.definition.parameters.properties.peers, "pi_exec peer attachment mapping missing");
+	assert.doesNotMatch(
+		piExecTool.definition.parameters.properties.code.description,
+		/async def agent_run\(\*, role: str/,
+	);
+	assert.doesNotMatch(piExecTool.definition.parameters.properties.code.description, /class Peer:/);
+	assert.equal(piExecTool.definition.parameters.properties.peers, undefined);
 	assert(piExecTool.definition.parameters.properties.reset, "pi_exec reset parameter missing");
 	assert.equal(piExecTool.definition.parameters.properties.state, undefined);
 	const limits = piExecTool.definition.parameters.properties.limits?.properties;
 	assert(limits, "pi_exec limits parameter missing");
-	assert.equal(limits.agentBudget.maximum, 128);
+	assert.equal(limits.agentBudget, undefined);
 	assert.equal(limits.callBudget.maximum, 2048);
 	assert.equal(limits.concurrency.maximum, 32);
 	assert.equal(limits.timeoutSeconds.maximum, 7200);

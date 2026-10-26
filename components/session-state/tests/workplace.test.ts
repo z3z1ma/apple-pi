@@ -32,6 +32,8 @@ async function team(replies: Parameters<typeof fauxSession>[1]) {
 		},
 		[],
 	);
+	manager.session.extensionRunner.setFlagValue("role", "coordinator");
+	await manager.session.bindExtensions({});
 	const managerId = manager.session.sessionManager.getSessionId();
 	const peer = await fauxSession(
 		[

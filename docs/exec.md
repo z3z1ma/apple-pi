@@ -1,6 +1,6 @@
 # Pi Exec
 
-`pi_exec` runs a type-checked Python snippet inside a Monty worker subprocess. Intermediate tool output stays inside the snippet; only its last expression (and captured `print` output) enters the main conversation. It is available only in the root Pi session.
+`pi_exec` runs a type-checked Python snippet inside a Monty worker subprocess. Intermediate tool output stays inside the snippet; only its last expression (and captured `print` output) enters the main conversation. It is available in every root Pi session for ordinary tool composition. Peer delegation and its model-facing APIs are available only to roles with `manages: true`, including when the session is the organization root.
 
 Use Pi Exec when a task needs tool composition or computation over tool results; use direct tools for a single operation that needs neither. Keep intermediate results in the program and return the smallest result that preserves the evidence for the next decision. Aggregate counts, select relevant excerpts, and report failures or missing evidence explicitly. Gather independent calls concurrently and await dependent steps in order. Captured `print` output also enters context, so apply the same reduction to logs.
 
@@ -22,6 +22,8 @@ The current guest provides `read`, `grep`, `find`, `ls`, `bash`, `edit`, and `wr
 The program result must be JSON-compatible. Python dicts with string keys and lists convert to JSON objects and arrays. Sets, bytes, non-finite numbers, cycles, and dicts with non-string keys fail at the boundary. Monty can stringify functions and cyclic references on export; the boundary rejects its function-repr and cycle-placeholder strings. Literal strings of the same form are also rejected because Monty does not distinguish them after export.
 
 ## Peers and schemas
+
+Managing roles can attach colleagues or create temporary peers; nonmanagers are refused by the host before a program scope or peer is started, including from saved programs. Their tool schema and guidance omit peer APIs, attachment parameters and agent-budget controls. Being an unroled root grants no exception.
 
 Programs use the same people as the [organization](organization.md), with catalog roles owning their models, thinking levels, and tool posture. Results come from a correlated turn in the peer's own session, not mail.
 

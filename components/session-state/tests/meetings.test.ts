@@ -10,9 +10,13 @@ beforeAll(() => startRuntime(state.socketPath));
 afterAll(() => stopRuntime(state));
 const call = (name: string, args: Parameters<typeof fauxToolCall>[1]): Reply =>
 	fauxAssistantMessage([fauxToolCall(name, args)], { stopReason: "toolUse" });
-async function person() {
+async function person(role?: string) {
 	const script: Reply[] = [];
 	const run = await fauxSession([bridge], () => script.shift() ?? fauxAssistantMessage("noted"), []);
+	if (role) {
+		run.session.extensionRunner.setFlagValue("role", role);
+		await run.session.bindExtensions({});
+	}
 	const id = run.session.sessionManager.getSessionId();
 	await vi.waitFor(() => expect(query(state.dbPath, "select 1 from sessions where id = ?", id)).toHaveLength(1), {
 		timeout: 15000,
@@ -28,8 +32,8 @@ const result = (run: Awaited<ReturnType<typeof fauxSession>>) =>
 	run.session.messages.filter((message) => message.role === "toolResult").at(-1)!;
 
 test("a meeting pushes its agenda and discussion to everyone; only the organizer ends it with a final summary", async () => {
-	const organizer = await person();
-	const reviewer = await person();
+	const organizer = await person("coordinator");
+	const reviewer = await person("director-of-engineering");
 	const engineer = await person();
 	try {
 		organizer.script.push(

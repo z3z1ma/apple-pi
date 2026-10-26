@@ -1,7 +1,7 @@
 import { existsSync, lstatSync, readdirSync, readFileSync, realpathSync } from "node:fs";
 import { isAbsolute, join, relative, sep } from "node:path";
 import type { ExtensionAPI, ExtensionContext, ToolDefinition } from "@earendil-works/pi-coding-agent";
-import { Type, type TSchema } from "typebox";
+import { type TSchema, Type } from "typebox";
 
 export const PROJECT_PROGRAMS_DIRECTORY = ".pi/programs";
 export const PROJECT_PROGRAM_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -207,7 +207,9 @@ interface ProgramRunnerTool {
 
 /** Register one `program_<name>` tool per saved program, refreshed only where a schema change cannot break prompt caching. */
 export function installSavedProgramTools(pi: ExtensionAPI, piExecTool: ProgramRunnerTool): void {
+	let registeredLimits = piExecTool.parameters.properties.limits;
 	function syncSavedProgramTools(cwd: string): void {
+		registeredLimits = piExecTool.parameters.properties.limits;
 		try {
 			for (const program of listSavedPrograms(cwd)) {
 				const parameters = buildProgramParametersSchema(
@@ -272,7 +274,8 @@ export function installSavedProgramTools(pi: ExtensionAPI, piExecTool: ProgramRu
 	pi.on("session_start", (_event, ctx) => syncSavedProgramTools(ctx.cwd));
 	pi.on("session_compact", (_event, ctx) => syncSavedProgramTools(ctx.cwd));
 	pi.on("before_agent_start", (_event, ctx) => {
-		if (!hasSessionMessages(ctx)) syncSavedProgramTools(ctx.cwd);
+		if (!hasSessionMessages(ctx) || registeredLimits !== piExecTool.parameters.properties.limits)
+			syncSavedProgramTools(ctx.cwd);
 	});
 	syncSavedProgramTools(process.cwd());
 }

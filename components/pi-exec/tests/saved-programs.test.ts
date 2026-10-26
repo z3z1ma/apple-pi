@@ -37,6 +37,7 @@ function registeredRuntime(cwd: string) {
 		tools: [],
 		sessionManager: {
 			getSessionId: () => "saved-program-test",
+			getEntries: () => [],
 			getBranch: () => branch,
 			getSessionFile: () => undefined,
 		},

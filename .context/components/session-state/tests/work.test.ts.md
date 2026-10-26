@@ -1,5 +1,7 @@
 ## file
 
+Management and insight fixtures choose a managing role explicitly; root position is not a capability. An unroled root and a working-role person retain task/link calls but cannot call insight tools; the human `/org` command still produces a fresh result without a model turn or granting those tools.
+
 Native-tool evidence assertions must inspect the returned impact/finding entries as well as readable output, not merely section headings or provenance strings shared by several sections.
 Why: the renderer always emits headings, and an impact already prints both recorder and task. Those text matches can pass even if the finding projection is empty. Checking grouped finding entries and an unchanged total proves the requested evidence is delivered without charging estimates or findings.
 The `/org` cases exercise actual registered commands through faux sessions against the spawned isolated runtime, and compare snapshot counts/references with native tool results at the command's captured cutoff. Native `org_communication` needs a positive activity window even though pending requests are independent snapshots; only the overview's direct reader uses an empty traffic interval. Fitness comparison reuses the command's reported endpoints to avoid clock drift. Explicit-person errors are observed through the SDK's `onError` channel, because extension commands catch handler exceptions and resolve the prompt normally.

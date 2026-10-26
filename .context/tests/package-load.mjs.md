@@ -2,5 +2,6 @@
 
 The loader checks the package's model-visible registration contract, including optional economic-comparison guidance on `org_fitness` and intentional removal of its old name. It is not proof of activation in a running person's session, evaluator behavior, or an installed tarball.
 Why: native guidance is part of the instrument the model receives; repository prose cannot substitute for it. Registration can succeed while activation is missing, so faux-session work/coordinator tests cover that separate seam. The old-name absence check reflects the approved breaking rename, not a general prohibition on aliases.
-Coupled: package.json, components/session-state/src/work-tools.ts
-Verify: components/session-state/tests/work.test.ts, components/session-state/tests/coordinator.test.ts
+The initial pi_exec registration is unprivileged: general composition stays visible, while peer signatures, attachments and agent budget are absent. Managing-role schema/guidance activation belongs to the SDK role tests; cross-extension role lookup and actual peer execution/rejection belong to the loaded work-panel fixture. A registry inventory of the workplace tools does not grant them to every role.
+Coupled: package.json, components/session-state/src/work-tools.ts, components/pi-exec/src/index.ts
+Verify: components/session-state/tests/work.test.ts, components/session-state/tests/coordinator.test.ts, components/organization/tests/roles.test.ts, tests/pi-exec-work-panel.test.ts

@@ -233,7 +233,7 @@ export function installPeers(pi: ExtensionAPI): void {
 			),
 			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 				const self = ctx.sessionManager.getSessionId();
-				return directoryView(self, { ...params, backlog: managesPeople(pi, ctx) });
+				return directoryView(self, { ...params, backlog: managesPeople(ctx) });
 			},
 		}),
 	);

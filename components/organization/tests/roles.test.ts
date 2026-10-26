@@ -6,6 +6,7 @@ import { fauxAssistantMessage } from "@earendil-works/pi-ai/compat";
 import { type ExtensionAPI, SessionManager } from "@earendil-works/pi-coding-agent";
 import { afterEach, expect, test, vi } from "vitest";
 import { fauxSession } from "../../../tests/helpers/faux-session.js";
+import piExec from "../../pi-exec/src/index.js";
 import { installOrganization, loadRoles, PACKAGE_ROLES_DIR } from "../src/index.js";
 
 const ROLE = `---
@@ -201,6 +202,38 @@ test("a resumed session takes its role from its transcript, with no flag", async
 	}
 });
 
+test.each([undefined, "implementation-engineer", "coordinator", "director-of-engineering"])(
+	"peer schemas and guidance follow the managing role in the active SDK tool set (role=%s)",
+	async (role) => {
+		// Production installs pi_exec before organization resolves the session's role.
+		const run = await fauxSession([piExec, organization], [fauxAssistantMessage("ok")], ["pi_exec"]);
+		try {
+			const errors: unknown[] = [];
+			const programs = join(run.cwd, ".pi", "programs");
+			mkdirSync(programs, { recursive: true });
+			writeFileSync(join(programs, "probe.py"), '"""A role schema probe."""\n1 + 2\n');
+			if (role) run.session.extensionRunner.setFlagValue("role", role);
+			await run.session.bindExtensions({ onError: (error) => errors.push(error) });
+			run.session.setActiveToolsByName(["pi_exec", "program_probe"]);
+			await run.session.prompt("ready");
+			expect(errors).toEqual([]);
+			const parameters = run.session.agent.state.tools.find((tool) => tool.name === "pi_exec")!.parameters as {
+				properties: { code: { description: string }; peers?: unknown };
+			};
+			const allowed = role === "coordinator" || role === "director-of-engineering";
+			expect("peers" in parameters.properties).toBe(allowed);
+			const program = run.session.agent.state.tools.find((tool) => tool.name === "program_probe")!;
+			const limits = (program.parameters as { properties: { limits: { properties: object } } }).properties.limits;
+			expect("agentBudget" in limits.properties).toBe(allowed);
+			expect(parameters.properties.code.description.includes("async def peer(")).toBe(allowed);
+			expect(parameters.properties.code.description.includes("async def agent_run(")).toBe(allowed);
+			expect(run.session.agent.state.systemPrompt.includes("Attach awake colleagues")).toBe(allowed);
+		} finally {
+			run.dispose();
+		}
+	},
+);
+
 test("everyone gets the org section; only a managing role gets the manager charter", async () => {
 	const run = await fauxSession(
 		[organization],
@@ -214,9 +247,11 @@ test("everyone gets the org section; only a managing role gets the manager chart
 		expect(prompt).toContain(`<org>\nYou are a session with no role, a person in an organization`);
 		expect(prompt).toContain(`Your session id is \`${id}\``);
 		expect(prompt).toContain("You are the root of your organization");
-		expect(prompt).toContain("You hold the manager tools");
-		for (const tool of ["org_waits", "org_work", "org_communication", "org_expertise", "org_fitness", "link"])
-			expect(prompt).toContain(`\`${tool}\``);
+		expect(prompt).not.toContain("You hold the manager tools");
+		expect(prompt).toContain("`link`");
+		for (const tool of ["org_waits", "org_work", "org_communication", "org_expertise", "org_fitness", "predictions"])
+			expect(prompt).not.toContain(`\`${tool}\``);
+		expect(prompt).not.toContain("<role-catalog>");
 		expect(prompt).not.toContain("<manager>");
 
 		run.session.extensionRunner.setFlagValue("reports-to", "boss");
@@ -226,8 +261,10 @@ test("everyone gets the org section; only a managing role gets the manager chart
 		expect(prompt).toContain("<org>\nYou are Staff Engineer, Simplicity, a person");
 		expect(prompt).toContain("You report to the session `boss`");
 		expect(prompt).toContain("ask your manager to hire one");
-		for (const tool of ["org_waits", "org_work", "org_communication", "org_expertise", "org_fitness", "link"])
-			expect(prompt).toContain(`\`${tool}\``);
+		expect(prompt).toContain("`link`");
+		for (const tool of ["org_waits", "org_work", "org_communication", "org_expertise", "org_fitness", "predictions"])
+			expect(prompt).not.toContain(`\`${tool}\``);
+		expect(prompt).not.toContain("<role-catalog>");
 		expect(prompt).not.toContain("<manager>");
 	} finally {
 		run.dispose();
@@ -239,6 +276,17 @@ test("everyone gets the org section; only a managing role gets the manager chart
 		await manager.session.prompt("hi");
 		const prompt = manager.session.agent.state.systemPrompt;
 		expect(prompt).toContain("<org>\nYou are Coordinator, a person");
+		expect(prompt).toContain("<role-catalog>");
+		for (const tool of [
+			"org_waits",
+			"org_work",
+			"org_communication",
+			"org_expertise",
+			"org_fitness",
+			"predictions",
+			"link",
+		])
+			expect(prompt).toContain(`\`${tool}\``);
 		expect(prompt).toContain("<manager>\nYou are a manager: the operator brings you work");
 		expect(prompt).toMatch(/standup[\s\S]*remind_me[\s\S]*meet/);
 		for (const moment of [

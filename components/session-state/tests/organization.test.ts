@@ -91,6 +91,8 @@ test("a manager transfers a person with its team, is refused a cycle or a strang
 		},
 		["directory", "move", "let_go"],
 	);
+	root.session.extensionRunner.setFlagValue("role", "coordinator");
+	await root.session.bindExtensions({});
 	const rootId = root.session.sessionManager.getSessionId();
 	try {
 		await seen(rootId);
@@ -164,6 +166,8 @@ test("after a transfer, a person's close notice reaches its new manager, and a r
 		[call("move", { person: moverId, manager: "m-new" }), fauxAssistantMessage("done")],
 		["move"],
 	);
+	boss.session.extensionRunner.setFlagValue("role", "coordinator");
+	await boss.session.bindExtensions({});
 	const bossId = boss.session.sessionManager.getSessionId();
 	try {
 		await seen(bossId);

@@ -21,7 +21,7 @@ beforeAll(() => startRuntime(state.socketPath));
 afterAll(() => stopRuntime(state));
 const call = (name: string, args: Parameters<typeof fauxToolCall>[1]): Reply =>
 	fauxAssistantMessage([fauxToolCall(name, args)], { stopReason: "toolUse" });
-async function person(manager?: string) {
+async function person(manager?: string, role?: string) {
 	const script: Reply[] = [];
 	const run = await fauxSession(
 		[
@@ -40,6 +40,14 @@ async function person(manager?: string) {
 		["ledger_add", "ledger_status", "read"],
 	);
 	const id = run.session.sessionManager.getSessionId();
+	if (role) {
+		run.session.extensionRunner.setFlagValue("role", role);
+		await run.session.bindExtensions({});
+		await vi.waitFor(
+			() => expect(query(state.dbPath, "select role from sessions where id = ?", id)).toEqual([{ role }]),
+			{ timeout: 15000 },
+		);
+	}
 	await vi.waitFor(() => expect(query(state.dbPath, "select 1 from sessions where id = ?", id)).toHaveLength(1), {
 		timeout: 15000,
 	});
@@ -145,7 +153,7 @@ test("taking, switching, rereading, and compaction append the explicit goal; fin
 }, 40000);
 
 test("assignments are shared task conversations, unassigning reports the change, and completion reaches the assigner", async () => {
-	const manager = await person();
+	const manager = await person(undefined, "coordinator");
 	const engineer = await person(manager.id);
 	const reviewer = await person(manager.id);
 	try {
@@ -224,6 +232,49 @@ test("assignments are shared task conversations, unassigning reports the change,
 	}
 }, 30000);
 
+test("workers and an unroled root keep links and tasks, but cannot call organizational insights", async () => {
+	const root = await person();
+	const worker = await person(root.id, "implementation-engineer");
+	try {
+		const task = await worker.invoke("take_task", { goal: "Check interfaces.", title: "Interfaces" });
+		const relationship = await worker.invoke<{ id: string }>("link", {
+			from: `task:${task.id}`,
+			to: "file:app.ts",
+			relation: "produced",
+		});
+		expect(relationship.id).toBeTruthy();
+		for (const who of [root, worker]) {
+			for (const tool of [
+				"org_work",
+				"org_waits",
+				"org_expertise",
+				"org_communication",
+				"org_fitness",
+				"predictions",
+				"hire",
+			])
+				expect(who.run.session.getActiveToolNames()).not.toContain(tool);
+			expect(await who.attempt("org_work", {})).toMatchObject({ isError: true });
+		}
+		// The human inspection command remains available without granting model tools.
+		const notices: string[] = [];
+		const errors: unknown[] = [];
+		await root.run.session.bindExtensions({
+			onError: (error) => errors.push(error),
+			uiContext: { notify: (text: string) => notices.push(text), setStatus() {} } as never,
+		});
+		const turns = root.run.requests.length;
+		await root.run.session.prompt("/org");
+		expect(errors).toEqual([]);
+		expect(notices.at(-1)).toContain("Open waits:");
+		expect(root.run.requests).toHaveLength(turns);
+		expect(root.run.session.getActiveToolNames()).not.toContain("org_work");
+	} finally {
+		await close(worker.run);
+		await close(root.run);
+	}
+}, 30000);
+
 test("promotion keeps files, assignment identity and conversation, while ledger tasks can be taken by path", async () => {
 	const who = await person();
 	try {
@@ -277,7 +328,7 @@ test("archiving a ledger bundle updates its path without changing the assignment
 }, 30000);
 
 test("the runtime records once when each task opens and how it closes, even for ledger tasks nobody was assigned", async () => {
-	const manager = await person();
+	const manager = await person(undefined, "coordinator");
 	const engineer = await person(manager.id);
 	const reviewer = await person(manager.id);
 	type Lifecycle = { opened_at: number | null; archived_at: number | null; close_status: string | null };
@@ -346,7 +397,7 @@ test("the runtime records once when each task opens and how it closes, even for 
 }, 45000);
 
 test("a new task carries the value and cost of delay its writer estimated, and the next read sees an edit", async () => {
-	const manager = await person();
+	const manager = await person(undefined, "coordinator");
 	const engineer = await person(manager.id);
 	try {
 		const valued = await manager.invoke("assign", {
@@ -373,9 +424,9 @@ test("a new task carries the value and cost of delay its writer estimated, and t
 	}
 }, 30000);
 
-test("anyone reads their organization's realized fitness over a window they name", async () => {
-	const manager = await person();
-	const engineer = await person(manager.id);
+test("a managing role reads its organization's realized fitness over a window it names", async () => {
+	const manager = await person(undefined, "coordinator");
+	const engineer = await person(manager.id, "coordinator");
 	try {
 		const flaky = await manager.invoke("assign", {
 			person: engineer.id,
@@ -452,11 +503,11 @@ test("anyone reads their organization's realized fitness over a window they name
 	}
 }, 30000);
 
-test("a nonmanager compares optional scenarios and reads recorded predictions through native tools", async () => {
-	const manager = await person();
-	const engineer = await person(manager.id);
+test("a managing role compares optional scenarios and reads recorded predictions through native tools", async () => {
+	const manager = await person(undefined, "coordinator");
+	const engineer = await person(manager.id, "coordinator");
 	try {
-		expect(engineer.run.session.getActiveToolNames()).not.toContain("hire");
+		expect(engineer.run.session.getActiveToolNames()).toContain("hire");
 		const scenario = {
 			name: "Builder",
 			decisionAt: "recording",
@@ -577,8 +628,8 @@ test("a nonmanager compares optional scenarios and reads recorded predictions th
 	}
 }, 30000);
 
-test("anyone finds who has context on an area from what people actually read", async () => {
-	const manager = await person();
+test("a managing role finds who has context on an area from what people actually read", async () => {
+	const manager = await person(undefined, "coordinator");
 	const engineer = await person(manager.id);
 	try {
 		await engineer.invoke("read", { path: "app.ts" });
@@ -597,7 +648,7 @@ test("anyone finds who has context on an area from what people actually read", a
 }, 30000);
 
 test("a manager inspects explicitly recorded escalation requests through org_communication", async () => {
-	const manager = await person();
+	const manager = await person(undefined, "coordinator");
 	const report = await person(manager.id);
 	try {
 		const result = await report.invoke<{ thread: string }>("escalate", { body: "Need a decision." });
@@ -615,7 +666,7 @@ test("a manager inspects explicitly recorded escalation requests through org_com
 }, 30000);
 
 test("escalate records an explicit escalation kind, not merely a subject", async () => {
-	const manager = await person();
+	const manager = await person(undefined, "coordinator");
 	const report = await person(manager.id);
 	try {
 		const result = await report.invoke<{ thread: string }>("escalate", { body: "Need a decision." });
@@ -630,16 +681,9 @@ test("escalate records an explicit escalation kind, not merely a subject", async
 }, 30000);
 
 test("a scripted manager inspects a ready task and relevant idle experience, assigns it, and observes the change", async () => {
-	const manager = await person();
+	const manager = await person(undefined, "coordinator");
 	const specialist = await person(manager.id);
 	try {
-		manager.run.session.extensionRunner.setFlagValue("role", "coordinator");
-		await manager.run.session.bindExtensions({});
-		await vi.waitFor(() =>
-			expect(query(state.dbPath, "select role from sessions where id = ?", manager.id)).toEqual([
-				{ role: "coordinator" },
-			]),
-		);
 		const ready = await manager.invoke("take_task", {
 			goal: "Review app.ts interfaces.",
 			title: "Review app interfaces",
@@ -708,8 +752,8 @@ test("a scripted manager inspects a ready task and relevant idle experience, ass
 	}
 }, 40000);
 
-test("a person inspects held work through org_work", async () => {
-	const who = await person();
+test("a managing role inspects held work through org_work", async () => {
+	const who = await person(undefined, "coordinator");
 	try {
 		const task = await who.invoke("take_task", { goal: "Ship the change.", title: "Change" });
 		const work = await who.invoke<{ inProgress: { ref: string; holders: string[] }[] }>("org_work", { task: task.id });
@@ -722,7 +766,7 @@ test("a person inspects held work through org_work", async () => {
 }, 30000);
 
 test("a manager sees a wait its report recorded, grouped under what it waits on", async () => {
-	const manager = await person();
+	const manager = await person(undefined, "coordinator");
 	const engineer = await person(manager.id);
 	try {
 		const task = await engineer.invoke("take_task", { goal: "Ship the API.", title: "API" });
@@ -745,7 +789,7 @@ test("a manager sees a wait its report recorded, grouped under what it waits on"
 }, 30000);
 
 test("/org shares the native organization snapshot counts and references without a model turn", async () => {
-	const manager = await person();
+	const manager = await person(undefined, "coordinator");
 	const report = await person(manager.id);
 	const notices: string[] = [];
 	try {
@@ -805,7 +849,7 @@ test("/org shares the native organization snapshot counts and references without
 }, 40000);
 
 test("/org expertise shares area and spaced-person rendering, and preserves explicit-person errors", async () => {
-	const manager = await person();
+	const manager = await person(undefined, "coordinator");
 	const report = await person(manager.id);
 	const notices: string[] = [];
 	const errors: string[] = [];
@@ -864,7 +908,7 @@ test("/org expertise shares area and spaced-person rendering, and preserves expl
 }, 40000);
 
 test("/org expertise rejects duplicate names including the caller, while IDs select native views", async () => {
-	const manager = await person();
+	const manager = await person(undefined, "coordinator");
 	const first = await person(manager.id);
 	const second = await person(manager.id);
 	const notices: string[] = [];
@@ -916,7 +960,7 @@ test("/org expertise rejects duplicate names including the caller, while IDs sel
 }, 40000);
 
 test("/org fitness reuses the native breakdown and incomplete or unknown forms show help", async () => {
-	const who = await person();
+	const who = await person(undefined, "coordinator");
 	const notices: string[] = [];
 	try {
 		await who.run.session.bindExtensions({ uiContext: { notify: (text: string) => notices.push(text) } as never });
@@ -975,7 +1019,7 @@ test("a database before lifecycle tracking gains task lifecycle columns and keep
 });
 
 test("the directory shows availability, assigned work, focus, ended outcomes, and the unassigned ledger backlog", async () => {
-	const who = await person();
+	const who = await person(undefined, "coordinator");
 	type Directory = {
 		members: {
 			id: string;

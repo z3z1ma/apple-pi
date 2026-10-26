@@ -62,6 +62,8 @@ test("letting an asleep person go wakes its existing identity only for its hando
 		],
 		[],
 	);
+	manager.session.extensionRunner.setFlagValue("role", "coordinator");
+	await manager.session.bindExtensions({});
 	const managerId = manager.session.sessionManager.getSessionId();
 	const stand = standInProcess();
 	const prior = await fakeBridge(state.socketPath, id, stand.pid, stand.startedAt, {

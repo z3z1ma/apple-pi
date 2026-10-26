@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { defineTool, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { organizationOf } from "../../organization/src/directory.js";
+import { managesPeople } from "../../organization/src/install.js";
 import { resolvePerson } from "./addresses.js";
 import { sendCommand } from "./client.js";
 import { realizedFitness } from "./fitness.js";
@@ -12,19 +13,8 @@ import { compareScenarios, predictions, type Scenario, scenarioSchema } from "./
 import { taskOrganization } from "./tree.js";
 import { goalText, rootOf, taskIdOf, type WorkAction, type WorkTask, withWork } from "./work.js";
 
-const PERSON_TASK_TOOLS = [
-	"take_task",
-	"focus",
-	"finish_task",
-	"promote_task",
-	"link",
-	"org_fitness",
-	"predictions",
-	"org_expertise",
-	"org_waits",
-	"org_work",
-	"org_communication",
-];
+const PERSON_TASK_TOOLS = ["take_task", "focus", "finish_task", "promote_task", "link"];
+const INSIGHT_TOOLS = ["org_fitness", "predictions", "org_expertise", "org_waits", "org_work", "org_communication"];
 const UNITS: Record<string, number> = { m: 60_000, h: 3_600_000, d: 86_400_000 };
 
 /** A time as a span back from now (`30m`, `8h`, `7d`) or a date. */
@@ -638,7 +628,7 @@ export function installWork(pi: ExtensionAPI): void {
 			name: "link",
 			executionMode: "sequential",
 			label: "link",
-			description: `Record a relationship between two things, or resolve one by id. Name each thing as kind:id with kind one of ${ENTITY_KINDS.join(", ")} (a task by id or ledger path, a person by name or id, a commit by SHA, a PR by URL, a file by path, a check run by its command and time or CI URL, the organization by its root's id). Relations: ${vocabulary} A wait (blocks, requires_decision) on a task ends on its own when that task closes done; resolve any other link yourself. A finds link targets a task; its owner resolves it accepted or rejected as evidence, never value. Any link can carry data.impact: {dollars: number, kind: 'incurred' | 'estimated', at?: epoch milliseconds}. Only incurred impacts enter org_fitness, at that time or link creation. Record actual losses or gains, never avoided losses or value/cost already counted; impacts are assertions the substrate does not verify. A predicts link from the message stating a change to organization:<root> stores unchanged data.scenario (the org_fitness scenario shape); use predictions to inspect calibration. Record before acting; keep hypothetical impacts nested inside data.scenario, not top-level data.impact.`,
+			description: `Record a relationship between two things, or resolve one by id. Name each thing as kind:id with kind one of ${ENTITY_KINDS.join(", ")} (a task by id or ledger path, a person by name or id, a commit by SHA, a PR by URL, a file by path, a check run by its command and time or CI URL, the organization by its root's id). Relations: ${vocabulary} A wait (blocks, requires_decision) on a task ends on its own when that task closes done; resolve any other link yourself. A finds link targets a task; its owner resolves it accepted or rejected as evidence, never value. Any link can carry data.impact: {dollars: number, kind: 'incurred' | 'estimated', at?: epoch milliseconds}. Only incurred impacts enter economic accounting, at that time or link creation. Record actual losses or gains, never avoided losses or value/cost already counted; impacts are assertions the substrate does not verify. A predicts link from the message stating a change to organization:<root> stores unchanged forecast premises in data.scenario. Record before acting; keep hypothetical impacts nested inside data.scenario, not top-level data.impact.`,
 			promptSnippet: "Record or resolve a link between tasks, people, threads, and results.",
 			parameters: Type.Object(
 				{
@@ -656,7 +646,7 @@ export function installWork(pi: ExtensionAPI): void {
 					data: Type.Optional(
 						Type.Unknown({
 							description:
-								"Structured data; scenario: org_fitness scenario shape for a predicts link. impact: {dollars: number, kind: 'incurred' | 'estimated', at?: epoch milliseconds}. Estimates are listed, not charged.",
+								"Structured data; scenario: forecast premises for a predicts link. impact: {dollars: number, kind: 'incurred' | 'estimated', at?: epoch milliseconds}. Estimates are listed, not charged.",
 						}),
 					),
 					inferred: Type.Optional(
@@ -725,10 +715,17 @@ export function installWork(pi: ExtensionAPI): void {
 			execute: (_id, args, signal, _update, ctx) => change(ctx, { action: "promote", ...args }, signal),
 		}),
 	);
-	const activate = () => {
+	const activate = (_event: unknown, ctx: ExtensionContext) => {
 		const active = pi.getActiveTools();
-		const next = [...new Set([...active, ...PERSON_TASK_TOOLS])];
-		if (next.length !== active.length) pi.setActiveTools(next);
+		const allowed = managesPeople(ctx);
+		const next = [
+			...new Set([
+				...active.filter((name) => allowed || !INSIGHT_TOOLS.includes(name)),
+				...PERSON_TASK_TOOLS,
+				...(allowed ? INSIGHT_TOOLS : []),
+			]),
+		];
+		if (next.length !== active.length || next.some((name, index) => name !== active[index])) pi.setActiveTools(next);
 	};
 	pi.on("session_start", activate);
 	pi.on("before_agent_start", activate);
