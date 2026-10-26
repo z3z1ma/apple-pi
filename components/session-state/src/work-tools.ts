@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { defineTool, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+import { organizationOf } from "../../organization/src/directory.js";
 import { resolvePerson } from "./addresses.js";
 import { sendCommand } from "./client.js";
 import { realizedFitness } from "./fitness.js";
@@ -349,7 +350,77 @@ function readFitness(
 	return { content: [{ type: "text" as const, text: lines.join("\n") }], details: fitness };
 }
 
+const ORG_HELP = `/org — open waits, ready unowned work, multiple-task holders and pending requests
+/org fitness <since> — recorded dollar breakdown (for example 8h or a date)
+/org expertise <area or person> — read/edit experience; exact organization names/IDs take precedence
+Use person:<name-or-id> to name a person explicitly; use ./<path> or an absolute path for a colliding area.`;
+
+function organizationOverview(ctx: ExtensionContext): string {
+	const at = Date.now();
+	const self = ctx.sessionManager.getSessionId();
+	const snapshot = withWork((db) => {
+		const root = rootOf(db, self);
+		const window = { cwd: ctx.cwd, to: at };
+		return {
+			root,
+			waits: waitsIn(db, root, window),
+			work: workIn(db, root, window),
+			requests: communicationIn(db, root, { ...window, from: at }).requests,
+		};
+	});
+	if (!snapshot) throw new Error("The runtime has no records yet");
+	const { root, waits, work, requests } = snapshot;
+	return [
+		`Organization ${root} at ${new Date(at).toISOString()}`,
+		`Open waits: ${waits.open}, on ${waits.targets.length} targets.`,
+		...waits.targets.map(
+			(target) => `- ${target.ref}: ${target.waits.length} waits; ${target.waits.map((wait) => wait.ref).join(", ")}`,
+		),
+		`Ready unowned work: ${work.ready.length}`,
+		...work.ready.map((task) => `- ${task.ref}`),
+		`Multiple-task holders: ${work.multiple.length}`,
+		...work.multiple.map((holder) => `- ${holder.person}: ${holder.tasks.join(", ")}`),
+		`Pending decisions: ${requests.reduce((n, request) => n + request.decisions.length, 0)}; escalations: ${requests.reduce((n, request) => n + request.escalations.length, 0)}`,
+		...requests.map((request) => `- ${request.person}: ${[...request.decisions, ...request.escalations].join(", ")}`),
+	].join("\n");
+}
+
 export function installWork(pi: ExtensionAPI): void {
+	pi.registerCommand("org", {
+		description: "Inspect organization waits, work and requests; fitness or expertise for detail",
+		handler: async (args, ctx) => {
+			const input = args.trim();
+			if (!input) {
+				ctx.ui.notify(organizationOverview(ctx), "info");
+				return;
+			}
+			const mode = input.split(/\s+/, 1)[0];
+			const query = input.slice(mode.length).trim();
+			if (mode === "fitness" && query) {
+				ctx.ui.notify(
+					readFitness(ctx, { since: query })
+						.content.map((part) => part.text)
+						.join("\n"),
+					"info",
+				);
+			} else if (mode === "expertise" && query) {
+				const self = ctx.sessionManager.getSessionId();
+				const address = query.replace(/^person:/, "").trim();
+				const members = organizationOf(self, true).members;
+				const byId = members.find((member) => member.id === address);
+				const byName = byId ? [] : members.filter((member) => member.name?.toLowerCase() === address.toLowerCase());
+				if (byName.length > 1) throw new Error(`More than one person is named ${address}; use the session id.`);
+				const person = byId?.id ?? byName[0]?.id;
+				const result = readExpertise(
+					ctx,
+					person || query.startsWith("person:") ? { person: person ?? address } : { area: query },
+				);
+				ctx.ui.notify(result.content.map((part) => part.text).join("\n"), "info");
+			} else {
+				ctx.ui.notify(ORG_HELP, "info");
+			}
+		},
+	});
 	pi.registerTool(
 		defineTool({
 			name: "org_communication",

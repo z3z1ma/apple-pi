@@ -156,6 +156,7 @@ try {
 		"notify-setup",
 		"notify-test",
 		"pi-sessions",
+		"org",
 		"stash",
 		"edit-prompt",
 		"inspect-tool",

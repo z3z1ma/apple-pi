@@ -8,6 +8,7 @@ import installLedger from "../../../extensions/ledger.js";
 import { fauxSession, type Reply } from "../../../tests/helpers/faux-session.js";
 import { addLedgerTask } from "../../shared/src/ledger-files.js";
 import bridge from "../src/index.js";
+import type { communicationIn, waitsIn, workIn } from "../src/inspect.js";
 import { MAIL_CUSTOM_TYPE } from "../src/mail.js";
 import { migrate } from "../src/schema.js";
 import { readValuation } from "../src/valuation.js";
@@ -661,6 +662,209 @@ test("a manager sees a wait its report recorded, grouped under what it waits on"
 	} finally {
 		await close(engineer.run);
 		await close(manager.run);
+	}
+}, 30000);
+
+test("/org shares the native organization snapshot counts and references without a model turn", async () => {
+	const manager = await person();
+	const report = await person(manager.id);
+	const notices: string[] = [];
+	try {
+		await manager.run.session.bindExtensions({ uiContext: { notify: (text: string) => notices.push(text) } as never });
+		await manager.invoke("take_task", { goal: "Review API.", title: "API review" });
+		await manager.invoke("take_task", { goal: "Review UI.", title: "UI review" });
+		const ready = await manager.invoke("take_task", { goal: "Ready work.", title: "Ready work" });
+		await manager.invoke("unassign", { person: manager.id, task: ready.id });
+		const blocked = await report.invoke("take_task", { goal: "Blocked work.", title: "Blocked work" });
+		await report.invoke("link", {
+			from: `task:${blocked.id}`,
+			to: `person:${manager.id}`,
+			relation: "requires_decision",
+		});
+		await report.invoke("escalate", { body: "Need a decision." });
+		const turns = manager.run.requests.length;
+		await manager.run.session.prompt("/org");
+		expect(manager.run.requests).toHaveLength(turns);
+		const text = notices.at(-1)!;
+		const until = text.split("\n")[0].split(" at ")[1];
+		expect(Date.parse(until)).not.toBeNaN();
+		const waits = await manager.invoke<ReturnType<typeof waitsIn>>("org_waits", { until });
+		const work = await manager.invoke<ReturnType<typeof workIn>>("org_work", { until });
+		const communication = await manager.invoke<ReturnType<typeof communicationIn>>("org_communication", {
+			since: new Date(Date.parse(until) - 3_600_000).toISOString(),
+			until,
+		});
+		expect(waits.open).toBe(1);
+		expect(work.ready).toHaveLength(1);
+		expect(work.multiple).toHaveLength(1);
+		expect(text).toContain(`Open waits: ${waits.open}, on ${waits.targets.length} targets.`);
+		expect(text).toContain(`Ready unowned work: ${work.ready.length}`);
+		expect(text).toContain(`Multiple-task holders: ${work.multiple.length}`);
+		for (const target of waits.targets) {
+			expect(text).toContain(`- ${target.ref}: ${target.waits.length} waits;`);
+			for (const wait of target.waits) expect(text).toContain(wait.ref);
+		}
+		for (const task of work.ready) expect(text).toContain(task.ref);
+		for (const holder of work.multiple) {
+			expect(text).toContain(holder.person);
+			for (const task of holder.tasks) expect(text).toContain(task);
+		}
+		expect(communication.requests).toMatchObject([
+			{ person: `person:${manager.id}`, decisions: [expect.any(String)], escalations: [expect.any(String)] },
+		]);
+		expect(text).toContain(
+			`Pending decisions: ${communication.requests.reduce((n, request) => n + request.decisions.length, 0)}; escalations: ${communication.requests.reduce((n, request) => n + request.escalations.length, 0)}`,
+		);
+		for (const request of communication.requests) {
+			expect(text).toContain(request.person);
+			for (const ref of [...request.decisions, ...request.escalations]) expect(text).toContain(ref);
+		}
+	} finally {
+		await close(report.run);
+		await close(manager.run);
+	}
+}, 40000);
+
+test("/org expertise shares area and spaced-person rendering, and preserves explicit-person errors", async () => {
+	const manager = await person();
+	const report = await person(manager.id);
+	const notices: string[] = [];
+	const errors: string[] = [];
+	try {
+		await manager.run.session.bindExtensions({
+			uiContext: { notify: (text: string) => notices.push(text), setStatus: () => {} } as never,
+			onError: (error) => errors.push(error.error),
+		});
+		report.run.session.setSessionName("Ada Example");
+		await report.invoke("read", { path: "app.ts" });
+		await vi.waitFor(() =>
+			expect(query(state.dbPath, "select name from sessions where id = ?", report.id)).toEqual([
+				{ name: "Ada Example" },
+			]),
+		);
+		await vi.waitFor(() =>
+			expect(
+				query(state.dbPath, "select 1 from messages where session_id = ? and tool = 'read'", report.id).length,
+			).toBeGreaterThan(0),
+		);
+		await manager.invoke("org_expertise", { area: "app.ts" });
+		const area = manager.run.session.messages.filter((message) => message.role === "toolResult").at(-1)!;
+		await manager.run.session.prompt("/org expertise app.ts");
+		expect(notices.at(-1)).toBe((area.content[0] as { text: string }).text);
+		expect(notices.at(-1)).toContain(`person:${report.id}`);
+		await manager.invoke("org_expertise", { person: report.id });
+		const personView = manager.run.session.messages.filter((message) => message.role === "toolResult").at(-1)!;
+		for (const argument of ["Ada Example", report.id, "person:Ada Example"]) {
+			const count = notices.length;
+			await manager.run.session.prompt(`/org expertise ${argument}`);
+			expect(notices).toHaveLength(count + 1);
+			expect(notices.at(-1)).toBe((personView.content[0] as { text: string }).text);
+		}
+		manager.run.session.setSessionName("Root Example");
+		await manager.invoke("read", { path: "app.ts" });
+		await vi.waitFor(() =>
+			expect(query(state.dbPath, "select name from sessions where id = ?", manager.id)).toEqual([
+				{ name: "Root Example" },
+			]),
+		);
+		await manager.invoke("org_expertise", { person: manager.id });
+		const selfView = manager.run.session.messages.filter((message) => message.role === "toolResult").at(-1)!;
+		for (const argument of ["Root Example", manager.id, "person:Root Example", `person:${manager.id}`]) {
+			const count = notices.length;
+			await manager.run.session.prompt(`/org expertise ${argument}`);
+			expect(notices).toHaveLength(count + 1);
+			expect(notices.at(-1)).toBe((selfView.content[0] as { text: string }).text);
+		}
+		expect(errors).toEqual([]);
+		await manager.run.session.prompt("/org expertise person:Unknown Person");
+		expect(errors.at(-1)).toMatch(/Nobody in your organization is named Unknown Person/);
+	} finally {
+		await close(report.run);
+		await close(manager.run);
+	}
+}, 40000);
+
+test("/org expertise rejects duplicate names including the caller, while IDs select native views", async () => {
+	const manager = await person();
+	const first = await person(manager.id);
+	const second = await person(manager.id);
+	const notices: string[] = [];
+	const errors: string[] = [];
+	try {
+		await manager.run.session.bindExtensions({
+			uiContext: { notify: (text: string) => notices.push(text), setStatus: () => {} } as never,
+			onError: (error) => errors.push(error.error),
+		});
+		first.run.session.setSessionName("Shared Name");
+		second.run.session.setSessionName("Shared Name");
+		await vi.waitFor(() =>
+			expect(query(state.dbPath, "select id from sessions where name = 'Shared Name' order by id")).toEqual(
+				[first.id, second.id].sort().map((id) => ({ id })),
+			),
+		);
+		for (const includeCaller of [false, true]) {
+			if (includeCaller) {
+				second.run.session.setSessionName("Other Name");
+				manager.run.session.setSessionName("Shared Name");
+				await vi.waitFor(() =>
+					expect(query(state.dbPath, "select id from sessions where name = 'Shared Name' order by id")).toEqual(
+						[first.id, manager.id].sort().map((id) => ({ id })),
+					),
+				);
+			}
+			for (const argument of ["Shared Name", "person:Shared Name"]) {
+				const count = notices.length;
+				const failures = errors.length;
+				await manager.run.session.prompt(`/org expertise ${argument}`);
+				expect(errors).toHaveLength(failures + 1);
+				expect(errors.at(-1)).toBe("More than one person is named Shared Name; use the session id.");
+				expect(notices).toHaveLength(count);
+			}
+			for (const id of includeCaller ? [manager.id, first.id] : [first.id, second.id]) {
+				await manager.invoke("org_expertise", { person: id });
+				const native = manager.run.session.messages.filter((message) => message.role === "toolResult").at(-1)!;
+				const count = notices.length;
+				await manager.run.session.prompt(`/org expertise person:${id}`);
+				expect(notices).toHaveLength(count + 1);
+				expect(notices.at(-1)).toBe((native.content[0] as { text: string }).text);
+			}
+		}
+	} finally {
+		await close(second.run);
+		await close(first.run);
+		await close(manager.run);
+	}
+}, 40000);
+
+test("/org fitness reuses the native breakdown and incomplete or unknown forms show help", async () => {
+	const who = await person();
+	const notices: string[] = [];
+	try {
+		await who.run.session.bindExtensions({ uiContext: { notify: (text: string) => notices.push(text) } as never });
+		const task = await who.invoke("take_task", {
+			goal: "Deliver the priced result.",
+			title: "Priced result",
+			value: 25,
+		});
+		writeFileSync(join(task.bundle, "retrospective.md"), "# Retrospective\n\nDelivered the priced result.\n");
+		await who.invoke("finish_task", { outcome: "Delivered the priced result." });
+		await who.run.session.prompt("/org fitness 1h");
+		const text = notices.at(-1)!;
+		const [, since, until] = text.split("\n")[0].match(/from (\S+) to (\S+)\./)!;
+		await who.invoke("org_fitness", { since, until });
+		const native = who.run.session.messages.filter((message) => message.role === "toolResult").at(-1)!;
+		expect(native.details).toMatchObject({ value: 25 });
+		expect(text).toBe((native.content[0] as { text: string }).text);
+		for (const args of ["unknown", "fitness", "expertise"]) {
+			const count = notices.length;
+			await who.run.session.prompt(`/org ${args}`);
+			expect(notices).toHaveLength(count + 1);
+			expect(notices.at(-1)).toContain("/org fitness <since>");
+			expect(notices.at(-1)).toContain("/org expertise <area or person>");
+			expect(notices.at(-1)).toContain("person:<name-or-id>");
+		}
+	} finally {
+		await close(who.run);
 	}
 }, 30000);
 

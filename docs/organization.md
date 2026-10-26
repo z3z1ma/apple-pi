@@ -78,6 +78,14 @@ Every root session has these tools. Each sends a command to the runtime or reads
 | `predictions` (no arguments) | Recorded scenarios targeting the caller's current root exactly: pending or expected/observed fitness with calibration error, or an explicit reason it is unscored. |
 | `link` (`from`, `to`, `relation`, `reason?`, `data?`, `inferred?`, `confidence?`; or `id`, `resolution?`) | Records a relationship between two things (a task waits on another or on a decision, produced a result, verifies, supersedes, fixes, or finds a problem in other work), or resolves one by id. Relations come from one vocabulary file; see [session-state](session-state.md#what-it-records). |
 
+## Operator command
+
+In a root Pi session, `/org` shows a compact organization snapshot: open waits grouped by target, ready work without an owner, people holding several tasks, and decisions or explicit escalations pending for each person. It uses the same readers and references as `org_waits`, `org_work` and `org_communication`, at one captured cutoff. Pending requests are cutoff snapshots, so this overview does not replay historical message traffic or read goal files. Counts are recorded facts, not recommendations.
+
+- `/org fitness <since>` renders the same realized dollar breakdown as `org_fitness`, for example `/org fitness 8h` or a start date. Fitness remains optional, with the same coverage and measurement limits.
+- `/org expertise <area or person>` renders the same read/edit experience as `org_expertise`. A unique exact organization name (including spaces and the caller's own name) or session ID selects a person; otherwise the full trimmed argument is an area. Duplicate names, including a collision with the caller, require a session ID. `person:<name-or-id>` selects a person explicitly and preserves unknown-person errors. For a filesystem area that collides with a person's name, use `./<path>` or an absolute path.
+- Unknown or incomplete forms show these choices. Commands display their results directly; they do not start a model turn or change organization state.
+
 ## Manager tools
 
 A root, and a person whose role manages, also has ten manager tools:
