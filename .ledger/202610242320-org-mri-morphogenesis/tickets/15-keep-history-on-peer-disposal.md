@@ -1,4 +1,4 @@
-# 12: Keep what history needs when temporary peers are discarded
+# 15: Keep what history needs when temporary peers are discarded
 
 Part of the approved spec [../spec.md](../spec.md); its Terms table defines window and the other words used here. Decided by the operator on 2026-10-26, after review of Compute counted by membership over time showed that fitness leaves out what `pi_exec` programs spend.
 
@@ -6,7 +6,7 @@ Part of the approved spec [../spec.md](../spec.md); its Terms table defines wind
 
 Disposal of a temporary peer must also keep the facts that past windows read: its assignments on tasks that survive the disposal end (they are not deleted), so a lasting task's delay keeps its in-progress spans.
 
-**Blocked by:** 05 (Compute counted by membership over time), 06 (Delay by state, open waits, and operator interruptions).
+**Blocked by:** 11 (Fitness as one tool among the others).
 
 **Status:** ready-for-agent
 

@@ -12,7 +12,7 @@ Done when no unresolved in-scope decision ticket remains, Not yet specified is e
 
 ## Current State
 
-Spec and eleven tickets approved by the operator on 2026-10-26, with four clarifications applied. Confirmed test seams: the workplace (faux sessions against a spawned runtime) and fitness without a live runtime (the evaluator over events, both adapters over a temporary database and hand-built scenarios). Frontier: Record when tasks open and close; Value and cost of delay on tasks. Next step: `/skill:implement`.
+Tickets 01 to 06 are built and committed. The operator redirected the rest on 2026-10-26 (`direction.md` and two sign-offs): four specific inspection tools first (07 to 10, expertise first), then fitness completed as `org_fitness`, one tool among the others (11 to 15), then `/org` (16) and the charter (17), which teaches reshaping whenever prudent. Next: ticket 07, `org_expertise`.
 
 ## Outcome
 
