@@ -10,7 +10,7 @@ The operator redirected optimization machinery into an observability substrate: 
 
 The most consequential repairs were at boundaries: historical ownership versus current membership/audience, immutable economic events versus later explanations, lost measurement qualifications, every admission producer for durable identity, and post-SQL filesystem cleanup ownership. Different reviewer lenses supplied executed counterexamples rather than repeated narrow happy paths.
 
-Independent working-tree checks, review copies, committed blobs and live deployment were kept separate. Authorized rollout moved the actual shared runtime from schema27 to29 after a consistent private backup and guarded restart. The operator refreshed the root session; new native tools/guidance and a successful live org_work call verified the refreshed surface. The separate composition failure is not an organization-feature repair.
+Independent working-tree checks, review copies, committed blobs and live deployment were kept separate. Authorized rollout moved the actual shared runtime from schema 27 to 29 after a consistent private backup and guarded restart. The operator refreshed the root session; new native tools/guidance and a successful live org_work call verified the refreshed surface. The separate composition failure is not an organization-feature repair.
 
 ## Learnings
 

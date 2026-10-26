@@ -1,4 +1,4 @@
-# Remaining integration seams (16/17)
+# Delivered integration seams and proof boundaries (16/17)
 
 These notes record the implemented integration seams and their invariants, not new product decisions or an outstanding coding plan. Tickets 14–17 are committed (d0a0f6dc, ebb54f5b, 7bdb93c9, 04f3a320). The operator entrypoint, prompt guidance and scripted demonstration are complete; the [authorized backend rollout](rollout.md) verified live schema 29. The operator-facing organization-root session was reloaded, and its refreshed native `org_work` call succeeded. All source and rollout steps are complete; the separate pi_exec pre-execution failure remains disclosed rather than repaired here.
 

@@ -1,6 +1,6 @@
 # Teach managers to adapt from evidence, not a compulsory objective
 
-## Decision requested
+## Completed approval record
 
 Approved and committed as 04f3a320 (16/16 hunks seen): native organization/manager guidance, the scripted manager demonstration, and matching documentation. This is the last source increment in tickets 01–17. Code approval does not restart the shared runtime, migrate the live database or refresh existing sessions; those remain separate rollout steps.
 
