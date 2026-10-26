@@ -293,6 +293,10 @@ const MIGRATIONS = [
 	 from thread_participants;
 	 insert into events (at, source, session_id, type, data)
 	 values (cast(unixepoch('subsec') * 1000 as integer), 'migration', 'runtime', 'thread_participation_tracking', '{}');`,
+	`insert into events (at, source, session_id, type, data)
+	 select cast(unixepoch('subsec') * 1000 as integer), 'migration', p.session_id, 'program_peer_observed', json_object('caller', p.created_by)
+	 from program_peers p
+	 where not exists (select 1 from events e where e.session_id = p.session_id and e.type in ('program_peer_created', 'program_peer_observed'));`,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

@@ -44,6 +44,9 @@ Verify: components/session-state/tests/history.test.ts
 
 ## symbol:Runtime.hello
 
+Durable temporary identity participates in hello admission even when the incoming bridge has no program flags. A retained transcript preserves UUID while ordinary resume can lose its program environment; only valid live scope/owner/parent matching permits a temporary hello. Rejection sends close before incarnation/person/facts writes. Valid first program hello and same-process reconnect retain their existing behavior, as do ordinary new IDs. This is the same lifetime no-reopen boundary as startSession, not a new ACL or hostile-socket policy.
+Verify: components/session-state/tests/peer-history.test.ts
+
 The hello's `reportsTo` is applied only while the record's `reports_to` is null; afterwards the record wins, and a bridge whose flag disagrees is sent a `transfer` command with its recorded manager.
 Why: the flag is what the session was started with, and `move` changes the manager after that; a reconnect or hand restart carrying the old flag would otherwise undo the move, and the bridge addresses its close notice from its own copy of the manager.
 A same-process reconnect keeps its incarnation's original tmux binding. A test that adds a pane needs a new incarnation, rather than a second hello from the same PID and start time.
@@ -92,6 +95,10 @@ Coupled: components/session-state/src/work.ts, apps/agent-world/src/backend/work
 Verify: apps/agent-world/tests/inn.test.ts, components/session-state/tests/work.test.ts
 
 ## symbol:Runtime.startSession
+
+A temporary launch ownership row, immutable `program_peer_created` caller fact and new-identity zero `cost_changed` baseline commit atomically before provisional work/person/process creation. Existing or legacy identities never get invented zero baselines. The shared cannot-reopen guard uses durable temporary identity, not only live ownership rows; otherwise explicit session-id reuse after disposal would turn a lifetime temporary ID into an incorrectly attributed lasting hire or another caller's peer.
+Why: first positive hello otherwise treats a brand-new peer's real spend as old transcript cost; a failed identity/baseline write must not leave partial launch ownership. Lasting identity and caller cannot be overwritten by reusing a discarded ID.
+Verify: components/session-state/tests/peer-history.test.ts
 
 A new hire's provisional person, goal bundle, assignment, task thread, team-history snapshot, and outbox commit before opening its process. The history uses the existing channel reader, with no separate summary or invented message-count cap. Pi starts with a pointer to its focused task; startup mail carries the file itself. Reopening keeps the stored role and work, while a supplied new goal adds an assignment.
 Why: passing only a prompt leaves the first turn without an explicit job; failing to preserve the role changes the person's mind on rehire.

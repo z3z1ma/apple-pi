@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import { type Link, WAITS } from "./links.js";
+import { temporaryCallers } from "./program-peers.js";
 import { readValuation } from "./valuation.js";
 
 const HOUR = 3_600_000;
@@ -72,19 +73,20 @@ interface TaskRow {
 function historyEvents(db: DatabaseSync, organization: string, from: number, until: number) {
 	// A task only temporary pi_exec peers hold is a step inside their caller's work, the same set their disposal deletes.
 	const ownership = taskOwnership(db, organization);
-	const tasks = db
-		.prepare(
-			`select id, bundle, opened_at, archived_at, close_status from work_tasks t
-			where opened_at is not null and not (
-				ephemeral = 1
-				and exists (select 1 from assignments a where a.task_id = t.id)
-				and not exists (
-					select 1 from assignments a where a.task_id = t.id
-					and a.person not in (select session_id from program_peers)
-				)
-			)`,
-		)
-		.all() as unknown as TaskRow[];
+	const temporary = temporaryCallers(db);
+	const tasks = (
+		db
+			.prepare(
+				"select id, bundle, opened_at, archived_at, close_status, ephemeral from work_tasks where opened_at is not null",
+			)
+			.all() as unknown as (TaskRow & { ephemeral: number })[]
+	).filter((task) => {
+		if (!task.ephemeral) return true;
+		const assignees = db.prepare("select person from assignments where task_id = ?").all(task.id) as {
+			person: string;
+		}[];
+		return !assignees.length || assignees.some(({ person }) => !temporary.has(person));
+	});
 	const events: EconomicEvent[] = [];
 	const relevant = tasks.flatMap((task) => {
 		const closed = task.archived_at ?? until;
@@ -150,14 +152,23 @@ interface Recorded {
  * Who belonged to the organization, replayed from the runtime's events in the order it recorded them (`seq`): a hello
  * seeding a manager (`reports_to_changed`), a move (`transferred`), a departure (`retired`), and a rehire
  * (`rehired`). A person is a member while its manager chain reaches the organization and it has not been let go; a
- * temporary pi_exec peer never is, because disposal deletes it. Before its first recorded change a person had the manager
+ * temporary pi_exec peer never is, even after cleanup. Before its first recorded change a person had the manager
  * that change replaced, and a person with none has its current manager throughout. So a later join or move, even in the
  * same millisecond, never rewrites who belonged earlier.
  */
 export function membership(db: DatabaseSync, organization: string) {
-	const peers = new Set(
-		(db.prepare("select session_id from program_peers").all() as { session_id: string }[]).map((r) => r.session_id),
-	);
+	const peers = temporaryCallers(db);
+	const accountingPerson = (person: string): string | undefined => {
+		const seen = new Set<string>();
+		while (peers.has(person)) {
+			if (seen.has(person)) return undefined;
+			seen.add(person);
+			const caller = peers.get(person);
+			if (!caller) return undefined;
+			person = caller;
+		}
+		return person;
+	};
 	const stream = db
 		.prepare(
 			"select session_id, at, type, data from events where type in ('reports_to_changed', 'transferred', 'retired', 'rehired', 'cost_changed', 'prompt_opened') order by seq",
@@ -168,11 +179,12 @@ export function membership(db: DatabaseSync, organization: string) {
 			(row) => [row.id, row.reports_to],
 		),
 	);
+	for (const [peer, caller] of peers) if (caller === null || !seeds.has(peer)) seeds.set(peer, caller);
 	const seeded = new Set<string>();
 	for (const row of stream)
 		if ((row.type === "reports_to_changed" || row.type === "transferred") && !seeded.has(row.session_id)) {
 			seeded.add(row.session_id);
-			seeds.set(row.session_id, JSON.parse(row.data ?? "{}").from ?? null);
+			if (peers.get(row.session_id) !== null) seeds.set(row.session_id, JSON.parse(row.data ?? "{}").from ?? null);
 		}
 	const structural = stream.filter((row) => row.type !== "cost_changed" && row.type !== "prompt_opened");
 	/** Replays every event recorded at or before `until`, calling `visit` after each with membership at that point. */
@@ -203,6 +215,7 @@ export function membership(db: DatabaseSync, organization: string) {
 	};
 	return {
 		replay,
+		accountingPerson,
 		memberAt: (person: string, at: number) => replay(at).isMember(person),
 		/** The manager a person had at a moment, as recorded. */
 		managerAt: (person: string, at: number) => replay(at).managerOf(person),
@@ -246,15 +259,18 @@ export function taskOwnership(db: DatabaseSync, organization: string) {
 }
 
 /**
- * Each member's spend at the moment it was recorded. A cost change marked `hello` is spend the transcript already held
+ * Each lasting member's spend, including its temporary creation descendants, at the moment it was recorded.
+ * A cost change marked `hello` is spend the transcript already held
  * before any cost was recorded for the session: a baseline.
  */
 function computeEvents(db: DatabaseSync, organization: string): EconomicEvent[] {
 	const events: EconomicEvent[] = [];
-	membership(db, organization).replay(Number.POSITIVE_INFINITY, (row, data, isMember) => {
-		if (row.type !== "cost_changed" || data.hello || !isMember(row.session_id)) return;
+	const members = membership(db, organization);
+	members.replay(Number.POSITIVE_INFINITY, (row, data, isMember) => {
+		const person = members.accountingPerson(row.session_id);
+		if (row.type !== "cost_changed" || data.hello || !person || !isMember(person)) return;
 		const amount = (data.to as number) - (data.from as number);
-		if (amount > 0) events.push({ kind: "compute", at: row.at, amount, source: `person:${row.session_id}` });
+		if (amount > 0) events.push({ kind: "compute", at: row.at, amount, source: `person:${person}` });
 	});
 	return events;
 }
@@ -294,10 +310,11 @@ export function openWaits(db: DatabaseSync, organization: string, at: number, el
  * members when they did it.
  */
 function interruptions(db: DatabaseSync, organization: string, from: number, to: number): number {
-	const { replay, memberAt } = membership(db, organization);
+	const { replay, memberAt, accountingPerson } = membership(db, organization);
 	let questions = 0;
 	replay(to, (row, _data, isMember) => {
-		if (row.type === "prompt_opened" && row.at >= from && row.at < to && isMember(row.session_id)) questions++;
+		const person = accountingPerson(row.session_id);
+		if (row.type === "prompt_opened" && row.at >= from && row.at < to && person && isMember(person)) questions++;
 	});
 	const mail = (
 		db
@@ -309,7 +326,10 @@ function interruptions(db: DatabaseSync, organization: string, from: number, to:
 				)`,
 			)
 			.all(from, to) as { sender: string; at: number }[]
-	).filter((row) => memberAt(row.sender, row.at)).length;
+	).filter((row) => {
+		const person = accountingPerson(row.sender);
+		return person && memberAt(person, row.at);
+	}).length;
 	return questions + mail;
 }
 
@@ -559,7 +579,7 @@ export function realizedFitness(
 		interruptions: interruptions(db, organization, from, to),
 		// The operator's time is part of the model, but nothing measures it honestly yet; waiting for him is already delay.
 		attention: { pricePerMinute: 1, measured: false },
-		// Disposal deletes a temporary peer, so what it spent and asked cannot be charged to its caller afterwards.
-		excludes: "the spend, questions, and operator mail of temporary pi_exec peers",
+		excludes:
+			"temporary pi_exec peers with unknown legacy callers or ancestry, and assignment spans already deleted before retention",
 	};
 }

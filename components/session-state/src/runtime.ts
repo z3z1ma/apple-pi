@@ -58,7 +58,7 @@ import { type AttentionRow, jumpTarget, statusSummary } from "./attention.js";
 import { syncChannels } from "./channels.js";
 import { RETRY_MS, sendCommand } from "./client.js";
 import { recordLink, resolveLink } from "./links.js";
-import { discardProgramPeople, programDescendants } from "./program-peers.js";
+import { discardProgramPeople, programDescendants, temporaryCallers } from "./program-peers.js";
 import { migrate } from "./schema.js";
 import { markRead, messagesOf, nameOf, OPERATOR, postToThread, type ThreadPost, threadOf } from "./threads.js";
 import {
@@ -425,7 +425,7 @@ export class Runtime {
 		const recorded = db
 			.prepare("select program_id, created_by as program_parent from program_peers where session_id = ?")
 			.get(session.id) as { program_id: string; program_parent: string } | undefined;
-		if (recorded || session.program) {
+		if (recorded || session.program || temporaryCallers(db).has(session.id)) {
 			const owner = session.program && this.programs.get(session.program.id)?.program;
 			if (
 				!session.program ||
@@ -1438,8 +1438,7 @@ export class Runtime {
 		if (live) return fail("already running");
 		if (this.starting.has(sessionId)) return fail("already starting");
 		if (program?.discarded.has(sessionId)) return fail("That peer was discarded; create a new handle");
-		if (db.prepare("select 1 from program_peers where session_id = ?").get(sessionId))
-			return fail("Program peers cannot be reopened; create a new handle");
+		if (temporaryCallers(db).has(sessionId)) return fail("Program peers cannot be reopened; create a new handle");
 		if (program) {
 			if (row) return fail("A program must create a new peer, not take ownership of an existing person");
 			if (!command.role || !command.goal?.text.trim()) return fail("A program peer needs a role and a goal");
@@ -1486,15 +1485,19 @@ export class Runtime {
 		if (programId) {
 			if (!command.role || !command.goal?.text.trim()) return fail("A program peer needs a role and a goal");
 			this.programs.get(programId)!.program!.created.add(sessionId);
-			db.prepare(
-				"insert into program_peers (session_id, program_id, created_by, task_id, socket) values (?, ?, ?, ?, ?)",
-			).run(
-				sessionId,
-				programId,
-				programParent!,
-				`work-${commandId}`,
-				command.tmux ? canonicalSocket(command.tmux.socket) : null,
-			);
+			this.atomically(() => {
+				db.prepare(
+					"insert into program_peers (session_id, program_id, created_by, task_id, socket) values (?, ?, ?, ?, ?)",
+				).run(
+					sessionId,
+					programId,
+					programParent!,
+					`work-${commandId}`,
+					command.tmux ? canonicalSocket(command.tmux.socket) : null,
+				);
+				this.event("runtime", sessionId, null, "program_peer_created", { caller: programParent });
+				this.event("runtime", sessionId, null, "cost_changed", { from: 0, to: 0, initial: true });
+			});
 		}
 		if (row?.retired_at) this.event("runtime", sessionId, null, "rehired", {});
 		if (row) db.prepare("update sessions set retired_at = null, retired_reason = null where id = ?").run(sessionId);

@@ -12,6 +12,25 @@ interface Person {
 	program_parent: string | null;
 }
 
+/** Temporary identity survives person/launch cleanup; a discarded legacy caller may be unknown. */
+export function temporaryCallers(db: DatabaseSync): Map<string, string | null> {
+	const callers = new Map<string, string | null>();
+	for (const row of db
+		.prepare(
+			"select session_id, type, data from events where type in ('program_peer_created', 'program_peer_observed', 'person_discarded') order by seq",
+		)
+		.all() as { session_id: string; type: string; data: string | null }[]) {
+		const caller = row.type === "person_discarded" ? null : JSON.parse(row.data ?? "{}").caller;
+		if (!callers.has(row.session_id)) callers.set(row.session_id, typeof caller === "string" ? caller : null);
+	}
+	for (const row of db.prepare("select session_id, created_by from program_peers").all() as {
+		session_id: string;
+		created_by: string;
+	}[])
+		if (!callers.has(row.session_id)) callers.set(row.session_id, row.created_by);
+	return callers;
+}
+
 /** Include temporary people created by these people, even if someone moved them to another team. */
 export function programDescendants(db: DatabaseSync, roots: Iterable<string>): Set<string> {
 	const people = db.prepare("select session_id as id, created_by as program_parent from program_peers").all() as Pick<
@@ -54,6 +73,7 @@ export function discardProgramPeople(
 		}
 		return person && !gone.has(person.id) ? person.id : undefined;
 	};
+	const temporary = temporaryCallers(db);
 	const transfers: { person: string; manager: string }[] = [];
 	db.exec("begin");
 	try {
@@ -67,7 +87,12 @@ export function discardProgramPeople(
 			db.prepare(
 				"insert into manager_changes (session_id, from_manager, to_manager, by, at) values (?, ?, ?, ?, ?)",
 			).run(person.id, person.reports_to, manager, "runtime", now);
-			changed.run(now, "facts", JSON.stringify({ reportsTo: manager }), person.id);
+			changed.run(
+				now,
+				"transferred",
+				JSON.stringify({ from: person.reports_to, to: manager, by: "runtime" }),
+				person.id,
+			);
 			transfers.push({ person: person.id, manager });
 		}
 		const tasks = db.prepare("select id, bundle, ephemeral, thread from work_tasks").all() as {
@@ -80,11 +105,16 @@ export function discardProgramPeople(
 			const assignees = db.prepare("select distinct person from assignments where task_id = ?").all(task.id) as {
 				person: string;
 			}[];
-			if (!assignees.some(({ person }) => gone.has(person))) continue;
-			if (task.ephemeral && assignees.every(({ person }) => gone.has(person))) {
+			const departing = assignees.find(({ person }) => gone.has(person));
+			if (!departing) continue;
+			if (
+				task.ephemeral &&
+				assignees.every(({ person }) => temporary.has(person)) &&
+				assignees.every(({ person }) => gone.has(person) || !byId.has(person))
+			) {
 				db.prepare(
 					"insert into work_changes (command_id, task_id, person, action, previous_bundle) values (?, ?, ?, 'discard', ?)",
-				).run(randomUUID(), task.id, assignees[0]!.person, task.bundle);
+				).run(randomUUID(), task.id, departing.person, task.bundle);
 				for (const table of ["assignments", "work_focus", "work_changes"]) {
 					if (table === "work_changes")
 						db.prepare("delete from work_changes where task_id = ? and action != 'discard'").run(task.id);
@@ -111,6 +141,9 @@ export function discardProgramPeople(
 				).run(randomUUID(), peer.task_id, peer.session_id, bundle);
 		}
 		for (const id of gone) {
+			db.prepare(
+				"update assignments set ended_at = ?, end_reason = 'discarded' where person = ? and ended_at is null",
+			).run(now, id);
 			changed.run(now, "person_discarded", "{}", id);
 			const manager = replacement(id);
 			const memberships = db
@@ -126,7 +159,6 @@ export function discardProgramPeople(
 				"update threads set closed_at = ? where created_by = ? and kind in ('meeting', 'channel') and closed_at is null",
 			).run(now, id);
 			for (const [table, column] of [
-				["assignments", "person"],
 				["work_focus", "person"],
 				["messages", "session_id"],
 				["session_tasks", "session_id"],

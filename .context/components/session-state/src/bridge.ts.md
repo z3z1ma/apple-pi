@@ -1,8 +1,8 @@
 ## file
 
-A program-created person's hello carries the launch ownership identifiers. The runtime requires the recorded owner and creation parent to match and rejects late hellos after disposal, before they can recreate a person. These peers skip routine close mail: their caller consumes the correlated result, while ordinary mail and task threads retain their normal behavior.
+A program-created person's hello carries launch ownership identifiers only while the program environment variables are present. Native transcript resume retains its UUID but can lose that environment and emit an ordinary hello. The runtime therefore checks durable temporary identity independently of the flags, requires valid live scope/owner/creation-parent matching, and rejects late or unflagged disposed identities before person/incarnation/facts writes. Retaining the transcript is not permission to reopen its temporary identity as a lasting root. These peers skip routine close mail: their caller consumes the correlated result, while ordinary mail and task threads retain their normal behavior.
 Coupled: components/session-state/src/runtime.ts, components/session-state/src/program-client.ts
-Verify: components/session-state/tests/program-peers.test.ts, components/session-state/tests/peer-turns.test.ts
+Verify: components/session-state/tests/peer-history.test.ts, components/session-state/tests/program-peers.test.ts, components/session-state/tests/peer-turns.test.ts
 
 ## symbol:StateLink.close
 
