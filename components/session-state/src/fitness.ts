@@ -348,7 +348,7 @@ interface Finding {
 }
 
 /** Link assertions are evidence, not verified facts. Explicit ownership wins over endpoint or recorder fallbacks. */
-function linkOwnership(db: DatabaseSync, organization: string) {
+export function linkOwnership(db: DatabaseSync, organization: string) {
 	const { managerAt, memberAt } = membership(db, organization);
 	const { owns } = taskOwnership(db, organization);
 	return (link: Link, at: number) => {

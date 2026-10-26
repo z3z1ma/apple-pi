@@ -277,6 +277,7 @@ try {
 				extension.tools.has("promote_task") &&
 				extension.tools.has("link") &&
 				extension.tools.has("org_fitness") &&
+				extension.tools.has("predictions") &&
 				!extension.tools.has("fitness") &&
 				extension.tools.has("org_expertise") &&
 				extension.tools.has("org_waits") &&
@@ -297,6 +298,13 @@ try {
 				fitnessTool.definition.description.includes(name),
 			),
 		"org_fitness must teach optional economic comparison alongside inspection",
+	);
+	assert(
+		fitnessTool.definition.parameters.type === "object" &&
+			fitnessTool.definition.parameters.properties.scenarios &&
+			fitnessTool.definition.parameters.properties.since &&
+			!fitnessTool.definition.parameters.required?.includes("since"),
+		"org_fitness must expose scenario/window alternatives as root object properties",
 	);
 
 	const searchBranchesTool = result.extensions

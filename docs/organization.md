@@ -74,7 +74,8 @@ Every root session has these tools. Each sends a command to the runtime or reads
 | `org_communication` (`since`, `until?`, and one of `subtree?`, `person?`) | Message counts for person pairs and teams, busiest thread references, and open decisions/explicit escalations awaiting each person. Each group message counts once per other participant in its historical audience; counts do not prove delivery, reading, or waste. Join/leave facts preserve audiences across team moves without retaining access. The result reports when complete tracking began; earlier departed participants cannot be recovered. Historical membership and managers apply at message time. Requests are snapshots at the cutoff. Legacy subject-only escalations are unclassified. |
 | `org_work` (`since?`, `until?`, and one of `subtree?`, `person?`, `task?`) | Open work classified once: waiting if a `blocks` or `requires_decision` link from the task is open; otherwise in progress if assigned, or ready if unassigned. Shows hours since opening, holders (assigned people), and people holding several tasks. `until` selects the snapshot time, now by default; `since` also lists tasks opened and closed (`done` or `cancelled`) in that window. Read-only facts with references, not proof of active execution. |
 | `org_waits` (`since?`, `until?`, and one of `subtree?`, `person?`, `task?`) | What blocks what: the open `blocks` and `requires_decision` links, grouped by what they wait on with the most waited-on first, each with waiter, reason, age, who recorded it, and whether it crosses teams (neither person manages the other and their managers differ). With `since`, also the waits resolved in that window. Facts with references, never a verdict. |
-| `org_fitness` (`since`, `until?`, `subtree?`) | Optional economic comparison beside the four inspection tools, not a mandatory objective: total and rate per hour, contributions and unvalued coverage. See [Fitness](#fitness). |
+| `org_fitness` (`since`, `until?`, `subtree?`; or `scenarios`) | Optional economic comparison beside the four inspection tools: realized window or expected scenario outcomes through the same evaluator. Choose exactly one mode. See [Fitness](#fitness). |
+| `predictions` (no arguments) | Recorded scenarios targeting the caller's current root exactly: pending or expected/observed fitness with calibration error, or an explicit reason it is unscored. |
 | `link` (`from`, `to`, `relation`, `reason?`, `data?`, `inferred?`, `confidence?`; or `id`, `resolution?`) | Records a relationship between two things (a task waits on another or on a decision, produced a result, verifies, supersedes, fixes, or finds a problem in other work), or resolves one by id. Relations come from one vocabulary file; see [session-state](session-state.md#what-it-records). |
 
 ## Manager tools
@@ -136,6 +137,43 @@ Only a root or a managing role can `assign` and `unassign`, and only inside its 
 - There is no score per person or team; narrowing to a subtree only filters the contributions that explain the whole.
 
 The value and cost of delay come from the task's `task.md` header (`Value: $50 (estimated by Name)`, `Cost of delay: $5/hour`); see [session-state](session-state.md#tasks-and-assignments). The design and the rest of the plan are in the ledger task `.ledger/202610242320-org-mri-morphogenesis/` (`spec.md`). Fitness is only as trustworthy as the values people give their work.
+
+### Scenarios and predictions
+
+Scenarios are an optional forecast, not a prerequisite for changing an organization. Call `org_fitness` with `scenarios` instead of window arguments (`since`, `until`, `subtree`). The adapter emits the same economic events as history and uses the same pure evaluator U; expected fitness is the probability-weighted sum of outcome U values. The manager supplies forecasts and the starting premise. The tool neither optimizes organizations nor certifies that the premise matches live work.
+
+```json
+{
+  "name": "One builder",
+  "decisionAt": "recording",
+  "horizonMs": 7200000,
+  "organization": "One builder, no reviewer",
+  "opportunities": [
+    { "id": "change", "taskId": "work-existing-id", "value": 300, "costOfDelayPerHour": 0 }
+  ],
+  "start": [],
+  "outcomes": [
+    {
+      "probability": 1,
+      "tasks": [{ "opportunity": "change", "openedMs": 0, "closedMs": 3600000, "status": "done" }],
+      "compute": [{ "atMs": 0, "dollars": 10 }],
+      "impacts": []
+    }
+  ],
+  "evidence": ["link:optional-evidence"]
+}
+```
+
+- `decisionAt` is an absolute epoch-millisecond origin or `"recording"`. All history/event times are millisecond offsets from that origin; `horizonMs` is positive and must produce a finite end strictly after its bound origin in JavaScript's numeric representation, both in preview and at recording. A positive offset that rounds back to the origin is refused; there is no fixed minimum horizon. A preview resolves every relative origin against one captured now. Recording later binds independently to the immutable link creation time; the preview is not a promise of that later timestamp.
+- Opportunities declare unique IDs, optional unique exact runtime task identities, and nonnegative value and hourly delay. Anticipated work can omit `taskId`. Each history pairs `closedMs` with `status` (`done` or `cancelled`), closing no earlier than opening. Start rows open and close at or before zero. Every outcome contains a complete history of every initial obligation, preserving opening and any already-closed state; initial open work can close at or after zero. Other opportunities may be pursued at or after zero or left unselected.
+- Outcomes are nonempty, with finite probabilities in `[0,1]` summing to 1 (machine-roundoff allowance only, without renormalization). All numbers are finite; compute is nonnegative and impacts are signed. U keeps its half-open window: a close at zero earns value once, a negative close is outside, and a close at the horizon earns no value in that window. Delay is clipped by overlap. The adapter invents no assignment/wait state and omits the unavailable delay-state breakdown from outcome totals and contributions.
+- Comparison requires the same resolved decision point, horizon, opportunity IDs/task identities, numeric valuations and initial histories. Array ordering does not matter; IDs use exact string identity/order rather than locale collation. Assumed organization text, outcomes, names and evidence may differ. A difference is named rather than silently comparing unlike premises.
+
+To record a prediction, use `link` from the message stating the proposed change to `organization:<root-id>` with `relation: "predicts"` and `data: {"scenario": <the scenario>}`. Record before acting. The generic link stores the data unchanged; there is no separate binding store. Keep hypothetical impacts inside the scenario, separate from top-level incurred `data.impact` assertions.
+
+`predictions` reads links targeting the current root identity exactly, with existing historical-origin admission. It does not aggregate a former root's forecasts after a merge. Each forecast observes its retained target identity over `[link.created_at, link.created_at + horizonMs)`, never a substituted larger current root. Before the horizon ends it is pending and computes no future observed fitness; at the exact endpoint it can show expected and observed totals and forecast error (observed minus expected). That error measures calibration, not the causal effect of a mutation. Observations retain coverage, incompleteness, known exclusions and the unmeasured attention term. An incomplete observed valuation suppresses numerical error as `observed fitness incomplete`, while preserving the measured total; static exclusions alone do not make every forecast unscorable. Nonfinite actual totals are explicitly unavailable (`observed: null`), and nonfinite derived calibration is unscored, each with a reason. Nonrepresentable coverage shares are separately marked unavailable with a metadata reason; counts and finite shares remain unchanged, and that metadata limitation alone does not suppress a finite calibration.
+
+An absolute scenario origin unequal to recording time remains a clock mismatch; its raw clock is not shifted, and expected plus available observed totals stay visible without numerical error. Current numeric value or delay changes on any opportunity suppress error as `valuation changed`; unmapped, missing, unvalued, not-yet-opened or foreign-at-recording task identities suppress it as `valuation unverifiable`. Every opportunity is checked, including unpursued work. Goal files are read only after historical ownership and retained opening-time checks (`opened_at` present and at or before recording). A later-created task never backfills an earlier forecast's valuation basis; unknown opening time is unverifiable. Equal-timestamp openings count, without claiming cross-domain causal sequence. Unrelated files are not dependencies, and genuine I/O failures on relevant owned files remain errors. Task identity survives moves/archives, and formatting or estimate authorship alone is not numeric drift. Unreadable scenario payloads and non-message prediction sources retain raw data and reason per row, without restricting generic link writes. This isolation covers generic-link payloads, not corrupted SQLite or arbitrary realized-history failures.
 
 ## The role catalog
 

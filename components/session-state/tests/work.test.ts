@@ -451,6 +451,131 @@ test("anyone reads their organization's realized fitness over a window they name
 	}
 }, 30000);
 
+test("a nonmanager compares optional scenarios and reads recorded predictions through native tools", async () => {
+	const manager = await person();
+	const engineer = await person(manager.id);
+	try {
+		expect(engineer.run.session.getActiveToolNames()).not.toContain("hire");
+		const scenario = {
+			name: "Builder",
+			decisionAt: "recording",
+			horizonMs: 3_600_000,
+			organization: "One builder",
+			opportunities: [{ id: "change", value: 300, costOfDelayPerHour: 0 }],
+			start: [],
+			outcomes: [
+				{
+					probability: 0.7,
+					tasks: [{ opportunity: "change", openedMs: 0, closedMs: 1, status: "done" }],
+					compute: [{ atMs: 0, dollars: 10 }],
+					impacts: [],
+				},
+				{
+					probability: 0.3,
+					tasks: [{ opportunity: "change", openedMs: 0, closedMs: 1, status: "done" }],
+					compute: [{ atMs: 0, dollars: 10 }],
+					impacts: [{ atMs: 1, dollars: -300 }],
+				},
+			],
+		};
+		const reviewed = structuredClone(scenario);
+		reviewed.name = "Reviewed";
+		reviewed.organization = "Builder and reviewer";
+		reviewed.outcomes[0].probability = 0.9;
+		reviewed.outcomes[1].probability = 0.1;
+		for (const outcome of reviewed.outcomes) outcome.compute[0].dollars = 16;
+		const comparison = await engineer.invoke<{ scenarios: { expected: number; decisionAt: number }[] }>("org_fitness", {
+			scenarios: [scenario, reviewed],
+		});
+		expect(comparison.scenarios.map((row) => row.expected)).toEqual([200, 254]);
+		expect(comparison.scenarios[0].decisionAt).toBe(comparison.scenarios[1].decisionAt);
+		const invalidModes: Parameters<typeof fauxToolCall>[1][] = [
+			{},
+			{ since: "1h", scenarios: [scenario] },
+			{ until: "1h", scenarios: [scenario] },
+			{ subtree: manager.id, scenarios: [scenario] },
+		];
+		for (const args of invalidModes) {
+			const invalid = await engineer.attempt("org_fitness", args);
+			expect(invalid.isError).toBe(true);
+			expect(JSON.stringify(invalid.content)).toContain("exactly one mode");
+		}
+		await engineer.invoke("send_mail", {
+			to: [manager.id],
+			subject: "Forecasted change",
+			body: "Add a reviewer after recording this forecast.",
+		});
+		const message = query(
+			state.dbPath,
+			"select id from thread_messages where sender = ? order by seq desc limit 1",
+			engineer.id,
+		)[0] as { id: string };
+		const data = { scenario: reviewed, note: "unaltered assertion" };
+		const link = await engineer.invoke<{ id: string }>("link", {
+			from: `message:${message.id}`,
+			to: `organization:${manager.id}`,
+			relation: "predicts",
+			data,
+		});
+		const stored = query(state.dbPath, "select data, created_at from links where id = ?", link.id)[0] as {
+			data: string;
+			created_at: number;
+		};
+		expect(JSON.parse(stored.data)).toEqual(data);
+		const result = await engineer.attempt("predictions", {});
+		expect(result.isError).not.toBe(true);
+		expect(result.details).toMatchObject({
+			predictions: [
+				{
+					link: `link:${link.id}`,
+					expected: 254,
+					status: "pending",
+					reason: "valuation unverifiable",
+					forecastError: null,
+					recordedAt: stored.created_at,
+				},
+			],
+		});
+		expect(JSON.stringify(result.content)).toContain("calibration, not the causal effect");
+		await engineer.invoke("take_task", { title: "Unpriced work", goal: "Investigate work without a value yet." });
+		const short = structuredClone(reviewed);
+		short.horizonMs = 1;
+		const shortLink = await engineer.invoke<{ id: string }>("link", {
+			from: `message:${message.id}`,
+			to: `organization:${manager.id}`,
+			relation: "predicts",
+			data: { scenario: short },
+		});
+		const shortRow = query(state.dbPath, "select created_at from links where id = ?", shortLink.id)[0] as {
+			created_at: number;
+		};
+		await vi.waitFor(() => expect(Date.now()).toBeGreaterThanOrEqual(shortRow.created_at + short.horizonMs));
+		const matured = await engineer.attempt("predictions", {});
+		expect(matured.isError).not.toBe(true);
+		expect(matured.details).toMatchObject({
+			predictions: expect.arrayContaining([
+				expect.objectContaining({
+					link: `link:${shortLink.id}`,
+					status: "observed",
+					observed: 0,
+					forecastError: null,
+					reason: "valuation unverifiable; observed fitness incomplete",
+					observation: expect.objectContaining({
+						incomplete: true,
+						coverage: expect.objectContaining({ tasks: 1, unvalued: 1 }),
+						excludes: expect.stringContaining("pi_exec"),
+					}),
+				}),
+			]),
+		});
+		expect(JSON.stringify(matured.content)).toContain("observed coverage 1 tasks, 1 unvalued (incomplete)");
+		expect(JSON.stringify(matured.content)).toContain("known exclusions:");
+	} finally {
+		await close(engineer.run);
+		await close(manager.run);
+	}
+}, 30000);
+
 test("anyone finds who has context on an area from what people actually read", async () => {
 	const manager = await person();
 	const engineer = await person(manager.id);

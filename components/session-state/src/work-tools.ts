@@ -7,6 +7,7 @@ import { realizedFitness } from "./fitness.js";
 import { areasOf, communicationIn, expertsOn, type Scope, waitsIn, workIn } from "./inspect.js";
 import { ENTITY_KINDS, type Entity, type Link, relations } from "./links.js";
 import type { Command } from "./protocol.js";
+import { compareScenarios, predictions, type Scenario, scenarioSchema } from "./scenarios.js";
 import { taskOrganization } from "./tree.js";
 import { goalText, rootOf, taskIdOf, type WorkAction, type WorkTask, withWork } from "./work.js";
 
@@ -17,6 +18,7 @@ const PERSON_TASK_TOOLS = [
 	"promote_task",
 	"link",
 	"org_fitness",
+	"predictions",
 	"org_expertise",
 	"org_waits",
 	"org_work",
@@ -264,8 +266,35 @@ function readWaits(
 	return { content: [{ type: "text" as const, text: lines.join("\n") }], details: waits };
 }
 
-function readFitness(ctx: ExtensionContext, args: { since: string; until?: string; subtree?: string }) {
+function readFitness(
+	ctx: ExtensionContext,
+	args: { since?: string; until?: string; subtree?: string; scenarios?: Scenario[] },
+) {
 	const now = Date.now();
+	if (args.scenarios !== undefined) {
+		if (args.since !== undefined || args.until !== undefined || args.subtree !== undefined)
+			throw new Error("Choose exactly one mode: scenarios or a realized window");
+		const comparison = compareScenarios(args.scenarios, now);
+		return {
+			content: [
+				{
+					type: "text" as const,
+					text: [
+						comparison.premise,
+						...comparison.scenarios.flatMap((scenario) => [
+							`${scenario.name}: expected $${scenario.expected.toFixed(2)}; decision ${scenario.decisionAt}, horizon ${scenario.horizonMs}ms; assumes ${scenario.organization}`,
+							...scenario.outcomes.map(
+								(outcome) => `- probability ${outcome.probability}: U $${outcome.total.toFixed(2)}`,
+							),
+						]),
+					].join("\n"),
+				},
+			],
+			details: comparison,
+		};
+	}
+	if (args.since === undefined)
+		throw new Error("Choose exactly one mode: give since for a realized window, or scenarios");
 	const from = pointInTime(args.since, now);
 	const to = args.until ? pointInTime(args.until, now) : now;
 	if (!(from < to)) throw new Error("The window must start before it ends");
@@ -472,12 +501,24 @@ export function installWork(pi: ExtensionAPI): void {
 			name: "org_fitness",
 			label: "org_fitness",
 			description:
-				"Compare recorded value, delay and compute in dollars over a past window. This is one optional analytical instrument beside org_waits, org_work, org_communication and org_expertise, not an objective for every management decision. Shows total and rate per hour, task/person/link contributions, recorded impacts with their recorders, findings created in the window by task and recorder with resolution at cutoff, and unvalued coverage. Spend on dropped work explains compute and delay already counted on currently recorded cancelled/replaced tasks, even when that outcome postdates the window; it is not another charge or a waste verdict. Task compute attribution estimates focus at observation time; unknown/no/ineligible focus is unattributed. Estimates and findings never change the total. Narrow contributions to a person's subtree; the total stays the organization's.",
+				"Compare recorded value, delay and compute in dollars over a past window. This is one optional analytical instrument beside org_waits, org_work, org_communication and org_expertise, not an objective for every management decision. Shows total and rate per hour, task/person/link contributions, recorded impacts with their recorders, findings created in the window by task and recorder with resolution at cutoff, and unvalued coverage. Spend on dropped work explains compute and delay already counted on currently recorded cancelled/replaced tasks, even when that outcome postdates the window; it is not another charge or a waste verdict. Task compute attribution estimates focus at observation time; unknown/no/ineligible focus is unattributed. Estimates and findings never change the total. Narrow contributions to a person's subtree; the total stays the organization's. Alternatively supply scenarios alone for probability-weighted expected fitness through the same evaluator. Comparisons require identical decision point, horizon, opportunities/task identities, valuations and starting histories. Histories use millisecond offsets; starting state and forecasts are supplied premises, not a certified live snapshot. decisionAt:'recording' binds to one captured preview now; a later recorded prediction binds separately to its link creation time.",
 			promptSnippet:
 				"Use optional economic comparison with org_fitness alongside direct organizational signals and judgment.",
 			parameters: Type.Object(
 				{
-					since: Type.String({ minLength: 1, description: "Start: a span back from now (30m, 8h, 7d) or a date." }),
+					since: Type.Optional(
+						Type.String({
+							minLength: 1,
+							description: "Realized mode start: 30m, 8h, 7d or a date; alternative to scenarios.",
+						}),
+					),
+					scenarios: Type.Optional(
+						Type.Array(scenarioSchema, {
+							minItems: 1,
+							description:
+								"Expected mode only: compare forecasts on equal premises, instead of since/until/subtree. All history times are offsets from decisionAt.",
+						}),
+					),
 					until: Type.Optional(Type.String({ minLength: 1, description: "End, in the same form; now by default." })),
 					subtree: Type.Optional(
 						Type.String({ minLength: 1, description: "Show only contributions of this person's subtree." }),
@@ -488,6 +529,36 @@ export function installWork(pi: ExtensionAPI): void {
 			execute: async (_id, args, _signal, _update, ctx) => readFitness(ctx, args),
 		}),
 	);
+	pi.registerTool(
+		defineTool({
+			name: "predictions",
+			label: "predictions",
+			description:
+				"Read recorded predicts links targeting your current root organization exactly. Record a forecast with link from the message stating the change to organization:<root>, carrying unchanged data.scenario in the org_fitness scenario shape. Relative decisionAt:'recording' binds to immutable link creation time; an absolute origin differing from recording stays a clock mismatch, never shifted. Pending until creation+horizon, then expected and observed dollars with forecast error (observed minus expected), calibration not causal effect. Numeric valuation changes or unmapped/missing/unvalued/not-yet-opened-at-recording opportunities suppress error. Observed coverage, incompleteness, exclusions and unmeasured attention remain visible; incomplete observed valuation suppresses error, while static exclusions alone do not. Nonfinite observed totals or calibration errors are explicitly unavailable/unscored, and bound horizons must advance representably. Expected and available observed totals remain visible. Unreadable scenarios retain raw data and reason. No aggregation of former-root forecasts after a merge.",
+			promptSnippet: "Read recorded forecasts beside observed fitness for calibration, not causal attribution.",
+			parameters: Type.Object({}, { additionalProperties: false }),
+			execute: async (_id, _args, _signal, _update, ctx) => {
+				const now = Date.now();
+				const rows = withWork((db) => predictions(db, rootOf(db, ctx.sessionManager.getSessionId()), now));
+				if (!rows) throw new Error("The runtime has no recorded predictions yet");
+				return {
+					content: [
+						{
+							type: "text" as const,
+							text: [
+								"Forecast error is calibration, not the causal effect of a change.",
+								...rows.map(
+									(row) =>
+										`${row.link} -> ${row.target}, recorded by ${row.recordedBy}: ${row.status}; expected ${row.expected ?? "unavailable"}, observed ${row.observed ?? "unavailable"}, error ${row.forecastError ?? "unscored"}${row.reason ? `; ${row.reason}` : ""}${row.observation ? `; observed coverage ${row.observation.coverage.tasks} tasks, ${row.observation.coverage.unvalued} unvalued (${row.observation.incomplete ? "incomplete" : "valued subset"}); known exclusions: ${row.observation.excludes}; attention measured: ${row.observation.attention.measured}${row.observation.coverageReason ? `; ${row.observation.coverageReason}` : ""}` : ""}${row.status === "unreadable" ? `; raw ${row.raw}` : ""}`,
+								),
+							].join("\n"),
+						},
+					],
+					details: { predictions: rows },
+				};
+			},
+		}),
+	);
 	const vocabulary = Object.entries(relations())
 		.map(([word, meaning]) => `${word}: ${meaning}`)
 		.join(" ");
@@ -496,7 +567,7 @@ export function installWork(pi: ExtensionAPI): void {
 			name: "link",
 			executionMode: "sequential",
 			label: "link",
-			description: `Record a relationship between two things, or resolve one by id. Name each thing as kind:id with kind one of ${ENTITY_KINDS.join(", ")} (a task by id or ledger path, a person by name or id, a commit by SHA, a PR by URL, a file by path, a check run by its command and time or CI URL, the organization by its root's id). Relations: ${vocabulary} A wait (blocks, requires_decision) on a task ends on its own when that task closes done; resolve any other link yourself. A finds link targets a task; its owner resolves it accepted or rejected as evidence, never value. Any link can carry data.impact: {dollars: number, kind: 'incurred' | 'estimated', at?: epoch milliseconds}. Only incurred impacts enter org_fitness, at that time or link creation. Record actual losses or gains, never avoided losses or value/cost already counted; impacts are assertions the substrate does not verify.`,
+			description: `Record a relationship between two things, or resolve one by id. Name each thing as kind:id with kind one of ${ENTITY_KINDS.join(", ")} (a task by id or ledger path, a person by name or id, a commit by SHA, a PR by URL, a file by path, a check run by its command and time or CI URL, the organization by its root's id). Relations: ${vocabulary} A wait (blocks, requires_decision) on a task ends on its own when that task closes done; resolve any other link yourself. A finds link targets a task; its owner resolves it accepted or rejected as evidence, never value. Any link can carry data.impact: {dollars: number, kind: 'incurred' | 'estimated', at?: epoch milliseconds}. Only incurred impacts enter org_fitness, at that time or link creation. Record actual losses or gains, never avoided losses or value/cost already counted; impacts are assertions the substrate does not verify. A predicts link from the message stating a change to organization:<root> stores unchanged data.scenario (the org_fitness scenario shape); use predictions to inspect calibration. Record before acting; keep hypothetical impacts nested inside data.scenario, not top-level data.impact.`,
 			promptSnippet: "Record or resolve a link between tasks, people, threads, and results.",
 			parameters: Type.Object(
 				{
@@ -514,7 +585,7 @@ export function installWork(pi: ExtensionAPI): void {
 					data: Type.Optional(
 						Type.Unknown({
 							description:
-								"Structured data; impact: {dollars: number, kind: 'incurred' | 'estimated', at?: epoch milliseconds}. Estimates are listed, not charged.",
+								"Structured data; scenario: org_fitness scenario shape for a predicts link. impact: {dollars: number, kind: 'incurred' | 'estimated', at?: epoch milliseconds}. Estimates are listed, not charged.",
 						}),
 					),
 					inferred: Type.Optional(
