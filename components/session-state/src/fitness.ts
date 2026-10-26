@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
-import { WAITS } from "./links.js";
+import { type Link, WAITS } from "./links.js";
 import { readValuation } from "./valuation.js";
 
 const HOUR = 3_600_000;
@@ -330,6 +330,79 @@ export function subtreeOf(db: DatabaseSync, person: string): Set<string> {
 	return members;
 }
 
+interface RecordedImpact {
+	link: string;
+	from: string;
+	to: string;
+	recordedBy: string;
+	at: number;
+	dollars: number;
+	kind: "incurred" | "estimated";
+}
+
+interface Finding {
+	link: string;
+	task: string;
+	person: string;
+	resolution: string | null;
+}
+
+/** Link assertions are evidence, not verified facts. Explicit ownership wins over endpoint or recorder fallbacks. */
+function recordedEvidence(db: DatabaseSync, organization: string, from: number, to: number) {
+	const { managerAt, memberAt } = membership(db, organization);
+	const { owns } = taskOwnership(db, organization);
+	const belongs = (link: Link, at: number) => {
+		if (link.organization) {
+			const seen = new Set<string>();
+			for (let anchor: string | null = link.organization; anchor && !seen.has(anchor); anchor = managerAt(anchor, at)) {
+				if (anchor === organization) return true;
+				seen.add(anchor);
+			}
+			return false;
+		}
+		const task = link.from_kind === "task" ? link.from_id : link.to_kind === "task" ? link.to_id : undefined;
+		return task ? owns(task, at) : memberAt(link.recorded_by, at);
+	};
+	const impacts: RecordedImpact[] = [];
+	const findings: Finding[] = [];
+	for (const link of db.prepare("select * from links order by created_at, id").all() as unknown as Link[]) {
+		const data = JSON.parse(link.data ?? "null");
+		const impact = data?.impact;
+		if (
+			impact &&
+			typeof impact.dollars === "number" &&
+			Number.isFinite(impact.dollars) &&
+			(impact.kind === "incurred" || impact.kind === "estimated")
+		) {
+			const at = impact.at === undefined ? link.created_at : impact.at;
+			if (typeof at === "number" && Number.isFinite(at) && at >= from && at < to && belongs(link, at))
+				impacts.push({
+					link: `link:${link.id}`,
+					from: `${link.from_kind}:${link.from_id}`,
+					to: `${link.to_kind}:${link.to_id}`,
+					recordedBy: `person:${link.recorded_by}`,
+					at,
+					dollars: impact.dollars,
+					kind: impact.kind,
+				});
+		}
+		if (
+			link.relation === "finds" &&
+			link.to_kind === "task" &&
+			link.created_at >= from &&
+			link.created_at < to &&
+			belongs(link, link.created_at)
+		)
+			findings.push({
+				link: `link:${link.id}`,
+				task: `task:${link.to_id}`,
+				person: `person:${link.recorded_by}`,
+				resolution: link.resolved_at !== null && link.resolved_at <= to ? link.resolution : null,
+			});
+	}
+	return { impacts, findings };
+}
+
 /** Realized fitness of one organization over `[from, to)`, recomputed from recorded facts and current valuations. */
 export function realizedFitness(
 	db: DatabaseSync,
@@ -339,6 +412,10 @@ export function realizedFitness(
 	options: { subtree?: string } = {},
 ) {
 	const { events, valued: inWindow, eligibleTasks } = historyEvents(db, organization, from, to);
+	const evidence = recordedEvidence(db, organization, from, to);
+	for (const impact of evidence.impacts)
+		if (impact.kind === "incurred")
+			events.push({ kind: "impact", at: impact.at, amount: impact.dollars, source: impact.link });
 	const result = evaluate(events, from, to);
 	const unvaluedTasks = inWindow.filter(({ valuation }) => valuation.value === null);
 	const unvalued = unvaluedTasks.length;
@@ -349,6 +426,8 @@ export function realizedFitness(
 		0,
 	);
 	let contributions = result.contributions;
+	let impacts = evidence.impacts;
+	let findings = evidence.findings;
 	if (options.subtree) {
 		const people = subtreeOf(db, options.subtree);
 		const held = new Set(
@@ -357,11 +436,25 @@ export function realizedFitness(
 				.map((row) => `task:${row.task_id}`),
 		);
 		for (const person of people) held.add(`person:${person}`);
+		impacts = impacts.filter((impact) => held.has(impact.from) || held.has(impact.to) || held.has(impact.recordedBy));
+		findings = findings.filter((finding) => held.has(finding.task) || held.has(finding.person));
+		for (const impact of impacts) held.add(impact.link);
 		contributions = contributions.filter((c) => held.has(c.source));
 	}
 	return {
 		...result,
 		contributions,
+		impacts,
+		findings: {
+			byTask: [...new Set(findings.map((finding) => finding.task))].map((task) => ({
+				task,
+				findings: findings.filter((finding) => finding.task === task),
+			})),
+			byPerson: [...new Set(findings.map((finding) => finding.person))].map((person) => ({
+				person,
+				findings: findings.filter((finding) => finding.person === person),
+			})),
+		},
 		perHour: result.total / ((to - from) / HOUR),
 		coverage: {
 			tasks: inWindow.length,

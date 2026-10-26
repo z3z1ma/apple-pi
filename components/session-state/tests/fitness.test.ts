@@ -5,6 +5,7 @@ import { DatabaseSync } from "node:sqlite";
 import { expect, test } from "vitest";
 import { type EconomicEvent, evaluate, realizedFitness } from "../src/fitness.js";
 import { waitsIn } from "../src/inspect.js";
+import { recordLink, resolveLink } from "../src/links.js";
 import { migrate } from "../src/schema.js";
 
 const HOUR = 3_600_000;
@@ -63,6 +64,144 @@ function organization() {
 			.run(at, session, type, JSON.stringify(data));
 	return { db, dir, task, event };
 }
+
+test("incurred link impacts count once at their time, with recorder provenance; estimates remain evidence", () => {
+	const { db, task } = organization();
+	task("original", "Value: $50", 0, { at: HOUR, status: "done" });
+	task("fix", "Value: $30", HOUR, { at: 3 * HOUR, status: "done" }, ["dev"]);
+	const fixes = { from: { kind: "task", id: "fix" }, to: { kind: "task", id: "original" }, relation: "fixes" };
+	recordLink(db, "damage", "dev", { ...fixes, data: { impact: { dollars: -120, kind: "incurred" } } }, 2 * HOUR);
+	recordLink(db, "estimate", "dev", { ...fixes, data: { impact: { dollars: -500, kind: "estimated" } } }, 2 * HOUR);
+	recordLink(
+		db,
+		"gain",
+		"dev",
+		{ ...fixes, relation: "produced", data: { impact: { dollars: 10, kind: "incurred", at: 3 * HOUR } } },
+		2 * HOUR,
+	);
+	const whole = realizedFitness(db, "root", 0, 4 * HOUR);
+	expect(whole).toMatchObject({ total: -30, value: 80, impact: -110 });
+	expect(whole.impacts).toEqual(
+		expect.arrayContaining([
+			expect.objectContaining({
+				link: "link:damage",
+				recordedBy: "person:dev",
+				dollars: -120,
+				kind: "incurred",
+				at: 2 * HOUR,
+			}),
+			expect.objectContaining({ link: "link:estimate", recordedBy: "person:dev", dollars: -500, kind: "estimated" }),
+		]),
+	);
+	expect(whole.contributions).toContainEqual(expect.objectContaining({ source: "link:damage", impact: -120 }));
+	for (const split of [HOUR, 2 * HOUR, 3 * HOUR])
+		expect(realizedFitness(db, "root", 0, split).total + realizedFitness(db, "root", split, 4 * HOUR).total).toBe(
+			whole.total,
+		);
+	expect(realizedFitness(db, "root", 0, 2 * HOUR).impact).toBe(0);
+	expect(realizedFitness(db, "root", 2 * HOUR, 3 * HOUR).impact).toBe(-120);
+});
+
+test("backdated impacts restate their own window even when the link was recorded later", () => {
+	const { db } = organization();
+	recordLink(
+		db,
+		"backdated",
+		"dev",
+		{
+			from: { kind: "check", id: "check" },
+			to: { kind: "file", id: "file" },
+			relation: "verifies",
+			data: { impact: { dollars: -120, kind: "incurred", at: HOUR } },
+		},
+		3 * HOUR,
+	);
+	expect(realizedFitness(db, "root", 0, 2 * HOUR).total).toBe(-120);
+	expect(realizedFitness(db, "root", 2 * HOUR, 4 * HOUR).total).toBe(0);
+	expect(realizedFitness(db, "root", 0, 4 * HOUR).total).toBe(-120);
+});
+
+test("fixes and supersedes alone leave earned value unchanged and unreadable impact shapes are not charged", () => {
+	const { db, task } = organization();
+	task("original", "Value: $50", 0, { at: HOUR, status: "done" });
+	task("fix", "Value: $30", HOUR, { at: 3 * HOUR, status: "done" });
+	for (const [id, relation, data] of [
+		["fix", "fixes", undefined],
+		["replace", "supersedes", undefined],
+		["string", "fixes", { impact: { dollars: "-120", kind: "incurred" } }],
+		["unknown", "fixes", { impact: { dollars: -120, kind: "guess" } }],
+		["bad-time", "fixes", { impact: { dollars: -120, kind: "incurred", at: "yesterday" } }],
+		["other-data", "fixes", { dollars: -120 }],
+	] as const)
+		recordLink(
+			db,
+			id,
+			"dev",
+			{ from: { kind: "task", id: "fix" }, to: { kind: "task", id: "original" }, relation, data },
+			2 * HOUR,
+		);
+	expect(realizedFitness(db, "root", 0, 4 * HOUR)).toMatchObject({ total: 80, impact: 0, impacts: [] });
+});
+
+test("findings are grouped by task and recorder, with resolution at the cutoff, never credited as value", () => {
+	const { db, task } = organization();
+	task("reviewed", "Value: $50", 0, { at: HOUR, status: "done" });
+	for (const id of ["accepted", "rejected", "later"])
+		recordLink(
+			db,
+			id,
+			"dev",
+			{ from: { kind: "check", id: "review" }, to: { kind: "task", id: "reviewed" }, relation: "finds" },
+			2 * HOUR,
+		);
+	resolveLink(db, "lead", "accepted", "accepted", 3 * HOUR);
+	resolveLink(db, "lead", "rejected", "rejected", 3 * HOUR);
+	resolveLink(db, "lead", "later", "accepted", 4 * HOUR);
+	const fitness = realizedFitness(db, "root", 0, 3 * HOUR);
+	expect(fitness.total).toBe(50);
+	const findings = [
+		{ link: "link:accepted", task: "task:reviewed", person: "person:dev", resolution: "accepted" },
+		{ link: "link:later", task: "task:reviewed", person: "person:dev", resolution: null },
+		{ link: "link:rejected", task: "task:reviewed", person: "person:dev", resolution: "rejected" },
+	];
+	expect(fitness.findings).toEqual({
+		byTask: [{ task: "task:reviewed", findings }],
+		byPerson: [{ person: "person:dev", findings }],
+	});
+	expect(realizedFitness(db, "root", 0, 2 * HOUR).findings.byTask).toEqual([]);
+	expect(realizedFitness(db, "root", 3 * HOUR, 4 * HOUR).findings.byTask).toEqual([]);
+	expect(realizedFitness(db, "root", 0, 3 * HOUR, { subtree: "root" }).total).toBe(50);
+});
+
+test("impact ownership follows the historical origin, not today's tree or a foreign recorder", () => {
+	const { db, event } = organization();
+	db.prepare(
+		"insert into sessions (id, kind, cwd, run_state, generation, source, updated_at) values ('other', 'root', '/', 'idle', 1, 'test', 0)",
+	).run();
+	recordLink(
+		db,
+		"origin",
+		"dev",
+		{
+			from: { kind: "check", id: "check" },
+			to: { kind: "file", id: "file" },
+			relation: "verifies",
+			data: { impact: { dollars: -120, kind: "incurred" } },
+		},
+		HOUR,
+	);
+	db.prepare("update links set recorded_by = 'other' where id = 'origin'").run();
+	expect(realizedFitness(db, "other", 0, 2 * HOUR).impact).toBe(0);
+	db.prepare("update sessions set reports_to = 'other' where id = 'root'").run();
+	event(3 * HOUR, "root", "reports_to_changed", { from: null, to: "other" });
+	expect(realizedFitness(db, "other", 0, 2 * HOUR).impact).toBe(0);
+	expect(realizedFitness(db, "root", 0, 2 * HOUR).impact).toBe(-120);
+	expect(realizedFitness(db, "root", 0, 2 * HOUR, { subtree: "dev" })).toMatchObject({
+		total: -120,
+		contributions: [],
+		impacts: [],
+	});
+});
 
 test("joining brings outstanding obligations forward without rewriting earlier windows, even after retirement", () => {
 	const { db, dir, task, event } = organization();

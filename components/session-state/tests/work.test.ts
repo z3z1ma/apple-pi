@@ -399,6 +399,33 @@ test("anyone reads their organization's realized fitness over a window they name
 		expect(fitness.delay).toBeGreaterThan(0);
 		expect(fitness.total).toBeCloseTo(50 - fitness.delay, 9);
 		expect(fitness).toMatchObject({ coverage: { unvalued: 1 }, incomplete: true });
+		await engineer.invoke("link", {
+			from: `check:review`,
+			to: `task:${flaky.id}`,
+			relation: "finds",
+			data: { impact: { dollars: -120, kind: "estimated" } },
+		});
+		const evidence = await engineer.attempt("org_fitness", { since: "1h" });
+		expect(evidence.isError).not.toBe(true);
+		const text = JSON.stringify(evidence.content);
+		expect(text).toContain("estimated $-120.00");
+		expect(text).toContain(`person:${engineer.id}`);
+		expect(text).toContain(`task:${flaky.id}`);
+		expect(evidence.details).toMatchObject({
+			total: fitness.total,
+			impacts: [
+				{
+					kind: "estimated",
+					dollars: -120,
+					recordedBy: `person:${engineer.id}`,
+					to: `task:${flaky.id}`,
+				},
+			],
+			findings: {
+				byTask: [{ task: `task:${flaky.id}`, findings: [{ person: `person:${engineer.id}`, resolution: null }] }],
+				byPerson: [{ person: `person:${engineer.id}`, findings: [{ task: `task:${flaky.id}`, resolution: null }] }],
+			},
+		});
 	} finally {
 		await close(engineer.run);
 		await close(manager.run);

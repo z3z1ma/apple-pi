@@ -286,6 +286,26 @@ function readFitness(ctx: ExtensionContext, args: { since: string; until?: strin
 			(w) =>
 				`- open wait ${w.id}: ${w.from_kind}:${w.from_id} ${w.relation} ${w.to_kind}:${w.to_id}, ${w.ageHours.toFixed(1)}h${w.reason ? ` (${w.reason})` : ""}`,
 		),
+		"Recorded impacts (assertions, not verified; estimates are not charged):",
+		...fitness.impacts.map(
+			(impact) =>
+				`- ${impact.link}: ${impact.kind} ${dollars(impact.dollars)} at ${new Date(impact.at).toISOString()}, recorded by ${impact.recordedBy}; ${impact.from} -> ${impact.to}`,
+		),
+		"Findings created in this window, with resolution at cutoff (evidence, not value):",
+		"Findings by task:",
+		...fitness.findings.byTask.flatMap((group) => [
+			`- ${group.task}:`,
+			...group.findings.map(
+				(finding) => `  - ${finding.link}: ${finding.resolution ?? "unresolved"}, recorded by ${finding.person}`,
+			),
+		]),
+		"Findings by person (recorder):",
+		...fitness.findings.byPerson.flatMap((group) => [
+			`- ${group.person}:`,
+			...group.findings.map(
+				(finding) => `  - ${finding.link}: ${finding.resolution ?? "unresolved"}, on ${finding.task}`,
+			),
+		]),
 		...fitness.contributions.map(
 			(c) =>
 				`- ${c.source}: value ${dollars(c.value)}, delay ${dollars(c.delay)}, compute ${dollars(c.compute)}, impact ${dollars(c.impact)}`,
@@ -446,7 +466,7 @@ export function installWork(pi: ExtensionAPI): void {
 			name: "org_fitness",
 			label: "org_fitness",
 			description:
-				"Compare recorded value, delay and compute in dollars over a past window. This is one optional analytical instrument beside org_waits, org_work, org_communication and org_expertise, not an objective for every management decision. Shows total and rate per hour, task/person contributions and unvalued coverage. Narrow contributions to a person's subtree; the total stays the organization's.",
+				"Compare recorded value, delay and compute in dollars over a past window. This is one optional analytical instrument beside org_waits, org_work, org_communication and org_expertise, not an objective for every management decision. Shows total and rate per hour, task/person/link contributions, recorded impacts with their recorders, findings created in the window by task and recorder with resolution at cutoff, and unvalued coverage. Estimates and findings never change the total. Narrow contributions to a person's subtree; the total stays the organization's.",
 			promptSnippet:
 				"Use optional economic comparison with org_fitness alongside direct organizational signals and judgment.",
 			parameters: Type.Object(
@@ -470,7 +490,7 @@ export function installWork(pi: ExtensionAPI): void {
 			name: "link",
 			executionMode: "sequential",
 			label: "link",
-			description: `Record a relationship between two things, or resolve one by id. Name each thing as kind:id with kind one of ${ENTITY_KINDS.join(", ")} (a task by id or ledger path, a person by name or id, a commit by SHA, a PR by URL, a file by path, a check run by its command and time or CI URL, the organization by its root's id). Relations: ${vocabulary} A wait (blocks, requires_decision) on a task ends on its own when that task closes done; resolve any other link yourself.`,
+			description: `Record a relationship between two things, or resolve one by id. Name each thing as kind:id with kind one of ${ENTITY_KINDS.join(", ")} (a task by id or ledger path, a person by name or id, a commit by SHA, a PR by URL, a file by path, a check run by its command and time or CI URL, the organization by its root's id). Relations: ${vocabulary} A wait (blocks, requires_decision) on a task ends on its own when that task closes done; resolve any other link yourself. A finds link targets a task; its owner resolves it accepted or rejected as evidence, never value. Any link can carry data.impact: {dollars: number, kind: 'incurred' | 'estimated', at?: epoch milliseconds}. Only incurred impacts enter org_fitness, at that time or link creation. Record actual losses or gains, never avoided losses or value/cost already counted; impacts are assertions the substrate does not verify.`,
 			promptSnippet: "Record or resolve a link between tasks, people, threads, and results.",
 			parameters: Type.Object(
 				{
@@ -485,7 +505,12 @@ export function installWork(pi: ExtensionAPI): void {
 					to: Type.Optional(Type.String({ minLength: 3, description: "The second thing, as kind:id." })),
 					relation: Type.Optional(Type.String({ minLength: 1, description: "A relation from the list." })),
 					reason: Type.Optional(Type.String({ description: "A short reason or evidence reference." })),
-					data: Type.Optional(Type.Unknown({ description: "Structured data, such as an impact or a scenario." })),
+					data: Type.Optional(
+						Type.Unknown({
+							description:
+								"Structured data; impact: {dollars: number, kind: 'incurred' | 'estimated', at?: epoch milliseconds}. Estimates are listed, not charged.",
+						}),
+					),
 					inferred: Type.Optional(
 						Type.Boolean({ description: "True when you infer the relationship rather than know it." }),
 					),
