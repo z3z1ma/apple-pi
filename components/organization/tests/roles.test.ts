@@ -215,6 +215,8 @@ test("everyone gets the org section; only a managing role gets the manager chart
 		expect(prompt).toContain(`Your session id is \`${id}\``);
 		expect(prompt).toContain("You are the root of your organization");
 		expect(prompt).toContain("You hold the manager tools");
+		for (const tool of ["org_waits", "org_work", "org_communication", "org_expertise", "org_fitness", "link"])
+			expect(prompt).toContain(`\`${tool}\``);
 		expect(prompt).not.toContain("<manager>");
 
 		run.session.extensionRunner.setFlagValue("reports-to", "boss");
@@ -224,6 +226,8 @@ test("everyone gets the org section; only a managing role gets the manager chart
 		expect(prompt).toContain("<org>\nYou are Staff Engineer, Simplicity, a person");
 		expect(prompt).toContain("You report to the session `boss`");
 		expect(prompt).toContain("ask your manager to hire one");
+		for (const tool of ["org_waits", "org_work", "org_communication", "org_expertise", "org_fitness", "link"])
+			expect(prompt).toContain(`\`${tool}\``);
 		expect(prompt).not.toContain("<manager>");
 	} finally {
 		run.dispose();
@@ -237,6 +241,31 @@ test("everyone gets the org section; only a managing role gets the manager chart
 		expect(prompt).toContain("<org>\nYou are Coordinator, a person");
 		expect(prompt).toContain("<manager>\nYou are a manager: the operator brings you work");
 		expect(prompt).toMatch(/standup[\s\S]*remind_me[\s\S]*meet/);
+		for (const moment of [
+			"when the operator asks",
+			"during planning or implementation",
+			"when reports, escalations or updates arrive",
+			"when work looks constrained",
+			"in sweeps",
+		])
+			expect(prompt).toContain(moment);
+		expect(prompt).toMatch(/org_expertise[\s\S]*before assigning or hiring/);
+		expect(prompt).toContain("investigate causes through tasks, links, history and mail");
+		expect(prompt).toContain("ask a subordinate manager to reorganize its subtree");
+		expect(prompt).toContain("keep the organization stable when change would cost more than it gives");
+		expect(prompt).toMatch(/Record important reasoning[\s\S]*revisit consequential decisions/);
+		expect(prompt).toContain("Fitness and scenarios are optional instruments");
+		expect(prompt).toContain("not an objective to hill-climb or a forecast required before action");
+		expect(prompt).toMatch(/Reporting manager, task owner and decision authority are separate roles that may coincide/);
+		expect(prompt).toMatch(
+			/Loosely coupled work suits parallel people; tightly coupled work suits one strong owner; risky work benefits from an independent challenger/,
+		);
+		expect(prompt).toMatch(
+			/fan-in[\s\S]*repeatedly constrains progress[\s\S]*consider whether changing decision authority, assignments or reporting would help/,
+		);
+		expect(prompt).not.toContain("95th-percentile");
+		expect(prompt).not.toContain("when work waits, or a person carries more");
+		expect(prompt).not.toContain("would make you the bottleneck, hire a manager");
 	} finally {
 		manager.dispose();
 	}

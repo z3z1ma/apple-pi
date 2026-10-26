@@ -629,6 +629,85 @@ test("escalate records an explicit escalation kind, not merely a subject", async
 	}
 }, 30000);
 
+test("a scripted manager inspects a ready task and relevant idle experience, assigns it, and observes the change", async () => {
+	const manager = await person();
+	const specialist = await person(manager.id);
+	try {
+		manager.run.session.extensionRunner.setFlagValue("role", "coordinator");
+		await manager.run.session.bindExtensions({});
+		await vi.waitFor(() =>
+			expect(query(state.dbPath, "select role from sessions where id = ?", manager.id)).toEqual([
+				{ role: "coordinator" },
+			]),
+		);
+		const ready = await manager.invoke("take_task", {
+			goal: "Review app.ts interfaces.",
+			title: "Review app interfaces",
+		});
+		await manager.invoke("unassign", { person: manager.id, task: ready.id });
+		const blocked = await manager.invoke("take_task", { goal: "Choose the API version.", title: "API version" });
+		const decision = await manager.invoke<{ id: string }>("link", {
+			from: `task:${blocked.id}`,
+			to: `person:${manager.id}`,
+			relation: "requires_decision",
+			reason: "Choose the supported API version.",
+		});
+		await specialist.invoke("read", { path: "app.ts" });
+		await vi.waitFor(() =>
+			expect(
+				query(state.dbPath, "select 1 from messages where session_id = ? and tool = 'read'", specialist.id).length,
+			).toBeGreaterThan(0),
+		);
+		await vi.waitFor(() =>
+			expect(query(state.dbPath, "select run_state from sessions where id = ?", specialist.id)).toEqual([
+				{ run_state: "idle" },
+			]),
+		);
+		expect(
+			query(state.dbPath, "select 1 from assignments where person = ? and ended_at is null", specialist.id),
+		).toEqual([]);
+		const start = manager.run.session.messages.length;
+		manager.script.push(
+			call("org_work", {}),
+			call("org_expertise", { area: "app.ts" }),
+			call("assign", { person: specialist.id, task: ready.id }),
+			call("org_work", {}),
+			fauxAssistantMessage(
+				"The experienced idle specialist now holds the ready review; the API decision remains blocked.",
+			),
+		);
+		await manager.run.session.prompt(
+			"Inspect the work and relevant experience, assign the ready review, then inspect the result.",
+		);
+		const results = manager.run.session.messages.slice(start).filter((message) => message.role === "toolResult");
+		expect(results.map((result) => result.toolName)).toEqual(["org_work", "org_expertise", "assign", "org_work"]);
+		for (const result of results) expect(result.isError).toBe(false);
+		const before = results[0].details as ReturnType<typeof workIn>;
+		const experience = results[1].details as {
+			people: { ref: string; reads: number; status: string; tasks: unknown[] }[];
+		};
+		const after = results[3].details as ReturnType<typeof workIn>;
+		expect(before.ready).toContainEqual(expect.objectContaining({ ref: `task:${ready.id}`, holders: [] }));
+		expect(before.waiting).toContainEqual(
+			expect.objectContaining({ ref: `task:${blocked.id}`, waits: [`link:${decision.id}`] }),
+		);
+		expect(experience.people).toContainEqual(
+			expect.objectContaining({ ref: `person:${specialist.id}`, reads: 1, status: "idle", tasks: [] }),
+		);
+		expect(after.ready.map((task) => task.ref)).not.toContain(`task:${ready.id}`);
+		expect(after.inProgress).toContainEqual(
+			expect.objectContaining({ ref: `task:${ready.id}`, holders: [`person:${specialist.id}`] }),
+		);
+		expect(after.waiting).toContainEqual(
+			expect.objectContaining({ ref: `task:${blocked.id}`, waits: [`link:${decision.id}`] }),
+		);
+		expect(manager.run.session.agent.state.systemPrompt).toContain("## Adapt with evidence");
+	} finally {
+		await close(specialist.run);
+		await close(manager.run);
+	}
+}, 40000);
+
 test("a person inspects held work through org_work", async () => {
 	const who = await person();
 	try {
