@@ -9,7 +9,7 @@ import { fauxSession, type Reply } from "../../../tests/helpers/faux-session.js"
 import { addLedgerTask } from "../../shared/src/ledger-files.js";
 import bridge from "../src/index.js";
 import { MAIL_CUSTOM_TYPE } from "../src/mail.js";
-import { migrate, SCHEMA_VERSION } from "../src/schema.js";
+import { migrate } from "../src/schema.js";
 import { readValuation } from "../src/valuation.js";
 import type { WorkTask } from "../src/work.js";
 import { TASK_GOAL_CUSTOM_TYPE } from "../src/work-tools.js";
@@ -424,7 +424,30 @@ test("anyone finds who has context on an area from what people actually read", a
 	}
 }, 30000);
 
-test("a database at the previous schema version gains the task lifecycle columns and keeps its rows", () => {
+test("a manager sees a wait its report recorded, grouped under what it waits on", async () => {
+	const manager = await person();
+	const engineer = await person(manager.id);
+	try {
+		const task = await engineer.invoke("take_task", { goal: "Ship the API.", title: "API" });
+		await engineer.invoke("link", {
+			from: `task:${task.id}`,
+			to: `person:${manager.id}`,
+			relation: "requires_decision",
+			reason: "Which version?",
+		});
+		type Waits = { open: number; targets: { ref: string; waits: { reason: string }[] }[] };
+		const waits = await manager.invoke<Waits>("org_waits", {});
+		expect(waits).toMatchObject({
+			open: 1,
+			targets: [{ ref: `person:${manager.id}`, waits: [{ reason: "Which version?" }] }],
+		});
+	} finally {
+		await close(engineer.run);
+		await close(manager.run);
+	}
+}, 30000);
+
+test("a database before lifecycle tracking gains task lifecycle columns and keeps its rows", () => {
 	const path = join(mkdtempSync(join(tmpdir(), "apple-pi-lifecycle-")), "state.db");
 	const db = new DatabaseSync(path);
 	try {
@@ -439,7 +462,7 @@ test("a database at the previous schema version gains the task lifecycle columns
 		db.exec(
 			"drop table links; alter table work_tasks drop column opened_at; alter table work_tasks drop column close_status",
 		);
-		db.exec(`pragma user_version = ${SCHEMA_VERSION - 2}`);
+		db.exec("pragma user_version = 24");
 		migrate(db);
 		// Opened at the first assignment; an archived ephemeral task closed done.
 		expect(db.prepare("select id, opened_at, close_status from work_tasks order by id").all()).toEqual([

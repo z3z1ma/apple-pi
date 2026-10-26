@@ -278,6 +278,7 @@ try {
 				extension.tools.has("link") &&
 				extension.tools.has("fitness") &&
 				extension.tools.has("org_expertise") &&
+				extension.tools.has("org_waits") &&
 				extension.tools.has("update_self"),
 		),
 		"session-state extension must own the mail, directory, manager, and self tools",

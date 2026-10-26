@@ -1,11 +1,15 @@
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai/compat";
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
 import installLedger from "../../../extensions/ledger.js";
 import { fauxSession, type Reply } from "../../../tests/helpers/faux-session.js";
 import bridge from "../src/index.js";
+import { waitsIn } from "../src/inspect.js";
+import { recordLink, resolveLink } from "../src/links.js";
+import { migrate } from "../src/schema.js";
 import type { WorkTask } from "../src/work.js";
 import { close, query, startRuntime, stopRuntime, tempStateDir } from "./helpers.js";
 
@@ -199,3 +203,160 @@ test("a link resolves by id once, with an optional word; an unknown id is refuse
 		await close(who.run);
 	}
 }, 30000);
+
+test("links stay inside an organization: another one's tasks and people cannot be linked, and its links cannot be resolved", async () => {
+	const ours = await person();
+	const theirs = await person();
+	try {
+		const secret = await theirs.invoke("take_task", { goal: "Plan the acquisition.", title: "Acquisition" });
+		const planted = await ours.attempt("link", {
+			from: `person:${ours.id}`,
+			to: `task:${secret.id}`,
+			relation: "blocks",
+		});
+		expect(planted).toMatchObject({ isError: true });
+		expect(JSON.stringify(planted.content)).toContain("belongs to another organization");
+		const aimed = await ours.attempt("link", {
+			from: `person:${ours.id}`,
+			to: `person:${theirs.id}`,
+			relation: "finds",
+		});
+		expect(aimed).toMatchObject({ isError: true });
+		const theirLink = await theirs.invoke<Link>("link", {
+			from: `task:${secret.id}`,
+			to: "file:plan.md",
+			relation: "produced",
+		});
+		const resolved = await ours.attempt("link", { id: theirLink.id, resolution: "closed by a stranger" });
+		expect(resolved).toMatchObject({ isError: true });
+		expect(linkRow(theirLink.id).resolved_at).toBeNull();
+		const scoped = await ours.attempt("org_waits", { person: theirs.id });
+		expect(scoped).toMatchObject({ isError: true });
+		expect(JSON.stringify(scoped.content)).toContain("is not in your organization");
+	} finally {
+		await close(theirs.run);
+		await close(ours.run);
+	}
+}, 30000);
+
+test("a legacy link with a missing recorder can be resolved through its surviving task ownership", () => {
+	const db = new DatabaseSync(":memory:");
+	migrate(db);
+	for (const [id, manager] of [
+		["root", null],
+		["ada", "root"],
+		["stranger", null],
+	])
+		db.prepare(
+			"insert into sessions (id, kind, cwd, run_state, generation, source, updated_at, reports_to) values (?, 'root', '/', 'idle', 1, 'test', 0, ?)",
+		).run(id, manager);
+	for (const task of ["t1", "t2"])
+		db.prepare(
+			"insert into work_tasks (id, bundle, project, organization, ephemeral, thread, opened_at) values (?, ?, '/', 'root', 1, ?, 0)",
+		).run(task, `/${task}`, `task:${task}`);
+	// Legacy links have no stored organization; only the task endpoints survive here.
+	db.prepare(
+		"insert into links (id, from_kind, from_id, to_kind, to_id, relation, recorded_by, inferred, created_at) values ('L', 'task', 't1', 'task', 't2', 'blocks', 'peer', 0, 1)",
+	).run();
+	expect(() => resolveLink(db, "stranger", "L", undefined, 2)).toThrow("belongs to another organization");
+	resolveLink(db, "ada", "L", "done by hand", 2);
+	expect(db.prepare("select resolved_at, resolution from links where id = 'L'").get()).toEqual({
+		resolved_at: 2,
+		resolution: "done by hand",
+	});
+	db.close();
+});
+
+test("the link-origin migration preserves legacy provenance and reports unrecoverable ownership", () => {
+	const db = new DatabaseSync(":memory:");
+	migrate(db);
+	db.exec("alter table links drop column organization; pragma user_version = 26");
+	db.prepare(
+		"insert into links (id, from_kind, from_id, to_kind, to_id, relation, recorded_by, inferred, created_at) values ('legacy', 'file', 'a.ts', 'commit', 'abc', 'blocks', 'gone', 0, 1)",
+	).run();
+	migrate(db);
+	expect(db.prepare("select organization, recorded_by from links where id = 'legacy'").get()).toEqual({
+		organization: null,
+		recorded_by: "gone",
+	});
+	expect(() => resolveLink(db, "root", "legacy", "done", 2)).toThrow("no recoverable organization");
+	db.close();
+});
+
+test("artifact links retain their originating organization after recorder deletion and a merge", () => {
+	const db = new DatabaseSync(":memory:");
+	migrate(db);
+	for (const [id, manager] of [
+		["root", null],
+		["peer", "root"],
+		["adopter", null],
+	] as const)
+		db.prepare(
+			"insert into sessions (id, kind, cwd, run_state, generation, source, updated_at, reports_to) values (?, 'root', '/', 'idle', 1, 'test', 0, ?)",
+		).run(id, manager);
+	recordLink(
+		db,
+		"artifact",
+		"peer",
+		{ from: { kind: "file", id: "a.ts" }, to: { kind: "commit", id: "abc" }, relation: "blocks" },
+		1,
+	);
+	db.prepare("delete from sessions where id = 'peer'").run();
+	expect(() => resolveLink(db, "adopter", "artifact", "done", 2)).toThrow("another organization");
+	db.prepare("update sessions set reports_to = 'adopter' where id = 'root'").run();
+	resolveLink(db, "adopter", "artifact", "done", 3);
+	expect(db.prepare("select organization, recorded_by, resolved_at from links where id = 'artifact'").get()).toEqual({
+		organization: "root",
+		recorded_by: "peer",
+		resolved_at: 3,
+	});
+	db.close();
+});
+
+test("after a root joins another organization, its people keep linking and resolving their own work, now the merged organization's", () => {
+	const db = new DatabaseSync(":memory:");
+	migrate(db);
+	for (const [id, manager] of [
+		["aroot", null],
+		["broot", null],
+		["bob", "broot"],
+	])
+		db.prepare(
+			"insert into sessions (id, kind, cwd, run_state, generation, source, updated_at, reports_to) values (?, 'root', '/', 'idle', 1, 'test', 0, ?)",
+		).run(id, manager);
+	db.prepare(
+		"insert into work_tasks (id, bundle, project, organization, ephemeral, thread, opened_at) values ('b-work', '/b', '/', 'broot', 1, 'task:b-work', 0)",
+	).run();
+	const wait = (id: string) =>
+		recordLink(
+			db,
+			id,
+			"bob",
+			{
+				from: { kind: "task", id: "b-work" },
+				to: { kind: "person", id: "bob" },
+				relation: "requires_decision",
+			},
+			1,
+		);
+	wait("before");
+	recordLink(
+		db,
+		"org-before",
+		"bob",
+		{ from: { kind: "person", id: "bob" }, to: { kind: "organization", id: "broot" }, relation: "requires_decision" },
+		1,
+	);
+	db.prepare("update sessions set reports_to = 'aroot' where id = 'broot'").run();
+	resolveLink(db, "bob", "org-before", undefined, 2);
+	wait("after");
+	resolveLink(db, "bob", "before", "decided", 2);
+	expect(db.prepare("select id, resolved_at from links order by id").all()).toEqual([
+		{ id: "after", resolved_at: null },
+		{ id: "before", resolved_at: 2 },
+		{ id: "org-before", resolved_at: 2 },
+	]);
+	expect(waitsIn(db, "aroot", { cwd: "/", to: 3 }).targets.flatMap((t) => t.waits.map((w) => w.ref))).toEqual([
+		"link:after",
+	]);
+});

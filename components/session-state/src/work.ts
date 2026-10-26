@@ -4,6 +4,10 @@ import { basename, dirname, join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { promoteLedgerTask, retrospectiveTemplate, writeAtomicTextFile } from "../../shared/src/ledger-files.js";
 import { resolveWaitsOn } from "./links.js";
+import { rootOf } from "./tree.js";
+
+export { rootOf } from "./tree.js";
+
 import { statePaths } from "./paths.js";
 import { nameOf, OPERATOR, type ThreadPost } from "./threads.js";
 import { type Worth, worthLines } from "./valuation.js";
@@ -101,20 +105,6 @@ function member(db: DatabaseSync, person: string) {
 	return row;
 }
 
-export function rootOf(db: DatabaseSync, person: string): string {
-	const seen = new Set<string>();
-	let root = person;
-	while (!seen.has(root)) {
-		seen.add(root);
-		const row = db.prepare("select reports_to from sessions where id = ?").get(root) as
-			| { reports_to: string | null }
-			| undefined;
-		if (!row?.reports_to || !db.prepare("select 1 from sessions where id = ?").get(row.reports_to)) return root;
-		root = row.reports_to;
-	}
-	throw new Error("The organization has a cycle");
-}
-
 function mayManage(db: DatabaseSync, actor: string, person: string): void {
 	if (actor === OPERATOR) return;
 	const manager = member(db, actor);
@@ -178,7 +168,7 @@ function createTask(
 	if (command.task) {
 		const found = findTask(db, command.cwd, command.task);
 		if (found) {
-			if (found.organization !== organization) throw new Error("The task belongs to another organization");
+			if (rootOf(db, found.organization) !== organization) throw new Error("The task belongs to another organization");
 			if (found.archived_at) throw new Error("The task is finished");
 			if (
 				command.action === "take" &&
@@ -356,7 +346,7 @@ export function changeWork(
 		body = `${nameOf(db, person)} finished ${taskTitle(task)}.\n\n${command.outcome}`;
 	} else {
 		task = requireTask(db, command.cwd, command.task);
-		if (actor !== OPERATOR && task.organization !== rootOf(db, actor))
+		if (actor !== OPERATOR && rootOf(db, task.organization) !== rootOf(db, actor))
 			throw new Error("The task belongs to another organization");
 		if (command.action === "focus") {
 			assignment(db, person, task);

@@ -3,7 +3,8 @@ import { homedir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import { organizationIn } from "../../organization/src/directory.js";
-import { subtreeOf } from "./fitness.js";
+import { membership, openWaits, subtreeOf, taskOwnership } from "./fitness.js";
+import { WAITS } from "./links.js";
 
 /**
  * Read-only views of the organization for the inspection tools. Each reports recorded facts and counts with references
@@ -67,7 +68,8 @@ function absolute(cwd: string, path: string): string {
 function matcher(area: string, cwd: string): (path: string) => boolean {
 	if (area.includes("/") || area.startsWith(".") || area.startsWith("~")) {
 		const root = absolute(cwd, area);
-		return (path) => path === root || path.startsWith(root + sep);
+		const prefix = root.endsWith(sep) ? root : root + sep;
+		return (path) => path === root || path.startsWith(prefix);
 	}
 	const word = area.toLowerCase();
 	return (path) => path.toLowerCase().includes(word);
@@ -164,4 +166,129 @@ function byActivity(
 	b: { reads: number; edits: number; lastTouch: number },
 ) {
 	return b.reads + b.edits - (a.reads + a.edits) || b.lastTouch - a.lastTouch;
+}
+
+/** Narrow a view to one person's subtree, one person, or one task; the whole organization when empty. */
+export type Scope = { subtree?: string; person?: string; task?: string };
+
+interface OpenWait {
+	id: string;
+	from_kind: string;
+	from_id: string;
+	to_kind: string;
+	to_id: string;
+	relation: string;
+	reason: string | null;
+	recorded_by: string;
+	created_at: number;
+	resolved_at?: number | null;
+}
+
+/**
+ * What blocks what: the organization's open waits at the window's end, grouped by what they wait on (most waits first,
+ * then the oldest), each with its waiter, reason, age, and whether it crosses teams; with a window start, also the
+ * waits resolved inside the window, with how long they waited. Everything is judged as of the moment that matters:
+ * the window's end for an open wait, the resolution for a resolved one. The waiter is whoever held the waiting task
+ * then (or the waiting person; the recorder when neither is known). Two people are on one team when one manages the
+ * other or they share a manager; a wait crosses teams when no waiter shares a team with anyone it waits on.
+ */
+export function waitsIn(db: DatabaseSync, organization: string, window: Window, scope: Scope = {}) {
+	const at = window.to ?? Date.now();
+	const { owns } = taskOwnership(db, organization);
+	const { memberAt, managerAt } = membership(db, organization);
+	const heldBy = db.prepare(
+		"select person from assignments where task_id = ? and assigned_at <= ? and (ended_at is null or ended_at > ?)",
+	);
+	// Only members count as holders: an old link may still point at another organization's task.
+	const holdersAt = (task: string, when: number) =>
+		(heldBy.all(task, when, when) as { person: string }[])
+			.map((row) => row.person)
+			.filter((person) => memberAt(person, when));
+	const sameTeam = (a: string, b: string, when: number) => {
+		const ma = managerAt(a, when);
+		const mb = managerAt(b, when);
+		return a === b || ma === b || mb === a || (ma !== null && ma === mb);
+	};
+	const parties = (kind: string, id: string, when: number) =>
+		kind === "person" ? [id] : kind === "task" ? holdersAt(id, when) : [];
+	const inScope = scoped(scope, holdersAt, managerAt);
+	const describe = (link: OpenWait, when: number) => {
+		const waiters = parties(link.from_kind, link.from_id, when);
+		const owners = parties(link.to_kind, link.to_id, when);
+		const from = waiters.length ? waiters : [link.recorded_by];
+		return {
+			ref: `link:${link.id}`,
+			from: `${link.from_kind}:${link.from_id}`,
+			to: `${link.to_kind}:${link.to_id}`,
+			relation: link.relation,
+			reason: link.reason,
+			recordedBy: `person:${link.recorded_by}`,
+			waiters: from.map((person) => `person:${person}`),
+			ageHours: (when - link.created_at) / 3_600_000,
+			crossesTeams: owners.length > 0 && from.every((w) => owners.every((o) => !sameTeam(w, o, when))),
+		};
+	};
+	const open = (openWaits(db, organization, at) as OpenWait[])
+		.filter((link) => inScope(link, at))
+		.map((link) => describe(link, at));
+	const targets = new Map<string, ReturnType<typeof describe>[]>();
+	for (const wait of open) targets.set(wait.to, [...(targets.get(wait.to) ?? []), wait]);
+	const unblocked =
+		window.from === undefined
+			? []
+			: (
+					db
+						.prepare(
+							`select * from links where relation in (${WAITS.map(() => "?").join(", ")}) and resolved_at >= ? and resolved_at < ?
+							order by resolved_at, id`,
+						)
+						.all(...WAITS, window.from, at) as unknown as (OpenWait & { resolved_at: number })[]
+				)
+					.filter(
+						(link) =>
+							(link.from_kind === "task" && owns(link.from_id, link.resolved_at)) ||
+							memberAt(link.recorded_by, link.resolved_at),
+					)
+					.filter((link) => inScope(link, link.resolved_at))
+					.map((link) => ({ ...describe(link, link.resolved_at), resolvedAt: link.resolved_at }));
+	const oldest = (waits: { ageHours: number }[]) => Math.max(...waits.map((w) => w.ageHours));
+	return {
+		open: open.length,
+		targets: [...targets]
+			.map(([ref, waits]) => ({ ref, waits }))
+			.sort((a, b) => b.waits.length - a.waits.length || oldest(b.waits) - oldest(a.waits)),
+		unblocked,
+	};
+}
+
+/**
+ * Whether a link belongs to the scope at a moment: recorded by, aimed at, or attached to a task held by its people,
+ * where a subtree is the one the recorded manager chain gave at that moment.
+ */
+function scoped(
+	scope: Scope,
+	holdersAt: (task: string, when: number) => string[],
+	managerAt: (person: string, when: number) => string | null,
+) {
+	if (scope.task)
+		return (link: OpenWait) =>
+			(link.from_kind === "task" && link.from_id === scope.task) ||
+			(link.to_kind === "task" && link.to_id === scope.task);
+	const root = scope.person ?? scope.subtree;
+	if (!root) return () => true;
+	const within = (person: string, when: number) => {
+		if (scope.person) return person === root;
+		const seen = new Set<string>();
+		for (let link: string | null = person; link && !seen.has(link); link = managerAt(link, when)) {
+			if (link === root) return true;
+			seen.add(link);
+		}
+		return false;
+	};
+	return (link: OpenWait, when: number) => {
+		const touches = (kind: string, id: string) =>
+			(kind === "person" && within(id, when)) ||
+			(kind === "task" && holdersAt(id, when).some((holder) => within(holder, when)));
+		return within(link.recorded_by, when) || touches(link.from_kind, link.from_id) || touches(link.to_kind, link.to_id);
+	};
 }

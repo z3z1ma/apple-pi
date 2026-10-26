@@ -709,7 +709,7 @@ export class Runtime {
 			db.exec("begin");
 			if (command.kind === "task_opened") openLedgerTask(db, sender, command.bundle, now);
 			else if (command.kind === "link_record") recordLink(db, commandId, sender, command, now);
-			else if (command.kind === "link_resolve") resolveLink(db, command.id, command.resolution, now, replay);
+			else if (command.kind === "link_resolve") resolveLink(db, sender, command.id, command.resolution, now, replay);
 			else
 				for (const person of closeLedgerTask(db, sender, command.from, command.to, command.status, now))
 					this.event("runtime", person, null, "task_moved", { from: command.from, to: command.to });

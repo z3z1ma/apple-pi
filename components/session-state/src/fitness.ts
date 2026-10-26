@@ -69,12 +69,13 @@ interface TaskRow {
 }
 
 /** The history adapter: an organization's recorded tasks as economic events, valued by their current task.md. */
-function historyEvents(db: DatabaseSync, organization: string, until: number) {
+function historyEvents(db: DatabaseSync, organization: string, from: number, until: number) {
 	// A task only temporary pi_exec peers hold is a step inside their caller's work, the same set their disposal deletes.
+	const ownership = taskOwnership(db, organization);
 	const tasks = db
 		.prepare(
 			`select id, bundle, opened_at, archived_at, close_status from work_tasks t
-			where organization = ? and opened_at is not null and not (
+			where opened_at is not null and not (
 				ephemeral = 1
 				and exists (select 1 from assignments a where a.task_id = t.id)
 				and not exists (
@@ -83,25 +84,35 @@ function historyEvents(db: DatabaseSync, organization: string, until: number) {
 				)
 			)`,
 		)
-		.all(organization) as unknown as TaskRow[];
+		.all() as unknown as TaskRow[];
 	const events: EconomicEvent[] = [];
-	const valued = tasks.map((task) => {
+	const relevant = tasks.flatMap((task) => {
+		const closed = task.archived_at ?? until;
+		const owned = ownership.intervals(task.id, Math.max(from, task.opened_at!), Math.min(until, closed));
+		const ownedAtClose =
+			task.archived_at !== null &&
+			task.archived_at >= from &&
+			task.archived_at < until &&
+			ownership.owns(task.id, task.archived_at);
+		return owned.length || ownedAtClose ? [{ task, owned, ownedAtClose }] : [];
+	});
+	const valued = relevant.map(({ task, owned, ownedAtClose }) => {
 		// A goal file that has gone counts as unvalued, which marks the result incomplete.
 		const goal = join(task.bundle, "task.md");
 		const valuation = readValuation(existsSync(goal) ? readFileSync(goal, "utf8") : "");
 		const source = `task:${task.id}`;
-		const closed = task.archived_at ?? until;
 		if (valuation.value !== null) {
-			if (task.close_status === "done" && task.archived_at !== null)
+			if (task.close_status === "done" && task.archived_at !== null && ownedAtClose)
 				events.push({ kind: "value", at: task.archived_at, amount: valuation.value, source });
 			if (valuation.costOfDelayPerHour > 0)
-				for (const span of delayStates(db, task.id, task.opened_at!, closed))
-					events.push({ kind: "delay", ...span, perHour: valuation.costOfDelayPerHour, source });
+				for (const interval of owned)
+					for (const span of delayStates(db, task.id, interval.from, interval.to))
+						events.push({ kind: "delay", ...span, perHour: valuation.costOfDelayPerHour, source });
 		}
-		return { task, valuation, closed };
+		return { task, valuation };
 	});
 	events.push(...computeEvents(db, organization));
-	return { events, valued };
+	return { events, valued, eligibleTasks: new Set(tasks.map((task) => task.id)) };
 }
 
 /** A task's delay interval cut where its state changed: an assignment began or ended, or a wait on it opened or closed. */
@@ -143,7 +154,7 @@ interface Recorded {
  * that change replaced, and a person with none has its current manager throughout. So a later join or move, even in the
  * same millisecond, never rewrites who belonged earlier.
  */
-function membership(db: DatabaseSync, organization: string) {
+export function membership(db: DatabaseSync, organization: string) {
 	const peers = new Set(
 		(db.prepare("select session_id from program_peers").all() as { session_id: string }[]).map((r) => r.session_id),
 	);
@@ -187,9 +198,50 @@ function membership(db: DatabaseSync, organization: string) {
 			else if (row.type === "rehired") departed.delete(row.session_id);
 			visit(row, data, isMember);
 		}
-		return isMember;
+		return { isMember, managerOf: (person: string) => manager.get(person) ?? null };
 	};
-	return { replay, memberAt: (person: string, at: number) => replay(at)(person) };
+	return {
+		replay,
+		memberAt: (person: string, at: number) => replay(at).isMember(person),
+		/** The manager a person had at a moment, as recorded. */
+		managerAt: (person: string, at: number) => replay(at).managerOf(person),
+	};
+}
+
+/** Task ownership follows structural ancestry; retiring a person does not discard its organization's obligations. */
+export function taskOwnership(db: DatabaseSync, organization: string) {
+	const { managerAt } = membership(db, organization);
+	const anchors = new Map(
+		(db.prepare("select id, organization from work_tasks").all() as { id: string; organization: string }[]).map(
+			(row) => [row.id, row.organization],
+		),
+	);
+	const changes = (
+		db
+			.prepare("select distinct at from events where type in ('reports_to_changed', 'transferred') order by at")
+			.all() as { at: number }[]
+	).map((row) => row.at);
+	const owns = (task: string, at: number) => {
+		const seen = new Set<string>();
+		for (
+			let anchor: string | null | undefined = anchors.get(task);
+			anchor && !seen.has(anchor);
+			anchor = managerAt(anchor, at)
+		) {
+			if (anchor === organization) return true;
+			seen.add(anchor);
+		}
+		return false;
+	};
+	return {
+		owns,
+		intervals: (task: string, from: number, to: number) => {
+			const cuts = [from, ...changes.filter((at) => at > from && at < to), to];
+			return cuts
+				.slice(0, -1)
+				.flatMap((at, i) => (at < cuts[i + 1] && owns(task, at) ? [{ from: at, to: cuts[i + 1] }] : []));
+		},
+	};
 }
 
 /**
@@ -207,9 +259,9 @@ function computeEvents(db: DatabaseSync, organization: string): EconomicEvent[] 
 }
 
 /** Waits still open at the window's end, from the organization's tasks or recorded by a member at that time. */
-function openWaits(db: DatabaseSync, organization: string, tasks: string[], at: number) {
+export function openWaits(db: DatabaseSync, organization: string, at: number, eligibleTasks?: ReadonlySet<string>) {
 	const { memberAt } = membership(db, organization);
-	const ours = new Set(tasks);
+	const { owns } = taskOwnership(db, organization);
 	return (
 		db
 			.prepare(
@@ -228,7 +280,11 @@ function openWaits(db: DatabaseSync, organization: string, tasks: string[], at: 
 			created_at: number;
 		}[]
 	)
-		.filter((link) => (link.from_kind === "task" && ours.has(link.from_id)) || memberAt(link.recorded_by, at))
+		.filter(
+			(link) =>
+				(link.from_kind === "task" && (!eligibleTasks || eligibleTasks.has(link.from_id)) && owns(link.from_id, at)) ||
+				memberAt(link.recorded_by, at),
+		)
 		.map((link) => ({ ...link, ageHours: (at - link.created_at) / HOUR }));
 }
 
@@ -281,9 +337,8 @@ export function realizedFitness(
 	to: number,
 	options: { subtree?: string } = {},
 ) {
-	const { events, valued } = historyEvents(db, organization, to);
+	const { events, valued: inWindow, eligibleTasks } = historyEvents(db, organization, from, to);
 	const result = evaluate(events, from, to);
-	const inWindow = valued.filter(({ task, closed }) => task.opened_at! < to && closed >= from);
 	const unvaluedTasks = inWindow.filter(({ valuation }) => valuation.value === null);
 	const unvalued = unvaluedTasks.length;
 	const closedUnvalued = unvaluedTasks.filter(({ task }) => task.archived_at !== null && task.archived_at < to).length;
@@ -317,12 +372,7 @@ export function realizedFitness(
 			unattributedValueShare: totalValue ? 1 - estimatedValue / totalValue : 0,
 		},
 		incomplete: unvalued > 0,
-		openWaits: openWaits(
-			db,
-			organization,
-			valued.map(({ task }) => task.id),
-			to,
-		),
+		openWaits: openWaits(db, organization, to, eligibleTasks),
 		interruptions: interruptions(db, organization, from, to),
 		// The operator's time is part of the model, but nothing measures it honestly yet; waiting for him is already delay.
 		attention: { pricePerMinute: 1, measured: false },

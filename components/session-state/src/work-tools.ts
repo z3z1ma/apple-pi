@@ -4,12 +4,22 @@ import { Type } from "typebox";
 import { resolvePerson } from "./addresses.js";
 import { sendCommand } from "./client.js";
 import { realizedFitness } from "./fitness.js";
-import { areasOf, expertsOn } from "./inspect.js";
+import { areasOf, expertsOn, type Scope, waitsIn } from "./inspect.js";
 import { ENTITY_KINDS, type Entity, type Link, relations } from "./links.js";
 import type { Command } from "./protocol.js";
+import { taskOrganization } from "./tree.js";
 import { goalText, rootOf, taskIdOf, type WorkAction, type WorkTask, withWork } from "./work.js";
 
-const PERSON_TASK_TOOLS = ["take_task", "focus", "finish_task", "promote_task", "link", "fitness", "org_expertise"];
+const PERSON_TASK_TOOLS = [
+	"take_task",
+	"focus",
+	"finish_task",
+	"promote_task",
+	"link",
+	"fitness",
+	"org_expertise",
+	"org_waits",
+];
 const UNITS: Record<string, number> = { m: 60_000, h: 3_600_000, d: 86_400_000 };
 
 /** A time as a span back from now (`30m`, `8h`, `7d`) or a date. */
@@ -194,6 +204,64 @@ function readExpertise(
 	return { content: [{ type: "text" as const, text: found.lines.join("\n") }], details: found.details };
 }
 
+/** One optional scope for an inspection: a person's subtree, a person, or a task. */
+function scopeOf(ctx: ExtensionContext, args: { subtree?: string; person?: string; task?: string }): Scope {
+	const given = [args.subtree, args.person, args.task].filter(Boolean).length;
+	if (given > 1) throw new Error("Give at most one of subtree, person, or task");
+	const self = ctx.sessionManager.getSessionId();
+	// A scope names someone or something in the caller's own organization.
+	const ours = (person: string) => {
+		if (withWork((db) => rootOf(db, person) !== rootOf(db, self)))
+			throw new Error(`${person} is not in your organization`);
+		return person;
+	};
+	if (args.subtree) return { subtree: ours(resolvePerson(self, args.subtree)) };
+	if (args.person) return { person: ours(resolvePerson(self, args.person)) };
+	if (args.task) {
+		const ref = args.task.replace(/^task:/, "");
+		const task = withWork((db) => {
+			const id = taskIdOf(db, ctx.cwd, ref);
+			if (taskOrganization(db, id) !== rootOf(db, self)) throw new Error(`${ref} is not a task of your organization`);
+			return id;
+		});
+		if (!task) throw new Error("The runtime has no tasks yet");
+		return { task };
+	}
+	return {};
+}
+
+function readWaits(
+	ctx: ExtensionContext,
+	args: { since?: string; until?: string; subtree?: string; person?: string; task?: string },
+) {
+	const now = Date.now();
+	const self = ctx.sessionManager.getSessionId();
+	const scope = scopeOf(ctx, args);
+	const window = {
+		cwd: ctx.cwd,
+		from: args.since ? pointInTime(args.since, now) : undefined,
+		to: args.until ? pointInTime(args.until, now) : now,
+	};
+	const waits = withWork((db) => waitsIn(db, rootOf(db, self), window, scope));
+	if (!waits) throw new Error("The runtime has no records yet");
+	const line = (w: (typeof waits.targets)[number]["waits"][number]) =>
+		`  - ${w.ref}: ${w.from} ${w.relation} ${w.to}, open ${w.ageHours.toFixed(1)}h, waiting: ${w.waiters.join(", ")}, recorded by ${w.recordedBy}${w.crossesTeams ? ", crosses teams" : ""}${w.reason ? ` (${w.reason})` : ""}`;
+	const lines = [
+		`Open waits: ${waits.open}, on ${waits.targets.length} targets, most waited-on first.`,
+		...waits.targets.flatMap((t) => [`- ${t.ref}: ${t.waits.length} waiting`, ...t.waits.map(line)]),
+		...(window.from === undefined
+			? []
+			: [
+					`Resolved in the window (unblocked): ${waits.unblocked.length}`,
+					...waits.unblocked.map(
+						(w) =>
+							`  - ${w.ref}: ${w.from} ${w.relation} ${w.to}, waited ${w.ageHours.toFixed(1)}h, resolved ${new Date(w.resolvedAt).toISOString()}${w.reason ? ` (${w.reason})` : ""}`,
+					),
+				]),
+	];
+	return { content: [{ type: "text" as const, text: lines.join("\n") }], details: waits };
+}
+
 function readFitness(ctx: ExtensionContext, args: { since: string; until?: string; subtree?: string }) {
 	const now = Date.now();
 	const from = pointInTime(args.since, now);
@@ -225,6 +293,30 @@ function readFitness(ctx: ExtensionContext, args: { since: string; until?: strin
 }
 
 export function installWork(pi: ExtensionAPI): void {
+	pi.registerTool(
+		defineTool({
+			name: "org_waits",
+			label: "org_waits",
+			description:
+				"What blocks what: the organization's open waits (blocks and requires_decision links), grouped by what they wait on, the most waited-on first, each with what waits, why, for how long, who recorded it, and whether it crosses teams (neither manages the other and they have different managers). Give since to also list waits resolved in that window. Narrow to a person's subtree, a person, or a task. Facts with references, never a verdict.",
+			promptSnippet: "See what is blocked, on what, and for how long.",
+			parameters: Type.Object(
+				{
+					since: Type.Optional(
+						Type.String({ minLength: 1, description: "Also list waits resolved since: 30m, 8h, 7d, or a date." }),
+					),
+					until: Type.Optional(Type.String({ minLength: 1, description: "Look as of this time instead of now." })),
+					subtree: Type.Optional(
+						Type.String({ minLength: 1, description: "Only waits involving this person's subtree." }),
+					),
+					person: Type.Optional(Type.String({ minLength: 1, description: "Only waits involving this person." })),
+					task: Type.Optional(Type.String({ minLength: 1, description: "Only waits from or to this task." })),
+				},
+				{ additionalProperties: false },
+			),
+			execute: async (_id, args, _signal, _update, ctx) => readWaits(ctx, args),
+		}),
+	);
 	pi.registerTool(
 		defineTool({
 			name: "org_expertise",

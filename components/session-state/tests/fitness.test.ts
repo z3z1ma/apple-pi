@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { expect, test } from "vitest";
 import { type EconomicEvent, evaluate, realizedFitness } from "../src/fitness.js";
+import { waitsIn } from "../src/inspect.js";
 import { migrate } from "../src/schema.js";
 
 const HOUR = 3_600_000;
@@ -62,6 +63,75 @@ function organization() {
 			.run(at, session, type, JSON.stringify(data));
 	return { db, dir, task, event };
 }
+
+test("joining brings outstanding obligations forward without rewriting earlier windows, even after retirement", () => {
+	const { db, dir, task, event } = organization();
+	db.prepare(
+		"insert into sessions (id, kind, cwd, run_state, generation, source, updated_at) values ('adopter', 'root', '/', 'idle', 1, 'test', 0)",
+	).run();
+	task("done", "Value: $50", 0, { at: HOUR, status: "done" });
+	task("ongoing", "Value: $20\nCost of delay: $5/hour", 0);
+	for (const [id, resolved] of [
+		["done", HOUR],
+		["ongoing", null],
+	] as const)
+		db.prepare(
+			"insert into links (id, from_kind, from_id, to_kind, to_id, relation, recorded_by, inferred, created_at, resolved_at) values (?, 'task', ?, 'person', 'dev', 'requires_decision', 'dev', 0, 0, ?)",
+		).run(id, id, resolved);
+	const past = () => ({
+		fitness: realizedFitness(db, "adopter", 0, 4 * HOUR),
+		waits: waitsIn(db, "adopter", { cwd: dir, from: 0, to: 4 * HOUR }),
+	});
+	expect(past().fitness).toMatchObject({ value: 0, delay: 0, coverage: { tasks: 0 } });
+	db.prepare("update sessions set reports_to = 'adopter' where id = 'root'").run();
+	event(5 * HOUR, "root", "reports_to_changed", { from: null, to: "adopter" });
+	expect(past().fitness).toMatchObject({ value: 0, delay: 0, coverage: { tasks: 0 }, openWaits: [] });
+	expect(past().waits).toMatchObject({ open: 0, unblocked: [] });
+	expect(realizedFitness(db, "adopter", 0, 6 * HOUR)).toMatchObject({
+		value: 0,
+		delay: 5,
+		coverage: { tasks: 1 },
+		delayByState: { waiting: 5 },
+	});
+	expect(waitsIn(db, "adopter", { cwd: dir, from: 0, to: 6 * HOUR })).toMatchObject({ open: 1, unblocked: [] });
+	event(7 * HOUR, "root", "retired");
+	expect(realizedFitness(db, "adopter", 7 * HOUR, 8 * HOUR).delay).toBe(5);
+	expect(waitsIn(db, "adopter", { cwd: dir, to: 8 * HOUR }).open).toBe(1);
+	db.prepare("update work_tasks set archived_at = ?, close_status = 'done' where id = 'ongoing'").run(6 * HOUR);
+	expect(realizedFitness(db, "adopter", 6 * HOUR, 7 * HOUR).value).toBe(20);
+	expect(realizedFitness(db, "adopter", 0, 6 * HOUR).value).toBe(0);
+});
+
+test("fitness reads only goal files owned during the requested window", () => {
+	const { db, task, event } = organization();
+	db.prepare(
+		"insert into sessions (id, kind, cwd, run_state, generation, source, updated_at) values ('other', 'root', '/', 'idle', 1, 'test', 0)",
+	).run();
+	const bundle = task("unreadable", "Value: $50", 0, { at: 8 * HOUR, status: "done" });
+	renameSync(join(bundle, "task.md"), join(bundle, "saved.md"));
+	mkdirSync(join(bundle, "task.md"));
+	expect(realizedFitness(db, "other", 0, HOUR)).toMatchObject({ value: 0, delay: 0, coverage: { tasks: 0 } });
+	db.prepare("update sessions set reports_to = 'other' where id = 'root'").run();
+	event(5 * HOUR, "root", "reports_to_changed", { from: null, to: "other" });
+	expect(realizedFitness(db, "other", 0, 4 * HOUR)).toMatchObject({ value: 0, delay: 0, coverage: { tasks: 0 } });
+	expect(() => realizedFitness(db, "other", 5 * HOUR, 6 * HOUR)).toThrowError(
+		expect.objectContaining({ code: "EISDIR" }),
+	);
+	expect(realizedFitness(db, "other", 9 * HOUR, 10 * HOUR).coverage.tasks).toBe(0);
+});
+
+test("open waits survive a source task's cancellation and its recorder's retirement", () => {
+	const { db, dir, task, event } = organization();
+	task("cancelled", "Value: $50", 0, { at: HOUR, status: "cancelled" });
+	db.prepare(
+		"insert into links (id, from_kind, from_id, to_kind, to_id, relation, recorded_by, inferred, created_at) values ('pending', 'task', 'cancelled', 'person', 'lead', 'requires_decision', 'dev', 0, 0)",
+	).run();
+	event(2 * HOUR, "dev", "retired");
+	const fitness = realizedFitness(db, "root", 3 * HOUR, 4 * HOUR);
+	expect(fitness.coverage.tasks).toBe(0);
+	expect(fitness.openWaits.map((wait) => wait.id)).toEqual(["pending"]);
+	expect(waitsIn(db, "root", { cwd: dir, from: 3 * HOUR, to: 4 * HOUR }).open).toBe(1);
+});
 
 test("the worked example: value earned once at completion, delay from the open until the close", () => {
 	const { db, task } = organization();
@@ -218,6 +288,11 @@ test("work held only by a program's temporary peers does not count; work they sh
 	task("shared", "Value: $10", 0, { at: HOUR, status: "done" }, ["helper", "dev"]);
 	db.exec("update work_tasks set ephemeral = 1");
 	expect(realizedFitness(db, "root", 0, 2 * HOUR).value).toBe(10);
+	for (const id of ["step", "shared"])
+		db.prepare(
+			"insert into links (id, from_kind, from_id, to_kind, to_id, relation, recorded_by, inferred, created_at) values (?, 'task', ?, 'person', 'lead', 'requires_decision', 'helper', 0, 0)",
+		).run(id, id);
+	expect(realizedFitness(db, "root", 3 * HOUR, 4 * HOUR).openWaits.map((wait) => wait.id)).toEqual(["shared"]);
 });
 
 test("narrowing to a subtree lists only its people's tasks and keeps the organization's total", () => {

@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import type { DatabaseSync } from "node:sqlite";
+import { rootOf, taskOrganization } from "./tree.js";
 
 /** The kinds of things a link can join; an id is a task id, a session id, a thread or message id, a SHA, a URL, or a path. */
 export const ENTITY_KINDS = [
@@ -28,6 +29,7 @@ export interface LinkRecord {
 }
 export interface Link {
 	id: string;
+	organization: string | null;
 	from_kind: string;
 	from_id: string;
 	to_kind: string;
@@ -73,6 +75,19 @@ export function recordLink(db: DatabaseSync, id: string, sender: string, link: L
 		const known = KNOWN[entity.kind];
 		if (known && !db.prepare(known).get(entity.id)) throw new Error(`No ${entity.kind} ${entity.id}`);
 	}
+	// Links stay inside the recorder's organization: another organization's tasks and people are not ours to join.
+	const root = rootOf(db, sender);
+	for (const entity of [link.from, link.to]) {
+		const owner =
+			entity.kind === "task"
+				? taskOrganization(db, entity.id)
+				: entity.kind === "person"
+					? rootOf(db, entity.id)
+					: entity.kind === "organization"
+						? entity.id
+						: root;
+		if (owner !== root) throw new Error(`${entity.kind}:${entity.id} belongs to another organization`);
+	}
 	if (
 		WAITS.includes(link.relation) &&
 		link.to.kind === "task" &&
@@ -80,8 +95,8 @@ export function recordLink(db: DatabaseSync, id: string, sender: string, link: L
 	)
 		throw new Error(`Task ${link.to.id} is already done; nothing waits on it`);
 	db.prepare(
-		`insert into links (id, from_kind, from_id, to_kind, to_id, relation, reason, data, recorded_by, inferred, confidence, created_at)
-		values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`insert into links (id, from_kind, from_id, to_kind, to_id, relation, reason, data, recorded_by, inferred, confidence, created_at, organization)
+		values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 	).run(
 		id,
 		link.from.kind,
@@ -95,26 +110,51 @@ export function recordLink(db: DatabaseSync, id: string, sender: string, link: L
 		link.inferred ? 1 : 0,
 		link.inferred ? (link.confidence ?? null) : null,
 		now,
+		root,
 	);
 }
 
 /** A link resolves once; `replay` accepts the same resolution again after a restart. */
 export function resolveLink(
 	db: DatabaseSync,
+	sender: string,
 	id: string,
 	resolution: string | undefined,
 	now: number,
 	replay = false,
 ): void {
-	const link = db.prepare("select resolved_at, resolution from links where id = ?").get(id) as
-		| { resolved_at: number | null; resolution: string | null }
-		| undefined;
+	const link = db.prepare("select * from links where id = ?").get(id) as unknown as Link | undefined;
 	if (!link) throw new Error(`No link ${id}`);
+	const organization = organizationOf(db, link);
+	if (!organization) throw new Error(`Link ${id} has no recoverable organization`);
+	if (rootOf(db, sender) !== organization) throw new Error(`Link ${id} belongs to another organization`);
 	if (link.resolved_at !== null) {
 		if (replay && link.resolution === (resolution ?? null)) return;
 		throw new Error(`Link ${id} is already resolved`);
 	}
 	db.prepare("update links set resolved_at = ?, resolution = ? where id = ?").run(now, resolution ?? null, id);
+}
+
+/**
+ * New links retain their originating organization independently of recorder lifetime. Legacy links use surviving
+ * endpoints or the recorder; missing evidence remains unknown rather than assigning ownership to the resolver.
+ */
+function organizationOf(db: DatabaseSync, link: Link): string | undefined {
+	if (link.organization) return rootOf(db, link.organization);
+	for (const [kind, id] of [
+		[link.from_kind, link.from_id],
+		[link.to_kind, link.to_id],
+	]) {
+		if (kind === "task") {
+			const organization = taskOrganization(db, id);
+			if (organization) return organization;
+		}
+		if (kind === "person" && db.prepare("select 1 from sessions where id = ?").get(id)) return rootOf(db, id);
+		if (kind === "organization") return rootOf(db, id);
+	}
+	return db.prepare("select 1 from sessions where id = ?").get(link.recorded_by)
+		? rootOf(db, link.recorded_by)
+		: undefined;
 }
 
 /** A task closed done ends every wait on it; a cancelled one ends none. */

@@ -287,6 +287,7 @@ const MIGRATIONS = [
 		resolution text
 	) strict;
 	create index links_by_target on links (to_kind, to_id);`,
+	`alter table links add column organization text;`,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

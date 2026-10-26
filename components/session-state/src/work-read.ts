@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import { visibleLiveBundles } from "../../shared/src/ledger-files.js";
+import { anchorsOf, rootOf } from "./tree.js";
 import type { Assignment, WorkTask } from "./work.js";
 
 export interface TaskSummary {
@@ -78,9 +79,10 @@ export function workOf(
 /** Only ledgers visible from this organization's directories; discovering a task never assigns it. */
 export function backlogOf(db: DatabaseSync, organization: string, directories: string[]): TaskSummary[] {
 	if (!hasWork(db)) return [];
-	const projects = db.prepare("select distinct project from work_tasks where organization = ?").all(organization) as {
-		project: string;
-	}[];
+	const anchors = anchorsOf(db, organization);
+	const projects = db
+		.prepare(`select distinct project from work_tasks where organization in (${anchors.map(() => "?").join(", ")})`)
+		.all(...anchors) as { project: string }[];
 	const bundles = new Set<string>();
 	for (const directory of new Set([...directories, ...projects.map((row) => row.project)])) {
 		if (existsSync(directory)) for (const bundle of visibleLiveBundles(directory)) bundles.add(bundle);
@@ -92,7 +94,7 @@ export function backlogOf(db: DatabaseSync, organization: string, directories: s
 			| undefined;
 		if (
 			stored &&
-			(stored.organization !== organization ||
+			(rootOf(db, stored.organization) !== organization ||
 				db.prepare("select 1 from assignments where task_id = ? and ended_at is null").get(stored.id))
 		)
 			continue;
