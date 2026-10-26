@@ -6,14 +6,14 @@ Part of the approved spec [../spec.md](../spec.md); its Terms table defines obli
 
 **Blocked by:** 01 (Record when tasks open and close), 03 (Value and cost of delay on tasks).
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] The evaluator, given hand-built events, satisfies partition invariance: U over two adjacent windows equals U over their union, including an event exactly at the boundary (it counts in the later window) and fractional hours.
-- [ ] The spec's worked example without compute gives value and delay of $0 and $10 for hours 0 to 2 and $50 and $7.50 for hours 2 to 4.
-- [ ] Against a temporary state database, a task with three assignees earns its value once; a ledger task closed `cancelled` earns nothing and accrues no delay after its close.
-- [ ] An unassigned ledger task later assigned, completed, and archived gives the same fitness for an earlier window before and after the archive.
-- [ ] An organization whose only work is a valued, unassigned task scores negative over any window after its open.
-- [ ] An unvalued task contributes no value or delay, counts in coverage, and marks the result incomplete; a `Value: $0` task with `Cost of delay: $5/hour` is valued and accrues delay; a value marked `(estimated by Name)` counts in the estimated share and an unmarked value in the unattributed share.
-- [ ] After an operator edit of a task's value, fitness for a past window is restated under the new value.
-- [ ] Narrowing to a subtree lists only contributions of tasks held by people in that subtree, and the total stays the organization's.
-- [ ] Through a faux session, a person without manager tools calls `fitness` with a `since` and gets the total, rate, contributions, and coverage; the package-load smoke test lists `fitness`.
+- [x] The evaluator, given hand-built events, satisfies partition invariance: U over two adjacent windows equals U over their union, including an event exactly at the boundary (it counts in the later window) and fractional hours.
+- [x] The spec's worked example without compute gives value and delay of $0 and $10 for hours 0 to 2 and $50 and $7.50 for hours 2 to 4.
+- [x] Against a temporary state database, a task with three assignees earns its value once; a ledger task closed `cancelled` earns nothing and accrues no delay after its close.
+- [x] An unassigned ledger task later assigned, completed, and archived gives the same fitness for an earlier window before and after the archive.
+- [x] An organization whose only work is a valued, unassigned task scores negative over any window after its open.
+- [x] An unvalued task contributes no value or delay, counts in coverage, and marks the result incomplete; a `Value: $0` task with `Cost of delay: $5/hour` is valued and accrues delay; a value marked `(estimated by Name)` counts in the estimated share and an unmarked value in the unattributed share.
+- [x] After an operator edit of a task's value, fitness for a past window is restated under the new value.
+- [x] Narrowing to a subtree lists only contributions of tasks held by people in that subtree, and the total stays the organization's.
+- [x] Through a faux session, a person without manager tools calls `fitness` with a `since` and gets the total, rate, contributions, and coverage; the package-load smoke test lists `fitness`.

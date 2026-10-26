@@ -70,6 +70,7 @@ Every root session has these tools. Each sends a command to the runtime or reads
 | `remind_me` (`delay_seconds`, `text` or `command`) | Sends the caller a note, or starts a bash command, after a delay. See [scheduling](scheduling.md). |
 | `update_self` (`story?`, `practice?`, `commitments?`, `colleagues?`) | Rewrites the named fields of the person's self. Accepted only in a reflection the harness starts. |
 | `take_task`, `focus`, `finish_task`, `promote_task` | The task tools. See [Tasks and assignments](#tasks-and-assignments). |
+| `fitness` (`since`, `until?`, `subtree?`) | Reads the organization's realized fitness over a window: total and rate per hour, contributions, and how much work has no value. See [Fitness](#fitness). |
 | `link` (`from`, `to`, `relation`, `reason?`, `data?`, `inferred?`, `confidence?`; or `id`, `resolution?`) | Records a relationship between two things (a task waits on another or on a decision, produced a result, verifies, supersedes, fixes, or finds a problem in other work), or resolves one by id. Relations come from one vocabulary file; see [session-state](session-state.md#what-it-records). |
 
 ## Manager tools
@@ -111,6 +112,18 @@ Ephemeral tasks live under the Pi state directory in `tasks/<id>/`, with `task.m
 Only a root or a managing role can `assign` and `unassign`, and only inside its own organization. The operator can assign anyone. `take_task` with an existing task works only when nobody else holds that task.
 
 `promote_task(task)` moves a live ephemeral bundle into its project's `.ledger/`, through the same index transaction as `ledger_add`. Files, assignment identity, and thread stay together. Its heading supplies the ledger title and summary; optional `title` and `description` can name it more clearly. The runtime alone writes assignments and focus. Editing a ledger bundle still records a transcript pointer in `history.json`, but never assigns work. Archiving a registered ledger task updates its bundle path without ending assignments or changing their identity. Views read the explicit focus, never old inferred intent or ledger touches.
+
+## Fitness
+
+The organization has one fitness number in dollars, so people can see whether it produces more value than it costs. Realized fitness over a window is value earned minus delay accrued minus compute, computed each time from recorded facts and the current `task.md` files; nothing is stored.
+
+- **Value** is earned once, when a task completes (an ephemeral task archived after its last assignee finishes, a ledger task closed `done`). A cancelled task earns nothing.
+- **Delay** is the task's cost of delay per hour while it is the organization's obligation: from when the runtime recorded it until it closes. Unfinished valuable work keeps costing, so an idle organization with valuable outstanding work scores negative.
+- Any split of a window adds up to the whole, because every part is charged at the time it happens.
+- A task without a readable value counts nothing and is reported as unvalued, which marks the number incomplete; the share of value that rests on agents' estimates is shown too. Editing a value restates past windows: fitness reflects the best current understanding of value.
+- There is no score per person or team; narrowing to a subtree only filters the contributions that explain the whole.
+
+The value and cost of delay come from the task's `task.md` header (`Value: $50 (estimated by Name)`, `Cost of delay: $5/hour`); see [session-state](session-state.md#tasks-and-assignments). The design and the rest of the plan are in the ledger task `.ledger/202610242320-org-mri-morphogenesis/` (`spec.md`). Fitness is only as trustworthy as the values people give their work.
 
 ## The role catalog
 

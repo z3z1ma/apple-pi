@@ -101,7 +101,7 @@ function member(db: DatabaseSync, person: string) {
 	return row;
 }
 
-function rootOf(db: DatabaseSync, person: string): string {
+export function rootOf(db: DatabaseSync, person: string): string {
 	const seen = new Set<string>();
 	let root = person;
 	while (!seen.has(root)) {

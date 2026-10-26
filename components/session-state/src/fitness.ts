@@ -1,0 +1,156 @@
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import type { DatabaseSync } from "node:sqlite";
+import { readValuation } from "./valuation.js";
+
+const HOUR = 3_600_000;
+
+/** One fact the evaluator adds up; `source` names what produced it, such as `task:<id>` or `person:<id>`. */
+export type EconomicEvent =
+	| { kind: "value" | "compute" | "impact"; at: number; amount: number; source: string }
+	| { kind: "delay"; from: number; to: number; perHour: number; source: string };
+
+export interface Contribution {
+	source: string;
+	value: number;
+	delay: number;
+	compute: number;
+	impact: number;
+}
+
+/**
+ * The pure evaluator U: sums what falls in `[from, to)`. Every event is a point or an interval charged by its overlap,
+ * so any split of a window adds up to the whole.
+ */
+export function evaluate(events: EconomicEvent[], from: number, to: number) {
+	const parts = new Map<string, Contribution>();
+	const part = (source: string) => {
+		const found = parts.get(source) ?? { source, value: 0, delay: 0, compute: 0, impact: 0 };
+		parts.set(source, found);
+		return found;
+	};
+	for (const event of events) {
+		if (event.kind === "delay") {
+			const hours = Math.max(0, Math.min(event.to, to) - Math.max(event.from, from)) / HOUR;
+			if (hours > 0) part(event.source).delay += hours * event.perHour;
+		} else if (event.at >= from && event.at < to) part(event.source)[event.kind] += event.amount;
+	}
+	const contributions = [...parts.values()];
+	const sum = (key: "value" | "delay" | "compute" | "impact") => contributions.reduce((t, c) => t + c[key], 0);
+	const value = sum("value");
+	const delay = sum("delay");
+	const compute = sum("compute");
+	const impact = sum("impact");
+	return { total: value - delay - compute + impact, value, delay, compute, impact, contributions };
+}
+
+interface TaskRow {
+	id: string;
+	bundle: string;
+	opened_at: number | null;
+	archived_at: number | null;
+	close_status: string | null;
+}
+
+/** The history adapter: an organization's recorded tasks as economic events, valued by their current task.md. */
+function historyEvents(db: DatabaseSync, organization: string, until: number) {
+	// A task only temporary pi_exec peers hold is a step inside their caller's work, the same set their disposal deletes.
+	const tasks = db
+		.prepare(
+			`select id, bundle, opened_at, archived_at, close_status from work_tasks t
+			where organization = ? and opened_at is not null and not (
+				ephemeral = 1
+				and exists (select 1 from assignments a where a.task_id = t.id)
+				and not exists (
+					select 1 from assignments a where a.task_id = t.id
+					and a.person not in (select session_id from program_peers)
+				)
+			)`,
+		)
+		.all(organization) as unknown as TaskRow[];
+	const events: EconomicEvent[] = [];
+	const valued = tasks.map((task) => {
+		// A goal file that has gone counts as unvalued, which marks the result incomplete.
+		const goal = join(task.bundle, "task.md");
+		const valuation = readValuation(existsSync(goal) ? readFileSync(goal, "utf8") : "");
+		const source = `task:${task.id}`;
+		const closed = task.archived_at ?? until;
+		if (valuation.value !== null) {
+			if (task.close_status === "done" && task.archived_at !== null)
+				events.push({ kind: "value", at: task.archived_at, amount: valuation.value, source });
+			if (valuation.costOfDelayPerHour > 0)
+				events.push({
+					kind: "delay",
+					from: task.opened_at!,
+					to: closed,
+					perHour: valuation.costOfDelayPerHour,
+					source,
+				});
+		}
+		return { task, valuation, closed };
+	});
+	return { events, valued };
+}
+
+/** Everyone at or below `person` in the reporting tree. */
+function subtreeOf(db: DatabaseSync, person: string): Set<string> {
+	const members = new Set([person]);
+	for (let grew = true; grew; ) {
+		grew = false;
+		for (const row of db.prepare("select id, reports_to from sessions where reports_to is not null").all() as {
+			id: string;
+			reports_to: string;
+		}[])
+			if (members.has(row.reports_to) && !members.has(row.id)) {
+				members.add(row.id);
+				grew = true;
+			}
+	}
+	return members;
+}
+
+/** Realized fitness of one organization over `[from, to)`, recomputed from recorded facts and current valuations. */
+export function realizedFitness(
+	db: DatabaseSync,
+	organization: string,
+	from: number,
+	to: number,
+	options: { subtree?: string } = {},
+) {
+	const { events, valued } = historyEvents(db, organization, to);
+	const result = evaluate(events, from, to);
+	const inWindow = valued.filter(({ task, closed }) => task.opened_at! < to && closed >= from);
+	const unvaluedTasks = inWindow.filter(({ valuation }) => valuation.value === null);
+	const unvalued = unvaluedTasks.length;
+	const closedUnvalued = unvaluedTasks.filter(({ task }) => task.archived_at !== null && task.archived_at < to).length;
+	const totalValue = inWindow.reduce((sum, { valuation }) => sum + (valuation.value ?? 0), 0);
+	const estimatedValue = inWindow.reduce(
+		(sum, { valuation }) => sum + (valuation.estimatedBy === null ? 0 : (valuation.value ?? 0)),
+		0,
+	);
+	let contributions = result.contributions;
+	if (options.subtree) {
+		const people = subtreeOf(db, options.subtree);
+		const held = new Set(
+			(db.prepare("select distinct task_id, person from assignments").all() as { task_id: string; person: string }[])
+				.filter((row) => people.has(row.person))
+				.map((row) => `task:${row.task_id}`),
+		);
+		contributions = contributions.filter((c) => held.has(c.source));
+	}
+	return {
+		...result,
+		contributions,
+		perHour: result.total / ((to - from) / HOUR),
+		coverage: {
+			tasks: inWindow.length,
+			unvalued,
+			unvaluedShare: inWindow.length ? unvalued / inWindow.length : 0,
+			outstandingUnvalued: unvalued - closedUnvalued,
+			closedUnvalued,
+			estimatedValueShare: totalValue ? estimatedValue / totalValue : 0,
+			unattributedValueShare: totalValue ? 1 - estimatedValue / totalValue : 0,
+		},
+		incomplete: unvalued > 0,
+	};
+}

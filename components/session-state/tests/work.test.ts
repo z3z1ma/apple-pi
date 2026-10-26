@@ -52,7 +52,14 @@ async function person(manager?: string) {
 		await vi.waitFor(() => expect(run.session.isStreaming).toBe(false));
 		return result.details as unknown as T;
 	}
-	return { run, id, invoke, script };
+	async function attempt(name: string, args: Parameters<typeof fauxToolCall>[1]) {
+		await vi.waitFor(() => expect(run.session.isStreaming).toBe(false));
+		script.push(call(name, args));
+		await run.session.prompt(`call ${name}`);
+		await vi.waitFor(() => expect(run.session.isStreaming).toBe(false));
+		return run.session.messages.filter((m) => m.role === "toolResult").at(-1)!;
+	}
+	return { run, id, invoke, attempt, script };
 }
 function goalPackets(run: Awaited<ReturnType<typeof fauxSession>>) {
 	return run.session.messages.filter(
@@ -359,6 +366,39 @@ test("a new task carries the value and cost of delay its writer estimated, and t
 		expect(readFileSync(join(plain.bundle, "task.md"), "utf8")).not.toMatch(/^(Value|Cost of delay):/m);
 		writeFileSync(path, readFileSync(path, "utf8").replace(/^Value: .*$/m, "Value: $80"));
 		expect(readValuation(readFileSync(path, "utf8"))).toEqual({ value: 80, costOfDelayPerHour: 5, estimatedBy: null });
+	} finally {
+		await close(engineer.run);
+		await close(manager.run);
+	}
+}, 30000);
+
+test("anyone reads their organization's realized fitness over a window they name", async () => {
+	const manager = await person();
+	const engineer = await person(manager.id);
+	try {
+		const flaky = await manager.invoke("assign", {
+			person: engineer.id,
+			goal: "Fix the flaky test.",
+			title: "Flaky test",
+			value: 50,
+			cost_of_delay: 5,
+		});
+		await packets(engineer.run, 1);
+		await engineer.invoke("take_task", { goal: "Tidy up.", title: "Tidy" });
+		await engineer.invoke("focus", { task: flaky.id });
+		await engineer.invoke("finish_task", { outcome: "Fixed." });
+		type Fitness = { value: number; delay: number; total: number; coverage: { unvalued: number }; incomplete: boolean };
+		const fitness = await engineer.invoke<Fitness>("fitness", { since: "1h" });
+		const ahead = await engineer.attempt("fitness", {
+			since: "1h",
+			until: new Date(Date.now() + 3_600_000).toISOString(),
+		});
+		expect(ahead).toMatchObject({ isError: true });
+		expect(JSON.stringify(ahead.content)).toContain("covers the past");
+		expect(fitness.value).toBe(50);
+		expect(fitness.delay).toBeGreaterThan(0);
+		expect(fitness.total).toBeCloseTo(50 - fitness.delay, 9);
+		expect(fitness).toMatchObject({ coverage: { unvalued: 1 }, incomplete: true });
 	} finally {
 		await close(engineer.run);
 		await close(manager.run);

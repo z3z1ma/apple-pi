@@ -3,11 +3,22 @@ import { defineTool, type ExtensionAPI, type ExtensionContext } from "@earendil-
 import { Type } from "typebox";
 import { resolvePerson } from "./addresses.js";
 import { sendCommand } from "./client.js";
+import { realizedFitness } from "./fitness.js";
 import { ENTITY_KINDS, type Entity, type Link, relations } from "./links.js";
 import type { Command } from "./protocol.js";
-import { goalText, taskIdOf, type WorkAction, type WorkTask, withWork } from "./work.js";
+import { goalText, rootOf, taskIdOf, type WorkAction, type WorkTask, withWork } from "./work.js";
 
-const PERSON_TASK_TOOLS = ["take_task", "focus", "finish_task", "promote_task", "link"];
+const PERSON_TASK_TOOLS = ["take_task", "focus", "finish_task", "promote_task", "link", "fitness"];
+const UNITS: Record<string, number> = { m: 60_000, h: 3_600_000, d: 86_400_000 };
+
+/** A time as a span back from now (`30m`, `8h`, `7d`) or a date. */
+function pointInTime(text: string, now: number): number {
+	const span = text.trim().match(/^(\d+(?:\.\d+)?)\s*([mhd])$/);
+	if (span) return now - Number(span[1]) * UNITS[span[2]];
+	const date = Date.parse(text);
+	if (Number.isNaN(date)) throw new Error(`Give a time as 30m, 8h, 7d, or a date (got "${text}")`);
+	return date;
+}
 export const TASK_GOAL_CUSTOM_TYPE = "apple-pi.task-goal";
 const taskParameter = Type.String({ minLength: 1, description: "Task id or path to its bundle or task.md." });
 export const goalTitle = Type.String({
@@ -139,7 +150,50 @@ async function changeLink(
 	};
 }
 
+function readFitness(ctx: ExtensionContext, args: { since: string; until?: string; subtree?: string }) {
+	const now = Date.now();
+	const from = pointInTime(args.since, now);
+	const to = args.until ? pointInTime(args.until, now) : now;
+	if (!(from < to)) throw new Error("The window must start before it ends");
+	if (to > now) throw new Error("Realized fitness covers the past; end the window now or earlier");
+	const self = ctx.sessionManager.getSessionId();
+	const subtree = args.subtree ? resolvePerson(self, args.subtree) : undefined;
+	const fitness = withWork((db) => realizedFitness(db, rootOf(db, self), from, to, { subtree }));
+	if (!fitness) throw new Error("The runtime has no tasks yet");
+	const dollars = (n: number) => `$${n.toFixed(2)}`;
+	const lines = [
+		`Realized fitness ${dollars(fitness.total)} (${dollars(fitness.perHour)} per hour) from ${new Date(from).toISOString()} to ${new Date(to).toISOString()}${fitness.incomplete ? "; incomplete: some work has no value" : ""}.`,
+		`Value earned ${dollars(fitness.value)}, delay ${dollars(fitness.delay)}, compute ${dollars(fitness.compute)}, impacts ${dollars(fitness.impact)}.`,
+		`Tasks in the window: ${fitness.coverage.tasks}, unvalued ${fitness.coverage.unvalued}; ${Math.round(fitness.coverage.estimatedValueShare * 100)}% of value is agents' estimates.`,
+		...fitness.contributions.map(
+			(c) =>
+				`- ${c.source}: value ${dollars(c.value)}, delay ${dollars(c.delay)}, compute ${dollars(c.compute)}, impact ${dollars(c.impact)}`,
+		),
+	];
+	return { content: [{ type: "text" as const, text: lines.join("\n") }], details: fitness };
+}
+
 export function installWork(pi: ExtensionAPI): void {
+	pi.registerTool(
+		defineTool({
+			name: "fitness",
+			label: "fitness",
+			description:
+				"Read your organization's realized fitness in dollars over a window you name: value earned when tasks completed, minus delay accrued while valued work was outstanding, minus compute. Shows the rate per hour, each task's and person's contribution, and how much work has no value yet. Narrow the contributions to one person's subtree to explain its part; the total stays the organization's.",
+			promptSnippet: "Read the organization's realized fitness and what contributes to it.",
+			parameters: Type.Object(
+				{
+					since: Type.String({ minLength: 1, description: "Start: a span back from now (30m, 8h, 7d) or a date." }),
+					until: Type.Optional(Type.String({ minLength: 1, description: "End, in the same form; now by default." })),
+					subtree: Type.Optional(
+						Type.String({ minLength: 1, description: "Show only contributions of this person's subtree." }),
+					),
+				},
+				{ additionalProperties: false },
+			),
+			execute: async (_id, args, _signal, _update, ctx) => readFitness(ctx, args),
+		}),
+	);
 	const vocabulary = Object.entries(relations())
 		.map(([word, meaning]) => `${word}: ${meaning}`)
 		.join(" ");
