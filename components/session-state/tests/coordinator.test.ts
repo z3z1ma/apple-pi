@@ -448,6 +448,7 @@ test("a hired person whose role does not manage loses the lifecycle tools; a hir
 				"promote_task",
 				"link",
 				"fitness",
+				"org_expertise",
 			].sort(),
 		);
 	} finally {
@@ -475,6 +476,7 @@ test("a hired person whose role does not manage loses the lifecycle tools; a hir
 				"promote_task",
 				"link",
 				"fitness",
+				"org_expertise",
 			].sort(),
 		);
 	} finally {
@@ -517,6 +519,7 @@ test.each([false, true])(
 					"promote_task",
 					"link",
 					"fitness",
+					"org_expertise",
 					"update_self",
 				].sort(),
 			);

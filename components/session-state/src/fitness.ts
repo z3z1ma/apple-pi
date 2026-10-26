@@ -257,7 +257,7 @@ function interruptions(db: DatabaseSync, organization: string, from: number, to:
 }
 
 /** Everyone at or below `person` in the reporting tree. */
-function subtreeOf(db: DatabaseSync, person: string): Set<string> {
+export function subtreeOf(db: DatabaseSync, person: string): Set<string> {
 	const members = new Set([person]);
 	for (let grew = true; grew; ) {
 		grew = false;

@@ -36,7 +36,7 @@ async function person(manager?: string) {
 			JSON.stringify(context.messages.at(-1)).includes("You have finished a task.")
 				? fauxAssistantMessage("Nothing changed.")
 				: (script.shift() ?? fauxAssistantMessage("noted")),
-		["ledger_add", "ledger_status"],
+		["ledger_add", "ledger_status", "read"],
 	);
 	const id = run.session.sessionManager.getSessionId();
 	await vi.waitFor(() => expect(query(state.dbPath, "select 1 from sessions where id = ?", id)).toHaveLength(1), {
@@ -399,6 +399,25 @@ test("anyone reads their organization's realized fitness over a window they name
 		expect(fitness.delay).toBeGreaterThan(0);
 		expect(fitness.total).toBeCloseTo(50 - fitness.delay, 9);
 		expect(fitness).toMatchObject({ coverage: { unvalued: 1 }, incomplete: true });
+	} finally {
+		await close(engineer.run);
+		await close(manager.run);
+	}
+}, 30000);
+
+test("anyone finds who has context on an area from what people actually read", async () => {
+	const manager = await person();
+	const engineer = await person(manager.id);
+	try {
+		await engineer.invoke("read", { path: "app.ts" });
+		await vi.waitFor(() =>
+			expect(
+				query(state.dbPath, "select 1 from messages where session_id = ? and tool = 'read'", engineer.id),
+			).not.toHaveLength(0),
+		);
+		type Expertise = { people: { ref: string; reads: number; status: string }[] };
+		const found = await manager.invoke<Expertise>("org_expertise", { area: "app.ts" });
+		expect(found.people).toMatchObject([{ ref: `person:${engineer.id}`, reads: 1 }]);
 	} finally {
 		await close(engineer.run);
 		await close(manager.run);

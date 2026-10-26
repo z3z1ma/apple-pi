@@ -87,36 +87,41 @@ export function organizationOf(self: string, includeSelf = false): Organization 
 	if (!existsSync(path)) return { root: self, members: [] };
 	const db = new DatabaseSync(path, { readOnly: true });
 	try {
-		const rows = db
-			.prepare(
-				`select s.id, s.name, ${organizationColumns(db)}, s.reports_to, s.cwd, s.run_state, s.prompt,
-					i.ended_at is null and i.process_state in ('alive', 'alive_bridge_lost') as awake,
-					(select min(f.started_at) from incarnations f where f.session_id = s.id) as since
-				from sessions s left join incarnations i on i.session_id = s.id and i.generation = s.generation
-				where s.kind = 'root'
-				order by s.reports_to, s.name`,
-			)
-			.all() as unknown as Row[];
-		const managerOf = new Map(rows.map((row) => [row.id, row.reports_to]));
-		if (!managerOf.has(self)) managerOf.set(self, null);
-		const root = rootOf(self, managerOf);
-		const members: Member[] = rows
-			.filter((row) => (includeSelf || row.id !== self) && rootOf(row.id, managerOf) === root)
-			.map((row) => ({
-				id: row.id,
-				name: row.name,
-				role: row.role,
-				title: row.role_title,
-				soul: row.soul,
-				reportsTo: row.reports_to,
-				status: !row.awake ? "at home" : row.prompt ? "waiting" : row.run_state === "idle" ? "idle" : "busy",
-				cwd: row.cwd,
-				...workOf(db, row.id),
-				since: row.since,
-				retired: row.retired_at ? { at: row.retired_at, reason: row.retired_reason ?? "" } : null,
-			}));
-		return { root, members };
+		return organizationIn(db, self, includeSelf);
 	} finally {
 		db.close();
 	}
+}
+
+/** The organization of `self` in an open state database. */
+export function organizationIn(db: DatabaseSync, self: string, includeSelf = false): Organization {
+	const rows = db
+		.prepare(
+			`select s.id, s.name, ${organizationColumns(db)}, s.reports_to, s.cwd, s.run_state, s.prompt,
+				i.ended_at is null and i.process_state in ('alive', 'alive_bridge_lost') as awake,
+				(select min(f.started_at) from incarnations f where f.session_id = s.id) as since
+			from sessions s left join incarnations i on i.session_id = s.id and i.generation = s.generation
+			where s.kind = 'root'
+			order by s.reports_to, s.name`,
+		)
+		.all() as unknown as Row[];
+	const managerOf = new Map(rows.map((row) => [row.id, row.reports_to]));
+	if (!managerOf.has(self)) managerOf.set(self, null);
+	const root = rootOf(self, managerOf);
+	const members: Member[] = rows
+		.filter((row) => (includeSelf || row.id !== self) && rootOf(row.id, managerOf) === root)
+		.map((row) => ({
+			id: row.id,
+			name: row.name,
+			role: row.role,
+			title: row.role_title,
+			soul: row.soul,
+			reportsTo: row.reports_to,
+			status: !row.awake ? "at home" : row.prompt ? "waiting" : row.run_state === "idle" ? "idle" : "busy",
+			cwd: row.cwd,
+			...workOf(db, row.id),
+			since: row.since,
+			retired: row.retired_at ? { at: row.retired_at, reason: row.retired_reason ?? "" } : null,
+		}));
+	return { root, members };
 }

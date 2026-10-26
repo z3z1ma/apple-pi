@@ -6,11 +6,11 @@ Part of the approved spec [../spec.md](../spec.md), as redirected by [../directi
 
 **Blocked by:** None (can start immediately).
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Against a temporary state database, asking about `components/session-state` lists the two people who edited files under it, with their read and edit counts, last touch, and the task each held at the time, and leaves out a person who only touched other paths.
-- [ ] A word such as `fitness` matches touched paths containing it, and an absolute path and the same path relative to the caller's directory give the same answer.
-- [ ] A person whose session was compacted after their last touch of the area is reported as compacted since; one at home is reported at home; a former member is marked as having left.
-- [ ] Asking about a person lists the directories they touched with counts and last touch, and a window keeps only touches inside it.
-- [ ] A subtree scope keeps only people in that subtree.
-- [ ] Through a faux session, a person without manager tools calls `org_expertise` and gets the answer; the package-load smoke test lists `org_expertise`.
+- [x] Against a temporary state database, asking about `components/session-state` lists the two people who edited files under it, with their read and edit counts, last touch, and the task each held at the time, and leaves out a person who only touched other paths.
+- [x] A word such as `fitness` matches touched paths containing it, and an absolute path and the same path relative to the caller's directory give the same answer.
+- [x] A person whose session was compacted after their last touch of the area is reported as compacted since; one at home is reported at home; a former member is marked as having left.
+- [x] Asking about a person lists the directories they touched with counts and last touch, and a window keeps only touches inside it.
+- [x] A subtree scope keeps only people in that subtree.
+- [x] Through a faux session, a person without manager tools calls `org_expertise` and gets the answer; the package-load smoke test lists `org_expertise`.

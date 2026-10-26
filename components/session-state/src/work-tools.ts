@@ -4,11 +4,12 @@ import { Type } from "typebox";
 import { resolvePerson } from "./addresses.js";
 import { sendCommand } from "./client.js";
 import { realizedFitness } from "./fitness.js";
+import { areasOf, expertsOn } from "./inspect.js";
 import { ENTITY_KINDS, type Entity, type Link, relations } from "./links.js";
 import type { Command } from "./protocol.js";
 import { goalText, rootOf, taskIdOf, type WorkAction, type WorkTask, withWork } from "./work.js";
 
-const PERSON_TASK_TOOLS = ["take_task", "focus", "finish_task", "promote_task", "link", "fitness"];
+const PERSON_TASK_TOOLS = ["take_task", "focus", "finish_task", "promote_task", "link", "fitness", "org_expertise"];
 const UNITS: Record<string, number> = { m: 60_000, h: 3_600_000, d: 86_400_000 };
 
 /** A time as a span back from now (`30m`, `8h`, `7d`) or a date. */
@@ -150,6 +151,49 @@ async function changeLink(
 	};
 }
 
+function readExpertise(
+	ctx: ExtensionContext,
+	args: { area?: string; person?: string; since?: string; until?: string; subtree?: string },
+) {
+	if (Boolean(args.area) === Boolean(args.person)) throw new Error("Give exactly one of area or person");
+	const now = Date.now();
+	const self = ctx.sessionManager.getSessionId();
+	const window = {
+		cwd: ctx.cwd,
+		from: args.since ? pointInTime(args.since, now) : undefined,
+		to: args.until ? pointInTime(args.until, now) : undefined,
+		subtree: args.subtree ? resolvePerson(self, args.subtree) : undefined,
+	};
+	const when = (at: number) => new Date(at).toISOString();
+	const found = withWork((db) => {
+		const organization = rootOf(db, self);
+		if (args.person) {
+			const person = resolvePerson(self, args.person);
+			const areas = areasOf(db, organization, person, window);
+			return {
+				details: { person: `person:${person}`, areas },
+				lines: [
+					`Areas where person:${person} made read or edit calls, most touched first:`,
+					...areas.map((a) => `- ${a.ref}: ${a.reads} reads, ${a.edits} edits, last ${when(a.lastTouch)}`),
+				],
+			};
+		}
+		const people = expertsOn(db, organization, args.area!, window);
+		return {
+			details: { area: args.area, people },
+			lines: [
+				`People who made read or edit calls in ${args.area}, most touched first:`,
+				...people.map(
+					(p) =>
+						`- ${p.ref} (${p.status}${p.compactionSince ? ", a compaction started since" : ""}): ${p.reads} reads, ${p.edits} edits, last ${when(p.lastTouch)}${p.tasks.length ? `; tasks ${p.tasks.map((t) => `${t.ref}${t.title ? ` "${t.title}"` : ""}${t.finished ? ` (finished: ${t.outcome?.split("\n")[0] ?? ""})` : ""}`).join(", ")}` : ""}`,
+				),
+			],
+		};
+	});
+	if (!found) throw new Error("The runtime has no records yet");
+	return { content: [{ type: "text" as const, text: found.lines.join("\n") }], details: found.details };
+}
+
 function readFitness(ctx: ExtensionContext, args: { since: string; until?: string; subtree?: string }) {
 	const now = Date.now();
 	const from = pointInTime(args.since, now);
@@ -181,6 +225,28 @@ function readFitness(ctx: ExtensionContext, args: { since: string; until?: strin
 }
 
 export function installWork(pi: ExtensionAPI): void {
+	pi.registerTool(
+		defineTool({
+			name: "org_expertise",
+			label: "org_expertise",
+			description:
+				"Who knows what, from the read and edit calls people made (counted whether or not they succeeded). Give an area (a path or directory, relative to your directory or absolute, or a word found in paths) to list the people who touched it: reads, edits, last touch, the tasks they held then, whether they are working, idle, at home, or left, and whether a compaction of their session started since. Or give a person to list the directories it touched. Facts sorted by activity, never a verdict on who is best; narrow by area or window.",
+			promptSnippet: "Find who has context on an area, or what a person knows.",
+			parameters: Type.Object(
+				{
+					area: Type.Optional(Type.String({ minLength: 1, description: "A path, directory, or word in paths." })),
+					person: Type.Optional(Type.String({ minLength: 1, description: "A person, by name or id." })),
+					since: Type.Optional(
+						Type.String({ minLength: 1, description: "Only touches after: 30m, 8h, 7d, or a date." }),
+					),
+					until: Type.Optional(Type.String({ minLength: 1, description: "Only touches before, in the same form." })),
+					subtree: Type.Optional(Type.String({ minLength: 1, description: "Only people in this person's subtree." })),
+				},
+				{ additionalProperties: false },
+			),
+			execute: async (_id, args, _signal, _update, ctx) => readExpertise(ctx, args),
+		}),
+	);
 	pi.registerTool(
 		defineTool({
 			name: "fitness",
