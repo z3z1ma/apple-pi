@@ -174,10 +174,11 @@ export function membership(db: DatabaseSync, organization: string) {
 			seeded.add(row.session_id);
 			seeds.set(row.session_id, JSON.parse(row.data ?? "{}").from ?? null);
 		}
+	const structural = stream.filter((row) => row.type !== "cost_changed" && row.type !== "prompt_opened");
 	/** Replays every event recorded at or before `until`, calling `visit` after each with membership at that point. */
 	const replay = (
 		until: number,
-		visit: (row: Recorded, data: Record<string, unknown>, isMember: (person: string) => boolean) => void = () => {},
+		visit?: (row: Recorded, data: Record<string, unknown>, isMember: (person: string) => boolean) => void,
 	) => {
 		const manager = new Map(seeds);
 		const departed = new Set<string>();
@@ -190,13 +191,13 @@ export function membership(db: DatabaseSync, organization: string) {
 			}
 			return false;
 		};
-		for (const row of stream) {
+		for (const row of visit ? stream : structural) {
 			if (row.at > until) continue;
 			const data = JSON.parse(row.data ?? "{}");
 			if (row.type === "reports_to_changed" || row.type === "transferred") manager.set(row.session_id, data.to ?? null);
 			else if (row.type === "retired") departed.add(row.session_id);
 			else if (row.type === "rehired") departed.delete(row.session_id);
-			visit(row, data, isMember);
+			visit?.(row, data, isMember);
 		}
 		return { isMember, managerOf: (person: string) => manager.get(person) ?? null };
 	};
@@ -302,7 +303,7 @@ function interruptions(db: DatabaseSync, organization: string, from: number, to:
 		db
 			.prepare(
 				`select m.sender, m.at from thread_messages m join threads t on t.id = m.thread_id
-				where t.kind = 'mail' and m.at >= ? and m.at < ?
+				where t.kind in ('mail', 'escalation') and m.at >= ? and m.at < ?
 				and exists (
 					select 1 from thread_participants p where p.thread_id = t.id and p.participant = 'operator' and p.joined_at <= m.at
 				)`,

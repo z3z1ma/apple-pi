@@ -9,7 +9,7 @@ import { rootOf } from "./tree.js";
 export { rootOf } from "./tree.js";
 
 import { statePaths } from "./paths.js";
-import { nameOf, OPERATOR, type ThreadPost } from "./threads.js";
+import { nameOf, OPERATOR, participateIn, type ThreadPost } from "./threads.js";
 import { type Worth, worthLines } from "./valuation.js";
 
 export type WorkAction =
@@ -244,9 +244,7 @@ function recordTask(
 }
 
 function participate(db: DatabaseSync, task: WorkTask, person: string, now: number): void {
-	db.prepare(
-		"insert into thread_participants (thread_id, participant, delivery, read_up_to, joined_at) values (?, ?, 'push', 0, ?) on conflict do nothing",
-	).run(task.thread, person, now);
+	participateIn(db, task.thread, person, now, "push");
 }
 
 function setFocus(db: DatabaseSync, person: string, task: WorkTask): void {

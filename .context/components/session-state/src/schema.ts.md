@@ -4,5 +4,7 @@ Forward migrations preserve recorded provenance. The link-origin migration leave
 Why: a discarded temporary peer can leave artifact-only links with no surviving ownership evidence. Guessing an origin during migration would turn missing history into authorization.
 Migration tests reconstruct a particular historical physical schema and pin its actual user_version (24 before task lifecycle columns, 26 before link origins), rather than subtracting from the latest version.
 Why: adding a migration otherwise advances the fixture's claimed version without changing its tables, silently skipping the backfill the test intends to exercise.
-Coupled: components/session-state/src/links.ts
-Verify: components/session-state/tests/links.test.ts, components/session-state/tests/work.test.ts
+The participation migration (physical version27 to28) seeds surviving participant rows at their known `joined_at` and records the tracking boundary. It does not infer deleted memberships or relabel subject-only mail as escalations.
+Why: earlier channel departures deleted their participation rows. Surviving joins provide partial evidence before the boundary, not a complete audience history; readers disclose that limit.
+Coupled: components/session-state/src/links.ts, components/session-state/src/threads.ts
+Verify: components/session-state/tests/links.test.ts, components/session-state/tests/work.test.ts, components/session-state/tests/participation.test.ts

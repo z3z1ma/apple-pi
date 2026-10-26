@@ -451,6 +451,7 @@ test("a hired person whose role does not manage loses the lifecycle tools; a hir
 				"org_expertise",
 				"org_waits",
 				"org_work",
+				"org_communication",
 			].sort(),
 		);
 	} finally {
@@ -481,6 +482,7 @@ test("a hired person whose role does not manage loses the lifecycle tools; a hir
 				"org_expertise",
 				"org_waits",
 				"org_work",
+				"org_communication",
 			].sort(),
 		);
 	} finally {
@@ -526,6 +528,7 @@ test.each([false, true])(
 					"org_expertise",
 					"org_waits",
 					"org_work",
+					"org_communication",
 					"update_self",
 				].sort(),
 			);

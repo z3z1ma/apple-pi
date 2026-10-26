@@ -7,7 +7,7 @@ import { existsSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { statePaths } from "./paths.js";
 
-export type ThreadKind = "mail" | "channel" | "meeting" | "task";
+export type ThreadKind = "mail" | "escalation" | "channel" | "meeting" | "task";
 export type Delivery = "push" | "pull";
 
 /** The operator, as a participant and an address. */
@@ -37,6 +37,53 @@ export interface Posted {
 const known = (db: DatabaseSync, id: string) =>
 	id === OPERATOR || db.prepare("select 1 from sessions where id = ?").get(id) !== undefined;
 
+/** Change access and its audience-history fact atomically, including when called without an outer transaction. */
+export function participateIn(
+	db: DatabaseSync,
+	thread: string,
+	person: string,
+	now: number,
+	delivery: Delivery | null,
+): void {
+	db.exec("savepoint participation");
+	try {
+		const result =
+			delivery === null
+				? db.prepare("delete from thread_participants where thread_id = ? and participant = ?").run(thread, person)
+				: db
+						.prepare(
+							"insert into thread_participants (thread_id, participant, delivery, read_up_to, joined_at) values (?, ?, ?, 0, ?) on conflict do nothing",
+						)
+						.run(thread, person, delivery, now);
+		if (result.changes)
+			db.prepare("insert into events (at, source, session_id, type, data) values (?, 'runtime', ?, ?, ?)").run(
+				now,
+				person,
+				delivery === null ? "thread_left" : "thread_joined",
+				JSON.stringify({ thread }),
+			);
+		db.exec("release participation");
+	} catch (error) {
+		db.exec("rollback to participation; release participation");
+		throw error;
+	}
+}
+
+/** Audience at a timestamp, separate from today's access and read cursors. */
+export function audienceAt(db: DatabaseSync, thread: string, at: number): string[] {
+	const people = new Set<string>();
+	const events = db
+		.prepare(
+			"select session_id, type from events where type in ('thread_joined', 'thread_left') and json_extract(data, '$.thread') = ? and at <= ? order by seq",
+		)
+		.all(thread, at) as { session_id: string; type: string }[];
+	for (const event of events) {
+		if (event.type === "thread_joined") people.add(event.session_id);
+		else people.delete(event.session_id);
+	}
+	return [...people].sort();
+}
+
 /** Store one message (creating its thread when new); returns what to push, or why the post is refused. */
 export function postToThread(
 	db: DatabaseSync,
@@ -49,10 +96,6 @@ export function postToThread(
 	if (typeof post.body !== "string" || !post.body) return "a post needs a body";
 	const addresses = [...new Set([...(post.to ?? []), ...(post.cc ?? [])])].filter((id) => id !== sender);
 	for (const id of addresses) if (!known(db, id)) return `nobody has the address ${id}`;
-	const join = db.prepare(
-		`insert into thread_participants (thread_id, participant, delivery, read_up_to, joined_at)
-		values (?, ?, ?, 0, ?) on conflict (thread_id, participant) do nothing`,
-	);
 	const thread = db.prepare("select subject, kind, created_by, closed_at from threads where id = ?").get(post.thread) as
 		| { subject: string; kind: ThreadKind; created_by: string; closed_at: number | null }
 		| undefined;
@@ -65,13 +108,13 @@ export function postToThread(
 		db.prepare(
 			"insert into threads (id, kind, subject, created_by, created_at, closed_at) values (?, ?, ?, ?, ?, null)",
 		).run(post.thread, post.threadKind ?? "mail", post.subject, sender, now);
-		join.run(post.thread, sender, "push", now);
+		participateIn(db, post.thread, sender, now, "push");
 	} else {
 		if (thread.closed_at !== null) return "the thread is closed";
 		if (!isParticipant(db, post.thread, sender)) return "you are not in this thread";
 	}
 	for (const id of addresses) {
-		join.run(post.thread, id, thread?.kind === "channel" ? "pull" : "push", now);
+		participateIn(db, post.thread, id, now, thread?.kind === "channel" ? "pull" : "push");
 		if (thread?.kind === "channel")
 			db.prepare("update thread_participants set invited = 1 where thread_id = ? and participant = ?").run(
 				post.thread,

@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import { syncChannels } from "./channels.js";
+import { participateIn } from "./threads.js";
 import { cleanMovedBundles } from "./work.js";
 
 interface Person {
@@ -90,7 +91,10 @@ export function discardProgramPeople(
 					else db.prepare(`delete from ${table} where task_id = ?`).run(task.id);
 				}
 				db.prepare("delete from work_tasks where id = ?").run(task.id);
-				db.prepare("delete from thread_participants where thread_id = ?").run(task.thread);
+				for (const row of db
+					.prepare("select participant from thread_participants where thread_id = ?")
+					.all(task.thread) as { participant: string }[])
+					participateIn(db, task.thread, row.participant, now, null);
 				db.prepare("delete from thread_messages where thread_id = ?").run(task.thread);
 				db.prepare("delete from threads where id = ?").run(task.thread);
 			}
@@ -109,17 +113,21 @@ export function discardProgramPeople(
 		for (const id of gone) {
 			changed.run(now, "person_discarded", "{}", id);
 			const manager = replacement(id);
-			if (manager)
-				db.prepare(`insert into thread_participants (thread_id, participant, delivery, read_up_to, joined_at)
-				select p.thread_id, ?, 'push', 0, ? from thread_participants p join threads t on t.id = p.thread_id
-				where p.participant = ? and t.kind = 'task' on conflict do nothing`).run(manager, now, id);
+			const memberships = db
+				.prepare(
+					"select p.thread_id, t.kind from thread_participants p join threads t on t.id = p.thread_id where p.participant = ?",
+				)
+				.all(id) as { thread_id: string; kind: string }[];
+			for (const entry of memberships) {
+				if (manager && entry.kind === "task") participateIn(db, entry.thread_id, manager, now, "push");
+				participateIn(db, entry.thread_id, id, now, null);
+			}
 			db.prepare(
 				"update threads set closed_at = ? where created_by = ? and kind in ('meeting', 'channel') and closed_at is null",
 			).run(now, id);
 			for (const [table, column] of [
 				["assignments", "person"],
 				["work_focus", "person"],
-				["thread_participants", "participant"],
 				["messages", "session_id"],
 				["session_tasks", "session_id"],
 				["manager_changes", "session_id"],

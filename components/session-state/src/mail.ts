@@ -145,7 +145,7 @@ function createEscalateTool() {
 			const thread = newThreadId();
 			const note = await sendThreadMessage(
 				self,
-				{ thread, subject: "Escalation", body: params.body, to: [to] },
+				{ thread, threadKind: "escalation", subject: "Escalation", body: params.body, to: [to] },
 				signal,
 			);
 			return {

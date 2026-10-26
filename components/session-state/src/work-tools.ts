@@ -4,7 +4,7 @@ import { Type } from "typebox";
 import { resolvePerson } from "./addresses.js";
 import { sendCommand } from "./client.js";
 import { realizedFitness } from "./fitness.js";
-import { areasOf, expertsOn, type Scope, waitsIn, workIn } from "./inspect.js";
+import { areasOf, communicationIn, expertsOn, type Scope, waitsIn, workIn } from "./inspect.js";
 import { ENTITY_KINDS, type Entity, type Link, relations } from "./links.js";
 import type { Command } from "./protocol.js";
 import { taskOrganization } from "./tree.js";
@@ -20,6 +20,7 @@ const PERSON_TASK_TOOLS = [
 	"org_expertise",
 	"org_waits",
 	"org_work",
+	"org_communication",
 ];
 const UNITS: Record<string, number> = { m: 60_000, h: 3_600_000, d: 86_400_000 };
 
@@ -294,6 +295,53 @@ function readFitness(ctx: ExtensionContext, args: { since: string; until?: strin
 }
 
 export function installWork(pi: ExtensionAPI): void {
+	pi.registerTool(
+		defineTool({
+			name: "org_communication",
+			label: "org_communication",
+			description:
+				"Inspect communication in a named window: unordered person pairs and teams by recorded manager, busiest threads, and open decision links or explicit escalation threads awaiting each person's reply at the cutoff. Each message counts for every other participant already in its thread, not proof of delivery or reading; group messages contribute several pairs. Scope to your organization, a person, or a subtree. No message bodies or efficiency verdicts. Historical subject-only escalations are not inferred.",
+			promptSnippet: "Inspect communication counts, open decisions and explicit escalations awaiting replies.",
+			parameters: Type.Object(
+				{
+					since: Type.String({ minLength: 1, description: "Window start: 30m, 8h, 7d, or a date." }),
+					until: Type.Optional(
+						Type.String({ minLength: 1, description: "Window end and request snapshot; now by default." }),
+					),
+					person: Type.Optional(Type.String({ minLength: 1 })),
+					subtree: Type.Optional(Type.String({ minLength: 1 })),
+				},
+				{ additionalProperties: false },
+			),
+			execute: async (_id, args, _signal, _update, ctx) => {
+				const now = Date.now();
+				const from = pointInTime(args.since, now);
+				const to = args.until ? pointInTime(args.until, now) : now;
+				if (to > now || from >= to) throw new Error("Choose a past window whose start precedes its end");
+				const scope = scopeOf(ctx, args);
+				const result = withWork((db) =>
+					communicationIn(db, rootOf(db, ctx.sessionManager.getSessionId()), { cwd: ctx.cwd, from, to }, scope),
+				);
+				if (!result) throw new Error("The runtime has no records yet");
+				const lines = [
+					"Participant-pair counts (not delivery/read receipts); group messages contribute to several pairs. Teams use each person's manager at message time, or self for a root.",
+					...result.pairs.map((pair) => `- ${pair.people.join(" <-> ")}: ${pair.messages} messages`),
+					...result.teams.map(
+						(team) => `- teams ${team.managers.join(" <-> ")}: ${team.messages} participant-pair messages`,
+					),
+					...result.requests.map(
+						(request) =>
+							`- ${request.person}: decisions ${request.decisions.join(", ") || "none"}; escalations awaiting reply ${request.escalations.join(", ") || "none"}`,
+					),
+					"Threads by message count:",
+					...result.threads.map((thread) => `- ${thread.ref}: ${thread.messages}`),
+					"Escalations use the explicit kind; older subject-only mail is unclassified. Temporary-peer history remains incomplete until caller attribution is implemented.",
+					`Audience history tracks changes since ${result.audienceHistory.completeSince === null ? "an unknown start" : new Date(result.audienceHistory.completeSince).toISOString()}; ${result.audienceHistory.earlierHistory}.`,
+				];
+				return { content: [{ type: "text" as const, text: lines.join("\n") }], details: result };
+			},
+		}),
+	);
 	pi.registerTool(
 		defineTool({
 			name: "org_work",

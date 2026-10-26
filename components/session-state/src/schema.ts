@@ -288,6 +288,11 @@ const MIGRATIONS = [
 	) strict;
 	create index links_by_target on links (to_kind, to_id);`,
 	`alter table links add column organization text;`,
+	`insert into events (at, source, session_id, type, data)
+	 select joined_at, 'migration', participant, 'thread_joined', json_object('thread', thread_id)
+	 from thread_participants;
+	 insert into events (at, source, session_id, type, data)
+	 values (cast(unixepoch('subsec') * 1000 as integer), 'migration', 'runtime', 'thread_participation_tracking', '{}');`,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

@@ -67,12 +67,12 @@ function readThreads(db: DatabaseSync, roots: Map<string, string>): WorkplaceThr
 
 function readEscalations(db: DatabaseSync, roots: Map<string, string>): Workplace["escalations"] {
 	if (!hasTable(db, "threads")) return [];
-	// Escalation is ordinary mail. This is the native escalate tool's subject, not a new thread kind.
+	// Explicit escalation threads retain ordinary participant/read-cursor delivery.
 	const rows = db
 		.prepare(`select distinct t.id, t.created_by from threads t
 		join thread_participants p on p.thread_id = t.id and p.participant = ?
 		join thread_messages m on m.thread_id = t.id and m.seq > p.read_up_to and m.sender != ?
-		where t.kind = 'mail' and t.subject = 'Escalation' and t.closed_at is null`)
+		where t.kind = 'escalation' and t.closed_at is null`)
 		.all(OPERATOR, OPERATOR) as { id: string; created_by: string }[];
 	return rows.map((row) => ({
 		thread: row.id,

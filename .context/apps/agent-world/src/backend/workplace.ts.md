@@ -7,7 +7,8 @@ Why: assigning on discovery would restore the implicit work binding this task re
 Coupled: components/session-state/src/work-read.ts, components/shared/src/ledger-files.ts, apps/agent-world/src/backend/facts.ts, apps/agent-world/src/backend/world-backend.ts
 Verify: apps/agent-world/tests/workplace.test.ts
 
-Escalation remains ordinary mail: the native `escalate` tool writes the subject `Escalation`, and an unread operator participant supplies attention. It is independent of the sender's run state and `needs_you_since`.
+The native `escalate` tool records the explicit `escalation` thread kind; an unread operator participant supplies attention. Subject-only legacy mail is unclassified, not inferred to be an escalation. Delivery and read cursors remain ordinary thread behavior, independent of the sender's run state and `needs_you_since`.
+Why: a display subject does not establish an escalation's purpose. The explicit kind must reach this reader together with the native writer change or operator escalation attention disappears.
 Coupled: components/session-state/src/mail.ts, apps/agent-world/src/backend/mail.ts
 Verify: apps/agent-world/tests/workplace.test.ts
 

@@ -424,6 +424,39 @@ test("anyone finds who has context on an area from what people actually read", a
 	}
 }, 30000);
 
+test("a manager inspects explicitly recorded escalation requests through org_communication", async () => {
+	const manager = await person();
+	const report = await person(manager.id);
+	try {
+		const result = await report.invoke<{ thread: string }>("escalate", { body: "Need a decision." });
+		const view = await manager.invoke<{ requests: { person: string; escalations: string[] }[] }>("org_communication", {
+			since: "1h",
+			person: manager.id,
+		});
+		expect(view.requests).toContainEqual(
+			expect.objectContaining({ person: `person:${manager.id}`, escalations: [`thread:${result.thread}`] }),
+		);
+	} finally {
+		await close(report.run);
+		await close(manager.run);
+	}
+}, 30000);
+
+test("escalate records an explicit escalation kind, not merely a subject", async () => {
+	const manager = await person();
+	const report = await person(manager.id);
+	try {
+		const result = await report.invoke<{ thread: string }>("escalate", { body: "Need a decision." });
+		const read = await manager.invoke<{ thread: { kind: string; subject: string } }>("read_thread", {
+			thread: result.thread,
+		});
+		expect(read.thread).toMatchObject({ kind: "escalation", subject: "Escalation" });
+	} finally {
+		await close(report.run);
+		await close(manager.run);
+	}
+}, 30000);
+
 test("a person inspects held work through org_work", async () => {
 	const who = await person();
 	try {

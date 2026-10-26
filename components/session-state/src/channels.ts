@@ -1,5 +1,5 @@
 import type { DatabaseSync } from "node:sqlite";
-import { nameOf } from "./threads.js";
+import { nameOf, participateIn } from "./threads.js";
 
 /** Reconcile team channels from the tree. Invited people stay when their reporting line changes. */
 export function syncChannels(db: DatabaseSync, now: number): void {
@@ -22,10 +22,7 @@ export function syncChannels(db: DatabaseSync, now: number): void {
 	const thread =
 		db.prepare(`insert into threads (id, kind, subject, created_by, created_at) values (?, 'channel', ?, ?, ?)
 		on conflict (id) do update set subject = excluded.subject`);
-	const join = db.prepare(`insert into thread_participants (thread_id, participant, delivery, read_up_to, joined_at)
-		values (?, ?, 'pull', 0, ?) on conflict (thread_id, participant) do nothing`);
 	const members = db.prepare("select participant, invited from thread_participants where thread_id = ?");
-	const leave = db.prepare("delete from thread_participants where thread_id = ? and participant = ?");
 	const retired = new Set(people.filter((person) => person.retired_at !== null).map((person) => person.id));
 	for (const manager of managers) {
 		const channel = `team:${manager.id}`;
@@ -37,8 +34,8 @@ export function syncChannels(db: DatabaseSync, now: number): void {
 		);
 		for (const member of members.all(channel) as { participant: string; invited: number }[]) {
 			if (retired.has(member.participant) || (!member.invited && !team.has(member.participant)))
-				leave.run(channel, member.participant);
+				participateIn(db, channel, member.participant, now, null);
 		}
-		for (const id of team) join.run(channel, id, now);
+		for (const id of team) participateIn(db, channel, id, now, "pull");
 	}
 }

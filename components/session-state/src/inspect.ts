@@ -5,6 +5,7 @@ import type { DatabaseSync } from "node:sqlite";
 import { organizationIn } from "../../organization/src/directory.js";
 import { membership, openWaits, subtreeOf, taskOwnership } from "./fitness.js";
 import { WAITS } from "./links.js";
+import { audienceAt } from "./threads.js";
 
 /**
  * Read-only views of the organization for the inspection tools. Each reports recorded facts and counts with references
@@ -341,6 +342,101 @@ export function workIn(db: DatabaseSync, organization: string, window: Window, s
 		waiting: open.filter((task) => task.waits.length > 0),
 		inProgress: open.filter((task) => !task.waits.length && task.holders.length > 0),
 		multiple: [...load].filter(([, tasks]) => tasks.length > 1).map(([person, tasks]) => ({ person, tasks })),
+	};
+}
+
+export function communicationIn(db: DatabaseSync, organization: string, window: Window, scope: Scope = {}) {
+	const at = window.to ?? Date.now();
+	const { memberAt, managerAt } = membership(db, organization);
+	const within = (person: string, when: number) => {
+		if (!memberAt(person, when)) return false;
+		if (scope.person) return person === scope.person;
+		if (!scope.subtree) return true;
+		const seen = new Set<string>();
+		for (let current: string | null = person; current && !seen.has(current); current = managerAt(current, when)) {
+			if (current === scope.subtree) return true;
+			seen.add(current);
+		}
+		return false;
+	};
+	const messages = db
+		.prepare(
+			"select m.thread_id, m.sender, m.at from thread_messages m join threads t on t.id = m.thread_id where m.at >= ? and m.at < ? order by m.seq",
+		)
+		.all(window.from ?? 0, at) as { thread_id: string; sender: string; at: number }[];
+	const pairs = new Map<string, { people: string[]; messages: number }>();
+	const teams = new Map<string, { managers: string[]; messages: number }>();
+	const threads = new Map<string, number>();
+	for (const message of messages) {
+		if (!memberAt(message.sender, message.at)) continue;
+		const others = audienceAt(db, message.thread_id, message.at).filter(
+			(person) => person !== message.sender && memberAt(person, message.at),
+		);
+		let included = within(message.sender, message.at);
+		for (const other of others) {
+			if (!within(message.sender, message.at) && !within(other, message.at)) continue;
+			included = true;
+			const people = [message.sender, other].sort().map((person) => `person:${person}`);
+			const key = JSON.stringify(people);
+			const pair = pairs.get(key) ?? { people, messages: 0 };
+			pair.messages++;
+			pairs.set(key, pair);
+			const managers = [managerAt(message.sender, message.at) ?? message.sender, managerAt(other, message.at) ?? other]
+				.sort()
+				.map((person) => `person:${person}`);
+			const teamKey = JSON.stringify(managers);
+			const team = teams.get(teamKey) ?? { managers, messages: 0 };
+			team.messages++;
+			teams.set(teamKey, team);
+		}
+		if (included) threads.set(message.thread_id, (threads.get(message.thread_id) ?? 0) + 1);
+	}
+	const requests = new Map<string, { person: string; decisions: string[]; escalations: string[] }>();
+	const request = (person: string) => {
+		const entry = requests.get(person) ?? { person: `person:${person}`, decisions: [], escalations: [] };
+		requests.set(person, entry);
+		return entry;
+	};
+	const decisions = db
+		.prepare(
+			"select id, to_id from links where relation = 'requires_decision' and to_kind = 'person' and created_at < ? and (resolved_at is null or resolved_at > ?) order by id",
+		)
+		.all(at, at) as { id: string; to_id: string }[];
+	for (const wait of decisions) if (within(wait.to_id, at)) request(wait.to_id).decisions.push(`link:${wait.id}`);
+	const escalations = db
+		.prepare(
+			"select id, created_by from threads where kind = 'escalation' and created_at < ? and (closed_at is null or closed_at > ?) order by id",
+		)
+		.all(at, at) as { id: string; created_by: string }[];
+	const latest = db.prepare(
+		"select sender from thread_messages where thread_id = ? and at < ? order by seq desc limit 1",
+	);
+	for (const thread of escalations) {
+		const last = latest.get(thread.id, at) as { sender: string } | undefined;
+		if (!last) continue;
+		for (const person of audienceAt(db, thread.id, at))
+			if (person !== thread.created_by && person !== last.sender && within(person, at))
+				request(person).escalations.push(`thread:${thread.id}`);
+	}
+	return {
+		audienceHistory: {
+			completeSince: (
+				db.prepare("select min(at) as at from events where type = 'thread_participation_tracking'").get() as {
+					at: number | null;
+				}
+			).at,
+			earlierHistory: "incomplete: departed participants before tracking cannot be recovered",
+		},
+		requests: [...requests.values()].sort((a, b) => a.person.localeCompare(b.person)),
+		pairs: [...pairs.values()].sort(
+			(a, b) => b.messages - a.messages || JSON.stringify(a.people).localeCompare(JSON.stringify(b.people)),
+		),
+		teams: [...teams.values()].sort(
+			(a, b) => b.messages - a.messages || JSON.stringify(a.managers).localeCompare(JSON.stringify(b.managers)),
+		),
+		threads: [...threads]
+			.map(([id, messages]) => ({ ref: `thread:${id}`, messages }))
+			.sort((a, b) => b.messages - a.messages || a.ref.localeCompare(b.ref)),
 	};
 }
 

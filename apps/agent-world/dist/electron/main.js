@@ -3180,7 +3180,7 @@ function readEscalations(db, roots) {
 	return db.prepare(`select distinct t.id, t.created_by from threads t
 		join thread_participants p on p.thread_id = t.id and p.participant = ?
 		join thread_messages m on m.thread_id = t.id and m.seq > p.read_up_to and m.sender != ?
-		where t.kind = 'mail' and t.subject = 'Escalation' and t.closed_at is null`).all(OPERATOR, OPERATOR).map((row) => ({
+		where t.kind = 'escalation' and t.closed_at is null`).all(OPERATOR, OPERATOR).map((row) => ({
 		thread: row.id,
 		person: row.created_by,
 		headquarters: roots.get(row.created_by) ?? row.created_by
