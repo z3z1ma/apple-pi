@@ -1,0 +1,14 @@
+{
+  "sessions": [
+    {
+      "id": "01a171af-7866-776f-a1fc-d41b7c525b38",
+      "linkedAt": "2026-10-25T06:20:57.035Z",
+      "via": "ledger_add"
+    },
+    {
+      "id": "870aa4d6-0883-45f0-93b7-1c0c42acee27",
+      "linkedAt": "2026-10-25T20:35:38.534Z",
+      "via": "edit"
+    }
+  ]
+}
