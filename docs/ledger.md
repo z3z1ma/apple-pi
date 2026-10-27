@@ -24,12 +24,11 @@ Every new task has `retrospective.md`. Keep it concise: it distills what mattere
 .ledger/<task-id>/
   task.md
   retrospective.md
-  history.json
 ```
 
 It also adds a searchable live-index row. It requires a one-line title and description; an optional lowercase kebab slug overrides the title-derived slug. Existing live and archived IDs are never overwritten. Index updates are atomic and add/status transactions use a project-scoped exclusive lease.
 
-The initial files are deliberately small. `task.md` provides `Status`, `Created`, `Updated`, and intent/current-state/outcome sections. `retrospective.md` provides concise what-mattered, learnings, and improvements sections. `history.json` is described under [History](#history). Add anything else only when useful.
+The initial files are deliberately small. `task.md` provides `Status`, `Created`, `Updated`, and intent/current-state/outcome sections. `retrospective.md` provides concise what-mattered, learnings, and improvements sections. Add anything else only when useful.
 
 ## Lifecycle
 
@@ -50,25 +49,9 @@ Live index rows read `` - `.ledger/<id>/task.md` — <status> — <title> — <d
 
 It does not judge whether work is complete. Read and edit existing ledger files with ordinary repository tools.
 
-## History
+## Relationships
 
-The ledger extension keeps `history.json` in each task bundle to record which Pi sessions worked on the task. It holds session IDs only:
-
-```json
-{
-  "sessions": [{ "id": "<Pi session id>", "linkedAt": "<ISO time>", "via": "ledger_add" }]
-}
-```
-
-A Pi session is linked the first time it calls `ledger_add` or `ledger_status` for the task, or changes a file inside the task's live bundle. `via` records which (`ledger_add`, `ledger_status`, or `edit`). Each session appears once.
-
-- A `write` or `edit` links through its path, resolved as those tools resolve it (`~/`, `file://`, and `@` included). The ledger is the nearest `.ledger/<task-id>/` holding the file, so a session working in a repository below a parent-directory ledger links to that ledger.
-- A `bash` or `pi_exec` call links when, after it, a live bundle has a file added, removed, or changed (by modification time, status-change time, or size) compared with just before it. Only bundles under the session's directory and its ancestors' `.ledger/` directories are compared, and `history.json` itself is ignored.
-- Only sessions with a session file (a persisted transcript) link. Sessions without one, such as interns, link nothing, since their IDs would point at no transcript.
-
-A closing session's link is written before the bundle moves to `.ledger/history/`, so the archive keeps `history.json`. Updates are atomic and share the add/status lease. A link waits while another ledger transaction holds the lease, until it is free or the session aborts. A link that was waiting when the task closed is written into the archived bundle.
-
-Transcripts stay in the local Pi session store. A shared `.ledger/` carries only session IDs, not transcripts. The tmux sidebar reads these links to title agent cards with their ledger task.
+The workplace runtime owns assignments, focus and task lifecycle records. Task tools automatically retain callers and assignees as task-thread participants, including ledger creators and status callers who hold no assignment. Each person's ID is its Pi session ID; the session record points to its transcript. Participation includes coordination and notification audiences; assignments separately record who held the work and when. Use `link` for other explicit relationships between tasks, people and artifacts. Editing ledger files changes only those files; it creates no session-pointer metadata or work assignments. See [tasks and assignments](session-state.md#tasks-and-assignments).
 
 ## Boundaries
 

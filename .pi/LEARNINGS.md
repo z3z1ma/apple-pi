@@ -33,7 +33,7 @@
 - To cover OS branches in one Vitest process, override `process.platform` with `Object.defineProperty` and restore the saved descriptor in `finally`.
 - Before a plan relies on a hook firing, read its guard in code. The tmux-sessions plugin reruns only when its path-plus-mtime stamp changes, not on every pi start.
 - For scripts in `.ledger/<task>/`, find the repository root by walking up to a marker directory, not a fixed `Path.parents[n]`: closing the task moves it under `history/`.
-- Editing a context file under `.context/.ledger/<task>/` makes the ledger extension write a stray `.context/.ledger/<task>/history.json`. Delete it before committing. After `ledger_status done`, move `.context/.ledger/<task>/` to `.context/.ledger/history/<task>/`, rewrite its `Coupled:` paths to the history path, and rerun `context_lint`.
+- After `ledger_status done`, move `.context/.ledger/<task>/` to `.context/.ledger/history/<task>/`, rewrite its `Coupled:` paths to the history path, and rerun `context_lint`.
 - The operator reviews ticket sets in the bundle: write the tickets into `.ledger/<task>/tickets/` first, then open `sign_off_task`; its verdict is the approval.
 - Never kill processes by pattern (`pkill -f vitest`) in this shared checkout: it can kill other lanes' runs. Cancel your own run with `task cancel` and kill only PIDs you started.
 - When reading the installed Pi package, grep `dist/core/` and `dist/modes/`, not `dist/bundle/chunks/`: the chunks are minified single lines that flood the output.

@@ -21,7 +21,7 @@ beforeAll(() => startRuntime(state.socketPath));
 afterAll(() => stopRuntime(state));
 const call = (name: string, args: Parameters<typeof fauxToolCall>[1]): Reply =>
 	fauxAssistantMessage([fauxToolCall(name, args)], { stopReason: "toolUse" });
-async function person(manager?: string, role?: string) {
+async function person(manager?: string, role?: string, cwd?: string) {
 	const script: Reply[] = [];
 	const run = await fauxSession(
 		[
@@ -38,6 +38,7 @@ async function person(manager?: string, role?: string) {
 				? fauxAssistantMessage("Nothing changed.")
 				: (script.shift() ?? fauxAssistantMessage("noted")),
 		["ledger_add", "ledger_status", "read"],
+		{ cwd },
 	);
 	const id = run.session.sessionManager.getSessionId();
 	if (role) {
@@ -82,6 +83,48 @@ async function packets(run: Awaited<ReturnType<typeof fauxSession>>, count: numb
 	await vi.waitFor(() => expect(goalPackets(run)).toHaveLength(count), { timeout: 10000 });
 	await vi.waitFor(() => expect(run.session.isStreaming).toBe(false));
 }
+
+test("ledger creation and status callers remain task participants without assignments", async () => {
+	const creator = await person();
+	const editor = await person(creator.id, undefined, creator.run.cwd);
+	const closer = await person(creator.id, undefined, creator.run.cwd);
+	type TaskThread = { id: string; kind: string; subject: string; participants: { id: string }[] };
+	const taskThreads = async (who: typeof creator) =>
+		(await who.invoke<{ threads: TaskThread[] }>("inbox", { all: true })).threads.filter(
+			(thread) => thread.kind === "task",
+		);
+	const participantIds = (thread: TaskThread) => thread.participants.map((participant) => participant.id).sort();
+	try {
+		const added = await creator.invoke<{ taskId: string; bundlePath: string }>("ledger_add", {
+			title: "Preserve task context",
+			description: "Keep session relationships in workplace state",
+		});
+		const bundle = realpathSync(join(creator.run.cwd, added.bundlePath));
+		const threads = await taskThreads(creator);
+		expect(threads).toHaveLength(1);
+		const thread = threads[0];
+		expect(thread.subject).toBe("Preserve task context");
+		expect(participantIds(thread)).toEqual([creator.id]);
+		for (const status of ["ready", "in-progress"]) await editor.invoke("ledger_status", { task: bundle, status });
+		const edited = (await taskThreads(editor)).find((entry) => entry.id === thread.id)!;
+		expect(participantIds(edited)).toEqual([creator.id, editor.id].sort());
+		await closer.invoke("ledger_status", { task: bundle, status: "done" });
+		for (const who of [creator, editor, closer]) {
+			const retained = (await taskThreads(who)).find((entry) => entry.id === thread.id)!;
+			expect(participantIds(retained)).toEqual([creator.id, editor.id, closer.id].sort());
+			const read = await who.invoke<{ thread: { id: string; subject: string } }>("read_thread", { thread: thread.id });
+			expect(read.thread).toMatchObject({ id: thread.id, subject: "Preserve task context" });
+		}
+		const directory = await creator.invoke<{ members: { id: string; tasks: unknown[]; focus: unknown }[] }>(
+			"directory",
+			{},
+		);
+		for (const who of [creator, editor, closer])
+			expect(directory.members.find((member) => member.id === who.id)).toMatchObject({ tasks: [], focus: null });
+	} finally {
+		for (const who of [closer, editor, creator]) await close(who.run);
+	}
+}, 30000);
 
 test("taking, switching, rereading, and compaction append the explicit goal; finishing archives informal work and its retrospective", async () => {
 	const who = await person();

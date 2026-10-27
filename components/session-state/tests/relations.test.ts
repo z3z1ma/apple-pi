@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai/compat";
@@ -133,7 +133,7 @@ test("a session in a git repository shows its repository, worktree, and branch, 
 	}
 }, 20000);
 
-test("editing other ledger bundles records their touch history without changing the explicit assignment or focus", async () => {
+test("editing other ledger bundles changes only the requested files and preserves the explicit assignment and focus", async () => {
 	const cwd = tempDir("aps-ledger-");
 	for (const task of ["202610180001-alpha", "202610180002-beta"]) {
 		mkdirSync(join(cwd, ".ledger", task), { recursive: true });
@@ -149,9 +149,13 @@ test("editing other ledger bundles records their touch history without changing 
 					stopReason: "toolUse",
 				},
 			),
+			fauxAssistantMessage([fauxToolCall("directory", { person: manager.getSessionId() })], { stopReason: "toolUse" }),
 			write(".ledger/202610180001-alpha/notes.md", "first"),
 			write(".ledger/202610180002-beta/notes.md", "second"),
+			fauxAssistantMessage([fauxToolCall("directory", { person: manager.getSessionId() })], { stopReason: "toolUse" }),
 			fauxAssistantMessage("done"),
+			fauxAssistantMessage([fauxToolCall("directory", { person: manager.getSessionId() })], { stopReason: "toolUse" }),
+			fauxAssistantMessage("reconnected"),
 		],
 		["write"],
 		{ cwd, sessionManager: manager },
@@ -160,40 +164,50 @@ test("editing other ledger bundles records their touch history without changing 
 		const id = manager.getSessionId();
 		await seen(id);
 		await run.session.prompt("take notes");
-		const focus = query(state.dbPath, "select task_id from work_focus where person = ?", id);
-		expect(focus).toHaveLength(1);
-		const assignment = query(state.dbPath, "select task_id from assignments where person = ? and ended_at is null", id);
-		expect(assignment).toEqual(focus);
+		const views = () =>
+			run.session.messages
+				.filter((message) => message.role === "toolResult")
+				.filter((message) => message.toolName === "directory");
+		expect(views()).toHaveLength(2);
+		const before = views()[0].details as { focus: { id: string }; tasks: { id: string }[] };
+		expect(before).toMatchObject({ focus: { title: "Session lifecycle" }, tasks: [{ title: "Session lifecycle" }] });
+		expect(views()[1]).toMatchObject({ isError: false, details: { focus: before.focus, tasks: before.tasks } });
 		for (const task of ["202610180001-alpha", "202610180002-beta"]) {
-			const history = JSON.parse(readFileSync(join(cwd, ".ledger", task, "history.json"), "utf8"));
-			expect(history.sessions).toContainEqual(expect.objectContaining({ id, via: "edit" }));
+			expect(readdirSync(join(cwd, ".ledger", task)).sort()).toEqual(["notes.md", "task.md"]);
 		}
-		expect(query(state.dbPath, "select * from session_tasks where session_id = ?", id)).toEqual([]);
-		expect(session(id).current_task).toBeNull();
 		await run.session.bindExtensions({});
-		expect(query(state.dbPath, "select task_id from work_focus where person = ?", id)).toEqual(focus);
+		await run.session.prompt("show my work after reconnecting");
+		expect(views()).toHaveLength(3);
+		expect(views()[2]).toMatchObject({ isError: false, details: { focus: before.focus, tasks: before.tasks } });
 	} finally {
 		await close(run);
 	}
 }, 20000);
 
-test("editing a ledger bundle in an in-memory session assigns no work and creates no broken history pointer", async () => {
+test("editing a ledger bundle without taking work leaves the person unassigned", async () => {
 	const cwd = tempDir("aps-ledger-mem-");
 	mkdirSync(join(cwd, ".ledger", "202610180003-gamma"), { recursive: true });
 	writeFileSync(join(cwd, ".ledger", "202610180003-gamma", "task.md"), "# gamma\n");
+	const manager = SessionManager.inMemory(cwd);
 	const run = await fauxSession(
 		[bridge, installLedger],
-		[write(".ledger/202610180003-gamma/notes.md", "note"), fauxAssistantMessage("done")],
+		[
+			write(".ledger/202610180003-gamma/notes.md", "note"),
+			fauxAssistantMessage([fauxToolCall("directory", { person: manager.getSessionId() })], { stopReason: "toolUse" }),
+			fauxAssistantMessage("done"),
+		],
 		["write"],
-		{ cwd },
+		{ cwd, sessionManager: manager },
 	);
 	try {
 		const id = run.session.sessionManager.getSessionId();
 		await seen(id);
 		await run.session.prompt("note it");
-		expect(query(state.dbPath, "select * from assignments where person = ?", id)).toEqual([]);
-		expect(query(state.dbPath, "select * from work_focus where person = ?", id)).toEqual([]);
-		expect(existsSync(join(cwd, ".ledger", "202610180003-gamma", "history.json"))).toBe(false);
+		const directory = run.session.messages.find(
+			(message) => message.role === "toolResult" && message.toolName === "directory",
+		);
+		expect(directory).toMatchObject({ isError: false, details: { tasks: [], focus: null } });
+		expect(readdirSync(join(cwd, ".ledger", "202610180003-gamma")).sort()).toEqual(["notes.md", "task.md"]);
 	} finally {
 		await close(run);
 	}

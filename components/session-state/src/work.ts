@@ -362,15 +362,7 @@ export function changeWork(
 			const previous = task.bundle;
 			previousBundle = previous;
 			const title = command.title ?? taskTitle(task);
-			const added = promoteLedgerTask(
-				task.project,
-				previous,
-				title,
-				command.description ?? title,
-				rollback,
-				committed,
-				actor,
-			);
+			const added = promoteLedgerTask(task.project, previous, title, command.description ?? title, rollback, committed);
 			task = { ...task, bundle: join(task.project, added.bundlePath), ephemeral: 0 };
 			db.prepare("update work_tasks set bundle = ?, ephemeral = 0 where id = ?").run(task.bundle, task.id);
 			participate(db, task, actor, now);
@@ -384,12 +376,14 @@ export function changeWork(
 	return { task, person, post: { thread: task.thread, body }, notify: person, goal };
 }
 
-/** A new ledger task is its creator's organization's obligation from now, assigned or not. */
+/** Record a ledger task and its caller's participation, without assigning work or reopening it. */
 export function openLedgerTask(db: DatabaseSync, sender: string, bundle: string, now: number): WorkTask {
 	const path = realpathSync(bundle);
 	const known = db.prepare("select * from work_tasks where bundle = ?").get(path) as unknown as WorkTask | undefined;
-	if (known) return known;
-	return recordTask(db, `work-${randomUUID()}`, path, dirname(dirname(path)), rootOf(db, sender), 0, sender, now);
+	const task =
+		known ?? recordTask(db, `work-${randomUUID()}`, path, dirname(dirname(path)), rootOf(db, sender), 0, sender, now);
+	participate(db, task, sender, now);
+	return task;
 }
 
 /**
@@ -407,13 +401,14 @@ export function closeLedgerTask(
 	const source = join(realpathSync(dirname(from)), basename(from));
 	const destination = realpathSync(to);
 	readFileSync(join(destination, "task.md"), "utf8");
-	const known = db.prepare("select id from work_tasks where bundle in (?, ?)").get(source, destination) as
-		| { id: string }
+	const known = db.prepare("select * from work_tasks where bundle in (?, ?)").get(source, destination) as unknown as
+		| WorkTask
 		| undefined;
-	const id =
-		known?.id ??
-		recordTask(db, `work-${randomUUID()}`, destination, dirname(dirname(source)), rootOf(db, sender), 0, sender, now)
-			.id;
+	const task =
+		known ??
+		recordTask(db, `work-${randomUUID()}`, destination, dirname(dirname(source)), rootOf(db, sender), 0, sender, now);
+	participate(db, task, sender, now);
+	const id = task.id;
 	db.prepare(
 		"update work_tasks set bundle = ?, archived_at = coalesce(archived_at, ?), close_status = coalesce(close_status, ?) where id = ?",
 	).run(destination, now, status, id);

@@ -1,5 +1,5 @@
 import { realpathSync } from "node:fs";
-import { basename, dirname, join } from "node:path";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineTool, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
@@ -7,23 +7,14 @@ import { Type } from "typebox";
 import { sendCommand } from "../components/session-state/src/client.js";
 import type { Command } from "../components/session-state/src/protocol.js";
 import { withWork } from "../components/session-state/src/work.js";
-import {
-	addLedgerTask,
-	isLiveStatus,
-	linkChangedFile,
-	linkSession,
-	observeBundles,
-	STATUSES,
-	transitionLedgerTask,
-} from "../components/shared/src/ledger-files.js";
+import { addLedgerTask, isLiveStatus, STATUSES, transitionLedgerTask } from "../components/shared/src/ledger-files.js";
 import { LEDGER_SYSTEM_PROMPT, LEDGER_SYSTEM_PROMPT_TAG } from "../components/shared/src/ledger-system-prompt.js";
 import { setSystemPromptSection } from "../components/shared/src/system-prompt-section.js";
 
 export { addLedgerTask, transitionLedgerTask } from "../components/shared/src/ledger-files.js";
 export const LEDGER_EXTENSION_PATH = fileURLToPath(import.meta.url);
-const OPAQUE_CHANGE_TOOLS = new Set(["bash", "pi_exec"]);
 
-/** Tell the runtime about a task's open or close, unless session state is off or has never run here. */
+/** Record task lifecycle and caller participation, unless session state is off or has never run here. */
 async function recordInRuntime(
 	ctx: ExtensionContext,
 	command: Extract<Command, { kind: "task_opened" | "task_moved" }>,
@@ -33,11 +24,6 @@ async function recordInRuntime(
 	if (process.env.PI_SESSION_STATE_DISABLED === "1" || !withWork(() => true)) return;
 	const receipt = await sendCommand(ctx.sessionManager.getSessionId(), command, { signal });
 	if (receipt.stage === "failed") throw new Error(`${failure}: ${receipt.reason}`);
-}
-
-/** Only sessions with a persisted transcript link; an ID without a session file would point at nothing. */
-function linkableSession(ctx: ExtensionContext): string | undefined {
-	return ctx.sessionManager.getSessionFile() ? ctx.sessionManager.getSessionId() : undefined;
 }
 
 function createLedgerAddTool() {
@@ -59,14 +45,7 @@ function createLedgerAddTool() {
 		}),
 		async execute(_toolCallId, params, signal, _onUpdate, ctx) {
 			if (!ctx.isProjectTrusted()) throw new Error("Adding a ledger task requires a trusted session repository");
-			const result = await addLedgerTask(
-				ctx.cwd,
-				params.title,
-				params.description,
-				params.slug,
-				new Date(),
-				linkableSession(ctx),
-			);
+			const result = await addLedgerTask(ctx.cwd, params.title, params.description, params.slug);
 			await recordInRuntime(
 				ctx,
 				{ kind: "task_opened", bundle: join(realpathSync(ctx.cwd), result.bundlePath) },
@@ -107,7 +86,7 @@ function createLedgerStatusTool() {
 		async execute(_toolCallId, params, signal, _onUpdate, ctx) {
 			if (!ctx.isProjectTrusted()) throw new Error("Changing a ledger task requires a trusted session repository");
 			const root = realpathSync(ctx.cwd);
-			const result = await transitionLedgerTask(root, params.task, params.status, linkableSession(ctx));
+			const result = await transitionLedgerTask(root, params.task, params.status);
 			const from = join(root, ".ledger", result.taskId);
 			if (result.status === "done" || result.status === "cancelled")
 				await recordInRuntime(
@@ -115,6 +94,13 @@ function createLedgerStatusTool() {
 					{ kind: "task_moved", from, to: join(root, result.bundlePath), status: result.status },
 					signal,
 					"The ledger task was archived, but the runtime did not record its close",
+				);
+			else
+				await recordInRuntime(
+					ctx,
+					{ kind: "task_opened", bundle: join(root, result.bundlePath) },
+					signal,
+					"The ledger status changed, but the runtime did not record participation",
 				);
 			const verb = isLiveStatus(result.status) ? "Moved" : "Archived";
 			return {
@@ -142,30 +128,4 @@ export default function installLedger(pi: ExtensionAPI): void {
 	);
 	pi.registerTool(createLedgerAddTool());
 	pi.registerTool(createLedgerStatusTool());
-	// Bundle signatures seen before each bash or pi_exec call, per session; their changes are found by comparison.
-	const observed = new Map<string, Map<string, string>>();
-	pi.on("tool_call", (event, ctx) => {
-		if (OPAQUE_CHANGE_TOOLS.has(event.toolName))
-			observed.set(ctx.sessionManager.getSessionId(), observeBundles(ctx.cwd));
-	});
-	// Only a session with a persisted transcript is written to history.json. Touching a file never assigns work.
-	pi.on("tool_result", async (event, ctx) => {
-		const sessionId = ctx.sessionManager.getSessionId();
-		const historySession = linkableSession(ctx);
-		if (event.toolName === "write" || event.toolName === "edit") {
-			if (!event.isError && typeof event.input.path === "string") {
-				await linkChangedFile(ctx.cwd, event.input.path, historySession, ctx.signal);
-			}
-			return;
-		}
-		const before = OPAQUE_CHANGE_TOOLS.has(event.toolName) ? observed.get(sessionId) : undefined;
-		if (!before) return;
-		const after = observeBundles(ctx.cwd);
-		observed.set(sessionId, after);
-		for (const [bundle, signature] of after) {
-			const previous = before.get(bundle);
-			if (previous === undefined || previous === signature) continue;
-			await linkSession(dirname(dirname(bundle)), basename(bundle), historySession, ctx.signal);
-		}
-	});
 }

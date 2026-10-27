@@ -135,7 +135,7 @@ Ephemeral tasks live under the Pi state directory in `tasks/<id>/`, with `task.m
 
 Only an unroled organization root or a managing role can `assign` and `unassign`, and only inside its own organization. The operator can assign anyone. `take_task` with an existing task works only when nobody else holds that task.
 
-`promote_task(task)` moves a live ephemeral bundle into its project's `.ledger/`, through the same index transaction as `ledger_add`. Files, assignment identity, and thread stay together. Its heading supplies the ledger title and summary; optional `title` and `description` can name it more clearly. The runtime alone writes assignments and focus. Editing a ledger bundle still records a transcript pointer in `history.json`, but never assigns work. Archiving a registered ledger task updates its bundle path without ending assignments or changing their identity. Views read the explicit focus, never old inferred intent or ledger touches.
+`promote_task(task)` moves a live ephemeral bundle into its project's `.ledger/`, through the same index transaction as `ledger_add`. Files, assignment identity, and thread stay together. Its heading supplies the ledger title and summary; optional `title` and `description` can name it more clearly. The runtime alone writes assignments and focus. Editing a ledger bundle never assigns work; use `link` for explicit task and artifact relationships. Archiving a registered ledger task updates its bundle path without ending assignments or changing their identity. Views read the explicit focus, never old inferred intent or ledger touches.
 
 ## Fitness
 

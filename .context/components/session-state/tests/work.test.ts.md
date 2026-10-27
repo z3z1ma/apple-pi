@@ -1,5 +1,8 @@
 ## file
 
+Ledger participation tests use native `inbox` discovery, `read_thread` access and `directory` work projections for independent callers sharing one project. Participation remains visible after archive, while callers without assignments still have empty held work and focus.
+Why: a participant row or audience-event count alone does not prove that a caller can discover and read its task thread; directory results separately test ownership without pinning storage tables or event encoding.
+
 Management and insight fixtures use managing roles or recorded unroled roots. An unroled subordinate and a working-role person retain task/link calls but cannot call insight tools; a working role remains restricted even at a root. The human `/org` command still produces a fresh result without a model turn or changing capabilities.
 
 Native-tool evidence assertions must inspect the returned impact/finding entries as well as readable output, not merely section headings or provenance strings shared by several sections.
@@ -10,5 +13,5 @@ Each repeated expertise/help invocation must emit a fresh notice; otherwise a no
 Why: registration-only checks cannot prove command rendering, stale UI output can hide a broken command branch, and separately captured clocks or expecting rejected prompts would test fixture assumptions rather than the command contract.
 The adaptation demonstration uses a managing-role faux session and a predetermined sequence of actual org_work/org_expertise/assign/org_work calls against the spawned isolated runtime. It creates retained ready work, an unresolved decision and a currently idle unassigned person with indexed read experience through native producers. Assertions preserve task/person/link references and show the assignment changes readiness without resolving the unrelated decision.
 Why: this proves observations and an existing management action compose into visible before/after conditions. The scripted choice is not autonomous judgment, causal optimization, a real teammate launch or pi_exec composition proof.
-Coupled: components/session-state/src/work-tools.ts, components/session-state/src/fitness.ts, components/session-state/src/inspect.ts, components/organization/src/charters.ts
+Coupled: components/session-state/src/work-tools.ts, components/session-state/src/mail.ts, components/session-state/src/peers.ts, components/session-state/src/fitness.ts, components/session-state/src/inspect.ts, components/organization/src/charters.ts
 Verify: components/session-state/tests/work.test.ts
