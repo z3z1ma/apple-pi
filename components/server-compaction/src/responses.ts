@@ -73,15 +73,15 @@ type CompleteFn = (
 	},
 ) => Promise<AssistantMessage>;
 
-/** OpenAI's documented minimum, so the server compacts everything it is sent. */
+/** OpenAI's minimum trigger threshold; generation stops once it emits a checkpoint. */
 const SUBSCRIPTION_COMPACT_THRESHOLD = 1000;
 
 /**
  * Compact in an ordinary Responses request with the session's instructions and tools.
  * As Codex does, a `compaction_trigger` item last makes the server answer with one
  * compaction item. ChatGPT subscription logins refuse the trigger but accept
- * `context_management`, which compacts at the threshold and then replies; the reply
- * is discarded. The newest compaction item wins. SSE keeps raw stream events visible.
+ * `context_management`, which can compact repeatedly while generating a reply.
+ * Stop that generation at the first complete checkpoint. SSE exposes its raw item.
  */
 export async function compactInRequest(options: {
 	complete: CompleteFn;
@@ -93,40 +93,56 @@ export async function compactInRequest(options: {
 	previousItems?: ResponsesCompactionItem[];
 	signal?: AbortSignal;
 }): Promise<ResponsesCompactionItem[]> {
+	options.signal?.throwIfAborted();
+	const completionController = new AbortController();
+	const signal = options.signal
+		? AbortSignal.any([options.signal, completionController.signal])
+		: completionController.signal;
 	let compaction: ResponsesCompactionItem | undefined;
-	const result = await options.complete(
-		options.model,
-		{ systemPrompt: options.systemPrompt, messages: convertToLlm(options.messages), tools: options.tools },
-		{
-			signal: options.signal,
-			transport: "sse",
-			onPayload: (payload) => {
-				const record = payload as Record<string, unknown>;
-				const input = withCompactionFirst(Array.isArray(record.input) ? record.input : [], options.previousItems ?? []);
-				if (options.subscriptionLogin) {
-					return {
-						...record,
-						input,
-						context_management: [{ type: "compaction", compact_threshold: SUBSCRIPTION_COMPACT_THRESHOLD }],
-					};
-				}
-				input.push({ type: "compaction_trigger" });
-				return { ...record, input };
+	let result: AssistantMessage | undefined;
+	try {
+		result = await options.complete(
+			options.model,
+			{ systemPrompt: options.systemPrompt, messages: convertToLlm(options.messages), tools: options.tools },
+			{
+				signal,
+				transport: "sse",
+				onPayload: (payload) => {
+					const record = payload as Record<string, unknown>;
+					const input = withCompactionFirst(
+						Array.isArray(record.input) ? record.input : [],
+						options.previousItems ?? [],
+					);
+					if (options.subscriptionLogin) {
+						return {
+							...record,
+							input,
+							context_management: [{ type: "compaction", compact_threshold: SUBSCRIPTION_COMPACT_THRESHOLD }],
+						};
+					}
+					input.push({ type: "compaction_trigger" });
+					return { ...record, input };
+				},
+				onProviderStreamEvent: (event) => {
+					const record = event as { type?: unknown; item?: ResponsesCompactionItem } | null;
+					if (
+						record?.type === "response.output_item.done" &&
+						record.item?.type === "compaction" &&
+						typeof record.item.encrypted_content === "string"
+					) {
+						if (options.subscriptionLogin && compaction) return;
+						compaction = record.item;
+						if (options.subscriptionLogin) completionController.abort();
+					}
+				},
 			},
-			onProviderStreamEvent: (event) => {
-				const record = event as { type?: unknown; item?: ResponsesCompactionItem } | null;
-				if (
-					record?.type === "response.output_item.done" &&
-					record.item?.type === "compaction" &&
-					typeof record.item.encrypted_content === "string"
-				) {
-					compaction = record.item;
-				}
-			},
-		},
-	);
+		);
+	} catch (error) {
+		if (!compaction || !completionController.signal.aborted || options.signal?.aborted) throw error;
+	}
+	options.signal?.throwIfAborted();
 	if (compaction) return [compaction];
-	throw new Error(result.errorMessage ?? `no compaction item (stop reason ${result.stopReason})`);
+	throw new Error(result?.errorMessage ?? `no compaction item (stop reason ${result?.stopReason})`);
 }
 
 /** The server drops input that precedes a compaction item, so instructions and tool declarations go after it. */

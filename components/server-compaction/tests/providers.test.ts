@@ -21,7 +21,7 @@ function event(previous?: unknown) {
 
 /** Plays the provider: hands the built request to onPayload and streams the given events. */
 function registry(events: unknown[], stopReason = "stop") {
-	const seen: { payload?: Record<string, unknown>; maxTokens?: number } = {};
+	const seen: { payload?: Record<string, unknown>; maxTokens?: number; cancelled?: boolean } = {};
 	const complete = vi.fn(async (_model, _context, options) => {
 		seen.payload = options.onPayload({
 			betas: ["oauth-2025-04-20"],
@@ -30,7 +30,11 @@ function registry(events: unknown[], stopReason = "stop") {
 			stop_sequences: ["x"],
 		});
 		seen.maxTokens = options.maxTokens;
-		for (const streamed of events) options.onProviderStreamEvent?.(streamed);
+		for (const streamed of events) {
+			options.onProviderStreamEvent?.(streamed);
+			if (options.signal?.aborted) break;
+		}
+		seen.cancelled = options.signal?.aborted ?? false;
 		return { stopReason, errorMessage: stopReason === "error" ? "Unhandled stop reason: compaction" : undefined };
 	});
 	return { complete, seen };
@@ -103,7 +107,7 @@ describe("OpenAI server-side compaction", () => {
 		expect(result?.summary).toContain("[Server-side compaction cmp_1]");
 	});
 
-	it("asks a ChatGPT subscription login to compact with context_management instead", async () => {
+	it("stops subscription generation at the first complete compaction item", async () => {
 		const item = { type: "compaction", id: "cmp_2", encrypted_content: "enc_2" };
 		const { complete, seen } = registry([
 			{ type: "response.output_item.done", item: { type: "compaction", id: "cmp_1", encrypted_content: "enc_1" } },
@@ -114,7 +118,38 @@ describe("OpenAI server-side compaction", () => {
 
 		expect(seen.payload?.context_management).toEqual([{ type: "compaction", compact_threshold: 1000 }]);
 		expect(seen.payload?.input).toEqual([{ role: "developer", content: "system" }]);
-		expect(result?.serverCompaction).toEqual({ api: "openai-responses", provider: "openai", items: [item] });
+		expect(result?.serverCompaction).toEqual({
+			api: "openai-responses",
+			provider: "openai",
+			items: [{ type: "compaction", id: "cmp_1", encrypted_content: "enc_1" }],
+		});
+		expect(seen.cancelled).toBe(true);
+	});
+
+	it("keeps a complete checkpoint when its own cancellation rejects the reply", async () => {
+		const item = { type: "compaction", id: "cmp_complete", encrypted_content: "enc_complete" };
+		let cancelled = false;
+		const complete = vi.fn(async (_model, _context, options) => {
+			options.onProviderStreamEvent({ type: "response.output_item.done", item });
+			cancelled = options.signal?.aborted ?? false;
+			throw new DOMException("Reply cancelled", "AbortError");
+		});
+		const result = await compactOnServer(event(), ctx("openai", "openai-responses", complete, "chatgpt-token"), []);
+		expect(cancelled).toBe(true);
+		expect(result?.serverCompaction).toMatchObject({ items: [item] });
+	});
+
+	it("does not publish a captured checkpoint after caller cancellation", async () => {
+		const controller = new AbortController();
+		const item = { type: "compaction", id: "cmp_cancelled", encrypted_content: "enc_cancelled" };
+		const complete = vi.fn(async (_model, _context, options) => {
+			options.onProviderStreamEvent({ type: "response.output_item.done", item });
+			controller.abort();
+			return { stopReason: "aborted" };
+		});
+		const context = ctx("openai", "openai-responses", complete, "chatgpt-token");
+		expect(await compactOnServer(Object.assign(event(), { signal: controller.signal }), context, [])).toBeUndefined();
+		expect((context as { ui: { notify: ReturnType<typeof vi.fn> } }).ui.notify).not.toHaveBeenCalled();
 	});
 
 	it("chains the previous items ahead of the developer prompt", async () => {
