@@ -3,6 +3,9 @@
 Ledger participation tests use native `inbox` discovery, `read_thread` access and filtered compact `directory` rows for independent callers sharing one project. Participation remains visible after archive, while callers without assignments still have zero held/finished assignments and no focus. The directory responsibility case requests a current person profile, then explicit finished-history pages: unassigning stays out of the finished count/page, finishing supplies one exact outcome, and neither default details nor the profile embeds that outcome. Work/backlog discovery belongs to org_work, not directory.
 Why: a participant row or audience-event count alone does not prove that a caller can discover and read its task thread; directory results separately test ownership without pinning storage tables or event encoding.
 
+Completion retention is exercised through registered `finish_task` calls against the isolated runtime: compare its returned bundle with the original path, then read the status, retrospective and nested binary evidence from that same bundle. The shared-assignee case checks the path again after the final holder finishes.
+Why: a completion timestamp or an existing directory alone does not prove the promised artifact paths still resolve to intact contents; a copied archive could satisfy weaker existence checks while invalidating the original paths.
+
 Management and insight fixtures use managing roles or recorded unroled roots. An unroled subordinate and a working-role person retain task/link calls but cannot call insight tools; a working role remains restricted even at a root. The human `/org` command still produces a fresh result without a model turn or changing capabilities.
 
 Native-tool evidence assertions must inspect the returned impact/finding entries as well as readable output, not merely section headings or provenance strings shared by several sections.

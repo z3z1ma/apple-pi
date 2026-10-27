@@ -8,7 +8,7 @@
 - Retire notebook learnings in one call and wait for it before `ledger_status` `done`; in the same parallel batch, the ledger-close hold still sees them open. Also run `git commit` and `ledger_status done` one after the other, never in one batch: the archive moves files mid-commit.
 - Vitest in this repo hides `console.log` from passing tests. To inspect values in a scratch test, write them to a temporary file and read it, or assert on them.
 - Faux-session compaction (`tests/helpers/faux-session.ts`) needs `session.settingsManager.applyOverrides({ compaction: { keepRecentTokens: 1 } })`, or it reports "Nothing to compact".
-- For exact upstream Pi API or release facts, fetch the tagged file from `raw.githubusercontent.com` (for example with `pi_exec` `fetch`) and read it; search summaries can be truncated or secondhand.
+- For exact upstream Pi API or release facts, fetch the tagged file from `raw.githubusercontent.com` (for example with `pi_exec` `fetch`) and read it; search summaries can be truncated or secondhand. Locate installed SDK helpers through production imports and package exports rather than recalled directory names.
 - Test fakes of `ExtensionToolContext` need `tools` and `executeTool`; `ctx.executeTool()` also needs an assistant message that issued the parent call, so drive nested calls through a real faux-model turn.
 - Before you say a reference project lacks a feature, check its ADRs, specs, and tool contract, not only its README.
 - Apple-pi is self-contained: design as if skills and tools installed outside the repo (such as `~/.agents/skills`) do not exist. Borrow their ideas only when they serve the user's goal.

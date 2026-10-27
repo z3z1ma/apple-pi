@@ -36,6 +36,7 @@ beforeAll(async () => {
 		mkdirSync(bundle, { recursive: true });
 		writeFileSync(join(bundle, "task.md"), "# Completed task\nOutcome saved.\n");
 	}
+	writeFileSync(join(source, "late-evidence.txt"), "Retain evidence written after the historical archive copy.\n");
 	db.prepare(
 		"insert into work_tasks (id, bundle, project, organization, ephemeral, thread, archived_at) values ('moved-task', ?, ?, 'person', 1, 'task:moved-task', 1)",
 	).run(destination, project);
@@ -99,14 +100,13 @@ test("accepted task opens and closes are applied once at startup, at the time th
 });
 afterAll(() => stopRuntime(state));
 
-test("startup finishes source cleanup after a committed archive without touching its saved outcome", () => {
-	expect(existsSync(join(state.stateDir, "tasks", "moved-task"))).toBe(false);
+test("startup preserves the original bundle left by a historical finish receipt", () => {
+	expect(readFileSync(join(state.stateDir, "tasks", "moved-task", "late-evidence.txt"), "utf8")).toContain(
+		"Retain evidence written after the historical archive copy.",
+	);
 	expect(readFileSync(join(state.stateDir, "tasks", "history", "moved-task", "task.md"), "utf8")).toContain(
 		"Outcome saved.",
 	);
-	expect(query(state.dbPath, "select previous_bundle from work_changes where command_id = 'moved'")).toEqual([
-		{ previous_bundle: null },
-	]);
 });
 
 test("interrupted file changes without a committed assignment fail visibly and preserve the files for inspection", () => {
@@ -178,6 +178,8 @@ test("failed promotion restores the ledger index and leaves the original goal, a
 test("failed completion restores the outcome and keeps the assignment open", async () => {
 	const file = join(state.stateDir, "tasks/work-recover/task.md");
 	const before = readFileSync(file, "utf8");
+	const artifact = join(state.stateDir, "tasks/work-recover/evidence.txt");
+	writeFileSync(artifact, "Original evidence survives a failed finish.\n");
 	const receipts = await sendCommand(
 		state.socketPath,
 		"person",
@@ -189,7 +191,7 @@ test("failed completion restores the outcome and keeps the assignment open", asy
 	expect(query(state.dbPath, "select ended_at from assignments where task_id = 'work-recover'")).toEqual([
 		{ ended_at: null },
 	]);
-	expect(existsSync(join(state.stateDir, "tasks/history/work-recover"))).toBe(false);
+	expect(readFileSync(artifact, "utf8")).toBe("Original evidence survives a failed finish.\n");
 });
 
 test("an accepted link is recorded once at startup, with the command id as its id", () => {

@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -129,7 +129,7 @@ test("ledger creation and status callers remain task participants without assign
 	}
 }, 30000);
 
-test("taking, switching, rereading, and compaction append the explicit goal; finishing archives informal work and its retrospective", async () => {
+test("taking, switching, rereading, and compaction append the explicit goal; finishing preserves informal work and its artifacts in place", async () => {
 	const who = await person();
 	try {
 		const first = await who.invoke("take_task", {
@@ -174,12 +174,17 @@ test("taking, switching, rereading, and compaction append the explicit goal; fin
 			join(first.bundle, "retrospective.md"),
 			"# Retrospective\n\nA blocked queue, verified against the trace.\n",
 		);
+		mkdirSync(join(first.bundle, "evidence"));
+		const artifact = join(first.bundle, "evidence", "trace.bin");
+		const bytes = Buffer.from([0, 1, 127, 255]);
+		writeFileSync(artifact, bytes);
 		const finished = await who.invoke("finish_task", {
 			outcome: "Queue blockage verified against the trace; no retry cause found.",
 		});
 		expect(query(state.dbPath, "select sender, receiver from mail where receiver = ?", who.id)).toEqual([]);
-		expect(finished.bundle).toContain("/tasks/history/");
-		expect(existsSync(first.bundle)).toBe(false);
+		expect(finished.bundle).toBe(first.bundle);
+		expect(readFileSync(artifact)).toEqual(bytes);
+		expect(readFileSync(join(first.bundle, "task.md"), "utf8")).toMatch(/^Status: done$/m);
 		expect(readFileSync(join(finished.bundle, "task.md"), "utf8")).toContain("Queue blockage verified");
 		expect(readFileSync(join(finished.bundle, "retrospective.md"), "utf8")).toContain("blocked queue");
 		expect(query(state.dbPath, "select task_id from work_focus where person = ?", who.id)).toEqual([]);
@@ -256,6 +261,7 @@ test("assignments are shared task conversations, unassigning reports the change,
 		]);
 		const completed = await reviewer.invoke("finish_task", { outcome: "Independently verified the boundary cases." });
 		expect(completed.archived_at).not.toBeNull();
+		expect(completed.bundle).toBe(task.bundle);
 		expect(readFileSync(join(completed.bundle, "task.md"), "utf8")).toContain(
 			"Independently verified the boundary cases.",
 		);

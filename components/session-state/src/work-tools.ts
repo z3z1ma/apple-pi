@@ -693,7 +693,7 @@ export function installWork(pi: ExtensionAPI): void {
 			executionMode: "sequential",
 			label: "finish_task",
 			description:
-				"Finish your focused assignment: write the outcome into task.md, end your assignment, clear focus, and report the outcome to everyone in its task thread. Say what you verified and what you believe. A finished ephemeral task is archived with its retrospective once all assignees have finished; a ledger bundle stays under its ledger status workflow.",
+				"Finish your focused assignment: write the outcome into task.md, end your assignment, clear focus, and report the outcome to everyone in its task thread. Say what you verified and what you believe. Once all assignees finish, an ephemeral task is marked done and its directory, retrospective and artifacts stay at their original paths; finishing never moves or deletes the bundle. A ledger bundle stays under its ledger status workflow.",
 			parameters: Type.Object(
 				{ outcome: Type.String({ minLength: 1, description: "The outcome and verification, in your own words." }) },
 				{ additionalProperties: false },

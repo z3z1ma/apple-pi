@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { cpSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { promoteLedgerTask, retrospectiveTemplate, writeAtomicTextFile } from "../../shared/src/ledger-files.js";
@@ -33,7 +33,7 @@ export interface WorkTask {
 	organization: string;
 	ephemeral: number;
 	thread: string;
-	/** When it closed: an ephemeral task's archive, or a ledger task's move to history. */
+	/** When it closed, independent of whether its bundle moved. */
 	archived_at: number | null;
 	/** When it became the organization's obligation; null for a task recorded before this column existed. */
 	opened_at: number | null;
@@ -326,20 +326,9 @@ export function changeWork(
 		const done = !db.prepare("select 1 from assignments where task_id = ? and ended_at is null").get(task.id);
 		writeOutcome(task, held, nameOf(db, person), command.outcome, Boolean(done && task.ephemeral), rollback);
 		if (done && task.ephemeral) {
-			const previous = task.bundle;
-			previousBundle = previous;
-			const archived = join(stateDir, "tasks", "history", task.id);
-			mkdirSync(dirname(archived), { recursive: true });
-			rollback.push(() => rmSync(archived, { recursive: true, force: true }));
-			cpSync(previous, archived, { recursive: true });
-			task = { ...task, bundle: archived, archived_at: now, close_status: "done" };
-			db.prepare("update work_tasks set bundle = ?, archived_at = ?, close_status = 'done' where id = ?").run(
-				archived,
-				now,
-				task.id,
-			);
+			task = { ...task, archived_at: now, close_status: "done" };
+			db.prepare("update work_tasks set archived_at = ?, close_status = 'done' where id = ?").run(now, task.id);
 			resolveWaitsOn(db, task.id, now);
-			committed.push(() => rmSync(previous, { recursive: true, force: true }));
 		}
 		body = `${nameOf(db, person)} finished ${taskTitle(task)}.\n\n${command.outcome}`;
 	} else {
@@ -418,10 +407,15 @@ export function closeLedgerTask(
 	);
 }
 
-/** A committed move may have lost power before removing its source. The destination and assignments already agree. */
+/** Finish explicit promotion moves after a crash; historical finish receipts preserve their source bundles. */
 export function cleanMovedBundles(db: DatabaseSync): void {
+	db.prepare(
+		"update work_changes set previous_bundle = null where action = 'finish' and previous_bundle is not null",
+	).run();
 	const moves = db
-		.prepare("select command_id, previous_bundle from work_changes where previous_bundle is not null")
+		.prepare(
+			"select command_id, previous_bundle from work_changes where action = 'promote' and previous_bundle is not null",
+		)
 		.all() as { command_id: string; previous_bundle: string }[];
 	for (const move of moves) {
 		try {
