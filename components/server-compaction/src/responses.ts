@@ -46,7 +46,7 @@ export async function compactWithResponses(options: {
 	previousItems?: ResponsesCompactionItem[];
 	signal?: AbortSignal;
 }): Promise<ResponsesCompactionItem[]> {
-	const input = convertMessagesForResponsesCompaction(options.messages, options.previousItems);
+	const input = convertMessagesForResponsesCompaction(options.messages, options.model, options.previousItems);
 	const response = await fetch(compactEndpoint(options.model, options.auth), {
 		method: "POST",
 		headers: requestHeaders(options.auth),

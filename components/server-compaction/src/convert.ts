@@ -1,4 +1,6 @@
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
+import type { Model } from "@earendil-works/pi-ai";
+import { transformMessages } from "@earendil-works/pi-ai/api/transform-messages";
 import { convertToLlm } from "@earendil-works/pi-coding-agent";
 import type { ResponsesCompactionItem } from "./types.js";
 
@@ -37,15 +39,16 @@ function toolOutput(content: unknown): string {
 
 /**
  * Convert Pi messages into Responses `input` items, keeping tool calls,
- * tool results, reasoning signatures, and images.
+ * tool results, compatible reasoning signatures, and images under Pi's model-aware replay policy.
  */
 export function convertMessagesForResponsesCompaction(
 	messages: AgentMessage[],
+	model: Model<any>,
 	previousItems: ResponsesCompactionItem[] = [],
 ): Record<string, unknown>[] {
 	const input: Record<string, unknown>[] = [...previousItems];
 
-	for (const msg of convertToLlm(messages)) {
+	for (const msg of transformMessages(convertToLlm(messages), model)) {
 		if (msg.role === "user") {
 			input.push({ role: "user", content: userContent(msg.content) });
 			continue;
