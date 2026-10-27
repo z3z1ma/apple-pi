@@ -270,7 +270,7 @@ test("a legacy link with a missing recorder can be resolved through its survivin
 test("the link-origin migration preserves legacy provenance and reports unrecoverable ownership", () => {
 	const db = new DatabaseSync(":memory:");
 	migrate(db);
-	db.exec("alter table links drop column organization; pragma user_version = 26");
+	db.exec("drop index events_by_type; alter table links drop column organization; pragma user_version = 26");
 	db.prepare(
 		"insert into links (id, from_kind, from_id, to_kind, to_id, relation, recorded_by, inferred, created_at) values ('legacy', 'file', 'a.ts', 'commit', 'abc', 'blocks', 'gone', 0, 1)",
 	).run();

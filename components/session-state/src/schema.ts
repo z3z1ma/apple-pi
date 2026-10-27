@@ -297,6 +297,7 @@ const MIGRATIONS = [
 	 select cast(unixepoch('subsec') * 1000 as integer), 'migration', p.session_id, 'program_peer_observed', json_object('caller', p.created_by)
 	 from program_peers p
 	 where not exists (select 1 from events e where e.session_id = p.session_id and e.type in ('program_peer_created', 'program_peer_observed'));`,
+	`create index events_by_type on events (type, seq);`,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

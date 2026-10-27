@@ -1054,7 +1054,7 @@ test("a database before lifecycle tracking gains task lifecycle columns and keep
 		db.exec(
 			"drop table links; alter table work_tasks drop column opened_at; alter table work_tasks drop column close_status",
 		);
-		db.exec("pragma user_version = 24");
+		db.exec("drop index events_by_type; pragma user_version = 24");
 		migrate(db);
 		// Opened at the first assignment; an archived ephemeral task closed done.
 		expect(db.prepare("select id, opened_at, close_status from work_tasks order by id").all()).toEqual([
