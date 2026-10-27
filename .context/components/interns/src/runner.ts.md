@@ -8,5 +8,8 @@ The shell is part of the intern contract for inspection and source retrieval. A 
 
 Native event observation is shared with peer turns. Keep process creation and cleanup here and outcome/usage/file-change interpretation in the shared observer.
 
-Coupled: components/interns/src/index.ts, components/interns/src/prompts.ts, components/shared/src/turn-observer.ts
+The explicit extension loadout includes the Anthropic watchdog even when the caller already has it active.
+Why: discovery is disabled in the separate intern process, and the caller's process-wide HTTP observer cannot protect that process's requests. The child-argument regression checks this propagation; watchdog transport suites check enforcement.
+
+Coupled: components/interns/src/index.ts, components/interns/src/prompts.ts, components/shared/src/turn-observer.ts, extensions/anthropic-watchdog.ts
 Verify: components/interns/tests/interns.test.ts, tests/home-search-guard-integration.test.ts, tests/ledger-prompt-integration.test.ts, tests/wiki-prompt-integration.test.ts
