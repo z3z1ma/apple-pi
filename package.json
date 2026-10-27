@@ -23,6 +23,7 @@
     "components/pair-programmer/src/",
     "components/ask-user-question/src/",
     "components/vroom/src/",
+    "components/anthropic-watchdog/src/",
     "components/home-search-guard/src/",
     "components/wiki/src/",
     "components/code-context/src/",
@@ -71,6 +72,7 @@
   ],
   "pi": {
     "extensions": [
+      "./extensions/anthropic-watchdog.ts",
       "./extensions/pi-pair.ts",
       "./extensions/ask-user-question.ts",
       "./extensions/session-search.ts",

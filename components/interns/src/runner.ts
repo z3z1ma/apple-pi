@@ -3,6 +3,7 @@ import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import type { AgentSessionEvent, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { ANTHROPIC_WATCHDOG_EXTENSION_PATH } from "../../../extensions/anthropic-watchdog.js";
 import { AUTO_COMPACT_EXTENSION_PATH } from "../../../extensions/auto-compact.js";
 import { CODE_CONTEXT_EXTENSION_PATH, CONTEXT_LINT_TOOL_NAME } from "../../../extensions/code-context.js";
 import { HOME_SEARCH_GUARD_EXTENSION_PATH } from "../../../extensions/home-search-guard.js";
@@ -44,6 +45,8 @@ export function buildInternCliArgs(
 		options.thinking,
 		"--extension",
 		AUTO_COMPACT_EXTENSION_PATH,
+		"--extension",
+		ANTHROPIC_WATCHDOG_EXTENSION_PATH,
 		"--extension",
 		VROOM_EXTENSION_PATH,
 		"--extension",

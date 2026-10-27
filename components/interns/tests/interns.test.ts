@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai/compat";
 import type { ExtensionAPI, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { ANTHROPIC_WATCHDOG_EXTENSION_PATH } from "../../../extensions/anthropic-watchdog.js";
 import { fauxSession } from "../../../tests/helpers/faux-session.js";
 import { installInterns } from "../src/index.js";
 
@@ -76,6 +77,11 @@ test("a one-shot intern returns its answer, exposes current tool activity, and l
 	const worker = started("sources");
 	expect(gone(worker.pid)).toBe(true);
 	expect(worker.args).toContain("--no-session");
+	expect(
+		worker.args.some(
+			(arg, index) => arg === "--extension" && worker.args[index + 1] === ANTHROPIC_WATCHDOG_EXTENSION_PATH,
+		),
+	).toBe(true);
 	expect(worker.args.slice(-2)).toEqual(["--", "sources"]);
 	expect(worker.args[worker.args.indexOf("--model") + 1]).toBe("faux-session-provider/faux-session-model");
 	expect(worker.args[worker.args.indexOf("--thinking") + 1]).toBe("off");

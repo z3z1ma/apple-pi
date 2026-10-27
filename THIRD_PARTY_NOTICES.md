@@ -80,6 +80,13 @@ apple-pi contains modified source imports and pinned runtime dependencies. apple
 - Original notice: `Copyright (c) 2026 Async23`
 - The extension code, scripts, and assets were adopted largely as-is. All Chinese user-facing strings were translated to English (notification bodies, subtitles, error/cancellation summaries, and the generic-heading skip list), the `agent_settled` delivery path was gated to macOS, and the test suite was ported from `node:test` to Vitest.
 
+## Anthropic stall watchdog (design references)
+
+- Issue: <https://github.com/earendil-works/pi/issues/10019>
+- Reference implementation: <https://github.com/PrayagS/pi-config/commit/2acf44749d3232b078278548d5a41ef009dde4f1>
+- Local paths: `components/anthropic-watchdog/`, `extensions/anthropic-watchdog.ts`
+- Independently implemented from the reported failure and Undici diagnostics behavior; no source copied from the reference probe. Its logging, header capture, warnings and configuration are not adopted. apple-pi owns request-scoped deadlines and lifecycle cleanup; Pi retains authentication, provider conversion and retries.
+
 ## Monty (runtime dependency)
 
 - Source: <https://github.com/pydantic/monty>

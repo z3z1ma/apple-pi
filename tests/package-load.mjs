@@ -74,6 +74,15 @@ try {
 	assert(
 		result.extensions.some(
 			(extension) =>
+				extension.path.endsWith("anthropic-watchdog.ts") &&
+				(extension.handlers.get("session_start")?.length ?? 0) > 0 &&
+				(extension.handlers.get("session_shutdown")?.length ?? 0) > 0,
+		),
+		"missing Anthropic request-watchdog lifecycle hooks",
+	);
+	assert(
+		result.extensions.some(
+			(extension) =>
 				extension.path.endsWith("home-search-guard.ts") && (extension.handlers.get("tool_call")?.length ?? 0) > 0,
 		),
 		"missing home search guard",

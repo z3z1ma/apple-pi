@@ -13,6 +13,7 @@ export default defineConfig({
 		include: [
 			"components/pair-programmer/tests/**/*.test.ts",
 			"components/vroom/tests/**/*.test.ts",
+			"components/anthropic-watchdog/tests/**/*.test.ts",
 			"components/home-search-guard/tests/**/*.test.ts",
 			"components/ask-user-question/tests/**/*.test.ts",
 			"components/shared/tests/**/*.test.ts",
