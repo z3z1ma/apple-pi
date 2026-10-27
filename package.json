@@ -74,7 +74,7 @@
     "extensions": [
       "./extensions/pi-pair.ts",
       "./extensions/ask-user-question.ts",
-      "./extensions/context.ts",
+      "./extensions/session-search.ts",
       "./extensions/auto-compact.ts",
       "./extensions/vroom.ts",
       "./extensions/home-search-guard.ts",

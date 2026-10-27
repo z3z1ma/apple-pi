@@ -9,11 +9,11 @@ import {
 	loadExtensions,
 } from "../node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/loader.js";
 
-async function loadContextExtension() {
-	return loadExtensions(["extensions/context.ts"], process.cwd(), createEventBus(), createExtensionRuntime());
+async function loadSessionSearchExtension() {
+	return loadExtensions(["extensions/session-search.ts"], process.cwd(), createEventBus(), createExtensionRuntime());
 }
 
-function surfaces(result: Awaited<ReturnType<typeof loadContextExtension>>) {
+function surfaces(result: Awaited<ReturnType<typeof loadSessionSearchExtension>>) {
 	const extension = result.extensions[0];
 	return {
 		errors: result.errors,
@@ -23,7 +23,7 @@ function surfaces(result: Awaited<ReturnType<typeof loadContextExtension>>) {
 	};
 }
 
-describe("standalone context extension", () => {
+describe("standalone session-search extension", () => {
 	const directories: string[] = [];
 
 	afterEach(() => {
@@ -32,14 +32,14 @@ describe("standalone context extension", () => {
 	});
 
 	function isolate() {
-		const root = mkdtempSync(join(tmpdir(), "apple-pi-context-root-"));
+		const root = mkdtempSync(join(tmpdir(), "apple-pi-session-search-extension-"));
 		directories.push(root);
 		process.env.PI_CODING_AGENT_DIR = root;
 	}
 
 	it("registers only search_session on the main session", async () => {
 		isolate();
-		const loaded = surfaces(await loadContextExtension());
+		const loaded = surfaces(await loadSessionSearchExtension());
 		expect(loaded.errors).toEqual([]);
 		expect(loaded.tools.has("search_session")).toBe(true);
 		expect(loaded.tools.has("revisit_note")).toBe(false);
