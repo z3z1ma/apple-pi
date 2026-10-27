@@ -1,22 +1,5 @@
-import { existsSync } from "node:fs";
-import { DatabaseSync } from "node:sqlite";
-import { organizationOf } from "../../organization/src/directory.js";
-import { statePaths } from "./paths.js";
+import { organizationOf, reportingOf } from "../../organization/src/directory.js";
 import { OPERATOR } from "./threads.js";
-
-/** The session row of `id`, read-only; undefined when the database or the session is missing. */
-function sessionRow(id: string): { id: string; reports_to: string | null } | undefined {
-	const path = statePaths().db;
-	if (!existsSync(path)) return undefined;
-	const db = new DatabaseSync(path, { readOnly: true });
-	try {
-		return db.prepare("select id, reports_to from sessions where id = ?").get(id) as
-			| { id: string; reports_to: string | null }
-			| undefined;
-	} finally {
-		db.close();
-	}
-}
 
 /**
  * Turn addresses into session ids: `my-manager`, `my-team` (your reports, or your teammates under your manager when
@@ -24,7 +7,7 @@ function sessionRow(id: string): { id: string; reports_to: string | null } | und
  */
 export function resolveAddresses(self: string, addresses: string[]): string[] {
 	const members = organizationOf(self).members;
-	const me = sessionRow(self);
+	const me = reportingOf(self);
 	const ids: string[] = [];
 	for (const raw of addresses) {
 		const address = raw.trim();
@@ -33,8 +16,8 @@ export function resolveAddresses(self: string, addresses: string[]): string[] {
 			continue;
 		}
 		if (address === "my-manager") {
-			if (!me?.reports_to) throw new Error("You have no manager.");
-			ids.push(me.reports_to);
+			if (!me?.reportsTo) throw new Error("You have no manager.");
+			ids.push(me.reportsTo);
 			continue;
 		}
 		if (address === "my-team") {
@@ -42,7 +25,7 @@ export function resolveAddresses(self: string, addresses: string[]): string[] {
 			const reports = live.filter((member) => member.reportsTo === self);
 			const team = reports.length
 				? reports
-				: live.filter((member) => me?.reports_to && member.reportsTo === me.reports_to);
+				: live.filter((member) => me?.reportsTo && member.reportsTo === me.reportsTo);
 			if (!team.length) throw new Error("You have no team: nobody reports to you, and you have no teammates.");
 			ids.push(...team.map((member) => member.id));
 			continue;
@@ -53,7 +36,7 @@ export function resolveAddresses(self: string, addresses: string[]): string[] {
 			continue;
 		}
 		if (byName.length > 1) throw new Error(`More than one person is named ${address}; use the session id.`);
-		if (members.some((member) => member.id === address) || sessionRow(address)) {
+		if (members.some((member) => member.id === address) || reportingOf(address)) {
 			ids.push(address);
 			continue;
 		}
@@ -63,7 +46,7 @@ export function resolveAddresses(self: string, addresses: string[]): string[] {
 }
 
 export function managerAddress(self: string): string {
-	return sessionRow(self)?.reports_to ?? OPERATOR;
+	return reportingOf(self)?.reportsTo ?? OPERATOR;
 }
 
 /** One person, by name in your organization or by session id; aliases such as my-team are refused. */

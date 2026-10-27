@@ -1,7 +1,7 @@
 ## symbol:sessionRole
 
 Pi's real extension loader isolates module caches. A role resolved by session-state is therefore not automatically cached in pi_exec's copy of this module. Honor a local resolved value, including explicitly unroled; when this copy has no entry, resolve and cache the existing transcript role name against the catalog, just as startup does. An absent transcript role stays unseen so the first start can still finish recording it; a stored but unknown role stays unroled until reload. Catalog edits take effect at reload, not halfway through a turn. The transcript remains the authority across extension graphs, without another role store or a global cache.
-Why: direct-import or Vitest-spy tests can pass while real loaded manager calls are all denied. The work-panel fixture loads a real role installer through Pi's loader and checks both managing execution and worker/unroled rejection before any program scope or person is created.
+Why: direct-import or Vitest-spy tests can pass while real loaded manager calls are all denied. The work-panel fixture loads a real role installer through Pi's loader and checks managing-role and unroled-root execution and working-role rejection before any program scope or person is created.
 Coupled: components/organization/src/install.ts, components/pi-exec/src/peer-calls.ts
 Verify: tests/pi-exec-work-panel.test.ts, components/organization/tests/roles.test.ts
 

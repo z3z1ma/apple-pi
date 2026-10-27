@@ -75,7 +75,8 @@ function contextFile(person: string, value: unknown): string {
 /** Invocation-local handles. Python keeps only their keys; this owner keeps and disposes the actual resources. */
 export function createPeerCalls(ctx: ExtensionToolContext, attachments: Record<string, string> = {}): PeerCalls {
 	const canManage = managesPeople(ctx);
-	if (!canManage && Object.keys(attachments).length) throw new Error("Peer delegation requires a managing role");
+	if (!canManage && Object.keys(attachments).length)
+		throw new Error("Peer delegation requires a managing role or an unroled organization root");
 	const caller = ctx.sessionManager?.getSessionId();
 	const cwd = ctx.cwd;
 	const handles = new Map<string, Handle>();
@@ -114,7 +115,7 @@ export function createPeerCalls(ctx: ExtensionToolContext, attachments: Record<s
 		return program;
 	};
 	const create = (role: unknown): string => {
-		if (!canManage) throw new Error("Peer creation requires a managing role");
+		if (!canManage) throw new Error("Peer creation requires a managing role or an unroled organization root");
 		if (closing) throw new Error("This program is closing its peers");
 		const name = requiredText(role, "catalog role");
 		const catalog = loadRoles(cwd);

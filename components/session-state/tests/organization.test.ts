@@ -158,8 +158,8 @@ test("a manager transfers a person with its team, is refused a cycle or a strang
 	}
 }, 40000);
 
-test("after a transfer, a person's close notice reaches its new manager, and a restart keeps the new manager over the old flag", async () => {
-	const mover = await fauxSession([bridge], [fauxAssistantMessage("hi")], []);
+test("after a transfer, prompt context and close notices use the new manager, and a restart preserves it over the old flag", async () => {
+	const mover = await fauxSession([bridge], () => fauxAssistantMessage("hi"), []);
 	const moverId = mover.session.sessionManager.getSessionId();
 	const boss = await fauxSession(
 		[bridge],
@@ -176,10 +176,24 @@ test("after a transfer, a person's close notice reaches its new manager, and a r
 		mover.session.extensionRunner.setFlagValue("reports-to", "m-old");
 		await mover.session.bindExtensions({});
 		await vi.waitFor(() => expect(reportsTo(moverId)).toBe("m-old"), { timeout: 15000 });
+		await mover.session.prompt("before transfer");
+		expect(mover.session.agent.state.systemPrompt).toContain("You report to the session `m-old`");
+		const prefix = mover.requests.at(-1)!.messages;
 
 		await boss.session.prompt("move");
 		expect(toolResults(boss).at(-1)).toMatchObject({ isError: false });
 		expect(reportsTo(moverId)).toBe("m-new");
+		await mover.session.prompt("after transfer");
+		expect(mover.session.agent.state.systemPrompt).toContain("You report to the session `m-new`");
+		expect(mover.session.agent.state.systemPrompt).not.toContain("You report to the session `m-old`");
+		const updated = mover.requests.at(-1)!.messages;
+		expect(updated.slice(0, prefix.length)).toEqual(prefix);
+		const delta = updated.slice(prefix.length).filter((message) => message.role === "system");
+		expect(delta).toContainEqual(
+			expect.objectContaining({
+				sections: expect.objectContaining({ org: expect.stringContaining("You report to the session `m-new`") }),
+			}),
+		);
 
 		// A new process of the mover still carries the old flag; the runtime keeps the manager it recorded.
 		await mover.session.bindExtensions({});
@@ -192,6 +206,7 @@ test("after a transfer, a person's close notice reaches its new manager, and a r
 		);
 		await mover.session.prompt("hi");
 		expect(reportsTo(moverId)).toBe("m-new");
+		expect(mover.session.agent.state.systemPrompt).toContain("You report to the session `m-new`");
 	} finally {
 		await close(mover);
 		await vi.waitFor(

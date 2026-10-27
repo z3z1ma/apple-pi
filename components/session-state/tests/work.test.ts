@@ -232,11 +232,12 @@ test("assignments are shared task conversations, unassigning reports the change,
 	}
 }, 30000);
 
-test("workers and an unroled root keep links and tasks, but cannot call organizational insights", async () => {
+test("links stay universal; insights belong to an unroled root, not its unroled or working-role reports", async () => {
 	const root = await person();
 	const worker = await person(root.id, "implementation-engineer");
+	const unroled = await person(root.id);
 	try {
-		for (const who of [root, worker]) {
+		for (const who of [root, worker, unroled]) {
 			const task = await who.invoke("take_task", { goal: "Check interfaces.", title: "Interfaces" });
 			const relationship = await who.invoke<{ id: string }>("link", {
 				from: `task:${task.id}`,
@@ -253,8 +254,8 @@ test("workers and an unroled root keep links and tasks, but cannot call organiza
 				"predictions",
 				"hire",
 			])
-				expect(who.run.session.getActiveToolNames()).not.toContain(tool);
-			expect(await who.attempt("org_work", {})).toMatchObject({ isError: true });
+				expect(who.run.session.getActiveToolNames().includes(tool)).toBe(who === root);
+			expect(await who.attempt("org_work", {})).toMatchObject({ isError: who !== root });
 		}
 		// The human inspection command remains available without granting model tools.
 		const notices: string[] = [];
@@ -268,8 +269,9 @@ test("workers and an unroled root keep links and tasks, but cannot call organiza
 		expect(errors).toEqual([]);
 		expect(notices.at(-1)).toContain("Open waits:");
 		expect(root.run.requests).toHaveLength(turns);
-		expect(root.run.session.getActiveToolNames()).not.toContain("org_work");
+		expect(root.run.session.getActiveToolNames()).toContain("org_work");
 	} finally {
+		await close(unroled.run);
 		await close(worker.run);
 		await close(root.run);
 	}

@@ -47,7 +47,7 @@ const personParameter = Type.String({
 	description: "The person: a name in your organization or a session id.",
 });
 
-/** Manager tools are active only for managing roles. */
+/** Manager tools follow the shared management capability gate. */
 export function installCoordinator(pi: ExtensionAPI): void {
 	installMeetings(pi);
 	installAssignments(pi);

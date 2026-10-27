@@ -520,7 +520,7 @@ describe("Pi Exec work panel", () => {
 		expect(h.text()).toContain("long-output-finished");
 	}, 30_000);
 
-	it.each(["", "implementation-engineer"])(
+	it.each(["implementation-engineer"])(
 		"the actual extension-loader path rejects nonmanaging peer creation (role=%s)",
 		async (role) => {
 			enablePeerFixture(role);
@@ -543,8 +543,8 @@ describe("Pi Exec work panel", () => {
 		},
 	);
 
-	it("shows a peer's active child tool before the peer returns", async () => {
-		enablePeerFixture();
+	it.each(["", "coordinator"])("shows a peer's active child tool for a root with role=%s", async (role) => {
+		enablePeerFixture(role);
 		const gate = await gateServer();
 		const h = await harness();
 		await h.open();

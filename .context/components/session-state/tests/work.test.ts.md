@@ -1,6 +1,6 @@
 ## file
 
-Management and insight fixtures choose a managing role explicitly; root position is not a capability. An unroled root and a working-role person retain task/link calls but cannot call insight tools; the human `/org` command still produces a fresh result without a model turn or granting those tools.
+Management and insight fixtures use managing roles or recorded unroled roots. An unroled subordinate and a working-role person retain task/link calls but cannot call insight tools; a working role remains restricted even at a root. The human `/org` command still produces a fresh result without a model turn or changing capabilities.
 
 Native-tool evidence assertions must inspect the returned impact/finding entries as well as readable output, not merely section headings or provenance strings shared by several sections.
 Why: the renderer always emits headings, and an impact already prints both recorder and task. Those text matches can pass even if the finding projection is empty. Checking grouped finding entries and an unchanged total proves the requested evidence is delivered without charging estimates or findings.

@@ -1,6 +1,6 @@
 /**
  * The organization in a root session: its role (mind, posture, `<role>`), the `<org>` section everyone gets, and the
- * `<manager>` charter and role catalog of a managing role. Root position alone grants no management capabilities.
+ * `<manager>` charter of a managing role. Managing roles and unroled organization roots hold management capabilities.
  */
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
@@ -13,20 +13,20 @@ import {
 	ORG_SYSTEM_PROMPT_TAG,
 	orgSection,
 } from "./charters.js";
-import { organizationOf } from "./directory.js";
+import { organizationOf, reportingOf } from "./directory.js";
 import { loadRoles } from "./roles.js";
 import { installSelf } from "./self.js";
 import { installSessionRole, sessionRole } from "./session-role.js";
 
-/** The manager this session reports to (`--reports-to`), or null for a root. */
-export function managerOf(pi: ExtensionAPI): string | null {
-	const flag = pi.getFlag("reports-to");
-	return typeof flag === "string" && flag ? flag : null;
+/** Current manager, null for a recorded root, or undefined before the runtime records the person. */
+export function managerOf(ctx: ExtensionContext): string | null | undefined {
+	return reportingOf(ctx.sessionManager.getSessionId())?.reportsTo;
 }
 
-/** Management capabilities follow the role, including in an organization-root session. */
+/** A role defines capabilities; an unroled person can manage only as a recorded organization root. */
 export function managesPeople(ctx: ExtensionContext): boolean {
-	return sessionRole(ctx)?.manages === true;
+	const role = sessionRole(ctx);
+	return role ? role.manages : managerOf(ctx) === null;
 }
 
 /** `reflects` is false for a person with no future to carry a self into, such as a program's temporary peer. */
@@ -36,7 +36,7 @@ export function installOrganization(pi: ExtensionAPI, { reflects }: { reflects: 
 	pi.on("before_agent_start", (event, ctx) => {
 		const id = ctx.sessionManager.getSessionId();
 		const role = sessionRole(ctx);
-		const managerId = managerOf(pi);
+		const managerId = managerOf(ctx) ?? null;
 		setSystemPromptSection(
 			event.systemPromptOptions,
 			ORG_SYSTEM_PROMPT_TAG,

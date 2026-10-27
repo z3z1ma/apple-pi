@@ -81,6 +81,20 @@ function rootOf(id: string, managerOf: Map<string, string | null>): string {
 	return current;
 }
 
+/** Current reporting record; undefined means unknown, while reportsTo: null identifies a recorded root. */
+export function reportingOf(id: string): { id: string; reportsTo: string | null } | undefined {
+	const path = statePaths().db;
+	if (!existsSync(path)) return undefined;
+	const db = new DatabaseSync(path, { readOnly: true });
+	try {
+		return db.prepare("select id, reports_to as reportsTo from sessions where id = ?").get(id) as
+			| { id: string; reportsTo: string | null }
+			| undefined;
+	} finally {
+		db.close();
+	}
+}
+
 /** The organization of `self`: its root and every other member, or `self` alone when the database is unreadable. */
 export function organizationOf(self: string, includeSelf = false): Organization {
 	const path = statePaths().db;

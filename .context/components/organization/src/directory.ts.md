@@ -5,6 +5,13 @@ Why: the runtime daemon migrates the schema only when it starts and keeps runnin
 Coupled: components/session-state/src/peers.ts, components/session-state/src/schema.ts
 Verify: components/organization/tests/roles.test.ts
 
+## symbol:reportingOf
+
+Read the current runtime-owned relationship for both prompt identity and mail addressing. Launch flags seed placement but stay stale after a transfer. Preserve three states: a parent id, null for a recorded root, and undefined when the database/person is missing. Only the recorded root supports the unroled management exception; organizationOf's directory fallback is not an authorization fact.
+Why: a real move updated mail and the runtime tree while the old flag kept the prompt naming the prior manager. The transfer test checks the immediate prompt, reconnect with the stale flag, and the unchanged prior provider-request prefix plus an appended section delta.
+Coupled: components/organization/src/install.ts, components/session-state/src/addresses.ts
+Verify: components/session-state/tests/organization.test.ts, components/organization/tests/roles.test.ts
+
 ## symbol:organizationOf
 
 Reads the state database read-only and derives the tree from `reports_to` on every call; a session whose manager is not in the `sessions` table is treated as a root of its own.

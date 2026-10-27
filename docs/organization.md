@@ -50,9 +50,9 @@ Why it is built this way: every person runs on a few aligned models that converg
 
 ## The tree
 
-A session started with `--reports-to <id>` has that session as its manager; a session with no manager is a root. The runtime owns the tree: the flag seeds the manager at the first hello and is ignored once the record holds one, a reopen keeps the recorded manager, and `move` is the only way to change it. Mail by id reaches any session on the machine, inside or outside the organization; the directory lists only the caller's organization. `/pi-sessions` still lists every live session for you.
+A session started with `--reports-to <id>` has that session as its manager; a session with no manager is a root. The runtime owns the tree: the flag seeds the manager at the first hello and is ignored once the record holds one, a reopen keeps the recorded manager, and `move` is the only way to change it. Prompt identity and mail addressing read the current runtime record, not the launch flag. Prompt changes use Pi's structured sections: the new relationship is appended as a transcript delta, preserving the earlier prefix where the provider supports these transitions. Mail by id reaches any session on the machine, inside or outside the organization; the directory lists only the caller's organization. `/pi-sessions` still lists every live session for you.
 
-Every root session's system prompt carries an `<org>` section: who it is, its id as its mail address, its manager and root, how the directory and mail work, and the norms (work, reports, and escalation follow the tree; a manager is never a relay; say what you verified and what you believe). A hired person is told to ask its manager for people it lacks and when to escalate. A person whose role manages also gets the `<manager>` charter (hire colliding perspectives, give independent thinkers the problem before the preferred answer, delegate whole outcomes, name disagreements, escalate by uncertainty times consequence, investigate recurring fan-in and consider changes to authority, assignments or reporting, reconcile against the directory, sweep). Only managing roles get the `<role-catalog>` section, one line per role, organizational insight tools and peer delegation. The packaged managing roles are `coordinator` and `director-of-engineering`; the same `manages` flag governs custom roles. An unroled root has ordinary workplace tools, not management powers. Start a new managing session with `pi --role coordinator`; an existing person's stored role remains fixed. The charters are in `components/organization/src/charters.ts`.
+Every root session's system prompt carries an `<org>` section: who it is, its id as its mail address, its manager and root, how the directory and mail work, and the norms (work, reports, and escalation follow the tree; a manager is never a relay; say what you verified and what you believe). A hired person is told to ask its manager for people it lacks and when to escalate. A person whose role manages also gets the `<manager>` charter (hire colliding perspectives, give independent thinkers the problem before the preferred answer, delegate whole outcomes, name disagreements, escalate by uncertainty times consequence, investigate recurring fan-in and consider changes to authority, assignments or reporting, reconcile against the directory, sweep). Managing roles and unroled recorded organization roots get the `<role-catalog>` section, one line per role, all management and organizational insight tools, and peer delegation. The packaged managing roles are `coordinator` and `director-of-engineering`; the same `manages` flag governs custom roles. An unroled root keeps its chosen model, thinking and normal Pi coding posture, with concise capability guidance rather than the delegation-first `<manager>` charter. A nonmanaging role stays restricted even at the root; a missing runtime record grants no root exception. Start a new managing session with `pi --role coordinator`; an existing person's stored role remains fixed. The charters are in `components/organization/src/charters.ts`.
 
 ## Workplace tools
 
@@ -72,7 +72,7 @@ Every root session has these tools. Each sends a command to the runtime or reads
 | `take_task`, `focus`, `finish_task`, `promote_task` | The task tools. See [Tasks and assignments](#tasks-and-assignments). |
 | `link` (`from`, `to`, `relation`, `reason?`, `data?`, `inferred?`, `confidence?`; or `id`, `resolution?`) | Records or resolves general relationships between tasks, people, files, checks and other results. It is available to every person, independently of organizational inspection. See [session-state](session-state.md#what-it-records). |
 
-Only managing roles also receive these read-only insight tools:
+Managing roles and unroled organization roots also receive these read-only insight tools:
 
 | Tool | What it does |
 | --- | --- |
@@ -85,7 +85,7 @@ Only managing roles also receive these read-only insight tools:
 
 ## Evidence-informed adaptation
 
-Every person records general relationships, waits and results with `link`. Managing roles learn the inspection tools above; other roles keep ordinary tool composition with `pi_exec`, without its peer APIs or delegation context. A managing role's charter teaches prudent adaptation during operator requests, planning and implementation, arriving reports or escalations, constrained work and sweeps. Inspect relevant facts, staff from recorded experience and context, investigate causes in tasks, links, history and mail, then use existing management tools when warranted—or deliberately keep a stable organization. Record important reasoning and revisit consequential decisions. Fitness and scenarios are optional instruments when dollar comparisons help, not an objective or a prerequisite for action.
+Every person records general relationships, waits and results with `link`. Managing roles and unroled organization roots learn the inspection tools above; other people keep ordinary tool composition with `pi_exec`, without its peer APIs or delegation context. A managing role's charter teaches prudent adaptation during operator requests, planning and implementation, arriving reports or escalations, constrained work and sweeps. Inspect relevant facts, staff from recorded experience and context, investigate causes in tasks, links, history and mail, then use existing management tools when warranted—or deliberately keep a stable organization. Record important reasoning and revisit consequential decisions. Fitness and scenarios are optional instruments when dollar comparisons help, not an objective or a prerequisite for action.
 
 Reporting manager, task owner and decision authority are separate roles that may coincide. Loosely coupled work suits parallel people, tightly coupled work one strong owner, and risky work an independent challenger. Recurring fan-in calls for understanding the constraint before changing authority, assignments or reporting; hiring another manager is an option, not a prescribed response. Staffing uses observed demand and coordination costs rather than a fixed flow threshold. The managing-role charter gate and existing reconciliation/sweep lifecycle remain unchanged.
 
@@ -99,7 +99,7 @@ In any root Pi session, the human `/org` command remains available regardless of
 
 ## Manager tools
 
-A person whose role manages also has eleven manager tools, regardless of its reporting position:
+A person whose role manages, or an unroled organization root, also has eleven manager tools:
 
 | Tool | What it does |
 | --- | --- |
@@ -133,7 +133,7 @@ A person can hold several tasks, with one in focus. `focus(task)` rereads its `t
 
 Ephemeral tasks live under the Pi state directory in `tasks/<id>/`, with `task.md`, `retrospective.md`, and any useful context files. They survive restarts. `finish_task(outcome)` writes the outcome, ends the focused assignment, clears focus, and posts the outcome in the thread. Once all assignees finish, an ephemeral bundle moves to `tasks/history/<id>/`, including its retrospective. Ledger tasks keep the ledger's separate status and archive workflow.
 
-Only a root or a managing role can `assign` and `unassign`, and only inside its own organization. The operator can assign anyone. `take_task` with an existing task works only when nobody else holds that task.
+Only an unroled organization root or a managing role can `assign` and `unassign`, and only inside its own organization. The operator can assign anyone. `take_task` with an existing task works only when nobody else holds that task.
 
 `promote_task(task)` moves a live ephemeral bundle into its project's `.ledger/`, through the same index transaction as `ledger_add`. Files, assignment identity, and thread stay together. Its heading supplies the ledger title and summary; optional `title` and `description` can name it more clearly. The runtime alone writes assignments and focus. Editing a ledger bundle still records a transcript pointer in `history.json`, but never assigns work. Archiving a registered ledger task updates its bundle path without ending assignments or changing their identity. Views read the explicit focus, never old inferred intent or ledger touches.
 

@@ -1,6 +1,7 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fauxAssistantMessage } from "@earendil-works/pi-ai/compat";
 import {
 	type BuildSystemPromptOptions,
 	createEventBus,
@@ -9,8 +10,10 @@ import {
 	SessionManager,
 } from "@earendil-works/pi-coding-agent";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { setSystemPromptSection } from "../components/shared/src/system-prompt-section.js";
 import { loadExtensions } from "../node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/loader.js";
 import { buildSystemPrompt } from "../node_modules/@earendil-works/pi-coding-agent/dist/core/system-prompt.js";
+import { fauxSession } from "./helpers/faux-session.js";
 
 const ROOT = join(import.meta.dirname, "..");
 const PACKAGE_EXTENSIONS: string[] = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")).pi.extensions;
@@ -50,6 +53,41 @@ async function runBeforeAgentStart(cwd: string, options: Partial<BuildSystemProm
 }
 
 describe("package system prompt", () => {
+	it("appends section changes and removals without rewriting the earlier provider request", async () => {
+		let sections: Record<string, string> = { org: "Original manager", "role-catalog": "Original catalog" };
+		const run = await fauxSession(
+			[
+				(pi) => {
+					pi.on("before_agent_start", (event) => {
+						for (const [name, content] of Object.entries(sections))
+							setSystemPromptSection(event.systemPromptOptions, name, content);
+					});
+				},
+			],
+			() => fauxAssistantMessage("ok"),
+			[],
+		);
+		try {
+			await run.session.prompt("first");
+			const prefix = run.requests.at(-1)!.messages;
+			sections = { org: "Current manager" };
+			await run.session.prompt("second");
+			const updated = run.requests.at(-1)!.messages;
+			expect(updated.slice(0, prefix.length)).toEqual(prefix);
+			expect(updated.slice(prefix.length)).toContainEqual(
+				expect.objectContaining({
+					role: "system",
+					sections: { org: "<org>\nCurrent manager\n</org>", "role-catalog": null },
+				}),
+			);
+			await run.session.prompt("unchanged");
+			expect(run.requests.at(-1)!.messages.filter((message) => message.role === "system")).toEqual(
+				updated.filter((message) => message.role === "system"),
+			);
+		} finally {
+			run.dispose();
+		}
+	});
 	it("adds structured sections without an opaque prompt or a subagent catalog", async () => {
 		const options = await runBeforeAgentStart(ROOT);
 		expect(options.forceSystemPrompt).toBeUndefined();

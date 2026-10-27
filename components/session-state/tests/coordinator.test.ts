@@ -507,15 +507,27 @@ test("a hired person whose role does not manage loses the lifecycle tools; a hir
 	}
 }, 30000);
 
-test.each([false, true])(
-	"root position grants no management or insights; a managing role restores both (role=%s)",
-	async (enabled) => {
+test.each([undefined, "implementation-engineer", "coordinator"])(
+	"an unroled root or managing role gets management and insights (role=%s)",
+	async (role) => {
+		const enabled = role !== "implementation-engineer";
 		const run = await fauxSession(
 			[bridge],
 			[call("directory", {}), fauxAssistantMessage("done")],
 			["read", "hire", "org_work"],
 		);
-		await withRole(run, enabled ? "coordinator" : undefined);
+		await withRole(run, role);
+		await vi.waitFor(
+			() =>
+				expect(
+					query(
+						state.dbPath,
+						"select reports_to from sessions where id = ?",
+						run.session.sessionManager.getSessionId(),
+					),
+				).toEqual([{ reports_to: null }]),
+			{ timeout: 15000 },
+		);
 		try {
 			await run.session.prompt("list my peers");
 			expect(toolResults(run)[0]).toMatchObject({ isError: false });

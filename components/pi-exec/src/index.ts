@@ -168,7 +168,7 @@ export default function piExec(pi: ExtensionAPI): void {
 		},
 		async execute(toolCallId, params, signal, onUpdate, ctx) {
 			if (params.peers && Object.keys(params.peers).length && !managesPeople(ctx))
-				throw new Error("Peer delegation requires a managing role");
+				throw new Error("Peer delegation requires a managing role or an unroled organization root");
 			if (executing) throw new Error("pi_exec already has a running program in this session");
 			executing = true;
 			const startedAt = Date.now();

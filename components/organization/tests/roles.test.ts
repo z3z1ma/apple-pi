@@ -7,6 +7,7 @@ import { type ExtensionAPI, SessionManager } from "@earendil-works/pi-coding-age
 import { afterEach, expect, test, vi } from "vitest";
 import { fauxSession } from "../../../tests/helpers/faux-session.js";
 import piExec from "../../pi-exec/src/index.js";
+import * as reportingState from "../src/directory.js";
 import { installOrganization, loadRoles, PACKAGE_ROLES_DIR } from "../src/index.js";
 
 const ROLE = `---
@@ -202,11 +203,23 @@ test("a resumed session takes its role from its transcript, with no flag", async
 	}
 });
 
-test.each([undefined, "implementation-engineer", "coordinator", "director-of-engineering"])(
-	"peer schemas and guidance follow the managing role in the active SDK tool set (role=%s)",
-	async (role) => {
+test.each([
+	{ role: undefined, parent: undefined, allowed: false },
+	{ role: undefined, parent: null, allowed: true },
+	{ role: undefined, parent: "boss", allowed: false },
+	{ role: "implementation-engineer", parent: null, allowed: false },
+	{ role: "coordinator", parent: "boss", allowed: true },
+	{ role: "director-of-engineering", parent: null, allowed: true },
+])(
+	"peer schemas and guidance follow current capabilities (role=$role, parent=$parent)",
+	async ({ role, parent, allowed }) => {
+		const reporting = vi
+			.spyOn(reportingState, "reportingOf")
+			.mockImplementation((id) => (parent === undefined ? undefined : { id, reportsTo: parent }));
 		// Production installs pi_exec before organization resolves the session's role.
 		const run = await fauxSession([piExec, organization], [fauxAssistantMessage("ok")], ["pi_exec"]);
+		const model = run.session.model;
+		const thinking = run.session.thinkingLevel;
 		try {
 			const errors: unknown[] = [];
 			const programs = join(run.cwd, ".pi", "programs");
@@ -220,7 +233,6 @@ test.each([undefined, "implementation-engineer", "coordinator", "director-of-eng
 			const parameters = run.session.agent.state.tools.find((tool) => tool.name === "pi_exec")!.parameters as {
 				properties: { code: { description: string }; peers?: unknown };
 			};
-			const allowed = role === "coordinator" || role === "director-of-engineering";
 			expect("peers" in parameters.properties).toBe(allowed);
 			const program = run.session.agent.state.tools.find((tool) => tool.name === "program_probe")!;
 			const limits = (program.parameters as { properties: { limits: { properties: object } } }).properties.limits;
@@ -228,13 +240,25 @@ test.each([undefined, "implementation-engineer", "coordinator", "director-of-eng
 			expect(parameters.properties.code.description.includes("async def peer(")).toBe(allowed);
 			expect(parameters.properties.code.description.includes("async def agent_run(")).toBe(allowed);
 			expect(run.session.agent.state.systemPrompt.includes("Attach awake colleagues")).toBe(allowed);
+			if (!role && allowed) {
+				const prompt = run.session.agent.state.systemPrompt;
+				expect(prompt).toContain("<role-catalog>");
+				expect(prompt).toContain("`org_work`");
+				expect(prompt).toContain("work directly or delegate");
+				expect(prompt).not.toContain("<manager>");
+				expect(prompt).not.toContain("<role>");
+				expect(run.session.model).toBe(model);
+				expect(run.session.thinkingLevel).toBe(thinking);
+			}
 		} finally {
+			reporting.mockRestore();
 			run.dispose();
 		}
 	},
 );
 
 test("everyone gets the org section; only a managing role gets the manager charter", async () => {
+	const reporting = vi.spyOn(reportingState, "reportingOf").mockReturnValue(undefined);
 	const run = await fauxSession(
 		[organization],
 		[fauxAssistantMessage("ok"), fauxAssistantMessage("ok"), fauxAssistantMessage("ok")],
@@ -254,7 +278,8 @@ test("everyone gets the org section; only a managing role gets the manager chart
 		expect(prompt).not.toContain("<role-catalog>");
 		expect(prompt).not.toContain("<manager>");
 
-		run.session.extensionRunner.setFlagValue("reports-to", "boss");
+		run.session.extensionRunner.setFlagValue("reports-to", "old-boss");
+		reporting.mockReturnValue({ id, reportsTo: "boss" });
 		await restartWithRole(run, "staff-engineer-simplicity");
 		await run.session.prompt("hi");
 		prompt = run.session.agent.state.systemPrompt;
@@ -267,6 +292,7 @@ test("everyone gets the org section; only a managing role gets the manager chart
 		expect(prompt).not.toContain("<role-catalog>");
 		expect(prompt).not.toContain("<manager>");
 	} finally {
+		reporting.mockRestore();
 		run.dispose();
 	}
 

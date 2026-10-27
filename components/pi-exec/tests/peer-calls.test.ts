@@ -99,9 +99,10 @@ async function colleague() {
 }
 
 test.each([undefined, "implementation-engineer"])(
-	"only managing roles can delegate; ordinary composition remains available (role=%s)",
+	"a nonmanaging role or unrecorded caller cannot delegate; ordinary composition stays available (role=%s)",
 	async (role) => {
 		vi.mocked(roleState.sessionRole).mockReturnValue(role ? loadRoles(process.cwd()).roles.get(role) : undefined);
+		if (!role) ctx = { ...ctx, sessionManager: SessionManager.inMemory(state.agentDir) };
 		for (const handler of events.get("before_agent_start") ?? [])
 			await handler({ systemPromptOptions: { sections: {} } }, ctx);
 		expect(tool.parameters.properties).not.toHaveProperty("peers");
