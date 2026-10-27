@@ -1,11 +1,5 @@
-import type { Model, Tool } from "@earendil-works/pi-ai";
-import type {
-	AgentSession,
-	ExtensionAPI,
-	ExtensionContext,
-	SessionBeforeCompactEvent,
-	ToolDefinition,
-} from "@earendil-works/pi-coding-agent";
+import type { Model } from "@earendil-works/pi-ai";
+import type { AgentSession, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import {
 	createAgentSession,
 	DefaultResourceLoader,
@@ -13,26 +7,11 @@ import {
 	SessionManager,
 	SettingsManager,
 } from "@earendil-works/pi-coding-agent";
-import {
-	activeTools,
-	compactOnServer,
-	registerServerCompactionReplayHooks,
-} from "../../server-compaction/src/index.js";
 import { bindPairRecallTools, type PrimarySessionManager } from "./recall.js";
-import type { PairReceiptIssuer } from "./receipt-expansion.js";
 import { SET_PAIR_ATTENTION_TOOL_NAME } from "./review-scheduler.js";
-import { buildPairSeed, PAIR_RESEED_ENTRY_ID, type SettledAdvice } from "./seed.js";
 
 export const PAIR_AGENT_RETRIES = 1;
 export const PAIR_SESSION_EXTENSION_PATHS: readonly string[] = [];
-
-export type PairSeedSource = {
-	entries(): readonly unknown[];
-	rollingAdvice(): readonly SettledAdvice[];
-	unresolvedNotebook?(): string;
-	receiptIssuer?(): PairReceiptIssuer;
-	presentReceipts?(text: string): void;
-};
 
 /** `createAgentSession({ tools })` is an allowlist. Custom tools omitted here never register. */
 export const PAIR_SESSION_TOOLS = [
@@ -44,31 +23,6 @@ export const PAIR_SESSION_TOOLS = [
 	SET_PAIR_ATTENTION_TOOL_NAME,
 ] as const;
 
-export async function pairCompactResult(
-	event: SessionBeforeCompactEvent,
-	source: PairSeedSource,
-	ctx?: ExtensionContext,
-	tools: Tool[] = [],
-) {
-	const server = ctx ? await compactOnServer(event, ctx, tools) : undefined;
-	const summary = buildPairSeed({
-		entries: source.entries(),
-		rollingAdvice: source.rollingAdvice(),
-		unresolvedNotebook: source.unresolvedNotebook?.(),
-		issueReceipt: source.receiptIssuer?.(),
-		includeFold: false,
-	});
-	source.presentReceipts?.(summary);
-	return {
-		compaction: {
-			summary,
-			firstKeptEntryId: PAIR_RESEED_ENTRY_ID,
-			tokensBefore: event.preparation.tokensBefore,
-			...(server ? { details: { serverCompaction: server.serverCompaction } } : {}),
-		},
-	};
-}
-
 export function createPairSettingsManager(
 	cwd: string,
 	agentDir = getAgentDir(),
@@ -78,7 +32,7 @@ export function createPairSettingsManager(
 	const providerTimeoutMs = inherited.getProviderRetrySettings().timeoutMs;
 	const websocketConnectTimeoutMs = inherited.getWebSocketConnectTimeoutMs();
 	return SettingsManager.inMemory({
-		compaction: { enabled: true, reserveTokens: 16_384, keepRecentTokens: 20_000 },
+		compaction: inherited.getSettings().compaction,
 		httpIdleTimeoutMs: inherited.getHttpIdleTimeoutMs(),
 		...(websocketConnectTimeoutMs !== undefined ? { websocketConnectTimeoutMs } : {}),
 		retry: {
@@ -106,7 +60,6 @@ export async function createPairSession(opts: {
 	receiptTool: ToolDefinition;
 	attentionTool: ToolDefinition;
 	notebookTool?: ToolDefinition;
-	seedSource: PairSeedSource;
 	primarySessionManager: PrimarySessionManager;
 	modelRuntime?: unknown;
 }): Promise<AgentSession> {
@@ -124,22 +77,6 @@ export async function createPairSession(opts: {
 		noContextFiles: true,
 		systemPrompt: opts.systemPrompt,
 		appendSystemPrompt: [],
-		extensionFactories: [
-			{
-				name: "pair-reseed",
-				hidden: true,
-				factory: (pi: ExtensionAPI) => {
-					// Replay + reseed only. Never register the pair programmer notebook
-					// Runtime, triggers, commands, or revisit_note here — those stay
-					// on the primary session. The reseed summary carries the current
-					// working conclusions; nothing rewrites request context per turn.
-					registerServerCompactionReplayHooks(pi);
-					pi.on("session_before_compact", (event, ctx) =>
-						pairCompactResult(event, opts.seedSource, ctx, activeTools(pi)),
-					);
-				},
-			},
-		],
 	});
 	await loader.reload();
 

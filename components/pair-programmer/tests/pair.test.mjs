@@ -1052,115 +1052,6 @@ test("seed: recent trajectory keeps last implementing-agent turns and user bash"
 	assert.match(seeded, /What the user told your partner/);
 });
 
-test("compact hook reseeds, presents its handles, and keeps no prior pair deltas", async () => {
-	let presented;
-	const result = await A.pairCompactResult(
-		{ preparation: { tokensBefore: 12000 } },
-		{
-			entries: () => [{ type: "message", message: { role: "user", content: "ship it" } }],
-			rollingAdvice: () => [],
-			presentReceipts: (text) => {
-				presented = text;
-			},
-		},
-	);
-	assert.equal(result.compaction.firstKeptEntryId, A.PAIR_RESEED_ENTRY_ID);
-	assert.equal(result.compaction.tokensBefore, 12000);
-	assert.match(result.compaction.summary, /ship it/);
-	assert.equal(presented, result.compaction.summary);
-});
-
-test("compact hook includes recent trajectory in the reseed", async () => {
-	const result = await A.pairCompactResult(
-		{ preparation: { tokensBefore: 8000 } },
-		{
-			entries: () => [
-				{ type: "message", message: { role: "user", content: "ship it" } },
-				{
-					type: "message",
-					message: {
-						role: "assistant",
-						content: [{ type: "thinking", thinking: "keep this skeleton" }],
-					},
-				},
-			],
-			rollingAdvice: () => [],
-		},
-	);
-	assert.match(result.compaction.summary, /## What your partner has been doing/);
-	assert.match(result.compaction.summary, /keep this skeleton/);
-});
-
-test("compact hook keeps the reseed and stores the server result when compact succeeds", async () => {
-	const originalFetch = globalThis.fetch;
-	globalThis.fetch = async () => ({
-		ok: true,
-		json: async () => ({ output: [{ type: "compaction", id: "cmp_adv", encrypted_content: "enc" }] }),
-		text: async () => "",
-	});
-	try {
-		const result = await A.pairCompactResult(
-			{
-				preparation: {
-					tokensBefore: 9000,
-					messagesToSummarize: [{ role: "user", content: [{ type: "text", text: "old review" }] }],
-					turnPrefixMessages: [],
-				},
-				branchEntries: [],
-			},
-			{
-				entries: () => [{ type: "message", message: { role: "user", content: "ship it" } }],
-				rollingAdvice: () => [],
-			},
-			{
-				model: { provider: "xai", api: "openai-responses", id: "grok-4.6", baseUrl: "https://api.x.ai/v1" },
-				modelRegistry: { getApiKeyAndHeaders: async () => ({ ok: true, apiKey: "k" }) },
-			},
-		);
-		assert.equal(result.compaction.firstKeptEntryId, A.PAIR_RESEED_ENTRY_ID);
-		assert.match(result.compaction.summary, /ship it/);
-		assert.ok(!result.compaction.summary.includes("[Server-side compaction"));
-		assert.deepEqual(result.compaction.details.serverCompaction, {
-			api: "openai-responses",
-			provider: "xai",
-			items: [{ type: "compaction", id: "cmp_adv", encrypted_content: "enc" }],
-		});
-	} finally {
-		globalThis.fetch = originalFetch;
-	}
-});
-
-test("compact hook omits the parent fold from the reseed summary", async () => {
-	const result = await A.pairCompactResult(
-		{ preparation: { tokensBefore: 1000 } },
-		{
-			entries: () => [
-				{ id: "m1", type: "message", message: { role: "user", content: "ship it" } },
-				{
-					id: "r1",
-					type: "custom",
-					customType: "notebook.reflections.recorded",
-					data: {
-						reflections: [
-							{
-								id: "abc123abc123",
-								content: "Do not reimplement auth",
-								supportingObservationIds: ["m1"],
-								tokenCount: 4,
-							},
-						],
-						coversUpToId: "m1",
-					},
-				},
-			],
-			rollingAdvice: () => [],
-		},
-	);
-	assert.match(result.compaction.summary, /ship it/);
-	assert.ok(!result.compaction.summary.includes("Do not reimplement auth"));
-	assert.ok(!result.compaction.summary.includes("## Current law"));
-});
-
 test("runtime: a failed prompt keeps the seed and marks each submitted receipt-bearing prompt as presented", async () => {
 	const prompts = [];
 	const presented = [];
@@ -1446,7 +1337,7 @@ test("buildReviewMessages: re-prime context precedes but is distinct from the ne
 	assert.equal(messages[2].content[0].text, "LATEST-ACTIVITY");
 });
 
-test("pair programmer settings inherit Pi's native HTTP idle timeout", () => {
+test("pair programmer settings inherit native timeouts and model-specific compaction settings", () => {
 	const root = mkdtempSync(join(tmpdir(), "pair-settings-"));
 	const agentDir = join(root, "agent");
 	const cwd = join(root, "project");
@@ -1454,12 +1345,31 @@ test("pair programmer settings inherit Pi's native HTTP idle timeout", () => {
 	mkdirSync(cwd, { recursive: true });
 	writeFileSync(
 		join(agentDir, "settings.json"),
-		JSON.stringify({ httpIdleTimeoutMs: 123_456, retry: { provider: { timeoutMs: 234_567 } } }),
+		JSON.stringify({
+			httpIdleTimeoutMs: 123_456,
+			retry: { provider: { timeoutMs: 234_567 } },
+			compaction: {
+				enabled: false,
+				reserveTokens: 5000,
+				keepRecentTokens: 800,
+				modelOverrides: { "pair/model": { keepRecentTokens: 1234 } },
+			},
+		}),
 	);
 
 	try {
 		const settings = S.createPairSettingsManager(cwd, agentDir, false);
 		assert.equal(settings.getHttpIdleTimeoutMs(), 123_456);
+		assert.deepEqual(settings.getCompactionSettings(), {
+			enabled: false,
+			reserveTokens: 5000,
+			keepRecentTokens: 800,
+		});
+		assert.deepEqual(settings.getCompactionSettings({ provider: "pair", id: "model" }), {
+			enabled: false,
+			reserveTokens: 5000,
+			keepRecentTokens: 1234,
+		});
 		assert.deepEqual(settings.getRetrySettings(), {
 			enabled: true,
 			maxRetries: 1,

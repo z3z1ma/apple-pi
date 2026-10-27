@@ -10,7 +10,7 @@ Why: any change to the system prompt invalidates the provider's cached prefix fo
 Why: the fork reuses the parent's tool list so its request shares the parent's cached prefix; removing the tool from the main session would change the list. The refusal keeps rewriting out of the main model's hands.
 
 The reflection before compaction starts in `session_before_compact` and returns nothing.
-Why: `startFork` copies the projection synchronously, so the fork still holds the detail the compaction is about to remove; the compaction itself belongs to `server-compaction` or Pi, and a returned value would compete with that one owner.
+Why: `startFork` copies the projection synchronously, so the fork still holds the detail the compaction is about to remove; the compaction itself belongs to Pi's native summarizer, and a returned value would compete with that one owner.
 
 `update_self` is added to the active tools at `session_start` and again at every `before_agent_start`.
 Why: Pi restores the active tool set from the saved transcript after extensions load, so a session older than the tool, or one whose user disabled it, would otherwise run without it; every new root-session tool also lands in the `activeTools` the bridge records, which `activity.test.ts` checks with `arrayContaining`.

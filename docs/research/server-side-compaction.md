@@ -1,6 +1,6 @@
 # Server-side compaction: provider support and evidence
 
-Researched 2026-10-02 for the question: should Apple Pi replace the xAI-only compaction hook with one generic extension that forces server-side compaction on every capable provider?
+Researched 2026-10-02 for the question: should Apple Pi replace the xAI-only compaction hook with one generic extension that forces server-side compaction on every capable provider? The provider survey below is historical; the implementation was removed on 2026-10-27. See [Decision](#decision) and the current [context contract](../context.md).
 
 ## Provider support
 
@@ -13,7 +13,7 @@ Researched 2026-10-02 for the question: should Apple Pi replace the xAI-only com
 
 Anthropic on-demand compaction lists Claude API, Claude Platform on AWS, Google Cloud and Microsoft Foundry as beta. Amazon Bedrock is "not available". Supported models include Opus 4.6 and later and Sonnet 4.6 and later.
 
-Every server-side item is valid only on the provider that made it. A session that changes provider after compaction needs a readable fallback. Apple Pi's xAI hook ([`docs/context.md`](../context.md)) already stores a text projection for that reason.
+Every server-side item is valid only on the provider that made it. A session that changes provider after compaction needs a readable fallback. The former Apple Pi xAI hook stored a text projection for that reason; the current package uses Pi's readable summaries instead.
 
 ## What Pi's default summarizer already does
 
@@ -50,6 +50,14 @@ Vendor claims for server-side compaction are about cost, latency, longer session
 
 ## Decision
 
-On 2026-10-02 the owner chose server-side compaction for OpenAI, xAI, and Anthropic, with Pi's summarizer as the fallback elsewhere. [`docs/context.md`](../context.md) describes the implementation. Live probes with OAuth credentials confirmed that each provider compacts and that a later request recalls compacted facts from the server result alone. OpenAI follows Codex (`codex-rs/core/src/compact_remote_v2*.rs`): an ordinary Responses request ending in a `compaction_trigger` item. The `openai` provider's ChatGPT subscription sign-in on api.openai.com refused both `/responses/compact` (`hardened_oauth_rule_missing`) and `compaction_trigger` (`subscription_sharing_unsupported_capability`); Codex sign-in uses the ChatGPT backend instead.
+### Original decision (superseded)
 
-A measured comparison on real sessions, as described in the conclusions, has not been run.
+On 2026-10-02 the owner chose server-side compaction for OpenAI, xAI, and Anthropic, with Pi's summarizer as the fallback elsewhere. That implementation has since been removed. Live probes with OAuth credentials confirmed that each provider compacts and that a later request recalls compacted facts from the server result alone. OpenAI follows Codex (`codex-rs/core/src/compact_remote_v2*.rs`): an ordinary Responses request ending in a `compaction_trigger` item. The `openai` provider's ChatGPT subscription sign-in on api.openai.com refused both `/responses/compact` (`hardened_oauth_rule_missing`) and `compaction_trigger` (`subscription_sharing_unsupported_capability`); Codex sign-in uses the ChatGPT backend instead.
+
+### Removal decision: 2026-10-27
+
+A controlled same-history comparison on the installed OpenAI subscription route measured 127,898 input tokens after the native checkpoint versus 80,071 after Pi's ordinary summary, with the same model, live instructions/tools and retained tail. Input changes reduced the fresh-checkpoint excess but did not repair an existing opaque chain. This is one measured case, not a universal compression ratio or a decoding of the checkpoint.
+
+The owner required exact Codex parity for Pi's `openai` provider with ChatGPT OAuth, otherwise Pi's native LLM summarization everywhere. The compatibility check failed: [pinned Codex](https://github.com/openai/codex/blob/c8e73bf7198152ecc1158b148105d054add7a525/codex-rs/model-provider-info/src/lib.rs#L457-L475) routes ChatGPT auth through `chatgpt.com/backend-api/codex/responses` with bearer and account headers, while installed Pi 1.4's `openai` OAuth requests a direct-use token for `api.openai.com/v1`. Codex's remote V2 appends an explicit compaction trigger and requires one completed checkpoint; our subscription threshold-and-abort workaround was a different protocol. The route difference does not, by itself, prove the backend's reason for rejecting the trigger.
+
+The package therefore removes custom compaction requests, opaque replay, text projections, pair compaction overrides and provider-specific retention machinery. All providers use Pi's native LLM summarizer. The independent post-compaction notebook packet and automatic-compaction failure safety remain. No authentication rerouting, deprecated-provider switch or new summarization platform is introduced.

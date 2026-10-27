@@ -15,7 +15,6 @@ function isTerminalAssistant(message: { content?: unknown } | undefined): boolea
 	);
 }
 
-export const PAIR_RESEED_ENTRY_ID = "pair-reseed";
 /** Last implementing-agent turns kept in the compact seed. */
 export const RECENT_TRAJECTORY_TURNS = 8;
 
@@ -308,12 +307,9 @@ export function buildPairSeed(opts: {
 	rollingAdvice?: readonly SettledAdvice[];
 	unresolvedNotebook?: string;
 	issueReceipt?: PairReceiptIssuer;
-	/** Default true. Compact reseeds omit the fold; the parent packet carries it. */
-	includeFold?: boolean;
 }): string {
-	const includeFold = opts.includeFold !== false;
 	return formatPairSeed({
-		fold: includeFold && opts.entries ? formatNotebookFold(opts.entries) : "",
+		fold: opts.entries ? formatNotebookFold(opts.entries) : "",
 		userMessages: opts.entries
 			? formatRecentUserMessages(collectRecentUserRequests(opts.entries), opts.issueReceipt)
 			: "",

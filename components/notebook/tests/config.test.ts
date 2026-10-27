@@ -9,7 +9,7 @@ vi.mock("@earendil-works/pi-coding-agent", () => ({
 	getAgentDir: () => mock.agentDir,
 }));
 
-import { DEFAULTS, loadConfig, readEnvConfig, resolveCompactAfterTokens } from "../src/config.js";
+import { DEFAULTS, loadConfig, readEnvConfig } from "../src/config.js";
 import { Runtime } from "../src/runtime.js";
 
 function writeJson(path: string, value: unknown) {
@@ -36,15 +36,7 @@ describe("pair programmer notebook config", () => {
 	});
 
 	it("uses pair programmer notebook defaults", () => {
-		expect(DEFAULTS).toEqual({
-			notebookAfterTokens: 20000,
-			compactAfterTokens: 81000,
-			compactAfterTokensMode: "ratio",
-			compactAfterTokensRatio: 0.68,
-			compactIdleMinutes: 4,
-			passive: false,
-		});
-		expect(loadConfig(cwd, {})).toEqual(DEFAULTS);
+		expect(loadConfig(cwd, false, {})).toMatchObject({ notebookAfterTokens: 20000, passive: false });
 	});
 
 	it("loads project pair programmer settings only when trusted", () => {
@@ -62,185 +54,28 @@ describe("pair programmer notebook config", () => {
 
 	it("merges global, trusted project, and env pair programmer settings in order", () => {
 		writeJson(join(agentDir, "settings.json"), {
-			pair: {
-				notebookAfterTokens: 10,
-				compactAfterTokens: 30,
-				compactIdleMinutes: 2.5,
-				passive: false,
-			},
+			pair: { notebookAfterTokens: 10, notebookSourceMaxTokens: 2000, passive: false },
 		});
 		writeJson(join(cwd, ".pi", "settings.json"), {
-			pair: {
-				notebookAfterTokens: 100,
-			},
+			pair: { notebookAfterTokens: 100 },
 		});
-
-		expect(loadConfig(cwd, true, { PI_PAIR_NOTEBOOK_PASSIVE: "true" })).toMatchObject({
+		expect(loadConfig(cwd, true, { PI_PAIR_NOTEBOOK_PASSIVE: "true" })).toEqual({
 			notebookAfterTokens: 100,
-			compactAfterTokens: 30,
-			compactIdleMinutes: 2.5,
+			notebookSourceMaxTokens: 2000,
 			passive: true,
 		});
 	});
 
 	it("ignores invalid pair programmer values", () => {
 		writeJson(join(cwd, ".pi", "settings.json"), {
-			pair: {
-				notebookAfterTokens: -1,
-				reflectAfterTokens: 0,
-				compactAfterTokens: 1.5,
-				compactIdleMinutes: -2,
-				agentMaxTurns: null,
-				showWorkerNotifications: "no",
-				passive: "yes",
-				debugLog: "true",
-			},
+			pair: { notebookAfterTokens: -1, notebookSourceMaxTokens: 0, passive: "yes" },
 		});
-
-		expect(loadConfig(cwd, {})).toEqual(DEFAULTS);
+		expect(loadConfig(cwd, true, {})).toEqual(DEFAULTS);
 	});
 
 	it("parses passive env override", () => {
 		expect(readEnvConfig({ PI_PAIR_NOTEBOOK_PASSIVE: "on" })).toEqual({ passive: true });
 		expect(readEnvConfig({ PI_PAIR_NOTEBOOK_PASSIVE: "0" })).toEqual({ passive: false });
 		expect(readEnvConfig({ PI_PAIR_NOTEBOOK_PASSIVE: "maybe" })).toEqual({});
-	});
-
-	describe("compactIdleMinutes setting", () => {
-		it("accepts valid non-negative numbers including 0", () => {
-			writeJson(join(cwd, ".pi", "settings.json"), {
-				pair: { compactIdleMinutes: 0 },
-			});
-			expect(loadConfig(cwd, true, {})).toMatchObject({ compactIdleMinutes: 0 });
-
-			writeJson(join(cwd, ".pi", "settings.json"), {
-				pair: { compactIdleMinutes: 3.5 },
-			});
-			expect(loadConfig(cwd, true, {})).toMatchObject({ compactIdleMinutes: 3.5 });
-		});
-
-		it("rejects negative numbers or non-numbers and falls back to default", () => {
-			writeJson(join(cwd, ".pi", "settings.json"), {
-				pair: { compactIdleMinutes: -1 },
-			});
-			expect(loadConfig(cwd, {})).toMatchObject({ compactIdleMinutes: 4 });
-
-			writeJson(join(cwd, ".pi", "settings.json"), {
-				pair: { compactIdleMinutes: "five" },
-			});
-			expect(loadConfig(cwd, {})).toMatchObject({ compactIdleMinutes: 4 });
-		});
-	});
-
-	describe("compactAfterTokens ratio mode", () => {
-		it("accepts compactAfterTokensMode and compactAfterTokensRatio", () => {
-			writeJson(join(cwd, ".pi", "settings.json"), {
-				pair: {
-					compactAfterTokensMode: "ratio",
-					compactAfterTokensRatio: 0.5,
-				},
-			});
-
-			expect(loadConfig(cwd, true, {})).toMatchObject({
-				compactAfterTokensMode: "ratio",
-				compactAfterTokensRatio: 0.5,
-			});
-		});
-
-		it("rejects invalid mode values and falls back to default ratio", () => {
-			writeJson(join(cwd, ".pi", "settings.json"), {
-				pair: {
-					compactAfterTokensMode: "auto",
-				},
-			});
-
-			expect(loadConfig(cwd, {})).toMatchObject({ compactAfterTokensMode: "ratio" });
-		});
-
-		it("rejects ratio outside (0, 1) and falls back to default", () => {
-			writeJson(join(cwd, ".pi", "settings.json"), {
-				pair: {
-					compactAfterTokensRatio: 0,
-				},
-			});
-			expect(loadConfig(cwd, {})).toMatchObject({ compactAfterTokensRatio: 0.68 });
-
-			writeJson(join(cwd, ".pi", "settings.json"), {
-				pair: {
-					compactAfterTokensRatio: 1,
-				},
-			});
-			expect(loadConfig(cwd, {})).toMatchObject({ compactAfterTokensRatio: 0.68 });
-
-			writeJson(join(cwd, ".pi", "settings.json"), {
-				pair: {
-					compactAfterTokensRatio: 1.5,
-				},
-			});
-			expect(loadConfig(cwd, {})).toMatchObject({ compactAfterTokensRatio: 0.68 });
-
-			writeJson(join(cwd, ".pi", "settings.json"), {
-				pair: {
-					compactAfterTokensRatio: -0.2,
-				},
-			});
-			expect(loadConfig(cwd, {})).toMatchObject({ compactAfterTokensRatio: 0.68 });
-		});
-
-		it("rejects non-numeric ratio and falls back to default", () => {
-			writeJson(join(cwd, ".pi", "settings.json"), {
-				pair: {
-					compactAfterTokensRatio: "0.5",
-				},
-			});
-			expect(loadConfig(cwd, {})).toMatchObject({ compactAfterTokensRatio: 0.68 });
-		});
-	});
-
-	describe("resolveCompactAfterTokens", () => {
-		it("returns the calibrated value in calibrated mode", () => {
-			const config = { ...DEFAULTS, compactAfterTokensMode: "calibrated", compactAfterTokens: 81000 } as any;
-			expect(resolveCompactAfterTokens(config, 1_000_000)).toBe(81000);
-		});
-
-		it("returns calibrated value regardless of context window in calibrated mode", () => {
-			const config = { ...DEFAULTS, compactAfterTokensMode: "calibrated", compactAfterTokens: 81000 } as any;
-			expect(resolveCompactAfterTokens(config, undefined)).toBe(81000);
-			expect(resolveCompactAfterTokens(config, 0)).toBe(81000);
-		});
-
-		it("scales by context window in ratio mode", () => {
-			const config = {
-				...DEFAULTS,
-				compactAfterTokensMode: "ratio",
-				compactAfterTokensRatio: 0.5,
-				compactAfterTokens: 81000,
-			} as any;
-			expect(resolveCompactAfterTokens(config, 1_000_000)).toBe(500_000);
-			expect(resolveCompactAfterTokens(config, 200_000)).toBe(100_000);
-		});
-
-		it("floors fractional results to an integer >= 1", () => {
-			const config = {
-				...DEFAULTS,
-				compactAfterTokensMode: "ratio",
-				compactAfterTokensRatio: 0.5,
-				compactAfterTokens: 81000,
-			} as any;
-			expect(resolveCompactAfterTokens(config, 3)).toBe(1);
-			expect(resolveCompactAfterTokens(config, 1)).toBe(1);
-		});
-
-		it("falls back to calibrated value when context window is unavailable in ratio mode", () => {
-			const config = {
-				...DEFAULTS,
-				compactAfterTokensMode: "ratio",
-				compactAfterTokensRatio: 0.5,
-				compactAfterTokens: 81000,
-			} as any;
-			expect(resolveCompactAfterTokens(config, undefined)).toBe(81000);
-			expect(resolveCompactAfterTokens(config, 0)).toBe(81000);
-			expect(resolveCompactAfterTokens(config, -1)).toBe(81000);
-		});
 	});
 });

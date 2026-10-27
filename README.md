@@ -69,7 +69,7 @@ flowchart TB
 
     subgraph Memory["4. Epistemic State, Compaction & Recall"]
         LEDGER["Session Notebook<br/>(notebook / open learnings / session-ledger fold)"]
-        COMPACT["Server or Pi Compaction + Notebook Packet<br/>(server-compaction / compaction-packet)"]
+        COMPACT["Pi Compaction + Notebook Packet<br/>(Pi summarizer / compaction-packet)"]
         SSEARCH["Session Search<br/>(search_session over this session's history)"]
         WIKI["Project Wiki<br/>(wiki / derived Markdown page graph)"]
     end
@@ -195,29 +195,29 @@ When I first wired `pi-exec`, I thought of it merely as a token-saving batch run
 
 ---
 
-### 2. `notebook`, `server-compaction`, & `session-search`: The Epistemic Fold
+### 2. `notebook` & `session-search`: The Epistemic Fold
 
 #### The Observed Dysfunction
 Every long coding session eventually hits the wall. When the context window fills up, a harness typically falls back on one of two things, and both can fail:
 1. **FIFO Truncation:** Drop the oldest messages, which immediately lobotomizes the original architectural constraints and causes the agent to re-introduce bugs you fixed an hour ago.
 2. **Naive LLM Summarization:** Ask a cheap model to "summarize the conversation so far." This produces three paragraphs of corporate mush (*"The user and assistant discussed refactoring the authentication module and encountered several test failures..."*) that strips out every exact file path, falsified hypothesis, and subtle invariant.
 
-#### The Mechanical Response (`components/notebook`, `components/server-compaction`, `components/session-search`)
-`apple-pi` does not replace compaction with its own summarizer. It moves compaction to the provider's server where the provider supports it, keeps a separate notebook of hard-won learnings that survives every compaction, and gives the agent a search tool over the session's full history:
+#### The Mechanical Response (`components/notebook`, `components/session-search`)
+`apple-pi` leaves compaction to Pi's native LLM summarizer for every provider, keeps a separate notebook of hard-won learnings that survives every compaction, and gives the agent a search tool over the session's full history:
 
 ```mermaid
 sequenceDiagram
     participant Agent as Primary Agent
     participant Notebook as Session Notebook (session-ledger/fold.ts)
-    participant Compactor as Compaction (server-compaction or Pi summarizer)
+    participant Compactor as Pi's native summarizer
     participant Recall as Session Search (search_session)
 
     Note over Agent,Notebook: Active Turn Loop
     Agent->>Notebook: Records sourced learnings (update_notebook)
     Notebook->>Notebook: Token-spaced reflection fork captures missed learnings (learning-cycle.ts)
 
-    Note over Agent,Compactor: Compaction (Pi's threshold, or compaction-trigger.ts after a run settles)
-    Compactor->>Agent: Provider server compaction, or Pi's default summary, replaces older history
+    Note over Agent,Compactor: Compaction (Pi's threshold, overflow recovery, or /compact)
+    Compactor->>Agent: Readable summary replaces older active history
     Notebook->>Agent: Appends one packet of current open learnings (compaction-packet.ts)
     Notebook->>Notebook: Distillation fork moves durable learnings to project files (distillation.ts)
 
@@ -228,7 +228,7 @@ sequenceDiagram
 
 * **The Session Ledger (`components/notebook/src/session-ledger/`):** The notebook stores sourced observations and reflections in Pi's append-only session JSONL; `fold.ts`, `progress.ts`, and `sources.ts` fold them into the current set of open learnings and the transcript entries that support each one. Retired learnings stay recallable through `revisit_note` but are no longer live guidance. This ledger holds learnings, not task progress: status and plans belong to the `.ledger/` task workbench, docs, and git.
 * **Two-Tier Learning Distillation (`hooks/learning-cycle.ts`, `hooks/open-learnings.ts`, `hooks/project-learnings.ts`, `distillation.ts`):** Discoveries made mid-session ("`WorkManager` requires an exclusive lease before mutating shared state") are captured first as open learnings, which last for one session. Distillation runs after each compaction, at ledger close, and on `/distill`; it moves a durable learning into a machine-owned project file—`.pi/LEARNINGS.md` (which `project-learnings.ts` loads into every root session's system prompt), a `.wiki/` page, a ledger task's `retrospective.md`, a reusable `.pi/programs/` composition, or a source file's context file—and retires it.
-* **Compaction and the Learnings Packet (`hooks/compaction-packet.ts`, `components/server-compaction`):** Compaction has one hook owner, `server-compaction` (`anthropic.ts`, `responses.ts`, `convert.ts`, `hooks.ts`). On OpenAI (API key and Codex sign-in), xAI, and Anthropic it compacts on the provider's server and replays the newest result on later requests; every other route falls back to Pi's default summarizer. `extensions/auto-compact.ts` loads `extensions/compaction-safety.ts`, which aborts the run before the next provider request when an automatic compaction fails or is cancelled. The notebook may also request a compaction after a run settles past its token threshold (`compaction-trigger.ts`), and right after every compaction it appends one persisted packet of the current open learnings. The packet supplements the compacted history; it does not replace it.
+* **Compaction and the Learnings Packet (`hooks/compaction-packet.ts`):** Pi's native LLM summarizer owns compaction for every provider, including the private pair session. apple-pi adds no server-compaction requests, encrypted-checkpoint replay, or custom compaction summaries. `extensions/auto-compact.ts` loads `extensions/compaction-safety.ts`, which aborts the run before the next provider request when an automatic compaction fails or is cancelled. Right after every compaction, the notebook appends one persisted packet of the current open learnings; Pi alone controls when and how compaction runs. The packet supplements the compacted history; it does not replace it.
 * **Out-of-Band Recall (`components/session-search`):** Because compaction removes raw historical turns from working memory, the agent gets a dedicated search tool, `search_session` (`tool.ts`, `search-entries.ts`), over this session's persisted conversation, tool calls, and write/edit payloads. It follows the active branch by default (`lineage.ts`), can include other branches, can be scoped to file touchpoints (`recall-scope.ts`), and supports progressive `drill-down.ts` into the exact entry an event occurred in.
 
 #### The Extrapolated & Emergent Implications
@@ -428,7 +428,6 @@ The codebase enforces a strict separation between **implementation machinery** (
 | `branch-search` | `branch-search.ts` | `search_branches`: parallel approach attempts as conversation forks in isolated git worktrees (`workspace.ts`, `orchestrator.ts`), scored by caller-written gates and numeric judge commands, with an optional judge-profile model (`judge.ts`, `report.ts`). |
 | `code-context` | `code-context.ts` | Delivers `.context/<path>.md` context files on top-level reads and blocks a top-level `edit`/`write` of a file only while its context file exists and its current marker is not in context (`installer.ts`); `context_lint` (`lint.ts`). |
 | `session-search` | `session-search.ts` | `search_session` over this session's transcript, tool calls, and write/edit payloads: active lineage by default (`lineage.ts`), file scopes (`recall-scope.ts`), and progressive drill-down (`drill-down.ts`). |
-| `server-compaction` | `server-compaction.ts` | Provider server-side compaction for OpenAI and Codex Responses, xAI Responses (`responses.ts`), and Anthropic (`anthropic.ts`), with message conversion and replay of the newest result (`convert.ts`, `hooks.ts`); other routes fall back to Pi's summarizer. |
 | `tasks` | `tasks.ts`, `work.ts` | Asynchronous bash process manager (`task-manager.ts`, `process-killer.ts`), output capture (`output-buffer.ts`), one-shot reminders (`remind_me`, `schedule-tool.ts`), monitoring (`monitor-tool.ts`), and the `/work` panel commands. |
 | `terse-tools` | `terse-tools.ts` | TUI renderer patches (`patch.ts`, `formatters.ts`) that compress verbose tool output into dense one-liners, mouse-navigable in fullscreen mode, with an interactive modal inspector (`inspector.ts`, `tool-viewer.ts`). |
 | `rtk` | `rtk.ts` | RTK binary detector (`detector.ts`) and `rtk rewrite` wrapper (`rewrite.ts`), which the tasks bash tool calls to route eligible commands through `rtk` for token compression; the extension (`rtk.ts`) adds only the prompt section. |

@@ -2,35 +2,16 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 
-export type CompactAfterTokensMode = "calibrated" | "ratio";
-
 export interface Config {
 	notebookAfterTokens: number;
 	notebookSourceMaxTokens?: number;
-	compactAfterTokens: number;
-	compactAfterTokensMode: CompactAfterTokensMode;
-	compactAfterTokensRatio: number;
-	compactIdleMinutes: number;
 	passive: boolean;
 }
 
 export const DEFAULTS: Config = {
 	notebookAfterTokens: 20_000,
-	compactAfterTokens: 81_000,
-	compactAfterTokensMode: "ratio",
-	compactAfterTokensRatio: 0.68,
-	compactIdleMinutes: 4,
 	passive: false,
 };
-
-export const COMPACT_AFTER_TOKENS_MODE_VALUES: readonly CompactAfterTokensMode[] = ["calibrated", "ratio"] as const;
-
-export function resolveCompactAfterTokens(config: Config, contextWindow: number | undefined): number {
-	if (config.compactAfterTokensMode === "ratio" && typeof contextWindow === "number" && contextWindow > 0) {
-		return Math.max(1, Math.floor(contextWindow * config.compactAfterTokensRatio));
-	}
-	return config.compactAfterTokens;
-}
 
 export const NOTEBOOK_SOURCE_FALLBACK_MAX_TOKENS = 60_000;
 export const NOTEBOOK_SOURCE_MIN_TOKENS = 256;
@@ -57,32 +38,13 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null;
 }
 
-function isCompactAfterTokensMode(value: unknown): value is CompactAfterTokensMode {
-	return typeof value === "string" && (COMPACT_AFTER_TOKENS_MODE_VALUES as readonly string[]).includes(value);
-}
-
-function validRatioOrUndefined(value: unknown): number | undefined {
-	return typeof value === "number" && Number.isFinite(value) && value > 0 && value < 1 ? value : undefined;
-}
-
-function nonNegativeNumberOrUndefined(value: unknown): number | undefined {
-	return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined;
-}
-
 function normalizeSettingsConfig(value: Record<string, unknown>): Partial<Config> {
 	const normalized: Partial<Config> = {};
-	const numberKeys = ["notebookAfterTokens", "notebookSourceMaxTokens", "compactAfterTokens"] as const;
+	const numberKeys = ["notebookAfterTokens", "notebookSourceMaxTokens"] as const;
 	for (const key of numberKeys) {
 		const candidate = positiveIntegerOrUndefined(value[key]);
 		if (candidate !== undefined) normalized[key] = candidate;
 	}
-	if (isCompactAfterTokensMode(value.compactAfterTokensMode)) {
-		normalized.compactAfterTokensMode = value.compactAfterTokensMode;
-	}
-	const ratio = validRatioOrUndefined(value.compactAfterTokensRatio);
-	if (ratio !== undefined) normalized.compactAfterTokensRatio = ratio;
-	const idleMinutes = nonNegativeNumberOrUndefined(value.compactIdleMinutes);
-	if (idleMinutes !== undefined) normalized.compactIdleMinutes = idleMinutes;
 	if (typeof value.passive === "boolean") normalized.passive = value.passive;
 	return normalized;
 }

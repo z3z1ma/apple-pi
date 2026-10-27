@@ -32,6 +32,10 @@ Verify: components/session-state/tests/tmux.test.ts
 `stop` aborts in-flight tmux reads and clears `this.db` before closing it; async work checks `this.db` after every await.
 Why: a poll that resumed after shutdown otherwise wrote to a closed database.
 
+A daemon restart interrupts its headless people, including ordinary lasting colleagues outside program scopes. Graceful shutdown explicitly terminates the headless map; bypassing it with SIGKILL still closes the parent-owned stdin pipes created by `launchSession`. Detached process groups do not establish worker survival. Plan recovery under the same identities and existing assignments, and verify their replacement processes and bridges rather than promise a transparent restart. Socket connectivity alone does not establish that the intended replacement PID or schema is running.
+Why: an authorized live restart lost all four headless colleagues despite bypassing `stop`; they required explicit reopening. Checking only program scopes missed those ordinary children, and a connection did not by itself prove replacement-daemon readiness.
+Coupled: components/session-state/src/runtime-main.ts, components/session-state/src/client.ts
+
 ## symbol:Runtime.checkLiveness
 
 Liveness covers every incarnation whose process state is still alive or alive with the bridge lost, including ended (superseded) ones, and only a proven-gone process ends as `lost`; a failed check stays `alive_bridge_lost`.

@@ -105,15 +105,6 @@ try {
 	assert(
 		result.extensions.some(
 			(extension) =>
-				extension.path.includes("server-compaction") &&
-				(extension.handlers.get("session_before_compact")?.length ?? 0) > 0 &&
-				(extension.handlers.get("before_provider_request")?.length ?? 0) > 0,
-		),
-		"missing server-side compaction hooks",
-	);
-	assert(
-		result.extensions.some(
-			(extension) =>
 				extension.path.endsWith("ledger.ts") && (extension.handlers.get("before_agent_start")?.length ?? 0) > 0,
 		),
 		"missing ledger system-prompt injection",

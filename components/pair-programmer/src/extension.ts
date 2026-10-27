@@ -39,7 +39,6 @@ import { Type } from "typebox";
 
 import { renderNotebookView } from "../../notebook/src/commands/view.js";
 import { registerNotebookCompactionPacket } from "../../notebook/src/hooks/compaction-packet.js";
-import { registerCompactionTrigger } from "../../notebook/src/hooks/compaction-trigger.js";
 import { registerLearningCycle } from "../../notebook/src/hooks/learning-cycle.js";
 import { registerOpenLearnings, showOpenLearnings } from "../../notebook/src/hooks/open-learnings.js";
 import { registerProjectLearnings } from "../../notebook/src/hooks/project-learnings.js";
@@ -349,16 +348,15 @@ export {
 	collectRecentUserRequests,
 	formatPairSeed,
 	formatRecentTrajectory,
-	PAIR_RESEED_ENTRY_ID,
 	RECENT_TRAJECTORY_TURNS,
 } from "./seed.js";
-export { PAIR_SESSION_TOOLS, pairCompactResult } from "./session.js";
+export { PAIR_SESSION_TOOLS } from "./session.js";
 
 // ---- PairRuntime — drives the pair agent off primary turn deltas ----
 
 /**
  * Reviews scheduler-permitted contiguous delta batches in the persistent pair
- * conversation. Identity change uses `reset()`. Overflow uses the pair session compact hook.
+ * conversation. Identity change uses `reset()`. Overflow uses Pi's native model-owned compaction.
  */
 type PendingDelta = Readonly<{
 	sequence: number;
@@ -1234,7 +1232,6 @@ export { loadSystemPrompt, PAIR_MODEL_PROFILE, PRIMARY_PAIR_PROTOCOL, PRIMARY_PA
 
 export default function (pi: ExtensionAPI) {
 	const rootNotebook = new NotebookRuntime();
-	registerCompactionTrigger(pi, rootNotebook);
 	registerNotebookCompactionPacket(pi);
 	registerNotebookSourceTool(pi);
 	registerMainNotebookTool(pi, rootNotebook);
@@ -1808,16 +1805,6 @@ export default function (pi: ExtensionAPI) {
 				receiptIssuer(ctx.sessionManager, entries),
 			);
 		};
-		const seedSource = {
-			entries: primaryEntries,
-			rollingAdvice: () => builtRuntime?.rollingAdvice ?? [],
-			unresolvedNotebook,
-			receiptIssuer: () => {
-				const entries = primaryEntries();
-				return receiptIssuer(ctx.sessionManager, entries);
-			},
-			presentReceipts: (text: string) => builtReceiptStore.activatePresented(text),
-		};
 		let session: Awaited<ReturnType<typeof createPairSession>> | undefined;
 		try {
 			session = await createPairSession({
@@ -1832,7 +1819,6 @@ export default function (pi: ExtensionAPI) {
 				receiptTool: builtReceiptTool as never,
 				attentionTool: builtAttentionTool as never,
 				notebookTool: builtNotebookTool as never,
-				seedSource,
 				primarySessionManager: ctx.sessionManager,
 				modelRuntime: (ctx.modelRegistry as { runtime?: unknown }).runtime,
 			});

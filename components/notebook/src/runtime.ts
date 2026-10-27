@@ -1,12 +1,5 @@
 import { type Config, DEFAULTS, loadConfig } from "./config.js";
 
-const STALE_EXTENSION_CTX_MESSAGE = "This extension ctx is stale after session replacement or reload";
-
-export function isStaleExtensionCtxError(error: unknown): boolean {
-	const message = error instanceof Error ? error.message : String(error);
-	return message.includes(STALE_EXTENSION_CTX_MESSAGE);
-}
-
 /** Root-owned deterministic notebook state. The pair programmer owns the model work. */
 export class Runtime {
 	config: Config = { ...DEFAULTS };
@@ -14,8 +7,6 @@ export class Runtime {
 	configCwd: string | undefined;
 	configProjectTrusted: boolean | undefined;
 	disposed = false;
-	compactInFlight = false;
-	idleCompactionTimer: ReturnType<typeof setTimeout> | undefined;
 	notebookEmptyBackoff:
 		| {
 				sessionIdentity: string | undefined;
@@ -23,13 +14,6 @@ export class Runtime {
 				tokensAtEmpty: number;
 		  }
 		| undefined;
-
-	clearIdleCompaction(): void {
-		if (this.idleCompactionTimer) {
-			clearTimeout(this.idleCompactionTimer);
-			this.idleCompactionTimer = undefined;
-		}
-	}
 
 	ensureConfig(cwd: string, projectTrusted = false): Config {
 		if (this.configLoaded && this.configCwd === cwd && this.configProjectTrusted === projectTrusted) return this.config;
@@ -42,6 +26,5 @@ export class Runtime {
 
 	dispose(): void {
 		this.disposed = true;
-		this.clearIdleCompaction();
 	}
 }

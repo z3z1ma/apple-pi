@@ -255,14 +255,3 @@ export function realTokensSinceAnchor(
 		currentContextTokens,
 	);
 }
-
-export function rawTokensSinceLastCompaction(entries: Entry[]): number {
-	const compactionIndex = findLastCompactionIndex(entries);
-	if (compactionIndex === -1) return rawTokensAfterIndex(entries, -1);
-
-	const firstKeptEntryId = entries[compactionIndex].firstKeptEntryId;
-	const firstKeptIndex = entryIndexForId(entries, firstKeptEntryId);
-
-	if (firstKeptIndex === -1) return rawTokensAfterIndex(entries, compactionIndex);
-	return rawTokensAfterIndex(entries, firstKeptIndex - 1);
-}
