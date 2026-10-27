@@ -41,8 +41,7 @@ describe("standalone session-search extension", () => {
 		isolate();
 		const loaded = surfaces(await loadSessionSearchExtension());
 		expect(loaded.errors).toEqual([]);
-		expect(loaded.tools.has("search_session")).toBe(true);
-		expect(loaded.tools.has("revisit_note")).toBe(false);
+		expect([...loaded.tools]).toEqual(["search_session"]);
 		expect(loaded.commands.size).toBe(0);
 		expect(loaded.handlers.has("turn_end")).toBe(false);
 		expect(loaded.handlers.has("context")).toBe(false);

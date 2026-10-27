@@ -14,6 +14,10 @@ Verify: components/branch-search/tests/fork-tools.test.ts
 
 The session starts in `print` mode. For an extension that acts only in the TUI, call `session.bindExtensions({ mode: "tui", uiContext: { notify } as never })` again after `fauxSession(...)`; that also captures `ctx.ui.notify` warnings. `session.setSessionName` fires `session_info_changed`, which simulates an operator rename. For resume, create the session with `SessionManager.create(cwd, dir)`, then open its file with `SessionManager.open(file)` in a second `fauxSession` on the same cwd.
 
+Observe extension-command failures through `bindExtensions({ onError })`: `session.prompt('/command')` catches handler errors and resolves normally. When a TUI fixture also performs native reads, provide `setStatus` alongside `notify` in its UI fake and assert the error channel stays empty on success.
+Why: expecting a rejected prompt missed a resolver error, while an incomplete notification-only fake introduced unrelated `ctx.ui.setStatus is not a function` errors. Fix the observation/fake rather than filtering failures out of positive controls.
+Verify: components/session-state/tests/work.test.ts
+
 An invalid image payload (such as base64 `aGk=`) is stored as the text placeholder `[Image omitted: could not be resized…]`, so an "images only" prompt gains text. Use a real 1x1 PNG to test a prompt without text.
 
 `options.streamText` adds start, text, and end stream events so `message_update` fires; without it a faux reply arrives only as `done`. Inside the stream function, its own `options` parameter shadows `fauxSession`'s, so read session options into locals before it.
