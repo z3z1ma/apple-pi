@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
+import { departedPeople } from "./departures.js";
 import { type Link, WAITS } from "./links.js";
 import { temporaryCallers } from "./program-peers.js";
 import { readValuation } from "./valuation.js";
@@ -171,7 +172,7 @@ export function membership(db: DatabaseSync, organization: string) {
 	};
 	const stream = db
 		.prepare(
-			"select session_id, at, type, data from events where type in ('reports_to_changed', 'transferred', 'retired', 'rehired', 'cost_changed', 'prompt_opened') order by seq",
+			"select session_id, at, type, data from events where type in ('reports_to_changed', 'transferred', 'retired', 'rehired', 'person_departed', 'cost_changed', 'prompt_opened') order by seq",
 		)
 		.all() as unknown as Recorded[];
 	const seeds = new Map(
@@ -179,6 +180,7 @@ export function membership(db: DatabaseSync, organization: string) {
 			(row) => [row.id, row.reports_to],
 		),
 	);
+	for (const [person, departure] of departedPeople(db)) if (!seeds.has(person)) seeds.set(person, departure.reportsTo);
 	for (const [peer, caller] of peers) if (caller === null || !seeds.has(peer)) seeds.set(peer, caller);
 	const seeded = new Set<string>();
 	for (const row of stream)
@@ -207,7 +209,7 @@ export function membership(db: DatabaseSync, organization: string) {
 			if (row.at > until) continue;
 			const data = JSON.parse(row.data ?? "{}");
 			if (row.type === "reports_to_changed" || row.type === "transferred") manager.set(row.session_id, data.to ?? null);
-			else if (row.type === "retired") departed.add(row.session_id);
+			else if (row.type === "retired" || row.type === "person_departed") departed.add(row.session_id);
 			else if (row.type === "rehired") departed.delete(row.session_id);
 			visit?.(row, data, isMember);
 		}

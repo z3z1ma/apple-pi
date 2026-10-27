@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
 import { fauxSession } from "../../../tests/helpers/faux-session.js";
 import bridge from "../src/index.js";
+import { killPane } from "../src/tmux.js";
 import { close, query, startRuntime, stopRuntime, tempStateDir } from "./helpers.js";
 
 // tmux puts -L servers under $TMUX_TMPDIR, so the runtime sees only these scratch servers, never the operator's.
@@ -209,4 +210,31 @@ test("a server that stops answering does not hold up the others", async () => {
 	} finally {
 		process.kill(stuckPid, "SIGCONT");
 	}
+});
+
+test("conditional removal preserves live and respawned panes and removes only the expected dead process", async () => {
+	const server = "departure-guard";
+	tmux(server, "new-session", "-d");
+	tmux(server, "set-option", "-g", "default-shell", "/bin/sh");
+	tmux(server, "set-option", "-g", "remain-on-exit", "on");
+	const pane = tmux(server, "new-window", "-d", "-P", "-F", "#{pane_id}", "exit 0");
+	const status = () =>
+		tmux(server, "display-message", "-p", "-t", pane, "#{pane_dead} #{pane_pid}").split(" ").map(Number);
+	await vi.waitFor(() => expect(status()[0]).toBe(1));
+	const oldPid = status()[1]!;
+	tmux(server, "respawn-pane", "-k", "-t", pane, "exec sleep 600");
+	await vi.waitFor(() => expect(status()[0]).toBe(0));
+	await killPane(socketOf(server), pane, oldPid, AbortSignal.timeout(5000));
+	expect(status()[0]).toBe(0);
+	const livePid = status()[1]!;
+	await killPane(socketOf(server), pane, livePid, AbortSignal.timeout(5000));
+	expect(status()[0]).toBe(0);
+	tmux(server, "respawn-pane", "-k", "-t", pane, "exit 0");
+	await vi.waitFor(() => expect(status()[0]).toBe(1));
+	const newPid = status()[1]!;
+	expect(newPid).not.toBe(oldPid);
+	await killPane(socketOf(server), pane, oldPid, AbortSignal.timeout(5000));
+	expect(status()).toEqual([1, newPid]);
+	await killPane(socketOf(server), pane, newPid, AbortSignal.timeout(5000));
+	expect(tmux(server, "list-panes", "-a", "-F", "#{pane_id}").split("\n")).not.toContain(pane);
 });

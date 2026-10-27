@@ -2,10 +2,9 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { appendFileSync, existsSync, mkdirSync, renameSync, statSync, unlinkSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
+import { sidecarUsageRelativePath } from "./sidecar-usage-path.js";
 
 export const SIDECAR_USAGE_MAX_BYTES = 10 * 1024 * 1024;
-export const SIDECAR_USAGE_DIR_RELATIVE_PATH = "sidecar-usage";
-export const SIDECAR_USAGE_UNSCOPED_FILE = "unscoped.ndjson";
 
 export const SIDECAR_USAGE_RECORD_KEYS = [
 	"ts",
@@ -95,23 +94,6 @@ export function withSidecarUsageContext<T>(context: SidecarUsageContext, fn: () 
 
 export function sidecarUsageContext(): SidecarUsageContext | undefined {
 	return storage.getStore();
-}
-
-export function safeSidecarUsageSessionId(sessionId: string | undefined): string | undefined {
-	const trimmed = sessionId?.trim();
-	if (!trimmed) return undefined;
-	const sanitized = trimmed
-		.replace(/[^A-Za-z0-9._-]+/g, "_")
-		.replace(/^_+|_+$/g, "")
-		.slice(0, 128);
-	if (!/[A-Za-z0-9]/.test(sanitized)) return undefined;
-	return sanitized;
-}
-
-export function sidecarUsageRelativePath(sessionId: string | undefined): string {
-	const safeSessionId = safeSidecarUsageSessionId(sessionId);
-	const file = safeSessionId ? `${safeSessionId}.ndjson` : SIDECAR_USAGE_UNSCOPED_FILE;
-	return join(SIDECAR_USAGE_DIR_RELATIVE_PATH, file);
 }
 
 export function usageFieldsFromUnknown(

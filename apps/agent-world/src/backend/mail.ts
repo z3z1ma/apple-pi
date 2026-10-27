@@ -5,6 +5,7 @@ import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import type { Command } from "../../../../components/session-state/src/protocol.js";
+import { nameOf as retainedName } from "../../../../components/session-state/src/threads.js";
 import type { CommandReceipt, ThreadRead } from "../world.js";
 import { MAIL_BODY_MAX, type MailItem, type MailThread, type MailThreadSummary, OPERATOR } from "../world.js";
 import type { Commands } from "./commands.js";
@@ -88,8 +89,8 @@ interface MailRow {
 	toCwd: string | null;
 }
 
-const nameOf = (id: string, name: string | null, cwd: string | null) =>
-	name || (cwd ? cwd.split("/").filter(Boolean).pop() : undefined) || id;
+const nameOf = (db: DatabaseSync, id: string, name: string | null, cwd: string | null) =>
+	name || (cwd ? cwd.split("/").filter(Boolean).pop() : undefined) || (id === OPERATOR ? id : retainedName(db, id));
 
 const hasThreads = (db: DatabaseSync) =>
 	db.prepare("select 1 from sqlite_master where type = 'table' and name = 'thread_messages'").get() !== undefined;
@@ -127,6 +128,11 @@ export function readStoredThread(db: DatabaseSync, id: string): MailThread | und
 		.prepare(`select m.seq, m.sender as "from", coalesce(s.name, m.sender) as name, m.body, m.at
 		from thread_messages m left join sessions s on s.id = m.sender where m.thread_id = ? order by m.seq`)
 		.all(id) as MailThread["messages"];
+	for (const participant of participants)
+		if (participant.name === participant.id && participant.id !== OPERATOR)
+			participant.name = retainedName(db, participant.id);
+	for (const message of messages)
+		if (message.name === message.from && message.from !== OPERATOR) message.name = retainedName(db, message.from);
 	return { id, subject: row.subject, closed: row.closed_at !== null, participants, messages };
 }
 
@@ -139,9 +145,9 @@ export function readMail(db: DatabaseSync): MailItem[] {
 		return {
 			id: row.id,
 			from,
-			fromName: from === OPERATOR ? "You" : nameOf(from, row.fromName, row.fromCwd),
+			fromName: from === OPERATOR ? "You" : nameOf(db, from, row.fromName, row.fromCwd),
 			to: row.receiver,
-			toName: nameOf(row.receiver, row.toName, row.toCwd),
+			toName: nameOf(db, row.receiver, row.toName, row.toCwd),
 			body: body.length > MAIL_BODY_MAX ? `${body.slice(0, MAIL_BODY_MAX - 1)}\u2026` : body,
 			sentAt: row.sentAt,
 			deliveredAt: row.deliveredAt,

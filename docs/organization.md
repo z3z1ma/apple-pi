@@ -1,6 +1,6 @@
 # The organization
 
-A Pi session is not a throwaway process. It is a **person**: a stable id, a human name, a role it cannot shake, a mind, a soul, a self, a record, a mailbox, and a place in an **organization**. The organization is a tree rooted at the session you start; managers hire from a **role catalog**, build teams of colliding perspectives, and bring in managers under them when their own attention would become the bottleneck. Everyone can read the whole directory and mail anyone in the organization; the tree carries only assignment, reporting, and escalation. Nobody is deleted: closing is sleep, retiring is leaving. The terminal is the organization; the [tmux sidebar](tmux-sessions.md) and [Agent World](agent-world.md) are its pictures.
+A Pi session is not a throwaway process. It is a **person**: a stable id, a human name, a role it cannot shake, a mind, a soul, a self, a record, a mailbox, and a place in an **organization**. The organization is a tree rooted at the session you start; managers hire from a **role catalog**, build teams of colliding perspectives, and bring in managers under them when their own attention would become the bottleneck. Everyone can read the whole directory and mail anyone in the organization; the tree carries only assignment, reporting, and escalation. Closing is reversible dormancy; a completed permanent departure removes the live person and its raw session after a durable handoff. The terminal is the organization; the [tmux sidebar](tmux-sessions.md) and [Agent World](agent-world.md) are its pictures.
 
 This page is the product contract. The runtime mechanics (the database, the commands, the facts) are in [session-state](session-state.md); the self's place among the session's memories is in [context](context.md#the-self); the one-shot reading helpers are in [interns](interns.md).
 
@@ -8,16 +8,16 @@ This page is the product contract. The runtime mechanics (the database, the comm
 
 | Term | Meaning |
 | --- | --- |
-| Person | A root Pi session with a stable session id. `pi --session-id X` reopens the same person; `/fork` and `/clone` make a new one. Your own sessions are people too. |
+| Person | A root Pi session with a stable session id. `pi --session-id X` can reopen a current person's retained session; `/fork` and `/clone` make a new one. A permanently departed id cannot return. Your own sessions are people too. |
 | Organization | Every person whose chain of managers ends at one root. The **root** is a person with no manager. Two roots on one machine are two organizations. |
 | Operator | The human. The operator is a person at the top of every organization, listed in the directory as `operator`, with no Pi session. Anyone can mail the operator. |
-| Manager | A person whose role has `manages: true`. Root position alone grants no management capabilities. Only managers receive organizational insights and peer delegation, and hire, send home, call in, let go, rehire, rename, and move people, assign and unassign work, and hold meetings. |
+| Manager | A person whose role has `manages: true`. Managing roles receive organizational insights, peer delegation and manager tools. An unroled recorded organization root shares those capabilities without the management job charter; a nonmanaging role keeps its own posture even at a root. |
 | Role | A catalog entry: an obligation, what the role leaves to others, what it delivers, its mind, its tool posture, and whether it manages. Fixed for a person's whole life. |
 | Mind | The role's ordered list of models and a thinking level; the first model the session's registry has is used. |
 | Soul | Three fragments of the world (random encyclopedia articles) drawn at hire, outside any model, and left unexplained. Never edited. |
 | Self | The person's account of itself in four parts (story, practice, commitments, colleagues), rewritten only in reflection. Never distilled, never capped. |
 | Record | What the harness knows a person did: assignments and their outcomes, manager history, hire and leave dates. |
-| Hire, send home, call in, let go, rehire, move | Start a new person with a role and a goal under a manager; stop its process (the person is at home); start a person at home again with its history; record that it has left the organization; bring a former member back; put it under another manager. Hiring and letting go change membership; sending home and calling in change only whether the person is at work. |
+| Hire, send home, call in, let go, move | Start a new person with a role and assigned goal; stop a person's process while retaining its membership and context; reopen that dormant person; request irreversible departure after a durable handoff; move a person under another manager. Dormancy preserves context; permanent departure deletes the owned raw session. |
 | Thread | One conversation: a subject, its participants, and its messages in order. Mail, team channels, meetings, and task discussions are all threads. |
 | Push, pull | How a participant gets a thread's messages. A pushed message arrives as mail (a turn). A pulled message waits until the participant reads the thread. |
 | Task | A bundle with a `task.md` goal: a ledger task in a project's `.ledger/`, or an ephemeral task in the state directory. A person works only on tasks assigned to it or taken by it. |
@@ -91,6 +91,20 @@ Every person records general relationships, waits and results with `link`. Manag
 
 Reporting manager, task owner and decision authority are separate roles that may coincide. Loosely coupled work suits parallel people, tightly coupled work one strong owner, and risky work an independent challenger. Recurring fan-in calls for understanding the constraint before changing authority, assignments or reporting; hiring another manager is an option, not a prescribed response. Staffing uses observed demand and coordination costs rather than a fixed flow threshold. The managing-role charter gate and existing reconciliation/sweep lifecycle remain unchanged.
 
+### Proactive coordination notices
+
+The runtime sends factual mail for three current structural patterns:
+
+- A cycle made entirely of explicit wait links.
+- Distinct current work holders converging on a shared dependency that itself has an explicit outgoing wait.
+- Repeated back-and-forth in a task's own thread, with at least two returning authors, while an explicit decision wait and downstream dependent waits remain open.
+
+Each notice contains counts and a usable evidence reference, not message bodies, a diagnosis or a staffing recommendation. Discussion participant counts describe potential audiences, not delivery, reading or unnecessary recipients. Ordinary message volume and several requests to a manager are not enough. No inactivity or age threshold is inferred.
+
+Notices reach the closest common eligible manager of the actual waiting, owning or repeatedly contributing people. Passive copied participants do not widen routing. Eligibility is a managing role or an unroled recorded organization root; the operator receives the fallback when no eligible common manager exists. Inspect `org_waits` and the referenced task/thread before choosing a response.
+
+Publication follows committed changes through the existing mail outbox. An unchanged active condition is suppressed across restart; a recorded clear rearms recurrence, and changed responsibility can route a new notice to its new manager. Clears are silent. Publication failure preserves the producing work and retries without claiming that a notice was sent. The observations do not change assignments, reporting or strategy.
+
 ## Operator command
 
 In any root Pi session, the human `/org` command remains available regardless of role and shows a compact organization snapshot: open waits grouped by target, ready work without an owner, people holding several tasks, and decisions or explicit escalations pending for each person. It uses the same readers and references as `org_waits`, `org_work` and `org_communication`, at one captured cutoff. Pending requests are cutoff snapshots, so this overview does not replay historical message traffic or read goal files. Counts are recorded facts, not recommendations.
@@ -101,23 +115,36 @@ In any root Pi session, the human `/org` command remains available regardless of
 
 ## Manager tools
 
-A person whose role manages, or an unroled organization root, also has eleven manager tools:
+A person whose role manages, or an unroled organization root, also has ten manager tools:
 
 | Tool | What it does |
 | --- | --- |
 | `hire` (`role`, `goal`, `title`, `value?`, `cost_of_delay?`, `cwd?`, `name?`, `session_id?`) | Starts a new person in a role, reporting to the caller, with the goal assigned as a task before its first turn. |
 | `call_in` (`person`, `goal?`, `value?`, `cost_of_delay?`) | Reopens a person at home with its history. A goal adds an assignment. Refused for a former member. |
-| `rehire` (`person`, `goal?`, `value?`, `cost_of_delay?`) | Brings a former member back into the organization with its history. A goal adds an assignment. Refused for a member. |
 | `send_home` (`person`) | Quits the person's process. The person sleeps and stays in the organization. |
 | `rename` (`person`, `name`) | Renames a running person. Its id and history stay. |
 | `move` (`person`, `manager`) | Puts a person, with everyone under it, under another manager of the same organization. |
-| `let_go` (`person`, `reason`) | Asks the person for a handover, posts it in the team channel, then records why it left and closes it. |
+| `let_go` (`person`, `reason`) | Accepts an asynchronous permanent departure after explicit responsibility handoff. Saves an own-context handoff file before irreversible removal; later mail reports the outcome. |
 | `assign` (`person`, `goal` and `title`, or `task`; `value?`, `cost_of_delay?`) | Gives a person a task or a written goal. It becomes the person's focus. |
 | `unassign` (`person`, `task`) | Takes an assignment back without finishing it. |
 | `meet` (`people`, `agenda`) | Opens a meeting thread. Every message is pushed to every participant. |
 | `end_meeting` (`thread`, `summary`) | Sends the summary and closes the meeting. Only the organizer can end it. |
 
 `person` and `manager` accept a name in the caller's organization or a session id. You can do the same acts from Agent World (hire at a manager's desk, give a goal to a person, let go from a person's actions). The details are in [session-state](session-state.md#manager-tools).
+
+### Permanent departure
+
+Use `send_home` and `call_in` when you want to retain someone's accumulated context. `let_go` is irreversible; a handoff is a summary, not a transcript backup.
+
+1. Finish or reassign every unfinished assignment and move direct reports first. Outstanding owned program resources must finish cleanup. The request also refuses an organization root, self-departure, a duplicate departure, or a program-owned temporary peer (its program owns disposal).
+2. Acceptance returns an operation id, not a claim that the person or its resources are gone. The runtime obtains a final Markdown handoff in the person's own session, waking it with its retained context when needed, and saves the document privately under `~/.pi/agent/state/handoffs/`.
+3. The runtime rechecks responsibilities before committing permanent departure. It then closes admission and new obligations, proves that known writing processes have stopped, removes checked owned transcript/usage files, and deletes the live person and private session records. Cleanup retries after errors and restart; read the later outcome before treating it as complete.
+
+A handoff or pre-commit failure retains membership and the raw session. After the permanent commit, a cleanup failure leaves removal pending, not a reusable person. Restart does not replay an interrupted paid handoff automatically. The permanent identity fact blocks both explicit restart and ordinary transcript re-admission, including after the live row is gone.
+
+Shared thread messages, finished assignment outcomes, explicit links, audience history and accounting facts survive with name/role/reporting attribution. Private prompt/configuration/self/soul/tool-argument payloads and private command failure text are scrubbed; command chronology and shared-work receipts remain. The minimal departure fact is retained history, not a discoverable live or former directory profile.
+
+This removes known session-owned resources, not independent fork/copy transcripts, project files, browser artifacts, unrelated logs or arbitrary orphan processes outside harness ownership. Existing legacy former records are not silently purged; their historical retirement/rehire intervals remain readable without restoring a rehire tool.
 
 The `<org>` section teaches the push and pull model. A new hire's first turn includes its team channel's history, when the channel has any. The `<manager>` charter suggests a short regular meeting, arranged with `remind_me` and held with `meet`, when the team benefits from one.
 
@@ -129,7 +156,7 @@ Each manager has a team channel, `team:<manager-id>`, for the manager and its di
 
 ## Tasks and assignments
 
-Work is explicit. Hiring creates and assigns a task before the person's first turn; calling a person in or rehiring it without a new goal preserves its work, while a new goal adds an assignment and becomes its focus. `take_task` takes a written `goal` with a short `title` (creating an ephemeral task whose `task.md` heading is the title) or an existing `task` (its id or ledger path). A goal without a title is refused: the goal is too long to name the task wherever it is listed. Managers use `assign(person, goal and title, or task)` and `unassign(person, task)`. An assignment records who gave whom what, when, and how it ended; assigning a person at home opens its session and starts the work. A wake failure reports that the assignment was saved, so the manager can call the person in without duplicating it.
+Work is explicit. Hiring creates and assigns a task before the person's first turn; calling a person in without a new goal preserves its work, while a new goal adds an assignment and becomes its focus. `take_task` takes a written `goal` with a short `title` (creating an ephemeral task whose `task.md` heading is the title) or an existing `task` (its id or ledger path). A goal without a title is refused: the goal is too long to name the task wherever it is listed. Managers use `assign(person, goal and title, or task)` and `unassign(person, task)`. An assignment records who gave whom what, when, and how it ended; assigning a person at home opens its session and starts the work. A wake failure reports that the assignment was saved, so the manager can call the person in without duplicating it.
 
 A person can hold several tasks, with one in focus. `focus(task)` rereads its `task.md`; the file is the goal, not a database copy. The goal is appended to context on assignment or focus, and again after compaction. Editing the file and refocusing brings its revision into context. Each task has a thread shared by its assignees and assigners; taking work also tells the person's manager there.
 
@@ -145,7 +172,7 @@ Only an unroled organization root or a managing role can `assign` and `unassign`
 
 - **Value** is earned once, when a task completes (an ephemeral task archived after its last assignee finishes, a ledger task closed `done`). A cancelled task earns nothing.
 - **Delay** is the task's cost of delay per hour while it is the organization's obligation: from when the runtime recorded it until it closes. Unfinished valuable work keeps costing, so an idle organization with valuable outstanding work scores negative.
-- **Compute** is each member's model spend at the time it happened, counted only while the person was a member: from its join (a former root that takes a manager joins then), until it is let go, and again after a rehire. Spend a session already had before the runtime recorded any cost for it is a baseline, not new spend. Spend is placed at the time the runtime observed it: spend made while the runtime was down lands in the window of the reconnect. A temporary `pi_exec` peer's spend follows immutable creation ancestry recursively to its first lasting caller, counted exactly once under that caller's membership at observation time. Reporting moves do not change this beneficiary. New peer identities record a zero cost baseline atomically with launch ownership before any process/hello, so their first positive hello counts as spend; ordinary and legacy identities keep the first-sight transcript baseline convention. Durable identity/caller facts survive cleanup. Migration preserves known surviving legacy caller mappings as observations, not invented births or zero baselines; discarded peers with unknown callers/ancestry and already-deleted assignment spans remain explicit limits. The first retained identity fact wins, including unknown identity recorded at disposal: a later observed/live caller cannot bind that prior lifetime. This conservatively includes old pending cleanup when its surviving facts cannot distinguish it from pre-upgrade ID reuse. An unknown temporary identity starts with unknown structural ancestry, not its reused current snapshot or a first transfer's backward `from` premise; actual recorded `to` changes still govern ancestry at their event times. Known-created and unambiguous legacy histories retain their existing replay conventions.
+- **Compute** is each member's model spend at the time it happened, counted only while the person was a member: from its join (a former root that takes a manager joins then), until departure. Existing legacy retirement/rehire intervals remain historical evidence; new permanent departures do not reopen. Spend a session already had before the runtime recorded any cost for it is a baseline, not new spend. Spend is placed at the time the runtime observed it: spend made while the runtime was down lands in the window of the reconnect. A temporary `pi_exec` peer's spend follows immutable creation ancestry recursively to its first lasting caller, counted exactly once under that caller's membership at observation time. Reporting moves do not change this beneficiary. New peer identities record a zero cost baseline atomically with launch ownership before any process/hello, so their first positive hello counts as spend; ordinary and legacy identities keep the first-sight transcript baseline convention. Durable identity/caller facts survive cleanup. Migration preserves known surviving legacy caller mappings as observations, not invented births or zero baselines; discarded peers with unknown callers/ancestry and already-deleted assignment spans remain explicit limits. The first retained identity fact wins, including unknown identity recorded at disposal: a later observed/live caller cannot bind that prior lifetime. This conservatively includes old pending cleanup when its surviving facts cannot distinguish it from pre-upgrade ID reuse. An unknown temporary identity starts with unknown structural ancestry, not its reused current snapshot or a first transfer's backward `from` premise; actual recorded `to` changes still govern ancestry at their event times. Known-created and unambiguous legacy histories retain their existing replay conventions.
 - Program-internal ephemeral tasks held only by temporary peers stay excluded even across sequential disposal; work with lasting assignment history or ledger status survives. Cleanup ends still-open retained assignments with a non-finished reason, preserving earlier ends/outcomes and past in-progress delay. Existing retained work-change/task-post and operator-thread history survives without a second store. Disposal reparenting records the same historical transfer used by ordinary moves. Temporary IDs remain temporary after cleanup and cannot be reopened as new lasting people or new peers. Admission enforces this both when starting work and when a bridge says hello: reopening a retained transcript keeps its UUID even without the old program environment, so an ordinary hello cannot recreate that discarded person. Valid live program hello/reconnect and ordinary new identities retain their normal behavior.
 - **Delay by state** splits each task's delay into queued (nobody holds it and nothing blocks it: it needs people), waiting (an open `blocks` or `requires_decision` link: it needs a decision or another task), and in progress. Open waits are listed with their age. Several waits on one task never charge its delay twice.
 - **Interruptions** count the questions members opened to the operator and the messages members sent in mail threads the operator is in. Temporary-peer questions and operator mail/escalations follow the same first-lasting-caller membership convention as compute, including after disposal. The operator's time is priced at $1 per minute in the model, but nothing measures it yet, so it is shown as unmeasured and left out of the number; time spent waiting for the operator already shows as delay.
@@ -249,7 +276,7 @@ Processes staff with standing people first: people with matching experience, cal
 ## Rules of the organization
 
 - Roles never change. A person who needs another role is a new hire; the old one sleeps or retires.
-- Nobody is deleted. `send_home` sends the person home (it keeps its id, transcript, self, and record); `let_go` records when and why it left, and a manager can `rehire` it. The only exception is a temporary peer of a `pi_exec` program, whose record is deleted when the program discards it ([exec](exec.md#peers-and-schemas)).
+- `send_home` retains the person's id, transcript, self and membership. A successful `let_go` permanently removes its live identity and owned raw session after a durable own-context handoff, while retaining shared organizational evidence. A `pi_exec` temporary peer remains its program's disposal responsibility ([exec](exec.md#peers-and-schemas)).
 - The tree carries assignment, reporting, and escalation; it does not gate mail. A manager that only forwards mail is a relay, which the charter forbids.
 - There is no handoff schema. People give each other goals and say what they verified and what they believe.
 - There are no caps: not on team size, self length, or the catalog. Managers size teams with judgment, and the charter names the one signal to watch (fan-in).
@@ -263,6 +290,6 @@ Processes staff with standing people first: people with matching experience, cal
 | Threads, assignments, and ephemeral tasks | the runtime: `threads.ts`, `channels.ts`, `work.ts`, and `runtime.ts` in `components/session-state/src/` |
 | The package catalog | `roles/*.md` |
 | The tree, the record, and the facts (`role`, `title`, `manages`, `soul`, `self`, `retired_at`, `retired_reason`) | the session-state runtime and database, [session-state](session-state.md) |
-| The terminal views | [tmux-sessions](tmux-sessions.md): organizations as indented trees with role titles and folded former members |
+| The terminal views | [tmux-sessions](tmux-sessions.md): organizations as indented trees with role titles and retained legacy former rows |
 | The picture | [agent-world](agent-world.md): headquarters per root, a team room per manager, cards, the hire form, retiring, former members at the inn |
 | Interns | [interns](interns.md): `explore` and `research`, fixed prompts and the `quick` profile |

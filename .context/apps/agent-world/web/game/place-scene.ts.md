@@ -72,6 +72,13 @@ Every frame it also sets the world's cursor from the same actions: `act` when th
 Coupled: apps/agent-world/web/overlay/pointer/cursor.ts
 Verify: apps/agent-world/tests/world-pointer.test.ts
 
+## symbol:PlaceScene.sleeperTarget
+
+Former rows are retained historical UI entries, not wake/assignment targets. The bed menu, inn register and conversation panel all preserve reading while omitting reactivation; the backend rejects a former wake before sending a command. Ordinary dormant members keep their existing wake flow. Permanent departure ultimately removes the live/dormant row rather than adding a new legacy former record.
+Why: removing native rehire while leaving an inviting Wake action would teach an operation the runtime deliberately refuses.
+Coupled: apps/agent-world/web/overlay/places/innkeeper.tsx, apps/agent-world/web/overlay/conversation/conversation-panel.tsx, apps/agent-world/src/backend/lifecycle.ts
+Verify: apps/agent-world/tests/world-inn.test.ts, apps/agent-world/tests/rename.test.ts
+
 ## symbol:PlaceScene.sleep
 
 At the inn the figures are the newest dormant agents (`charactersIn` with the inn's spot count), not awake characters: each dozes in its seated frame (`dozing`) or, on a spot a `bed` overlay slot names, lies in that bed (`in-bed`: the walker is hidden at rest and a head cut from frame 14 is drawn on the pillow under a quilt cut from the bed sprite along the pack's `world.bed.covers` polygon). A sleeper that is still dormant but pushed past the spots leaves by the stairs (the door whose `to` is `rooms`); one that woke leaves by the front door; one coming down from upstairs enters by the stairs.

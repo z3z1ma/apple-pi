@@ -42,6 +42,7 @@ function Panel({ opened, world, store }: { opened: Character; world: WorldSnapsh
 	const character = live ?? opened;
 	// Asleep at the inn (dormant): it can be woken here instead of reached in a terminal it no longer has.
 	const sleeper = live ? undefined : world?.dormant?.find((agent) => agent.id === opened.id);
+	const former = sleeper?.retiredAt != null;
 	const places = useSyncExternalStore(placePanels.subscribe, placePanels.get);
 	const waking = places.wakes[opened.id];
 	const facts = character.facts;
@@ -190,6 +191,8 @@ function Panel({ opened, world, store }: { opened: Character; world: WorldSnapsh
 							<dd>
 								{live ? (
 									<Doing character={character} text={doing} />
+								) : former ? (
+									`${say(theme, "retired")} (read-only)`
 								) : sleeper ? (
 									<>
 										{say(theme, "asleep-here")}
@@ -203,20 +206,22 @@ function Panel({ opened, world, store }: { opened: Character; world: WorldSnapsh
 					</dl>
 					<div className="aw-conv-side-foot">
 						{sleeper ? (
-							<button
-								type="button"
-								className="aw-cta"
-								disabled={waking?.state === "sending"}
-								onClick={() => void placeActions.wake(sleeper)}
-							>
-								Wake {character.name}
-							</button>
+							!former && (
+								<button
+									type="button"
+									className="aw-cta"
+									disabled={waking?.state === "sending"}
+									onClick={() => void placeActions.wake(sleeper)}
+								>
+									Wake {character.name}
+								</button>
+							)
 						) : (
 							<button type="button" className="aw-cta" onClick={goToTerminal}>
 								Go to its terminal
 							</button>
 						)}
-						{sleeper && waking && (
+						{!former && sleeper && waking && (
 							<p className={`aw-conv-wake aw-conv-wake-${waking.state}`} role="status">
 								{waking.text}
 							</p>
@@ -255,9 +260,11 @@ function Panel({ opened, world, store }: { opened: Character; world: WorldSnapsh
 						<footer className="aw-conv-reply-slot">
 							<span className="aw-conv-pen" aria-hidden="true" />
 							<span>
-								{sleeper
-									? say(theme, "conversation-asleep", { name: character.name })
-									: `${character.name} is no longer running, so it cannot be told anything here.`}
+								{former
+									? `${character.name} is a former member; this conversation is read-only.`
+									: sleeper
+										? say(theme, "conversation-asleep", { name: character.name })
+										: `${character.name} is no longer running, so it cannot be told anything here.`}
 							</span>
 						</footer>
 					)}

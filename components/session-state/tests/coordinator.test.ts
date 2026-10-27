@@ -147,7 +147,6 @@ test("a coordinator starts a session in a new tmux window, and reopens it by id 
 			cost_of_delay: 4,
 		}),
 		fauxAssistantMessage("started"),
-		call("rehire", { person: "worker-1" }),
 		call("call_in", { person: "worker-1" }),
 		fauxAssistantMessage("called in"),
 		call("call_in", {
@@ -204,12 +203,7 @@ test("a coordinator starts a session in a new tmux window, and reopens it by id 
 		tmux("kill-window", "-t", "Ada Lovelace");
 		await vi.waitFor(() => expect(incarnation("worker-1").ended_at).not.toBeNull(), { timeout: 15000 });
 		await run.session.prompt("bring it back");
-		// A person sent home is still a member: it is called in, not rehired.
 		expect(toolResults(run)[1]).toMatchObject({
-			isError: true,
-			text: expect.stringContaining("worker-1 is still a member; call_in brings it back from home."),
-		});
-		expect(toolResults(run)[2]).toMatchObject({
 			isError: false,
 			text: expect.stringContaining("worker-1 is back (worker-1)."),
 		});
@@ -231,7 +225,7 @@ test("a coordinator starts a session in a new tmux window, and reopens it by id 
 		tmux("kill-window", "-t", "Ada Lovelace");
 		await vi.waitFor(() => expect(incarnation("worker-1").ended_at).not.toBeNull(), { timeout: 15000 });
 		await run.session.prompt("bring it back with the next goal");
-		expect(toolResults(run)[3]).toMatchObject({ isError: false });
+		expect(toolResults(run)[2]).toMatchObject({ isError: false });
 		expect(starts().at(-1)?.goal).toContain("Check the rewritten interfaces.");
 		expect(goalsOf("worker-1")[1]).toMatch(/^Value: \$20 \(estimated by .+\)$/m);
 		expect(
@@ -414,7 +408,6 @@ test("a hired person whose role does not manage loses the lifecycle tools; a hir
 	const tools = [
 		"hire",
 		"call_in",
-		"rehire",
 		"send_home",
 		"rename",
 		"move",
@@ -478,6 +471,7 @@ test("a hired person whose role does not manage loses the lifecycle tools; a hir
 		manager.session.extensionRunner.setFlagValue("reports-to", "boss");
 		await withRole(manager, "coordinator");
 		await manager.session.prompt("hi");
+		expect(manager.session.getActiveToolNames()).not.toContain("rehire");
 		expect(manager.session.getActiveToolNames()).toEqual(
 			expect.arrayContaining([
 				...tools,
@@ -535,7 +529,6 @@ test.each([undefined, "implementation-engineer", "coordinator"])(
 			for (const name of [
 				"hire",
 				"call_in",
-				"rehire",
 				"send_home",
 				"rename",
 				"move",

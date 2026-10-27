@@ -2223,12 +2223,13 @@ export class PlaceScene extends Phaser.Scene {
 	private sleeperTarget(character: Character): Target {
 		const name = character.name;
 		const agent = () => this.store.get()?.dormant?.find((sleeper) => sleeper.id === character.id);
+		const former = agent()?.retiredAt != null;
 		return {
 			name,
 			tone: "character",
 			actions: [
-				// A former member must be rehired before it can take work.
-				...(agent()?.retiredAt ? [] : this.giveAction(character, false)),
+				// Legacy former records are available for reading, not reactivation.
+				...(former ? [] : this.giveAction(character, false)),
 				action(
 					"Read last talk with",
 					() => {
@@ -2238,7 +2239,7 @@ export class PlaceScene extends Phaser.Scene {
 					name,
 					"character",
 				),
-				action("Wake", () => void placeActions.wake(character), name, "character"),
+				...(former ? [] : [action("Wake", () => void placeActions.wake(character), name, "character")]),
 				action("Look up", () => placePanels.open("innkeeper"), name, "character"),
 			],
 		};

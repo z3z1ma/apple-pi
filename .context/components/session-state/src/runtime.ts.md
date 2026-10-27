@@ -1,3 +1,12 @@
+## symbol:Runtime.checkFriction
+
+Startup and the existing liveness timer observe committed structural changes. Connection closure still checks process liveness but does not replay coordination history for every command socket. Its journal watermark is only a cheap trigger filter; the planner and durable raised/cleared entries remain authoritative. Include delivered/failed work because assignment persistence can precede a failed wake. Tool/cost/run-state chatter and alert mail receipts do not trigger graph replay. No extra polling timer, age threshold or process-local notification authority is introduced.
+Why: replaying global history on every heartbeat was measurably expensive; the complete publication helper still costs hundreds of milliseconds on a representative copy, so command-socket closures must not turn a burst into one replay per command. Watching only successful work would miss a saved assignment whose recipient could not wake.
+
+Shared notice, complete outgoing mail and raised marker commit together, followed by dispatch. A failed publication rolls back only that observation, preserves the producing work and leaves the watermark retryable. Startup recomputes against the durable journal; silent clears rearm recurrence, and recipient changes raise a new scoped condition. The harness posts factual evidence, not a management decision or proof of reading.
+Coupled: components/session-state/src/friction.ts, components/session-state/src/threads.ts
+Verify: components/session-state/tests/friction-delivery.test.ts
+
 ## symbol:Runtime.takeLock
 
 The single-runtime guarantee is an exclusive SQLite lock held for the runtime's whole life, not a pid file. The pid file only tells tests and people which process to stop.
@@ -50,7 +59,7 @@ Verify: components/session-state/tests/peer-history.test.ts
 The hello's `reportsTo` is applied only while the record's `reports_to` is null; afterwards the record wins, and a bridge whose flag disagrees is sent a `transfer` command with its recorded manager.
 Why: the flag is what the session was started with, and `move` changes the manager after that; a reconnect or hand restart carrying the old flag would otherwise undo the move, and the bridge addresses its close notice from its own copy of the manager.
 A same-process reconnect keeps its incarnation's original tmux binding. A test that adds a pane needs a new incarnation, rather than a second hello from the same PID and start time.
-A committed retirement's pending close takes precedence over mail replay and stays bound to the retired incarnation. Old mail waits for a later reopening; replaying it before closing could start new work in a person who has already left.
+Ordinary close receipts remain incarnation-bound: a later ordinary call_in can receive queued mail without replaying an old incarnation's close. Permanent/legacy former admission guards run before normal incarnation creation or mail replay; those identities do not use an ordinary reopen path.
 Coupled: components/session-state/src/bridge.ts, components/session-state/src/coordinator.ts
 Verify: components/session-state/tests/organization.test.ts, components/session-state/tests/program-peers.test.ts
 
@@ -64,6 +73,7 @@ Verify: components/session-state/tests/peer-turns.test.ts, components/session-st
 
 The message, any meeting closure, and every outgoing delivery commit in one transaction before a bridge receives the mail. Startup completes accepted `thread_post` commands: a stored message means its outbox committed; an absent message means the post still needs applying.
 Why: acknowledging or delivering between these writes can leave a closed meeting without its summary at one participant, or a durable message without all recipients after a crash. Delivery remains idempotent through the existing command ids and transcript receipts.
+Envelope fromName is supplied only when it adds a human label beyond the raw address; operator/raw-ID headers keep their existing rendering, while named departed authors use retained attribution. A generic display-name fallback is not itself an envelope-label contract.
 Coupled: components/session-state/src/threads.ts
 Verify: components/session-state/tests/thread-recovery.test.ts
 
@@ -101,7 +111,7 @@ Why: first positive hello otherwise treats a brand-new peer's real spend as old 
 Verify: components/session-state/tests/peer-history.test.ts
 
 A new hire's provisional person, goal bundle, assignment, task thread, team-history snapshot, and outbox commit before opening its process. The history uses the existing channel reader, with no separate summary or invented message-count cap. Pi starts with a pointer to its focused task; startup mail carries the file itself. Reopening keeps the stored role and work, while a supplied new goal adds an assignment.
-Why: passing only a prompt leaves the first turn without an explicit job; failing to preserve the role changes the person's mind on rehire.
+Why: passing only a prompt leaves the first turn without an explicit job; an ordinary wake preserves the existing person's role and work.
 Coupled: components/session-state/src/work.ts, components/session-state/src/bridge.ts
 Verify: components/session-state/tests/coordinator.test.ts, components/session-state/tests/workplace.test.ts, apps/agent-world/tests/recruit.test.ts
 
@@ -127,13 +137,26 @@ Verify: components/session-state/tests/program-peers.test.ts, components/session
 
 ## symbol:Runtime.retireSession
 
-Retirement asks for a correlated turn in the person's own session, waits for idle, and wakes a sleeper with its stored identity. The model is told that its final prose becomes its handover post; the runtime publishes that reply verbatim rather than inventing a summary or requiring another handoff artifact. Ordinary work already in progress is left alone.
+Acceptance starts a runtime-owned departure job; caller disconnection does not cancel it. It waits for ordinary work to finish, wakes a dormant person under its stored identity and requests a correlated final turn in that person's retained session. Successful final prose is saved verbatim as private durable Markdown, not posted as shared mail. Empty/failed handoffs and newly arrived responsibilities refuse the irreversible commit while preserving the live person/transcript.
 
-The handover, retirement, membership change, and incarnation-bound close outbox commit together. Startup recognizes the committed post and completes the receipt; an interrupted uncommitted request fails for inspection instead of rerunning paid model work. A reconnect replays the close only to that incarnation, preserving later rehire.
+The durable handoff precedes the atomic person_departed marker, retired snapshot, notices and incarnation-bound close. From that commit the identity cannot return. File/private-record removal is a separate retryable phase gated by observed writer/process/pane proof; applied means cleanup completed, not merely that the model replied. Startup resumes committed cleanup without another paid turn, while an interrupted precommit job fails for inspection. Final-turn cost arrives through the existing bridge observation convention before departure rather than being synthesized from reply.usage.
 
-Caller disconnection cancels only the owned handover. Failure leaves the person unretired; a sleeper woken for a failed handover stays available for inspection. Internal commands use this runtime's explicit socket, so a scratch runtime cannot accidentally reach or start the operator's default daemon.
-Coupled: components/session-state/src/client.ts, components/session-state/src/peer-turns.ts, apps/agent-world/src/backend/lifecycle.ts
-Verify: components/session-state/tests/workplace.test.ts, components/session-state/tests/workplace-wake.test.ts, components/session-state/tests/workplace-recovery.test.ts
+Internal turn commands use this runtime's explicit socket, so isolated tests cannot contact the operator's daemon. A failed handoff can leave a newly awakened person available for inspection. Shared receipts/outcomes/history and retained name/accounting seeds survive private cleanup.
+Coupled: components/session-state/src/departures.ts, components/session-state/src/client.ts, components/session-state/src/peer-turns.ts, apps/agent-world/src/backend/lifecycle.ts
+Verify: components/session-state/tests/departure-lifecycle.test.ts, components/session-state/tests/departures.test.ts, components/session-state/tests/workplace.test.ts, components/session-state/tests/workplace-wake.test.ts, components/session-state/tests/workplace-recovery.test.ts
+
+## symbol:Runtime.rejectDepartureHello
+
+Permanent departed UUIDs are refused before incarnation/person/facts writes. Their narrow writer observations preserve PID/start and exact reported files without admitting a person; late attempts reopen only cleanup work. A different UUID refused solely because its manager departed acquires no cleanup ownership. Stored legacy former rows also reject before writes but gain no permanent marker, writer journal or purge job; active legacy retired-to-rehired rows with null retired_at still admit.
+Why: a close request does not prove an SDK host stopped writing, and a manager's departure is not authority to delete a different person's files.
+Verify: components/session-state/tests/departure-lifecycle.test.ts
+
+## symbol:Runtime.stopDepartureWriters
+
+Shutdown/ended incarnation is not OS death. PID/start and newer session bindings govern which writers can be stopped; a proven newer binding to another identity remains untouched. Revalidate the writer/incarnation watermark after awaits and before unlink/cleanup. Known live unacknowledged closes remain pending rather than acquiring an invented timeout. Exact session-header identity gates transcript unlink; mismatches preserve files for retry, and tmux removal requires the expected dead PID in the server-side condition.
+Why: rejected resumes, same-PID SDK switches and pane respawns cross asynchronous cleanup boundaries. These are cooperative harness ownership proofs, not hostile-socket or arbitrary orphan-process guarantees.
+Coupled: components/session-state/src/departures.ts, components/session-state/src/tmux.ts
+Verify: components/session-state/tests/departure-lifecycle.test.ts, components/session-state/tests/tmux.test.ts
 
 ## symbol:Runtime.transfer
 

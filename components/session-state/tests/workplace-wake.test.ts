@@ -21,6 +21,7 @@ const args = process.argv.slice(2);
 const flag = (name) => args[args.indexOf(name) + 1];
 const id = flag("--session-id");
 writeFileSync(process.env.WORKPLACE_PI_LOG, JSON.stringify(args));
+writeFileSync(process.env.WORKPLACE_PI_LOG + '.pid', String(process.pid));
 const socket = createConnection(process.env.PI_CODING_AGENT_DIR + "/state/apple-pi.sock");
 const send = (message) => socket.write(JSON.stringify(message) + "\\n");
 socket.on("connect", () => send({ type: "hello", session: { id, kind: "root", cwd: process.cwd(), name: flag("--name") },
@@ -93,6 +94,13 @@ test("letting an asleep person go wakes its existing identity only for its hando
 		expect(manager.session.messages.filter((message) => message.role === "toolResult").at(-1)).toMatchObject({
 			isError: false,
 		});
+		await vi.waitFor(
+			() =>
+				expect(query(state.dbPath, "select stage from commands where session_id = ? and kind = 'retire'", id)).toEqual([
+					{ stage: "applied" },
+				]),
+			{ timeout: 10000 },
+		);
 		expect(JSON.parse(readFileSync(log, "utf8"))).toEqual([
 			"--mode",
 			"rpc",
@@ -105,6 +113,16 @@ test("letting an asleep person go wakes its existing identity only for its hando
 			"--role",
 			"repository-archaeologist",
 		]);
+		const [{ data }] = query<{ data: string }>(
+			state.dbPath,
+			"select data from events where type = 'person_departed' and session_id = ?",
+			id,
+		);
+		const departure = JSON.parse(data);
+		expect(departure).toMatchObject({ role: "repository-archaeologist", reason: "The investigation is complete." });
+		expect(readFileSync(departure.handoffFile, "utf8")).toContain(body);
+		expect(query(state.dbPath, "select 1 from sessions where id = ?", id)).toHaveLength(0);
+		expect(query(state.dbPath, "select 1 from incarnations where session_id = ?", id)).toHaveLength(0);
 		expect(
 			query(
 				state.dbPath,
@@ -112,25 +130,15 @@ test("letting an asleep person go wakes its existing identity only for its hando
 				`team:${managerId}`,
 				id,
 			),
-		).toEqual([{ body }]);
-		expect(query(state.dbPath, "select role, retired_reason from sessions where id = ?", id)).toEqual([
-			{ role: "repository-archaeologist", retired_reason: "The investigation is complete." },
-		]);
-		await vi.waitFor(() =>
-			expect(
-				query(
-					state.dbPath,
-					"select 1 from incarnations where session_id = ? and generation = 2 and ended_at is not null",
-					id,
-				),
-			).toHaveLength(1),
-		);
+		).toHaveLength(0);
+		const pid = Number(readFileSync(`${log}.pid`, "utf8"));
+		expect(() => process.kill(pid, 0)).toThrow();
 		const commands = readFileSync(`${log}.commands`, "utf8")
 			.trim()
 			.split("\n")
 			.map((line) => JSON.parse(line));
 		expect(commands.map((command) => command.kind)).toEqual(["run_turn", "close"]);
-		expect(commands[0].task).toContain("handover");
+		expect(commands[0].task).toContain("final handoff");
 	} finally {
 		prior.socket.destroy();
 		stand.child.kill();

@@ -1,7 +1,7 @@
 // What the operator does to a session from the inn, the rookery, and a character's actions: wake a dormant one
 // (`start`), end an awake one (`close`, confirmed only while it is busy, decision 13), mail anyone as himself
 // (threaded mail, owned by mail.ts), hire a new person (`start` for a new id, with a role from the catalog), rename an awake one (`rename`),
-// and retire one (`retire`: it leaves the organization and sleeps at the inn marked so). Commands go through the
+// and request permanent departure (`retire`: accepted handoff and cleanup continue in the runtime). Commands go through the
 // command client (`commands.ts`); each resolves with the receipt stage that answers the operator's question (is it
 // awake, is it ended, did the letter arrive or does it wait), not necessarily the last.
 import { randomUUID } from "node:crypto";
@@ -97,6 +97,7 @@ export function openLifecycle(
 				const awake = world.characters.find((character) => character.id === characterId);
 				return { ok: false, reason: awake ? `${awake.name} is already awake.` : "No stopped session has that id." };
 			}
+			if (sleeper.retiredAt != null) return { ok: false, reason: "Former members cannot be reopened." };
 			const pane = await operatorPane(paths.db);
 			if (!pane)
 				return {
@@ -221,8 +222,17 @@ export function openLifecycle(
 				world.characters.find((character) => character.id === characterId) ??
 				world.dormant?.find((agent) => agent.id === characterId);
 			if (!person) return { ok: false, reason: "No session has that id." };
-			const result = await commands.send(characterId, { kind: "retire", reason });
-			return result.ok ? { ok: true, stage: "applied" } : result;
+			const receipt = await follow(
+				commands,
+				characterId,
+				{ kind: "retire", reason, by: "operator" },
+				CLOSE_MS,
+				(stage) => stage === "accepted",
+				() => "The departure request is accepted; handoff and cleanup continue in the runtime.",
+			);
+			return receipt.ok
+				? { ...receipt, note: "Departure accepted; the runtime will report handoff and cleanup progress." }
+				: receipt;
 		},
 
 		...openMailbox(paths.db, commands),

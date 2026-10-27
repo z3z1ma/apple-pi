@@ -95,6 +95,7 @@ function SleeperRow({
 }) {
 	const theme = useTheme();
 	const portrait = theme ? portraitOf(theme, lookFor(theme, agent)) : undefined;
+	const former = agent.retiredAt != null;
 	const repository = base(agent.repository);
 	const slept = ago(agent.stoppedAt);
 	return (
@@ -106,7 +107,7 @@ function SleeperRow({
 					{agent.title && <small className="aw-register-title">{agent.title}</small>}
 					<small className={where.upstairs ? "aw-register-where aw-upstairs" : "aw-register-where"}>{where.text}</small>
 				</span>
-				{agent.retiredAt && (
+				{former && (
 					<span className="aw-register-left" title={agent.retiredReason ?? undefined}>
 						{say(theme, "retired")}
 						{agent.retiredReason && `: ${agent.retiredReason}`}
@@ -142,16 +143,18 @@ function SleeperRow({
 					>
 						Read
 					</button>
-					<button
-						type="button"
-						className="aw-button aw-button-strong"
-						aria-label={`Wake ${agent.name}`}
-						title={`Wake ${agent.name} in a new tmux window`}
-						disabled={progress?.state === "sending"}
-						onClick={() => void placeActions.wake(agent)}
-					>
-						Wake
-					</button>
+					{!former && (
+						<button
+							type="button"
+							className="aw-button aw-button-strong"
+							aria-label={`Wake ${agent.name}`}
+							title={`Wake ${agent.name} in a new tmux window`}
+							disabled={progress?.state === "sending"}
+							onClick={() => void placeActions.wake(agent)}
+						>
+							Wake
+						</button>
+					)}
 				</span>
 			</span>
 		</li>

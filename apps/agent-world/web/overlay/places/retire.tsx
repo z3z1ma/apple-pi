@@ -1,5 +1,5 @@
 // The retire form: a small themed dialog, drawn like the rename form, opened from a person's actions. It asks why the
-// person leaves, sends `retire`, and shows the receipt; the person then sleeps at the inn marked as a former member.
+// person leaves, sends `retire`, and shows acceptance separately from the runtime's later handoff/cleanup outcome.
 import { useState, useSyncExternalStore } from "react";
 import type { WorldSnapshot } from "../../../src/world.js";
 import { portraitFor } from "../../looks.js";
@@ -41,7 +41,8 @@ function RetireForm({ opened, world }: { opened: { id: string; name: string }; w
 				<div className="aw-place-heading">
 					<h2>{title}</h2>
 					<p className="aw-place-says">
-						Its session ends and it leaves the organization; it sleeps at the inn, and a manager can call it back.
+						A handoff is saved before its session and private resources are permanently removed. Acceptance starts the
+						work; later mail reports the outcome.
 					</p>
 				</div>
 			</header>

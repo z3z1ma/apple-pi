@@ -280,6 +280,8 @@ test("the innkeeper's register lists every dormant agent, newest first, with its
 		expect(await rows.nth(1).textContent()).toContain("No focused task");
 		expect(await rows.nth(1).textContent()).toContain("Scientific Skeptic");
 		expect(await rows.nth(1).textContent()).toContain("Left the guild: the burst passed");
+		expect(await rows.nth(1).getByRole("button", { name: "Wake test-fixer" }).count()).toBe(0);
+		expect(await rows.nth(1).getByRole("button", { name: "Read test-fixer's last conversation" }).count()).toBe(1);
 		expect(await rows.first().textContent()).not.toContain("Left the guild");
 		await register.getByText("10 asleep here, 2 upstairs").waitFor({ timeout: 2000 });
 		expect(await rows.nth(11).textContent()).toContain("Upstairs");
@@ -317,21 +319,26 @@ test("waking from the register shows the receipt, and the woken character gets u
 		const register = page.getByRole("dialog", { name: "The innkeeper's register" });
 		await register.waitFor({ timeout: 8000 });
 		await page.addStyleTag({ content: ".aw-place-veil, .aw-place-veil * { pointer-events: auto !important; }" });
-		await register.getByRole("button", { name: "Wake test-fixer" }).click();
+		await register.getByRole("button", { name: "Wake ci-watcher" }).click();
 		await register.getByText("Awake in a new window beside your current one.").waitFor({ timeout: 3000 });
-		expect(await calls(page)).toContainEqual(["wake", "s-1"]);
+		expect(await calls(page)).toContainEqual(["wake", "s-2"]);
 		await shot(page, "aw-15-woken-receipt");
 
 		// The runtime reports it awake in its wing: it stands up and walks out by the door.
-		const woken = { ...worker("s-1"), name: "test-fixer" };
-		await push(world([ORLA, woken], [SLEEPERS[0], ...SLEEPERS.slice(2)]));
+		const woken = { ...worker("s-2"), name: "ci-watcher" };
+		await push(
+			world(
+				[ORLA, woken],
+				SLEEPERS.filter((agent) => agent.id !== "s-2"),
+			),
+		);
 		await page.keyboard.press("Escape");
-		await vi.waitFor(async () => expect((await figures(page)).map((f) => f.id)).not.toContain("s-1"), {
+		await vi.waitFor(async () => expect((await figures(page)).map((f) => f.id)).not.toContain("s-2"), {
 			timeout: 3000,
 		});
 		const departing = await view<FigureView[]>(page, "departing()");
-		expect(departing.map((f) => f.id)).toContain("s-1");
-		expect(departing.find((f) => f.id === "s-1")?.moving).toBe(true);
+		expect(departing.map((f) => f.id)).toContain("s-2");
+		expect(departing.find((f) => f.id === "s-2")?.moving).toBe(true);
 		// The next sleeper from upstairs takes the free spot.
 		expect((await figures(page)).map((f) => f.id)).toContain("s-10");
 		await shot(page, "aw-15-woken-walks-out");
@@ -346,7 +353,7 @@ test("waking from the register shows the receipt, and the woken character gets u
 		const [hx, hy] = await screen(page, x, y - 1.2);
 		await page.mouse.click(hx, hy);
 		await register.waitFor({ timeout: 8000 });
-		await register.getByRole("button", { name: "Wake ci-watcher" }).click();
+		await register.getByRole("button", { name: "Wake pr-review" }).click();
 		await register.getByText("No terminal is attached to tmux.").waitFor({ timeout: 3000 });
 		expect(errors).toEqual([]);
 	} finally {
@@ -395,6 +402,30 @@ test("a sleeper's menu reads its last conversation in the conversation panel, or
 		await page.close();
 	}
 }, 60000);
+
+test("a legacy former person's bed and conversation remain readable without wake actions", async () => {
+	const { page, errors } = await openWorld(world([ORLA]));
+	try {
+		await toInn(page);
+		await clickThrough(page);
+		const former = (await figures(page)).find((figure) => figure.id === "s-1")!;
+		const [x, y] = await screen(page, former.x, former.y - 0.6);
+		await page.mouse.click(x, y, { button: "right" });
+		const menu = page.getByRole("menu");
+		expect(await menu.getByRole("menuitem", { name: "Wake test-fixer" }).count()).toBe(0);
+		await menu.getByRole("menuitem", { name: "Read last talk with test-fixer" }).click();
+		const panel = page.getByRole("dialog", { name: "Conversation with test-fixer" });
+		await panel.waitFor({ timeout: 8000 });
+		expect(await panel.textContent()).toContain("read-only");
+		expect(await panel.getByRole("button", { name: "Wake test-fixer" }).count()).toBe(0);
+		expect(await panel.getByRole("button", { name: "Go to its terminal" }).count()).toBe(0);
+		expect(await calls(page)).toContainEqual(["conversation", "s-1"]);
+		expect((await calls(page)).some((call) => call[0] === "wake")).toBe(false);
+		expect(errors).toEqual([]);
+	} finally {
+		await page.close();
+	}
+}, 30000);
 
 test("ending a session: an idle one at once, a busy one only after a themed confirmation; its character comes to the inn to sleep", async () => {
 	const busy = worker("pi-busy", { run: "running_tool", status: "working" });

@@ -5,6 +5,7 @@
  */
 import { existsSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
+import { departureOf } from "./departures.js";
 import { statePaths } from "./paths.js";
 
 export type ThreadKind = "mail" | "escalation" | "channel" | "meeting" | "task";
@@ -12,6 +13,9 @@ export type Delivery = "push" | "pull";
 
 /** The operator, as a participant and an address. */
 export const OPERATOR = "operator";
+
+/** Automatic runtime notices are not messages authored by a person or the operator. */
+export const HARNESS = "harness";
 
 /** What a `thread_post` command asks the runtime to do. */
 export interface ThreadPost {
@@ -108,7 +112,7 @@ export function postToThread(
 		db.prepare(
 			"insert into threads (id, kind, subject, created_by, created_at, closed_at) values (?, ?, ?, ?, ?, null)",
 		).run(post.thread, post.threadKind ?? "mail", post.subject, sender, now);
-		participateIn(db, post.thread, sender, now, "push");
+		participateIn(db, post.thread, sender, now, sender === HARNESS ? "pull" : "push");
 	} else {
 		if (thread.closed_at !== null) return "the thread is closed";
 		if (!isParticipant(db, post.thread, sender)) return "you are not in this thread";
@@ -197,8 +201,9 @@ export function withThreads<T>(read: (db: DatabaseSync) => T): T | undefined {
 /** A participant's display name: its session name, else its id; the operator is "the operator". */
 export function nameOf(db: DatabaseSync, id: string): string {
 	if (id === OPERATOR) return "the operator";
+	if (id === HARNESS) return "the harness";
 	const row = db.prepare("select name from sessions where id = ?").get(id) as { name: string | null } | undefined;
-	return row?.name || id;
+	return row?.name || departureOf(db, id)?.name || id;
 }
 
 /** The threads `participant` is in, newest activity first; with `unreadOnly`, only those with unread messages. */

@@ -5,6 +5,7 @@ import { createServer, type Server, type Socket } from "node:net";
 import { createInterface } from "node:readline";
 import { DatabaseSync } from "node:sqlite";
 import type { TurnResult } from "../../shared/src/turn-observer.js";
+import { frictionIn } from "./friction.js";
 import type { StatePaths } from "./paths.js";
 import {
 	type BridgeMessage,
@@ -57,10 +58,30 @@ const JSON_FACTS = new Set<string>(["prompt", "queue", "config", "previousSessio
 import { type AttentionRow, jumpTarget, statusSummary } from "./attention.js";
 import { syncChannels } from "./channels.js";
 import { RETRY_MS, sendCommand } from "./client.js";
+import {
+	type Departure,
+	type DepartureWriter,
+	departureOf,
+	departureWatermark,
+	departureWriters,
+	removeDepartureFiles,
+	removeDepartureRecords,
+	saveHandoff,
+} from "./departures.js";
 import { recordLink, resolveLink } from "./links.js";
 import { discardProgramPeople, programDescendants, temporaryCallers } from "./program-peers.js";
 import { migrate } from "./schema.js";
-import { markRead, messagesOf, nameOf, OPERATOR, postToThread, type ThreadPost, threadOf } from "./threads.js";
+import {
+	HARNESS,
+	markRead,
+	messagesOf,
+	nameOf,
+	OPERATOR,
+	participateIn,
+	postToThread,
+	type ThreadPost,
+	threadOf,
+} from "./threads.js";
 import {
 	canonicalSocket,
 	killPane,
@@ -131,6 +152,7 @@ interface Connection {
 	generation?: number;
 	lastSeen: number;
 	shutdown: boolean;
+	observedIdentity?: { person: string; pid: number; startedAt: number };
 	/** The sessions whose live replies this client subscribed to. */
 	subscriptions?: Set<string>;
 	/**
@@ -218,6 +240,7 @@ export class Runtime {
 	private server?: Server;
 	private timer?: NodeJS.Timeout;
 	private tmuxTimer?: NodeJS.Timeout;
+	private friction: { sequence?: number; error?: string } = {};
 	private polling = false;
 	private readonly stopping = new AbortController();
 	/** Servers whose last read failed, so a failure is logged and recorded once rather than every second. */
@@ -229,7 +252,8 @@ export class Runtime {
 	/** Sessions this runtime opened a window for, until their bridge connects or the window closes. */
 	private readonly starting = new Map<string, SessionStart>();
 	private readonly headless = new Map<string, ChildProcess>();
-	private readonly retiring = new Map<string, { person: string; controller: AbortController }>();
+	private readonly retiring = new Map<string, { person: string }>();
+	private readonly departing = new Set<string>();
 	private readonly programs = new Map<string, Connection>();
 	private readonly discarding = new Set<string>();
 	private readonly discardRequests = new Map<string, Set<string>>();
@@ -277,9 +301,13 @@ export class Runtime {
 			server.listen(this.paths.socket, () => resolve());
 		});
 		chmodSync(this.paths.socket, 0o600);
-		this.timer = setInterval(() => this.checkLiveness(), 1000);
+		this.timer = setInterval(() => {
+			this.checkLiveness();
+			this.checkFriction();
+		}, 1000);
 		this.tmuxTimer = setInterval(() => void this.pollTmux(), TMUX_POLL_MS);
 		this.checkLiveness();
+		this.checkFriction();
 		void this.pollTmux();
 		void this.cleanPrograms();
 		return true;
@@ -392,6 +420,7 @@ export class Runtime {
 			);
 			return;
 		}
+		if (message.type === "shutdown") connection.shutdown = true;
 		const { sessionId, generation } = connection;
 		if (sessionId === undefined || generation === undefined) return;
 		if (message.type === "reply_delta" || message.type === "reply_end") {
@@ -418,10 +447,50 @@ export class Runtime {
 		}
 	}
 
+	private rejectDepartureHello(connection: Connection, hello: Hello): boolean {
+		const db = this.db!;
+		const { session, process: proc } = hello;
+		connection.observedIdentity = { person: session.id, pid: proc.pid, startedAt: proc.startedAt };
+		for (const [id, child] of this.headless) {
+			if (id !== session.id && child.pid === proc.pid && !temporaryCallers(db).has(id)) this.headless.delete(id);
+		}
+		const stored = db.prepare("select reports_to, retired_at from sessions where id = ?").get(session.id) as
+			| { reports_to: string | null; retired_at: number | null }
+			| undefined;
+		const manager = stored?.reports_to ?? hello.facts.reportsTo;
+		const departed = departureOf(db, session.id);
+		if (departed || stored?.retired_at != null || (manager && departureOf(db, manager))) {
+			connection.sessionId = undefined;
+			connection.generation = undefined;
+			if (departed) {
+				this.event("bridge", session.id, null, "departure_writer_seen", {
+					pid: proc.pid,
+					startedAt: proc.startedAt,
+					sessionFile: session.file ?? null,
+					cleanedAt: null,
+				});
+				this.departing.add(session.id);
+				const { seq } = db
+					.prepare("select max(seq) as seq from events where session_id = ? and type = 'departure_writer_seen'")
+					.get(session.id) as { seq: number };
+				const closeId = `${departed.commandId}:reject:${seq}`;
+				this.queueDelivery(closeId, session.id, { kind: "close" });
+				this.dispatch(connection, closeId, { kind: "close" });
+				void this.cleanPrograms();
+			} else
+				connection.socket.write(
+					`${JSON.stringify({ type: "command", commandId: randomUUID(), sessionId: session.id, command: { kind: "close" } })}\n`,
+				);
+			return true;
+		}
+		return false;
+	}
+
 	private hello(connection: Connection, hello: Hello): void {
 		const db = this.db!;
 		const now = Date.now();
 		const { session, process: proc } = hello;
+		if (this.rejectDepartureHello(connection, hello)) return;
 		const recorded = db
 			.prepare("select program_id, created_by as program_parent from program_peers where session_id = ?")
 			.get(session.id) as { program_id: string; program_parent: string } | undefined;
@@ -576,6 +645,10 @@ export class Runtime {
 			receipt(existing.stage, existing.reason ?? undefined);
 			return;
 		}
+		if (command.kind !== "close" && departureOf(db, sessionId)) {
+			receipt("failed", "This person has permanently departed and cannot accept new commands.");
+			return;
+		}
 		const current = db.prepare("select generation from sessions where id = ?").get(sessionId) as
 			| { generation: number }
 			| undefined;
@@ -639,9 +712,15 @@ export class Runtime {
 			return;
 		}
 		if (command.kind === "retire") {
+			try {
+				this.departureCandidate(commandId, sessionId, command);
+			} catch (error) {
+				this.setCommandStage(commandId, "failed", error instanceof Error ? error.message : String(error));
+				return;
+			}
 			receipt("accepted");
 			void this.retireSession(commandId, sessionId, command).catch((error) => {
-				if (this.db) this.setCommandStage(commandId, "failed", error instanceof Error ? error.message : String(error));
+				if (this.db) this.failDeparture(commandId, sessionId, command, error);
 			});
 			return;
 		}
@@ -832,28 +911,57 @@ export class Runtime {
 		}
 	}
 
+	private departureCandidate(commandId: string, sessionId: string, command: Extract<Command, { kind: "retire" }>) {
+		const db = this.db!;
+		if (typeof command.reason !== "string" || !command.reason.trim()) throw new Error("retire needs a reason");
+		if (command.by === sessionId) throw new Error("Ask your manager or the operator to let you go.");
+		if ([...this.retiring].some(([id, job]) => id !== commandId && job.person === sessionId))
+			throw new Error("This person's handover is already in progress.");
+		const person = db
+			.prepare(`select name, role, role_title, reports_to, session_file, generation, retired_at
+			from sessions where id = ? and kind = 'root'`)
+			.get(sessionId) as
+			| {
+					name: string | null;
+					role: string | null;
+					role_title: string | null;
+					reports_to: string | null;
+					session_file: string | null;
+					generation: number;
+					retired_at: number | null;
+			  }
+			| undefined;
+		if (!person) throw new Error("unknown person");
+		if (person.retired_at !== null || departureOf(db, sessionId)) throw new Error("This person has already left.");
+		if (person.reports_to === null) throw new Error("An organization root cannot be let go.");
+		if (temporaryCallers(db).has(sessionId))
+			throw new Error("Temporary program peers belong to their program's discard lifecycle, not let_go.");
+		if (db.prepare("select 1 from assignments where person = ? and ended_at is null").get(sessionId))
+			throw new Error("Finish or explicitly reassign this person's unfinished assignments before letting it go.");
+		if (
+			db
+				.prepare(`select 1 from sessions s where reports_to = ? and kind = 'root' and
+			(retired_at is null or exists (select 1 from events e where e.session_id = s.id and e.type = 'person_departed'))`)
+				.get(sessionId)
+		)
+			throw new Error("Move this person's reports first, and let any pending report departures finish cleanup.");
+		if (
+			db.prepare("select 1 from program_scopes where caller = ?").get(sessionId) ||
+			db.prepare("select 1 from program_peers where created_by = ?").get(sessionId)
+		)
+			throw new Error("This person's program delegations must finish cleanup before departure.");
+		return { ...person, reports_to: person.reports_to };
+	}
+
 	private async retireSession(
 		commandId: string,
 		sessionId: string,
 		command: Extract<Command, { kind: "retire" }>,
 	): Promise<void> {
 		const db = this.db!;
-		const person = db.prepare("select reports_to, retired_at from sessions where id = ?").get(sessionId) as
-			| { reports_to: string | null; retired_at: number | null }
-			| undefined;
-		if (!person) throw new Error("unknown session");
-		if (typeof command.reason !== "string" || !command.reason.trim()) throw new Error("retire needs a reason");
-		if (command.by === sessionId)
-			throw new Error("Ask your manager or the operator to let you go; your own call cannot wait for you to be idle.");
-		if (person.retired_at !== null) {
-			this.setCommandStage(commandId, "applied", "This person has already left.");
-			return;
-		}
-		if ([...this.retiring.values()].some((job) => job.person === sessionId))
-			throw new Error("This person's handover is already in progress.");
-		const controller = new AbortController();
-		this.retiring.set(commandId, { person: sessionId, controller });
-		const signal = AbortSignal.any([controller.signal, this.stopping.signal]);
+		const person = this.departureCandidate(commandId, sessionId, command);
+		this.retiring.set(commandId, { person: sessionId });
+		const signal = this.stopping.signal;
 		const send = (request: Command, id?: string) =>
 			sendCommand(sessionId, request, {
 				socketPath: this.paths.socket,
@@ -863,87 +971,195 @@ export class Runtime {
 		try {
 			if (![...this.connections].some((connection) => !connection.shutdown && connection.sessionId === sessionId)) {
 				const wake = await send({ kind: "start", prompt: "" });
-				if (wake.stage === "failed") throw new Error(`Could not wake the person for its handover: ${wake.reason}`);
+				if (wake.stage === "failed")
+					throw new Error(`The person has not left: inspect failed wake request ${wake.commandId}.`);
 			}
 			signal.throwIfAborted();
-			const channel = `team:${person.reports_to ?? sessionId}`;
-			const turnId = randomUUID();
+			const turnId = `${commandId}:handoff`;
 			const answer = await send(
 				{
 					kind: "run_turn",
 					task: [
-						`Prepare your handover before leaving the organization. Reason: ${command.reason}`,
-						`Your final reply will be posted verbatim, in your name, to the team channel ${channel} before you leave.`,
-						"Tell the team what is done, what is open, and where the useful context and files are. Say what you verified and what you believe.",
+						`Prepare your final handoff before permanently leaving the organization. Reason: ${command.reason}`,
+						"Your final prose will be saved verbatim in a private durable Markdown file. Your manager and the requestor will receive its location, not a full-team post.",
+						"Use your retained context to explain completed and open work, useful decisions and reasoning, important file/task/thread references, risks and next steps. Distinguish verified facts from beliefs and uncertainties.",
 					].join("\n\n"),
 				},
 				turnId,
 			);
 			signal.throwIfAborted();
+			if (this.db !== db) throw new Error("The runtime stopped during the handoff.");
 			if (answer.stage !== "applied" || answer.result?.status !== "completed" || !answer.result.text.trim())
 				throw new Error(
-					`The person has not left: ${answer.reason ?? answer.result?.error ?? "no handover was returned"}`,
+					`The person has not left: handoff request ${turnId} did not complete with nonempty prose; inspect that command.`,
 				);
 			const turn = db.prepare("select generation from commands where command_id = ?").get(turnId) as {
 				generation: number;
 			};
-			const current = db.prepare("select generation, reports_to from sessions where id = ?").get(sessionId) as
-				| { generation: number; reports_to: string | null }
-				| undefined;
-			if (!current || current.generation !== turn.generation || current.reports_to !== person.reports_to)
-				throw new Error("The person changed session or team during the handover; it has not been retired.");
 			const now = Date.now();
 			let pending: ReturnType<Runtime["preparePost"]>;
 			let close: Connection | undefined;
+			let departure: Departure;
 			const closeId = `${commandId}:close`;
 			db.exec("begin");
 			try {
-				pending = this.preparePost(
-					`${commandId}:handover`,
+				const current = this.departureCandidate(commandId, sessionId, command);
+				if (
+					current.generation !== turn.generation ||
+					current.reports_to !== person.reports_to ||
+					current.role !== person.role ||
+					(person.session_file !== null && current.session_file !== person.session_file)
+				)
+					throw new Error("The person changed session, transcript, role or team during the handoff; it has not left.");
+				const handoffFile = saveHandoff(
+					this.paths.dir,
 					sessionId,
-					{ thread: channel, body: answer.result.text },
-					now,
+					[
+						`# Final handoff: ${current.name ?? sessionId}`,
+						`Person: ${sessionId}\nRole: ${current.role ?? "unroled"}\nReason: ${command.reason}\nRequest: ${commandId}`,
+						answer.result.text,
+					].join("\n\n"),
 				);
+				departure = {
+					commandId,
+					reason: command.reason,
+					name: current.name,
+					role: current.role,
+					title: current.role_title,
+					reportsTo: current.reports_to,
+					handoffFile,
+					sessionFile: current.session_file,
+				};
+				this.event("runtime", sessionId, current.generation, "person_departed", departure);
 				db.prepare("update sessions set retired_at = ?, retired_reason = ?, updated_at = ? where id = ?").run(
 					now,
-					command.reason.trim(),
+					command.reason,
 					now,
 					sessionId,
+				);
+				recordLink(
+					db,
+					`${commandId}:handoff-file`,
+					sessionId,
+					{
+						from: { kind: "person", id: sessionId },
+						to: { kind: "file", id: handoffFile },
+						relation: "produced",
+						reason: "Final handoff before permanent departure",
+					},
+					now,
 				);
 				syncChannels(db, now);
 				close = this.queueDelivery(closeId, sessionId, { kind: "close" }, current.generation);
-				this.event("client", sessionId, current.generation, "retired", { reason: command.reason });
+				pending = this.prepareDepartureNotice(
+					commandId,
+					sessionId,
+					command,
+					"committed",
+					`Permanent departure committed for ${current.name ?? sessionId} (${sessionId}). Cleanup is pending. Handoff: ${handoffFile}`,
+					current.reports_to,
+				);
 				db.exec("commit");
 			} catch (error) {
 				db.exec("rollback");
 				throw error;
 			}
-			for (const { target, id, mail } of pending.deliveries) this.dispatch(target, id, mail);
-			this.setCommandStage(commandId, "applied");
+			this.departing.add(sessionId);
+			this.setCommandStage(
+				commandId,
+				"delivered",
+				`Permanent departure committed; cleanup pending. Handoff: ${departure.handoffFile}`,
+			);
 			if (close) this.dispatch(close, closeId, { kind: "close" });
+			for (const { target, id, mail } of pending.deliveries) this.dispatch(target, id, mail);
+			void this.cleanPrograms();
 		} finally {
 			this.retiring.delete(commandId);
 		}
 	}
 
-	private recoverRetirements(): void {
-		const rows = this.db!.prepare(`select c.command_id, m.id as posted, s.retired_at from commands c
-			left join thread_messages m on m.id = c.command_id || ':handover'
-			left join sessions s on s.id = c.session_id
-			where c.kind = 'retire' and c.stage in ('accepted', 'delivered')`).all() as {
-			command_id: string;
-			posted: string | null;
-			retired_at: number | null;
-		}[];
-		for (const row of rows) {
-			if (row.posted && row.retired_at !== null) this.setCommandStage(row.command_id, "applied");
-			else
-				this.setCommandStage(
-					row.command_id,
+	private prepareDepartureNotice(
+		commandId: string,
+		person: string,
+		command: Extract<Command, { kind: "retire" }>,
+		phase: string,
+		body: string,
+		manager?: string,
+	) {
+		const db = this.db!;
+		const to = [...new Set([manager, command.by ?? OPERATOR])].filter(
+			(id): id is string =>
+				Boolean(id) &&
+				(id === OPERATOR ||
+					Boolean(db.prepare("select 1 from sessions where id = ? and kind = 'root' and retired_at is null").get(id!))),
+		);
+		return this.preparePost(
+			`${commandId}:${phase}`,
+			HARNESS,
+			{ thread: `departure:${commandId}`, threadKind: "mail", subject: `Departure: ${person}`, to, body },
+			Date.now(),
+		);
+	}
+
+	private failDeparture(
+		commandId: string,
+		person: string,
+		command: Extract<Command, { kind: "retire" }>,
+		error: unknown,
+	): void {
+		const db = this.db!;
+		const reason = error instanceof Error ? error.message : String(error);
+		if (departureOf(db, person)?.commandId === commandId) {
+			this.departing.add(person);
+			this.setCommandStage(commandId, "delivered", `Permanent departure committed; cleanup pending: ${reason}`);
+			void this.cleanPrograms();
+			return;
+		}
+		const manager = (
+			db.prepare("select reports_to from sessions where id = ?").get(person) as
+				| { reports_to: string | null }
+				| undefined
+		)?.reports_to;
+		let pending: ReturnType<Runtime["preparePost"]> | undefined;
+		this.atomically(() => {
+			if (!db.prepare("select 1 from thread_messages where id = ?").get(`${commandId}:failed`))
+				pending = this.prepareDepartureNotice(
+					commandId,
+					person,
+					command,
 					"failed",
-					"The runtime restarted before the handover and retirement committed; inspect the person before retrying.",
+					`Departure failed before commitment for ${person}; its identity and transcript remain. ${reason}`,
+					manager ?? undefined,
+				);
+		});
+		this.setCommandStage(commandId, "failed", reason);
+		for (const { target, id, mail } of pending?.deliveries ?? []) this.dispatch(target, id, mail);
+	}
+
+	private recoverRetirements(): void {
+		const rows = this.db!.prepare(
+			"select command_id, session_id, command from commands where kind = 'retire' and stage in ('accepted', 'delivered')",
+		).all() as { command_id: string; session_id: string; command: string }[];
+		for (const row of rows) {
+			if (departureOf(this.db!, row.session_id)?.commandId === row.command_id) {
+				if (
+					this.db!.prepare("select 1 from events where session_id = ? and type = 'person_removed'").get(row.session_id)
+				)
+					this.setCommandStage(row.command_id, "applied", "Permanent departure cleanup completed before the restart.");
+				else this.departing.add(row.session_id);
+			} else
+				this.failDeparture(
+					row.command_id,
+					row.session_id,
+					JSON.parse(row.command),
+					new Error(
+						"The runtime restarted before the handoff and permanent departure committed; inspect the person before retrying.",
+					),
 				);
 		}
+		for (const row of this.db!.prepare(`select distinct session_id from events where type = 'departure_writer_seen'
+			and json_extract(data, '$.cleanedAt') is null`).all() as { session_id: string }[])
+			this.departing.add(row.session_id);
 	}
 
 	private preparePost(
@@ -956,9 +1172,8 @@ export class Runtime {
 		const db = this.db!;
 		const posted = postToThread(db, sender, commandId, post, now);
 		if (typeof posted === "string") throw new Error(posted);
-		const fromName = (
-			db.prepare("select name from sessions where id = ?").get(sender) as { name: string | null } | undefined
-		)?.name;
+		const label = nameOf(db, sender);
+		const fromName = sender !== OPERATOR && label !== sender ? label : undefined;
 		const asleep: string[] = [];
 		const deliveries: { target: Connection; id: string; mail: Command }[] = [];
 		for (const participant of new Set([...posted.push, ...(changed ? [changed.person] : [])])) {
@@ -1072,6 +1287,8 @@ export class Runtime {
 		if (typeof command.manager !== "string" || !command.manager || typeof command.by !== "string" || !command.by)
 			return "transfer needs a manager and the acting manager (by)";
 		if (command.manager === sessionId) return "a person cannot report to itself";
+		if (departureOf(db, sessionId) || departureOf(db, command.manager) || departureOf(db, command.by))
+			return "A permanently departed person cannot take part in a reporting change.";
 		const managerOf = new Map(
 			(
 				db.prepare("select id, reports_to from sessions where kind = 'root'").all() as {
@@ -1290,6 +1507,7 @@ export class Runtime {
 			await killPane(
 				launch.socket!,
 				pane.paneId,
+				pane.pid,
 				AbortSignal.any([this.stopping.signal, AbortSignal.timeout(TMUX_POLL_MS)]),
 			);
 			if (this.db !== db) return false;
@@ -1302,6 +1520,275 @@ export class Runtime {
 		return true;
 	}
 
+	private async stopDepartureWriters(
+		person: string,
+		db: DatabaseSync,
+		writers: DepartureWriter[],
+		checkOwnership: () => void,
+		servers: Map<string, PaneRow[] | "absent">,
+	): Promise<boolean> {
+		type BoundProcess = IncarnationRow & { tmux_socket: string | null; pane_id: string | null; binding_seq: number };
+		const query = `select i.*, coalesce((select max(seq) from events e where e.session_id = i.session_id
+			and e.generation = i.generation and e.type = 'incarnation_started'), 0) as binding_seq from incarnations i`;
+		const incarnations = db
+			.prepare(`${query} where session_id = ? order by rowid`)
+			.all(person) as unknown as BoundProcess[];
+		if (
+			!incarnations.length &&
+			!writers.length &&
+			!db.prepare("select 1 from events where session_id = ? and type = 'person_removed'").get(person)
+		)
+			throw new Error("No retained process identity proves this departure safe to clean; inspect the journal.");
+		const processes = new Map(
+			[...incarnations.map((row) => ({ pid: row.pid, startedAt: row.process_started_at })), ...writers].map((row) => [
+				`${row.pid}:${row.startedAt}`,
+				{ pid: row.pid, startedAt: row.startedAt },
+			]),
+		);
+		const rebound = new Set<string>();
+		const sent = this.signalled.get(person) ?? new Set<string>();
+		this.signalled.set(person, sent);
+		let waiting: string | undefined;
+		let signalledNow = false;
+		for (const [key, proc] of processes) {
+			checkOwnership();
+			const state = checkProcess(proc.pid, proc.startedAt);
+			if (state === "gone") {
+				if (this.headless.get(person)?.pid === proc.pid) this.headless.delete(person);
+				continue;
+			}
+			if (state === "unknown") {
+				waiting = `Cannot prove writer ${proc.pid}'s process identity or exit.`;
+				continue;
+			}
+			const bindings = (
+				db.prepare(`${query} where pid = ? order by i.rowid desc`).all(proc.pid) as unknown as BoundProcess[]
+			).filter((row) => sameStart(row.process_started_at, proc.startedAt));
+			const matches = (row: { pid: number; startedAt: number }) =>
+				row.pid === proc.pid && sameStart(row.startedAt, proc.startedAt);
+			const owned = [...this.connections].some(
+				(connection) =>
+					!connection.shutdown &&
+					!connection.socket.destroyed &&
+					connection.observedIdentity?.person === person &&
+					matches(connection.observedIdentity),
+			);
+			const other = [...this.connections].some(
+				(connection) =>
+					!connection.shutdown &&
+					!connection.socket.destroyed &&
+					connection.observedIdentity &&
+					connection.observedIdentity.person !== person &&
+					matches(connection.observedIdentity),
+			);
+			const lastOwned = Math.max(
+				0,
+				...bindings.filter((row) => row.session_id === person).map((row) => row.binding_seq),
+				...writers.filter(matches).map((row) => row.seq),
+			);
+			if (!owned && bindings[0] && bindings[0].session_id !== person && bindings[0].binding_seq > lastOwned) {
+				rebound.add(key);
+				if (this.headless.get(person)?.pid === proc.pid) this.headless.delete(person);
+				continue;
+			}
+			if (proc.pid === process.pid || proc.pid === process.ppid) {
+				waiting =
+					"Refusing to signal the runtime or its launcher process; awaiting proven exit or a new identity binding.";
+				continue;
+			}
+			if (!owned || other) {
+				waiting = `Writer ${proc.pid} has no exclusive current binding to this identity; awaiting exit or proven rebinding.`;
+				continue;
+			}
+			if (
+				[...this.dispatched].some(
+					([id, target]) =>
+						target.observedIdentity?.person === person &&
+						matches(target.observedIdentity) &&
+						db.prepare("select 1 from commands where command_id = ? and kind = 'close' and stage = 'accepted'").get(id),
+				)
+			)
+				return false;
+			waiting = `Waiting for writer ${proc.pid} to exit after close/SIGTERM.`;
+			if (!sent.has(key)) {
+				try {
+					process.kill(proc.pid, "SIGTERM");
+				} catch (error) {
+					if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
+				}
+				sent.add(key);
+				signalledNow = true;
+			}
+		}
+		if (waiting) {
+			if (signalledNow) return false;
+			throw new Error(waiting);
+		}
+		await this.removeDeparturePanes(person, incarnations, rebound, db, checkOwnership, servers);
+		return true;
+	}
+
+	private async removeDeparturePanes(
+		person: string,
+		incarnations: (IncarnationRow & { tmux_socket: string | null; pane_id: string | null })[],
+		rebound: Set<string>,
+		db: DatabaseSync,
+		checkOwnership: () => void,
+		servers: Map<string, PaneRow[] | "absent">,
+	): Promise<void> {
+		for (const incarnation of incarnations) {
+			const { tmux_socket: socket, pane_id: pane } = incarnation;
+			if (!socket || !pane || rebound.has(`${incarnation.pid}:${incarnation.process_started_at}`)) continue;
+			const owner = db
+				.prepare(
+					"select session_id from incarnations where tmux_socket = ? and pane_id = ? order by rowid desc limit 1",
+				)
+				.get(socket, pane) as { session_id: string } | undefined;
+			if (owner?.session_id !== person) continue;
+			if (!servers.has(socket))
+				servers.set(socket, await listPanes(socket, { timeout: TMUX_POLL_MS, signal: this.stopping.signal }));
+			checkOwnership();
+			const rows = servers.get(socket)!;
+			const current = rows === "absent" ? undefined : rows.find((row) => row.paneId === pane);
+			if (current?.dead && current.pid === incarnation.pid) {
+				await killPane(
+					socket,
+					pane,
+					incarnation.pid,
+					AbortSignal.any([this.stopping.signal, AbortSignal.timeout(TMUX_POLL_MS)]),
+				);
+				checkOwnership();
+			}
+		}
+	}
+
+	private async cleanDeparture(
+		person: string,
+		db: DatabaseSync,
+		servers: Map<string, PaneRow[] | "absent">,
+	): Promise<void> {
+		const departure = departureOf(db, person);
+		if (!departure) {
+			this.departing.delete(person);
+			return;
+		}
+		const receipt = db
+			.prepare("select command, stage, reason from commands where command_id = ?")
+			.get(departure.commandId) as { command: string; stage: ReceiptStage; reason: string | null } | undefined;
+		const command: Extract<Command, { kind: "retire" }> = receipt
+			? JSON.parse(receipt.command)
+			: { kind: "retire", reason: departure.reason };
+		const writers = departureWriters(db, person);
+		const removed = Boolean(
+			db.prepare("select 1 from events where session_id = ? and type = 'person_removed'").get(person),
+		);
+		const phase = removed ? `late-${writers[0]?.seq ?? 0}` : "cleanup";
+		const paths = new Set(
+			[departure.sessionFile, ...writers.map((writer) => writer.sessionFile)].filter(
+				(file): file is string => file !== null,
+			),
+		);
+		try {
+			if (!receipt) throw new Error("The permanent departure's command journal is missing; inspect before cleanup.");
+			const watermark = departureWatermark(db);
+			const checkOwnership = () => {
+				this.stopping.signal.throwIfAborted();
+				if (this.db !== db || departureWatermark(db) !== watermark)
+					throw new Error("Observed writers or bindings changed; cleanup will retry.");
+			};
+			if (!removed || writers.length) {
+				if (!(await this.stopDepartureWriters(person, db, writers, checkOwnership, servers))) return;
+				checkOwnership();
+				for (const file of paths.size ? paths : [null]) {
+					await removeDepartureFiles(this.paths.dir, person, { ...departure, sessionFile: file }, checkOwnership);
+					checkOwnership();
+				}
+			}
+			checkOwnership();
+			const pending = db
+				.prepare(
+					"select command_id from commands where session_id = ? and command_id != ? and stage in ('accepted', 'delivered')",
+				)
+				.all(person, departure.commandId) as { command_id: string }[];
+			let notice: ReturnType<Runtime["preparePost"]> | undefined;
+			this.atomically(() => {
+				checkOwnership();
+				const now = Date.now();
+				for (const row of db.prepare("select thread_id from thread_participants where participant = ?").all(person) as {
+					thread_id: string;
+				}[])
+					participateIn(db, row.thread_id, person, now, null);
+				removeDepartureRecords(db, person, now);
+				if (!removed)
+					this.event("runtime", person, null, "person_removed", {
+						commandId: departure.commandId,
+						handoffFile: departure.handoffFile,
+					});
+				else if (writers.length)
+					this.event("runtime", person, null, "departure_resources_removed", {
+						commandId: departure.commandId,
+						through: writers.at(-1)!.seq,
+					});
+				if (!removed || writers.length)
+					notice = this.prepareDepartureNotice(
+						departure.commandId,
+						person,
+						command,
+						`${phase}-complete`,
+						`${removed ? "Rejected late attempt's owned resources cleaned" : "Permanent departure cleanup completed"} for ${person}. Handoff retained: ${departure.handoffFile}`,
+						departure.reportsTo,
+					);
+			});
+			for (const row of pending) this.setCommandStage(row.command_id, "failed", "The person permanently departed.");
+			this.setCommandStage(
+				departure.commandId,
+				"applied",
+				`Permanent departure cleanup completed. Handoff: ${departure.handoffFile}`,
+			);
+			this.departing.delete(person);
+			this.signalled.delete(person);
+			for (const { target, id, mail } of notice?.deliveries ?? []) this.dispatch(target, id, mail);
+		} catch (error) {
+			if (this.db !== db) return;
+			let reason = error instanceof Error ? error.message : String(error);
+			for (const file of paths) reason = reason.replaceAll(file, "[owned session file]");
+			try {
+				const prior = db
+					.prepare(
+						"select data from events where session_id = ? and type = 'departure_cleanup_blocked' order by seq desc limit 1",
+					)
+					.get(person) as { data: string } | undefined;
+				let notice: ReturnType<Runtime["preparePost"]> | undefined;
+				if (!prior || JSON.parse(prior.data).reason !== reason || JSON.parse(prior.data).phase !== phase)
+					this.atomically(() => {
+						this.event("runtime", person, null, "departure_cleanup_blocked", {
+							commandId: departure.commandId,
+							phase,
+							reason,
+						});
+						if (
+							!db.prepare("select 1 from thread_messages where id = ?").get(`${departure.commandId}:${phase}-blocked`)
+						)
+							notice = this.prepareDepartureNotice(
+								departure.commandId,
+								person,
+								command,
+								`${phase}-blocked`,
+								`Departure resource cleanup is pending for ${person}: ${reason} Handoff retained: ${departure.handoffFile}`,
+								departure.reportsTo,
+							);
+					});
+				if (receipt && receipt.stage !== "applied" && receipt.reason !== reason)
+					this.setCommandStage(departure.commandId, "delivered", reason);
+				for (const { target, id, mail } of notice?.deliveries ?? []) this.dispatch(target, id, mail);
+			} catch (noticeError) {
+				console.error(
+					`Departure cleanup remains pending for ${person}: ${reason}; notification failed: ${String(noticeError)}`,
+				);
+			}
+		}
+	}
+
 	private async cleanPrograms(): Promise<void> {
 		const db = this.db;
 		if (!db || this.cleaningPrograms) return;
@@ -1312,6 +1799,10 @@ export class Runtime {
 			this.markDiscarded(this.discarding);
 			const stopped = new Set<string>();
 			const servers = new Map<string, PaneRow[] | "absent">();
+			for (const person of this.departing) {
+				await this.cleanDeparture(person, db, servers);
+				if (this.db !== db) return;
+			}
 			for (const id of this.discarding) if (await this.stopProgramPeer(id, db, servers)) stopped.add(id);
 			if (this.db !== db) return;
 			if (stopped.size) {
@@ -1358,7 +1849,8 @@ export class Runtime {
 			}
 		} finally {
 			this.cleaningPrograms = false;
-			if (this.db && this.discarding.size) this.programTimer = setTimeout(() => void this.cleanPrograms(), RETRY_MS);
+			if (this.db && (this.discarding.size || this.departing.size))
+				this.programTimer = setTimeout(() => void this.cleanPrograms(), RETRY_MS);
 		}
 	}
 
@@ -1435,6 +1927,8 @@ export class Runtime {
 					"select 1 from incarnations where session_id = ? and generation = ? and ended_at is null and process_state in ('alive', 'alive_bridge_lost')",
 				)
 				.get(sessionId, row.generation);
+		if ((row && row.retired_at !== null) || departureOf(db, sessionId))
+			return fail("People who were let go cannot be reopened; hire a new person.");
 		if (live) return fail("already running");
 		if (this.starting.has(sessionId)) return fail("already starting");
 		if (program?.discarded.has(sessionId)) return fail("That peer was discarded; create a new handle");
@@ -1462,8 +1956,10 @@ export class Runtime {
 		const cwd = realpathSync(directory);
 		if (!row && command.role && !command.goal?.text.trim()) return fail("A new hire needs a written goal");
 		const name = command.name ?? row?.name ?? undefined;
-		// A stopped person keeps its manager; a reopen by a manager is a return from retirement.
+		// A person sent home keeps its manager when called in.
 		const reportsTo = row?.reports_to ?? command.reportsTo;
+		if (reportsTo && departureOf(db, reportsTo))
+			return fail("A permanently departed person cannot receive new reports.");
 		const inherited =
 			!row && reportsTo
 				? (
@@ -1499,8 +1995,6 @@ export class Runtime {
 				this.event("runtime", sessionId, null, "cost_changed", { from: 0, to: 0, initial: true });
 			});
 		}
-		if (row?.retired_at) this.event("runtime", sessionId, null, "rehired", {});
-		if (row) db.prepare("update sessions set retired_at = null, retired_reason = null where id = ?").run(sessionId);
 		if (command.goal) {
 			const prepare = () => {
 				if (!row) {
@@ -1643,9 +2137,20 @@ export class Runtime {
 
 	/** Hand a command to a bridge, binding it to that bridge's incarnation; only that incarnation may report on it. */
 	private dispatch(target: Connection, commandId: string, command: Command, replay = false): void {
-		this.db!.prepare("update commands set generation = ? where command_id = ?").run(target.generation!, commandId);
+		this.db!.prepare("update commands set generation = ? where command_id = ?").run(
+			target.generation ?? null,
+			commandId,
+		);
 		this.dispatched.set(commandId, target);
-		target.socket.write(`${JSON.stringify({ type: "command", commandId, command, ...(replay ? { replay } : {}) })}\n`);
+		target.socket.write(
+			`${JSON.stringify({
+				type: "command",
+				commandId,
+				command,
+				...(replay ? { replay } : {}),
+				...(target.generation === undefined ? { sessionId: target.observedIdentity?.person } : {}),
+			})}\n`,
+		);
 	}
 
 	/**
@@ -1660,7 +2165,6 @@ export class Runtime {
 				| { kind: string }
 				| undefined;
 			if (target && row?.kind === "run_turn") this.issue(target, { kind: "cancel_turn", turn: commandId });
-			this.retiring.get(commandId)?.controller.abort(new Error("The retirement request was cancelled."));
 			this.commandClients.delete(commandId);
 		}
 		for (const [commandId, target] of this.dispatched) {
@@ -1706,10 +2210,17 @@ export class Runtime {
 		reason?: string,
 		result?: TurnResult,
 	): void {
-		const row = this.db!.prepare("select session_id, generation from commands where command_id = ?").get(commandId) as
-			| { session_id: string; generation: number | null }
-			| undefined;
-		if (!row || row.session_id !== bridge.sessionId || row.generation !== bridge.generation) return;
+		const row = this.db!.prepare("select session_id, generation, kind from commands where command_id = ?").get(
+			commandId,
+		) as { session_id: string; generation: number | null; kind: string } | undefined;
+		if (!row) return;
+		const rejectedClose =
+			row.kind === "close" &&
+			row.generation === null &&
+			bridge.generation === undefined &&
+			bridge.observedIdentity?.person === row.session_id &&
+			this.dispatched.get(commandId) === bridge;
+		if (!rejectedClose && (row.session_id !== bridge.sessionId || row.generation !== bridge.generation)) return;
 		this.setCommandStage(commandId, stage, reason, result);
 	}
 
@@ -1961,6 +2472,8 @@ export class Runtime {
 
 	private writeFacts(sessionId: string, generation: number, facts: Partial<Facts>, atHello: boolean): void {
 		const db = this.db!;
+		if (facts.reportsTo && departureOf(db, facts.reportsTo))
+			throw new Error("A permanently departed person cannot receive new reports.");
 		const row = db.prepare("select * from sessions where id = ?").get(sessionId) as Record<string, unknown> | undefined;
 		if (!row || row.generation !== generation) return;
 		for (const [key, value] of Object.entries(facts)) {
@@ -2150,6 +2663,64 @@ export class Runtime {
 				this.event("runtime", row.session_id, row.generation, "process_check_failed", { pid: row.pid });
 			}
 		}
+	}
+
+	/** Publish changed coordination evidence through the existing transactional mail outbox. */
+	private checkFriction(): void {
+		const db = this.db;
+		if (!db || db.isTransaction) return;
+		const sequence = (db.prepare("select coalesce(max(seq), 0) as seq from events").get() as { seq: number }).seq;
+		if (this.friction.sequence === sequence) return;
+		if (
+			this.friction.sequence !== undefined &&
+			!db
+				.prepare(`
+			select 1 from events e left join commands c on c.command_id = json_extract(e.data, '$.commandId')
+			where e.seq > ? and (
+				e.type in ('incarnation_started', 'reports_to_changed', 'role_changed', 'manages_changed',
+					'transferred', 'person_departed', 'person_removed')
+				or (e.type in ('command_delivered', 'command_applied', 'command_failed')
+					and c.kind in ('work', 'start', 'task_opened', 'task_moved', 'link_record', 'link_resolve', 'thread_post'))
+			) limit 1`)
+				.get(this.friction.sequence)
+		) {
+			this.friction.sequence = sequence;
+			return;
+		}
+		const pending: ReturnType<Runtime["preparePost"]>[] = [];
+		try {
+			db.exec("begin");
+			const changes = frictionIn(db);
+			for (const identity of changes.cleared)
+				this.event("runtime", identity.organization, null, "friction_cleared", identity);
+			for (const notice of changes.raised) {
+				const { body, ...identity } = notice;
+				pending.push(
+					this.preparePost(
+						`friction:${randomUUID()}`,
+						HARNESS,
+						{
+							thread: `friction:${notice.organization}:${notice.recipient}`,
+							threadKind: "mail",
+							subject: "Recorded coordination patterns",
+							to: [notice.recipient],
+							body,
+						},
+						Date.now(),
+					),
+				);
+				this.event("runtime", notice.organization, null, "friction_raised", identity);
+			}
+			db.exec("commit");
+		} catch (error) {
+			if (db.isTransaction) db.exec("rollback");
+			const message = error instanceof Error ? error.message : String(error);
+			if (this.friction.error !== message) console.error(`Friction publication failed: ${message}`);
+			this.friction.error = message;
+			return;
+		}
+		this.friction = { sequence };
+		for (const post of pending) for (const { target, id, mail } of post.deliveries) this.dispatch(target, id, mail);
 	}
 
 	/** Read every live tmux server and bring the topology tables up to date, one transaction per pass. */

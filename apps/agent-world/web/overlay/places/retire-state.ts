@@ -1,6 +1,6 @@
 // Retiring a person: the small form opened from a character's actions, in the theme's words (leaving the guild,
 // resigning, graduating), and what it sends (the runtime's `retire` with a reason; the person leaves the organization
-// and sleeps at the inn marked so). `main.tsx` connects the backend API and the view store. Each change replaces the
+// after its durable own-context handoff; cleanup may still be pending). `main.tsx` connects the backend API and the view store. Each change replaces the
 // state object, as useSyncExternalStore needs.
 import type { AgentWorldApi, Character } from "../../../src/world.js";
 import { say } from "../../theme.js";

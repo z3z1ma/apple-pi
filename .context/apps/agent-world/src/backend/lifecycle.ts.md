@@ -15,8 +15,9 @@ Why: the first turn must already have an assignment. Keeping the goal in its fil
 Coupled: components/session-state/src/runtime.ts, components/session-state/src/coordinator.ts, apps/agent-world/src/backend/roles.ts, apps/agent-world/web/overlay/places/recruit-state.ts
 Verify: apps/agent-world/tests/recruit.test.ts, apps/agent-world/tests/world-recruit.test.ts
 
-Retiring (`retire`) sends the runtime's `retire` with a non-blank reason for an awake or a dormant character and waits for `applied`, without the ordinary close-wait deadline. The runtime waits for the person's own handover (waking it if asleep), posts that reply, and commits retirement before asking it to close. The character leaves the world when its bridge goes, not when the receipt arrives; a failed handover leaves it in the team.
-Why: the runtime's `retire` is the one path that records `retired_at` and `retired_reason` (what the inn's leaving mark and the directory's former members read); sending `close` here instead would stop the session without marking it.
+Retiring (`retire`) requests permanent departure as `operator` and returns acceptance while the runtime owns the person's own-session handoff and subsequent cleanup. `follow` preserves the received stage instead of rewriting acceptance as applied. The UI relays the pending note and waits for authoritative snapshots; completed departure creates no dormant former person. A later runtime outcome reports failure or completion.
+Why: command acceptance, durable handoff, membership ending and proven resource cleanup are separate boundaries. Waiting on the old blocking handover makes the new asynchronous API appear hung; reporting acceptance as applied falsely claims cleanup.
+Legacy former rows remain available to read but `wake` refuses them before locating a pane or sending `start`. Ordinary dormancy keeps its existing wake behavior; this neither purges legacy state nor creates a reactivation path.
 Coupled: components/session-state/src/runtime.ts, apps/agent-world/web/overlay/places/retire-state.ts, apps/agent-world/src/backend/inn.ts
 Verify: apps/agent-world/tests/backend.test.ts, apps/agent-world/tests/rename.test.ts, apps/agent-world/tests/world-rename.test.ts
 

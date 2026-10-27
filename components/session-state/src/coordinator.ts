@@ -4,6 +4,7 @@ import { Type } from "typebox";
 import { loadRoles, managesPeople, organizationOf } from "../../organization/src/index.js";
 import { resolvePerson } from "./addresses.js";
 import { sendCommand } from "./client.js";
+import { departureOf } from "./departures.js";
 import { installMeetings } from "./meetings.js";
 import type { Command, Receipt } from "./protocol.js";
 import { focusedTask, withWork } from "./work.js";
@@ -12,7 +13,6 @@ import { goalTitle, goalWorth, installAssignments, requireTitle } from "./work-t
 const MANAGER_TOOLS = [
 	"hire",
 	"call_in",
-	"rehire",
 	"send_home",
 	"rename",
 	"move",
@@ -31,8 +31,13 @@ function ownPane(): { socket: string; pane: string } | undefined {
 	return { socket, pane };
 }
 
-async function run(sessionId: string, command: Command, signal: AbortSignal | undefined): Promise<Receipt> {
-	const receipt = await sendCommand(sessionId, command, { signal });
+async function run(
+	sessionId: string,
+	command: Command,
+	signal: AbortSignal | undefined,
+	until: "accepted" | "applied" = "applied",
+): Promise<Receipt> {
+	const receipt = await sendCommand(sessionId, command, { signal, until });
 	if (receipt.stage === "failed") throw new Error(`${command.kind} ${sessionId} failed: ${receipt.reason}`);
 	return receipt;
 }
@@ -76,8 +81,14 @@ export function installCoordinator(pi: ExtensionAPI): void {
 			),
 			async execute(_toolCallId, params, signal, _onUpdate, ctx) {
 				const sessionId = params.session_id ?? randomUUID();
-				if (withWork((db) => db.prepare("select 1 from sessions where id = ?").get(sessionId)))
-					throw new Error("This person already exists; use call_in, or rehire for a former member.");
+				if (
+					withWork(
+						(db) => db.prepare("select 1 from sessions where id = ?").get(sessionId) || departureOf(db, sessionId),
+					)
+				)
+					throw new Error(
+						"This identity already exists or has permanently left; call in an existing member or hire a new identity.",
+					);
 				const catalog = loadRoles(ctx.cwd);
 				if (!catalog.roles.has(params.role))
 					throw new Error(`Unknown role "${params.role}"; known roles: ${[...catalog.roles.keys()].join(", ")}.`);
@@ -107,11 +118,12 @@ export function installCoordinator(pi: ExtensionAPI): void {
 			},
 		}),
 	);
-	const returnTool = (name: "call_in" | "rehire", description: string, former: boolean) =>
+	pi.registerTool(
 		defineTool({
-			name,
-			label: name,
-			description,
+			name: "call_in",
+			label: "call_in",
+			description:
+				"Call in a person you sent home: it reopens in a new tmux window next to yours (headless outside tmux), in its own directory and with its full history, and reports to you. An optional goal becomes a new assigned task; otherwise it keeps its existing work. Returns once it runs.",
 			parameters: Type.Object(
 				{
 					person: personParameter,
@@ -130,8 +142,7 @@ export function installCoordinator(pi: ExtensionAPI): void {
 				const left = withWork((db) =>
 					Boolean(db.prepare("select 1 from sessions where id = ? and retired_at is not null").get(id)),
 				);
-				if (left && !former) throw new Error(`${params.person} has left the organization; rehire brings it back.`);
-				if (!left && former) throw new Error(`${params.person} is still a member; call_in brings it back from home.`);
+				if (left) throw new Error(`${params.person} has left the organization; hire a new person.`);
 				await run(
 					id,
 					{
@@ -154,20 +165,7 @@ export function installCoordinator(pi: ExtensionAPI): void {
 				);
 				return reply(`${params.person} is back (${id}).`, { sessionId: id });
 			},
-		});
-	pi.registerTool(
-		returnTool(
-			"call_in",
-			"Call in a person you sent home: it reopens in a new tmux window next to yours (headless outside tmux), in its own directory and with its full history, and reports to you. An optional goal becomes a new assigned task; otherwise it keeps its existing work. Returns once it runs.",
-			false,
-		),
-	);
-	pi.registerTool(
-		returnTool(
-			"rehire",
-			"Rehire a person who was let go: it rejoins your organization, reopens in a new tmux window next to yours (headless outside tmux) with its full history, and reports to you. An optional goal becomes a new assigned task. Returns once it runs.",
-			true,
-		),
+		}),
 	);
 	pi.registerTool(
 		defineTool({
@@ -243,7 +241,7 @@ export function installCoordinator(pi: ExtensionAPI): void {
 			name: "let_go",
 			label: "let_go",
 			description:
-				"Let a person go: wait until it is idle (calling it in if it is at home), ask for its handover, post that reply in its team channel, then record why it left and close it. A failed or cancelled handover leaves it in the team. Its history stays, the directory lists it among former members, and rehire brings it back. Let go reluctantly: a person's accumulated context is expensive to rebuild.",
+				"Request permanent departure after finishing or explicitly reassigning the person's assignments, moving its reports and settling its program delegations. Returns an accepted request ID, not completion. The runtime asks its own session for a final handoff, saves a private durable Markdown file, then commits departure and retries safe process/file/private-record cleanup. You and its manager receive progress and a handoff pointer. Caller disconnection leaves accepted work running; handoff failure preserves the person and transcript. Shared organizational evidence remains. Hire a new person for later work.",
 			parameters: Type.Object(
 				{
 					person: personParameter,
@@ -253,8 +251,20 @@ export function installCoordinator(pi: ExtensionAPI): void {
 			),
 			async execute(_toolCallId, params, signal, _onUpdate, ctx) {
 				const id = resolvePerson(ctx.sessionManager.getSessionId(), params.person);
-				await run(id, { kind: "retire", reason: params.reason, by: ctx.sessionManager.getSessionId() }, signal);
-				return reply(`${params.person} left: ${params.reason}`, { sessionId: id });
+				const receipt = await run(
+					id,
+					{ kind: "retire", reason: params.reason, by: ctx.sessionManager.getSessionId() },
+					signal,
+					"accepted",
+				);
+				return reply(
+					`Departure request accepted for ${params.person}; handoff and cleanup run asynchronously. Request: ${receipt.commandId}`,
+					{
+						sessionId: id,
+						commandId: receipt.commandId,
+						stage: receipt.stage,
+					},
+				);
 			},
 		}),
 	);

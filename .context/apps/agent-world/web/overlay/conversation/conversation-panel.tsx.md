@@ -10,7 +10,7 @@ A key pressed right after closing was once "lost": Escape's release and G's pres
 Coupled: apps/agent-world/web/overlay/focus.ts, apps/agent-world/web/overlay/places/place-dialog.tsx
 Verify: apps/agent-world/tests/world-conversation.test.ts, apps/agent-world/tests/world-rookery.test.ts
 
-A dormant character (its id in `world.dormant`) has no terminal: the side pane offers Wake (`placeActions.wake`) where awake ones have Go to its terminal, and the reply slot says how it wakes.
+An ordinary dormant character (its id in `world.dormant`, without a retirement time) has no terminal: the side pane offers Wake (`placeActions.wake`) where awake ones have Go to its terminal, and the reply slot says how it wakes. A retained former entry is read-only: no Wake/terminal action or instruction to wake it. Permanent departure and ordinary dormancy are separate; a former row is not permission to recreate its person.
 Verify: apps/agent-world/tests/world-inn.test.ts
 
 `mark_seen` is sent when the panel opens on a character with `needsYouSince`, and again on a later settle only while the window has focus.

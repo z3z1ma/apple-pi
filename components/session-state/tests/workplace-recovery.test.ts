@@ -2,6 +2,7 @@ import { mkdirSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
 import { syncChannels } from "../src/channels.js";
+import { saveHandoff } from "../src/departures.js";
 import { lineReader } from "../src/protocol.js";
 import { migrate } from "../src/schema.js";
 import {
@@ -27,10 +28,25 @@ beforeAll(async () => {
 			values (?, 'root', '/tmp', 'idle', 1, ?, ?, 'fixture', 0)`).run(
 			id,
 			id === "manager" ? null : "manager",
-			["done", "reopened"].includes(id) ? 1 : null,
+			id === "done" ? 1 : null,
 		);
 	}
 	syncChannels(db, 1);
+	const handoffFile = saveHandoff(state.stateDir, "done", "The evidence is in docs/result.md.");
+	db.prepare(
+		"insert into events (at, source, session_id, type, data) values (1, 'runtime', 'done', 'person_departed', ?)",
+	).run(
+		JSON.stringify({
+			commandId: "done",
+			reason: "Assignment ended.",
+			name: "Done Worker",
+			role: null,
+			title: null,
+			reportsTo: "manager",
+			handoffFile,
+			sessionFile: null,
+		}),
+	);
 	for (const id of ["done", "interrupted"])
 		db.prepare(
 			"insert into commands (command_id, session_id, kind, command, stage, created_at, updated_at) values (?, ?, 'retire', ?, 'accepted', 1, 1)",
@@ -65,13 +81,15 @@ afterAll(async () => {
 	await stopRuntime(state);
 });
 
-test("startup keeps a committed handover once and fails an interrupted request without restarting the model", async () => {
-	expect(
-		query(state.dbPath, "select command_id, stage from commands where kind = 'retire' order by command_id"),
-	).toEqual([
-		{ command_id: "done", stage: "applied" },
-		{ command_id: "interrupted", stage: "failed" },
-	]);
+test("startup preserves committed cleanup ownership and fails an interrupted uncommitted handoff without model replay", async () => {
+	await vi.waitFor(() =>
+		expect(
+			query(state.dbPath, "select command_id, stage from commands where kind = 'retire' order by command_id"),
+		).toEqual([
+			{ command_id: "done", stage: "delivered" },
+			{ command_id: "interrupted", stage: "failed" },
+		]),
+	);
 	expect(query(state.dbPath, "select 1 from commands where kind in ('run_turn', 'start')")).toEqual([]);
 	const repeated = await sendCommand(
 		state.socketPath,
@@ -79,13 +97,13 @@ test("startup keeps a committed handover once and fails an interrupted request w
 		{ kind: "retire", reason: "Ignored duplicate" },
 		{ commandId: "done" },
 	);
-	expect(repeated.at(-1)?.stage).toBe("applied");
-	expect(query(state.dbPath, "select body from thread_messages")).toEqual([
+	expect(repeated.at(-1)?.stage).toBe("delivered");
+	expect(query(state.dbPath, "select body from thread_messages where id = 'done:handover'")).toEqual([
 		{ body: "The evidence is in docs/result.md." },
 	]);
 });
 
-test("a committed retirement closes the same incarnation on reconnect before any queued work is replayed", async () => {
+test("a committed departure rejects reconnect and closes it without admitting or replaying queued work", async () => {
 	const link = await fakeBridge(state.socketPath, "done", stand.pid, stand.startedAt);
 	const received: string[] = [];
 	link.socket.on(
@@ -98,6 +116,8 @@ test("a committed retirement closes the same incarnation on reconnect before any
 	try {
 		await vi.waitFor(() => expect(received).toContain("close"));
 		expect(received).toEqual(["close"]);
+		expect(query(state.dbPath, "select generation from sessions where id = 'done'")).toEqual([{ generation: 1 }]);
+		expect(query(state.dbPath, "select 1 from incarnations where session_id = 'done'")).toHaveLength(1);
 		expect(query(state.dbPath, "select stage from commands where command_id = 'old-mail'")).toEqual([
 			{ stage: "accepted" },
 		]);
@@ -107,7 +127,7 @@ test("a committed retirement closes the same incarnation on reconnect before any
 	}
 });
 
-test("a previous incarnation's pending close never closes a later reopening", async () => {
+test("an ordinary dormant member's previous-incarnation close never closes its later call-in", async () => {
 	const link = await fakeBridge(state.socketPath, "reopened", stand.pid, stand.startedAt);
 	const received: string[] = [];
 	link.socket.on(
@@ -137,7 +157,7 @@ test("a previous incarnation's pending close never closes a later reopening", as
 	}
 });
 
-test("a failed close outbox rolls back the handover, retirement, and team membership change", async () => {
+test("a failed close outbox rolls back permanent departure and team membership before any close is sent", async () => {
 	const link = await fakeBridge(state.socketPath, "rollback", stand.pid, stand.startedAt, {
 		facts: { reportsTo: "manager" },
 	});
@@ -156,6 +176,9 @@ test("a failed close outbox rolls back the handover, retirement, and team member
 		expect(query(state.dbPath, "select retired_at from sessions where id = 'rollback'")).toEqual([
 			{ retired_at: null },
 		]);
+		expect(
+			query(state.dbPath, "select 1 from events where type = 'person_departed' and session_id = 'rollback'"),
+		).toEqual([]);
 		expect(query(state.dbPath, "select 1 from thread_messages where sender = 'rollback'")).toEqual([]);
 		expect(
 			query(

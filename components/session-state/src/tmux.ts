@@ -172,9 +172,23 @@ export async function setServerOptions(
 }
 
 /** Remove an owned pane after its process stops, including a dead pane kept by remain-on-exit. */
-export async function killPane(socket: string, pane: string, signal: AbortSignal): Promise<void> {
+export async function killPane(socket: string, pane: string, pid: number, signal: AbortSignal): Promise<void> {
 	try {
-		await run("tmux", ["-S", socket, "kill-pane", "-t", pane], { encoding: "utf8", signal });
+		// -F evaluates and selects the command in the server, without a shell job or a client-side check/kill gap.
+		await run(
+			"tmux",
+			[
+				"-S",
+				socket,
+				"if-shell",
+				"-F",
+				"-t",
+				pane,
+				`#{&&:#{pane_dead},#{==:#{pane_pid},${pid}}}`,
+				`kill-pane -t ${JSON.stringify(pane)}`,
+			],
+			{ encoding: "utf8", signal },
+		);
 	} catch (error) {
 		const stderr = String((error as { stderr?: string }).stderr ?? "");
 		if (!noServer(stderr) && !/can't find pane/i.test(stderr)) throw error;

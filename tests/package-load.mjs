@@ -263,7 +263,7 @@ try {
 				extension.tools.has("directory") &&
 				extension.tools.has("hire") &&
 				extension.tools.has("call_in") &&
-				extension.tools.has("rehire") &&
+				!extension.tools.has("rehire") &&
 				extension.tools.has("send_home") &&
 				extension.tools.has("rename") &&
 				extension.tools.has("move") &&

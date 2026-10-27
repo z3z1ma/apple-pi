@@ -13,6 +13,13 @@ Why: a permission error or a missing `tmux` binary proves nothing about the serv
 The initial command is used to recover a program window when the daemon died before recording its pane id or receiving hello. A window name can already have changed; the initial command still carries the session id. This field stays transient rather than becoming a second process identity in the database.
 Coupled: components/session-state/src/runtime.ts
 
+## symbol:killPane
+
+The expected PID and dead state are checked together in a non-yielding tmux server command. A prior list result is only an observation; a live or respawned pane remains untouched even if it reuses the same pane id.
+Why: an awaited shell condition creates a check/kill gap in which respawn can replace the process. This guard removes an old pane, not a newly live process, and complements the runtime's separate writer/process proof.
+Coupled: components/session-state/src/runtime.ts
+Verify: components/session-state/tests/tmux.test.ts
+
 ## symbol:canonicalSocket
 
 Socket paths are resolved with `realpath` everywhere they become keys: discovery and the path a bridge reports from `TMUX`.

@@ -5,6 +5,7 @@ import { createConnection } from "node:net";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { ROLE_ENTRY } from "../../organization/src/session-role.js";
 import { createPeerCalls } from "../../pi-exec/src/peer-calls.js";
 import { sendCommand } from "../src/client.js";
 import { openPeerProgram, type PeerProgram } from "../src/program-client.js";
@@ -297,7 +298,13 @@ test("a caller can confirm cleanup after a runtime crash without losing the peer
 
 test("ten one-shot agent calls automatically leave one caller pane, no former people and no temporary task bundles", async () => {
 	const pane = await callerInTmux();
-	const peers = createPeerCalls({ cwd: state.agentDir, sessionManager: { getSessionId: () => "caller" } } as never);
+	const peers = createPeerCalls({
+		cwd: state.agentDir,
+		sessionManager: {
+			getSessionId: () => "caller",
+			getEntries: () => [{ type: "custom", customType: ROLE_ENTRY, data: { role: "coordinator" } }],
+		},
+	} as never);
 	try {
 		for (let i = 0; i < 10; i++) {
 			const args = { role: "implementation-engineer", task: `Verify iteration ${i}.` };

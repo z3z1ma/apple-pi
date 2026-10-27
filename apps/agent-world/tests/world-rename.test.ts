@@ -126,6 +126,12 @@ async function openWorld(theme: string, size: readonly [number, number] = [1280,
 				current = next;
 				for (const listener of listeners) listener(next);
 			};
+			w.completeDeparture = (id: string) =>
+				push({
+					...current,
+					characters: current.characters.filter((character: any) => character.id !== id),
+					dormant: current.dormant.filter((character: any) => character.id !== id),
+				});
 			w.agentWorld = {
 				snapshot: async () => current,
 				onUpdate(listener: (s: unknown) => void) {
@@ -152,31 +158,7 @@ async function openWorld(theme: string, size: readonly [number, number] = [1280,
 				async retire(characterId: string, reason: string) {
 					w.retirements.push({ characterId, reason });
 					await new Promise((resolve) => setTimeout(resolve, 200));
-					// The runtime applied it, and the session closed: the person sleeps at the inn as a former member.
-					const gone = current.characters.find((c: any) => c.id === characterId);
-					push({
-						...current,
-						characters: current.characters.filter((c: any) => c.id !== characterId),
-						dormant: [
-							...current.dormant,
-							{
-								id: gone.id,
-								name: gone.name,
-								role: gone.role,
-								title: gone.facts.title,
-								reportsTo: null,
-								repository: null,
-								cwd: gone.facts.cwd,
-								task: null,
-								stoppedAt: Date.now(),
-								stopReason: "retired",
-								retiredAt: Date.now(),
-								retiredReason: reason,
-								startedAt: gone.startedAt,
-							},
-						],
-					});
-					return { ok: true, stage: "applied" };
+					return { ok: true, stage: "accepted", note: "Handoff and cleanup are still pending." };
 				},
 				async rename(characterId: string, name: string) {
 					w.renames.push({ characterId, name });
@@ -315,7 +297,7 @@ describe.each(PACKS)("%s", (id) => {
 		}
 	});
 
-	test("a person with a role retires from its row, in the theme's words, with a reason; it then sleeps at the inn marked so", {
+	test("departure acceptance stays pending until the snapshot removes the person, without creating a former sleeper", {
 		timeout: 60_000,
 	}, async () => {
 		const { page, errors } = await openWorld(id);
@@ -330,18 +312,25 @@ describe.each(PACKS)("%s", (id) => {
 			await retire.click();
 			const form = page.getByRole("dialog", { name: say("retire-title", { name: "wanderer" }) });
 			await form.waitFor({ timeout: 5000 });
+			await form.getByText(/private resources are permanently removed/).waitFor();
 			expect(await form.getByLabel("Reason").getAttribute("placeholder")).toBe(say("retire-reason"));
 			const send = form.getByRole("button", { name: say("retire-send"), exact: true });
 			expect(await send.isDisabled()).toBe(true);
 			await form.getByLabel("Reason").fill("The survey is written.");
 			await shot(page, `aw-12-${id}-retire-form`);
 			await send.click();
-			await form.getByText(say("retire-done", { name: "wanderer" })).waitFor({ timeout: 5000 });
+			await form.getByText("Handoff and cleanup are still pending.").waitFor({ timeout: 5000 });
+			expect(await form.getByText(say("retire-done", { name: "wanderer" })).count()).toBe(0);
 			expect(await page.evaluate(() => (window as any).retirements)).toEqual([
 				{ characterId: "wanderer", reason: "The survey is written." },
 			]);
 			await form.getByRole("button", { name: "Close", exact: true }).last().click();
-			// Gone from the world; the inn's register marks it a former member.
+			await page
+				.getByRole("button", { name: /^wanderer/ })
+				.first()
+				.waitFor({ state: "visible" });
+			// Only a later authoritative snapshot removes it; permanent departure creates no dormant identity.
+			await page.evaluate(() => (window as any).completeDeparture("wanderer"));
 			await vi.waitFor(async () => expect(await page.getByRole("button", { name: /^wanderer/ }).count()).toBe(0));
 			await page.getByRole("tab", { name: "Places", exact: true }).click();
 			await page.getByTitle(`Travel to ${manifest(id).labels.inn}`, { exact: true }).click();
@@ -355,11 +344,8 @@ describe.each(PACKS)("%s", (id) => {
 			await clickable(page);
 			const register = page.getByRole("dialog", { name: say("register-title") });
 			await register.waitFor({ timeout: 15_000 });
-			const row = register.getByRole("listitem").first();
-			expect(await row.textContent()).toContain("wanderer");
-			expect(await row.textContent()).toContain("Technical Writer");
-			expect(await row.textContent()).toContain(`${say("retired")}: The survey is written.`);
-			await shot(page, `aw-12-${id}-former-member`);
+			expect(await register.getByRole("listitem").count()).toBe(0);
+			await shot(page, `aw-12-${id}-permanent-departure`);
 			expect(errors).toEqual([]);
 		} finally {
 			await page.close();

@@ -8,6 +8,7 @@ import { createConnection } from "node:net";
 import { execFile } from "node:child_process";
 import { DatabaseSync } from "node:sqlite";
 import { promisify } from "node:util";
+import "@earendil-works/pi-coding-agent";
 import { inflateSync } from "node:zlib";
 //#region components/session-state/src/paths.ts
 /** Pi's own rule for `PI_CODING_AGENT_DIR`: a leading `~` means the home directory. */
@@ -165,7 +166,7 @@ var OUTSIDE_KINDS = [
 	"library"
 ];
 /** The label mail from the operator carries as its sender (`from`), so agents can tell it from mail between them. */
-var OPERATOR = "operator";
+var OPERATOR$1 = "operator";
 var MAIL_BODY_MAX = 4e3;
 /** A place outside any headquarters: the square, or a place off it. */
 function isOutside(place) {
@@ -870,10 +871,32 @@ async function operatorPane(path) {
 		pane: latest.pane
 	} : void 0;
 }
+//#endregion
+//#region components/shared/src/ledger-files.ts
+var LIVE_STATUSES = [
+	"planning",
+	"ready",
+	"in-progress"
+];
+var CLOSED_STATUSES = ["done", "cancelled"];
+[...LIVE_STATUSES, ...CLOSED_STATUSES];
+//#endregion
+//#region components/session-state/src/departures.ts
+/** A permanent identity fact, not a claim that process and filesystem cleanup has finished. */
+function departureOf(db, person) {
+	const row = db.prepare("select data from events where session_id = ? and type = 'person_departed' order by seq desc limit 1").get(person);
+	return row ? JSON.parse(row.data) : void 0;
+}
+/** A participant's display name: its session name, else its id; the operator is "the operator". */
+function nameOf$1(db, id) {
+	if (id === "operator") return "the operator";
+	if (id === "harness") return "the harness";
+	return db.prepare("select name from sessions where id = ?").get(id)?.name || departureOf(db, id)?.name || id;
+}
 function openMailbox(path, commands) {
 	const send = async (command) => {
 		let note;
-		const result = await commands.send(OPERATOR, command, { onReceipt(stage, reason) {
+		const result = await commands.send(OPERATOR$1, command, { onReceipt(stage, reason) {
 			if (stage === "applied") note = reason;
 		} });
 		return result.ok ? {
@@ -948,7 +971,7 @@ left join sessions ts on ts.id = m.receiver
 where m.id in (select id from mail order by sent_at desc limit 120)
 	or m.stage in ('accepted', 'delivered')
 order by m.sent_at desc, m.id`;
-var nameOf = (id, name, cwd) => name || (cwd ? cwd.split("/").filter(Boolean).pop() : void 0) || id;
+var nameOf = (db, id, name, cwd) => name || (cwd ? cwd.split("/").filter(Boolean).pop() : void 0) || (id === "operator" ? id : nameOf$1(db, id));
 var hasThreads = (db) => db.prepare("select 1 from sqlite_master where type = 'table' and name = 'thread_messages'").get() !== void 0;
 /** The operator is not a session row: its needs-you state is its unread thread cursor. */
 function readOperatorMail(db) {
@@ -956,7 +979,7 @@ function readOperatorMail(db) {
 	return db.prepare(`select t.id, t.subject, max(m.at) as lastAt,
 		count(case when m.seq > p.read_up_to and m.sender != ? then 1 end) as unread
 		from threads t join thread_participants p on p.thread_id = t.id and p.participant = ?
-		join thread_messages m on m.thread_id = t.id group by t.id order by lastAt desc`).all(OPERATOR, OPERATOR);
+		join thread_messages m on m.thread_id = t.id group by t.id order by lastAt desc`).all(OPERATOR$1, OPERATOR$1);
 }
 /** Read a thread only if the operator participates. The caller marks the returned sequence read through the runtime. */
 function readOperatorThread(db, id) {
@@ -972,6 +995,8 @@ function readStoredThread(db, id) {
 		from thread_participants p left join sessions s on s.id = p.participant where p.thread_id = ? order by p.joined_at`).all(id);
 	const messages = db.prepare(`select m.seq, m.sender as "from", coalesce(s.name, m.sender) as name, m.body, m.at
 		from thread_messages m left join sessions s on s.id = m.sender where m.thread_id = ? order by m.seq`).all(id);
+	for (const participant of participants) if (participant.name === participant.id && participant.id !== "operator") participant.name = nameOf$1(db, participant.id);
+	for (const message of messages) if (message.name === message.from && message.from !== "operator") message.name = nameOf$1(db, message.from);
 	return {
 		id,
 		subject: row.subject,
@@ -988,9 +1013,9 @@ function readMail(db) {
 		return {
 			id: row.id,
 			from,
-			fromName: from === "operator" ? "You" : nameOf(from, row.fromName, row.fromCwd),
+			fromName: from === "operator" ? "You" : nameOf(db, from, row.fromName, row.fromCwd),
 			to: row.receiver,
-			toName: nameOf(row.receiver, row.toName, row.toCwd),
+			toName: nameOf(db, row.receiver, row.toName, row.toCwd),
 			body: body.length > 4e3 ? `${body.slice(0, MAIL_BODY_MAX - 1)}\u2026` : body,
 			sentAt: row.sentAt,
 			deliveredAt: row.deliveredAt,
@@ -1102,6 +1127,10 @@ function openLifecycle(paths, commands, snapshot) {
 					reason: awake ? `${awake.name} is already awake.` : "No stopped session has that id."
 				};
 			}
+			if (sleeper.retiredAt != null) return {
+				ok: false,
+				reason: "Former members cannot be reopened."
+			};
 			const pane = await operatorPane(paths.db);
 			if (!pane) return {
 				ok: false,
@@ -1226,14 +1255,15 @@ function openLifecycle(paths, commands, snapshot) {
 				ok: false,
 				reason: "No session has that id."
 			};
-			const result = await commands.send(characterId, {
+			const receipt = await follow(commands, characterId, {
 				kind: "retire",
-				reason
-			});
-			return result.ok ? {
-				ok: true,
-				stage: "applied"
-			} : result;
+				reason,
+				by: "operator"
+			}, CLOSE_MS, (stage) => stage === "accepted", () => "The departure request is accepted; handoff and cleanup continue in the runtime.");
+			return receipt.ok ? {
+				...receipt,
+				note: "Departure accepted; the runtime will report handoff and cleanup progress."
+			} : receipt;
 		},
 		...openMailbox(paths.db, commands)
 	};
@@ -3180,7 +3210,7 @@ function readEscalations(db, roots) {
 	return db.prepare(`select distinct t.id, t.created_by from threads t
 		join thread_participants p on p.thread_id = t.id and p.participant = ?
 		join thread_messages m on m.thread_id = t.id and m.seq > p.read_up_to and m.sender != ?
-		where t.kind = 'escalation' and t.closed_at is null`).all(OPERATOR, OPERATOR).map((row) => ({
+		where t.kind = 'escalation' and t.closed_at is null`).all(OPERATOR$1, OPERATOR$1).map((row) => ({
 		thread: row.id,
 		person: row.created_by,
 		headquarters: roots.get(row.created_by) ?? row.created_by
@@ -3300,7 +3330,7 @@ function openWorkplace(path, commands, snapshot) {
 				reason: "That task is no longer on the board."
 			};
 			const tmux = await operatorPane(path);
-			const result = await commands.send(OPERATOR, {
+			const result = await commands.send(OPERATOR$1, {
 				kind: "work",
 				...tmux ? { tmux } : {},
 				action: "assign",

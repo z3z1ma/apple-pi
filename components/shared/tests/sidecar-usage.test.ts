@@ -11,9 +11,8 @@ vi.mock("@earendil-works/pi-coding-agent", () => ({
 
 import {
 	recordSidecarUsage,
+	SIDECAR_USAGE_MAX_BYTES,
 	SIDECAR_USAGE_RECORD_KEYS,
-	safeSidecarUsageSessionId,
-	sidecarUsageRelativePath,
 	startSidecarUsageTracker,
 	usageFieldsFromUnknown,
 	withSidecarUsageContext,
@@ -80,7 +79,7 @@ describe("sidecar usage records", () => {
 			});
 		});
 
-		const path = join(agentDir, sidecarUsageRelativePath("session-123"));
+		const path = join(agentDir, "sidecar-usage", "session-123.ndjson");
 		const [row] = readJsonLines(path);
 		expect(Object.keys(row).sort()).toEqual([...SIDECAR_USAGE_RECORD_KEYS].sort());
 		expect(row).toMatchObject({
@@ -112,7 +111,7 @@ describe("sidecar usage records", () => {
 		withSidecarUsageContext({}, () => {
 			recordSidecarUsage({ agent: "pair", trigger: "notebook_maintenance", status: "ok" });
 		});
-		expect(existsSync(join(agentDir, sidecarUsageRelativePath(undefined)))).toBe(true);
+		expect(existsSync(join(agentDir, "sidecar-usage", "unscoped.ndjson"))).toBe(true);
 	});
 
 	it("swallows write failures", () => {
@@ -135,7 +134,7 @@ describe("sidecar usage records", () => {
 			});
 			tracker.finish("aborted");
 		});
-		const [row] = readJsonLines(join(agentDir, sidecarUsageRelativePath("session-empty")));
+		const [row] = readJsonLines(join(agentDir, "sidecar-usage", "session-empty.ndjson"));
 		expect(row).toMatchObject({
 			agent: "pair",
 			trigger: "notebook_maintenance",
@@ -180,15 +179,41 @@ describe("sidecar usage records", () => {
 			});
 			tracker.finish("ok");
 		});
-		const rows = readJsonLines(join(agentDir, sidecarUsageRelativePath("session-calls")));
+		const rows = readJsonLines(join(agentDir, "sidecar-usage", "session-calls.ndjson"));
 		expect(rows).toHaveLength(2);
 		expect(rows.map((row) => row.status)).toEqual(["stop", "error"]);
 		expect(rows[0]).toMatchObject({ input: 3, cacheRead: 8, output: 1, cost: 0.1 });
 	});
 
-	it("sanitizes session ids and extracts usage.cost.total", () => {
-		expect(safeSidecarUsageSessionId(" session/../id:value ")).toBe("session_.._id_value");
-		expect(sidecarUsageRelativePath("---")).toBe(join("sidecar-usage", "unscoped.ndjson"));
+	it("writes unusual IDs to safe filenames and unusable IDs to the shared unscoped file", () => {
+		for (const [sessionId, filename] of [
+			[" session/../id:value ", "session_.._id_value.ndjson"],
+			["---", "unscoped.ndjson"],
+		] as const) {
+			withSidecarUsageContext({ sessionId }, () => {
+				recordSidecarUsage({ agent: "pair", trigger: "turn_end", status: "stop" });
+			});
+			expect(readJsonLines(join(agentDir, "sidecar-usage", filename))).toEqual([
+				expect.objectContaining({ sessionId, agent: "pair", status: "stop" }),
+			]);
+		}
+	});
+
+	it("keeps the previous session usage bytes in the owned rotation file when starting a fresh log", () => {
+		const file = join(agentDir, "sidecar-usage", "session-rotation.ndjson");
+		mkdirSync(join(agentDir, "sidecar-usage"));
+		const previous = Buffer.alloc(SIDECAR_USAGE_MAX_BYTES, "x");
+		writeFileSync(file, previous);
+		withSidecarUsageContext({ sessionId: "session-rotation" }, () => {
+			recordSidecarUsage({ agent: "pair", trigger: "turn_end", status: "stop" });
+		});
+		expect(readFileSync(`${file}.1`).equals(previous)).toBe(true);
+		expect(readJsonLines(file)).toEqual([
+			expect.objectContaining({ sessionId: "session-rotation", agent: "pair", status: "stop" }),
+		]);
+	});
+
+	it("extracts numeric counters and usage.cost.total", () => {
 		expect(usageFieldsFromUnknown({ input: "3", cacheRead: 1, output: 2, cost: { total: 0.4 } })).toEqual({
 			input: 3,
 			cacheRead: 1,

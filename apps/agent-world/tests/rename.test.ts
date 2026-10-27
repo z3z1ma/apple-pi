@@ -66,7 +66,7 @@ test("Rename on an awake agent sends rename with the new name, resolves with its
 	await soon(() => expect(lines.map((line) => line.text)).toContain("Rename for Ada the builder: Ada the builder"));
 }, 40000);
 
-test("retirement waits for its handover rather than returning accepted when the ordinary close wait expires", async () => {
+test("departure returns accepted while the runtime's handoff and cleanup are still pending", async () => {
 	const { id } = await awake();
 	let release = (_value: CommandResult) => {};
 	const handover = new Promise<CommandResult>((resolve) => {
@@ -80,25 +80,41 @@ test("retirement waits for its handover rather than returning accepted when the 
 		}),
 	};
 	const people = openLifecycle({ db: state.dbPath, agentDir: state.agentDir }, controlled, () => world.snapshot());
-	vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
 	try {
-		let settled = false;
-		const pending = people.retire(id, "The work ended.").then((receipt) => {
-			settled = true;
-			return receipt;
-		});
-		await vi.advanceTimersByTimeAsync(10_001);
-		expect(settled).toBe(false);
+		const receipt = await people.retire(id, "The work ended.");
+		expect(receipt).toMatchObject({ ok: true, stage: "accepted" });
+		expect(receipt.ok && receipt.note).toContain("handoff and cleanup progress");
 		expect(vi.mocked(controlled.send).mock.calls[0]?.slice(0, 2)).toEqual([
 			id,
-			{ kind: "retire", reason: "The work ended." },
+			{ kind: "retire", reason: "The work ended.", by: "operator" },
 		]);
-		release({ ok: true });
-		expect(await pending).toEqual({ ok: true, stage: "applied" });
 	} finally {
 		release({ ok: false, reason: "Test finished" });
-		vi.useRealTimers();
 	}
+});
+
+test("legacy former records are not wake targets", async () => {
+	const send = vi.fn<Commands["send"]>();
+	const people = openLifecycle({ db: state.dbPath, agentDir: state.agentDir }, { ...commands, send }, () => ({
+		...world.snapshot(),
+		dormant: [
+			{
+				id: "legacy-former",
+				name: "Former Worker",
+				role: "worker",
+				reportsTo: null,
+				retiredAt: 1,
+				repository: null,
+				cwd: "/not-read",
+				task: null,
+				stoppedAt: 1,
+				stopReason: "retired",
+				startedAt: 0,
+			},
+		],
+	}));
+	expect(await people.wake("legacy-former")).toEqual({ ok: false, reason: "Former members cannot be reopened." });
+	expect(send).not.toHaveBeenCalled();
 });
 
 test("Renaming to a blank name, or a character that is not awake, is refused and sends nothing", async () => {
