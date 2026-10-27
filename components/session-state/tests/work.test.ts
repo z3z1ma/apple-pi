@@ -115,12 +115,15 @@ test("ledger creation and status callers remain task participants without assign
 			const read = await who.invoke<{ thread: { id: string; subject: string } }>("read_thread", { thread: thread.id });
 			expect(read.thread).toMatchObject({ id: thread.id, subject: "Preserve task context" });
 		}
-		const directory = await creator.invoke<{ members: { id: string; tasks: unknown[]; focus: unknown }[] }>(
-			"directory",
-			{},
-		);
+		const directory = await creator.invoke<{
+			members: { id: string; held: number; finished: number; focus: unknown }[];
+		}>("directory", { subtree: creator.id });
 		for (const who of [creator, editor, closer])
-			expect(directory.members.find((member) => member.id === who.id)).toMatchObject({ tasks: [], focus: null });
+			expect(directory.members.find((member) => member.id === who.id)).toMatchObject({
+				held: 0,
+				finished: 0,
+				focus: null,
+			});
 	} finally {
 		for (const who of [closer, editor, creator]) await close(who.run);
 	}
@@ -1063,62 +1066,57 @@ test("a database before lifecycle tracking gains task lifecycle columns and keep
 	}
 });
 
-test("the directory shows availability, assigned work, focus, ended outcomes, and the unassigned ledger backlog", async () => {
+test("directory profiles keep current responsibility concise and retrieve only requested finished-assignment history", async () => {
 	const who = await person(undefined, "coordinator");
-	type Directory = {
-		members: {
-			id: string;
-			availability: string;
-			focus: { id: string; title: string } | null;
-			tasks: { id: string }[];
-			record: { outcome: string; endReason: string }[];
-		}[];
-		backlog: { id: string; bundle: string; title: string }[];
+	type Profile = {
+		id: string;
+		availability: string;
+		focus: { id: string; title: string } | null;
+		tasks: { id: string }[];
+		finished: number;
 	};
+	type History = { total: number; nextOffset: number | null; record: { outcome: string; endReason: string }[] };
 	try {
 		const ledger = await addLedgerTask(who.run.cwd, "Review release readiness", "Check the release evidence");
-		let directory = await who.invoke<Directory>("directory", {});
-		expect(directory.members.find((m) => m.id === who.id)).toMatchObject({
-			availability: "available",
-			focus: null,
-			tasks: [],
-			record: [],
-		});
-		expect(directory.backlog).toContainEqual(expect.objectContaining({ title: "Review release readiness" }));
-		const task = await who.invoke("take_task", {
-			task: directory.backlog.find((entry) => entry.bundle.endsWith(ledger.taskId))!.id,
-		});
+		const overview = await who.invoke("directory", {});
+		expect(overview).not.toHaveProperty("members");
+		expect(overview).not.toHaveProperty("backlog");
+		let profile = await who.invoke<Profile>("directory", { person: who.id });
+		expect(profile).toMatchObject({ availability: "available", focus: null, tasks: [], finished: 0 });
+		const task = await who.invoke("take_task", { task: join(who.run.cwd, ".ledger", ledger.taskId) });
 		await packets(who.run, 1);
-		directory = await who.invoke<Directory>("directory", {});
-		expect(directory.backlog).toEqual([]);
-		expect(directory.members.find((m) => m.id === who.id)).toMatchObject({
+		profile = await who.invoke<Profile>("directory", { person: who.id });
+		expect(profile).toMatchObject({
 			availability: "assigned",
 			focus: { id: task.id, title: "Review release readiness" },
 			tasks: [expect.objectContaining({ id: task.id })],
+			finished: 0,
 		});
 		await who.invoke("unassign", { person: who.id, task: task.id });
-		directory = await who.invoke<Directory>("directory", {});
-		expect(directory.members.find((m) => m.id === who.id)).toMatchObject({
-			availability: "available",
-			focus: null,
-			tasks: [],
+		profile = await who.invoke<Profile>("directory", { person: who.id });
+		expect(profile).toMatchObject({ availability: "available", focus: null, tasks: [], finished: 0 });
+		expect(await who.invoke<History>("directory", { person: who.id, history: { limit: 1 } })).toMatchObject({
+			total: 0,
 			record: [],
+			nextOffset: null,
 		});
-		expect(directory.backlog).toContainEqual(expect.objectContaining({ id: task.id }));
 		await who.invoke("take_task", { task: task.id });
 		await packets(who.run, 2);
-		await who.invoke("finish_task", { outcome: "Release checks passed; load behavior remains unverified." });
-		directory = await who.invoke<Directory>("directory", {});
-		expect(directory.members.find((m) => m.id === who.id)).toMatchObject({
-			availability: "available",
-			focus: null,
-			tasks: [],
-			record: [
-				expect.objectContaining({
-					endReason: "finished",
-					outcome: "Release checks passed; load behavior remains unverified.",
-				}),
-			],
+		const outcome = "Release checks passed; load behavior remains unverified.";
+		await who.invoke("finish_task", { outcome });
+		profile = await who.invoke<Profile>("directory", { person: who.id });
+		expect(profile).toMatchObject({ availability: "available", focus: null, tasks: [], finished: 1 });
+		expect(JSON.stringify(profile)).not.toContain(outcome);
+		expect(profile).not.toHaveProperty("record");
+		expect(await who.invoke<History>("directory", { person: who.id, history: { limit: 1 } })).toMatchObject({
+			total: 1,
+			nextOffset: null,
+			record: [{ endReason: "finished", outcome }],
+		});
+		expect(await who.invoke<History>("directory", { person: who.id, history: { limit: 1, offset: 1 } })).toMatchObject({
+			total: 1,
+			nextOffset: null,
+			record: [],
 		});
 	} finally {
 		await close(who.run);

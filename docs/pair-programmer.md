@@ -59,7 +59,7 @@ The partner has a deliberately narrow typed toolset:
 
 - `share_note` stages one useful intervention for frontier confirmation: either a current, actionable `nit`, `concern`, or `blocker`, or a precise `question` that asks the driver to explain something or expose specific missing evidence;
 - `ask_for_second_opinion(question, to?)` asks a colleague for an independent opinion;
-- `directory` reads the main session's organization, including roles, managers, tasks, and track records;
+- `directory` uses the native compact discovery contract for the main session's organization: counts by default, filtered/paged people, concise current profiles and explicitly requested finished-assignment history pages (see [Record](organization.md#the-person));
 - `update_notebook` records learnings the driver missed and merges duplicates; full reviews list every open learning to retain;
 - `expand_receipt` opens one historical payload folded behind a receipt already shown on the shared trajectory;
 - `revisit_note` follows a known notebook ID to its primary-session source evidence;

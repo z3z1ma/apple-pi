@@ -7,9 +7,11 @@ import { afterAll, afterEach, expect, test, vi } from "vitest";
 import { fauxSession } from "../../../tests/helpers/faux-session.js";
 import bridge from "../../session-state/src/index.js";
 import { MAIL_CUSTOM_TYPE } from "../../session-state/src/mail.js";
+import { type DirectoryOptions, directoryParameters } from "../../session-state/src/peers.js";
 import { close, query, sendCommand, stopRuntime, tempStateDir } from "../../session-state/tests/helpers.js";
 import pair, { livePairUserMessages } from "../src/extension.js";
 import { formatTurnDelta } from "../src/formatting.js";
+import { createSecondOpinionTools } from "../src/second-opinion.js";
 import { buildPairSeed } from "../src/seed.js";
 
 const state = tempStateDir();
@@ -170,6 +172,76 @@ test.each([undefined, " "])(
 	},
 	25000,
 );
+
+test("native and pair directory share compact schema and results for the main identity", async () => {
+	const requests: Parameters<typeof fauxToolCall>[1][] = [];
+	const pairedResults: unknown[] = [];
+	let currentParams: DirectoryOptions = {};
+	let pairTool: ReturnType<typeof createSecondOpinionTools>["directory"] | undefined;
+	const main = await fauxSession(
+		[person()],
+		async (context) => {
+			const last = context.messages.at(-1);
+			if (last?.role === "user" && requests.length)
+				return fauxAssistantMessage([fauxToolCall("directory", requests.shift()!)], { stopReason: "toolUse" });
+			if (last?.role === "toolResult" && last.toolName === "directory" && !last.isError && pairTool)
+				pairedResults.push(
+					await pairTool.execute("pair-directory", currentParams, new AbortController().signal, undefined, {} as never),
+				);
+			return fauxAssistantMessage("done");
+		},
+		[],
+	);
+	runs.push(main);
+	const self = main.session.sessionManager.getSessionId();
+	main.session.setSessionName("Directory owner");
+	await vi.waitFor(
+		() =>
+			expect(query(state.dbPath, "select name from sessions where id = ?", self)).toEqual([
+				{ name: "Directory owner" },
+			]),
+		{ timeout: 10000 },
+	);
+	await colleague("Directory specialist", self);
+	pairTool = createSecondOpinionTools(self, () => true).directory;
+	expect(pairTool.parameters).toEqual(directoryParameters);
+	expect(directoryParameters.properties).not.toHaveProperty("former");
+	const cases: (DirectoryOptions & Parameters<typeof fauxToolCall>[1])[] = [
+		{},
+		{ team: "Directory owner" },
+		{ subtree: self, limit: 1 },
+		{ name: "specialist" },
+		{ person: "Directory owner" },
+		{ person: self, history: { limit: 1 } },
+	];
+	for (const [index, params] of cases.entries()) {
+		currentParams = params;
+		requests.push(params);
+		await main.session.prompt("inspect directory");
+		const native = main.session.messages.filter((message) => message.role === "toolResult").at(-1)!;
+		expect(native.isError).toBe(false);
+		expect(pairedResults).toHaveLength(index + 1);
+		const paired = pairedResults.at(-1);
+		expect(paired).toEqual({ content: native.content, details: native.details });
+		expect(JSON.stringify(paired)).not.toContain('"soul":');
+		if (!("history" in params)) expect(JSON.stringify(paired)).not.toContain('"record":');
+	}
+	const invalid: Parameters<typeof fauxToolCall>[1][] = [{ former: true }, { limit: 0 }, { history: { limit: 1 } }];
+	for (const params of invalid) {
+		requests.push(params);
+		await main.session.prompt("invalid directory request");
+		expect(main.session.messages.filter((message) => message.role === "toolResult").at(-1)?.isError).toBe(true);
+	}
+	await expect(
+		pairTool.execute(
+			"invalid-pair-directory",
+			{ history: { limit: 1 } },
+			new AbortController().signal,
+			undefined,
+			{} as never,
+		),
+	).rejects.toThrow(/with one person/);
+}, 30000);
 
 test("the pair can deliberately name the operator", async () => {
 	const main = await paired(undefined, "operator");

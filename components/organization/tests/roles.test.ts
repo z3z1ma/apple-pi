@@ -270,6 +270,9 @@ test("everyone gets the org section; only a managing role gets the manager chart
 		let prompt = run.session.agent.state.systemPrompt;
 		expect(prompt).toContain(`<org>\nYou are a session with no role, a person in an organization`);
 		expect(prompt).toContain(`Your session id is \`${id}\``);
+		expect(prompt).toContain("`directory` starts with organization counts");
+		expect(prompt).toContain("`history: {limit, offset}`");
+		expect(prompt).not.toContain("former: true");
 		expect(prompt).toContain("You are the root of your organization");
 		expect(prompt).not.toContain("You hold the manager tools");
 		expect(prompt).toContain("`link`");

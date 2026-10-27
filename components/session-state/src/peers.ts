@@ -2,12 +2,14 @@ import { existsSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { type Member, organizationColumns, organizationOf } from "../../organization/src/directory.js";
-import { managesPeople } from "../../organization/src/install.js";
+import {
+	type Member,
+	type Organization,
+	organizationColumns,
+	organizationOf,
+} from "../../organization/src/directory.js";
 import { statePaths } from "./paths.js";
-import { OPERATOR } from "./threads.js";
-import { withWork } from "./work.js";
-import { backlogOf, hasWork } from "./work-read.js";
+import { hasWork } from "./work-read.js";
 
 export interface Peer {
 	id: string;
@@ -57,146 +59,231 @@ export function livePeers(self: string | null): Peer[] {
 	}
 }
 
-/** The tools every person has, restored after a resume replaces the tool loadout with the transcript's older one. */
+/** Restore newly registered person tools when resume loads an older transcript's tool set. */
 const PERSON_TOOLS = ["directory", "send_mail", "reply", "inbox", "read_thread", "post", "escalate"];
+const statuses = ["working", "idle", "asking the operator", "at home"] as const;
+export interface DirectoryOptions {
+	person?: string;
+	team?: string;
+	subtree?: string;
+	role?: string | null;
+	status?: (typeof statuses)[number];
+	name?: string;
+	limit?: number;
+	offset?: number;
+	history?: { limit: number; offset?: number };
+}
+const pageFields = {
+	limit: Type.Integer({
+		minimum: 1,
+		maximum: Number.MAX_SAFE_INTEGER,
+		description: "Number of rows requested; no implicit page size.",
+	}),
+	offset: Type.Optional(
+		Type.Integer({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER, description: "Row offset; defaults to zero." }),
+	),
+};
+export const directoryParameters = Type.Object(
+	{
+		person: Type.Optional(
+			Type.String({ minLength: 1, description: "Exact name or ID for a concise current profile." }),
+		),
+		team: Type.Optional(Type.String({ minLength: 1, description: "Direct reports of this manager (name or ID)." })),
+		subtree: Type.Optional(
+			Type.String({ minLength: 1, description: "This person and their descendants (name or ID)." }),
+		),
+		role: Type.Optional(
+			Type.Union([Type.String({ minLength: 1 }), Type.Null()], {
+				description: "Exact role catalog name, or null for unroled people.",
+			}),
+		),
+		status: Type.Optional(Type.Union(statuses.map((status) => Type.Literal(status)))),
+		name: Type.Optional(
+			Type.String({ minLength: 1, description: "Case-insensitive name substring for people discovery." }),
+		),
+		limit: Type.Optional(pageFields.limit),
+		offset: pageFields.offset,
+		history: Type.Optional(
+			Type.Object(pageFields, {
+				additionalProperties: false,
+				description:
+					"With person only: explicit page of finished assignments and outcomes, not participation or unassignments.",
+			}),
+		),
+	},
+	{ additionalProperties: false },
+);
+export const directoryDescription =
+	"Discover your organization's people through compact responses. With no arguments, shows counts by direct manager, role and status. Filter compact people by team (direct manager), subtree, role, status or name substring; IDs remain usable for mail and assignment. Give limit and optional offset to page people, with totals and nextOffset; a filter without limit returns its matching compact rows. Give person for a concise current profile and held task references. Add history:{limit,offset?} with person for an explicit page of finished assignments/outcomes. Names selecting one person must be unique; use IDs for duplicates. Souls and full histories are absent from default responses. This is responsibility from assignments, not broad participation. Write to people with send_mail.";
 
-/** A person as the directory shows it: who, what it does, and to whom it reports. */
 function entry(member: Member, names: Map<string, string>) {
 	return {
-		name: member.name ?? member.id,
 		id: member.id,
+		name: member.name ?? member.id,
 		title: member.title,
 		role: member.role,
-		manager: member.reportsTo ? (names.get(member.reportsTo) ?? member.reportsTo) : "Operator",
+		manager: member.reportsTo,
+		managerName: member.reportsTo ? (names.get(member.reportsTo) ?? member.reportsTo) : "Operator",
 		team: `team:${member.reportsTo ?? member.id}`,
 		status: member.status === "busy" ? "working" : member.status === "waiting" ? "asking the operator" : member.status,
 		availability: member.tasks.length ? "assigned" : "available",
-		focus: member.focus,
-		tasks: member.tasks,
-		directory: member.cwd,
-		soul: member.soul,
-		record: member.record,
-		since: member.since,
-		...(member.retired ? { left: member.retired } : {}),
+		focus: member.focus ? { id: member.focus.id, title: member.focus.title } : null,
+		held: member.tasks.length,
+		finished: member.record.length,
 	};
 }
 
-type Entry = ReturnType<typeof entry>;
-type Directory = ReturnType<typeof readDirectory>;
-
-/** One read-only directory projection, shared by the person and its pair. */
-export function readDirectory(self: string, includeFormer = false, includeBacklog = false) {
-	const organization = organizationOf(self, true);
-	const all = organization.members;
-	const backlog = includeBacklog
-		? (withWork((db) =>
-				backlogOf(
-					db,
-					organization.root,
-					all.filter((member) => !member.retired).map((member) => member.cwd),
-				),
-			) ?? [])
-		: undefined;
-	const names = new Map(all.map((member) => [member.id, member.name ?? member.id]));
-	const members = [
-		{
-			id: OPERATOR,
-			name: "Operator",
-			title: "Operator",
-			role: null,
-			manager: null,
-			team: null,
-			status: "human",
-			availability: null,
-			focus: null,
-			tasks: [],
-			directory: null,
-			soul: null,
-			record: [],
-			since: null,
-		},
-		...all.filter((member) => !member.retired).map((member) => entry(member, names)),
-	];
-	const former = includeFormer ? all.filter((member) => member.retired).map((member) => entry(member, names)) : [];
-	return { members, former, ...(backlog ? { backlog } : {}) };
+function compactDirectory(organization: Organization) {
+	const names = new Map(organization.members.map((member) => [member.id, member.name ?? member.id]));
+	const members = organization.members
+		.filter((member) => !member.retired)
+		.map((member) => entry(member, names))
+		.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+	return { root: organization.root, members };
 }
 
-/** The members who are people in the tree; the operator heads the roster as its own line. */
-const people = (members: Directory["members"]) => members.filter((member): member is Entry => member.id !== OPERATOR);
-
-const day = (ms: number | null) => (ms ? new Date(ms).toISOString().slice(0, 10) : "never");
-
-function rosterLine(person: Entry): string {
-	const who = `${person.name} (${person.id})${person.title ? `, ${person.title}` : ""}, reports to ${person.manager}`;
-	if (person.left) return `- ${who}: left ${day(person.left.at)}: ${person.left.reason}`;
-	const focus = person.focus ? `; focus: ${person.focus.title} [${person.focus.id}]` : "";
-	return `- ${who}: ${person.status}, ${person.availability}${focus}; ${person.tasks.length} held, ${person.record.length} finished`;
+/** Compact shared projection; the pair uses the main person's identity. */
+export function readDirectory(self: string) {
+	return compactDirectory(organizationOf(self, true));
 }
 
-/** The roster: one line per person, the backlog for a manager, and how to see one person in full. */
-function rosterText(directory: Directory): string {
-	const lines = [
-		"Operator (operator): the human at the top of the organization.",
-		...people(directory.members).map(rosterLine),
-	];
-	if (directory.former.length) lines.push("", "Former members:", ...directory.former.map(rosterLine));
-	if (directory.backlog)
-		lines.push(
-			"",
-			directory.backlog.length ? "Backlog (unassigned live ledger tasks):" : "Backlog: empty.",
-			...directory.backlog.map((task) => `- ${task.title} [${task.id}]${task.status ? ` (${task.status})` : ""}`),
-		);
-	lines.push(
-		"",
-		"directory with person: <name or id> shows one person's tasks, record with outcomes, directory, and soul.",
-	);
-	return lines.join("\n");
+function selectPerson<T extends { id: string; name: string }>(members: T[], address: string): T {
+	const text = address.trim();
+	const byId = members.find((member) => member.id === text);
+	if (byId) return byId;
+	const matches = members.filter((member) => member.name.toLowerCase() === text.toLowerCase());
+	if (matches.length > 1) throw new Error(`More than one person is named ${text}; use the session id.`);
+	if (!matches.length) throw new Error(`Nobody in your organization is called ${text}.`);
+	return matches[0];
 }
-
-function personText(person: Entry): string {
-	const task = (held: Entry["tasks"][number]) =>
-		`- ${held.title} [${held.id}]${person.focus?.id === held.id ? " (focus)" : ""}: ${held.bundle}/task.md, thread ${held.thread ?? "none"}`;
-	const finished = (done: Entry["record"][number]) =>
-		`- ${done.title} [${done.id}] (${day(done.endedAt)}, ${done.endReason ?? "ended"}): ${done.outcome ?? "no outcome"}`;
-	return [
-		`${person.name} (${person.id})${person.title ? `, ${person.title} (${person.role})` : ""}, reports to ${person.manager}; team channel ${person.team}`,
-		person.left
-			? `Left ${day(person.left.at)}: ${person.left.reason}`
-			: `Status: ${person.status}, ${person.availability}`,
-		`Directory: ${person.directory}`,
-		`Soul: ${person.soul ?? "none"}`,
-		`Since: ${day(person.since)}`,
-		"",
-		person.tasks.length ? "Held tasks:" : "Held tasks: none.",
-		...person.tasks.map(task),
-		"",
-		person.record.length ? "Record:" : "Record: nothing finished yet.",
-		...person.record.map(finished),
-	].join("\n");
+function page<T>(rows: T[], limit: number, offset = 0) {
+	if (!Number.isSafeInteger(limit) || limit < 1 || !Number.isSafeInteger(offset) || offset < 0)
+		throw new Error("Pages require a positive safe-integer limit and a nonnegative safe-integer offset.");
+	const items = rows.slice(offset, offset + limit);
+	return {
+		total: rows.length,
+		offset,
+		nextOffset: offset + items.length < rows.length ? offset + items.length : null,
+		items,
+	};
 }
+function tally(keys: (string | null)[]) {
+	const counts = new Map<string | null, number>();
+	for (const key of keys) counts.set(key, (counts.get(key) ?? 0) + 1);
+	return [...counts].map(([key, count]) => ({ key, count }));
+}
+function rosterLine(person: ReturnType<typeof entry>) {
+	return `- ${person.name} (${person.id})${person.title ? `, ${person.title}` : ""}: ${person.status}, ${person.availability}; manager ${person.manager ?? "operator"} (${person.managerName}); ${person.held} held, ${person.finished} finished${person.focus ? `; focus ${person.focus.title} [${person.focus.id}]` : ""}`;
+}
+const response = <T>(lines: string[], details: T) => ({
+	content: [{ type: "text" as const, text: lines.join("\n") }],
+	details,
+});
 
-/**
- * The directory as the model reads it: a roster of one line per person, or one person in full. `details` keeps the
- * structured projection for programs and views.
- */
+/** Native and pair tools share schema, selection, paging and compact result payloads. */
 export function directoryView(
 	self: string,
-	options: { former?: boolean; person?: string; backlog?: boolean },
+	options: DirectoryOptions = {},
 ): { content: { type: "text"; text: string }[]; details: unknown } {
-	if (options.person) {
-		const wanted = options.person.trim().toLowerCase();
-		const directory = readDirectory(self, true);
-		const person = [...people(directory.members), ...directory.former].find(
-			(member) => member.id.toLowerCase() === wanted || member.name.toLowerCase() === wanted,
-		);
-		if (!person) throw new Error(`Nobody in your organization is called ${options.person}.`);
-		return { content: [{ type: "text", text: personText(person) }], details: person };
+	for (const value of [options.person, options.team, options.subtree, options.role, options.name]) {
+		if (typeof value === "string" && !value.trim()) throw new Error("Directory selectors must contain text.");
 	}
-	const directory = readDirectory(self, options.former, options.backlog);
-	return { content: [{ type: "text", text: rosterText(directory) }], details: directory };
+	const organization = organizationOf(self, true);
+	const { root, members } = compactDirectory(organization);
+	const filters = [options.team, options.subtree, options.role, options.status, options.name];
+	if (options.history && !options.person) throw new Error("Request history with one person.");
+	if (options.offset !== undefined && options.limit === undefined) throw new Error("Give limit with offset.");
+	if (options.person) {
+		if (filters.some((filter) => filter !== undefined) || options.limit !== undefined || options.offset !== undefined)
+			throw new Error("Use person alone, optionally with a history page; people filters/pages are separate.");
+		const person = selectPerson(members, options.person);
+		const member = organization.members.find((candidate) => candidate.id === person.id)!;
+		if (options.history) {
+			const { items: record, ...paging } = page(member.record, options.history.limit, options.history.offset);
+			return response(
+				[
+					`Finished assignments for ${person.name} (${person.id}): ${record.length} of ${paging.total}, offset ${paging.offset}; nextOffset ${paging.nextOffset ?? "none"}.`,
+					...record.map(
+						(task) =>
+							`- ${task.title} [${task.id}], assignment ${task.assignment}, finished ${task.endedAt}: ${task.outcome ?? "no outcome"}`,
+					),
+				],
+				{ kind: "history" as const, person: { id: person.id, name: person.name }, ...paging, record },
+			);
+		}
+		const tasks = member.tasks.map(({ id, title, bundle, thread, assignedBy, assignedAt }) => ({
+			id,
+			title,
+			bundle,
+			thread,
+			assignedBy,
+			assignedAt,
+		}));
+		return response(
+			[
+				rosterLine(person),
+				`Directory: ${member.cwd}`,
+				...tasks.map((task) => `- ${task.title} [${task.id}]: ${task.bundle}/task.md, thread ${task.thread ?? "none"}`),
+				"Request history:{limit,offset?} with this person for finished assignment outcomes.",
+			],
+			{ kind: "person" as const, ...person, directory: member.cwd, since: member.since, tasks },
+		);
+	}
+	const filtered = filters.some((filter) => filter !== undefined) || options.limit !== undefined;
+	if (!filtered) {
+		const names = new Map(members.map((member) => [member.id, member.name]));
+		const teams = tally(members.map((member) => member.manager)).map(({ key: manager, count }) => ({
+			manager,
+			managerName: manager ? (names.get(manager) ?? manager) : "Operator",
+			count,
+		}));
+		const roles = tally(members.map((member) => member.role)).map(({ key: role, count }) => ({ role, count }));
+		const status = tally(members.map((member) => member.status)).map(({ key: status, count }) => ({ status, count }));
+		return response(
+			[
+				`Organization ${root}: ${members.length} people. Operator (operator) is the human.`,
+				...teams.map(
+					(team) => `- Manager ${team.managerName} (${team.manager ?? "operator"}): ${team.count} direct reports`,
+				),
+				`Roles: ${roles.map((row) => `${row.role ?? "unroled"} ${row.count}`).join(", ")}`,
+				`Status: ${status.map((row) => `${row.status} ${row.count}`).join(", ")}`,
+				"Filter by team/subtree (name or ID), role, status or name substring; or request limit/offset. Use person for a current profile and history:{limit,offset?} for finished assignments.",
+			],
+			{ kind: "overview" as const, root, total: members.length, teams, roles, status },
+		);
+	}
+	const team = options.team ? selectPerson(members, options.team).id : undefined;
+	const subtree = options.subtree ? selectPerson(members, options.subtree).id : undefined;
+	const parents = new Map(organization.members.map((member) => [member.id, member.reportsTo]));
+	const inside = (id: string) => {
+		const seen = new Set<string>();
+		for (let at: string | null = id; at && !seen.has(at); at = parents.get(at) ?? null) {
+			if (at === subtree) return true;
+			seen.add(at);
+		}
+		return false;
+	};
+	const matches = members.filter(
+		(member) =>
+			(!team || member.manager === team) &&
+			(!subtree || inside(member.id)) &&
+			(options.role === undefined || member.role === options.role) &&
+			(options.status === undefined || member.status === options.status) &&
+			(options.name === undefined || member.name.toLowerCase().includes(options.name.trim().toLowerCase())),
+	);
+	const { items, ...paging } =
+		options.limit === undefined
+			? { items: matches, total: matches.length, offset: 0, nextOffset: null }
+			: page(matches, options.limit, options.offset);
+	return response(
+		[
+			`People: ${items.length} of ${paging.total}, offset ${paging.offset}; nextOffset ${paging.nextOffset ?? "none"}.`,
+			...items.map(rosterLine),
+		],
+		{ kind: "people" as const, root, ...paging, members: items },
+	);
 }
 
-/** `directory` (your organization) for the model and `/pi-sessions` (every live session on the machine) for the operator, in root sessions. */
 export function installPeers(pi: ExtensionAPI): void {
 	const activate = () => {
 		const active = pi.getActiveTools();
@@ -219,21 +306,12 @@ export function installPeers(pi: ExtensionAPI): void {
 		defineTool({
 			name: "directory",
 			label: "directory",
-			description:
-				"Your organization's directory: one line per person, with the operator at the top: name, id, title, manager, whether they are working, idle, asking the operator, or at home, whether they are available, their focus, and how many tasks they hold and have finished. Managers also see unassigned live ledger tasks in the backlog. Give person for one person in full: held tasks, the record of finished assignments with outcomes, working directory, and soul. Former members, who left, are listed only with former: true. Write to anyone with send_mail by name.",
-			promptSnippet: "Your organization's directory: who is in it, what each does, and whom each reports to.",
-			parameters: Type.Object(
-				{
-					former: Type.Optional(Type.Boolean({ description: "Also list the people who left, with when and why." })),
-					person: Type.Optional(
-						Type.String({ minLength: 1, description: "A name or session id: show that one person in full." }),
-					),
-				},
-				{ additionalProperties: false },
-			),
-			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-				const self = ctx.sessionManager.getSessionId();
-				return directoryView(self, { ...params, backlog: managesPeople(ctx) });
+			description: directoryDescription,
+			promptSnippet:
+				"Discover your organization through compact counts, filtered people, current profiles and explicit history pages.",
+			parameters: directoryParameters,
+			async execute(_id, params, _signal, _update, ctx) {
+				return directoryView(ctx.sessionManager.getSessionId(), params);
 			},
 		}),
 	);
