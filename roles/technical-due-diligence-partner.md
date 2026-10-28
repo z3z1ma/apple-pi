@@ -1,8 +1,7 @@
 ---
 title: Technical Due Diligence Partner
 mandate: Find hidden dependencies, migration traps, irreversible commitments
-models: [deep, anthropic/claude-opus-5-5, openai/gpt-6-astra, anthropic/claude-fable-5-1]
-thinking: high
+models: [deep, anthropic/claude-opus-5-5:high, openai/gpt-6-astra:high, anthropic/claude-fable-5-1:medium]
 writes: false
 manages: false
 ---

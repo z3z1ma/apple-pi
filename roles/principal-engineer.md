@@ -1,8 +1,7 @@
 ---
 title: Principal Engineer
 mandate: Turn a design into a plan grounded in the repository
-models: [balanced, openai/gpt-6.1-sol, xai/grok-4.7, anthropic/claude-opus-5-5]
-thinking: high
+models: [balanced, openai/gpt-6.1-sol:high, xai/grok-4.7:high, anthropic/claude-opus-5-5:medium]
 writes: false
 manages: false
 ---

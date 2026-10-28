@@ -1,8 +1,7 @@
 ---
 title: Director of Engineering
 mandate: Route work, set decision gates, resolve conflicts, own delivery
-models: [coordination, openai/gpt-6.1-sol, xai/grok-4.7, anthropic/claude-opus-5-5]
-thinking: high
+models: [coordination, openai/gpt-6.1-sol:high, xai/grok-4.7:high, anthropic/claude-opus-5-5:medium]
 writes: true
 manages: true
 ---

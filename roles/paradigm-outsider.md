@@ -1,8 +1,7 @@
 ---
 title: Paradigm Outsider
 mandate: Solve it without the current stack or conventions
-models: [deep, anthropic/claude-fable-5-1, openai/gpt-6-astra, anthropic/claude-opus-5-5]
-thinking: high
+models: [deep, anthropic/claude-fable-5-1:medium, openai/gpt-6-astra:high, anthropic/claude-opus-5-5:high]
 writes: false
 manages: false
 ---

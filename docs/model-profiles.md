@@ -80,11 +80,10 @@ A profile is an operator's equivalence judgment, not a benchmark guarantee. Rais
 A role's `models` list can begin with a profile name, followed by ordered concrete recommendations:
 
 ```yaml
-models: [writing, openai/gpt-6.1-terra, anthropic/claude-sonnet-5-5]
-thinking: xhigh
+models: [writing, openai/gpt-6.1-terra:xhigh, anthropic/claude-sonnet-5-5:high]
 ```
 
-When `writing` is defined, its selected entry supplies both model and thinking. When the global file or that mapping is absent, the role uses its concrete recommendations and its frontmatter thinking level. A profile can appear only first, and a profile-first role keeps at least one concrete recommendation. Concrete-only custom roles also work.
+When `writing` is defined, its selected profile entry supplies both model and thinking. When the global file or that mapping is absent, the role tries its concrete recommendations in order, using each entry's effort. Every concrete entry requires `provider/model:effort`; the final colon separates effort, so a tagged identity can be written as `provider/model:v1:high`. A profile can appear only first and has no effort suffix, because its own policy supplies effort. A profile-first role keeps at least one concrete recommendation. Concrete-only custom roles also work. The role-wide `thinking` key is rejected; effort has one authority per selected entry. After editing a role file, reload the session to refresh its catalog. A person's saved mind stays unchanged; create a new person to use revised model recommendations.
 
 A malformed configured file or an unusable configured pool is an error, not permission to bypass the operator's policy. Roles block work when configured policy or a saved mind cannot be applied. Concrete recommendation lists retain their warning-and-default behavior if none can be selected. See [organization](organization.md#the-person) for identity and resume behavior.
 
@@ -103,7 +102,7 @@ The repository examples follow the operator's rough sizing guide, not measured b
 
 Thinking labels are model-relative: Luna/xhigh is economical support under this policy, not frontier judgment. A role's obligation and a model's writing or visual affinity still matter within a band. These bands guide the shipped policy; custom global pools remain the operator's judgment, without runtime intelligence scores or automatic tier enforcement.
 
-Concrete role recommendations share one frontmatter thinking level. They meet at least their profile's workload band; later defaults can be stronger or use more effort than the minimum. For example, a strong-engineering role at high effort can recommend Sol, Grok, then Opus; Opus/high is a stronger fallback than the profile's Opus/medium. Routine defaults use Luna/xhigh then Haiku/xhigh, while a configured pool uses the more efficient Haiku/high equivalent. Writing defaults prefer Terra/xhigh then Sonnet/xhigh; the Anthropic profile uses Sonnet/high. Profile entries are the way to express exact per-model equivalence without changing the concrete-list format.
+Concrete role defaults and configured pools use the same model-specific effort equivalents. Strong-engineering roles recommend Sol/high, Grok/high, then Opus/medium. Routine defaults use Luna/xhigh then Haiku/high. Writing defaults prefer Terra/xhigh then Sonnet/high. Each packaged fallback matches its workload band without relying on a role-wide effort value or a stronger-than-needed fallback.
 
 The repository root carries `model-profiles.openai.json` and `model-profiles.anthropic.json`, copied by [setup](setup.md#4-configure-model-profiles). Both cover all nine names. The OpenAI example uses ordered single-entry pools: Astra/high for deep judgment, Sol/high for engineering and coordination, Terra/xhigh for writing and visual work, and Luna/xhigh for support. The Anthropic example uses Opus/medium for engineering and coordination, Sonnet/high for writing and visual work, and Haiku/high for support. Its deep pool rotates Opus/high and Fable/medium, following the guide while retaining different model perspectives.
 

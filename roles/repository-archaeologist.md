@@ -1,8 +1,7 @@
 ---
 title: Repository Archaeologist
 mandate: Dig out hidden assumptions, prior art, conventions
-models: [routine, openai/gpt-6-luna, anthropic/claude-haiku-5-5]
-thinking: xhigh
+models: [routine, openai/gpt-6-luna:xhigh, anthropic/claude-haiku-5-5:high]
 writes: false
 manages: false
 ---

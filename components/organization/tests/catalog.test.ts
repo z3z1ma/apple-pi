@@ -1,6 +1,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { ModelThinkingLevel } from "@earendil-works/pi-ai";
 import { fauxAssistantMessage } from "@earendil-works/pi-ai/compat";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { afterEach, expect, test, vi } from "vitest";
@@ -41,18 +42,18 @@ test("every package role loads with a mandate, a profile, concrete defaults, and
 	}
 });
 
-test("concrete role recommendations meet their workload's sizing band at the role's shared effort", () => {
+test("concrete role recommendations match their workload's sizing band at each entry's effort", () => {
 	const { roles } = loadRoles(tempDir());
 	for (const role of roles.values()) {
 		const minimum = PROFILE_SIZING_BANDS[role.models[0]!]!;
 		expect(minimum, role.name).toBeGreaterThan(0);
-		for (const model of role.models.slice(1)) {
-			expect(modelSizingBand(model, role.thinking), `${role.name}: ${model}/${role.thinking}`).toBeGreaterThanOrEqual(
-				minimum,
-			);
+		for (const entry of role.models.slice(1)) {
+			const match = /^(.*):(off|minimal|low|medium|high|xhigh|max)$/.exec(entry);
+			expect(match, `${role.name}: ${entry}`).not.toBeNull();
+			expect(modelSizingBand(match![1]!, match![2]! as ModelThinkingLevel), `${role.name}: ${entry}`).toBe(minimum);
 		}
 	}
-	expect(roles.get("technical-writer")?.models[1]).toBe("openai/gpt-6.1-terra");
+	expect(roles.get("technical-writer")!.models[1]).toMatch(/^openai\/gpt-6\.1-terra:/);
 });
 
 test("a manager's prompt carries the catalog's titles and mandates; a hired non-manager's does not", async () => {

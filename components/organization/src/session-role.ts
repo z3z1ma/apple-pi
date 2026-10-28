@@ -18,7 +18,7 @@ import {
 	selectModelProfile,
 } from "../../shared/src/model-profiles.js";
 import { setSystemPromptSection } from "../../shared/src/system-prompt-section.js";
-import { loadRoles, type Role } from "./roles.js";
+import { loadRoles, parseRoleModel, type Role } from "./roles.js";
 import { drawSoul, isSoul, renderSoul, type Soul, soulLine } from "./soul.js";
 
 export const ROLE_ENTRY = "organization-role";
@@ -121,11 +121,12 @@ async function applyMind(
 			thinking: selected.thinking as ThinkingLevel,
 		});
 	}
-	for (const id of profileName ? role.models.slice(1) : role.models) {
-		const slash = id.indexOf("/");
-		const model = ctx.modelRegistry.find(id.slice(0, slash), id.slice(slash + 1));
+	for (const entry of profileName ? role.models.slice(1) : role.models) {
+		const candidate = parseRoleModel(entry)!;
+		const slash = candidate.model.indexOf("/");
+		const model = ctx.modelRegistry.find(candidate.model.slice(0, slash), candidate.model.slice(slash + 1));
 		if (!model || !(await pi.setModel(model))) continue;
-		pi.setThinkingLevel(role.thinking as ThinkingLevel);
+		pi.setThinkingLevel(candidate.thinking as ThinkingLevel);
 		return { model: `${model.provider}/${model.id}`, thinking: pi.getThinkingLevel() };
 	}
 	warn(

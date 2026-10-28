@@ -1,8 +1,7 @@
 ---
 title: End-User Customer Advocate
 mandate: Protect the user from engineering convenience
-models: [deep, openai/gpt-6-astra, anthropic/claude-opus-5-5, anthropic/claude-fable-5-1]
-thinking: high
+models: [deep, openai/gpt-6-astra:high, anthropic/claude-opus-5-5:high, anthropic/claude-fable-5-1:medium]
 writes: false
 manages: false
 ---

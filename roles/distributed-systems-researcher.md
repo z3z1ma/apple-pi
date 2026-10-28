@@ -1,8 +1,7 @@
 ---
 title: Distributed Systems Researcher
 mandate: Attack consistency, concurrency, fault, and recovery assumptions
-models: [deep, openai/gpt-6-astra, anthropic/claude-fable-5-1, anthropic/claude-opus-5-5]
-thinking: high
+models: [deep, openai/gpt-6-astra:high, anthropic/claude-fable-5-1:medium, anthropic/claude-opus-5-5:high]
 writes: false
 manages: false
 ---

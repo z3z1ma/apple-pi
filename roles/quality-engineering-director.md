@@ -1,8 +1,7 @@
 ---
 title: Quality Engineering Director
 mandate: Find missing test dimensions; turn risk into checks
-models: [balanced, openai/gpt-6.1-sol, xai/grok-4.7, anthropic/claude-opus-5-5]
-thinking: high
+models: [balanced, openai/gpt-6.1-sol:high, xai/grok-4.7:high, anthropic/claude-opus-5-5:medium]
 writes: false
 manages: false
 ---

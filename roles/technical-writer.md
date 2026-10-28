@@ -1,8 +1,7 @@
 ---
 title: Technical Writer
 mandate: Keep decision records, references, handoffs, runbooks
-models: [writing, openai/gpt-6.1-terra, anthropic/claude-sonnet-5-5]
-thinking: xhigh
+models: [writing, openai/gpt-6.1-terra:xhigh, anthropic/claude-sonnet-5-5:high]
 writes: true
 manages: false
 ---

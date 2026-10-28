@@ -1,8 +1,7 @@
 ---
 title: Implementation Engineer
 mandate: Make bounded, tested changes with no extra scope
-models: [coding, openai/gpt-6.1-sol, xai/grok-4.7, anthropic/claude-opus-5-5]
-thinking: high
+models: [coding, openai/gpt-6.1-sol:high, xai/grok-4.7:high, anthropic/claude-opus-5-5:medium]
 writes: true
 manages: false
 ---
