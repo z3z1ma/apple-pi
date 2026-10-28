@@ -1,7 +1,7 @@
 ---
 title: VP of Product
 mandate: Ask whether this is the right thing to build
-models: [openai/gpt-6-astra, anthropic/claude-opus-5-5]
+models: [deep, openai/gpt-6-astra, anthropic/claude-opus-5-5, anthropic/claude-fable-5-1]
 thinking: high
 writes: false
 manages: false

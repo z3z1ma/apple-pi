@@ -1,7 +1,7 @@
 ---
 title: Architecture Prosecutor
 mandate: Build the strongest evidence that the design is wrong
-models: [anthropic/claude-opus-5-5, openai/gpt-6-astra]
+models: [deep, anthropic/claude-opus-5-5, openai/gpt-6-astra, anthropic/claude-fable-5-1]
 thinking: high
 writes: false
 manages: false

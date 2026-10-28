@@ -1,5 +1,6 @@
-import { readFileSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import type { Model, ModelThinkingLevel, Usage } from "@earendil-works/pi-ai";
 import { type ExtensionContext, getAgentDir } from "@earendil-works/pi-coding-agent";
 
@@ -22,6 +23,9 @@ export const INFERENCE_PROFILE_NAMES = [
 	"coding",
 	"visual-engineering",
 	"background",
+	"coordination",
+	"routine",
+	"writing",
 ] as const;
 export type InferenceProfileName = (typeof INFERENCE_PROFILE_NAMES)[number];
 
@@ -31,29 +35,39 @@ export interface InferenceProfileCatalogEntry {
 }
 
 export const INFERENCE_PROFILE_CATALOG: readonly InferenceProfileCatalogEntry[] = [
-	{ profile: "quick", description: "Fast, economical model with light-to-moderate reasoning." },
+	{ profile: "quick", description: "Fast, economical model with workload-appropriate reasoning." },
 	{ profile: "balanced", description: "Broadly capable model with measured reasoning." },
 	{ profile: "pair", description: "Economical, attentive model that follows the work and notices concrete risk." },
 	{ profile: "deep", description: "Strongest available model with high reasoning effort." },
-	{ profile: "coding", description: "Code-strong model with high reasoning effort." },
+	{ profile: "coding", description: "Code-strong model for implementation and tool use." },
 	{
 		profile: "visual-engineering",
-		description: "Model strong in UI, spatial, and multimodal reasoning, with moderate-to-high effort.",
+		description: "Model strong in UI, spatial, and multimodal reasoning, with model-specific effort.",
 	},
-	{ profile: "background", description: "Low-cost model with low reasoning effort for asynchronous work." },
+	{ profile: "background", description: "Economical model for asynchronous work, with model-specific effort." },
+	{ profile: "coordination", description: "Model suited to planning, delegation, and coordinating work." },
+	{ profile: "routine", description: "Economical model for routine, well-defined work." },
+	{ profile: "writing", description: "Model suited to clear technical writing with measured reasoning." },
 ];
 
 const THINKING_LEVELS = new Set<string>(MODEL_PROFILE_THINKING_LEVELS);
 const PROFILE_NAMES = new Set<string>(INFERENCE_PROFILE_NAMES);
-const PROFILE_FIELDS = new Set(["model", "thinking"]);
+const CANDIDATE_FIELDS = new Set(["model", "thinking"]);
+const POOL_FIELDS = new Set(["selection", "models"]);
+const SELECTIONS = new Set(["ordered", "random", "round-robin"]);
 
 export function isInferenceProfileName(value: string): value is InferenceProfileName {
 	return PROFILE_NAMES.has(value);
 }
 
-export interface ModelProfile {
+export interface ModelProfileCandidate {
 	model: string;
 	thinking: ModelThinkingLevel;
+}
+
+export interface ModelProfile {
+	selection: "ordered" | "random" | "round-robin";
+	models: ModelProfileCandidate[];
 }
 
 export interface ResolvedModelProfile {
@@ -81,13 +95,41 @@ function record(value: unknown): Record<string, unknown> | undefined {
 	return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
 }
 
+function validateFields(path: string, label: string, value: Record<string, unknown>, fields: Set<string>): void {
+	const unknown = Object.keys(value).filter((field) => !fields.has(field));
+	if (unknown.length > 0) {
+		fail(path, `${label} has unsupported field${unknown.length === 1 ? "" : "s"}: ${unknown.join(", ")}`);
+	}
+}
+
+function parseCandidate(path: string, label: string, raw: unknown): ModelProfileCandidate {
+	const candidate = record(raw);
+	if (!candidate) fail(path, `${label} must be an object`);
+	validateFields(path, label, candidate, CANDIDATE_FIELDS);
+	if (typeof candidate.model !== "string" || !candidate.model.trim()) {
+		fail(path, `${label} requires a non-empty "model"`);
+	}
+	if (candidate.model.trim() !== candidate.model) {
+		fail(path, `${label} model must not have surrounding whitespace`);
+	}
+	const slash = candidate.model.indexOf("/");
+	if (slash <= 0 || slash === candidate.model.length - 1) {
+		fail(path, `${label} model must be "provider/model"`);
+	}
+	if (typeof candidate.thinking !== "string" || !THINKING_LEVELS.has(candidate.thinking)) {
+		fail(path, `${label} thinking must be one of: ${MODEL_PROFILE_THINKING_LEVELS.join(", ")}`);
+	}
+	return { model: candidate.model, thinking: candidate.thinking as ModelThinkingLevel };
+}
+
 /** Read and validate the complete user-global model profile authority. */
-export function loadModelProfiles(): Record<string, ModelProfile> {
+export function loadModelProfiles(options: { optional?: boolean } = {}): Record<string, ModelProfile> {
 	const path = modelProfilesPath();
 	let source: string;
 	try {
 		source = readFileSync(path, "utf8");
 	} catch (error) {
+		if (options.optional && (error as NodeJS.ErrnoException).code === "ENOENT") return Object.create(null);
 		const reason = error instanceof Error ? error.message : String(error);
 		fail(path, `cannot read model profiles (${reason})`);
 	}
@@ -115,39 +157,94 @@ export function loadModelProfiles(): Record<string, ModelProfile> {
 		}
 		const profile = record(raw);
 		if (!profile) fail(path, `profile ${JSON.stringify(name)} must be an object`);
-		const unknown = Object.keys(profile).filter((field) => !PROFILE_FIELDS.has(field));
-		if (unknown.length > 0) {
-			fail(
-				path,
-				`profile ${JSON.stringify(name)} has unsupported field${unknown.length === 1 ? "" : "s"}: ${unknown.join(", ")}`,
-			);
+		const label = `profile ${JSON.stringify(name)}`;
+		if (!Object.hasOwn(profile, "selection") && !Object.hasOwn(profile, "models")) {
+			profiles[name] = { selection: "ordered", models: [parseCandidate(path, label, profile)] };
+			continue;
 		}
-		if (typeof profile.model !== "string" || !profile.model.trim()) {
-			fail(path, `profile ${JSON.stringify(name)} requires a non-empty "model"`);
+		validateFields(path, label, profile, POOL_FIELDS);
+		if (typeof profile.selection !== "string" || !SELECTIONS.has(profile.selection)) {
+			fail(path, `${label} selection must be one of: ${[...SELECTIONS].join(", ")}`);
 		}
-		if (profile.model.trim() !== profile.model) {
-			fail(path, `profile ${JSON.stringify(name)} model must not have surrounding whitespace`);
+		if (!Array.isArray(profile.models) || profile.models.length === 0) {
+			fail(path, `${label} requires a non-empty "models" array`);
 		}
-		const slash = profile.model.indexOf("/");
-		if (slash <= 0 || slash === profile.model.length - 1) {
-			fail(path, `profile ${JSON.stringify(name)} model must be "provider/model"`);
-		}
-		if (typeof profile.thinking !== "string" || !THINKING_LEVELS.has(profile.thinking)) {
-			fail(
-				path,
-				`profile ${JSON.stringify(name)} thinking must be one of: ${MODEL_PROFILE_THINKING_LEVELS.join(", ")}`,
-			);
-		}
-		profiles[name] = { model: profile.model, thinking: profile.thinking as ModelThinkingLevel };
+		profiles[name] = {
+			selection: profile.selection as ModelProfile["selection"],
+			models: profile.models.map((candidate, index) => parseCandidate(path, `${label} models[${index}]`, candidate)),
+		};
 	}
 	return profiles;
 }
 
-/** Resolve one exact profile bundle against Pi's model registry. */
-export function resolveModelProfile(
+export interface ModelProfileRegistry {
+	find(provider: string, modelId: string): Model<any> | undefined;
+	hasConfiguredAuth?(model: Model<any>): boolean;
+}
+
+/** Use registered candidates with configured authentication when the registry can check it. */
+export function resolveModelProfileCandidates(
 	name: string,
-	registry: { find(provider: string, modelId: string): Model<any> | undefined },
+	profile: ModelProfile,
+	registry: ModelProfileRegistry,
+): ResolvedModelProfile[] {
+	const candidates = profile.models.flatMap((candidate) => {
+		const slash = candidate.model.indexOf("/");
+		const model = registry.find(candidate.model.slice(0, slash), candidate.model.slice(slash + 1));
+		return model && (registry.hasConfiguredAuth?.(model) ?? true)
+			? [{ name, model, thinking: candidate.thinking }]
+			: [];
+	});
+	if (candidates.length === 0) unavailableProfile(name, profile);
+	return candidates;
+}
+
+function roundRobinIndex(name: string, count: number): number {
+	const stateDir = join(getAgentDir(), "state");
+	mkdirSync(stateDir, { recursive: true, mode: 0o700 });
+	const database = new DatabaseSync(join(stateDir, "model-profile-selection.sqlite"));
+	try {
+		database.exec(`
+			PRAGMA busy_timeout = 5000;
+			CREATE TABLE IF NOT EXISTS selections (name TEXT PRIMARY KEY, next INTEGER NOT NULL);
+			BEGIN IMMEDIATE;
+		`);
+		const row = database.prepare("SELECT next FROM selections WHERE name = ?").get(name);
+		const index = Number(row?.next ?? 0) % count;
+		database
+			.prepare("INSERT INTO selections (name, next) VALUES (?, ?) ON CONFLICT(name) DO UPDATE SET next = excluded.next")
+			.run(name, (index + 1) % count);
+		database.exec("COMMIT;");
+		return index;
+	} finally {
+		database.close();
+	}
+}
+
+function unavailableProfile(name: string, profile: ModelProfile): never {
+	throw new ModelProfileError(
+		`${modelProfilesPath()}: model profile ${JSON.stringify(name)} selects unavailable model ${profile.models.map((candidate) => JSON.stringify(candidate.model)).join(", ")}`,
+	);
+}
+
+/** Select only from the caller's eligible candidates, retaining each candidate's thinking level. */
+export function selectModelProfile(
+	name: string,
+	profile: ModelProfile,
+	candidates: ResolvedModelProfile[],
 ): ResolvedModelProfile {
+	if (candidates.length === 0) unavailableProfile(name, profile);
+	const index =
+		profile.selection === "random"
+			? Math.floor(Math.random() * candidates.length)
+			: profile.selection === "round-robin"
+				? roundRobinIndex(name, candidates.length)
+				: 0;
+	return candidates[index]!;
+}
+
+/** Resolve and select one profile bundle against Pi's model registry. */
+export function resolveModelProfile(name: string, registry: ModelProfileRegistry): ResolvedModelProfile {
 	const normalized = name.trim();
 	if (!normalized || normalized !== name) {
 		throw new ModelProfileError("model profile name must be a non-empty, unpadded string");
@@ -160,16 +257,7 @@ export function resolveModelProfile(
 	if (!profile) {
 		throw new ModelProfileError(`${modelProfilesPath()}: model profile ${JSON.stringify(name)} is not defined`);
 	}
-	const slash = profile.model.indexOf("/");
-	const provider = profile.model.slice(0, slash);
-	const modelId = profile.model.slice(slash + 1);
-	const model = registry.find(provider, modelId);
-	if (!model) {
-		throw new ModelProfileError(
-			`${modelProfilesPath()}: model profile ${JSON.stringify(name)} selects unavailable model ${JSON.stringify(profile.model)}`,
-		);
-	}
-	return { name, model, thinking: profile.thinking };
+	return selectModelProfile(name, profile, resolveModelProfileCandidates(name, profile, registry));
 }
 
 /** One request on a user-global model profile, without the conversation or tools. */

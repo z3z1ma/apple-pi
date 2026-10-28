@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { ModelThinkingLevel } from "@earendil-works/pi-ai";
 import { getAgentDir, parseFrontmatter } from "@earendil-works/pi-coding-agent";
-import { MODEL_PROFILE_THINKING_LEVELS } from "../../shared/src/model-profiles.js";
+import { isInferenceProfileName, MODEL_PROFILE_THINKING_LEVELS } from "../../shared/src/model-profiles.js";
 
 export interface Role {
 	/** The file name without `.md`; the name a hire or `--role` uses. */
@@ -17,7 +17,7 @@ export interface Role {
 	title: string;
 	/** One line a manager hires by: what the role is for. */
 	mandate: string;
-	/** `provider/id` in order of preference; the first the registry knows is used. */
+	/** Optional leading profile, then ordered `provider/id` recommendations. */
 	models: string[];
 	thinking: ModelThinkingLevel;
 	/** Whether the person keeps the built-in `edit` and `write` tools. */
@@ -75,8 +75,9 @@ export function readRole(path: string, name: string): Role | string {
 	const mandate = typeof fm.mandate === "string" ? fm.mandate.trim() : "";
 	if (!mandate || mandate.includes("\n")) return `${path}: mandate must be one non-empty line`;
 	const models = Array.isArray(fm.models) ? fm.models : [];
-	if (models.length === 0 || !models.every((m) => typeof m === "string" && MODEL_ID.test(m)))
-		return `${path}: models must be a non-empty list of provider/id`;
+	const recommendations = typeof models[0] === "string" && isInferenceProfileName(models[0]) ? models.slice(1) : models;
+	if (recommendations.length === 0 || !recommendations.every((m) => typeof m === "string" && MODEL_ID.test(m)))
+		return `${path}: models must be provider/id recommendations, optionally preceded by one known profile`;
 	if (!MODEL_PROFILE_THINKING_LEVELS.includes(fm.thinking as ModelThinkingLevel))
 		return `${path}: thinking must be one of ${MODEL_PROFILE_THINKING_LEVELS.join(", ")}`;
 	if (typeof fm.writes !== "boolean") return `${path}: writes must be true or false`;

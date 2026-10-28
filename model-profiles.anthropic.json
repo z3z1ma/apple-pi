@@ -1,32 +1,47 @@
 {
   "profiles": {
     "quick": {
-      "model": "anthropic/claude-sonnet-5-5",
-      "thinking": "low"
+      "selection": "ordered",
+      "models": [{ "model": "anthropic/claude-haiku-5-5", "thinking": "high" }]
     },
     "pair": {
-      "model": "anthropic/claude-sonnet-5-5",
-      "thinking": "medium"
+      "selection": "ordered",
+      "models": [{ "model": "anthropic/claude-haiku-5-5", "thinking": "high" }]
     },
     "balanced": {
-      "model": "anthropic/claude-sonnet-5-5",
-      "thinking": "medium"
+      "selection": "ordered",
+      "models": [{ "model": "anthropic/claude-opus-5-5", "thinking": "medium" }]
     },
     "deep": {
-      "model": "anthropic/claude-opus-5-5",
-      "thinking": "high"
+      "selection": "round-robin",
+      "models": [
+        { "model": "anthropic/claude-opus-5-5", "thinking": "high" },
+        { "model": "anthropic/claude-fable-5-1", "thinking": "medium" }
+      ]
     },
     "coding": {
-      "model": "anthropic/claude-opus-5-5",
-      "thinking": "medium"
+      "selection": "ordered",
+      "models": [{ "model": "anthropic/claude-opus-5-5", "thinking": "medium" }]
     },
     "visual-engineering": {
-      "model": "anthropic/claude-opus-5-5",
-      "thinking": "low"
+      "selection": "ordered",
+      "models": [{ "model": "anthropic/claude-sonnet-5-5", "thinking": "high" }]
     },
     "background": {
-      "model": "anthropic/claude-sonnet-5-5",
-      "thinking": "low"
+      "selection": "ordered",
+      "models": [{ "model": "anthropic/claude-haiku-5-5", "thinking": "high" }]
+    },
+    "coordination": {
+      "selection": "ordered",
+      "models": [{ "model": "anthropic/claude-opus-5-5", "thinking": "medium" }]
+    },
+    "routine": {
+      "selection": "ordered",
+      "models": [{ "model": "anthropic/claude-haiku-5-5", "thinking": "high" }]
+    },
+    "writing": {
+      "selection": "ordered",
+      "models": [{ "model": "anthropic/claude-sonnet-5-5", "thinking": "high" }]
     }
   }
 }

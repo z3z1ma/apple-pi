@@ -1,32 +1,44 @@
 {
   "profiles": {
     "quick": {
-      "model": "openai/gpt-6-luna",
-      "thinking": "high"
+      "selection": "ordered",
+      "models": [{ "model": "openai/gpt-6-luna", "thinking": "xhigh" }]
     },
     "pair": {
-      "model": "openai/gpt-6-luna",
-      "thinking": "xhigh"
+      "selection": "ordered",
+      "models": [{ "model": "openai/gpt-6-luna", "thinking": "xhigh" }]
     },
     "balanced": {
-      "model": "openai/gpt-6.1-sol",
-      "thinking": "low"
+      "selection": "ordered",
+      "models": [{ "model": "openai/gpt-6.1-sol", "thinking": "high" }]
     },
     "deep": {
-      "model": "openai/gpt-6-astra",
-      "thinking": "xhigh"
+      "selection": "ordered",
+      "models": [{ "model": "openai/gpt-6-astra", "thinking": "high" }]
     },
     "coding": {
-      "model": "openai/gpt-6.1-sol",
-      "thinking": "medium"
+      "selection": "ordered",
+      "models": [{ "model": "openai/gpt-6.1-sol", "thinking": "high" }]
     },
     "visual-engineering": {
-      "model": "openai/gpt-6-astra",
-      "thinking": "low"
+      "selection": "ordered",
+      "models": [{ "model": "openai/gpt-6.1-terra", "thinking": "xhigh" }]
     },
     "background": {
-      "model": "openai/gpt-6-luna",
-      "thinking": "low"
+      "selection": "ordered",
+      "models": [{ "model": "openai/gpt-6-luna", "thinking": "xhigh" }]
+    },
+    "coordination": {
+      "selection": "ordered",
+      "models": [{ "model": "openai/gpt-6.1-sol", "thinking": "high" }]
+    },
+    "routine": {
+      "selection": "ordered",
+      "models": [{ "model": "openai/gpt-6-luna", "thinking": "xhigh" }]
+    },
+    "writing": {
+      "selection": "ordered",
+      "models": [{ "model": "openai/gpt-6.1-terra", "thinking": "xhigh" }]
     }
   }
 }

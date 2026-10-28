@@ -1,8 +1,8 @@
 ---
 title: Developer Experience Lead
 mandate: Judge APIs, naming, errors, docs, integration friction
-models: [antigravity/gemini-3.8-flash, openai/gpt-6.1-sol]
-thinking: medium
+models: [balanced, openai/gpt-6.1-sol, xai/grok-4.7, anthropic/claude-opus-5-5]
+thinking: high
 writes: false
 manages: false
 ---

@@ -1,7 +1,7 @@
 ---
 title: Scientific Skeptic
 mandate: Separate fact from assumption; design the cheapest falsifying test
-models: [openai/gpt-6-astra, anthropic/claude-fable-5-1]
+models: [deep, openai/gpt-6-astra, anthropic/claude-fable-5-1, anthropic/claude-opus-5-5]
 thinking: high
 writes: false
 manages: false

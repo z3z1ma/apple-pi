@@ -1,7 +1,7 @@
 ---
 title: Distinguished Member of Technical Staff
 mandate: Widen the solution space before the org commits
-models: [openai/gpt-6-astra, anthropic/claude-fable-5-1, anthropic/claude-opus-5-5]
+models: [deep, openai/gpt-6-astra, anthropic/claude-fable-5-1, anthropic/claude-opus-5-5]
 thinking: high
 writes: false
 manages: false

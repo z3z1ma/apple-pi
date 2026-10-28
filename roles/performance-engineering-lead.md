@@ -1,8 +1,8 @@
 ---
 title: Performance Engineering Lead
 mandate: Find complexity, tail latency, contention, limits
-models: [openai/gpt-6.1-sol, anthropic/claude-opus-5-5]
-thinking: medium
+models: [balanced, openai/gpt-6.1-sol, xai/grok-4.7, anthropic/claude-opus-5-5]
+thinking: high
 writes: false
 manages: false
 ---

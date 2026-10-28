@@ -1,8 +1,8 @@
 ---
 title: Infrastructure CFO
 mandate: Price decisions in spend, hours, lock-in, maintenance
-models: [xai/grok-4.7, openai/gpt-6.1-sol]
-thinking: medium
+models: [balanced, xai/grok-4.7, openai/gpt-6.1-sol, anthropic/claude-opus-5-5]
+thinking: high
 writes: false
 manages: false
 ---

@@ -5,6 +5,8 @@ import { fauxAssistantMessage } from "@earendil-works/pi-ai/compat";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { afterEach, expect, test, vi } from "vitest";
 import { fauxSession } from "../../../tests/helpers/faux-session.js";
+import { modelSizingBand, PROFILE_SIZING_BANDS } from "../../../tests/helpers/model-sizing.js";
+import { isInferenceProfileName } from "../../shared/src/model-profiles.js";
 import { installOrganization, loadRoles } from "../src/index.js";
 
 /** The models Pi lists on this machine; every role's mind must be among them, or the role runs on the default. */
@@ -17,6 +19,7 @@ const KNOWN_MODELS = new Set([
 	"anthropic/claude-haiku-5-5",
 	"openai/gpt-6-astra",
 	"openai/gpt-6.1-sol",
+	"openai/gpt-6.1-terra",
 	"openai/gpt-6-luna",
 ]);
 
@@ -46,60 +49,38 @@ test("every package role loads with a mandate, known minds, a thinking level, an
 	expect(managers.sort()).toEqual(["coordinator", "director-of-engineering"]);
 	for (const role of catalog.roles.values()) {
 		expect(role.mandate, role.name).not.toBe("");
-		for (const model of role.models) expect(KNOWN_MODELS.has(model), `${role.name}: ${model}`).toBe(true);
+		expect(isInferenceProfileName(role.models[0]!), role.name).toBe(true);
+		expect(role.models.length, role.name).toBeGreaterThan(1);
+		for (const model of role.models.slice(1)) expect(KNOWN_MODELS.has(model), `${role.name}: ${model}`).toBe(true);
 		expect(role.body.split(/\s+/).length, role.name).toBeGreaterThan(150);
 		expect(role.body, role.name).toContain("Your obligation is");
 		expect(role.body, role.name).toContain("You are not responsible for");
 		if (!role.manages) expect(role.body, role.name).toContain("## What you deliver");
 	}
 	expect(catalog.roles.get("distinguished-member-of-technical-staff")).toMatchObject({
-		models: ["anthropic/claude-fable-5-1", "anthropic/claude-opus-5-5", "openai/gpt-6-astra"],
+		models: ["deep", "openai/gpt-6-astra", "anthropic/claude-fable-5-1", "anthropic/claude-opus-5-5"],
 		thinking: "high",
 		writes: false,
 	});
 	expect(catalog.roles.get("test-and-ci-operator")).toMatchObject({
-		models: ["anthropic/claude-haiku-5-5", "openai/gpt-6-luna"],
-		thinking: "low",
+		models: ["routine", "openai/gpt-6-luna", "anthropic/claude-haiku-5-5"],
+		thinking: "xhigh",
 	});
 });
 
-test("the package catalog balances advisory subscriptions while preferring Sol for engineering work", () => {
+test("concrete role recommendations meet their workload's sizing band at the role's shared effort", () => {
 	const { roles } = loadRoles(tempDir());
-	for (const name of [
-		"accessibility-specialist",
-		"chaos-engineering-specialist",
-		"code-review-specialist",
-		"maintainer-from-three-years-ahead",
-		"principal-engineer",
-		"quality-engineering-director",
-		"release-engineering-lead",
-	]) {
-		expect(roles.get(name)?.models, name).toEqual(["openai/gpt-6.1-sol", "anthropic/claude-sonnet-5-5"]);
+	for (const role of roles.values()) {
+		const minimum = PROFILE_SIZING_BANDS[role.models[0]!]!;
+		expect(minimum, role.name).toBeGreaterThan(0);
+		for (const model of role.models.slice(1)) {
+			expect(modelSizingBand(model, role.thinking), `${role.name}: ${model}/${role.thinking}`).toBeGreaterThanOrEqual(
+				minimum,
+			);
+		}
 	}
-	expect(roles.get("implementation-engineer")?.models).toEqual(["openai/gpt-6.1-sol", "openai/gpt-6-luna"]);
-	expect(roles.get("technical-writer")).toMatchObject({
-		models: ["antigravity/gemini-3.8-flash", "openai/gpt-6-luna"],
-		thinking: "low",
-		writes: true,
-		manages: false,
-	});
-	for (const name of ["new-team-member", "developer-experience-lead"]) {
-		expect(roles.get(name), name).toMatchObject({
-			models: ["antigravity/gemini-3.8-flash", "openai/gpt-6.1-sol"],
-			writes: false,
-			manages: false,
-		});
-	}
-	for (const [name, fallback] of [
-		["infrastructure-cfo", "openai/gpt-6.1-sol"],
-		["skeptical-first-time-user", "openai/gpt-6-luna"],
-	]) {
-		expect(roles.get(name), name).toMatchObject({
-			models: ["xai/grok-4.7", fallback],
-			writes: false,
-			manages: false,
-		});
-	}
+	expect(roles.get("technical-writer")?.models[1]).toBe("openai/gpt-6.1-terra");
+	expect(roles.get("infrastructure-cfo")?.models[1]).toBe("xai/grok-4.7");
 });
 
 test("a manager's prompt carries the catalog's titles and mandates; a hired non-manager's does not", async () => {

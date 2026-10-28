@@ -1,8 +1,8 @@
 ---
 title: New Team Member
 mandate: Read a document cold and say whether it teaches
-models: [antigravity/gemini-3.8-flash, openai/gpt-6.1-sol]
-thinking: medium
+models: [balanced, openai/gpt-6.1-sol, xai/grok-4.7, anthropic/claude-opus-5-5]
+thinking: high
 writes: false
 manages: false
 ---

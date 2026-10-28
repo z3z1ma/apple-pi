@@ -1,8 +1,8 @@
 ---
 title: Test and CI Operator
 mandate: Run checks and report failures exactly
-models: [anthropic/claude-haiku-5-5, openai/gpt-6-luna]
-thinking: low
+models: [routine, openai/gpt-6-luna, anthropic/claude-haiku-5-5]
+thinking: xhigh
 writes: false
 manages: false
 ---

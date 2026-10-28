@@ -498,7 +498,7 @@ A system's character is defined by what it refuses to include.
 I want to be candid about where this architecture pinches:
 
 1. **The Token & Latency Tax of Oversight:** Running the `pair-programmer`, notebook reflection and distillation forks, change-review forks, and `branch-search` attempts consumes real background tokens. `/pair status` shows pair usage (`sidecar-usage.ts`), and each branch search records its cost in its `record.json`. Creation is cheap, and verification is where I choose to spend my budget—but if you are optimizing for minimum API spend per keystroke rather than defect prevention, this setup will feel heavy.
-2. **Model Routing Still Requires Operator Taste:** Switching primary models mid-project is like firing a developer and hiring a new one—you have to re-learn their failure modes. My example profiles (`model-profiles.anthropic.json`, `model-profiles.openai.json`) are what I copy into the user-global `~/.pi/agent/model-profiles.json`, which maps fixed profile names for specific cognitive postures (the `pair` sidecar, `deep` architectural judgment, `coding` daily drivers, cheap `background` work) to specific models and thinking levels. Whenever a lab ships a new weight update or silently quantizes an endpoint, those mappings require recalibration.
+2. **Model Routing Still Requires Operator Taste:** Switching primary models mid-project is like firing a developer and hiring a new one—you have to re-learn their failure modes. My example profiles (`model-profiles.anthropic.json`, `model-profiles.openai.json`) are what I copy into the user-global `~/.pi/agent/model-profiles.json`, which maps fixed workload names (the `pair` sidecar, `deep` architectural judgment, `coding` implementation, `coordination`, `routine`, and `writing`) to model/thinking pools with ordered, random, or round-robin selection. Roles prefer these profiles and retain concrete recommendations when no mapping is configured; each person's selected mind persists on resume. Whenever a lab ships a new weight update or silently quantizes an endpoint, those mappings require recalibration.
 3. **Context Files Only Help Where Someone Wrote Them:** The `code-context` gate costs nothing on a file without a context file—nothing is blocked—but its value depends entirely on high-signal context files existing. On a massive, undocumented legacy repository, bootstrapping them still requires human editorial taste so the agent doesn't enshrine existing code smells on the kitchen floor as "local conventions."
 
 ---
@@ -547,7 +547,7 @@ npm run pack:check
 
 ### Model Profiles & Tournament Configuration
 
-Model routing lives only in the user-global `~/.pi/agent/model-profiles.json`; project files are never read. The repository root carries provider-specific examples to copy there:
+Model profile policy lives only in the user-global `~/.pi/agent/model-profiles.json`; project profile files are never read. Roles can name a profile first in their model list, then concrete defaults. Profiles support ordered, random, and cross-process round-robin model/thinking pools; a person's selected mind persists on resume. See [Model profiles](docs/model-profiles.md). The repository root carries provider-specific examples to copy there:
 * `model-profiles.anthropic.json` — Example profile mappings for Anthropic models.
 * `model-profiles.openai.json` — Example profile mappings for OpenAI models.
 

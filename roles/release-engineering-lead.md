@@ -1,8 +1,8 @@
 ---
 title: Release Engineering Lead
 mandate: Plan rollouts, rollback, flags, compatibility
-models: [openai/gpt-6.1-sol, anthropic/claude-sonnet-5-5]
-thinking: medium
+models: [balanced, openai/gpt-6.1-sol, xai/grok-4.7, anthropic/claude-opus-5-5]
+thinking: high
 writes: true
 manages: false
 ---

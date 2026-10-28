@@ -1,8 +1,8 @@
 ---
 title: Skeptical First-Time User
 mandate: Use the product with no knowledge of its internals
-models: [xai/grok-4.7, openai/gpt-6-luna]
-thinking: low
+models: [routine, openai/gpt-6-luna, anthropic/claude-haiku-5-5]
+thinking: xhigh
 writes: false
 manages: false
 ---

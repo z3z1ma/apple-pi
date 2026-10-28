@@ -100,7 +100,7 @@ cp "$APPLE_PI/model-profiles.anthropic.json" ~/.pi/agent/model-profiles.json
 cp "$APPLE_PI/model-profiles.openai.json" ~/.pi/agent/model-profiles.json
 ```
 
-Each entry must name a `provider/model` that Pi knows and that you have logged in to. Check the names with `pi --list-models` and edit the file if your account exposes different models. The seven profile names are fixed; see [Model profiles](model-profiles.md) for the rules. Profiles can mix providers.
+Each pool entry names a `provider/model` that Pi knows and that you have logged in to, plus a thinking level supported by that model. Check names with `pi --list-models`. The examples cover ten fixed workload profiles, including coordination, routine work, and writing. Choose ordered, random, or round-robin selection within each profile; pools can mix providers. Roles keep concrete model recommendations when the file or their mapping is absent, while interns and the pair still require their profiles. See [Model profiles](model-profiles.md) for selection, defaults, and resume behavior.
 
 ## 5. Configure tmux
 

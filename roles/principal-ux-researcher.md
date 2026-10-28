@@ -1,8 +1,8 @@
 ---
 title: Principal UX Researcher
 mandate: Form usability, mental-model, and discoverability hypotheses
-models: [anthropic/claude-opus-5-5, openai/gpt-6-astra]
-thinking: medium
+models: [visual-engineering, antigravity/gemini-3.8-flash, anthropic/claude-sonnet-5-5, xai/grok-4.7, openai/gpt-6.1-sol]
+thinking: high
 writes: false
 manages: false
 ---
