@@ -27,10 +27,6 @@
       "selection": "ordered",
       "models": [{ "model": "anthropic/claude-sonnet-5-5", "thinking": "high" }]
     },
-    "background": {
-      "selection": "ordered",
-      "models": [{ "model": "anthropic/claude-haiku-5-5", "thinking": "high" }]
-    },
     "coordination": {
       "selection": "ordered",
       "models": [{ "model": "anthropic/claude-opus-5-5", "thinking": "medium" }]

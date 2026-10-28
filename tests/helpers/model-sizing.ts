@@ -24,6 +24,5 @@ export const PROFILE_SIZING_BANDS: Record<string, number> = {
 	"visual-engineering": 2,
 	quick: 1,
 	routine: 1,
-	background: 1,
 	pair: 1,
 };

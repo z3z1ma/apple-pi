@@ -24,10 +24,6 @@
       "selection": "ordered",
       "models": [{ "model": "openai/gpt-6.1-terra", "thinking": "xhigh" }]
     },
-    "background": {
-      "selection": "ordered",
-      "models": [{ "model": "openai/gpt-6-luna", "thinking": "xhigh" }]
-    },
     "coordination": {
       "selection": "ordered",
       "models": [{ "model": "openai/gpt-6.1-sol", "thinking": "high" }]

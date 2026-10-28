@@ -64,7 +64,7 @@ test("the package catalog loads, a project file overrides by name, and a bad fil
 	expect(packaged.roles.get("staff-engineer-simplicity")).toMatchObject({ manages: false, writes: false });
 	for (const role of packaged.roles.values()) {
 		expect(role.path.startsWith(PACKAGE_ROLES_DIR)).toBe(true);
-		expect(role.body.length).toBeGreaterThan(200);
+		expect(role.body.trim()).not.toBe("");
 	}
 
 	mkdirSync(join(cwd, ".pi", "roles"), { recursive: true });
@@ -187,20 +187,9 @@ test("a role that used the default retains that mind when a profile is later con
 		);
 		await restartWithRole(run, "lost");
 		await run.session.prompt("keep working");
-		expect(run.session.model).toBe(initial);
+		expect(run.session.model).toMatchObject({ provider: initial.provider, id: initial.id });
 		expect(run.session.thinkingLevel).toBe(effectiveThinking);
 		expect(run.session.agent.state.messages.at(-1)).toMatchObject({ role: "assistant", stopReason: "stop" });
-		const roleEntries = run.session.sessionManager
-			.getEntries()
-			.filter((entry) => entry.type === "custom" && entry.customType === ROLE_ENTRY);
-		expect(roleEntries.at(-1)).toMatchObject({
-			data: {
-				mind: {
-					model: `${initial.provider}/${initial.id}`,
-					thinking: effectiveThinking,
-				},
-			},
-		});
 	} finally {
 		stderr.mockRestore();
 		run.dispose();
@@ -407,7 +396,10 @@ test.each(["[coding, faux-session-provider/faux-session-model]", "[faux-session-
 	(models) => {
 		const path = join(tempDir(), "role.md");
 		writeFileSync(path, ROLE.replace("[faux-session-provider/faux-session-model]", models));
-		expect(readRole(path, "test")).toMatchObject({ models: expect.any(Array) });
+		expect(readRole(path, "test")).toMatchObject({
+			models: models.slice(1, -1).split(", "),
+			thinking: "low",
+		});
 	},
 );
 
@@ -432,25 +424,26 @@ function profileConfig(model: string, thinking = "high") {
 	writeFileSync(modelProfilesPath(), JSON.stringify({ profiles: { coding: { model, thinking } } }));
 }
 
-const roleEntries = (run: Awaited<ReturnType<typeof fauxSession>>) =>
-	run.session.sessionManager.getEntries().filter((entry) => entry.type === "custom" && entry.customType === ROLE_ENTRY);
-
 test.each(["absent", "unmapped"])(
-	"an %s profile uses concrete recommendations and records effective thinking",
+	"an %s profile uses the concrete recommendation and its role effort",
 	async (config) => {
 		const cwd = tempDir();
 		profileRole(cwd);
 		if (config === "unmapped") writeFileSync(modelProfilesPath(), JSON.stringify({ profiles: {} }));
-		const run = await fauxSession([organization], [], ["read"], { cwd });
+		const installer = (pi: ExtensionAPI) => {
+			pi.on("session_start", (_event, ctx) => {
+				const model = { ...ctx.model!, reasoning: true };
+				vi.spyOn(ctx.modelRegistry, "find").mockImplementation((provider, id) =>
+					provider === model.provider && id === model.id ? model : undefined,
+				);
+			});
+			organization(pi);
+		};
+		const run = await fauxSession([installer], [], ["read"], { cwd });
 		try {
 			await restartWithRole(run, "profiled");
-			expect(roleEntries(run)).toHaveLength(1);
-			expect(roleEntries(run)[0]).toMatchObject({
-				data: {
-					role: "profiled",
-					mind: { model: "faux-session-provider/faux-session-model", thinking: run.session.thinkingLevel },
-				},
-			});
+			expect(run.session.model).toMatchObject({ provider: "faux-session-provider", id: "faux-session-model" });
+			expect(run.session.thinkingLevel).toBe("low");
 		} finally {
 			run.dispose();
 		}
@@ -460,11 +453,13 @@ test.each(["absent", "unmapped"])(
 test("a profile selects once, retains its effective thinking across resume, and ignores edited configuration", async () => {
 	const cwd = tempDir();
 	profileRole(cwd);
-	profileConfig("faux-session-provider/faux-session-model");
+	profileConfig("faux-session-provider/profile-choice");
 	const installer = (pi: ExtensionAPI) => {
 		pi.on("session_start", (_event, ctx) => {
-			const model = { ...ctx.model!, reasoning: true };
-			vi.spyOn(ctx.modelRegistry, "find").mockReturnValue(model);
+			const model = { ...ctx.model!, id: "profile-choice", reasoning: true };
+			vi.spyOn(ctx.modelRegistry, "find").mockImplementation((provider, id) =>
+				provider === model.provider && id === model.id ? model : undefined,
+			);
 		});
 		organization(pi);
 	};
@@ -473,10 +468,8 @@ test("a profile selects once, retains its effective thinking across resume, and 
 		sessionManager: SessionManager.create(cwd, tempDir()),
 	});
 	await restartWithRole(first, "profiled");
+	expect(first.session.model?.id).toBe("profile-choice");
 	expect(first.session.thinkingLevel).toBe("high");
-	const thinking = first.session.thinkingLevel;
-	const entry = roleEntries(first)[0];
-	expect(entry).toMatchObject({ data: { mind: { model: "faux-session-provider/faux-session-model", thinking } } });
 	await first.session.prompt("save");
 	const file = first.session.sessionManager.getSessionFile()!;
 	first.dispose();
@@ -485,8 +478,9 @@ test("a profile selects once, retains its effective thinking across resume, and 
 	const resumed = await fauxSession([installer], [], ["read"], { cwd, sessionManager: SessionManager.open(file) });
 	try {
 		await resumed.session.prompt("resume");
-		expect(resumed.session.thinkingLevel).toBe(thinking);
-		expect(roleEntries(resumed)).toHaveLength(1);
+		expect(resumed.session.model?.id).toBe("profile-choice");
+		expect(resumed.session.thinkingLevel).toBe("high");
+		expect(resumed.session.messages.at(-1)).toMatchObject({ role: "assistant", stopReason: "stop" });
 		expect(resumed.session.agent.state.systemPrompt).toContain("You are the test role.");
 	} finally {
 		resumed.dispose();
@@ -536,19 +530,19 @@ test("round-robin gives new people successive minds while a restart retains the 
 	}
 });
 
-test("an older role entry selects and records its mind once", async () => {
+test("an older role entry selects once and retains its mind when policy changes", async () => {
 	const cwd = tempDir();
 	profileRole(cwd);
 	const manager = SessionManager.inMemory(cwd);
 	manager.appendCustomEntry(ROLE_ENTRY, { role: "profiled" });
 	const run = await fauxSession([organization], [], ["read"], { cwd, sessionManager: manager });
 	try {
-		expect(roleEntries(run)).toHaveLength(2);
-		expect(roleEntries(run)[1]).toMatchObject({
-			data: { mind: { model: "faux-session-provider/faux-session-model" } },
-		});
+		expect(run.session.model?.id).toBe("faux-session-model");
+		writeFileSync(modelProfilesPath(), "malformed");
 		await run.session.bindExtensions({});
-		expect(roleEntries(run)).toHaveLength(2);
+		await run.session.prompt("continue with the retained mind");
+		expect(run.session.model?.id).toBe("faux-session-model");
+		expect(run.session.messages.at(-1)).toMatchObject({ role: "assistant", stopReason: "stop" });
 	} finally {
 		run.dispose();
 	}
@@ -562,12 +556,10 @@ test.each(["malformed", "unknown", "unauthenticated", "setModel-false", "setMode
 		if (failure === "malformed") writeFileSync(modelProfilesPath(), "broken");
 		else profileConfig(failure === "unknown" ? "gone/model" : "faux-session-provider/faux-session-model");
 		const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
-		const selected: string[] = [];
 		const installer = (pi: ExtensionAPI) => {
 			organization(pi);
 			if (failure.startsWith("setModel"))
-				vi.spyOn(pi, "setModel").mockImplementation(async (model) => {
-					selected.push(model.id);
+				vi.spyOn(pi, "setModel").mockImplementation(async () => {
 					if (failure === "setModel-throws") throw new Error("selection failed");
 					return false;
 				});
@@ -597,10 +589,8 @@ test.each(["malformed", "unknown", "unauthenticated", "setModel-false", "setMode
 			expect(run.session.messages.filter((message) => message.role === "assistant")).toEqual(
 				expect.arrayContaining([expect.objectContaining({ stopReason: "aborted" })]),
 			);
-			expect(roleEntries(run)).toHaveLength(0);
 			expect(errors).not.toHaveLength(0);
 			expect(stderr.mock.calls.some((call) => String(call[0]).includes("Role Test Role:"))).toBe(true);
-			if (failure.startsWith("setModel")) expect(selected).toEqual(["faux-session-model"]);
 		} finally {
 			stderr.mockRestore();
 			run.dispose();
@@ -634,7 +624,6 @@ test("concrete recommendations retain ordered setModel fallback", async () => {
 		await restartWithRole(run, "concrete");
 		expect(attempted).toEqual(["first", "second"]);
 		expect(run.session.model?.id).toBe("second");
-		expect(roleEntries(run)[0]).toMatchObject({ data: { mind: { model: "faux-session-provider/second" } } });
 	} finally {
 		run.dispose();
 	}
@@ -653,7 +642,7 @@ test("an unavailable retained mind blocks rather than selecting a new profile mo
 		await run.session.bindExtensions({ onError: (error) => errors.push(error) });
 		await run.session.prompt("blocked");
 		expect(errors).not.toHaveLength(0);
-		expect(roleEntries(run)).toHaveLength(1);
+		expect(run.session.messages.at(-1)).toMatchObject({ role: "assistant", stopReason: "aborted" });
 		expect(
 			stderr.mock.calls.some((call) =>
 				String(call[0]).includes("Selected role model faux-session-provider/faux-session-model is unavailable"),

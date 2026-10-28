@@ -69,7 +69,6 @@ Names are exact, case-sensitive, and limited to this catalog:
 | `deep` | Strongest available judgment for difficult or high-stakes questions. | Architects, security, scientific and product challengers. |
 | `coding` | Code implementation with strong tool use. | Implementation Engineer. |
 | `visual-engineering` | Visual and spatial analysis or implementation at measured effort. | Principal UX Researcher. |
-| `background` | Low-cost asynchronous work. | No built-in role user. |
 | `coordination` | Strong judgment for sustained planning, delegation, and decisions. | Coordinator, Director of Engineering. |
 | `routine` | Economical inference for bounded reading, execution, and reporting. | Repository Archaeologist, Test and CI Operator, Skeptical First-Time User. |
 | `writing` | Clear technical prose from a capable writing model. | Technical Writer. |
@@ -100,13 +99,13 @@ The repository examples follow the operator's rough sizing guide, not measured b
 | Frontier judgment | Astra medium or higher; Fable medium or higher; Opus high or higher. | `deep` |
 | Strong engineering | Sol high; Opus medium; Grok high. | `balanced`, `coding`, `coordination` |
 | Capable writing and visual work | Terra xhigh; Sonnet high; Gemini high; Grok medium. | `writing`, `visual-engineering` |
-| Economical support | Luna xhigh; Haiku high; Gemini medium; Grok low. | `quick`, `pair`, `routine`, `background` |
+| Economical support | Luna xhigh; Haiku high; Gemini medium; Grok low. | `quick`, `pair`, `routine` |
 
 Thinking labels are model-relative: Luna/xhigh is economical support under this policy, not frontier judgment. A role's obligation and a model's writing or visual affinity still matter within a band. These bands guide the shipped policy; custom global pools remain the operator's judgment, without runtime intelligence scores or automatic tier enforcement.
 
 Concrete role recommendations share one frontmatter thinking level. They meet at least their profile's workload band; later defaults can be stronger or use more effort than the minimum. For example, a strong-engineering role at high effort can recommend Sol, Grok, then Opus; Opus/high is a stronger fallback than the profile's Opus/medium. Routine defaults use Luna/xhigh then Haiku/xhigh, while a configured pool uses the more efficient Haiku/high equivalent. Writing defaults prefer Terra/xhigh then Sonnet/xhigh; the Anthropic profile uses Sonnet/high. Profile entries are the way to express exact per-model equivalence without changing the concrete-list format.
 
-The repository root carries `model-profiles.openai.json` and `model-profiles.anthropic.json`, copied by [setup](setup.md#4-configure-model-profiles). Both cover all ten names. The OpenAI example uses ordered single-entry pools: Astra/high for deep judgment, Sol/high for engineering and coordination, Terra/xhigh for writing and visual work, and Luna/xhigh for support. The Anthropic example uses Opus/medium for engineering and coordination, Sonnet/high for writing and visual work, and Haiku/high for support. Its deep pool rotates Opus/high and Fable/medium, following the guide while retaining different model perspectives.
+The repository root carries `model-profiles.openai.json` and `model-profiles.anthropic.json`, copied by [setup](setup.md#4-configure-model-profiles). Both cover all nine names. The OpenAI example uses ordered single-entry pools: Astra/high for deep judgment, Sol/high for engineering and coordination, Terra/xhigh for writing and visual work, and Luna/xhigh for support. The Anthropic example uses Opus/medium for engineering and coordination, Sonnet/high for writing and visual work, and Haiku/high for support. Its deep pool rotates Opus/high and Fable/medium, following the guide while retaining different model perspectives.
 
 Expand a pool and choose round-robin or random when you want to spread assignments. Mix providers within any pool; a provider-specific example is a starting policy, not a restriction.
 
