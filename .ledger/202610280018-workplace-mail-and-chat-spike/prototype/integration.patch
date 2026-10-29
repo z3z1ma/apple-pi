@@ -1,0 +1,3153 @@
+diff --git a/apps/agent-world/src/backend/mail.ts b/apps/agent-world/src/backend/mail.ts
+index dbe7b650..0d00535b 100644
+--- a/apps/agent-world/src/backend/mail.ts
++++ b/apps/agent-world/src/backend/mail.ts
+@@ -109,9 +109,12 @@ export function readOperatorMail(db: DatabaseSync): MailThreadSummary[] {
+ /** Read a thread only if the operator participates. The caller marks the returned sequence read through the runtime. */
+ export function readOperatorThread(db: DatabaseSync, id: string): MailThread | undefined {
+ 	if (!hasThreads(db)) return undefined;
+-	if (!db.prepare("select 1 from thread_participants where thread_id = ? and participant = ?").get(id, OPERATOR))
+-		return undefined;
+-	return readStoredThread(db, id);
++	const participant = db
++		.prepare("select read_up_to from thread_participants where thread_id = ? and participant = ?")
++		.get(id, OPERATOR) as { read_up_to: number } | undefined;
++	if (!participant) return undefined;
++	const thread = readStoredThread(db, id);
++	return thread ? { ...thread, readUpTo: participant.read_up_to } : undefined;
+ }
+ 
+ /** The stored conversation. Its caller decides whether this is a participant read or a shared-board observation. */
+diff --git a/apps/agent-world/src/backend/projection.ts b/apps/agent-world/src/backend/projection.ts
+index 07eac0fe..fcd07348 100644
+--- a/apps/agent-world/src/backend/projection.ts
++++ b/apps/agent-world/src/backend/projection.ts
+@@ -23,6 +23,7 @@ export interface SessionRow {
+ 	awake: boolean;
+ 	/** When it first started (ms), or undefined when it never had an incarnation. */
+ 	firstStartedAt: number | undefined;
++	hiredAt?: number | null;
+ 	/** When its current incarnation ended (ms); undefined while it runs or when unknown. */
+ 	stoppedAt?: number;
+ }
+@@ -33,6 +34,7 @@ export interface Sleeper {
+ 	name: string;
+ 	role: Role;
+ 	title: string | null;
++	hiredAt?: number | null;
+ 	startedAt: number;
+ 	stoppedAt: number | null;
+ 	retiredAt: number | null;
+@@ -128,6 +130,7 @@ export function projectWorld(sessions: SessionRow[], remembered: RememberedWings
+ 			name: nameOf(session),
+ 			role: roleOf(session),
+ 			title: session.title,
++			hiredAt: session.hiredAt ?? null,
+ 			startedAt: session.firstStartedAt ?? 0,
+ 			stoppedAt: session.stoppedAt ?? null,
+ 			retiredAt: session.retiredAt,
+@@ -140,6 +143,7 @@ export function projectWorld(sessions: SessionRow[], remembered: RememberedWings
+ 		name: nameOf(session),
+ 		role: roleOf(session),
+ 		place: placeOf(session),
++		hiredAt: session.hiredAt ?? null,
+ 		startedAt: session.firstStartedAt ?? 0,
+ 	}));
+ 
+diff --git a/apps/agent-world/src/backend/workplace.ts b/apps/agent-world/src/backend/workplace.ts
+index e17db197..7571610b 100644
+--- a/apps/agent-world/src/backend/workplace.ts
++++ b/apps/agent-world/src/backend/workplace.ts
+@@ -170,6 +170,7 @@ export interface WorkplaceActions {
+ 	readTask(task: string): Promise<TaskRead>;
+ 	assignTask(person: string, task: string): Promise<CommandReceipt>;
+ 	readWorkplaceThread(thread: string): Promise<ThreadRead>;
++	setChannelMembership(thread: string, joined: boolean): Promise<CommandReceipt>;
+ }
+ 
+ /** The operator observes shared workplace conversations; only a participant marks them read or replies. */
+@@ -200,6 +201,10 @@ export function openWorkplace(path: string, commands: Commands, snapshot: () =>
+ 			});
+ 			return result.ok ? { ok: true, stage: "applied" } : result;
+ 		},
++		async setChannelMembership(thread, joined) {
++			const result = await commands.send(OPERATOR, { kind: "channel_membership", thread, joined });
++			return result.ok ? { ok: true, stage: "applied" } : result;
++		},
+ 		async readWorkplaceThread(id) {
+ 			if (!existsSync(path)) return { ok: false, reason: "The session database is not available." };
+ 			const db = new DatabaseSync(path);
+diff --git a/apps/agent-world/src/backend/world-backend.ts b/apps/agent-world/src/backend/world-backend.ts
+index 9b3b7253..35fb315a 100644
+--- a/apps/agent-world/src/backend/world-backend.ts
++++ b/apps/agent-world/src/backend/world-backend.ts
+@@ -13,6 +13,7 @@ import type {
+ 	KeptPart,
+ 	MailItem,
+ 	MailThreadSummary,
++	ProfileRead,
+ 	TerminalResult,
+ 	Workplace,
+ 	WorldSnapshot,
+@@ -28,6 +29,7 @@ import { workplaceReader } from "./workplace.js";
+ 
+ export interface WorldBackend {
+ 	snapshot(): WorldSnapshot;
++	profile(characterId: string): ProfileRead;
+ 	/** Calls `listener` with the new snapshot after each change; returns a function that stops the calls. */
+ 	subscribe(listener: (snapshot: WorldSnapshot) => void): () => void;
+ 	/** The latest feed lines, oldest first: a backlog from before the world opened, then everything since. */
+@@ -101,7 +103,7 @@ where s.kind = 'root'`;
+ // one), and the ones awake at the last read (given as a JSON array of ids), looked up by id.
+ const changedSql = (columns: OptionalColumns) => `${sessionsSql(columns)}
+ 	and s.id in (select session_id from events where seq > ? union select value from json_each(?))`;
+-const OPTIONAL_COLUMNS = ["role_title", "manages", "soul", "self", "retired_at", "retired_reason"] as const;
++const OPTIONAL_COLUMNS = ["role_title", "manages", "soul", "self", "retired_at", "retired_reason", "hired_at"] as const;
+ type OptionalColumns = Record<(typeof OPTIONAL_COLUMNS)[number], boolean> & { work: boolean };
+ const optionalColumns = (db: DatabaseSync): OptionalColumns => {
+ 	const present = new Set(
+@@ -128,6 +130,7 @@ interface Row extends FactsRow {
+ 	manages: number | null;
+ 	retired_at: number | null;
+ 	retired_reason: string | null;
++	hired_at: number | null;
+ 	firstStartedAt: number | null;
+ 	awake: number;
+ 	stoppedAt: number | null;
+@@ -156,6 +159,7 @@ function sessionRow(row: Row): SessionRow {
+ 		retiredAt: row.retired_at,
+ 		retiredReason: row.retired_reason,
+ 		awake: row.awake === 1,
++		hiredAt: row.hired_at,
+ 		firstStartedAt: row.firstStartedAt ?? undefined,
+ 		stoppedAt: row.stoppedAt ?? undefined,
+ 	};
+@@ -485,6 +489,12 @@ export function openWorldBackend(paths: { db: string; socket: string }): WorldBa
+ 
+ 	return {
+ 		snapshot: () => current,
++		profile(characterId) {
++			const row = rowsById.get(characterId);
++			return !closed && db && row
++				? { ok: true, self: row.self }
++				: { ok: false, reason: "This person's profile is not available." };
++		},
+ 		subscribe(listener) {
+ 			listeners.add(listener);
+ 			return () => listeners.delete(listener);
+diff --git a/apps/agent-world/src/electron/electron.d.ts b/apps/agent-world/src/electron/electron.d.ts
+index 0a28f858..3829fa5a 100644
+--- a/apps/agent-world/src/electron/electron.d.ts
++++ b/apps/agent-world/src/electron/electron.d.ts
+@@ -9,7 +9,7 @@ declare module "electron" {
+ 	interface WebContents {
+ 		send(channel: string, ...args: unknown[]): void;
+ 		setWindowOpenHandler(handler: () => { action: "deny" | "allow" }): void;
+-		on(event: "will-navigate", listener: (event: { preventDefault(): void }) => void): this;
++		on(event: "will-navigate", listener: (event: { preventDefault(): void }, url: string) => void): this;
+ 		once(event: "did-finish-load", listener: () => void): this;
+ 		capturePage(): Promise<NativeImage>;
+ 		executeJavaScript(code: string): Promise<unknown>;
+diff --git a/apps/agent-world/src/electron/main.ts b/apps/agent-world/src/electron/main.ts
+index 0fa29d52..58e0586f 100644
+--- a/apps/agent-world/src/electron/main.ts
++++ b/apps/agent-world/src/electron/main.ts
+@@ -73,6 +73,9 @@ function start() {
+ 			? world.goToTerminal(characterId)
+ 			: { ok: false, reason: "No character was named." },
+ 	);
++	ipcMain.handle("world:profile", (_event, characterId: unknown) =>
++		typeof characterId === "string" ? world.profile(characterId) : { ok: false, reason: "No character was named." },
++	);
+ 	ipcMain.handle("world:conversation", (_event, characterId: unknown, before: unknown) =>
+ 		typeof characterId === "string"
+ 			? conversations.page(characterId, typeof before === "string" ? before : undefined)
+@@ -137,6 +140,11 @@ function start() {
+ 	ipcMain.handle("world:workplace-thread", (_event, thread: unknown) =>
+ 		typeof thread === "string" ? workplace.readWorkplaceThread(thread) : { ok: false, reason: "No thread was named." },
+ 	);
++	ipcMain.handle("world:channel-membership", (_event, thread: unknown, joined: unknown) =>
++		typeof thread === "string" && typeof joined === "boolean"
++			? workplace.setChannelMembership(thread, joined)
++			: { ok: false, reason: "A channel and whether to join are required." },
++	);
+ 	// Recruiting a new agent: a worker at its coordinator's desk, an independent one at the square's recruiter.
+ 	ipcMain.handle("world:recruit", (_event, request: unknown) => {
+ 		const { name, cwd, brief, reportsTo, role } = (request ?? {}) as Record<string, unknown>;
+@@ -230,7 +238,18 @@ function start() {
+ 			window = undefined;
+ 		});
+ 		window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+-		window.webContents.on("will-navigate", (event) => event.preventDefault());
++		window.webContents.on("will-navigate", (event, url) => {
++			// Temporary workplace spike: only the app's own view links may navigate.
++			if (
++				![
++					"app://world/index.html",
++					"app://world/index.html?",
++					"app://world/index.html?workplace=chat",
++					"app://world/index.html?workplace=mail",
++				].includes(url)
++			)
++				event.preventDefault();
++		});
+ 		void window.loadURL("app://world/index.html");
+ 
+ 		const capture = process.env.AGENT_WORLD_CAPTURE;
+diff --git a/apps/agent-world/src/electron/preload.ts b/apps/agent-world/src/electron/preload.ts
+index 0d8996f5..8a0b3410 100644
+--- a/apps/agent-world/src/electron/preload.ts
++++ b/apps/agent-world/src/electron/preload.ts
+@@ -11,6 +11,7 @@ import type {
+ 	NotepadChange,
+ 	NotepadRead,
+ 	NotepadSave,
++	ProfileRead,
+ 	Receipt,
+ 	RecruitReceipt,
+ 	ReplyStreamEvent,
+@@ -37,6 +38,7 @@ const api: AgentWorldApi = {
+ 		return () => ipcRenderer.removeListener("world:feed", forward);
+ 	},
+ 	goToTerminal: (characterId) => ipcRenderer.invoke("world:terminal", characterId) as Promise<TerminalResult>,
++	profile: (characterId) => ipcRenderer.invoke("world:profile", characterId) as Promise<ProfileRead>,
+ 	conversation: (characterId, before) =>
+ 		ipcRenderer.invoke("world:conversation", characterId, before) as Promise<ConversationPage>,
+ 	markSeen: (characterId) => ipcRenderer.invoke("world:mark-seen", characterId) as Promise<CommandResult>,
+@@ -65,6 +67,8 @@ const api: AgentWorldApi = {
+ 	readTask: (task) => ipcRenderer.invoke("world:read-task", task) as Promise<TaskRead>,
+ 	assignTask: (person, task) => ipcRenderer.invoke("world:assign-task", person, task) as Promise<CommandReceipt>,
+ 	readWorkplaceThread: (thread) => ipcRenderer.invoke("world:workplace-thread", thread) as Promise<ThreadRead>,
++	setChannelMembership: (thread, joined) =>
++		ipcRenderer.invoke("world:channel-membership", thread, joined) as Promise<CommandReceipt>,
+ 	recruit: (request) => ipcRenderer.invoke("world:recruit", request) as Promise<RecruitReceipt>,
+ 	rename: (characterId, name) => ipcRenderer.invoke("world:rename", characterId, name) as Promise<CommandReceipt>,
+ 	roles: () => ipcRenderer.invoke("world:roles") as Promise<RoleChoice[]>,
+diff --git a/apps/agent-world/src/world.ts b/apps/agent-world/src/world.ts
+index cf2e3a5f..10164138 100644
+--- a/apps/agent-world/src/world.ts
++++ b/apps/agent-world/src/world.ts
+@@ -72,13 +72,17 @@ export interface CharacterFacts {
+ 	tmux: { socket: string; pane: string; session: string | null; window: number | null } | null;
+ }
+ 
++export type ProfileRead = { ok: true; self: string | null } | { ok: false; reason: string };
++
+ /** One awake top-level Pi session. */
+ export interface Character {
+ 	id: string;
+ 	name: string;
+ 	role: Role;
+ 	place: PlaceRef;
+-	/** When the session first started (ms); characters are listed in this order, so nobody moves when another leaves. */
++	/** When the session was explicitly hired (ms); absent for older or non-hired people. */
++	hiredAt?: number | null;
++	/** Earliest runtime-observed incarnation (ms), not a hire date; also owns the stable roster order. */
+ 	startedAt: number;
+ 	/** Always set by the backend; fixtures that test only places may leave it out. */
+ 	facts?: CharacterFacts;
+@@ -198,6 +202,7 @@ export interface DormantAgent {
+ 	/** When its last incarnation ended (ms), and why (`exited`, `lost`, ...); null when unknown. */
+ 	stoppedAt: number | null;
+ 	stopReason: string | null;
++	hiredAt?: number | null;
+ 	startedAt: number;
+ }
+ 
+@@ -238,6 +243,8 @@ export interface MailThreadSummary {
+ }
+ 
+ export interface MailThread {
++	/** Operator cursor before this read acknowledged its returned messages; absent for a preview. */
++	readUpTo?: number;
+ 	id: string;
+ 	subject: string;
+ 	closed: boolean;
+@@ -441,6 +448,8 @@ export interface AgentWorldApi extends IntegrationsApi {
+ 	onFeed(listener: (lines: FeedLine[]) => void): () => void;
+ 	/** Switch the operator's tmux client to the character's pane. */
+ 	goToTerminal(characterId: string): Promise<TerminalResult>;
++	/** Full Self text on demand, without reading or acknowledging a conversation. */
++	profile(characterId: string): Promise<ProfileRead>;
+ 	/** A page of the character's conversation: the newest, or the one just before the cursor `before`. */
+ 	conversation(characterId: string, before?: string): Promise<ConversationPage>;
+ 	/** Tell the runtime the operator saw the character (`mark_seen`); resolves with the command's last receipt. */
+@@ -478,6 +487,12 @@ export interface AgentWorldApi extends IntegrationsApi {
+ 	assignTask(person: string, task: string): Promise<CommandReceipt>;
+ 	/** Observe a shared channel, meeting, or task thread; only an operator participant marks it read. */
+ 	readWorkplaceThread(thread: string): Promise<ThreadRead>;
++	/**
++	 * Join or leave an existing team channel as the operator. A private thread is refused. Joined state is
++	 * `workplace.threads[].participants` on the next snapshot. This does not mark the channel read: read it after an
++	 * applied receipt to acknowledge the history now visible.
++	 */
++	setChannelMembership(thread: string, joined: boolean): Promise<CommandReceipt>;
+ 	/**
+ 	 * Recruit a new agent (`start` for a new session id): a worker's window opens after its coordinator's pane, an
+ 	 * independent agent's after the operator's current one.
+diff --git a/apps/agent-world/tests/backend.test.ts b/apps/agent-world/tests/backend.test.ts
+index cd5638d4..48ee6d5a 100644
+--- a/apps/agent-world/tests/backend.test.ts
++++ b/apps/agent-world/tests/backend.test.ts
+@@ -176,6 +176,17 @@ test("two coordinators each get their own headquarters; a session others report
+ 	expect(wings("lead")).toEqual(["alpha:1"]);
+ }, 30000);
+ 
++test("full Self is available on demand without adding its body to world snapshots or inventing a hire date", async () => {
++	const self = "## My story\n\nSynthetic profile body available only on demand.\n";
++	await session("profile-person", { self });
++	expect(world.profile("profile-person")).toEqual({ ok: true, self });
++	await session("profile-empty");
++	expect(world.profile("profile-empty")).toEqual({ ok: true, self: null });
++	expect(world.profile("not-a-person")).toMatchObject({ ok: false });
++	expect(JSON.stringify(latest())).not.toContain("Synthetic profile body");
++	expect(character("profile-person")?.hiredAt).toBeNull();
++});
++
+ test("an organization is one headquarters: the root at its desk, a manager's team in its team room, and a retired person at the inn marked so", async () => {
+ 	await session("org-root", { coordinator: true });
+ 	await session("org-manager", {
+diff --git a/apps/agent-world/tests/world-conversation.test.ts b/apps/agent-world/tests/world-conversation.test.ts
+index da2ce560..00b756ca 100644
+--- a/apps/agent-world/tests/world-conversation.test.ts
++++ b/apps/agent-world/tests/world-conversation.test.ts
+@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
+ import { type Browser, chromium, type Page } from "playwright-core";
+ import { afterAll, beforeAll, expect, test, vi } from "vitest";
+ import { appFile, contentType } from "../src/app-files.js";
+-import type { Character, CharacterFacts, TranscriptEntry, WorldSnapshot } from "../src/world.js";
++import type { Character, CharacterFacts, MailThread, TranscriptEntry, WorldSnapshot } from "../src/world.js";
+ 
+ // Seam 2 for the conversation panel: the committed, built world UI in headless Chrome, with the preload API replaced by
+ // a fixture backend that pages fixture transcripts and records what the panel asks of it.
+@@ -207,7 +207,11 @@ function longSession(count: number): TranscriptEntry[] {
+ 	return entries;
+ }
+ 
+-async function openWorld(first: WorldSnapshot, transcripts: Record<string, TranscriptEntry[]>) {
++async function openWorld(
++	first: WorldSnapshot,
++	transcripts: Record<string, TranscriptEntry[]>,
++	threads: MailThread[] = [],
++) {
+ 	const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+ 	const errors: string[] = [];
+ 	page.on("pageerror", (error) => errors.push(error.message));
+@@ -220,7 +224,7 @@ async function openWorld(first: WorldSnapshot, transcripts: Record<string, Trans
+ 		await route.fulfill({ body: readFileSync(file), contentType: contentType(file) });
+ 	});
+ 	await page.addInitScript(
+-		([snapshot, conversations, size]) => {
++		([snapshot, conversations, size, storedThreads]) => {
+ 			const listeners = new Set<(s: unknown) => void>();
+ 			let current = snapshot as any;
+ 			const w = window as any;
+@@ -234,6 +238,40 @@ async function openWorld(first: WorldSnapshot, transcripts: Record<string, Trans
+ 			};
+ 			w.seen = [];
+ 			w.commands = [];
++			w.membershipCommands = [];
++			w.threadReplies = [];
++			w.threadReads = [];
++			w.profileReads = [];
++			w.profiles = {};
++			const threads = storedThreads as MailThread[];
++			const publishThread = (thread: MailThread) => {
++				const last = thread.messages.at(-1);
++				const summaries = (current.operatorMail ?? []).filter((item: any) => item.id !== thread.id);
++				if (last && thread.participants.some((person) => person.id === "operator"))
++					summaries.push({
++						id: thread.id,
++						subject: thread.subject,
++						lastAt: last.at,
++						unread: thread.messages.filter(
++							(message) => message.seq > (thread.readUpTo ?? 0) && message.from !== "operator",
++						).length,
++					});
++				w.push({
++					...current,
++					operatorMail: summaries,
++					workplace: current.workplace && {
++						...current.workplace,
++						threads: current.workplace.threads.map((item: any) =>
++							item.id === thread.id ? { ...item, lastSeq: last?.seq ?? 0, lastAt: last?.at ?? 0 } : item,
++						),
++					},
++				});
++			};
++			w.channelPost = (id: string, message: MailThread["messages"][number]) => {
++				const thread = threads.find((item) => item.id === id)!;
++				thread.messages.push(message);
++				publishThread(thread);
++			};
+ 			w.receiptListeners = new Set();
+ 			w.replyListeners = new Set();
+ 			w.watched = [];
+@@ -243,6 +281,66 @@ async function openWorld(first: WorldSnapshot, transcripts: Record<string, Trans
+ 			};
+ 			w.agentWorld = {
+ 				snapshot: async () => current,
++				async profile(id: string) {
++					w.profileReads.push(id);
++					return { ok: true, self: w.profiles[id] ?? null };
++				},
++				async readWorkplaceThread(id: string) {
++					w.threadReads.push(id);
++					const thread = threads.find((thread) => thread.id === id);
++					if (!thread) return { ok: false, reason: "Unknown channel" };
++					if (w.readError) {
++						w.readError = false;
++						return { ok: false, reason: "The channel could not be read." };
++					}
++					const returned = structuredClone(thread);
++					if (thread.participants.some((person) => person.id === "operator")) {
++						returned.readUpTo = thread.readUpTo ?? 0;
++						thread.readUpTo = thread.messages.at(-1)?.seq ?? 0;
++						publishThread(thread);
++					} else delete returned.readUpTo;
++					return { ok: true, thread: returned };
++				},
++				async setChannelMembership(id: string, joined: boolean) {
++					w.membershipCommands.push([id, joined]);
++					if (w.membershipError) {
++						const reason = w.membershipError;
++						w.membershipError = null;
++						return { ok: false, reason };
++					}
++					const thread = threads.find((thread) => thread.id === id)!;
++					thread.participants = thread.participants.filter((person) => person.id !== "operator");
++					if (joined) {
++						thread.participants.push({ id: "operator", name: "You" });
++						thread.readUpTo = 0;
++					} else delete thread.readUpTo;
++					w.push({
++						...current,
++						workplace: {
++							...current.workplace,
++							threads: current.workplace.threads.map((channel: any) =>
++								channel.id === id
++									? { ...channel, participants: thread.participants.map((person) => person.id) }
++									: channel,
++							),
++						},
++					});
++					return { ok: true, stage: "applied" };
++				},
++				async replyThread(id: string, body: string) {
++					w.threadReplies.push([id, body]);
++					const thread = threads.find((thread) => thread.id === id)!;
++					thread.messages.push({
++						seq: Math.max(0, ...threads.flatMap((item) => item.messages.map((message) => message.seq))) + 1,
++						from: "operator",
++						name: "You",
++						at: Date.now(),
++						body,
++					});
++					thread.readUpTo = thread.messages.at(-1)?.seq ?? 0;
++					publishThread(thread);
++					return { ok: true, stage: "applied" };
++				},
+ 				onUpdate(listener: (s: unknown) => void) {
+ 					listeners.add(listener);
+ 					return () => listeners.delete(listener);
+@@ -257,6 +355,15 @@ async function openWorld(first: WorldSnapshot, transcripts: Record<string, Trans
+ 					w.pages.push([id, before ?? null]);
+ 					// A page takes a moment, as reading a long transcript does.
+ 					await new Promise((resolve) => setTimeout(resolve, 120));
++					if (!before && w.holdHistory === id) {
++						w.holdHistory = null;
++						await new Promise<void>((resolve) => {
++							w.releaseHistory = () => {
++								delete w.releaseHistory;
++								resolve();
++							};
++						});
++					}
+ 					const all = (conversations as Record<string, unknown[]>)[id];
+ 					if (!all) return { ok: false, reason: "unknown session" };
+ 					const end = before ? all.findIndex((entry: any) => entry.id === before) : all.length;
+@@ -324,7 +431,7 @@ async function openWorld(first: WorldSnapshot, transcripts: Record<string, Trans
+ 						...current,
+ 						characters: current.characters.map((c: any) =>
+ 							c.id === id && c.facts.status !== "asking"
+-								? { ...c, facts: { ...c.facts, unseen: false, needsYouSince: null } }
++								? { ...c, facts: { ...c.facts, unseen: false, needsYouSince: null, seenAt: Date.now() } }
+ 								: c,
+ 						),
+ 					};
+@@ -333,7 +440,7 @@ async function openWorld(first: WorldSnapshot, transcripts: Record<string, Trans
+ 				},
+ 			};
+ 		},
+-		[first, transcripts, PAGE] as const,
++		[first, transcripts, PAGE, threads] as const,
+ 	);
+ 	await page.goto(`${ORIGIN}/index.html`);
+ 	await vi.waitFor(async () => expect(await page.evaluate(() => (window as any).agentWorldView.place())).toBeTruthy(), {
+@@ -499,6 +606,8 @@ test("a long conversation opens at its newest entry and loads older pages on scr
+ 		expect((await pages(page)).map(([, before]) => before)).toEqual([null, "e110", "e60", "e10"]);
+ 		await transcript.getByText("The beginning of the conversation").waitFor({ timeout: 2000 });
+ 		await transcript.getByText("Question number 0?").waitFor({ timeout: 2000 });
++		// Finish the frame sample even when paging completes before 21 frames have elapsed.
++		await page.waitForFunction(() => (window as any).frameGaps.length > 20, undefined, { timeout: 3000 });
+ 		const gaps = await page.evaluate(() => (window as any).frameGaps as number[]);
+ 		expect(gaps.length).toBeGreaterThan(20);
+ 		expect(Math.max(...gaps.slice(1))).toBeLessThan(250);
+@@ -1140,6 +1249,919 @@ test("web links in a transcript open in the system browser and file links in the
+ 	}
+ }, 30000);
+ 
++test("workplace text-only DMs omit session details while preserving messages and live replies", async () => {
++	const toolOnly: TranscriptEntry[] = [
++		{
++			kind: "assistant",
++			id: "only-tool",
++			at: at(80),
++			parts: [
++				{ kind: "tool", call: { id: "only-call", name: "read", arg: "README.md", input: '{"path":"README.md"}' } },
++			],
++			error: null,
++			aborted: false,
++		},
++		{
++			kind: "tool-result",
++			id: "only-result",
++			at: at(81),
++			callId: "only-call",
++			tool: "read",
++			text: "Project guide",
++			isError: false,
++			cut: false,
++		},
++	];
++	const details: TranscriptEntry[] = [
++		...toolOnly,
++		{
++			kind: "assistant",
++			id: "thought-only",
++			at: at(82),
++			parts: [{ kind: "thinking", text: "Private reasoning" }],
++			error: "Connection error",
++			aborted: true,
++		},
++		{
++			kind: "note",
++			id: "notification",
++			at: at(83),
++			label: "apple-pi:task-notification",
++			shown: true,
++			text: "Background task finished",
++		},
++		{
++			kind: "tool-result",
++			id: "orphan-failure",
++			at: at(84),
++			callId: "unloaded-call",
++			tool: "bash",
++			text: "Orphan tool failure",
++			isError: true,
++			cut: false,
++		},
++		{ kind: "user", id: "image-only", at: at(85), text: "", images: 1 },
++	];
++	const { page, errors } = await openWorld(world(), {
++		"pi-tests": [...SUITE, ...details],
++		ledger: details,
++		asker: [],
++		[HQ]: [],
++	});
++	page.setDefaultTimeout(5000);
++	try {
++		await page.getByRole("link", { name: "Workplace spike", exact: true }).click();
++		await page.getByRole("button", { name: /^pi-tests/ }).click();
++		await log(page).getByText("Raising the timeouts now.").waitFor();
++		expect(
++			await log(page)
++				.getByRole("button", { name: /^bash / })
++				.count(),
++		).toBe(0);
++		for (const detail of [
++			"Thought it over",
++			"The reply failed",
++			"Stopped before it finished",
++			"Show tool calls",
++			"task-notification",
++			"Rebase on",
++			"With an image",
++			"Orphan tool failure",
++		]) {
++			expect(await log(page).textContent()).not.toContain(detail);
++		}
++		await log(page).getByText("Running the", { exact: false }).waitFor();
++		await page.getByRole("status").filter({ hasText: "pi-tests is working" }).waitFor();
++		await page.getByRole("button", { name: "Show tool calls", exact: true }).click();
++		await log(page)
++			.getByRole("button", { name: /^bash npx vitest run/ })
++			.click();
++		await log(page).getByText("2 failed | 40 passed", { exact: false }).waitFor();
++		await log(page).getByText("The reply failed: Connection error", { exact: true }).waitFor();
++		await log(page).getByRole("button", { name: "apple-pi:task-notification", exact: true }).waitFor();
++		await log(page).getByText("Mail from orla", { exact: true }).waitFor();
++		await page.getByRole("button", { name: "Show tool calls", exact: true }).click();
++		expect(
++			await log(page)
++				.getByRole("button", { name: /^bash / })
++				.count(),
++		).toBe(0);
++		await log(page).getByText("Raising the timeouts now.").waitFor();
++		const writing = world(
++			CAST.map((person) =>
++				person.id === "pi-tests"
++					? { ...person, facts: facts({ run: "writing_reply", status: "working", tool: person.facts?.tool ?? null }) }
++					: person,
++			),
++		);
++		await page.evaluate((next) => (window as any).push(next), writing);
++		await page.getByRole("status").filter({ hasText: "pi-tests is typing" }).waitFor();
++		await page.getByRole("main").getByText("Writing a reply", { exact: true }).filter({ visible: true }).waitFor();
++		await page.evaluate(() =>
++			(window as any).reply({
++				kind: "delta",
++				characterId: "pi-tests",
++				streamId: "dm-live",
++				delta: "The checks are complete.",
++			}),
++		);
++		await log(page).getByText("The checks are complete.", { exact: true }).waitFor();
++		await page.evaluate(
++			(next) => (window as any).push(next),
++			world(
++				CAST.map((person) =>
++					person.id === "pi-tests" ? { ...person, facts: facts({ tool: person.facts?.tool ?? null }) } : person,
++				),
++			),
++		);
++		await page.getByRole("status").filter({ hasText: "pi-tests is typing" }).waitFor({ state: "detached" });
++		await page.getByRole("main").getByText("Idle", { exact: true }).filter({ visible: true }).waitFor();
++		await page.getByRole("button", { name: /^ledger/ }).click();
++		await vi.waitFor(async () =>
++			expect(await page.evaluate(() => (window as any).pages.some(([id]: string[]) => id === "ledger"))).toBe(true),
++		);
++		await vi.waitFor(async () => expect(await log(page).textContent()).toBe(""));
++		await page.getByRole("button", { name: "Show tool calls", exact: true }).click();
++		await log(page)
++			.getByRole("button", { name: /^read README\.md/ })
++			.click();
++		await log(page).getByText("Project guide", { exact: true }).waitFor();
++		expect(errors).toEqual([]);
++	} finally {
++		await page.close();
++	}
++}, 30000);
++
++test("DM tool activity stays in a truncated lower line and the composer keeps a continuous border", async () => {
++	const longArg = `npm run verify -- ${"long_argument/".repeat(200)}`;
++	const initial = world(
++		CAST.map((person) =>
++			person.id === "pi-tests"
++				? {
++						...person,
++						facts: facts({
++							run: "running_tool",
++							status: "working",
++							title: "Implementation Engineer",
++							tool: { name: "bash", arg: longArg, since: at(55) },
++						}),
++					}
++				: person,
++		),
++	);
++	const { page, errors } = await openWorld(initial, { "pi-tests": SUITE });
++	page.setDefaultTimeout(5000);
++	try {
++		await page.getByRole("link", { name: "Workplace spike", exact: true }).click();
++		await page.getByRole("button", { name: /^pi-tests/ }).click();
++		await log(page).getByText("Raising the timeouts now.").waitFor();
++		const header = page
++			.getByRole("main")
++			.getByText(/^Working/)
++			.filter({ visible: true });
++		expect(await header.textContent()).toBe("Working · Implementation Engineer");
++		const detail = page.getByTitle(/^pi-tests is working/);
++		await detail.waitFor();
++		expect(await detail.textContent()).toContain(longArg);
++		const composer = page.getByRole("textbox", { name: "Instruct pi-tests", exact: true });
++		for (const width of [1280, 820]) {
++			await page.setViewportSize({ width, height: 800 });
++			const size = await detail.evaluate((node) => ({
++				width: node.clientWidth,
++				scroll: node.scrollWidth,
++				height: node.getBoundingClientRect().height,
++				line: parseFloat(getComputedStyle(node).lineHeight),
++				overflow: getComputedStyle(node).textOverflow,
++				wrap: getComputedStyle(node).whiteSpace,
++			}));
++			expect(size.scroll).toBeGreaterThan(size.width);
++			expect(size.overflow).toBe("ellipsis");
++			expect(size.wrap).toBe("nowrap");
++			expect(size.height).toBeLessThanOrEqual(size.line + 1);
++			await composer.focus();
++			const seam = await composer.evaluate((node) => {
++				const footer = node.closest("footer")!;
++				const box = footer.querySelector(".aw-conv-box")!;
++				const bar = footer.querySelector(".aw-conv-act-bar")!;
++				return {
++					gap: bar.getBoundingClientRect().top - box.getBoundingClientRect().bottom,
++					left: bar.getBoundingClientRect().left - box.getBoundingClientRect().left,
++					right: bar.getBoundingClientRect().right - box.getBoundingClientRect().right,
++					boxColor: getComputedStyle(box).borderLeftColor,
++					barColor: getComputedStyle(bar).borderLeftColor,
++				};
++			});
++			expect(Math.abs(seam.gap)).toBeLessThan(1);
++			expect(Math.abs(seam.left)).toBeLessThan(1);
++			expect(Math.abs(seam.right)).toBeLessThan(1);
++			expect(seam.boxColor).toBe(seam.barColor);
++			expect(await page.getByRole("main").evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
++		}
++		expect(errors).toEqual([]);
++	} finally {
++		await page.close();
++	}
++}, 30000);
++
++async function openWorkplaceChannel(conversations: Record<string, TranscriptEntry[]> = {}) {
++	const id = "team:orla";
++	const initial: WorldSnapshot = {
++		...world(),
++		workplace: {
++			tasks: [],
++			escalations: [],
++			threads: [
++				{
++					id,
++					kind: "channel",
++					subject: "Engineering",
++					createdBy: HQ,
++					headquarters: HQ,
++					closed: false,
++					lastSeq: 1,
++					lastAt: at(20),
++					participants: [HQ, "pi-tests"],
++				},
++			],
++		},
++	};
++	const thread: MailThread = {
++		id,
++		subject: "Engineering",
++		closed: false,
++		participants: [
++			{ id: HQ, name: "Orla" },
++			{ id: "pi-tests", name: "pi-tests" },
++		],
++		messages: [
++			{
++				seq: 1,
++				from: "pi-tests",
++				name: "pi-tests",
++				at: at(20),
++				body: "## Release plan\n\n**Ready** for review.\n\n- Compatibility checked\n\n```ts\nconst ready = true;\n```\n\n[Release notes](https://example.com/release) and [spec](docs/api.md).\n\n<script>window.channelInjected=true</script>\n\n![remote image](https://example.com/remote.png)\n\n[unsafe](javascript:alert(1))",
++			},
++		],
++	};
++	const { page, errors } = await openWorld(initial, conversations, [thread]);
++	page.setDefaultTimeout(5000);
++	await page.getByRole("link", { name: "Workplace spike", exact: true }).click();
++	await page.getByRole("button", { name: "# Engineering", exact: true }).click();
++	await page.getByRole("button", { name: "Join channel", exact: true }).waitFor();
++	return { page, errors, id };
++}
++
++test("channel author and participant names open their exact DMs without sending messages", async () => {
++	const { page, errors } = await openWorkplaceChannel({ "pi-tests": SUITE, [HQ]: [] });
++	try {
++		await page.locator(".wp-message header").getByRole("button", { name: "pi-tests", exact: true }).click();
++		await log(page).getByText("Raising the timeouts now.").waitFor();
++		expect(await pages(page)).toEqual([["pi-tests", null]]);
++		await page.getByRole("textbox", { name: "Instruct pi-tests", exact: true }).fill("Keep this DM draft.");
++		await page.getByRole("button", { name: "# Engineering", exact: true }).click();
++		await page.locator(".wp-thread-header").getByRole("button", { name: "Orla", exact: true }).click();
++		await page.locator(".wp-conversation-header").getByRole("heading", { name: "Orla", exact: true }).waitFor();
++		await vi.waitFor(async () => expect((await pages(page)).at(-1)).toEqual([HQ, null]));
++		await page.getByRole("button", { name: /^pi-tests/ }).click();
++		expect(await page.getByRole("textbox", { name: "Instruct pi-tests", exact: true }).inputValue()).toBe(
++			"Keep this DM draft.",
++		);
++		expect(await page.evaluate(() => (window as any).commands)).toEqual([]);
++		expect(errors).toEqual([]);
++	} finally {
++		await page.close();
++	}
++}, 30000);
++
++test("chat avatars open observed profiles, restore keyboard focus, and enter a DM only on Message", async () => {
++	const { page, errors } = await openWorkplaceChannel({ "pi-tests": SUITE });
++	try {
++		const avatar = page.locator(".wp-message").getByRole("button", { name: "View profile: pi-tests", exact: true });
++		await avatar.focus();
++		await page.keyboard.press("Enter");
++		const profile = page.getByRole("complementary", { name: "Profile: pi-tests", exact: true });
++		await profile.getByRole("heading", { name: "pi-tests", exact: true }).waitFor();
++		await profile.getByText(SUITE_TASK.title, { exact: false }).waitFor();
++		expect(await pages(page)).toEqual([]);
++		expect(await seen(page)).toEqual([]);
++		await page.keyboard.press("Escape");
++		await profile.waitFor({ state: "detached" });
++		expect(await avatar.evaluate((node) => node === document.activeElement)).toBe(true);
++		await avatar.click();
++		const otherAvatar = page
++			.locator(".wp-chat-sidebar")
++			.getByRole("button", { name: "View profile: Orla", exact: true });
++		await otherAvatar.click();
++		await page.getByRole("complementary", { name: "Profile: Orla", exact: true }).waitFor();
++		await page.keyboard.press("Escape");
++		expect(await otherAvatar.evaluate((node) => node === document.activeElement)).toBe(true);
++		await avatar.click();
++		await profile.getByRole("button", { name: "Message pi-tests", exact: true }).click();
++		await log(page).getByText("Raising the timeouts now.").waitFor();
++		await profile.waitFor({ state: "detached" });
++		const input = page.getByRole("textbox", { name: "Instruct pi-tests", exact: true });
++		await input.fill("Preserve while viewing profiles.");
++		await log(page).getByRole("button", { name: "View profile: pi-tests", exact: true }).first().click();
++		await profile.waitFor();
++		await profile.getByRole("button", { name: "Close profile", exact: true }).click();
++		expect(await input.inputValue()).toBe("Preserve while viewing profiles.");
++		await page
++			.locator(".wp-conversation-header")
++			.getByRole("button", { name: "View profile: pi-tests", exact: true })
++			.click();
++		await profile.waitFor();
++		await page.getByRole("button", { name: "Mail", exact: true }).click();
++		expect(await page.getByRole("complementary", { name: /^Profile:/ }).count()).toBe(0);
++		expect(await page.evaluate(() => (window as any).commands)).toEqual([]);
++		expect(errors).toEqual([]);
++	} finally {
++		await page.close();
++	}
++}, 30000);
++
++test("avatar colors vary by stable identity and stay consistent across surfaces, rename, reload, and appearance", async () => {
++	const { page, errors } = await openWorkplaceChannel({ "pi-tests": SUITE });
++	try {
++		const channelAvatar = page
++			.locator(".wp-message")
++			.getByRole("button", { name: "View profile: pi-tests", exact: true });
++		const background = (node: Element) => getComputedStyle(node).backgroundColor;
++		const lightColor = await channelAvatar.evaluate(background);
++		const orla = page.locator(".wp-chat-sidebar").getByRole("button", { name: "View profile: Orla", exact: true });
++		expect(await orla.evaluate(background)).not.toBe(lightColor);
++		await page.locator(".wp-message header").getByRole("button", { name: "pi-tests", exact: true }).click();
++		await log(page).getByText("Raising the timeouts now.").waitFor();
++		const headerAvatar = page
++			.locator(".wp-conversation-header")
++			.getByRole("button", { name: "View profile: pi-tests", exact: true });
++		const sidebarAvatar = page
++			.locator(".wp-chat-sidebar")
++			.getByRole("button", { name: "View profile: pi-tests", exact: true });
++		const messageAvatar = log(page).getByRole("button", { name: "View profile: pi-tests", exact: true }).first();
++		for (const avatar of [headerAvatar, sidebarAvatar, messageAvatar])
++			expect(await avatar.evaluate(background)).toBe(lightColor);
++		await headerAvatar.click();
++		const profile = page.getByRole("complementary", { name: /^Profile:/ });
++		const profileAvatar = profile.locator(".wp-profile-avatar");
++		expect(await profileAvatar.evaluate(background)).toBe(lightColor);
++		await page.getByRole("button", { name: "Theme: dark mode", exact: true }).click();
++		const darkColor = await headerAvatar.evaluate(background);
++		expect(darkColor).not.toBe(lightColor);
++		for (const avatar of [sidebarAvatar, messageAvatar, profileAvatar])
++			expect(await avatar.evaluate(background)).toBe(darkColor);
++		await page.evaluate(
++			(next) => (window as any).push(next),
++			world(CAST.map((person) => (person.id === "pi-tests" ? { ...person, name: "Suite Engineer" } : person))),
++		);
++		await profile.getByRole("heading", { name: "Suite Engineer", exact: true }).waitFor();
++		expect(await page.locator(".wp-header-avatar").evaluate(background)).toBe(darkColor);
++		expect(await profileAvatar.evaluate(background)).toBe(darkColor);
++		await page.reload();
++		await page.getByRole("button", { name: /^pi-tests/ }).click();
++		expect(await page.locator(".wp-header-avatar").evaluate(background)).toBe(darkColor);
++		expect(errors).toEqual([]);
++	} finally {
++		await page.close();
++	}
++}, 30000);
++
++test("profiles distinguish the operator, unavailable people, and read-only dormant and former histories", async () => {
++	const { page, errors } = await openWorkplaceChannel({ "pi-tests": SUITE });
++	try {
++		await page.locator(".wp-message").getByRole("button", { name: "View profile: pi-tests", exact: true }).click();
++		await page.getByRole("complementary", { name: "Profile: pi-tests", exact: true }).waitFor();
++		const sleeping = {
++			id: "pi-tests",
++			name: "pi-tests",
++			title: "Implementation Engineer",
++			role: "worker" as const,
++			reportsTo: HQ,
++			repository: null,
++			cwd: "/example",
++			task: null,
++			stoppedAt: at(80),
++			stopReason: "exited",
++			startedAt: at(1),
++		};
++		await page.evaluate((next) => (window as any).push(next), {
++			...world(CAST.filter((person) => person.id !== "pi-tests")),
++			dormant: [sleeping],
++		});
++		const profile = page.getByRole("complementary", { name: "Profile: pi-tests", exact: true });
++		await profile.getByText(/Asleep.*History only/).waitFor();
++		expect(await profile.getByText("Cost", { exact: true }).count()).toBe(0);
++		await profile.getByText("Implementation Engineer", { exact: true }).waitFor();
++		await profile.getByRole("button", { name: "View conversation pi-tests", exact: true }).click();
++		await log(page).getByText("Raising the timeouts now.").waitFor();
++		expect(await page.getByRole("textbox", { name: /^(Instruct|Reply to) pi-tests/ }).count()).toBe(0);
++		await page.evaluate((next) => (window as any).push(next), {
++			...world(CAST.filter((person) => person.id !== "pi-tests")),
++			dormant: [{ ...sleeping, retiredAt: at(81), retiredReason: "Finished" }],
++		});
++		await page
++			.locator(".wp-conversation-header")
++			.getByText(/^Former member/)
++			.waitFor();
++		await page
++			.locator(".wp-conversation-header")
++			.getByRole("button", { name: "View profile: pi-tests", exact: true })
++			.click();
++		await profile.getByText(/Former member.*History only/).waitFor();
++		await profile.getByRole("button", { name: "View conversation pi-tests", exact: true }).click();
++		expect(await page.getByRole("textbox", { name: /^(Instruct|Reply to) pi-tests/ }).count()).toBe(0);
++		await log(page).getByRole("button", { name: "View profile: You", exact: true }).click();
++		const operator = page.getByRole("complementary", { name: "Profile: You", exact: true });
++		await operator.getByText("Operator", { exact: true }).waitFor();
++		expect(await operator.getByRole("button", { name: /^Message / }).count()).toBe(0);
++		await operator.getByRole("button", { name: "Close profile", exact: true }).click();
++		await page
++			.locator(".wp-conversation-header")
++			.getByRole("button", { name: "View profile: pi-tests", exact: true })
++			.click();
++		await page.evaluate((next) => (window as any).push(next), world(CAST.filter((person) => person.id !== "pi-tests")));
++		await profile.getByText("This person is not available in the current organization.", { exact: true }).waitFor();
++		expect(await profile.getByRole("button", { name: /^(Message|View conversation) / }).count()).toBe(0);
++		expect(await page.evaluate(() => (window as any).commands)).toEqual([]);
++		expect(errors).toEqual([]);
++	} finally {
++		await page.close();
++	}
++}, 30000);
++
++test("light-theme questions have a high-contrast badge while the approved dark indicator stays unchanged", async () => {
++	const { page, errors } = await openWorld(world(), {});
++	try {
++		await page.emulateMedia({ colorScheme: "light" });
++		await page.getByRole("link", { name: "Workplace spike", exact: true }).click();
++		const badge = page.locator(".wp-needs");
++		await badge.waitFor();
++		const light = await badge.evaluate((node) => {
++			const style = getComputedStyle(node);
++			const luminance = (color: string) => {
++				const rgb = color
++					.match(/[\d.]+/g)!
++					.slice(0, 3)
++					.map((value) => {
++						const channel = Number(value) / 255;
++						return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
++					});
++				return rgb[0] * 0.2126 + rgb[1] * 0.7152 + rgb[2] * 0.0722;
++			};
++			let surface: Element | null = node;
++			while (surface && getComputedStyle(surface).backgroundColor === "rgba(0, 0, 0, 0)")
++				surface = surface.parentElement;
++			const background = surface ? getComputedStyle(surface).backgroundColor : "rgb(255, 255, 255)";
++			const colors = [luminance(background), luminance(style.color)];
++			return (Math.max(...colors) + 0.05) / (Math.min(...colors) + 0.05);
++		});
++		expect(light).toBeGreaterThanOrEqual(4.5);
++		await page.getByRole("button", { name: "Theme: dark mode", exact: true }).click();
++		expect(await badge.evaluate((node) => getComputedStyle(node).backgroundColor)).toBe("rgba(0, 0, 0, 0)");
++		expect(await badge.evaluate((node) => getComputedStyle(node).color)).toBe("rgb(216, 179, 120)");
++		expect(errors).toEqual([]);
++	} finally {
++		await page.close();
++	}
++}, 30000);
++
++test("workplace starts with the OS appearance and remembers an explicit choice across reload and Mail", async () => {
++	const { page, errors } = await openWorld(world(), {});
++	page.setDefaultTimeout(5000);
++	try {
++		await page.emulateMedia({ colorScheme: "dark" });
++		await page.getByRole("link", { name: "Workplace spike", exact: true }).click();
++		const theme = page.getByRole("button", { name: "Theme: dark mode", exact: true });
++		await vi.waitFor(async () => expect(await theme.getAttribute("aria-pressed")).toBe("true"));
++		const darkBackground = await page.getByRole("main").evaluate((node) => getComputedStyle(node).backgroundColor);
++		await theme.click();
++		await page.reload();
++		await theme.waitFor();
++		expect(await theme.getAttribute("aria-pressed")).toBe("false");
++		expect(await page.getByRole("main").evaluate((node) => getComputedStyle(node).backgroundColor)).not.toBe(
++			darkBackground,
++		);
++		const lightColor = await page.getByRole("main").evaluate((node) => getComputedStyle(node).color);
++		await theme.click();
++		const darkColor = await page.getByRole("main").evaluate((node) => getComputedStyle(node).color);
++		expect(darkColor).not.toBe(lightColor);
++		await page.getByRole("button", { name: "Mail", exact: true }).click();
++		expect(await theme.getAttribute("aria-pressed")).toBe("true");
++		expect(await page.getByRole("main").evaluate((node) => getComputedStyle(node).color)).toBe(darkColor);
++		expect(errors).toEqual([]);
++	} finally {
++		await page.close();
++	}
++}, 30000);
++
++test("team channels render safe Markdown and open links through the bridge without navigating", async () => {
++	const { page, errors } = await openWorkplaceChannel();
++	try {
++		await page.getByRole("heading", { name: "Release plan", exact: true }).waitFor();
++		await page.getByText("Ready", { exact: true }).waitFor();
++		await page.getByText("const ready = true;", { exact: true }).waitFor();
++		expect(await page.getByRole("listitem").allTextContents()).toContain("Compatibility checked");
++		await page.getByText("<script>window.channelInjected=true</script>", { exact: false }).waitFor();
++		await page.getByText("remote image", { exact: true }).waitFor();
++		expect(await page.getByRole("img", { name: "remote image", exact: true }).count()).toBe(0);
++		expect(await page.getByRole("link", { name: "unsafe", exact: true }).count()).toBe(0);
++		const before = page.url();
++		await page.getByRole("link", { name: "Release notes", exact: true }).focus();
++		await page.keyboard.press("Enter");
++		await page.getByRole("link", { name: "spec", exact: true }).click({ button: "middle" });
++		expect(await page.evaluate(() => (window as any).links)).toEqual([
++			"https://example.com/release",
++			["file", "docs/api.md", "/Users/op/code/apple-pi"],
++		]);
++		expect(page.url()).toBe(before);
++		expect(errors).toEqual([]);
++	} finally {
++		await page.close();
++	}
++}, 30000);
++
++test("channel preview requires an explicit successful join to post; failed membership changes and leave/rejoin retain drafts", async () => {
++	const { page, errors, id } = await openWorkplaceChannel();
++	try {
++		expect(await page.getByRole("textbox", { name: "Post to channel", exact: true }).count()).toBe(0);
++		expect(await page.evaluate(() => (window as any).membershipCommands)).toEqual([]);
++		await page.evaluate(() => {
++			(window as any).membershipError = "Joining was refused";
++		});
++		await page.getByRole("button", { name: "Join channel", exact: true }).click();
++		await page.getByRole("alert").filter({ hasText: "Joining was refused" }).waitFor();
++		expect(await page.getByRole("textbox", { name: "Post to channel", exact: true }).count()).toBe(0);
++		await page.getByRole("button", { name: "Join channel", exact: true }).click();
++		const composer = page.getByRole("textbox", { name: "Post to channel", exact: true });
++		await composer.fill("A channel post");
++		await composer.press("Shift+Enter");
++		expect(await composer.inputValue()).toBe("A channel post\n");
++		expect(await page.evaluate(() => (window as any).threadReplies)).toEqual([]);
++		await composer.press("Enter");
++		await page.getByText("A channel post", { exact: true }).waitFor();
++		expect(await page.evaluate(() => (window as any).threadReplies)).toEqual([[id, "A channel post\n"]]);
++		await composer.fill("Unsent draft");
++		await page.getByLabel("Joined: channel membership", { exact: true }).click();
++		await page.evaluate(() => {
++			(window as any).membershipError = "Leaving was refused";
++		});
++		await page.getByRole("button", { name: "Leave channel", exact: true }).click();
++		await page.getByRole("alert").filter({ hasText: "Leaving was refused" }).waitFor();
++		expect(await composer.inputValue()).toBe("Unsent draft");
++		await page.getByRole("button", { name: "Leave channel", exact: true }).click();
++		await page.getByRole("button", { name: "Join channel", exact: true }).waitFor();
++		expect(await composer.count()).toBe(0);
++		await page.getByRole("button", { name: "Join channel", exact: true }).click();
++		await composer.waitFor();
++		expect(await composer.inputValue()).toBe("Unsent draft");
++		expect(await page.evaluate(() => (window as any).membershipCommands)).toEqual([
++			[id, true],
++			[id, true],
++			[id, false],
++			[id, false],
++			[id, true],
++		]);
++		expect(errors).toEqual([]);
++	} finally {
++		await page.close();
++	}
++}, 30000);
++
++test("closing and reopening a mail draft retains its body and recipient across application switches", async () => {
++	const { page, errors } = await openWorld(world(), {});
++	try {
++		await page.getByRole("link", { name: "Workplace spike", exact: true }).click();
++		await page.getByRole("button", { name: "Mail", exact: true }).click();
++		await page.getByRole("button", { name: "Compose", exact: true }).click();
++		await page.getByRole("combobox", { name: "Mail recipient", exact: true }).selectOption("pi-tests");
++		await page.getByRole("textbox", { name: "Mail body", exact: true }).fill("Keep this recipient with this draft.");
++		await page.getByRole("button", { name: "Close new message", exact: true }).click();
++		await page.getByRole("button", { name: "Chat", exact: true }).click();
++		await page.getByRole("button", { name: "Mail", exact: true }).click();
++		await page.getByRole("button", { name: "Compose", exact: true }).click();
++		expect(await page.getByRole("combobox", { name: "Mail recipient", exact: true }).inputValue()).toBe("pi-tests");
++		expect(await page.getByRole("textbox", { name: "Mail body", exact: true }).inputValue()).toBe(
++			"Keep this recipient with this draft.",
++		);
++		expect(errors).toEqual([]);
++	} finally {
++		await page.close();
++	}
++}, 30000);
++
++test("profiles load full Self only on demand, expand fields independently at 200 characters, and distinguish hire from first seen", async () => {
++	const { page, errors } = await openWorkplaceChannel();
++	try {
++		const story = `${"s".repeat(205)}\n\n## A nested note\nThis remains part of the story.`;
++		const practice = "p".repeat(201);
++		const standards = "q".repeat(200);
++		const self = `## My story\n\n${story}\n\n## How I work\n\n${practice}\n\n## What I hold myself to\n\n${standards}\n\n## The people I work with\n\nColleague notes.`;
++		await page.evaluate(
++			async ({ self, hiredAt }) => {
++				const w = window as any;
++				w.profiles["pi-tests"] = self;
++				const current = await w.agentWorld.snapshot();
++				w.push({
++					...current,
++					characters: current.characters.map((person: any) =>
++						person.id === "pi-tests"
++							? { ...person, hiredAt, facts: { ...person.facts, tasks: ["r".repeat(240), "Another completed task"] } }
++							: person,
++					),
++				});
++			},
++			{ self, hiredAt: at(2) },
++		);
++		expect(await page.evaluate(() => (window as any).profileReads)).toEqual([]);
++		await page.locator(".wp-chat-sidebar").getByRole("button", { name: "View profile: pi-tests", exact: true }).click();
++		const profile = page.getByRole("complementary", { name: "Profile: pi-tests", exact: true });
++		const storyField = profile.getByRole("region", { name: "Self: My story", exact: true });
++		await storyField.waitFor();
++		expect(await page.evaluate(() => (window as any).profileReads)).toEqual(["pi-tests"]);
++		expect(await pages(page)).toEqual([]);
++		expect(await seen(page)).toEqual([]);
++		await storyField.getByText(`${"s".repeat(200)}\u2026`, { exact: true }).waitFor();
++		await profile
++			.getByRole("region", { name: "Self: The people I work with", exact: true })
++			.getByText("Colleague notes.", { exact: true })
++			.waitFor();
++		await storyField.getByRole("button", { name: "See more of Self: My story", exact: true }).click();
++		await storyField.getByText(story, { exact: true }).waitFor();
++		const practiceField = profile.getByRole("region", { name: "Self: How I work", exact: true });
++		expect(await practiceField.getByRole("button").getAttribute("aria-expanded")).toBe("false");
++		await practiceField.getByText(`${"p".repeat(200)}\u2026`, { exact: true }).waitFor();
++		await profile
++			.getByRole("region", { name: "Self: What I hold myself to", exact: true })
++			.getByText(standards, { exact: true })
++			.waitFor();
++		expect(
++			await profile
++				.getByRole("region", { name: "Self: What I hold myself to", exact: true })
++				.getByRole("button")
++				.count(),
++		).toBe(0);
++		const record = profile.getByText("Record", { exact: true }).locator("..");
++		await record.getByText(`${"r".repeat(200)}\u2026`, { exact: true }).waitFor();
++		await record.getByRole("button", { name: "See more of Record", exact: true }).click();
++		await record.getByText(`${"r".repeat(240)}\nAnother completed task`, { exact: true }).waitFor();
++		await storyField.getByRole("button", { name: "See less of Self: My story", exact: true }).click();
++		await storyField.getByText(`${"s".repeat(200)}\u2026`, { exact: true }).waitFor();
++		expect(await record.getByRole("button").getAttribute("aria-expanded")).toBe("true");
++		expect(
++			await profile.getByText("Hired", { exact: true }).locator("..").locator("time").getAttribute("datetime"),
++		).toBe(new Date(at(2)).toISOString());
++		await page.evaluate(async () => {
++			const w = window as any;
++			const current = await w.agentWorld.snapshot();
++			w.push({ ...current, characters: current.characters.map((person: any) => ({ ...person, hiredAt: null })) });
++		});
++		await profile.getByText("First seen", { exact: true }).waitFor();
++		expect(await profile.getByText("Hired", { exact: true }).count()).toBe(0);
++		expect(await profile.locator("time").getAttribute("datetime")).toBe(new Date(at(1)).toISOString());
++
++		expect(errors).toEqual([]);
++	} finally {
++		await page.close();
++	}
++}, 30000);
++
++test("Mail has visible Sent and Activity icons, and selecting Activity opens the Activity delivery log", async () => {
++	const { page, errors } = await openWorld(world(), {});
++	page.setDefaultTimeout(5000);
++	try {
++		await page.getByRole("link", { name: "Workplace spike", exact: true }).click();
++		await page.getByRole("button", { name: "Mail", exact: true }).click();
++		for (const name of ["Sent", "Activity"]) {
++			const folder = page.getByRole("button", { name, exact: true });
++			expect(await folder.locator("svg").isVisible()).toBe(true);
++			await folder.click();
++			expect(await folder.getAttribute("aria-pressed")).toBe("true");
++		}
++		await page
++			.getByRole("region", { name: "Delivery log", exact: true })
++			.getByRole("heading", { name: "Activity", exact: true })
++			.waitFor();
++		expect(errors).toEqual([]);
++	} finally {
++		await page.close();
++	}
++}, 30000);
++
++test("DM unread updates survive another conversation, older reading and window blur, and clear only after the loaded latest reply is visible", async () => {
++	const cast = CAST.map((person) =>
++		person.id === "pi-tests" ? { ...person, facts: facts({ seenAt: at(9) }) } : person,
++	);
++	const { page, errors } = await openWorld(world(cast), { "pi-tests": longSession(80), [HQ]: [] });
++	try {
++		await page.getByRole("link", { name: "Workplace spike", exact: true }).click();
++		await page.getByRole("button", { name: /^Orla/, exact: false }).first().click();
++		const incoming = async (id: string, text: string) =>
++			page.evaluate(
++				async ({ id, text }) => {
++					const w = window as any;
++					const when = Date.now();
++					w.append("pi-tests", {
++						kind: "assistant",
++						id,
++						at: when,
++						parts: [{ kind: "text", text }],
++						error: null,
++						aborted: false,
++					});
++					const current = await w.agentWorld.snapshot();
++					w.push({
++						...current,
++						characters: current.characters.map((person: any) =>
++							person.id === "pi-tests"
++								? {
++										...person,
++										facts: {
++											...person.facts,
++											run: "idle",
++											status: "idle",
++											tool: null,
++											unseen: true,
++											needsYouSince: when,
++											settledAt: when,
++										},
++									}
++								: person,
++						),
++					});
++				},
++				{ id, text },
++			);
++		const row = page
++			.locator(".wp-dm")
++			.filter({ has: page.getByRole("button", { name: "View profile: pi-tests", exact: true }) });
++		await incoming("unread-away", "A reply while another DM is open.");
++		await vi.waitFor(async () => expect(await row.getAttribute("data-unread")).toBe("true"));
++		for (let appearance = 0; appearance < 2; appearance++) {
++			const dot = (await row.locator(".wp-unread-dot").boundingBox())!;
++			const name = (await row.locator("strong").boundingBox())!;
++			expect(dot.width).toBeGreaterThan(0);
++			expect(dot.width).toBeCloseTo(dot.height, 1);
++			expect(dot.height).toBeLessThanOrEqual(name.height);
++			await page.getByRole("button", { name: "Theme: dark mode", exact: true }).click();
++		}
++		expect(await seen(page)).toEqual([]);
++		await row.getByRole("button", { name: /^pi-tests/ }).click();
++		await log(page).getByText("A reply while another DM is open.", { exact: true }).waitFor();
++		await vi.waitFor(async () => expect(await row.getAttribute("data-unread")).toBe("false"));
++		expect(await row.locator(".wp-unread-dot").count()).toBe(0);
++		expect(await seen(page)).toEqual(["pi-tests"]);
++		await page.evaluate(() => {
++			(window as any).holdHistory = "pi-tests";
++		});
++		await incoming("unread-loading", "A reply whose newest page is still loading.");
++		await vi.waitFor(async () =>
++			expect(await page.evaluate(() => typeof (window as any).releaseHistory)).toBe("function"),
++		);
++		expect(await seen(page)).toEqual(["pi-tests"]);
++		expect(await row.getAttribute("data-unread")).toBe("true");
++		await page.evaluate(() => (window as any).releaseHistory());
++		await log(page).getByText("A reply whose newest page is still loading.", { exact: true }).waitFor();
++		await vi.waitFor(async () => expect(await seen(page)).toEqual(["pi-tests", "pi-tests"]));
++		await log(page).evaluate((el) => {
++			el.scrollTop = el.scrollHeight - el.clientHeight - 500;
++		});
++		await page.getByRole("button", { name: /^Jump to latest/ }).waitFor();
++		const before = await log(page).evaluate((el) => el.scrollTop);
++		await incoming("unread-older", "A reply while reading older content.");
++		await log(page).getByText("A reply while reading older content.", { exact: true }).waitFor();
++		expect(await seen(page)).toEqual(["pi-tests", "pi-tests"]);
++		expect(await row.getAttribute("data-unread")).toBe("true");
++		expect(Math.abs((await log(page).evaluate((el) => el.scrollTop)) - before)).toBeLessThan(4);
++		await page.getByRole("button", { name: /^New messages - jump to latest/ }).click();
++		await vi.waitFor(async () => expect(await seen(page)).toEqual(["pi-tests", "pi-tests", "pi-tests"]));
++		await page.evaluate(() => window.dispatchEvent(new Event("blur")));
++		await incoming("unread-blurred", "A reply while the window is inactive.");
++		await log(page).getByText("A reply while the window is inactive.", { exact: true }).waitFor();
++		expect(await seen(page)).toEqual(["pi-tests", "pi-tests", "pi-tests"]);
++		expect(await row.getAttribute("data-unread")).toBe("true");
++		await page.evaluate(() => window.dispatchEvent(new Event("focus")));
++		await vi.waitFor(async () => expect(await seen(page)).toEqual(["pi-tests", "pi-tests", "pi-tests", "pi-tests"]));
++		expect(await log(page).getByRole("separator", { name: "New updates", exact: true }).count()).toBe(1);
++		expect(errors).toEqual([]);
++	} finally {
++		await page.close();
++	}
++}, 30000);
++
++test("channel unread boundaries use the real pre-read cursor, and new posts respect older reading and recover from a read failure", async () => {
++	const id = "team:unread";
++	const participants = [
++		{ id: "operator", name: "You" },
++		{ id: "pi-tests", name: "pi-tests" },
++	];
++	const messages = Array.from({ length: 30 }, (_, i) => ({
++		seq: i + 1,
++		from: "pi-tests",
++		name: "pi-tests",
++		at: at(i),
++		body: `Earlier post ${i}.`,
++	}));
++	messages.push(
++		{ seq: 102, from: "operator", name: "You", at: at(31), body: "My own post is not an unread incoming message." },
++		{ seq: 105, from: "pi-tests", name: "pi-tests", at: at(32), body: "The first unread incoming post." },
++	);
++	const initial = {
++		...world(),
++		operatorMail: [{ id, subject: "Unread team", unread: 1, lastAt: at(32) }],
++		workplace: {
++			tasks: [],
++			escalations: [],
++			threads: [
++				{
++					id,
++					kind: "channel" as const,
++					subject: "Unread team",
++					createdBy: HQ,
++					headquarters: HQ,
++					closed: false,
++					lastSeq: 105,
++					lastAt: at(32),
++					participants: participants.map((person) => person.id),
++				},
++			],
++		},
++	};
++	const { page, errors } = await openWorld(initial, {}, [
++		{ id, subject: "Unread team", closed: false, participants, messages, readUpTo: 102 },
++	]);
++	try {
++		await page.getByRole("link", { name: "Workplace spike", exact: true }).click();
++		const channel = page.getByRole("button", { name: "# Unread team", exact: true });
++		expect(await channel.getAttribute("data-unread")).toBe("true");
++		expect(await channel.locator("b").textContent()).toBe("1");
++		await channel.click();
++		const divider = page.getByRole("separator", { name: "New messages", exact: true });
++		await divider.waitFor();
++		await divider
++			.locator("..")
++			.locator("xpath=following-sibling::article[1]")
++			.getByText("The first unread incoming post.", { exact: true })
++			.waitFor();
++		await vi.waitFor(async () => expect(await channel.getAttribute("data-unread")).toBe("false"));
++		const scroll = page.locator(".wp-thread-messages");
++		await scroll.evaluate((el) => {
++			el.scrollTop = 100;
++			el.dispatchEvent(new Event("scroll", { bubbles: true }));
++		});
++		const reads = await page.evaluate(() => (window as any).threadReads.length);
++		await page.evaluate(
++			({ id, at }) =>
++				(window as any).channelPost(id, {
++					seq: 109,
++					from: "pi-tests",
++					name: "pi-tests",
++					at,
++					body: "Incoming while reading older posts.",
++				}),
++			{ id, at: at(33) },
++		);
++		const jump = page.getByRole("button", { name: "New messages - jump to latest", exact: true });
++		await jump.waitFor();
++		expect(await page.evaluate(() => (window as any).threadReads.length)).toBe(reads);
++		expect(await channel.getAttribute("data-unread")).toBe("true");
++		expect(await scroll.evaluate((el) => el.scrollTop)).toBe(100);
++		await jump.click();
++		await scroll.getByText("Incoming while reading older posts.", { exact: true }).waitFor();
++		await vi.waitFor(async () => expect(await channel.getAttribute("data-unread")).toBe("false"));
++		await page.evaluate(
++			({ id, at }) =>
++				(window as any).channelPost(id, {
++					seq: 110,
++					from: "pi-tests",
++					name: "pi-tests",
++					at,
++					body: "Incoming while following the latest posts.",
++				}),
++			{ id, at: at(34) },
++		);
++		await scroll.getByText("Incoming while following the latest posts.", { exact: true }).waitFor();
++		await vi.waitFor(async () => expect(await channel.getAttribute("data-unread")).toBe("false"));
++		await page.evaluate(
++			({ id, at }) => {
++				const w = window as any;
++				w.readError = true;
++				w.channelPost(id, { seq: 111, from: "pi-tests", name: "pi-tests", at, body: "The retried post." });
++			},
++			{ id, at: at(35) },
++		);
++		await page.getByRole("alert").getByText("The channel could not be read.", { exact: true }).waitFor();
++		const failedReads = await page.evaluate(() => (window as any).threadReads.length);
++		await page.waitForTimeout(200);
++		expect(await page.evaluate(() => (window as any).threadReads.length)).toBe(failedReads);
++		expect(await channel.getAttribute("data-unread")).toBe("true");
++		await jump.click();
++		await scroll.getByText("The retried post.", { exact: true }).waitFor();
++		await vi.waitFor(async () => expect(await channel.getAttribute("data-unread")).toBe("false"));
++		expect(errors).toEqual([]);
++	} finally {
++		await page.close();
++	}
++}, 30000);
++
+ test("Tab keeps to the open book, and Escape gives the keys back to the world", async () => {
+ 	const { page, errors } = await openWorld(world(), { "pi-tests": SUITE, ledger: [], asker: [], [HQ]: [] });
+ 	try {
+diff --git a/apps/agent-world/web/game/layout.ts b/apps/agent-world/web/game/layout.ts
+index 4e8f1c78..74bfc0d6 100644
+--- a/apps/agent-world/web/game/layout.ts
++++ b/apps/agent-world/web/game/layout.ts
+@@ -203,6 +203,7 @@ export function sleeperCharacter(agent: DormantAgent): Character {
+ 		name: agent.name,
+ 		role: agent.role,
+ 		place: { kind: "inn" },
++		hiredAt: agent.hiredAt,
+ 		startedAt: agent.startedAt,
+ 		// What the conversation panel shows of it: where it worked and its last task. Asleep, it needs nobody.
+ 		facts: {
+@@ -213,6 +214,7 @@ export function sleeperCharacter(agent: DormantAgent): Character {
+ 			unseen: false,
+ 			seenAt: null,
+ 			settledAt: agent.stoppedAt,
++			title: agent.title ?? null,
+ 			tool: null,
+ 			task: agent.task,
+ 			git: agent.repository ? { repository: agent.repository, worktree: agent.repository, branch: "" } : null,
+diff --git a/apps/agent-world/web/index.html b/apps/agent-world/web/index.html
+index c033d9ab..00805b08 100644
+--- a/apps/agent-world/web/index.html
++++ b/apps/agent-world/web/index.html
+@@ -12,6 +12,6 @@
+ 	<body>
+ 		<div id="game"></div>
+ 		<div id="overlay"></div>
+-		<script type="module" src="./main.tsx"></script>
++		<script type="module" src="./entry.ts"></script>
+ 	</body>
+ </html>
+diff --git a/apps/agent-world/web/overlay/conversation/conversation-panel.tsx b/apps/agent-world/web/overlay/conversation/conversation-panel.tsx
+index 7c40cc9f..cf32644b 100644
+--- a/apps/agent-world/web/overlay/conversation/conversation-panel.tsx
++++ b/apps/agent-world/web/overlay/conversation/conversation-panel.tsx
+@@ -15,12 +15,13 @@ import { activity, ago, attentionOf, placeName } from "../interface/model.js";
+ import { placeActions, placePanels } from "../places/place-panels.js";
+ import { Footer } from "./actions.js";
+ import "./conversation.css";
++import { useWindowFocus } from "../../use-window-focus.js";
+ import { focusWorld, trapTab } from "../focus.js";
+ import { shortArg } from "../tool-line.js";
+-import { useHistory } from "./history.js";
++import { type History, useHistory } from "./history.js";
+ import { useLiveReplies } from "./live-reply.js";
+-import { conversationPanel } from "./panel-state.js";
+-import { BlockView, blockAt, blockKey, blocksOf, dayName, WorkingDirectory } from "./transcript.js";
++import { type ConversationApi, conversationPanel } from "./panel-state.js";
++import { BlockView, blockAt, blockKey, blocksOf, blockVisible, dayName, WorkingDirectory } from "./transcript.js";
+ 
+ /** Within this many px of the top, the page before loads. */
+ const LOAD_MARGIN = 400;
+@@ -34,7 +35,79 @@ export function ConversationPanel({ store }: { store: WorldStore }) {
+ 	return <Panel key={`${panel.opening}:${panel.character.id}`} opened={panel.character} world={world} store={store} />;
+ }
+ 
+-function Panel({ opened, world, store }: { opened: Character; world: WorldSnapshot | undefined; store: WorldStore }) {
++/** Temporary workplace spike: reuse the session surface without a modal keyboard boundary. */
++export function EmbeddedConversation({
++	character,
++	store,
++	showTools,
++}: {
++	character: Character;
++	store: WorldStore;
++	showTools: boolean;
++}) {
++	const world = useSyncExternalStore(store.subscribe, store.get);
++	return <Panel key={character.id} opened={character} world={world} store={store} embedded showTools={showTools} />;
++}
++
++function useSeenConversation(
++	api: ConversationApi | undefined,
++	id: string,
++	needsYouSince: number | null,
++	ready: boolean,
++) {
++	const [note, setNote] = useState<string>();
++	const seenOnce = useRef(false);
++	const seenNeeds = useRef<number | null>(null);
++	useEffect(() => {
++		if (needsYouSince === null) {
++			seenNeeds.current = null;
++			return;
++		}
++		if (!api || !ready || seenNeeds.current === needsYouSince || (!document.hasFocus() && seenOnce.current)) return;
++		seenOnce.current = true;
++		seenNeeds.current = needsYouSince;
++		void Promise.resolve()
++			.then(() => api.markSeen(id))
++			.then(
++				(result) => setNote(result.ok ? undefined : `Could not mark it seen: ${result.reason}`),
++				(failure: unknown) => setNote(`Could not mark it seen: ${String(failure)}`),
++			);
++	}, [api, id, needsYouSince, ready]);
++	return note;
++}
++
++function useReadPosition(history: History, pulse: string, facts: Character["facts"], embedded: boolean) {
++	const [atLatest, setAtLatest] = useState(false);
++	const focused = useWindowFocus();
++	const unreadSince = useRef(facts?.unseen ? (facts.seenAt ?? 0) : undefined);
++	if (embedded && facts?.unseen && (!atLatest || !focused) && unreadSince.current === undefined)
++		unreadSince.current = facts.seenAt ?? 0;
++	const firstRead = useRef(false);
++	useEffect(() => {
++		if (!embedded || !history.ready || firstRead.current) return;
++		firstRead.current = true;
++		if (history.readPulse !== pulse) history.refresh();
++	}, [embedded, history.ready, history.readPulse, history.refresh, pulse]);
++	return {
++		unreadSince: embedded ? unreadSince.current : undefined,
++		onAtLatest: embedded ? setAtLatest : undefined,
++		ready: !embedded || (atLatest && focused && history.ready && !history.error && history.readPulse === pulse),
++	};
++}
++
++function Panel({
++	opened,
++	world,
++	store,
++	embedded = false,
++	showTools = true,
++}: {
++	opened: Character;
++	world: WorldSnapshot | undefined;
++	store: WorldStore;
++	embedded?: boolean;
++	showTools?: boolean;
++}) {
+ 	const { api } = conversationPanel.get();
+ 	const theme = useTheme();
+ 	// The character as it is now; if it left the world meanwhile, as it was.
+@@ -48,22 +121,6 @@ function Panel({ opened, world, store }: { opened: Character; world: WorldSnapsh
+ 	const facts = character.facts;
+ 	const attention = attentionOf(character);
+ 
+-	// Opening the conversation is seeing it, in every view; so is a settle while the operator is looking at it.
+-	const [seenNote, setSeenNote] = useState<string>();
+-	const seenOnce = useRef(false);
+-	const needsYouSince = facts?.needsYouSince ?? null;
+-	useEffect(() => {
+-		if (needsYouSince === null || !api) return;
+-		if (!document.hasFocus() && seenOnce.current) return;
+-		seenOnce.current = true;
+-		void Promise.resolve()
+-			.then(() => api.markSeen(opened.id))
+-			.then(
+-				(result) => setSeenNote(result.ok ? undefined : `Could not mark it seen: ${result.reason}`),
+-				(failure: unknown) => setSeenNote(`Could not mark it seen: ${String(failure)}`),
+-			);
+-	}, [api, opened.id, needsYouSince]);
+-
+ 	// Finished work keeps its happy face while the conversation stays open, though seeing it clears the badge.
+ 	const [happy, setHappy] = useState(attention === "finished");
+ 	useEffect(() => {
+@@ -76,6 +133,8 @@ function Panel({ opened, world, store }: { opened: Character; world: WorldSnapsh
+ 	const pulse = `${facts?.run}:${facts?.settledAt}:${facts?.tool?.since}:${facts?.needsYouSince}`;
+ 	const history = useHistory(api, opened.id, pulse);
+ 	const streaming = useLiveReplies(api, opened.id, history.entries, history.refresh);
++	const position = useReadPosition(history, pulse, facts, embedded);
++	const seenNote = useSeenConversation(api, opened.id, facts?.needsYouSince ?? null, position.ready);
+ 	const [sentCount, setSentCount] = useState(0);
+ 
+ 	// Escape closes (a confirmation first); while open, the world's keys (walking, the walk grid) rest. Keys typed in
+@@ -83,6 +142,7 @@ function Panel({ opened, world, store }: { opened: Character; world: WorldSnapsh
+ 	// releases still reach the world, so no key stays held down.
+ 	const panelRef = useRef<HTMLDivElement>(null);
+ 	useEffect(() => {
++		if (embedded) return;
+ 		const capture = (event: KeyboardEvent) => {
+ 			if (event.key === "Escape") {
+ 				event.stopImmediatePropagation();
+@@ -107,7 +167,7 @@ function Panel({ opened, world, store }: { opened: Character; world: WorldSnapsh
+ 			// Closed: the world has the keys again.
+ 			focusWorld();
+ 		};
+-	}, []);
++	}, [embedded]);
+ 
+ 	// Links open through the main process: web links in the system browser, files in their default app (relative paths
+ 	// from the agent's directory). A refusal or failure shows where Go to does.
+@@ -133,7 +193,20 @@ function Panel({ opened, world, store }: { opened: Character; world: WorldSnapsh
+ 	const place = placeName(character.place, world, theme?.labels);
+ 	const repository = facts?.git?.repository.split("/").filter(Boolean).pop();
+ 	const doing = activity(character);
++	const progress =
++		facts?.run &&
++		{
++			idle: "",
++			thinking: "is thinking",
++			writing_reply: "is typing",
++			running_tool: "is working",
++			compacting: "is updating context",
++		}[facts.run];
++	const toolProgress = facts?.run === "running_tool" && facts.tool ? doing : undefined;
+ 	const portrait = theme ? portraitFor(theme, character, expression) : undefined;
++	const accessibility = embedded
++		? { role: "region" as const, "aria-label": `Conversation with ${character.name}` }
++		: { role: "dialog" as const, "aria-modal": true as const, "aria-label": `Conversation with ${character.name}` };
+ 
+ 	return (
+ 		// biome-ignore lint/a11y/noStaticElementInteractions: clicking the dimmed world closes the panel; Escape does from the keyboard
+@@ -143,13 +216,7 @@ function Panel({ opened, world, store }: { opened: Character; world: WorldSnapsh
+ 				if (event.target === event.currentTarget) conversationPanel.close();
+ 			}}
+ 		>
+-			<div
+-				ref={panelRef}
+-				className="aw-conv-panel"
+-				role="dialog"
+-				aria-modal="true"
+-				aria-label={`Conversation with ${character.name}`}
+-			>
++			<div ref={panelRef} className="aw-conv-panel" {...accessibility}>
+ 				<span className="aw-conv-ornament aw-tl" aria-hidden="true" />
+ 				<span className="aw-conv-ornament aw-tr" aria-hidden="true" />
+ 				<span className="aw-conv-ornament aw-bl" aria-hidden="true" />
+@@ -226,16 +293,6 @@ function Panel({ opened, world, store }: { opened: Character; world: WorldSnapsh
+ 								{waking.text}
+ 							</p>
+ 						)}
+-						{terminal && (
+-							<p className="aw-conv-warn" role="status">
+-								{terminal}
+-							</p>
+-						)}
+-						{seenNote && (
+-							<p className="aw-conv-warn" role="status">
+-								{seenNote}
+-							</p>
+-						)}
+ 					</div>
+ 				</aside>
+ 				<section className="aw-conv-pane aw-conv-main">
+@@ -246,9 +303,50 @@ function Panel({ opened, world, store }: { opened: Character; world: WorldSnapsh
+ 						title="Close (Esc)"
+ 						onClick={() => conversationPanel.close()}
+ 					/>
++					{terminal && (
++						<p className="aw-conv-warn" role="status">
++							{terminal}
++						</p>
++					)}
++					{seenNote && (
++						<p className="aw-conv-warn" role="status">
++							{seenNote}
++						</p>
++					)}
+ 					<WorkingDirectory.Provider value={facts?.cwd}>
+-						<Transcript history={history} live={streaming} name={character.name} sent={sentCount} onLink={openLink} />
++						<Transcript
++							history={history}
++							live={streaming}
++							name={character.name}
++							sent={sentCount}
++							onLink={openLink}
++							showTools={showTools}
++							unreadSince={position.unreadSince}
++							onAtLatest={position.onAtLatest}
++						/>
+ 					</WorkingDirectory.Provider>
++					{embedded && live && facts?.run && facts.run !== "idle" && !facts.asking && (
++						<div className="wp-typing" role="status">
++							<span className="wp-typing-dots" aria-hidden="true">
++								<i />
++								<i />
++								<i />
++							</span>
++							<span
++								className="wp-typing-copy"
++								title={`${character.name} ${progress}${toolProgress ? ` · ${toolProgress}` : ""}`}
++							>
++								<strong>{character.name}</strong> {progress}
++								{toolProgress && (
++									<>
++										{" "}
++										<span aria-hidden="true"> · </span>
++										<code>{toolProgress}</code>
++									</>
++								)}
++							</span>
++						</div>
++					)}
+ 					{live ? (
+ 						<Footer
+ 							character={character}
+@@ -277,7 +375,7 @@ function Panel({ opened, world, store }: { opened: Character; world: WorldSnapsh
+ /** What it is doing: a tool and its argument set apart, or the plain state. */
+ function Doing({ character, text }: { character: Character; text: string }) {
+ 	const tool = character.facts?.tool;
+-	if (tool && attentionOf(character) === "working")
++	if (tool && character.facts?.run === "running_tool")
+ 		return (
+ 			<>
+ 				<span className="aw-conv-tool-name">{tool.name}</span>
+@@ -302,8 +400,14 @@ function Transcript({
+ 	name,
+ 	sent,
+ 	onLink,
++	showTools,
++	unreadSince,
++	onAtLatest,
+ }: {
++	unreadSince?: number;
++	onAtLatest?: (latest: boolean) => void;
+ 	history: ReturnType<typeof useHistory>;
++	showTools: boolean;
+ 	/** Open a web link in the system browser. */
+ 	onLink: (href: string, file: boolean) => void;
+ 	/** Replies being written, and written ones the history has not read yet, drawn after it. */
+@@ -314,12 +418,20 @@ function Transcript({
+ }) {
+ 	const theme = useTheme();
+ 	const log = useRef<HTMLDivElement>(null);
++	const [away, setAway] = useState(false);
++	const [newBelow, setNewBelow] = useState(false);
+ 	const entries = useMemo(
+ 		() => (live.length ? [...history.entries, ...live] : history.entries),
+ 		[history.entries, live],
+ 	);
+-	const { blocks, results } = useMemo(() => blocksOf(entries), [entries]);
++	const { blocks: allBlocks, results } = useMemo(() => blocksOf(entries), [entries]);
++	const blocks = useMemo(() => allBlocks.filter((block) => blockVisible(block, showTools)), [allBlocks, showTools]);
+ 	const firstKey = blocks.length ? blockKey(blocks[0]) : undefined;
++	const unreadIndex =
++		unreadSince === undefined
++			? -1
++			: blocks.findIndex((block) => block.kind === "agent" && block.entries.some((entry) => entry.at > unreadSince));
++	const lastEntry = useRef<TranscriptEntry | undefined>(undefined);
+ 	const layout = useRef<{ height: number; first?: string; sent: number; stuck: boolean; placed: boolean }>({
+ 		height: 0,
+ 		sent,
+@@ -334,7 +446,11 @@ function Transcript({
+ 		if (!el) return;
+ 		const was = layout.current;
+ 		if (!was.placed && history.ready) {
+-			el.scrollTop = el.scrollHeight;
++			const unread = el.querySelector<HTMLElement>("[data-unread-start]");
++			el.scrollTop =
++				unread && (unreadIndex > 0 || !history.before)
++					? unread.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop
++					: el.scrollHeight;
+ 			was.placed = true;
+ 		} else if (was.first !== undefined && firstKey !== was.first) {
+ 			el.scrollTop += el.scrollHeight - was.height;
+@@ -342,6 +458,22 @@ function Transcript({
+ 			el.scrollTop = el.scrollHeight;
+ 			was.stuck = true;
+ 		}
++		if (
++			onAtLatest &&
++			was.placed &&
++			!was.stuck &&
++			was.first === firstKey &&
++			lastEntry.current !== entries.at(-1) &&
++			el.scrollHeight > was.height
++		)
++			setNewBelow(true);
++		lastEntry.current = entries.at(-1);
++		was.stuck = el.scrollHeight - el.clientHeight - el.scrollTop < STICK_MARGIN;
++		if (onAtLatest && history.ready) {
++			onAtLatest(was.stuck);
++			setAway(!was.stuck);
++			if (was.stuck) setNewBelow(false);
++		}
+ 		was.height = el.scrollHeight;
+ 		was.first = firstKey;
+ 		was.sent = sent;
+@@ -361,11 +493,16 @@ function Transcript({
+ 		const el = log.current;
+ 		if (!el) return;
+ 		layout.current.stuck = el.scrollHeight - el.clientHeight - el.scrollTop < STICK_MARGIN;
++		if (onAtLatest) {
++			onAtLatest(layout.current.stuck);
++			setAway(!layout.current.stuck);
++			if (layout.current.stuck) setNewBelow(false);
++		}
+ 		if (el.scrollTop < LOAD_MARGIN) history.loadOlder();
+ 	};
+ 
+ 	let day = "";
+-	return (
++	const content = (
+ 		<>
+ 			{/* biome-ignore lint/a11y/useKeyWithClickEvents: links are anchors, so Enter on one clicks it and reaches here */}
+ 			<div
+@@ -382,14 +519,14 @@ function Transcript({
+ 				{history.ready && !history.before && blocks.length > 0 && (
+ 					<div className="aw-conv-start">The beginning of the conversation</div>
+ 				)}
+-				{history.missing > 0 && (
++				{showTools && history.missing > 0 && (
+ 					<p className="aw-conv-missing" role="note">
+ 						{history.missing === 1
+ 							? "One entry is no longer in its transcript file."
+ 							: `${history.missing} entries are no longer in its transcript file.`}
+ 					</p>
+ 				)}
+-				{blocks.map((block) => {
++				{blocks.map((block, index) => {
+ 					const at = blockAt(block);
+ 					const name_ = at ? dayName(at) : day;
+ 					const divider = name_ !== day;
+@@ -401,11 +538,17 @@ function Transcript({
+ 									<span>{name_}</span>
+ 								</div>
+ 							)}
+-							<BlockView block={block} name={name} results={results} />
++							{index === unreadIndex && (
++								<div className="aw-conv-unread" data-unread-start>
++									<span aria-hidden="true">New</span>
++									<hr aria-label="New updates" />
++								</div>
++							)}
++							<BlockView block={block} name={name} results={results} showTools={showTools} />
+ 						</div>
+ 					);
+ 				})}
+-				{history.ready && blocks.length === 0 && !history.error && (
++				{history.ready && entries.length === 0 && !history.error && (
+ 					<p className="aw-conv-empty">Nothing has been said yet.</p>
+ 				)}
+ 				{!history.ready && !history.error && <p className="aw-conv-empty">{say(theme, "conversation-opening")}</p>}
+@@ -425,4 +568,27 @@ function Transcript({
+ 			)}
+ 		</>
+ 	);
++	if (!onAtLatest) return content;
++	return (
++		<div className="aw-conv-transcript">
++			{content}
++			{away && (
++				<button
++					type="button"
++					className="aw-conv-jump"
++					onClick={() => {
++						const el = log.current;
++						if (!el) return;
++						el.scrollTop = el.scrollHeight;
++						layout.current.stuck = true;
++						onAtLatest(true);
++						setAway(false);
++						setNewBelow(false);
++					}}
++				>
++					{newBelow ? "New messages - jump to latest" : "Jump to latest"} &darr;
++				</button>
++			)}
++		</div>
++	);
+ }
+diff --git a/apps/agent-world/web/overlay/conversation/history.ts b/apps/agent-world/web/overlay/conversation/history.ts
+index 275aac9f..eb94cea2 100644
+--- a/apps/agent-world/web/overlay/conversation/history.ts
++++ b/apps/agent-world/web/overlay/conversation/history.ts
+@@ -11,6 +11,8 @@ export interface History {
+ 	before: string | null;
+ 	/** The first page has arrived. */
+ 	ready: boolean;
++	/** The observed run state whose newest page was last read successfully. */
++	readPulse?: string;
+ 	/** Entries the runtime indexed that its transcript no longer holds, in the pages read so far. */
+ 	missing: number;
+ 	loadingOlder: boolean;
+@@ -42,16 +44,18 @@ export function useHistory(api: ConversationApi | undefined, characterId: string
+ 	const [before, setBefore] = useState<string | null>(null);
+ 	const [missing, setMissing] = useState(0);
+ 	const [ready, setReady] = useState(false);
++	const [readPulse, setReadPulse] = useState<string>();
+ 	const [loadingOlder, setLoadingOlder] = useState(false);
+ 	const [error, setError] = useState<string>();
+ 	const [attempt, setAttempt] = useState(0);
+-	const live = useRef({ entries, before, loadingOlder, ready, refreshing: false, again: false });
+-	live.current = { ...live.current, entries, before, loadingOlder, ready };
++	const live = useRef({ entries, before, loadingOlder, ready, pulse, refreshing: false, again: false });
++	live.current = { ...live.current, entries, before, loadingOlder, ready, pulse };
+ 
+ 	// The newest page, on opening.
+ 	useEffect(() => {
+ 		if (!api) return;
+ 		let gone = false;
++		const requestedPulse = live.current.pulse;
+ 		void attempt;
+ 		call(() => api.conversation(characterId))
+ 			.then((page) => {
+@@ -64,6 +68,7 @@ export function useHistory(api: ConversationApi | undefined, characterId: string
+ 				setEntries(page.entries);
+ 				setBefore(page.before);
+ 				setMissing(page.missing);
++				setReadPulse(requestedPulse);
+ 				setReady(true);
+ 			})
+ 			.catch((failure: unknown) => !gone && setError(String((failure as Error)?.message ?? failure)));
+@@ -105,9 +110,15 @@ export function useHistory(api: ConversationApi | undefined, characterId: string
+ 			return;
+ 		}
+ 		now.refreshing = true;
++		const requestedPulse = now.pulse;
+ 		call(() => api.conversation(characterId))
+ 			.then((page) => {
+-				if (!page.ok) return;
++				if (!page.ok) {
++					setError(page.reason);
++					return;
++				}
++				setError(undefined);
++				setReadPulse(requestedPulse);
+ 				const fresh = newer(live.current.entries, page.entries);
+ 				if (fresh === undefined) {
+ 					// More happened than a page holds: start again from the newest page.
+@@ -115,7 +126,7 @@ export function useHistory(api: ConversationApi | undefined, characterId: string
+ 					setBefore(page.before);
+ 				} else if (fresh.length) setEntries((known) => [...known, ...fresh]);
+ 			})
+-			.catch(() => {})
++			.catch((failure: unknown) => setError(String((failure as Error)?.message ?? failure)))
+ 			.finally(() => {
+ 				live.current.refreshing = false;
+ 				if (live.current.again) {
+@@ -136,6 +147,7 @@ export function useHistory(api: ConversationApi | undefined, characterId: string
+ 		entries,
+ 		before,
+ 		ready,
++		readPulse,
+ 		missing,
+ 		loadingOlder,
+ 		error,
+diff --git a/apps/agent-world/web/overlay/conversation/transcript.tsx b/apps/agent-world/web/overlay/conversation/transcript.tsx
+index 26c94038..c215e6da 100644
+--- a/apps/agent-world/web/overlay/conversation/transcript.tsx
++++ b/apps/agent-world/web/overlay/conversation/transcript.tsx
+@@ -1,7 +1,7 @@
+ // The transcript on the book's right page: the operator's turns and the agent's replies as Markdown, consecutive
+ // replies of one turn under one heading, each tool call folded to one line (its tool and main argument) that opens to
+ // its input and result, mail as a sealed letter, and other extensions' messages folded like tool calls.
+-import { createContext, memo, useContext, useState } from "react";
++import { createContext, memo, type ReactNode, useContext, useState } from "react";
+ import type { TranscriptEntry, TranscriptToolCall } from "../../../src/world.js";
+ import { shortArg } from "../tool-line.js";
+ import { isLive } from "./live-reply.js";
+@@ -67,10 +67,26 @@ export function blockKey(block: Block): string {
+ 	return block.kind === "agent" ? block.entries[0].id : block.entry.id;
+ }
+ 
+-const Markdown = memo(function Markdown({ text }: { text: string }) {
+-	// The HTML comes from markdownHtml, which escapes every raw tag and drops links and images.
+-	// biome-ignore lint/security/noDangerouslySetInnerHtml: sanitised by markdownHtml
+-	return <div className="aw-md" dangerouslySetInnerHTML={{ __html: markdownHtml(text) }} />;
++export const Markdown = memo(function Markdown({
++	text,
++	onLink,
++}: {
++	text: string;
++	onLink?: (href: string, file: boolean) => void;
++}) {
++	const follow = (event: React.MouseEvent) => {
++		if (!onLink || event.button > 1) return;
++		const anchor =
++			event.target instanceof Element ? event.target.closest<HTMLAnchorElement>("a.aw-md-link[href]") : null;
++		if (!anchor) return;
++		event.preventDefault();
++		onLink(anchor.getAttribute("href")!, anchor.hasAttribute("data-file"));
++	};
++	const html = markdownHtml(text);
++	// biome-ignore lint/a11y/noStaticElementInteractions: the wrapper delegates native anchor clicks; it is not an additional control
++	// biome-ignore lint/a11y/useKeyWithClickEvents: native anchors already deliver Enter as a click
++	// biome-ignore lint/security/noDangerouslySetInnerHtml: markdownHtml escapes raw HTML, blocks unsafe schemes, and renders images as text
++	return <div className="aw-md" onClick={follow} onAuxClick={follow} dangerouslySetInnerHTML={{ __html: html }} />;
+ });
+ 
+ /** A folded line that opens on click: a tool call with its result, a thought, or an extension's note. */
+@@ -114,6 +130,14 @@ const STATE_TITLE = { ok: "Done", error: "Failed", waiting: "No result yet" };
+ 
+ /** The character's working directory, which tool lines leave out of the paths and commands they show. */
+ export const WorkingDirectory = createContext<string | undefined>(undefined);
++export const TranscriptAuthor = createContext<((speaker: "assistant" | "user", name: string) => ReactNode) | undefined>(
++	undefined,
++);
++
++function Author({ speaker, name }: { speaker: "assistant" | "user"; name: string }) {
++	const render = useContext(TranscriptAuthor);
++	return render ? render(speaker, name) : <span className="aw-conv-name">{name}</span>;
++}
+ 
+ function ToolCall({ call, result }: { call: TranscriptToolCall; result?: ToolResult }) {
+ 	const cwd = useContext(WorkingDirectory);
+@@ -187,23 +211,38 @@ function replyItems(entries: Assistant[]): Map<string, ReplyItem[]> {
+ 	return items;
+ }
+ 
++/** Text-only mode changes presentation, never the loaded history or tool/result index. */
++export function blockVisible(block: Block, showTools: boolean): boolean {
++	if (showTools) return true;
++	if (block.kind === "user") return !!block.entry.text.trim();
++	return (
++		block.kind === "agent" &&
++		block.entries.some((entry) => entry.parts.some((part) => part.kind === "text" && part.text.trim()))
++	);
++}
++
+ function AgentBlock({
+ 	name,
+ 	entries,
+ 	results,
++	showTools,
+ }: {
+ 	name: string;
+ 	entries: Assistant[];
+ 	results: Map<string, ToolResult>;
++	showTools: boolean;
+ }) {
+ 	const items = replyItems(entries);
++	const visibleEntries = entries.filter(
++		(entry) => showTools || items.get(entry.id)!.some((item) => item.kind === "text"),
++	);
+ 	return (
+ 		<article className="aw-conv-entry aw-conv-assistant" data-entry={entries[0].id}>
+ 			<header className="aw-conv-who">
+-				<span className="aw-conv-name">{name}</span>
++				<Author speaker="assistant" name={name} />
+ 				<time>{clock(entries[0].at)}</time>
+ 			</header>
+-			{entries.map((entry) => (
++			{visibleEntries.map((entry) => (
+ 				<div
+ 					key={entry.id}
+ 					className={`aw-conv-reply${isLive(entry.id) ? " aw-conv-writing" : ""}`}
+@@ -211,6 +250,7 @@ function AgentBlock({
+ 				>
+ 					{items.get(entry.id)!.map((item) => {
+ 						if (item.kind === "text") return <Markdown key={item.key} text={item.text} />;
++						if (!showTools) return null;
+ 						if (item.kind === "thoughts")
+ 							return (
+ 								<Fold key={item.key} className="aw-conv-thought" glyph="thought" label="Thought it over">
+@@ -224,8 +264,8 @@ function AgentBlock({
+ 							);
+ 						return <ToolCall key={item.key} call={item.call} result={results.get(item.call.id)} />;
+ 					})}
+-					{entry.error && <p className="aw-conv-failed">The reply failed: {entry.error}</p>}
+-					{entry.aborted && <p className="aw-conv-failed">Stopped before it finished.</p>}
++					{showTools && entry.error && <p className="aw-conv-failed">The reply failed: {entry.error}</p>}
++					{showTools && entry.aborted && <p className="aw-conv-failed">Stopped before it finished.</p>}
+ 				</div>
+ 			))}
+ 		</article>
+@@ -236,21 +276,25 @@ export const BlockView = memo(function BlockView({
+ 	block,
+ 	name,
+ 	results,
++	showTools = true,
+ }: {
+ 	block: Block;
+ 	name: string;
+ 	results: Map<string, ToolResult>;
++	showTools?: boolean;
+ }) {
+-	if (block.kind === "agent") return <AgentBlock name={name} entries={block.entries} results={results} />;
++	if (!blockVisible(block, showTools)) return null;
++	if (block.kind === "agent")
++		return <AgentBlock name={name} entries={block.entries} results={results} showTools={showTools} />;
+ 	if (block.kind === "user")
+ 		return (
+ 			<article className="aw-conv-entry aw-conv-user" data-entry={block.entry.id}>
+ 				<header className="aw-conv-who">
+-					<span className="aw-conv-name">You</span>
++					<Author speaker="user" name="You" />
+ 					<time>{clock(block.entry.at)}</time>
+ 				</header>
+ 				<Markdown text={block.entry.text} />
+-				{block.entry.images > 0 && (
++				{showTools && block.entry.images > 0 && (
+ 					<p className="aw-conv-quiet">
+ 						{block.entry.images === 1 ? "With an image" : `With ${block.entry.images} images`} (see its terminal).
+ 					</p>
+diff --git a/apps/agent-world/web/overlay/interface/character-card.tsx b/apps/agent-world/web/overlay/interface/character-card.tsx
+index 253a8643..58f0a2fd 100644
+--- a/apps/agent-world/web/overlay/interface/character-card.tsx
++++ b/apps/agent-world/web/overlay/interface/character-card.tsx
+@@ -12,7 +12,7 @@ const tokens = (n: number) => (n >= 1000 ? `${Math.round(n / 1000)}k` : String(n
+ const base = (path: string) => path.split("/").filter(Boolean).pop() ?? path;
+ 
+ /** The card's facts, as term and value rows, in reading order. */
+-function factRows(character: Character, world: WorldSnapshot | undefined): [string, string][] {
++export function factRows(character: Character, world: WorldSnapshot | undefined): [string, string][] {
+ 	const facts = character.facts;
+ 	if (!facts) return [];
+ 	const attention = attentionOf(character);
+diff --git a/apps/agent-world/web/overlay/interface/model.ts b/apps/agent-world/web/overlay/interface/model.ts
+index 876f2304..8360a309 100644
+--- a/apps/agent-world/web/overlay/interface/model.ts
++++ b/apps/agent-world/web/overlay/interface/model.ts
+@@ -169,11 +169,16 @@ export function activity(character: Character): string {
+ 	if (!facts) return "";
+ 	const attention = attentionOf(character);
+ 	if (attention === "asking") return facts.asking?.text ? `Asks: ${facts.asking.text}` : "Asks you something";
+-	if (facts.tool) {
++	if (facts.run === "running_tool" && facts.tool) {
+ 		const arg = shortArg(facts.tool.arg, facts.cwd);
+ 		return arg ? `${facts.tool.name} \u00b7 ${arg}` : facts.tool.name;
+ 	}
+ 	if (attention === "finished") return "Finished, unseen";
+-	if (attention === "working") return facts.run === "compacting" ? "Compacting" : "Working";
++	if (attention === "working") {
++		if (facts.run === "compacting") return "Compacting";
++		if (facts.run === "writing_reply") return "Writing a reply";
++		if (facts.run === "thinking") return "Thinking";
++		return "Working";
++	}
+ 	return "Idle";
+ }
+diff --git a/components/session-state/src/protocol.ts b/components/session-state/src/protocol.ts
+index 00cc3a4a..d23dd437 100644
+--- a/components/session-state/src/protocol.ts
++++ b/components/session-state/src/protocol.ts
+@@ -157,6 +157,11 @@ export type Command =
+ 	| ({ kind: "thread_post" } & ThreadPost)
+ 	/** The session has read `thread` up to message `seq`. Applied by the runtime. */
+ 	| { kind: "thread_read"; thread: string; seq: number }
++	/**
++	 * The operator joins or leaves an existing team channel. Applied by the runtime. It does not create a thread, and
++	 * a repeat does not move the read cursor.
++	 */
++	| { kind: "channel_membership"; thread: string; joined: boolean }
+ 	/**
+ 	 * Start the session (a new id, or a stopped session by its id) with `pi` in a new tmux window after `tmux.pane`'s
+ 	 * window. The runtime opens the window itself; `cwd` and `name` default to the stopped session's. Applied when the
+diff --git a/components/session-state/src/runtime.ts b/components/session-state/src/runtime.ts
+index 928a765d..e37c179a 100644
+--- a/components/session-state/src/runtime.ts
++++ b/components/session-state/src/runtime.ts
+@@ -251,6 +251,8 @@ export class Runtime {
+ 	private readonly attentionShown = new Map<string, string>();
+ 	/** Sessions this runtime opened a window for, until their bridge connects or the window closes. */
+ 	private readonly starting = new Map<string, SessionStart>();
++	/** Manager-tool hires this process created, until that start connects or fails. A restart does not recover the set. */
++	private readonly newHires = new Set<string>();
+ 	private readonly headless = new Map<string, ChildProcess>();
+ 	private readonly retiring = new Map<string, { person: string }>();
+ 	private readonly departing = new Set<string>();
+@@ -288,6 +290,7 @@ export class Runtime {
+ 		cleanMovedBundles(this.db);
+ 		syncChannels(this.db, Date.now());
+ 		this.recoverThreadPosts();
++		this.recoverChannelMembership();
+ 		this.recoverWorkCommands();
+ 		this.recoverWorkRecords();
+ 		this.recoverRetirements();
+@@ -764,6 +767,11 @@ export class Runtime {
+ 			this.setCommandStage(commandId, "applied");
+ 			return;
+ 		}
++		if (command.kind === "channel_membership") {
++			receipt("accepted");
++			this.channelMembership(commandId, sessionId, command, now);
++			return;
++		}
+ 		if (waits) {
+ 			receipt(
+ 				"accepted",
+@@ -1228,6 +1236,58 @@ export class Runtime {
+ 		);
+ 	}
+ 
++	/**
++	 * Join or leave an existing team channel as the operator. The row and its audience event commit together; a repeat
++	 * join does not move the cursor. `invited` keeps the operator through the next channel reconciliation.
++	 */
++	private channelMembership(
++		commandId: string,
++		sessionId: string,
++		command: Extract<Command, { kind: "channel_membership" }>,
++		now: number,
++	): void {
++		const db = this.db!;
++		if (sessionId !== OPERATOR) {
++			this.setCommandStage(commandId, "failed", "only the operator can join or leave a channel this way");
++			return;
++		}
++		if (typeof command.thread !== "string" || !command.thread || typeof command.joined !== "boolean") {
++			this.setCommandStage(commandId, "failed", "channel membership needs a thread and whether to join");
++			return;
++		}
++		const thread = db.prepare("select kind from threads where id = ?").get(command.thread) as
++			| { kind: string }
++			| undefined;
++		if (thread?.kind !== "channel") {
++			this.setCommandStage(commandId, "failed", "no team channel with that id");
++			return;
++		}
++		try {
++			db.exec("begin");
++			participateIn(db, command.thread, OPERATOR, now, command.joined ? "pull" : null);
++			if (command.joined)
++				db.prepare("update thread_participants set invited = 1 where thread_id = ? and participant = ?").run(
++					command.thread,
++					OPERATOR,
++				);
++			db.exec("commit");
++		} catch (error) {
++			if (db.isTransaction) db.exec("rollback");
++			this.setCommandStage(commandId, "failed", (error as Error).message);
++			return;
++		}
++		this.setCommandStage(commandId, "applied");
++	}
++
++	/** Finish a membership command accepted before a crash. Join and leave are both idempotent. */
++	private recoverChannelMembership(): void {
++		const pending = this.db!.prepare(
++			"select command_id, session_id, command, created_at from commands where kind = 'channel_membership' and stage = 'accepted' order by created_at",
++		).all() as { command_id: string; session_id: string; command: string; created_at: number }[];
++		for (const row of pending)
++			this.channelMembership(row.command_id, row.session_id, JSON.parse(row.command), row.created_at);
++	}
++
+ 	/** Complete posts accepted before a crash. A stored message means its full outbox committed with it. */
+ 	private recoverThreadPosts(): void {
+ 		const db = this.db!;
+@@ -1515,6 +1575,7 @@ export class Runtime {
+ 		const start = this.starting.get(id);
+ 		if (start) {
+ 			this.starting.delete(id);
++			this.abandonHire(id);
+ 			this.setCommandStage(start.commandId, "failed", "The program discarded the peer before it connected");
+ 		}
+ 		return true;
+@@ -2030,6 +2091,7 @@ export class Runtime {
+ 			)
+ 				return;
+ 		}
++		if (!row && command.role && !programId && command.goal?.text.trim()) this.newHires.add(sessionId);
+ 		return this.launchSession(commandId, sessionId, {
+ 			cwd,
+ 			name,
+@@ -2081,6 +2143,7 @@ export class Runtime {
+ 					sessionId,
+ 				);
+ 			child.once("error", (error) => {
++				this.abandonHire(sessionId);
+ 				if (this.db === db) fail(`Pi could not start: ${error.message}`);
+ 			});
+ 			child.once("close", (code) => {
+@@ -2088,6 +2151,7 @@ export class Runtime {
+ 				if (this.db !== db) return;
+ 				if (this.starting.get(sessionId) === start) {
+ 					this.starting.delete(sessionId);
++					this.abandonHire(sessionId);
+ 					fail(`Pi exited before connecting (code ${code}); see the runtime log`);
+ 				}
+ 				void this.cleanPrograms();
+@@ -2104,6 +2168,7 @@ export class Runtime {
+ 			);
+ 		} catch (error) {
+ 			if (this.starting.get(sessionId) === start) this.starting.delete(sessionId);
++			this.abandonHire(sessionId);
+ 			const { stderr, message } = error as { stderr?: string; message: string };
+ 			if (this.db === db) fail(`tmux could not open a window: ${stderr?.trim() || message}`);
+ 			return;
+@@ -2239,21 +2304,28 @@ export class Runtime {
+ 			  }
+ 			| undefined;
+ 		if (!row || row.stage === "applied" || row.stage === "failed") return;
+-		// Mail of a thread that reached the transcript has been read there.
+-		if (stage === "applied" && row.kind === "mail") {
+-			const mail = JSON.parse(row.command) as { thread?: string; seq?: number };
+-			if (mail.thread && typeof mail.seq === "number") markRead(db, mail.thread, row.session_id, mail.seq);
+-		}
+-		db.prepare("update commands set stage = ?, reason = ?, updated_at = ? where command_id = ?").run(
+-			stage,
+-			reason ?? null,
+-			Date.now(),
+-			commandId,
+-		);
+-		this.event("runtime", row.session_id, row.generation, `command_${stage}`, {
+-			commandId,
+-			...(reason ? { reason } : {}),
+-		});
++		const hire = stage === "applied" && row.kind === "start" && this.newHires.delete(row.session_id);
++		const write = () => {
++			if (hire) this.stampHire(row.session_id);
++			// Mail of a thread that reached the transcript has been read there.
++			if (stage === "applied" && row.kind === "mail") {
++				const mail = JSON.parse(row.command) as { thread?: string; seq?: number };
++				if (mail.thread && typeof mail.seq === "number") markRead(db, mail.thread, row.session_id, mail.seq);
++			}
++			db.prepare("update commands set stage = ?, reason = ?, updated_at = ? where command_id = ?").run(
++				stage,
++				reason ?? null,
++				Date.now(),
++				commandId,
++			);
++			this.event("runtime", row.session_id, row.generation, `command_${stage}`, {
++				commandId,
++				...(reason ? { reason } : {}),
++			});
++		};
++		// A hire date commits with the applied stage, or not at all. The receipt follows the commit.
++		if (hire) this.atomically(write);
++		else write();
+ 		const client = this.commandClients.get(commandId);
+ 		if (stage === "applied" || stage === "failed") client?.heldTurns?.delete(commandId);
+ 		client?.socket.write(
+@@ -2266,6 +2338,23 @@ export class Runtime {
+ 		}
+ 	}
+ 
++	/** Drop a hire whose start failed before it connected, so a later call-in does not record a date. */
++	private abandonHire(sessionId: string): void {
++		this.newHires.delete(sessionId);
++	}
++
++	/** The connect time already stored for this hello. The caller commits it with the start becoming applied. */
++	private stampHire(sessionId: string): void {
++		const db = this.db!;
++		const started = db
++			.prepare(
++				"select started_at from incarnations where session_id = ? and ended_at is null order by generation desc limit 1",
++			)
++			.get(sessionId) as { started_at: number } | undefined;
++		if (!started) return;
++		db.prepare("update sessions set hired_at = ? where id = ? and hired_at is null").run(started.started_at, sessionId);
++	}
++
+ 	/**
+ 	 * A bridge reconnecting to an open incarnation that had no live connection was unheard for a while (the runtime
+ 	 * or the bridge was down). What happened then is lost: record the gap, from the last thing recorded, instead of
+@@ -2844,6 +2933,7 @@ export class Runtime {
+ 			if (start.socket !== socket || !startsBeforeRead.has(start)) continue;
+ 			if (panes?.some((pane) => pane.paneId === start.pane && !pane.dead)) continue;
+ 			this.starting.delete(sessionId);
++			this.abandonHire(sessionId);
+ 			this.setCommandStage(start.commandId, "failed", "the window closed before the session started");
+ 		}
+ 		const present = db.prepare("select 1 from tmux_servers where socket = ?").get(socket) !== undefined;
+diff --git a/components/session-state/src/schema.ts b/components/session-state/src/schema.ts
+index 69a08a75..6a980048 100644
+--- a/components/session-state/src/schema.ts
++++ b/components/session-state/src/schema.ts
+@@ -298,6 +298,8 @@ const MIGRATIONS = [
+ 	 from program_peers p
+ 	 where not exists (select 1 from events e where e.session_id = p.session_id and e.type in ('program_peer_created', 'program_peer_observed'));`,
+ 	`create index events_by_type on events (type, seq);`,
++	// When a manager-tool hire first connected. Null is unknown, including every person recorded before this column.
++	`alter table sessions add column hired_at integer;`,
+ ];
+ 
+ export const SCHEMA_VERSION = MIGRATIONS.length;
+diff --git a/docs/session-state.md b/docs/session-state.md
+index 4504befc..b9feb067 100644
+--- a/docs/session-state.md
++++ b/docs/session-state.md
+@@ -19,7 +19,7 @@ Everything lives under `~/.pi/agent/state/` (or `$PI_CODING_AGENT_DIR/state/`, w
+   - the `queue` (JSON): steers and follow-ups typed during a run and not yet delivered (Pi delivers steers first), and `pending`, Pi's own flag that something waits, which also covers messages other extensions queued;
+   - `last_error` (a failed reply's message) and `last_abort_at`;
+   - `model`, `thinking_level`, `context_tokens`, `context_window`, and `cost` so far;
+-  - relations: `reports_to` (the manager session from `--reports-to`), `role` (the role catalog name the session took at its first start, see [Roles](#roles)), `soul` (one line of the soul drawn with the role), `self` (the person's self, its four fields as `##` sections, reported at every start and after each `update_self` in a reflection), `parent_session_file` and `parent_session_id` (the session it was forked or cloned from), and `previous_session` with `previous_session_id` (the session that ran before it in the same process and pane, and whether it gave way to a new session, a resume, or a fork); the ids are filled in once that session is known;
++  - relations: `reports_to` (the manager session from `--reports-to`), `role` (the role catalog name the session took at its first start, see [Roles](#roles)), `hired_at` (epoch milliseconds, set by the runtime when a manager-tool hire's start first connects; null when the person was recorded before this column, was not hired that way, or the start never connected; the bridge cannot set or clear it), `soul` (one line of the soul drawn with the role), `self` (the person's self, its four fields as `##` sections, reported at every start and after each `update_self` in a reflection), `parent_session_file` and `parent_session_id` (the session it was forked or cloned from), and `previous_session` with `previous_session_id` (the session that ran before it in the same process and pane, and whether it gave way to a new session, a resume, or a fork); the ids are filled in once that session is known;
+   - `git` (JSON): repository, worktree, and branch of its directory, read when it starts, after each shell command, and when a run settles; null when git says it is not a repository; a failed read (no git, a timeout) keeps the last known value;
+   - `config` (JSON): name, the names of the options on Pi's command line (not their values, which could include a prompt), active tools, extensions, loaded skills, and MCP servers. Extensions are the files that registered tools or extension commands; Pi lists no extensions, so one that registers only hooks does not appear.
+ 
+@@ -60,6 +60,7 @@ Any client can ask a session to do something by sending `{"type": "command", "co
+ | `mail` | `from`, `body`, `sentAt`; thread mail also `thread`, `subject`, `seq`, `fromName` | Mails the session; see [Mail and threads](#mail-and-threads). Waits while the session is not running |
+ | `thread_post` | `thread`, `body`; a new thread also `subject`, `to`, optional `cc` | Posts from the request's session to a thread, creating it when new; applied by the runtime, which pushes it as `mail` to each pushed participant; see [Mail and threads](#mail-and-threads) |
+ | `thread_read` | `thread`, `seq` | The session has read the thread up to `seq` (applied by the runtime) |
++| `channel_membership` | `thread`, `joined` (boolean) | The operator joins or leaves an existing team channel. Applied by the runtime; accepts only `sessionId: "operator"` and refuses private threads. Joining does not mark history read |
+ | `run_turn` | `task`, optional `outputSchema`, `contextFile` | Waits until the session is idle, runs one turn, and returns its reply on the receipt. `pi_exec` uses it for peers |
+ | `cancel_turn` | `turn` | Cancels one `run_turn` request, queued or running |
+ | `discard_peer` | | Stops a temporary peer owned by the sending program and deletes its record |
+@@ -147,6 +148,8 @@ Each manager has a `team:<manager-id>` thread for the manager and its direct rep
+ 
+ `post` can also take `invite`, an array of names or ids. An existing member can invite a colleague from another team as a reader. Invitations survive a reporting-line change; ordinary team membership follows moves immediately. Former members leave the channels; members at home stay. Replies in channels have the same pull-and-mention behavior as posts.
+ 
++The operator can explicitly join or leave an existing team channel through `channel_membership`, exposed to Agent World as `setChannelMembership(thread, joined)`. Joining adds a pull participant with an invitation that survives team reconciliation and restart. A first join starts at `read_up_to = 0`; a repeated join preserves its cursor. Leaving removes that participation, so a later join starts fresh. Membership and its ordinary `thread_joined` or `thread_left` event commit together. The command never joins a private thread, creates a channel, or marks messages read. An operator view can read the visible history after an applied join receipt to acknowledge only those messages through the existing reader. Channel membership alone starts no Pi turn; the operator remains an address, not a session.
++
+ ## Meetings
+ 
+ Managers use `meet(people, agenda)` to start a meeting thread. The agenda and each `reply` are pushed to every participant, including the organizer. The organizer decides how long to discuss; there is no round limit. Only that organizer can call `end_meeting(thread, summary)`, which sends the conclusion and closes the thread. Further replies are refused.
+@@ -170,7 +173,7 @@ An assignment to a person at home saves first, then calls the person in: beside
+ 
+ ## Manager tools
+ 
+-A session whose role manages, or an unroled organization root, gets ten more tools: `meet`, `end_meeting`, `assign`, and `unassign` (above), and six lifecycle tools. `hire` (required `role` and `goal`, optional `cwd` defaulting to the manager's directory, optional `name` and `session_id`) hires a person that reports to it, takes the given role at its first start, and receives a unique two-part human name from the session-title extension. It opens in a tmux window after the manager's pane, or headless outside tmux. `call_in(person, goal?)` reopens a current person at home with its stored role and work, optionally assigning a new goal; `send_home` closes a running one; `rename` (`person`, `name`) renames a running one through its bridge without changing its id or history; `move` (`person`, `manager`) moves a person, with everyone under it, under another manager of the same organization (refused for a cycle, a stranger, or the person itself), tells its running bridge so later close notices go to the new manager, and mails the person and both managers; and `let_go` (`person`, `reason`) accepts an asynchronous permanent-departure request after explicit responsibility handoff. The runtime obtains a final Markdown summary in that person's own session and saves it privately under the state directory's `handoffs/`. It rechecks responsibilities, commits the permanent identity fact, then proves known writers stopped before removing checked owned files and private/live records. Acceptance is not completed cleanup; the later outcome identifies the durable handoff. Handoff/pre-commit failure retains membership and context; post-commit cleanup failures retry without reopening the person. The retention and failure contract is in [permanent departure](organization.md#permanent-departure). `person` and `manager` accept a name in the caller's organization or a session id. Start and reopen send the manager's pane and id. A hire without a goal or into a role the catalog lacks fails before any window opens. A task is assigned before the person's first turn; the written goal is delivered through its task context, not passed as a command-line prompt. When its manager's team channel has messages, a new hire also gets one mail with that history before its first turn. Every root session registers the ten tools, but only a managing role or an unroled recorded organization root keeps them active. Root-session lifecycle hooks restore the directory, mail, and task tools for every root and the ten manager tools for managers, including when Pi resumes an older transcript whose saved tool set lacks them.
++A session whose role manages, or an unroled organization root, gets ten more tools: `meet`, `end_meeting`, `assign`, and `unassign` (above), and six lifecycle tools. `hire` (required `role` and `goal`, optional `cwd` defaulting to the manager's directory, optional `name` and `session_id`) hires a person that reports to it, takes the given role at its first start, and receives a unique two-part human name from the session-title extension. It opens in a tmux window after the manager's pane, or headless outside tmux. When that start connects, the runtime records `hired_at`. A start that fails before connecting leaves it null, and calling the person in later does not fill it. People already in the database stay null; their first seen time is a separate fact. `call_in(person, goal?)` reopens a current person at home with its stored role and work, optionally assigning a new goal; `send_home` closes a running one; `rename` (`person`, `name`) renames a running one through its bridge without changing its id or history; `move` (`person`, `manager`) moves a person, with everyone under it, under another manager of the same organization (refused for a cycle, a stranger, or the person itself), tells its running bridge so later close notices go to the new manager, and mails the person and both managers; and `let_go` (`person`, `reason`) accepts an asynchronous permanent-departure request after explicit responsibility handoff. The runtime obtains a final Markdown summary in that person's own session and saves it privately under the state directory's `handoffs/`. It rechecks responsibilities, commits the permanent identity fact, then proves known writers stopped before removing checked owned files and private/live records. Acceptance is not completed cleanup; the later outcome identifies the durable handoff. Handoff/pre-commit failure retains membership and context; post-commit cleanup failures retry without reopening the person. The retention and failure contract is in [permanent departure](organization.md#permanent-departure). `person` and `manager` accept a name in the caller's organization or a session id. Start and reopen send the manager's pane and id. A hire without a goal or into a role the catalog lacks fails before any window opens. A task is assigned before the person's first turn; the written goal is delivered through its task context, not passed as a command-line prompt. When its manager's team channel has messages, a new hire also gets one mail with that history before its first turn. Every root session registers the ten tools, but only a managing role or an unroled recorded organization root keeps them active. Root-session lifecycle hooks restore the directory, mail, and task tools for every root and the ten manager tools for managers, including when Pi resumes an older transcript whose saved tool set lacks them.
+ 
+ The `person_departed` fact preserves only the identity/reporting/handoff attribution needed to refuse reuse and read retained organizational history. Completed removal deletes the live person, incarnations, private message index, focus and current participation, while keeping shared messages, assignments/outcomes, links, audience chronology and accounting. Explicit private fact and command payloads are redacted rather than discarding shared history. Pending cleanup owns its process/file journal across restart, including rejected writing processes observed after permanent admission closes; private file pointers are cleared after cleanup. Legacy retirement/rehire events remain historical facts, not a reactivation surface.
+ 
+diff --git a/components/session-state/tests/channel-membership.test.ts b/components/session-state/tests/channel-membership.test.ts
+new file mode 100644
+index 00000000..8ed884f4
+--- /dev/null
++++ b/components/session-state/tests/channel-membership.test.ts
+@@ -0,0 +1,187 @@
++import { existsSync } from "node:fs";
++import { afterAll, beforeAll, expect, test, vi } from "vitest";
++import type { Command } from "../src/protocol.js";
++import type { ThreadKind } from "../src/threads.js";
++import {
++	fakeBridge,
++	query,
++	runtimePid,
++	sendCommand,
++	standInProcess,
++	startRuntime,
++	stopRuntime,
++	tempStateDir,
++} from "./helpers.js";
++
++const state = tempStateDir();
++const stand = standInProcess();
++const other = standInProcess();
++const channel = "team:lead";
++
++beforeAll(async () => {
++	await startRuntime(state.socketPath);
++	await fakeBridge(state.socketPath, "lead", stand.pid, stand.startedAt, {
++		session: { name: "Lead" },
++		facts: { manages: true },
++	});
++	await fakeBridge(state.socketPath, "other", other.pid, other.startedAt, {
++		session: { name: "Other" },
++		facts: { manages: true },
++	});
++	await vi.waitFor(() => expect(query(state.dbPath, "select id from threads where id = ?", channel)).toHaveLength(1), {
++		timeout: 10000,
++	});
++});
++afterAll(async () => {
++	stand.child.kill();
++	other.child.kill();
++	await stopRuntime(state);
++});
++
++const sent = async (who: string, command: Command, commandId?: string) => {
++	const receipt = (await sendCommand(state.socketPath, who, command, commandId ? { commandId } : {})).at(-1);
++	if (!receipt) throw new Error(`no receipt for ${command.kind}`);
++	return receipt;
++};
++const membership = () =>
++	query<{ delivery: string; read_up_to: number; invited: number }>(
++		state.dbPath,
++		"select delivery, read_up_to, invited from thread_participants where thread_id = ? and participant = 'operator'",
++		channel,
++	);
++const audience = (type: string, thread = channel) =>
++	query<{ at: number }>(
++		state.dbPath,
++		"select at from events where session_id = 'operator' and type = ? and json_extract(data, '$.thread') = ? order by seq",
++		type,
++		thread,
++	);
++async function restart() {
++	const pid = runtimePid(state.pidPath)!;
++	process.kill(pid, "SIGTERM");
++	await vi.waitFor(() => expect(existsSync(state.socketPath)).toBe(false), { timeout: 10000 });
++	await startRuntime(state.socketPath);
++}
++
++test("the operator joins and leaves a team channel, and reconciliation keeps that choice", async () => {
++	expect((await sent("operator", { kind: "thread_post", thread: channel, body: "Before I join." })).reason).toBe(
++		"you are not in this thread",
++	);
++	await sent("lead", { kind: "thread_post", thread: channel, body: "History before the operator joins." });
++	const seq = query<{ seq: number }>(
++		state.dbPath,
++		"select max(seq) as seq from thread_messages where thread_id = ?",
++		channel,
++	)[0].seq;
++
++	expect(await sent("operator", { kind: "channel_membership", thread: channel, joined: true }, "join-once")).toEqual({
++		stage: "applied",
++	});
++	expect(membership()).toEqual([{ delivery: "pull", read_up_to: 0, invited: 1 }]);
++	expect(audience("thread_joined")).toHaveLength(1);
++
++	await sent("operator", { kind: "thread_read", thread: channel, seq });
++	expect(await sent("operator", { kind: "channel_membership", thread: channel, joined: true })).toEqual({
++		stage: "applied",
++	});
++	expect(membership()).toEqual([{ delivery: "pull", read_up_to: seq, invited: 1 }]);
++	expect(audience("thread_joined")).toHaveLength(1);
++
++	expect(await sent("operator", { kind: "thread_post", thread: channel, body: "I will watch this channel." })).toEqual({
++		stage: "applied",
++	});
++
++	const cursor = membership()[0].read_up_to;
++	await restart();
++	expect(membership()).toEqual([{ delivery: "pull", read_up_to: cursor, invited: 1 }]);
++	expect(audience("thread_joined")).toHaveLength(1);
++	expect(audience("thread_left")).toEqual([]);
++
++	expect(await sent("operator", { kind: "channel_membership", thread: channel, joined: false }, "leave-once")).toEqual({
++		stage: "applied",
++	});
++	expect(membership()).toEqual([]);
++	expect(audience("thread_left")).toHaveLength(1);
++	expect(await sent("operator", { kind: "channel_membership", thread: channel, joined: false })).toEqual({
++		stage: "applied",
++	});
++	expect(audience("thread_left")).toHaveLength(1);
++	expect((await sent("operator", { kind: "thread_post", thread: channel, body: "After I leave." })).reason).toBe(
++		"you are not in this thread",
++	);
++
++	await restart();
++	expect(membership()).toEqual([]);
++	expect(audience("thread_joined")).toHaveLength(1);
++	expect(audience("thread_left")).toHaveLength(1);
++	expect(await sent("operator", { kind: "channel_membership", thread: channel, joined: true }, "join-once")).toEqual({
++		stage: "applied",
++	});
++	expect(membership()).toEqual([]);
++}, 40000);
++
++test("membership is refused for a person and for any thread that is not a team channel", async () => {
++	const make = async (thread: string, threadKind: ThreadKind) => {
++		expect(
++			(
++				await sent("lead", {
++					kind: "thread_post",
++					thread,
++					threadKind,
++					subject: thread,
++					to: ["other"],
++					body: "Private.",
++				})
++			)?.stage,
++		).toBe("applied");
++	};
++	await make("t-mail", "mail");
++	await make("t-meeting", "meeting");
++	await make("t-task", "task");
++	await make("t-escalation", "escalation");
++	for (const thread of ["t-mail", "t-meeting", "t-task", "t-escalation", "team:missing"]) {
++		expect((await sent("operator", { kind: "channel_membership", thread, joined: true })).reason).toBe(
++			"no team channel with that id",
++		);
++		expect(
++			query(state.dbPath, "select 1 from thread_participants where thread_id = ? and participant = 'operator'", thread),
++		).toEqual([]);
++	}
++	expect(
++		(
++			await sent("operator", {
++				kind: "channel_membership",
++				thread: "",
++				joined: true,
++			})
++		).reason,
++	).toBe("channel membership needs a thread and whether to join");
++	expect(
++		(
++			await sent("operator", {
++				kind: "channel_membership",
++				thread: channel,
++				joined: "yes" as unknown as boolean,
++			})
++		).reason,
++	).toBe("channel membership needs a thread and whether to join");
++	expect((await sent("other", { kind: "channel_membership", thread: channel, joined: true })).reason).toBe(
++		"only the operator can join or leave a channel this way",
++	);
++	expect(
++		query(
++			state.dbPath,
++			"select participant from thread_participants where thread_id = ? and participant = 'other'",
++			channel,
++		),
++	).toEqual([]);
++	expect(await sent("operator", { kind: "channel_membership", thread: "team:other", joined: true })).toEqual({
++		stage: "applied",
++	});
++	expect(
++		query(
++			state.dbPath,
++			"select delivery, invited from thread_participants where thread_id = 'team:other' and participant = 'operator'",
++		),
++	).toEqual([{ delivery: "pull", invited: 1 }]);
++});
+diff --git a/components/session-state/tests/channel-membership-recovery.test.ts b/components/session-state/tests/channel-membership-recovery.test.ts
+new file mode 100644
+index 00000000..40b12ebd
+--- /dev/null
++++ b/components/session-state/tests/channel-membership-recovery.test.ts
+@@ -0,0 +1,114 @@
++import { mkdirSync } from "node:fs";
++import { DatabaseSync } from "node:sqlite";
++import { afterAll, beforeAll, expect, test } from "vitest";
++import { migrate } from "../src/schema.js";
++import { query, startRuntime, stopRuntime, tempStateDir } from "./helpers.js";
++
++const state = tempStateDir();
++
++beforeAll(async () => {
++	// A stopped runtime, with accepted membership commands at both crash boundaries. Only this fixture writes the
++	// database; the runtime then reconciles channels and replays those commands.
++	mkdirSync(state.stateDir, { recursive: true });
++	const db = new DatabaseSync(state.dbPath);
++	migrate(db);
++	for (const id of ["kept", "pending", "left", "both"])
++		db.prepare(
++			"insert into sessions (id, kind, cwd, run_state, generation, source, updated_at) values (?, 'root', '/tmp', 'idle', 1, 'fixture', 0)",
++		).run(id);
++	const thread = db.prepare(
++		"insert into threads (id, kind, subject, created_by, created_at) values (?, 'channel', ?, ?, 1)",
++	);
++	const member = db.prepare(
++		"insert into thread_participants (thread_id, participant, delivery, read_up_to, joined_at, invited) values (?, 'operator', 'pull', ?, 10, 1)",
++	);
++	const command = db.prepare(
++		"insert into commands (command_id, session_id, kind, command, stage, created_at, updated_at) values (?, 'operator', 'channel_membership', ?, 'accepted', ?, ?)",
++	);
++	const event = db.prepare(
++		"insert into events (at, source, session_id, type, data) values (?, 'runtime', 'operator', ?, ?)",
++	);
++	thread.run("team:kept", "Kept", "kept");
++	member.run("team:kept", 4);
++	event.run(10, "thread_joined", JSON.stringify({ thread: "team:kept" }));
++	command.run("join-kept", JSON.stringify({ kind: "channel_membership", thread: "team:kept", joined: true }), 20, 20);
++
++	thread.run("team:pending", "Pending", "pending");
++	command.run(
++		"join-pending",
++		JSON.stringify({ kind: "channel_membership", thread: "team:pending", joined: true }),
++		30,
++		30,
++	);
++
++	thread.run("team:left", "Left", "left");
++	member.run("team:left", 2);
++	event.run(10, "thread_joined", JSON.stringify({ thread: "team:left" }));
++	command.run(
++		"leave-pending",
++		JSON.stringify({ kind: "channel_membership", thread: "team:left", joined: false }),
++		40,
++		40,
++	);
++
++	thread.run("team:gone", "Gone", "kept");
++	event.run(10, "thread_joined", JSON.stringify({ thread: "team:gone" }));
++	event.run(15, "thread_left", JSON.stringify({ thread: "team:gone" }));
++	command.run("leave-done", JSON.stringify({ kind: "channel_membership", thread: "team:gone", joined: false }), 50, 50);
++
++	thread.run("team:both", "Both", "both");
++	command.run("join-both", JSON.stringify({ kind: "channel_membership", thread: "team:both", joined: true }), 70, 70);
++	command.run("leave-both", JSON.stringify({ kind: "channel_membership", thread: "team:both", joined: false }), 80, 80);
++
++	command.run("join-mail", JSON.stringify({ kind: "channel_membership", thread: "t-mail", joined: true }), 60, 60);
++	db.exec(
++		"insert into threads (id, kind, subject, created_by, created_at) values ('t-mail', 'mail', 'Mail', 'kept', 1)",
++	);
++	db.close();
++	await startRuntime(state.socketPath);
++});
++afterAll(() => stopRuntime(state));
++
++const row = (thread: string) =>
++	query<{ delivery: string; read_up_to: number; invited: number }>(
++		state.dbPath,
++		"select delivery, read_up_to, invited from thread_participants where thread_id = ? and participant = 'operator'",
++		thread,
++	);
++const events = (thread: string, type: string) =>
++	query<{ at: number }>(
++		state.dbPath,
++		"select at from events where session_id = 'operator' and type = ? and json_extract(data, '$.thread') = ? order by seq",
++		type,
++		thread,
++	);
++
++test("startup finishes accepted membership without resetting a committed cursor or repeating a committed leave", () => {
++	expect(
++		query(
++			state.dbPath,
++			"select command_id, stage, reason from commands where kind = 'channel_membership' order by created_at",
++		),
++	).toEqual([
++		{ command_id: "join-kept", stage: "applied", reason: null },
++		{ command_id: "join-pending", stage: "applied", reason: null },
++		{ command_id: "leave-pending", stage: "applied", reason: null },
++		{ command_id: "leave-done", stage: "applied", reason: null },
++		{ command_id: "join-mail", stage: "failed", reason: "no team channel with that id" },
++		{ command_id: "join-both", stage: "applied", reason: null },
++		{ command_id: "leave-both", stage: "applied", reason: null },
++	]);
++	expect(row("team:kept")).toEqual([{ delivery: "pull", read_up_to: 4, invited: 1 }]);
++	expect(events("team:kept", "thread_joined")).toEqual([{ at: 10 }]);
++	expect(events("team:kept", "thread_left")).toEqual([]);
++	expect(row("team:pending")).toEqual([{ delivery: "pull", read_up_to: 0, invited: 1 }]);
++	expect(events("team:pending", "thread_joined")).toEqual([{ at: 30 }]);
++	expect(row("team:left")).toEqual([]);
++	expect(events("team:left", "thread_left")).toEqual([{ at: 40 }]);
++	expect(row("team:gone")).toEqual([]);
++	expect(events("team:gone", "thread_left")).toEqual([{ at: 15 }]);
++	expect(row("t-mail")).toEqual([]);
++	expect(row("team:both")).toEqual([]);
++	expect(events("team:both", "thread_joined")).toEqual([{ at: 70 }]);
++	expect(events("team:both", "thread_left")).toEqual([{ at: 80 }]);
++});
+diff --git a/components/session-state/tests/hire-date.test.ts b/components/session-state/tests/hire-date.test.ts
+new file mode 100644
+index 00000000..5dd859bb
+--- /dev/null
++++ b/components/session-state/tests/hire-date.test.ts
+@@ -0,0 +1,218 @@
++import { existsSync, mkdirSync, writeFileSync } from "node:fs";
++import { join } from "node:path";
++import { DatabaseSync } from "node:sqlite";
++import { afterEach, expect, test, vi } from "vitest";
++import { sendCommand } from "../src/client.js";
++import { openPeerProgram, type PeerProgram } from "../src/program-client.js";
++import { migrate } from "../src/schema.js";
++import { fakeBridge, query, runtimePid, standInProcess, startRuntime, stopRuntime, tempStateDir } from "./helpers.js";
++
++const fixture = new URL("../../../tests/fixtures/peer-pi.mjs", import.meta.url).pathname;
++const processes: ReturnType<typeof standInProcess>[] = [];
++let programs: PeerProgram[] = [];
++
++afterEach(async () => {
++	for (const program of programs) await program.close().catch(() => undefined);
++	programs = [];
++	for (const process of processes) process.child.kill();
++	processes.length = 0;
++	vi.unstubAllEnvs();
++});
++
++function hireCommand(manager: string, cwd: string) {
++	return {
++		kind: "start" as const,
++		cwd,
++		reportsTo: manager,
++		role: "repository-archaeologist",
++		name: "New Hire",
++		goal: { text: "Record when this hire connects.", by: manager, title: "Hire date" },
++	};
++}
++
++test("startup does not date an already applied hire or a person with no hire", async () => {
++	const state = tempStateDir();
++	mkdirSync(state.stateDir, { recursive: true });
++	const db = new DatabaseSync(state.dbPath);
++	migrate(db);
++	db.prepare(
++		"insert into sessions (id, kind, cwd, run_state, generation, source, updated_at, role, hired_at) values ('old-hire', 'root', '/tmp', 'idle', 1, 'fixture', 1, 'repository-archaeologist', null)",
++	).run();
++	db.prepare(
++		"insert into sessions (id, kind, cwd, run_state, generation, source, updated_at, hired_at) values ('visitor', 'root', '/tmp', 'idle', 1, 'fixture', 1, null)",
++	).run();
++	db.prepare(
++		"insert into sessions (id, kind, cwd, run_state, generation, source, updated_at, hired_at) values ('kept', 'root', '/tmp', 'idle', 1, 'fixture', 1, 5)",
++	).run();
++	db.prepare(
++		"insert into incarnations (session_id, generation, pid, process_started_at, process_state, started_at, ended_at, source, updated_at) values ('old-hire', 1, 1, 1, 'exited', 20, 21, 'fixture', 21)",
++	).run();
++	db.prepare(
++		"insert into commands (command_id, session_id, kind, command, stage, created_at, updated_at) values ('old-start', 'old-hire', 'start', ?, 'applied', 10, 20)",
++	).run(
++		JSON.stringify({
++			kind: "start",
++			role: "repository-archaeologist",
++			goal: { text: "An old hire.", by: "someone", title: "Old" },
++		}),
++	);
++	db.close();
++	try {
++		await startRuntime(state.socketPath);
++		expect(query(state.dbPath, "select id, hired_at from sessions order by id")).toEqual([
++			{ id: "kept", hired_at: 5 },
++			{ id: "old-hire", hired_at: null },
++			{ id: "visitor", hired_at: null },
++		]);
++	} finally {
++		await stopRuntime(state);
++	}
++});
++
++test("a connecting hire is dated once, and call-in, transfer, and restart keep that date", async () => {
++	const state = tempStateDir();
++	const bin = join(state.agentDir, "bin");
++	mkdirSync(bin);
++	writeFileSync(join(bin, "pi"), `#!/bin/sh\nexec '${process.execPath}' '${fixture}' "$@"\n`, { mode: 0o700 });
++	vi.stubEnv("PATH", `${bin}:${process.env.PATH}`);
++	const manager = standInProcess();
++	const visitor = standInProcess();
++	const lead = standInProcess();
++	processes.push(manager, visitor, lead);
++	await startRuntime(state.socketPath);
++	try {
++		await fakeBridge(state.socketPath, "manager", manager.pid, manager.startedAt, {
++			session: { cwd: state.agentDir, name: "Manager" },
++			facts: { manages: true },
++		});
++		await vi.waitFor(() => expect(query(state.dbPath, "select id from sessions where id = 'manager'")).toHaveLength(1));
++		const hired = await sendCommand("new-hire", hireCommand("manager", state.agentDir), { commandId: "hire-command" });
++		expect(hired.stage, hired.reason).toBe("applied");
++		const dated = query<{ hired_at: number; started_at: number }>(
++			state.dbPath,
++			"select s.hired_at, min(i.started_at) as started_at from sessions s join incarnations i on i.session_id = s.id where s.id = 'new-hire'",
++		)[0];
++		expect(dated.hired_at).toBe(dated.started_at);
++
++		await fakeBridge(state.socketPath, "visitor", visitor.pid, visitor.startedAt, {
++			session: { cwd: state.agentDir, name: "Visitor" },
++		});
++		await vi.waitFor(() =>
++			expect(query(state.dbPath, "select hired_at from sessions where id = 'visitor'")).toEqual([{ hired_at: null }]),
++		);
++		const plain = await sendCommand("plain", {
++			kind: "start",
++			cwd: state.agentDir,
++			reportsTo: "manager",
++			goal: { text: "No role, so this is not a hire.", by: "manager", title: "Unroled" },
++		});
++		expect(plain.stage, plain.reason).toBe("applied");
++		expect(query(state.dbPath, "select hired_at from sessions where id = 'plain'")).toEqual([{ hired_at: null }]);
++
++		const repeat = await sendCommand("new-hire", hireCommand("manager", state.agentDir), { commandId: "hire-command" });
++		expect(repeat.stage).toBe("applied");
++		expect(query(state.dbPath, "select hired_at from sessions where id = 'new-hire'")).toEqual([
++			{ hired_at: dated.hired_at },
++		]);
++
++		const pid = query<{ pid: number }>(
++			state.dbPath,
++			"select pid from incarnations where session_id = 'new-hire' and ended_at is null",
++		)[0].pid;
++		process.kill(pid, "SIGTERM");
++		await vi.waitFor(() =>
++			expect(
++				query(state.dbPath, "select ended_at from incarnations where session_id = 'new-hire' and pid = ?", pid)[0]
++					.ended_at,
++			).not.toBeNull(),
++		);
++		const called = await sendCommand("new-hire", { kind: "start", reportsTo: "manager" });
++		expect(called.stage, called.reason).toBe("applied");
++		expect(query(state.dbPath, "select hired_at from sessions where id = 'new-hire'")).toEqual([
++			{ hired_at: dated.hired_at },
++		]);
++
++		await fakeBridge(state.socketPath, "lead", lead.pid, lead.startedAt, {
++			session: { cwd: state.agentDir, name: "Lead" },
++			facts: { reportsTo: "manager", manages: true },
++		});
++		await vi.waitFor(() =>
++			expect(query(state.dbPath, "select reports_to from sessions where id = 'lead'")).toEqual([
++				{ reports_to: "manager" },
++			]),
++		);
++		const moved = await sendCommand("new-hire", { kind: "transfer", manager: "lead", by: "manager" });
++		expect(moved.stage, moved.reason).toBe("applied");
++		expect(query(state.dbPath, "select reports_to, hired_at from sessions where id = 'new-hire'")).toEqual([
++			{ reports_to: "lead", hired_at: dated.hired_at },
++		]);
++
++		const runtime = runtimePid(state.pidPath)!;
++		process.kill(runtime, "SIGTERM");
++		await vi.waitFor(() => expect(existsSync(state.socketPath)).toBe(false));
++		await startRuntime(state.socketPath);
++		expect(query(state.dbPath, "select hired_at from sessions where id = 'new-hire'")).toEqual([
++			{ hired_at: dated.hired_at },
++		]);
++		expect(query(state.dbPath, "select hired_at from sessions where id = 'visitor'")).toEqual([{ hired_at: null }]);
++	} finally {
++		await stopRuntime(state);
++	}
++}, 40000);
++
++test("a start that exits before connecting leaves no hire date, and calling in does not add one", async () => {
++	const state = tempStateDir();
++	const bin = join(state.agentDir, "bin");
++	mkdirSync(bin);
++	writeFileSync(join(bin, "pi"), `#!/bin/sh\nexec '${process.execPath}' '${fixture}' "$@"\n`, { mode: 0o700 });
++	writeFileSync(join(state.agentDir, "peer-control.json"), JSON.stringify({ failStartup: true }));
++	vi.stubEnv("PATH", `${bin}:${process.env.PATH}`);
++	const manager = standInProcess();
++	processes.push(manager);
++	await startRuntime(state.socketPath);
++	try {
++		await fakeBridge(state.socketPath, "manager", manager.pid, manager.startedAt, {
++			session: { cwd: state.agentDir },
++			facts: { manages: true },
++		});
++		await vi.waitFor(() => expect(query(state.dbPath, "select id from sessions where id = 'manager'")).toHaveLength(1));
++		const failed = await sendCommand("missed", hireCommand("manager", state.agentDir));
++		expect(failed.stage).toBe("failed");
++		expect(query(state.dbPath, "select hired_at from sessions where id = 'missed'")).toEqual([{ hired_at: null }]);
++		writeFileSync(join(state.agentDir, "peer-control.json"), "{}");
++		const called = await sendCommand("missed", { kind: "start", reportsTo: "manager" });
++		expect(called.stage, called.reason).toBe("applied");
++		expect(query(state.dbPath, "select hired_at from sessions where id = 'missed'")).toEqual([{ hired_at: null }]);
++	} finally {
++		await stopRuntime(state);
++	}
++}, 40000);
++
++test("a program peer is not given a hire date", async () => {
++	const state = tempStateDir();
++	const bin = join(state.agentDir, "bin");
++	mkdirSync(bin);
++	writeFileSync(join(bin, "pi"), `#!/bin/sh\nexec '${process.execPath}' '${fixture}' "$@"\n`, { mode: 0o700 });
++	vi.stubEnv("PATH", `${bin}:${process.env.PATH}`);
++	const manager = standInProcess();
++	processes.push(manager);
++	await startRuntime(state.socketPath);
++	try {
++		await fakeBridge(state.socketPath, "caller", manager.pid, manager.startedAt, {
++			session: { cwd: state.agentDir },
++			facts: { manages: true },
++		});
++		await vi.waitFor(() => expect(query(state.dbPath, "select id from sessions where id = 'caller'")).toHaveLength(1));
++		const program = await openPeerProgram("caller");
++		programs.push(program);
++		const started = await program.command("peer-1", {
++			kind: "start",
++			role: "implementation-engineer",
++			goal: { by: "caller", text: "A temporary peer is not a hire." },
++		});
++		expect(started.stage, started.reason).toBe("applied");
++		expect(query(state.dbPath, "select hired_at from sessions where id = 'peer-1'")).toEqual([{ hired_at: null }]);
++	} finally {
++		await stopRuntime(state);
++	}
++}, 40000);
+diff --git a/apps/agent-world/tests/channel-membership.test.ts b/apps/agent-world/tests/channel-membership.test.ts
+new file mode 100644
+index 00000000..b52083da
+--- /dev/null
++++ b/apps/agent-world/tests/channel-membership.test.ts
+@@ -0,0 +1,132 @@
++import { afterAll, expect, test, vi } from "vitest";
++import type { Command } from "../../../components/session-state/src/protocol.js";
++import {
++	fakeBridge,
++	sendCommand,
++	standInProcess,
++	startRuntime,
++	stopRuntime,
++	tempStateDir,
++} from "../../../components/session-state/tests/helpers.js";
++import { openCommands } from "../src/backend/commands.js";
++import { openWorkplace } from "../src/backend/workplace.js";
++import { openWorldBackend } from "../src/backend/world-backend.js";
++
++const state = tempStateDir();
++const leadProcess = standInProcess();
++const workerProcess = standInProcess();
++const channel = "team:lead";
++
++afterAll(() => {
++	leadProcess.child.kill();
++	workerProcess.child.kill();
++});
++
++test("joining a channel refreshes the snapshot and the existing read path, and a private thread is refused", async () => {
++	await startRuntime(state.socketPath);
++	const lead = await fakeBridge(state.socketPath, "lead", leadProcess.pid, leadProcess.startedAt, {
++		session: { name: "Lead" },
++		facts: { manages: true },
++	});
++	const worker = await fakeBridge(state.socketPath, "worker", workerProcess.pid, workerProcess.startedAt, {
++		session: { name: "Worker" },
++		facts: { reportsTo: "lead" },
++	});
++	const world = openWorldBackend({ db: state.dbPath, socket: state.socketPath });
++	const commands = openCommands(state.socketPath);
++	const workplace = openWorkplace(state.dbPath, commands, () => world.snapshot());
++	const send = async (command: Command) =>
++		expect((await sendCommand(state.socketPath, "lead", command)).at(-1)).toMatchObject({ stage: "applied" });
++	try {
++		await vi.waitFor(
++			() => {
++				expect(world.snapshot().workplace?.threads.some((thread) => thread.id === channel)).toBe(true);
++				expect(world.snapshot().characters.some((person) => person.id === "worker")).toBe(true);
++			},
++			{ timeout: 10000 },
++		);
++		await send({ kind: "thread_post", thread: channel, body: "History the operator has not read." });
++		await send({
++			kind: "thread_post",
++			thread: "private",
++			subject: "Private mail",
++			to: ["worker"],
++			body: "Not a channel.",
++		});
++
++		expect(await workplace.setChannelMembership(channel, true)).toEqual({ ok: true, stage: "applied" });
++		await vi.waitFor(
++			() =>
++				expect(world.snapshot().workplace?.threads.find((thread) => thread.id === channel)?.participants).toContain(
++					"operator",
++				),
++			{ timeout: 10000 },
++		);
++		await vi.waitFor(
++			() => expect(world.snapshot().operatorMail).toContainEqual(expect.objectContaining({ id: channel, unread: 1 })),
++			{ timeout: 10000 },
++		);
++		const firstRead = await workplace.readWorkplaceThread(channel);
++		expect(firstRead).toMatchObject({
++			ok: true,
++			thread: { readUpTo: 0, messages: [expect.objectContaining({ body: "History the operator has not read." })] },
++		});
++		if (!firstRead.ok) throw new Error(firstRead.reason);
++		const firstSeq = firstRead.thread.messages.at(-1)!.seq;
++		await vi.waitFor(
++			() => expect(world.snapshot().operatorMail).toContainEqual(expect.objectContaining({ id: channel, unread: 0 })),
++			{ timeout: 10000 },
++		);
++
++		expect(
++			(
++				await sendCommand(state.socketPath, "operator", { kind: "thread_post", thread: channel, body: "My own post." })
++			).at(-1),
++		).toMatchObject({ stage: "applied" });
++		await send({ kind: "thread_post", thread: "private", body: "A global sequence outside the channel." });
++		await send({ kind: "thread_post", thread: channel, body: "Another incoming post after a global sequence gap." });
++		await vi.waitFor(
++			() => expect(world.snapshot().operatorMail).toContainEqual(expect.objectContaining({ id: channel, unread: 1 })),
++			{ timeout: 10000 },
++		);
++		const nextRead = await workplace.readWorkplaceThread(channel);
++		expect(nextRead).toMatchObject({
++			ok: true,
++			thread: {
++				messages: expect.arrayContaining([
++					expect.objectContaining({ body: "My own post." }),
++					expect.objectContaining({ body: "Another incoming post after a global sequence gap." }),
++				]),
++			},
++		});
++
++		if (!nextRead.ok) throw new Error(nextRead.reason);
++		const ownPost = nextRead.thread.messages.find((message) => message.body === "My own post.")!;
++		expect(ownPost.seq).toBeGreaterThan(firstSeq);
++		expect(nextRead.thread.readUpTo).toBe(ownPost.seq);
++		await vi.waitFor(
++			() => expect(world.snapshot().operatorMail).toContainEqual(expect.objectContaining({ id: channel, unread: 0 })),
++			{ timeout: 10000 },
++		);
++
++		expect(await workplace.setChannelMembership("private", true)).toMatchObject({
++			ok: false,
++			reason: "no team channel with that id",
++		});
++		expect(await workplace.readWorkplaceThread("private")).toMatchObject({ ok: false });
++		expect(await workplace.setChannelMembership(channel, false)).toEqual({ ok: true, stage: "applied" });
++		await vi.waitFor(
++			() =>
++				expect(world.snapshot().workplace?.threads.find((thread) => thread.id === channel)?.participants).not.toContain(
++					"operator",
++				),
++			{ timeout: 10000 },
++		);
++	} finally {
++		lead.socket.destroy();
++		worker.socket.destroy();
++		world.close();
++		commands.close();
++		await stopRuntime(state);
++	}
++}, 40000);
+diff --git a/apps/agent-world/tests/profile.test.ts b/apps/agent-world/tests/profile.test.ts
+new file mode 100644
+index 00000000..ab7b7a45
+--- /dev/null
++++ b/apps/agent-world/tests/profile.test.ts
+@@ -0,0 +1,68 @@
++import { mkdtempSync, rmSync } from "node:fs";
++import { tmpdir } from "node:os";
++import { join } from "node:path";
++import { DatabaseSync } from "node:sqlite";
++import { expect, onTestFinished, test } from "vitest";
++import { migrate } from "../../../components/session-state/src/schema.js";
++import { openWorldBackend } from "../src/backend/world-backend.js";
++
++const firstSeen = Date.UTC(2026, 9, 20);
++const laterStart = Date.UTC(2026, 9, 21);
++
++test.each([false, true])(
++	"world profiles retain hire dates across later incarnations and keep unknown dates unknown (old schema: %s)",
++	(legacy) => {
++		const dir = mkdtempSync(join(tmpdir(), "world-profile-"));
++		onTestFinished(() => rmSync(dir, { recursive: true, force: true }));
++		const path = join(dir, "profile.db");
++		const db = new DatabaseSync(path);
++		try {
++			migrate(db);
++			if (legacy) db.exec("alter table sessions drop column hired_at");
++			for (const awake of [true, false]) {
++				for (const knownHire of [true, false]) {
++					const id = `${knownHire ? "hired" : "unknown"}-${awake ? "awake" : "asleep"}`;
++					db.prepare(`insert into sessions (id, kind, cwd, name, run_state, generation, source, updated_at)
++						values (?, 'root', '/example', ?, 'idle', 2, 'bridge', ?)`).run(id, id, laterStart);
++					if (knownHire && !legacy) db.prepare("update sessions set hired_at = ? where id = ?").run(firstSeen, id);
++					for (const generation of [1, 2]) {
++						const startedAt = generation === 1 ? firstSeen : laterStart;
++						const endedAt = generation === 2 && awake ? null : startedAt + 1000;
++						db.prepare(`insert into incarnations
++							(session_id, generation, pid, process_started_at, process_state, started_at, ended_at, source, updated_at)
++							values (?, ?, 1, ?, ?, ?, ?, 'bridge', ?)`).run(
++							id,
++							generation,
++							startedAt,
++							endedAt === null ? "alive" : "exited",
++							startedAt,
++							endedAt,
++							startedAt,
++						);
++					}
++				}
++			}
++		} finally {
++			db.close();
++		}
++		const world = openWorldBackend({ db: path, socket: join(dir, "no-runtime.sock") });
++		try {
++			const snapshot = world.snapshot();
++			for (const [people, suffix] of [
++				[snapshot.characters, "awake"],
++				[snapshot.dormant, "asleep"],
++			] as const) {
++				expect(people?.find((person) => person.id === `hired-${suffix}`)).toMatchObject({
++					hiredAt: legacy ? null : firstSeen,
++					startedAt: firstSeen,
++				});
++				expect(people?.find((person) => person.id === `unknown-${suffix}`)).toMatchObject({
++					hiredAt: null,
++					startedAt: firstSeen,
++				});
++			}
++		} finally {
++			world.close();
++		}
++	},
++);

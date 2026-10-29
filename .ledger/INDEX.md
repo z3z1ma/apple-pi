@@ -15,3 +15,7 @@
 - `.ledger/202610232305-handbook-org-runtime/task.md` — planning — Organization runtime for the handbook model — Runtime changes the skill handbook needs: <manager> guidance for unroled roots, working sessions reporting to the coordinator by default, and plain workplace tool renames added as skills come up.
 
 - `.ledger/202610241552-run-bash-through-a-pty-by-default/task.md` — in-progress — Run Bash through a PTY by default — Bash stdout/stderr on PTY slaves (no controlling terminal) so programs emit terminal colors; plain text to the model, styled view in the UI, pipe fallback.
+
+- `.ledger/202610280018-workplace-mail-and-chat-spike/task.md` — in-progress — Workplace mail and chat evaluation — Adopted as first-class Workplace; historical iteration evidence retained. Org continues in its own task.
+
+- `.ledger/202610290925-org-chart-and-task-specific-teams/task.md` — planning — Org chart and task-specific teams — First-class Workplace Org tab: independent reporting trees, profiles, safe cross-team drag/reparent/split, planned role-based teams, whole-tree channels and controlled head kickoff.

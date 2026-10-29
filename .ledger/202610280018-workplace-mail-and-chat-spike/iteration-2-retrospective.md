@@ -1,0 +1,17 @@
+# Retrospective
+
+Refined the existing workplace spike rather than adding another application or backend. Inspected Slawk's DM, message-row, and CSS sources at revision 5f30358; used its avatar gutter, density, and workspace hierarchy as design cues. Imported no third-party source, assets, fonts, or dependencies.
+
+The operator's priority was the agent session. Workplace DMs now hide tools by default with an explicit toggle, retain warnings for hidden failed tools, omit empty tool-only author rows, and explain tool-only transcripts. History, pagination, streaming, receipts, and direct instruction semantics stay intact. Activity labels reflect the current run state, with typing only for writing_reply. Mail retains folders/inbox/reader/reply structure but uses matching workspace typography, sender/recipient metadata, and functional unread filtering.
+
+Opened the rebuilt application for the operator before finishing the remaining checks. An independent first-user check found that the header still preferred a retained bash tool while the session said typing. Fixed the shared activity helper and modal detail guard, rather than patching only the new header. Regression coverage now keeps a stale tool in writing and idle snapshots.
+
+Final checks: build and combined Node/web typecheck passed; six-file focused Biome check passed; four relevant Vitest files passed 34 tests with one worker; fixture browser smoke and real isolated Electron navigation passed; context_lint passed for 199 files; git diff --check passed. The initial run failed because decorative avatar initials polluted button names and because the existing paging test completed with only 19 sampled frames. Marked decorative initials aria-hidden and made the frame sample wait for its existing required count without weakening its latency assertion. The final rerun passed. No full suite, live messages, runtime restart, or commit.
+
+Run notes and canonical source remain in .ledger/202610280018-workplace-mail-and-chat-spike/. Final fixture screenshots are under /tmp/wp-refine-final-shots. The operator's refined-design verdict is pending; the preview remains available.
+
+## Maintainer review of tests and simplicity
+
+Kept the shared session renderer and current production implementation. Rewrote the new DM assertions and fixture smoke around visible controls, expanded tool results, conversation text, and activity announcements. Removed checks for empty reply wrappers and assistant element counts: those pinned the renderer's DOM rather than the operator's experience. Retained the existing paging responsiveness sample, which still checks scroll position and frame gaps during loading; it now completes its minimum frame sample independently of paging speed.
+
+Visible status queries exclude the hidden modal sidebar reused by the embedded layout. The smoke fixture now updates the derived summary status together with its run state, matching the real snapshot contract. After these changes, combined typecheck passed, all 18 conversation tests passed with one worker, and the fixture smoke passed. No production source or built output changed in this review; the earlier four-file/34-test and Electron-navigation results remain the implementation checks, not new runs. No live runtime messages, full suite, or additional Electron launch were used. New context files explain the embedded CSS boundary and fixture-versus-Electron verification boundary.
