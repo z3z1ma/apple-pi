@@ -13,7 +13,7 @@ import {
 	ORG_SYSTEM_PROMPT_TAG,
 	orgSection,
 } from "./charters.js";
-import { organizationOf, reportingOf } from "./directory.js";
+import { organizationOf, reportingOf, specializationOf } from "./directory.js";
 import { loadRoles } from "./roles.js";
 import { installSelf } from "./self.js";
 import { installSessionRole, sessionRole } from "./session-role.js";
@@ -36,6 +36,13 @@ export function installOrganization(pi: ExtensionAPI, { reflects }: { reflects: 
 	pi.on("before_agent_start", (event, ctx) => {
 		const id = ctx.sessionManager.getSessionId();
 		const role = sessionRole(ctx);
+		const specialization = specializationOf(id);
+		if (specialization)
+			setSystemPromptSection(
+				event.systemPromptOptions,
+				"specialization",
+				`Apply this focus within your role; fulfill all role responsibilities.\n\n${specialization}`,
+			);
 		const managerId = managerOf(ctx) ?? null;
 		setSystemPromptSection(
 			event.systemPromptOptions,

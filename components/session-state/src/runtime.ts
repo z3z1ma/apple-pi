@@ -2100,6 +2100,9 @@ export class Runtime {
 	) {
 		const db = this.db!;
 		const fail = (reason: string) => this.setCommandStage(commandId, "failed", reason);
+		if (command.specialization !== undefined && typeof command.specialization !== "string")
+			return fail("Specialization must be text.");
+		const specialization = command.specialization?.trim() || null;
 		const row = db
 			.prepare("select cwd, name, generation, reports_to, role, retired_at from sessions where id = ?")
 			.get(sessionId) as
@@ -2187,41 +2190,17 @@ export class Runtime {
 				this.event("runtime", sessionId, null, "cost_changed", { from: 0, to: 0, initial: true });
 			});
 		}
-		if (command.goal) {
-			const prepare = () => {
-				if (!row) {
-					db.prepare(`insert into sessions (id, kind, cwd, name, run_state, generation, reports_to, role, source, updated_at)
-					values (?, 'root', ?, ?, 'idle', 0, ?, ?, 'runtime', ?)`).run(
-						sessionId,
-						cwd,
-						name ?? null,
-						reportsTo ?? null,
-						command.role ?? null,
-						Date.now(),
-					);
-					this.queueTeamHistory(commandId, sessionId, reportsTo ?? undefined);
-				}
-			};
-			if (
-				!this.applyWork(
-					commandId,
-					command.goal.by,
-					{
-						kind: "work",
-						action: "assign",
-						person: sessionId,
-						goal: command.goal.text,
-						title: command.goal.title,
-						value: command.goal.value,
-						cost_of_delay: command.goal.cost_of_delay,
-						cwd,
-					},
-					Date.now(),
-					prepare,
-				)
+		if (
+			!this.prepareStart(
+				commandId,
+				sessionId,
+				command,
+				{ cwd, name, reportsTo: reportsTo ?? undefined },
+				Boolean(row),
+				specialization,
 			)
-				return;
-		}
+		)
+			return;
 		if (!row && command.role && !programId && command.goal?.text.trim()) this.newHires.add(sessionId);
 		return this.launchSession(commandId, sessionId, {
 			cwd,
@@ -2234,6 +2213,53 @@ export class Runtime {
 			tmux: command.tmux,
 			...(programId ? { program: { id: programId, parent: programParent! } } : {}),
 		});
+	}
+
+	private prepareStart(
+		commandId: string,
+		sessionId: string,
+		command: Extract<Command, { kind: "start" }>,
+		launch: Pick<SessionLaunch, "cwd" | "name" | "reportsTo">,
+		existing: boolean,
+		specialization: string | null,
+	): boolean {
+		const db = this.db!;
+		const { cwd, name, reportsTo } = launch;
+		const prepare = () => {
+			if (!existing) {
+				db.prepare(`insert into sessions (id, kind, cwd, name, run_state, generation, reports_to, role, specialization, source, updated_at)
+				values (?, 'root', ?, ?, 'idle', 0, ?, ?, ?, 'runtime', ?)`).run(
+					sessionId,
+					cwd,
+					name ?? null,
+					reportsTo ?? null,
+					command.role ?? null,
+					specialization,
+					Date.now(),
+				);
+				this.queueTeamHistory(commandId, sessionId, reportsTo ?? undefined);
+			}
+		};
+		if (!command.goal && specialization) this.atomically(prepare);
+		if (command.goal) {
+			return this.applyWork(
+				commandId,
+				command.goal.by,
+				{
+					kind: "work",
+					action: "assign",
+					person: sessionId,
+					goal: command.goal.text,
+					title: command.goal.title,
+					value: command.goal.value,
+					cost_of_delay: command.goal.cost_of_delay,
+					cwd,
+				},
+				Date.now(),
+				prepare,
+			);
+		}
+		return true;
 	}
 
 	private async launchSession(commandId: string, sessionId: string, launch: SessionLaunch): Promise<void> {

@@ -65,6 +65,12 @@ export function installCoordinator(pi: ExtensionAPI): void {
 			parameters: Type.Object(
 				{
 					role: Type.String({ minLength: 1, description: "Role catalog name, such as staff-engineer-simplicity." }),
+					specialization: Type.Optional(
+						Type.String({
+							description:
+								"Optional lasting focus within this role, set at creation. The person keeps all role responsibilities.",
+						}),
+					),
 					cwd: Type.Optional(
 						Type.String({ minLength: 1, description: "Directory the person works in; yours by default." }),
 					),
@@ -92,6 +98,14 @@ export function installCoordinator(pi: ExtensionAPI): void {
 				const catalog = loadRoles(ctx.cwd);
 				if (!catalog.roles.has(params.role))
 					throw new Error(`Unknown role "${params.role}"; known roles: ${[...catalog.roles.keys()].join(", ")}.`);
+				const specialization = params.specialization?.trim();
+				if (
+					specialization &&
+					!withWork((db) =>
+						db.prepare("select 1 from pragma_table_info('sessions') where name = 'specialization'").get(),
+					)
+				)
+					throw new Error("Restart the session runtime before hiring with a specialization.");
 				await run(
 					sessionId,
 					{
@@ -100,6 +114,7 @@ export function installCoordinator(pi: ExtensionAPI): void {
 						cwd: params.cwd ?? ctx.cwd,
 						reportsTo: ctx.sessionManager.getSessionId(),
 						role: params.role,
+						...(specialization ? { specialization } : {}),
 						...(params.name ? { name: params.name } : {}),
 						goal: {
 							text: params.goal,

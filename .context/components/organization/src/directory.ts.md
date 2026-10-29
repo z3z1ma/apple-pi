@@ -12,6 +12,12 @@ Why: a real move updated mail and the runtime tree while the old flag kept the p
 Coupled: components/organization/src/install.ts, components/session-state/src/addresses.ts
 Verify: components/session-state/tests/organization.test.ts, components/organization/tests/roles.test.ts
 
+## symbol:specializationOf
+
+This reader is query-only and uses organizationColumns before selecting specialization, so a newly loaded extension can still prompt against a pre-migration daemon. Absence is null; it never reconstructs focus from historic commands, role names, or transcripts. Runtime creation is the only writer.
+Coupled: components/organization/src/install.ts, components/session-state/src/runtime.ts, components/session-state/src/schema.ts
+Verify: components/session-state/tests/specialization.test.ts
+
 ## symbol:organizationOf
 
 Reads the state database read-only and derives the tree from `reports_to` on every call; a session whose manager is not in the `sessions` table is treated as a root of its own.

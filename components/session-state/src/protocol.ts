@@ -175,6 +175,8 @@ export type Command =
 			reportsTo?: string;
 			/** The role a new session is hired into; a stopped session keeps the role its transcript records. */
 			role?: string;
+			/** Immutable creator-supplied focus within the role; existing identities keep their recorded value. */
+			specialization?: string;
 			/** Written work, assigned before the new process starts so its first turn receives the goal. */
 			goal?: { text: string; by: string; title?: string } & Worth;
 			prompt?: string;

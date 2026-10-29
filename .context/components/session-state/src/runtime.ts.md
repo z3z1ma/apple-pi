@@ -138,6 +138,13 @@ Before the first hello, recovery may have only a launch record. The tmux initial
 Coupled: components/session-state/src/tmux.ts, components/session-state/src/program-peers.ts
 Verify: components/session-state/tests/program-peers.test.ts
 
+## symbol:Runtime.prepareStart
+
+Creator specialization is normalized before creation and written only in the first provisional sessions insert, atomically with initial work when a goal is supplied. A goal-less new start with a nonempty focus also records that identity before launch. Existing rows, including null specialization, are never amended; failed process startup therefore retains the original context for same-identity retry. Hello/facts do not own this column. Ordinary starts without focus keep their prior creation path.
+Why: specialization is immutable creator instruction, not a mutable observation. Retrofitting a null or interpreting an old start would invent creation history. The transaction was extracted because startSession exceeded its complexity boundary; role, goal and program admission remain in startSession, and process launch remains separate.
+Coupled: components/session-state/src/schema.ts, components/session-state/src/coordinator.ts, components/organization/src/install.ts, components/organization/src/directory.ts
+Verify: components/session-state/tests/specialization.test.ts
+
 ## symbol:Runtime.launchSession
 
 Both tmux and headless launches receive startup work through a bridge steer after hello and mail replay. A positional CLI prompt can start before onboarding context arrives, and RPC mode ignores it anyway. A program peer or a person woken for handover starts with an empty startup prompt: replayed mail rides its next turn, and only the correlated request starts that turn. Passing a second startup goal would produce unobserved, duplicate work.

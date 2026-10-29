@@ -1,0 +1,10 @@
+## file
+
+The creation scenario launches fixture Pi workers through an isolated real runtime, deliberately fails the first launch, and then retries/calls in the same identity with conflicting text. A separate real faux-model session uses that identity's runtime-owned record and a retained role/soul/self to verify the full current role body, all soul fragments, a written self and tool posture before and after reopen, without network soul draws. It checks those required sections rather than freezing unrelated system-prompt text. This proves runtime persistence plus the actual organization prompt consumer, not real provider quality or a production process launch.
+Why: checking only a role heading and an empty self section could pass after specialization accidentally replaced the person's obligations or retained self.
+
+The old-schema fixture deliberately pins physical version31 with only the sessions column subset needed by migration32; it proves nullable addition and the guarded reader, not a full historical database upgrade. All test state, processes and model transcripts are temporary. No-specialization assertions test absence rather than inventing focus from role/history.
+The manager boundary is also driven through actual typed hire tool calls. The current-schema case uses the real isolated runtime and proves stored normalized focus and unchanged role/nonmanagement. The old-schema case spies on transport to prove refusal before dispatch for nonempty focus while omitted/blank focus still forwards ordinary starts. That spy does not claim old-runtime process creation. Direct installer fixtures must supply the tool's required title as well as goal, or schema validation fails before the capability check.
+
+Coupled: components/session-state/src/coordinator.ts, components/session-state/src/runtime.ts, components/session-state/src/schema.ts, components/organization/src/install.ts, components/organization/src/directory.ts
+Verify: components/session-state/tests/specialization.test.ts

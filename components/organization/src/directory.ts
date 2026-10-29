@@ -95,6 +95,21 @@ export function reportingOf(id: string): { id: string; reportsTo: string | null 
 	}
 }
 
+/** Immutable creator context, absent for older schemas and people created without it. */
+export function specializationOf(id: string): string | null {
+	const path = statePaths().db;
+	if (!existsSync(path)) return null;
+	const db = new DatabaseSync(path, { readOnly: true });
+	try {
+		const row = db
+			.prepare(`select ${organizationColumns(db, ["specialization"])} from sessions s where s.id = ?`)
+			.get(id) as { specialization: string | null } | undefined;
+		return row?.specialization ?? null;
+	} finally {
+		db.close();
+	}
+}
+
 /** The organization of `self`: its root and every other member, or `self` alone when the database is unreadable. */
 export function organizationOf(self: string, includeSelf = false): Organization {
 	const path = statePaths().db;

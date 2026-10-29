@@ -4,6 +4,11 @@ Pi restores the tool loadout from the saved transcript after building the curren
 Why: extension registration alone cannot guarantee availability after resuming a saved session; a hook that only removes tools for non-coordinators leaves older coordinators without lifecycle tools.
 New hires omit the name by default so the root TUI session-title extension owns initial naming; an explicitly supplied name opts out. Calling in an ordinary dormant member preserves the runtime's stored name.
 Why: a CLI-supplied name is treated as an operator rename by session-title and permanently disables its automatic human-name generation for that session.
+A nonempty creator specialization requires the sessions column before hire sends a start; blank or omitted text stays an ordinary hire. The runtime still owns normalization and immutable persistence.
+Why: a newer extension can connect to an older daemon, which accepts an unknown start property but discards it. The tool must refuse before creating a person rather than report a specialized hire that never received its focus.
+Coupled: components/session-state/src/schema.ts, components/session-state/src/runtime.ts
+Verify: components/session-state/tests/specialization.test.ts
+
 `let_go` returns an accepted request reference; the daemon owns the subsequent handoff and retryable cleanup. The native caller's command connection closes at that receipt and is not the job's cancellation owner. Permanent departure and reversible dormancy remain different operations, so `call_in` remains available and `rehire` has no public registration.
 Why: waiting for complete cleanup would block the manager on a model run or a failed filesystem/process proof, while cancelling on caller disconnection could undo already-accepted organizational work.
 Coupled: components/session-state/src/peers.ts, components/session-title/src/index.ts, components/session-state/src/runtime.ts, components/organization/src/session-role.ts

@@ -300,6 +300,7 @@ const MIGRATIONS = [
 	`create index events_by_type on events (type, seq);`,
 	// When a manager-tool hire first connected. Null is unknown, including every person recorded before this column.
 	`alter table sessions add column hired_at integer;`,
+	`alter table sessions add column specialization text;`,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

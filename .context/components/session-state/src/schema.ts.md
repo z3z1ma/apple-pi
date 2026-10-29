@@ -10,8 +10,9 @@ The peer-caller migration (physical version28 to29) preserves surviving `program
 Why: startup cleanup can erase the last authoritative caller row. Guessing a birth or zero baseline would import historical spend, while using today's reporting manager would change immutable accounting ownership.
 The hire-date migration adds nullable `sessions.hired_at` and writes no rows. Existing people, including those with an already applied start, stay null.
 Why: a start command that looks like a hire is not proof of when that person was hired. Filling the column from old commands would invent dates the operator chose not to guess.
+The specialization migration adds a nullable column without backfilling existing identities. Only first creation supplies the value, including its absence; later reconnect/call-in and failed launch retries keep that original record.
 Coupled: components/session-state/src/runtime.ts
-Verify: components/session-state/tests/hire-date.test.ts
+Verify: components/session-state/tests/hire-date.test.ts, components/session-state/tests/specialization.test.ts
 
 The event-type index changes journal lookup cost, not recorded facts or sequence order. Type-filtered membership and lifecycle readers otherwise scan unrelated retained tool/private-event payloads. Keep chronological ordering explicit when querying several types: the index groups by type before sequence.
 Why: measuring a prospective observer against current-sized state exposed repeated full event scans even with almost no open waits. This is an index over the existing authority, not a new current-state cache or observation ledger.
