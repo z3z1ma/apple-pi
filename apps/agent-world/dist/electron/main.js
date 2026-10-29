@@ -5,8 +5,9 @@ import { BrowserWindow, app, dialog, ipcMain, net, protocol, shell } from "elect
 import { homedir } from "node:os";
 import { createHash, randomUUID } from "node:crypto";
 import { createConnection } from "node:net";
+import { spawn } from "@lydell/node-pty";
 import { DatabaseSync } from "node:sqlite";
-import { execFile, spawn } from "node:child_process";
+import { execFile, spawn as spawn$1 } from "node:child_process";
 import { promisify } from "node:util";
 import "@earendil-works/pi-coding-agent";
 import { inflateSync } from "node:zlib";
@@ -547,6 +548,171 @@ function openConversations(socketPath) {
 			socket?.destroy();
 			streams?.destroy();
 			replyListeners.clear();
+		}
+	};
+}
+//#endregion
+//#region apps/agent-world/src/terminal.ts
+function record(value) {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function dimension(value) {
+	return typeof value === "number" && Number.isInteger(value) && value > 0 && value <= 65535;
+}
+function isTerminalClose(value) {
+	return record(value) && typeof value.id === "string" && value.id.trim().length > 0;
+}
+function isTerminalCreate(value) {
+	return record(value) && isTerminalClose(value) && typeof value.cwd === "string" && dimension(value.cols) && dimension(value.rows);
+}
+function isTerminalWrite(value) {
+	return record(value) && isTerminalClose(value) && typeof value.data === "string";
+}
+function isTerminalResize(value) {
+	return record(value) && isTerminalClose(value) && dimension(value.cols) && dimension(value.rows);
+}
+//#endregion
+//#region apps/agent-world/src/backend/embedded-terminal.ts
+function openEmbeddedTerminals() {
+	const sessions = /* @__PURE__ */ new Map();
+	const listeners = /* @__PURE__ */ new Set();
+	const emit = (event) => {
+		for (const listener of listeners) listener(event);
+	};
+	const failure = (error) => ({
+		ok: false,
+		reason: error instanceof Error ? error.message : String(error)
+	});
+	const close = (id) => {
+		const session = sessions.get(id);
+		if (!session) return;
+		if (!session.exited) session.pty.kill();
+		session.unsubscribe();
+		sessions.delete(id);
+	};
+	const closeAll = () => {
+		for (const id of sessions.keys()) close(id);
+	};
+	return {
+		async create(request) {
+			if (!isTerminalCreate(request)) return {
+				ok: false,
+				reason: "A terminal identity, directory and positive terminal dimensions are required."
+			};
+			if (sessions.has(request.id)) return {
+				ok: false,
+				reason: "That terminal already exists."
+			};
+			try {
+				if (!isAbsolute(request.cwd)) throw new Error("Choose an absolute directory for the terminal.");
+				const cwd = realpathSync(request.cwd);
+				if (!statSync(cwd).isDirectory()) throw new Error("The terminal directory is not a directory.");
+				const shell = process.env.SHELL || "/bin/sh";
+				const env = {
+					...process.env,
+					TERM: "xterm-256color",
+					COLORTERM: "truecolor",
+					TERM_PROGRAM: "apple-pi"
+				};
+				for (const key of [
+					"TMUX",
+					"TMUX_PANE",
+					"TERM_SESSION_ID",
+					"TERM_PROGRAM_VERSION"
+				]) delete env[key];
+				const pty = spawn(shell, ["-l", "-i"], {
+					cwd,
+					cols: request.cols,
+					rows: request.rows,
+					name: "xterm-256color",
+					env
+				});
+				const session = {
+					pty,
+					exited: false,
+					unsubscribe: () => {
+						data.dispose();
+						exit.dispose();
+					}
+				};
+				const data = pty.onData((text) => emit({
+					type: "data",
+					id: request.id,
+					data: text
+				}));
+				const exit = pty.onExit((result) => {
+					session.exited = true;
+					emit({
+						type: "exit",
+						id: request.id,
+						...result
+					});
+				});
+				sessions.set(request.id, session);
+				return {
+					ok: true,
+					session: {
+						id: request.id,
+						cwd,
+						shell
+					}
+				};
+			} catch (error) {
+				return failure(error);
+			}
+		},
+		async write(request) {
+			if (!isTerminalWrite(request)) return {
+				ok: false,
+				reason: "A terminal identity and text input are required."
+			};
+			const session = sessions.get(request.id);
+			if (!session || session.exited) return {
+				ok: false,
+				reason: "That terminal is no longer running."
+			};
+			try {
+				session.pty.write(request.data);
+				return { ok: true };
+			} catch (error) {
+				return failure(error);
+			}
+		},
+		async resize(request) {
+			if (!isTerminalResize(request)) return {
+				ok: false,
+				reason: "Positive terminal dimensions are required."
+			};
+			const session = sessions.get(request.id);
+			if (!session || session.exited) return {
+				ok: false,
+				reason: "That terminal is no longer running."
+			};
+			try {
+				session.pty.resize(request.cols, request.rows);
+				return { ok: true };
+			} catch (error) {
+				return failure(error);
+			}
+		},
+		async close(request) {
+			if (!isTerminalClose(request)) return {
+				ok: false,
+				reason: "A terminal identity is required."
+			};
+			close(request.id);
+			return { ok: true };
+		},
+		onEvent(listener) {
+			listeners.add(listener);
+			return () => {
+				listeners.delete(listener);
+			};
+		},
+		closeAll,
+		dispose() {
+			closeAll();
+			listeners.clear();
 		}
 	};
 }
@@ -3927,11 +4093,12 @@ function git(root, args, allowDetached = false) {
 	return new Promise((resolve, reject) => {
 		const env = {
 			...process.env,
+			LC_ALL: "C",
 			GIT_OPTIONAL_LOCKS: "0",
 			GIT_TERMINAL_PROMPT: "0"
 		};
 		for (const key of Object.keys(env)) if (key.startsWith("GIT_") && !["GIT_OPTIONAL_LOCKS", "GIT_TERMINAL_PROMPT"].includes(key)) delete env[key];
-		const child = spawn("git", [
+		const child = spawn$1("git", [
 			"--no-pager",
 			"-c",
 			"core.fsmonitor=false",
@@ -3953,11 +4120,94 @@ function git(root, args, allowDetached = false) {
 		child.on("close", (code) => code === 0 || allowDetached && code === 1 ? resolve(Buffer.concat(out).toString("utf8")) : reject(new Error(Buffer.concat(err).toString("utf8").trim() || `Git exited with ${code}.`)));
 	});
 }
+async function gitRoot(root) {
+	return directory((await git(root, ["rev-parse", "--show-toplevel"])).replace(/\n$/, ""));
+}
 async function repositoryRoot(path) {
 	const root = directory(path);
-	const top = directory((await git(root, ["rev-parse", "--show-toplevel"])).trim());
+	const top = await gitRoot(root);
 	if (root !== top) throw new Error(`Open the repository root to view Git changes: ${top}`);
 	return root;
+}
+function listedFile(root, path) {
+	const named = resolve(root, path);
+	try {
+		within(root, named);
+	} catch {
+		return false;
+	}
+	let canonical;
+	try {
+		if (!lstatSync(named).isFile()) return false;
+		canonical = realpathSync(named);
+	} catch (error) {
+		if (["ENOENT", "ENOTDIR"].includes(error.code ?? "")) return false;
+		throw error;
+	}
+	try {
+		within(root, canonical);
+		return true;
+	} catch {
+		return false;
+	}
+}
+function folderFiles(root) {
+	const folders = [root];
+	const paths = [];
+	while (folders.length) {
+		const folder = folders.pop();
+		if (!lstatSync(folder).isDirectory()) continue;
+		const canonical = realpathSync(folder);
+		try {
+			within(root, canonical);
+		} catch {
+			continue;
+		}
+		for (const entry of readdirSync(canonical, { withFileTypes: true })) {
+			if (entry.name === ".git") continue;
+			const path = join(canonical, entry.name);
+			if (entry.isDirectory()) folders.push(path);
+			else if (entry.isFile() && listedFile(root, path)) paths.push(relative(root, path));
+		}
+	}
+	return paths.sort();
+}
+async function workspaceFiles(root) {
+	let inside;
+	try {
+		inside = await git(root, ["rev-parse", "--is-inside-work-tree"]);
+	} catch (error) {
+		if (error instanceof Error && error.message.startsWith("fatal: not a git repository")) return folderFiles(root);
+		throw error;
+	}
+	if (inside.trim() !== "true") throw new Error("Choose a working directory, not a bare Git repository.");
+	const paths = (await git(root, [
+		"ls-files",
+		"--cached",
+		"--others",
+		"--exclude-standard",
+		"-z"
+	])).split("\0");
+	return [...new Set(paths.filter((path) => path && listedFile(root, path)))].sort();
+}
+function parseWorktrees(output, root) {
+	return output.split("\0\0").filter(Boolean).map((record) => {
+		const fields = record.split("\0");
+		const value = (key) => fields.find((field) => field === key || field.startsWith(`${key} `))?.slice(key.length + 1);
+		const path = value("worktree");
+		if (!path) throw new Error("Git returned a worktree without a path.");
+		const locked = value("locked"), prunable = value("prunable");
+		return {
+			path,
+			branch: value("branch")?.replace(/^refs\/heads\//, "") ?? null,
+			head: value("HEAD") ?? null,
+			detached: fields.includes("detached"),
+			bare: fields.includes("bare"),
+			current: path === root,
+			...locked !== void 0 ? { locked } : {},
+			...prunable !== void 0 ? { prunable } : {}
+		};
+	});
 }
 function save(request) {
 	let temporary;
@@ -4009,9 +4259,28 @@ function openWorkspace(snapshot) {
 			const candidates = new Set([...world.characters.map((person) => person.facts?.cwd), ...(world.dormant ?? []).map((person) => person.cwd)].filter((cwd) => Boolean(cwd)));
 			const roots = /* @__PURE__ */ new Set();
 			for (const candidate of candidates) try {
-				roots.add(directory((await git(directory(candidate), ["rev-parse", "--show-toplevel"])).trim()));
+				roots.add(await gitRoot(directory(candidate)));
 			} catch {}
 			return { roots: [...roots].sort() };
+		}),
+		files: (request) => attempt(async () => {
+			const root = directory(request.root);
+			return {
+				root,
+				paths: await workspaceFiles(root)
+			};
+		}),
+		worktrees: (request) => attempt(async () => {
+			const root = await gitRoot(directory(request.root));
+			return {
+				root,
+				worktrees: parseWorktrees(await git(root, [
+					"worktree",
+					"list",
+					"--porcelain",
+					"-z"
+				]), root)
+			};
 		}),
 		tree: (request) => attempt(() => {
 			const at = locate(request);
@@ -6795,6 +7064,34 @@ function wireIntegrations(options) {
 	return integrations;
 }
 //#endregion
+//#region apps/agent-world/src/electron/terminal-ipc.ts
+function wireTerminals(terminals, owner) {
+	const allowed = (event) => {
+		const contents = owner();
+		return contents !== void 0 && event.sender === contents && event.senderFrame === contents.mainFrame;
+	};
+	const invalid = {
+		ok: false,
+		reason: "A valid terminal request from the application window is required."
+	};
+	ipcMain.handle("terminal:create", (event, request) => allowed(event) && isTerminalCreate(request) ? terminals.create({
+		id: request.id,
+		cwd: request.cwd,
+		cols: request.cols,
+		rows: request.rows
+	}) : invalid);
+	ipcMain.handle("terminal:write", (event, request) => allowed(event) && isTerminalWrite(request) ? terminals.write({
+		id: request.id,
+		data: request.data
+	}) : invalid);
+	ipcMain.handle("terminal:resize", (event, request) => allowed(event) && isTerminalResize(request) ? terminals.resize({
+		id: request.id,
+		cols: request.cols,
+		rows: request.rows
+	}) : invalid);
+	ipcMain.handle("terminal:close", (event, request) => allowed(event) && isTerminalClose(request) ? terminals.close({ id: request.id }) : invalid);
+}
+//#endregion
 //#region apps/agent-world/src/electron/main.ts
 var appDir = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 /** How long the capture waits for a place to draw, and then for its art to settle. */
@@ -6837,6 +7134,8 @@ function wireWorkspace(workspace) {
 		reason: "A valid workspace root and relative path are required."
 	};
 	ipcMain.handle("workspace:repositories", () => workspace.repositories());
+	ipcMain.handle("workspace:files", (_event, request) => isWorkspaceRoot(request) ? workspace.files(request) : invalid);
+	ipcMain.handle("workspace:worktrees", (_event, request) => isWorkspaceRoot(request) ? workspace.worktrees(request) : invalid);
 	ipcMain.handle("workspace:tree", (_event, request) => isWorkspacePath(request) ? workspace.tree(request) : invalid);
 	ipcMain.handle("workspace:read-file", (_event, request) => isWorkspacePath(request) ? workspace.readFile(request) : invalid);
 	ipcMain.handle("workspace:save-file", (_event, request) => isWorkspaceSave(request) ? workspace.saveFile(request) : invalid);
@@ -6852,6 +7151,9 @@ function start() {
 	const toWindow = (channel, message) => {
 		if (window && !window.isDestroyed()) window.webContents.send(channel, message);
 	};
+	const terminals = openEmbeddedTerminals();
+	wireTerminals(terminals, () => window?.webContents);
+	terminals.onEvent((event) => toWindow("terminal:event", event));
 	ipcMain.handle("world:snapshot", () => world.snapshot());
 	ipcMain.handle("world:feed", () => world.feed());
 	ipcMain.handle("world:terminal", (_event, characterId) => typeof characterId === "string" ? world.goToTerminal(characterId) : {
@@ -6999,6 +7301,7 @@ function start() {
 	});
 	app.on("window-all-closed", () => app.quit());
 	app.on("will-quit", () => {
+		terminals.dispose();
 		world.close();
 		notepads.close();
 		conversations.close();
@@ -7022,16 +7325,21 @@ function start() {
 			}
 		});
 		window.on("closed", () => {
+			terminals.closeAll();
 			window = void 0;
 		});
+		window.webContents.on("did-frame-navigate", (_event, _url, _code, _status, isMainFrame) => {
+			if (isMainFrame) terminals.closeAll();
+		});
+		window.webContents.on("render-process-gone", () => terminals.closeAll());
 		window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
 		window.webContents.on("will-prevent-unload", (event) => {
 			if (!window || window.isDestroyed()) return;
 			if (dialog.showMessageBoxSync(window, {
 				type: "warning",
 				buttons: ["Stay", "Leave"],
-				title: "Unsaved changes",
-				message: "Leave and discard unsaved changes?",
+				title: "Leave Workplace?",
+				message: "Leaving discards unsaved changes and closes running terminals.",
 				defaultId: 0,
 				cancelId: 0,
 				noLink: true

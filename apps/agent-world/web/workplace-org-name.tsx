@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { type KeyboardEvent, type MouseEvent, useEffect, useRef, useState } from "react";
 import { useWorkplaceMenu } from "./workplace-context-menu.js";
 import { organizationName, saveOrganizationName, useWorkplaceNames } from "./workplace-names.js";
 import "./workplace-org-name.css";
@@ -62,7 +62,8 @@ export function OrgNameEditor({
 	name,
 	defaultName = `${name} organization`,
 	heading,
-}: NameProps & { heading?: "h1" | "h2" }) {
+	onOpenWork,
+}: NameProps & { heading?: "h1" | "h2"; onOpenWork?: () => void }) {
 	useWorkplaceNames();
 	const openMenu = useWorkplaceMenu();
 	const [editing, setEditing] = useState(false);
@@ -70,6 +71,10 @@ export function OrgNameEditor({
 	const label = organizationName(id, name, defaultName);
 	const Heading = heading ?? "strong";
 	const items = [{ label: "Rename", onSelect: () => setEditing(true) }];
+	const renameProps = {
+		onContextMenu: (event: MouseEvent<HTMLElement>) => openMenu(event, items),
+		onKeyDown: (event: KeyboardEvent<HTMLElement>) => openMenu(event, items),
+	};
 	const close = () => {
 		setEditing(false);
 		requestAnimationFrame(() => title.current?.focus());
@@ -78,18 +83,38 @@ export function OrgNameEditor({
 		<OrganizationNameForm id={id} name={name} defaultName={defaultName} onClose={close} />
 	) : (
 		<div className="wp-org-name">
-			<Heading
-				ref={(element) => {
-					title.current = element;
-				}}
-				tabIndex={0}
-				aria-haspopup="menu"
-				title="Right-click to rename; Shift+F10 opens actions"
-				onContextMenu={(event) => openMenu(event, items)}
-				onKeyDown={(event) => openMenu(event, items)}
-			>
-				{label}
-			</Heading>
+			{onOpenWork ? (
+				<Heading>
+					<button
+						type="button"
+						className="wp-org-name-work"
+						ref={(element) => {
+							title.current = element;
+						}}
+						aria-haspopup="dialog"
+						title="View recorded work; right-click to rename; Shift+F10 opens actions"
+						{...renameProps}
+						onClick={(event) => {
+							event.currentTarget.focus();
+							onOpenWork();
+						}}
+					>
+						{label}
+					</button>
+				</Heading>
+			) : (
+				<Heading
+					ref={(element) => {
+						title.current = element;
+					}}
+					tabIndex={0}
+					aria-haspopup="menu"
+					title="Right-click to rename; Shift+F10 opens actions"
+					{...renameProps}
+				>
+					{label}
+				</Heading>
+			)}
 		</div>
 	);
 }

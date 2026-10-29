@@ -4,9 +4,31 @@
 	font-size: 12px;
 	overflow-wrap: anywhere;
 }
-.wp-work-history > h3 {
+.wp-work-history-header {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 12px;
 	margin: 12px 0 6px;
+}
+.wp-work-history-header > h3 {
+	margin: 0;
 	font-size: 13px;
+}
+.wp-work-history .wp-work-history-open {
+	flex: none;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	color: var(--wp-link);
+	font: inherit;
+	font-size: 11px;
+	font-weight: 600;
+	cursor: pointer;
+}
+.wp-work-history .wp-work-history-open:hover {
+	text-decoration: underline;
+	text-underline-offset: 3px;
 }
 .wp-work-history > p {
 	margin: 6px 0;
@@ -17,17 +39,6 @@
 .wp-work-history .wp-work-history-counts,
 .wp-work-history .wp-work-history-recent {
 	color: var(--wp-text);
-}
-.wp-work-history > button,
-.wp-work-dialog > header button {
-	padding: 8px 12px;
-	border: 1px solid var(--wp-border);
-	border-radius: 6px;
-	color: var(--wp-text);
-	background: var(--wp-panel);
-	font: inherit;
-	font-weight: 650;
-	cursor: pointer;
 }
 .wp-work-dialog {
 	box-sizing: border-box;
@@ -66,9 +77,6 @@
 	margin: 0;
 	font-size: 20px;
 	line-height: 1.3;
-}
-.wp-work-dialog > header button {
-	flex: none;
 }
 .wp-work-dialog-layout {
 	display: grid;
@@ -119,6 +127,17 @@
 	margin-top: 4px;
 	color: var(--wp-muted);
 	font-size: 12px;
+}
+.wp-work-dialog > header button {
+	flex: none;
+	padding: 8px 12px;
+	border: 1px solid var(--wp-border);
+	border-radius: 6px;
+	color: var(--wp-text);
+	background: var(--wp-panel);
+	font: inherit;
+	font-weight: 650;
+	cursor: pointer;
 }
 .wp-work-dialog-detail {
 	padding: 22px;

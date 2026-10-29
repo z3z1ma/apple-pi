@@ -10,7 +10,7 @@ Why: the shell has no Phaser scene and must keep sibling navigation available; a
 Coupled: apps/agent-world/web/workplace.tsx, apps/agent-world/web/workplace.css
 Verify: apps/agent-world/scripts/workplace-smoke.mjs
 
-In the modal, Tab and Shift+Tab are kept inside the panel (inside an open confirmation, if there is one) by `trapTab` from `overlay/focus.ts`, and closing gives the focus to the world's `#game` (`focusWorld`) in the effect's cleanup. The place panels and their confirmations do the same.
+In the modal, Tab and Shift+Tab are kept inside the panel (inside an open confirmation, if there is one) by `trapTab` from `overlay/focus.ts`. Cleanup returns focus to the world's `#game` (`focusWorld`) only while World is visible; hiding the retained World tab leaves focus in Workplace. The place panels and their confirmations keep their existing close-to-game behavior.
 A key pressed right after closing was once "lost": Escape's release and G's press and release fell in one Phaser frame, and Phaser's keyboard plugin handles its whole queue again for each new key event, so G toggled the grid twice. `PlaceScene.toggleGrid` now handles each event once (`handledKeys`); any new `keydown-<KEY>` toggle in a scene needs the same guard.
 Coupled: apps/agent-world/web/overlay/focus.ts, apps/agent-world/web/overlay/places/place-dialog.tsx
 Verify: apps/agent-world/tests/world-conversation.test.ts, apps/agent-world/tests/world-rookery.test.ts
@@ -18,7 +18,7 @@ Verify: apps/agent-world/tests/world-conversation.test.ts, apps/agent-world/test
 An ordinary dormant character (its id in `world.dormant`, without a retirement time) has no terminal: the side pane offers Wake (`placeActions.wake`) where awake ones have Go to its terminal, and the reply slot says how it wakes. A retained former entry is read-only: no Wake/terminal action or instruction to wake it. Permanent departure and ordinary dormancy are separate; a former row is not permission to recreate its person.
 Verify: apps/agent-world/tests/world-inn.test.ts
 
-The World modal retains its opening/settle `mark_seen` behavior. Embedded DMs wait for a successful newest-page read for the current run-state pulse, focus, and the latest scroll position before marking a need seen. One request per needs timestamp keeps unrelated rerenders from repeating it. A failed history read leaves the update unread.
+The World modal retains its opening/settle `mark_seen` behavior only while its host is visible. The retained World tab unmounts the modal reader while hidden but preserves panel selection and draft text in the existing panel store. Queued acknowledgments recheck the actual frame visibility before invoking the API; hidden cleanup leaves focus in the parent rail rather than refocusing the game. Embedded DMs wait for a successful newest-page read for the current run-state pulse, focus, and the latest scroll position before marking a need seen. One request per needs timestamp keeps unrelated rerenders from repeating it. A failed history read leaves the update unread.
 Why: selecting the DM or receiving a settled snapshot is not enough when its latest page is still in flight, the operator is reading older content, or the window is inactive.
 Verify: apps/agent-world/tests/world-conversation.test.ts
 

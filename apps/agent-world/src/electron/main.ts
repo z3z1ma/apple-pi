@@ -12,6 +12,7 @@ import { agentDir, statePaths } from "../../../../components/session-state/src/p
 import { appFile } from "../app-files.js";
 import { openCommands } from "../backend/commands.js";
 import { openConversations } from "../backend/conversations.js";
+import { openEmbeddedTerminals } from "../backend/embedded-terminal.js";
 import { instruct } from "../backend/instructions.js";
 import { openLifecycle } from "../backend/lifecycle.js";
 import { openFileLink, openLink } from "../backend/links.js";
@@ -24,6 +25,7 @@ import { leaveOutUnchanged, openWorldBackend } from "../backend/world-backend.js
 import { isOrgMoveRequest, isOrgStartRequest } from "../org.js";
 import { isWorkspaceDiff, isWorkspacePath, isWorkspaceRoot, isWorkspaceSave, type WorkspaceApi } from "../workspace.js";
 import { wireIntegrations } from "./integrations-ipc.js";
+import { wireTerminals } from "./terminal-ipc.js";
 
 // This file runs as dist/electron/main.js, two levels below the app directory.
 const appDir = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -64,6 +66,12 @@ async function captureWhenDrawn(window: BrowserWindow, file: string) {
 function wireWorkspace(workspace: WorkspaceApi) {
 	const invalid = { ok: false, reason: "A valid workspace root and relative path are required." };
 	ipcMain.handle("workspace:repositories", () => workspace.repositories());
+	ipcMain.handle("workspace:files", (_event, request: unknown) =>
+		isWorkspaceRoot(request) ? workspace.files(request) : invalid,
+	);
+	ipcMain.handle("workspace:worktrees", (_event, request: unknown) =>
+		isWorkspaceRoot(request) ? workspace.worktrees(request) : invalid,
+	);
 	ipcMain.handle("workspace:tree", (_event, request: unknown) =>
 		isWorkspacePath(request) ? workspace.tree(request) : invalid,
 	);
@@ -90,6 +98,9 @@ function start() {
 	const toWindow = (channel: string, message: unknown) => {
 		if (window && !window.isDestroyed()) window.webContents.send(channel, message);
 	};
+	const terminals = openEmbeddedTerminals();
+	wireTerminals(terminals, () => window?.webContents);
+	terminals.onEvent((event) => toWindow("terminal:event", event));
 
 	ipcMain.handle("world:snapshot", () => world.snapshot());
 	ipcMain.handle("world:feed", () => world.feed());
@@ -254,6 +265,7 @@ function start() {
 	});
 	app.on("window-all-closed", () => app.quit());
 	app.on("will-quit", () => {
+		terminals.dispose();
 		world.close();
 		notepads.close();
 		conversations.close();
@@ -279,16 +291,21 @@ function start() {
 			},
 		});
 		window.on("closed", () => {
+			terminals.closeAll();
 			window = undefined;
 		});
+		window.webContents.on("did-frame-navigate", (_event, _url, _code, _status, isMainFrame) => {
+			if (isMainFrame) terminals.closeAll();
+		});
+		window.webContents.on("render-process-gone", () => terminals.closeAll());
 		window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
 		window.webContents.on("will-prevent-unload", (event) => {
 			if (!window || window.isDestroyed()) return;
 			const choice = dialog.showMessageBoxSync(window, {
 				type: "warning",
 				buttons: ["Stay", "Leave"],
-				title: "Unsaved changes",
-				message: "Leave and discard unsaved changes?",
+				title: "Leave Workplace?",
+				message: "Leaving discards unsaved changes and closes running terminals.",
 				defaultId: 0,
 				cancelId: 0,
 				noLink: true,

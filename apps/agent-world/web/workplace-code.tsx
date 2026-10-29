@@ -1,10 +1,12 @@
 import type { editor } from "monaco-editor";
 import { type KeyboardEvent, type MouseEvent, useCallback, useEffect, useRef, useState } from "react";
-import type { WorkspaceEntry } from "../src/workspace.js";
+import type { WorkspaceEntry, WorkspaceWorktree } from "../src/workspace.js";
 import type { WorldSnapshot } from "../src/world.js";
 import { useWorkplaceMenu } from "./workplace-context-menu.js";
 import { GitDiffText, type GitDiffView, GitPane } from "./workplace-git.js";
 import { Icon } from "./workplace-icon.js";
+import { QuickOpen } from "./workplace-quick-open.js";
+import { WorkplaceTerminal } from "./workplace-terminal.js";
 import "./workplace-code.css";
 
 type MonacoModule = typeof import("./workplace-monaco.js");
@@ -20,6 +22,20 @@ type Buffer = {
 };
 const api = window.agentWorld;
 const fileKey = (root: string, path: string) => JSON.stringify([root, path]);
+
+function worktreeLabel(tree: WorkspaceWorktree) {
+	return [
+		tree.branch ?? "",
+		tree.detached ? "Detached HEAD" : "",
+		tree.bare ? "Bare repository" : "",
+		tree.current ? "Current" : "",
+		tree.locked !== undefined ? `Locked${tree.locked ? `: ${tree.locked}` : ""}` : "",
+		tree.prunable !== undefined ? `Prunable${tree.prunable ? `: ${tree.prunable}` : ""}` : "",
+		tree.path,
+	]
+		.filter(Boolean)
+		.join(" - ");
+}
 
 function FileTree({
 	repository,
@@ -100,10 +116,12 @@ export function WorkplaceCode({
 	world,
 	active,
 	onDirtyChange,
+	onTerminalCountChange,
 }: {
 	world: WorldSnapshot;
 	active: boolean;
 	onDirtyChange?: (dirty: boolean) => void;
+	onTerminalCountChange?: (count: number) => void;
 }) {
 	const openMenu = useWorkplaceMenu();
 	const tabButtons = useRef(new Map<string, HTMLButtonElement>());
@@ -113,9 +131,16 @@ export function WorkplaceCode({
 	const rootRef = useRef(root);
 	rootRef.current = root;
 	const [manualRoot, setManualRoot] = useState("");
+	const [quickOpen, setQuickOpen] = useState(false);
+	const [worktrees, setWorktrees] = useState<WorkspaceWorktree[]>([]);
+	const [worktreeRoot, setWorktreeRoot] = useState("");
+	const [worktreeError, setWorktreeError] = useState<string>();
+	const [worktreeLoading, setWorktreeLoading] = useState(false);
 	const [entries, setEntries] = useState<Record<string, WorkspaceEntry[]>>({});
 	const [expanded, setExpanded] = useState(new Set<string>());
 	const [selected, setSelected] = useState<string>();
+	const selectedRef = useRef(selected);
+	selectedRef.current = selected;
 	const [error, setError] = useState<string>();
 	const [notice, setNotice] = useState<string>();
 	const [busy, setBusy] = useState(false);
@@ -143,6 +168,51 @@ export function WorkplaceCode({
 	useEffect(() => {
 		onDirtyChange?.(retainedDirty);
 	}, [retainedDirty, onDirtyChange]);
+	const showQuickOpen = useCallback(() => {
+		if (rootRef.current) setQuickOpen(true);
+	}, []);
+	useEffect(() => {
+		if (!active) {
+			setQuickOpen(false);
+			return;
+		}
+		const open = (event: globalThis.KeyboardEvent) => {
+			if ((event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === "p") {
+				event.preventDefault();
+				event.stopPropagation();
+				showQuickOpen();
+			}
+		};
+		window.addEventListener("keydown", open, true);
+		return () => window.removeEventListener("keydown", open, true);
+	}, [active, showQuickOpen]);
+	useEffect(() => {
+		let live = true;
+		setWorktrees([]);
+		setWorktreeError(undefined);
+		setWorktreeRoot("");
+		setWorktreeLoading(!!root);
+		if (!root) return;
+		void (async () => {
+			try {
+				const result = await api.workspace.worktrees({ root });
+				if (!live) return;
+				if (!result.ok) {
+					setWorktreeError(result.reason);
+					return;
+				}
+				setWorktrees(result.worktrees);
+				setWorktreeRoot(result.root);
+			} catch (reason) {
+				if (live) setWorktreeError(String(reason));
+			} finally {
+				if (live) setWorktreeLoading(false);
+			}
+		})();
+		return () => {
+			live = false;
+		};
+	}, [root]);
 
 	useEffect(() => {
 		let live = true;
@@ -288,6 +358,7 @@ export function WorkplaceCode({
 	useEffect(() => {
 		setEntries({});
 		setExpanded(new Set());
+		setQuickOpen(false);
 		setSelected(undefined);
 		setDiff(undefined);
 		setError(undefined);
@@ -389,6 +460,7 @@ export function WorkplaceCode({
 		if (active && !diff) void save();
 	};
 	const switchRoot = (repository: string) => {
+		setRoots((before) => [...new Set([...before, repository])]);
 		setRoot(repository);
 		setBusy(false);
 	};
@@ -413,15 +485,17 @@ export function WorkplaceCode({
 			!window.confirm(`Discard unsaved changes in:\n${unsaved.join("\n")}\n\nClosing these files does not save them.`)
 		)
 			return;
-		const remaining = openBuffers.filter(([key]) => !closing.has(key));
-		const index = openBuffers.findIndex(([key]) => key === selected);
+		const tabs = [...buffers.current.entries()].filter(([, buffer]) => buffer.root === root);
+		const selectedKey = selectedRef.current;
+		const remaining = tabs.filter(([key]) => !closing.has(key));
+		const index = tabs.findIndex(([key]) => key === selectedKey);
 		const next =
-			selected && !closing.has(selected)
-				? selected
+			selectedKey && !closing.has(selectedKey)
+				? selectedKey
 				: remaining[Math.min(Math.max(index, 0), remaining.length - 1)]?.[0];
 		openRequest.current++;
 		setBusy(false);
-		if (selected && closing.has(selected)) {
+		if (selectedKey && closing.has(selectedKey)) {
 			instance.current?.setModel(null);
 			setDiff(undefined);
 		}
@@ -454,10 +528,10 @@ export function WorkplaceCode({
 			{ label: "Close", onSelect: () => closeTabs([key]), disabled: saving },
 			{
 				label: "Close others",
-				onSelect: () => closeTabs(openBuffers.filter(([other]) => other !== key).map(([other]) => other)),
+				onSelect: () => closeTabs([...buffers.current.keys()].filter((other) => other !== key)),
 				disabled: saving || openBuffers.length < 2,
 			},
-			{ label: "Close all", onSelect: () => closeTabs(openBuffers.map(([other]) => other)), disabled: saving },
+			{ label: "Close all", onSelect: () => closeTabs([...buffers.current.keys()]), disabled: saving },
 			{
 				label: "Copy relative path",
 				onSelect: () => {
@@ -503,12 +577,44 @@ export function WorkplaceCode({
 						))}
 					</select>
 				</label>
+				<select
+					className="wp-code-worktrees"
+					aria-label="Linked worktree"
+					title={worktreeError ?? (worktreeRoot ? `Linked worktrees of ${worktreeRoot}` : "Linked worktrees")}
+					value={
+						worktrees.find((tree) => tree.path === root)?.path ?? worktrees.find((tree) => tree.current)?.path ?? ""
+					}
+					disabled={worktreeLoading || !worktrees.length}
+					onChange={(event) => {
+						const tree = worktrees.find((entry) => entry.path === event.target.value);
+						if (tree && !tree.bare && tree.prunable === undefined) switchRoot(tree.path);
+					}}
+				>
+					{!worktrees.length && (
+						<option value="">
+							{worktreeLoading
+								? "Discovering worktrees..."
+								: worktreeError
+									? "Worktrees unavailable"
+									: "No linked worktrees"}
+						</option>
+					)}
+					{worktrees.map((tree) => (
+						<option
+							key={tree.path}
+							value={tree.path}
+							disabled={tree.bare || tree.prunable !== undefined}
+							title={worktreeLabel(tree)}
+						>
+							{worktreeLabel(tree)}
+						</option>
+					))}
+				</select>
 				<form
 					onSubmit={(event) => {
 						event.preventDefault();
 						if (manualRoot.trim()) {
 							switchRoot(manualRoot.trim());
-							setRoots((before) => [...new Set([...before, manualRoot.trim()])]);
 							setManualRoot("");
 						}
 					}}
@@ -547,20 +653,32 @@ export function WorkplaceCode({
 				<aside className="wp-code-files" aria-label="Files" tabIndex={-1} ref={filesPane}>
 					<div className="wp-code-pane-heading">
 						<strong>Files</strong>
-						<button
-							type="button"
-							className="wp-icon-button"
-							aria-label="Refresh files"
-							title="Refresh files"
-							disabled={!root}
-							onClick={() => {
-								setEntries({});
-								void loadDirectory("");
-								for (const path of expanded) void loadDirectory(path);
-							}}
-						>
-							<Icon name="refresh" />
-						</button>
+						<div className="wp-code-file-actions">
+							<button
+								type="button"
+								className="wp-icon-button"
+								aria-label="Quick open file"
+								title="Quick open file (Cmd/Ctrl+P)"
+								disabled={!root}
+								onClick={showQuickOpen}
+							>
+								<Icon name="search" />
+							</button>
+							<button
+								type="button"
+								className="wp-icon-button"
+								aria-label="Refresh files"
+								title="Refresh files"
+								disabled={!root}
+								onClick={() => {
+									setEntries({});
+									void loadDirectory("");
+									for (const path of expanded) void loadDirectory(path);
+								}}
+							>
+								<Icon name="refresh" />
+							</button>
+						</div>
 					</div>
 					{root ? (
 						<FileTree
@@ -695,6 +813,7 @@ export function WorkplaceCode({
 							)}
 						</div>
 					</div>
+					<WorkplaceTerminal root={root} active={active} onLiveCountChange={onTerminalCountChange} />
 				</main>
 				<aside className="wp-code-git" hidden={!showGit} aria-label="Repository changes">
 					{root ? (
@@ -710,6 +829,24 @@ export function WorkplaceCode({
 					)}
 				</aside>
 			</div>
+			{quickOpen && (
+				<QuickOpen
+					root={root}
+					onClose={() => setQuickOpen(false)}
+					onOpen={(path) => {
+						setQuickOpen(false);
+						void openFile(path).then(() =>
+							requestAnimationFrame(() => {
+								if (
+									selectedRef.current === fileKey(rootRef.current, path) &&
+									filesPane.current?.getClientRects().length
+								)
+									instance.current?.focus();
+							}),
+						);
+					}}
+				/>
+			)}
 		</section>
 	);
 }

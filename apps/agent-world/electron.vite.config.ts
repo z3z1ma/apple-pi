@@ -16,7 +16,7 @@ export default defineConfig(({ mode }) => ({
 		minify: false,
 		reportCompressedSize: false,
 		rollupOptions: {
-			external: ["electron", /^node:/],
+			external: ["electron", "@lydell/node-pty", /^node:/],
 			output: {
 				format: mode === "preload" ? "cjs" : "es",
 				entryFileNames: mode === "preload" ? "preload.cjs" : "main.js",

@@ -1,6 +1,7 @@
 // The world as the backend reports it to the world UI. Shared by the backend, the preload bridge, and the renderer.
 import type { IntegrationsApi } from "./integrations.js";
 import type { OrgMoveRequest, OrgMoveResult, OrgStartProgress, OrgStartRequest } from "./org.js";
+import type { TerminalApi } from "./terminal.js";
 import type { WorkspaceApi } from "./workspace.js";
 
 export type {
@@ -477,6 +478,7 @@ export interface NotepadChange {
  */
 export interface AgentWorldApi extends IntegrationsApi {
 	workspace: WorkspaceApi;
+	terminal: TerminalApi;
 	snapshot(): Promise<WorldSnapshot>;
 	/**
 	 * Called with the new snapshot after every change, whole but for the parts named in `unchanged` (the same as the

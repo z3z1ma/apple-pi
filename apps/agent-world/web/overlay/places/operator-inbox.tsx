@@ -1,5 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { MailThread, MailThreadSummary } from "../../../src/world.js";
+import { setWorldDraftDirty } from "../../world-drafts.js";
+import { worldVisible } from "../../world-visibility.js";
 import "./operator-inbox.css";
 
 export function ThreadMessages({ thread }: { thread: MailThread }) {
@@ -19,6 +21,12 @@ export function OperatorInbox({ threads }: { threads: MailThreadSummary[] }) {
 	const [pending, setPending] = useState(false);
 	const [error, setError] = useState("");
 	const request = useRef(0);
+	const draftOwner = useRef({});
+	useLayoutEffect(() => {
+		const owner = draftOwner.current;
+		setWorldDraftDirty(owner, Object.values(drafts).some(Boolean));
+		return () => setWorldDraftDirty(owner, false);
+	}, [drafts]);
 	useEffect(
 		() => () => {
 			request.current++;
@@ -26,6 +34,7 @@ export function OperatorInbox({ threads }: { threads: MailThreadSummary[] }) {
 		[],
 	);
 	const read = async (id: string) => {
+		if (!worldVisible()) return;
 		const token = ++request.current;
 		setPending(true);
 		setError("");

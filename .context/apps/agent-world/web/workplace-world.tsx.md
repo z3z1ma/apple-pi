@@ -1,0 +1,6 @@
+## file
+
+Workplace mounts this same-origin frame once on the first World visit and hides its containing shell div on other tabs. The frame owns normal World CSS/Phaser/overlay roots; its entry receives the parent's existing preload API before import. The parent emits `world-visibilitychange` after the shell's hidden attribute changes and after frame load, covering both a retained return and a load that completes after the operator left. It also emits resize while active so Phaser can observe its current pane dimensions. The `Agent World` frame title and exact `?world&embedded=1` route are checked by entry.ts; changing either requires updating that bootstrap check.
+Why: CSS hiding does not change a child document's visibilityState. Explicit notification plus the child's synchronous frame-element visibility check prevents hidden readers from treating a retained World as visible. Resize lets Phaser's existing scale handler observe the available pane without covering the rail.
+Coupled: apps/agent-world/web/workplace.tsx, apps/agent-world/web/workplace-world.css, apps/agent-world/web/entry.ts, apps/agent-world/web/world-visibility.ts
+Verify: apps/agent-world/tests/world-terminal.test.ts, apps/agent-world/tests/world-conversation.test.ts

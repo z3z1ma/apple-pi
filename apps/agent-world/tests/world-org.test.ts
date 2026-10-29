@@ -497,6 +497,101 @@ test("organization cards align their footers across varied work and explain unav
 	}
 }, 30_000);
 
+test.each(["light", "dark"] as const)(
+	"%s organization names open metadata-only work and restore the exact trigger without changing rename or chart actions",
+	async (appearance) => {
+		const snapshot = world();
+		snapshot.characters.push(person("solo", "Solo", null));
+		const { page, errors } = await openOrg(appearance, snapshot);
+		try {
+			await page.setViewportSize({ width: appearance === "dark" ? 900 : 1440, height: 900 });
+			const card = page.getByRole("group", { name: "Ada's team", exact: true });
+			const name = card.getByRole("button", { name: "Ada organization", exact: true });
+			expect(await card.getByRole("button", { name: /^View (?:all )?recorded work/ }).count()).toBe(0);
+			await shot(page, `${appearance}-organization-work-trigger`);
+			await name.click();
+			const modal = page.getByRole("dialog", { name: "Recorded team work", exact: true });
+			await modal.waitFor();
+			expect(await page.evaluate(() => (window as any).orgCalls.taskReads)).toEqual([]);
+			await modal.getByRole("button", { name: "Read task: Build the reporting editor", exact: true }).click();
+			await modal.getByText("Explicitly loaded task: active-work.", { exact: true }).waitFor();
+			await shot(page, `${appearance}-organization-name-work`);
+			await page.keyboard.press("Escape");
+			await modal.waitFor({ state: "hidden" });
+			expect(await name.evaluate((node) => document.activeElement === node)).toBe(true);
+			await page.keyboard.press("Shift+F10");
+			const menu = page.getByRole("menu", { name: "Actions", exact: true });
+			await menu.getByRole("menuitem", { name: "Rename", exact: true }).click();
+			const form = page.getByRole("form", { name: "Rename organization", exact: true });
+			await form.getByRole("button", { name: "Cancel", exact: true }).click();
+			expect(await modal.count()).toBe(0);
+			await name.click({ button: "right" });
+			await menu.waitFor();
+			expect(await modal.count()).toBe(0);
+			await page.keyboard.press("Escape");
+			await page.getByRole("button", { name: "Solo organization", exact: true }).click();
+			await modal.getByText("No matching work.", { exact: true }).waitFor();
+			await page.keyboard.press("Escape");
+			await openTeam(page, "Ada");
+			const headingName = page
+				.getByRole("heading", { name: "Ada organization", exact: true })
+				.getByRole("button", { name: "Ada organization", exact: true });
+			await headingName.focus();
+			await page.keyboard.press(appearance === "dark" ? "Space" : "Enter");
+			await modal.waitFor();
+			await page.keyboard.press("Escape");
+			expect(await headingName.evaluate((node) => document.activeElement === node)).toBe(true);
+			await page.getByRole("button", { name: "View profile: Cleo", exact: true }).click();
+			const profile = page.getByRole("complementary", { name: "Profile: Cleo", exact: true });
+			const profileWork = profile.getByRole("button", { name: "View all recorded work (3)", exact: true });
+			expect((await profileWork.innerText()).trim()).toBe("View all");
+			const actionBox = (await profileWork.boundingBox())!;
+			const workHeading = (await profile.getByRole("heading", { name: "Work", exact: true }).boundingBox())!;
+			const contentRight = await profile
+				.getByRole("region", { name: "Recorded work", exact: true })
+				.evaluate((node) => {
+					const style = getComputedStyle(node);
+					return (
+						node.getBoundingClientRect().right -
+						Number.parseFloat(style.paddingRight) -
+						Number.parseFloat(style.borderRightWidth)
+					);
+				});
+			expect(actionBox.y).toBeLessThan(workHeading.y + workHeading.height);
+			expect(actionBox.y + actionBox.height).toBeGreaterThan(workHeading.y);
+			expect(actionBox.x + actionBox.width).toBeCloseTo(contentRight, 0);
+			expect(
+				await profileWork.evaluate((button) => {
+					const style = getComputedStyle(button);
+					return Number.parseFloat(style.borderTopWidth) === 0 && style.backgroundColor === "rgba(0, 0, 0, 0)";
+				}),
+			).toBe(true);
+			await profileWork.click();
+			const personModal = page.getByRole("dialog", { name: "Recorded work", exact: true });
+			await personModal.waitFor();
+			await page.keyboard.press("Escape");
+			expect(await profileWork.evaluate((node) => document.activeElement === node)).toBe(true);
+			await shot(page, `${appearance}-profile-work-link`);
+			await profile.getByRole("button", { name: "Close profile", exact: true }).click();
+			const unavailable = world();
+			delete unavailable.workplace!.workHistory;
+			await page.evaluate((next) => (window as any).pushOrg(next), unavailable);
+			await headingName.click();
+			await modal.getByText("Work history is not available in this snapshot.", { exact: true }).first().waitFor();
+			expect(await modal.getByRole("button", { name: /^Read task:/ }).count()).toBe(0);
+			await page.keyboard.press("Escape");
+			const calls = await page.evaluate(() => (window as any).orgCalls);
+			expect(calls.taskReads).toEqual(["active-work"]);
+			for (const key of ["renames", "conversations", "seen", "moves", "starts", "recruits"])
+				expect(calls[key]).toEqual([]);
+			expect(errors).toEqual([]);
+		} finally {
+			await page.close();
+		}
+	},
+	45_000,
+);
+
 test("organization display names persist locally, cancel cleanly and relabel channels without changing their identity", async () => {
 	const snapshot = world();
 	snapshot.workplace!.threads = [
@@ -1227,8 +1322,7 @@ test("recorded team work keeps its provenance while a person's profile includes 
 	const { page, errors } = await openOrg();
 	try {
 		await openTeam(page, "Ada");
-		const teamWork = page.getByRole("region", { name: "Recorded team work", exact: true });
-		await teamWork.getByRole("button", { name: "View recorded work (2)", exact: true }).click();
+		await page.getByRole("button", { name: "Ada organization", exact: true }).click();
 		const teamDialog = page.getByRole("dialog", { name: "Recorded team work", exact: true });
 		await teamDialog.getByRole("button", { name: "Read task: Build the reporting editor", exact: true }).waitFor();
 		expect(await page.evaluate(() => (window as any).orgCalls.taskReads)).toEqual([]);
@@ -1245,7 +1339,7 @@ test("recorded team work keeps its provenance while a person's profile includes 
 		const profile = page.getByRole("complementary", { name: "Profile: Cleo", exact: true });
 		await profile
 			.getByRole("region", { name: "Recorded work", exact: true })
-			.getByRole("button", { name: "View recorded work (3)", exact: true })
+			.getByRole("button", { name: "View all recorded work (3)", exact: true })
 			.click();
 		const history = page.getByRole("dialog", { name: "Recorded work", exact: true });
 		await history.getByRole("button", { name: "Read task: Ship the invoice report", exact: true }).waitFor();
@@ -1275,7 +1369,7 @@ test("recorded team work keeps its provenance while a person's profile includes 
 		).toBe(true);
 		await close.click();
 		await openTeam(page, "Daria");
-		await teamWork.getByRole("button", { name: "View recorded work (2)", exact: true }).click();
+		await page.getByRole("button", { name: "Daria organization", exact: true }).click();
 		await teamDialog.getByRole("button", { name: "Read task: Ship the invoice report", exact: true }).waitFor();
 		await teamDialog.getByRole("button", { name: "Read task: Investigate the ledger import", exact: true }).waitFor();
 		expect(await page.getByRole("button", { name: "View profile: Cleo", exact: true }).count()).toBe(0);
@@ -1321,9 +1415,7 @@ test("large work history stays in a bounded modal with independent scrolling and
 			width: document.documentElement.scrollWidth,
 			height: document.documentElement.scrollHeight,
 		}));
-		const openTeamHistory = page
-			.getByRole("region", { name: "Recorded team work", exact: true })
-			.getByRole("button", { name: "View recorded work (60)", exact: true });
+		const openTeamHistory = page.getByRole("button", { name: "Ada organization", exact: true });
 		await openTeamHistory.click();
 		const modal = page.getByRole("dialog", { name: "Recorded team work", exact: true });
 		await modal.waitFor();
@@ -1377,7 +1469,7 @@ test("large work history stays in a bounded modal with independent scrolling and
 		const profile = page.getByRole("complementary", { name: "Profile: Cleo", exact: true });
 		const profileBefore = await profile.boundingBox();
 		const profileChartBefore = await chart.boundingBox();
-		const trigger = profile.getByRole("button", { name: "View recorded work (60)", exact: true });
+		const trigger = profile.getByRole("button", { name: "View all recorded work (60)", exact: true });
 		await trigger.click();
 		const personModal = page.getByRole("dialog", { name: "Recorded work", exact: true });
 		await personModal.waitFor();
@@ -1453,5 +1545,8 @@ test("Org search crosses teams using snapshot metadata and reads work only on re
 async function shot(page: Page, name: string) {
 	if (!SHOTS) return;
 	mkdirSync(SHOTS, { recursive: true });
+	await page.evaluate(
+		() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))),
+	);
 	await page.screenshot({ path: join(SHOTS, `aw-org-${name}.png`), animations: "disabled" });
 }

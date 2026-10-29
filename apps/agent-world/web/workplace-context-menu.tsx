@@ -67,14 +67,16 @@ function MenuPopup({ menu, close }: { menu: Menu; close: (restore?: boolean) => 
 			top: Math.max(8, Math.min(menu.y, innerHeight - box.height - 8)),
 		});
 		(element.current!.querySelector<HTMLButtonElement>("button:not(:disabled)") ?? element.current!).focus();
-		const outside = (event: PointerEvent) => {
+		const outside = (event: Event) => {
 			if (!element.current?.contains(event.target as Node)) close(false);
 		};
 		const dismiss = () => close();
 		window.addEventListener("pointerdown", outside, true);
+		window.addEventListener("focusin", outside, true);
 		window.addEventListener("resize", dismiss);
 		return () => {
 			window.removeEventListener("pointerdown", outside, true);
+			window.removeEventListener("focusin", outside, true);
 			window.removeEventListener("resize", dismiss);
 		};
 	}, [menu, close]);

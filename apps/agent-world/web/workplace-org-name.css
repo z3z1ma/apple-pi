@@ -16,6 +16,24 @@
 	outline: 2px solid var(--wp-accent);
 	outline-offset: 3px;
 }
+.wp-org .wp-org-name .wp-org-name-work {
+	padding: 0;
+	border: 0;
+	border-radius: 3px;
+	background: transparent;
+	color: inherit;
+	font: inherit;
+	text-align: left;
+	white-space: normal;
+	overflow-wrap: anywhere;
+	cursor: pointer;
+}
+.wp-org .wp-org-name .wp-org-name-work:hover,
+.wp-org .wp-org-name .wp-org-name-work:focus-visible {
+	color: var(--wp-accent);
+	text-decoration: underline;
+	text-underline-offset: 0.16em;
+}
 .wp-org-name-editor {
 	display: grid;
 	grid-template-columns: minmax(0, 1fr) auto auto;

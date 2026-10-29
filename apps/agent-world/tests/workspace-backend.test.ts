@@ -142,6 +142,125 @@ test("manual subdirectories remain browsable but Git names the required reposito
 	expect(await workspace.tree({ root: join(root, ".git"), path: "" })).toMatchObject({ ok: false });
 });
 
+test("file discovery respects Git ignores and selected-root paths without following symlinks or changing the index", async () => {
+	const tracked = "tracked\n\u03a9 [file].ts";
+	fs.writeFileSync(join(root, tracked), "tracked");
+	fs.writeFileSync(join(root, ".gitignore"), "ignored/\nignored.txt\n");
+	fs.writeFileSync(join(root, "ignored.txt"), "tracked despite ignore");
+	git("add", ".gitignore", tracked);
+	git("add", "-f", "ignored.txt");
+	fs.mkdirSync(join(root, "ignored"));
+	fs.writeFileSync(join(root, "ignored", "hidden.txt"), "hidden");
+	fs.mkdirSync(join(root, "sub"));
+	fs.writeFileSync(join(root, "sub", "untracked\n\u03a9.txt"), "untracked");
+	fs.symlinkSync(join(root, tracked), join(root, "inside-link"));
+	fs.mkdirSync(join(root, "escaped-dir"));
+	fs.writeFileSync(join(root, "escaped-dir", "secret"), "original");
+	git("add", "escaped-dir/secret");
+	fs.rmSync(join(root, "escaped-dir"), { recursive: true });
+	fs.mkdirSync(join(base, "outside"));
+	fs.writeFileSync(join(base, "outside", "secret"), "outside");
+	fs.symlinkSync(join(base, "outside"), join(root, "escaped-dir"));
+	fs.unlinkSync(join(root, "hello.ts"));
+	const index = fs.readFileSync(join(root, ".git", "index"));
+	expect(await workspace.files({ root })).toEqual({
+		ok: true,
+		root: fs.realpathSync(root),
+		paths: [".gitignore", "ignored.txt", "sub/untracked\n\u03a9.txt", tracked].sort(),
+	});
+	expect(await workspace.files({ root: join(root, "sub") })).toEqual({
+		ok: true,
+		root: fs.realpathSync(join(root, "sub")),
+		paths: ["untracked\n\u03a9.txt"],
+	});
+	expect(fs.readFileSync(join(root, ".git", "index"))).toEqual(index);
+});
+
+test("plain-folder file discovery includes nested actual files and skips metadata and symlink traversal", async () => {
+	const plain = join(base, "plain");
+	fs.mkdirSync(join(plain, "nested"), { recursive: true });
+	fs.mkdirSync(join(plain, ".git"));
+	fs.writeFileSync(join(plain, ".git", "metadata"), "not a valid repository");
+	fs.writeFileSync(join(plain, "nested", "file [x].txt"), "text");
+	fs.writeFileSync(join(plain, "binary"), Buffer.from([0, 1]));
+	fs.symlinkSync(root, join(plain, "outside-link"));
+	fs.symlinkSync(join(plain, "nested"), join(plain, "inside-link"));
+	expect(await workspace.files({ root: plain })).toEqual({
+		ok: true,
+		root: fs.realpathSync(plain),
+		paths: ["binary", "nested/file [x].txt"],
+	});
+	expect(await workspace.worktrees({ root: plain })).toMatchObject({ ok: false });
+});
+
+test("worktree discovery preserves odd paths and reports current, branch, detached, lock and prune state", async () => {
+	const renamed = join(base, "main repo \n");
+	fs.renameSync(root, renamed);
+	root = renamed;
+	const linked = join(base, "linked\n\u03a9"),
+		detached = join(base, "detached space"),
+		missing = join(base, "missing");
+	git("worktree", "add", "-b", "feature/review", linked);
+	git("worktree", "lock", "--reason", "Review\nKeep available", linked);
+	git("worktree", "add", "--detach", detached);
+	git("worktree", "lock", detached);
+	git("worktree", "add", "--detach", missing);
+	const missingPath = fs.realpathSync(missing);
+	fs.rmSync(missing, { recursive: true });
+	fs.mkdirSync(join(linked, "sub"));
+	const index = fs.readFileSync(join(root, ".git", "index"));
+	const result = await workspace.worktrees({ root: join(linked, "sub") });
+	if (!result.ok) throw new Error(result.reason);
+	expect(result.root).toBe(fs.realpathSync(linked));
+	expect(result.worktrees).toHaveLength(4);
+	expect(result.worktrees.find((entry) => entry.path === fs.realpathSync(root))).toMatchObject({
+		branch: "main",
+		current: false,
+		detached: false,
+		bare: false,
+	});
+	expect(result.worktrees.find((entry) => entry.path === fs.realpathSync(linked))).toMatchObject({
+		branch: "feature/review",
+		current: true,
+		detached: false,
+		bare: false,
+		locked: "Review\nKeep available",
+	});
+	expect(result.worktrees.find((entry) => entry.path === fs.realpathSync(detached))).toMatchObject({
+		branch: null,
+		current: false,
+		detached: true,
+		bare: false,
+		locked: "",
+	});
+	expect(result.worktrees.find((entry) => entry.path === missingPath)).toMatchObject({ prunable: expect.any(String) });
+	const fromMain = await workspace.worktrees({ root });
+	expect(fromMain).toMatchObject({ ok: true, root: fs.realpathSync(root) });
+	expect(fs.readFileSync(join(root, ".git", "index"))).toEqual(index);
+});
+
+test("a bare repository stays distinct from its editable linked worktree", async () => {
+	const bare = join(base, "bare.git"),
+		linked = join(base, "bare-linked");
+	execFileSync("git", ["clone", "--bare", root, bare], { stdio: "ignore" });
+	execFileSync("git", ["-C", bare, "worktree", "add", "-b", "linked", linked], { stdio: "ignore" });
+	const result = await workspace.worktrees({ root: linked });
+	if (!result.ok) throw new Error(result.reason);
+	expect(result.worktrees.find((entry) => entry.path === fs.realpathSync(bare))).toMatchObject({
+		branch: null,
+		head: null,
+		bare: true,
+		detached: false,
+		current: false,
+	});
+	expect(result.worktrees.find((entry) => entry.path === fs.realpathSync(linked))).toMatchObject({
+		branch: "linked",
+		bare: false,
+		current: true,
+	});
+	expect(await workspace.files({ root: bare })).toMatchObject({ ok: false });
+});
+
 test("discovers real roots and validates renderer payloads", async () => {
 	const discovered = openWorkspace(() => ({
 		...snapshot,

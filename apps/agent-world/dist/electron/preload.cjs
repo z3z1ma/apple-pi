@@ -1,8 +1,21 @@
 let electron = require("electron");
 //#region apps/agent-world/src/electron/preload.ts
 var api = {
+	terminal: {
+		create: (request) => electron.ipcRenderer.invoke("terminal:create", request),
+		write: (request) => electron.ipcRenderer.invoke("terminal:write", request),
+		resize: (request) => electron.ipcRenderer.invoke("terminal:resize", request),
+		close: (request) => electron.ipcRenderer.invoke("terminal:close", request),
+		onEvent(listener) {
+			const forward = (_event, event) => listener(event);
+			electron.ipcRenderer.on("terminal:event", forward);
+			return () => electron.ipcRenderer.removeListener("terminal:event", forward);
+		}
+	},
 	workspace: {
 		repositories: () => electron.ipcRenderer.invoke("workspace:repositories"),
+		files: (request) => electron.ipcRenderer.invoke("workspace:files", request),
+		worktrees: (request) => electron.ipcRenderer.invoke("workspace:worktrees", request),
 		tree: (request) => electron.ipcRenderer.invoke("workspace:tree", request),
 		readFile: (request) => electron.ipcRenderer.invoke("workspace:read-file", request),
 		saveFile: (request) => electron.ipcRenderer.invoke("workspace:save-file", request),

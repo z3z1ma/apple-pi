@@ -9,6 +9,11 @@ Verify: apps/agent-world/tests/world-conversation.test.ts
 Why: the stylesheet is loaded only with Workplace, but the hide rule is class-scoped so a shared HTML import cannot blank the World canvas.
 Coupled: apps/agent-world/web/workplace.tsx, apps/agent-world/web/entry.ts
 
+Compact icon actions keep a visible border/background at rest and an accessible name on the owning button. The shared button/font resets use `:where(.wp-app)` so component treatments win regardless of stylesheet import order; hover is an additional cue rather than the only evidence that an action is clickable. Navigation rows and full-card footers retain their separate affordances.
+Why: the shared reset previously erased the profile's Add person treatment, leaving offset text that appeared clickable only on hover. Icon-only refresh/save controls must not repeat that failure or lose their names when the visible words are removed.
+Coupled: apps/agent-world/web/workplace-icon.tsx, apps/agent-world/web/workplace-code.tsx, apps/agent-world/web/workplace-git.tsx, apps/agent-world/web/workplace-issues.tsx, apps/agent-world/web/workplace-org.css
+Verify: apps/agent-world/tests/world-code.test.ts, apps/agent-world/tests/world-issues.test.ts, apps/agent-world/tests/world-org.test.ts
+
 The workplace palette is owned by `.wp-app` and its `data-appearance` value. Light and dark share semantic color tokens; base CSS also defines native `color-scheme`. The switch remembers only the operator's explicit choice locally, while an unset preference starts from the OS setting. The shared Markdown styles are workplace-scoped so team channels and DMs match without changing World.
 
 Keep the embedded session overrides scoped under `.wp-session`; the World modal and workplace DM use the same conversation markup and base CSS. The workplace's avatar gutter, composer layout, and hidden character sidebar belong only to the embedded surface.

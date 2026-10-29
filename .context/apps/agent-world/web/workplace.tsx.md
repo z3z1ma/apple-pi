@@ -1,5 +1,16 @@
 ## file
 
+World is a lazy retained application tab under the permanent rail/header. Its button selects ?workplace=world without full navigation; the World iframe stays mounted after first visit, while Chat/Mail readers follow their existing active-tab gate. The decorative brand is not a second full-navigation route. Code drafts, live PTYs and planned teams keep their parent component identities across World switches.
+Why: World used to be a separate top-level page, which unloaded the editor and triggered terminal cleanup. The existing root beforeunload protection now applies to actual page exit, not switching this tab.
+Coupled: apps/agent-world/web/workplace-world.tsx, apps/agent-world/web/entry.ts
+Verify: apps/agent-world/tests/world-terminal.test.ts, apps/agent-world/tests/world-conversation.test.ts
+
+The whole wp-surface is inert while world.connected is false, including Code's local controls. Actual Electron interaction fixtures need a connected isolated runtime; a visible input or a preload API alone does not make the form usable. Browser fixtures supply connected snapshots, so their success does not test this prerequisite.
+
+The existing beforeunload guard combines unsaved parent drafts, the trusted World's data-world-dirty frame marker, and Code's live embedded-terminal count. The marker covers the child's separate conversation/inbox draft state even when its frame is hidden. Starting/running terminal sessions count; exited terminal tabs do not. The same native Stay/Leave dialog protects unsaved state and running shells, while ordinary application-tab switching retains the mounted Code/terminal components. Main owns cleanup after committed full navigation, renderer death and actual window closure; a cancelled navigation must not close shells.
+Coupled: apps/agent-world/web/workplace-code.tsx, apps/agent-world/web/workplace-terminal.tsx, apps/agent-world/web/world-drafts.ts, apps/agent-world/src/electron/main.ts
+Verify: apps/agent-world/tests/world-terminal.test.ts, apps/agent-world/tests/world-navigation.test.ts
+
 Workspace heading uses the reserved device-local workspace display preference, independent of any session identity. Chat labels resolve organization:<head> to org- and team:<head> to team- slugs from per-head UI names; channel selection/read/cursors still use the original ID. Passing only channelLabel into ThreadPane keeps a rename from becoming a new channel read. Name changes rerender through the shared local preference subscription. The root mounts exactly one WorkplaceMenuProvider. Right-click or keyboard context actions on organization/team channel rows open a local name form without selecting or reading the channel; the target key is the parsed head ID, never the display slug. Channel heading context action shares that path; row buttons remain its keyboard entry. Closing the form restores a still-connected trigger.
 Coupled: apps/agent-world/web/workplace-names.ts, apps/agent-world/web/workplace-org-name.tsx
 

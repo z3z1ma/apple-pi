@@ -13,8 +13,8 @@
 	flex: none;
 	align-items: center;
 	justify-content: space-between;
-	gap: 12px;
-	padding: 16px;
+	gap: 8px;
+	padding: 10px 12px;
 	border-bottom: 1px solid var(--wp-border);
 }
 .wp-git-header > div {
@@ -33,7 +33,7 @@
 }
 .wp-git h2 {
 	margin: 0;
-	font-size: 17px;
+	font-size: 13px;
 }
 .wp-git-header > button {
 	flex: none;
@@ -43,19 +43,9 @@
 	margin: 5px 0 0;
 	color: var(--wp-muted);
 	font-size: 11px;
-	overflow-wrap: anywhere;
-}
-.wp-git button {
-	padding: 6px 9px;
-	border: 1px solid var(--wp-border);
-	border-radius: 6px;
-	color: var(--wp-text);
-	background: var(--wp-bg);
-	font: inherit;
-	cursor: pointer;
-}
-.wp-git button:hover:not(:disabled) {
-	background: var(--wp-hover);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 .wp-git button:disabled {
 	opacity: 0.55;
@@ -86,8 +76,8 @@
 	display: flex;
 	justify-content: space-between;
 	margin: 0;
-	padding: 14px 12px 8px;
-	font-size: 12px;
+	padding: 10px 10px 4px;
+	font-size: 11px;
 }
 .wp-git-files h3 span {
 	color: var(--wp-muted);
@@ -95,22 +85,25 @@
 }
 .wp-git-files ul {
 	margin: 0;
-	padding: 0 6px 8px;
+	padding: 0 6px 4px;
 	list-style: none;
 }
 .wp-git-files li {
 	display: flex;
 	align-items: center;
-	gap: 7px;
-	padding: 7px 6px;
-	border-radius: 6px;
+	height: 30px;
+	gap: 4px;
+	border-radius: 4px;
+}
+.wp-git-files li:hover {
+	background: var(--wp-hover);
 }
 .wp-git-files li[data-selected="true"] {
 	background: var(--wp-selected);
 }
 .wp-git-badge {
 	flex: none;
-	width: 18px;
+	width: 16px;
 	color: var(--wp-accent);
 	text-align: center;
 	font-family: ui-monospace, monospace;
@@ -119,26 +112,27 @@
 .wp-git-file-name {
 	flex: 1;
 	min-width: 0;
-}
-.wp-git .wp-git-open {
-	max-width: 100%;
-	padding: 0;
-	border: 0;
-	background: transparent;
-	text-align: left;
-	font-size: 12px;
-	overflow-wrap: anywhere;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 .wp-git-file-name small {
-	display: block;
-	margin-top: 3px;
 	color: var(--wp-muted);
-	overflow-wrap: anywhere;
+	font-size: inherit;
 }
 .wp-git .wp-git-view {
-	flex: none;
-	padding: 4px 6px;
-	font-size: 11px;
+	display: flex;
+	align-items: center;
+	flex: 1;
+	min-width: 0;
+	height: 100%;
+	gap: 5px;
+	padding: 0 4px;
+	border: 0;
+	background: transparent;
+	color: var(--wp-text);
+	text-align: left;
+	font-size: 12px;
 }
 .wp-git-diff-empty {
 	margin: 0;

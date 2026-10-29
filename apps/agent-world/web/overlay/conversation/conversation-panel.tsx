@@ -16,6 +16,7 @@ import { placeActions, placePanels } from "../places/place-panels.js";
 import { Footer } from "./actions.js";
 import "./conversation.css";
 import { useWindowFocus } from "../../use-window-focus.js";
+import { useWorldVisible, worldVisible } from "../../world-visibility.js";
 import { focusWorld, trapTab } from "../focus.js";
 import { shortArg } from "../tool-line.js";
 import { type History, useHistory } from "./history.js";
@@ -31,7 +32,8 @@ const STICK_MARGIN = 48;
 export function ConversationPanel({ store }: { store: WorldStore }) {
 	const panel = useSyncExternalStore(conversationPanel.subscribe, conversationPanel.get);
 	const world = useSyncExternalStore(store.subscribe, store.get);
-	if (!panel.character) return null;
+	const visible = useWorldVisible();
+	if (!panel.character || !visible) return null;
 	return <Panel key={`${panel.opening}:${panel.character.id}`} opened={panel.character} world={world} store={store} />;
 }
 
@@ -58,21 +60,28 @@ function useSeenConversation(
 	const [note, setNote] = useState<string>();
 	const seenOnce = useRef(false);
 	const seenNeeds = useRef<number | null>(null);
+	const visible = useWorldVisible();
 	useEffect(() => {
 		if (needsYouSince === null) {
 			seenNeeds.current = null;
 			return;
 		}
-		if (!api || !ready || seenNeeds.current === needsYouSince || (!document.hasFocus() && seenOnce.current)) return;
-		seenOnce.current = true;
-		seenNeeds.current = needsYouSince;
+		if (!visible || !api || !ready || seenNeeds.current === needsYouSince || (!document.hasFocus() && seenOnce.current))
+			return;
 		void Promise.resolve()
-			.then(() => api.markSeen(id))
+			.then(() => {
+				if (!worldVisible() || seenNeeds.current === needsYouSince) return;
+				seenOnce.current = true;
+				seenNeeds.current = needsYouSince;
+				return api.markSeen(id);
+			})
 			.then(
-				(result) => setNote(result.ok ? undefined : `Could not mark it seen: ${result.reason}`),
+				(result) => {
+					if (result) setNote(result.ok ? undefined : `Could not mark it seen: ${result.reason}`);
+				},
 				(failure: unknown) => setNote(`Could not mark it seen: ${String(failure)}`),
 			);
-	}, [api, id, needsYouSince, ready]);
+	}, [api, id, needsYouSince, ready, visible]);
 	return note;
 }
 
@@ -164,8 +173,8 @@ function Panel({
 		return () => {
 			window.removeEventListener("keydown", capture, { capture: true });
 			document.removeEventListener("keydown", bubble);
-			// Closed: the world has the keys again.
-			focusWorld();
+			// Closing an invisible frame must leave focus in the Workplace rail.
+			if (worldVisible()) focusWorld();
 		};
 	}, [embedded]);
 

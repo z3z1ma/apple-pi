@@ -4,6 +4,7 @@
 // It also keeps what outlives one opening of the panel: each character's unsent draft, and the instructions sent to it
 // with the receipt stages they reached.
 import type { AgentWorldApi, Character, Instruction, ReceiptStage } from "../../../src/world.js";
+import { setWorldDraftDirty } from "../../world-drafts.js";
 import { onePanel } from "../one-panel.js";
 
 /** Reading the conversation is required; acting and live replies are there once the backend offers them. */
@@ -109,6 +110,7 @@ export const conversationPanel = {
 	setDraft(characterId: string, text: string) {
 		if (text) drafts.set(characterId, text);
 		else drafts.delete(characterId);
+		setWorldDraftDirty(drafts, drafts.size > 0);
 	},
 	/** The choices made so far in a questionnaire's form; kept while the app runs, like a draft. */
 	formDraft: (questionnaire: string) => formDrafts.get(questionnaire),

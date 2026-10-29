@@ -6,11 +6,27 @@ declare module "electron" {
 		toPNG(): Buffer;
 	}
 
-	interface WebContents {
-		send(channel: string, ...args: unknown[]): void;
-		setWindowOpenHandler(handler: () => { action: "deny" | "allow" }): void;
+	export interface IpcMainInvokeEvent {
+		sender: WebContents;
+		senderFrame: { url: string } | null;
+	}
+	export interface WebContents {
+		readonly mainFrame: { url: string };
+		on(
+			event: "did-frame-navigate",
+			listener: (
+				event: unknown,
+				url: string,
+				httpResponseCode: number,
+				httpStatusText: string,
+				isMainFrame: boolean,
+			) => void,
+		): this;
+		on(event: "render-process-gone", listener: () => void): this;
 		on(event: "will-navigate", listener: (event: { preventDefault(): void }, url: string) => void): this;
 		on(event: "will-prevent-unload", listener: (event: { preventDefault(): void }) => void): this;
+		send(channel: string, ...args: unknown[]): void;
+		setWindowOpenHandler(handler: () => { action: "deny" | "allow" }): void;
 		once(event: "did-finish-load", listener: () => void): this;
 		capturePage(): Promise<NativeImage>;
 		executeJavaScript(code: string): Promise<unknown>;
@@ -58,7 +74,7 @@ declare module "electron" {
 	};
 
 	export const ipcMain: {
-		handle(channel: string, listener: (event: unknown, ...args: unknown[]) => unknown): void;
+		handle(channel: string, listener: (event: IpcMainInvokeEvent, ...args: unknown[]) => unknown): void;
 	};
 
 	export const shell: {

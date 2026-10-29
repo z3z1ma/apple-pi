@@ -12,13 +12,13 @@ Run `/world` in a root Pi session. The first time, it installs Electron 44.9.0 u
 
 Agent World starts detached, so it keeps running after the session that opened it ends. Only one Agent World runs at a time: `/world` while it is open brings its window to the front. When it fails to start, the reason is in `~/.pi/agent/agent-world/electron.log`.
 
-Closing the window quits Agent World and changes nothing in tmux or Pi: your sessions keep running, and nothing is stopped or marked.
+Closing the window quits Agent World without stopping or marking tmux/Pi sessions. It does hang up shells created in Workplace's embedded terminal; live terminals participate in the native leave confirmation.
 
 ## Workplace
 
-The app opens in Workplace's **Chat** view. Chat connects to real Pi conversations and team channels; Mail exposes operator correspondence, Sent and Activity. Org displays named organizations, profiles and recorded work, changes reporting and prepares task-specific teams. Code edits existing local UTF-8 files with explicit Save and conflict detection, alongside read-only Git status/diffs. Issues reads Jira and sends selected agents instructions; status changes require confirmation as you.
+The app opens in Workplace's **Chat** view. Chat connects to real Pi conversations and team channels; Mail exposes operator correspondence, Sent and Activity. Org displays named organizations, profiles and recorded work, changes reporting and prepares task-specific teams. Code edits existing local UTF-8 files with explicit Save and conflict detection, filename/path Quick Open, existing linked-worktree navigation, read-only Git status/diffs and explicitly created local terminals. Issues reads Jira and sends selected agents instructions; status changes require confirmation as you.
 
-Workspace and organization display names are device-local preferences, not person or runtime identity changes. Specialization is an optional lifetime focus assigned when creating a person, separate from their fixed role. **World** in the rail explicitly opens the visual world; **Workplace** there returns to Chat. Unsaved Code buffers and retained setup plans prompt before leaving the renderer; accepting the leave loses memory-only drafts, not the real people or work already created.
+Workspace and organization display names are device-local preferences, not person or runtime identity changes. Specialization is an optional lifetime focus assigned when creating a person, separate from their fixed role. **World** is a tab inside Workplace: the left rail stays available, and switching to Chat or any other tab keeps World loaded and preserves drafts and embedded terminals. Terminal content uses a fixed high-contrast dark palette in both app appearances, while its surrounding controls follow the app theme. Unsaved Code buffers, retained setup plans and live embedded terminals share one prompt before a full renderer reload or app close; accepting the leave discards memory-only drafts and hangs up those terminals. It does not remove Pi people or their assigned work.
 
 See [Workplace](workplace.md) for its controls, read/acknowledgment rules, profiles and limits.
 

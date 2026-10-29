@@ -206,48 +206,56 @@ export function OrgChart({
 			)}
 			<div className="wp-org-team-content">
 				{head && (
-					<>
-						<header className="wp-org-team-heading">
-							<div>
-								<OrgNameEditor key={head.character.id} id={head.character.id} name={head.character.name} heading="h2" />
-								<p>{branch(head.character.id).size} people · reporting lines</p>
-							</div>
-							<div className="wp-org-tools">
-								<button type="button" onClick={() => setFitting(true)}>
-									Fit
-								</button>
-								<button
-									type="button"
-									aria-label="Zoom out"
-									onClick={() => {
-										setFitting(false);
-										setZoom((value) => value / 1.2);
-									}}
-								>
-									−
-								</button>
-								<span>{Math.round(zoom * 100)}%</span>
-								<button
-									type="button"
-									aria-label="Zoom in"
-									onClick={() => {
-										setFitting(false);
-										setZoom((value) => value * 1.2);
-									}}
-								>
-									+
-								</button>
-								{manages(head) && !head.home && (
-									<button type="button" disabled={busy} onClick={() => addPerson(head.character.id)}>
-										Add person
-									</button>
-								)}
-							</div>
-						</header>
-						<div className="wp-org-team-work">
-							<WorkHistory world={world} team={head.character.id} compact />
-						</div>
-					</>
+					<WorkHistory world={world} team={head.character.id} compact>
+						{(openWork, summary) => (
+							<>
+								<header className="wp-org-team-heading">
+									<div>
+										<OrgNameEditor
+											key={head.character.id}
+											id={head.character.id}
+											name={head.character.name}
+											heading="h2"
+											onOpenWork={openWork}
+										/>
+										<p>{branch(head.character.id).size} people · reporting lines</p>
+									</div>
+									<div className="wp-org-tools">
+										<button type="button" onClick={() => setFitting(true)}>
+											Fit
+										</button>
+										<button
+											type="button"
+											aria-label="Zoom out"
+											onClick={() => {
+												setFitting(false);
+												setZoom((value) => value / 1.2);
+											}}
+										>
+											−
+										</button>
+										<span>{Math.round(zoom * 100)}%</span>
+										<button
+											type="button"
+											aria-label="Zoom in"
+											onClick={() => {
+												setFitting(false);
+												setZoom((value) => value * 1.2);
+											}}
+										>
+											+
+										</button>
+										{manages(head) && !head.home && (
+											<button type="button" disabled={busy} onClick={() => addPerson(head.character.id)}>
+												Add person
+											</button>
+										)}
+									</div>
+								</header>
+								<div className="wp-org-team-work">{summary}</div>
+							</>
+						)}
+					</WorkHistory>
 				)}
 				<div
 					className={`wp-org-viewport${head ? " wp-org-chart-viewport" : ""}`}
@@ -358,20 +366,26 @@ export function OrgChart({
 										className="wp-org-team-card"
 										{...dragProps(root)}
 									>
-										<div className="wp-org-card-heading">
-											<PersonAvatar id={root.character.id} name={root.character.name} />
-											<div>
-												<OrgNameEditor id={root.character.id} name={root.character.name} />
-												{customName && <span className="wp-org-card-head">Head: {root.character.name}</span>}
-											</div>
-										</div>
-										<div className="wp-org-team-summary">
-											<span>
-												{members.size} {members.size === 1 ? "person" : "people"}
-											</span>
-											{atHome > 0 && <span>{atHome} at home</span>}
-										</div>
-										<WorkHistory world={world} team={root.character.id} compact />
+										<WorkHistory world={world} team={root.character.id} compact>
+											{(openWork, summary) => (
+												<>
+													<div className="wp-org-card-heading">
+														<PersonAvatar id={root.character.id} name={root.character.name} />
+														<div>
+															<OrgNameEditor id={root.character.id} name={root.character.name} onOpenWork={openWork} />
+															{customName && <span className="wp-org-card-head">Head: {root.character.name}</span>}
+														</div>
+													</div>
+													<div className="wp-org-team-summary">
+														<span>
+															{members.size} {members.size === 1 ? "person" : "people"}
+														</span>
+														{atHome > 0 && <span>{atHome} at home</span>}
+													</div>
+													{summary}
+												</>
+											)}
+										</WorkHistory>
 										<div className="wp-org-team-actions">
 											<button
 												type="button"

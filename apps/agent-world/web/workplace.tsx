@@ -15,6 +15,7 @@ import { channelName, useWorkplaceNames } from "./workplace-names.js";
 import { Org } from "./workplace-org.js";
 import { OrganizationNameForm, OrgNameEditor } from "./workplace-org-name.js";
 import { ChatPeople, PersonAvatar, PersonName, PersonProfile, sessionStatus } from "./workplace-people.js";
+import { WorkplaceWorld } from "./workplace-world.js";
 import { worldStore } from "./world-store.js";
 import "./workplace.css";
 
@@ -63,18 +64,22 @@ function Workplace() {
 	};
 	const initialView = new URLSearchParams(location.search).get("workplace");
 	const [view, setView] = useState(
-		["org", "mail", "code", "issues"].includes(initialView ?? "") ? (initialView ?? "chat") : "chat",
+		["org", "mail", "code", "issues", "world"].includes(initialView ?? "") ? (initialView ?? "chat") : "chat",
 	);
 	const [orgVisited, setOrgVisited] = useState(initialView === "org");
 	const [codeVisited, setCodeVisited] = useState(initialView === "code");
 	const [issuesVisited, setIssuesVisited] = useState(initialView === "issues");
+	const [worldVisited, setWorldVisited] = useState(initialView === "world");
 	const [codeDirty, setCodeDirty] = useState(false);
+	const [terminalCount, setTerminalCount] = useState(0);
 	const [planState, setPlanState] = useState({ dirty: false, started: false });
 	useEffect(() => {
 		const protectDrafts = (event: BeforeUnloadEvent) => {
 			if (
 				!codeDirty &&
+				terminalCount === 0 &&
 				!planState.dirty &&
+				!document.querySelector(".wp-world-frame[data-world-dirty]") &&
 				![...drafts.values()].some(Boolean) &&
 				!world?.characters.some((person) => Boolean(conversationPanel.draft(person.id)))
 			)
@@ -84,7 +89,7 @@ function Workplace() {
 		};
 		window.addEventListener("beforeunload", protectDrafts);
 		return () => window.removeEventListener("beforeunload", protectDrafts);
-	}, [codeDirty, planState.dirty, world]);
+	}, [codeDirty, terminalCount, planState.dirty, world]);
 	const [requestedDM, setRequestedDM] = useState<{ id: string; key: string }>();
 	const [requestedChannel, setRequestedChannel] = useState<{ id: string; key: string }>();
 	const openChannel = (id: string) => {
@@ -108,9 +113,9 @@ function Workplace() {
 			data-appearance={dark ? "dark" : "light"}
 		>
 			<nav className="wp-rail" aria-label="Applications">
-				<a className="wp-brand" href="?world" title="Back to Agent World">
+				<span className="wp-brand" aria-hidden="true">
 					pi
-				</a>
+				</span>
 				<button
 					type="button"
 					aria-label="Chat"
@@ -199,10 +204,22 @@ function Workplace() {
 					</span>
 					Theme
 				</button>
-				<a className="wp-world-link" href="?world">
-					<Icon name="world" />
+				<button
+					type="button"
+					className="wp-world-link"
+					aria-label="World"
+					aria-pressed={view === "world"}
+					onClick={() => {
+						setWorldVisited(true);
+						setView("world");
+						history.replaceState(null, "", "?workplace=world");
+					}}
+				>
+					<span className="wp-rail-icon">
+						<Icon name="world" />
+					</span>
 					World
-				</a>
+				</button>
 				<span className="wp-avatar" title="Signed in as operator">
 					You
 				</span>
@@ -222,7 +239,9 @@ function Workplace() {
 										? "Code"
 										: view === "issues"
 											? "Issues"
-											: "Mail"}
+											: view === "world"
+												? "World"
+												: "Mail"}
 						</span>
 					</strong>
 					<span className={world?.connected ? "wp-connected" : "wp-offline"}>
@@ -257,12 +276,22 @@ function Workplace() {
 						)}
 						{codeVisited && (
 							<div hidden={view !== "code"}>
-								<WorkplaceCode world={world} active={view === "code"} onDirtyChange={setCodeDirty} />
+								<WorkplaceCode
+									world={world}
+									active={view === "code"}
+									onDirtyChange={setCodeDirty}
+									onTerminalCountChange={setTerminalCount}
+								/>
 							</div>
 						)}
 						{issuesVisited && (
 							<div hidden={view !== "issues"}>
 								<WorkplaceIssues world={world} active={view === "issues"} openDM={openDM} />
+							</div>
+						)}
+						{worldVisited && (
+							<div hidden={view !== "world"}>
+								<WorkplaceWorld active={view === "world"} />
 							</div>
 						)}
 					</div>

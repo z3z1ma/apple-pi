@@ -3,6 +3,7 @@
 // backend's `conversation`, which reads them through the runtime without blocking the world.
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { TranscriptEntry } from "../../../src/world.js";
+import { worldVisible } from "../../world-visibility.js";
 import type { ConversationApi } from "./panel-state.js";
 
 export interface History {
@@ -24,7 +25,8 @@ export interface History {
 }
 
 /** Run `ask` so that a synchronous throw becomes a rejected promise. */
-const call = <T>(ask: () => Promise<T>): Promise<T> => Promise.resolve().then(ask);
+const call = <T>(ask: () => Promise<T> | undefined): Promise<T | undefined> => Promise.resolve().then(ask);
+const canRead = (owner: { active: boolean }) => owner.active && (!window.frameElement || worldVisible());
 
 /** Entries of `fresh` (the newest page) that `known` lacks, or undefined when the page no longer reaches `known`. */
 function newer(known: TranscriptEntry[], fresh: TranscriptEntry[]): TranscriptEntry[] | undefined {
@@ -50,16 +52,30 @@ export function useHistory(api: ConversationApi | undefined, characterId: string
 	const [attempt, setAttempt] = useState(0);
 	const live = useRef({ entries, before, loadingOlder, ready, pulse, refreshing: false, again: false });
 	live.current = { ...live.current, entries, before, loadingOlder, ready, pulse };
+	const lifetime = useRef({ active: false });
+	// biome-ignore lint/correctness/useExhaustiveDependencies: request ownership ends when the API or character changes.
+	useEffect(() => {
+		const owner = { active: true };
+		lifetime.current = owner;
+		live.current.refreshing = false;
+		live.current.again = false;
+		live.current.loadingOlder = false;
+		setLoadingOlder(false);
+		return () => {
+			owner.active = false;
+		};
+	}, [api, characterId]);
 
 	// The newest page, on opening.
 	useEffect(() => {
 		if (!api) return;
 		let gone = false;
+		const owner = lifetime.current;
 		const requestedPulse = live.current.pulse;
 		void attempt;
-		call(() => api.conversation(characterId))
+		call(() => (!gone && canRead(owner) ? api.conversation(characterId) : undefined))
 			.then((page) => {
-				if (gone) return;
+				if (gone || !canRead(owner) || !page) return;
 				if (!page.ok) {
 					setError(page.reason);
 					return;
@@ -71,7 +87,7 @@ export function useHistory(api: ConversationApi | undefined, characterId: string
 				setReadPulse(requestedPulse);
 				setReady(true);
 			})
-			.catch((failure: unknown) => !gone && setError(String((failure as Error)?.message ?? failure)));
+			.catch((failure: unknown) => !gone && canRead(owner) && setError(String((failure as Error)?.message ?? failure)));
 		return () => {
 			gone = true;
 		};
@@ -79,12 +95,14 @@ export function useHistory(api: ConversationApi | undefined, characterId: string
 
 	const loadOlder = useCallback(() => {
 		const now = live.current;
-		if (!api || !now.ready || now.loadingOlder || !now.before) return;
+		const owner = lifetime.current;
+		if (!api || !canRead(owner) || !now.ready || now.loadingOlder || !now.before) return;
 		const cursor = now.before;
 		live.current.loadingOlder = true;
 		setLoadingOlder(true);
-		call(() => api.conversation(characterId, cursor))
+		call(() => (canRead(owner) ? api.conversation(characterId, cursor) : undefined))
 			.then((page) => {
+				if (!canRead(owner) || !page) return;
 				if (!page.ok) {
 					setError(page.reason);
 					return;
@@ -94,8 +112,9 @@ export function useHistory(api: ConversationApi | undefined, characterId: string
 				setBefore(page.before);
 				setMissing((n) => n + page.missing);
 			})
-			.catch((failure: unknown) => setError(String((failure as Error)?.message ?? failure)))
+			.catch((failure: unknown) => canRead(owner) && setError(String((failure as Error)?.message ?? failure)))
 			.finally(() => {
+				if (!canRead(owner)) return;
 				live.current.loadingOlder = false;
 				setLoadingOlder(false);
 			});
@@ -104,15 +123,17 @@ export function useHistory(api: ConversationApi | undefined, characterId: string
 	// Read the newest page again when the character's state changes, and append what is new.
 	const refresh = useCallback(() => {
 		const now = live.current;
-		if (!api || !now.ready) return;
+		const owner = lifetime.current;
+		if (!api || !canRead(owner) || !now.ready) return;
 		if (now.refreshing) {
 			now.again = true;
 			return;
 		}
 		now.refreshing = true;
 		const requestedPulse = now.pulse;
-		call(() => api.conversation(characterId))
+		call(() => (canRead(owner) ? api.conversation(characterId) : undefined))
 			.then((page) => {
+				if (!canRead(owner) || !page) return;
 				if (!page.ok) {
 					setError(page.reason);
 					return;
@@ -126,8 +147,9 @@ export function useHistory(api: ConversationApi | undefined, characterId: string
 					setBefore(page.before);
 				} else if (fresh.length) setEntries((known) => [...known, ...fresh]);
 			})
-			.catch((failure: unknown) => setError(String((failure as Error)?.message ?? failure)))
+			.catch((failure: unknown) => canRead(owner) && setError(String((failure as Error)?.message ?? failure)))
 			.finally(() => {
+				if (!canRead(owner)) return;
 				live.current.refreshing = false;
 				if (live.current.again) {
 					live.current.again = false;

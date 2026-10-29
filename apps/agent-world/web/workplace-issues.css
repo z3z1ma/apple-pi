@@ -73,6 +73,8 @@
 }
 .wp-issues-toolbar > button {
 	white-space: nowrap;
+	border: 1px solid var(--wp-border);
+	background: var(--wp-panel);
 }
 .wp-issues-toolbar > button[aria-pressed="true"] {
 	background: var(--wp-selected);
@@ -81,6 +83,7 @@
 }
 .wp-issues-toolbar form {
 	display: flex;
+	align-items: center;
 	flex: 1;
 	gap: 8px;
 }

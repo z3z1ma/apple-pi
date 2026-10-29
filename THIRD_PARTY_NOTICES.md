@@ -1208,3 +1208,67 @@ This software is provided by the copyright holders and contributors “as is” 
 ````
 
 </details>
+
+## Ghostty renderer for Workplace terminals
+
+- `ghostty-web@0.4.0`, MIT, Copyright (c) 2025 Coder: its JavaScript and Ghostty VT WebAssembly are bundled into Agent World renderer assets. The npm package is a build-time dependency; the shipped renderer uses no CDN.
+- Published npm metadata identifies source commit [`9e4e126d89ac3537d2b2ebec075849851566de9f`](https://github.com/coder/ghostty-web/tree/9e4e126d89ac3537d2b2ebec075849851566de9f). Its `ghostty` gitlink pins [`5714ed07a1012573261b7b7e3ed2add9c1504496`](https://github.com/ghostty-org/ghostty/tree/5714ed07a1012573261b7b7e3ed2add9c1504496); its build script applies the project's WASM API patch to that source before building `lib-vt`. Embedded Ghostty is MIT, Copyright (c) 2024 Mitchell Hashimoto, Ghostty contributors.
+- The existing `@lydell/node-pty` runtime dependency supplies the local PTY. It stays external to the Electron bundle; its platform-native addon is installed through npm, not copied into renderer assets.
+
+### ghostty-web license
+
+Source: `node_modules/ghostty-web/LICENSE`, verified identical to the [pinned official source](https://raw.githubusercontent.com/coder/ghostty-web/9e4e126d89ac3537d2b2ebec075849851566de9f/LICENSE).
+
+```text
+MIT License
+
+Copyright (c) 2025 Coder
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+```
+
+### Embedded Ghostty license
+
+Source: [official pinned Ghostty LICENSE](https://raw.githubusercontent.com/ghostty-org/ghostty/5714ed07a1012573261b7b7e3ed2add9c1504496/LICENSE).
+
+```text
+MIT License
+
+Copyright (c) 2024 Mitchell Hashimoto, Ghostty contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+```

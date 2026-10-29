@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 import type { WorkplaceTaskHistory, WorldSnapshot } from "../src/world.js";
 import { Markdown } from "./overlay/conversation/transcript.js";
 import "./workplace-work-history.css";
@@ -54,12 +54,14 @@ function TaskContent({ task }: { task: WorkplaceTaskHistory }) {
 
 function WorkDialog({
 	tasks,
+	available,
 	heading,
 	names,
 	people,
 	onClose,
 }: {
 	tasks: WorkplaceTaskHistory[];
+	available: boolean;
 	heading: string;
 	names: Map<string, string>;
 	people?: string[];
@@ -108,7 +110,13 @@ function WorkDialog({
 				<div>
 					<h2 id={title}>{heading}</h2>
 					<p>
-						{tasks.length} {tasks.length === 1 ? "task" : "tasks"} · select one to read its details
+						{available ? (
+							<>
+								{tasks.length} {tasks.length === 1 ? "task" : "tasks"} &#183; select one to read its details
+							</>
+						) : (
+							"Work history is not available in this snapshot."
+						)}
 					</p>
 				</div>
 				<button type="button" ref={close} aria-label="Close work history" onClick={onClose}>
@@ -144,7 +152,7 @@ function WorkDialog({
 							</button>
 						))
 					) : (
-						<p>No matching work.</p>
+						<p>{available ? "No matching work." : "Work history is not available in this snapshot."}</p>
 					)}
 				</nav>
 				<section className="wp-work-dialog-detail" aria-label="Task detail">
@@ -190,11 +198,13 @@ export function WorkHistory({
 	team,
 	people,
 	compact = false,
+	children,
 }: {
 	world: WorldSnapshot;
 	team?: string;
 	people?: string[];
 	compact?: boolean;
+	children?: (openWork: () => void, summary: ReactNode) => ReactNode;
 }) {
 	const [open, setOpen] = useState(false);
 	const history = world.workplace?.workHistory;
@@ -219,9 +229,27 @@ export function WorkHistory({
 		...world.characters.map((person) => [person.id, person.name] as const),
 		...(world.dormant ?? []).map((person) => [person.id, person.name] as const),
 	]);
-	return (
+	const summary = (
 		<section className={`wp-work-history${compact ? " wp-work-history-compact" : ""}`} aria-label={heading}>
-			{!compact && <h3>Work</h3>}
+			{!compact && (
+				<header className="wp-work-history-header">
+					<h3>Work</h3>
+					{!children && tasks.length > 0 && (
+						<button
+							type="button"
+							className="wp-work-history-open"
+							aria-label={`View all recorded work (${tasks.length})`}
+							title={`View all recorded work (${tasks.length})`}
+							onClick={(event) => {
+								event.currentTarget.focus();
+								setOpen(true);
+							}}
+						>
+							View all
+						</button>
+					)}
+				</header>
+			)}
 			{history === undefined ? (
 				<p>Work history is not available in this snapshot.</p>
 			) : tasks.length === 0 ? (
@@ -235,19 +263,19 @@ export function WorkHistory({
 					<p className="wp-work-history-recent" title={tasks[0].title}>
 						{tasks[0].title}
 					</p>
-					<button
-						type="button"
-						className="wp-work-history-open"
-						aria-label={`View recorded work (${tasks.length})`}
-						onClick={() => setOpen(true)}
-					>
-						View work <span aria-hidden="true">({tasks.length})</span>
-					</button>
 				</>
 			)}
 			{open && (
-				<WorkDialog tasks={tasks} heading={heading} names={names} people={people} onClose={() => setOpen(false)} />
+				<WorkDialog
+					tasks={tasks}
+					available={history !== undefined}
+					heading={heading}
+					names={names}
+					people={people}
+					onClose={() => setOpen(false)}
+				/>
 			)}
 		</section>
 	);
+	return children ? children(() => setOpen(true), summary) : summary;
 }

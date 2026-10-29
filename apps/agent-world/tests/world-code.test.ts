@@ -10,6 +10,7 @@ import type { WorldSnapshot } from "../src/world.js";
 const APP = fileURLToPath(new URL("..", import.meta.url));
 const ORIGIN = "http://localhost";
 const ROOT = "/fixture/project";
+const LINKED_ROOT = `${ROOT}-linked worktree/\u660e\u7d30`;
 const SHOTS = process.env.AGENT_WORLD_SHOTS;
 let browser: Browser;
 beforeAll(async () => {
@@ -40,91 +41,137 @@ async function openCode() {
 		if (!file || !existsSync(file)) return route.fulfill({ status: 404 });
 		return route.fulfill({ body: readFileSync(file), contentType: contentType(file) });
 	});
-	await page.addInitScript((root) => {
-		const w = window as any;
-		const snapshot: WorldSnapshot = {
-			connected: true,
-			headquarters: [],
-			characters: [],
-			dormant: [],
-			mail: [],
-			operatorMail: [],
-			workplace: { threads: [], tasks: [], escalations: [] },
-		};
-		w.workspaceCalls = { repositories: 0, trees: [], reads: [], saves: [], status: [], diffs: [], copied: [] };
-		Object.defineProperty(navigator, "clipboard", {
-			value: {
-				writeText: async (text: string) => {
-					w.workspaceCalls.copied.push(text);
+	await page.addInitScript(
+		({ root, linked }) => {
+			const w = window as any;
+			const snapshot: WorldSnapshot = {
+				connected: true,
+				headquarters: [],
+				characters: [],
+				dormant: [],
+				mail: [],
+				operatorMail: [],
+				workplace: { threads: [], tasks: [], escalations: [] },
+			};
+			w.workspaceCalls = {
+				repositories: 0,
+				files: [],
+				worktrees: [],
+				trees: [],
+				reads: [],
+				saves: [],
+				status: [],
+				diffs: [],
+				copied: [],
+			};
+			Object.defineProperty(navigator, "clipboard", {
+				value: {
+					writeText: async (text: string) => {
+						w.workspaceCalls.copied.push(text);
+					},
 				},
-			},
-		});
-		w.workspaceDisk = {
-			"src/main.ts": { text: 'export const message = "original";\n', hash: "main-original" },
-			"README.md": { text: "# Fixture project\n", hash: "readme-original" },
-			"notes.txt": { text: "untracked note\n", hash: "notes-original" },
-		};
-		w.agentWorld = {
-			snapshot: async () => snapshot,
-			onUpdate: () => () => {},
-			feed: async () => [],
-			onFeed: () => () => {},
-			onReceipt: () => () => {},
-			onReply: () => () => {},
-			watchReplies: async () => {},
-			onNotepad: () => () => {},
-			workspace: {
-				repositories: async () => {
-					w.workspaceCalls.repositories++;
-					return { ok: true, roots: [root, `${root}-other`] };
+			});
+			w.workspaceDisk = {
+				"src/main.ts": { text: 'export const message = "original";\n', hash: "main-original" },
+				"README.md": { text: "# Fixture project\n", hash: "readme-original" },
+				"notes.txt": { text: "untracked note\n", hash: "notes-original" },
+			};
+			w.agentWorld = {
+				snapshot: async () => snapshot,
+				onUpdate: () => () => {},
+				feed: async () => [],
+				onFeed: () => () => {},
+				onReceipt: () => () => {},
+				onReply: () => () => {},
+				watchReplies: async () => {},
+				onNotepad: () => () => {},
+				workspace: {
+					repositories: async () => {
+						w.workspaceCalls.repositories++;
+						return { ok: true, roots: [root, `${root}-other`] };
+					},
+					files: async (request: { root: string }) => {
+						w.workspaceCalls.files.push(structuredClone(request));
+						return { ok: true, root: request.root, paths: w.workspaceFiles ?? Object.keys(w.workspaceDisk) };
+					},
+					worktrees: async (request: { root: string }) => {
+						w.workspaceCalls.worktrees.push(structuredClone(request));
+						const entries = [
+							{ path: root, branch: "feature/editor", detached: false, bare: false },
+							{ path: `${root}-other`, branch: "feature/other", detached: false, bare: false },
+							{ path: linked, branch: null, detached: true, bare: false, locked: "" },
+							{ path: `${root}-prunable`, branch: "old/review", detached: false, bare: false, prunable: "" },
+							{ path: `${root}-bare`, branch: null, detached: false, bare: true },
+						];
+						return {
+							ok: true,
+							root: request.root,
+							worktrees: entries.map((entry) => ({
+								...entry,
+								current: entry.path === request.root,
+								head: "fixture-head",
+							})),
+						};
+					},
+					tree: async (request: WorkspacePath) => {
+						w.workspaceCalls.trees.push(structuredClone(request));
+						const entries =
+							request.path === ""
+								? [
+										{ name: "src", path: "src", kind: "directory" },
+										{ name: "README.md", path: "README.md", kind: "file" },
+									]
+								: [{ name: "main.ts", path: "src/main.ts", kind: "file" }];
+						return { ok: true, ...request, entries };
+					},
+					readFile: async (request: WorkspacePath) => {
+						w.workspaceCalls.reads.push(structuredClone(request));
+						const result = { ok: true, ...request, ...w.workspaceDisk[request.path] };
+						if (request.path === w.holdReadPath) {
+							return await new Promise((resolve) => {
+								w.releaseFileRead = () => {
+									w.holdReadPath = undefined;
+									resolve(result);
+								};
+							});
+						}
+						return result;
+					},
+					saveFile: async (request: WorkspaceSave) => {
+						w.workspaceCalls.saves.push(structuredClone(request));
+						const current = w.workspaceDisk[request.path];
+						if (request.baseHash !== current.hash)
+							return { ok: false, conflict: true, reason: "The file changed since it was read." };
+						const hash = `saved-${w.workspaceCalls.saves.length}`;
+						w.workspaceDisk[request.path] = { text: request.text, hash };
+						return { ok: true, hash };
+					},
+					gitStatus: async (request: { root: string }) => {
+						w.workspaceCalls.status.push(structuredClone(request));
+						return {
+							ok: true,
+							branch: "feature/editor",
+							entries: [
+								{ path: "src/main.ts", index: "M", worktree: "M" },
+								{ path: "notes.txt", index: "?", worktree: "?" },
+								...(w.extraGitEntries ?? []),
+							],
+						};
+					},
+					gitDiff: async (request: WorkspaceDiff) => {
+						w.workspaceCalls.diffs.push(structuredClone(request));
+						const text =
+							request.path === "notes.txt"
+								? ""
+								: `diff --git a/src/main.ts b/src/main.ts\n--- a/src/main.ts\n+++ b/src/main.ts\n@@ -1,2 +1,61 @@\n-old value\n+${request.staged ? "staged change" : "working change"}\n${Array.from({ length: 60 }, (_, i) => `+line ${i}: ${"long value ".repeat(20)}`).join("\n")}`;
+						w.lastGitDiff = text;
+						return { ok: true, text };
+					},
 				},
-				tree: async (request: WorkspacePath) => {
-					w.workspaceCalls.trees.push(structuredClone(request));
-					const entries =
-						request.path === ""
-							? [
-									{ name: "src", path: "src", kind: "directory" },
-									{ name: "README.md", path: "README.md", kind: "file" },
-								]
-							: [{ name: "main.ts", path: "src/main.ts", kind: "file" }];
-					return { ok: true, ...request, entries };
-				},
-				readFile: async (request: WorkspacePath) => {
-					w.workspaceCalls.reads.push(structuredClone(request));
-					return { ok: true, ...request, ...w.workspaceDisk[request.path] };
-				},
-				saveFile: async (request: WorkspaceSave) => {
-					w.workspaceCalls.saves.push(structuredClone(request));
-					const current = w.workspaceDisk[request.path];
-					if (request.baseHash !== current.hash)
-						return { ok: false, conflict: true, reason: "The file changed since it was read." };
-					const hash = `saved-${w.workspaceCalls.saves.length}`;
-					w.workspaceDisk[request.path] = { text: request.text, hash };
-					return { ok: true, hash };
-				},
-				gitStatus: async (request: { root: string }) => {
-					w.workspaceCalls.status.push(structuredClone(request));
-					return {
-						ok: true,
-						branch: "feature/editor",
-						entries: [
-							{ path: "src/main.ts", index: "M", worktree: "M" },
-							{ path: "notes.txt", index: "?", worktree: "?" },
-						],
-					};
-				},
-				gitDiff: async (request: WorkspaceDiff) => {
-					w.workspaceCalls.diffs.push(structuredClone(request));
-					const text =
-						request.path === "notes.txt"
-							? ""
-							: `diff --git a/src/main.ts b/src/main.ts\n--- a/src/main.ts\n+++ b/src/main.ts\n@@ -1,2 +1,61 @@\n-old value\n+${request.staged ? "staged change" : "working change"}\n${Array.from({ length: 60 }, (_, i) => `+line ${i}: ${"long value ".repeat(20)}`).join("\n")}`;
-					w.lastGitDiff = text;
-					return { ok: true, text };
-				},
-			},
-		};
-	}, ROOT);
+			};
+		},
+		{ root: ROOT, linked: LINKED_ROOT },
+	);
 	await page.goto(`${ORIGIN}/index.html`);
 	await page.getByRole("button", { name: "Chat", exact: true }).waitFor();
 	expect(await page.evaluate(() => (window as any).workspaceCalls.reads)).toEqual([]);
@@ -359,6 +406,221 @@ test("Git distinguishes staged and working diffs without opening files or writin
 	}
 }, 45_000);
 
+test("Quick Open searches file paths locally and opens only the chosen file while preserving drafts", async () => {
+	const { page, errors } = await openCode();
+	try {
+		await openMain(page);
+		await replaceText(page, 'export const message = "retained quick-open draft";\n');
+		await page.evaluate(() => {
+			const w = window as any;
+			w.workspaceFiles = [
+				"src/main.ts",
+				"components/main.tsx",
+				"docs/my-main.ts",
+				"main.ts/archive.md",
+				...Array.from({ length: 60 }, (_, i) => `generated/entry-${String(i).padStart(3, "0")}.ts`),
+			];
+			w.workspaceDisk["components/main.tsx"] = {
+				text: 'export const component = "chosen by keyboard";\n',
+				hash: "component-original",
+			};
+		});
+		const readsBefore = await page.evaluate(() => (window as any).workspaceCalls.reads.length);
+		expect(await page.evaluate(() => (window as any).workspaceCalls.files)).toEqual([]);
+		await page.keyboard.press("Meta+P");
+		const dialog = page.getByRole("dialog", { name: "Quick open file", exact: true });
+		const input = dialog.getByRole("combobox", { name: "Find file by name or path", exact: true });
+		await input.waitFor();
+		expect(await input.evaluate((el) => document.activeElement === el)).toBe(true);
+		await input.fill("main.ts");
+		const options = dialog.getByRole("option");
+		await vi.waitFor(async () => expect(await options.count()).toBe(4));
+		expect(await options.first().getAttribute("title")).toBe(`${ROOT}/src/main.ts`);
+		await page.keyboard.press("ArrowDown");
+		expect(await options.nth(1).getAttribute("aria-selected")).toBe("true");
+		expect(await page.evaluate(() => (window as any).workspaceCalls.reads.length)).toBe(readsBefore);
+		expect(await page.evaluate(() => (window as any).workspaceCalls.files)).toEqual([{ root: ROOT }]);
+		await shot(page, "quick-open-ranked");
+		await page.keyboard.press("Enter");
+		await dialog.waitFor({ state: "hidden" });
+		await vi.waitFor(async () => expect(await editorText(page)).toContain("chosen by keyboard"));
+		expect(await page.evaluate(() => (window as any).workspaceCalls.reads.slice(-1))).toEqual([
+			{ root: ROOT, path: "components/main.tsx" },
+		]);
+		await page
+			.getByRole("tab")
+			.and(page.getByTitle("src/main.ts", { exact: true }))
+			.click();
+		expect(await editorText(page)).toContain("retained quick-open draft");
+		const trigger = page.getByRole("button", { name: "Quick open file", exact: true });
+		await trigger.click();
+		await input.fill("entry-059");
+		await dialog.getByRole("option", { name: "entry-059.ts generated/entry-059.ts", exact: true }).waitFor();
+		await input.fill("no-such-file");
+		await dialog.getByRole("status").filter({ hasText: "No matching files." }).waitFor();
+		await page.keyboard.press("Escape");
+		await dialog.waitFor({ state: "hidden" });
+		expect(await trigger.evaluate((el) => document.activeElement === el)).toBe(true);
+		await page.getByRole("button", { name: "Chat", exact: true }).click();
+		expect(
+			await page.evaluate(() => {
+				const event = new KeyboardEvent("keydown", { key: "p", metaKey: true, bubbles: true, cancelable: true });
+				window.dispatchEvent(event);
+				return event.defaultPrevented;
+			}),
+		).toBe(false);
+		expect(await dialog.isVisible()).toBe(false);
+		expect(await page.evaluate(() => (window as any).workspaceCalls.saves)).toEqual([]);
+		expect(errors).toEqual([]);
+	} finally {
+		await page.close();
+	}
+}, 45_000);
+
+test("opening Quick Open from a tab menu dismisses the old menu and keeps picker focus", async () => {
+	const { page, errors } = await openCode();
+	try {
+		await openMain(page);
+		await page.getByRole("tab", { name: "main.ts", exact: true }).click({ button: "right" });
+		const menu = page.getByRole("menu", { name: "Actions", exact: true });
+		await menu.waitFor();
+		await page.keyboard.press("Meta+P");
+		const input = page
+			.getByRole("dialog", { name: "Quick open file", exact: true })
+			.getByRole("combobox", { name: "Find file by name or path", exact: true });
+		await input.waitFor();
+		await shot(page, "quick-open-from-menu");
+		await vi.waitFor(async () => expect(await menu.isVisible()).toBe(false));
+		expect(await input.evaluate((node) => document.activeElement === node)).toBe(true);
+		expect(await page.evaluate(() => (window as any).workspaceCalls.saves)).toEqual([]);
+		expect(errors).toEqual([]);
+	} finally {
+		await page.close();
+	}
+}, 45_000);
+
+test("linked worktrees expose metadata and retain separate drafts without saving files", async () => {
+	const { page, errors } = await openCode();
+	try {
+		await openMain(page);
+		await replaceText(page, 'export const message = "original-root draft";\n');
+		const manualRoot = page.getByRole("textbox", { name: "Repository path", exact: true });
+		await manualRoot.fill(ROOT);
+		expect(
+			await page.getByRole("button", { name: "Open", exact: true }).evaluate((node) => {
+				const style = getComputedStyle(node);
+				return (
+					Number.parseFloat(style.borderTopWidth) > 0 &&
+					style.borderTopStyle !== "none" &&
+					style.borderTopColor !== "rgba(0, 0, 0, 0)" &&
+					style.backgroundColor !== "rgba(0, 0, 0, 0)"
+				);
+			}),
+		).toBe(true);
+		await manualRoot.clear();
+		const select = page.getByRole("combobox", { name: "Linked worktree", exact: true });
+		await vi.waitFor(async () => expect(await select.isEnabled()).toBe(true));
+		const entries = await select.locator("option").evaluateAll((options) =>
+			options.map((option) => ({
+				value: (option as HTMLOptionElement).value,
+				text: option.textContent ?? "",
+				disabled: (option as HTMLOptionElement).disabled,
+			})),
+		);
+		expect(entries.find((entry) => entry.value === LINKED_ROOT)).toMatchObject({
+			disabled: false,
+			text: expect.stringContaining("Locked"),
+		});
+		expect(entries.find((entry) => entry.value === LINKED_ROOT)?.text).toContain("Detached HEAD");
+		expect(entries.find((entry) => entry.value === `${ROOT}-prunable`)).toMatchObject({
+			disabled: true,
+			text: expect.stringContaining("Prunable"),
+		});
+		expect(entries.find((entry) => entry.value === `${ROOT}-bare`)).toMatchObject({
+			disabled: true,
+			text: expect.stringContaining("Bare"),
+		});
+		await select.selectOption(LINKED_ROOT);
+		await vi.waitFor(async () =>
+			expect(await page.getByRole("combobox", { name: "Code repository", exact: true }).inputValue()).toBe(LINKED_ROOT),
+		);
+		await openMain(page);
+		await replaceText(page, 'export const message = "linked-root draft";\n');
+		expect(await page.evaluate(() => (window as any).workspaceCalls.reads)).toEqual(
+			expect.arrayContaining([{ root: LINKED_ROOT, path: "src/main.ts" }]),
+		);
+		await shot(page, "linked-worktree-draft");
+		await select.selectOption(ROOT);
+		await page.getByRole("tab", { name: /main\.ts/ }).click();
+		expect(await editorText(page)).toContain("original-root draft");
+		await select.selectOption(LINKED_ROOT);
+		await page.getByRole("tab", { name: /main\.ts/ }).click();
+		expect(await editorText(page)).toContain("linked-root draft");
+		expect(await page.evaluate(() => (window as any).workspaceCalls.saves)).toEqual([]);
+		expect(await page.evaluate(() => (window as any).workspaceCalls.diffs)).toEqual([]);
+		expect(errors).toEqual([]);
+	} finally {
+		await page.close();
+	}
+}, 45_000);
+
+test("compact Git rows keep long renamed paths readable by tooltip and the file action reachable", async () => {
+	const { page, errors } = await openCode();
+	try {
+		await page.setViewportSize({ width: 900, height: 800 });
+		const path = "packages/reporting workspace/src/reconciliation/monthly-output-with-detailed-ledger-labels.ts";
+		const previous = "packages/reporting workspace/src/legacy/monthly-output-before-rename.ts";
+		await page.evaluate(
+			([path, previous]) => {
+				(window as any).extraGitEntries = [{ path, previousPath: previous, index: "R", worktree: " " }];
+				(window as any).workspaceDisk[path!] = {
+					text: 'export const label = "long path file";\n',
+					hash: "long-path-hash",
+				};
+			},
+			[path, previous],
+		);
+		const git = page.getByRole("region", { name: "Source control", exact: true });
+		await git.getByRole("button", { name: "Refresh Git", exact: true }).click();
+		const row = git.getByRole("button", { name: `View staged diff: ${path}`, exact: true });
+		const open = git.getByRole("button", { name: `Open file: ${path}`, exact: true });
+		await row.waitFor();
+		expect(await row.getAttribute("title")).toBe(`${path} (from ${previous})`);
+		expect(await row.innerText()).not.toContain("View diff");
+		expect((await open.innerText()).trim()).toBe("");
+		expect(await open.locator("svg").count()).toBe(1);
+		const longBox = await row.boundingBox();
+		const shortBox = await git
+			.getByRole("button", { name: "View staged diff: src/main.ts", exact: true })
+			.boundingBox();
+		const iconBox = await open.boundingBox();
+		const paneBox = await git.boundingBox();
+		expect(longBox!.height).toBeCloseTo(shortBox!.height, 1);
+		expect(longBox!.height).toBeCloseTo(iconBox!.height, 1);
+		expect(longBox!.x + longBox!.width).toBeLessThanOrEqual(iconBox!.x);
+		expect(iconBox!.x + iconBox!.width).toBeLessThanOrEqual(paneBox!.x + paneBox!.width);
+		expect(paneBox!.x + paneBox!.width).toBeLessThanOrEqual(page.viewportSize()!.width);
+		await shot(page, "git-long-path-light");
+		await row.click();
+		await page.getByRole("region", { name: "Git diff", exact: true }).waitFor();
+		expect(await page.evaluate(() => (window as any).workspaceCalls.diffs)).toEqual([
+			{ root: ROOT, path, staged: true },
+		]);
+		expect(await page.evaluate(() => (window as any).workspaceCalls.reads)).toEqual([]);
+		await page.getByRole("button", { name: "Theme: dark mode", exact: true }).click();
+		await shot(page, "git-long-path-dark");
+		await open.click();
+		await vi.waitFor(async () => expect(await editorText(page)).toContain("long path file"));
+		expect(await page.evaluate(() => (window as any).workspaceCalls.reads)).toEqual(
+			expect.arrayContaining([{ root: ROOT, path }]),
+		);
+		expect(await page.evaluate(() => (window as any).workspaceCalls.saves)).toEqual([]);
+		expect(errors).toEqual([]);
+	} finally {
+		await page.close();
+	}
+}, 45_000);
+
 test("clean tabs close individually and keyboard menus copy paths and restore focus", async () => {
 	const { page, errors } = await openCode();
 	try {
@@ -415,6 +677,51 @@ test("clean tabs close individually and keyboard menus copy paths and restore fo
 		await page.close();
 	}
 }, 45_000);
+
+test.each(["Close all", "Close others"] as const)(
+	"%s uses files that finish opening while the tab menu is visible",
+	async (action) => {
+		const { page, errors } = await openCode();
+		try {
+			await openMain(page);
+			await page
+				.getByRole("complementary", { name: "Files", exact: true })
+				.getByRole("button", { name: "README.md", exact: true })
+				.click();
+			await vi.waitFor(async () => expect(await editorText(page)).toContain("Fixture project"));
+			const main = page.getByRole("tab", { name: "main.ts", exact: true });
+			await main.click();
+			await page.evaluate(() => {
+				(window as any).holdReadPath = "notes.txt";
+			});
+			await page.getByRole("button", { name: "Open file: notes.txt", exact: true }).click();
+			await main.click({ button: "right" });
+			const menu = page.getByRole("menu", { name: "Actions", exact: true });
+			await menu.waitFor();
+			await page.evaluate(() => (window as any).releaseFileRead());
+			const late = page.getByRole("tab", { name: "notes.txt", exact: true });
+			await late.waitFor();
+			expect(await late.getAttribute("aria-selected")).toBe("true");
+			await shot(page, `late-read-${action.replaceAll(" ", "-").toLowerCase()}`);
+			await menu.getByRole("menuitem", { name: action, exact: true }).click();
+			await vi.waitFor(async () =>
+				expect(await page.getByRole("tablist", { name: "Open files", exact: true }).getByRole("tab").count()).toBe(
+					action === "Close all" ? 0 : 1,
+				),
+			);
+			await late.waitFor({ state: "hidden" });
+			if (action === "Close others") {
+				expect(await main.getAttribute("aria-selected")).toBe("true");
+				expect(await editorText(page)).toContain("original");
+			}
+			expect(await page.evaluate(() => (window as any).workspaceCalls.saves)).toEqual([]);
+			expect(errors).toEqual([]);
+		} finally {
+			await page.close();
+		}
+	},
+	45_000,
+);
 
 test("bulk close confirms dirty targets atomically and preserves buffers in other repositories", async () => {
 	const { page, errors } = await openCode();

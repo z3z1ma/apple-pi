@@ -1,4 +1,5 @@
 .wp-code {
+	position: relative;
 	display: flex;
 	flex-direction: column;
 	height: 100%;
@@ -26,6 +27,11 @@
 .wp-code-toolbar select {
 	max-width: 380px;
 	min-width: 160px;
+}
+.wp-code-toolbar .wp-code-worktrees {
+	flex: 0 1 260px;
+	min-width: 120px;
+	max-width: 260px;
 }
 .wp-code-toolbar form {
 	display: flex;
@@ -104,6 +110,10 @@
 	background: none;
 	font-size: 11px;
 	padding: 3px;
+}
+.wp-code-file-actions {
+	display: flex;
+	gap: 6px;
 }
 .wp-code-tree-list {
 	list-style: none;
@@ -333,6 +343,90 @@
 	color: var(--wp-muted);
 	font-size: 12px;
 	line-height: 1.5;
+}
+.wp-code-quick-backdrop {
+	position: absolute;
+	inset: 0;
+	z-index: 40;
+	display: flex;
+	justify-content: center;
+	align-items: flex-start;
+	padding: 24px 16px;
+	background: #0003;
+}
+.wp-code-quick {
+	display: flex;
+	flex-direction: column;
+	width: 620px;
+	max-width: 100%;
+	max-height: 100%;
+	min-height: 0;
+	border: 1px solid var(--wp-border);
+	border-radius: 8px;
+	background: var(--wp-bg);
+	box-shadow: var(--wp-shadow);
+	overflow: hidden;
+}
+.wp-code-quick header {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 12px;
+	border-bottom: 1px solid var(--wp-border);
+}
+.wp-code-quick input {
+	flex: 1;
+	min-width: 0;
+	padding: 8px;
+	border: 1px solid var(--wp-border);
+	border-radius: 4px;
+}
+.wp-code-quick-list {
+	flex: 1;
+	min-height: 0;
+	overflow: auto;
+	list-style: none;
+	padding: 4px 0;
+	margin: 0;
+}
+.wp-code-quick button[role="option"] {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	width: 100%;
+	padding: 8px 12px;
+	text-align: left;
+}
+.wp-code-quick button[aria-selected="true"] {
+	background: var(--wp-selected);
+}
+.wp-code-quick button[role="option"] > span {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 0;
+}
+.wp-code-quick strong,
+.wp-code-quick small {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.wp-code-quick strong {
+	font-size: 13px;
+	font-weight: 500;
+}
+.wp-code-quick small {
+	color: var(--wp-muted);
+	font-size: 11px;
+}
+.wp-code-quick-message {
+	padding: 14px;
+	color: var(--wp-muted);
+	font-size: 12px;
+}
+.wp-code-quick-message[role="alert"] {
+	color: var(--wp-danger);
 }
 @media (max-width: 1100px) {
 	.wp-code-panes.with-git {

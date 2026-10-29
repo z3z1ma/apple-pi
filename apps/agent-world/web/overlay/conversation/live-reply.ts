@@ -34,6 +34,8 @@ export function useLiveReplies(
 
 	useEffect(() => {
 		if (!api?.onReply || !api.watchReplies) return;
+		const reader = {};
+		const watch = window.agentWorldReplyWatches;
 		const stop = api.onReply((event: ReplyStreamEvent) => {
 			if (event.characterId !== characterId) return;
 			if (event.kind === "delta")
@@ -57,14 +59,10 @@ export function useLiveReplies(
 				ended.current();
 			}
 		});
-		void Promise.resolve()
-			.then(() => api.watchReplies?.([characterId]))
-			.catch(() => {});
+		void watch(reader, characterId).catch(() => {});
 		return () => {
 			stop();
-			void Promise.resolve()
-				.then(() => api.watchReplies?.([]))
-				.catch(() => {});
+			void watch(reader).catch(() => {});
 		};
 	}, [api, characterId]);
 

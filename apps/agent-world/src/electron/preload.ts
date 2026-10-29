@@ -3,6 +3,7 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type { IntegrationsApi, OutsideWriteEntry } from "../integrations.js";
 import type { OrgMoveResult, OrgStartProgress } from "../org.js";
+import type { TerminalEvent } from "../terminal.js";
 import type {
 	AgentWorldApi,
 	CommandReceipt,
@@ -26,9 +27,26 @@ import type {
 } from "../world.js";
 
 const api: AgentWorldApi = {
+	terminal: {
+		create: (request) =>
+			ipcRenderer.invoke("terminal:create", request) as ReturnType<AgentWorldApi["terminal"]["create"]>,
+		write: (request) => ipcRenderer.invoke("terminal:write", request) as ReturnType<AgentWorldApi["terminal"]["write"]>,
+		resize: (request) =>
+			ipcRenderer.invoke("terminal:resize", request) as ReturnType<AgentWorldApi["terminal"]["resize"]>,
+		close: (request) => ipcRenderer.invoke("terminal:close", request) as ReturnType<AgentWorldApi["terminal"]["close"]>,
+		onEvent(listener) {
+			const forward = (_event: unknown, event: TerminalEvent) => listener(event);
+			ipcRenderer.on("terminal:event", forward);
+			return () => ipcRenderer.removeListener("terminal:event", forward);
+		},
+	},
 	workspace: {
 		repositories: () =>
 			ipcRenderer.invoke("workspace:repositories") as ReturnType<AgentWorldApi["workspace"]["repositories"]>,
+		files: (request) =>
+			ipcRenderer.invoke("workspace:files", request) as ReturnType<AgentWorldApi["workspace"]["files"]>,
+		worktrees: (request) =>
+			ipcRenderer.invoke("workspace:worktrees", request) as ReturnType<AgentWorldApi["workspace"]["worktrees"]>,
 		tree: (request) => ipcRenderer.invoke("workspace:tree", request) as ReturnType<AgentWorldApi["workspace"]["tree"]>,
 		readFile: (request) =>
 			ipcRenderer.invoke("workspace:read-file", request) as ReturnType<AgentWorldApi["workspace"]["readFile"]>,

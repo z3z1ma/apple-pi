@@ -15,7 +15,14 @@ import {
 	writeFileSync,
 } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
-import type { WorkspaceApi, WorkspaceGitEntry, WorkspacePath, WorkspaceResult, WorkspaceSave } from "../workspace.js";
+import type {
+	WorkspaceApi,
+	WorkspaceGitEntry,
+	WorkspacePath,
+	WorkspaceResult,
+	WorkspaceSave,
+	WorkspaceWorktree,
+} from "../workspace.js";
 import type { WorldSnapshot } from "../world.js";
 
 const hash = (bytes: Buffer) => createHash("sha256").update(bytes).digest("hex");
@@ -67,7 +74,7 @@ async function attempt<T>(action: () => T | Promise<T>): Promise<WorkspaceResult
 
 function git(root: string, args: string[], allowDetached = false): Promise<string> {
 	return new Promise((resolve, reject) => {
-		const env = { ...process.env, GIT_OPTIONAL_LOCKS: "0", GIT_TERMINAL_PROMPT: "0" };
+		const env = { ...process.env, LC_ALL: "C", GIT_OPTIONAL_LOCKS: "0", GIT_TERMINAL_PROMPT: "0" };
 		for (const key of Object.keys(env))
 			if (key.startsWith("GIT_") && !["GIT_OPTIONAL_LOCKS", "GIT_TERMINAL_PROMPT"].includes(key))
 				delete env[key as keyof typeof env];
@@ -88,11 +95,98 @@ function git(root: string, args: string[], allowDetached = false): Promise<strin
 	});
 }
 
+async function gitRoot(root: string) {
+	return directory((await git(root, ["rev-parse", "--show-toplevel"])).replace(/\n$/, ""));
+}
+
 async function repositoryRoot(path: string) {
 	const root = directory(path);
-	const top = directory((await git(root, ["rev-parse", "--show-toplevel"])).trim());
+	const top = await gitRoot(root);
 	if (root !== top) throw new Error(`Open the repository root to view Git changes: ${top}`);
 	return root;
+}
+
+function listedFile(root: string, path: string): boolean {
+	const named = resolve(root, path);
+	try {
+		within(root, named);
+	} catch {
+		return false;
+	}
+	let canonical: string;
+	try {
+		if (!lstatSync(named).isFile()) return false;
+		canonical = realpathSync(named);
+	} catch (error) {
+		if (["ENOENT", "ENOTDIR"].includes((error as NodeJS.ErrnoException).code ?? "")) return false;
+		throw error;
+	}
+	try {
+		within(root, canonical);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+function folderFiles(root: string): string[] {
+	const folders = [root];
+	const paths: string[] = [];
+	while (folders.length) {
+		const folder = folders.pop()!;
+		if (!lstatSync(folder).isDirectory()) continue;
+		const canonical = realpathSync(folder);
+		try {
+			within(root, canonical);
+		} catch {
+			continue;
+		}
+		for (const entry of readdirSync(canonical, { withFileTypes: true })) {
+			if (entry.name === ".git") continue;
+			const path = join(canonical, entry.name);
+			if (entry.isDirectory()) folders.push(path);
+			else if (entry.isFile() && listedFile(root, path)) paths.push(relative(root, path));
+		}
+	}
+	return paths.sort();
+}
+
+async function workspaceFiles(root: string): Promise<string[]> {
+	let inside: string;
+	try {
+		inside = await git(root, ["rev-parse", "--is-inside-work-tree"]);
+	} catch (error) {
+		if (error instanceof Error && error.message.startsWith("fatal: not a git repository")) return folderFiles(root);
+		throw error;
+	}
+	if (inside.trim() !== "true") throw new Error("Choose a working directory, not a bare Git repository.");
+	const paths = (await git(root, ["ls-files", "--cached", "--others", "--exclude-standard", "-z"])).split("\0");
+	return [...new Set(paths.filter((path) => path && listedFile(root, path)))].sort();
+}
+
+function parseWorktrees(output: string, root: string): WorkspaceWorktree[] {
+	return output
+		.split("\0\0")
+		.filter(Boolean)
+		.map((record) => {
+			const fields = record.split("\0");
+			const value = (key: string) =>
+				fields.find((field) => field === key || field.startsWith(`${key} `))?.slice(key.length + 1);
+			const path = value("worktree");
+			if (!path) throw new Error("Git returned a worktree without a path.");
+			const locked = value("locked"),
+				prunable = value("prunable");
+			return {
+				path,
+				branch: value("branch")?.replace(/^refs\/heads\//, "") ?? null,
+				head: value("HEAD") ?? null,
+				detached: fields.includes("detached"),
+				bare: fields.includes("bare"),
+				current: path === root,
+				...(locked !== undefined ? { locked } : {}),
+				...(prunable !== undefined ? { prunable } : {}),
+			};
+		});
 }
 
 function save(request: WorkspaceSave): WorkspaceResult<{ hash: string }> {
@@ -151,12 +245,22 @@ export function openWorkspace(snapshot: () => WorldSnapshot): WorkspaceApi {
 				const roots = new Set<string>();
 				for (const candidate of candidates) {
 					try {
-						roots.add(directory((await git(directory(candidate), ["rev-parse", "--show-toplevel"])).trim()));
+						roots.add(await gitRoot(directory(candidate)));
 					} catch {
 						/* A retained session directory can be missing or no longer be a repository. Manual paths remain available. */
 					}
 				}
 				return { roots: [...roots].sort() };
+			}),
+		files: (request) =>
+			attempt(async () => {
+				const root = directory(request.root);
+				return { root, paths: await workspaceFiles(root) };
+			}),
+		worktrees: (request) =>
+			attempt(async () => {
+				const root = await gitRoot(directory(request.root));
+				return { root, worktrees: parseWorktrees(await git(root, ["worktree", "list", "--porcelain", "-z"]), root) };
 			}),
 		tree: (request) =>
 			attempt(() => {

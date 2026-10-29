@@ -499,6 +499,8 @@ export function WorkplaceIssues({
 }) {
 	const [query, setQuery] = useState("");
 	const [search, setSearch] = useState("");
+	const [scope, setScope] = useState<"mine" | "all">("mine");
+	const searchInput = useRef<HTMLInputElement>(null);
 	const [issues, setIssues] = useState<JiraIssue[]>([]);
 	const [selected, setSelected] = useState<string>();
 	const [opened, setOpened] = useState<string[]>([]);
@@ -525,7 +527,12 @@ export function WorkplaceIssues({
 					setIssues([]);
 					return;
 				}
-				const result = search ? await window.agentWorld.jiraSearch(search) : await window.agentWorld.jiraAssigned();
+				if (scope === "all" && !search) {
+					setIssues([]);
+					return;
+				}
+				const result =
+					scope === "all" ? await window.agentWorld.jiraSearch(search) : await window.agentWorld.jiraAssigned();
 				if (!current) return;
 				if (result.ok) setIssues(result.issues);
 				else {
@@ -542,7 +549,7 @@ export function WorkplaceIssues({
 		return () => {
 			current = false;
 		};
-	}, [started, search, refresh]);
+	}, [started, scope, search, refresh]);
 	return (
 		<section className="wp-issues" aria-label="Issues" hidden={!active}>
 			<header className="wp-issues-header">
@@ -564,18 +571,30 @@ export function WorkplaceIssues({
 			<div className="wp-issues-toolbar">
 				<button
 					type="button"
-					aria-pressed={!search}
+					aria-pressed={scope === "mine"}
 					onClick={() => {
+						setScope("mine");
 						setQuery("");
 						setSearch("");
 					}}
 				>
 					My issues
 				</button>
+				<button
+					type="button"
+					aria-pressed={scope === "all"}
+					onClick={() => {
+						setScope("all");
+						searchInput.current?.focus();
+					}}
+				>
+					Search all
+				</button>
 				<form
 					onSubmit={(event) => {
 						event.preventDefault();
 						if (query.trim()) {
+							setScope("all");
 							setSearch(query.trim());
 							setRefresh((value) => value + 1);
 						}
@@ -583,13 +602,20 @@ export function WorkplaceIssues({
 				>
 					<input
 						type="search"
+						ref={searchInput}
 						aria-label="Search issues"
-						placeholder="Search issues or paste a Jira key"
+						placeholder="Search all Jira issues by title or key"
 						value={query}
 						onChange={(event) => setQuery(event.target.value)}
 					/>
-					<button type="submit" disabled={!query.trim() || loading}>
-						Search
+					<button
+						type="submit"
+						className="wp-icon-button"
+						aria-label="Search"
+						title="Search all Jira issues"
+						disabled={!query.trim() || loading}
+					>
+						<Icon name="search" />
 					</button>
 				</form>
 			</div>
@@ -602,7 +628,7 @@ export function WorkplaceIssues({
 			<div className={`wp-issues-layout${selected ? " has-detail" : ""}`} hidden={signedOut}>
 				<div className="wp-issues-list">
 					<div className="wp-issues-list-heading">
-						<h2>{search ? `Results for “${search}”` : "Assigned to you"}</h2>
+						<h2>{search ? `Results for “${search}”` : scope === "all" ? "All Jira issues" : "Assigned to you"}</h2>
 						<span>
 							{issues.length} {issues.length === 1 ? "issue" : "issues"}
 						</span>
@@ -619,11 +645,13 @@ export function WorkplaceIssues({
 					)}
 					{!loading && !error && !issues.length && (
 						<div className="wp-issues-empty">
-							<h3>{search ? "No matching issues" : "You're all caught up"}</h3>
+							<h3>{search ? "No matching issues" : scope === "all" ? "Search across Jira" : "You're all caught up"}</h3>
 							<p>
 								{search
 									? "Try an issue key or a different search."
-									: "No unfinished Jira issues are assigned to you. Search to find other work."}
+									: scope === "all"
+										? "Find an issue by title, phrase or key, regardless of assignee."
+										: "No unfinished Jira issues are assigned to you. Search all to find other work."}
 							</p>
 						</div>
 					)}

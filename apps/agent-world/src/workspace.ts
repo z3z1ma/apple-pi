@@ -21,8 +21,20 @@ export interface WorkspaceGitEntry {
 	index: string;
 	worktree: string;
 }
+export interface WorkspaceWorktree {
+	path: string;
+	branch: string | null;
+	head: string | null;
+	detached: boolean;
+	bare: boolean;
+	current: boolean;
+	locked?: string;
+	prunable?: string;
+}
 export interface WorkspaceApi {
 	repositories(): Promise<WorkspaceResult<{ roots: string[] }>>;
+	files(request: { root: string }): Promise<WorkspaceResult<{ root: string; paths: string[] }>>;
+	worktrees(request: { root: string }): Promise<WorkspaceResult<{ root: string; worktrees: WorkspaceWorktree[] }>>;
 	tree(request: WorkspacePath): Promise<WorkspaceResult<{ root: string; path: string; entries: WorkspaceEntry[] }>>;
 	readFile(
 		request: WorkspacePath,

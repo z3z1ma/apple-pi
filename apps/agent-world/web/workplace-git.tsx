@@ -87,13 +87,12 @@ function RepositoryGit({ root, onOpenFile, onDiff }: GitPaneProps) {
 	return (
 		<section className="wp-git" aria-label="Source control">
 			<header className="wp-git-header">
-				<div>
+				<div title={root}>
 					<div className="wp-git-title">
 						<h2>Source control</h2>
 						<span>Read-only</span>
 					</div>
 					{status?.ok && <p className="wp-git-branch">{status.branch ?? "Detached HEAD"}</p>}
-					<p title={root}>{root}</p>
 				</div>
 				<button
 					type="button"
@@ -141,32 +140,33 @@ function RepositoryGit({ root, onOpenFile, onDiff }: GitPaneProps) {
 										key={entry.path}
 										data-selected={selected?.path === entry.path && selected.staged === group.staged}
 									>
-										<span className="wp-git-badge" title={group.title}>
-											{badge(entry, group.staged)}
-										</span>
-										<div className="wp-git-file-name">
-											<button
-												type="button"
-												className="wp-git-open"
-												aria-label={`Open file: ${entry.path}`}
-												title={entry.path}
-												onClick={() => {
-													setSelected(undefined);
-													onOpenFile(entry.path);
-												}}
-											>
-												{entry.path}
-											</button>
-											{entry.previousPath && <small>From {entry.previousPath}</small>}
-										</div>
 										<button
 											type="button"
 											className="wp-git-view"
 											aria-label={`View ${group.title.toLowerCase()} diff: ${entry.path}`}
+											title={entry.previousPath ? `${entry.path} (from ${entry.previousPath})` : entry.path}
 											aria-pressed={selected?.path === entry.path && selected.staged === group.staged}
 											onClick={() => setSelected({ path: entry.path, staged: group.staged })}
 										>
-											View diff
+											<span className="wp-git-badge" title={group.title}>
+												{badge(entry, group.staged)}
+											</span>
+											<span className="wp-git-file-name">
+												{entry.path}
+												{entry.previousPath && <small> (from {entry.previousPath})</small>}
+											</span>
+										</button>
+										<button
+											type="button"
+											className="wp-icon-button wp-git-open"
+											aria-label={`Open file: ${entry.path}`}
+											title={`Open file: ${entry.path}`}
+											onClick={() => {
+												setSelected(undefined);
+												onOpenFile(entry.path);
+											}}
+										>
+											<Icon name="file" />
 										</button>
 									</li>
 								))}

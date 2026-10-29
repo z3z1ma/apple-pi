@@ -73,17 +73,14 @@ body.workplace {
 .wp-app * {
 	box-sizing: border-box;
 }
-.wp-app button,
-.wp-app input,
-.wp-app textarea,
-.wp-app select {
+:where(.wp-app) :is(button, input, textarea, select) {
 	font: inherit;
 }
 .wp-app button,
 .wp-app a {
 	cursor: pointer;
 }
-.wp-app button {
+:where(.wp-app) button {
 	border: 0;
 	background: transparent;
 	color: inherit;

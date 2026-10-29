@@ -2,6 +2,7 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import type { MailThread, WorkplaceTask, WorldSnapshot } from "../../../src/world.js";
 import { say } from "../../theme.js";
 import { useTheme } from "../../theme-store.js";
+import { useWorldVisible } from "../../world-visibility.js";
 import { markdownHtml } from "../conversation/markdown.js";
 import { ThreadMessages } from "./operator-inbox.js";
 import { PlaceDialog } from "./place-dialog.js";
@@ -295,12 +296,14 @@ function TaskGoal({
 }
 
 function SharedThread({ id, latest }: { id: string; latest?: number }) {
+	const visible = useWorldVisible();
 	const [thread, setThread] = useState<MailThread>();
 	const [error, setError] = useState("");
 	const [revision, setRevision] = useState(0);
 	const [pending, setPending] = useState(true);
 	// biome-ignore lint/correctness/useExhaustiveDependencies: a new revision is the operator's request to read again
 	useEffect(() => {
+		if (!visible) return;
 		let current = true;
 		setPending(true);
 		setError("");
@@ -320,7 +323,7 @@ function SharedThread({ id, latest }: { id: string; latest?: number }) {
 		return () => {
 			current = false;
 		};
-	}, [id, revision]);
+	}, [id, revision, visible]);
 	return (
 		<article className="aw-thread aw-workplace-thread" aria-label={thread?.subject ?? "Shared conversation"}>
 			{thread && (

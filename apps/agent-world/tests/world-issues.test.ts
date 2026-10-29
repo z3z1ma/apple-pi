@@ -84,7 +84,7 @@ async function openIssues(signedIn = true) {
 			type: "Task",
 			priority: "High",
 			project: "APP",
-			assignee: "Operator",
+			assignee: key === w.unassignedIssueKey ? null : "Operator",
 			updated: new Date(now).toISOString(),
 			url: `https://fixture.atlassian.net/browse/${key}`,
 		});
@@ -144,7 +144,7 @@ async function openIssues(signedIn = true) {
 			},
 			jiraSearch: async (query: string) => {
 				w.issueCalls.searches.push(query);
-				return { ok: true, issues: [issue("APP-2")] };
+				return { ok: true, issues: (w.issueSearchKeys ?? ["APP-2"]).map(issue) };
 			},
 			jiraIssue: async (key: string) => {
 				w.issueCalls.details.push(key);
@@ -364,6 +364,61 @@ test("Issues reads on explicit selection, retains goal drafts, and delegates onl
 			expect(await page.evaluate(() => (window as any).issueCalls.conversations)).toContain("ada"),
 		);
 		expect(await page.evaluate(() => (window as any).issueCalls.confirmed)).toEqual([]);
+		expect(errors).toEqual([]);
+	} finally {
+		await page.close();
+	}
+}, 45_000);
+
+test("Search all finds unassigned work and My issues retains its selected detail and delegation draft", async () => {
+	const { page, errors } = await openIssues();
+	try {
+		await page.evaluate(() => {
+			(window as any).unassignedIssueKey = "APP-3";
+			(window as any).issueSearchKeys = ["APP-3"];
+		});
+		const mine = page.getByRole("button", { name: "My issues", exact: true });
+		const all = page.getByRole("button", { name: "Search all", exact: true });
+		const query = page.getByRole("searchbox", { name: "Search issues", exact: true });
+		expect(await mine.getAttribute("aria-pressed")).toBe("true");
+		await all.click();
+		expect(await all.getAttribute("aria-pressed")).toBe("true");
+		expect(await query.evaluate((node) => document.activeElement === node)).toBe(true);
+		await page.getByRole("heading", { name: "All Jira issues", exact: true }).waitFor();
+		await page.getByRole("heading", { name: "Search across Jira", exact: true }).waitFor();
+		expect(await page.evaluate(() => (window as any).issueCalls.searches)).toEqual([]);
+		await query.fill("APP-3");
+		const search = page.getByRole("button", { name: "Search", exact: true });
+		expect((await search.innerText()).trim()).toBe("");
+		expect(await search.locator("svg").count()).toBe(1);
+		await search.click();
+		const result = page.getByRole("button", { name: "Read issue: APP-3 Review keyboard workflow", exact: true });
+		await result.getByText("Unassigned", { exact: true }).waitFor();
+		expect(await page.evaluate(() => (window as any).issueCalls.searches)).toEqual(["APP-3"]);
+		expect(await page.evaluate(() => (window as any).issueCalls.details)).toEqual([]);
+		await result.click();
+		const detail = page.getByRole("region", { name: "Issue detail", exact: true });
+		await detail.getByRole("heading", { name: /^APP-3 .*Review keyboard workflow$/ }).waitFor();
+		await detail.getByText("Delegate", { exact: true }).click();
+		const recipient = detail.getByRole("combobox", { name: "Person or team head", exact: true });
+		const goal = detail.getByRole("textbox", { name: "Goal and context", exact: true });
+		await recipient.selectOption("ada");
+		await goal.fill("Investigate this unassigned issue before choosing a change.");
+		await shot(page, "all-unassigned-draft");
+		const assignedBefore = await page.evaluate(() => (window as any).issueCalls.assigned);
+		await mine.click();
+		await page.getByRole("button", { name: "Read issue: APP-1 Fix report totals", exact: true }).waitFor();
+		await result.waitFor({ state: "hidden" });
+		expect(await mine.getAttribute("aria-pressed")).toBe("true");
+		expect(await query.inputValue()).toBe("");
+		expect(await page.evaluate(() => (window as any).issueCalls.assigned)).toBe(assignedBefore + 1);
+		await detail.getByText("Outside current results", { exact: true }).waitFor();
+		expect(await recipient.inputValue()).toBe("ada");
+		expect(await goal.inputValue()).toBe("Investigate this unassigned issue before choosing a change.");
+		expect(await page.evaluate(() => (window as any).issueCalls.details)).toEqual(["APP-3"]);
+		expect(await page.evaluate(() => (window as any).issueCalls.delegated)).toEqual([]);
+		expect(await page.evaluate(() => (window as any).issueCalls.confirmed)).toEqual([]);
+		await shot(page, "my-issues-retained-unassigned");
 		expect(errors).toEqual([]);
 	} finally {
 		await page.close();
