@@ -1,4 +1,4 @@
-Status: in-progress
+Status: done
 Created: 2026-10-29
 
 # Org chart and task-specific teams
@@ -13,7 +13,7 @@ Build39 passed 9/9 Org browser cases, 2/2 targeted profile cases (30 unrelated s
 
 The operator explicitly approved activation and app relaunch. Runtime `23011` was replaced by `42962`; all 11 exact Pi processes survived and each live socket bridge was verified. All 111 recorded people retained their reporting lines and hire dates; 21 whole-team channels initialized. Agent World `16372` was replaced by `54660`, connected to the new runtime, with World still the launch default. No live test team, test messages, reporting moves or real model startup were exercised. Historical context: `.ledger/history/202610280018-workplace-mail-and-chat-spike/`.
 
-Subsequent Workplace iterations changed the app default to Chat and added optional initial goals, local names and refined history/navigation controls. See [the current product contract](../../docs/workplace.md); this task's build39 checks and activation record are historical evidence, not proof of those later builds.
+Subsequent Workplace iterations changed the app default to Chat and added optional initial goals, local names and refined history/navigation controls. See [the current product contract](../../../docs/workplace.md); this task's build39 checks and activation record are historical evidence, not proof of those later builds.
 
 ## Outcome
 

@@ -1,9 +1,16 @@
 ## file
 
-Issues reuses the existing IntegrationsApi Jira adapter, sign-in storage and outside-write gate. The first activation reads credentials and assigned issues; search, refresh and selected issue reads stay in component state. My issues and Search all are explicit scopes: entering a query always searches across accessible Jira issues, while entering the empty all-issues scope only focuses the query and shows its empty state, without pretending assigned results are global results or sending an empty search. Hiding the tab keeps the query and selection; merely mounting a hidden tab makes no Jira request. Each explicitly opened issue detail stays mounted while hidden, retaining its recipient/goal and receipt observer across issue selection, detail closure and tab changes; inactive panels cancel unsent write confirmations. Description and comments reuse RichView and its existing safeHtml allowlist, falling back to escaped plain text. Workplace supplies RichView's link callback through openLink rather than World's unconnected Atlassian singleton. No unsanitized DTO HTML reaches the page and images remain named placeholders. All external links go through openLink.
+Issues reuses the existing IntegrationsApi Jira adapter, sign-in storage and outside-write gate. The first activation reads credentials and assigned issues. Search scope and submitted query stay in component state; typing alone makes no search request. Hiding the tab keeps the query and selection; merely mounting a hidden tab makes no Jira request. Each explicitly opened issue detail stays mounted while hidden, retaining its recipient/goal and receipt observer across issue selection, detail closure and tab changes; inactive panels cancel unsent write confirmations. Description and comments reuse RichView and its existing safeHtml allowlist, falling back to escaped plain text. Workplace supplies RichView's link callback through openLink rather than World's unconnected Atlassian singleton. No unsanitized DTO HTML reaches the page and images remain named placeholders. All external links go through openLink.
 Why: Workplace adds a view of the existing integration, not another credential handler, direct HTTP client or issue store.
 
 Coupled: apps/agent-world/src/integrations.ts, apps/agent-world/src/backend/integrations/jira.ts, apps/agent-world/web/workplace.tsx
+Verify: apps/agent-world/tests/world-issues.test.ts
+
+## symbol:WorkplaceIssues
+
+The editable `query`, submitted `search` and explicit `mine`/`all` scope represent different user choices. My issues clears both query values. Search all with no submitted query shows the search prompt instead of requesting assigned issues or an empty global search. Submitting a query searches across accessible Jira issues; submitting the same query again still refreshes it. The effect's lifetime check prevents a superseded credential or list response from replacing the current scope's result. Opened detail panels remain independent of the list so changing scope preserves their drafts and does not change a delegation target.
+Why: deriving the scope from search text alone cannot distinguish My issues from an empty Search all view. Combining draft and submitted text would turn typing into network requests; removing the explicit refresh would make repeated submissions of the same text a no-op.
+Verify: apps/agent-world/tests/world-issues.test.ts
 
 ## symbol:DelegateIssue
 

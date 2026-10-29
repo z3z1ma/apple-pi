@@ -1,6 +1,6 @@
 # Org chart and team setup
 
-This records the original Org delivery at build39. Later Workplace iterations changed the launch default to Chat, added optional initial goals and refined naming/history interactions. [The current Workplace contract](../../docs/workplace.md) owns those subsequent behaviors; the decisions and evidence below describe the original delivery.
+This records the original Org delivery at build39. Later Workplace iterations changed the launch default to Chat, added optional initial goals and refined naming/history interactions. [The current Workplace contract](../../../docs/workplace.md) owns those subsequent behaviors; the decisions and evidence below describe the original delivery.
 
 Status: implemented, committed and activated. Build39 contains the team overview, fitted top-down focused chart, compact recorded work summaries with explicit history expansion, global metadata search, direct reporting confirmation and explicit profile Close. Focused checks passed, including Org 9/9, targeted profiles 2/2 (30 unrelated skipped), actual Electron, byte freshness and final Node/web typecheck. Runtime `34e57b59` and integrated app `7d7c3e30` are committed. The operator approved daemon activation and app relaunch; all 11 Pi processes and socket bridges survived, reporting/hire dates were preserved and 21 whole-team channels initialized. See evidence.md for logs and limits. No live test team or paid-model startup was used for validation.
 

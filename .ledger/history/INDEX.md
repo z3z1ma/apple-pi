@@ -147,3 +147,5 @@
 - `.ledger/history/202610242320-org-mri-morphogenesis/task.md` — done — Organizational MRI and morphogenesis — Architecture decision for a self-optimizing organization: diagnose where the org of Pi sessions wastes cognition and coordination (MRI) from session-state facts, and adapt staffing, routing, authority, and topology through reviewable org changes (morphogenesis). Wayfinder map in map.md.
 
 - `.ledger/history/202610280018-workplace-mail-and-chat-spike/task.md` — done — Workplace mail and chat evaluation — Adopted as first-class Workplace; historical iteration evidence retained. Org continues in its own task.
+
+- `.ledger/history/202610290925-org-chart-and-task-specific-teams/task.md` — done — Org chart and task-specific teams — First-class Workplace Org tab: independent reporting trees, profiles, safe cross-team drag/reparent/split, planned role-based teams, whole-tree channels and controlled head kickoff.
