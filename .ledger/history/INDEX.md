@@ -145,3 +145,5 @@
 - `.ledger/history/202610241039-rtk-one-rewrite-owner/task.md` — done — Delete the rtk tool_call hook: one rewrite owner — Delete extensions/rtk.ts's tool_call hook and its _rtk/_rawCommand fields so prepareShellCommand is the only command rewriter; fold the duplicate guards, drop unused rtk options, skip host-binary tests when rtk is absent, update docs.
 
 - `.ledger/history/202610242320-org-mri-morphogenesis/task.md` — done — Organizational MRI and morphogenesis — Architecture decision for a self-optimizing organization: diagnose where the org of Pi sessions wastes cognition and coordination (MRI) from session-state facts, and adapt staffing, routing, authority, and topology through reviewable org changes (morphogenesis). Wayfinder map in map.md.
+
+- `.ledger/history/202610280018-workplace-mail-and-chat-spike/task.md` — done — Workplace mail and chat evaluation — Adopted as first-class Workplace; historical iteration evidence retained. Org continues in its own task.

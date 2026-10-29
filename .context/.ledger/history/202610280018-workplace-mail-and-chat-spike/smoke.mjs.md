@@ -9,5 +9,5 @@ Why: earlier screenshots lacked the unread state, and a generic text flex rule l
 
 After resizing the viewport, wait for two animation frames before taking a screenshot. Immediate captures showed duplicated bottom pixels although the DOM held one app at the correct height; the paint boundary removed that artifact at both widths. Distinguish stale compositor pixels from measured layout overflow, which the conversation regression checks separately.
 
-Coupled: apps/agent-world/web/world-store.ts, .ledger/202610280018-workplace-mail-and-chat-spike/electron-navigation.mjs
-Verify: .ledger/202610280018-workplace-mail-and-chat-spike/smoke.mjs
+Coupled: apps/agent-world/web/world-store.ts, .ledger/history/202610280018-workplace-mail-and-chat-spike/electron-navigation.mjs
+Verify: .ledger/history/202610280018-workplace-mail-and-chat-spike/smoke.mjs

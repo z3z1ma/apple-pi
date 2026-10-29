@@ -1,4 +1,4 @@
-Status: in-progress
+Status: done
 Created: 2026-10-28
 
 # Spike workplace mail, chat, and org chart interfaces
