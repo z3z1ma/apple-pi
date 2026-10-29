@@ -2149,7 +2149,6 @@ export class Runtime {
 		const directory = command.cwd ?? row?.cwd;
 		if (!directory) return fail("unknown session; give a directory to start it in");
 		const cwd = realpathSync(directory);
-		if (!row && command.role && !command.goal?.text.trim()) return fail("A new hire needs a written goal");
 		const name = command.name ?? row?.name ?? undefined;
 		// A recorded manager, including an intentional null, wins over the caller's flag.
 		const reportsTo = row ? row.reports_to : command.reportsTo;
@@ -2201,7 +2200,7 @@ export class Runtime {
 			)
 		)
 			return;
-		if (!row && command.role && !programId && command.goal?.text.trim()) this.newHires.add(sessionId);
+		if (!row && command.role && !programId) this.newHires.add(sessionId);
 		return this.launchSession(commandId, sessionId, {
 			cwd,
 			name,
@@ -2240,7 +2239,7 @@ export class Runtime {
 				this.queueTeamHistory(commandId, sessionId, reportsTo ?? undefined);
 			}
 		};
-		if (!command.goal && specialization) this.atomically(prepare);
+		if (!command.goal && (command.role || specialization)) this.atomically(prepare);
 		if (command.goal) {
 			return this.applyWork(
 				commandId,

@@ -119,8 +119,8 @@ A temporary launch ownership row, immutable `program_peer_created` caller fact a
 Why: first positive hello otherwise treats a brand-new peer's real spend as old transcript cost; a failed identity/baseline write must not leave partial launch ownership. Lasting identity and caller cannot be overwritten by reusing a discarded ID.
 Verify: components/session-state/tests/peer-history.test.ts
 
-A new hire's provisional person, goal bundle, assignment, task thread, team-history snapshot, and outbox commit before opening its process. The history uses the existing channel reader, with no separate summary or invented message-count cap. Pi starts with a pointer to its focused task; startup mail carries the file itself. Reopening keeps the stored role and work, while a supplied new goal adds an assignment.
-Why: passing only a prompt leaves the first turn without an explicit job; an ordinary wake preserves the existing person's role and work.
+A new hire's provisional person and team-history snapshot commit before opening its process; when a goal is supplied, its bundle, assignment, task thread and outbox join that transaction. A lasting role can be hired without work, while program peers still require a role and goal. The history uses the existing channel reader, with no separate summary or invented message-count cap. When work is assigned, Pi starts with a pointer to its focused task; startup mail carries the file itself. Reopening keeps the stored role and work, while a supplied new goal adds an assignment.
+Why: when initial work is requested, its assignment must exist before the first turn. An idle hire retains its standing role without a placeholder task; an ordinary wake preserves the existing person's role and work.
 Coupled: components/session-state/src/work.ts, components/session-state/src/bridge.ts
 Verify: components/session-state/tests/coordinator.test.ts, components/session-state/tests/workplace.test.ts, apps/agent-world/tests/recruit.test.ts
 
@@ -140,7 +140,7 @@ Verify: components/session-state/tests/program-peers.test.ts
 
 ## symbol:Runtime.prepareStart
 
-Creator specialization is normalized before creation and written only in the first provisional sessions insert, atomically with initial work when a goal is supplied. A goal-less new start with a nonempty focus also records that identity before launch. Existing rows, including null specialization, are never amended; failed process startup therefore retains the original context for same-identity retry. Hello/facts do not own this column. Ordinary starts without focus keep their prior creation path.
+Creator specialization is normalized before creation and written only in the first provisional sessions insert, atomically with initial work when a goal is supplied. A goal-less new start with a role or nonempty focus also records that identity before launch. Existing rows, including null specialization, are never amended; failed process startup therefore retains the original context for same-identity retry. Hello/facts do not own this column. Unroled starts without focus keep their prior creation path.
 Why: specialization is immutable creator instruction, not a mutable observation. Retrofitting a null or interpreting an old start would invent creation history. The transaction was extracted because startSession exceeded its complexity boundary; role, goal and program admission remain in startSession, and process launch remains separate.
 Coupled: components/session-state/src/schema.ts, components/session-state/src/coordinator.ts, components/organization/src/install.ts, components/organization/src/directory.ts
 Verify: components/session-state/tests/specialization.test.ts
@@ -185,7 +185,7 @@ Verify: components/session-state/tests/channel-membership.test.ts, components/se
 
 ## symbol:Runtime.stampHire
 
-`hired_at` is the open incarnation's `started_at`, written only for an id in the in-memory hire set, in the same transaction as that start becoming applied. The set is filled when this process inserts the person for a non-program start with a role and a goal, and it is not rebuilt at startup. A failed start must drop the id: the later call-in uses the same applied path and would otherwise date a start that never connected. Hello's session upsert does not name the column.
+`hired_at` is the open incarnation's `started_at`, written only for an id in the in-memory hire set, in the same transaction as that start becoming applied. The set is filled when this process inserts the person for a non-program start with a role, with or without an initial goal, and it is not rebuilt at startup. A failed start must drop the id: the later call-in uses the same applied path and would otherwise date a start that never connected. Hello's session upsert does not name the column.
 Why: scanning applied starts would date people hired before the column existed. The provisional insert is too early, because the hire tool treats connection as success. A date written apart from the applied stage could survive a rolled-back completion or be lost after one.
 Coupled: components/session-state/src/schema.ts
 Verify: components/session-state/tests/hire-date.test.ts

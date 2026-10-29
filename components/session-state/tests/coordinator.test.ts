@@ -378,12 +378,18 @@ test("renaming an unknown person reports that it does not exist", async () => {
 	}
 }, 20000);
 
-test("a hire without a written goal is refused before creating a person", async () => {
+test("a hire without a written goal connects without creating work", async () => {
 	const run = await coordinator([call("hire", { role: "technical-writer", session_id: "no-goal-person" })]);
 	try {
 		await run.session.prompt("hire without assigning work");
-		expect(toolResults(run)[0]).toMatchObject({ isError: true, text: expect.stringContaining("goal") });
-		expect(query(state.dbPath, "select 1 from sessions where id = 'no-goal-person'")).toEqual([]);
+		expect(toolResults(run)[0]).toMatchObject({ isError: false });
+		expect(query(state.dbPath, "select role, hired_at from sessions where id = 'no-goal-person'")).toEqual([
+			{ role: "technical-writer", hired_at: expect.any(Number) },
+		]);
+		expect(query(state.dbPath, "select task_id from assignments where person = 'no-goal-person'")).toEqual([]);
+		expect(
+			query(state.dbPath, "select command_id from commands where session_id = 'no-goal-person' and kind = 'steer'"),
+		).toEqual([]);
 	} finally {
 		await close(run);
 	}

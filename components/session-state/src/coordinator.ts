@@ -61,7 +61,7 @@ export function installCoordinator(pi: ExtensionAPI): void {
 			name: "hire",
 			label: "hire",
 			description:
-				"Hire a person into your organization: a new lasting colleague, a top-level Pi session in its own tmux window next to yours (headless outside tmux), which reports to you (directory shows you as its manager, and it mails you when it closes). It holds its role, mind, and posture for life, and receives a unique two-part human name unless you give one. Give a written goal: an ephemeral task is assigned before its first turn. Returns once the person runs.",
+				"Hire a person into your organization: a new lasting colleague, a top-level Pi session in its own tmux window next to yours (headless outside tmux), which reports to you (directory shows you as its manager, and it mails you when it closes). It holds its role, mind, and posture for life, and receives a unique two-part human name unless you give one. Its role is its standing job. Give a goal and title to assign an initial task, or omit the goal to bring the person in idle for later work. Returns once the person connects.",
 			parameters: Type.Object(
 				{
 					role: Type.String({ minLength: 1, description: "Role catalog name, such as staff-engineer-simplicity." }),
@@ -74,11 +74,13 @@ export function installCoordinator(pi: ExtensionAPI): void {
 					cwd: Type.Optional(
 						Type.String({ minLength: 1, description: "Directory the person works in; yours by default." }),
 					),
-					goal: Type.String({
-						minLength: 1,
-						description: "The written goal to assign, with context and what done looks like.",
-					}),
-					title: goalTitle,
+					goal: Type.Optional(
+						Type.String({
+							description:
+								"Optional initial task, with context and what done looks like. Omit to bring the person in idle.",
+						}),
+					),
+					title: Type.Optional(goalTitle),
 					...goalWorth,
 					name: Type.Optional(Type.String({ minLength: 1, description: "A name to give instead of a drawn one." })),
 					session_id: Type.Optional(Type.String({ description: "Session id to use; a new one by default." })),
@@ -86,6 +88,8 @@ export function installCoordinator(pi: ExtensionAPI): void {
 				{ additionalProperties: false },
 			),
 			async execute(_toolCallId, params, signal, _onUpdate, ctx) {
+				const goal = params.goal?.trim();
+				requireTitle(goal, params.title);
 				const sessionId = params.session_id ?? randomUUID();
 				if (
 					withWork(
@@ -116,13 +120,17 @@ export function installCoordinator(pi: ExtensionAPI): void {
 						role: params.role,
 						...(specialization ? { specialization } : {}),
 						...(params.name ? { name: params.name } : {}),
-						goal: {
-							text: params.goal,
-							by: ctx.sessionManager.getSessionId(),
-							title: params.title,
-							value: params.value,
-							cost_of_delay: params.cost_of_delay,
-						},
+						...(goal
+							? {
+									goal: {
+										text: goal,
+										by: ctx.sessionManager.getSessionId(),
+										title: params.title,
+										value: params.value,
+										cost_of_delay: params.cost_of_delay,
+									},
+								}
+							: { prompt: "" }),
 					},
 					signal,
 				);
