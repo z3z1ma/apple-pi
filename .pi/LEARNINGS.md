@@ -6,6 +6,7 @@
 - When Read reports ENOENT for an image a command just wrote, run `ls -la <file>` first, then retry, also as `/private/tmp/...` for `/tmp/...` paths. Read also returns the old image when a file is rewritten at the same path: write refreshed screenshots under a new name.
 - After `update_notebook` supersedes a learning, the notebook no longer knows the old id; use and retire the new one.
 - Retire notebook learnings in one call and wait for it before `ledger_status` `done`; in the same parallel batch, the ledger-close hold still sees them open. Also run `git commit` and `ledger_status done` one after the other, never in one batch: the archive moves files mid-commit.
+- Use the current goal path returned by task tools (`focus` for assigned work), rather than constructing a path from a work UUID: promoted tasks live in `.ledger`, not the state-directory task bundle.
 - Vitest in this repo hides `console.log` from passing tests. To inspect values in a scratch test, write them to a temporary file and read it, or assert on them.
 - Faux-session compaction (`tests/helpers/faux-session.ts`) needs `session.settingsManager.applyOverrides({ compaction: { keepRecentTokens: 1 } })`, or it reports "Nothing to compact".
 - For exact upstream Pi API or release facts, fetch the tagged file from `raw.githubusercontent.com` (for example with `pi_exec` `fetch`) and read it; search summaries can be truncated or secondhand. Locate installed SDK helpers through production imports and package exports rather than recalled directory names.
@@ -33,7 +34,7 @@
 - To cover OS branches in one Vitest process, override `process.platform` with `Object.defineProperty` and restore the saved descriptor in `finally`.
 - Before a plan relies on a hook firing, read its guard in code. The tmux-sessions plugin reruns only when its path-plus-mtime stamp changes, not on every pi start.
 - For scripts in `.ledger/<task>/`, find the repository root by walking up to a marker directory, not a fixed `Path.parents[n]`: closing the task moves it under `history/`.
-- After `ledger_status done`, move `.context/.ledger/<task>/` to `.context/.ledger/history/<task>/`, rewrite its `Coupled:` paths to the history path, and rerun `context_lint`.
+- After archiving a ledger task, check its relative Markdown links from the extra `history/` level. Move any `.context/.ledger/<task>/` to `.context/.ledger/history/<task>/`, update its `Coupled:` paths, and rerun `context_lint`.
 - The operator reviews ticket sets in the bundle: write the tickets into `.ledger/<task>/tickets/` first, then open `sign_off_task`; its verdict is the approval.
 - Never kill processes by pattern (`pkill -f vitest`) in this shared checkout: it can kill other lanes' runs. Cancel your own run with `task cancel` and kill only PIDs you started.
 - When reading the installed Pi package, grep `dist/core/` and `dist/modes/`, not `dist/bundle/chunks/`: the chunks are minified single lines that flood the output.
