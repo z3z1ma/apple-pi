@@ -16,4 +16,4 @@
 
 - `.ledger/202610241552-run-bash-through-a-pty-by-default/task.md` — in-progress — Run Bash through a PTY by default — Bash stdout/stderr on PTY slaves (no controlling terminal) so programs emit terminal colors; plain text to the model, styled view in the UI, pipe fallback.
 
-- `.ledger/202610290925-org-chart-and-task-specific-teams/task.md` — planning — Org chart and task-specific teams — First-class Workplace Org tab: independent reporting trees, profiles, safe cross-team drag/reparent/split, planned role-based teams, whole-tree channels and controlled head kickoff.
+- `.ledger/202610290925-org-chart-and-task-specific-teams/task.md` — in-progress — Org chart and task-specific teams — First-class Workplace Org tab: independent reporting trees, profiles, safe cross-team drag/reparent/split, planned role-based teams, whole-tree channels and controlled head kickoff.
