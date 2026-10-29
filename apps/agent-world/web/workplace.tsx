@@ -1,6 +1,12 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createRoot } from "react-dom/client";
-import type { CommandResult, MailThread, WorkplaceThread, WorldSnapshot } from "../src/world.js";
+import type { Character, CommandResult, MailThread, WorkplaceThread, WorldSnapshot } from "../src/world.js";
+import {
+	FileReferenceCwd,
+	FileReferenceNavigation,
+	type FileReferenceTarget,
+	FileReferenceText,
+} from "./file-references.js";
 import { sleeperCharacter } from "./game/layout.js";
 import { EmbeddedConversation } from "./overlay/conversation/conversation-panel.js";
 import { conversationPanel } from "./overlay/conversation/panel-state.js";
@@ -12,9 +18,10 @@ import { useWorkplaceMenu, WorkplaceMenuProvider } from "./workplace-context-men
 import { Icon } from "./workplace-icon.js";
 import { WorkplaceIssues } from "./workplace-issues.js";
 import { channelName, useWorkplaceNames } from "./workplace-names.js";
-import { Org } from "./workplace-org.js";
+import { descendants, Org, orgPeople } from "./workplace-org.js";
 import { OrganizationNameForm, OrgNameEditor } from "./workplace-org-name.js";
 import { ChatPeople, PersonAvatar, PersonName, PersonProfile, sessionStatus } from "./workplace-people.js";
+import { PersonActionsButton, WorkplacePersonActions } from "./workplace-person-actions.js";
 import { WorkplaceWorld } from "./workplace-world.js";
 import { worldStore } from "./world-store.js";
 import "./workplace.css";
@@ -72,6 +79,13 @@ function Workplace() {
 	const [worldVisited, setWorldVisited] = useState(initialView === "world");
 	const [codeDirty, setCodeDirty] = useState(false);
 	const [terminalCount, setTerminalCount] = useState(0);
+	const [fileRequest, setFileRequest] = useState<FileReferenceTarget>();
+	const openFileReference = useCallback((target: FileReferenceTarget) => {
+		setFileRequest({ ...target });
+		setCodeVisited(true);
+		setView("code");
+		history.replaceState(null, "", "?workplace=code");
+	}, []);
 	const [planState, setPlanState] = useState({ dirty: false, started: false });
 	useEffect(() => {
 		const protectDrafts = (event: BeforeUnloadEvent) => {
@@ -252,48 +266,53 @@ function Workplace() {
 					<div className="wp-empty">Loading the workplace…</div>
 				) : (
 					<div className="wp-surface" inert={!world.connected}>
-						<div hidden={view !== "chat"}>
-							<Chat
-								world={world}
-								active={view === "chat"}
-								requestedDM={requestedDM}
-								requestedChannel={requestedChannel}
-							/>
-						</div>
-						<div hidden={view !== "mail"}>
-							<Mail world={world} active={view === "mail"} />
-						</div>
-						{orgVisited && (
-							<div hidden={view !== "org"}>
-								<Org
-									world={world}
-									active={view === "org"}
-									openDM={openDM}
-									openChannel={openChannel}
-									onPlanChange={setPlanState}
-								/>
-							</div>
-						)}
-						{codeVisited && (
-							<div hidden={view !== "code"}>
-								<WorkplaceCode
-									world={world}
-									active={view === "code"}
-									onDirtyChange={setCodeDirty}
-									onTerminalCountChange={setTerminalCount}
-								/>
-							</div>
-						)}
-						{issuesVisited && (
-							<div hidden={view !== "issues"}>
-								<WorkplaceIssues world={world} active={view === "issues"} openDM={openDM} />
-							</div>
-						)}
-						{worldVisited && (
-							<div hidden={view !== "world"}>
-								<WorkplaceWorld active={view === "world"} />
-							</div>
-						)}
+						<FileReferenceNavigation.Provider value={openFileReference}>
+							<WorkplacePersonActions world={world}>
+								<div hidden={view !== "chat"}>
+									<Chat
+										world={world}
+										active={view === "chat"}
+										requestedDM={requestedDM}
+										requestedChannel={requestedChannel}
+									/>
+								</div>
+								<div hidden={view !== "mail"}>
+									<Mail world={world} active={view === "mail"} />
+								</div>
+								{orgVisited && (
+									<div hidden={view !== "org"}>
+										<Org
+											world={world}
+											active={view === "org"}
+											openDM={openDM}
+											openChannel={openChannel}
+											onPlanChange={setPlanState}
+										/>
+									</div>
+								)}
+								{codeVisited && (
+									<div hidden={view !== "code"}>
+										<WorkplaceCode
+											world={world}
+											active={view === "code"}
+											fileRequest={fileRequest}
+											onDirtyChange={setCodeDirty}
+											onTerminalCountChange={setTerminalCount}
+										/>
+									</div>
+								)}
+								{issuesVisited && (
+									<div hidden={view !== "issues"}>
+										<WorkplaceIssues world={world} active={view === "issues"} openDM={openDM} />
+									</div>
+								)}
+								{worldVisited && (
+									<div hidden={view !== "world"}>
+										<WorkplaceWorld active={view === "world"} />
+									</div>
+								)}
+							</WorkplacePersonActions>
+						</FileReferenceNavigation.Provider>
 					</div>
 				)}
 			</div>
@@ -366,12 +385,43 @@ function Chat({
 	const channels = world.workplace?.threads.filter((thread) => thread.kind === "channel") ?? [];
 	const unreads = channelUnreads(world);
 	const selectedChannel = channels.find((thread) => selection?.kind === "channel" && thread.id === selection.id);
-	const sleeping = world.dormant?.filter((agent) => !agent.retiredAt) ?? [];
+	const lasting = orgPeople(world);
+	const parents = new Map(lasting.map((person) => [person.character.id, person.parent]));
+	const heads = lasting.filter(
+		(person) =>
+			(!person.parent || !parents.has(person.parent)) && descendants(person.character.id, parents).length >= 4,
+	);
+	const headIds = new Set(heads.map((person) => person.character.id));
+	const direct = world.characters.filter((agent) => !headIds.has(agent.id));
+	const sleeping = world.dormant?.filter((agent) => !agent.retiredAt && !headIds.has(agent.id)) ?? [];
 	const sleeper = world.dormant?.find((agent) => selection?.kind === "dm" && agent.id === selection.id);
 	const person =
 		world.characters.find((agent) => selection?.kind === "dm" && agent.id === selection.id) ??
 		(sleeper ? sleeperCharacter(sleeper) : undefined);
 	const matches = (name: string) => name.toLowerCase().includes(filter.toLowerCase());
+	const personRow = (agent: Character, home = false) => (
+		<div className="wp-dm" key={agent.id} data-selected={person?.id === agent.id} data-unread={!!agent.facts?.unseen}>
+			<PersonAvatar
+				id={agent.id}
+				name={agent.name}
+				className={`wp-person-icon wp-status-${agent.facts?.status ?? "idle"}`}
+			/>
+			<button
+				type="button"
+				className="wp-dm-link"
+				aria-description={agent.facts?.unseen ? "Unread update" : undefined}
+				aria-pressed={person?.id === agent.id}
+				onClick={() => openDM(agent.id)}
+			>
+				<span className="wp-dm-summary">
+					<strong>{agent.name}</strong>
+					<small>{home ? "Asleep \u00b7 history only" : (agent.facts?.title ?? activity(agent))}</small>
+				</span>
+				{agent.facts?.unseen && <span className="wp-unread-dot" aria-hidden="true" />}
+				{agent.facts?.asking && <b className="wp-needs">?</b>}
+			</button>
+		</div>
+	);
 	return (
 		<ChatPeople.Provider
 			value={{
@@ -440,39 +490,18 @@ function Chat({
 					{!channels.length && (
 						<p className="wp-sidebar-note">Team channels appear here when the runtime creates them.</p>
 					)}
+					{heads.length > 0 && (
+						<section aria-label="VIPs">
+							<h2>
+								VIPs <span>{heads.length}</span>
+							</h2>
+							{heads.filter((head) => matches(head.character.name)).map((head) => personRow(head.character, head.home))}
+						</section>
+					)}
 					<h2>
-						Direct messages <span>{world.characters.length}</span>
+						Direct messages <span>{direct.length}</span>
 					</h2>
-					{world.characters
-						.filter((agent) => matches(agent.name))
-						.map((agent) => (
-							<div
-								className="wp-dm"
-								key={agent.id}
-								data-selected={person?.id === agent.id}
-								data-unread={!!agent.facts?.unseen}
-							>
-								<PersonAvatar
-									id={agent.id}
-									name={agent.name}
-									className={`wp-person-icon wp-status-${agent.facts?.status ?? "idle"}`}
-								/>
-								<button
-									type="button"
-									className="wp-dm-link"
-									aria-description={agent.facts?.unseen ? "Unread update" : undefined}
-									aria-pressed={person?.id === agent.id}
-									onClick={() => openDM(agent.id)}
-								>
-									<span className="wp-dm-summary">
-										<strong>{agent.name}</strong>
-										<small>{agent.facts?.title ?? activity(agent)}</small>
-									</span>
-									{agent.facts?.unseen && <span className="wp-unread-dot" aria-hidden="true" />}
-									{agent.facts?.asking && <b className="wp-needs">?</b>}
-								</button>
-							</div>
-						))}
+					{direct.filter((agent) => matches(agent.name)).map((agent) => personRow(agent))}
 					{sleeping.length > 0 && (
 						<details className="wp-sleepers">
 							<summary>Sleeping agents ({sleeping.length})</summary>
@@ -527,6 +556,7 @@ function Chat({
 									<span>Tool calls</span>
 									<span className="wp-switch" aria-hidden="true" />
 								</button>
+								<PersonActionsButton id={person.id} />
 							</header>
 							{person.facts?.task && (
 								<div className="wp-session-context">
@@ -554,7 +584,11 @@ function Chat({
 										</>
 									)}
 								>
-									{active && <EmbeddedConversation character={person} store={store} showTools={showTools} />}
+									{active && (
+										<FileReferenceCwd.Provider value={person.facts?.cwd}>
+											<EmbeddedConversation character={person} store={store} showTools={showTools} />
+										</FileReferenceCwd.Provider>
+									)}
 								</TranscriptAuthor.Provider>
 							</div>
 						</>
@@ -795,6 +829,7 @@ function Messages({
 	unreadAfter?: number;
 	followLink: (author: string, href: string, file: boolean) => void;
 }) {
+	const world = store.get();
 	const firstUnread =
 		unreadAfter === undefined
 			? undefined
@@ -839,11 +874,20 @@ function Messages({
 						</p>
 					)}
 					<div className="wp-message-body">
-						{channel ? (
-							<Markdown text={message.body} onLink={(href, file) => followLink(message.from, href, file)} />
-						) : (
-							message.body
-						)}
+						<FileReferenceCwd.Provider
+							value={
+								message.from === "operator"
+									? undefined
+									: (world?.characters.find((person) => person.id === message.from)?.facts?.cwd ??
+										world?.dormant?.find((person) => person.id === message.from)?.cwd)
+							}
+						>
+							{channel ? (
+								<Markdown text={message.body} onLink={(href, file) => followLink(message.from, href, file)} />
+							) : (
+								<FileReferenceText text={message.body} />
+							)}
+						</FileReferenceCwd.Provider>
 					</div>
 				</div>
 			</article>

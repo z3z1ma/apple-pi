@@ -1,0 +1,108 @@
+.wp-app .wp-person-menu {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex: none;
+	width: 30px;
+	height: 30px;
+	padding: 0;
+	border: 1px solid var(--wp-border);
+	border-radius: 6px;
+	background: var(--wp-bg);
+	color: var(--wp-text);
+	font-size: 20px;
+	line-height: 1;
+	cursor: pointer;
+}
+.wp-person-menu:hover {
+	background: var(--wp-hover);
+}
+.wp-profile-actions {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+.wp-person-dialog {
+	box-sizing: border-box;
+	width: min(460px, calc(100% - 32px));
+	max-height: calc(100% - 32px);
+	margin: auto;
+	padding: 26px;
+	overflow: auto;
+	border: 1px solid var(--wp-border);
+	border-radius: 12px;
+	background: var(--wp-bg);
+	color: var(--wp-text);
+	box-shadow: var(--wp-shadow);
+	font-size: 13px;
+	line-height: 1.65;
+	overflow-wrap: anywhere;
+}
+.wp-person-dialog::backdrop {
+	background: #0006;
+}
+.wp-person-dialog h2 {
+	margin: 0 0 14px;
+	font-size: 20px;
+	line-height: 1.3;
+}
+.wp-person-dialog label {
+	display: block;
+	margin: 14px 0;
+}
+.wp-person-dialog textarea {
+	box-sizing: border-box;
+	width: 100%;
+	padding: 8px;
+	border: 1px solid var(--wp-border);
+	border-radius: 6px;
+	background: var(--wp-bg);
+	color: var(--wp-text);
+	font: inherit;
+	resize: vertical;
+}
+.wp-person-dialog .wp-person-permanent {
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
+}
+.wp-person-dialog input[type="checkbox"] {
+	width: auto;
+}
+.wp-person-dialog .wp-person-warning,
+.wp-person-dialog [role="alert"] {
+	padding: 10px;
+	border: 1px solid var(--wp-danger);
+	border-radius: 6px;
+	color: var(--wp-danger);
+	background: var(--wp-danger-bg);
+}
+.wp-person-dialog footer {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: flex-end;
+	gap: 8px;
+	margin-top: 20px;
+}
+.wp-person-dialog button {
+	padding: 8px 12px;
+	border: 1px solid var(--wp-border);
+	border-radius: 6px;
+	background: var(--wp-bg);
+	color: var(--wp-text);
+	font: inherit;
+	cursor: pointer;
+}
+.wp-person-dialog .wp-person-confirm {
+	border-color: var(--wp-accent);
+	font-weight: 650;
+}
+.wp-person-dialog button:disabled {
+	opacity: 0.5;
+	cursor: default;
+}
+.wp-person-menu:focus-visible,
+.wp-person-dialog :focus-visible {
+	outline: 2px solid var(--wp-accent);
+	outline-offset: 3px;
+}

@@ -1,0 +1,14 @@
+## file
+
+FileReferenceNavigation enables local-file decoration only in Workplace; without it the shared Markdown renderer returns its original HTML and issues no resolver calls. FileReferenceCwd is explicit source provenance, independent of Code's last selected root. DM uses the selected person's known cwd; actual mail/channel messages use exact author IDs; unknown/operator authors and historical transcript-mail display names have no inferred cwd. Work history uses recorded task.project only after explicit body activation.
+
+Decoration receives already escaped Markdown or textContent-generated HTML. It walks DOM text nodes, not arbitrary HTML strings, preserving external anchors and the existing sanitizer's dead-link/image policy. Generated local anchors carry only controlled IDs and dispatch through the context callback; they do not navigate or use external openFile/openLink. Existing local Markdown destinations become inert until validated. Native Enter/click/middle-click is caught before the transcript's old outer bridge handler.
+
+Each mounted body batches literal and location-stripped candidates into workspace.resolvePaths. Metadata validation performs no content read or crawl; unmount/source changes ignore pending results and suppress an unstarted invocation. No global index, cache or subscription is added. Missing/invalid candidates remain text; resolver failures are visible locally. Code's existing read path owns click-time disappearance/read errors.
+
+A literal colon filename wins over location parsing. Renderer supports positive :line[:column] and narrow local file:/// or file://localhost/ URLs without query/fragment. Backend owns ~/ expansion, canonical roots and filesystem containment. Inline code is a whole explicit filename candidate even without an extension or with spaces; newline-containing values remain excluded. Quoted/backticked plain text also preserves the entire candidate while retaining its delimiters. Unquoted prose uses path-like tokens. Rejecting all inline-code whitespace previously lost ordinary existing filenames such as src/my file.ts even though the backend could resolve them. This is not a shell/path-expression parser.
+
+Why: one shared transcript renderer serves two applications with different navigation, and its content is untrusted. Local decoration must not turn a displayed path into external navigation, borrow another body's directory, or fetch contents while the user is only reading a message.
+
+Coupled: apps/agent-world/web/file-reference-paths.ts, apps/agent-world/web/file-references.css, apps/agent-world/web/overlay/conversation/transcript.tsx, apps/agent-world/web/workplace.tsx, apps/agent-world/web/workplace-code.tsx, apps/agent-world/web/workplace-work-history.tsx, apps/agent-world/src/backend/workspace.ts
+Verify: apps/agent-world/tests/file-reference-paths.test.ts, apps/agent-world/tests/world-file-links.test.ts

@@ -1,5 +1,6 @@
-import { type ReactNode, useEffect, useId, useRef, useState } from "react";
+import { type ReactNode, useContext, useEffect, useId, useRef, useState } from "react";
 import type { WorkplaceTaskHistory, WorldSnapshot } from "../src/world.js";
+import { FileReferenceCwd, FileReferenceNavigation, FileReferenceText } from "./file-references.js";
 import { Markdown } from "./overlay/conversation/transcript.js";
 import "./workplace-work-history.css";
 
@@ -33,7 +34,9 @@ function TaskContent({ task }: { task: WorkplaceTaskHistory }) {
 	}, [task.id]);
 	return (
 		<article aria-label={`Task: ${task.title}`} className="wp-work-history-content">
-			<p className="wp-work-history-path">{task.bundle}/task.md</p>
+			<p className="wp-work-history-path">
+				<FileReferenceText text={`${task.bundle}/task.md`} />
+			</p>
 			{text === undefined && !error && <p role="status">Reading task...</p>}
 			{text !== undefined && (
 				<Markdown
@@ -67,6 +70,7 @@ function WorkDialog({
 	people?: string[];
 	onClose: () => void;
 }) {
+	const navigate = useContext(FileReferenceNavigation);
 	const dialog = useRef<HTMLDialogElement>(null);
 	const close = useRef<HTMLButtonElement>(null);
 	const title = useId();
@@ -97,99 +101,112 @@ function WorkDialog({
 		return () => window.removeEventListener("keydown", onEscape, { capture: true });
 	}, [onClose]);
 	return (
-		<dialog
-			ref={dialog}
-			className="wp-work-dialog"
-			aria-labelledby={title}
-			onCancel={(event) => {
-				event.preventDefault();
-				onClose();
-			}}
+		<FileReferenceNavigation.Provider
+			value={
+				navigate
+					? (target) => {
+							onClose();
+							navigate(target);
+						}
+					: undefined
+			}
 		>
-			<header>
-				<div>
-					<h2 id={title}>{heading}</h2>
-					<p>
-						{available ? (
+			<dialog
+				ref={dialog}
+				className="wp-work-dialog"
+				aria-labelledby={title}
+				onCancel={(event) => {
+					event.preventDefault();
+					onClose();
+				}}
+			>
+				<header>
+					<div>
+						<h2 id={title}>{heading}</h2>
+						<p>
+							{available ? (
+								<>
+									{tasks.length} {tasks.length === 1 ? "task" : "tasks"} &#183; select one to read its details
+								</>
+							) : (
+								"Work history is not available in this snapshot."
+							)}
+						</p>
+					</div>
+					<button type="button" ref={close} aria-label="Close work history" onClick={onClose}>
+						Close
+					</button>
+				</header>
+				<div className="wp-work-dialog-layout">
+					<nav className="wp-work-dialog-list" aria-label="Tasks">
+						<label className="wp-work-dialog-filter">
+							Filter work
+							<input
+								type="search"
+								value={query}
+								onChange={(event) => setQuery(event.target.value)}
+								placeholder="Task title or status"
+							/>
+						</label>
+						{matches.length ? (
+							matches.map((item) => (
+								<button
+									key={item.id}
+									type="button"
+									aria-label={`Read task: ${item.title}`}
+									aria-pressed={item.id === selected}
+									onClick={() => setSelected(item.id)}
+								>
+									<strong>{item.title}</strong>
+									<span>
+										{item.status ?? "Status not recorded"}
+										{latest(item) > 0 ? ` · ${new Date(latest(item)).toLocaleDateString()}` : ""}
+									</span>
+									<span>Recorded organization: {names.get(item.headquarters) ?? item.headquarters}</span>
+								</button>
+							))
+						) : (
+							<p>{available ? "No matching work." : "Work history is not available in this snapshot."}</p>
+						)}
+					</nav>
+					<section className="wp-work-dialog-detail" aria-label="Task detail">
+						{task ? (
 							<>
-								{tasks.length} {tasks.length === 1 ? "task" : "tasks"} &#183; select one to read its details
+								<h3>{task.title}</h3>
+								<p>
+									{task.status ?? "Status not recorded"} · Recorded organization:{" "}
+									{names.get(task.headquarters) ?? task.headquarters}
+								</p>
+								<ul className="wp-work-history-participants">
+									{task.participants
+										.filter((person) => people === undefined || people.includes(person.person))
+										.map((person, index) => (
+											// biome-ignore lint/suspicious/noArrayIndexKey: repeated assignment records contain only stateless text and have no public assignment ID.
+											<li key={`${person.person}:${person.assignedAt}:${index}`}>
+												{names.get(person.person) ?? person.person}:{" "}
+												{person.outcome === "held"
+													? person.focused
+														? "assigned, in focus"
+														: "assigned"
+													: person.outcome === "finished"
+														? "assignment finished"
+														: person.outcome === "unknown"
+															? "outcome not recorded"
+															: person.outcome}
+											</li>
+										))}
+								</ul>
+								<FileReferenceCwd.Provider value={task.project || undefined}>
+									<TaskContent key={task.id} task={task} />
+								</FileReferenceCwd.Provider>
 							</>
 						) : (
-							"Work history is not available in this snapshot."
+							<p className="wp-work-dialog-empty">Choose a task to see its participants and details.</p>
 						)}
-					</p>
+					</section>
 				</div>
-				<button type="button" ref={close} aria-label="Close work history" onClick={onClose}>
-					Close
-				</button>
-			</header>
-			<div className="wp-work-dialog-layout">
-				<nav className="wp-work-dialog-list" aria-label="Tasks">
-					<label className="wp-work-dialog-filter">
-						Filter work
-						<input
-							type="search"
-							value={query}
-							onChange={(event) => setQuery(event.target.value)}
-							placeholder="Task title or status"
-						/>
-					</label>
-					{matches.length ? (
-						matches.map((item) => (
-							<button
-								key={item.id}
-								type="button"
-								aria-label={`Read task: ${item.title}`}
-								aria-pressed={item.id === selected}
-								onClick={() => setSelected(item.id)}
-							>
-								<strong>{item.title}</strong>
-								<span>
-									{item.status ?? "Status not recorded"}
-									{latest(item) > 0 ? ` · ${new Date(latest(item)).toLocaleDateString()}` : ""}
-								</span>
-								<span>Recorded organization: {names.get(item.headquarters) ?? item.headquarters}</span>
-							</button>
-						))
-					) : (
-						<p>{available ? "No matching work." : "Work history is not available in this snapshot."}</p>
-					)}
-				</nav>
-				<section className="wp-work-dialog-detail" aria-label="Task detail">
-					{task ? (
-						<>
-							<h3>{task.title}</h3>
-							<p>
-								{task.status ?? "Status not recorded"} · Recorded organization:{" "}
-								{names.get(task.headquarters) ?? task.headquarters}
-							</p>
-							<ul className="wp-work-history-participants">
-								{task.participants
-									.filter((person) => people === undefined || people.includes(person.person))
-									.map((person, index) => (
-										// biome-ignore lint/suspicious/noArrayIndexKey: repeated assignment records contain only stateless text and have no public assignment ID.
-										<li key={`${person.person}:${person.assignedAt}:${index}`}>
-											{names.get(person.person) ?? person.person}:{" "}
-											{person.outcome === "held"
-												? person.focused
-													? "assigned, in focus"
-													: "assigned"
-												: person.outcome === "finished"
-													? "assignment finished"
-													: person.outcome === "unknown"
-														? "outcome not recorded"
-														: person.outcome}
-										</li>
-									))}
-							</ul>
-							<TaskContent key={task.id} task={task} />
-						</>
-					) : (
-						<p className="wp-work-dialog-empty">Choose a task to see its participants and details.</p>
-					)}
-				</section>
-			</div>
-		</dialog>
+			</dialog>
+		</FileReferenceNavigation.Provider>
 	);
 }
 

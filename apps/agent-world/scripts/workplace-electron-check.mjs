@@ -119,6 +119,10 @@ try {
 		const link = createConnection(upstreamPath);
 		sockets.add(link);
 		await once(link, "connect");
+		const heartbeat = setInterval(() => {
+			if (!link.destroyed) link.write('{"type":"heartbeat"}\n');
+		}, 1000);
+		link.once("close", () => clearInterval(heartbeat));
 		link.write(
 			`${JSON.stringify({
 				type: "hello",
@@ -192,12 +196,25 @@ try {
 		const stale = await api.saveFile({ root, path: "example.ts", text: "must not replace", baseHash: "stale" });
 		const outside = await api.readFile({ root, path: "../outside" });
 		const git = await api.gitStatus({ root });
-		return { read, stale, outside, git };
+		const resolved = await api.resolvePaths({
+			cwd: root,
+			paths: ["example.ts", `${root}/example.ts`, "missing.ts", "../outside"],
+		});
+		return { read, stale, outside, git, resolved };
 	}, repository);
 	assert.equal(fileProof.read.text, "export const answer = 42;\n");
 	assert.equal(fileProof.stale.ok, false);
 	assert.equal(fileProof.outside.ok, false);
 	assert.equal(fileProof.git.ok, true);
+	assert.equal(fileProof.resolved.ok, true);
+	assert.deepEqual(
+		fileProof.resolved.files,
+		["example.ts", `${repository}/example.ts`].map((candidate) => ({
+			candidate,
+			root: fileProof.read.root,
+			path: "example.ts",
+		})),
+	);
 	assert.equal(readFileSync(join(repository, "example.ts"), "utf8"), "export const answer = 42;\n");
 	const codeCapture = join(tmpdir(), `workplace-electron-code-${process.pid}.png`);
 	await page.screenshot({ path: codeCapture, animations: "disabled" });
@@ -213,6 +230,9 @@ try {
 	await page.getByRole("button", { name: "View profile: Navigation Report", exact: true }).click();
 	await page.getByLabel("Profile: Navigation Report", { exact: true }).waitFor();
 	await page.getByText("An isolated navigation fixture.", { exact: true }).waitFor();
+	await page.getByRole("button", { name: "Person actions: Navigation Report", exact: true }).click();
+	await page.getByRole("menuitem", { name: "Send home", exact: true }).waitFor();
+	await page.keyboard.press("Escape");
 	assert.deepEqual(query("select id, seen_at from sessions order by id"), seenBefore);
 	assert.deepEqual(
 		requests
@@ -233,6 +253,17 @@ try {
 		const methods = [api.orgMove, api.orgStart, api.onOrgStart].map((method) => typeof method);
 		const malformedMove = await api.orgMove({});
 		const malformedStart = await api.orgStart(null);
+		const malformedCallIn = await api.callIn(null);
+		const missingCallIn = await api.callIn({
+			id: crypto.randomUUID(),
+			person: "missing-profile",
+			expected: ["missing-profile"],
+		});
+		const awakeCallIn = await api.callIn({
+			id: crypto.randomUUID(),
+			person: "nav-report",
+			expected: ["nav-report"],
+		});
 		const events = [];
 		let delivered;
 		const received = new Promise((resolve) => {
@@ -250,11 +281,17 @@ try {
 		});
 		await Promise.race([received, new Promise((resolve) => setTimeout(resolve, 5000))]);
 		dispose();
-		return { methods, malformedMove, malformedStart, blocked, events };
+		return { methods, malformedMove, malformedStart, malformedCallIn, missingCallIn, awakeCallIn, blocked, events };
 	});
 	assert.deepEqual(ipc.methods, ["function", "function", "function"]);
 	assert.equal(ipc.malformedMove.ok, false);
 	assert.equal(ipc.malformedStart.complete, false);
+	assert.equal(ipc.malformedCallIn.ok, false);
+	assert.equal(ipc.missingCallIn.ok, false);
+	assert.equal(ipc.awakeCallIn.ok, true, JSON.stringify(ipc.awakeCallIn));
+	assert.equal(ipc.awakeCallIn.people.length, 1);
+	assert.equal(ipc.awakeCallIn.people[0].person, "nav-report");
+	assert.equal(ipc.awakeCallIn.people[0].state, "ready");
 	assert.equal(ipc.blocked.complete, false);
 	assert.equal(ipc.blocked.people[0].state, "blocked");
 	assert.ok(

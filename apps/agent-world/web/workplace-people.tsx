@@ -4,6 +4,7 @@ import type { Character, WorldSnapshot } from "../src/world.js";
 import { sleeperCharacter } from "./game/layout.js";
 import { factRows } from "./overlay/interface/character-card.js";
 import { OrgNameEditor } from "./workplace-org-name.js";
+import { PersonActionsButton } from "./workplace-person-actions.js";
 import { WorkHistory } from "./workplace-work-history.js";
 
 type PeopleNavigation = {
@@ -188,9 +189,12 @@ export function PersonProfile({ id, name: fallbackName, onClose }: { id: string;
 		<aside className="wp-profile" aria-label={`Profile: ${name}`}>
 			<header>
 				<h2>Profile</h2>
-				<button type="button" ref={close} className="wp-profile-close" aria-label="Close profile" onClick={onClose}>
-					Close
-				</button>
+				<div className="wp-profile-actions">
+					<PersonActionsButton id={id} />
+					<button type="button" ref={close} className="wp-profile-close" aria-label="Close profile" onClick={onClose}>
+						Close
+					</button>
+				</div>
 			</header>
 			<div className="wp-profile-body">
 				<PersonAvatar id={id} name={name} className="wp-profile-avatar" interactive={false} />

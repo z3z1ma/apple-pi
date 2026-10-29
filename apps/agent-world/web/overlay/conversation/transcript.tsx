@@ -3,6 +3,7 @@
 // its input and result, mail as a sealed letter, and other extensions' messages folded like tool calls.
 import { createContext, memo, type ReactNode, useContext, useState } from "react";
 import type { TranscriptEntry, TranscriptToolCall } from "../../../src/world.js";
+import { FileReferenceCwd, useFileReferenceHtml } from "../../file-references.js";
 import { shortArg } from "../tool-line.js";
 import { isLive } from "./live-reply.js";
 import { markdownHtml } from "./markdown.js";
@@ -74,7 +75,9 @@ export const Markdown = memo(function Markdown({
 	text: string;
 	onLink?: (href: string, file: boolean) => void;
 }) {
+	const references = useFileReferenceHtml(markdownHtml(text));
 	const follow = (event: React.MouseEvent) => {
+		if (references.follow(event)) return;
 		if (!onLink || event.button > 1) return;
 		const anchor =
 			event.target instanceof Element ? event.target.closest<HTMLAnchorElement>("a.aw-md-link[href]") : null;
@@ -82,11 +85,24 @@ export const Markdown = memo(function Markdown({
 		event.preventDefault();
 		onLink(anchor.getAttribute("href")!, anchor.hasAttribute("data-file"));
 	};
-	const html = markdownHtml(text);
-	// biome-ignore lint/a11y/noStaticElementInteractions: the wrapper delegates native anchor clicks; it is not an additional control
-	// biome-ignore lint/a11y/useKeyWithClickEvents: native anchors already deliver Enter as a click
-	// biome-ignore lint/security/noDangerouslySetInnerHtml: markdownHtml escapes raw HTML, blocks unsafe schemes, and renders images as text
-	return <div className="aw-md" onClick={follow} onAuxClick={follow} dangerouslySetInnerHTML={{ __html: html }} />;
+	const html = references.html;
+	const body = (
+		// biome-ignore lint/a11y/noStaticElementInteractions: delegates native anchor activation
+		// biome-ignore lint/a11y/useKeyWithClickEvents: native anchors emit clicks for Enter
+		<div
+			className="aw-md"
+			onClick={follow}
+			onAuxClick={follow}
+			// biome-ignore lint/security/noDangerouslySetInnerHtml: escaped Markdown with controlled local-file anchors
+			dangerouslySetInnerHTML={{ __html: html }}
+		/>
+	);
+	return (
+		<>
+			{body}
+			{references.error && <p role="status">File links unavailable: {references.error}</p>}
+		</>
+	);
 });
 
 /** A folded line that opens on click: a tool call with its result, a thought, or an extension's note. */
@@ -309,7 +325,9 @@ export const BlockView = memo(function BlockView({
 					<span className="aw-conv-name">Mail from {block.entry.from}</span>
 					<time>{clock(block.entry.at)}</time>
 				</header>
-				<Markdown text={block.entry.text} />
+				<FileReferenceCwd.Provider value={undefined}>
+					<Markdown text={block.entry.text} />
+				</FileReferenceCwd.Provider>
 			</article>
 		);
 	if (block.kind === "note")

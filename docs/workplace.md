@@ -38,7 +38,19 @@ These are operator actions. An agent's native `move` remains within its organiza
 
 A move preserves identities, roles, hire dates, assignments and focus. A task keeps its originally recorded organization head as its **anchor**; its current organization is the tree that anchor now belongs to. If a move would newly separate an unfinished assignee from their task's organization, it is refused with the blocking task IDs. Finish the work or explicitly hand it off through the existing assignment tools first. Moving an entire organization under another head keeps its recorded task anchor with its assignees, so it does not create that separation. Existing invalid assignments are not silently repaired or used to block an otherwise safe move.
 
-An independent branch remains independent on reconnect or call-in: a recorded null manager wins over an old launch flag. Runtime reporting, prompt identity, channel membership and later close notices follow the recorded tree. Use World's existing **Send home** and **Call in** controls for lifecycle actions; these are not additional Org profile controls.
+An independent branch remains independent on reconnect or call-in: a recorded null manager wins over an old launch flag. Runtime reporting, prompt identity, channel membership and later close notices follow the recorded tree.
+
+### Person actions
+
+Open the person menu in a DM header or profile. In Org, right-click a real person's card, or focus it and press Shift+F10, for the same actions. Opening the menu does not read or acknowledge a conversation. Organization-name work history and Rename remain separate controls.
+
+**Send home** closes only the selected person's session, preserving their identity, work and history. Idle people go home immediately; interrupting someone busy or awaiting input requires confirmation. If they become busy after selection, the backend can require a fresh confirmation. Their reports stay where they are.
+
+**Call in** includes the selected person and any absent managers up to the organization head, including absent ancestors above a manager who is already awake. It never calls in their reports. When additional people would start, review their names and confirm once; a single-person call-in starts immediately. Managers start highest-first. Ordinary call-in can resume existing focused work or queued mail; it does not invent a task or promise that everyone stays idle. Existing terminal-placement requirements still apply.
+
+The result lists each affected person's observed state. A failed or uncertain manager blocks remaining starts, while people already called in stay running. **Retry call in** reconciles the same operation and approved people rather than blindly opening replacement sessions. If reporting or the approved scope is stale, close the result and review a new call-in preview. This is a Workplace action, not a new automatic cascade in the native agent tool or standalone World's existing Call in control.
+
+**Let go** is permanent departure, not reversible Send home. Eligible people require a reason and an explicit permanent-removal acknowledgment. The runtime still enforces unfinished-work, reports and other departure checks. Acceptance means the handoff and cleanup have been requested; later runtime updates report the outcome. The UI does not remove the person optimistically or let go of their reports.
 
 ### Add one person immediately
 
@@ -74,7 +86,7 @@ Progress distinguishes pending, preparing, ready, active, blocked, failed and un
 
 ## Chat works with live sessions
 
-The sidebar lists running people as direct conversations, existing team channels, and sleeping people's retained histories. Search filters the available names and channels; it is not a server-side transcript search.
+The sidebar lists channels, **VIPs**, direct messages and sleeping people's retained histories. VIPs are the heads of organizations with at least four current lasting people, counting the head and people at home. Those heads appear only in VIPs, including when asleep; selecting one opens the same ordinary DM or retained history. Grouping uses organization metadata without reading conversations. Search filters the available names and channels; it is not a server-side transcript search.
 
 A direct conversation is the person's actual Pi session. Its transcript, streamed replies, questions, instruction timing and receipts use the same conversation machinery as World. What you send depends on its current state:
 
@@ -84,6 +96,8 @@ A direct conversation is the person's actual Pi session. Its transcript, streame
 | Working | Redirect now, Tell it after this, or Stop with confirmation |
 | Asking you | Answer the structured question; terminal-only questions say so |
 | Sleeping or retained former history | Read-only history |
+
+The DM header's [person menu](#person-actions) also exposes Send home, Call in and eligible permanent departure without leaving the conversation.
 
 **Tool calls off** shows only written assistant/user text. Thoughts, calls/results, mail, notifications and historical diagnostics remain in the underlying history and are available with details on. Current operation failures still appear where you can act on them. The compact activity line shows tool detail only while a tool actually runs; a retained old command is not current activity.
 
@@ -134,6 +148,12 @@ Use the file-search action or Cmd+P/Ctrl+P while Code is active for **Quick Open
 Use **Save** or Cmd+S/Ctrl+S to write the selected file. Saves compare the disk version with the version you read. If another process changed it, saving is blocked and your draft stays intact. **Review disk version** shows the competing content. **Keep my draft** accepts that reviewed disk version as the comparison base while retaining your text; it writes nothing. A later **Save** can replace that version, but still refuses any newer disk change. **Discard draft and use disk version** instead replaces the draft with the reviewed content. A refresh or focus check can load disk changes when the buffer is clean. Symlink/path checks keep access within the chosen workspace, and saving through a symlink is refused. The editor handles existing text files; its controls do not create or delete files.
 
 The **Repository changes** panel is read-only Git status and diff inspection: staged, unstaged and untracked paths, with explicit refresh. Git inspection requires the repository's top-level directory. It does not stage, commit, discard, push or execute arbitrary commands.
+
+### File references
+
+Recognized local file paths in DMs, mail and task-history views receive a subtle wavy underline once the file is validated. Activate one to open it in Code, retaining existing editor buffers and drafts. A file opened from task history closes that modal and moves focus to the editor. Normal web links keep their existing behavior. Inline-code and quoted paths can contain spaces; surrounding quote or backtick delimiters remain unchanged.
+
+Absolute paths and `~/` paths do not depend on Code's currently selected repository. Relative paths need an explicit source working directory, such as the DM person's directory or a task's project; unknown or ambiguous contexts stay plain text. Relative paths remain inside that directory. Conventional `:line[:column]` references select that editor location, while a real filename containing the suffix takes precedence. Validation checks regular files and containment without reading their contents or crawling directories; content is read only after activation. A file removed afterward produces the existing Code read error.
 
 ### Embedded terminal
 

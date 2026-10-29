@@ -3,6 +3,7 @@ import type { Character, WorldSnapshot } from "../src/world.js";
 import { organizationName, useWorkplaceNames } from "./workplace-names.js";
 import { OrgNameEditor } from "./workplace-org-name.js";
 import { PersonAvatar, sessionStatus } from "./workplace-people.js";
+import { usePersonMenu } from "./workplace-person-actions.js";
 import { WorkHistory } from "./workplace-work-history.js";
 import "./workplace-org-chart.css";
 
@@ -62,6 +63,7 @@ export function OrgChart({
 	addPerson: (manager: string) => void;
 }) {
 	useWorkplaceNames();
+	const personMenu = usePersonMenu();
 	const [collapsed, setCollapsed] = useState(new Set<string>());
 	const [dragged, setDragged] = useState<string>();
 	const [zoom, setZoom] = useState(1);
@@ -312,6 +314,8 @@ export function OrgChart({
 										<fieldset
 											key={id}
 											aria-label={`${person.character.name}'s branch`}
+											tabIndex={-1}
+											onContextMenu={(event) => personMenu(event, id)}
 											className={`wp-org-tree-node${selected === id ? " wp-org-selected" : ""}${person.home ? " wp-org-home" : ""}${canDrop(person) ? " wp-org-drop-target" : ""}`}
 											style={{ left: x, top: y, width: CARD_WIDTH, height: CARD_HEIGHT }}
 											{...dragProps(person)}
@@ -320,6 +324,8 @@ export function OrgChart({
 												type="button"
 												className="wp-org-person"
 												aria-label={`View profile: ${person.character.name}`}
+												onContextMenu={(event) => personMenu(event, id)}
+												onKeyDown={(event) => personMenu(event, id)}
 												onClick={(event) => select(id, event.currentTarget)}
 											>
 												{identity(person)}

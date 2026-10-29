@@ -1,0 +1,18 @@
+.wp-app .wp-file-reference {
+	color: inherit;
+	text-decoration-line: underline;
+	text-decoration-style: wavy;
+	text-decoration-color: var(--wp-muted);
+	text-underline-offset: 3px;
+	cursor: pointer;
+}
+
+.wp-app .wp-file-reference:hover {
+	text-decoration-color: currentColor;
+}
+
+.wp-app .wp-file-reference:focus-visible {
+	outline: 2px solid var(--wp-accent);
+	outline-offset: 3px;
+	border-radius: 2px;
+}

@@ -25,10 +25,23 @@ type Person = { character: Character; parent: string | null; home: boolean };
 type Move = { person: string; manager: string | null; branch: string[] };
 const api = window.agentWorld;
 
-function descendants(id: string, parents: Map<string, string | null>): string[] {
+export function descendants(id: string, parents: Map<string, string | null>): string[] {
 	const found = new Set([id]);
 	for (const current of found) for (const [child, parent] of parents) if (parent === current) found.add(child);
 	return [...found];
+}
+
+export function orgPeople(world: WorldSnapshot): Person[] {
+	return [
+		...world.characters
+			.filter((character) => !character.facts?.temporary)
+			.map((character) => ({ character, parent: character.facts?.reportsTo ?? null, home: false })),
+		...(world.dormant ?? [])
+			.filter(
+				(person) => !person.temporary && !person.retiredAt && !world.characters.some((awake) => awake.id === person.id),
+			)
+			.map((person) => ({ character: sleeperCharacter(person), parent: person.reportsTo, home: true })),
+	];
 }
 
 // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Owns the retained plan, profile and recruitment panels across navigation and startup receipts.
@@ -63,16 +76,7 @@ export function Org({
 	const [started, setStarted] = useState(false);
 	const [result, setResult] = useState<OrgStartProgress>();
 	const trigger = useRef<HTMLElement | null>(null);
-	const people: Person[] = [
-		...world.characters
-			.filter((character) => !character.facts?.temporary)
-			.map((character) => ({ character, parent: character.facts?.reportsTo ?? null, home: false })),
-		...(world.dormant ?? [])
-			.filter(
-				(person) => !person.temporary && !person.retiredAt && !world.characters.some((awake) => awake.id === person.id),
-			)
-			.map((person) => ({ character: sleeperCharacter(person), parent: person.reportsTo, home: true })),
-	];
+	const people = orgPeople(world);
 	const parents = new Map(people.map((person) => [person.character.id, person.parent]));
 	const person = people.find((candidate) => candidate.character.id === selected);
 	const currentPosition = draft?.positions.find((candidate) => candidate.id === position);

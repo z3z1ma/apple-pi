@@ -32,8 +32,8 @@ export function WorkplaceMenuProvider({ children }: { children: ReactNode }) {
 		const trigger = event.currentTarget;
 		const box = trigger.getBoundingClientRect();
 		setMenu({
-			x: "clientX" in event ? event.clientX : box.left,
-			y: "clientY" in event ? event.clientY : box.bottom,
+			x: event.type === "contextmenu" && "clientX" in event ? event.clientX : box.left,
+			y: event.type === "contextmenu" && "clientY" in event ? event.clientY : box.bottom,
 			trigger,
 			items,
 		});

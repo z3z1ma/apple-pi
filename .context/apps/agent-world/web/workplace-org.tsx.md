@@ -1,3 +1,10 @@
+## symbol:orgPeople
+
+This is the existing Org roster selector shared with Chat's VIPs placement, not a second roster policy. Awake identities take precedence over duplicate dormant rows, and temporary/former dormant people stay outside the lasting tree. Chat combines this roster with the existing descendants helper and the chart's visible-root boundary; it counts nested/home members without changing reporting. Keep eligibility/filter semantics coupled when either view evolves.
+Why: counting all awake sessions or direct reports alone would disagree with the actual Org chart and would incorrectly promote temporary peers or undersize an organization whose people are at home.
+Coupled: apps/agent-world/web/workplace.tsx, apps/agent-world/web/workplace-org-chart.tsx
+Verify: apps/agent-world/tests/world-lifecycle.test.ts, apps/agent-world/tests/world-org.test.ts
+
 ## symbol:Org
 
 Org keeps one plan and the actual world snapshot separate. A role position is a proposal, never a person; Start team returns actual session identities that are retained on every retry. Only explicit backend editable=true unlocks a rejected plan: a missing visible person alone cannot prove that no launch/goal/move was recorded.

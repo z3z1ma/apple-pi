@@ -17,6 +17,10 @@ Why: direct-card CSS selectors supply flexible summary height and the two-line p
 The overview avatar opens the head's profile through the ChatPeople provider supplied by Org, preserving the clicked trigger for focus restoration. Keep that provider when embedding the chart.
 Why: PersonAvatar becomes decorative without its provider. Removing the repeated Head button must preserve an accessible profile action rather than only remove text.
 
+Actual people in the focused tree have right-click lifecycle actions on the branch card and Shift+F10/ContextMenu on the primary profile button. Shared menu opening prevents profile selection and reads; normal click/drag/report toggling remains unchanged. Organization overview names keep their separate work/Rename actions; their avatar's ordinary profile route exposes the same named lifecycle ellipsis. OrgChart therefore needs the surrounding WorkplacePersonActions owner as well as ChatPeople.
+Coupled: apps/agent-world/web/workplace-person-actions.tsx
+Verify: apps/agent-world/tests/world-lifecycle.test.ts
+
 Add person stays visible in every card footer, disabled by the managing-role/awake guards with a reason title. Visibility never grants permission.
 Why: a missing action looked inconsistent across equal cards; a disabled action explains the actual limit without allowing an unavailable head to recruit.
 Coupled: apps/agent-world/web/workplace-names.ts, apps/agent-world/web/workplace-org-name.tsx, apps/agent-world/web/workplace-org-chart.css, apps/agent-world/web/workplace-org.tsx, apps/agent-world/web/workplace-people.tsx, apps/agent-world/web/workplace-work-history.tsx

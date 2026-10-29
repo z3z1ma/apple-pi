@@ -1,6 +1,8 @@
 ## symbol:Markdown
 
-The same escaped Markdown renderer serves session replies and team-channel messages. Channels supply a link callback that prevents navigation and delegates to the main process; session replies keep the transcript's existing outer click handler. Reuse includes that surrounding event boundary: ordinary clicks, keyboard activation, and middle-clicks must reach the bridge without navigating the window. Raw tags and remote images remain inert, and relative files use only the author's known directory, never a different participant's.
+The same escaped Markdown renderer serves session replies, task bodies and team-channel messages. Workplace's FileReferenceNavigation context adds stat-validated local-file anchors and consumes their activation before older bridge handlers. External links keep the channel callback or transcript's outer handler. Without the navigation context, standalone World retains the original HTML and bridge behavior with no resolver work. Raw tags and remote images remain inert; decoration operates on sanitized DOM text, never raw HTML parsing by regex. Ordinary click, Enter and middle-click keep the window from navigating.
+
+Relative references require explicit source cwd; a historical mail block in a DM clears that context because its from field is only a display name, not a known author ID. It must not borrow the recipient's directory. Actual mail messages use their separately mapped exact-author cwd. Absolute references remain eligible when no relative origin exists.
 Why: a runtime channel is untrusted content just like a transcript. Sharing rendering must preserve the window's navigation and remote-content boundary.
 Coupled: apps/agent-world/web/workplace.tsx, apps/agent-world/web/overlay/conversation/markdown.ts
 Verify: apps/agent-world/tests/world-conversation.test.ts

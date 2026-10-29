@@ -2,6 +2,7 @@ import type { editor } from "monaco-editor";
 import { type KeyboardEvent, type MouseEvent, useCallback, useEffect, useRef, useState } from "react";
 import type { WorkspaceEntry, WorkspaceWorktree } from "../src/workspace.js";
 import type { WorldSnapshot } from "../src/world.js";
+import type { FileReferenceTarget } from "./file-reference-paths.js";
 import { useWorkplaceMenu } from "./workplace-context-menu.js";
 import { GitDiffText, type GitDiffView, GitPane } from "./workplace-git.js";
 import { Icon } from "./workplace-icon.js";
@@ -117,11 +118,13 @@ export function WorkplaceCode({
 	active,
 	onDirtyChange,
 	onTerminalCountChange,
+	fileRequest,
 }: {
 	world: WorldSnapshot;
 	active: boolean;
 	onDirtyChange?: (dirty: boolean) => void;
 	onTerminalCountChange?: (count: number) => void;
+	fileRequest?: FileReferenceTarget;
 }) {
 	const openMenu = useWorkplaceMenu();
 	const tabButtons = useRef(new Map<string, HTMLButtonElement>());
@@ -153,6 +156,9 @@ export function WorkplaceCode({
 	const container = useRef<HTMLDivElement>(null);
 	const instance = useRef<editor.IStandaloneCodeEditor | undefined>(undefined);
 	const openRequest = useRef(0);
+	const handledFileRequest = useRef<FileReferenceTarget | undefined>(undefined);
+	const [reveal, setReveal] = useState<{ key: string; line: number; column: number }>();
+	const revealed = useRef<typeof reveal>(undefined);
 	const savingRef = useRef(false);
 	const saveRef = useRef<() => void>(() => {});
 	const current = selected ? buffers.current.get(selected) : undefined;
@@ -311,8 +317,17 @@ export function WorkplaceCode({
 			});
 		}
 		instance.current.setModel(current.model);
-		if (active) instance.current.layout();
-	}, [current, loaded, active]);
+		if (active) {
+			instance.current.layout();
+			if (reveal && revealed.current !== reveal && reveal.key === selected) {
+				const position = current.model.validatePosition({ lineNumber: reveal.line, column: reveal.column });
+				instance.current.setPosition(position);
+				instance.current.revealPositionInCenter(position);
+				instance.current.focus();
+				revealed.current = reveal;
+			}
+		}
+	}, [current, loaded, active, reveal, selected]);
 
 	useEffect(() => {
 		let live = true;
@@ -395,35 +410,56 @@ export function WorkplaceCode({
 		return () => window.removeEventListener("focus", check);
 	}, [active, current, readBuffer]);
 
-	const openFile = async (path: string) => {
-		setDiff(undefined);
-		const repository = root;
-		const request = ++openRequest.current;
-		const key = fileKey(repository, path);
-		const existing = buffers.current.get(key);
-		setError(undefined);
-		setNotice(undefined);
-		if (existing) {
-			setBusy(false);
-			setSelected(key);
+	const openFile = useCallback(
+		async (path: string) => {
+			setDiff(undefined);
+			const repository = root;
+			const request = ++openRequest.current;
+			const key = fileKey(repository, path);
+			const existing = buffers.current.get(key);
+			setError(undefined);
+			setNotice(undefined);
+			if (existing) {
+				setBusy(false);
+				setSelected(key);
+				return true;
+			}
+			setBusy(true);
+			try {
+				const result = await api.workspace.readFile({ root: repository, path });
+				if (request !== openRequest.current || repository !== rootRef.current) return false;
+				if (!result.ok) {
+					setError(result.reason);
+					return;
+				}
+				buffers.current.set(key, { root: repository, path, text: result.text, base: result.text, hash: result.hash });
+				setSelected(key);
+				return true;
+			} catch (reason) {
+				if (request === openRequest.current) setError(String(reason));
+			} finally {
+				if (request === openRequest.current) setBusy(false);
+			}
+		},
+		[root],
+	);
+
+	useEffect(() => {
+		if (!fileRequest || handledFileRequest.current === fileRequest) return;
+		if (root !== fileRequest.root) {
+			setRoot(fileRequest.root);
 			return;
 		}
-		setBusy(true);
-		try {
-			const result = await api.workspace.readFile({ root: repository, path });
-			if (request !== openRequest.current || repository !== rootRef.current) return;
-			if (!result.ok) {
-				setError(result.reason);
-				return;
-			}
-			buffers.current.set(key, { root: repository, path, text: result.text, base: result.text, hash: result.hash });
-			setSelected(key);
-		} catch (reason) {
-			if (request === openRequest.current) setError(String(reason));
-		} finally {
-			if (request === openRequest.current) setBusy(false);
-		}
-	};
+		handledFileRequest.current = fileRequest;
+		void openFile(fileRequest.path).then((opened) => {
+			if (!opened || handledFileRequest.current !== fileRequest) return;
+			setReveal({
+				key: fileKey(fileRequest.root, fileRequest.path),
+				line: fileRequest.line ?? 1,
+				column: fileRequest.column ?? 1,
+			});
+		});
+	}, [fileRequest, root, openFile]);
 
 	const save = async () => {
 		if (!current || savingRef.current || current.text === current.base || current.external) return;

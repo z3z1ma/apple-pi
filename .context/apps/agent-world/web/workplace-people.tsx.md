@@ -5,9 +5,9 @@ Why: a familiar chat author must still point at the runtime's actual session, an
 Coupled: apps/agent-world/web/workplace.tsx, apps/agent-world/web/overlay/conversation/conversation-panel.tsx
 Verify: apps/agent-world/tests/world-conversation.test.ts
 
-Profiles consume snapshot observations and the World examine card's fact rows, with full Self fetched only on opening through the profile IPC. Opening one neither reads a transcript nor marks a result seen; Message opens the ordinary DM reader. Dormant adapters contain a placeholder cost, so the profile omits that value while retaining the observed role title. Current commands stay in the lower DM activity line, so profiles use compact status and omit the detailed Doing row. Profiles unmount while Chat is hidden. Chat owns the exact clicked avatar's focus target, including replacement of an already-open profile; component cleanup must not restore an older trigger during that replacement.
-Why: viewing a person differs from entering their conversation, and World actions such as retirement do not belong in a chat profile.
-Coupled: apps/agent-world/web/overlay/interface/character-card.tsx
+Profiles consume snapshot observations and the World examine card's fact rows, with full Self fetched only on opening through the profile IPC. Opening one neither reads a transcript nor marks a result seen; Message opens the ordinary DM reader. Dormant adapters contain a placeholder cost, so the profile omits that value while retaining the observed role title. Current commands stay in the lower DM activity line, so profiles use compact status and omit the detailed Doing row. Chat profiles unmount while Chat is hidden. Chat owns the exact clicked avatar's focus target, including replacement of an already-open profile; component cleanup must not restore an older trigger during that replacement.
+Why: viewing a person differs from entering their conversation. The named profile ellipsis delegates explicit lifecycle choices to WorkplacePersonActions; opening the observational profile remains separate from taking such an action. The existing Close control/focus target stays independent from that menu.
+Coupled: apps/agent-world/web/overlay/interface/character-card.tsx, apps/agent-world/web/workplace-person-actions.tsx
 Verify: apps/agent-world/tests/world-conversation.test.ts
 
 Root/coordinator profiles offer the device-local OrgNameEditor between Message and work history. This is display metadata only, not a person rename or a capability grant; temporary/former people are excluded.

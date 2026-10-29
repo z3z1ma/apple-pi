@@ -1,5 +1,10 @@
 ## file
 
+File-reference navigation supplies an immutable fileRequest with backend-validated root/path and optional positive line/column. Code selects that root before using the existing guarded openFile path, retains all other buffers/models, and reveals/focuses the clamped position once the target model exists and Code is visible. Each request is consumed once; later repository changes must not reopen it. The same literal file without a location opens at the start. Missing/deleted files show the existing Code read error rather than an external-open fallback. Decoration itself never reads file contents.
+Why: a first-visit file activation can arrive before repository selection, Monaco loading and model creation complete. Applying focus or caret position earlier loses that navigation; replaying it on later root changes overrides the user's next action.
+Coupled: apps/agent-world/web/file-references.tsx, apps/agent-world/web/file-reference-paths.ts
+Verify: apps/agent-world/tests/world-file-links.test.ts
+
 The shell keeps Code mounted after its first visit and passes visibility through `active`. Its dirty callback covers retained buffers in every repository, not only the selected file. The shell owns renderer unload prevention through that aggregate dirty callback; native confirmation belongs to Electron's `will-prevent-unload` handler. Both layers follow that single confirmation path.
 Why: unmounting on application navigation discards unsaved drafts and worker/model ownership. Reporting only the selected file as dirty lets World navigation lose drafts from a different repository. A separate renderer confirmation would duplicate the native leave decision.
 
