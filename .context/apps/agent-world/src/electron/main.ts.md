@@ -33,6 +33,14 @@ The embedded entry reuses the parent's preload API before loading World. Validat
 Coupled: apps/agent-world/web/entry.ts, apps/agent-world/web/workplace.tsx, apps/agent-world/web/workplace-world.tsx, apps/agent-world/src/electron/terminal-ipc.ts
 Verify: apps/agent-world/scripts/workplace-electron-check.mjs
 
+world:call-in validates the explicit request shape and delegates to lifecycle's recorded-chain checks. It stays separate from world:wake, whose original World semantics call only the selected sleeper. Renderer confirmation is not authority to start additional people beyond the confirmed ids.
+Coupled: apps/agent-world/src/call-in.ts, apps/agent-world/src/backend/call-in.ts, apps/agent-world/src/backend/lifecycle.ts
+Verify: apps/agent-world/tests/call-in.test.ts
+
+workspace:resolve-paths validates the candidate list/source cwd and explicitly forwards only those fields. It belongs to the workspace API, independent of the currently selected Code root; backend path validation remains authoritative. The preload uses this same channel, not the world-prefixed lifecycle collection.
+Coupled: apps/agent-world/src/workspace.ts, apps/agent-world/src/backend/workspace.ts, apps/agent-world/src/electron/preload.ts
+Verify: apps/agent-world/tests/workspace-backend.test.ts
+
 Workspace IPC validates payload shapes before filesystem operations; it intentionally accepts manual directory roots for the operator's Code editor. This authority is separate from transcript link opening. Only save-file writes and requires an existing file plus its base hash; Git endpoints are read-only.
 Why: editor-selected roots intentionally grant broader local filesystem access than links embedded in untrusted conversation content, so the two entry paths must retain separate validation rules.
 Coupled: apps/agent-world/src/workspace.ts, apps/agent-world/src/backend/workspace.ts, apps/agent-world/src/electron/preload.ts

@@ -22,8 +22,16 @@ import { listThemes, themeBackdrop } from "../backend/theme-packs.js";
 import { openWorkplace } from "../backend/workplace.js";
 import { openWorkspace } from "../backend/workspace.js";
 import { leaveOutUnchanged, openWorldBackend } from "../backend/world-backend.js";
+import { isCallInRequest } from "../call-in.js";
 import { isOrgMoveRequest, isOrgStartRequest } from "../org.js";
-import { isWorkspaceDiff, isWorkspacePath, isWorkspaceRoot, isWorkspaceSave, type WorkspaceApi } from "../workspace.js";
+import {
+	isWorkspaceDiff,
+	isWorkspacePath,
+	isWorkspaceResolvePaths,
+	isWorkspaceRoot,
+	isWorkspaceSave,
+	type WorkspaceApi,
+} from "../workspace.js";
 import { wireIntegrations } from "./integrations-ipc.js";
 import { wireTerminals } from "./terminal-ipc.js";
 
@@ -71,6 +79,11 @@ function wireWorkspace(workspace: WorkspaceApi) {
 	);
 	ipcMain.handle("workspace:worktrees", (_event, request: unknown) =>
 		isWorkspaceRoot(request) ? workspace.worktrees(request) : invalid,
+	);
+	ipcMain.handle("workspace:resolve-paths", (_event, request: unknown) =>
+		isWorkspaceResolvePaths(request)
+			? workspace.resolvePaths({ paths: request.paths, ...(request.cwd !== undefined ? { cwd: request.cwd } : {}) })
+			: invalid,
 	);
 	ipcMain.handle("workspace:tree", (_event, request: unknown) =>
 		isWorkspacePath(request) ? workspace.tree(request) : invalid,
@@ -167,6 +180,11 @@ function start() {
 	const unnamed = { ok: false, reason: "No character was named." };
 	ipcMain.handle("world:wake", (_event, characterId: unknown) =>
 		typeof characterId === "string" ? lifecycle.wake(characterId) : unnamed,
+	);
+	ipcMain.handle("world:call-in", (_event, request: unknown) =>
+		isCallInRequest(request)
+			? lifecycle.callIn(request)
+			: { ok: false, people: [], reason: "A valid confirmed call-in is required." },
 	);
 	ipcMain.handle("world:end-session", (_event, characterId: unknown, confirmed: unknown) =>
 		typeof characterId === "string" ? lifecycle.endSession(characterId, confirmed === true) : unnamed,

@@ -7,9 +7,9 @@ import { createHash, randomUUID } from "node:crypto";
 import { createConnection } from "node:net";
 import { spawn } from "@lydell/node-pty";
 import { DatabaseSync } from "node:sqlite";
+import "@earendil-works/pi-coding-agent";
 import { execFile, spawn as spawn$1 } from "node:child_process";
 import { promisify } from "node:util";
-import "@earendil-works/pi-coding-agent";
 import { inflateSync } from "node:zlib";
 //#region components/session-state/src/paths.ts
 /** Pi's own rule for `PI_CODING_AGENT_DIR`: a leading `~` means the home directory. */
@@ -782,6 +782,52 @@ async function instruct(commands, character, commandId, instruction, onReceipt) 
 	return result;
 }
 //#endregion
+//#region components/shared/src/ledger-files.ts
+var LIVE_STATUSES = [
+	"planning",
+	"ready",
+	"in-progress"
+];
+var CLOSED_STATUSES = ["done", "cancelled"];
+[...LIVE_STATUSES, ...CLOSED_STATUSES];
+//#endregion
+//#region components/session-state/src/departures.ts
+/** A permanent identity fact, not a claim that process and filesystem cleanup has finished. */
+function departureOf(db, person) {
+	const row = db.prepare("select data from events where session_id = ? and type = 'person_departed' order by seq desc limit 1").get(person);
+	return row ? JSON.parse(row.data) : void 0;
+}
+/** A participant's display name: its session name, else its id; the operator is "the operator". */
+function nameOf$1(db, id) {
+	if (id === "operator") return "the operator";
+	if (id === "harness") return "the harness";
+	return db.prepare("select name from sessions where id = ?").get(id)?.name || departureOf(db, id)?.name || id;
+}
+//#endregion
+//#region components/session-state/src/valuation.ts
+var AMOUNT = String.raw`\$([\d.eE+-]+)`;
+new RegExp(String.raw`^Value:\s*${AMOUNT}(?:\s*\(estimated by (.+)\))?\s*$`, "m");
+new RegExp(String.raw`^Cost of delay:\s*${AMOUNT}\s*/\s*(hour|day)\s*$`, "m");
+//#endregion
+//#region components/session-state/src/program-peers.ts
+/** Temporary identity survives person/launch cleanup; a discarded legacy caller may be unknown. */
+function temporaryCallers(db) {
+	const callers = /* @__PURE__ */ new Map();
+	for (const row of db.prepare("select session_id, type, data from events where type in ('program_peer_created', 'program_peer_observed', 'person_discarded') order by seq").all()) {
+		const caller = row.type === "person_discarded" ? null : JSON.parse(row.data ?? "{}").caller;
+		if (!callers.has(row.session_id)) callers.set(row.session_id, typeof caller === "string" ? caller : null);
+	}
+	for (const row of db.prepare("select session_id, created_by from program_peers").all()) if (!callers.has(row.session_id)) callers.set(row.session_id, row.created_by);
+	return callers;
+}
+//#endregion
+//#region apps/agent-world/src/call-in.ts
+function isCallInRequest(value) {
+	if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+	const request = value;
+	return typeof request.id === "string" && request.id.trim().length > 0 && typeof request.person === "string" && request.person.trim().length > 0 && Array.isArray(request.expected) && request.expected.length > 0 && request.expected.every((id) => typeof id === "string" && id.trim().length > 0) && new Set(request.expected).size === request.expected.length && request.expected.includes(request.person);
+}
+//#endregion
 //#region apps/agent-world/src/backend/facts.ts
 /**
 * The facts columns for the current incarnation. A runtime predating explicit work has no focused task;
@@ -1039,26 +1085,217 @@ async function operatorPane(path) {
 	} : void 0;
 }
 //#endregion
-//#region components/shared/src/ledger-files.ts
-var LIVE_STATUSES = [
-	"planning",
-	"ready",
-	"in-progress"
-];
-var CLOSED_STATUSES = ["done", "cancelled"];
-[...LIVE_STATUSES, ...CLOSED_STATUSES];
-//#endregion
-//#region components/session-state/src/departures.ts
-/** A permanent identity fact, not a claim that process and filesystem cleanup has finished. */
-function departureOf(db, person) {
-	const row = db.prepare("select data from events where session_id = ? and type = 'person_departed' order by seq desc limit 1").get(person);
-	return row ? JSON.parse(row.data) : void 0;
+//#region apps/agent-world/src/backend/call-in.ts
+var awake = (person) => person.started_at !== null && person.ended_at === null && person.process_state === "alive";
+var ready$1 = (person) => ({
+	person: person.id,
+	state: person.run_state === "idle" ? "ready" : "active"
+});
+var prefix = (id, person) => `call-in:${encodeURIComponent(id)}:${encodeURIComponent(person)}:`;
+var reasonOf = (error) => error instanceof Error ? error.message : String(error);
+function personIn(db, id) {
+	return db.prepare(`select s.id, s.reports_to, s.retired_at, s.run_state,
+		i.started_at, i.ended_at, i.process_state from sessions s left join incarnations i
+		on i.session_id = s.id and i.generation = s.generation where s.id = ? and s.kind = 'root'`).get(id);
 }
-/** A participant's display name: its session name, else its id; the operator is "the operator". */
-function nameOf$1(db, id) {
-	if (id === "operator") return "the operator";
-	if (id === "harness") return "the harness";
-	return db.prepare("select name from sessions where id = ?").get(id)?.name || departureOf(db, id)?.name || id;
+function consent(people, expected) {
+	const extra = people.find((person) => !awake(person) && !expected.includes(person.id));
+	if (extra) throw new Error(`The preview changed: ${extra.id} would also be called in. Review it again.`);
+}
+function chain(db, request) {
+	const temporary = temporaryCallers(db);
+	const people = [];
+	const visited = /* @__PURE__ */ new Set();
+	let id = request.person;
+	while (id) {
+		if (visited.has(id)) throw new Error("The reporting chain contains a cycle.");
+		visited.add(id);
+		const person = personIn(db, id);
+		if (!person) throw new Error(`The reporting chain is missing ${id}.`);
+		if (person.retired_at !== null || departureOf(db, id)) throw new Error(`Former person ${id} cannot be called in.`);
+		if (temporary.has(id)) throw new Error(`Temporary person ${id} cannot be called in.`);
+		people.push(person);
+		id = person.reports_to;
+	}
+	if (request.expected.some((expected) => !visited.has(expected))) throw new Error("The reporting chain changed. Review the call-in preview again.");
+	return people.reverse();
+}
+function starts(db, person) {
+	return db.prepare("select command_id, stage, reason from commands where session_id = ? and kind = 'start' order by created_at, rowid").all(person);
+}
+function unsettled(person, history) {
+	if (awake(person)) return;
+	const pending = history.findLast((start) => start.stage === "accepted" || start.stage === "delivered");
+	if (pending) return {
+		person: person.id,
+		state: "uncertain",
+		stage: pending.stage,
+		commandId: pending.command_id,
+		reason: "A previous start has not reconciled. Wait for it or inspect its receipt before retrying."
+	};
+	if (person.started_at !== null && person.ended_at === null) return {
+		person: person.id,
+		state: "uncertain",
+		reason: "The current process has lost its bridge; reconcile it before another start."
+	};
+}
+function openCallIn(path, wake) {
+	const running = /* @__PURE__ */ new Map();
+	const read = (operation) => {
+		const db = new DatabaseSync(path, { readOnly: true });
+		try {
+			return operation(db);
+		} finally {
+			db.close();
+		}
+	};
+	async function execute(request) {
+		let people = request.expected.map((person) => ({
+			person,
+			state: "blocked"
+		}));
+		const complete = (ok, reason) => {
+			const joined = people.filter((person) => person.state === "ready" || person.state === "active");
+			try {
+				if (joined.length) read((db) => {
+					for (const outcome of joined) {
+						const current = personIn(db, outcome.person);
+						if (current && current.retired_at === null && awake(current)) Object.assign(outcome, ready$1(current));
+						else Object.assign(outcome, {
+							state: "uncertain",
+							reason: "The person is no longer connected."
+						});
+					}
+				});
+			} catch (error) {
+				for (const outcome of joined) Object.assign(outcome, {
+					state: "uncertain",
+					reason: reasonOf(error)
+				});
+			}
+			const uncertain = joined.find((person) => person.state === "uncertain");
+			return {
+				ok: ok && !uncertain,
+				people,
+				...reason || uncertain ? { reason: reason ?? uncertain?.reason } : {}
+			};
+		};
+		const reject = (reason) => complete(false, reason);
+		try {
+			const original = read((db) => chain(db, request));
+			people = read((db) => original.filter((person) => request.expected.includes(person.id)).map((person) => {
+				const previous = starts(db, person.id).filter((start) => start.command_id.startsWith(prefix(request.id, person.id))).at(-1);
+				return {
+					...awake(person) ? ready$1(person) : {
+						person: person.id,
+						state: "blocked"
+					},
+					...previous ? {
+						commandId: previous.command_id,
+						stage: previous.stage
+					} : {}
+				};
+			}));
+			const uncertainty = read((db) => original.map((person) => unsettled(person, starts(db, person.id))).find(Boolean));
+			if (uncertainty) {
+				people = people.map((person) => person.person === uncertainty.person ? uncertainty : person);
+				return reject(uncertainty.reason);
+			}
+			consent(original, request.expected);
+			if (original.every(awake)) return complete(true);
+			const pane = await operatorPane(path);
+			if (!pane) return reject("No terminal is attached to tmux, so there is nowhere to open these sessions.");
+			for (const outcome of people) {
+				const current = read((db) => chain(db, request));
+				consent(current, request.expected);
+				if (current.map((person) => person.id).join("\0") !== original.map((person) => person.id).join("\0")) return reject("Reporting changed during call-in. Review the preview again.");
+				const index = current.findIndex((person) => person.id === outcome.person);
+				const person = current[index];
+				if (current.slice(0, index).some((parent) => !awake(parent))) return reject("A manager is no longer connected. Remaining people were not called in.");
+				if (awake(person)) {
+					Object.assign(outcome, ready$1(person));
+					continue;
+				}
+				const history = read((db) => starts(db, person.id));
+				const uncertain = unsettled(person, history);
+				if (uncertain) {
+					Object.assign(outcome, uncertain);
+					return reject(uncertain.reason);
+				}
+				const attempts = history.filter((start) => start.command_id.startsWith(prefix(request.id, person.id)));
+				const completed = attempts.find((start) => start.stage === "applied");
+				if (completed) {
+					Object.assign(outcome, {
+						state: "uncertain",
+						stage: completed.stage,
+						commandId: completed.command_id,
+						reason: "This call-in already completed, but the person has since stopped. Start a new call-in request."
+					});
+					return reject(outcome.reason);
+				}
+				const commandId = `${prefix(request.id, person.id)}${attempts.length + 1}`;
+				Object.assign(outcome, {
+					commandId,
+					state: "uncertain",
+					reason: "The start has not reconciled yet."
+				});
+				let receipt;
+				try {
+					receipt = await wake(person.id, commandId, pane);
+				} catch (error) {
+					receipt = {
+						ok: false,
+						reason: reasonOf(error)
+					};
+				}
+				const latest = read((db) => ({
+					person: personIn(db, person.id),
+					record: starts(db, person.id).find((start) => start.command_id === commandId)
+				}));
+				const stage = latest.record?.stage ?? (receipt.ok ? receipt.stage : void 0);
+				if (latest.person && awake(latest.person)) Object.assign(outcome, ready$1(latest.person), {
+					stage,
+					reason: void 0
+				});
+				else {
+					Object.assign(outcome, {
+						state: stage === "failed" ? "failed" : "uncertain",
+						stage,
+						reason: latest.record?.reason ?? (receipt.ok ? "No connected incarnation is visible after this start." : receipt.reason)
+					});
+					return reject(outcome.reason);
+				}
+			}
+			return complete(true);
+		} catch (error) {
+			return reject(reasonOf(error));
+		}
+	}
+	return (input) => {
+		if (!isCallInRequest(input)) return Promise.resolve({
+			ok: false,
+			people: [],
+			reason: "A call-in identity, selected person and confirmed people are required."
+		});
+		const request = {
+			id: input.id,
+			person: input.person,
+			expected: [...input.expected]
+		};
+		const signature = JSON.stringify([request.person, [...request.expected].sort()]);
+		const previous = running.get(request.id);
+		if (previous) return previous.signature === signature ? previous.result : Promise.resolve({
+			ok: false,
+			people: [],
+			reason: "This call-in is already running with a different preview."
+		});
+		const result = execute(request).finally(() => running.delete(request.id));
+		running.set(request.id, {
+			signature,
+			result
+		});
+		return result;
+	};
 }
 function openMailbox(path, commands) {
 	const send = async (command) => {
@@ -1250,7 +1487,7 @@ var isDirectory = (path) => {
 	}
 };
 /** Send `command` and resolve at the first stage `enough` accepts, or with the last stage reached after `ms`. */
-function follow(commands, sessionId, command, ms, enough, late) {
+function follow(commands, sessionId, command, ms, enough, late, commandId) {
 	return new Promise((resolve) => {
 		let last;
 		let done = false;
@@ -1268,17 +1505,20 @@ function follow(commands, sessionId, command, ms, enough, late) {
 				note: late(last.stage)
 			});
 		}, ms);
-		commands.send(sessionId, command, { onReceipt(stage, reason) {
-			last = {
-				stage,
-				reason
-			};
-			if (stage !== "failed" && enough(stage, reason)) settle({
-				ok: true,
-				stage,
-				...reason ? { note: reason } : {}
-			});
-		} }).then((result) => settle(result.ok ? {
+		commands.send(sessionId, command, {
+			commandId,
+			onReceipt(stage, reason) {
+				last = {
+					stage,
+					reason
+				};
+				if (stage !== "failed" && enough(stage, reason)) settle({
+					ok: true,
+					stage,
+					...reason ? { note: reason } : {}
+				});
+			}
+		}).then((result) => settle(result.ok ? {
 			ok: true,
 			stage: "applied"
 		} : {
@@ -1289,6 +1529,10 @@ function follow(commands, sessionId, command, ms, enough, late) {
 }
 function openLifecycle(paths, commands, snapshot) {
 	return {
+		callIn: openCallIn(paths.db, (person, commandId, tmux) => follow(commands, person, {
+			kind: "start",
+			tmux
+		}, WAKE_MS, (stage) => stage === "applied", (stage) => `Call-in is ${stage}; a connected incarnation has not been confirmed.`, commandId)),
 		async wake(characterId) {
 			const world = snapshot();
 			const sleeper = world.dormant?.find((agent) => agent.id === characterId);
@@ -4039,10 +4283,13 @@ var failure = (error) => ({
 	ok: false,
 	reason: error instanceof Error ? error.message : String(error)
 });
-function within(root, path) {
+function inside(root, path) {
 	const rel = relative(root, path);
-	if (isAbsolute(rel) || rel === ".." || rel.startsWith(`..${sep}`)) throw new Error("The path is outside the workspace root.");
-	if (rel.split(sep).includes(".git")) throw new Error("Git metadata is not available in the file editor.");
+	return !isAbsolute(rel) && rel !== ".." && !rel.startsWith(`..${sep}`);
+}
+function within(root, path) {
+	if (!inside(root, path)) throw new Error("The path is outside the workspace root.");
+	if (relative(root, path).split(sep).includes(".git")) throw new Error("Git metadata is not available in the file editor.");
 }
 function directory(root) {
 	if (!isAbsolute(root)) throw new Error("Choose an absolute workspace directory.");
@@ -4062,6 +4309,42 @@ function locate(request) {
 		root,
 		path,
 		named
+	};
+}
+function referenceRoot(named, parent, source) {
+	if (!source) return parent;
+	if (inside(source, parent)) return source;
+	for (let at = dirname(named);; at = dirname(at)) {
+		if (realpathSync(at) === source) return source;
+		if (dirname(at) === at) return parent;
+	}
+}
+function resolveReference(candidate, source) {
+	if (!candidate || candidate.includes("\0") || candidate.startsWith("~") && !candidate.startsWith("~/")) return;
+	const spelling = candidate.startsWith("~/") ? join(homedir(), candidate.slice(2)) : candidate;
+	let request;
+	if (isAbsolute(spelling)) {
+		const named = resolve(spelling);
+		const parent = directory(dirname(named));
+		const file = join(parent, basename(named));
+		const root = referenceRoot(named, parent, source);
+		request = {
+			root,
+			path: relative(root, file)
+		};
+	} else {
+		if (!source) return;
+		request = {
+			root: source,
+			path: spelling
+		};
+	}
+	const at = locate(request);
+	if (!statSync(at.path).isFile()) return;
+	return {
+		candidate,
+		root: at.root,
+		path: relative(at.root, at.path)
 	};
 }
 function bytesAt(path) {
@@ -4254,6 +4537,18 @@ function save(request) {
 }
 function openWorkspace(snapshot) {
 	return {
+		resolvePaths: (request) => attempt(() => {
+			let source;
+			if (request.cwd !== void 0) try {
+				source = directory(request.cwd);
+			} catch {}
+			const files = [];
+			for (const candidate of new Set(request.paths)) try {
+				const file = resolveReference(candidate, source);
+				if (file) files.push(file);
+			} catch {}
+			return { files };
+		}),
 		repositories: () => attempt(async () => {
 			const world = snapshot();
 			const candidates = new Set([...world.characters.map((person) => person.facts?.cwd), ...(world.dormant ?? []).map((person) => person.cwd)].filter((cwd) => Boolean(cwd)));
@@ -4992,6 +5287,7 @@ function isOrgStartRequest(value) {
 //#endregion
 //#region apps/agent-world/src/workspace.ts
 var object = (value) => typeof value === "object" && value !== null;
+var isWorkspaceResolvePaths = (value) => object(value) && Array.isArray(value.paths) && value.paths.every((path) => typeof path === "string") && (value.cwd === void 0 || typeof value.cwd === "string");
 var isWorkspaceRoot = (value) => object(value) && typeof value.root === "string";
 var isWorkspacePath = (value) => isWorkspaceRoot(value) && "path" in value && typeof value.path === "string";
 var isWorkspaceSave = (value) => isWorkspacePath(value) && "text" in value && typeof value.text === "string" && "baseHash" in value && typeof value.baseHash === "string";
@@ -7136,6 +7432,10 @@ function wireWorkspace(workspace) {
 	ipcMain.handle("workspace:repositories", () => workspace.repositories());
 	ipcMain.handle("workspace:files", (_event, request) => isWorkspaceRoot(request) ? workspace.files(request) : invalid);
 	ipcMain.handle("workspace:worktrees", (_event, request) => isWorkspaceRoot(request) ? workspace.worktrees(request) : invalid);
+	ipcMain.handle("workspace:resolve-paths", (_event, request) => isWorkspaceResolvePaths(request) ? workspace.resolvePaths({
+		paths: request.paths,
+		...request.cwd !== void 0 ? { cwd: request.cwd } : {}
+	}) : invalid);
 	ipcMain.handle("workspace:tree", (_event, request) => isWorkspacePath(request) ? workspace.tree(request) : invalid);
 	ipcMain.handle("workspace:read-file", (_event, request) => isWorkspacePath(request) ? workspace.readFile(request) : invalid);
 	ipcMain.handle("workspace:save-file", (_event, request) => isWorkspaceSave(request) ? workspace.saveFile(request) : invalid);
@@ -7225,6 +7525,11 @@ function start() {
 		reason: "No character was named."
 	};
 	ipcMain.handle("world:wake", (_event, characterId) => typeof characterId === "string" ? lifecycle.wake(characterId) : unnamed);
+	ipcMain.handle("world:call-in", (_event, request) => isCallInRequest(request) ? lifecycle.callIn(request) : {
+		ok: false,
+		people: [],
+		reason: "A valid confirmed call-in is required."
+	});
 	ipcMain.handle("world:end-session", (_event, characterId, confirmed) => typeof characterId === "string" ? lifecycle.endSession(characterId, confirmed === true) : unnamed);
 	ipcMain.handle("world:send-mail", (_event, characterId, body) => typeof characterId === "string" && typeof body === "string" ? lifecycle.sendMail(characterId, body) : unnamed);
 	ipcMain.handle("world:read-thread", (_event, thread) => typeof thread === "string" ? lifecycle.readThread(thread) : {

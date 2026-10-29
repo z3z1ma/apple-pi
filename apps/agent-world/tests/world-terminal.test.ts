@@ -91,6 +91,7 @@ async function openCode(startupQuery = false) {
 				},
 			};
 			const workspace: WorkspaceApi = {
+				resolvePaths: async () => ({ ok: true, files: [] }),
 				repositories: async () => ({ ok: true, roots: [root, `${root}-other`] }),
 				files: async ({ root }) => ({ ok: true, root, paths: ["main.ts"] }),
 				worktrees: async ({ root }) => ({ ok: true, root, worktrees: [] }),

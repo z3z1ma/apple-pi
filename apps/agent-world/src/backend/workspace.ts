@@ -14,11 +14,13 @@ import {
 	unlinkSync,
 	writeFileSync,
 } from "node:fs";
-import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { homedir } from "node:os";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import type {
 	WorkspaceApi,
 	WorkspaceGitEntry,
 	WorkspacePath,
+	WorkspaceResolvedPath,
 	WorkspaceResult,
 	WorkspaceSave,
 	WorkspaceWorktree,
@@ -30,11 +32,14 @@ const failure = (error: unknown) => ({
 	ok: false as const,
 	reason: error instanceof Error ? error.message : String(error),
 });
-function within(root: string, path: string) {
+function inside(root: string, path: string) {
 	const rel = relative(root, path);
-	if (isAbsolute(rel) || rel === ".." || rel.startsWith(`..${sep}`))
-		throw new Error("The path is outside the workspace root.");
-	if (rel.split(sep).includes(".git")) throw new Error("Git metadata is not available in the file editor.");
+	return !isAbsolute(rel) && rel !== ".." && !rel.startsWith(`..${sep}`);
+}
+function within(root: string, path: string) {
+	if (!inside(root, path)) throw new Error("The path is outside the workspace root.");
+	if (relative(root, path).split(sep).includes(".git"))
+		throw new Error("Git metadata is not available in the file editor.");
 }
 function directory(root: string) {
 	if (!isAbsolute(root)) throw new Error("Choose an absolute workspace directory.");
@@ -51,6 +56,32 @@ function locate(request: WorkspacePath) {
 	const path = realpathSync(named);
 	within(root, path);
 	return { root, path, named };
+}
+function referenceRoot(named: string, parent: string, source?: string) {
+	if (!source) return parent;
+	if (inside(source, parent)) return source;
+	for (let at = dirname(named); ; at = dirname(at)) {
+		if (realpathSync(at) === source) return source;
+		if (dirname(at) === at) return parent;
+	}
+}
+function resolveReference(candidate: string, source?: string): WorkspaceResolvedPath | undefined {
+	if (!candidate || candidate.includes("\0") || (candidate.startsWith("~") && !candidate.startsWith("~/"))) return;
+	const spelling = candidate.startsWith("~/") ? join(homedir(), candidate.slice(2)) : candidate;
+	let request: WorkspacePath;
+	if (isAbsolute(spelling)) {
+		const named = resolve(spelling);
+		const parent = directory(dirname(named));
+		const file = join(parent, basename(named));
+		const root = referenceRoot(named, parent, source);
+		request = { root, path: relative(root, file) };
+	} else {
+		if (!source) return;
+		request = { root: source, path: spelling };
+	}
+	const at = locate(request);
+	if (!statSync(at.path).isFile()) return;
+	return { candidate, root: at.root, path: relative(at.root, at.path) };
 }
 function bytesAt(path: string) {
 	if (!statSync(path).isFile()) throw new Error("Choose a regular file.");
@@ -233,6 +264,27 @@ function save(request: WorkspaceSave): WorkspaceResult<{ hash: string }> {
 
 export function openWorkspace(snapshot: () => WorldSnapshot): WorkspaceApi {
 	return {
+		resolvePaths: (request) =>
+			attempt(() => {
+				let source: string | undefined;
+				if (request.cwd !== undefined) {
+					try {
+						source = directory(request.cwd);
+					} catch {
+						/* Unavailable source context leaves only explicit absolute references resolvable. */
+					}
+				}
+				const files: WorkspaceResolvedPath[] = [];
+				for (const candidate of new Set(request.paths)) {
+					try {
+						const file = resolveReference(candidate, source);
+						if (file) files.push(file);
+					} catch {
+						/* Missing, inaccessible or confined candidates remain ordinary text. */
+					}
+				}
+				return { files };
+			}),
 		repositories: () =>
 			attempt(async () => {
 				const world = snapshot();

@@ -10,6 +10,7 @@ import { homedir } from "node:os";
 import { isAbsolute, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type { Command } from "../../../../components/session-state/src/protocol.js";
+import type { CallInRequest, CallInResult } from "../call-in.js";
 import {
 	type CommandReceipt,
 	NAME_MAX,
@@ -19,6 +20,7 @@ import {
 	type RoleChoice,
 	type WorldSnapshot,
 } from "../world.js";
+import { openCallIn } from "./call-in.js";
 import type { Commands } from "./commands.js";
 import { operatorPane } from "./inn.js";
 import { type Mailbox, openMailbox } from "./mail.js";
@@ -32,6 +34,7 @@ const RENAME_MS = 8000;
 
 export interface Lifecycle extends Mailbox {
 	wake(characterId: string): Promise<CommandReceipt>;
+	callIn(request: CallInRequest): Promise<CallInResult>;
 	endSession(characterId: string, confirmed?: boolean): Promise<CommandReceipt>;
 	recruit(request: RecruitRequest): Promise<RecruitReceipt>;
 	rename(characterId: string, name: string): Promise<CommandReceipt>;
@@ -59,6 +62,7 @@ function follow(
 	ms: number,
 	enough: (stage: ReceiptStage, reason: string | undefined) => boolean,
 	late: (stage: ReceiptStage) => string,
+	commandId?: string,
 ): Promise<CommandReceipt> {
 	return new Promise((resolve) => {
 		let last: { stage: ReceiptStage; reason?: string } | undefined;
@@ -75,6 +79,7 @@ function follow(
 		}, ms);
 		void commands
 			.send(sessionId, command, {
+				commandId,
 				onReceipt(stage, reason) {
 					last = { stage, reason };
 					if (stage !== "failed" && enough(stage, reason))
@@ -91,6 +96,17 @@ export function openLifecycle(
 	snapshot: () => WorldSnapshot,
 ): Lifecycle {
 	return {
+		callIn: openCallIn(paths.db, (person, commandId, tmux) =>
+			follow(
+				commands,
+				person,
+				{ kind: "start", tmux },
+				WAKE_MS,
+				(stage) => stage === "applied",
+				(stage) => `Call-in is ${stage}; a connected incarnation has not been confirmed.`,
+				commandId,
+			),
+		),
 		async wake(characterId) {
 			const world = snapshot();
 			const sleeper = world.dormant?.find((agent) => agent.id === characterId);

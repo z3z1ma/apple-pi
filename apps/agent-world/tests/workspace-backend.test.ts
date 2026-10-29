@@ -4,12 +4,23 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { openWorkspace } from "../src/backend/workspace.js";
-import { isWorkspaceDiff, isWorkspacePath, isWorkspaceRoot, isWorkspaceSave } from "../src/workspace.js";
+import {
+	isWorkspaceDiff,
+	isWorkspacePath,
+	isWorkspaceResolvePaths,
+	isWorkspaceRoot,
+	isWorkspaceSave,
+} from "../src/workspace.js";
 import type { WorldSnapshot } from "../src/world.js";
 
 vi.mock("node:fs", async (importOriginal) => {
 	const actual = await importOriginal<typeof import("node:fs")>();
-	return { ...actual, fsyncSync: vi.fn(actual.fsyncSync) };
+	return {
+		...actual,
+		fsyncSync: vi.fn(actual.fsyncSync),
+		readFileSync: vi.fn(actual.readFileSync),
+		readdirSync: vi.fn(actual.readdirSync),
+	};
 });
 
 let base: string, root: string;
@@ -261,6 +272,120 @@ test("a bare repository stays distinct from its editable linked worktree", async
 	expect(await workspace.files({ root: bare })).toMatchObject({ ok: false });
 });
 
+test("batched references use explicit source cwd or the absolute file parent, never the current Code root", async () => {
+	fs.mkdirSync(join(root, "sub"));
+	fs.writeFileSync(join(root, "sub", "nested.ts"), "nested");
+	const outside = join(base, "other.md");
+	fs.writeFileSync(outside, "outside");
+	const absolute = join(root, "sub", "nested.ts");
+	expect(
+		await workspace.resolvePaths({
+			cwd: root,
+			paths: ["hello.ts", "sub/../hello.ts", absolute, outside, "missing", "sub", "hello.ts"],
+		}),
+	).toEqual({
+		ok: true,
+		files: [
+			{ candidate: "hello.ts", root: fs.realpathSync(root), path: "hello.ts" },
+			{ candidate: "sub/../hello.ts", root: fs.realpathSync(root), path: "hello.ts" },
+			{ candidate: absolute, root: fs.realpathSync(root), path: "sub/nested.ts" },
+			{ candidate: outside, root: fs.realpathSync(base), path: "other.md" },
+		],
+	});
+	for (const cwd of [undefined, "relative-context", join(base, "absent")]) {
+		expect(await workspace.resolvePaths({ cwd, paths: ["hello.ts", absolute] })).toEqual({
+			ok: true,
+			files: [{ candidate: absolute, root: fs.realpathSync(join(root, "sub")), path: "nested.ts" }],
+		});
+	}
+	expect(await workspace.resolvePaths({ cwd: join(root, "sub"), paths: ["../hello.ts"] })).toEqual({
+		ok: true,
+		files: [],
+	});
+});
+
+test("reference resolution preserves containment and rejects metadata, directories and special files", async () => {
+	fs.writeFileSync(join(base, "private"), "outside");
+	fs.symlinkSync(join(root, "hello.ts"), join(root, "inside"));
+	fs.symlinkSync(join(base, "private"), join(root, "escape"));
+	fs.symlinkSync(base, join(root, "escape-dir"));
+	fs.symlinkSync(join(root, ".git"), join(root, "metadata"));
+	execFileSync("mkfifo", [join(root, "pipe")]);
+	const paths = [
+		"inside",
+		"../private",
+		"escape",
+		join(root, "escape"),
+		"escape-dir/private",
+		join(root, "escape-dir", "private"),
+		".git/config",
+		join(root, ".git/config"),
+		"metadata/config",
+		"pipe",
+		".",
+		"",
+		"bad\0path",
+	];
+	expect(await workspace.resolvePaths({ cwd: root, paths })).toEqual({
+		ok: true,
+		files: [{ candidate: "inside", root: fs.realpathSync(root), path: "hello.ts" }],
+	});
+	const alias = join(base, "repo-alias");
+	fs.symlinkSync(root, alias);
+	expect(
+		await workspace.resolvePaths({
+			cwd: alias,
+			paths: [join(root, "escape-dir", "private"), join(alias, "escape-dir", "private")],
+		}),
+	).toEqual({ ok: true, files: [] });
+	expect(await workspace.resolvePaths({ cwd: alias, paths: [join(root, "hello.ts")] })).toEqual({
+		ok: true,
+		files: [{ candidate: join(root, "hello.ts"), root: fs.realpathSync(root), path: "hello.ts" }],
+	});
+});
+
+test("decoration validates only metadata; contents and directory walks wait for other explicit operations", async () => {
+	fs.writeFileSync(join(root, "binary"), Buffer.from([0, 1]));
+	fs.writeFileSync(join(root, "invalid-utf8"), Buffer.from([0xff]));
+	vi.mocked(fs.readFileSync).mockClear();
+	vi.mocked(fs.readdirSync).mockClear();
+	expect(await workspace.resolvePaths({ cwd: root, paths: ["binary", "invalid-utf8"] })).toEqual({
+		ok: true,
+		files: ["binary", "invalid-utf8"].map((candidate) => ({ candidate, root: fs.realpathSync(root), path: candidate })),
+	});
+	expect(fs.readFileSync).not.toHaveBeenCalled();
+	expect(fs.readdirSync).not.toHaveBeenCalled();
+	expect(await workspace.readFile({ root, path: "binary" })).toMatchObject({ ok: false });
+	fs.unlinkSync(join(root, "invalid-utf8"));
+	expect(await workspace.readFile({ root, path: "invalid-utf8" })).toMatchObject({ ok: false });
+	expect(await workspace.resolvePaths({ cwd: root, paths: ["invalid-utf8"] })).toEqual({ ok: true, files: [] });
+});
+
+test("home expansion is conventional and colon or unusual filenames stay literal", async () => {
+	const literal = "hello.ts:17:3",
+		unusual = "name [x] \u03a9.md";
+	fs.writeFileSync(join(root, literal), "literal");
+	fs.writeFileSync(join(root, unusual), "unusual");
+	vi.stubEnv("HOME", root);
+	try {
+		expect(
+			await workspace.resolvePaths({
+				cwd: root,
+				paths: ["~/hello.ts", literal, unusual, "hello.ts:17", "~someone/hello.ts"],
+			}),
+		).toEqual({
+			ok: true,
+			files: [
+				{ candidate: "~/hello.ts", root: fs.realpathSync(root), path: "hello.ts" },
+				{ candidate: literal, root: fs.realpathSync(root), path: literal },
+				{ candidate: unusual, root: fs.realpathSync(root), path: unusual },
+			],
+		});
+	} finally {
+		vi.unstubAllEnvs();
+	}
+});
+
 test("discovers real roots and validates renderer payloads", async () => {
 	const discovered = openWorkspace(() => ({
 		...snapshot,
@@ -281,6 +406,10 @@ test("discovers real roots and validates renderer payloads", async () => {
 	}));
 	expect(await discovered.repositories()).toEqual({ ok: true, roots: [fs.realpathSync(root)] });
 	expect(isWorkspaceRoot(null)).toBe(false);
+	expect(isWorkspaceResolvePaths({ paths: ["hello.ts"], cwd: root })).toBe(true);
+	expect(isWorkspaceResolvePaths({ paths: [] })).toBe(true);
+	for (const value of [null, {}, { paths: "hello.ts" }, { paths: [1] }, { paths: ["hello.ts"], cwd: null }])
+		expect(isWorkspaceResolvePaths(value)).toBe(false);
 	expect(isWorkspacePath({ root, path: 2 })).toBe(false);
 	expect(isWorkspaceSave({ root, path: "x", text: "new" })).toBe(false);
 	expect(isWorkspaceSave({ root, path: "x", text: "new", baseHash: "abc" })).toBe(true);

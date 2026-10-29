@@ -16,6 +16,7 @@ var api = {
 		repositories: () => electron.ipcRenderer.invoke("workspace:repositories"),
 		files: (request) => electron.ipcRenderer.invoke("workspace:files", request),
 		worktrees: (request) => electron.ipcRenderer.invoke("workspace:worktrees", request),
+		resolvePaths: (request) => electron.ipcRenderer.invoke("workspace:resolve-paths", request),
 		tree: (request) => electron.ipcRenderer.invoke("workspace:tree", request),
 		readFile: (request) => electron.ipcRenderer.invoke("workspace:read-file", request),
 		saveFile: (request) => electron.ipcRenderer.invoke("workspace:save-file", request),
@@ -54,6 +55,7 @@ var api = {
 		return () => electron.ipcRenderer.removeListener("world:reply", forward);
 	},
 	wake: (characterId) => electron.ipcRenderer.invoke("world:wake", characterId),
+	callIn: (request) => electron.ipcRenderer.invoke("world:call-in", request),
 	endSession: (characterId, confirmed) => electron.ipcRenderer.invoke("world:end-session", characterId, confirmed),
 	sendMail: (characterId, body) => electron.ipcRenderer.invoke("world:send-mail", characterId, body),
 	readThread: (thread) => electron.ipcRenderer.invoke("world:read-thread", thread),

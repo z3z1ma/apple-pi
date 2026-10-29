@@ -3,6 +3,13 @@ export interface WorkspacePath {
 	root: string;
 	path: string;
 }
+export interface WorkspaceResolvePaths {
+	paths: string[];
+	cwd?: string;
+}
+export interface WorkspaceResolvedPath extends WorkspacePath {
+	candidate: string;
+}
 export interface WorkspaceSave extends WorkspacePath {
 	text: string;
 	baseHash: string;
@@ -32,6 +39,7 @@ export interface WorkspaceWorktree {
 	prunable?: string;
 }
 export interface WorkspaceApi {
+	resolvePaths(request: WorkspaceResolvePaths): Promise<WorkspaceResult<{ files: WorkspaceResolvedPath[] }>>;
 	repositories(): Promise<WorkspaceResult<{ roots: string[] }>>;
 	files(request: { root: string }): Promise<WorkspaceResult<{ root: string; paths: string[] }>>;
 	worktrees(request: { root: string }): Promise<WorkspaceResult<{ root: string; worktrees: WorkspaceWorktree[] }>>;
@@ -46,6 +54,11 @@ export interface WorkspaceApi {
 	gitDiff(request: WorkspaceDiff): Promise<WorkspaceResult<{ text: string }>>;
 }
 const object = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null;
+export const isWorkspaceResolvePaths = (value: unknown): value is WorkspaceResolvePaths =>
+	object(value) &&
+	Array.isArray(value.paths) &&
+	value.paths.every((path) => typeof path === "string") &&
+	(value.cwd === undefined || typeof value.cwd === "string");
 export const isWorkspaceRoot = (value: unknown): value is { root: string } =>
 	object(value) && typeof value.root === "string";
 export const isWorkspacePath = (value: unknown): value is WorkspacePath =>

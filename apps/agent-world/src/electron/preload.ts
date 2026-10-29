@@ -47,6 +47,8 @@ const api: AgentWorldApi = {
 			ipcRenderer.invoke("workspace:files", request) as ReturnType<AgentWorldApi["workspace"]["files"]>,
 		worktrees: (request) =>
 			ipcRenderer.invoke("workspace:worktrees", request) as ReturnType<AgentWorldApi["workspace"]["worktrees"]>,
+		resolvePaths: (request) =>
+			ipcRenderer.invoke("workspace:resolve-paths", request) as ReturnType<AgentWorldApi["workspace"]["resolvePaths"]>,
 		tree: (request) => ipcRenderer.invoke("workspace:tree", request) as ReturnType<AgentWorldApi["workspace"]["tree"]>,
 		readFile: (request) =>
 			ipcRenderer.invoke("workspace:read-file", request) as ReturnType<AgentWorldApi["workspace"]["readFile"]>,
@@ -91,6 +93,7 @@ const api: AgentWorldApi = {
 		return () => ipcRenderer.removeListener("world:reply", forward);
 	},
 	wake: (characterId) => ipcRenderer.invoke("world:wake", characterId) as Promise<CommandReceipt>,
+	callIn: (request) => ipcRenderer.invoke("world:call-in", request) as ReturnType<AgentWorldApi["callIn"]>,
 	endSession: (characterId, confirmed) =>
 		ipcRenderer.invoke("world:end-session", characterId, confirmed) as Promise<CommandReceipt>,
 	sendMail: (characterId, body) => ipcRenderer.invoke("world:send-mail", characterId, body) as Promise<CommandReceipt>,

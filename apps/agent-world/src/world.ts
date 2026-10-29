@@ -1,5 +1,9 @@
 // The world as the backend reports it to the world UI. Shared by the backend, the preload bridge, and the renderer.
+import type { CallInRequest, CallInResult } from "./call-in.js";
 import type { IntegrationsApi } from "./integrations.js";
+
+export type { CallInPerson, CallInRequest, CallInResult } from "./call-in.js";
+
 import type { OrgMoveRequest, OrgMoveResult, OrgStartProgress, OrgStartRequest } from "./org.js";
 import type { TerminalApi } from "./terminal.js";
 import type { WorkspaceApi } from "./workspace.js";
@@ -516,6 +520,7 @@ export interface AgentWorldApi extends IntegrationsApi {
 	onReply(listener: (event: ReplyStreamEvent) => void): () => void;
 	/** Wake a dormant character (`start`): its session opens in a new tmux window after the operator's current pane. */
 	wake(characterId: string): Promise<CommandReceipt>;
+	callIn(request: CallInRequest): Promise<CallInResult>;
 	/** End an awake character's session (`close`); a busy one asks for `confirmed` first. */
 	endSession(characterId: string, confirmed?: boolean): Promise<CommandReceipt>;
 	/** Start a mail thread as the operator; messages to a dormant character wait until it wakes. */

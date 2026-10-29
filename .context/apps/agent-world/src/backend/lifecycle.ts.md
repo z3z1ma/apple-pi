@@ -1,5 +1,9 @@
 ## symbol:openLifecycle
 
+Workplace's explicit confirmed callIn operation delegates ancestry/consent and receipt reconciliation to backend/call-in.ts. It reuses this owner's ordinary start wait and operator tmux placement, with a supplied command id for retries; it adds no goal or empty-prompt override. The old World wake below remains selected-only. A follow result with ok:true may still be accepted/delivered, so confirmed call-in checks observed incarnations rather than using that boolean as dependency readiness.
+Coupled: apps/agent-world/src/backend/call-in.ts, apps/agent-world/src/call-in.ts
+Verify: apps/agent-world/tests/call-in.test.ts
+
 Waking passes the sleeper's `reportsTo` in the `start` command, and aims it at the pane of the most recently active tmux client across every server in `tmux_servers`.
 Why: the runtime owns the tree: it seeds `reports_to` from the flag at a session's first hello and keeps the recorded manager over any later flag, so the value sent here only matters for a session the runtime has never seen; a reopened person keeps its recorded manager either way. The runtime's `start` preserves the stopped session's `cwd`, name, role, and focus.
 Coupled: components/session-state/src/runtime.ts, apps/agent-world/src/backend/inn.ts
