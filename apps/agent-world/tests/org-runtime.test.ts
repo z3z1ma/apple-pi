@@ -25,17 +25,19 @@ function retry(plan: OrgStartRequest, progress: OrgStartProgress, withReady = fa
 	};
 }
 
-test("Org holds team openings, preserves retry goals and sends one kickoff to the head", async () => {
-	const state = tempStateDir();
-	const directory = realpathSync(state.agentDir);
-	const bin = join(directory, "bin");
-	const log = join(directory, "launches.jsonl");
-	const failure = join(directory, "fail-worker");
-	mkdirSync(bin);
-	writeFileSync(failure, "Fail the report before its first hello.");
-	writeFileSync(
-		join(bin, "pi"),
-		`#!${process.execPath}
+test.each(["team", "individual", "none"] as const)(
+	"Org preserves retry identities and starts only supplied work (goals: %s)",
+	async (mode) => {
+		const state = tempStateDir();
+		const directory = realpathSync(state.agentDir);
+		const bin = join(directory, "bin");
+		const log = join(directory, "launches.jsonl");
+		const failure = join(directory, "fail-worker");
+		mkdirSync(bin);
+		writeFileSync(failure, "Fail the report before its first hello.");
+		writeFileSync(
+			join(bin, "pi"),
+			`#!${process.execPath}
 const { appendFileSync, existsSync, readFileSync } = require("node:fs");
 const { execFileSync } = require("node:child_process");
 const { createConnection } = require("node:net");
@@ -77,143 +79,180 @@ socket.on("close", () => { clearInterval(heartbeat); process.exit(0); });
 process.stdin.resume();
 process.stdin.on("end", () => socket.end());
 `,
-	);
-	chmodSync(join(bin, "pi"), 0o755);
-	vi.stubEnv("PATH", `${bin}:${process.env.PATH}`);
-	vi.stubEnv("ORG_RUNTIME_LOG", log);
-	vi.stubEnv("ORG_RUNTIME_FAILURE", failure);
-	await startRuntime(state.socketPath);
-	const stand = standInProcess();
-	const seed = await fakeBridge(state.socketPath, "seed", stand.pid, stand.startedAt, {
-		session: { cwd: directory },
-		facts: { manages: true },
-	});
-	const world = openWorldBackend({ db: state.dbPath, socket: state.socketPath });
-	const commands = openCommands(state.socketPath);
-	let org = openOrg({ db: state.dbPath, agentDir: directory }, commands, () => world.snapshot());
-	const plan: OrgStartRequest = {
-		id: "socket-plan",
-		cwd: directory,
-		goal: "Deliver the invoice retry change.",
-		positions: [
-			{
-				id: "report",
-				manager: "head",
-				role: "implementation-engineer",
-				name: "Report",
-				goal: "Implement invoice retries.",
-			},
-			{ id: "head", manager: null, role: "coordinator", name: "Head", goal: "Coordinate invoice retry delivery." },
-		],
-	};
-	try {
-		await vi.waitFor(
-			() => {
-				expect(world.snapshot().connected).toBe(true);
-				expect(world.snapshot().workplace?.threads.some((thread) => thread.id === "organization:seed")).toBe(true);
-			},
-			{ timeout: 10000 },
 		);
-		const partial = await org.orgStart(plan);
-		expect(partial.next).toBe("choose-ready");
-		expect(partial.kickoff).toBeUndefined();
-		const head = partial.people.find((person) => person.id === "head")!.person!;
-		const report = partial.people.find((person) => person.id === "report")!.person!;
-		expect(partial.people).toEqual(
-			expect.arrayContaining([
-				expect.objectContaining({ id: "head", state: "ready" }),
-				expect.objectContaining({ id: "report", state: "failed" }),
-			]),
-		);
-		expect(
-			query(
-				state.dbPath,
-				"select delivery, read_up_to from thread_participants where thread_id = ? and participant = 'operator'",
-				partial.channel!,
-			),
-		).toEqual([{ delivery: "pull", read_up_to: 0 }]);
-		const subset = await org.orgStart(retry(plan, partial, true));
-		expect(subset.kickoff).toBeDefined();
-		const kickoffThread = subset.kickoff!.thread;
-		expect(subset.complete).toBe(false);
-		expect(subset.people.find((person) => person.id === "report")?.state).toBe("failed");
-		rmSync(failure);
-		org = openOrg({ db: state.dbPath, agentDir: directory }, commands, () => world.snapshot());
-		const complete = await org.orgStart(retry(plan, subset));
-		expect(complete.complete, JSON.stringify(complete)).toBe(true);
-		expect(Object.fromEntries(complete.people.map(({ id, person }) => [id, person]))).toEqual(
-			Object.fromEntries(partial.people.map(({ id, person }) => [id, person])),
-		);
-		expect(complete.readiness?.thread).toBe(`organization:${head}`);
-		await vi.waitFor(
-			() => {
-				const tasks = world.snapshot().workplace?.tasks ?? [];
-				expect(tasks).toHaveLength(2);
-				expect(
-					tasks.map((task) => ({
-						headquarters: task.headquarters,
-						people: task.assignees.map((assignee) => assignee.person),
-					})),
-				).toEqual(
-					expect.arrayContaining([
-						{ headquarters: head, people: [head] },
-						{ headquarters: head, people: [report] },
-					]),
-				);
-			},
-			{ timeout: 10000 },
-		);
-		const kickoff = query<{ body: string }>(
-			state.dbPath,
-			"select body from thread_messages where thread_id = ?",
-			kickoffThread,
-		);
-		expect(kickoff).toHaveLength(1);
-		expect(kickoff[0].body.startsWith(`${plan.goal}\n\nReady teammates (session IDs):\n`)).toBe(true);
-		expect(JSON.parse(kickoff[0].body.split("Ready teammates (session IDs):\n")[1])).toEqual([head]);
+		chmodSync(join(bin, "pi"), 0o755);
+		vi.stubEnv("PATH", `${bin}:${process.env.PATH}`);
+		vi.stubEnv("ORG_RUNTIME_LOG", log);
+		vi.stubEnv("ORG_RUNTIME_FAILURE", failure);
+		await startRuntime(state.socketPath);
+		const stand = standInProcess();
+		const seed = await fakeBridge(state.socketPath, "seed", stand.pid, stand.startedAt, {
+			session: { cwd: directory },
+			facts: { manages: true },
+		});
+		const world = openWorldBackend({ db: state.dbPath, socket: state.socketPath });
+		const commands = openCommands(state.socketPath);
+		let org = openOrg({ db: state.dbPath, agentDir: directory }, commands, () => world.snapshot());
+		const plan: OrgStartRequest = {
+			id: "socket-plan",
+			cwd: directory,
+			...(mode === "team" ? { goal: "Deliver the invoice retry change." } : {}),
+			positions: [
+				{
+					id: "report",
+					manager: "head",
+					role: "implementation-engineer",
+					name: "Report",
+					goal: mode === "none" ? undefined : "Implement invoice retries.",
+					specialization: "Data correctness",
+				},
+				{
+					id: "head",
+					manager: null,
+					role: "coordinator",
+					name: "Head",
+					goal: mode === "team" ? "Coordinate invoice retry delivery." : undefined,
+				},
+			],
+		};
+		try {
+			await vi.waitFor(
+				() => {
+					expect(world.snapshot().connected).toBe(true);
+					expect(world.snapshot().workplace?.threads.some((thread) => thread.id === "organization:seed")).toBe(true);
+				},
+				{ timeout: 10000 },
+			);
+			const partial = await org.orgStart(plan);
+			expect(partial.next).toBe(mode === "team" ? "choose-ready" : "retry");
+			expect(partial.kickoff).toBeUndefined();
+			const head = partial.people.find((person) => person.id === "head")!.person!;
+			const report = partial.people.find((person) => person.id === "report")!.person!;
+			expect(partial.people).toEqual(
+				expect.arrayContaining([
+					expect.objectContaining({ id: "head", state: "ready" }),
+					expect.objectContaining({ id: "report", state: "failed" }),
+				]),
+			);
+			expect(
+				query(
+					state.dbPath,
+					"select delivery, read_up_to from thread_participants where thread_id = ? and participant = 'operator'",
+					partial.channel!,
+				),
+			).toEqual([{ delivery: "pull", read_up_to: 0 }]);
+			const subset = await org.orgStart(retry(plan, partial, true));
+			if (mode === "team") expect(subset.kickoff).toBeDefined();
+			else expect(subset.kickoff).toBeUndefined();
+			const kickoffThread = subset.kickoff?.thread;
+			expect(subset.complete).toBe(false);
+			expect(subset.people.find((person) => person.id === "report")?.state).toBe("failed");
+			rmSync(failure);
+			org = openOrg({ db: state.dbPath, agentDir: directory }, commands, () => world.snapshot());
+			const complete = await org.orgStart(retry(plan, subset));
+			expect(complete.complete, JSON.stringify(complete)).toBe(true);
+			expect(Object.fromEntries(complete.people.map(({ id, person }) => [id, person]))).toEqual(
+				Object.fromEntries(partial.people.map(({ id, person }) => [id, person])),
+			);
+			expect(complete.readiness?.thread).toBe(mode === "team" ? `organization:${head}` : undefined);
+			await vi.waitFor(
+				() => {
+					const tasks = world.snapshot().workplace?.tasks ?? [];
+					expect(tasks).toHaveLength(mode === "team" ? 2 : mode === "individual" ? 1 : 0);
+					expect(
+						tasks.map((task) => ({
+							headquarters: task.headquarters,
+							people: task.assignees.map((assignee) => assignee.person),
+						})),
+					).toEqual(
+						expect.arrayContaining([
+							...(mode === "team" ? [{ headquarters: head, people: [head] }] : []),
+							...(mode !== "none" ? [{ headquarters: head, people: [report] }] : []),
+						]),
+					);
+				},
+				{ timeout: 10000 },
+			);
+			const kickoff = kickoffThread
+				? query<{ body: string }>(state.dbPath, "select body from thread_messages where thread_id = ?", kickoffThread)
+				: [];
+			if (mode === "team") {
+				expect(kickoff).toHaveLength(1);
+				expect(kickoff[0].body.startsWith(`${plan.goal}\n\nReady teammates (session IDs):\n`)).toBe(true);
+				expect(JSON.parse(kickoff[0].body.split("Ready teammates (session IDs):\n")[1])).toEqual([head]);
+			} else {
+				expect(query(state.dbPath, "select command_id from commands where kind = 'thread_post'")).toEqual([]);
+			}
 
-		const recorded = () =>
-			readFileSync(log, "utf8")
-				.trim()
-				.split("\n")
-				.map((line) => JSON.parse(line));
-		await vi.waitFor(
-			() => {
-				const readiness = recorded().filter(
-					(entry) =>
-						entry.event === "command" && entry.command.kind === "mail" && entry.command.thread === complete.channel,
+			const recorded = () =>
+				readFileSync(log, "utf8")
+					.trim()
+					.split("\n")
+					.map((line) => JSON.parse(line));
+			if (mode === "team")
+				await vi.waitFor(
+					() => {
+						const readiness = recorded().filter(
+							(entry) =>
+								entry.event === "command" && entry.command.kind === "mail" && entry.command.thread === complete.channel,
+						);
+						expect(readiness.map((entry) => entry.id)).toEqual([head]);
+						const receivedKickoff = recorded().filter(
+							(entry) =>
+								entry.event === "command" && entry.command.kind === "mail" && entry.command.thread === kickoffThread,
+						);
+						expect(receivedKickoff.map((entry) => ({ id: entry.id, body: entry.command.body }))).toEqual([
+							{ id: head, body: kickoff[0].body },
+						]);
+					},
+					{ timeout: 10000 },
 				);
-				expect(readiness.map((entry) => entry.id)).toEqual([head]);
-				const receivedKickoff = recorded().filter(
-					(entry) =>
-						entry.event === "command" && entry.command.kind === "mail" && entry.command.thread === kickoffThread,
+			await vi.waitFor(() =>
+				expect(
+					recorded()
+						.filter((entry) => entry.event === "command" && entry.command.kind === "steer")
+						.map((entry) => entry.id),
+				).toEqual(mode === "individual" ? [report] : []),
+			);
+			if (mode === "none") {
+				expect(query(state.dbPath, "select id from work_tasks")).toEqual([]);
+				expect(query(state.dbPath, "select person from assignments")).toEqual([]);
+				expect(query(state.dbPath, "select person from work_focus")).toEqual([]);
+				expect(recorded().filter((entry) => entry.event === "command" && entry.command.kind !== "transfer")).toEqual(
+					[],
 				);
-				expect(receivedKickoff.map((entry) => ({ id: entry.id, body: entry.command.body }))).toEqual([
-					{ id: head, body: kickoff[0].body },
-				]);
-			},
-			{ timeout: 10000 },
-		);
-		expect(recorded().filter((entry) => entry.event === "command" && entry.command.kind === "steer")).toEqual([]);
-		const launches = recorded().filter((entry) => entry.event === "launch");
-		expect(launches[0].id).toBe(head);
-		expect(launches.filter((entry) => entry.id === head)).toHaveLength(1);
-		expect(launches.every((entry) => entry.managerReady)).toBe(true);
-		expect(launches[0].goal).toContain("Coordinate invoice retry delivery.");
-		const reportLaunches = launches.filter((entry) => entry.id === report);
-		expect(reportLaunches.length).toBeGreaterThan(1);
-		for (const launch of reportLaunches) expect(launch.goal).toContain("Implement invoice retries.");
-		await org.orgStart(retry(plan, complete));
-		expect(recorded().filter((entry) => entry.event === "launch")).toHaveLength(launches.length);
-		expect(query(state.dbPath, "select id from thread_messages where thread_id = ?", complete.channel!)).toHaveLength(
-			1,
-		);
-		expect(query(state.dbPath, "select id from thread_messages where thread_id = ?", kickoffThread)).toHaveLength(1);
-	} finally {
-		world.close();
-		commands.close();
-		seed.socket.destroy();
-		stand.child.kill();
-		await stopRuntime(state);
-	}
-}, 30000);
+			}
+			expect(query(state.dbPath, "select role, specialization from sessions where id = ?", report)).toEqual([
+				{ role: "implementation-engineer", specialization: "Data correctness" },
+			]);
+			const launches = recorded().filter((entry) => entry.event === "launch");
+			expect(launches[0].id).toBe(head);
+			expect(launches.filter((entry) => entry.id === head)).toHaveLength(1);
+			expect(launches.every((entry) => entry.managerReady)).toBe(true);
+			if (mode === "team") expect(launches[0].goal).toContain("Coordinate invoice retry delivery.");
+			else expect(launches[0].goal).toBeNull();
+			const reportLaunches = launches.filter((entry) => entry.id === report);
+			expect(reportLaunches.length).toBeGreaterThan(1);
+			for (const launch of reportLaunches) {
+				if (mode === "none") expect(launch.goal).toBeNull();
+				else expect(launch.goal).toContain("Implement invoice retries.");
+			}
+			await org.orgStart(retry(plan, complete));
+			expect(recorded().filter((entry) => entry.event === "launch")).toHaveLength(launches.length);
+			expect(query(state.dbPath, "select id from thread_messages where thread_id = ?", complete.channel!)).toHaveLength(
+				mode === "team" ? 1 : 0,
+			);
+			if (kickoffThread)
+				expect(query(state.dbPath, "select id from thread_messages where thread_id = ?", kickoffThread)).toHaveLength(
+					1,
+				);
+		} finally {
+			world.close();
+			commands.close();
+			seed.socket.destroy();
+			stand.child.kill();
+			await stopRuntime(state);
+		}
+	},
+	30000,
+);

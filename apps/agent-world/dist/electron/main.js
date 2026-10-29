@@ -1164,7 +1164,7 @@ function openLifecycle(paths, commands, snapshot) {
 		async recruit(request) {
 			const name = request.name.replace(/\s+/g, " ").trim();
 			const cwd = expandHome(request.cwd.trim());
-			const brief = request.brief.trim();
+			const brief = request.brief?.trim();
 			const role = request.role?.trim();
 			const specialization = request.specialization?.trim();
 			if (!name && !role) return {
@@ -1182,10 +1182,6 @@ function openLifecycle(paths, commands, snapshot) {
 			if (!isDirectory(cwd)) return {
 				ok: false,
 				reason: `${cwd} is not a directory.`
-			};
-			if (role && !brief) return {
-				ok: false,
-				reason: "A role hire needs a written goal."
 			};
 			if (role && !loadRoleChoices(paths.agentDir).some((choice) => choice.name === role)) return {
 				ok: false,
@@ -1252,7 +1248,7 @@ function openLifecycle(paths, commands, snapshot) {
 					...brief ? { goal: {
 						text: brief,
 						by: "operator"
-					} } : {}
+					} } : { prompt: "" }
 				}, WAKE_MS, (stage) => stage === "applied", () => `Its window opened, but ${name || "the new person"} has not joined yet.`),
 				sessionId
 			};
@@ -1567,6 +1563,8 @@ function openOrg(paths, commands, snapshot) {
 		};
 	};
 	async function start(request) {
+		const teamGoal = request.goal?.trim() ?? "";
+		const goalFor = (position) => position.goal?.trim() || teamGoal;
 		const progress = {
 			id: request.id,
 			people: request.positions.map((position) => ({
@@ -1601,7 +1599,7 @@ function openOrg(paths, commands, snapshot) {
 			const directory = request.cwd === "~" ? homedir() : request.cwd.startsWith("~/") ? join(homedir(), request.cwd.slice(2)) : request.cwd;
 			if (!isAbsolute(directory) || !existsSync(directory) || !statSync(directory).isDirectory()) return reject("Choose an existing absolute working directory.");
 			const cwd = realpathSync(directory);
-			if (!request.id.trim() || !request.goal.trim() || !request.positions.length) return reject("A team needs an identity, a written goal and positions.");
+			if (!request.id.trim() || !request.positions.length) return reject("A team needs an identity and positions.");
 			const positions = new Map(request.positions.map((position) => [position.id, position]));
 			if (positions.size !== request.positions.length || request.positions.some((position) => !position.id)) return reject("Each planned position needs a unique identity.");
 			const heads = request.positions.filter((position) => position.manager === null);
@@ -1614,14 +1612,14 @@ function openOrg(paths, commands, snapshot) {
 					const attempts = preparations(request.id, position.id);
 					const previous = attempts.at(-1);
 					const original = attempts[0] && JSON.parse(attempts[0].command);
-					if (original?.goal && (original.cwd !== cwd || original.role !== position.role || (original.specialization ?? "") !== (position.specialization?.trim() ?? "") || original.goal.text !== (position.goal?.trim() || request.goal.trim()))) return reject("A prepared person's role, specialization, working directory and goal cannot change on retry.");
+					if (original?.role && (original.cwd !== cwd || original.role !== position.role || (original.specialization ?? "") !== (position.specialization?.trim() ?? "") || (original.goal?.text ?? "") !== goalFor(position))) return reject("A prepared person's role, specialization, working directory and goal cannot change on retry.");
 					if (position.person && previous && position.person !== previous.session_id) return reject("A retry changed a prepared person's identity.");
 					const id = previous?.session_id ?? position.person ?? randomUUID();
 					progress.people.find((person) => person.id === position.id).person = id;
 					const existing = people.get(id);
 					if (!existing && position.specialization?.trim() && !read((db) => db.prepare("select 1 from pragma_table_info('sessions') where name = 'specialization'").get())) return reject("Restart the session runtime with current code before creating a person with specialization.");
 					if (unavailable.has(id) || existing?.retired_at != null) return reject("Temporary or departed people cannot join a planned team.");
-					if (!existing && (!position.role || !roles.has(position.role) || !(position.goal ?? request.goal).trim())) return reject("Each new person needs a catalog role and written goal.");
+					if (!existing && (!position.role || !roles.has(position.role))) return reject("Each new person needs a catalog role.");
 				}
 			};
 			const identityError = identify();
@@ -1699,10 +1697,10 @@ function openOrg(paths, commands, snapshot) {
 				name: position.name?.trim() || void 0,
 				role: position.role,
 				...position.specialization?.trim() ? { specialization: position.specialization.trim() } : {},
-				goal: {
+				...goalFor(position) ? { goal: {
 					by: "operator",
-					text: position.goal?.trim() || request.goal.trim()
-				}
+					text: goalFor(position)
+				} } : {}
 			});
 			const startUnresolved = (member, commandId, result) => {
 				const record = recorded(commandId);
@@ -1711,6 +1709,10 @@ function openOrg(paths, commands, snapshot) {
 					reason: result.ok ? "The start was applied but no connected incarnation is visible." : result.reason,
 					...record?.stage === "failed" ? { atHome: true } : {}
 				});
+			};
+			const openingPrompt = (position, existing, attempts) => {
+				const assignedGoal = existing ? attempts[0] && JSON.parse(attempts[0].command).goal?.text : goalFor(position);
+				return teamGoal || !assignedGoal ? { prompt: "" } : {};
 			};
 			const prepare = async (position) => {
 				const member = progress.people.find((person) => person.id === position.id);
@@ -1771,7 +1773,7 @@ function openOrg(paths, commands, snapshot) {
 						kind: "start",
 						cwd,
 						...pane ? { tmux: pane } : {},
-						prompt: "",
+						...openingPrompt(position, existing, attempts),
 						...manager ? { reportsTo: manager } : {},
 						...!existing ? hire(position) : {}
 					}, { commandId });
@@ -1845,13 +1847,19 @@ function openOrg(paths, commands, snapshot) {
 				const headReady = ready(progress.people.find((person) => person.id === head.id));
 				const kickoffId = `org-kickoff:${request.id}`;
 				let kickoff = recorded(kickoffId);
+				if (!teamGoal && !kickoff) {
+					progress.complete = allReady;
+					progress.next = allReady ? "done" : "retry";
+					if (allReady) progress.note = "Team ready.";
+					return;
+				}
 				if (!kickoff && headReady && (allReady || request.withReady)) {
 					const result = await commands.send("operator", {
 						kind: "thread_post",
 						thread: kickoffId,
 						subject: "Team kickoff",
 						to: [headId],
-						body: `${request.goal}${READY_ROSTER}${JSON.stringify(progress.people.filter(ready).map((person) => person.person))}`
+						body: `${teamGoal}${READY_ROSTER}${JSON.stringify(progress.people.filter(ready).map((person) => person.person))}`
 					}, { commandId: kickoffId });
 					kickoff = recorded(kickoffId);
 					if (!result.ok) progress.note = result.reason;
@@ -4704,7 +4712,7 @@ function isOrgMoveRequest(value) {
 	return object$1(value) && typeof value.person === "string" && (value.manager === null || typeof value.manager === "string") && Array.isArray(value.branch) && value.branch.every((id) => typeof id === "string");
 }
 function isOrgStartRequest(value) {
-	return object$1(value) && typeof value.id === "string" && typeof value.cwd === "string" && typeof value.goal === "string" && (value.withReady === void 0 || typeof value.withReady === "boolean") && Array.isArray(value.positions) && value.positions.every((position) => object$1(position) && typeof position.id === "string" && (position.manager === null || typeof position.manager === "string") && [
+	return object$1(value) && typeof value.id === "string" && typeof value.cwd === "string" && (value.goal === void 0 || typeof value.goal === "string") && (value.withReady === void 0 || typeof value.withReady === "boolean") && Array.isArray(value.positions) && value.positions.every((position) => object$1(position) && typeof position.id === "string" && (position.manager === null || typeof position.manager === "string") && [
 		position.role,
 		position.name,
 		position.person,
@@ -6944,9 +6952,9 @@ function start() {
 	});
 	ipcMain.handle("world:recruit", (_event, request) => {
 		const { name, cwd, brief, reportsTo, role, specialization } = request ?? {};
-		if (typeof name !== "string" || typeof cwd !== "string" || typeof brief !== "string") return {
+		if (typeof name !== "string" || typeof cwd !== "string" || brief !== void 0 && typeof brief !== "string") return {
 			ok: false,
-			reason: "The recruit needs a name, a directory, and a brief."
+			reason: "The recruit needs a name and directory, with an optional text goal."
 		};
 		return lifecycle.recruit({
 			name,

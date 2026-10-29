@@ -191,8 +191,8 @@ function start() {
 	// Recruiting a new agent: a worker at its coordinator's desk, an independent one at the square's recruiter.
 	ipcMain.handle("world:recruit", (_event, request: unknown) => {
 		const { name, cwd, brief, reportsTo, role, specialization } = (request ?? {}) as Record<string, unknown>;
-		if (typeof name !== "string" || typeof cwd !== "string" || typeof brief !== "string")
-			return { ok: false, reason: "The recruit needs a name, a directory, and a brief." };
+		if (typeof name !== "string" || typeof cwd !== "string" || (brief !== undefined && typeof brief !== "string"))
+			return { ok: false, reason: "The recruit needs a name and directory, with an optional text goal." };
 		return lifecycle.recruit({
 			name,
 			cwd,

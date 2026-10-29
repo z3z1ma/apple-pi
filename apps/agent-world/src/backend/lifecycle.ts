@@ -145,14 +145,13 @@ export function openLifecycle(
 			// One line: it is also the tmux window's name.
 			const name = request.name.replace(/\s+/g, " ").trim();
 			const cwd = expandHome(request.cwd.trim());
-			const brief = request.brief.trim();
+			const brief = request.brief?.trim();
 			const role = request.role?.trim();
 			const specialization = request.specialization?.trim();
 			if (!name && !role) return { ok: false, reason: "Give the new agent a name." };
 			if (!cwd) return { ok: false, reason: "Choose the directory it works in." };
 			if (!isAbsolute(cwd)) return { ok: false, reason: `${cwd} is not a full path to a directory.` };
 			if (!isDirectory(cwd)) return { ok: false, reason: `${cwd} is not a directory.` };
-			if (role && !brief) return { ok: false, reason: "A role hire needs a written goal." };
 			if (role && !loadRoleChoices(paths.agentDir).some((choice) => choice.name === role))
 				return { ok: false, reason: `No role in the catalog is named ${role}.` };
 			if (specialization) {
@@ -216,7 +215,7 @@ export function openLifecycle(
 				...(request.reportsTo ? { reportsTo: request.reportsTo } : {}),
 				...(role ? { role } : {}),
 				...(specialization ? { specialization } : {}),
-				...(brief ? { goal: { text: brief, by: "operator" } } : {}),
+				...(brief ? { goal: { text: brief, by: "operator" } } : { prompt: "" }),
 			};
 			const receipt = await follow(
 				commands,

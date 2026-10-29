@@ -1,8 +1,10 @@
 import type { editor } from "monaco-editor";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { type KeyboardEvent, type MouseEvent, useCallback, useEffect, useRef, useState } from "react";
 import type { WorkspaceEntry } from "../src/workspace.js";
 import type { WorldSnapshot } from "../src/world.js";
+import { useWorkplaceMenu } from "./workplace-context-menu.js";
 import { GitDiffText, type GitDiffView, GitPane } from "./workplace-git.js";
+import { Icon } from "./workplace-icon.js";
 import "./workplace-code.css";
 
 type MonacoModule = typeof import("./workplace-monaco.js");
@@ -20,22 +22,33 @@ const api = window.agentWorld;
 const fileKey = (root: string, path: string) => JSON.stringify([root, path]);
 
 function FileTree({
+	repository,
 	entries,
 	expanded,
 	selected,
 	onToggle,
 	onOpen,
+	onCopy,
 	depth = 0,
 	path = "",
 }: {
+	repository: string;
 	entries: Record<string, WorkspaceEntry[]>;
 	expanded: Set<string>;
 	selected?: string;
 	onToggle(path: string): void;
 	onOpen(path: string): void;
+	onCopy(path: string): void;
 	depth?: number;
 	path?: string;
 }) {
+	const openMenu = useWorkplaceMenu();
+	const menu = (event: MouseEvent<HTMLElement> | KeyboardEvent<HTMLElement>, entry: WorkspaceEntry) => {
+		openMenu(event, [
+			...(entry.kind === "directory" ? [] : [{ label: "Open", onSelect: () => onOpen(entry.path) }]),
+			{ label: "Copy relative path", onSelect: () => onCopy(entry.path) },
+		]);
+	};
 	return (
 		<ul className="wp-code-tree-list">
 			{(entries[path] ?? []).map((entry) => (
@@ -43,24 +56,36 @@ function FileTree({
 					<button
 						type="button"
 						className={selected === entry.path ? "is-selected" : ""}
-						style={{ paddingLeft: 12 + depth * 14 }}
+						style={{ paddingLeft: 8 + depth * 14 }}
 						aria-expanded={entry.kind === "directory" ? expanded.has(entry.path) : undefined}
-						title={entry.path}
+						aria-current={selected === entry.path ? "true" : undefined}
+						title={`${repository}/${entry.path}`}
 						onClick={() => (entry.kind === "directory" ? onToggle(entry.path) : onOpen(entry.path))}
+						onContextMenu={(event) => menu(event, entry)}
+						onKeyDown={(event) => menu(event, entry)}
 					>
-						<span className="wp-code-file-icon" aria-hidden="true">
-							{entry.kind === "directory" ? (expanded.has(entry.path) ? "▾" : "▸") : "·"}
+						<span className="wp-code-chevron" aria-hidden="true">
+							{entry.kind === "directory" && (
+								<Icon name={expanded.has(entry.path) ? "chevron-down" : "chevron-right"} />
+							)}
 						</span>
-						<span>{entry.name}</span>
+						<span className="wp-code-file-icon" aria-hidden="true">
+							<Icon
+								name={entry.kind === "directory" ? (expanded.has(entry.path) ? "folder-open" : "folder") : "file"}
+							/>
+						</span>
+						<span className="wp-code-file-name">{entry.name}</span>
 						{entry.kind === "symlink" && <small>link</small>}
 					</button>
 					{entry.kind === "directory" && expanded.has(entry.path) && (
 						<FileTree
+							repository={repository}
 							entries={entries}
 							expanded={expanded}
 							selected={selected}
 							onToggle={onToggle}
 							onOpen={onOpen}
+							onCopy={onCopy}
 							depth={depth + 1}
 							path={entry.path}
 						/>
@@ -80,6 +105,9 @@ export function WorkplaceCode({
 	active: boolean;
 	onDirtyChange?: (dirty: boolean) => void;
 }) {
+	const openMenu = useWorkplaceMenu();
+	const tabButtons = useRef(new Map<string, HTMLButtonElement>());
+	const filesPane = useRef<HTMLElement>(null);
 	const [roots, setRoots] = useState<string[]>([]);
 	const [root, setRoot] = useState("");
 	const rootRef = useRef(root);
@@ -105,6 +133,7 @@ export function WorkplaceCode({
 	const current = selected ? buffers.current.get(selected) : undefined;
 	const dirty = current !== undefined && current.text !== current.base;
 	const repositoryList = [...new Set([...roots, root].filter(Boolean))];
+	const openBuffers = [...buffers.current.entries()].filter(([, buffer]) => buffer.root === root);
 	const changedElsewhere = [...buffers.current.values()].filter(
 		(buffer) => buffer.root !== root && buffer.text !== buffer.base,
 	).length;
@@ -270,7 +299,7 @@ export function WorkplaceCode({
 	const readBuffer = useCallback(async (buffer: Buffer) => {
 		const baseHash = buffer.hash;
 		const result = await api.workspace.readFile({ root: buffer.root, path: buffer.path });
-		if (baseHash !== buffer.hash) return;
+		if (baseHash !== buffer.hash || buffers.current.get(fileKey(buffer.root, buffer.path)) !== buffer) return;
 		if (!result.ok) throw new Error(result.reason);
 		if (result.hash === buffer.hash) return;
 		if (buffer.text !== buffer.base) {
@@ -371,6 +400,72 @@ export function WorkplaceCode({
 		setError(undefined);
 		setNotice(undefined);
 	};
+	const closeTabs = (keys: string[]) => {
+		if (savingRef.current || root !== rootRef.current) return;
+		const closing = new Set(keys.filter((key) => buffers.current.get(key)?.root === root));
+		if (!closing.size) return;
+		const unsaved = [...closing].flatMap((key) => {
+			const buffer = buffers.current.get(key)!;
+			return buffer.text !== buffer.base || buffer.external ? [buffer.path] : [];
+		});
+		if (
+			unsaved.length &&
+			!window.confirm(`Discard unsaved changes in:\n${unsaved.join("\n")}\n\nClosing these files does not save them.`)
+		)
+			return;
+		const remaining = openBuffers.filter(([key]) => !closing.has(key));
+		const index = openBuffers.findIndex(([key]) => key === selected);
+		const next =
+			selected && !closing.has(selected)
+				? selected
+				: remaining[Math.min(Math.max(index, 0), remaining.length - 1)]?.[0];
+		openRequest.current++;
+		setBusy(false);
+		if (selected && closing.has(selected)) {
+			instance.current?.setModel(null);
+			setDiff(undefined);
+		}
+		for (const key of closing) {
+			const buffer = buffers.current.get(key)!;
+			buffers.current.delete(key);
+			buffer.listener?.dispose();
+			buffer.model?.dispose();
+		}
+		setSelected(next);
+		setError(undefined);
+		setNotice(undefined);
+		redraw((version) => version + 1);
+		requestAnimationFrame(() => {
+			if (filesPane.current?.getClientRects().length) (tabButtons.current.get(next ?? "") ?? filesPane.current).focus();
+		});
+	};
+	const copyPath = async (path: string) => {
+		try {
+			await navigator.clipboard.writeText(path);
+			setNotice(`Copied ${path}`);
+		} catch (reason) {
+			setError(`Could not copy path: ${String(reason)}`);
+		}
+	};
+	const tabMenu = (event: MouseEvent<HTMLElement> | KeyboardEvent<HTMLElement>, key: string) => {
+		const buffer = buffers.current.get(key);
+		if (!buffer) return;
+		openMenu(event, [
+			{ label: "Close", onSelect: () => closeTabs([key]), disabled: saving },
+			{
+				label: "Close others",
+				onSelect: () => closeTabs(openBuffers.filter(([other]) => other !== key).map(([other]) => other)),
+				disabled: saving || openBuffers.length < 2,
+			},
+			{ label: "Close all", onSelect: () => closeTabs(openBuffers.map(([other]) => other)), disabled: saving },
+			{
+				label: "Copy relative path",
+				onSelect: () => {
+					void copyPath(buffer.path);
+				},
+			},
+		]);
+	};
 	const resolveConflict = (choice: "draft" | "disk") => {
 		if (!current?.external) return;
 		const disk = current.external;
@@ -449,11 +544,14 @@ export function WorkplaceCode({
 				</div>
 			)}
 			<div className={`wp-code-panes ${showGit ? "with-git" : ""}`}>
-				<aside className="wp-code-files" aria-label="Files">
+				<aside className="wp-code-files" aria-label="Files" tabIndex={-1} ref={filesPane}>
 					<div className="wp-code-pane-heading">
 						<strong>Files</strong>
 						<button
 							type="button"
+							className="wp-icon-button"
+							aria-label="Refresh files"
+							title="Refresh files"
 							disabled={!root}
 							onClick={() => {
 								setEntries({});
@@ -461,15 +559,19 @@ export function WorkplaceCode({
 								for (const path of expanded) void loadDirectory(path);
 							}}
 						>
-							Refresh files
+							<Icon name="refresh" />
 						</button>
 					</div>
 					{root ? (
 						<FileTree
+							repository={root}
 							entries={entries}
 							expanded={expanded}
 							selected={current?.path}
 							onToggle={toggleDirectory}
+							onCopy={(path) => {
+								void copyPath(path);
+							}}
 							onOpen={(path) => {
 								void openFile(path);
 							}}
@@ -480,16 +582,24 @@ export function WorkplaceCode({
 				</aside>
 				<main className="wp-code-editor-pane">
 					<div className="wp-code-tabs" role="tablist" aria-label="Open files">
-						{[...buffers.current.entries()]
-							.filter(([, buffer]) => buffer.root === root)
-							.map(([key, buffer]) => (
+						{openBuffers.map(([key, buffer]) => (
+							<div
+								className={`wp-code-tab ${key === selected && !diff ? "is-selected" : ""}`}
+								key={key}
+								role="presentation"
+							>
 								<button
 									type="button"
 									role="tab"
 									aria-selected={key === selected && !diff}
-									key={key}
+									ref={(button) => {
+										if (button) tabButtons.current.set(key, button);
+										else tabButtons.current.delete(key);
+									}}
 									title={buffer.path}
 									onClick={() => selectTab(key)}
+									onContextMenu={(event) => tabMenu(event, key)}
+									onKeyDown={(event) => tabMenu(event, key)}
 								>
 									{buffer.path.split("/").at(-1)}
 									{buffer.text !== buffer.base && (
@@ -499,7 +609,20 @@ export function WorkplaceCode({
 										</span>
 									)}
 								</button>
-							))}
+								<button
+									type="button"
+									className="wp-code-tab-close"
+									aria-label={`Close ${buffer.path}`}
+									title={`Close ${buffer.path}`}
+									disabled={saving}
+									onClick={() => closeTabs([key])}
+									onContextMenu={(event) => tabMenu(event, key)}
+									onKeyDown={(event) => tabMenu(event, key)}
+								>
+									<Icon name="close" />
+								</button>
+							</div>
+						))}
 					</div>
 					{diff && (
 						<section className="wp-code-diff" aria-label="Git diff">
@@ -520,22 +643,27 @@ export function WorkplaceCode({
 							<span title={current?.path}>{busy ? "Reading file..." : (current?.path ?? "No file selected")}</span>
 							<button
 								type="button"
+								className="wp-icon-button"
+								aria-label="Check for file changes"
+								title="Check for file changes on disk"
 								disabled={!current || saving}
 								onClick={() => {
 									if (current) void readBuffer(current).catch((reason) => setError(String(reason)));
 								}}
 							>
-								Check disk
+								<Icon name="refresh" />
 							</button>
 							<button
 								type="button"
-								className="wp-code-save"
+								className="wp-icon-button wp-code-save"
+								aria-label={saving ? "Saving" : "Save"}
+								title="Save (Cmd/Ctrl+S)"
 								disabled={!dirty || saving || !!current?.external}
 								onClick={() => {
 									void save();
 								}}
 							>
-								{saving ? "Saving..." : "Save"}
+								<Icon name="save" />
 							</button>
 						</div>
 						{current?.external && (

@@ -240,13 +240,17 @@ test("an organization is one headquarters: the root at its desk, a manager's tea
 	} finally {
 		commands.close();
 	}
-	await recorded("select 1 from events where session_id = ? and type = 'person_departed'", "org-b");
-	await skeptic.stop();
-	await soon(() => expect(character("org-b")).toBeUndefined());
-	await soon(() => expect(latest().dormant?.some((agent) => agent.id === "org-b")).toBe(false));
-	expect(latest().headquarters.find((hq) => hq.id === "org-root")?.wings).toContainEqual(
-		expect.objectContaining({ team: "org-manager", headcount: 2, dormant: 0 }),
+	await vi.waitFor(
+		() => {
+			expect(character("org-b")).toBeUndefined();
+			expect(latest().dormant?.some((agent) => agent.id === "org-b")).toBe(false);
+			expect(latest().headquarters.find((hq) => hq.id === "org-root")?.wings).toContainEqual(
+				expect.objectContaining({ team: "org-manager", headcount: 2, dormant: 0 }),
+			);
+		},
+		{ timeout: 15000 },
 	);
+	await skeptic.stop();
 }, 60000);
 
 test("a wing stays once seen, in first-seen order, boarded when its last agent stops, and is still there after the app restarts", async () => {

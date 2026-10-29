@@ -38,6 +38,8 @@ test("start IPC accepts a typed draft with optional existing identities and expl
 	expect(isOrgStartRequest(team())).toBe(true);
 	expect(isOrgStartRequest({ ...team(), withReady: true })).toBe(true);
 	expect(isOrgStartRequest({ ...team(), withReady: false })).toBe(true);
+	expect(isOrgStartRequest({ ...team(), goal: undefined })).toBe(true);
+	expect(isOrgStartRequest({ ...team(), goal: "  " })).toBe(true);
 });
 
 test("malformed start IPC fields are refused before reaching the controller", () => {

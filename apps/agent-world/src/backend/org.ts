@@ -108,6 +108,8 @@ export function openOrg(paths: { db: string; agentDir: string }, commands: Comma
 	};
 
 	async function start(request: OrgStartRequest): Promise<OrgStartProgress> {
+		const teamGoal = request.goal?.trim() ?? "";
+		const goalFor = (position: OrgStartRequest["positions"][number]) => position.goal?.trim() || teamGoal;
 		const progress: OrgStartProgress = {
 			id: request.id,
 			people: request.positions.map((position) => ({ id: position.id, person: position.person, state: "pending" })),
@@ -147,8 +149,7 @@ export function openOrg(paths: { db: string; agentDir: string }, commands: Comma
 			if (!isAbsolute(directory) || !existsSync(directory) || !statSync(directory).isDirectory())
 				return reject("Choose an existing absolute working directory.");
 			const cwd = realpathSync(directory);
-			if (!request.id.trim() || !request.goal.trim() || !request.positions.length)
-				return reject("A team needs an identity, a written goal and positions.");
+			if (!request.id.trim() || !request.positions.length) return reject("A team needs an identity and positions.");
 			const positions = new Map(request.positions.map((position) => [position.id, position]));
 			if (positions.size !== request.positions.length || request.positions.some((position) => !position.id))
 				return reject("Each planned position needs a unique identity.");
@@ -177,11 +178,11 @@ export function openOrg(paths: { db: string; agentDir: string }, commands: Comma
 					const previous = attempts.at(-1);
 					const original = attempts[0] && JSON.parse(attempts[0].command);
 					if (
-						original?.goal &&
+						original?.role &&
 						(original.cwd !== cwd ||
 							original.role !== position.role ||
 							(original.specialization ?? "") !== (position.specialization?.trim() ?? "") ||
-							original.goal.text !== (position.goal?.trim() || request.goal.trim()))
+							(original.goal?.text ?? "") !== goalFor(position))
 					)
 						return reject(
 							"A prepared person's role, specialization, working directory and goal cannot change on retry.",
@@ -201,8 +202,8 @@ export function openOrg(paths: { db: string; agentDir: string }, commands: Comma
 						);
 					if (unavailable.has(id) || existing?.retired_at != null)
 						return reject("Temporary or departed people cannot join a planned team.");
-					if (!existing && (!position.role || !roles.has(position.role) || !(position.goal ?? request.goal).trim()))
-						return reject("Each new person needs a catalog role and written goal.");
+					if (!existing && (!position.role || !roles.has(position.role)))
+						return reject("Each new person needs a catalog role.");
 				}
 			};
 			const identityError = identify();
@@ -296,7 +297,7 @@ export function openOrg(paths: { db: string; agentDir: string }, commands: Comma
 				name: position.name?.trim() || undefined,
 				role: position.role,
 				...(position.specialization?.trim() ? { specialization: position.specialization.trim() } : {}),
-				goal: { by: "operator", text: position.goal?.trim() || request.goal.trim() },
+				...(goalFor(position) ? { goal: { by: "operator", text: goalFor(position) } } : {}),
 			});
 			const startUnresolved = (
 				member: OrgStartProgress["people"][number],
@@ -309,6 +310,14 @@ export function openOrg(paths: { db: string; agentDir: string }, commands: Comma
 					reason: result.ok ? "The start was applied but no connected incarnation is visible." : result.reason,
 					...(record?.stage === "failed" ? { atHome: true } : {}),
 				});
+			};
+			const openingPrompt = (
+				position: OrgStartRequest["positions"][number],
+				existing: Person | undefined,
+				attempts: RecordedCommand[],
+			) => {
+				const assignedGoal = existing ? attempts[0] && JSON.parse(attempts[0].command).goal?.text : goalFor(position);
+				return teamGoal || !assignedGoal ? { prompt: "" } : {};
 			};
 			const prepare = async (position: OrgStartRequest["positions"][number]) => {
 				const member = progress.people.find((person) => person.id === position.id)!;
@@ -363,7 +372,7 @@ export function openOrg(paths: { db: string; agentDir: string }, commands: Comma
 							kind: "start",
 							cwd,
 							...(pane ? { tmux: pane } : {}),
-							prompt: "",
+							...openingPrompt(position, existing, attempts),
 							...(manager ? { reportsTo: manager } : {}),
 							...(!existing ? hire(position) : {}),
 						},
@@ -450,6 +459,12 @@ export function openOrg(paths: { db: string; agentDir: string }, commands: Comma
 				const headReady = ready(progress.people.find((person) => person.id === head.id)!);
 				const kickoffId = `org-kickoff:${request.id}`;
 				let kickoff = recorded(kickoffId);
+				if (!teamGoal && !kickoff) {
+					progress.complete = allReady;
+					progress.next = allReady ? "done" : "retry";
+					if (allReady) progress.note = "Team ready.";
+					return;
+				}
 				if (!kickoff && headReady && (allReady || request.withReady)) {
 					const result = await commands.send(
 						"operator",
@@ -458,7 +473,7 @@ export function openOrg(paths: { db: string; agentDir: string }, commands: Comma
 							thread: kickoffId,
 							subject: "Team kickoff",
 							to: [headId],
-							body: `${request.goal}${READY_ROSTER}${JSON.stringify(progress.people.filter(ready).map((person) => person.person))}`,
+							body: `${teamGoal}${READY_ROSTER}${JSON.stringify(progress.people.filter(ready).map((person) => person.person))}`,
 						},
 						{ commandId: kickoffId },
 					);

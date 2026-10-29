@@ -39,7 +39,7 @@
 	font: inherit;
 }
 .wp-org-tools button,
-.wp-org-reporting button,
+.wp-org .wp-org-reporting button,
 .wp-org-draft button {
 	padding: 8px 12px;
 	border: 1px solid var(--wp-border);
@@ -61,6 +61,7 @@
 	filter: brightness(1.1);
 }
 .wp-org-toolbar > .wp-org-tools {
+	align-items: flex-end;
 	width: min(480px, 52%);
 }
 .wp-org-toolbar .wp-org-primary {

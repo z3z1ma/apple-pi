@@ -264,6 +264,27 @@ test("Issues reads on explicit selection, retains goal drafts, and delegates onl
 		expect(await page.evaluate(() => (window as any).unsafeIssueHtml)).toBeUndefined();
 		await page.getByText("Reproduce the total mismatch, then verify the corrected result.", { exact: true }).waitFor();
 		const detail = page.getByRole("region", { name: "Issue detail", exact: true });
+		for (const name of ["Refresh issues", "Refresh issue", "Close issue"]) {
+			const button = page.getByRole("button", { name, exact: true });
+			expect((await button.innerText()).trim()).toBe("");
+			expect(await button.locator("svg").count()).toBe(1);
+			expect(
+				await button.evaluate((node) => {
+					const box = node.getBoundingClientRect();
+					const glyph = node.querySelector("svg")!.getBoundingClientRect();
+					const style = getComputedStyle(node);
+					const hit = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+					return (
+						box.width > glyph.width &&
+						box.height > glyph.height &&
+						Number.parseFloat(style.borderTopWidth) > 0 &&
+						style.borderTopStyle !== "none" &&
+						style.borderTopColor !== "rgba(0, 0, 0, 0)" &&
+						(hit === node || node.contains(hit))
+					);
+				}),
+			).toBe(true);
+		}
 		expect(await detail.locator('script, a[href^="javascript:"]').count()).toBe(0);
 		const disclosure = detail.getByText("Delegate", { exact: true });
 		const beforeLink = page.url();
@@ -280,6 +301,13 @@ test("Issues reads on explicit selection, retains goal drafts, and delegates onl
 		expect(await page.getByRole("button", { name: "Send instruction", exact: true }).isEnabled()).toBe(false);
 		await recipient.selectOption("ada");
 		await goal.fill("Fix the totals and prove the rounding rule is unchanged.");
+		await page.getByRole("button", { name: "Refresh issue", exact: true }).click();
+		await vi.waitFor(async () =>
+			expect(await page.evaluate(() => (window as any).issueCalls.details)).toEqual(["APP-1", "APP-1"]),
+		);
+		await page.getByRole("button", { name: "Refresh issues", exact: true }).click();
+		expect(await recipient.inputValue()).toBe("ada");
+		expect(await goal.inputValue()).toBe("Fix the totals and prove the rounding rule is unchanged.");
 		await disclosure.click();
 		await goal.waitFor({ state: "hidden" });
 		await disclosure.click();

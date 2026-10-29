@@ -310,14 +310,11 @@ export type CommandReceipt =
 	| { ok: true; stage: "accepted" | "delivered" | "applied"; note?: string }
 	| { ok: false; reason: string; confirm?: boolean };
 
-/**
- * A new agent the operator recruits (ticket 10): its name, the directory it works in, and its opening brief (its first
- * prompt; empty for none). A worker names the coordinator it reports to; an independent agent names none.
- */
+/** A new person with optional initial work; without work, it starts ready for instructions. */
 export interface RecruitRequest {
 	name: string;
 	cwd: string;
-	brief: string;
+	brief?: string;
 	reportsTo?: string;
 	/** The catalog role it is hired into; none for a session with no role. */
 	role?: string;

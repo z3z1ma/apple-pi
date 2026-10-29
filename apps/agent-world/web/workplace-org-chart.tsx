@@ -344,6 +344,13 @@ export function OrgChart({
 							{roots.map((root) => {
 								const members = branch(root.character.id);
 								const atHome = people.filter((person) => members.has(person.character.id) && person.home).length;
+								const customName =
+									organizationName(root.character.id, root.character.name) !== `${root.character.name} organization`;
+								const addReason = !manages(root)
+									? "This role cannot manage people"
+									: root.home
+										? "Wake team head to add a person"
+										: undefined;
 								return (
 									<fieldset
 										key={root.character.id}
@@ -352,17 +359,10 @@ export function OrgChart({
 										{...dragProps(root)}
 									>
 										<div className="wp-org-card-heading">
-											<PersonAvatar id={root.character.id} name={root.character.name} interactive={false} />
+											<PersonAvatar id={root.character.id} name={root.character.name} />
 											<div>
 												<OrgNameEditor id={root.character.id} name={root.character.name} />
-												<button
-													type="button"
-													className="wp-org-card-head"
-													aria-label={`View profile: ${root.character.name}`}
-													onClick={(event) => select(root.character.id, event.currentTarget)}
-												>
-													Head: {root.character.name}
-												</button>
+												{customName && <span className="wp-org-card-head">Head: {root.character.name}</span>}
 											</div>
 										</div>
 										<div className="wp-org-team-summary">
@@ -380,16 +380,15 @@ export function OrgChart({
 											>
 												Open team <span aria-hidden="true">→</span>
 											</button>
-											{manages(root) && !root.home && (
-												<button
-													type="button"
-													aria-label={`Add person to ${root.character.name}'s team`}
-													disabled={busy}
-													onClick={() => addPerson(root.character.id)}
-												>
-													+ Add person
-												</button>
-											)}
+											<button
+												type="button"
+												aria-label={`Add person to ${root.character.name}'s team`}
+												title={addReason}
+												disabled={busy || !!addReason}
+												onClick={() => addPerson(root.character.id)}
+											>
+												+ Add person
+											</button>
 										</div>
 									</fieldset>
 								);

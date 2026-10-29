@@ -62,7 +62,7 @@ export function AddPerson({
 
 	async function submit(event: React.FormEvent) {
 		event.preventDefault();
-		if (busy || pending || !canManage || !selected || !cwd.trim() || !goal.trim()) return;
+		if (busy || pending || !canManage || !selected || !cwd.trim()) return;
 		setBusy(true);
 		onBusyChange?.(true);
 		setError(undefined);
@@ -70,7 +70,7 @@ export function AddPerson({
 			const receipt = await api.recruit({
 				name: name.trim(),
 				cwd: cwd.trim(),
-				brief: goal.trim(),
+				...(goal.trim() ? { brief: goal.trim() } : {}),
 				reportsTo: manager,
 				role,
 				...(specialization.trim() ? { specialization: specialization.trim() } : {}),
@@ -116,7 +116,6 @@ export function AddPerson({
 				</button>
 			</header>
 			<form onSubmit={submit} aria-busy={busy}>
-				<p>This starts a Pi session immediately with the role and goal below.</p>
 				<fieldset disabled={busy || !!pending}>
 					<label htmlFor={`${id}-role`}>Role</label>
 					<select id={`${id}-role`} value={role} required onChange={(event) => setRole(event.target.value)}>
@@ -163,11 +162,12 @@ export function AddPerson({
 						placeholder="/full/path/to/repository"
 						onChange={(event) => setCwd(event.target.value)}
 					/>
-					<label htmlFor={`${id}-goal`}>Goal</label>
+					<label htmlFor={`${id}-goal`}>Goal (optional)</label>
 					<textarea
 						id={`${id}-goal`}
+						aria-label="Goal"
 						value={goal}
-						required
+						placeholder="Leave blank to start ready for instructions."
 						rows={6}
 						onChange={(event) => setGoal(event.target.value)}
 					/>
@@ -188,7 +188,7 @@ export function AddPerson({
 					<button
 						className="wp-org-primary"
 						type="submit"
-						disabled={busy || !!pending || !canManage || !selected || !cwd.trim() || !goal.trim()}
+						disabled={busy || !!pending || !canManage || !selected || !cwd.trim()}
 					>
 						Add person
 					</button>

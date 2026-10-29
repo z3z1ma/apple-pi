@@ -156,6 +156,7 @@ afterEach(() => {
 
 test("prepares managers before reports with held prompts, joins without reading, and kicks off only the head once", async () => {
 	const request = plan();
+	request.positions[1]!.goal = undefined;
 	const result = await org.orgStart(request);
 	expect(result.complete).toBe(true);
 	const head = result.people.find((member) => member.id === "head")!.person!;
@@ -165,11 +166,15 @@ test("prepares managers before reports with held prompts, joins without reading,
 	expect(starts[0]!.command).toMatchObject({
 		prompt: "",
 		role: "coordinator",
-		goal: { by: "operator", text: "Coordinate the change." },
+		goal: { by: "operator", text: request.goal },
 	});
-	expect(starts[1]!.command).toMatchObject({ prompt: "", reportsTo: head });
+	expect(starts[1]!.command).toMatchObject({
+		prompt: "",
+		reportsTo: head,
+		goal: { by: "operator", text: "Build the agreed change." },
+	});
 	expect(messagesOf(db, result.kickoff!.thread)).toMatchObject([
-		{ from: "operator", body: expect.stringContaining(request.goal) },
+		{ from: "operator", body: expect.stringContaining(request.goal!) },
 	]);
 	expect(pushed).toEqual([[head]]);
 	expect(events.some((event) => event.people.some((member) => member.state === "preparing"))).toBe(true);
@@ -447,18 +452,98 @@ test("waking an existing planned person sends no replacement specialization", as
 	expect(start.command).not.toHaveProperty("specialization");
 });
 
-test("a prepared person's goal cannot silently change on retry", async () => {
-	fail.set("Worker", "failed");
+test.each([undefined, "  "])(
+	"a goal-free plan prepares people and membership without kickoff or readiness: %j",
+	async (goal) => {
+		const request = plan();
+		request.goal = goal;
+		for (const position of request.positions) position.goal = goal;
+		fail.set("Worker", "failed");
+		const partial = await org.orgStart(request);
+		expect(partial.next).toBe("retry");
+		expect(partial.kickoff).toBeUndefined();
+		fail.clear();
+		const done = await org.orgStart({ ...retry(request, partial), withReady: true });
+		expect(done).toMatchObject({ complete: true, next: "done", note: "Team ready." });
+		expect(done.kickoff).toBeUndefined();
+		expect(done.readiness).toBeUndefined();
+		for (const entry of sent.filter((entry) => entry.command.kind === "start")) {
+			expect(entry.command).toHaveProperty("prompt", "");
+			expect(entry.command).not.toHaveProperty("goal");
+		}
+		expect(sent.filter((entry) => entry.command.kind === "thread_post")).toEqual([]);
+		expect(threadsOf(db, "operator", false).find((thread) => thread.id === done.channel)).toMatchObject({
+			id: done.channel,
+			unread: 0,
+		});
+	},
+);
+
+test("an explicit position goal without a team goal starts only that person's work", async () => {
 	const request = plan();
+	request.goal = undefined;
+	request.positions[1]!.goal = undefined;
+	const done = await org.orgStart(request);
+	expect(done.complete).toBe(true);
+	const starts = sent.filter((entry) => entry.command.kind === "start");
+	expect(starts[0]!.command).toHaveProperty("prompt", "");
+	expect(starts[0]!.command).not.toHaveProperty("goal");
+	expect(starts[1]!.command).toHaveProperty("goal", { by: "operator", text: "Build the agreed change." });
+	expect(starts[1]!.command).not.toHaveProperty("prompt");
+	expect(sent.filter((entry) => entry.command.kind === "thread_post")).toEqual([]);
+});
+
+test("a prepared goal-free identity cannot receive a new goal on retry", async () => {
+	const request = plan();
+	request.goal = undefined;
+	for (const position of request.positions) position.goal = undefined;
+	fail.set("Worker", "failed");
 	const partial = await org.orgStart(request);
-	const before = sent.length;
 	const changed = retry(request, partial);
-	changed.positions[0]!.goal = "Different work";
-	const result = await org.orgStart(changed);
-	expect(result.note).toContain("cannot change on retry");
-	expect(result.editable).toBe(false);
+	changed.positions[0]!.goal = "New work";
+	const before = sent.length;
+	const refused = await org.orgStart(changed);
+	expect(refused.note).toContain("cannot change on retry");
+	expect(refused.editable).toBe(false);
 	expect(sent).toHaveLength(before);
 });
+
+test("an existing-only idle plan accepts later explicit team intent without replacing its kickoff", async () => {
+	person("existing-head", null, true);
+	const request: OrgStartRequest = {
+		id: "existing-idle",
+		cwd: directory,
+		positions: [{ id: "head", person: "existing-head", manager: null }],
+	};
+	const idle = await org.orgStart(request);
+	expect(idle.complete).toBe(true);
+	expect(idle.kickoff).toBeUndefined();
+	expect(sent.filter((entry) => entry.command.kind === "start" || entry.command.kind === "thread_post")).toEqual([]);
+	const started = await org.orgStart({ ...request, goal: "Coordinate the next change." });
+	expect(started.kickoff).toBeDefined();
+	await org.orgStart({ ...request, goal: "Coordinate the next change." });
+	const observed = await org.orgStart(request);
+	expect(observed.kickoff).toEqual(started.kickoff);
+	expect(observed.complete).toBe(true);
+	expect(messagesOf(db, started.kickoff!.thread)).toHaveLength(1);
+});
+
+test.each(["Different work", undefined])(
+	"a prepared person's goal cannot change or disappear on retry: %j",
+	async (goal) => {
+		fail.set("Worker", "failed");
+		const request = plan();
+		request.goal = undefined;
+		const partial = await org.orgStart(request);
+		const before = sent.length;
+		const changed = retry(request, partial);
+		changed.positions[0]!.goal = goal;
+		const result = await org.orgStart(changed);
+		expect(result.note).toContain("cannot change on retry");
+		expect(result.editable).toBe(false);
+		expect(sent).toHaveLength(before);
+	},
+);
 
 test("an already-awake member that joins after subset kickoff gets one readiness notice", async () => {
 	person("existing-head", null, true);

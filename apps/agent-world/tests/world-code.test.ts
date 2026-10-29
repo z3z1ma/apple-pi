@@ -51,7 +51,14 @@ async function openCode() {
 			operatorMail: [],
 			workplace: { threads: [], tasks: [], escalations: [] },
 		};
-		w.workspaceCalls = { repositories: 0, trees: [], reads: [], saves: [], status: [], diffs: [] };
+		w.workspaceCalls = { repositories: 0, trees: [], reads: [], saves: [], status: [], diffs: [], copied: [] };
+		Object.defineProperty(navigator, "clipboard", {
+			value: {
+				writeText: async (text: string) => {
+					w.workspaceCalls.copied.push(text);
+				},
+			},
+		});
 		w.workspaceDisk = {
 			"src/main.ts": { text: 'export const message = "original";\n', hash: "main-original" },
 			"README.md": { text: "# Fixture project\n", hash: "readme-original" },
@@ -69,7 +76,7 @@ async function openCode() {
 			workspace: {
 				repositories: async () => {
 					w.workspaceCalls.repositories++;
-					return { ok: true, roots: [root] };
+					return { ok: true, roots: [root, `${root}-other`] };
 				},
 				tree: async (request: WorkspacePath) => {
 					w.workspaceCalls.trees.push(structuredClone(request));
@@ -167,6 +174,27 @@ test("real Monaco retains dirty files across file and app switches, then saves e
 		const text = 'export const message = "operator draft";\n';
 		await replaceText(page, text);
 		await page.getByRole("img", { name: "Unsaved changes", exact: true }).waitFor();
+		for (const name of ["Refresh files", "Refresh Git", "Check for file changes", "Save"]) {
+			const button = page.getByRole("button", { name, exact: true });
+			expect((await button.innerText()).trim()).toBe("");
+			expect(await button.locator("svg").count()).toBe(1);
+			expect(
+				await button.evaluate((node) => {
+					const box = node.getBoundingClientRect();
+					const glyph = node.querySelector("svg")!.getBoundingClientRect();
+					const style = getComputedStyle(node);
+					const hit = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+					return (
+						box.width > glyph.width &&
+						box.height > glyph.height &&
+						Number.parseFloat(style.borderTopWidth) > 0 &&
+						style.borderTopStyle !== "none" &&
+						style.borderTopColor !== "rgba(0, 0, 0, 0)" &&
+						(hit === node || node.contains(hit))
+					);
+				}),
+			).toBe(true);
+		}
 		expect(await page.evaluate(() => (window as any).workspaceCalls.saves)).toEqual([]);
 		await page
 			.getByRole("complementary", { name: "Files", exact: true })
@@ -266,7 +294,7 @@ test("conflict recovery preserves the draft, writes only after Save, and still r
 				hash: "discard-hash",
 			};
 		});
-		await page.getByRole("button", { name: "Check disk", exact: true }).click();
+		await page.getByRole("button", { name: "Check for file changes", exact: true }).click();
 		await page.getByRole("button", { name: "Discard draft and use disk version", exact: true }).click();
 		await vi.waitFor(async () => expect(await editorText(page)).toContain("discard target"));
 		expect(await page.evaluate(() => (window as any).workspaceCalls.saves)).toHaveLength(3);
@@ -324,6 +352,126 @@ test("Git distinguishes staged and working diffs without opening files or writin
 		expect(await page.evaluate(() => (window as any).workspaceCalls.reads)).toEqual(
 			expect.arrayContaining([{ root: ROOT, path: "notes.txt" }]),
 		);
+		expect(await page.evaluate(() => (window as any).workspaceCalls.saves)).toEqual([]);
+		expect(errors).toEqual([]);
+	} finally {
+		await page.close();
+	}
+}, 45_000);
+
+test("clean tabs close individually and keyboard menus copy paths and restore focus", async () => {
+	const { page, errors } = await openCode();
+	try {
+		await openMain(page);
+		await page
+			.getByRole("complementary", { name: "Files", exact: true })
+			.getByRole("button", { name: "README.md", exact: true })
+			.click();
+		await vi.waitFor(async () => expect(await editorText(page)).toContain("Fixture project"));
+		const mainTab = page.getByRole("tab", { name: "main.ts", exact: true });
+		await mainTab.focus();
+		await page.keyboard.press("Shift+F10");
+		const menu = page.getByRole("menu", { name: "Actions", exact: true });
+		await menu.waitFor();
+		expect(
+			await menu
+				.getByRole("menuitem", { name: "Close", exact: true })
+				.evaluate((node) => node === document.activeElement),
+		).toBe(true);
+		await page.keyboard.press("End");
+		expect(
+			await menu
+				.getByRole("menuitem", { name: "Copy relative path", exact: true })
+				.evaluate((node) => node === document.activeElement),
+		).toBe(true);
+		await page.keyboard.press("Enter");
+		expect(await page.evaluate(() => (window as any).workspaceCalls.copied)).toEqual(["src/main.ts"]);
+		expect(await mainTab.evaluate((node) => node === document.activeElement)).toBe(true);
+		await page.keyboard.press("Shift+F10");
+		await page.keyboard.press("Escape");
+		await menu.waitFor({ state: "hidden" });
+		expect(await mainTab.evaluate((node) => node === document.activeElement)).toBe(true);
+		await shot(page, "tabs-light");
+		await page.getByRole("button", { name: "Theme: dark mode", exact: true }).click();
+		await mainTab.click({ button: "right" });
+		await menu.waitFor();
+		await shot(page, "tabs-dark-menu");
+		await page.keyboard.press("Escape");
+		await page.getByRole("button", { name: "Close src/main.ts", exact: true }).click();
+		await mainTab.waitFor({ state: "hidden" });
+		const readme = page.getByRole("tab", { name: "README.md", exact: true });
+		expect(await readme.getAttribute("aria-selected")).toBe("true");
+		await page.getByRole("button", { name: "Close README.md", exact: true }).click();
+		await readme.waitFor({ state: "hidden" });
+		const files = page.getByRole("complementary", { name: "Files", exact: true });
+		await vi.waitFor(async () => expect(await files.evaluate((node) => node === document.activeElement)).toBe(true));
+		const readsBefore = await page.evaluate(() => (window as any).workspaceCalls.reads.length);
+		await files.getByRole("button", { name: "main.ts", exact: true }).click();
+		await vi.waitFor(async () => expect(await editorText(page)).toContain("original"));
+		expect(await page.evaluate(() => (window as any).workspaceCalls.reads.length)).toBeGreaterThan(readsBefore);
+		expect(await page.evaluate(() => (window as any).workspaceCalls.saves)).toEqual([]);
+		expect(errors).toEqual([]);
+	} finally {
+		await page.close();
+	}
+}, 45_000);
+
+test("bulk close confirms dirty targets atomically and preserves buffers in other repositories", async () => {
+	const { page, errors } = await openCode();
+	const prompts: string[] = [];
+	let accept = false;
+	page.on("dialog", async (dialog) => {
+		prompts.push(dialog.message());
+		if (accept) await dialog.accept();
+		else await dialog.dismiss();
+	});
+	try {
+		await openMain(page);
+		await replaceText(page, 'export const message = "primary draft";\n');
+		await page
+			.getByRole("complementary", { name: "Files", exact: true })
+			.getByRole("button", { name: "README.md", exact: true })
+			.click();
+		await vi.waitFor(async () => expect(await editorText(page)).toContain("Fixture project"));
+		const roots = page.getByRole("combobox", { name: "Code repository", exact: true });
+		await roots.selectOption(`${ROOT}-other`);
+		await openMain(page);
+		await replaceText(page, 'export const message = "other repository draft";\n');
+		await roots.selectOption(ROOT);
+		const readme = page.getByRole("tab", { name: "README.md", exact: true });
+		await readme.click();
+		await readme.click({ button: "right" });
+		const menu = page.getByRole("menu", { name: "Actions", exact: true });
+		await menu.getByRole("menuitem", { name: "Close others", exact: true }).click();
+		expect(prompts).toHaveLength(1);
+		expect(prompts[0]).toContain("src/main.ts");
+		expect(prompts[0]).not.toContain("README.md");
+		expect(await page.getByRole("tablist", { name: "Open files", exact: true }).getByRole("tab").count()).toBe(2);
+		await page.getByRole("tab", { name: /main.ts/ }).click();
+		expect(await editorText(page)).toContain("primary draft");
+		accept = true;
+		await readme.click({ button: "right" });
+		await menu.getByRole("menuitem", { name: "Close others", exact: true }).click();
+		await page.getByRole("tab", { name: /main.ts/ }).waitFor({ state: "hidden" });
+		expect(prompts).toHaveLength(2);
+		await readme.click({ button: "right" });
+		await menu.getByRole("menuitem", { name: "Close all", exact: true }).click();
+		await readme.waitFor({ state: "hidden" });
+		expect(prompts).toHaveLength(2);
+		await roots.selectOption(`${ROOT}-other`);
+		const other = page.getByRole("tab", { name: /main.ts/ });
+		await other.click();
+		expect(await editorText(page)).toContain("other repository draft");
+		accept = false;
+		await other.click({ button: "right" });
+		await menu.getByRole("menuitem", { name: "Close all", exact: true }).click();
+		expect(prompts).toHaveLength(3);
+		expect(await editorText(page)).toContain("other repository draft");
+		accept = true;
+		await other.click({ button: "right" });
+		await menu.getByRole("menuitem", { name: "Close all", exact: true }).click();
+		await other.waitFor({ state: "hidden" });
+		expect(prompts).toHaveLength(4);
 		expect(await page.evaluate(() => (window as any).workspaceCalls.saves)).toEqual([]);
 		expect(errors).toEqual([]);
 	} finally {

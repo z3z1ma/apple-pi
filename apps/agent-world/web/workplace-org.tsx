@@ -229,7 +229,7 @@ export function Org({
 				name: candidate.character.name,
 				role: roles.find((choice) => choice.title === candidate.character.facts?.title)?.name ?? "",
 				manager: candidate.character.id === existingToAdd ? (draft.positions[0]?.id ?? null) : candidate.parent,
-				goal: candidate.character.facts?.task?.title ?? "",
+				goal: "",
 				existing: true,
 			}));
 		setDraft({ ...draft, positions: [...draft.positions, ...additions] });
@@ -242,7 +242,9 @@ export function Org({
 		setStarted(true);
 		try {
 			const response = await api.orgStart({
-				...draft,
+				id: draft.id,
+				cwd: draft.cwd,
+				...(draft.goal.trim() ? { goal: draft.goal.trim() } : {}),
 				withReady,
 				positions: draft.positions.map((item) => ({
 					id: item.id,
@@ -251,8 +253,7 @@ export function Org({
 					person: item.existing ? item.id : item.person,
 					manager: item.manager,
 					...(!item.existing && item.specialization?.trim() ? { specialization: item.specialization.trim() } : {}),
-					goal:
-						item.goal.trim() || `${draft.goal}\n\n${role(item.role)?.mandate ?? "Contribute through the team head."}`,
+					...(!item.existing && item.goal.trim() ? { goal: item.goal.trim() } : {}),
 				})),
 			});
 			setResult(response);
@@ -276,11 +277,11 @@ export function Org({
 					response.note ??
 						"Team setup is partial. Review each person before retrying or starting with ready teammates.",
 				);
-			else {
+			else if (response.kickoff) {
 				const headId = response.people.find((member) => member.id === draft.positions[0]?.id)?.person;
 				const headName = people.find((candidate) => candidate.character.id === headId)?.character.name;
 				setNotice(`Sent the team task to ${headName ?? "the team head"}; they coordinate the reports.`);
-			}
+			} else setNotice(response.note ?? "Team ready for instructions.");
 		} catch (reason) {
 			setError(String(reason));
 		} finally {
@@ -343,15 +344,15 @@ export function Org({
 			<button
 				type="button"
 				className="wp-org-primary wp-org-start"
-				disabled={
-					busy || result?.complete || !draft.goal.trim() || !draft.cwd.trim() || typeof api.orgStart !== "function"
-				}
+				disabled={busy || result?.complete || !draft.cwd.trim() || typeof api.orgStart !== "function"}
 				onClick={() => void startTeam()}
 			>
 				{busy
 					? "Preparing team..."
 					: result?.complete
-						? "Team started"
+						? result.kickoff
+							? "Team started"
+							: "Team ready"
 						: started
 							? "Retry unresolved teammates"
 							: "Start team"}
@@ -480,15 +481,22 @@ export function Org({
 										read.
 									</p>
 									<label>
-										Team task
+										Team task (optional)
 										<textarea
 											aria-label="Team task"
 											value={draft.goal}
 											disabled={started}
 											onChange={(event) => setDraft({ ...draft, goal: event.target.value })}
-											placeholder="What must this team accomplish?"
+											placeholder="Leave blank to prepare the team without a shared task."
 										/>
 									</label>
+									{!draft.goal.trim() && (
+										<p>
+											{draft.positions.some((item) => !item.existing && item.goal.trim())
+												? "Only position goals will be assigned."
+												: "People will be ready for instructions."}
+										</p>
+									)}
 									<label>
 										Repository
 										<input
@@ -629,15 +637,17 @@ export function Org({
 													onChange={(event) => updatePosition({ name: event.target.value })}
 												/>
 											</label>
-											<label>
-												Position goal
-												<textarea
-													aria-label="Position goal"
-													value={currentPosition.goal}
-													onChange={(event) => updatePosition({ goal: event.target.value })}
-													placeholder="Use the team task and this role's mandate"
-												/>
-											</label>
+											{!currentPosition.existing && (
+												<label>
+													Position goal (optional)
+													<textarea
+														aria-label="Position goal"
+														value={currentPosition.goal}
+														onChange={(event) => updatePosition({ goal: event.target.value })}
+														placeholder="Use the team task when one is set"
+													/>
+												</label>
+											)}
 											{currentPosition.manager !== null && (
 												<label>
 													Reports to

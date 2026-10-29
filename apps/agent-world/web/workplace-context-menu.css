@@ -1,0 +1,37 @@
+.wp-context-menu {
+	position: fixed;
+	z-index: 100;
+	display: flex;
+	flex-direction: column;
+	min-width: 160px;
+	max-width: calc(100vw - 16px);
+	max-height: calc(100vh - 16px);
+	overflow: auto;
+	padding: 4px;
+	border: 1px solid var(--wp-border);
+	border-radius: 7px;
+	background: var(--wp-bg);
+	color: var(--wp-text);
+	box-shadow: 0 6px 24px #0003;
+}
+.wp-context-menu > button {
+	flex-shrink: 0;
+	padding: 8px 12px;
+	border: 0;
+	border-radius: 4px;
+	background: transparent;
+	color: inherit;
+	text-align: left;
+	font: inherit;
+	font-size: 13px;
+	cursor: pointer;
+}
+.wp-context-menu > button:hover,
+.wp-context-menu > button:focus-visible {
+	background: var(--wp-selected);
+	outline: none;
+}
+.wp-context-menu > button:disabled {
+	opacity: 0.5;
+	cursor: default;
+}

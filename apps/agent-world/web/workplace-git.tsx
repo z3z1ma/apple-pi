@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { WorkspaceApi, WorkspaceGitEntry } from "../src/workspace.js";
+import { Icon } from "./workplace-icon.js";
 import "./workplace-git.css";
 
 type Selection = { path: string; staged: boolean };
@@ -94,8 +95,15 @@ function RepositoryGit({ root, onOpenFile, onDiff }: GitPaneProps) {
 					{status?.ok && <p className="wp-git-branch">{status.branch ?? "Detached HEAD"}</p>}
 					<p title={root}>{root}</p>
 				</div>
-				<button type="button" onClick={() => setRequest({ root })} disabled={loading}>
-					Refresh Git
+				<button
+					type="button"
+					className="wp-icon-button"
+					aria-label="Refresh Git"
+					title="Refresh Git"
+					onClick={() => setRequest({ root })}
+					disabled={loading}
+				>
+					<Icon name="refresh" />
 				</button>
 			</header>
 			{loading && (

@@ -161,10 +161,6 @@ test("recruiting refuses what Pi could not start, and sends nothing", async () =
 			{ name: "docs", cwd: join(workDir, "missing"), brief: "", reportsTo: "lead" },
 			`${join(workDir, "missing")} is not a directory.`,
 		],
-		[
-			{ name: "docs", cwd: workDir, brief: "", reportsTo: "lead", role: "technical-writer" },
-			"A role hire needs a written goal.",
-		],
 		[{ name: "docs", cwd: workDir, brief: "", reportsTo: "nobody" }, "That manager is not running."],
 		// No client is attached yet, so an independent agent has nowhere to open.
 		[
@@ -246,7 +242,8 @@ test("recruiting an independent agent sends start reporting to nobody, after the
 	const sent = JSON.parse(command[0].command);
 	expect(sent).toMatchObject({ kind: "start", cwd: otherDir, name: "scout" });
 	expect(sent).not.toHaveProperty("reportsTo");
-	expect(sent).not.toHaveProperty("prompt");
+	expect(sent).toHaveProperty("prompt", "");
+	expect(sent).not.toHaveProperty("goal");
 	expect(starts().at(-1)!.args).toEqual(["--session-id", id, "--name", "scout"]);
 	// Right after window 0, which the operator's client shows.
 	expect(windows().slice(1)).toEqual(["1:scout", "2:lead", "3:docs"]);

@@ -87,6 +87,20 @@ test("an old runtime refuses specialized creation before dispatch but still perm
 	expect(vi.mocked(commands.send).mock.calls[0][1]).not.toHaveProperty("specialization");
 });
 
+test.each([undefined, "", "  \n "])("an unnamed role hire without a goal requests an idle start: %j", async (brief) => {
+	const result = await lifecycle.recruit({ ...request(), brief, specialization: "Data correctness" });
+	expect(result).toMatchObject({ ok: true, stage: "applied" });
+	const command = vi.mocked(commands.send).mock.calls[0][1];
+	expect(command).toMatchObject({
+		kind: "start",
+		role: "implementation-engineer",
+		specialization: "Data correctness",
+		prompt: "",
+	});
+	expect(command).not.toHaveProperty("goal");
+	expect(command).not.toHaveProperty("name");
+});
+
 test("explicit names retain whitespace normalization", async () => {
 	await lifecycle.recruit({ ...request(), name: "  Aida   Stone  " });
 	expect(vi.mocked(commands.send).mock.calls[0][1]).toMatchObject({ name: "Aida Stone" });
@@ -94,7 +108,6 @@ test("explicit names retain whitespace normalization", async () => {
 
 test.each([
 	[{ role: undefined }, "Give the new agent a name."],
-	[{ brief: " " }, "A role hire needs a written goal."],
 	[{ role: "not-a-role" }, "No role in the catalog is named not-a-role."],
 	[{ cwd: "" }, "Choose the directory it works in."],
 ])("invalid requests open no session: %j", async (change, reason) => {

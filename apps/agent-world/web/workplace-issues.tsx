@@ -3,6 +3,7 @@ import type { JiraIssue, JiraIssueDetail, JiraTransition } from "../src/integrat
 import type { WorldSnapshot } from "../src/world.js";
 import { useOutsideWrite, type WriteState } from "./overlay/places/outside-write.js";
 import { RichView } from "./overlay/places/rich-view.js";
+import { Icon } from "./workplace-icon.js";
 import "./workplace-issues.css";
 
 const failure = (error: unknown) => (error instanceof Error ? error.message : String(error));
@@ -392,11 +393,24 @@ function IssueDetail({
 					{outsideResults && <small>Outside current results</small>}
 				</span>
 				<div>
-					<button type="button" disabled={loading} onClick={() => setRefresh((value) => value + 1)}>
-						Refresh issue
+					<button
+						type="button"
+						className="wp-icon-button"
+						aria-label="Refresh issue"
+						title="Refresh issue"
+						disabled={loading}
+						onClick={() => setRefresh((value) => value + 1)}
+					>
+						<Icon name="refresh" />
 					</button>
-					<button type="button" aria-label="Close issue" onClick={onClose}>
-						Close
+					<button
+						type="button"
+						className="wp-icon-button"
+						aria-label="Close issue"
+						title="Close issue"
+						onClick={onClose}
+					>
+						<Icon name="close" />
 					</button>
 				</div>
 			</header>
@@ -536,8 +550,15 @@ export function WorkplaceIssues({
 					<h1>Issues</h1>
 					<span className="wp-issues-source">Jira</span>
 				</div>
-				<button type="button" disabled={loading} onClick={() => setRefresh((value) => value + 1)}>
-					Refresh issues
+				<button
+					type="button"
+					className="wp-icon-button"
+					aria-label="Refresh issues"
+					title="Refresh issues"
+					disabled={loading}
+					onClick={() => setRefresh((value) => value + 1)}
+				>
+					<Icon name="refresh" />
 				</button>
 			</header>
 			<div className="wp-issues-toolbar">

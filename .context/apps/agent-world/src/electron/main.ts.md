@@ -17,7 +17,7 @@ Why: the renderer shows untrusted text; the main process must not trust the rend
 Coupled: apps/agent-world/src/backend/links.ts, apps/agent-world/src/electron/preload.ts
 Verify: apps/agent-world/tests/links.test.ts
 
-Recruit IPC explicitly forwards its allowed fields, including string specialization; adding a creation-request DTO field also requires adding it to this handler. The browser fixtures supply agentWorld directly and cannot prove main-process forwarding. Malformed optional specialization is not forwarded; runtime creation remains the persistence authority.
+Recruit IPC accepts an omitted brief or a string, refusing other supplied types; its explicit field forwarding keeps absent initial work intact. It explicitly forwards its allowed fields, including string specialization; adding a creation-request DTO field also requires adding it to this handler. The browser fixtures supply agentWorld directly and cannot prove main-process forwarding. Malformed optional specialization is not forwarded; runtime creation remains the persistence authority.
 Why: a valid renderer request can otherwise lose creation context at the Electron boundary while its UI and backend tests both pass.
 Coupled: apps/agent-world/src/world.ts, apps/agent-world/src/backend/lifecycle.ts
 The lifecycle tests verify the request after this handler; they do not exercise this forwarding step.

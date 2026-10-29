@@ -8,10 +8,12 @@ import { Markdown, TranscriptAuthor } from "./overlay/conversation/transcript.js
 import { activity } from "./overlay/interface/model.js";
 import { useWindowFocus } from "./use-window-focus.js";
 import { WorkplaceCode } from "./workplace-code.js";
+import { useWorkplaceMenu, WorkplaceMenuProvider } from "./workplace-context-menu.js";
+import { Icon } from "./workplace-icon.js";
 import { WorkplaceIssues } from "./workplace-issues.js";
 import { channelName, useWorkplaceNames } from "./workplace-names.js";
 import { Org } from "./workplace-org.js";
-import { OrgNameEditor } from "./workplace-org-name.js";
+import { OrganizationNameForm, OrgNameEditor } from "./workplace-org-name.js";
 import { ChatPeople, PersonAvatar, PersonName, PersonProfile, sessionStatus } from "./workplace-people.js";
 import { worldStore } from "./world-store.js";
 import "./workplace.css";
@@ -23,57 +25,6 @@ document.body.classList.add("workplace");
 document.title = "Workplace";
 const drafts = new Map<string, string>();
 const date = (at: number) => new Date(at).toLocaleDateString(undefined, { month: "short", day: "numeric" });
-
-function Icon({
-	name,
-}: {
-	name:
-		| "chat"
-		| "mail"
-		| "world"
-		| "search"
-		| "compose"
-		| "tools"
-		| "inbox"
-		| "sent"
-		| "activity"
-		| "moon"
-		| "sun"
-		| "org"
-		| "code"
-		| "issues";
-}) {
-	const paths = {
-		code: "m8 7-5 5 5 5 M16 7l5 5-5 5 M14 4l-4 16",
-		issues: "M7 3h10v4H7V3Z M7 5H4v16h16V5h-3 M8 11h8 M8 16h5",
-		org: "M9 3h6v5H9V3Z M3 16h6v5H3v-5Z M15 16h6v5h-6v-5Z M12 8v4 M6 16v-4h12v4",
-		sent: "m3 4 18 8-18 8 4-8-4-8Z M7 12h14",
-		activity: "M3 12h4l3-8 4 16 3-8h4",
-		moon: "M20 14a8 8 0 0 1-10-10 8 8 0 1 0 10 10Z",
-		sun: "M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z M12 2v2 M12 20v2 M2 12h2 M20 12h2 M5 5l2 2 M17 17l2 2 M5 19l2-2 M17 7l2-2",
-		chat: "M5 4h14v12H9l-4 4V4Z M9 8h6 M9 12h4",
-		mail: "M3 5h18v14H3V5Z M3 6l9 7 9-7",
-		world: "M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z M3 12h18 M12 3c5 5 5 13 0 18-5-5-5-13 0-18Z",
-		search: "M16 10a6 6 0 1 1-12 0 6 6 0 0 1 12 0Z M15 15l5 5",
-		compose: "m5 16-1 4 4-1L20 7l-3-3L5 16Z M14 7l3 3",
-		tools: "m8 7-5 5 5 5 M16 7l5 5-5 5 M14 4l-4 16",
-		inbox: "m3 14 3-9h12l3 9v5H3v-5Z M3 14h5l2 3h4l2-3h5",
-	};
-	return (
-		<svg
-			className="wp-icon"
-			viewBox="0 0 24 24"
-			fill="none"
-			stroke="currentColor"
-			strokeWidth="1.7"
-			strokeLinecap="round"
-			strokeLinejoin="round"
-			aria-hidden="true"
-		>
-			<path d={paths[name]} />
-		</svg>
-	);
-}
 
 function channelUnreads(world: WorldSnapshot) {
 	const counts = new Map((world.operatorMail ?? []).map((thread) => [thread.id, thread.unread]));
@@ -333,6 +284,27 @@ function Chat({
 	requestedChannel?: { id: string; key: string };
 }) {
 	useWorkplaceNames();
+	const openMenu = useWorkplaceMenu();
+	const [renameChannel, setRenameChannel] = useState<{ id: string; name: string; trigger: HTMLElement }>();
+	const channelMenu = (
+		event: React.MouseEvent<HTMLElement> | React.KeyboardEvent<HTMLElement>,
+		channel: WorkplaceThread,
+	) => {
+		const head = /^(?:organization|team):(.+)$/.exec(channel.id)?.[1];
+		if (!head) return;
+		const trigger = event.currentTarget;
+		const name =
+			world.characters.find((person) => person.id === head)?.name ??
+			world.dormant?.find((person) => person.id === head)?.name ??
+			head;
+		openMenu(event, [{ label: "Rename", onSelect: () => setRenameChannel({ id: head, name, trigger }) }]);
+	};
+	const closeChannelRename = () => {
+		setRenameChannel(undefined);
+		requestAnimationFrame(() => {
+			if (renameChannel?.trigger.isConnected) renameChannel.trigger.focus();
+		});
+	};
 	const [selection, setSelection] = useState<{ kind: "dm" | "channel"; id: string }>();
 	const [filter, setFilter] = useState("");
 	const [showTools, setShowTools] = useState(false);
@@ -401,12 +373,25 @@ function Chat({
 					<h2>
 						Channels <span>{channels.length}</span>
 					</h2>
+					{renameChannel && (
+						<div className="wp-channel-rename">
+							<OrganizationNameForm
+								key={renameChannel.id}
+								id={renameChannel.id}
+								name={renameChannel.name}
+								onClose={closeChannelRename}
+							/>
+						</div>
+					)}
 					{channels
 						.filter((thread) => matches(channelName(thread.id, thread.subject, world)))
 						.map((thread) => (
 							<button
 								type="button"
 								className="wp-channel"
+								aria-haspopup={/^(organization|team):/.test(thread.id) ? "menu" : undefined}
+								onContextMenu={(event) => channelMenu(event, thread)}
+								onKeyDown={(event) => channelMenu(event, thread)}
 								data-unread={(unreads.get(thread.id) ?? 0) > 0}
 								aria-label={`# ${channelName(thread.id, thread.subject, world)}`}
 								aria-description={`${unreads.get(thread.id) ?? 0} unread messages`}
@@ -548,7 +533,14 @@ function Chat({
 						<>
 							<header className="wp-conversation-header">
 								<div>
-									<h1># {channelName(selectedChannel.id, selectedChannel.subject, world)}</h1>
+									<h1
+										tabIndex={-1}
+										aria-haspopup={/^(organization|team):/.test(selectedChannel.id) ? "menu" : undefined}
+										onContextMenu={(event) => channelMenu(event, selectedChannel)}
+										onKeyDown={(event) => channelMenu(event, selectedChannel)}
+									>
+										# {channelName(selectedChannel.id, selectedChannel.subject, world)}
+									</h1>
 									<p>
 										{selectedChannel.participants.length} participants ·{" "}
 										{selectedChannel.id.startsWith("organization:")
@@ -1181,4 +1173,8 @@ function Compose({
 	);
 }
 
-createRoot(document.getElementById("overlay")!).render(<Workplace />);
+createRoot(document.getElementById("overlay")!).render(
+	<WorkplaceMenuProvider>
+		<Workplace />
+	</WorkplaceMenuProvider>,
+);

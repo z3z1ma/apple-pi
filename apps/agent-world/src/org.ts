@@ -19,7 +19,7 @@ export interface OrgStartPosition {
 export interface OrgStartRequest {
 	id: string;
 	cwd: string;
-	goal: string;
+	goal?: string;
 	positions: OrgStartPosition[];
 	withReady?: boolean;
 }
@@ -64,7 +64,7 @@ export function isOrgStartRequest(value: unknown): value is OrgStartRequest {
 		object(value) &&
 		typeof value.id === "string" &&
 		typeof value.cwd === "string" &&
-		typeof value.goal === "string" &&
+		(value.goal === undefined || typeof value.goal === "string") &&
 		(value.withReady === undefined || typeof value.withReady === "boolean") &&
 		Array.isArray(value.positions) &&
 		value.positions.every(
