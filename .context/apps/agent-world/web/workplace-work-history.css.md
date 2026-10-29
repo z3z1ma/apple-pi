@@ -1,6 +1,8 @@
 ## file
 
-This reusable panel inherits the Workplace palette in team cards, focused teams and profiles. Its selectors stay scoped so task Markdown and nested list controls remain readable without changing the embedding panel's layout. Compact mode folds the entire record list rather than truncating history to an arbitrary number of tasks.
-Why: the same component sits inside profile and team-card styles; broad heading or list rules in either parent can silently override its task content.
+Recorded work stays a compact summary in team cards, focused teams and profiles. The full history belongs to a native dialog bounded by the viewport; its nonshrinking header keeps Close visible while the task list and detail scroll independently. On narrow screens the two scroll areas stack inside the same fixed-height dialog rather than extending the page.
+
+The dialog remains inside Workplace's DOM so its top-layer rendering inherits the palette. Apply flex display only when the native dialog is open. Keep the grid and its scroll areas shrinkable with zero minimum dimensions, and scope summary headings/paragraphs to direct children so they do not restyle task Markdown inside the dialog. Task Markdown retains its own content container and horizontal code scrolling.
+Why: unconditional display:flex defeats the native closed state, and grid items' automatic minimum size can let a long task body expand the layout instead of scrolling. The shared summary, dialog and Markdown are nested under the same component, so broad descendant selectors can override the detail view.
 Coupled: apps/agent-world/web/workplace-work-history.tsx, apps/agent-world/web/workplace.css
 Verify: apps/agent-world/tests/world-org.test.ts

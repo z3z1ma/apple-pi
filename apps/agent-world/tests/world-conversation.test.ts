@@ -1967,7 +1967,8 @@ test("profiles load full Self only on demand, expand fields independently at 200
 				},
 			});
 		});
-		await profile.getByRole("button", { name: "Read task: Recorded completed work", exact: true }).waitFor();
+		await profile.getByRole("button", { name: "View recorded work (1)", exact: true }).waitFor();
+		await profile.getByText("Most recent: Recorded completed work", { exact: true }).waitFor();
 		expect(await profile.getByText("Record", { exact: true }).count()).toBe(0);
 		await storyField.getByText(`${"s".repeat(200)}\u2026`, { exact: true }).waitFor();
 
