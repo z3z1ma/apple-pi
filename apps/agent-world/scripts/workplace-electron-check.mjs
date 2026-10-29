@@ -44,6 +44,7 @@ const env = {
 	...process.env,
 	PI_CODING_AGENT_DIR: scratch,
 	PI_SESSION_STATE_DISABLED: "",
+	HOME: scratch,
 	TMUX_TMPDIR: join(scratch, "tmux"),
 	TMUX: "",
 	TMUX_PANE: "",
@@ -145,9 +146,22 @@ try {
 		env,
 	});
 	const page = await app.firstWindow();
+	await app.evaluate(({ BrowserWindow }) => {
+		for (const window of BrowserWindow.getAllWindows()) {
+			window.webContents.setBackgroundThrottling(false);
+			window.on("page-title-updated", (event) => event.preventDefault());
+			window.setTitle("Workplace verification - isolated test");
+			window.hide();
+		}
+	});
 	const errors = [];
 	page.on("pageerror", (error) => errors.push(error.message));
 	await page.locator(".wp-app").waitFor({ timeout: 30000 });
+	await page.locator(".wp-surface:not([inert])").waitFor();
+	const documentId = await page.evaluate(() => {
+		window.workplaceCheckDocument = crypto.randomUUID();
+		return window.workplaceCheckDocument;
+	});
 	assert.equal(new URL(page.url()).search, "");
 	assert.equal(await page.title(), "Workplace");
 	await page.getByRole("button", { name: "Chat", exact: true }).waitFor();
@@ -250,8 +264,22 @@ try {
 	assert.equal(existsSync(join(scratch, "unexpected-pi")), false);
 	assert.equal(query("select id from sessions").length, 3);
 	assert.deepEqual(query("select command_id from commands where kind = 'start'"), []);
-	await page.getByRole("link", { name: "World", exact: true }).click();
-	await page.getByRole("link", { name: "Workplace", exact: true }).waitFor({ timeout: 30000 });
+	await page.getByRole("button", { name: "World", exact: true }).click();
+	assert.equal(new URL(page.url()).search, "?workplace=world");
+	const world = page.frameLocator('iframe[title="Agent World"]');
+	await world.locator("#game canvas").waitFor({ timeout: 30000 });
+	const worldDocumentId = await world.locator("body").evaluate(() => {
+		window.workplaceCheckDocument = crypto.randomUUID();
+		return window.workplaceCheckDocument;
+	});
+	assert.equal(await page.evaluate(() => window.workplaceCheckDocument), documentId);
+	await page.getByRole("button", { name: "Chat", exact: true }).click();
+	assert.equal(new URL(page.url()).search, "?workplace=chat");
+	assert.equal(await page.evaluate(() => window.workplaceCheckDocument), documentId);
+	await page.getByRole("button", { name: "World", exact: true }).click();
+	assert.equal(await world.locator("body").evaluate(() => window.workplaceCheckDocument), worldDocumentId);
+	await page.getByRole("button", { name: "Chat", exact: true }).click();
+	assert.equal(await page.evaluate(() => window.workplaceCheckDocument), documentId);
 	// A real anchor navigation exercises Electron's exact allow-list; replacing history alone does not.
 	await page.evaluate(() => {
 		const link = document.createElement("a");
@@ -264,18 +292,14 @@ try {
 	await page.locator("#org-entry-check").click();
 	await page.locator(".wp-org-team-card").first().waitFor({ timeout: 10000 });
 	assert.match(page.url(), /workplace=org/);
-	await page.getByRole("link", { name: "World", exact: true }).click();
-	await page.getByRole("link", { name: "Workplace", exact: true }).waitFor({ timeout: 30000 });
-	const returned = new URL(page.url());
-	assert.equal(returned.pathname, "/index.html");
-	assert.equal(returned.search, "?world");
-	await page.getByRole("link", { name: "Workplace", exact: true }).click();
-	await page.locator(".wp-app").waitFor({ timeout: 10000 });
+	assert.equal(await page.evaluate(() => window.workplaceCheckDocument), undefined);
+	assert.equal(new URL(page.url()).pathname, "/index.html");
+	await page.getByRole("button", { name: "Chat", exact: true }).click();
 	assert.match(page.url(), /workplace=chat/);
 	assert.equal(await page.title(), "Workplace");
 	assert.deepEqual(errors, []);
 	console.log(
-		"PASS: isolated Electron defaults to Chat, runs Monaco and guarded filesystem/Git IPC, opens Org without reading, bridges blocked Org requests/progress, and round-trips through explicit World",
+		"PASS: isolated Electron defaults to Chat, runs Monaco and guarded filesystem/Git IPC, opens Org without reading, bridges blocked Org requests/progress, retains World and the top document across rail switches, and permits explicit Org navigation",
 	);
 } finally {
 	try {
