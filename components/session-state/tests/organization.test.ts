@@ -2,7 +2,7 @@ import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai/compat
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
 import { fauxSession, type Reply } from "../../../tests/helpers/faux-session.js";
 
-type DirectoryMember = { id: string; manager: string | null; left?: { at: number; reason: string } };
+type DirectoryMember = { id: string; manager: string | null };
 
 import bridge from "../src/index.js";
 import {
@@ -42,7 +42,13 @@ const fake = async (id: string, reportsTo: string) => {
 		for (const line of chunk.toString().split("\n")) {
 			if (!line.includes('"command"')) continue;
 			const message = JSON.parse(line) as { type: string; command?: { kind: string; manager?: string } };
-			if (message.type === "command" && message.command) received.push(message.command);
+			if (message.type === "command" && message.command) {
+				received.push(message.command);
+				if (message.command.kind === "close") {
+					link.send({ type: "shutdown", reason: "quit" });
+					stand.child.kill();
+				}
+			}
 		}
 	});
 	return { ...link, received };
@@ -71,14 +77,14 @@ const mailTo = (to: string) =>
 	});
 
 test("a manager transfers a person with its team, is refused a cycle or a stranger, retires a person, and the record keeps every move", async () => {
-	let listed: { members: DirectoryMember[]; former: DirectoryMember[] } | undefined;
+	let listed: { members: DirectoryMember[] } | undefined;
 	const root = await fauxSession(
 		[bridge],
 		(context) => {
 			const last = context.messages.at(-1) as {
 				role: string;
 				toolName?: string;
-				details?: { members: DirectoryMember[]; former: DirectoryMember[] };
+				details?: { members: DirectoryMember[] };
 			};
 			if (last.toolName === "directory") listed = last.details;
 			if (last.role !== "user") return fauxAssistantMessage("done");
@@ -87,7 +93,7 @@ test("a manager transfers a person with its team, is refused a cycle or a strang
 			if (text === "cycle") return call("move", { person: "m2", manager: "p2" });
 			if (text === "stranger") return call("move", { person: "p1", manager: "stranger" });
 			if (text === "retire") return call("let_go", { person: "p2", reason: "The burst is over." });
-			return call("directory", { former: true });
+			return call("directory", { subtree: root.session.sessionManager.getSessionId() });
 		},
 		["directory", "move", "let_go"],
 	);
@@ -131,23 +137,42 @@ test("a manager transfers a person with its team, is refused a cycle or a strang
 		expect(reportsTo("p1")).toBe("m2");
 
 		await root.session.prompt("retire");
-		expect(toolResults(root).at(-1)).toMatchObject({ isError: false, text: "p2 left: The burst is over." });
-		await vi.waitFor(() => expect(p2.received).toContainEqual({ kind: "close" }));
-		expect(query(state.dbPath, "select retired_reason from sessions where id = 'p2'")).toEqual([
-			{ retired_reason: "The burst is over." },
-		]);
+		expect(toolResults(root).at(-1)).toMatchObject({
+			isError: false,
+			text: expect.stringContaining(
+				"Departure request accepted for p2; handoff and cleanup run asynchronously. Request:",
+			),
+		});
+		await vi.waitFor(() => expect(p2.received).toContainEqual({ kind: "close" }), { timeout: 15000 });
+		await vi.waitFor(() => expect(query(state.dbPath, "select id from sessions where id = 'p2'")).toEqual([]), {
+			timeout: 15000,
+		});
+		expect(
+			query<{ data: string }>(
+				state.dbPath,
+				"select data from events where session_id = 'p2' and type = 'person_departed'",
+			).map((row) => JSON.parse(row.data)),
+		).toEqual([expect.objectContaining({ reason: "The burst is over." })]);
 
 		await root.session.prompt("list");
 		expect(listed?.members.map((m) => [m.id, m.manager])).toEqual([
-			["operator", null],
-			[rootId, "Operator"],
+			[rootId, null],
 			["m1", rootId],
 			["m2", rootId],
-			["p1", "Person m2"],
+			["p1", "m2"],
 		]);
-		expect(listed?.former).toEqual([
-			expect.objectContaining({ id: "p2", left: { at: expect.any(Number), reason: "The burst is over." } }),
-		]);
+		expect(mailTo("p1")).toContainEqual({
+			from: "harness",
+			body: expect.stringContaining("Permanent departure committed for Person p2 (p2)."),
+		});
+		await vi.waitFor(
+			() =>
+				expect(mailTo("p1")).toContainEqual({
+					from: "harness",
+					body: expect.stringContaining("Permanent departure cleanup completed for p2."),
+				}),
+			{ timeout: 15000 },
+		);
 		expect(query(state.dbPath, "select session_id, from_manager, to_manager, by from manager_changes")).toEqual([
 			{ session_id: "p1", from_manager: "m1", to_manager: "m2", by: rootId },
 		]);
@@ -159,7 +184,17 @@ test("a manager transfers a person with its team, is refused a cycle or a strang
 }, 40000);
 
 test("after a transfer, prompt context and close notices use the new manager, and a restart preserves it over the old flag", async () => {
-	const mover = await fauxSession([bridge], () => fauxAssistantMessage("hi"), []);
+	const mover = await fauxSession(
+		[
+			(pi) => {
+				const getFlag = pi.getFlag.bind(pi);
+				pi.getFlag = (name) => (name === "reports-to" ? "m-old" : getFlag(name));
+				bridge(pi);
+			},
+		],
+		() => fauxAssistantMessage("hi"),
+		[],
+	);
 	const moverId = mover.session.sessionManager.getSessionId();
 	const boss = await fauxSession(
 		[bridge],
@@ -173,8 +208,6 @@ test("after a transfer, prompt context and close notices use the new manager, an
 		await seen(bossId);
 		await fake("m-old", bossId);
 		await fake("m-new", bossId);
-		mover.session.extensionRunner.setFlagValue("reports-to", "m-old");
-		await mover.session.bindExtensions({});
 		await vi.waitFor(() => expect(reportsTo(moverId)).toBe("m-old"), { timeout: 15000 });
 		await mover.session.prompt("before transfer");
 		expect(mover.session.agent.state.systemPrompt).toContain("You report to the session `m-old`");
@@ -195,25 +228,30 @@ test("after a transfer, prompt context and close notices use the new manager, an
 			}),
 		);
 
-		// A new process of the mover still carries the old flag; the runtime keeps the manager it recorded.
+		// A replacement bridge still carries the old flag; wait until it applies the recorded manager.
 		await mover.session.bindExtensions({});
 		await vi.waitFor(
 			() =>
 				expect(
-					query(state.dbPath, "select 1 from commands where session_id = ? and kind = 'transfer'", moverId),
-				).toHaveLength(3),
+					query(
+						state.dbPath,
+						"select 1 from commands where session_id = ? and kind = 'transfer' and json_extract(command, '$.by') = 'runtime' and stage = 'applied'",
+						moverId,
+					),
+				).toHaveLength(1),
 			{ timeout: 15000 },
 		);
 		await mover.session.prompt("hi");
 		expect(reportsTo(moverId)).toBe("m-new");
 		expect(mover.session.agent.state.systemPrompt).toContain("You report to the session `m-new`");
-	} finally {
 		await close(mover);
 		await vi.waitFor(
 			() => expect(mailTo("m-new")).toContainEqual({ from: moverId, body: expect.stringContaining("closed") }),
 			{ timeout: 15000 },
 		);
 		expect(mailTo("m-old").map((mail) => mail.from)).toEqual([bossId]); // the transfer notice only
+	} finally {
+		await close(mover);
 		await close(boss);
 	}
 }, 40000);

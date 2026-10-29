@@ -60,12 +60,17 @@ Verify: components/session-state/tests/history.test.ts
 Durable temporary identity participates in hello admission even when the incoming bridge has no program flags. A retained transcript preserves UUID while ordinary resume can lose its program environment; only valid live scope/owner/parent matching permits a temporary hello. Rejection sends close before incarnation/person/facts writes. Valid first program hello and same-process reconnect retain their existing behavior, as do ordinary new IDs. This is the same lifetime no-reopen boundary as startSession, not a new ACL or hostile-socket policy.
 Verify: components/session-state/tests/peer-history.test.ts
 
-The hello's `reportsTo` is applied only while the record's `reports_to` is null; afterwards the record wins, and a bridge whose flag disagrees is sent a `transfer` command with its recorded manager.
-Why: the flag is what the session was started with, and `move` changes the manager after that; a reconnect or hand restart carrying the old flag would otherwise undo the move, and the bridge addresses its close notice from its own copy of the manager.
+The hello's `reportsTo` seeds the record only on first admission: no prior incarnation and no `manager_changes` or `transferred` record. A later null is an intentional split. A stale flag is sent a `transfer` with the recorded manager, or `""` when that manager is null.
+Why: the flag is what the process was started with. Applying it whenever `reports_to` is null would undo a split on reconnect, and the bridge would keep addressing close notices to the old manager.
 A same-process reconnect keeps its incarnation's original tmux binding. A test that adds a pane needs a new incarnation, rather than a second hello from the same PID and start time.
 Ordinary close receipts remain incarnation-bound: a later ordinary call_in can receive queued mail without replaying an old incarnation's close. Permanent/legacy former admission guards run before normal incarnation creation or mail replay; those identities do not use an ordinary reopen path.
 Coupled: components/session-state/src/bridge.ts, components/session-state/src/coordinator.ts
-Verify: components/session-state/tests/organization.test.ts, components/session-state/tests/program-peers.test.ts
+Verify: components/session-state/tests/organization.test.ts, components/session-state/tests/organization-move.test.ts, components/session-state/tests/program-peers.test.ts
+
+## symbol:Runtime.command
+
+Keep command-specific receipt completion and follow-up delivery in a cohesive handler when adding dispatch cases.
+Why: the dispatcher is already near Biome's cognitive-complexity ceiling; inlining the operator reporting move's nested completion and bridge-notice logic raised it to 57 against the limit of 50. Extracting that command's completion restored the check without changing the limit.
 
 ## symbol:Runtime.commandProgress
 
@@ -177,6 +182,13 @@ Verify: components/session-state/tests/channel-membership.test.ts, components/se
 Why: scanning applied starts would date people hired before the column existed. The provisional insert is too early, because the hire tool treats connection as success. A date written apart from the applied stage could survive a rolled-back completion or be lost after one.
 Coupled: components/session-state/src/schema.ts
 Verify: components/session-state/tests/hire-date.test.ts
+
+## symbol:Runtime.organizationMove
+
+Only the operator may move a branch across organizations or split it (`manager` null). The expected branch must match the person and all lasting descendants, using `temporaryCallers` for the same hidden temporary identities as Org. Full ancestry and assignment roots still include temporary descendants, which follow their parent and can block a move that would strand their unfinished work. Neither a temporary person nor a temporary manager can be selected directly. The new manager must exist, be able to manage, and not be in the branch. A move that would newly separate an unfinished assignment from its task's organization is refused; a whole-organization merge is not, because the recorded head moves with the assignees. Tasks, focus, and hire dates are not rewritten. A split is a `transferred` event with `to: null`; `manager_changes.to_manager` cannot store null. The live bridge is told through the existing `transfer` command.
+Why: an agent's `transfer` stays inside one organization. Guessing a null into `manager_changes` would invent a manager. The branch list stops a stale drag from moving people the operator did not see.
+Coupled: components/session-state/src/tree.ts, components/session-state/src/work.ts, components/session-state/src/channels.ts, components/session-state/src/program-peers.ts
+Verify: components/session-state/tests/organization-move.test.ts
 
 ## symbol:Runtime.transfer
 

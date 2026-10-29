@@ -187,6 +187,11 @@ export type Command =
 	 * new manager); `by` is the acting manager's session id, for the record.
 	 */
 	| { kind: "transfer"; manager: string; by: string }
+	/**
+	 * The operator moves a branch under `manager`, or makes it independent when `manager` is null. `branch` is the
+	 * person and everyone under them, as last seen. Applied by the runtime. An agent's `transfer` stays in one organization.
+	 */
+	| { kind: "organization_move"; person: string; manager: string | null; branch: string[] }
 	/** Record that the person left (when and why) and close it when it runs. Applied by the runtime. */
 	| { kind: "retire"; reason: string; by?: string }
 	/** The operator saw the session: it no longer needs them unless a prompt is open. Applied by the runtime. */

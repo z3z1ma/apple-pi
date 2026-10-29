@@ -586,15 +586,16 @@ export class Runtime {
 		const stored = db.prepare("select reports_to from sessions where id = ?").get(session.id) as {
 			reports_to: string | null;
 		};
-		this.applyFacts(
-			session.id,
-			generation,
-			stored.reports_to === null && reportsTo ? { ...facts, reportsTo } : facts,
-			true,
+		const reportingRecorded = Boolean(
+			db.prepare("select 1 from manager_changes where session_id = ?").get(session.id) ||
+				db.prepare("select 1 from events where session_id = ? and type = 'transferred'").get(session.id),
 		);
-		// A bridge started with a stale flag learns its manager from the record.
-		if (stored.reports_to !== null && reportsTo !== undefined && stored.reports_to !== reportsTo)
-			this.issue(connection, { kind: "transfer", manager: stored.reports_to, by: "runtime" });
+		// A launch flag seeds the manager only on first admission. A later null is an intentional split.
+		const seedManager = stored.reports_to === null && Boolean(reportsTo) && !latest && !reportingRecorded;
+		this.applyFacts(session.id, generation, seedManager ? { ...facts, reportsTo } : facts, true);
+		// A bridge started with a stale flag learns its manager from the record, including none.
+		if (!seedManager && reportsTo !== undefined && (stored.reports_to ?? "") !== reportsTo)
+			this.issue(connection, { kind: "transfer", manager: stored.reports_to ?? "", by: "runtime" });
 		syncChannels(db, now);
 		this.resolveParents();
 		// A (re)connecting bridge reports the tool it runs now; one that ended while the bridge was away just clears.
@@ -712,6 +713,11 @@ export class Runtime {
 				this.setCommandStage(commandId, "applied");
 				if (target) this.issue(target, { kind: "transfer", manager: command.manager, by: command.by });
 			}
+			return;
+		}
+		if (command.kind === "organization_move") {
+			receipt("accepted");
+			this.finishOrganizationMove(commandId, sessionId, command);
 			return;
 		}
 		if (command.kind === "retire") {
@@ -1394,6 +1400,131 @@ export class Runtime {
 		return undefined;
 	}
 
+	private finishOrganizationMove(
+		commandId: string,
+		sessionId: string,
+		command: Extract<Command, { kind: "organization_move" }>,
+	): void {
+		const refused = this.organizationMove(sessionId, command);
+		if (refused) this.setCommandStage(commandId, "failed", refused);
+		else {
+			this.setCommandStage(commandId, "applied");
+			const moved = [...this.connections].find(
+				(connection) => connection.sessionId === command.person && !connection.shutdown,
+			);
+			if (moved) this.issue(moved, { kind: "transfer", manager: command.manager ?? "", by: OPERATOR });
+		}
+	}
+
+	/** The operator moves a branch across organizations, or splits it when `manager` is null. */
+	private organizationMove(
+		sessionId: string,
+		command: Extract<Command, { kind: "organization_move" }>,
+	): string | undefined {
+		const db = this.db!;
+		if (sessionId !== OPERATOR) return "only the operator can move a branch across organizations";
+		if (
+			typeof command.person !== "string" ||
+			!command.person ||
+			!Array.isArray(command.branch) ||
+			command.branch.some((id) => typeof id !== "string" || !id)
+		)
+			return "organization_move needs a person and the branch as last seen";
+		const branch = [...new Set(command.branch)];
+		if (command.manager !== null && (typeof command.manager !== "string" || !command.manager))
+			return "organization_move needs a person and the branch as last seen";
+		if (command.manager === command.person) return "a person cannot report to itself";
+		if (departureOf(db, command.person) || (command.manager && departureOf(db, command.manager)))
+			return "A permanently departed person cannot take part in a reporting change.";
+		const temporary = temporaryCallers(db);
+		if (temporary.has(command.person) || (command.manager && temporary.has(command.manager)))
+			return "a temporary peer cannot change organization";
+		const people = db
+			.prepare("select id, reports_to, manages, role, retired_at from sessions where kind = 'root'")
+			.all() as {
+			id: string;
+			reports_to: string | null;
+			manages: number | null;
+			role: string | null;
+			retired_at: number | null;
+		}[];
+		const managerOf = new Map(people.map((row) => [row.id, row.reports_to]));
+		const person = people.find((row) => row.id === command.person);
+		if (!person) return "unknown person";
+		if (person.retired_at !== null) return "that person has left";
+		if (command.manager) {
+			const manager = people.find((row) => row.id === command.manager);
+			if (!manager) return `unknown manager ${command.manager}`;
+			if (manager.retired_at !== null) return "that person has left";
+			const unroledRoot = manager.role === null && manager.reports_to === null;
+			if (manager.manages !== 1 && !unroledRoot) return "that person cannot manage a branch";
+		}
+		const members = new Set<string>();
+		const pending = [command.person];
+		while (pending.length) {
+			const id = pending.pop()!;
+			if (members.has(id)) continue;
+			members.add(id);
+			for (const [child, manager] of managerOf) if (manager === id) pending.push(child);
+		}
+		const lasting = new Set([...members].filter((id) => !temporary.has(id)));
+		if (branch.length !== lasting.size || branch.some((id) => !lasting.has(id)))
+			return "the branch changed; review it and try again";
+		if (command.manager && members.has(command.manager)) return "that manager is in this branch";
+		const from = managerOf.get(command.person) ?? null;
+		if (from === command.manager) return undefined;
+		const next = new Map(managerOf);
+		next.set(command.person, command.manager);
+		const rootIn = (id: string, tree: Map<string, string | null>) => {
+			const seen = new Set<string>();
+			let current = id;
+			while (!seen.has(current)) {
+				seen.add(current);
+				const manager = tree.get(current);
+				if (!manager || !tree.has(manager)) return current;
+				current = manager;
+			}
+			return current;
+		};
+		const open = db
+			.prepare(
+				`select a.person, a.task_id, t.organization from assignments a
+				join work_tasks t on t.id = a.task_id where a.ended_at is null`,
+			)
+			.all() as { person: string; task_id: string; organization: string }[];
+		const stranded = [
+			...new Set(
+				open
+					.filter((row) => {
+						const before = rootIn(row.person, managerOf) === rootIn(row.organization, managerOf);
+						const after = rootIn(row.person, next) === rootIn(row.organization, next);
+						return before && !after;
+					})
+					.map((row) => row.task_id),
+			),
+		];
+		if (stranded.length) return `unfinished work would leave its organization: ${stranded.join(", ")}`;
+		const now = Date.now();
+		this.atomically(() => {
+			db.prepare("update sessions set reports_to = ?, updated_at = ? where id = ?").run(
+				command.manager,
+				now,
+				command.person,
+			);
+			if (command.manager)
+				db.prepare(
+					"insert into manager_changes (session_id, from_manager, to_manager, by, at) values (?, ?, ?, 'operator', ?)",
+				).run(command.person, from, command.manager, now);
+			syncChannels(db, now);
+			this.event("runtime", command.person, null, "transferred", {
+				from,
+				to: command.manager,
+				by: OPERATOR,
+			});
+		});
+		return undefined;
+	}
+
 	private discardPeer(client: Connection, commandId: string, sessionId: string): void {
 		const row = this.db!.prepare("select program_id from program_peers where session_id = ?").get(sessionId) as
 			| { program_id: string }
@@ -2017,8 +2148,8 @@ export class Runtime {
 		const cwd = realpathSync(directory);
 		if (!row && command.role && !command.goal?.text.trim()) return fail("A new hire needs a written goal");
 		const name = command.name ?? row?.name ?? undefined;
-		// A person sent home keeps its manager when called in.
-		const reportsTo = row?.reports_to ?? command.reportsTo;
+		// A recorded manager, including an intentional null, wins over the caller's flag.
+		const reportsTo = row ? row.reports_to : command.reportsTo;
 		if (reportsTo && departureOf(db, reportsTo))
 			return fail("A permanently departed person cannot receive new reports.");
 		const inherited =
@@ -2068,7 +2199,7 @@ export class Runtime {
 						command.role ?? null,
 						Date.now(),
 					);
-					this.queueTeamHistory(commandId, sessionId, reportsTo);
+					this.queueTeamHistory(commandId, sessionId, reportsTo ?? undefined);
 				}
 			};
 			if (
@@ -2095,7 +2226,7 @@ export class Runtime {
 		return this.launchSession(commandId, sessionId, {
 			cwd,
 			name,
-			reportsTo,
+			reportsTo: reportsTo ?? undefined,
 			role: row?.role ?? command.role,
 			prompt:
 				command.prompt ??
