@@ -9,7 +9,7 @@ declare module "electron" {
 	interface WebContents {
 		send(channel: string, ...args: unknown[]): void;
 		setWindowOpenHandler(handler: () => { action: "deny" | "allow" }): void;
-		on(event: "will-navigate", listener: (event: { preventDefault(): void }) => void): this;
+		on(event: "will-navigate", listener: (event: { preventDefault(): void }, url: string) => void): this;
 		once(event: "did-finish-load", listener: () => void): this;
 		capturePage(): Promise<NativeImage>;
 		executeJavaScript(code: string): Promise<unknown>;

@@ -12,7 +12,7 @@ const tokens = (n: number) => (n >= 1000 ? `${Math.round(n / 1000)}k` : String(n
 const base = (path: string) => path.split("/").filter(Boolean).pop() ?? path;
 
 /** The card's facts, as term and value rows, in reading order. */
-function factRows(character: Character, world: WorldSnapshot | undefined): [string, string][] {
+export function factRows(character: Character, world: WorldSnapshot | undefined): [string, string][] {
 	const facts = character.facts;
 	if (!facts) return [];
 	const attention = attentionOf(character);

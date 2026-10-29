@@ -1,7 +1,7 @@
 // The transcript on the book's right page: the operator's turns and the agent's replies as Markdown, consecutive
 // replies of one turn under one heading, each tool call folded to one line (its tool and main argument) that opens to
 // its input and result, mail as a sealed letter, and other extensions' messages folded like tool calls.
-import { createContext, memo, useContext, useState } from "react";
+import { createContext, memo, type ReactNode, useContext, useState } from "react";
 import type { TranscriptEntry, TranscriptToolCall } from "../../../src/world.js";
 import { shortArg } from "../tool-line.js";
 import { isLive } from "./live-reply.js";
@@ -67,10 +67,26 @@ export function blockKey(block: Block): string {
 	return block.kind === "agent" ? block.entries[0].id : block.entry.id;
 }
 
-const Markdown = memo(function Markdown({ text }: { text: string }) {
-	// The HTML comes from markdownHtml, which escapes every raw tag and drops links and images.
-	// biome-ignore lint/security/noDangerouslySetInnerHtml: sanitised by markdownHtml
-	return <div className="aw-md" dangerouslySetInnerHTML={{ __html: markdownHtml(text) }} />;
+export const Markdown = memo(function Markdown({
+	text,
+	onLink,
+}: {
+	text: string;
+	onLink?: (href: string, file: boolean) => void;
+}) {
+	const follow = (event: React.MouseEvent) => {
+		if (!onLink || event.button > 1) return;
+		const anchor =
+			event.target instanceof Element ? event.target.closest<HTMLAnchorElement>("a.aw-md-link[href]") : null;
+		if (!anchor) return;
+		event.preventDefault();
+		onLink(anchor.getAttribute("href")!, anchor.hasAttribute("data-file"));
+	};
+	const html = markdownHtml(text);
+	// biome-ignore lint/a11y/noStaticElementInteractions: the wrapper delegates native anchor clicks; it is not an additional control
+	// biome-ignore lint/a11y/useKeyWithClickEvents: native anchors already deliver Enter as a click
+	// biome-ignore lint/security/noDangerouslySetInnerHtml: markdownHtml escapes raw HTML, blocks unsafe schemes, and renders images as text
+	return <div className="aw-md" onClick={follow} onAuxClick={follow} dangerouslySetInnerHTML={{ __html: html }} />;
 });
 
 /** A folded line that opens on click: a tool call with its result, a thought, or an extension's note. */
@@ -114,6 +130,14 @@ const STATE_TITLE = { ok: "Done", error: "Failed", waiting: "No result yet" };
 
 /** The character's working directory, which tool lines leave out of the paths and commands they show. */
 export const WorkingDirectory = createContext<string | undefined>(undefined);
+export const TranscriptAuthor = createContext<((speaker: "assistant" | "user", name: string) => ReactNode) | undefined>(
+	undefined,
+);
+
+function Author({ speaker, name }: { speaker: "assistant" | "user"; name: string }) {
+	const render = useContext(TranscriptAuthor);
+	return render ? render(speaker, name) : <span className="aw-conv-name">{name}</span>;
+}
 
 function ToolCall({ call, result }: { call: TranscriptToolCall; result?: ToolResult }) {
 	const cwd = useContext(WorkingDirectory);
@@ -187,23 +211,38 @@ function replyItems(entries: Assistant[]): Map<string, ReplyItem[]> {
 	return items;
 }
 
+/** Text-only mode changes presentation, never the loaded history or tool/result index. */
+export function blockVisible(block: Block, showTools: boolean): boolean {
+	if (showTools) return true;
+	if (block.kind === "user") return !!block.entry.text.trim();
+	return (
+		block.kind === "agent" &&
+		block.entries.some((entry) => entry.parts.some((part) => part.kind === "text" && part.text.trim()))
+	);
+}
+
 function AgentBlock({
 	name,
 	entries,
 	results,
+	showTools,
 }: {
 	name: string;
 	entries: Assistant[];
 	results: Map<string, ToolResult>;
+	showTools: boolean;
 }) {
 	const items = replyItems(entries);
+	const visibleEntries = entries.filter(
+		(entry) => showTools || items.get(entry.id)!.some((item) => item.kind === "text"),
+	);
 	return (
 		<article className="aw-conv-entry aw-conv-assistant" data-entry={entries[0].id}>
 			<header className="aw-conv-who">
-				<span className="aw-conv-name">{name}</span>
+				<Author speaker="assistant" name={name} />
 				<time>{clock(entries[0].at)}</time>
 			</header>
-			{entries.map((entry) => (
+			{visibleEntries.map((entry) => (
 				<div
 					key={entry.id}
 					className={`aw-conv-reply${isLive(entry.id) ? " aw-conv-writing" : ""}`}
@@ -211,6 +250,7 @@ function AgentBlock({
 				>
 					{items.get(entry.id)!.map((item) => {
 						if (item.kind === "text") return <Markdown key={item.key} text={item.text} />;
+						if (!showTools) return null;
 						if (item.kind === "thoughts")
 							return (
 								<Fold key={item.key} className="aw-conv-thought" glyph="thought" label="Thought it over">
@@ -224,8 +264,8 @@ function AgentBlock({
 							);
 						return <ToolCall key={item.key} call={item.call} result={results.get(item.call.id)} />;
 					})}
-					{entry.error && <p className="aw-conv-failed">The reply failed: {entry.error}</p>}
-					{entry.aborted && <p className="aw-conv-failed">Stopped before it finished.</p>}
+					{showTools && entry.error && <p className="aw-conv-failed">The reply failed: {entry.error}</p>}
+					{showTools && entry.aborted && <p className="aw-conv-failed">Stopped before it finished.</p>}
 				</div>
 			))}
 		</article>
@@ -236,21 +276,25 @@ export const BlockView = memo(function BlockView({
 	block,
 	name,
 	results,
+	showTools = true,
 }: {
 	block: Block;
 	name: string;
 	results: Map<string, ToolResult>;
+	showTools?: boolean;
 }) {
-	if (block.kind === "agent") return <AgentBlock name={name} entries={block.entries} results={results} />;
+	if (!blockVisible(block, showTools)) return null;
+	if (block.kind === "agent")
+		return <AgentBlock name={name} entries={block.entries} results={results} showTools={showTools} />;
 	if (block.kind === "user")
 		return (
 			<article className="aw-conv-entry aw-conv-user" data-entry={block.entry.id}>
 				<header className="aw-conv-who">
-					<span className="aw-conv-name">You</span>
+					<Author speaker="user" name="You" />
 					<time>{clock(block.entry.at)}</time>
 				</header>
 				<Markdown text={block.entry.text} />
-				{block.entry.images > 0 && (
+				{showTools && block.entry.images > 0 && (
 					<p className="aw-conv-quiet">
 						{block.entry.images === 1 ? "With an image" : `With ${block.entry.images} images`} (see its terminal).
 					</p>

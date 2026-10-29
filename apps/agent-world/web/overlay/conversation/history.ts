@@ -11,6 +11,8 @@ export interface History {
 	before: string | null;
 	/** The first page has arrived. */
 	ready: boolean;
+	/** The observed run state whose newest page was last read successfully. */
+	readPulse?: string;
 	/** Entries the runtime indexed that its transcript no longer holds, in the pages read so far. */
 	missing: number;
 	loadingOlder: boolean;
@@ -42,16 +44,18 @@ export function useHistory(api: ConversationApi | undefined, characterId: string
 	const [before, setBefore] = useState<string | null>(null);
 	const [missing, setMissing] = useState(0);
 	const [ready, setReady] = useState(false);
+	const [readPulse, setReadPulse] = useState<string>();
 	const [loadingOlder, setLoadingOlder] = useState(false);
 	const [error, setError] = useState<string>();
 	const [attempt, setAttempt] = useState(0);
-	const live = useRef({ entries, before, loadingOlder, ready, refreshing: false, again: false });
-	live.current = { ...live.current, entries, before, loadingOlder, ready };
+	const live = useRef({ entries, before, loadingOlder, ready, pulse, refreshing: false, again: false });
+	live.current = { ...live.current, entries, before, loadingOlder, ready, pulse };
 
 	// The newest page, on opening.
 	useEffect(() => {
 		if (!api) return;
 		let gone = false;
+		const requestedPulse = live.current.pulse;
 		void attempt;
 		call(() => api.conversation(characterId))
 			.then((page) => {
@@ -64,6 +68,7 @@ export function useHistory(api: ConversationApi | undefined, characterId: string
 				setEntries(page.entries);
 				setBefore(page.before);
 				setMissing(page.missing);
+				setReadPulse(requestedPulse);
 				setReady(true);
 			})
 			.catch((failure: unknown) => !gone && setError(String((failure as Error)?.message ?? failure)));
@@ -105,9 +110,15 @@ export function useHistory(api: ConversationApi | undefined, characterId: string
 			return;
 		}
 		now.refreshing = true;
+		const requestedPulse = now.pulse;
 		call(() => api.conversation(characterId))
 			.then((page) => {
-				if (!page.ok) return;
+				if (!page.ok) {
+					setError(page.reason);
+					return;
+				}
+				setError(undefined);
+				setReadPulse(requestedPulse);
 				const fresh = newer(live.current.entries, page.entries);
 				if (fresh === undefined) {
 					// More happened than a page holds: start again from the newest page.
@@ -115,7 +126,7 @@ export function useHistory(api: ConversationApi | undefined, characterId: string
 					setBefore(page.before);
 				} else if (fresh.length) setEntries((known) => [...known, ...fresh]);
 			})
-			.catch(() => {})
+			.catch((failure: unknown) => setError(String((failure as Error)?.message ?? failure)))
 			.finally(() => {
 				live.current.refreshing = false;
 				if (live.current.again) {
@@ -136,6 +147,7 @@ export function useHistory(api: ConversationApi | undefined, characterId: string
 		entries,
 		before,
 		ready,
+		readPulse,
 		missing,
 		loadingOlder,
 		error,

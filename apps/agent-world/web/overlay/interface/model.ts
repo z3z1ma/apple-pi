@@ -169,11 +169,16 @@ export function activity(character: Character): string {
 	if (!facts) return "";
 	const attention = attentionOf(character);
 	if (attention === "asking") return facts.asking?.text ? `Asks: ${facts.asking.text}` : "Asks you something";
-	if (facts.tool) {
+	if (facts.run === "running_tool" && facts.tool) {
 		const arg = shortArg(facts.tool.arg, facts.cwd);
 		return arg ? `${facts.tool.name} \u00b7 ${arg}` : facts.tool.name;
 	}
 	if (attention === "finished") return "Finished, unseen";
-	if (attention === "working") return facts.run === "compacting" ? "Compacting" : "Working";
+	if (attention === "working") {
+		if (facts.run === "compacting") return "Compacting";
+		if (facts.run === "writing_reply") return "Writing a reply";
+		if (facts.run === "thinking") return "Thinking";
+		return "Working";
+	}
 	return "Idle";
 }

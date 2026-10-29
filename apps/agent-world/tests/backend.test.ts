@@ -103,7 +103,13 @@ async function session(
 			clearInterval(beat);
 			link.socket.end();
 			stand.child.kill();
-			await recorded("select 1 from incarnations where session_id = ? and ended_at is not null", id);
+			await vi.waitFor(
+				() =>
+					expect(
+						query(state.dbPath, "select 1 from incarnations where session_id = ? and ended_at is null", id),
+					).toHaveLength(0),
+				{ timeout: 15000 },
+			);
 		},
 	};
 }
@@ -176,7 +182,18 @@ test("two coordinators each get their own headquarters; a session others report 
 	expect(wings("lead")).toEqual(["alpha:1"]);
 }, 30000);
 
-test("an organization is one headquarters: the root at its desk, a manager's team in its team room, and a retired person at the inn marked so", async () => {
+test("full Self is available on demand without adding its body to world snapshots or inventing a hire date", async () => {
+	const self = "## My story\n\nSynthetic profile body available only on demand.\n";
+	await session("profile-person", { self });
+	expect(world.profile("profile-person")).toEqual({ ok: true, self });
+	await session("profile-empty");
+	expect(world.profile("profile-empty")).toEqual({ ok: true, self: null });
+	expect(world.profile("not-a-person")).toMatchObject({ ok: false });
+	expect(JSON.stringify(latest())).not.toContain("Synthetic profile body");
+	expect(character("profile-person")?.hiredAt).toBeNull();
+});
+
+test("an organization is one headquarters: the root at its desk, a manager's team in its team room, and permanent departure removes the person from the roster", async () => {
 	await session("org-root", { coordinator: true });
 	await session("org-manager", {
 		reportsTo: "org-root",
@@ -219,19 +236,14 @@ test("an organization is one headquarters: the root at its desk, a manager's tea
 	const commands = openCommands(state.socketPath);
 	try {
 		const lifecycle = openLifecycle({ db: state.dbPath, agentDir: state.agentDir }, commands, () => world.snapshot());
-		expect(await lifecycle.retire("org-b", "the burst passed")).toEqual({ ok: true, stage: "applied" });
+		expect(await lifecycle.retire("org-b", "the burst passed")).toMatchObject({ ok: true, stage: "accepted" });
 	} finally {
 		commands.close();
 	}
-	await skeptic.stop(); // the runtime asked it to close; a fake bridge quits only when told
+	await recorded("select 1 from events where session_id = ? and type = 'person_departed'", "org-b");
+	await skeptic.stop();
 	await soon(() => expect(character("org-b")).toBeUndefined());
-	await soon(() =>
-		expect(latest().dormant?.find((agent) => agent.id === "org-b")).toMatchObject({
-			title: "Scientific Skeptic",
-			retiredAt: expect.any(Number),
-			retiredReason: "the burst passed",
-		}),
-	);
+	await soon(() => expect(latest().dormant?.some((agent) => agent.id === "org-b")).toBe(false));
 	expect(latest().headquarters.find((hq) => hq.id === "org-root")?.wings).toContainEqual(
 		expect.objectContaining({ team: "org-manager", headcount: 2, dormant: 0 }),
 	);

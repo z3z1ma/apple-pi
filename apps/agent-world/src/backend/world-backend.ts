@@ -13,6 +13,7 @@ import type {
 	KeptPart,
 	MailItem,
 	MailThreadSummary,
+	ProfileRead,
 	TerminalResult,
 	Workplace,
 	WorldSnapshot,
@@ -28,6 +29,7 @@ import { workplaceReader } from "./workplace.js";
 
 export interface WorldBackend {
 	snapshot(): WorldSnapshot;
+	profile(characterId: string): ProfileRead;
 	/** Calls `listener` with the new snapshot after each change; returns a function that stops the calls. */
 	subscribe(listener: (snapshot: WorldSnapshot) => void): () => void;
 	/** The latest feed lines, oldest first: a backlog from before the world opened, then everything since. */
@@ -101,7 +103,7 @@ where s.kind = 'root'`;
 // one), and the ones awake at the last read (given as a JSON array of ids), looked up by id.
 const changedSql = (columns: OptionalColumns) => `${sessionsSql(columns)}
 	and s.id in (select session_id from events where seq > ? union select value from json_each(?))`;
-const OPTIONAL_COLUMNS = ["role_title", "manages", "soul", "self", "retired_at", "retired_reason"] as const;
+const OPTIONAL_COLUMNS = ["role_title", "manages", "soul", "self", "retired_at", "retired_reason", "hired_at"] as const;
 type OptionalColumns = Record<(typeof OPTIONAL_COLUMNS)[number], boolean> & { work: boolean };
 const optionalColumns = (db: DatabaseSync): OptionalColumns => {
 	const present = new Set(
@@ -128,6 +130,7 @@ interface Row extends FactsRow {
 	manages: number | null;
 	retired_at: number | null;
 	retired_reason: string | null;
+	hired_at: number | null;
 	firstStartedAt: number | null;
 	awake: number;
 	stoppedAt: number | null;
@@ -156,6 +159,7 @@ function sessionRow(row: Row): SessionRow {
 		retiredAt: row.retired_at,
 		retiredReason: row.retired_reason,
 		awake: row.awake === 1,
+		hiredAt: row.hired_at,
 		firstStartedAt: row.firstStartedAt ?? undefined,
 		stoppedAt: row.stoppedAt ?? undefined,
 	};
@@ -485,6 +489,12 @@ export function openWorldBackend(paths: { db: string; socket: string }): WorldBa
 
 	return {
 		snapshot: () => current,
+		profile(characterId) {
+			const row = rowsById.get(characterId);
+			return !closed && db && row
+				? { ok: true, self: row.self }
+				: { ok: false, reason: "This person's profile is not available." };
+		},
 		subscribe(listener) {
 			listeners.add(listener);
 			return () => listeners.delete(listener);

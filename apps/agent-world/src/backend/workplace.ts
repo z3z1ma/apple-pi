@@ -170,6 +170,7 @@ export interface WorkplaceActions {
 	readTask(task: string): Promise<TaskRead>;
 	assignTask(person: string, task: string): Promise<CommandReceipt>;
 	readWorkplaceThread(thread: string): Promise<ThreadRead>;
+	setChannelMembership(thread: string, joined: boolean): Promise<CommandReceipt>;
 }
 
 /** The operator observes shared workplace conversations; only a participant marks them read or replies. */
@@ -198,6 +199,10 @@ export function openWorkplace(path: string, commands: Commands, snapshot: () => 
 				task: task.id,
 				cwd: task.project,
 			});
+			return result.ok ? { ok: true, stage: "applied" } : result;
+		},
+		async setChannelMembership(thread, joined) {
+			const result = await commands.send(OPERATOR, { kind: "channel_membership", thread, joined });
 			return result.ok ? { ok: true, stage: "applied" } : result;
 		},
 		async readWorkplaceThread(id) {

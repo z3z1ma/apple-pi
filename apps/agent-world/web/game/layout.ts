@@ -203,6 +203,7 @@ export function sleeperCharacter(agent: DormantAgent): Character {
 		name: agent.name,
 		role: agent.role,
 		place: { kind: "inn" },
+		hiredAt: agent.hiredAt,
 		startedAt: agent.startedAt,
 		// What the conversation panel shows of it: where it worked and its last task. Asleep, it needs nobody.
 		facts: {
@@ -213,6 +214,7 @@ export function sleeperCharacter(agent: DormantAgent): Character {
 			unseen: false,
 			seenAt: null,
 			settledAt: agent.stoppedAt,
+			title: agent.title ?? null,
 			tool: null,
 			task: agent.task,
 			git: agent.repository ? { repository: agent.repository, worktree: agent.repository, branch: "" } : null,

@@ -73,6 +73,9 @@ function start() {
 			? world.goToTerminal(characterId)
 			: { ok: false, reason: "No character was named." },
 	);
+	ipcMain.handle("world:profile", (_event, characterId: unknown) =>
+		typeof characterId === "string" ? world.profile(characterId) : { ok: false, reason: "No character was named." },
+	);
 	ipcMain.handle("world:conversation", (_event, characterId: unknown, before: unknown) =>
 		typeof characterId === "string"
 			? conversations.page(characterId, typeof before === "string" ? before : undefined)
@@ -136,6 +139,11 @@ function start() {
 	);
 	ipcMain.handle("world:workplace-thread", (_event, thread: unknown) =>
 		typeof thread === "string" ? workplace.readWorkplaceThread(thread) : { ok: false, reason: "No thread was named." },
+	);
+	ipcMain.handle("world:channel-membership", (_event, thread: unknown, joined: unknown) =>
+		typeof thread === "string" && typeof joined === "boolean"
+			? workplace.setChannelMembership(thread, joined)
+			: { ok: false, reason: "A channel and whether to join are required." },
 	);
 	// Recruiting a new agent: a worker at its coordinator's desk, an independent one at the square's recruiter.
 	ipcMain.handle("world:recruit", (_event, request: unknown) => {
@@ -230,7 +238,18 @@ function start() {
 			window = undefined;
 		});
 		window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
-		window.webContents.on("will-navigate", (event) => event.preventDefault());
+		window.webContents.on("will-navigate", (event, url) => {
+			// Only the app's own view links may navigate.
+			if (
+				![
+					"app://world/index.html",
+					"app://world/index.html?",
+					"app://world/index.html?workplace=chat",
+					"app://world/index.html?workplace=mail",
+				].includes(url)
+			)
+				event.preventDefault();
+		});
 		void window.loadURL("app://world/index.html");
 
 		const capture = process.env.AGENT_WORLD_CAPTURE;

@@ -109,9 +109,12 @@ export function readOperatorMail(db: DatabaseSync): MailThreadSummary[] {
 /** Read a thread only if the operator participates. The caller marks the returned sequence read through the runtime. */
 export function readOperatorThread(db: DatabaseSync, id: string): MailThread | undefined {
 	if (!hasThreads(db)) return undefined;
-	if (!db.prepare("select 1 from thread_participants where thread_id = ? and participant = ?").get(id, OPERATOR))
-		return undefined;
-	return readStoredThread(db, id);
+	const participant = db
+		.prepare("select read_up_to from thread_participants where thread_id = ? and participant = ?")
+		.get(id, OPERATOR) as { read_up_to: number } | undefined;
+	if (!participant) return undefined;
+	const thread = readStoredThread(db, id);
+	return thread ? { ...thread, readUpTo: participant.read_up_to } : undefined;
 }
 
 /** The stored conversation. Its caller decides whether this is a participant read or a shared-board observation. */

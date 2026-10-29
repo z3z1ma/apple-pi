@@ -1,6 +1,6 @@
 # Agent World
 
-Agent World is a desktop app that shows your Pi sessions as characters in a hand-painted world. Every live top-level Pi session in tmux is a character: the root of an [organization](organization.md) stands in its headquarters, the people that report to it work in their repository's wing or, under a manager, in that manager's team room, independent sessions stand in the town square, and stopped sessions sleep at the inn. From the world you can talk to any agent, answer its questions, redirect or stop it, wake a sleeping one, and work with GitHub, Jira, Confluence, and Slack without going to the terminal. The terminal stays one click away.
+Agent World is a desktop app for your Pi organization, with [Workplace](workplace.md) for chat and mail and a hand-painted World view. In World, every live top-level Pi session in tmux is a character: the root of an [organization](organization.md) stands in its headquarters, the people that report to it work in their repository's wing or, under a manager, in that manager's team room, independent sessions stand in the town square, and stopped sessions sleep at the inn. From the world you can talk to any agent, answer its questions, redirect or stop it, wake a sleeping one, and work with GitHub, Jira, Confluence, and Slack without going to the terminal. The terminal stays one click away.
 
 Agent World shows what the [session-state](session-state.md) model records. It reads the session-state database read-only and sends every change (a reply, an answer, mark seen, a wake, your theme and look) to the runtime as a command with a receipt. It never writes to the database itself.
 
@@ -13,6 +13,12 @@ Run `/world` in a root Pi session. The first time, it installs Electron 44.9.0 u
 Agent World starts detached, so it keeps running after the session that opened it ends. Only one Agent World runs at a time: `/world` while it is open brings its window to the front. When it fails to start, the reason is in `~/.pi/agent/agent-world/electron.log`.
 
 Closing the window quits Agent World and changes nothing in tmux or Pi: your sessions keep running, and nothing is stopped or marked.
+
+## Workplace
+
+Choose **Workplace** to open the supported chat and mail interface. Chat connects to actual Pi session conversations and team channels; Mail exposes operator correspondence, Sent and Activity. Profiles, unread updates, light/dark appearance and channel participation share the existing runtime rather than a separate message store. **World** in its rail returns to the visual world; the app still opens in World by default.
+
+See [Workplace](workplace.md) for its controls, read/acknowledgment rules, profiles and limits.
 
 ## The world
 
@@ -120,6 +126,8 @@ Agent World owns no record of your work. Everything it shows comes from the sess
 | The record of writes outside | `~/.pi/agent/state/agent-world-outside-writes.jsonl` |
 | Pages read lately in the library | `~/.pi/agent/state/agent-world-library-recent.json` |
 | Electron | `~/.pi/agent/agent-world/electron-44.9.0/` |
+| Workplace appearance | The page's local storage in Electron's data directory |
+| Unsent Workplace drafts and compose recipient | Memory only; cleared on reload/close |
 | Electron's own data (window state, the Slack sign-in window's cookies, the last good theme) | `~/.pi/agent/agent-world/electron-data/` |
 | Why the app failed to start | `~/.pi/agent/agent-world/electron.log` |
 

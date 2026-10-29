@@ -1,6 +1,6 @@
 ## file
 
-The backend imports only Node, Electron-free npm modules, and other `apps/agent-world/src/backend/` files; nothing from `components/` or `@earendil-works/pi-coding-agent`. What it needs about sessions it reads from the session-state database, and a column a newer migration adds is selected only when `pragma_table_info` lists it (`OPTIONAL_COLUMNS`: the organization's `role_title`, `manages`, `soul`, `self`, `retired_at`, `retired_reason`). Who manages is the `manages` fact the bridge reports (stored as 0/1), or having anyone report to it; the role's name is never interpreted here, and the catalog is read from its files (`roles.ts`) only for the hire form.
+The backend imports only Node, Electron-free npm modules, and other `apps/agent-world/src/backend/` files; nothing from `components/` or `@earendil-works/pi-coding-agent`. What it needs about sessions it reads from the session-state database, and a column a newer migration adds is selected only when `pragma_table_info` lists it (`OPTIONAL_COLUMNS`: the organization's `role_title`, `manages`, `soul`, `self`, `retired_at`, `retired_reason`, `hired_at`). Who manages is the `manages` fact the bridge reports (stored as 0/1), or having anyone report to it; the role's name is never interpreted here, and the catalog is read from its files (`roles.ts`) only for the hire form.
 Why: the Electron main build (`apps/agent-world/electron.vite.config.ts`) bundles everything it imports except Electron and `node:`, so a `components/` import drags the package's extension code into the committed `dist/`; and the running runtime keeps old code and an unmigrated database until it restarts, so a selected column may not exist yet.
 Coupled: apps/agent-world/electron.vite.config.ts, components/session-state/src/schema.ts
 Verify: apps/agent-world/tests/backend.test.ts
@@ -38,6 +38,10 @@ Verify: apps/agent-world/tests/workplace-disposal.test.ts
 Workplace summaries share this poll and the existing task-file reread cadence; bodies are read on demand through `openWorkplace`. Table guards keep an unmigrated runtime readable.
 Coupled: apps/agent-world/src/backend/workplace.ts
 Verify: apps/agent-world/tests/workplace.test.ts
+
+Full Self is returned from the cached root row only through the on-demand `profile` reader. Snapshot facts retain headings, not every person's full document. This read has no conversation or acknowledgment effect. Explicit hire dates are nullable and selected only when the column exists; earliest incarnation time remains a separate observation and roster-order key.
+Coupled: apps/agent-world/src/world.ts, apps/agent-world/src/electron/main.ts, apps/agent-world/src/electron/preload.ts
+Verify: apps/agent-world/tests/backend.test.ts, apps/agent-world/tests/profile.test.ts
 
 The feed keeps its own sequence cursor, apart from the world's: the first read starts from a short backlog (the last `FEED_BACKLOG` lines within the last `FEED_BACKLOG_EVENTS` events), and a database whose sequence is behind the cursor (a new database) starts again from a backlog.
 Why: the world's read skips when nothing changed, but every line must reach the chatbox once and in order, within a second.

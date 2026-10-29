@@ -14,6 +14,7 @@ var api = {
 		return () => electron.ipcRenderer.removeListener("world:feed", forward);
 	},
 	goToTerminal: (characterId) => electron.ipcRenderer.invoke("world:terminal", characterId),
+	profile: (characterId) => electron.ipcRenderer.invoke("world:profile", characterId),
 	conversation: (characterId, before) => electron.ipcRenderer.invoke("world:conversation", characterId, before),
 	markSeen: (characterId) => electron.ipcRenderer.invoke("world:mark-seen", characterId),
 	setAvatarLook: (look) => electron.ipcRenderer.invoke("world:avatar-look", look),
@@ -39,6 +40,7 @@ var api = {
 	readTask: (task) => electron.ipcRenderer.invoke("world:read-task", task),
 	assignTask: (person, task) => electron.ipcRenderer.invoke("world:assign-task", person, task),
 	readWorkplaceThread: (thread) => electron.ipcRenderer.invoke("world:workplace-thread", thread),
+	setChannelMembership: (thread, joined) => electron.ipcRenderer.invoke("world:channel-membership", thread, joined),
 	recruit: (request) => electron.ipcRenderer.invoke("world:recruit", request),
 	rename: (characterId, name) => electron.ipcRenderer.invoke("world:rename", characterId, name),
 	roles: () => electron.ipcRenderer.invoke("world:roles"),

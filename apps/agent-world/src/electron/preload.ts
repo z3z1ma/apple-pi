@@ -11,6 +11,7 @@ import type {
 	NotepadChange,
 	NotepadRead,
 	NotepadSave,
+	ProfileRead,
 	Receipt,
 	RecruitReceipt,
 	ReplyStreamEvent,
@@ -37,6 +38,7 @@ const api: AgentWorldApi = {
 		return () => ipcRenderer.removeListener("world:feed", forward);
 	},
 	goToTerminal: (characterId) => ipcRenderer.invoke("world:terminal", characterId) as Promise<TerminalResult>,
+	profile: (characterId) => ipcRenderer.invoke("world:profile", characterId) as Promise<ProfileRead>,
 	conversation: (characterId, before) =>
 		ipcRenderer.invoke("world:conversation", characterId, before) as Promise<ConversationPage>,
 	markSeen: (characterId) => ipcRenderer.invoke("world:mark-seen", characterId) as Promise<CommandResult>,
@@ -65,6 +67,8 @@ const api: AgentWorldApi = {
 	readTask: (task) => ipcRenderer.invoke("world:read-task", task) as Promise<TaskRead>,
 	assignTask: (person, task) => ipcRenderer.invoke("world:assign-task", person, task) as Promise<CommandReceipt>,
 	readWorkplaceThread: (thread) => ipcRenderer.invoke("world:workplace-thread", thread) as Promise<ThreadRead>,
+	setChannelMembership: (thread, joined) =>
+		ipcRenderer.invoke("world:channel-membership", thread, joined) as Promise<CommandReceipt>,
 	recruit: (request) => ipcRenderer.invoke("world:recruit", request) as Promise<RecruitReceipt>,
 	rename: (characterId, name) => ipcRenderer.invoke("world:rename", characterId, name) as Promise<CommandReceipt>,
 	roles: () => ipcRenderer.invoke("world:roles") as Promise<RoleChoice[]>,

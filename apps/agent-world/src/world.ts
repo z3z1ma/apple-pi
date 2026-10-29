@@ -72,13 +72,17 @@ export interface CharacterFacts {
 	tmux: { socket: string; pane: string; session: string | null; window: number | null } | null;
 }
 
+export type ProfileRead = { ok: true; self: string | null } | { ok: false; reason: string };
+
 /** One awake top-level Pi session. */
 export interface Character {
 	id: string;
 	name: string;
 	role: Role;
 	place: PlaceRef;
-	/** When the session first started (ms); characters are listed in this order, so nobody moves when another leaves. */
+	/** When the session was explicitly hired (ms); absent for older or non-hired people. */
+	hiredAt?: number | null;
+	/** Earliest runtime-observed incarnation (ms), not a hire date; also owns the stable roster order. */
 	startedAt: number;
 	/** Always set by the backend; fixtures that test only places may leave it out. */
 	facts?: CharacterFacts;
@@ -198,6 +202,7 @@ export interface DormantAgent {
 	/** When its last incarnation ended (ms), and why (`exited`, `lost`, ...); null when unknown. */
 	stoppedAt: number | null;
 	stopReason: string | null;
+	hiredAt?: number | null;
 	startedAt: number;
 }
 
@@ -238,6 +243,8 @@ export interface MailThreadSummary {
 }
 
 export interface MailThread {
+	/** Operator cursor before this read acknowledged its returned messages; absent for a preview. */
+	readUpTo?: number;
 	id: string;
 	subject: string;
 	closed: boolean;
@@ -441,6 +448,8 @@ export interface AgentWorldApi extends IntegrationsApi {
 	onFeed(listener: (lines: FeedLine[]) => void): () => void;
 	/** Switch the operator's tmux client to the character's pane. */
 	goToTerminal(characterId: string): Promise<TerminalResult>;
+	/** Full Self text on demand, without reading or acknowledging a conversation. */
+	profile(characterId: string): Promise<ProfileRead>;
 	/** A page of the character's conversation: the newest, or the one just before the cursor `before`. */
 	conversation(characterId: string, before?: string): Promise<ConversationPage>;
 	/** Tell the runtime the operator saw the character (`mark_seen`); resolves with the command's last receipt. */
@@ -478,6 +487,12 @@ export interface AgentWorldApi extends IntegrationsApi {
 	assignTask(person: string, task: string): Promise<CommandReceipt>;
 	/** Observe a shared channel, meeting, or task thread; only an operator participant marks it read. */
 	readWorkplaceThread(thread: string): Promise<ThreadRead>;
+	/**
+	 * Join or leave an existing team channel as the operator. A private thread is refused. Joined state is
+	 * `workplace.threads[].participants` on the next snapshot. This does not mark the channel read: read it after an
+	 * applied receipt to acknowledge the history now visible.
+	 */
+	setChannelMembership(thread: string, joined: boolean): Promise<CommandReceipt>;
 	/**
 	 * Recruit a new agent (`start` for a new session id): a worker's window opens after its coordinator's pane, an
 	 * independent agent's after the operator's current one.

@@ -15,12 +15,13 @@ import { activity, ago, attentionOf, placeName } from "../interface/model.js";
 import { placeActions, placePanels } from "../places/place-panels.js";
 import { Footer } from "./actions.js";
 import "./conversation.css";
+import { useWindowFocus } from "../../use-window-focus.js";
 import { focusWorld, trapTab } from "../focus.js";
 import { shortArg } from "../tool-line.js";
-import { useHistory } from "./history.js";
+import { type History, useHistory } from "./history.js";
 import { useLiveReplies } from "./live-reply.js";
-import { conversationPanel } from "./panel-state.js";
-import { BlockView, blockAt, blockKey, blocksOf, dayName, WorkingDirectory } from "./transcript.js";
+import { type ConversationApi, conversationPanel } from "./panel-state.js";
+import { BlockView, blockAt, blockKey, blocksOf, blockVisible, dayName, WorkingDirectory } from "./transcript.js";
 
 /** Within this many px of the top, the page before loads. */
 const LOAD_MARGIN = 400;
@@ -34,7 +35,79 @@ export function ConversationPanel({ store }: { store: WorldStore }) {
 	return <Panel key={`${panel.opening}:${panel.character.id}`} opened={panel.character} world={world} store={store} />;
 }
 
-function Panel({ opened, world, store }: { opened: Character; world: WorldSnapshot | undefined; store: WorldStore }) {
+/** Temporary workplace spike: reuse the session surface without a modal keyboard boundary. */
+export function EmbeddedConversation({
+	character,
+	store,
+	showTools,
+}: {
+	character: Character;
+	store: WorldStore;
+	showTools: boolean;
+}) {
+	const world = useSyncExternalStore(store.subscribe, store.get);
+	return <Panel key={character.id} opened={character} world={world} store={store} embedded showTools={showTools} />;
+}
+
+function useSeenConversation(
+	api: ConversationApi | undefined,
+	id: string,
+	needsYouSince: number | null,
+	ready: boolean,
+) {
+	const [note, setNote] = useState<string>();
+	const seenOnce = useRef(false);
+	const seenNeeds = useRef<number | null>(null);
+	useEffect(() => {
+		if (needsYouSince === null) {
+			seenNeeds.current = null;
+			return;
+		}
+		if (!api || !ready || seenNeeds.current === needsYouSince || (!document.hasFocus() && seenOnce.current)) return;
+		seenOnce.current = true;
+		seenNeeds.current = needsYouSince;
+		void Promise.resolve()
+			.then(() => api.markSeen(id))
+			.then(
+				(result) => setNote(result.ok ? undefined : `Could not mark it seen: ${result.reason}`),
+				(failure: unknown) => setNote(`Could not mark it seen: ${String(failure)}`),
+			);
+	}, [api, id, needsYouSince, ready]);
+	return note;
+}
+
+function useReadPosition(history: History, pulse: string, facts: Character["facts"], embedded: boolean) {
+	const [atLatest, setAtLatest] = useState(false);
+	const focused = useWindowFocus();
+	const unreadSince = useRef(facts?.unseen ? (facts.seenAt ?? 0) : undefined);
+	if (embedded && facts?.unseen && (!atLatest || !focused) && unreadSince.current === undefined)
+		unreadSince.current = facts.seenAt ?? 0;
+	const firstRead = useRef(false);
+	useEffect(() => {
+		if (!embedded || !history.ready || firstRead.current) return;
+		firstRead.current = true;
+		if (history.readPulse !== pulse) history.refresh();
+	}, [embedded, history.ready, history.readPulse, history.refresh, pulse]);
+	return {
+		unreadSince: embedded ? unreadSince.current : undefined,
+		onAtLatest: embedded ? setAtLatest : undefined,
+		ready: !embedded || (atLatest && focused && history.ready && !history.error && history.readPulse === pulse),
+	};
+}
+
+function Panel({
+	opened,
+	world,
+	store,
+	embedded = false,
+	showTools = true,
+}: {
+	opened: Character;
+	world: WorldSnapshot | undefined;
+	store: WorldStore;
+	embedded?: boolean;
+	showTools?: boolean;
+}) {
 	const { api } = conversationPanel.get();
 	const theme = useTheme();
 	// The character as it is now; if it left the world meanwhile, as it was.
@@ -48,22 +121,6 @@ function Panel({ opened, world, store }: { opened: Character; world: WorldSnapsh
 	const facts = character.facts;
 	const attention = attentionOf(character);
 
-	// Opening the conversation is seeing it, in every view; so is a settle while the operator is looking at it.
-	const [seenNote, setSeenNote] = useState<string>();
-	const seenOnce = useRef(false);
-	const needsYouSince = facts?.needsYouSince ?? null;
-	useEffect(() => {
-		if (needsYouSince === null || !api) return;
-		if (!document.hasFocus() && seenOnce.current) return;
-		seenOnce.current = true;
-		void Promise.resolve()
-			.then(() => api.markSeen(opened.id))
-			.then(
-				(result) => setSeenNote(result.ok ? undefined : `Could not mark it seen: ${result.reason}`),
-				(failure: unknown) => setSeenNote(`Could not mark it seen: ${String(failure)}`),
-			);
-	}, [api, opened.id, needsYouSince]);
-
 	// Finished work keeps its happy face while the conversation stays open, though seeing it clears the badge.
 	const [happy, setHappy] = useState(attention === "finished");
 	useEffect(() => {
@@ -76,6 +133,8 @@ function Panel({ opened, world, store }: { opened: Character; world: WorldSnapsh
 	const pulse = `${facts?.run}:${facts?.settledAt}:${facts?.tool?.since}:${facts?.needsYouSince}`;
 	const history = useHistory(api, opened.id, pulse);
 	const streaming = useLiveReplies(api, opened.id, history.entries, history.refresh);
+	const position = useReadPosition(history, pulse, facts, embedded);
+	const seenNote = useSeenConversation(api, opened.id, facts?.needsYouSince ?? null, position.ready);
 	const [sentCount, setSentCount] = useState(0);
 
 	// Escape closes (a confirmation first); while open, the world's keys (walking, the walk grid) rest. Keys typed in
@@ -83,6 +142,7 @@ function Panel({ opened, world, store }: { opened: Character; world: WorldSnapsh
 	// releases still reach the world, so no key stays held down.
 	const panelRef = useRef<HTMLDivElement>(null);
 	useEffect(() => {
+		if (embedded) return;
 		const capture = (event: KeyboardEvent) => {
 			if (event.key === "Escape") {
 				event.stopImmediatePropagation();
@@ -107,7 +167,7 @@ function Panel({ opened, world, store }: { opened: Character; world: WorldSnapsh
 			// Closed: the world has the keys again.
 			focusWorld();
 		};
-	}, []);
+	}, [embedded]);
 
 	// Links open through the main process: web links in the system browser, files in their default app (relative paths
 	// from the agent's directory). A refusal or failure shows where Go to does.
@@ -133,7 +193,20 @@ function Panel({ opened, world, store }: { opened: Character; world: WorldSnapsh
 	const place = placeName(character.place, world, theme?.labels);
 	const repository = facts?.git?.repository.split("/").filter(Boolean).pop();
 	const doing = activity(character);
+	const progress =
+		facts?.run &&
+		{
+			idle: "",
+			thinking: "is thinking",
+			writing_reply: "is typing",
+			running_tool: "is working",
+			compacting: "is updating context",
+		}[facts.run];
+	const toolProgress = facts?.run === "running_tool" && facts.tool ? doing : undefined;
 	const portrait = theme ? portraitFor(theme, character, expression) : undefined;
+	const accessibility = embedded
+		? { role: "region" as const, "aria-label": `Conversation with ${character.name}` }
+		: { role: "dialog" as const, "aria-modal": true as const, "aria-label": `Conversation with ${character.name}` };
 
 	return (
 		// biome-ignore lint/a11y/noStaticElementInteractions: clicking the dimmed world closes the panel; Escape does from the keyboard
@@ -143,13 +216,7 @@ function Panel({ opened, world, store }: { opened: Character; world: WorldSnapsh
 				if (event.target === event.currentTarget) conversationPanel.close();
 			}}
 		>
-			<div
-				ref={panelRef}
-				className="aw-conv-panel"
-				role="dialog"
-				aria-modal="true"
-				aria-label={`Conversation with ${character.name}`}
-			>
+			<div ref={panelRef} className="aw-conv-panel" {...accessibility}>
 				<span className="aw-conv-ornament aw-tl" aria-hidden="true" />
 				<span className="aw-conv-ornament aw-tr" aria-hidden="true" />
 				<span className="aw-conv-ornament aw-bl" aria-hidden="true" />
@@ -226,16 +293,6 @@ function Panel({ opened, world, store }: { opened: Character; world: WorldSnapsh
 								{waking.text}
 							</p>
 						)}
-						{terminal && (
-							<p className="aw-conv-warn" role="status">
-								{terminal}
-							</p>
-						)}
-						{seenNote && (
-							<p className="aw-conv-warn" role="status">
-								{seenNote}
-							</p>
-						)}
 					</div>
 				</aside>
 				<section className="aw-conv-pane aw-conv-main">
@@ -246,9 +303,50 @@ function Panel({ opened, world, store }: { opened: Character; world: WorldSnapsh
 						title="Close (Esc)"
 						onClick={() => conversationPanel.close()}
 					/>
+					{terminal && (
+						<p className="aw-conv-warn" role="status">
+							{terminal}
+						</p>
+					)}
+					{seenNote && (
+						<p className="aw-conv-warn" role="status">
+							{seenNote}
+						</p>
+					)}
 					<WorkingDirectory.Provider value={facts?.cwd}>
-						<Transcript history={history} live={streaming} name={character.name} sent={sentCount} onLink={openLink} />
+						<Transcript
+							history={history}
+							live={streaming}
+							name={character.name}
+							sent={sentCount}
+							onLink={openLink}
+							showTools={showTools}
+							unreadSince={position.unreadSince}
+							onAtLatest={position.onAtLatest}
+						/>
 					</WorkingDirectory.Provider>
+					{embedded && live && facts?.run && facts.run !== "idle" && !facts.asking && (
+						<div className="wp-typing" role="status">
+							<span className="wp-typing-dots" aria-hidden="true">
+								<i />
+								<i />
+								<i />
+							</span>
+							<span
+								className="wp-typing-copy"
+								title={`${character.name} ${progress}${toolProgress ? ` · ${toolProgress}` : ""}`}
+							>
+								<strong>{character.name}</strong> {progress}
+								{toolProgress && (
+									<>
+										{" "}
+										<span aria-hidden="true"> · </span>
+										<code>{toolProgress}</code>
+									</>
+								)}
+							</span>
+						</div>
+					)}
 					{live ? (
 						<Footer
 							character={character}
@@ -277,7 +375,7 @@ function Panel({ opened, world, store }: { opened: Character; world: WorldSnapsh
 /** What it is doing: a tool and its argument set apart, or the plain state. */
 function Doing({ character, text }: { character: Character; text: string }) {
 	const tool = character.facts?.tool;
-	if (tool && attentionOf(character) === "working")
+	if (tool && character.facts?.run === "running_tool")
 		return (
 			<>
 				<span className="aw-conv-tool-name">{tool.name}</span>
@@ -302,8 +400,14 @@ function Transcript({
 	name,
 	sent,
 	onLink,
+	showTools,
+	unreadSince,
+	onAtLatest,
 }: {
+	unreadSince?: number;
+	onAtLatest?: (latest: boolean) => void;
 	history: ReturnType<typeof useHistory>;
+	showTools: boolean;
 	/** Open a web link in the system browser. */
 	onLink: (href: string, file: boolean) => void;
 	/** Replies being written, and written ones the history has not read yet, drawn after it. */
@@ -314,12 +418,20 @@ function Transcript({
 }) {
 	const theme = useTheme();
 	const log = useRef<HTMLDivElement>(null);
+	const [away, setAway] = useState(false);
+	const [newBelow, setNewBelow] = useState(false);
 	const entries = useMemo(
 		() => (live.length ? [...history.entries, ...live] : history.entries),
 		[history.entries, live],
 	);
-	const { blocks, results } = useMemo(() => blocksOf(entries), [entries]);
+	const { blocks: allBlocks, results } = useMemo(() => blocksOf(entries), [entries]);
+	const blocks = useMemo(() => allBlocks.filter((block) => blockVisible(block, showTools)), [allBlocks, showTools]);
 	const firstKey = blocks.length ? blockKey(blocks[0]) : undefined;
+	const unreadIndex =
+		unreadSince === undefined
+			? -1
+			: blocks.findIndex((block) => block.kind === "agent" && block.entries.some((entry) => entry.at > unreadSince));
+	const lastEntry = useRef<TranscriptEntry | undefined>(undefined);
 	const layout = useRef<{ height: number; first?: string; sent: number; stuck: boolean; placed: boolean }>({
 		height: 0,
 		sent,
@@ -334,13 +446,33 @@ function Transcript({
 		if (!el) return;
 		const was = layout.current;
 		if (!was.placed && history.ready) {
-			el.scrollTop = el.scrollHeight;
+			const unread = el.querySelector<HTMLElement>("[data-unread-start]");
+			el.scrollTop =
+				unread && (unreadIndex > 0 || !history.before)
+					? unread.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop
+					: el.scrollHeight;
 			was.placed = true;
 		} else if (was.first !== undefined && firstKey !== was.first) {
 			el.scrollTop += el.scrollHeight - was.height;
 		} else if (was.sent !== sent || (was.stuck && el.scrollHeight !== was.height)) {
 			el.scrollTop = el.scrollHeight;
 			was.stuck = true;
+		}
+		if (
+			onAtLatest &&
+			was.placed &&
+			!was.stuck &&
+			was.first === firstKey &&
+			lastEntry.current !== entries.at(-1) &&
+			el.scrollHeight > was.height
+		)
+			setNewBelow(true);
+		lastEntry.current = entries.at(-1);
+		was.stuck = el.scrollHeight - el.clientHeight - el.scrollTop < STICK_MARGIN;
+		if (onAtLatest && history.ready) {
+			onAtLatest(was.stuck);
+			setAway(!was.stuck);
+			if (was.stuck) setNewBelow(false);
 		}
 		was.height = el.scrollHeight;
 		was.first = firstKey;
@@ -361,11 +493,16 @@ function Transcript({
 		const el = log.current;
 		if (!el) return;
 		layout.current.stuck = el.scrollHeight - el.clientHeight - el.scrollTop < STICK_MARGIN;
+		if (onAtLatest) {
+			onAtLatest(layout.current.stuck);
+			setAway(!layout.current.stuck);
+			if (layout.current.stuck) setNewBelow(false);
+		}
 		if (el.scrollTop < LOAD_MARGIN) history.loadOlder();
 	};
 
 	let day = "";
-	return (
+	const content = (
 		<>
 			{/* biome-ignore lint/a11y/useKeyWithClickEvents: links are anchors, so Enter on one clicks it and reaches here */}
 			<div
@@ -382,14 +519,14 @@ function Transcript({
 				{history.ready && !history.before && blocks.length > 0 && (
 					<div className="aw-conv-start">The beginning of the conversation</div>
 				)}
-				{history.missing > 0 && (
+				{showTools && history.missing > 0 && (
 					<p className="aw-conv-missing" role="note">
 						{history.missing === 1
 							? "One entry is no longer in its transcript file."
 							: `${history.missing} entries are no longer in its transcript file.`}
 					</p>
 				)}
-				{blocks.map((block) => {
+				{blocks.map((block, index) => {
 					const at = blockAt(block);
 					const name_ = at ? dayName(at) : day;
 					const divider = name_ !== day;
@@ -401,11 +538,17 @@ function Transcript({
 									<span>{name_}</span>
 								</div>
 							)}
-							<BlockView block={block} name={name} results={results} />
+							{index === unreadIndex && (
+								<div className="aw-conv-unread" data-unread-start>
+									<span aria-hidden="true">New</span>
+									<hr aria-label="New updates" />
+								</div>
+							)}
+							<BlockView block={block} name={name} results={results} showTools={showTools} />
 						</div>
 					);
 				})}
-				{history.ready && blocks.length === 0 && !history.error && (
+				{history.ready && entries.length === 0 && !history.error && (
 					<p className="aw-conv-empty">Nothing has been said yet.</p>
 				)}
 				{!history.ready && !history.error && <p className="aw-conv-empty">{say(theme, "conversation-opening")}</p>}
@@ -424,5 +567,28 @@ function Transcript({
 				</div>
 			)}
 		</>
+	);
+	if (!onAtLatest) return content;
+	return (
+		<div className="aw-conv-transcript">
+			{content}
+			{away && (
+				<button
+					type="button"
+					className="aw-conv-jump"
+					onClick={() => {
+						const el = log.current;
+						if (!el) return;
+						el.scrollTop = el.scrollHeight;
+						layout.current.stuck = true;
+						onAtLatest(true);
+						setAway(false);
+						setNewBelow(false);
+					}}
+				>
+					{newBelow ? "New messages - jump to latest" : "Jump to latest"} &darr;
+				</button>
+			)}
+		</div>
 	);
 }

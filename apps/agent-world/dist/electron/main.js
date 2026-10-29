@@ -984,8 +984,13 @@ function readOperatorMail(db) {
 /** Read a thread only if the operator participates. The caller marks the returned sequence read through the runtime. */
 function readOperatorThread(db, id) {
 	if (!hasThreads(db)) return void 0;
-	if (!db.prepare("select 1 from thread_participants where thread_id = ? and participant = ?").get(id, "operator")) return void 0;
-	return readStoredThread(db, id);
+	const participant = db.prepare("select read_up_to from thread_participants where thread_id = ? and participant = ?").get(id, OPERATOR$1);
+	if (!participant) return void 0;
+	const thread = readStoredThread(db, id);
+	return thread ? {
+		...thread,
+		readUpTo: participant.read_up_to
+	} : void 0;
 }
 /** The stored conversation. Its caller decides whether this is a participant read or a shared-board observation. */
 function readStoredThread(db, id) {
@@ -3077,6 +3082,7 @@ function projectWorld(sessions, remembered) {
 		name: nameOf(session),
 		role: roleOf(session),
 		title: session.title,
+		hiredAt: session.hiredAt ?? null,
 		startedAt: session.firstStartedAt ?? 0,
 		stoppedAt: session.stoppedAt ?? null,
 		retiredAt: session.retiredAt,
@@ -3087,6 +3093,7 @@ function projectWorld(sessions, remembered) {
 		name: nameOf(session),
 		role: roleOf(session),
 		place: placeOf(session),
+		hiredAt: session.hiredAt ?? null,
 		startedAt: session.firstStartedAt ?? 0
 	}));
 	const shown = /* @__PURE__ */ new Set();
@@ -3343,6 +3350,17 @@ function openWorkplace(path, commands, snapshot) {
 				stage: "applied"
 			} : result;
 		},
+		async setChannelMembership(thread, joined) {
+			const result = await commands.send(OPERATOR$1, {
+				kind: "channel_membership",
+				thread,
+				joined
+			});
+			return result.ok ? {
+				ok: true,
+				stage: "applied"
+			} : result;
+		},
 		async readWorkplaceThread(id) {
 			if (!existsSync(path)) return {
 				ok: false,
@@ -3568,7 +3586,8 @@ var OPTIONAL_COLUMNS = [
 	"soul",
 	"self",
 	"retired_at",
-	"retired_reason"
+	"retired_reason",
+	"hired_at"
 ];
 var optionalColumns = (db) => {
 	const present = new Set(db.prepare("select name from pragma_table_info('sessions')").all().map((row) => row.name));
@@ -3610,6 +3629,7 @@ function sessionRow(row) {
 		retiredAt: row.retired_at,
 		retiredReason: row.retired_reason,
 		awake: row.awake === 1,
+		hiredAt: row.hired_at,
 		firstStartedAt: row.firstStartedAt ?? void 0,
 		stoppedAt: row.stoppedAt ?? void 0
 	};
@@ -3923,6 +3943,16 @@ function openWorldBackend(paths) {
 	};
 	return {
 		snapshot: () => current,
+		profile(characterId) {
+			const row = rowsById.get(characterId);
+			return !closed && db && row ? {
+				ok: true,
+				self: row.self
+			} : {
+				ok: false,
+				reason: "This person's profile is not available."
+			};
+		},
 		subscribe(listener) {
 			listeners.add(listener);
 			return () => listeners.delete(listener);
@@ -6081,6 +6111,10 @@ function start() {
 		ok: false,
 		reason: "No character was named."
 	});
+	ipcMain.handle("world:profile", (_event, characterId) => typeof characterId === "string" ? world.profile(characterId) : {
+		ok: false,
+		reason: "No character was named."
+	});
 	ipcMain.handle("world:conversation", (_event, characterId, before) => typeof characterId === "string" ? conversations.page(characterId, typeof before === "string" ? before : void 0) : {
 		ok: false,
 		reason: "No character was named."
@@ -6148,6 +6182,10 @@ function start() {
 	ipcMain.handle("world:workplace-thread", (_event, thread) => typeof thread === "string" ? workplace.readWorkplaceThread(thread) : {
 		ok: false,
 		reason: "No thread was named."
+	});
+	ipcMain.handle("world:channel-membership", (_event, thread, joined) => typeof thread === "string" && typeof joined === "boolean" ? workplace.setChannelMembership(thread, joined) : {
+		ok: false,
+		reason: "A channel and whether to join are required."
 	});
 	ipcMain.handle("world:recruit", (_event, request) => {
 		const { name, cwd, brief, reportsTo, role } = request ?? {};
@@ -6223,7 +6261,14 @@ function start() {
 			window = void 0;
 		});
 		window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
-		window.webContents.on("will-navigate", (event) => event.preventDefault());
+		window.webContents.on("will-navigate", (event, url) => {
+			if (![
+				"app://world/index.html",
+				"app://world/index.html?",
+				"app://world/index.html?workplace=chat",
+				"app://world/index.html?workplace=mail"
+			].includes(url)) event.preventDefault();
+		});
 		window.loadURL("app://world/index.html");
 		const capture = process.env.AGENT_WORLD_CAPTURE;
 		if (capture) window.webContents.once("did-finish-load", () => window && void captureWhenDrawn(window, capture));
