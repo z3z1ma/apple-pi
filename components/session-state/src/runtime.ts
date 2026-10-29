@@ -251,6 +251,8 @@ export class Runtime {
 	private readonly attentionShown = new Map<string, string>();
 	/** Sessions this runtime opened a window for, until their bridge connects or the window closes. */
 	private readonly starting = new Map<string, SessionStart>();
+	/** Manager-tool hires this process created, until that start connects or fails. A restart does not recover the set. */
+	private readonly newHires = new Set<string>();
 	private readonly headless = new Map<string, ChildProcess>();
 	private readonly retiring = new Map<string, { person: string }>();
 	private readonly departing = new Set<string>();
@@ -288,6 +290,7 @@ export class Runtime {
 		cleanMovedBundles(this.db);
 		syncChannels(this.db, Date.now());
 		this.recoverThreadPosts();
+		this.recoverChannelMembership();
 		this.recoverWorkCommands();
 		this.recoverWorkRecords();
 		this.recoverRetirements();
@@ -764,6 +767,11 @@ export class Runtime {
 			this.setCommandStage(commandId, "applied");
 			return;
 		}
+		if (command.kind === "channel_membership") {
+			receipt("accepted");
+			this.channelMembership(commandId, sessionId, command, now);
+			return;
+		}
 		if (waits) {
 			receipt(
 				"accepted",
@@ -1228,6 +1236,58 @@ export class Runtime {
 		);
 	}
 
+	/**
+	 * Join or leave an existing team channel as the operator. The row and its audience event commit together; a repeat
+	 * join does not move the cursor. `invited` keeps the operator through the next channel reconciliation.
+	 */
+	private channelMembership(
+		commandId: string,
+		sessionId: string,
+		command: Extract<Command, { kind: "channel_membership" }>,
+		now: number,
+	): void {
+		const db = this.db!;
+		if (sessionId !== OPERATOR) {
+			this.setCommandStage(commandId, "failed", "only the operator can join or leave a channel this way");
+			return;
+		}
+		if (typeof command.thread !== "string" || !command.thread || typeof command.joined !== "boolean") {
+			this.setCommandStage(commandId, "failed", "channel membership needs a thread and whether to join");
+			return;
+		}
+		const thread = db.prepare("select kind from threads where id = ?").get(command.thread) as
+			| { kind: string }
+			| undefined;
+		if (thread?.kind !== "channel") {
+			this.setCommandStage(commandId, "failed", "no team channel with that id");
+			return;
+		}
+		try {
+			db.exec("begin");
+			participateIn(db, command.thread, OPERATOR, now, command.joined ? "pull" : null);
+			if (command.joined)
+				db.prepare("update thread_participants set invited = 1 where thread_id = ? and participant = ?").run(
+					command.thread,
+					OPERATOR,
+				);
+			db.exec("commit");
+		} catch (error) {
+			if (db.isTransaction) db.exec("rollback");
+			this.setCommandStage(commandId, "failed", (error as Error).message);
+			return;
+		}
+		this.setCommandStage(commandId, "applied");
+	}
+
+	/** Finish a membership command accepted before a crash. Join and leave are both idempotent. */
+	private recoverChannelMembership(): void {
+		const pending = this.db!.prepare(
+			"select command_id, session_id, command, created_at from commands where kind = 'channel_membership' and stage = 'accepted' order by created_at",
+		).all() as { command_id: string; session_id: string; command: string; created_at: number }[];
+		for (const row of pending)
+			this.channelMembership(row.command_id, row.session_id, JSON.parse(row.command), row.created_at);
+	}
+
 	/** Complete posts accepted before a crash. A stored message means its full outbox committed with it. */
 	private recoverThreadPosts(): void {
 		const db = this.db!;
@@ -1515,6 +1575,7 @@ export class Runtime {
 		const start = this.starting.get(id);
 		if (start) {
 			this.starting.delete(id);
+			this.abandonHire(id);
 			this.setCommandStage(start.commandId, "failed", "The program discarded the peer before it connected");
 		}
 		return true;
@@ -2030,6 +2091,7 @@ export class Runtime {
 			)
 				return;
 		}
+		if (!row && command.role && !programId && command.goal?.text.trim()) this.newHires.add(sessionId);
 		return this.launchSession(commandId, sessionId, {
 			cwd,
 			name,
@@ -2081,6 +2143,7 @@ export class Runtime {
 					sessionId,
 				);
 			child.once("error", (error) => {
+				this.abandonHire(sessionId);
 				if (this.db === db) fail(`Pi could not start: ${error.message}`);
 			});
 			child.once("close", (code) => {
@@ -2088,6 +2151,7 @@ export class Runtime {
 				if (this.db !== db) return;
 				if (this.starting.get(sessionId) === start) {
 					this.starting.delete(sessionId);
+					this.abandonHire(sessionId);
 					fail(`Pi exited before connecting (code ${code}); see the runtime log`);
 				}
 				void this.cleanPrograms();
@@ -2104,6 +2168,7 @@ export class Runtime {
 			);
 		} catch (error) {
 			if (this.starting.get(sessionId) === start) this.starting.delete(sessionId);
+			this.abandonHire(sessionId);
 			const { stderr, message } = error as { stderr?: string; message: string };
 			if (this.db === db) fail(`tmux could not open a window: ${stderr?.trim() || message}`);
 			return;
@@ -2239,21 +2304,28 @@ export class Runtime {
 			  }
 			| undefined;
 		if (!row || row.stage === "applied" || row.stage === "failed") return;
-		// Mail of a thread that reached the transcript has been read there.
-		if (stage === "applied" && row.kind === "mail") {
-			const mail = JSON.parse(row.command) as { thread?: string; seq?: number };
-			if (mail.thread && typeof mail.seq === "number") markRead(db, mail.thread, row.session_id, mail.seq);
-		}
-		db.prepare("update commands set stage = ?, reason = ?, updated_at = ? where command_id = ?").run(
-			stage,
-			reason ?? null,
-			Date.now(),
-			commandId,
-		);
-		this.event("runtime", row.session_id, row.generation, `command_${stage}`, {
-			commandId,
-			...(reason ? { reason } : {}),
-		});
+		const hire = stage === "applied" && row.kind === "start" && this.newHires.delete(row.session_id);
+		const write = () => {
+			if (hire) this.stampHire(row.session_id);
+			// Mail of a thread that reached the transcript has been read there.
+			if (stage === "applied" && row.kind === "mail") {
+				const mail = JSON.parse(row.command) as { thread?: string; seq?: number };
+				if (mail.thread && typeof mail.seq === "number") markRead(db, mail.thread, row.session_id, mail.seq);
+			}
+			db.prepare("update commands set stage = ?, reason = ?, updated_at = ? where command_id = ?").run(
+				stage,
+				reason ?? null,
+				Date.now(),
+				commandId,
+			);
+			this.event("runtime", row.session_id, row.generation, `command_${stage}`, {
+				commandId,
+				...(reason ? { reason } : {}),
+			});
+		};
+		// A hire date commits with the applied stage, or not at all. The receipt follows the commit.
+		if (hire) this.atomically(write);
+		else write();
 		const client = this.commandClients.get(commandId);
 		if (stage === "applied" || stage === "failed") client?.heldTurns?.delete(commandId);
 		client?.socket.write(
@@ -2264,6 +2336,23 @@ export class Runtime {
 			this.dispatched.delete(commandId);
 			if (row.program_id) void this.cleanPrograms();
 		}
+	}
+
+	/** Drop a hire whose start failed before it connected, so a later call-in does not record a date. */
+	private abandonHire(sessionId: string): void {
+		this.newHires.delete(sessionId);
+	}
+
+	/** The connect time already stored for this hello. The caller commits it with the start becoming applied. */
+	private stampHire(sessionId: string): void {
+		const db = this.db!;
+		const started = db
+			.prepare(
+				"select started_at from incarnations where session_id = ? and ended_at is null order by generation desc limit 1",
+			)
+			.get(sessionId) as { started_at: number } | undefined;
+		if (!started) return;
+		db.prepare("update sessions set hired_at = ? where id = ? and hired_at is null").run(started.started_at, sessionId);
 	}
 
 	/**
@@ -2844,6 +2933,7 @@ export class Runtime {
 			if (start.socket !== socket || !startsBeforeRead.has(start)) continue;
 			if (panes?.some((pane) => pane.paneId === start.pane && !pane.dead)) continue;
 			this.starting.delete(sessionId);
+			this.abandonHire(sessionId);
 			this.setCommandStage(start.commandId, "failed", "the window closed before the session started");
 		}
 		const present = db.prepare("select 1 from tmux_servers where socket = ?").get(socket) !== undefined;

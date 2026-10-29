@@ -298,6 +298,8 @@ const MIGRATIONS = [
 	 from program_peers p
 	 where not exists (select 1 from events e where e.session_id = p.session_id and e.type in ('program_peer_created', 'program_peer_observed'));`,
 	`create index events_by_type on events (type, seq);`,
+	// When a manager-tool hire first connected. Null is unknown, including every person recorded before this column.
+	`alter table sessions add column hired_at integer;`,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

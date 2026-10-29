@@ -162,6 +162,22 @@ Why: rejected resumes, same-PID SDK switches and pane respawns cross asynchronou
 Coupled: components/session-state/src/departures.ts, components/session-state/src/tmux.ts
 Verify: components/session-state/tests/departure-lifecycle.test.ts, components/session-state/tests/tmux.test.ts
 
+## symbol:Runtime.channelMembership
+
+Only the operator may join or leave, and only an existing team channel. Mail, escalation, meeting, and task threads are refused and not created. Join is pull, sets `invited` so the next `syncChannels` keeps the operator, and leaves `read_up_to` at 0. A repeat join emits no second audience event and does not move the cursor, including when it only sets a missing invitation. Leave deletes the row. Neither call marks the channel read.
+Why: the operator is never in the reporting tree, so a join without `invited` is undone by the next hello or startup, with a `thread_left` that the operator did not ask for. Resetting the cursor on a repeat join would acknowledge messages the operator had not read. A person using this command would bypass the tree.
+The membership row and its `thread_joined` or `thread_left` event commit together. Startup replays an accepted command after `syncChannels`, in `created_at` order. A committed join already has `invited`, so reconciliation does not drop it before replay; replay then changes nothing. A committed leave is a no-op. The same `commandId` still returns the stored stage and applies nothing, so a retry cannot undo a later leave.
+Why: the command is stored as accepted before it is applied, the same as other runtime commands. Membership is not commutative, so a later accepted leave must replay after an earlier accepted join.
+Coupled: components/session-state/src/threads.ts, components/session-state/src/channels.ts, apps/agent-world/src/backend/workplace.ts
+Verify: components/session-state/tests/channel-membership.test.ts, components/session-state/tests/channel-membership-recovery.test.ts, apps/agent-world/tests/channel-membership.test.ts
+
+## symbol:Runtime.stampHire
+
+`hired_at` is the open incarnation's `started_at`, written only for an id in the in-memory hire set, in the same transaction as that start becoming applied. The set is filled when this process inserts the person for a non-program start with a role and a goal, and it is not rebuilt at startup. A failed start must drop the id: the later call-in uses the same applied path and would otherwise date a start that never connected. Hello's session upsert does not name the column.
+Why: scanning applied starts would date people hired before the column existed. The provisional insert is too early, because the hire tool treats connection as success. A date written apart from the applied stage could survive a rolled-back completion or be lost after one.
+Coupled: components/session-state/src/schema.ts
+Verify: components/session-state/tests/hire-date.test.ts
+
 ## symbol:Runtime.transfer
 
 A move is refused when the new manager is the person, is under the person, or is in another organization (a different root), so the tree stays one tree; the person's own reports keep reporting to it and move with it.

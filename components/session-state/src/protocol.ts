@@ -158,6 +158,11 @@ export type Command =
 	/** The session has read `thread` up to message `seq`. Applied by the runtime. */
 	| { kind: "thread_read"; thread: string; seq: number }
 	/**
+	 * The operator joins or leaves an existing team channel. Applied by the runtime. It does not create a thread, and
+	 * a repeat does not move the read cursor.
+	 */
+	| { kind: "channel_membership"; thread: string; joined: boolean }
+	/**
 	 * Start the session (a new id, or a stopped session by its id) with `pi` in a new tmux window after `tmux.pane`'s
 	 * window. The runtime opens the window itself; `cwd` and `name` default to the stopped session's. Applied when the
 	 * session's bridge connects; failed when the window closes first.
