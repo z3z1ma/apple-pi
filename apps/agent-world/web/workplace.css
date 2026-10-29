@@ -1823,26 +1823,34 @@ body.workplace {
 }
 .wp-profile > header {
 	display: flex;
+	flex: none;
 	align-items: center;
 	justify-content: space-between;
+	gap: 12px;
 	padding: 16px 20px;
 	border-bottom: 1px solid var(--wp-border);
+	background: var(--wp-bg);
 }
 .wp-profile h2 {
 	margin: 0;
 	font-size: 15px;
 }
-.wp-profile-close {
-	width: 28px;
-	height: 28px;
-	font-size: 22px;
-	color: var(--wp-muted);
+.wp-profile .wp-profile-close {
+	flex: none;
+	padding: 7px 12px;
+	border: 1px solid var(--wp-border);
+	border-radius: 6px;
+	background: var(--wp-panel);
+	color: var(--wp-text);
+	font-size: 12px;
+	font-weight: 650;
+	line-height: 1.4;
 }
-.wp-profile-close:hover {
+.wp-profile .wp-profile-close:hover {
 	background: var(--wp-hover);
-	border-radius: 5px;
 }
 .wp-profile-body {
+	min-height: 0;
 	overflow-y: auto;
 	padding: 24px;
 }
@@ -1852,7 +1860,7 @@ body.workplace {
 	font-size: 32px;
 	margin-bottom: 18px;
 }
-.wp-profile h3 {
+.wp-profile-body > h3 {
 	margin: 0 0 6px;
 	font-size: 22px;
 	overflow-wrap: anywhere;

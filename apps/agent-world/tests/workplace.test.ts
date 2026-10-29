@@ -267,7 +267,12 @@ test("a native escalation appears until the operator reads it, without depending
 test("a runtime that has not migrated workplace tables yields no invented work", () => {
 	const db = new DatabaseSync(":memory:");
 	try {
-		expect(workplaceReader(taskReader())(db, [], true)).toEqual({ threads: [], tasks: [], escalations: [] });
+		expect(workplaceReader(taskReader())(db, [], true)).toEqual({
+			threads: [],
+			tasks: [],
+			workHistory: [],
+			escalations: [],
+		});
 	} finally {
 		db.close();
 	}

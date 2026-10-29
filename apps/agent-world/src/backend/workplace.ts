@@ -2,11 +2,14 @@ import { existsSync, lstatSync, readdirSync, readFileSync, realpathSync } from "
 import { basename, dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type {
+	CharacterFacts,
 	CommandReceipt,
 	TaskRead,
 	ThreadRead,
 	Workplace,
 	WorkplaceTask,
+	WorkplaceTaskHistory,
+	WorkplaceTaskParticipation,
 	WorkplaceThread,
 	WorldSnapshot,
 } from "../world.js";
@@ -89,6 +92,57 @@ interface TaskRow {
 	ephemeral: number;
 	thread: string;
 	archived_at: number | null;
+	opened_at?: number | null;
+	close_status?: string | null;
+}
+
+interface AssignmentRow {
+	task_id: string;
+	person: string;
+	assigned_at: number;
+	ended_at: number | null;
+	end_reason: string | null;
+	focused: number;
+}
+
+function participation(row: AssignmentRow): WorkplaceTaskParticipation {
+	const outcome =
+		row.ended_at === null
+			? "held"
+			: row.end_reason === "finished" || row.end_reason === "unassigned" || row.end_reason === "discarded"
+				? row.end_reason
+				: "unknown";
+	return {
+		person: row.person,
+		assignedAt: row.assigned_at,
+		endedAt: row.ended_at,
+		outcome,
+		focused: row.ended_at === null && row.focused === 1,
+	};
+}
+
+function taskHistory(
+	row: TaskRow,
+	goal: NonNullable<CharacterFacts["task"]>,
+	participants: WorkplaceTaskParticipation[],
+): WorkplaceTaskHistory {
+	const times = [
+		row.opened_at,
+		row.archived_at,
+		...participants.flatMap((item) => [item.assignedAt, item.endedAt]),
+	].filter((at): at is number => typeof at === "number");
+	return {
+		...goal,
+		id: row.id,
+		project: row.project,
+		headquarters: row.organization,
+		thread: row.thread,
+		status: row.close_status ?? goal.status,
+		openedAt: row.opened_at ?? null,
+		closedAt: row.archived_at,
+		updatedAt: times.length ? times.reduce((latest, at) => Math.max(latest, at)) : null,
+		participants,
+	};
 }
 
 /** Files are rediscovered on the backend's task reread, not on each tool or streaming event. */
@@ -99,21 +153,28 @@ export function workplaceReader(readTask: ReturnType<typeof taskReader>) {
 		const roots = organizationRoots(sessions);
 		const threads = readThreads(db, roots);
 		const escalations = readEscalations(db, roots);
-		if (!hasTable(db, "work_tasks")) return { threads, escalations, tasks: [] };
+		if (!hasTable(db, "work_tasks")) return { threads, escalations, tasks: [], workHistory: [] };
 		const stored = db.prepare("select * from work_tasks").all() as unknown as TaskRow[];
 		const held = new Map<string, WorkplaceTask["assignees"]>();
+		const participants = new Map<string, WorkplaceTaskParticipation[]>();
 		for (const row of db
-			.prepare(`select a.task_id, a.person, coalesce(f.task_id = a.task_id, 0) as focused
-			from assignments a left join work_focus f on f.person = a.person where a.ended_at is null order by a.id`)
-			.all() as { task_id: string; person: string; focused: number }[]) {
+			.prepare(`select a.task_id, a.person, a.assigned_at, a.ended_at, a.end_reason, coalesce(f.task_id = a.task_id, 0) as focused
+			from assignments a left join work_focus f on f.person = a.person order by a.id`)
+			.all() as unknown as AssignmentRow[]) {
+			const history = participants.get(row.task_id) ?? [];
+			history.push(participation(row));
+			participants.set(row.task_id, history);
+			if (row.ended_at !== null) continue;
 			const list = held.get(row.task_id) ?? [];
 			list.push({ person: row.person, focused: row.focused === 1 });
 			held.set(row.task_id, list);
 		}
 		const tasks: WorkplaceTask[] = [];
+		const workHistory: WorkplaceTaskHistory[] = [];
 		for (const row of stored) {
-			if (row.archived_at !== null) continue;
 			const goal = readTask(JSON.stringify({ bundle: row.bundle, taskId: row.id }), rereadFiles)!;
+			workHistory.push(taskHistory(row, goal, participants.get(row.id) ?? []));
+			if (row.archived_at !== null) continue;
 			if (!held.has(row.id) && (goal.status === "done" || goal.status === "cancelled")) continue;
 			tasks.push({
 				...goal,
@@ -162,6 +223,7 @@ export function workplaceReader(readTask: ReturnType<typeof taskReader>) {
 			threads: threads.filter((thread) => thread.kind === "meeting" || active.has(thread.headquarters)),
 			escalations,
 			tasks,
+			workHistory,
 		};
 	};
 }
@@ -179,8 +241,9 @@ export function openWorkplace(path: string, commands: Commands, snapshot: () => 
 	const findTask = (id: string) => snapshot().workplace?.tasks.find((task) => task.id === id || task.bundle === id);
 	return {
 		async readTask(id) {
-			const task = findTask(id);
-			if (!task) return { ok: false, reason: "That task is no longer on the board." };
+			const task =
+				findTask(id) ?? snapshot().workplace?.workHistory?.find((task) => task.id === id || task.bundle === id);
+			if (!task) return { ok: false, reason: "That task is not in the recorded workplace." };
 			try {
 				return { ok: true, text: readFileSync(join(task.bundle, "task.md"), "utf8") };
 			} catch (error) {

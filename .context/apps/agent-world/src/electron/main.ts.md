@@ -17,7 +17,12 @@ Why: the renderer shows untrusted text; the main process must not trust the rend
 Coupled: apps/agent-world/src/backend/links.ts, apps/agent-world/src/electron/preload.ts
 Verify: apps/agent-world/tests/links.test.ts
 
-Internal workplace view links need an explicit `will-navigate` exception; permit only the app's known index URLs while other renderer navigation and new windows stay blocked. The empty query variant is deliberate: the World link's `href="?"` returns `app://world/index.html?`.
+Org IPC validates renderer payload shapes through the public Org guards before calling the standalone controller; it shares the existing Commands connection with lifecycle/workplace actions. Shape validity is not an allowed-key filter: the controller extracts the authorized move fields rather than spreading a renderer object into a runtime command. Progress is emitted on world:org-progress, and listener disposal in the preload removes its own forwarder.
+Why: a well-typed renderer object can still contain an unexpected command kind. Shape validation alone must not turn those extra fields into runtime authority.
+Coupled: apps/agent-world/src/org.ts, apps/agent-world/src/backend/org.ts, apps/agent-world/src/electron/preload.ts
+Verify: apps/agent-world/tests/org-api.test.ts, apps/agent-world/tests/org-backend.test.ts
+
+Internal workplace view links need an explicit `will-navigate` exception; permit only the app's exact index, empty-query, Chat, Mail and Org URLs while other renderer navigation and new windows stay blocked. The empty query variant is deliberate: the World link's `href="?"` returns `app://world/index.html?`.
 Why: browser-fixture tests bypass Electron's navigation guard and can pass even when clicking the real launch link does nothing. Broadly allowing same-origin navigation would expand the renderer's navigation authority beyond these view links.
 Coupled: apps/agent-world/web/entry.ts, apps/agent-world/web/workplace.tsx
 Verify: apps/agent-world/scripts/workplace-electron-check.mjs

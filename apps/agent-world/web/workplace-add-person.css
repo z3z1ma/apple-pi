@@ -1,0 +1,88 @@
+.wp-add-person {
+	width: min(390px, 100%);
+	min-width: 0;
+	overflow-y: auto;
+	border-left: 1px solid var(--wp-border);
+	background: var(--wp-bg);
+	color: var(--wp-text);
+}
+.wp-add-person > header {
+	display: flex;
+	align-items: start;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 22px;
+	border-bottom: 1px solid var(--wp-border);
+}
+.wp-add-person h2 {
+	margin: 0;
+	font-size: 19px;
+}
+.wp-add-person p {
+	margin: 6px 0;
+	font-size: 12px;
+	line-height: 1.6;
+	color: var(--wp-muted);
+	overflow-wrap: anywhere;
+}
+.wp-add-person form {
+	padding: 18px 22px;
+}
+.wp-add-person fieldset {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	margin: 18px 0;
+	padding: 0;
+	border: 0;
+	min-width: 0;
+}
+.wp-add-person label {
+	margin-top: 10px;
+	font-size: 12px;
+	font-weight: 650;
+}
+.wp-add-person input,
+.wp-add-person select,
+.wp-add-person textarea {
+	box-sizing: border-box;
+	width: 100%;
+	min-width: 0;
+	padding: 9px 10px;
+	border: 1px solid var(--wp-border);
+	border-radius: 6px;
+	background: var(--wp-panel);
+	color: var(--wp-text);
+	font: inherit;
+}
+.wp-add-person textarea {
+	resize: vertical;
+}
+.wp-add-person button {
+	padding: 8px 12px;
+	border: 1px solid var(--wp-border);
+	border-radius: 6px;
+	background: var(--wp-bg);
+	color: var(--wp-text);
+	font: inherit;
+}
+.wp-add-person button:disabled {
+	opacity: 0.55;
+}
+.wp-add-person footer {
+	display: flex;
+	justify-content: flex-end;
+	gap: 8px;
+	margin-top: 18px;
+}
+.wp-add-person p[role="alert"] {
+	color: var(--wp-danger);
+}
+@media (max-width: 760px) {
+	.wp-add-person {
+		position: absolute;
+		inset: 0 0 0 auto;
+		z-index: 4;
+		box-shadow: var(--wp-shadow);
+	}
+}

@@ -7,6 +7,7 @@ import { conversationPanel } from "./overlay/conversation/panel-state.js";
 import { Markdown, TranscriptAuthor } from "./overlay/conversation/transcript.js";
 import { activity } from "./overlay/interface/model.js";
 import { useWindowFocus } from "./use-window-focus.js";
+import { Org } from "./workplace-org.js";
 import { ChatPeople, PersonAvatar, PersonName, PersonProfile, sessionStatus } from "./workplace-people.js";
 import { worldStore } from "./world-store.js";
 import "./workplace.css";
@@ -22,9 +23,22 @@ const date = (at: number) => new Date(at).toLocaleDateString(undefined, { month:
 function Icon({
 	name,
 }: {
-	name: "chat" | "mail" | "world" | "search" | "compose" | "tools" | "inbox" | "sent" | "activity" | "moon" | "sun";
+	name:
+		| "chat"
+		| "mail"
+		| "world"
+		| "search"
+		| "compose"
+		| "tools"
+		| "inbox"
+		| "sent"
+		| "activity"
+		| "moon"
+		| "sun"
+		| "org";
 }) {
 	const paths = {
+		org: "M9 3h6v5H9V3Z M3 16h6v5H3v-5Z M15 16h6v5h-6v-5Z M12 8v4 M6 16v-4h12v4",
 		sent: "m3 4 18 8-18 8 4-8-4-8Z M7 12h14",
 		activity: "M3 12h4l3-8 4 16 3-8h4",
 		moon: "M20 14a8 8 0 0 1-10-10 8 8 0 1 0 10 10Z",
@@ -88,14 +102,22 @@ function Workplace() {
 			/* An unavailable preference store does not block changing appearance. */
 		}
 	};
-	const [view, setView] = useState(new URLSearchParams(location.search).get("workplace") === "mail" ? "mail" : "chat");
+	const initialView = new URLSearchParams(location.search).get("workplace");
+	const [view, setView] = useState(initialView === "org" ? "org" : initialView === "mail" ? "mail" : "chat");
+	const [orgVisited, setOrgVisited] = useState(initialView === "org");
+	const [requestedDM, setRequestedDM] = useState<{ id: string; key: string }>();
+	const openDM = (id: string) => {
+		setRequestedDM({ id, key: crypto.randomUUID() });
+		setView("chat");
+		history.replaceState(null, "", "?workplace=chat");
+	};
 	const unread = world ? inboxThreads(world).reduce((sum, thread) => sum + thread.unread, 0) : 0;
 	const unreadChat = world
 		? world.characters.filter((person) => person.facts?.unseen).length +
 			[...channelUnreads(world).values()].filter((count) => count > 0).length
 		: 0;
 	return (
-		<div className={`wp-app wp-${view}`} data-appearance={dark ? "dark" : "light"}>
+		<div className={`wp-app wp-${view === "org" ? "org-view" : view}`} data-appearance={dark ? "dark" : "light"}>
 			<nav className="wp-rail" aria-label="Applications">
 				<a className="wp-brand" href="?" title="Back to Agent World">
 					pi
@@ -132,6 +154,21 @@ function Workplace() {
 				</button>
 				<button
 					type="button"
+					aria-label="Org"
+					aria-pressed={view === "org"}
+					onClick={() => {
+						setOrgVisited(true);
+						setView("org");
+						history.replaceState(null, "", "?workplace=org");
+					}}
+				>
+					<span className="wp-rail-icon">
+						<Icon name="org" />
+					</span>
+					Org
+				</button>
+				<button
+					type="button"
 					className="wp-appearance-toggle"
 					aria-label="Theme: dark mode"
 					aria-pressed={dark}
@@ -154,7 +191,7 @@ function Workplace() {
 			<div className="wp-workspace">
 				<header className="wp-topbar">
 					<strong>
-						Workplace <span> / {view === "chat" ? "Conversations" : "Mail"}</span>
+						Workplace <span> / {view === "chat" ? "Conversations" : view === "org" ? "Organizations" : "Mail"}</span>
 					</strong>
 					<span className={world?.connected ? "wp-connected" : "wp-offline"}>
 						{world ? (world.connected ? "Runtime connected" : "Disconnected · last known state") : "Connecting…"}
@@ -165,11 +202,16 @@ function Workplace() {
 				) : (
 					<div className="wp-surface" inert={!world.connected}>
 						<div hidden={view !== "chat"}>
-							<Chat world={world} active={view === "chat"} />
+							<Chat world={world} active={view === "chat"} requestedDM={requestedDM} />
 						</div>
 						<div hidden={view !== "mail"}>
 							<Mail world={world} active={view === "mail"} />
 						</div>
+						{orgVisited && (
+							<div hidden={view !== "org"}>
+								<Org world={world} active={view === "org"} openDM={openDM} />
+							</div>
+						)}
 					</div>
 				)}
 			</div>
@@ -177,12 +219,28 @@ function Workplace() {
 	);
 }
 
-function Chat({ world, active }: { world: WorldSnapshot; active: boolean }) {
+function Chat({
+	world,
+	active,
+	requestedDM,
+}: {
+	world: WorldSnapshot;
+	active: boolean;
+	requestedDM?: { id: string; key: string };
+}) {
 	const [selection, setSelection] = useState<{ kind: "dm" | "channel"; id: string }>();
 	const [filter, setFilter] = useState("");
 	const [showTools, setShowTools] = useState(false);
 	const [profile, setProfile] = useState<{ id: string; name: string }>();
 	const profileTrigger = useRef<HTMLElement | null>(null);
+	const consumedDM = useRef<string | undefined>(undefined);
+	useEffect(() => {
+		if (active && requestedDM && consumedDM.current !== requestedDM.key) {
+			consumedDM.current = requestedDM.key;
+			setSelection({ kind: "dm", id: requestedDM.id });
+			setProfile(undefined);
+		}
+	}, [active, requestedDM]);
 	const closeProfile = () => {
 		setProfile(undefined);
 		if (profileTrigger.current?.isConnected) profileTrigger.current.focus();

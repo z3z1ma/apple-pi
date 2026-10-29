@@ -1,6 +1,7 @@
 ## file
 
-Chat avatars are real controls, including transcript authors; the workplace suppresses World's decorative pseudo-avatars so one identity is drawn once. Tone variables follow stable IDs via `workplace-people.tsx`, with light/dark lightness overrides. Profile layout is a side pane at desktop widths and an overlay at the existing narrow-layout breakpoint; its body owns long-fact scrolling, while the conversation retains its own scroll position.
+Chat avatars are real controls, including transcript authors; the workplace suppresses World's decorative pseudo-avatars so one identity is drawn once. Tone variables follow stable IDs via `workplace-people.tsx`, with light/dark lightness overrides. Profile layout is a side pane at desktop widths and an overlay at the existing narrow-layout breakpoint; its body owns long-fact scrolling, while the conversation retains its own scroll position. Keep the profile header nonshrinking and its explicit Close control visible outside that scrolling body. The Close selector must override shared bare-button resets and use the workplace palette in both themes. Scope the large identity heading to the profile body's direct heading; embedded work history owns its own headings.
+Why: Org embeds the shared profile under reporting controls, so the remaining vertical space can be small. Scrolling must leave a legible close action available, and broad profile heading rules would override the embedded work history's hierarchy.
 Coupled: apps/agent-world/web/workplace-people.tsx, apps/agent-world/web/overlay/conversation/transcript.tsx
 Verify: apps/agent-world/tests/world-conversation.test.ts
 

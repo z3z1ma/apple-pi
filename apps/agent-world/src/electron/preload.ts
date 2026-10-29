@@ -2,6 +2,7 @@
 // as CommonJS with only a few Electron modules, so this is built to dist/electron/preload.cjs.
 import { contextBridge, ipcRenderer } from "electron";
 import type { IntegrationsApi, OutsideWriteEntry } from "../integrations.js";
+import type { OrgMoveResult, OrgStartProgress } from "../org.js";
 import type {
 	AgentWorldApi,
 	CommandReceipt,
@@ -72,6 +73,13 @@ const api: AgentWorldApi = {
 	recruit: (request) => ipcRenderer.invoke("world:recruit", request) as Promise<RecruitReceipt>,
 	rename: (characterId, name) => ipcRenderer.invoke("world:rename", characterId, name) as Promise<CommandReceipt>,
 	roles: () => ipcRenderer.invoke("world:roles") as Promise<RoleChoice[]>,
+	orgMove: (request) => ipcRenderer.invoke("world:org-move", request) as Promise<OrgMoveResult>,
+	orgStart: (request) => ipcRenderer.invoke("world:org-start", request) as Promise<OrgStartProgress>,
+	onOrgStart(listener) {
+		const forward = (_event: unknown, progress: OrgStartProgress) => listener(progress);
+		ipcRenderer.on("world:org-progress", forward);
+		return () => ipcRenderer.removeListener("world:org-progress", forward);
+	},
 	retire: (characterId, reason) => ipcRenderer.invoke("world:retire", characterId, reason) as Promise<CommandReceipt>,
 	openNotepad: (coordinatorId) => ipcRenderer.invoke("world:open-notepad", coordinatorId) as Promise<NotepadRead>,
 	saveNotepad: (coordinatorId, text, base) =>

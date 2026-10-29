@@ -16,9 +16,11 @@ import { instruct } from "../backend/instructions.js";
 import { openLifecycle } from "../backend/lifecycle.js";
 import { openFileLink, openLink } from "../backend/links.js";
 import { openNotepads } from "../backend/notepad.js";
+import { openOrg } from "../backend/org.js";
 import { listThemes, themeBackdrop } from "../backend/theme-packs.js";
 import { openWorkplace } from "../backend/workplace.js";
 import { leaveOutUnchanged, openWorldBackend } from "../backend/world-backend.js";
+import { isOrgMoveRequest, isOrgStartRequest } from "../org.js";
 import { wireIntegrations } from "./integrations-ipc.js";
 
 // This file runs as dist/electron/main.js, two levels below the app directory.
@@ -110,6 +112,24 @@ function start() {
 	conversations.onReply((event) => toWindow("world:reply", event));
 	// The inn, the rookery, and ending a session.
 	const lifecycle = openLifecycle({ ...statePaths(), agentDir: agentDir() }, commands, () => world.snapshot());
+	const org = openOrg({ ...statePaths(), agentDir: agentDir() }, commands, () => world.snapshot());
+	org.onOrgStart((progress) => toWindow("world:org-progress", progress));
+	ipcMain.handle("world:org-move", (_event, request: unknown) =>
+		isOrgMoveRequest(request)
+			? org.orgMove(request)
+			: { ok: false, reason: "A person, manager and observed branch are required." },
+	);
+	ipcMain.handle("world:org-start", (_event, request: unknown) =>
+		isOrgStartRequest(request)
+			? org.orgStart(request)
+			: {
+					id: "",
+					people: [],
+					complete: false,
+					next: "retry",
+					note: "A team task, repository and valid positions are required.",
+				},
+	);
 	const unnamed = { ok: false, reason: "No character was named." };
 	ipcMain.handle("world:wake", (_event, characterId: unknown) =>
 		typeof characterId === "string" ? lifecycle.wake(characterId) : unnamed,
@@ -246,6 +266,7 @@ function start() {
 					"app://world/index.html?",
 					"app://world/index.html?workplace=chat",
 					"app://world/index.html?workplace=mail",
+					"app://world/index.html?workplace=org",
 				].includes(url)
 			)
 				event.preventDefault();

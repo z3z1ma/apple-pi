@@ -1,5 +1,15 @@
 // The world as the backend reports it to the world UI. Shared by the backend, the preload bridge, and the renderer.
 import type { IntegrationsApi } from "./integrations.js";
+import type { OrgMoveRequest, OrgMoveResult, OrgStartProgress, OrgStartRequest } from "./org.js";
+
+export type {
+	OrgMoveRequest,
+	OrgMoveResult,
+	OrgStartPerson,
+	OrgStartPosition,
+	OrgStartProgress,
+	OrgStartRequest,
+} from "./org.js";
 
 /**
  * How a character is drawn: a coordinator is the root of an organization (it keeps the headquarters) or a manager
@@ -32,6 +42,8 @@ export type Status = "asking" | "working" | "idle";
 
 /** Observed facts about a character, as the session-state runtime records them (`docs/session-state.md`). */
 export interface CharacterFacts {
+	/** A known temporary program peer; World retains it, Org excludes it. */
+	temporary?: boolean;
 	run: RunState;
 	status: Status;
 	/**
@@ -163,9 +175,34 @@ export interface WorkplaceTask {
 	assignees: { person: string; focused: boolean }[];
 }
 
+export interface WorkplaceTaskParticipation {
+	person: string;
+	assignedAt: number;
+	endedAt: number | null;
+	outcome: "held" | "finished" | "unassigned" | "discarded" | "unknown";
+	focused: boolean;
+}
+
+export interface WorkplaceTaskHistory {
+	id: string;
+	bundle: string;
+	project: string;
+	/** The recorded task organization, not the assignees' current reporting root. */
+	headquarters: string;
+	title: string;
+	status: string | null;
+	thread: string;
+	goalMissing?: boolean;
+	openedAt: number | null;
+	closedAt: number | null;
+	updatedAt: number | null;
+	participants: WorkplaceTaskParticipation[];
+}
+
 export interface Workplace {
 	threads: WorkplaceThread[];
 	tasks: WorkplaceTask[];
+	workHistory?: WorkplaceTaskHistory[];
 	escalations: { thread: string; person: string; headquarters: string }[];
 }
 
@@ -184,6 +221,7 @@ export interface WorldUpdate extends WorldSnapshot {
 
 /** A stopped top-level session (a dormant character): it sleeps at the inn until it is woken. */
 export interface DormantAgent {
+	temporary?: boolean;
 	id: string;
 	name: string;
 	/** What it was while awake; a dormant coordinator keeps its look. */
@@ -502,6 +540,9 @@ export interface AgentWorldApi extends IntegrationsApi {
 	rename(characterId: string, name: string): Promise<CommandReceipt>;
 	/** The roles the hire form offers, from the role catalog. */
 	roles(): Promise<RoleChoice[]>;
+	orgMove(request: OrgMoveRequest): Promise<OrgMoveResult>;
+	orgStart(request: OrgStartRequest): Promise<OrgStartProgress>;
+	onOrgStart(listener: (progress: OrgStartProgress) => void): () => void;
 	/** Retire a character (`retire`): it leaves the organization with a reason, and sleeps at the inn marked so. */
 	retire(characterId: string, reason: string): Promise<CommandReceipt>;
 	/** Read a running coordinator's notepad (`NOTES.md` in its directory) and watch it for changes. */

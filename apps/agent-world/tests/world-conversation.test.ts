@@ -1541,6 +1541,22 @@ test("chat avatars open observed profiles, restore keyboard focus, and enter a D
 		await page.keyboard.press("Enter");
 		const profile = page.getByRole("complementary", { name: "Profile: pi-tests", exact: true });
 		await profile.getByRole("heading", { name: "pi-tests", exact: true }).waitFor();
+		const closeProfile = profile.getByRole("button", { name: "Close profile", exact: true });
+		const theme = page.getByRole("button", { name: "Theme: dark mode", exact: true });
+		for (const dark of [false, true]) {
+			expect(await theme.getAttribute("aria-pressed")).toBe(String(dark));
+			expect(await closeProfile.textContent()).toBe("Close");
+			expect(await closeProfile.isVisible()).toBe(true);
+			expect(
+				await closeProfile.evaluate((button) => {
+					const rect = button.getBoundingClientRect();
+					return (
+						rect.top >= 0 && rect.bottom <= window.innerHeight && rect.left >= 0 && rect.right <= window.innerWidth
+					);
+				}),
+			).toBe(true);
+			await theme.click();
+		}
 		await profile.getByText(SUITE_TASK.title, { exact: false }).waitFor();
 		expect(await pages(page)).toEqual([]);
 		expect(await seen(page)).toEqual([]);
@@ -1903,6 +1919,15 @@ test("profiles load full Self only on demand, expand fields independently at 200
 		await record.getByText(`${"r".repeat(200)}\u2026`, { exact: true }).waitFor();
 		await record.getByRole("button", { name: "See more of Record", exact: true }).click();
 		await record.getByText(`${"r".repeat(240)}\nAnother completed task`, { exact: true }).waitFor();
+		const closeProfile = profile.getByRole("button", { name: "Close profile", exact: true });
+		await profile.getByRole("region", { name: "Self: The people I work with", exact: true }).scrollIntoViewIfNeeded();
+		expect(await closeProfile.isVisible()).toBe(true);
+		expect(
+			await closeProfile.evaluate((button) => {
+				const rect = button.getBoundingClientRect();
+				return rect.top >= 0 && rect.bottom <= window.innerHeight;
+			}),
+		).toBe(true);
 		await storyField.getByRole("button", { name: "See less of Self: My story", exact: true }).click();
 		await storyField.getByText(`${"s".repeat(200)}\u2026`, { exact: true }).waitFor();
 		expect(await record.getByRole("button").getAttribute("aria-expanded")).toBe("true");
@@ -1917,6 +1942,34 @@ test("profiles load full Self only on demand, expand fields independently at 200
 		await profile.getByText("First seen", { exact: true }).waitFor();
 		expect(await profile.getByText("Hired", { exact: true }).count()).toBe(0);
 		expect(await profile.locator("time").getAttribute("datetime")).toBe(new Date(at(1)).toISOString());
+		await page.evaluate(async () => {
+			const w = window as any;
+			const current = await w.agentWorld.snapshot();
+			w.push({
+				...current,
+				workplace: {
+					...current.workplace,
+					workHistory: [
+						{
+							id: "recorded-task",
+							bundle: "/tasks/recorded",
+							project: "/example",
+							headquarters: "original-team",
+							title: "Recorded completed work",
+							status: "done",
+							thread: "task:recorded",
+							openedAt: null,
+							closedAt: null,
+							updatedAt: null,
+							participants: [{ person: "pi-tests", assignedAt: 1, endedAt: 2, outcome: "finished", focused: false }],
+						},
+					],
+				},
+			});
+		});
+		await profile.getByRole("button", { name: "Read task: Recorded completed work", exact: true }).waitFor();
+		expect(await profile.getByText("Record", { exact: true }).count()).toBe(0);
+		await storyField.getByText(`${"s".repeat(200)}\u2026`, { exact: true }).waitFor();
 
 		expect(errors).toEqual([]);
 	} finally {

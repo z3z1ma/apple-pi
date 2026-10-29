@@ -10,6 +10,11 @@ Why: viewing a person differs from entering their conversation, and World action
 Coupled: apps/agent-world/web/overlay/interface/character-card.tsx
 Verify: apps/agent-world/tests/world-conversation.test.ts
 
+Recorded work appears after the Message control and before biographical facts. WorkHistory filters actual assignment participation by stable person ID and reads a task only on explicit opening; the older Record summary remains a separately expandable fallback only when no history entry contains that person. An absent history field or an empty/unrelated history therefore retains Record; matching history avoids a second inventory of the same completed work. The visible Close text retains the existing Close profile accessible name, focus target, and Escape/onClose behavior.
+Why: the legacy Record is a title summary, not evidence of assignment participation. Replacing it only when this person has structured history avoids duplicate task inventories without hiding the only available record in older snapshots.
+Coupled: apps/agent-world/web/workplace-work-history.tsx
+Verify: apps/agent-world/tests/world-conversation.test.ts, apps/agent-world/tests/world-org.test.ts
+
 Record and each Self field independently preview the operator-chosen 200 characters, counting Unicode code points. Self arrives as rendered Markdown: only the four headings produced by `renderSelf` start fields; other headings stay in the current field, and legacy unkeyed prose stays under Notes. Plain text keeps its markup inert. Explicit `hiredAt` is labelled Hired; absent dates use the earliest observed incarnation labelled First seen, never an estimated hire date.
 Coupled: components/organization/src/self.ts, apps/agent-world/src/backend/world-backend.ts, apps/agent-world/src/electron/main.ts, apps/agent-world/src/electron/preload.ts, apps/agent-world/src/world.ts
 Verify: apps/agent-world/tests/world-conversation.test.ts, apps/agent-world/tests/profile.test.ts

@@ -15,6 +15,7 @@ const TMUX_TIMEOUT_MS = 2000;
 
 /** What the inn shows of a stopped session beyond the projection: where it worked, its last task, why it stopped. */
 export interface SleeperRow {
+	temporary?: number;
 	cwd: string;
 	reportsTo: string | null;
 	git: string | null;
@@ -73,6 +74,7 @@ function made(
 	const git = parseShared<{ repository?: unknown } | null>(row?.git);
 	const agent: DormantAgent = {
 		...sleeper,
+		temporary: row?.temporary === 1,
 		reportsTo: row?.reportsTo ?? null,
 		repository: typeof git?.repository === "string" ? git.repository : null,
 		cwd: row?.cwd ?? "",

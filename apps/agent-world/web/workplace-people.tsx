@@ -3,6 +3,7 @@ import { createContext, useContext, useEffect, useId, useMemo, useRef, useState 
 import type { Character, WorldSnapshot } from "../src/world.js";
 import { sleeperCharacter } from "./game/layout.js";
 import { factRows } from "./overlay/interface/character-card.js";
+import { WorkHistory } from "./workplace-work-history.js";
 
 type PeopleNavigation = {
 	world: WorldSnapshot;
@@ -166,6 +167,9 @@ export function PersonProfile({ id, name: fallbackName, onClose }: { id: string;
 	const name = person?.name ?? fallbackName;
 	const close = useRef<HTMLButtonElement>(null);
 	const since = person ? (person.hiredAt ?? person.startedAt) : 0;
+	const hasRecordedWork = people.world.workplace?.workHistory?.some((task) =>
+		task.participants.some((participant) => participant.person === id),
+	);
 	useEffect(() => {
 		close.current?.focus();
 	}, []);
@@ -184,7 +188,7 @@ export function PersonProfile({ id, name: fallbackName, onClose }: { id: string;
 			<header>
 				<h2>Profile</h2>
 				<button type="button" ref={close} className="wp-profile-close" aria-label="Close profile" onClick={onClose}>
-					×
+					Close
 				</button>
 			</header>
 			<div className="wp-profile-body">
@@ -206,6 +210,7 @@ export function PersonProfile({ id, name: fallbackName, onClose }: { id: string;
 						<button type="button" className="wp-primary wp-profile-message" onClick={() => people.openDM(id)}>
 							{dormant ? "View conversation" : "Message"} {name}
 						</button>
+						<WorkHistory world={people.world} people={[id]} />
 						<dl>
 							<div>
 								<dt>{person.hiredAt != null ? "Hired" : "First seen"}</dt>
@@ -224,7 +229,13 @@ export function PersonProfile({ id, name: fallbackName, onClose }: { id: string;
 								</dd>
 							</div>
 							{factRows(person, people.world)
-								.filter(([term]) => term !== "Doing" && term !== "Self" && (term !== "Cost" || !dormant))
+								.filter(
+									([term]) =>
+										term !== "Doing" &&
+										term !== "Self" &&
+										(term !== "Cost" || !dormant) &&
+										(term !== "Record" || !hasRecordedWork),
+								)
 								.map(([term, value]) => (
 									<div key={term}>
 										<dt>{term}</dt>

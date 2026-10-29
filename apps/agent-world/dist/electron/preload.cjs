@@ -44,6 +44,13 @@ var api = {
 	recruit: (request) => electron.ipcRenderer.invoke("world:recruit", request),
 	rename: (characterId, name) => electron.ipcRenderer.invoke("world:rename", characterId, name),
 	roles: () => electron.ipcRenderer.invoke("world:roles"),
+	orgMove: (request) => electron.ipcRenderer.invoke("world:org-move", request),
+	orgStart: (request) => electron.ipcRenderer.invoke("world:org-start", request),
+	onOrgStart(listener) {
+		const forward = (_event, progress) => listener(progress);
+		electron.ipcRenderer.on("world:org-progress", forward);
+		return () => electron.ipcRenderer.removeListener("world:org-progress", forward);
+	},
 	retire: (characterId, reason) => electron.ipcRenderer.invoke("world:retire", characterId, reason),
 	openNotepad: (coordinatorId) => electron.ipcRenderer.invoke("world:open-notepad", coordinatorId),
 	saveNotepad: (coordinatorId, text, base) => electron.ipcRenderer.invoke("world:save-notepad", coordinatorId, text, base),

@@ -8,6 +8,7 @@ import { randomUUID } from "node:crypto";
 import { statSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import type { Command } from "../../../../components/session-state/src/protocol.js";
 import {
 	type CommandReceipt,
@@ -145,11 +146,11 @@ export function openLifecycle(
 			const name = request.name.replace(/\s+/g, " ").trim();
 			const cwd = expandHome(request.cwd.trim());
 			const brief = request.brief.trim();
-			if (!name) return { ok: false, reason: "Give the new agent a name." };
+			const role = request.role?.trim();
+			if (!name && !role) return { ok: false, reason: "Give the new agent a name." };
 			if (!cwd) return { ok: false, reason: "Choose the directory it works in." };
 			if (!isAbsolute(cwd)) return { ok: false, reason: `${cwd} is not a full path to a directory.` };
 			if (!isDirectory(cwd)) return { ok: false, reason: `${cwd} is not a directory.` };
-			const role = request.role?.trim();
 			if (role && !brief) return { ok: false, reason: "A role hire needs a written goal." };
 			if (role && !loadRoleChoices(paths.agentDir).some((choice) => choice.name === role))
 				return { ok: false, reason: `No role in the catalog is named ${role}.` };
@@ -158,11 +159,30 @@ export function openLifecycle(
 				// A new person's window opens beside its manager's, where the manager's own new sessions open.
 				const coordinator = snapshot().characters.find((character) => character.id === request.reportsTo);
 				if (!coordinator) return { ok: false, reason: "That manager is not running." };
+				const db = new DatabaseSync(paths.db);
+				try {
+					db.exec("pragma query_only = 1");
+					const manager = db
+						.prepare(`select role, manages, reports_to, retired_at from sessions where id = ? and kind = 'root'
+						and not exists (select 1 from program_peers p where p.session_id = sessions.id)
+						and not exists (select 1 from events e where e.session_id = sessions.id and e.type in ('program_peer_created', 'program_peer_observed', 'person_discarded'))`)
+						.get(request.reportsTo) as
+						| { role: string | null; manages: number | null; reports_to: string | null; retired_at: number | null }
+						| undefined;
+					if (
+						!manager ||
+						manager.retired_at !== null ||
+						(manager.manages !== 1 && !(manager.role === null && manager.reports_to === null))
+					)
+						return { ok: false, reason: "That person cannot manage new reports." };
+				} finally {
+					db.close();
+				}
 				const tmux = coordinator.facts?.tmux;
 				if (!tmux)
 					return {
 						ok: false,
-						reason: `${coordinator.name} is not running in tmux, so there is nowhere to open ${name}'s window beside it.`,
+						reason: `${coordinator.name} is not running in tmux, so there is nowhere to open ${name || "the new person"}'s window beside it.`,
 					};
 				pane = { socket: tmux.socket, pane: tmux.pane };
 			} else {
@@ -170,7 +190,7 @@ export function openLifecycle(
 				if (!pane)
 					return {
 						ok: false,
-						reason: `No terminal is attached to tmux, so there is nowhere to open ${name}'s window.`,
+						reason: `No terminal is attached to tmux, so there is nowhere to open ${name || "the new person"}'s window.`,
 					};
 			}
 			const sessionId = randomUUID();
@@ -178,7 +198,7 @@ export function openLifecycle(
 				kind: "start",
 				tmux: pane,
 				cwd,
-				name,
+				...(name ? { name } : {}),
 				...(request.reportsTo ? { reportsTo: request.reportsTo } : {}),
 				...(role ? { role } : {}),
 				...(brief ? { goal: { text: brief, by: "operator" } } : {}),
@@ -189,7 +209,7 @@ export function openLifecycle(
 				command,
 				WAKE_MS,
 				(stage) => stage === "applied",
-				() => `Its window opened, but ${name} has not joined yet.`,
+				() => `Its window opened, but ${name || "the new person"} has not joined yet.`,
 			);
 			return { ...receipt, sessionId };
 		},

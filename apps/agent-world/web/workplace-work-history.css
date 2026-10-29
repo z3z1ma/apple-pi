@@ -1,0 +1,80 @@
+.wp-work-history {
+	min-width: 0;
+	color: var(--wp-text);
+	font-size: 12px;
+	overflow-wrap: anywhere;
+}
+.wp-work-history h3 {
+	margin: 12px 0 6px;
+	font-size: 13px;
+}
+.wp-work-history p {
+	margin: 6px 0;
+	color: var(--wp-muted);
+	font-size: 12px;
+	line-height: 1.5;
+}
+.wp-work-history .wp-work-history-counts,
+.wp-work-history .wp-work-history-recent {
+	color: var(--wp-text);
+}
+.wp-work-history-list {
+	list-style: none;
+	padding: 0;
+	margin: 8px 0;
+}
+.wp-work-history-list > li {
+	padding: 10px 0;
+	border-top: 1px solid var(--wp-border);
+}
+.wp-work-history-list > li > button {
+	max-width: 100%;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	color: var(--wp-text);
+	text-align: left;
+	font: inherit;
+	font-weight: 650;
+	text-decoration: underline;
+	text-underline-offset: 3px;
+	cursor: pointer;
+}
+.wp-work-history-meta {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin-top: 5px;
+	color: var(--wp-muted);
+}
+.wp-work-history-participants {
+	padding-left: 16px;
+	margin: 6px 0;
+	color: var(--wp-muted);
+	font-size: 11px;
+}
+.wp-work-history summary {
+	padding: 6px 0;
+	cursor: pointer;
+}
+.wp-work-history-content {
+	padding: 8px;
+	margin-top: 8px;
+	border: 1px solid var(--wp-border);
+	border-radius: 6px;
+	background: var(--wp-bg);
+}
+.wp-work-history-content .aw-md {
+	font-size: 12px;
+}
+.wp-work-history-content pre {
+	overflow-x: auto;
+}
+.wp-work-history-content [role="alert"] {
+	color: var(--wp-danger);
+}
+.wp-work-history button:focus-visible,
+.wp-work-history summary:focus-visible {
+	outline: 2px solid var(--wp-accent);
+	outline-offset: 3px;
+}

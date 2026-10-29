@@ -94,6 +94,8 @@ select s.id, s.name, s.cwd, s.reports_to as reportsTo, s.git,
 	(select min(f.started_at) from incarnations f where f.session_id = s.id) as firstStartedAt,
 	coalesce(i.ended_at is null and i.process_state in ('alive', 'alive_bridge_lost'), 0) as awake,
 	i.ended_at as stoppedAt, i.end_reason as stopReason,
+	s.id in (select session_id from events where type in ('program_peer_created', 'program_peer_observed', 'person_discarded')
+		${columns.peers ? "union select session_id from program_peers" : ""}) as temporary,
 	${factsColumns(columns.work)}
 from sessions s
 ${FACTS_JOINS}
@@ -104,7 +106,7 @@ where s.kind = 'root'`;
 const changedSql = (columns: OptionalColumns) => `${sessionsSql(columns)}
 	and s.id in (select session_id from events where seq > ? union select value from json_each(?))`;
 const OPTIONAL_COLUMNS = ["role_title", "manages", "soul", "self", "retired_at", "retired_reason", "hired_at"] as const;
-type OptionalColumns = Record<(typeof OPTIONAL_COLUMNS)[number], boolean> & { work: boolean };
+type OptionalColumns = Record<(typeof OPTIONAL_COLUMNS)[number], boolean> & { work: boolean; peers: boolean };
 const optionalColumns = (db: DatabaseSync): OptionalColumns => {
 	const present = new Set(
 		(db.prepare("select name from pragma_table_info('sessions')").all() as { name: string }[]).map((row) => row.name),
@@ -112,11 +114,16 @@ const optionalColumns = (db: DatabaseSync): OptionalColumns => {
 	return {
 		...Object.fromEntries(OPTIONAL_COLUMNS.map((column) => [column, present.has(column)])),
 		work: Boolean(db.prepare("select 1 from sqlite_master where type = 'table' and name = 'work_focus'").get()),
+		peers: Boolean(db.prepare("select 1 from sqlite_master where type = 'table' and name = 'program_peers'").get()),
 	} as OptionalColumns;
 };
 const sqlCache = new Map<string, { sessions: string; changed: string }>();
 const sqlFor = (columns: OptionalColumns) => {
-	const key = [Number(columns.work), ...OPTIONAL_COLUMNS.map((column) => Number(columns[column]))].join("");
+	const key = [
+		Number(columns.work),
+		Number(columns.peers),
+		...OPTIONAL_COLUMNS.map((column) => Number(columns[column])),
+	].join("");
 	const cached = sqlCache.get(key);
 	if (cached) return cached;
 	const sql = { sessions: sessionsSql(columns), changed: changedSql(columns) };
@@ -133,6 +140,7 @@ interface Row extends FactsRow {
 	hired_at: number | null;
 	firstStartedAt: number | null;
 	awake: number;
+	temporary: number;
 	stoppedAt: number | null;
 	stopReason: string | null;
 }
@@ -330,13 +338,16 @@ export function openWorldBackend(paths: { db: string; socket: string }): WorldBa
 				...projected,
 				characters: projected.characters.map((character) => ({
 					...character,
-					facts: factsOf(
-						byId.get(character.id)!,
-						readTask,
-						((tasksOf?.all(character.id) ?? []) as { id: string; bundle: string }[]).map(
-							(task) => readTask(JSON.stringify({ bundle: task.bundle, taskId: task.id }))?.title ?? task.id,
+					facts: {
+						...factsOf(
+							byId.get(character.id)!,
+							readTask,
+							((tasksOf?.all(character.id) ?? []) as { id: string; bundle: string }[]).map(
+								(task) => readTask(JSON.stringify({ bundle: task.bundle, taskId: task.id }))?.title ?? task.id,
+							),
 						),
-					),
+						temporary: byId.get(character.id)!.temporary === 1,
+					},
 				})),
 			};
 			dormant = dormantAgents(world.dormant, byId, (task) => readTask(task, rereadTasks), dormant, !rereadTasks);

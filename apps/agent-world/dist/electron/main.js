@@ -5,8 +5,8 @@ import { BrowserWindow, app, ipcMain, net, protocol, shell } from "electron";
 import { homedir } from "node:os";
 import { randomUUID } from "node:crypto";
 import { createConnection } from "node:net";
-import { execFile } from "node:child_process";
 import { DatabaseSync } from "node:sqlite";
+import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import "@earendil-works/pi-coding-agent";
 import { inflateSync } from "node:zlib";
@@ -819,6 +819,7 @@ function made(sleeper, row, readTask) {
 	const git = parseShared(row?.git);
 	const agent = {
 		...sleeper,
+		temporary: row?.temporary === 1,
 		reportsTo: row?.reportsTo ?? null,
 		repository: typeof git?.repository === "string" ? git.repository : null,
 		cwd: row?.cwd ?? "",
@@ -1164,7 +1165,8 @@ function openLifecycle(paths, commands, snapshot) {
 			const name = request.name.replace(/\s+/g, " ").trim();
 			const cwd = expandHome(request.cwd.trim());
 			const brief = request.brief.trim();
-			if (!name) return {
+			const role = request.role?.trim();
+			if (!name && !role) return {
 				ok: false,
 				reason: "Give the new agent a name."
 			};
@@ -1180,7 +1182,6 @@ function openLifecycle(paths, commands, snapshot) {
 				ok: false,
 				reason: `${cwd} is not a directory.`
 			};
-			const role = request.role?.trim();
 			if (role && !brief) return {
 				ok: false,
 				reason: "A role hire needs a written goal."
@@ -1196,10 +1197,23 @@ function openLifecycle(paths, commands, snapshot) {
 					ok: false,
 					reason: "That manager is not running."
 				};
+				const db = new DatabaseSync(paths.db);
+				try {
+					db.exec("pragma query_only = 1");
+					const manager = db.prepare(`select role, manages, reports_to, retired_at from sessions where id = ? and kind = 'root'
+						and not exists (select 1 from program_peers p where p.session_id = sessions.id)
+						and not exists (select 1 from events e where e.session_id = sessions.id and e.type in ('program_peer_created', 'program_peer_observed', 'person_discarded'))`).get(request.reportsTo);
+					if (!manager || manager.retired_at !== null || manager.manages !== 1 && !(manager.role === null && manager.reports_to === null)) return {
+						ok: false,
+						reason: "That person cannot manage new reports."
+					};
+				} finally {
+					db.close();
+				}
 				const tmux = coordinator.facts?.tmux;
 				if (!tmux) return {
 					ok: false,
-					reason: `${coordinator.name} is not running in tmux, so there is nowhere to open ${name}'s window beside it.`
+					reason: `${coordinator.name} is not running in tmux, so there is nowhere to open ${name || "the new person"}'s window beside it.`
 				};
 				pane = {
 					socket: tmux.socket,
@@ -1209,7 +1223,7 @@ function openLifecycle(paths, commands, snapshot) {
 				pane = await operatorPane(paths.db);
 				if (!pane) return {
 					ok: false,
-					reason: `No terminal is attached to tmux, so there is nowhere to open ${name}'s window.`
+					reason: `No terminal is attached to tmux, so there is nowhere to open ${name || "the new person"}'s window.`
 				};
 			}
 			const sessionId = randomUUID();
@@ -1218,14 +1232,14 @@ function openLifecycle(paths, commands, snapshot) {
 					kind: "start",
 					tmux: pane,
 					cwd,
-					name,
+					...name ? { name } : {},
 					...request.reportsTo ? { reportsTo: request.reportsTo } : {},
 					...role ? { role } : {},
 					...brief ? { goal: {
 						text: brief,
 						by: "operator"
 					} } : {}
-				}, WAKE_MS, (stage) => stage === "applied", () => `Its window opened, but ${name} has not joined yet.`),
+				}, WAKE_MS, (stage) => stage === "applied", () => `Its window opened, but ${name || "the new person"} has not joined yet.`),
 				sessionId
 			};
 		},
@@ -1463,6 +1477,409 @@ function openNotepads(snapshot, onChange) {
 			}
 		},
 		close
+	};
+}
+//#endregion
+//#region apps/agent-world/src/backend/org.ts
+var ready = (person) => person.state === "ready" || person.state === "active";
+var bridgeLost = (person) => person && person.started_at !== null && person.ended_at === null && !person.awake;
+var key = (value) => encodeURIComponent(value);
+var READY_ROSTER = "\n\nReady teammates (session IDs):\n";
+var preparePrefix = (plan, position) => `org-prepare:${key(plan)}:${key(position)}:`;
+var blockedTasks = (reason) => {
+	return reason.startsWith("unfinished work would leave its organization: ") ? reason.slice(46).split(", ") : void 0;
+};
+function peopleIn(db) {
+	return new Map(db.prepare(`select s.id, s.reports_to, s.role, s.manages, s.retired_at, s.run_state,
+		coalesce(i.ended_at is null and i.process_state = 'alive', 0) as awake, i.started_at, i.ended_at
+		from sessions s left join incarnations i on i.session_id = s.id and i.generation = s.generation
+		where s.kind = 'root'
+		and not exists (select 1 from program_peers p where p.session_id = s.id)
+		and not exists (select 1 from events e where e.session_id = s.id and e.type in ('program_peer_created', 'program_peer_observed', 'person_discarded'))`).all().map((person) => [person.id, person]));
+}
+function branchOf(people, head) {
+	const branch = /* @__PURE__ */ new Set([head]);
+	for (let size = -1; size !== branch.size;) {
+		size = branch.size;
+		for (const person of people.values()) if (person.reports_to && branch.has(person.reports_to)) branch.add(person.id);
+	}
+	return [...branch].sort();
+}
+function rootOf(id, parents) {
+	const seen = /* @__PURE__ */ new Set();
+	while (!seen.has(id)) {
+		seen.add(id);
+		const parent = parents.get(id);
+		if (!parent || !parents.has(parent)) return id;
+		id = parent;
+	}
+	return id;
+}
+/** Operator planning over the runtime's existing people, command receipts and thread authority. */
+function openOrg(paths, commands, snapshot) {
+	const listeners = /* @__PURE__ */ new Set();
+	const running = /* @__PURE__ */ new Map();
+	const read = (fn) => {
+		if (!existsSync(paths.db)) throw new Error("The session runtime database is not available.");
+		const db = new DatabaseSync(paths.db);
+		try {
+			db.exec("pragma query_only = 1");
+			return fn(db);
+		} finally {
+			db.close();
+		}
+	};
+	const recorded = (id) => read((db) => db.prepare("select * from commands where command_id = ?").get(id));
+	const preparations = (plan, position) => {
+		const prefix = preparePrefix(plan, position);
+		return read((db) => db.prepare("select * from commands where kind = 'start' and substr(command_id, 1, ?) = ? order by rowid").all(prefix.length, prefix));
+	};
+	const move = async (request, commandId) => {
+		const { person, manager, branch } = request;
+		const result = await commands.send("operator", {
+			kind: "organization_move",
+			person,
+			manager,
+			branch
+		}, { commandId });
+		return result.ok ? {
+			ok: true,
+			person,
+			manager,
+			branch
+		} : {
+			...result,
+			tasks: blockedTasks(result.reason)
+		};
+	};
+	async function start(request) {
+		const progress = {
+			id: request.id,
+			people: request.positions.map((position) => ({
+				id: position.id,
+				person: position.person,
+				state: "pending"
+			})),
+			complete: false,
+			editable: false,
+			next: "working"
+		};
+		const publish = () => {
+			const value = structuredClone(progress);
+			for (const listener of listeners) listener(value);
+			return value;
+		};
+		let untouched = false;
+		const reject = (reason, tasks) => {
+			progress.editable = untouched;
+			for (const person of progress.people) Object.assign(person, {
+				state: "blocked",
+				reason,
+				...tasks ? { tasks } : {}
+			});
+			progress.next = "retry";
+			progress.note = reason;
+			return publish();
+		};
+		function preflight() {
+			if (!snapshot().connected) return reject("The session runtime is not connected.");
+			if (!read((db) => db.prepare("select 1 from threads where kind = 'channel' and id like 'organization:%' limit 1").get())) return reject("The running session runtime lacks whole-team channels. Restart the session runtime with current code before starting a team; restarting can stop headless people.");
+			const directory = request.cwd === "~" ? homedir() : request.cwd.startsWith("~/") ? join(homedir(), request.cwd.slice(2)) : request.cwd;
+			if (!isAbsolute(directory) || !existsSync(directory) || !statSync(directory).isDirectory()) return reject("Choose an existing absolute working directory.");
+			const cwd = realpathSync(directory);
+			if (!request.id.trim() || !request.goal.trim() || !request.positions.length) return reject("A team needs an identity, a written goal and positions.");
+			const positions = new Map(request.positions.map((position) => [position.id, position]));
+			if (positions.size !== request.positions.length || request.positions.some((position) => !position.id)) return reject("Each planned position needs a unique identity.");
+			const heads = request.positions.filter((position) => position.manager === null);
+			if (heads.length !== 1) return reject("A team needs exactly one head.");
+			const roles = new Map(loadRoleChoices(paths.agentDir).map((role) => [role.name, role]));
+			const people = read(peopleIn);
+			const unavailable = read((db) => /* @__PURE__ */ new Set([...db.prepare("select session_id from events where type in ('person_departed', 'program_peer_created', 'program_peer_observed', 'person_discarded')").all().map((row) => row.session_id), ...db.prepare("select session_id from program_peers").all().map((row) => row.session_id)]));
+			const identify = () => {
+				for (const position of request.positions) {
+					const attempts = preparations(request.id, position.id);
+					const previous = attempts.at(-1);
+					const original = attempts[0] && JSON.parse(attempts[0].command);
+					if (original?.goal && (original.cwd !== cwd || original.role !== position.role || original.goal.text !== (position.goal?.trim() || request.goal.trim()))) return reject("A prepared person's role, working directory and goal cannot change on retry.");
+					if (position.person && previous && position.person !== previous.session_id) return reject("A retry changed a prepared person's identity.");
+					const id = previous?.session_id ?? position.person ?? randomUUID();
+					progress.people.find((person) => person.id === position.id).person = id;
+					const existing = people.get(id);
+					if (unavailable.has(id) || existing?.retired_at != null) return reject("Temporary or departed people cannot join a planned team.");
+					if (!existing && (!position.role || !roles.has(position.role) || !(position.goal ?? request.goal).trim())) return reject("Each new person needs a catalog role and written goal.");
+				}
+			};
+			const identityError = identify();
+			if (identityError) return identityError;
+			const identity = (id) => progress.people.find((person) => person.id === id)?.person ?? id;
+			const head = heads[0];
+			const headId = identity(head.id);
+			const validateTree = () => {
+				const canManage = (id) => {
+					const position = positions.get(id);
+					const existing = people.get(identity(id));
+					if (!existing) return !!roles.get(position?.role ?? "")?.manages;
+					if (existing.retired_at !== null || unavailable.has(existing.id)) return false;
+					if (existing.manages === null && existing.started_at === null && preparations(request.id, id).length) return !!roles.get(existing.role ?? "")?.manages;
+					return existing.manages === 1 || existing.role === null && existing.reports_to === null;
+				};
+				if (!canManage(head.id)) return reject("The team head needs a managing role.");
+				const parents = new Map([...people.values()].map((person) => [person.id, person.reports_to]));
+				for (const position of request.positions) {
+					if (position.manager !== null && !canManage(position.manager)) return reject("Each manager must exist and be able to manage.");
+					parents.set(identity(position.id), position.manager === null ? null : identity(position.manager));
+				}
+				if (new Set(progress.people.map((person) => person.person)).size !== progress.people.length) return reject("A person can fill only one position.");
+				for (const position of request.positions) {
+					const seen = /* @__PURE__ */ new Set();
+					let id = identity(position.id);
+					while (id !== null && parents.has(id)) {
+						if (seen.has(id)) return reject("The planned reporting lines contain a cycle.");
+						seen.add(id);
+						id = parents.get(id) ?? null;
+					}
+					if (rootOf(identity(position.id), parents) !== headId) return reject("Every position must belong to the planned head's tree.");
+				}
+				const before = new Map([...people.values()].map((person) => [person.id, person.reports_to]));
+				const stranded = read((db) => db.prepare(`select a.person, a.task_id, t.organization from assignments a join work_tasks t on t.id = a.task_id where a.ended_at is null`).all().filter((assignment) => rootOf(assignment.person, before) === rootOf(assignment.organization, before) && rootOf(assignment.person, parents) !== rootOf(assignment.organization, parents)).map((assignment) => assignment.task_id));
+				if (stranded.length) return reject("Unfinished work needs an explicit handoff before starting this team.", [...new Set(stranded)]);
+			};
+			const treeError = validateTree();
+			if (treeError) return treeError;
+			return {
+				cwd,
+				ordered: [...request.positions].sort((a, b) => {
+					const depth = (id) => {
+						let count = 0;
+						let parent = positions.get(id)?.manager;
+						while (parent && positions.has(parent)) {
+							count++;
+							parent = positions.get(parent)?.manager;
+						}
+						return count;
+					};
+					return depth(a.id) - depth(b.id);
+				}),
+				head,
+				headId,
+				positions
+			};
+		}
+		try {
+			untouched = read((db) => {
+				const prefixes = [
+					`org-prepare:${key(request.id)}:`,
+					`org-move:${key(request.id)}:`,
+					`org-readiness:${key(request.id)}:`
+				];
+				return !db.prepare(`select 1 from commands where command_id in (?, ?) or exists
+					(select 1 from json_each(?) p where substr(command_id, 1, length(p.value)) = p.value) limit 1`).get(`org-join:${request.id}`, `org-kickoff:${request.id}`, JSON.stringify(prefixes));
+			});
+			const plan = preflight();
+			if ("people" in plan) return plan;
+			const { cwd, ordered, head, headId, positions } = plan;
+			const channel = `organization:${headId}`;
+			const identity = (id) => progress.people.find((person) => person.id === id)?.person ?? id;
+			const hire = (position) => ({
+				name: position.name?.trim() || void 0,
+				role: position.role,
+				goal: {
+					by: "operator",
+					text: position.goal?.trim() || request.goal.trim()
+				}
+			});
+			const startUnresolved = (member, commandId, result) => {
+				const record = recorded(commandId);
+				Object.assign(member, {
+					state: record?.stage === "failed" ? "failed" : "uncertain",
+					reason: result.ok ? "The start was applied but no connected incarnation is visible." : result.reason,
+					...record?.stage === "failed" ? { atHome: true } : {}
+				});
+			};
+			const prepare = async (position) => {
+				const member = progress.people.find((person) => person.id === position.id);
+				const manager = position.manager === null ? null : identity(position.manager);
+				const parent = progress.people.find((person) => person.person === manager);
+				if (parent && !ready(parent)) {
+					Object.assign(member, {
+						state: "blocked",
+						reason: "Its planned manager is not ready."
+					});
+					publish();
+					return;
+				}
+				member.state = "preparing";
+				publish();
+				const people = read(peopleIn);
+				let existing = people.get(member.person);
+				if (existing && existing.reports_to !== manager) {
+					const moved = await move({
+						person: existing.id,
+						manager,
+						branch: branchOf(people, existing.id)
+					}, `org-move:${key(request.id)}:${key(position.id)}:${randomUUID()}`);
+					if (!moved.ok) {
+						Object.assign(member, {
+							state: "blocked",
+							reason: moved.reason,
+							tasks: moved.tasks
+						});
+						publish();
+						return;
+					}
+				}
+				if (bridgeLost(existing)) {
+					Object.assign(member, {
+						state: "uncertain",
+						reason: "Its current process has lost its bridge; reconcile it before another start.",
+						atHome: false
+					});
+					publish();
+					return;
+				}
+				if (!existing?.awake) {
+					const attempts = preparations(request.id, position.id);
+					const previous = attempts.at(-1);
+					const stopped = previous?.stage === "applied" && existing && existing.ended_at !== null;
+					if (previous && previous.stage !== "failed" && !stopped) {
+						Object.assign(member, {
+							state: "uncertain",
+							reason: "A previous start has not reconciled with a connected incarnation. Inspect it before retrying."
+						});
+						publish();
+						return;
+					}
+					const pane = await operatorPane(paths.db);
+					const commandId = `${preparePrefix(request.id, position.id)}${attempts.length + 1}`;
+					const result = await commands.send(member.person, {
+						kind: "start",
+						cwd,
+						...pane ? { tmux: pane } : {},
+						prompt: "",
+						...manager ? { reportsTo: manager } : {},
+						...!existing ? hire(position) : {}
+					}, { commandId });
+					existing = read(peopleIn).get(member.person);
+					if (!existing?.awake) {
+						startUnresolved(member, commandId, result);
+						publish();
+						return;
+					}
+				}
+				Object.assign(member, {
+					state: existing.run_state === "idle" ? "ready" : "active",
+					atHome: false
+				});
+				publish();
+			};
+			const notifyReady = async (kickoff) => {
+				const body = JSON.parse(kickoff.command).body;
+				const boundary = body.lastIndexOf(READY_ROSTER);
+				if (boundary < 0) throw new Error("The recorded kickoff has no ready-teammate roster; inspect it before retrying.");
+				const roster = JSON.parse(body.slice(boundary + 33));
+				if (!Array.isArray(roster) || roster.some((id) => typeof id !== "string")) throw new Error("The recorded kickoff has an invalid ready-teammate roster.");
+				const initiallyReady = new Set(roster);
+				const prefix = `org-readiness:${key(request.id)}:`;
+				const notices = read((db) => db.prepare("select * from commands where kind = 'thread_post' and substr(command_id, 1, ?) = ? and stage != 'failed'").all(prefix.length, prefix));
+				const pending = notices.find((notice) => notice.stage !== "applied");
+				if (pending) {
+					progress.readiness = {
+						thread: channel,
+						commandId: pending.command_id
+					};
+					progress.note = "A readiness update is awaiting its recorded receipt; retry after it reconciles.";
+				}
+				const notified = new Set(notices.flatMap((notice) => notice.command_id.slice(prefix.length).split("|").map(decodeURIComponent)));
+				const current = read(peopleIn);
+				const late = progress.people.filter((person) => ready(person) && !notified.has(person.person) && !initiallyReady.has(person.person));
+				if (late.length) {
+					const counts = /* @__PURE__ */ new Map();
+					for (const person of late) {
+						const role = positions.get(person.id)?.role ?? current.get(person.person)?.role ?? "teammate";
+						counts.set(role, (counts.get(role) ?? 0) + 1);
+					}
+					const commandId = `${prefix}${late.map((person) => key(person.person)).sort().join("|")}`;
+					const result = await commands.send("operator", {
+						kind: "thread_post",
+						thread: channel,
+						body: `@${headId} Team readiness update: ${late.length} additional teammates are ready (${[...counts].map(([role, count]) => `${count} ${role}`).join(", ")}).`
+					}, { commandId });
+					if (result.ok) progress.readiness = {
+						thread: channel,
+						commandId
+					};
+					else progress.note = result.reason;
+				}
+			};
+			const finish = async () => {
+				progress.channel = channel;
+				if (ready(progress.people.find((person) => person.id === head.id))) {
+					const joined = await commands.send("operator", {
+						kind: "channel_membership",
+						thread: channel,
+						joined: true
+					}, { commandId: `org-join:${request.id}` });
+					if (!joined.ok) {
+						progress.note = joined.reason;
+						progress.next = "retry";
+						return;
+					}
+				}
+				const allReady = progress.people.every(ready);
+				const headReady = ready(progress.people.find((person) => person.id === head.id));
+				const kickoffId = `org-kickoff:${request.id}`;
+				let kickoff = recorded(kickoffId);
+				if (!kickoff && headReady && (allReady || request.withReady)) {
+					const result = await commands.send("operator", {
+						kind: "thread_post",
+						thread: kickoffId,
+						subject: "Team kickoff",
+						to: [headId],
+						body: `${request.goal}${READY_ROSTER}${JSON.stringify(progress.people.filter(ready).map((person) => person.person))}`
+					}, { commandId: kickoffId });
+					kickoff = recorded(kickoffId);
+					if (!result.ok) progress.note = result.reason;
+				}
+				if (kickoff) {
+					progress.kickoff = {
+						thread: kickoffId,
+						commandId: kickoffId
+					};
+					if (kickoff.stage === "applied") await notifyReady(kickoff);
+					else progress.note ??= kickoff.reason ?? "The kickoff has not been confirmed; inspect its recorded receipt before retrying.";
+				}
+				progress.complete = allReady && kickoff?.stage === "applied" && !progress.note;
+				progress.next = progress.complete ? "done" : headReady && !kickoff ? "choose-ready" : "retry";
+			};
+			publish();
+			for (const position of ordered) await prepare(position);
+			await finish();
+			return publish();
+		} catch (error) {
+			progress.note = error instanceof Error ? error.message : String(error);
+			for (const person of progress.people) if (person.state === "preparing") Object.assign(person, {
+				state: "uncertain",
+				reason: progress.note
+			});
+			progress.next = "retry";
+			return publish();
+		}
+	}
+	return {
+		orgMove: (request) => move(request),
+		orgStart(request) {
+			const active = running.get(request.id);
+			if (active) return active;
+			const result = start(request).finally(() => running.delete(request.id));
+			running.set(request.id, result);
+			return result;
+		},
+		onOrgStart(listener) {
+			listeners.add(listener);
+			return () => {
+				listeners.delete(listener);
+			};
+		}
 	};
 }
 //#endregion
@@ -3223,6 +3640,35 @@ function readEscalations(db, roots) {
 		headquarters: roots.get(row.created_by) ?? row.created_by
 	}));
 }
+function participation(row) {
+	const outcome = row.ended_at === null ? "held" : row.end_reason === "finished" || row.end_reason === "unassigned" || row.end_reason === "discarded" ? row.end_reason : "unknown";
+	return {
+		person: row.person,
+		assignedAt: row.assigned_at,
+		endedAt: row.ended_at,
+		outcome,
+		focused: row.ended_at === null && row.focused === 1
+	};
+}
+function taskHistory(row, goal, participants) {
+	const times = [
+		row.opened_at,
+		row.archived_at,
+		...participants.flatMap((item) => [item.assignedAt, item.endedAt])
+	].filter((at) => typeof at === "number");
+	return {
+		...goal,
+		id: row.id,
+		project: row.project,
+		headquarters: row.organization,
+		thread: row.thread,
+		status: row.close_status ?? goal.status,
+		openedAt: row.opened_at ?? null,
+		closedAt: row.archived_at,
+		updatedAt: times.length ? times.reduce((latest, at) => Math.max(latest, at)) : null,
+		participants
+	};
+}
 /** Files are rediscovered on the backend's task reread, not on each tool or streaming event. */
 function workplaceReader(readTask) {
 	let directoryKey;
@@ -3234,12 +3680,18 @@ function workplaceReader(readTask) {
 		if (!hasTable(db, "work_tasks")) return {
 			threads,
 			escalations,
-			tasks: []
+			tasks: [],
+			workHistory: []
 		};
 		const stored = db.prepare("select * from work_tasks").all();
 		const held = /* @__PURE__ */ new Map();
-		for (const row of db.prepare(`select a.task_id, a.person, coalesce(f.task_id = a.task_id, 0) as focused
-			from assignments a left join work_focus f on f.person = a.person where a.ended_at is null order by a.id`).all()) {
+		const participants = /* @__PURE__ */ new Map();
+		for (const row of db.prepare(`select a.task_id, a.person, a.assigned_at, a.ended_at, a.end_reason, coalesce(f.task_id = a.task_id, 0) as focused
+			from assignments a left join work_focus f on f.person = a.person order by a.id`).all()) {
+			const history = participants.get(row.task_id) ?? [];
+			history.push(participation(row));
+			participants.set(row.task_id, history);
+			if (row.ended_at !== null) continue;
 			const list = held.get(row.task_id) ?? [];
 			list.push({
 				person: row.person,
@@ -3248,12 +3700,14 @@ function workplaceReader(readTask) {
 			held.set(row.task_id, list);
 		}
 		const tasks = [];
+		const workHistory = [];
 		for (const row of stored) {
-			if (row.archived_at !== null) continue;
 			const goal = readTask(JSON.stringify({
 				bundle: row.bundle,
 				taskId: row.id
 			}), rereadFiles);
+			workHistory.push(taskHistory(row, goal, participants.get(row.id) ?? []));
+			if (row.archived_at !== null) continue;
 			if (!held.has(row.id) && (goal.status === "done" || goal.status === "cancelled")) continue;
 			tasks.push({
 				...goal,
@@ -3303,7 +3757,8 @@ function workplaceReader(readTask) {
 		return {
 			threads: threads.filter((thread) => thread.kind === "meeting" || active.has(thread.headquarters)),
 			escalations,
-			tasks
+			tasks,
+			workHistory
 		};
 	};
 }
@@ -3313,10 +3768,10 @@ function openWorkplace(path, commands, snapshot) {
 	const findTask = (id) => snapshot().workplace?.tasks.find((task) => task.id === id || task.bundle === id);
 	return {
 		async readTask(id) {
-			const task = findTask(id);
+			const task = findTask(id) ?? snapshot().workplace?.workHistory?.find((task) => task.id === id || task.bundle === id);
 			if (!task) return {
 				ok: false,
-				reason: "That task is no longer on the board."
+				reason: "That task is not in the recorded workplace."
 			};
 			try {
 				return {
@@ -3574,6 +4029,8 @@ select s.id, s.name, s.cwd, s.reports_to as reportsTo, s.git,
 	(select min(f.started_at) from incarnations f where f.session_id = s.id) as firstStartedAt,
 	coalesce(i.ended_at is null and i.process_state in ('alive', 'alive_bridge_lost'), 0) as awake,
 	i.ended_at as stoppedAt, i.end_reason as stopReason,
+	s.id in (select session_id from events where type in ('program_peer_created', 'program_peer_observed', 'person_discarded')
+		${columns.peers ? "union select session_id from program_peers" : ""}) as temporary,
 	${factsColumns(columns.work)}
 from sessions s
 ${FACTS_JOINS}
@@ -3593,12 +4050,17 @@ var optionalColumns = (db) => {
 	const present = new Set(db.prepare("select name from pragma_table_info('sessions')").all().map((row) => row.name));
 	return {
 		...Object.fromEntries(OPTIONAL_COLUMNS.map((column) => [column, present.has(column)])),
-		work: Boolean(db.prepare("select 1 from sqlite_master where type = 'table' and name = 'work_focus'").get())
+		work: Boolean(db.prepare("select 1 from sqlite_master where type = 'table' and name = 'work_focus'").get()),
+		peers: Boolean(db.prepare("select 1 from sqlite_master where type = 'table' and name = 'program_peers'").get())
 	};
 };
 var sqlCache = /* @__PURE__ */ new Map();
 var sqlFor = (columns) => {
-	const key = [Number(columns.work), ...OPTIONAL_COLUMNS.map((column) => Number(columns[column]))].join("");
+	const key = [
+		Number(columns.work),
+		Number(columns.peers),
+		...OPTIONAL_COLUMNS.map((column) => Number(columns[column]))
+	].join("");
 	const cached = sqlCache.get(key);
 	if (cached) return cached;
 	const sql = {
@@ -3791,10 +4253,13 @@ function openWorldBackend(paths) {
 				...projected,
 				characters: projected.characters.map((character) => ({
 					...character,
-					facts: factsOf(byId.get(character.id), readTask, (tasksOf?.all(character.id) ?? []).map((task) => readTask(JSON.stringify({
-						bundle: task.bundle,
-						taskId: task.id
-					}))?.title ?? task.id))
+					facts: {
+						...factsOf(byId.get(character.id), readTask, (tasksOf?.all(character.id) ?? []).map((task) => readTask(JSON.stringify({
+							bundle: task.bundle,
+							taskId: task.id
+						}))?.title ?? task.id)),
+						temporary: byId.get(character.id).temporary === 1
+					}
 				}))
 			};
 			dormant = dormantAgents(world.dormant, byId, (task) => readTask(task, rereadTasks), dormant, !rereadTasks);
@@ -3992,6 +4457,22 @@ function openWorldBackend(paths) {
 			feedListeners.clear();
 		}
 	};
+}
+//#endregion
+//#region apps/agent-world/src/org.ts
+function object(value) {
+	return typeof value === "object" && value !== null;
+}
+function isOrgMoveRequest(value) {
+	return object(value) && typeof value.person === "string" && (value.manager === null || typeof value.manager === "string") && Array.isArray(value.branch) && value.branch.every((id) => typeof id === "string");
+}
+function isOrgStartRequest(value) {
+	return object(value) && typeof value.id === "string" && typeof value.cwd === "string" && typeof value.goal === "string" && (value.withReady === void 0 || typeof value.withReady === "boolean") && Array.isArray(value.positions) && value.positions.every((position) => object(position) && typeof position.id === "string" && (position.manager === null || typeof position.manager === "string") && [
+		position.role,
+		position.name,
+		position.person,
+		position.goal
+	].every((field) => field === void 0 || typeof field === "string"));
 }
 //#endregion
 //#region apps/agent-world/src/backend/integrations/atlassian.ts
@@ -6155,6 +6636,22 @@ function start() {
 		...statePaths(),
 		agentDir: agentDir()
 	}, commands, () => world.snapshot());
+	const org = openOrg({
+		...statePaths(),
+		agentDir: agentDir()
+	}, commands, () => world.snapshot());
+	org.onOrgStart((progress) => toWindow("world:org-progress", progress));
+	ipcMain.handle("world:org-move", (_event, request) => isOrgMoveRequest(request) ? org.orgMove(request) : {
+		ok: false,
+		reason: "A person, manager and observed branch are required."
+	});
+	ipcMain.handle("world:org-start", (_event, request) => isOrgStartRequest(request) ? org.orgStart(request) : {
+		id: "",
+		people: [],
+		complete: false,
+		next: "retry",
+		note: "A team task, repository and valid positions are required."
+	});
 	const unnamed = {
 		ok: false,
 		reason: "No character was named."
@@ -6266,7 +6763,8 @@ function start() {
 				"app://world/index.html",
 				"app://world/index.html?",
 				"app://world/index.html?workplace=chat",
-				"app://world/index.html?workplace=mail"
+				"app://world/index.html?workplace=mail",
+				"app://world/index.html?workplace=org"
 			].includes(url)) event.preventDefault();
 		});
 		window.loadURL("app://world/index.html");

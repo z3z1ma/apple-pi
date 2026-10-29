@@ -1,0 +1,47 @@
+.wp-org-move-dialog {
+	box-sizing: border-box;
+	width: min(460px, calc(100% - 32px));
+	max-height: calc(100% - 32px);
+	margin: auto;
+	padding: 26px;
+	overflow: auto;
+	border: 1px solid var(--wp-border);
+	border-radius: 12px;
+	color: var(--wp-text);
+	background: var(--wp-bg);
+	box-shadow: var(--wp-shadow);
+}
+.wp-org-move-dialog::backdrop {
+	background: #0006;
+}
+.wp-org-move-dialog h2 {
+	margin: 0 0 14px;
+	font-size: 20px;
+}
+.wp-org-move-dialog p {
+	color: var(--wp-muted);
+	font-size: 13px;
+	line-height: 1.65;
+	overflow-wrap: anywhere;
+}
+.wp-org-move-dialog p[role="alert"] {
+	padding: 12px;
+	border: 1px solid var(--wp-danger);
+	border-radius: 7px;
+	color: var(--wp-danger);
+	background: var(--wp-danger-bg);
+}
+.wp-org-move-dialog > div {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: flex-end;
+	gap: 8px;
+	margin-top: 20px;
+}
+.wp-org-move-dialog button {
+	padding: 8px 12px;
+	border: 1px solid var(--wp-border);
+	border-radius: 7px;
+	color: var(--wp-text);
+	background: var(--wp-bg);
+}

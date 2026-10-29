@@ -35,6 +35,11 @@ Why: a changed-row query alone cannot return a deleted row; it left discarded pe
 Coupled: components/session-state/src/program-peers.ts
 Verify: apps/agent-world/tests/workplace-disposal.test.ts
 
+Temporary identity follows the same known-ID evidence as `temporaryCallers`: durable `program_peer_created`, `program_peer_observed` or `person_discarded` events, plus surviving `program_peers` rows. The SQL reader emits a boolean without importing runtime owners or interpreting caller/manager ancestry. Missing launch rows never override durable temporary evidence. World retains those people; Org uses the metadata to omit them from its editable chart. Both awake facts and dormant rows carry the classification.
+Why: launch ownership rows can disappear during cleanup, while retained temporary-identity evidence still rules out offering that person as a lasting teammate. Reporting lines are mutable and do not determine identity; a lasting report under a temporary manager remains lasting. Keep the SQL evidence kinds aligned with `temporaryCallers` when that owner changes.
+Coupled: components/session-state/src/program-peers.ts, apps/agent-world/src/backend/inn.ts
+Verify: apps/agent-world/tests/temporary-metadata.test.ts
+
 Workplace summaries share this poll and the existing task-file reread cadence; bodies are read on demand through `openWorkplace`. Table guards keep an unmigrated runtime readable.
 Coupled: apps/agent-world/src/backend/workplace.ts
 Verify: apps/agent-world/tests/workplace.test.ts

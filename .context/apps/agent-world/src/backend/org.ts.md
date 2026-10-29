@@ -1,0 +1,21 @@
+## symbol:openOrg
+
+The controller reads the runtime database query-only and sends all writes through the existing Commands client. `orgMove` extracts only person, manager and branch from the renderer request; runtime `organization_move` retains validation, stale-branch checks and work authority. Startup's planned-tree/work checks are preflight, not authorization: each applied move is validated again by the runtime.
+
+Whole-team channel presence is checked before any preparation. A live old daemon may still lack current channel behavior despite a newer checkout; the controller returns an actionable restart warning rather than spawning people first. It never restarts the runtime itself.
+
+Preparation is progressive, managers before reports. New people use ordinary start with a role/goal and an empty opening prompt. Existing/provisional people retain assignments and omit goal on retry. Existing active people remain active. A failed start can be retried under the same identity; accepted/delivered ambiguity or a lost bridge remains uncertain until a recorded incarnation reconciles it. A proven ended incarnation permits an ordinary wake. The existing commands table preserves position identities and attempt outcomes across controller recreation; the in-memory map only coalesces concurrent requests. Preparation discovery filters by both the position ID prefix and kind='start': assignment outbox mail has nested IDs under that same prefix and is not another launch attempt.
+Preflight rejection sets editable=true only when the existing command journal contains no prior preparation, correlated planned move, readiness, join or kickoff for that plan. Planned moves have their own plan-prefixed IDs so moves of already-awake people also retain evidence of side effects. Original prepared new-person role, canonical cwd and goal text are immutable on retry, compared with the recorded first start.
+Why: a launch can persist a goal and provisional identity before the connection drops. Retrying with a new identity or another goal would duplicate work, while treating acceptance as success would hide an unfinished start.
+
+Start team explicitly joins the operator as a pull participant through channel_membership, as disclosed in the UI. Joining preserves existing unread channel messages as well as the read cursor.
+Why: the operator must be a participant to author readiness posts, but starting or retrying a team is not evidence that the operator read its channel.
+
+Kickoff is one operator mail to the head with stable org-kickoff:<plan-id> command/thread identity. Its task-first body ends with an authored Ready teammates (session IDs) JSON roster. Only the head receives that direct mail. Partial startup waits unless withReady is explicit. Later readiness compares stable person IDs against that recorded roster and prior notices, not incarnation start timestamps; missing/malformed roster evidence refuses recovery explicitly. Later readiness updates use the whole-team channel and mention only the head; report identities are kept in the idempotency key, not the channel message body, because channel mentions start turns.
+Why: an already-awake person can join after a blocked move succeeds, while an initial member can restart without becoming a new teammate. Process age cannot distinguish those cases.
+
+A pending readiness thread_post remains pending, but queued nested mail is delivery of an already-published notice, not pending publication. Readiness recovery therefore filters kind='thread_post' as well as its ID prefix.
+Why: posting to a channel commits the notice and its outbox together. A sleeping or slow head can leave the pushed-mail receipt pending after the channel message is safely stored; treating that delivery receipt as the post outcome would report a completed startup as unresolved.
+
+Coupled: apps/agent-world/src/org.ts, apps/agent-world/src/electron/main.ts, apps/agent-world/src/backend/commands.ts, apps/agent-world/src/backend/roles.ts, components/session-state/src/runtime.ts, components/session-state/src/channels.ts
+Verify: apps/agent-world/tests/org-backend.test.ts, apps/agent-world/tests/org-runtime.test.ts
