@@ -9,7 +9,7 @@ import type { Character, CharacterFacts, WorldSnapshot } from "../src/world.js";
 // The workplace in the built world UI over a fixture backend. The backend suites prove that these calls reach the
 // runtime; this proves where the operator finds them and what the UI sends.
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-const ORIGIN = "http://agent-world.test";
+const ORIGIN = "http://localhost";
 const appDir = fileURLToPath(new URL("..", import.meta.url));
 const SHOTS = process.env.AGENT_WORLD_SHOTS;
 const PACKS = ["fantasy", "tech-office", "anime-school"] as const;
@@ -206,7 +206,7 @@ async function openWorld(theme: string) {
 		},
 		[world(theme), themes] as const,
 	);
-	await page.goto(`${ORIGIN}/index.html`);
+	await page.goto(`${ORIGIN}/index.html?world`);
 	await vi.waitFor(async () => expect(await page.evaluate(() => document.documentElement.dataset.theme)).toBe(theme), {
 		timeout: 20000,
 	});

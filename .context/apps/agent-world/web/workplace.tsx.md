@@ -1,5 +1,8 @@
 ## file
 
+Workspace heading uses the reserved device-local workspace display preference, independent of any session identity. Chat labels resolve organization:<head> to org- and team:<head> to team- slugs from per-head UI names; channel selection/read/cursors still use the original ID. Passing only channelLabel into ThreadPane keeps a rename from becoming a new channel read. Name changes rerender through the shared local preference subscription.
+Coupled: apps/agent-world/web/workplace-names.ts, apps/agent-world/web/workplace-org-name.tsx
+
 The DM header uses a compact run-state label plus role, not the detailed tool activity used by other views. Current tool details belong only in the lower activity line, which must ellipsize to available space. Keep the shared `activity()` helper detailed for its other consumers. Compact status is shared with profiles through `workplace-people.tsx`.
 Why: a long tool argument replaced the short status and made the header unstable. The lower activity line can show useful live detail without stretching the header or borrowing stale tool metadata.
 Coupled: apps/agent-world/web/overlay/conversation/conversation-panel.tsx, apps/agent-world/web/workplace.css

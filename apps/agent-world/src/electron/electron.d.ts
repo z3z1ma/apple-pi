@@ -10,6 +10,7 @@ declare module "electron" {
 		send(channel: string, ...args: unknown[]): void;
 		setWindowOpenHandler(handler: () => { action: "deny" | "allow" }): void;
 		on(event: "will-navigate", listener: (event: { preventDefault(): void }, url: string) => void): this;
+		on(event: "will-prevent-unload", listener: (event: { preventDefault(): void }) => void): this;
 		once(event: "did-finish-load", listener: () => void): this;
 		capturePage(): Promise<NativeImage>;
 		executeJavaScript(code: string): Promise<unknown>;
@@ -65,6 +66,21 @@ declare module "electron" {
 		/** Opens a file in its default app; resolves with an error message, or "" when it opened. */
 		openPath(path: string): Promise<string>;
 		showItemInFolder(path: string): void;
+	};
+
+	export const dialog: {
+		showMessageBoxSync(
+			window: BrowserWindow,
+			options: {
+				type: "warning";
+				buttons: string[];
+				title: string;
+				message: string;
+				defaultId: number;
+				cancelId: number;
+				noLink: boolean;
+			},
+		): number;
 	};
 
 	export const net: {

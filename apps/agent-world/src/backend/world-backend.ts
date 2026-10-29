@@ -105,7 +105,16 @@ where s.kind = 'root'`;
 // one), and the ones awake at the last read (given as a JSON array of ids), looked up by id.
 const changedSql = (columns: OptionalColumns) => `${sessionsSql(columns)}
 	and s.id in (select session_id from events where seq > ? union select value from json_each(?))`;
-const OPTIONAL_COLUMNS = ["role_title", "manages", "soul", "self", "retired_at", "retired_reason", "hired_at"] as const;
+const OPTIONAL_COLUMNS = [
+	"role_title",
+	"manages",
+	"soul",
+	"self",
+	"retired_at",
+	"retired_reason",
+	"hired_at",
+	"specialization",
+] as const;
 type OptionalColumns = Record<(typeof OPTIONAL_COLUMNS)[number], boolean> & { work: boolean; peers: boolean };
 const optionalColumns = (db: DatabaseSync): OptionalColumns => {
 	const present = new Set(
@@ -138,6 +147,7 @@ interface Row extends FactsRow {
 	retired_at: number | null;
 	retired_reason: string | null;
 	hired_at: number | null;
+	specialization: string | null;
 	firstStartedAt: number | null;
 	awake: number;
 	temporary: number;
@@ -168,6 +178,7 @@ function sessionRow(row: Row): SessionRow {
 		retiredReason: row.retired_reason,
 		awake: row.awake === 1,
 		hiredAt: row.hired_at,
+		specialization: row.specialization,
 		firstStartedAt: row.firstStartedAt ?? undefined,
 		stoppedAt: row.stoppedAt ?? undefined,
 	};

@@ -1,0 +1,5 @@
+## file
+
+These names are device-local display preferences keyed by stable session/head IDs, like appearance. The reserved workspace key names the app workspace independently of every session; its caller supplies the default Your organization. The snapshot exposes no current operator-root identity, so callers must not treat its first headquarters as that identity. They never rename a person, thread, task or runtime organization. Known organization channels use org- and direct-report channels use team-; neither label is an address or authority. Missing historical people retain the existing channel title rather than inventing an identity. The subscriber set updates every mounted consumer in this renderer after a successful localStorage write; callers use the hook when rendering helper-derived labels.
+Why: changing display text must preserve channel IDs, history, cursors and membership, while saved names should appear immediately across cards and Chat.
+Coupled: apps/agent-world/web/workplace-org-name.tsx, apps/agent-world/web/workplace.tsx, apps/agent-world/src/world.ts

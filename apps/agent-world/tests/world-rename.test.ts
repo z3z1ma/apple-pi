@@ -11,7 +11,7 @@ import type { Character, CharacterFacts, ThemeChoice, WorldSnapshot } from "../s
 // the receipt, and the new name is on the figure, the side panel, and the conversation panel; a blank name sends
 // nothing. The recruiting form's fields stay inside it at every window size, in every pack.
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-const ORIGIN = "http://agent-world.test";
+const ORIGIN = "http://localhost";
 const appDir = fileURLToPath(new URL("..", import.meta.url));
 // AGENT_WORLD_SHOTS=<dir> saves screenshots there as aw-12-<theme>-*.png.
 const SHOTS = process.env.AGENT_WORLD_SHOTS;
@@ -174,7 +174,7 @@ async function openWorld(theme: string, size: readonly [number, number] = [1280,
 		},
 		[world(theme), themes] as const,
 	);
-	await page.goto(`${ORIGIN}/index.html`);
+	await page.goto(`${ORIGIN}/index.html?world`);
 	await vi.waitFor(async () => expect(await page.evaluate(() => document.documentElement.dataset.theme)).toBe(theme), {
 		timeout: 20000,
 	});

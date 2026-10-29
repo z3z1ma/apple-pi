@@ -1,5 +1,7 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import type { Character, WorldSnapshot } from "../src/world.js";
+import { organizationName, useWorkplaceNames } from "./workplace-names.js";
+import { OrgNameEditor } from "./workplace-org-name.js";
 import { PersonAvatar, sessionStatus } from "./workplace-people.js";
 import { WorkHistory } from "./workplace-work-history.js";
 import "./workplace-org-chart.css";
@@ -59,11 +61,16 @@ export function OrgChart({
 	propose: (id: string, manager: string | null) => void;
 	addPerson: (manager: string) => void;
 }) {
+	useWorkplaceNames();
 	const [collapsed, setCollapsed] = useState(new Set<string>());
 	const [dragged, setDragged] = useState<string>();
 	const [zoom, setZoom] = useState(1);
 	const [fitting, setFitting] = useState(true);
 	const scroller = useRef<HTMLDivElement>(null);
+	const canvas = useRef<HTMLDivElement>(null);
+	const zoomRef = useRef(zoom);
+	zoomRef.current = zoom;
+	const zoomAnchor = useRef<{ x: number; y: number; clientX: number; clientY: number } | null>(null);
 	const pan = useRef<{ x: number; y: number; left: number; top: number } | null>(null);
 	const ids = new Set(people.map((person) => person.character.id));
 	const roots = people.filter((person) => !person.parent || !ids.has(person.parent));
@@ -90,12 +97,46 @@ export function OrgChart({
 		observer.observe(element);
 		return () => observer.disconnect();
 	}, [headId, graph.width, graph.height, fitting]);
+	useLayoutEffect(() => {
+		const element = scroller.current;
+		if (!element || !headId) return;
+		const wheel = (event: WheelEvent) => {
+			if (!event.ctrlKey) return;
+			event.preventDefault();
+			const bounds = canvas.current?.getBoundingClientRect();
+			if (!bounds) return;
+			zoomAnchor.current = {
+				x: (event.clientX - bounds.left) / zoomRef.current,
+				y: (event.clientY - bounds.top) / zoomRef.current,
+				clientX: event.clientX,
+				clientY: event.clientY,
+			};
+			setFitting(false);
+			setZoom((value) => {
+				const next = value * Math.exp(-event.deltaY / 100);
+				return Number.isFinite(next) && next > 0 ? next : value;
+			});
+		};
+		// Chromium sends trackpad pinch as ctrl+wheel; a passive listener cannot stop page zoom.
+		element.addEventListener("wheel", wheel, { passive: false });
+		return () => element.removeEventListener("wheel", wheel);
+	}, [headId]);
+	useLayoutEffect(() => {
+		const anchor = zoomAnchor.current;
+		zoomAnchor.current = null;
+		const element = scroller.current;
+		const bounds = canvas.current?.getBoundingClientRect();
+		if (!anchor || !element || !bounds) return;
+		element.scrollLeft += bounds.left + anchor.x * zoom - anchor.clientX;
+		element.scrollTop += bounds.top + anchor.y * zoom - anchor.clientY;
+	}, [zoom]);
 	const branch = (id: string) => {
 		const found = new Set([id]);
 		for (const parent of found) for (const child of children.get(parent) ?? []) found.add(child.character.id);
 		return found;
 	};
 	const openTeam = (id: string | undefined) => {
+		zoomAnchor.current = null;
 		setTeam(id);
 		setFitting(true);
 		scroller.current?.scrollTo(0, 0);
@@ -154,7 +195,7 @@ export function OrgChart({
 						>
 							<PersonAvatar id={root.character.id} name={root.character.name} interactive={false} />
 							<span>
-								<strong>{root.character.name}</strong>
+								<strong>{organizationName(root.character.id, root.character.name)}</strong>
 								<small>
 									{branch(root.character.id).size} {branch(root.character.id).size === 1 ? "person" : "people"}
 								</small>
@@ -168,7 +209,7 @@ export function OrgChart({
 					<>
 						<header className="wp-org-team-heading">
 							<div>
-								<h2>{head.character.name}</h2>
+								<OrgNameEditor key={head.character.id} id={head.character.id} name={head.character.name} heading="h2" />
 								<p>{branch(head.character.id).size} people · reporting lines</p>
 							</div>
 							<div className="wp-org-tools">
@@ -240,6 +281,7 @@ export function OrgChart({
 					) : head ? (
 						<div className="wp-org-chart-size" style={{ width: graph.width * zoom, height: graph.height * zoom }}>
 							<div
+								ref={canvas}
 								className="wp-org-chart-canvas"
 								style={{ width: graph.width, height: graph.height, transform: `scale(${zoom})` }}
 							>
@@ -299,55 +341,59 @@ export function OrgChart({
 						</div>
 					) : (
 						<section className="wp-org-team-grid" aria-label="All teams">
-							{roots.map((root) => (
-								<fieldset
-									key={root.character.id}
-									aria-label={`${root.character.name}'s team`}
-									className="wp-org-team-card"
-									{...dragProps(root)}
-								>
-									<button
-										type="button"
-										className="wp-org-person"
-										aria-label={`View profile: ${root.character.name}`}
-										onClick={(event) => select(root.character.id, event.currentTarget)}
+							{roots.map((root) => {
+								const members = branch(root.character.id);
+								const atHome = people.filter((person) => members.has(person.character.id) && person.home).length;
+								return (
+									<fieldset
+										key={root.character.id}
+										aria-label={`${root.character.name}'s team`}
+										className="wp-org-team-card"
+										{...dragProps(root)}
 									>
-										{identity(root)}
-									</button>
-									<div className="wp-org-team-summary">
-										<strong>{branch(root.character.id).size}</strong>{" "}
-										{branch(root.character.id).size === 1 ? "person" : "people"}
-										<span>
-											{
-												[...branch(root.character.id)].filter(
-													(id) => people.find((person) => person.character.id === id)?.home,
-												).length
-											}{" "}
-											at home
-										</span>
-									</div>
-									<WorkHistory world={world} team={root.character.id} compact />
-									<div className="wp-org-team-actions">
-										<button
-											type="button"
-											aria-label={`Open team: ${root.character.name}`}
-											onClick={() => openTeam(root.character.id)}
-										>
-											Open team <span aria-hidden="true">→</span>
-										</button>
-										{manages(root) && !root.home && (
+										<div className="wp-org-card-heading">
+											<PersonAvatar id={root.character.id} name={root.character.name} interactive={false} />
+											<div>
+												<OrgNameEditor id={root.character.id} name={root.character.name} />
+												<button
+													type="button"
+													className="wp-org-card-head"
+													aria-label={`View profile: ${root.character.name}`}
+													onClick={(event) => select(root.character.id, event.currentTarget)}
+												>
+													Head: {root.character.name}
+												</button>
+											</div>
+										</div>
+										<div className="wp-org-team-summary">
+											<span>
+												{members.size} {members.size === 1 ? "person" : "people"}
+											</span>
+											{atHome > 0 && <span>{atHome} at home</span>}
+										</div>
+										<WorkHistory world={world} team={root.character.id} compact />
+										<div className="wp-org-team-actions">
 											<button
 												type="button"
-												aria-label={`Add person to ${root.character.name}'s team`}
-												disabled={busy}
-												onClick={() => addPerson(root.character.id)}
+												aria-label={`Open team: ${root.character.name}`}
+												onClick={() => openTeam(root.character.id)}
 											>
-												+ Add person
+												Open team <span aria-hidden="true">→</span>
 											</button>
-										)}
-									</div>
-								</fieldset>
-							))}
+											{manages(root) && !root.home && (
+												<button
+													type="button"
+													aria-label={`Add person to ${root.character.name}'s team`}
+													disabled={busy}
+													onClick={() => addPerson(root.character.id)}
+												>
+													+ Add person
+												</button>
+											)}
+										</div>
+									</fieldset>
+								);
+							})}
 						</section>
 					)}
 					{dragged && (

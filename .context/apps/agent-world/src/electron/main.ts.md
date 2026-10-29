@@ -17,16 +17,30 @@ Why: the renderer shows untrusted text; the main process must not trust the rend
 Coupled: apps/agent-world/src/backend/links.ts, apps/agent-world/src/electron/preload.ts
 Verify: apps/agent-world/tests/links.test.ts
 
+Recruit IPC explicitly forwards its allowed fields, including string specialization; adding a creation-request DTO field also requires adding it to this handler. The browser fixtures supply agentWorld directly and cannot prove main-process forwarding. Malformed optional specialization is not forwarded; runtime creation remains the persistence authority.
+Why: a valid renderer request can otherwise lose creation context at the Electron boundary while its UI and backend tests both pass.
+Coupled: apps/agent-world/src/world.ts, apps/agent-world/src/backend/lifecycle.ts
+The lifecycle tests verify the request after this handler; they do not exercise this forwarding step.
+
 Org IPC validates renderer payload shapes through the public Org guards before calling the standalone controller; it shares the existing Commands connection with lifecycle/workplace actions. Shape validity is not an allowed-key filter: the controller extracts the authorized move fields rather than spreading a renderer object into a runtime command. Progress is emitted on world:org-progress, and listener disposal in the preload removes its own forwarder.
 Why: a well-typed renderer object can still contain an unexpected command kind. Shape validation alone must not turn those extra fields into runtime authority.
 Coupled: apps/agent-world/src/org.ts, apps/agent-world/src/backend/org.ts, apps/agent-world/src/electron/preload.ts
 Verify: apps/agent-world/tests/org-api.test.ts, apps/agent-world/tests/org-backend.test.ts
 
-Internal workplace view links need an explicit `will-navigate` exception; permit only the app's exact index, empty-query, Chat, Mail and Org URLs while other renderer navigation and new windows stay blocked. The empty query variant is deliberate: the World link's `href="?"` returns `app://world/index.html?`.
+Internal view links need an explicit `will-navigate` exception; permit only the app's exact index, empty-query, ?world, Chat, Mail, Org, Code and Issues URLs while other renderer navigation and new windows stay blocked. Bare and empty-query entries open Workplace Chat; World links use exactly ?world. Ordinary Electron startup loads the bare URL.
 Why: browser-fixture tests bypass Electron's navigation guard and can pass even when clicking the real launch link does nothing. Broadly allowing same-origin navigation would expand the renderer's navigation authority beyond these view links.
 Coupled: apps/agent-world/web/entry.ts, apps/agent-world/web/workplace.tsx
 Verify: apps/agent-world/scripts/workplace-electron-check.mjs
 
-`AGENT_WORLD_CAPTURE` waits until `window.agentWorldView` reports a place with a painting (at most `CAPTURE_WAIT_MS`), then `CAPTURE_DELAY_MS`, writes the PNG, prints `agent-world capture: place <key>` (or `no place drew`), and quits.
+Workspace IPC validates payload shapes before filesystem operations; it intentionally accepts manual directory roots for the operator's Code editor. This authority is separate from transcript link opening. Only save-file writes and requires an existing file plus its base hash; Git endpoints are read-only.
+Why: editor-selected roots intentionally grant broader local filesystem access than links embedded in untrusted conversation content, so the two entry paths must retain separate validation rules.
+Coupled: apps/agent-world/src/workspace.ts, apps/agent-world/src/backend/workspace.ts, apps/agent-world/src/electron/preload.ts
+Verify: apps/agent-world/tests/workspace-backend.test.ts
+
+The shared renderer beforeunload guard triggers Electron's will-prevent-unload native confirmation. Stay is both default and cancel. In this Electron event, preventDefault permits unloading by overriding the renderer veto, so it runs only for explicit Leave. World navigation should use this once rather than another window.confirm first; SPA tab switches remain a separate renderer concern.
+Why: Electron's event cancels the renderer's cancellation; reversing that meaning would discard edits on Stay, while omitting the handler can trap the operator in a page that always vetoes unloading.
+Coupled: apps/agent-world/web/workplace.tsx, apps/agent-world/src/electron/electron.d.ts
+
+The diagnostic-only `AGENT_WORLD_CAPTURE` launch explicitly loads ?world, preserving the existing World-render check while ordinary startup stays in Workplace. It waits until `window.agentWorldView` reports a place with a painting (at most `CAPTURE_WAIT_MS`), then `CAPTURE_DELAY_MS`, writes the PNG, prints `agent-world capture: place <key>` (or `no place drew`), and quits.
 Why: the start-up check (`npm run check:world-start`, apps/agent-world/scripts/startup-check.ts) reads that line and the PNG; a fixed delay captured a half-loaded window on a slow start.
 Coupled: apps/agent-world/scripts/startup-check.ts, apps/agent-world/web/main.tsx

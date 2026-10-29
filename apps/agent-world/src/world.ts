@@ -1,6 +1,7 @@
 // The world as the backend reports it to the world UI. Shared by the backend, the preload bridge, and the renderer.
 import type { IntegrationsApi } from "./integrations.js";
 import type { OrgMoveRequest, OrgMoveResult, OrgStartProgress, OrgStartRequest } from "./org.js";
+import type { WorkspaceApi } from "./workspace.js";
 
 export type {
 	OrgMoveRequest,
@@ -92,6 +93,8 @@ export interface Character {
 	name: string;
 	role: Role;
 	place: PlaceRef;
+	/** Creator-set attention within the role; absent on older snapshots. */
+	specialization?: string | null;
 	/** When the session was explicitly hired (ms); absent for older or non-hired people. */
 	hiredAt?: number | null;
 	/** Earliest runtime-observed incarnation (ms), not a hire date; also owns the stable roster order. */
@@ -240,6 +243,7 @@ export interface DormantAgent {
 	/** When its last incarnation ended (ms), and why (`exited`, `lost`, ...); null when unknown. */
 	stoppedAt: number | null;
 	stopReason: string | null;
+	specialization?: string | null;
 	hiredAt?: number | null;
 	startedAt: number;
 }
@@ -317,6 +321,7 @@ export interface RecruitRequest {
 	reportsTo?: string;
 	/** The catalog role it is hired into; none for a session with no role. */
 	role?: string;
+	specialization?: string;
 }
 
 /** A role a person can be hired into, as the catalog describes it. */
@@ -474,6 +479,7 @@ export interface NotepadChange {
  * Confluence, Slack, the outside-write gate, delegation) is in `integrations.ts`.
  */
 export interface AgentWorldApi extends IntegrationsApi {
+	workspace: WorkspaceApi;
 	snapshot(): Promise<WorldSnapshot>;
 	/**
 	 * Called with the new snapshot after every change, whole but for the parts named in `unchanged` (the same as the

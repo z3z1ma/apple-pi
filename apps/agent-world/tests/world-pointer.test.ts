@@ -12,7 +12,7 @@ import type { PlaceData, Point } from "../web/theme.js";
 // over something to do, is a fist over floor nobody can walk to, and points over open floor; a left click drops a
 // yellow X where the avatar is heading or a red X on what it acts on, gone within about half a second.
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-const ORIGIN = "http://agent-world.test";
+const ORIGIN = "http://localhost";
 const appDir = fileURLToPath(new URL("..", import.meta.url));
 // AGENT_WORLD_SHOTS=<dir> saves screenshots as aw-alive-01-<theme>-*.png, the cursor drawn where the pointer is.
 const SHOTS = process.env.AGENT_WORLD_SHOTS;
@@ -81,7 +81,7 @@ async function openWorld(theme: string) {
 			onReply: () => () => {},
 		};
 	}, world(theme));
-	await page.goto(`${ORIGIN}/index.html`);
+	await page.goto(`${ORIGIN}/index.html?world`);
 	await vi.waitFor(async () => expect(await view(page, "avatar()")).toBeTruthy(), { timeout: 15000 });
 	await page.waitForTimeout(500);
 	await page.mouse.move(640, 400);

@@ -7,7 +7,11 @@ import { conversationPanel } from "./overlay/conversation/panel-state.js";
 import { Markdown, TranscriptAuthor } from "./overlay/conversation/transcript.js";
 import { activity } from "./overlay/interface/model.js";
 import { useWindowFocus } from "./use-window-focus.js";
+import { WorkplaceCode } from "./workplace-code.js";
+import { WorkplaceIssues } from "./workplace-issues.js";
+import { channelName, useWorkplaceNames } from "./workplace-names.js";
 import { Org } from "./workplace-org.js";
+import { OrgNameEditor } from "./workplace-org-name.js";
 import { ChatPeople, PersonAvatar, PersonName, PersonProfile, sessionStatus } from "./workplace-people.js";
 import { worldStore } from "./world-store.js";
 import "./workplace.css";
@@ -35,9 +39,13 @@ function Icon({
 		| "activity"
 		| "moon"
 		| "sun"
-		| "org";
+		| "org"
+		| "code"
+		| "issues";
 }) {
 	const paths = {
+		code: "m8 7-5 5 5 5 M16 7l5 5-5 5 M14 4l-4 16",
+		issues: "M7 3h10v4H7V3Z M7 5H4v16h16V5h-3 M8 11h8 M8 16h5",
 		org: "M9 3h6v5H9V3Z M3 16h6v5H3v-5Z M15 16h6v5h-6v-5Z M12 8v4 M6 16v-4h12v4",
 		sent: "m3 4 18 8-18 8 4-8-4-8Z M7 12h14",
 		activity: "M3 12h4l3-8 4 16 3-8h4",
@@ -103,9 +111,36 @@ function Workplace() {
 		}
 	};
 	const initialView = new URLSearchParams(location.search).get("workplace");
-	const [view, setView] = useState(initialView === "org" ? "org" : initialView === "mail" ? "mail" : "chat");
+	const [view, setView] = useState(
+		["org", "mail", "code", "issues"].includes(initialView ?? "") ? (initialView ?? "chat") : "chat",
+	);
 	const [orgVisited, setOrgVisited] = useState(initialView === "org");
+	const [codeVisited, setCodeVisited] = useState(initialView === "code");
+	const [issuesVisited, setIssuesVisited] = useState(initialView === "issues");
+	const [codeDirty, setCodeDirty] = useState(false);
+	const [planState, setPlanState] = useState({ dirty: false, started: false });
+	useEffect(() => {
+		const protectDrafts = (event: BeforeUnloadEvent) => {
+			if (
+				!codeDirty &&
+				!planState.dirty &&
+				![...drafts.values()].some(Boolean) &&
+				!world?.characters.some((person) => Boolean(conversationPanel.draft(person.id)))
+			)
+				return;
+			event.preventDefault();
+			event.returnValue = "";
+		};
+		window.addEventListener("beforeunload", protectDrafts);
+		return () => window.removeEventListener("beforeunload", protectDrafts);
+	}, [codeDirty, planState.dirty, world]);
 	const [requestedDM, setRequestedDM] = useState<{ id: string; key: string }>();
+	const [requestedChannel, setRequestedChannel] = useState<{ id: string; key: string }>();
+	const openChannel = (id: string) => {
+		setRequestedChannel({ id, key: crypto.randomUUID() });
+		setView("chat");
+		history.replaceState(null, "", "?workplace=chat");
+	};
 	const openDM = (id: string) => {
 		setRequestedDM({ id, key: crypto.randomUUID() });
 		setView("chat");
@@ -117,9 +152,12 @@ function Workplace() {
 			[...channelUnreads(world).values()].filter((count) => count > 0).length
 		: 0;
 	return (
-		<div className={`wp-app wp-${view === "org" ? "org-view" : view}`} data-appearance={dark ? "dark" : "light"}>
+		<div
+			className={`wp-app wp-${["org", "code", "issues"].includes(view) ? `${view}-view` : view}`}
+			data-appearance={dark ? "dark" : "light"}
+		>
 			<nav className="wp-rail" aria-label="Applications">
-				<a className="wp-brand" href="?" title="Back to Agent World">
+				<a className="wp-brand" href="?world" title="Back to Agent World">
 					pi
 				</a>
 				<button
@@ -169,6 +207,36 @@ function Workplace() {
 				</button>
 				<button
 					type="button"
+					aria-label="Code"
+					aria-pressed={view === "code"}
+					onClick={() => {
+						setCodeVisited(true);
+						setView("code");
+						history.replaceState(null, "", "?workplace=code");
+					}}
+				>
+					<span className="wp-rail-icon">
+						<Icon name="code" />
+					</span>
+					Code
+				</button>
+				<button
+					type="button"
+					aria-label="Issues"
+					aria-pressed={view === "issues"}
+					onClick={() => {
+						setIssuesVisited(true);
+						setView("issues");
+						history.replaceState(null, "", "?workplace=issues");
+					}}
+				>
+					<span className="wp-rail-icon">
+						<Icon name="issues" />
+					</span>
+					Issues
+				</button>
+				<button
+					type="button"
 					className="wp-appearance-toggle"
 					aria-label="Theme: dark mode"
 					aria-pressed={dark}
@@ -180,7 +248,7 @@ function Workplace() {
 					</span>
 					Theme
 				</button>
-				<a className="wp-world-link" href="?">
+				<a className="wp-world-link" href="?world">
 					<Icon name="world" />
 					World
 				</a>
@@ -191,7 +259,20 @@ function Workplace() {
 			<div className="wp-workspace">
 				<header className="wp-topbar">
 					<strong>
-						Workplace <span> / {view === "chat" ? "Conversations" : view === "org" ? "Organizations" : "Mail"}</span>
+						Workplace{" "}
+						<span>
+							{" "}
+							/{" "}
+							{view === "chat"
+								? "Conversations"
+								: view === "org"
+									? "Organizations"
+									: view === "code"
+										? "Code"
+										: view === "issues"
+											? "Issues"
+											: "Mail"}
+						</span>
 					</strong>
 					<span className={world?.connected ? "wp-connected" : "wp-offline"}>
 						{world ? (world.connected ? "Runtime connected" : "Disconnected · last known state") : "Connecting…"}
@@ -202,14 +283,35 @@ function Workplace() {
 				) : (
 					<div className="wp-surface" inert={!world.connected}>
 						<div hidden={view !== "chat"}>
-							<Chat world={world} active={view === "chat"} requestedDM={requestedDM} />
+							<Chat
+								world={world}
+								active={view === "chat"}
+								requestedDM={requestedDM}
+								requestedChannel={requestedChannel}
+							/>
 						</div>
 						<div hidden={view !== "mail"}>
 							<Mail world={world} active={view === "mail"} />
 						</div>
 						{orgVisited && (
 							<div hidden={view !== "org"}>
-								<Org world={world} active={view === "org"} openDM={openDM} />
+								<Org
+									world={world}
+									active={view === "org"}
+									openDM={openDM}
+									openChannel={openChannel}
+									onPlanChange={setPlanState}
+								/>
+							</div>
+						)}
+						{codeVisited && (
+							<div hidden={view !== "code"}>
+								<WorkplaceCode world={world} active={view === "code"} onDirtyChange={setCodeDirty} />
+							</div>
+						)}
+						{issuesVisited && (
+							<div hidden={view !== "issues"}>
+								<WorkplaceIssues world={world} active={view === "issues"} openDM={openDM} />
 							</div>
 						)}
 					</div>
@@ -223,17 +325,28 @@ function Chat({
 	world,
 	active,
 	requestedDM,
+	requestedChannel,
 }: {
 	world: WorldSnapshot;
 	active: boolean;
 	requestedDM?: { id: string; key: string };
+	requestedChannel?: { id: string; key: string };
 }) {
+	useWorkplaceNames();
 	const [selection, setSelection] = useState<{ kind: "dm" | "channel"; id: string }>();
 	const [filter, setFilter] = useState("");
 	const [showTools, setShowTools] = useState(false);
 	const [profile, setProfile] = useState<{ id: string; name: string }>();
 	const profileTrigger = useRef<HTMLElement | null>(null);
 	const consumedDM = useRef<string | undefined>(undefined);
+	const consumedChannel = useRef<string | undefined>(undefined);
+	useEffect(() => {
+		if (active && requestedChannel && consumedChannel.current !== requestedChannel.key) {
+			consumedChannel.current = requestedChannel.key;
+			setSelection({ kind: "channel", id: requestedChannel.id });
+			setProfile(undefined);
+		}
+	}, [active, requestedChannel]);
 	useEffect(() => {
 		if (active && requestedDM && consumedDM.current !== requestedDM.key) {
 			consumedDM.current = requestedDM.key;
@@ -273,7 +386,7 @@ function Chat({
 				<aside className="wp-chat-sidebar">
 					<div className="wp-sidebar-heading">
 						<span className="wp-eyebrow">WORKSPACE</span>
-						<h1>Your organization</h1>
+						<OrgNameEditor id="workspace" name="Your organization" defaultName="Your organization" heading="h1" />
 						<p>{world.characters.length} active sessions</p>
 					</div>
 					<label className="wp-find">
@@ -289,20 +402,20 @@ function Chat({
 						Channels <span>{channels.length}</span>
 					</h2>
 					{channels
-						.filter((thread) => matches(thread.subject))
+						.filter((thread) => matches(channelName(thread.id, thread.subject, world)))
 						.map((thread) => (
 							<button
 								type="button"
 								className="wp-channel"
 								data-unread={(unreads.get(thread.id) ?? 0) > 0}
-								aria-label={`# ${thread.subject}`}
+								aria-label={`# ${channelName(thread.id, thread.subject, world)}`}
 								aria-description={`${unreads.get(thread.id) ?? 0} unread messages`}
 								key={thread.id}
 								aria-pressed={selectedChannel?.id === thread.id}
 								onClick={() => setSelection({ kind: "channel", id: thread.id })}
 							>
 								<span>#</span>
-								<span>{thread.subject}</span>
+								<span>{channelName(thread.id, thread.subject, world)}</span>
 								{(unreads.get(thread.id) ?? 0) > 0 && (
 									<b className="wp-unread-count" aria-hidden="true">
 										{unreads.get(thread.id)}
@@ -435,12 +548,26 @@ function Chat({
 						<>
 							<header className="wp-conversation-header">
 								<div>
-									<h1># {selectedChannel.subject}</h1>
-									<p>{selectedChannel.participants.length} participants · Team channel</p>
+									<h1># {channelName(selectedChannel.id, selectedChannel.subject, world)}</h1>
+									<p>
+										{selectedChannel.participants.length} participants ·{" "}
+										{selectedChannel.id.startsWith("organization:")
+											? "Organization channel"
+											: selectedChannel.id.startsWith("team:")
+												? "Direct-report team channel"
+												: "Channel"}
+									</p>
 								</div>
 								<span className="wp-session-label">Shared conversation</span>
 							</header>
-							{active && <ThreadPane key={selectedChannel.id} id={selectedChannel.id} channel={selectedChannel} />}
+							{active && (
+								<ThreadPane
+									key={selectedChannel.id}
+									id={selectedChannel.id}
+									channel={selectedChannel}
+									channelLabel={channelName(selectedChannel.id, selectedChannel.subject, world)}
+								/>
+							)}
 						</>
 					) : (
 						<div className="wp-empty">
@@ -516,11 +643,6 @@ function Mail({ world, active }: { world: WorldSnapshot; active: boolean }) {
 						{key === "inbox" && unread > 0 && <b>{unread}</b>}
 					</button>
 				))}
-				<p>
-					Mail is asynchronous correspondence.
-					<br />
-					Sending here does not redirect an agent's current turn.
-				</p>
 			</aside>
 			<main className="wp-mail-main">
 				<header className="wp-mail-toolbar">
@@ -708,7 +830,7 @@ function Messages({
 	));
 }
 
-function ThreadPane({ id, channel }: { id: string; channel?: WorkplaceThread }) {
+function ThreadPane({ id, channel, channelLabel }: { id: string; channel?: WorkplaceThread; channelLabel?: string }) {
 	const [thread, setThread] = useState<MailThread>();
 	const [draft, setDraft] = useState(drafts.get(id) ?? "");
 	const [pending, setPending] = useState(false);
@@ -908,7 +1030,9 @@ function ThreadPane({ id, channel }: { id: string; channel?: WorkplaceThread }) 
 				) : !member ? (
 					<div className="wp-channel-preview">
 						<div>
-							<h2>{channel ? `You're previewing # ${channel.subject}` : "You are not a participant"}</h2>
+							<h2>
+								{channel ? `You're previewing # ${channelLabel ?? channel.subject}` : "You are not a participant"}
+							</h2>
 							<p>
 								{channel
 									? "Join to take part in the conversation. Previewing does not change anyone's read status."

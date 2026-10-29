@@ -204,6 +204,7 @@ export function sleeperCharacter(agent: DormantAgent): Character {
 		role: agent.role,
 		place: { kind: "inn" },
 		hiredAt: agent.hiredAt,
+		specialization: agent.specialization,
 		startedAt: agent.startedAt,
 		// What the conversation panel shows of it: where it worked and its last task. Asleep, it needs nobody.
 		facts: {

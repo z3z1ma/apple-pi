@@ -1,7 +1,7 @@
 import type { WorldSnapshot } from "../src/world.js";
 
 /** Search recorded metadata across teams; reading a task remains a separate operator action. */
-export function searchOrg(world: WorldSnapshot, query: string) {
+export function searchOrg(world: WorldSnapshot, query: string, names: Readonly<Record<string, string>> = {}) {
 	const people = [
 		...world.characters
 			.filter((person) => !person.facts?.temporary)
@@ -28,6 +28,10 @@ export function searchOrg(world: WorldSnapshot, query: string) {
 	];
 	const byId = new Map(people.map((person) => [person.id, person]));
 	const nameOf = (id: string) => byId.get(id)?.name ?? world.headquarters.find((team) => team.id === id)?.name ?? id;
+	const teamNameOf = (id: string) => (Object.hasOwn(names, id) ? names[id] : nameOf(id));
+	const visibleTeams = new Set(
+		people.filter((person) => !person.manager || !byId.has(person.manager)).map((person) => person.id),
+	);
 	const rootOf = (id: string) => {
 		const seen = new Set<string>();
 		while (!seen.has(id)) {
@@ -45,13 +49,27 @@ export function searchOrg(world: WorldSnapshot, query: string) {
 		people: people
 			.map((person) => {
 				const team = rootOf(person.id);
-				return { ...person, team, teamName: nameOf(team) };
+				return { ...person, team, teamName: teamNameOf(team) };
 			})
-			.filter((person) => matches(person.id, person.name, person.role, person.task, person.teamName)),
+			.filter((person) =>
+				matches(person.id, person.name, person.role, person.task, person.teamName, nameOf(person.team)),
+			),
 		work: (world.workplace?.workHistory ?? [])
-			.map((task) => ({ ...task, organizationName: nameOf(task.headquarters) }))
+			.map((task) => ({
+				...task,
+				organizationName: teamNameOf(task.headquarters),
+				recordedTeam: visibleTeams.has(task.headquarters) ? task.headquarters : null,
+			}))
 			.filter((task) =>
-				matches(task.id, task.title, task.project, task.status ?? "", task.headquarters, task.organizationName),
+				matches(
+					task.id,
+					task.title,
+					task.project,
+					task.status ?? "",
+					task.headquarters,
+					task.organizationName,
+					nameOf(task.headquarters),
+				),
 			),
 	};
 }

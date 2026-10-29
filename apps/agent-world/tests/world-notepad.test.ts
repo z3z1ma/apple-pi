@@ -10,7 +10,7 @@ import type { Character, CharacterFacts, ThemeChoice, WorldSnapshot } from "../s
 // the coordinator's notes, typing saves them, asking for an update puts a marker at the cursor and mails the agent to
 // replace it, a selection goes to an agent as mail, and a change on disk loads (or, under unsaved edits, asks).
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-const ORIGIN = "http://agent-world.test";
+const ORIGIN = "http://localhost";
 const appDir = fileURLToPath(new URL("..", import.meta.url));
 // AGENT_WORLD_SHOTS=<dir> saves screenshots there as aw-notes-<theme>-*.png.
 const SHOTS = process.env.AGENT_WORLD_SHOTS;
@@ -166,7 +166,7 @@ async function openWorld(theme: string, size: readonly [number, number] = [1280,
 		},
 		[world(theme), themes] as const,
 	);
-	await page.goto(`${ORIGIN}/index.html`);
+	await page.goto(`${ORIGIN}/index.html?world`);
 	await vi.waitFor(async () => expect(await page.evaluate(() => document.documentElement.dataset.theme)).toBe(theme), {
 		timeout: 20000,
 	});

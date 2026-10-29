@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import type { TaskRead, WorldSnapshot } from "../src/world.js";
 import "./workplace-org-search.css";
 
+import { useWorkplaceNames } from "./workplace-names.js";
 import { searchOrg } from "./workplace-org-search-model.js";
 
 export function OrgSearch({
@@ -20,7 +21,8 @@ export function OrgSearch({
 	const [query, setQuery] = useState("");
 	const [open, setOpen] = useState(false);
 	const [task, setTask] = useState<{ id: string; title: string; result?: TaskRead }>();
-	const results = searchOrg(world, query);
+	const names = useWorkplaceNames();
+	const results = searchOrg(world, query, names);
 	const visible = open && query.trim().length > 0;
 	const close = () => {
 		request.current++;
@@ -131,6 +133,18 @@ export function OrgSearch({
 									</p>
 									<p>Recorded organization: {item.organizationName}</p>
 									<p>{item.project}</p>
+									{item.recordedTeam && (
+										<button
+											type="button"
+											aria-label={`Open recorded team: ${item.organizationName}`}
+											onClick={() => {
+												close();
+												onTeam(item.headquarters);
+											}}
+										>
+											Open recorded team
+										</button>
+									)}
 									<button
 										type="button"
 										disabled={!world.connected}

@@ -1,6 +1,14 @@
 let electron = require("electron");
 //#region apps/agent-world/src/electron/preload.ts
 var api = {
+	workspace: {
+		repositories: () => electron.ipcRenderer.invoke("workspace:repositories"),
+		tree: (request) => electron.ipcRenderer.invoke("workspace:tree", request),
+		readFile: (request) => electron.ipcRenderer.invoke("workspace:read-file", request),
+		saveFile: (request) => electron.ipcRenderer.invoke("workspace:save-file", request),
+		gitStatus: (request) => electron.ipcRenderer.invoke("workspace:git-status", request),
+		gitDiff: (request) => electron.ipcRenderer.invoke("workspace:git-diff", request)
+	},
 	snapshot: () => electron.ipcRenderer.invoke("world:snapshot"),
 	onUpdate(listener) {
 		const forward = (_event, update) => listener(update);

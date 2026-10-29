@@ -7,7 +7,7 @@
 import { writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { app, BrowserWindow, ipcMain, net, protocol, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, net, protocol, shell } from "electron";
 import { agentDir, statePaths } from "../../../../components/session-state/src/paths.js";
 import { appFile } from "../app-files.js";
 import { openCommands } from "../backend/commands.js";
@@ -19,8 +19,10 @@ import { openNotepads } from "../backend/notepad.js";
 import { openOrg } from "../backend/org.js";
 import { listThemes, themeBackdrop } from "../backend/theme-packs.js";
 import { openWorkplace } from "../backend/workplace.js";
+import { openWorkspace } from "../backend/workspace.js";
 import { leaveOutUnchanged, openWorldBackend } from "../backend/world-backend.js";
 import { isOrgMoveRequest, isOrgStartRequest } from "../org.js";
+import { isWorkspaceDiff, isWorkspacePath, isWorkspaceRoot, isWorkspaceSave, type WorkspaceApi } from "../workspace.js";
 import { wireIntegrations } from "./integrations-ipc.js";
 
 // This file runs as dist/electron/main.js, two levels below the app directory.
@@ -59,8 +61,29 @@ async function captureWhenDrawn(window: BrowserWindow, file: string) {
 	app.quit();
 }
 
+function wireWorkspace(workspace: WorkspaceApi) {
+	const invalid = { ok: false, reason: "A valid workspace root and relative path are required." };
+	ipcMain.handle("workspace:repositories", () => workspace.repositories());
+	ipcMain.handle("workspace:tree", (_event, request: unknown) =>
+		isWorkspacePath(request) ? workspace.tree(request) : invalid,
+	);
+	ipcMain.handle("workspace:read-file", (_event, request: unknown) =>
+		isWorkspacePath(request) ? workspace.readFile(request) : invalid,
+	);
+	ipcMain.handle("workspace:save-file", (_event, request: unknown) =>
+		isWorkspaceSave(request) ? workspace.saveFile(request) : invalid,
+	);
+	ipcMain.handle("workspace:git-status", (_event, request: unknown) =>
+		isWorkspaceRoot(request) ? workspace.gitStatus(request) : invalid,
+	);
+	ipcMain.handle("workspace:git-diff", (_event, request: unknown) =>
+		isWorkspaceDiff(request) ? workspace.gitDiff(request) : invalid,
+	);
+}
+
 function start() {
 	const world = openWorldBackend(statePaths());
+	wireWorkspace(openWorkspace(() => world.snapshot()));
 	const conversations = openConversations(statePaths().socket);
 	const commands = openCommands(statePaths().socket);
 	let window: BrowserWindow | undefined;
@@ -167,7 +190,7 @@ function start() {
 	);
 	// Recruiting a new agent: a worker at its coordinator's desk, an independent one at the square's recruiter.
 	ipcMain.handle("world:recruit", (_event, request: unknown) => {
-		const { name, cwd, brief, reportsTo, role } = (request ?? {}) as Record<string, unknown>;
+		const { name, cwd, brief, reportsTo, role, specialization } = (request ?? {}) as Record<string, unknown>;
 		if (typeof name !== "string" || typeof cwd !== "string" || typeof brief !== "string")
 			return { ok: false, reason: "The recruit needs a name, a directory, and a brief." };
 		return lifecycle.recruit({
@@ -176,6 +199,7 @@ function start() {
 			brief,
 			...(typeof reportsTo === "string" ? { reportsTo } : {}),
 			...(typeof role === "string" ? { role } : {}),
+			...(typeof specialization === "string" ? { specialization } : {}),
 		});
 	});
 	ipcMain.handle("world:roles", () => lifecycle.roles());
@@ -258,22 +282,38 @@ function start() {
 			window = undefined;
 		});
 		window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+		window.webContents.on("will-prevent-unload", (event) => {
+			if (!window || window.isDestroyed()) return;
+			const choice = dialog.showMessageBoxSync(window, {
+				type: "warning",
+				buttons: ["Stay", "Leave"],
+				title: "Unsaved changes",
+				message: "Leave and discard unsaved changes?",
+				defaultId: 0,
+				cancelId: 0,
+				noLink: true,
+			});
+			// Electron's event cancels the renderer's veto, so preventing it permits unloading.
+			if (choice === 1) event.preventDefault();
+		});
 		window.webContents.on("will-navigate", (event, url) => {
 			// Only the app's own view links may navigate.
 			if (
 				![
 					"app://world/index.html",
 					"app://world/index.html?",
+					"app://world/index.html?world",
 					"app://world/index.html?workplace=chat",
 					"app://world/index.html?workplace=mail",
 					"app://world/index.html?workplace=org",
+					"app://world/index.html?workplace=code",
+					"app://world/index.html?workplace=issues",
 				].includes(url)
 			)
 				event.preventDefault();
 		});
-		void window.loadURL("app://world/index.html");
-
 		const capture = process.env.AGENT_WORLD_CAPTURE;
+		void window.loadURL(capture ? "app://world/index.html?world" : "app://world/index.html");
 		if (capture) window.webContents.once("did-finish-load", () => window && void captureWhenDrawn(window, capture));
 	});
 }

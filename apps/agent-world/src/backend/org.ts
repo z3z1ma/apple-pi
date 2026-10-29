@@ -180,14 +180,25 @@ export function openOrg(paths: { db: string; agentDir: string }, commands: Comma
 						original?.goal &&
 						(original.cwd !== cwd ||
 							original.role !== position.role ||
+							(original.specialization ?? "") !== (position.specialization?.trim() ?? "") ||
 							original.goal.text !== (position.goal?.trim() || request.goal.trim()))
 					)
-						return reject("A prepared person's role, working directory and goal cannot change on retry.");
+						return reject(
+							"A prepared person's role, specialization, working directory and goal cannot change on retry.",
+						);
 					if (position.person && previous && position.person !== previous.session_id)
 						return reject("A retry changed a prepared person's identity.");
 					const id = previous?.session_id ?? position.person ?? randomUUID();
 					progress.people.find((person) => person.id === position.id)!.person = id;
 					const existing = people.get(id);
+					if (
+						!existing &&
+						position.specialization?.trim() &&
+						!read((db) => db.prepare("select 1 from pragma_table_info('sessions') where name = 'specialization'").get())
+					)
+						return reject(
+							"Restart the session runtime with current code before creating a person with specialization.",
+						);
 					if (unavailable.has(id) || existing?.retired_at != null)
 						return reject("Temporary or departed people cannot join a planned team.");
 					if (!existing && (!position.role || !roles.has(position.role) || !(position.goal ?? request.goal).trim()))
@@ -284,6 +295,7 @@ export function openOrg(paths: { db: string; agentDir: string }, commands: Comma
 			const hire = (position: OrgStartRequest["positions"][number]) => ({
 				name: position.name?.trim() || undefined,
 				role: position.role,
+				...(position.specialization?.trim() ? { specialization: position.specialization.trim() } : {}),
 				goal: { by: "operator", text: position.goal?.trim() || request.goal.trim() },
 			});
 			const startUnresolved = (

@@ -21,7 +21,7 @@ import { PERSON_TILES } from "../web/game/walker.js";
 // click, and its menu with its own verbs, poses, and Examine line; a pet asleep purrs on in its sleep when petted and
 // wakes to play. None of it calls the backend.
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-const ORIGIN = "http://agent-world.test";
+const ORIGIN = "http://localhost";
 const appDir = fileURLToPath(new URL("..", import.meta.url));
 // AGENT_WORLD_SHOTS=<dir> saves close-ups there as aw-03-<theme>-<look>-*.png.
 const SHOTS = process.env.AGENT_WORLD_SHOTS;
@@ -121,7 +121,7 @@ async function openWorld(theme: string) {
 			},
 		});
 	}, world(theme));
-	await page.goto(`${ORIGIN}/index.html`);
+	await page.goto(`${ORIGIN}/index.html?world`);
 	await vi.waitFor(async () => expect(await view(page, "avatar()")).toBeTruthy(), { timeout: 15000 });
 	await page.waitForTimeout(500);
 	await page.addStyleTag({ content: ".aw-interface, .aw-interface * { pointer-events: none !important; }" });

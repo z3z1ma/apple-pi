@@ -1,0 +1,61 @@
+.wp-org-name {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 8px;
+	min-width: 0;
+}
+.wp-org-name :is(strong, h1, h2) {
+	margin: 0;
+	overflow-wrap: anywhere;
+}
+.wp-org-name h1 {
+	font-size: 20px;
+}
+.wp-org-name h2 {
+	font-size: 18px;
+}
+.wp-org-name button,
+.wp-org-name-editor button {
+	padding: 6px 9px;
+	border: 1px solid var(--wp-border);
+	border-radius: 5px;
+	background: var(--wp-bg);
+	color: var(--wp-text);
+	font: inherit;
+	font-size: 12px;
+	cursor: pointer;
+}
+.wp-org-name-editor {
+	min-width: 0;
+	color: var(--wp-text);
+}
+.wp-org-name-editor label {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	font-size: 12px;
+}
+.wp-org-name-editor input {
+	box-sizing: border-box;
+	width: 100%;
+	min-width: 0;
+	padding: 8px;
+	border: 1px solid var(--wp-border);
+	border-radius: 5px;
+	background: var(--wp-bg);
+	color: var(--wp-text);
+	font: inherit;
+}
+.wp-org-name-editor p {
+	color: var(--wp-muted);
+	font-size: 11px;
+	line-height: 1.5;
+}
+.wp-org-name-editor > div {
+	display: flex;
+	gap: 8px;
+}
+.wp-org-name-editor [role="alert"] {
+	color: var(--wp-danger);
+}

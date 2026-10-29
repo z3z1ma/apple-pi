@@ -26,6 +26,19 @@ import type {
 } from "../world.js";
 
 const api: AgentWorldApi = {
+	workspace: {
+		repositories: () =>
+			ipcRenderer.invoke("workspace:repositories") as ReturnType<AgentWorldApi["workspace"]["repositories"]>,
+		tree: (request) => ipcRenderer.invoke("workspace:tree", request) as ReturnType<AgentWorldApi["workspace"]["tree"]>,
+		readFile: (request) =>
+			ipcRenderer.invoke("workspace:read-file", request) as ReturnType<AgentWorldApi["workspace"]["readFile"]>,
+		saveFile: (request) =>
+			ipcRenderer.invoke("workspace:save-file", request) as ReturnType<AgentWorldApi["workspace"]["saveFile"]>,
+		gitStatus: (request) =>
+			ipcRenderer.invoke("workspace:git-status", request) as ReturnType<AgentWorldApi["workspace"]["gitStatus"]>,
+		gitDiff: (request) =>
+			ipcRenderer.invoke("workspace:git-diff", request) as ReturnType<AgentWorldApi["workspace"]["gitDiff"]>,
+	},
 	snapshot: () => ipcRenderer.invoke("world:snapshot") as Promise<WorldSnapshot>,
 	onUpdate(listener) {
 		const forward = (_event: unknown, update: WorldUpdate) => listener(update);

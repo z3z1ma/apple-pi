@@ -13,7 +13,7 @@ import type { PlaceData } from "../web/theme.js";
 // the coordinator's desk (and the coordinator) recruits a worker for that coordinator, and the square's recruiter an
 // independent agent, each in the theme's own words; the form offers the package's role catalog with each mandate.
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-const ORIGIN = "http://agent-world.test";
+const ORIGIN = "http://localhost";
 const appDir = fileURLToPath(new URL("..", import.meta.url));
 // AGENT_WORLD_SHOTS=<dir> saves screenshots there as aw-10-<theme>-*.png.
 const SHOTS = process.env.AGENT_WORLD_SHOTS;
@@ -176,7 +176,7 @@ async function openWorld(theme: string) {
 		},
 		[world(theme), themes, ROLES] as const,
 	);
-	await page.goto(`${ORIGIN}/index.html`);
+	await page.goto(`${ORIGIN}/index.html?world`);
 	await vi.waitFor(async () => expect(await page.evaluate(() => document.documentElement.dataset.theme)).toBe(theme), {
 		timeout: 20000,
 	});

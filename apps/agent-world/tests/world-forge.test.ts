@@ -11,7 +11,7 @@ import type { PlaceData } from "../web/theme.js";
 // Seam 2 for the forge (tickets 21-23): the committed, built world UI in headless Chrome over a fixture backend that
 // answers the integrations API (pull requests, a diff, the outside-write gate, delegation) and records every call.
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-const ORIGIN = "http://agent-world.test";
+const ORIGIN = "http://localhost";
 const appDir = fileURLToPath(new URL("..", import.meta.url));
 // AGENT_WORLD_SHOTS=<dir> saves screenshots there as aw-2x-*.png.
 const SHOTS = process.env.AGENT_WORLD_SHOTS;
@@ -275,7 +275,7 @@ async function openWorld(first: WorldSnapshot, answers: Record<string, unknown> 
 		},
 		{ snapshot: first, prs: PRS, detail: DETAIL, answers },
 	);
-	await page.goto(`${ORIGIN}/index.html`);
+	await page.goto(`${ORIGIN}/index.html?world`);
 	await vi.waitFor(async () => expect(await view(page, "avatar()")).toBeTruthy(), { timeout: 15000 });
 	await page.waitForTimeout(400); // the arrival fade
 	return { page, errors };

@@ -14,7 +14,7 @@ import type { PlaceData } from "../web/theme.js";
 // on the square's minimap as an arrow at its edge, reached by walking out of the square and left by walking back, and
 // it holds the townsfolk (unread Slack channels) the square has no room for.
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-const ORIGIN = "http://agent-world.test";
+const ORIGIN = "http://localhost";
 const appDir = fileURLToPath(new URL("..", import.meta.url));
 // AGENT_WORLD_SHOTS=<dir> saves screenshots there as aw-alive-09-*.png.
 const SHOTS = process.env.AGENT_WORLD_SHOTS;
@@ -92,7 +92,7 @@ async function openWorld(first: WorldSnapshot) {
 		},
 		[first, CHANNELS] as const,
 	);
-	await page.goto(`${ORIGIN}/index.html`);
+	await page.goto(`${ORIGIN}/index.html?world`);
 	await vi.waitFor(async () => expect(await view(page, "avatar()")).toBeTruthy(), { timeout: 15000 });
 	await page.waitForTimeout(500); // the arrival fade
 	return { page, errors };

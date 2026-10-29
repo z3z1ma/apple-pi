@@ -6,5 +6,9 @@ The caller supplies only lasting people using authoritative temporary metadata, 
 
 Avatar tiles have explicit square dimensions and a nonshrinking flex basis. The original fixed-width cards squeezed shared avatar spans; state and fit tests did not establish a usable overview. Keep rendered square-avatar, parent/sibling geometry and fitted horizontal-overflow checks at representative widths. Task context comes from recorded team work, distinct from the current members' work histories; it is not inferred from the reporting tree.
 
-Coupled: apps/agent-world/web/workplace-org-chart.css, apps/agent-world/web/workplace-org.tsx, apps/agent-world/web/workplace-people.tsx
+Chromium trackpad pinch arrives as ctrl+wheel. The focused chart owns a nonpassive native wheel listener while ordinary wheel scrolling stays native. Pointer anchoring captures graph coordinates before scaling and restores them through scroll offsets after layout; normal scroll edges can constrain that anchor when content fits. Pinch rejects nonpositive or nonfinite scales without adding range limits; the existing toolbar zoom range is unchanged.
+Why: a passive wheel listener cannot prevent document zoom. Restoring scroll before React applies the new canvas dimensions anchors against the old geometry and moves the point under the pointer.
+
+Overview/focused titles use local organization display preferences; person names and stable IDs remain unchanged. Card name editing is outside the person-profile button, so Save/Cancel never opens a profile or moves a branch. Overview density keeps head identity, inline member counts, compact work context and actions; zero-at-home and repeated role/status prose add no information there.
+Coupled: apps/agent-world/web/workplace-names.ts, apps/agent-world/web/workplace-org-name.tsx, apps/agent-world/web/workplace-org-chart.css, apps/agent-world/web/workplace-org.tsx, apps/agent-world/web/workplace-people.tsx
 Verify: apps/agent-world/tests/world-org.test.ts

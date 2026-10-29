@@ -9,7 +9,7 @@ import type { Character, CharacterFacts, MailThread, TranscriptEntry, WorldSnaps
 // Seam 2 for the conversation panel: the committed, built world UI in headless Chrome, with the preload API replaced by
 // a fixture backend that pages fixture transcripts and records what the panel asks of it.
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-const ORIGIN = "http://agent-world.test";
+const ORIGIN = "http://localhost";
 const appDir = fileURLToPath(new URL("..", import.meta.url));
 // AGENT_WORLD_SHOTS=<dir> saves screenshots of the panel there, as aw-<ticket>-*.png.
 const SHOTS = process.env.AGENT_WORLD_SHOTS;
@@ -442,7 +442,7 @@ async function openWorld(
 		},
 		[first, transcripts, PAGE, threads] as const,
 	);
-	await page.goto(`${ORIGIN}/index.html`);
+	await page.goto(`${ORIGIN}/index.html?world`);
 	await vi.waitFor(async () => expect(await page.evaluate(() => (window as any).agentWorldView.place())).toBeTruthy(), {
 		timeout: 15000,
 	});
@@ -1506,7 +1506,7 @@ async function openWorkplaceChannel(conversations: Record<string, TranscriptEntr
 	const { page, errors } = await openWorld(initial, conversations, [thread]);
 	page.setDefaultTimeout(5000);
 	await page.getByRole("link", { name: "Workplace", exact: true }).click();
-	await page.getByRole("button", { name: "# Engineering", exact: true }).click();
+	await page.getByRole("button", { name: "# team-orla", exact: true }).click();
 	await page.getByRole("button", { name: "Join channel", exact: true }).waitFor();
 	return { page, errors, id };
 }
@@ -1518,7 +1518,7 @@ test("channel author and participant names open their exact DMs without sending 
 		await log(page).getByText("Raising the timeouts now.").waitFor();
 		expect(await pages(page)).toEqual([["pi-tests", null]]);
 		await page.getByRole("textbox", { name: "Instruct pi-tests", exact: true }).fill("Keep this DM draft.");
-		await page.getByRole("button", { name: "# Engineering", exact: true }).click();
+		await page.getByRole("button", { name: "# team-orla", exact: true }).click();
 		await page.locator(".wp-thread-header").getByRole("button", { name: "Orla", exact: true }).click();
 		await page.locator(".wp-conversation-header").getByRole("heading", { name: "Orla", exact: true }).waitFor();
 		await vi.waitFor(async () => expect((await pages(page)).at(-1)).toEqual([HQ, null]));
@@ -1968,7 +1968,7 @@ test("profiles load full Self only on demand, expand fields independently at 200
 			});
 		});
 		await profile.getByRole("button", { name: "View recorded work (1)", exact: true }).waitFor();
-		await profile.getByText("Most recent: Recorded completed work", { exact: true }).waitFor();
+		await profile.getByText("Recorded completed work", { exact: true }).waitFor();
 		expect(await profile.getByText("Record", { exact: true }).count()).toBe(0);
 		await storyField.getByText(`${"s".repeat(200)}\u2026`, { exact: true }).waitFor();
 

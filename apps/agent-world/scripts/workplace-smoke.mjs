@@ -303,7 +303,11 @@ try {
 		};
 	});
 	await page.emulateMedia({ colorScheme: "light" });
-	await page.goto("http://workplace.test/?workplace=chat");
+	await page.goto("http://workplace.test/");
+	await page.locator(".wp-app").waitFor();
+	assert.equal(new URL(page.url()).search, "");
+	assert.equal(await page.title(), "Workplace");
+	assert.equal(await page.getByRole("link", { name: "World", exact: true }).getAttribute("href"), "?world");
 	const theme = page.getByRole("button", { name: "Theme: dark mode", exact: true });
 	await theme.waitFor();
 	assert.equal(await theme.getAttribute("aria-pressed"), "false");

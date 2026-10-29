@@ -1,5 +1,5 @@
-// World stays the default. Workplace loads only when the query asks for it.
-if (new URLSearchParams(location.search).has("workplace")) {
+// Workplace is home; only the explicit World route starts the game.
+if (location.search !== "?world") {
 	await import("./workplace.js");
 } else {
 	await import("./main.js");

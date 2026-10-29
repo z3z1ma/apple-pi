@@ -17,7 +17,7 @@ import type { Character, CharacterFacts, WorldSnapshot } from "../src/world.js";
 // fixture backend that answers the function places' API (Atlassian sign-in, Jira, Confluence, the outside-write gate,
 // delegation) and records every call, so a test can tell what was sent and that nothing was written unconfirmed.
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-const ORIGIN = "http://agent-world.test";
+const ORIGIN = "http://localhost";
 const appDir = fileURLToPath(new URL("..", import.meta.url));
 // AGENT_WORLD_SHOTS=<dir> saves screenshots there as aw-24-*.png, aw-25-*.png, aw-26-*.png, in every theme.
 const SHOTS = process.env.AGENT_WORLD_SHOTS;
@@ -327,7 +327,7 @@ async function openWorld(first: WorldSnapshot, signedIn: boolean, assigned: Jira
 			data: { assigned, search: SEARCH, detail: DETAIL, transitions: TRANSITIONS, pages: PAGES, page: PAGE },
 		},
 	);
-	await page.goto(`${ORIGIN}/index.html`);
+	await page.goto(`${ORIGIN}/index.html?world`);
 	await vi.waitFor(async () => expect(await view(page, "avatar()")).toBeTruthy(), { timeout: 15000 });
 	await page.waitForTimeout(400);
 	return { page, errors };

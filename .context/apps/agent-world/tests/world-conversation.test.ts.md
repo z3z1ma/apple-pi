@@ -5,6 +5,10 @@ Why: a fixture that accepts a command without updating its next read can falsely
 Coupled: apps/agent-world/web/workplace.tsx, apps/agent-world/web/overlay/conversation/transcript.tsx, apps/agent-world/tests/channel-membership.test.ts, components/session-state/tests/channel-membership.test.ts
 Verify: apps/agent-world/tests/build.test.ts
 
+The fixture explicitly enters `?world` before testing World conversations or following the Workplace link; bare entry now belongs to Workplace Chat. Keep the channel fixture's original `Engineering` subject and `team:orla` ID while querying its displayed `# team-orla` name.
+Why: the two surfaces have different entry contracts, and organization naming changes display labels without changing thread identity, history, or membership.
+Coupled: apps/agent-world/web/entry.ts, apps/agent-world/web/workplace-names.ts
+
 Text-only transcripts retain identity controls. Check the absence of diagnostic folds and historical detail, rather than a global zero-button count that would prohibit avatar/profile navigation. Profile opening reads snapshot facts plus on-demand Self, without history/seen effects; entering the DM performs the ordinary conversation reads. The fixture returns the pre-read channel cursor, advances it after a participant read or own post, and publishes matching unread summaries. Global sequence gaps and own posts exercise the boundary rather than a guessed count-derived cursor. Test focus after replacing an open profile as well as closing its first instance.
 Coupled: apps/agent-world/web/workplace-people.tsx
 

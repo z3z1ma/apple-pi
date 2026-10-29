@@ -10,7 +10,7 @@ import type { PlaceData, Point } from "../web/theme.js";
 
 // Seam 2 (the built world UI in headless Chrome against a fixture backend), for walking, pointing, and the camera.
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-const ORIGIN = "http://agent-world.test";
+const ORIGIN = "http://localhost";
 const appDir = fileURLToPath(new URL("..", import.meta.url));
 // AGENT_WORLD_SHOTS=<dir> saves screenshots, including a frame sequence of one walk, as aw-06-*.png.
 const SHOTS = process.env.AGENT_WORLD_SHOTS;
@@ -65,7 +65,7 @@ async function openWorld(first: WorldSnapshot) {
 		(window as any).contextMenus = [];
 		document.addEventListener("contextmenu", (event) => (window as any).contextMenus.push(event.defaultPrevented));
 	}, first);
-	await page.goto(`${ORIGIN}/index.html`);
+	await page.goto(`${ORIGIN}/index.html?world`);
 	// These tests click the world itself: let clicks pass through the interface's panels (still drawn for screenshots).
 	await page.addStyleTag({ content: ".aw-interface, .aw-interface * { pointer-events: none !important; }" });
 	await vi.waitFor(async () => expect(await avatar(page)).toBeTruthy(), { timeout: 15000 });

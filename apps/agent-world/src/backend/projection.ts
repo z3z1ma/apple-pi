@@ -24,6 +24,7 @@ export interface SessionRow {
 	/** When it first started (ms), or undefined when it never had an incarnation. */
 	firstStartedAt: number | undefined;
 	hiredAt?: number | null;
+	specialization?: string | null;
 	/** When its current incarnation ended (ms); undefined while it runs or when unknown. */
 	stoppedAt?: number;
 }
@@ -35,6 +36,7 @@ export interface Sleeper {
 	role: Role;
 	title: string | null;
 	hiredAt?: number | null;
+	specialization?: string | null;
 	startedAt: number;
 	stoppedAt: number | null;
 	retiredAt: number | null;
@@ -131,6 +133,7 @@ export function projectWorld(sessions: SessionRow[], remembered: RememberedWings
 			role: roleOf(session),
 			title: session.title,
 			hiredAt: session.hiredAt ?? null,
+			specialization: session.specialization ?? null,
 			startedAt: session.firstStartedAt ?? 0,
 			stoppedAt: session.stoppedAt ?? null,
 			retiredAt: session.retiredAt,
@@ -144,6 +147,7 @@ export function projectWorld(sessions: SessionRow[], remembered: RememberedWings
 		role: roleOf(session),
 		place: placeOf(session),
 		hiredAt: session.hiredAt ?? null,
+		specialization: session.specialization ?? null,
 		startedAt: session.firstStartedAt ?? 0,
 	}));
 

@@ -13,7 +13,7 @@ import type { PlaceData } from "../web/theme.js";
 // avatar walks up, then its default play changes how it looks), and the right-click menu (every play and Examine);
 // and none of it calls the backend: a fidget sends no command and makes no outside call.
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-const ORIGIN = "http://agent-world.test";
+const ORIGIN = "http://localhost";
 const appDir = fileURLToPath(new URL("..", import.meta.url));
 // AGENT_WORLD_SHOTS=<dir> saves close-ups there as aw-29-<theme>-<kind>-*.png.
 const SHOTS = process.env.AGENT_WORLD_SHOTS;
@@ -112,7 +112,7 @@ async function openWorld(theme: string) {
 			},
 		});
 	}, world(theme));
-	await page.goto(`${ORIGIN}/index.html`);
+	await page.goto(`${ORIGIN}/index.html?world`);
 	await vi.waitFor(async () => expect(await view(page, "avatar()")).toBeTruthy(), { timeout: 15000 });
 	await page.waitForTimeout(500);
 	// Clicks reach the world through the interface's panels (they still draw for screenshots).

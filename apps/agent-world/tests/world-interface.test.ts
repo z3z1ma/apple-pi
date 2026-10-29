@@ -9,7 +9,7 @@ import type { Character, CharacterFacts, FeedLine, PlaceRef, WorldSnapshot } fro
 // Seam 2 for the interface (minimap, orbs, side panel, chatbox): the committed, built world UI in headless Chrome,
 // with the preload API replaced by a fixture backend that records what the interface asks of it.
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-const ORIGIN = "http://agent-world.test";
+const ORIGIN = "http://localhost";
 const appDir = fileURLToPath(new URL("..", import.meta.url));
 // AGENT_WORLD_SHOTS=<dir> saves screenshots of each tab and the chatbox there, as aw-08-*.png.
 const SHOTS = process.env.AGENT_WORLD_SHOTS;
@@ -68,7 +68,7 @@ async function openWorld(first: WorldSnapshot, backlog: FeedLine[] = []) {
 		},
 		[first, backlog] as const,
 	);
-	await page.goto(`${ORIGIN}/index.html`);
+	await page.goto(`${ORIGIN}/index.html?world`);
 	const push = (snapshot: WorldSnapshot) => page.evaluate((s) => (window as any).pushSnapshot(s), snapshot);
 	const pushFeed = (lines: FeedLine[]) => page.evaluate((l) => (window as any).pushFeed(l), lines);
 	await vi.waitFor(async () => expect(await place(page)).toBeTruthy(), { timeout: 15000 });

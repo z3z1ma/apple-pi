@@ -23,6 +23,7 @@ export function AddPerson({
 	const person = world.characters.find((candidate) => candidate.id === manager);
 	const [cwd, setCwd] = useState(person?.facts?.cwd ?? "");
 	const [goal, setGoal] = useState("");
+	const [specialization, setSpecialization] = useState("");
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string>();
 	const [pending, setPending] = useState<{ id: string; note: string }>();
@@ -72,6 +73,7 @@ export function AddPerson({
 				brief: goal.trim(),
 				reportsTo: manager,
 				role,
+				...(specialization.trim() ? { specialization: specialization.trim() } : {}),
 			});
 			if (!receipt.ok) {
 				if (receipt.sessionId) {
@@ -134,6 +136,17 @@ export function AddPerson({
 							</p>
 						</div>
 					)}
+					<label htmlFor={`${id}-specialization`}>Specialization</label>
+					<textarea
+						id={`${id}-specialization`}
+						className="wp-specialization"
+						value={specialization}
+						rows={2}
+						aria-describedby={`${id}-specialization-help`}
+						placeholder="Focus on keyboard and screen-reader behavior."
+						onChange={(event) => setSpecialization(event.target.value)}
+					/>
+					<p id={`${id}-specialization-help`}>A focus within this role. All role responsibilities still apply.</p>
 					<label htmlFor={`${id}-name`}>Name (optional)</label>
 					<input
 						id={`${id}-name`}

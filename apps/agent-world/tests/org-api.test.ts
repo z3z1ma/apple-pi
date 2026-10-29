@@ -6,7 +6,7 @@ const team = () => ({
 	cwd: "/work/project",
 	goal: "Deliver the agreed work.",
 	positions: [
-		{ id: "head", role: "coordinator", manager: null },
+		{ id: "head", role: "coordinator", manager: null, specialization: "Operational clarity" },
 		{
 			id: "report",
 			person: "existing-person",
@@ -60,6 +60,7 @@ test("malformed start IPC fields are refused before reaching the controller", ()
 		["person", {}],
 		["name", []],
 		["goal", false],
+		["specialization", 3],
 	] as const) {
 		expect(isOrgStartRequest({ ...team(), positions: [{ id: "head", manager: null, [field]: value }] })).toBe(false);
 	}

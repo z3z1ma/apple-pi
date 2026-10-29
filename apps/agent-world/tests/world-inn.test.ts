@@ -10,7 +10,7 @@ import type { PlaceData } from "../web/theme.js";
 // Seam 2 for the inn (ticket 15): the committed, built world UI in headless Chrome over a fixture backend that records
 // what the world asks of it (wakes, ended sessions) and answers with receipts.
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-const ORIGIN = "http://agent-world.test";
+const ORIGIN = "http://localhost";
 const appDir = fileURLToPath(new URL("..", import.meta.url));
 // AGENT_WORLD_SHOTS=<dir> saves screenshots there as aw-15-*.png.
 const SHOTS = process.env.AGENT_WORLD_SHOTS;
@@ -91,7 +91,7 @@ async function openWorld(first: WorldSnapshot) {
 			for (const listener of listeners) listener(next);
 		};
 	}, first);
-	await page.goto(`${ORIGIN}/index.html`);
+	await page.goto(`${ORIGIN}/index.html?world`);
 	const push = (snapshot: WorldSnapshot) => page.evaluate((s) => (window as any).pushSnapshot(s), snapshot);
 	await vi.waitFor(async () => expect(await view(page, "avatar()")).toBeTruthy(), { timeout: 15000 });
 	await page.waitForTimeout(400); // the arrival fade

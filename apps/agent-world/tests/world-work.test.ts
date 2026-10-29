@@ -9,7 +9,7 @@ import type { Character, CharacterFacts, WorldSnapshot } from "../src/world.js";
 // Explicit focused work in the agent rows, Work tab, examine card, and conversation panel.
 // The built world UI in headless Chrome against a fixture backend.
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-const ORIGIN = "http://agent-world.test";
+const ORIGIN = "http://localhost";
 const appDir = fileURLToPath(new URL("..", import.meta.url));
 // AGENT_WORLD_SHOTS=<dir> saves screenshots as aw-13-*.png.
 const SHOTS = process.env.AGENT_WORLD_SHOTS;
@@ -43,7 +43,7 @@ async function openWorld(snapshot: WorldSnapshot) {
 			markSeen: async () => ({ ok: true }),
 		};
 	}, snapshot);
-	await page.goto(`${ORIGIN}/index.html`);
+	await page.goto(`${ORIGIN}/index.html?world`);
 	// The interface draws before the world starts; the world handles Talk to only once a place is shown.
 	await vi.waitFor(
 		async () => expect(await page.evaluate(() => (window as any).agentWorldView?.place())).toBeTruthy(),

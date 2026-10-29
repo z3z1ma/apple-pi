@@ -137,7 +137,7 @@ function world(): WorldSnapshot {
 		],
 		characters: [
 			person("ada", "Ada", null, true),
-			person("ben", "Ben", "ada", true),
+			{ ...person("ben", "Ben", "ada", true), specialization: "Coordinate accessibility reviews." },
 			{
 				...person("cleo", "Cleo", "ben"),
 				facts: {
@@ -185,7 +185,7 @@ function world(): WorldSnapshot {
 }
 
 // Built UI over an isolated preload fixture. Runtime suites own authorization and durable work/channel invariants.
-async function openOrg(appearance: "light" | "dark" = "light") {
+async function openOrg(appearance: "light" | "dark" = "light", snapshot: WorldSnapshot = world()) {
 	const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, colorScheme: appearance });
 	page.setDefaultTimeout(5000);
 	const errors: string[] = [];
@@ -217,6 +217,9 @@ async function openOrg(appearance: "light" | "dark" = "light") {
 				wakes: [],
 				closes: [],
 				recruits: [],
+				renames: [],
+				channelReads: [],
+				memberships: [],
 			};
 			w.pushOrg = (next: WorldSnapshot) => {
 				current = next;
@@ -233,7 +236,7 @@ async function openOrg(appearance: "light" | "dark" = "light") {
 				roles: async () => catalog,
 				readTask: async (id: string) => {
 					w.orgCalls.taskReads.push(id);
-					return { ok: true, text: `# Task evidence\n\nExplicitly loaded task: ${id}.` };
+					return { ok: true, text: w.taskBody ?? `# Task evidence\n\nExplicitly loaded task: ${id}.` };
 				},
 				profile: async (id: string) => {
 					w.orgCalls.profiles.push(id);
@@ -248,6 +251,21 @@ async function openOrg(appearance: "light" | "dark" = "light") {
 					return { ok: true };
 				},
 				goToTerminal: async () => ({ ok: true }),
+				rename: async (id: string, name: string) => {
+					w.orgCalls.renames.push({ id, name });
+					return { ok: true, stage: "applied" };
+				},
+				setChannelMembership: async (id: string, joined: boolean) => {
+					w.orgCalls.memberships.push({ id, joined });
+					return { ok: true, stage: "applied" };
+				},
+				readWorkplaceThread: async (id: string) => {
+					w.orgCalls.channelReads.push(id);
+					return {
+						ok: true,
+						thread: { id, subject: "Original team channel", closed: false, participants: [], messages: [] },
+					};
+				},
 				onReceipt: () => () => {},
 				onReply: () => () => {},
 				watchReplies: async () => {},
@@ -285,9 +303,9 @@ async function openOrg(appearance: "light" | "dark" = "light") {
 				},
 			};
 		},
-		[world(), CATALOG] as const,
+		[snapshot, CATALOG] as const,
 	);
-	await page.goto(`${ORIGIN}/index.html`);
+	await page.goto(`${ORIGIN}/index.html?world`);
 	await page.getByRole("link", { name: "Workplace", exact: true }).click();
 	await page.getByRole("button", { name: "Org", exact: true }).click();
 	return { page, errors };
@@ -415,6 +433,118 @@ test.each(["light", "dark"] as const)(
 	},
 	30_000,
 );
+
+test("organization display names persist locally, cancel cleanly and relabel channels without changing their identity", async () => {
+	const snapshot = world();
+	snapshot.workplace!.threads = [
+		{
+			id: "organization:ada",
+			kind: "channel",
+			subject: "Original team channel",
+			createdBy: "ada",
+			headquarters: "ada",
+			closed: false,
+			lastSeq: 0,
+			lastAt: NOW,
+			participants: ["ada", "ben"],
+		},
+	];
+	const { page, errors } = await openOrg("light", snapshot);
+	try {
+		const rename = page.getByRole("button", { name: "Rename organization: Ada organization", exact: true });
+		await rename.click();
+		const form = page.getByRole("form", { name: "Rename organization", exact: true });
+		await form.getByRole("textbox", { name: "Organization name", exact: true }).fill("Discarded name");
+		await form.getByRole("button", { name: "Cancel", exact: true }).click();
+		await rename.waitFor();
+		await rename.click();
+		await form.getByRole("textbox", { name: "Organization name", exact: true }).fill("Reporting Team");
+		await form.getByRole("button", { name: "Save name", exact: true }).click();
+		await page.getByRole("button", { name: "Rename organization: Reporting Team", exact: true }).waitFor();
+		await openTeam(page, "Ada");
+		await page.getByRole("heading", { name: "Reporting Team", exact: true }).waitFor();
+		await page.getByRole("button", { name: "View profile: Ada", exact: true }).waitFor();
+		await shot(page, "light-organization-name");
+		await page.getByRole("button", { name: "Chat", exact: true }).click();
+		await page.getByRole("button", { name: "# org-reporting-team", exact: true }).waitFor();
+		let calls = await page.evaluate(() => (window as any).orgCalls);
+		for (const action of ["renames", "channelReads", "memberships", "conversations", "seen"])
+			expect(calls[action]).toEqual([]);
+		await page.reload();
+		await page.getByRole("button", { name: "# org-reporting-team", exact: true }).waitFor();
+		await page.getByRole("button", { name: "Org", exact: true }).click();
+		await page.getByRole("button", { name: "Rename organization: Reporting Team", exact: true }).waitFor();
+		await page.getByRole("button", { name: "Chat", exact: true }).click();
+		await page.getByRole("button", { name: "# org-reporting-team", exact: true }).click();
+		await page.getByRole("heading", { name: "# org-reporting-team", exact: true }).waitFor();
+		await vi.waitFor(async () =>
+			expect(await page.evaluate(() => (window as any).orgCalls.channelReads)).toEqual(["organization:ada"]),
+		);
+		calls = await page.evaluate(() => (window as any).orgCalls);
+		for (const action of ["renames", "memberships", "conversations", "seen", "moves", "starts", "recruits"])
+			expect(calls[action]).toEqual([]);
+		expect(errors).toEqual([]);
+	} finally {
+		await page.close();
+	}
+}, 30_000);
+
+test("trackpad pinch zooms the chart around its pointer without page zoom; ordinary wheel still scrolls", async () => {
+	const { page, errors } = await openOrg();
+	try {
+		await openTeam(page, "Ada");
+		const viewport = page.locator(".wp-org-chart-viewport");
+		const canvas = page.locator(".wp-org-chart-canvas");
+		for (let i = 0; i < 7; i++) await page.getByRole("button", { name: "Zoom in", exact: true }).click();
+		await viewport.evaluate((node) => {
+			node.scrollLeft = (node.scrollWidth - node.clientWidth) / 2;
+			node.scrollTop = (node.scrollHeight - node.clientHeight) / 2;
+			(window as any).chartWheelEvents = [];
+			document.addEventListener("wheel", (event) => {
+				(window as any).chartWheelEvents.push({ ctrl: event.ctrlKey, prevented: event.defaultPrevented });
+			});
+		});
+		const bounds = (await viewport.boundingBox())!;
+		const pointer = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
+		const geometry = () =>
+			canvas.evaluate((node, pointer) => {
+				const rect = node.getBoundingClientRect();
+				const scale = new DOMMatrix(getComputedStyle(node).transform).a;
+				return {
+					scale,
+					x: (pointer.x - rect.x) / scale,
+					y: (pointer.y - rect.y) / scale,
+					page: { width: innerWidth, height: innerHeight, ratio: devicePixelRatio, scale: visualViewport?.scale },
+				};
+			}, pointer);
+		const before = await geometry();
+		expect(await viewport.evaluate((node) => node.scrollLeft > 0 && node.scrollTop > 0)).toBe(true);
+		await page.mouse.move(pointer.x, pointer.y);
+		await page.keyboard.down("Control");
+		await page.mouse.wheel(0, -30);
+		await page.keyboard.up("Control");
+		await vi.waitFor(async () => expect((await geometry()).scale).toBeGreaterThan(before.scale));
+		const after = await geometry();
+		expect(Math.abs(after.x - before.x) * after.scale).toBeLessThanOrEqual(1);
+		expect(Math.abs(after.y - before.y) * after.scale).toBeLessThanOrEqual(1);
+		expect(after.page).toEqual(before.page);
+		await shot(page, "light-pinch-zoom");
+		expect(await page.evaluate(() => (window as any).chartWheelEvents)).toContainEqual({ ctrl: true, prevented: true });
+		const scroll = await viewport.evaluate((node) => node.scrollTop);
+		await page.mouse.wheel(0, 120);
+		await vi.waitFor(async () => expect(await viewport.evaluate((node) => node.scrollTop)).toBeGreaterThan(scroll));
+		expect((await geometry()).scale).toBe(after.scale);
+		expect(await page.evaluate(() => (window as any).chartWheelEvents)).toContainEqual({
+			ctrl: false,
+			prevented: false,
+		});
+		expect((await geometry()).page).toEqual(before.page);
+		expect(await page.evaluate(() => (window as any).orgCalls.moves)).toEqual([]);
+		expect(errors).toEqual([]);
+	} finally {
+		await page.close();
+	}
+}, 30_000);
 
 const card = (page: Page, name: string) =>
 	page
@@ -596,6 +726,9 @@ test("planned catalog roles can repeat, retain edits across Chat/Mail, and open 
 		for (const name of ["Ben", "Cleo", "Ellis"]) await plan.getByText(name, { exact: true }).waitFor();
 		expect(await plan.getByText(/^Existing person.*staged/).count()).toBe(3);
 		expect(await page.getByRole("textbox", { name: "Name (optional)", exact: true }).inputValue()).toBe("Ben");
+		const specialization = plan.getByRole("textbox", { name: "Specialization", exact: true });
+		expect(await specialization.inputValue()).toBe("Coordinate accessibility reviews.");
+		expect(await specialization.evaluate((node) => (node as HTMLTextAreaElement).readOnly)).toBe(true);
 		const calls = await page.evaluate(() => (window as any).orgCalls);
 		for (const action of ["moves", "starts", "wakes", "closes", "recruits"]) expect(calls[action]).toEqual([]);
 		expect(errors).toEqual([]);
@@ -632,7 +765,12 @@ test.each([false, true])(
 			await page.getByRole("button", { name: "Mail", exact: true }).click();
 			await page.getByRole("button", { name: "Org", exact: true }).click();
 			await shot(page, "dark-pending-return");
-			expect(await page.getByRole("textbox", { name: "Team task", exact: true }).inputValue()).toBe(first.goal);
+			const plan = page.getByRole("complementary", { name: "Team plan", exact: true });
+			expect(await plan.getByRole("textbox", { name: "Team task", exact: true }).isVisible()).toBe(false);
+			await plan.getByText("Setup plan", { exact: true }).click();
+			expect(await plan.getByRole("textbox", { name: "Team task", exact: true }).inputValue()).toBe(first.goal);
+			expect(await plan.getByRole("textbox", { name: "Team task", exact: true }).isEnabled()).toBe(false);
+			await plan.getByText("Setup plan", { exact: true }).click();
 			expect(await page.evaluate(() => (window as any).orgCalls.starts)).toHaveLength(1);
 			const partial = {
 				id: first.id,
@@ -700,7 +838,10 @@ test.each([false, true])(
 				(window as any).progressOrg(progress);
 				(window as any).releaseOrgStart(progress);
 			}, complete);
-			await page.getByText("Team prepared. The head has received the kickoff.", { exact: true }).waitFor();
+			await page
+				.getByRole("region", { name: "Team setup progress", exact: true })
+				.getByText("Sent the team task to New head; they coordinate the reports.", { exact: true })
+				.waitFor();
 			await page.getByRole("button", { name: "Retry unresolved teammates", exact: true }).waitFor({ state: "hidden" });
 			expect(await page.evaluate(() => (window as any).orgCalls.starts)).toHaveLength(3);
 			expect(await page.evaluate(() => (window as any).orgCalls.recruits)).toEqual([]);
@@ -713,86 +854,209 @@ test.each([false, true])(
 	45_000,
 );
 
-test("direct Add person sends a role hire once and waits for the accepted person's actual connection", async () => {
+test("closing and resuming setup preserves partial identities; replacing it needs an explicit confirmation", async () => {
 	const { page, errors } = await openOrg();
 	try {
-		await openTeam(page, "Ada");
-		await page.getByRole("button", { name: "Add person", exact: true }).click();
-		const form = page.getByRole("complementary", { name: "Add person", exact: true });
-		await form.getByRole("combobox", { name: "Role", exact: true }).selectOption("implementation-engineer");
-		await form.getByRole("textbox", { name: "Repository", exact: true }).fill(REPOSITORY);
-		await form.getByRole("textbox", { name: "Goal", exact: true }).fill("Implement the profile inspector.");
-		expect(await form.getByRole("textbox", { name: "Name (optional)", exact: true }).inputValue()).toBe("");
-		expect(await page.evaluate(() => (window as any).orgCalls.recruits)).toEqual([]);
-		await form.getByRole("button", { name: "Add person", exact: true }).click();
-		await vi.waitFor(async () => expect(await page.evaluate(() => (window as any).orgCalls.recruits)).toHaveLength(1));
-		expect(await page.evaluate(() => (window as any).orgCalls.recruits[0])).toEqual({
-			name: "",
-			cwd: REPOSITORY,
-			brief: "Implement the profile inspector.",
-			reportsTo: "ada",
-			role: "implementation-engineer",
-		});
-		await form.getByText("Starting person...", { exact: true }).waitFor();
-		await page.evaluate(() =>
-			(window as any).releaseOrgRecruit({ ok: true, stage: "accepted", sessionId: "new-colleague" }),
+		await draftTeam(page);
+		const plan = page.getByRole("complementary", { name: "Team plan", exact: true });
+		const specialization = plan.getByRole("textbox", { name: "Specialization", exact: true });
+		await specialization.fill("  Focus on keyboard accessibility.  ");
+		await shot(page, "light-plan-specialization");
+		await plan.getByRole("button", { name: "Close team plan", exact: true }).click();
+		await plan.waitFor({ state: "hidden" });
+		await page.getByRole("button", { name: "Resume team plan", exact: true }).click();
+		expect(await specialization.inputValue()).toBe("  Focus on keyboard accessibility.  ");
+		expect(await plan.getByRole("textbox", { name: "Team task", exact: true }).inputValue()).toContain(
+			"Implement the Org chart",
 		);
-		await form
-			.getByRole("status")
-			.getByText(/has not joined yet/)
-			.waitFor();
-		expect(await form.getByRole("button", { name: "Add person", exact: true }).isEnabled()).toBe(false);
-		await shot(page, "light-direct-person-pending");
-		const updated = world();
-		updated.characters.push(person("unrelated", "Another colleague", "ada"));
-		await page.evaluate((next) => (window as any).pushOrg(next), updated);
-		await page.getByRole("button", { name: "View profile: Another colleague", exact: true }).waitFor();
-		expect(await form.isVisible()).toBe(true);
-		expect(await form.getByRole("button", { name: "Add person", exact: true }).isEnabled()).toBe(false);
-		updated.characters.push(person("new-colleague", "New colleague", "ada"));
-		await page.evaluate((next) => (window as any).pushOrg(next), updated);
-		await form.waitFor({ state: "hidden" });
-		await page.getByRole("button", { name: "View profile: New colleague", exact: true }).click();
-		const profile = page.getByRole("complementary", { name: "Profile: New colleague", exact: true });
-		await profile.getByText("I verify changes before delivery. Session: new-colleague.", { exact: true }).waitFor();
-		expect(await page.evaluate(() => (window as any).orgCalls.recruits)).toHaveLength(1);
 		expect(await page.evaluate(() => (window as any).orgCalls.starts)).toEqual([]);
-		expect(await page.evaluate(() => (window as any).orgCalls.seen)).toEqual([]);
-		expect(await page.evaluate(() => (window as any).orgCalls.conversations)).toEqual([]);
+		await plan.getByRole("button", { name: "Start team", exact: true }).click();
+		await vi.waitFor(async () => expect(await page.evaluate(() => (window as any).orgCalls.starts)).toHaveLength(1));
+		const first = await page.evaluate(() => (window as any).orgCalls.starts[0]);
+		const [head, engineer, other] = first.positions;
+		expect(other.specialization).toBe("Focus on keyboard accessibility.");
+		expect(head).not.toHaveProperty("specialization");
+		expect(engineer).not.toHaveProperty("specialization");
+		await plan.getByText("Setup plan", { exact: true }).click();
+		expect(await specialization.inputValue()).toBe("  Focus on keyboard accessibility.  ");
+		expect(await specialization.isEnabled()).toBe(false);
+		await plan.getByText("Setup plan", { exact: true }).click();
+		const partial = {
+			id: first.id,
+			complete: false,
+			next: "choose-ready",
+			people: [
+				{ id: head.id, person: "retained-head", state: "ready" },
+				{ id: engineer.id, person: "retained-engineer", state: "failed", reason: "Window could not start" },
+				{ id: other.id, state: "blocked", reason: "Waiting for the teammate window" },
+			],
+		};
+		const updated = world();
+		updated.characters.push(person("retained-head", "Retained head", null, true));
+		await page.evaluate(
+			([progress, snapshot]) => {
+				(window as any).pushOrg(snapshot);
+				(window as any).progressOrg(progress);
+				(window as any).releaseOrgStart(progress);
+			},
+			[partial, updated] as const,
+		);
+		const progress = plan.getByRole("region", { name: "Team setup progress", exact: true });
+		await progress.getByText("Window could not start", { exact: true }).waitFor();
+		for (const label of ["1. Coordinator", "2. Implementation Engineer", "3. Implementation Engineer"])
+			await progress.getByText(label, { exact: true }).waitFor();
+		for (const state of ["ready", "failed", "blocked"]) await progress.getByText(state, { exact: true }).waitFor();
+		await plan.getByRole("button", { name: "Close team plan", exact: true }).click();
+		await plan.waitFor({ state: "hidden" });
+		await page.getByRole("button", { name: "Resume setup", exact: true }).click();
+		await progress.getByText("Recorded person: retained-engineer", { exact: true }).waitFor();
+		expect(await plan.getByRole("textbox", { name: "Team task", exact: true }).isVisible()).toBe(false);
+		const cancel = page.waitForEvent("dialog").then(async (dialog) => {
+			expect(dialog.type()).toBe("confirm");
+			expect(dialog.message()).toContain("Created people and their work remain");
+			await dialog.dismiss();
+		});
+		await page.getByRole("button", { name: "New team", exact: true }).click();
+		await cancel;
+		await progress.getByText("Window could not start", { exact: true }).waitFor();
+		expect(await page.evaluate(() => (window as any).orgCalls.starts)).toHaveLength(1);
+		await plan.getByRole("button", { name: "Retry unresolved teammates", exact: true }).click();
+		await vi.waitFor(async () => expect(await page.evaluate(() => (window as any).orgCalls.starts)).toHaveLength(2));
+		const retry = await page.evaluate(() => (window as any).orgCalls.starts[1]);
+		expect(retry).toEqual({
+			...first,
+			positions: first.positions.map((position: any) => ({
+				...position,
+				person: partial.people.find((member) => member.id === position.id)?.person,
+			})),
+		});
+		await page.evaluate((result) => (window as any).releaseOrgStart(result), partial);
+		await vi.waitFor(async () =>
+			expect(await page.getByRole("button", { name: "New team", exact: true }).isEnabled()).toBe(true),
+		);
+		const replace = page.waitForEvent("dialog").then(async (dialog) => {
+			expect(dialog.message()).toContain("Created people and their work remain");
+			await dialog.accept();
+		});
+		await page.getByRole("button", { name: "New team", exact: true }).click();
+		await replace;
+		expect(await plan.getByRole("textbox", { name: "Team task", exact: true }).inputValue()).toBe("");
+		expect(await plan.getByRole("button", { name: /^Planned role:/ }).count()).toBe(1);
+		expect(await progress.count()).toBe(0);
+		await page.getByRole("button", { name: "Open team: Retained head", exact: true }).waitFor();
+		const calls = await page.evaluate(() => (window as any).orgCalls);
+		expect(calls.starts).toHaveLength(2);
+		for (const action of ["moves", "wakes", "closes", "recruits", "conversations", "seen"])
+			expect(calls[action]).toEqual([]);
 		expect(errors).toEqual([]);
 	} finally {
 		await page.close();
 	}
 }, 30_000);
 
+test.each(["", "  Focus on screen-reader behavior.  "])(
+	"direct Add person specialization=%j sends once and waits for the accepted person's actual connection",
+	async (specialization) => {
+		const { page, errors } = await openOrg();
+		try {
+			await openTeam(page, "Ada");
+			await page.getByRole("button", { name: "Add person", exact: true }).click();
+			const form = page.getByRole("complementary", { name: "Add person", exact: true });
+			await form.getByRole("combobox", { name: "Role", exact: true }).selectOption("implementation-engineer");
+			await form.getByRole("textbox", { name: "Repository", exact: true }).fill(REPOSITORY);
+			await form.getByRole("textbox", { name: "Goal", exact: true }).fill("Implement the profile inspector.");
+			await form.getByRole("textbox", { name: "Specialization", exact: true }).fill(specialization);
+			if (specialization) await shot(page, "light-add-person-specialization");
+			expect(await form.getByRole("textbox", { name: "Name (optional)", exact: true }).inputValue()).toBe("");
+			expect(await page.evaluate(() => (window as any).orgCalls.recruits)).toEqual([]);
+			await form.getByRole("button", { name: "Add person", exact: true }).click();
+			await vi.waitFor(async () =>
+				expect(await page.evaluate(() => (window as any).orgCalls.recruits)).toHaveLength(1),
+			);
+			expect(await page.evaluate(() => (window as any).orgCalls.recruits[0])).toEqual({
+				name: "",
+				cwd: REPOSITORY,
+				brief: "Implement the profile inspector.",
+				reportsTo: "ada",
+				role: "implementation-engineer",
+				...(specialization.trim() ? { specialization: specialization.trim() } : {}),
+			});
+			await form.getByText("Starting person...", { exact: true }).waitFor();
+			await page.evaluate(() =>
+				(window as any).releaseOrgRecruit({ ok: true, stage: "accepted", sessionId: "new-colleague" }),
+			);
+			await form
+				.getByRole("status")
+				.getByText(/has not joined yet/)
+				.waitFor();
+			expect(await form.getByRole("button", { name: "Add person", exact: true }).isEnabled()).toBe(false);
+			await shot(page, "light-direct-person-pending");
+			const updated = world();
+			updated.characters.push(person("unrelated", "Another colleague", "ada"));
+			await page.evaluate((next) => (window as any).pushOrg(next), updated);
+			await page.getByRole("button", { name: "View profile: Another colleague", exact: true }).waitFor();
+			expect(await form.isVisible()).toBe(true);
+			expect(await form.getByRole("button", { name: "Add person", exact: true }).isEnabled()).toBe(false);
+			updated.characters.push(person("new-colleague", "New colleague", "ada"));
+			await page.evaluate((next) => (window as any).pushOrg(next), updated);
+			await form.waitFor({ state: "hidden" });
+			await page.getByRole("button", { name: "View profile: New colleague", exact: true }).click();
+			const profile = page.getByRole("complementary", { name: "Profile: New colleague", exact: true });
+			await profile.getByText("I verify changes before delivery. Session: new-colleague.", { exact: true }).waitFor();
+			expect(await page.evaluate(() => (window as any).orgCalls.recruits)).toHaveLength(1);
+			expect(await page.evaluate(() => (window as any).orgCalls.starts)).toEqual([]);
+			expect(await page.evaluate(() => (window as any).orgCalls.seen)).toEqual([]);
+			expect(await page.evaluate(() => (window as any).orgCalls.conversations)).toEqual([]);
+			expect(errors).toEqual([]);
+		} finally {
+			await page.close();
+		}
+	},
+	30_000,
+);
+
 test("recorded team work keeps its provenance while a person's profile includes earlier assignments", async () => {
 	const { page, errors } = await openOrg();
 	try {
 		await openTeam(page, "Ada");
 		const teamWork = page.getByRole("region", { name: "Recorded team work", exact: true });
-		await teamWork.getByText("View recorded work (2)", { exact: true }).click();
-		await teamWork.getByRole("button", { name: "Read task: Build the reporting editor", exact: true }).waitFor();
-		await teamWork.getByText("Cleo: assigned, in focus", { exact: true }).waitFor();
-		await teamWork.getByText("Ellis: assigned", { exact: true }).waitFor();
-		expect(
-			await teamWork.getByRole("button", { name: "Read task: Ship the invoice report", exact: true }).count(),
-		).toBe(0);
+		await teamWork.getByRole("button", { name: "View recorded work (2)", exact: true }).click();
+		const teamDialog = page.getByRole("dialog", { name: "Recorded team work", exact: true });
+		await teamDialog.getByRole("button", { name: "Read task: Build the reporting editor", exact: true }).waitFor();
 		expect(await page.evaluate(() => (window as any).orgCalls.taskReads)).toEqual([]);
-		await teamWork.getByText("View recorded work (2)", { exact: true }).click();
+		await teamDialog.getByRole("button", { name: "Read task: Build the reporting editor", exact: true }).click();
+		await teamDialog.getByText("Cleo: assigned, in focus", { exact: true }).waitFor();
+		await teamDialog.getByRole("button", { name: "Read task: Review the keyboard workflow", exact: true }).click();
+		await teamDialog.getByText("Ellis: assigned", { exact: true }).waitFor();
+		expect(
+			await teamDialog.getByRole("button", { name: "Read task: Ship the invoice report", exact: true }).count(),
+		).toBe(0);
+		expect(await page.evaluate(() => (window as any).orgCalls.taskReads)).toEqual(["active-work", "assigned-work"]);
+		await teamDialog.getByRole("button", { name: "Close work history", exact: true }).click();
 		await page.getByRole("button", { name: "View profile: Cleo", exact: true }).click();
 		const profile = page.getByRole("complementary", { name: "Profile: Cleo", exact: true });
-		const history = profile.getByRole("region", { name: "Recorded work", exact: true });
+		await profile
+			.getByRole("region", { name: "Recorded work", exact: true })
+			.getByRole("button", { name: "View recorded work (3)", exact: true })
+			.click();
+		const history = page.getByRole("dialog", { name: "Recorded work", exact: true });
 		await history.getByRole("button", { name: "Read task: Ship the invoice report", exact: true }).waitFor();
-		await history.getByText("Cleo: assignment finished", { exact: true }).waitFor();
-		await history.getByText("Cleo: unassigned", { exact: true }).waitFor();
 		expect(await history.getByText("Recorded organization: Daria", { exact: true }).count()).toBe(2);
-		expect(await page.evaluate(() => (window as any).orgCalls.taskReads)).toEqual([]);
+		expect(await page.evaluate(() => (window as any).orgCalls.taskReads)).toEqual(["active-work", "assigned-work"]);
 		await history.getByRole("button", { name: "Read task: Ship the invoice report", exact: true }).click();
+		await history.getByText("Cleo: assignment finished", { exact: true }).waitFor();
 		await history
 			.getByRole("article", { name: "Task: Ship the invoice report", exact: true })
 			.getByText("Explicitly loaded task: finished-work.", { exact: true })
 			.waitFor();
-		expect(await page.evaluate(() => (window as any).orgCalls.taskReads)).toEqual(["finished-work"]);
+		expect(await page.evaluate(() => (window as any).orgCalls.taskReads)).toEqual([
+			"active-work",
+			"assigned-work",
+			"finished-work",
+		]);
+		await history.getByRole("button", { name: "Read task: Investigate the ledger import", exact: true }).click();
+		await history.getByText("Cleo: unassigned", { exact: true }).waitFor();
+		await history.getByRole("button", { name: "Close work history", exact: true }).click();
 		const close = profile.getByRole("button", { name: "Close profile", exact: true });
 		expect((await close.textContent())?.trim()).toBe("Close");
 		expect(
@@ -803,14 +1067,135 @@ test("recorded team work keeps its provenance while a person's profile includes 
 		).toBe(true);
 		await close.click();
 		await openTeam(page, "Daria");
-		await teamWork.getByText("View recorded work (2)", { exact: true }).click();
-		await teamWork.getByText("Cleo: assignment finished", { exact: true }).waitFor();
-		await teamWork.getByText("Cleo: unassigned", { exact: true }).waitFor();
+		await teamWork.getByRole("button", { name: "View recorded work (2)", exact: true }).click();
+		await teamDialog.getByRole("button", { name: "Read task: Ship the invoice report", exact: true }).waitFor();
+		await teamDialog.getByRole("button", { name: "Read task: Investigate the ledger import", exact: true }).waitFor();
 		expect(await page.getByRole("button", { name: "View profile: Cleo", exact: true }).count()).toBe(0);
-		expect(await page.evaluate(() => (window as any).orgCalls.taskReads)).toEqual(["finished-work"]);
+		expect(await page.evaluate(() => (window as any).orgCalls.taskReads)).toEqual([
+			"active-work",
+			"assigned-work",
+			"finished-work",
+			"handed-off-work",
+		]);
 		expect(await page.evaluate(() => (window as any).orgCalls.conversations)).toEqual([]);
 		expect(await page.evaluate(() => (window as any).orgCalls.seen)).toEqual([]);
 		await shot(page, "light-recorded-work");
+		expect(errors).toEqual([]);
+	} finally {
+		await page.close();
+	}
+}, 30_000);
+
+test("large work history stays in a bounded modal with independent scrolling and leaves chart and profile unchanged", async () => {
+	const snapshot = world();
+	const many = Array.from({ length: 60 }, (_, index) => ({
+		...WORK[0]!,
+		id: `history-${index}`,
+		title: `Recorded task ${index}`,
+		bundle: `/tasks/history-${index}`,
+		updatedAt: NOW - index,
+	}));
+	snapshot.workplace!.workHistory = many;
+	const { page, errors } = await openOrg("dark", snapshot);
+	try {
+		await page.setViewportSize({ width: 900, height: 800 });
+		await page.evaluate(() => {
+			(window as any).taskBody = Array.from(
+				{ length: 120 },
+				(_, index) =>
+					`Paragraph ${index}: Details of this recorded task are intentionally long enough to scroll independently.`,
+			).join("\n\n");
+		});
+		await openTeam(page, "Ada");
+		const chart = page.locator(".wp-org-viewport");
+		const chartBefore = await chart.boundingBox();
+		const pageBefore = await page.evaluate(() => ({
+			width: document.documentElement.scrollWidth,
+			height: document.documentElement.scrollHeight,
+		}));
+		const openTeamHistory = page
+			.getByRole("region", { name: "Recorded team work", exact: true })
+			.getByRole("button", { name: "View recorded work (60)", exact: true });
+		await openTeamHistory.click();
+		const modal = page.getByRole("dialog", { name: "Recorded team work", exact: true });
+		await modal.waitFor();
+		const bounds = await modal.boundingBox();
+		expect(bounds!.x).toBeGreaterThanOrEqual(0);
+		expect(bounds!.y).toBeGreaterThanOrEqual(0);
+		expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(900);
+		expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(800);
+		expect(await chart.boundingBox()).toEqual(chartBefore);
+		expect(
+			await page.evaluate(() => ({
+				width: document.documentElement.scrollWidth,
+				height: document.documentElement.scrollHeight,
+			})),
+		).toEqual(pageBefore);
+		expect(await page.evaluate(() => (window as any).orgCalls.taskReads)).toEqual([]);
+		const list = modal.getByRole("navigation", { name: "Tasks", exact: true });
+		expect(await list.evaluate((node) => node.scrollHeight > node.clientHeight)).toBe(true);
+		await list.getByRole("button", { name: "Read task: Recorded task 0", exact: true }).click();
+		await modal
+			.getByRole("article", { name: "Task: Recorded task 0", exact: true })
+			.getByText(/^Paragraph 119:/)
+			.waitFor();
+		const detail = modal.getByRole("region", { name: "Task detail", exact: true });
+		expect(await detail.evaluate((node) => node.scrollHeight > node.clientHeight)).toBe(true);
+		const listScroll = await list.evaluate((node) => node.scrollTop);
+		await detail.evaluate((node) => {
+			node.scrollTop = node.scrollHeight;
+		});
+		expect(await detail.evaluate((node) => node.scrollTop)).toBeGreaterThan(0);
+		expect(await list.evaluate((node) => node.scrollTop)).toBe(listScroll);
+		const detailScroll = await detail.evaluate((node) => node.scrollTop);
+		await list.evaluate((node) => {
+			node.scrollTop = node.scrollHeight;
+		});
+		expect(await list.evaluate((node) => node.scrollTop)).toBeGreaterThan(listScroll);
+		const lastTask = list.getByRole("button", { name: `Read task: ${many.at(-1)!.title}`, exact: true });
+		await lastTask.waitFor();
+		const lastBounds = await lastTask.boundingBox();
+		const listBounds = await list.boundingBox();
+		expect(lastBounds!.y).toBeGreaterThanOrEqual(listBounds!.y);
+		expect(lastBounds!.y + lastBounds!.height).toBeLessThanOrEqual(listBounds!.y + listBounds!.height);
+		expect(await page.evaluate(() => (window as any).orgCalls.taskReads)).toEqual(["history-0"]);
+		expect(await detail.evaluate((node) => node.scrollTop)).toBe(detailScroll);
+		expect(await modal.boundingBox()).toEqual(bounds);
+		await shot(page, "dark-large-work-modal");
+		await modal.getByRole("button", { name: "Close work history", exact: true }).click();
+		expect(await chart.boundingBox()).toEqual(chartBefore);
+		expect(await openTeamHistory.evaluate((node) => node === document.activeElement)).toBe(true);
+		await page.getByRole("button", { name: "View profile: Cleo", exact: true }).click();
+		const profile = page.getByRole("complementary", { name: "Profile: Cleo", exact: true });
+		const profileBefore = await profile.boundingBox();
+		const profileChartBefore = await chart.boundingBox();
+		const trigger = profile.getByRole("button", { name: "View recorded work (60)", exact: true });
+		await trigger.click();
+		const personModal = page.getByRole("dialog", { name: "Recorded work", exact: true });
+		await personModal.waitFor();
+		expect(await page.evaluate(() => (window as any).orgCalls.taskReads)).toEqual(["history-0"]);
+		expect(await profile.boundingBox()).toEqual(profileBefore);
+		await profile.getByRole("button", { name: "Close profile", exact: true }).evaluate((node) => node.focus());
+		expect(
+			await profile
+				.getByRole("button", { name: "Close profile", exact: true })
+				.evaluate((node) => node === document.activeElement),
+		).toBe(false);
+		await personModal.getByRole("button", { name: "Close work history", exact: true }).focus();
+		await page.keyboard.press("Escape");
+		await personModal.waitFor({ state: "hidden" });
+		expect(await profile.isVisible()).toBe(true);
+		expect(await trigger.evaluate((node) => node === document.activeElement)).toBe(true);
+		expect(await profile.boundingBox()).toEqual(profileBefore);
+		expect(await chart.boundingBox()).toEqual(profileChartBefore);
+		expect(
+			await page.evaluate(() => ({
+				width: document.documentElement.scrollWidth,
+				height: document.documentElement.scrollHeight,
+			})),
+		).toEqual(pageBefore);
+		expect(await page.evaluate(() => (window as any).orgCalls.conversations)).toEqual([]);
+		expect(await page.evaluate(() => (window as any).orgCalls.seen)).toEqual([]);
 		expect(errors).toEqual([]);
 	} finally {
 		await page.close();

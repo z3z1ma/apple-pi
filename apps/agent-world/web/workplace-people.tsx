@@ -3,6 +3,7 @@ import { createContext, useContext, useEffect, useId, useMemo, useRef, useState 
 import type { Character, WorldSnapshot } from "../src/world.js";
 import { sleeperCharacter } from "./game/layout.js";
 import { factRows } from "./overlay/interface/character-card.js";
+import { OrgNameEditor } from "./workplace-org-name.js";
 import { WorkHistory } from "./workplace-work-history.js";
 
 type PeopleNavigation = {
@@ -210,8 +211,21 @@ export function PersonProfile({ id, name: fallbackName, onClose }: { id: string;
 						<button type="button" className="wp-primary wp-profile-message" onClick={() => people.openDM(id)}>
 							{dormant ? "View conversation" : "Message"} {name}
 						</button>
+						{!person.facts?.temporary &&
+							!dormant?.retiredAt &&
+							(person.role === "coordinator" || person.facts?.reportsTo === null) && (
+								<OrgNameEditor key={id} id={id} name={name} />
+							)}
 						<WorkHistory world={people.world} people={[id]} />
 						<dl>
+							{person.specialization && (
+								<div>
+									<dt>Specialization</dt>
+									<dd>
+										<ExpandableText text={person.specialization} field="Specialization" />
+									</dd>
+								</div>
+							)}
 							<div>
 								<dt>{person.hiredAt != null ? "Hired" : "First seen"}</dt>
 								<dd>

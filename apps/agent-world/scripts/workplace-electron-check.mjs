@@ -2,7 +2,16 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
 import { once } from "node:events";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import {
+	chmodSync,
+	existsSync,
+	mkdirSync,
+	mkdtempSync,
+	readFileSync,
+	renameSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
 import { createConnection, createServer } from "node:net";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -18,6 +27,10 @@ while (!existsSync(join(root, "apps/agent-world"))) {
 }
 const scratch = mkdtempSync(join(tmpdir(), "wp-electron-nav-"));
 const state = join(scratch, "state");
+const repository = join(scratch, "repository");
+mkdirSync(repository);
+writeFileSync(join(repository, "example.ts"), "export const answer = 1;\n");
+execFileSync("git", ["init", repository], { stdio: "ignore", timeout: 5000 });
 const socketPath = join(state, "apple-pi.sock");
 const upstreamPath = join(state, "trace-upstream.sock");
 const bin = join(scratch, "bin");
@@ -134,15 +147,47 @@ try {
 	const page = await app.firstWindow();
 	const errors = [];
 	page.on("pageerror", (error) => errors.push(error.message));
-	await page.getByRole("link", { name: "Workplace", exact: true }).waitFor({ timeout: 30000 });
-	await page.getByRole("link", { name: "Workplace", exact: true }).click();
-	await page.locator(".wp-app").waitFor({ timeout: 5000 });
-	assert.match(page.url(), /workplace=chat/);
+	await page.locator(".wp-app").waitFor({ timeout: 30000 });
+	assert.equal(new URL(page.url()).search, "");
+	assert.equal(await page.title(), "Workplace");
+	await page.getByRole("button", { name: "Chat", exact: true }).waitFor();
 	assert.equal((await page.evaluate(() => window.agentWorld.profile("missing-profile"))).ok, false);
 	await page.getByRole("button", { name: "Mail", exact: true }).click();
 	assert.match(page.url(), /workplace=mail/);
 	await page.getByRole("button", { name: "Chat", exact: true }).click();
 	assert.match(page.url(), /workplace=chat/);
+	await page.getByRole("button", { name: "Code", exact: true }).click();
+	await page.getByRole("textbox", { name: "Repository path", exact: true }).fill(repository);
+	await page.getByRole("button", { name: "Open", exact: true }).click();
+	await page
+		.getByRole("complementary", { name: "Files", exact: true })
+		.getByRole("button", { name: "example.ts", exact: true })
+		.click();
+	const editor = page.locator(".wp-code-monaco .monaco-editor");
+	await editor.waitFor({ timeout: 15000 });
+	await waitFor(async () => (await editor.locator(".view-lines").innerText()).includes("answer"));
+	await editor.click({ position: { x: 180, y: 22 } });
+	await page.keyboard.press("Meta+a");
+	await page.keyboard.insertText("export const answer = 42;\n");
+	await page.getByRole("button", { name: "Save", exact: true }).click();
+	await waitFor(() => readFileSync(join(repository, "example.ts"), "utf8") === "export const answer = 42;\n");
+	const fileProof = await page.evaluate(async (root) => {
+		const api = window.agentWorld.workspace;
+		const read = await api.readFile({ root, path: "example.ts" });
+		if (!read.ok) throw new Error(read.reason);
+		const stale = await api.saveFile({ root, path: "example.ts", text: "must not replace", baseHash: "stale" });
+		const outside = await api.readFile({ root, path: "../outside" });
+		const git = await api.gitStatus({ root });
+		return { read, stale, outside, git };
+	}, repository);
+	assert.equal(fileProof.read.text, "export const answer = 42;\n");
+	assert.equal(fileProof.stale.ok, false);
+	assert.equal(fileProof.outside.ok, false);
+	assert.equal(fileProof.git.ok, true);
+	assert.equal(readFileSync(join(repository, "example.ts"), "utf8"), "export const answer = 42;\n");
+	const codeCapture = join(tmpdir(), `workplace-electron-code-${process.pid}.png`);
+	await page.screenshot({ path: codeCapture, animations: "disabled" });
+	console.log(`Native Code capture: ${codeCapture}`);
 	await page.getByRole("button", { name: "Org", exact: true }).click();
 	await page.locator(".wp-org-team-card").first().waitFor();
 	assert.equal(await page.locator(".wp-org-team-card").count(), 2);
@@ -223,10 +268,14 @@ try {
 	await page.getByRole("link", { name: "Workplace", exact: true }).waitFor({ timeout: 30000 });
 	const returned = new URL(page.url());
 	assert.equal(returned.pathname, "/index.html");
-	assert.equal(returned.search, "");
+	assert.equal(returned.search, "?world");
+	await page.getByRole("link", { name: "Workplace", exact: true }).click();
+	await page.locator(".wp-app").waitFor({ timeout: 10000 });
+	assert.match(page.url(), /workplace=chat/);
+	assert.equal(await page.title(), "Workplace");
 	assert.deepEqual(errors, []);
 	console.log(
-		"PASS: isolated Electron preserves Chat/Mail, opens Org overview/team/profile without reading, bridges blocked Org requests/progress, permits direct Org entry, and returns to World",
+		"PASS: isolated Electron defaults to Chat, runs Monaco and guarded filesystem/Git IPC, opens Org without reading, bridges blocked Org requests/progress, and round-trips through explicit World",
 	);
 } finally {
 	try {

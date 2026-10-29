@@ -13,7 +13,7 @@ import type { PlaceData, Point } from "../web/theme.js";
 // the small dialogue box, reacts when clicked several times in a row, and with life on, strolls (unless posted) and
 // now and then barks.
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-const ORIGIN = "http://agent-world.test";
+const ORIGIN = "http://localhost";
 const appDir = fileURLToPath(new URL("..", import.meta.url));
 // AGENT_WORLD_SHOTS=<dir> saves screenshots there as aw-ambient-*.png.
 const SHOTS = process.env.AGENT_WORLD_SHOTS;
@@ -133,7 +133,7 @@ async function openWorld(first: WorldSnapshot, pace?: number) {
 		},
 		[first, pace ?? null] as const,
 	);
-	await page.goto(`${ORIGIN}/index.html`);
+	await page.goto(`${ORIGIN}/index.html?world`);
 	await vi.waitFor(
 		async () =>
 			expect(await page.evaluate(() => (window as any).agentWorldView?.avatar()), errors.join("; ")).toBeTruthy(),

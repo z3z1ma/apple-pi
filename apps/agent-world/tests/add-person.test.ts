@@ -63,6 +63,28 @@ test("an unnamed role hire starts with the selected role, manager and goal, with
 		goal: { text: "Build the agreed change.", by: "operator" },
 	});
 	expect(command).not.toHaveProperty("name");
+	expect(command).not.toHaveProperty("specialization");
+});
+
+test.each(["  Data correctness\nReview edge cases.  ", "  "])(
+	"specialization is trimmed and blank text is omitted: %j",
+	async (specialization) => {
+		await lifecycle.recruit({ ...request(), specialization });
+		const command = vi.mocked(commands.send).mock.calls[0][1];
+		if (specialization.trim()) expect(command).toHaveProperty("specialization", specialization.trim());
+		else expect(command).not.toHaveProperty("specialization");
+	},
+);
+
+test("an old runtime refuses specialized creation before dispatch but still permits ordinary creation", async () => {
+	db.exec("alter table sessions drop column specialization");
+	expect(await lifecycle.recruit({ ...request(), specialization: "Data correctness" })).toMatchObject({
+		ok: false,
+		reason: expect.stringContaining("Restart the session runtime"),
+	});
+	expect(commands.send).not.toHaveBeenCalled();
+	expect(await lifecycle.recruit({ ...request(), specialization: "  " })).toMatchObject({ ok: true });
+	expect(vi.mocked(commands.send).mock.calls[0][1]).not.toHaveProperty("specialization");
 });
 
 test("explicit names retain whitespace normalization", async () => {

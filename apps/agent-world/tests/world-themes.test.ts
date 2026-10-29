@@ -10,7 +10,7 @@ import type { Character, CharacterFacts, ThemeChoice, WorldSnapshot } from "../s
 // fails safely (the world opens in the last good theme and says why); Settings switches theme live, changing only
 // presentation; and the same world reads the same in every theme.
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-const ORIGIN = "http://agent-world.test";
+const ORIGIN = "http://localhost";
 const appDir = fileURLToPath(new URL("..", import.meta.url));
 // AGENT_WORLD_SHOTS=<dir> saves screenshots there, as aw-<ticket>-*.png.
 const SHOTS = process.env.AGENT_WORLD_SHOTS;
@@ -147,7 +147,7 @@ async function openWorld(
 		},
 		[first, options.themes ?? null, options.lastGood ?? null] as const,
 	);
-	await page.goto(`${ORIGIN}/index.html`);
+	await page.goto(`${ORIGIN}/index.html?world`);
 	await vi.waitFor(async () => expect(await page.evaluate(() => (window as any).agentWorldView.place())).toBeTruthy(), {
 		timeout: 20000,
 	});

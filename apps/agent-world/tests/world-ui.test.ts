@@ -8,7 +8,7 @@ import type { Character, Headquarters, WorldSnapshot } from "../src/world.js";
 
 // Seam 2: the committed, built world UI in headless Chrome, with the preload API replaced by a fixture backend.
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-const ORIGIN = "http://agent-world.test";
+const ORIGIN = "http://localhost";
 const appDir = fileURLToPath(new URL("..", import.meta.url));
 // AGENT_WORLD_SHOTS=<dir> saves a screenshot of each place the tests visit there.
 const SHOTS = process.env.AGENT_WORLD_SHOTS;
@@ -52,7 +52,7 @@ async function openWorld(first: WorldSnapshot) {
 			for (const listener of listeners) listener(next);
 		};
 	}, first);
-	await page.goto(`${ORIGIN}/index.html`);
+	await page.goto(`${ORIGIN}/index.html?world`);
 	const push = (snapshot: WorldSnapshot) => page.evaluate((s) => (window as any).pushSnapshot(s), snapshot);
 	await vi.waitFor(async () => expect(await place(page)).toBeTruthy(), { timeout: 15000 });
 	return { page, push, errors };

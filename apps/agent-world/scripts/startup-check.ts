@@ -1,5 +1,5 @@
 // The start-up check (`npm run check:world-start`): starts the built app with the installed Electron, or the one
-// named by AGENT_WORLD_ELECTRON, waits for the world to draw, captures the window through AGENT_WORLD_CAPTURE, and
+// named by AGENT_WORLD_ELECTRON. AGENT_WORLD_CAPTURE selects the explicit ?world diagnostic route, waits for its painting, and
 // fails unless the capture shows a rendered world: not blank, not one colour, not mostly the window's background.
 //
 // It runs everything in a scratch agent directory with its own session-state runtime and one stand-in coordinator

@@ -5,12 +5,13 @@ import { DatabaseSync } from "node:sqlite";
 import { expect, onTestFinished, test } from "vitest";
 import { migrate } from "../../../components/session-state/src/schema.js";
 import { openWorldBackend } from "../src/backend/world-backend.js";
+import { sleeperCharacter } from "../web/game/layout.js";
 
 const firstSeen = Date.UTC(2026, 9, 20);
 const laterStart = Date.UTC(2026, 9, 21);
 
 test.each([false, true])(
-	"world profiles retain hire dates across later incarnations and keep unknown dates unknown (old schema: %s)",
+	"world profiles retain hire dates and specialization across incarnations with old-schema fallback (old schema: %s)",
 	(legacy) => {
 		const dir = mkdtempSync(join(tmpdir(), "world-profile-"));
 		onTestFinished(() => rmSync(dir, { recursive: true, force: true }));
@@ -18,13 +19,18 @@ test.each([false, true])(
 		const db = new DatabaseSync(path);
 		try {
 			migrate(db);
-			if (legacy) db.exec("alter table sessions drop column hired_at");
+			if (legacy) db.exec("alter table sessions drop column hired_at; alter table sessions drop column specialization");
 			for (const awake of [true, false]) {
 				for (const knownHire of [true, false]) {
 					const id = `${knownHire ? "hired" : "unknown"}-${awake ? "awake" : "asleep"}`;
 					db.prepare(`insert into sessions (id, kind, cwd, name, run_state, generation, source, updated_at)
 						values (?, 'root', '/example', ?, 'idle', 2, 'bridge', ?)`).run(id, id, laterStart);
-					if (knownHire && !legacy) db.prepare("update sessions set hired_at = ? where id = ?").run(firstSeen, id);
+					if (knownHire && !legacy)
+						db.prepare("update sessions set hired_at = ?, specialization = ? where id = ?").run(
+							firstSeen,
+							"Data correctness\nKeep edge cases visible.",
+							id,
+						);
 					for (const generation of [1, 2]) {
 						const startedAt = generation === 1 ? firstSeen : laterStart;
 						const endedAt = generation === 2 && awake ? null : startedAt + 1000;
@@ -54,13 +60,19 @@ test.each([false, true])(
 			] as const) {
 				expect(people?.find((person) => person.id === `hired-${suffix}`)).toMatchObject({
 					hiredAt: legacy ? null : firstSeen,
+					specialization: legacy ? null : "Data correctness\nKeep edge cases visible.",
 					startedAt: firstSeen,
 				});
 				expect(people?.find((person) => person.id === `unknown-${suffix}`)).toMatchObject({
 					hiredAt: null,
+					specialization: null,
 					startedAt: firstSeen,
 				});
 			}
+			const sleeper = snapshot.dormant!.find((person) => person.id === "hired-asleep")!;
+			expect(sleeperCharacter(sleeper).specialization).toBe(
+				legacy ? null : "Data correctness\nKeep edge cases visible.",
+			);
 		} finally {
 			world.close();
 		}

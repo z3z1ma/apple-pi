@@ -23,7 +23,7 @@ import { openWorldBackend, type WorldBackend } from "../src/backend/world-backen
 // again for the reaction, and each menu line) sends the runtime no command, writes nothing to its database, calls no
 // function place's integrations, and fetches nothing from anywhere: the cast is presentation only.
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-const ORIGIN = "http://agent-world.test";
+const ORIGIN = "http://localhost";
 const appDir = fileURLToPath(new URL("..", import.meta.url));
 
 const state = tempStateDir();
@@ -104,7 +104,7 @@ async function openWorld(): Promise<{ page: Page; requests: string[]; errors: st
 			{ get: (target: any, key: string) => target[key] ?? call(key) },
 		);
 	});
-	await page.goto(`${ORIGIN}/index.html`);
+	await page.goto(`${ORIGIN}/index.html?world`);
 	await vi.waitFor(
 		async () =>
 			expect(await page.evaluate(() => (window as any).agentWorldView?.avatar()), errors.join("; ")).toBeTruthy(),

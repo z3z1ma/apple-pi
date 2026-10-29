@@ -12,7 +12,7 @@ import type { PlaceData } from "../web/theme.js";
 // a fixture backend that answers Slack like the integrations backend does (`src/integrations.ts`), records every call,
 // and gives a confirmation token only through `describeWrite`, as the outside-write gate does.
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-const ORIGIN = "http://agent-world.test";
+const ORIGIN = "http://localhost";
 const appDir = fileURLToPath(new URL("..", import.meta.url));
 // AGENT_WORLD_SHOTS=<dir> saves screenshots there as aw-27-*.png and aw-28-*.png.
 const SHOTS = process.env.AGENT_WORLD_SHOTS;
@@ -318,7 +318,7 @@ async function openWorld(first: WorldSnapshot, slack: SlackFixture, viewport = {
 		},
 		[first, slack, HISTORY, REPLIES] as const,
 	);
-	await page.goto(`${ORIGIN}/index.html`);
+	await page.goto(`${ORIGIN}/index.html?world`);
 	await vi.waitFor(async () => expect(await view(page, "avatar()")).toBeTruthy(), { timeout: 15000 });
 	await page.waitForTimeout(500); // the arrival fade
 	return { page, errors };

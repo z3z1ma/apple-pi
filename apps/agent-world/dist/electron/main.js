@@ -1,12 +1,12 @@
-import { appendFileSync, chmodSync, closeSync, existsSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync, watch, writeFileSync, writeSync } from "node:fs";
-import { basename, dirname, isAbsolute, join, normalize, resolve, sep } from "node:path";
+import { appendFileSync, chmodSync, closeSync, existsSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync, unlinkSync, watch, writeFileSync, writeSync } from "node:fs";
+import { basename, dirname, isAbsolute, join, normalize, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { BrowserWindow, app, ipcMain, net, protocol, shell } from "electron";
+import { BrowserWindow, app, dialog, ipcMain, net, protocol, shell } from "electron";
 import { homedir } from "node:os";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { createConnection } from "node:net";
 import { DatabaseSync } from "node:sqlite";
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import "@earendil-works/pi-coding-agent";
 import { inflateSync } from "node:zlib";
@@ -1166,6 +1166,7 @@ function openLifecycle(paths, commands, snapshot) {
 			const cwd = expandHome(request.cwd.trim());
 			const brief = request.brief.trim();
 			const role = request.role?.trim();
+			const specialization = request.specialization?.trim();
 			if (!name && !role) return {
 				ok: false,
 				reason: "Give the new agent a name."
@@ -1190,6 +1191,18 @@ function openLifecycle(paths, commands, snapshot) {
 				ok: false,
 				reason: `No role in the catalog is named ${role}.`
 			};
+			if (specialization) {
+				const db = new DatabaseSync(paths.db);
+				try {
+					db.exec("pragma query_only = 1");
+					if (!db.prepare("select 1 from pragma_table_info('sessions') where name = 'specialization'").get()) return {
+						ok: false,
+						reason: "Restart the session runtime with current code before creating a person with specialization."
+					};
+				} finally {
+					db.close();
+				}
+			}
 			let pane;
 			if (request.reportsTo) {
 				const coordinator = snapshot().characters.find((character) => character.id === request.reportsTo);
@@ -1235,6 +1248,7 @@ function openLifecycle(paths, commands, snapshot) {
 					...name ? { name } : {},
 					...request.reportsTo ? { reportsTo: request.reportsTo } : {},
 					...role ? { role } : {},
+					...specialization ? { specialization } : {},
 					...brief ? { goal: {
 						text: brief,
 						by: "operator"
@@ -1600,11 +1614,12 @@ function openOrg(paths, commands, snapshot) {
 					const attempts = preparations(request.id, position.id);
 					const previous = attempts.at(-1);
 					const original = attempts[0] && JSON.parse(attempts[0].command);
-					if (original?.goal && (original.cwd !== cwd || original.role !== position.role || original.goal.text !== (position.goal?.trim() || request.goal.trim()))) return reject("A prepared person's role, working directory and goal cannot change on retry.");
+					if (original?.goal && (original.cwd !== cwd || original.role !== position.role || (original.specialization ?? "") !== (position.specialization?.trim() ?? "") || original.goal.text !== (position.goal?.trim() || request.goal.trim()))) return reject("A prepared person's role, specialization, working directory and goal cannot change on retry.");
 					if (position.person && previous && position.person !== previous.session_id) return reject("A retry changed a prepared person's identity.");
 					const id = previous?.session_id ?? position.person ?? randomUUID();
 					progress.people.find((person) => person.id === position.id).person = id;
 					const existing = people.get(id);
+					if (!existing && position.specialization?.trim() && !read((db) => db.prepare("select 1 from pragma_table_info('sessions') where name = 'specialization'").get())) return reject("Restart the session runtime with current code before creating a person with specialization.");
 					if (unavailable.has(id) || existing?.retired_at != null) return reject("Temporary or departed people cannot join a planned team.");
 					if (!existing && (!position.role || !roles.has(position.role) || !(position.goal ?? request.goal).trim())) return reject("Each new person needs a catalog role and written goal.");
 				}
@@ -1683,6 +1698,7 @@ function openOrg(paths, commands, snapshot) {
 			const hire = (position) => ({
 				name: position.name?.trim() || void 0,
 				role: position.role,
+				...position.specialization?.trim() ? { specialization: position.specialization.trim() } : {},
 				goal: {
 					by: "operator",
 					text: position.goal?.trim() || request.goal.trim()
@@ -2471,7 +2487,7 @@ function urls(css) {
 	return found;
 }
 /** A path inside the pack, from `dir` (pack-relative, '' for its root) and a relative reference. */
-function within(dir, ref) {
+function within$1(dir, ref) {
 	const parts = dir ? dir.split("/") : [];
 	for (const part of ref.split("/")) if (part === "..") {
 		if (!parts.length) return void 0;
@@ -3129,7 +3145,7 @@ async function checkLooks(reader, value, hosts, pixels, problems) {
 */
 /** The skin's stylesheet: there, styling every class a skin must, and naming only files the pack has. */
 async function checkSkin(reader, manifest, problems) {
-	const skin = within("", manifest.skin);
+	const skin = within$1("", manifest.skin);
 	const css = skin && await reader.text(skin);
 	if (!skin || css === void 0) return problems.push({
 		file: manifest.skin,
@@ -3142,14 +3158,14 @@ async function checkSkin(reader, manifest, problems) {
 		fault: `does not style ${unstyled.map((c) => `.${c}`).join(", ")}`
 	});
 	for (const ref of urls(css)) {
-		const asset = within(dir, ref);
+		const asset = within$1(dir, ref);
 		if (!asset || await reader.text(asset) === void 0) problems.push({
 			file: skin,
 			fault: `names ${ref}, which is not in the pack`
 		});
 	}
 	for (const [token, value] of Object.entries(isObject(manifest.style) ? manifest.style : {})) for (const ref of typeof value === "string" ? urls(value) : []) {
-		const asset = within("", ref);
+		const asset = within$1("", ref);
 		if (!asset || await reader.text(asset) === void 0) problems.push({
 			file: "theme.json",
 			fault: `style ${token} names ${ref}, which is not in the pack`
@@ -3500,6 +3516,7 @@ function projectWorld(sessions, remembered) {
 		role: roleOf(session),
 		title: session.title,
 		hiredAt: session.hiredAt ?? null,
+		specialization: session.specialization ?? null,
 		startedAt: session.firstStartedAt ?? 0,
 		stoppedAt: session.stoppedAt ?? null,
 		retiredAt: session.retiredAt,
@@ -3511,6 +3528,7 @@ function projectWorld(sessions, remembered) {
 		role: roleOf(session),
 		place: placeOf(session),
 		hiredAt: session.hiredAt ?? null,
+		specialization: session.specialization ?? null,
 		startedAt: session.firstStartedAt ?? 0
 	}));
 	const shown = /* @__PURE__ */ new Set();
@@ -3840,6 +3858,223 @@ function openWorkplace(path, commands, snapshot) {
 		}
 	};
 }
+//#endregion
+//#region apps/agent-world/src/backend/workspace.ts
+var hash = (bytes) => createHash("sha256").update(bytes).digest("hex");
+var failure = (error) => ({
+	ok: false,
+	reason: error instanceof Error ? error.message : String(error)
+});
+function within(root, path) {
+	const rel = relative(root, path);
+	if (isAbsolute(rel) || rel === ".." || rel.startsWith(`..${sep}`)) throw new Error("The path is outside the workspace root.");
+	if (rel.split(sep).includes(".git")) throw new Error("Git metadata is not available in the file editor.");
+}
+function directory(root) {
+	if (!isAbsolute(root)) throw new Error("Choose an absolute workspace directory.");
+	const canonical = realpathSync(root);
+	if (canonical.split(sep).includes(".git")) throw new Error("Git metadata is not available in the file editor.");
+	if (!statSync(canonical).isDirectory()) throw new Error("The workspace root is not a directory.");
+	return canonical;
+}
+function locate(request) {
+	const root = directory(request.root);
+	if (isAbsolute(request.path) || request.path.includes("\0")) throw new Error("Use a relative file path.");
+	const named = resolve(root, request.path);
+	within(root, named);
+	const path = realpathSync(named);
+	within(root, path);
+	return {
+		root,
+		path,
+		named
+	};
+}
+function bytesAt(path) {
+	if (!statSync(path).isFile()) throw new Error("Choose a regular file.");
+	return readFileSync(path);
+}
+function textOf(bytes) {
+	if (bytes.includes(0)) throw new Error("Binary files cannot be edited here.");
+	try {
+		return new TextDecoder("utf-8", {
+			fatal: true,
+			ignoreBOM: true
+		}).decode(bytes);
+	} catch {
+		throw new Error("This file is not valid UTF-8 text.");
+	}
+}
+async function attempt(action) {
+	try {
+		return {
+			ok: true,
+			...await action()
+		};
+	} catch (error) {
+		return failure(error);
+	}
+}
+function git(root, args, allowDetached = false) {
+	return new Promise((resolve, reject) => {
+		const env = {
+			...process.env,
+			GIT_OPTIONAL_LOCKS: "0",
+			GIT_TERMINAL_PROMPT: "0"
+		};
+		for (const key of Object.keys(env)) if (key.startsWith("GIT_") && !["GIT_OPTIONAL_LOCKS", "GIT_TERMINAL_PROMPT"].includes(key)) delete env[key];
+		const child = spawn("git", [
+			"--no-pager",
+			"-c",
+			"core.fsmonitor=false",
+			"-C",
+			root,
+			...args
+		], {
+			env,
+			stdio: [
+				"ignore",
+				"pipe",
+				"pipe"
+			]
+		});
+		const out = [], err = [];
+		child.stdout.on("data", (chunk) => out.push(chunk));
+		child.stderr.on("data", (chunk) => err.push(chunk));
+		child.on("error", reject);
+		child.on("close", (code) => code === 0 || allowDetached && code === 1 ? resolve(Buffer.concat(out).toString("utf8")) : reject(new Error(Buffer.concat(err).toString("utf8").trim() || `Git exited with ${code}.`)));
+	});
+}
+async function repositoryRoot(path) {
+	const root = directory(path);
+	const top = directory((await git(root, ["rev-parse", "--show-toplevel"])).trim());
+	if (root !== top) throw new Error(`Open the repository root to view Git changes: ${top}`);
+	return root;
+}
+function save(request) {
+	let temporary;
+	try {
+		const at = locate(request);
+		if (lstatSync(at.named).isSymbolicLink()) throw new Error("Open the symlink target directly before saving.");
+		const before = statSync(at.path);
+		const bytes = bytesAt(at.path);
+		textOf(bytes);
+		if (hash(bytes) !== request.baseHash) return {
+			ok: false,
+			conflict: true,
+			reason: "The file changed on disk. Reload before saving."
+		};
+		const next = Buffer.from(request.text, "utf8");
+		textOf(next);
+		temporary = join(dirname(at.path), `.workspace-save-${randomUUID()}`);
+		const fd = openSync(temporary, "wx", before.mode);
+		try {
+			writeFileSync(fd, next);
+			chmodSync(temporary, before.mode);
+			fsyncSync(fd);
+		} finally {
+			closeSync(fd);
+		}
+		const current = locate(request);
+		const now = statSync(current.path);
+		if (current.path !== at.path || lstatSync(current.named).isSymbolicLink() || before.ino !== now.ino || before.dev !== now.dev || before.mode !== now.mode || hash(bytesAt(current.path)) !== request.baseHash) return {
+			ok: false,
+			conflict: true,
+			reason: "The file changed while saving. Reload before saving."
+		};
+		renameSync(temporary, at.path);
+		temporary = void 0;
+		return {
+			ok: true,
+			hash: hash(next)
+		};
+	} catch (error) {
+		return failure(error);
+	} finally {
+		if (temporary) unlinkSync(temporary);
+	}
+}
+function openWorkspace(snapshot) {
+	return {
+		repositories: () => attempt(async () => {
+			const world = snapshot();
+			const candidates = new Set([...world.characters.map((person) => person.facts?.cwd), ...(world.dormant ?? []).map((person) => person.cwd)].filter((cwd) => Boolean(cwd)));
+			const roots = /* @__PURE__ */ new Set();
+			for (const candidate of candidates) try {
+				roots.add(directory((await git(directory(candidate), ["rev-parse", "--show-toplevel"])).trim()));
+			} catch {}
+			return { roots: [...roots].sort() };
+		}),
+		tree: (request) => attempt(() => {
+			const at = locate(request);
+			const entries = readdirSync(at.path, { withFileTypes: true }).filter((entry) => entry.name !== ".git").map((entry) => ({
+				name: entry.name,
+				path: join(request.path, entry.name),
+				kind: entry.isDirectory() ? "directory" : entry.isFile() ? "file" : entry.isSymbolicLink() ? "symlink" : "other"
+			}));
+			entries.sort((a, b) => Number(b.kind === "directory") - Number(a.kind === "directory") || a.name.localeCompare(b.name));
+			return {
+				root: at.root,
+				path: request.path,
+				entries
+			};
+		}),
+		readFile: (request) => attempt(() => {
+			const at = locate(request);
+			const bytes = bytesAt(at.path);
+			return {
+				root: at.root,
+				path: request.path,
+				text: textOf(bytes),
+				hash: hash(bytes)
+			};
+		}),
+		saveFile: async (request) => save(request),
+		gitStatus: (request) => attempt(async () => {
+			const root = await repositoryRoot(request.root);
+			const records = (await git(root, [
+				"status",
+				"--porcelain=v1",
+				"-z",
+				"--untracked-files=all"
+			])).split("\0");
+			const entries = [];
+			for (let i = 0; i < records.length; i++) {
+				const record = records[i];
+				if (!record) continue;
+				const entry = {
+					path: record.slice(3),
+					index: record[0],
+					worktree: record[1]
+				};
+				if (/[RC]/.test(record.slice(0, 2))) entry.previousPath = records[++i];
+				entries.push(entry);
+			}
+			return {
+				entries,
+				branch: (await git(root, [
+					"symbolic-ref",
+					"--quiet",
+					"--short",
+					"HEAD"
+				], true)).trim() || null
+			};
+		}),
+		gitDiff: (request) => attempt(async () => {
+			const root = await repositoryRoot(request.root);
+			if (isAbsolute(request.path) || !request.path || request.path.includes("\0")) throw new Error("Choose a relative file path for the diff.");
+			within(root, resolve(root, request.path));
+			return { text: await git(root, [
+				"diff",
+				"--no-ext-diff",
+				"--no-textconv",
+				...request.staged ? ["--cached"] : [],
+				"--",
+				`:(literal)${request.path}`
+			]) };
+		})
+	};
+}
 /** New events of `FEED_TYPES` after a sequence number, with their session's name; `?` is the last seq read. */
 var FEED_SINCE = `select e.seq, e.at, e.session_id as sessionId, e.generation, e.type, e.data,
 	s.name, s.cwd, s.kind as sessionKind
@@ -4044,7 +4279,8 @@ var OPTIONAL_COLUMNS = [
 	"self",
 	"retired_at",
 	"retired_reason",
-	"hired_at"
+	"hired_at",
+	"specialization"
 ];
 var optionalColumns = (db) => {
 	const present = new Set(db.prepare("select name from pragma_table_info('sessions')").all().map((row) => row.name));
@@ -4092,6 +4328,7 @@ function sessionRow(row) {
 		retiredReason: row.retired_reason,
 		awake: row.awake === 1,
 		hiredAt: row.hired_at,
+		specialization: row.specialization,
 		firstStartedAt: row.firstStartedAt ?? void 0,
 		stoppedAt: row.stoppedAt ?? void 0
 	};
@@ -4460,20 +4697,28 @@ function openWorldBackend(paths) {
 }
 //#endregion
 //#region apps/agent-world/src/org.ts
-function object(value) {
+function object$1(value) {
 	return typeof value === "object" && value !== null;
 }
 function isOrgMoveRequest(value) {
-	return object(value) && typeof value.person === "string" && (value.manager === null || typeof value.manager === "string") && Array.isArray(value.branch) && value.branch.every((id) => typeof id === "string");
+	return object$1(value) && typeof value.person === "string" && (value.manager === null || typeof value.manager === "string") && Array.isArray(value.branch) && value.branch.every((id) => typeof id === "string");
 }
 function isOrgStartRequest(value) {
-	return object(value) && typeof value.id === "string" && typeof value.cwd === "string" && typeof value.goal === "string" && (value.withReady === void 0 || typeof value.withReady === "boolean") && Array.isArray(value.positions) && value.positions.every((position) => object(position) && typeof position.id === "string" && (position.manager === null || typeof position.manager === "string") && [
+	return object$1(value) && typeof value.id === "string" && typeof value.cwd === "string" && typeof value.goal === "string" && (value.withReady === void 0 || typeof value.withReady === "boolean") && Array.isArray(value.positions) && value.positions.every((position) => object$1(position) && typeof position.id === "string" && (position.manager === null || typeof position.manager === "string") && [
 		position.role,
 		position.name,
 		position.person,
-		position.goal
+		position.goal,
+		position.specialization
 	].every((field) => field === void 0 || typeof field === "string"));
 }
+//#endregion
+//#region apps/agent-world/src/workspace.ts
+var object = (value) => typeof value === "object" && value !== null;
+var isWorkspaceRoot = (value) => object(value) && typeof value.root === "string";
+var isWorkspacePath = (value) => isWorkspaceRoot(value) && "path" in value && typeof value.path === "string";
+var isWorkspaceSave = (value) => isWorkspacePath(value) && "text" in value && typeof value.text === "string" && "baseHash" in value && typeof value.baseHash === "string";
+var isWorkspaceDiff = (value) => isWorkspacePath(value) && (!("staged" in value) || value.staged === void 0 || typeof value.staged === "boolean");
 //#endregion
 //#region apps/agent-world/src/backend/integrations/atlassian.ts
 var TIMEOUT_MS$2 = 2e4;
@@ -6578,8 +6823,21 @@ async function captureWhenDrawn(window, file) {
 	console.log(`agent-world capture: ${place ? `place ${place}` : "no place drew"}`);
 	app.quit();
 }
+function wireWorkspace(workspace) {
+	const invalid = {
+		ok: false,
+		reason: "A valid workspace root and relative path are required."
+	};
+	ipcMain.handle("workspace:repositories", () => workspace.repositories());
+	ipcMain.handle("workspace:tree", (_event, request) => isWorkspacePath(request) ? workspace.tree(request) : invalid);
+	ipcMain.handle("workspace:read-file", (_event, request) => isWorkspacePath(request) ? workspace.readFile(request) : invalid);
+	ipcMain.handle("workspace:save-file", (_event, request) => isWorkspaceSave(request) ? workspace.saveFile(request) : invalid);
+	ipcMain.handle("workspace:git-status", (_event, request) => isWorkspaceRoot(request) ? workspace.gitStatus(request) : invalid);
+	ipcMain.handle("workspace:git-diff", (_event, request) => isWorkspaceDiff(request) ? workspace.gitDiff(request) : invalid);
+}
 function start() {
 	const world = openWorldBackend(statePaths());
+	wireWorkspace(openWorkspace(() => world.snapshot()));
 	const conversations = openConversations(statePaths().socket);
 	const commands = openCommands(statePaths().socket);
 	let window;
@@ -6685,7 +6943,7 @@ function start() {
 		reason: "A channel and whether to join are required."
 	});
 	ipcMain.handle("world:recruit", (_event, request) => {
-		const { name, cwd, brief, reportsTo, role } = request ?? {};
+		const { name, cwd, brief, reportsTo, role, specialization } = request ?? {};
 		if (typeof name !== "string" || typeof cwd !== "string" || typeof brief !== "string") return {
 			ok: false,
 			reason: "The recruit needs a name, a directory, and a brief."
@@ -6695,7 +6953,8 @@ function start() {
 			cwd,
 			brief,
 			...typeof reportsTo === "string" ? { reportsTo } : {},
-			...typeof role === "string" ? { role } : {}
+			...typeof role === "string" ? { role } : {},
+			...typeof specialization === "string" ? { specialization } : {}
 		});
 	});
 	ipcMain.handle("world:roles", () => lifecycle.roles());
@@ -6758,17 +7017,32 @@ function start() {
 			window = void 0;
 		});
 		window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+		window.webContents.on("will-prevent-unload", (event) => {
+			if (!window || window.isDestroyed()) return;
+			if (dialog.showMessageBoxSync(window, {
+				type: "warning",
+				buttons: ["Stay", "Leave"],
+				title: "Unsaved changes",
+				message: "Leave and discard unsaved changes?",
+				defaultId: 0,
+				cancelId: 0,
+				noLink: true
+			}) === 1) event.preventDefault();
+		});
 		window.webContents.on("will-navigate", (event, url) => {
 			if (![
 				"app://world/index.html",
 				"app://world/index.html?",
+				"app://world/index.html?world",
 				"app://world/index.html?workplace=chat",
 				"app://world/index.html?workplace=mail",
-				"app://world/index.html?workplace=org"
+				"app://world/index.html?workplace=org",
+				"app://world/index.html?workplace=code",
+				"app://world/index.html?workplace=issues"
 			].includes(url)) event.preventDefault();
 		});
-		window.loadURL("app://world/index.html");
 		const capture = process.env.AGENT_WORLD_CAPTURE;
+		window.loadURL(capture ? "app://world/index.html?world" : "app://world/index.html");
 		if (capture) window.webContents.once("did-finish-load", () => window && void captureWhenDrawn(window, capture));
 	});
 }

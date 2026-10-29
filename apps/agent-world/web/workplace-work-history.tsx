@@ -221,14 +221,7 @@ export function WorkHistory({
 	]);
 	return (
 		<section className={`wp-work-history${compact ? " wp-work-history-compact" : ""}`} aria-label={heading}>
-			<h3>{heading}</h3>
-			<p>
-				{team !== undefined
-					? "Tasks recorded for this organization, including work by people who later moved."
-					: people?.length === 1
-						? "Tasks this person participated in, including work in other organizations."
-						: "Tasks involving these current people, including work in other organizations."}
-			</p>
+			{!compact && <h3>Work</h3>}
 			{history === undefined ? (
 				<p>Work history is not available in this snapshot.</p>
 			) : tasks.length === 0 ? (
@@ -236,10 +229,11 @@ export function WorkHistory({
 			) : (
 				<>
 					<p className="wp-work-history-counts">
-						{active} open · {completed} completed · {tasks.length - active - completed} other
+						{active} open · {completed} completed
+						{tasks.length - active - completed > 0 && ` · ${tasks.length - active - completed} other`}
 					</p>
 					<p className="wp-work-history-recent" title={tasks[0].title}>
-						Most recent: {tasks[0].title}
+						{tasks[0].title}
 					</p>
 					<button
 						type="button"

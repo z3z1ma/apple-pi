@@ -13,7 +13,7 @@ import type { PlaceData, Point } from "../web/theme.js";
 // stroll between the square's points of interest; an idle agent steps out and back while a working one stays; the host
 // shifts behind its counter; and nobody pauses on a door's stand point or keeps the avatar from its way.
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-const ORIGIN = "http://agent-world.test";
+const ORIGIN = "http://localhost";
 const appDir = fileURLToPath(new URL("..", import.meta.url));
 // AGENT_WORLD_SHOTS=<dir> saves screenshots there as aw-life-*.png.
 const SHOTS = process.env.AGENT_WORLD_SHOTS;
@@ -123,7 +123,7 @@ async function openWorld(first: WorldSnapshot, pace = PACE) {
 		},
 		[first, UNREAD, pace] as const,
 	);
-	await page.goto(`${ORIGIN}/index.html`);
+	await page.goto(`${ORIGIN}/index.html?world`);
 	await vi.waitFor(async () => expect(await view(page, "avatar()")).toBeTruthy(), { timeout: 15000 });
 	await page.waitForTimeout(500);
 	return { page, errors };

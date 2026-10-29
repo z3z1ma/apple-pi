@@ -147,6 +147,7 @@ export function openLifecycle(
 			const cwd = expandHome(request.cwd.trim());
 			const brief = request.brief.trim();
 			const role = request.role?.trim();
+			const specialization = request.specialization?.trim();
 			if (!name && !role) return { ok: false, reason: "Give the new agent a name." };
 			if (!cwd) return { ok: false, reason: "Choose the directory it works in." };
 			if (!isAbsolute(cwd)) return { ok: false, reason: `${cwd} is not a full path to a directory.` };
@@ -154,6 +155,19 @@ export function openLifecycle(
 			if (role && !brief) return { ok: false, reason: "A role hire needs a written goal." };
 			if (role && !loadRoleChoices(paths.agentDir).some((choice) => choice.name === role))
 				return { ok: false, reason: `No role in the catalog is named ${role}.` };
+			if (specialization) {
+				const db = new DatabaseSync(paths.db);
+				try {
+					db.exec("pragma query_only = 1");
+					if (!db.prepare("select 1 from pragma_table_info('sessions') where name = 'specialization'").get())
+						return {
+							ok: false,
+							reason: "Restart the session runtime with current code before creating a person with specialization.",
+						};
+				} finally {
+					db.close();
+				}
+			}
 			let pane: { socket: string; pane: string } | undefined;
 			if (request.reportsTo) {
 				// A new person's window opens beside its manager's, where the manager's own new sessions open.
@@ -201,6 +215,7 @@ export function openLifecycle(
 				...(name ? { name } : {}),
 				...(request.reportsTo ? { reportsTo: request.reportsTo } : {}),
 				...(role ? { role } : {}),
+				...(specialization ? { specialization } : {}),
 				...(brief ? { goal: { text: brief, by: "operator" } } : {}),
 			};
 			const receipt = await follow(

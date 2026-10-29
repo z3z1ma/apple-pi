@@ -58,6 +58,9 @@
 .wp-add-person textarea {
 	resize: vertical;
 }
+.wp-add-person textarea.wp-specialization {
+	min-height: 0;
+}
 .wp-add-person button {
 	padding: 8px 12px;
 	border: 1px solid var(--wp-border);

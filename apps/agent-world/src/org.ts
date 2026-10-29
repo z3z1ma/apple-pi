@@ -9,6 +9,7 @@ export type OrgMoveResult = ({ ok: true } & OrgMoveRequest) | { ok: false; reaso
 export interface OrgStartPosition {
 	id: string;
 	role?: string;
+	specialization?: string;
 	name?: string;
 	person?: string;
 	manager: string | null;
@@ -71,7 +72,7 @@ export function isOrgStartRequest(value: unknown): value is OrgStartRequest {
 				object(position) &&
 				typeof position.id === "string" &&
 				(position.manager === null || typeof position.manager === "string") &&
-				[position.role, position.name, position.person, position.goal].every(
+				[position.role, position.name, position.person, position.goal, position.specialization].every(
 					(field) => field === undefined || typeof field === "string",
 				),
 		)

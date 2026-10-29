@@ -236,6 +236,9 @@
 	min-height: 75px;
 	resize: vertical;
 }
+.wp-org-draft textarea.wp-specialization {
+	min-height: 0;
+}
 .wp-org-add {
 	display: flex;
 	gap: 8px;
@@ -309,12 +312,49 @@
 	flex-shrink: 0;
 	padding: 12px;
 }
-.wp-org-progress {
-	white-space: pre-wrap;
-	overflow-wrap: anywhere;
+.wp-org-plan-fields {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+	padding-top: 12px;
+}
+.wp-org-plan-details > summary {
+	cursor: pointer;
+	font-size: 13px;
+	font-weight: 650;
+}
+.wp-org-plan-retained {
+	margin: 0;
 	color: var(--wp-muted);
-	font-size: 11px;
+	font-size: 12px;
+	line-height: 1.5;
+}
+.wp-org-progress {
+	overflow-wrap: anywhere;
+	color: var(--wp-text);
+	font-size: 12px;
 	line-height: 1.6;
+}
+.wp-org-progress-person {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	gap: 4px 10px;
+	padding: 10px 0;
+	border-top: 1px solid var(--wp-border);
+}
+.wp-org-progress-person > p,
+.wp-org-progress-person > button {
+	grid-column: 1 / -1;
+	margin: 0;
+	text-align: left;
+}
+.wp-org-progress-state {
+	color: var(--wp-muted);
+}
+.wp-org-progress-person[data-state="failed"] .wp-org-progress-state,
+.wp-org-progress-person[data-state="blocked"] .wp-org-progress-state,
+.wp-org-progress-person[data-state="uncertain"] .wp-org-progress-state {
+	color: var(--wp-danger);
 }
 .wp-org-inspector {
 	display: flex;

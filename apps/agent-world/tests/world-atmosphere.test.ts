@@ -13,7 +13,7 @@ import type { AtmosphereView } from "../web/game/atmosphere.js";
 // painting, lit windows and brighter lamps after dark); every place has motion that is not a character, which moves
 // with life and holds still (but drawn) without it.
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-const ORIGIN = "http://agent-world.test";
+const ORIGIN = "http://localhost";
 const appDir = fileURLToPath(new URL("..", import.meta.url));
 // AGENT_WORLD_SHOTS=<dir> saves screenshots there as aw-alive-11-*.png.
 const SHOTS = process.env.AGENT_WORLD_SHOTS;
@@ -76,7 +76,7 @@ async function openWorld(theme: string, clock: number, life?: number) {
 		},
 		[world(theme), life ?? null] as const,
 	);
-	await page.goto(`${ORIGIN}/index.html`);
+	await page.goto(`${ORIGIN}/index.html?world`);
 	await vi.waitFor(
 		async () => expect(await page.evaluate(() => (window as any).agentWorldView?.place())).toBeTruthy(),
 		{ timeout: 15000 },

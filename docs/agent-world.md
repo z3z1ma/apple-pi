@@ -1,8 +1,8 @@
 # Agent World
 
-Agent World is a desktop app for your Pi organization, with [Workplace](workplace.md) for chat and mail and a hand-painted World view. In World, every live top-level Pi session in tmux is a character: the root of an [organization](organization.md) stands in its headquarters, the people that report to it work in their repository's wing or, under a manager, in that manager's team room, independent sessions stand in the town square, and stopped sessions sleep at the inn. From the world you can talk to any agent, answer its questions, redirect or stop it, wake a sleeping one, and work with GitHub, Jira, Confluence, and Slack without going to the terminal. The terminal stays one click away.
+Agent World is a desktop app for your Pi organization, with [Workplace](workplace.md) for Chat, Mail, Org, Code and Issues, and a hand-painted World view. In World, every live top-level Pi session in tmux is a character: the root of an [organization](organization.md) stands in its headquarters, the people that report to it work in their repository's wing or, under a manager, in that manager's team room, independent sessions stand in the town square, and stopped sessions sleep at the inn. From the world you can talk to any agent, answer its questions, redirect or stop it, wake a sleeping one, and work with GitHub, Jira, Confluence, and Slack without going to the terminal. The terminal stays one click away.
 
-Agent World shows what the [session-state](session-state.md) model records. It reads the session-state database read-only and sends every change (a reply, an answer, mark seen, a wake, your theme and look) to the runtime as a command with a receipt. It never writes to the database itself.
+Agent World shows what the [session-state](session-state.md) model records. It reads the session-state database read-only and sends session/workplace changes (a reply, an answer, mark seen, a wake, your World theme and look) to the runtime as commands with receipts. Code saves local files explicitly; Jira writes use the existing operator-confirmation boundary. It never writes to the database itself.
 
 The source is in `apps/agent-world/`; see [Development](development.md#agent-world) for building and checking it.
 
@@ -16,13 +16,15 @@ Closing the window quits Agent World and changes nothing in tmux or Pi: your ses
 
 ## Workplace
 
-Choose **Workplace** to open the supported chat and mail interface. Chat connects to actual Pi session conversations and team channels; Mail exposes operator correspondence, Sent and Activity. Profiles, unread updates, light/dark appearance and channel participation share the existing runtime rather than a separate message store. **World** in its rail returns to the visual world; the app still opens in World by default.
+The app opens in Workplace's **Chat** view. Chat connects to real Pi conversations and team channels; Mail exposes operator correspondence, Sent and Activity. Org displays named organizations, profiles and recorded work, changes reporting and prepares task-specific teams. Code edits existing local UTF-8 files with explicit Save and conflict detection, alongside read-only Git status/diffs. Issues reads Jira and sends selected agents instructions; status changes require confirmation as you.
+
+Workspace and organization display names are device-local preferences, not person or runtime identity changes. Specialization is an optional lifetime focus assigned when creating a person, separate from their fixed role. **World** in the rail explicitly opens the visual world; **Workplace** there returns to Chat. Unsaved Code buffers and retained setup plans prompt before leaving the renderer; accepting the leave loses memory-only drafts, not the real people or work already created.
 
 See [Workplace](workplace.md) for its controls, read/acknowledgment rules, profiles and limits.
 
 ## The world
 
-The world opens in the headquarters of your first organization: the session you are in, or one with a managing role (`pi --role coordinator`), that others report to. A second root is a second headquarters. Each other function has its own place, reached through the doors of the town square or from the Places tab.
+The World view opens in the first headquarters in its stable snapshot order. Each headquarters belongs to a root session, or a session with a managing role (`pi --role coordinator`), that others report to. A second root is a second headquarters. Each other function has its own place, reached through the doors of the town square or from the Places tab.
 
 | Place | What it shows | What you can do |
 | --- | --- | --- |
@@ -126,8 +128,8 @@ Agent World owns no record of your work. Everything it shows comes from the sess
 | The record of writes outside | `~/.pi/agent/state/agent-world-outside-writes.jsonl` |
 | Pages read lately in the library | `~/.pi/agent/state/agent-world-library-recent.json` |
 | Electron | `~/.pi/agent/agent-world/electron-44.9.0/` |
-| Workplace appearance | The page's local storage in Electron's data directory |
-| Unsent Workplace drafts and compose recipient | Memory only; cleared on reload/close |
+| Workplace appearance, workspace name and per-head organization display names | The page's local storage in Electron's data directory |
+| Unsent Workplace drafts, team plans, Code buffers and issue-delegation forms | Renderer memory only; cleared on reload/close after any leave confirmation |
 | Electron's own data (window state, the Slack sign-in window's cookies, the last good theme) | `~/.pi/agent/agent-world/electron-data/` |
 | Why the app failed to start | `~/.pi/agent/agent-world/electron.log` |
 

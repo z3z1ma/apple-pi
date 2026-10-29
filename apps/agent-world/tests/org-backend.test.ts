@@ -382,6 +382,71 @@ test("only untouched preflight failures leave the draft editable", async () => {
 	expect(refused.editable).toBe(false);
 });
 
+test("new-person specialization is trimmed and omitted when waking its failed identity", async () => {
+	fail.set("Worker", "failed");
+	const request = plan();
+	request.positions[0]!.specialization = "  Data correctness\nKeep edge cases visible.  ";
+	request.positions[1]!.specialization = "   ";
+	const partial = await org.orgStart(request);
+	const worker = partial.people.find((member) => member.id === "worker")!.person!;
+	expect(sent.find((entry) => entry.person === worker && entry.command.kind === "start")!.command).toHaveProperty(
+		"specialization",
+		"Data correctness\nKeep edge cases visible.",
+	);
+	expect(sent.find((entry) => entry.person !== worker && entry.command.kind === "start")!.command).not.toHaveProperty(
+		"specialization",
+	);
+	fail.clear();
+	const done = await org.orgStart(retry(request, partial));
+	expect(done.complete).toBe(true);
+	const starts = sent.filter((entry) => entry.person === worker && entry.command.kind === "start");
+	expect(starts).toHaveLength(2);
+	expect(starts[1]!.command).not.toHaveProperty("specialization");
+});
+
+test.each([undefined, "Original focus"])(
+	"prepared specialization cannot change on retry (original %j)",
+	async (specialization) => {
+		fail.set("Worker", "failed");
+		const request = plan();
+		request.positions[0]!.specialization = specialization;
+		const partial = await org.orgStart(request);
+		const before = sent.length;
+		const changed = retry(request, partial);
+		changed.positions[0]!.specialization = "Different focus";
+		const result = await org.orgStart(changed);
+		expect(result.note).toContain("cannot change on retry");
+		expect(result.editable).toBe(false);
+		expect(sent).toHaveLength(before);
+	},
+);
+
+test("an old runtime refuses specialized team creation without preparing any person", async () => {
+	db.exec("alter table sessions drop column specialization");
+	const request = plan();
+	request.positions[0]!.specialization = "Data correctness";
+	const refused = await org.orgStart(request);
+	expect(refused.note).toContain("Restart the session runtime");
+	expect(refused.editable).toBe(true);
+	expect(sent).toHaveLength(0);
+	request.positions[0]!.specialization = "  ";
+	expect((await org.orgStart(request)).complete).toBe(true);
+});
+
+test("waking an existing planned person sends no replacement specialization", async () => {
+	person("existing-head");
+	const result = await org.orgStart({
+		id: "existing-specialization",
+		cwd: directory,
+		goal: "Coordinate existing work.",
+		positions: [{ id: "head", person: "existing-head", manager: null, specialization: "Replacement focus" }],
+	});
+	expect(result.complete).toBe(true);
+	const start = sent.find((entry) => entry.command.kind === "start")!;
+	expect(start.person).toBe("existing-head");
+	expect(start.command).not.toHaveProperty("specialization");
+});
+
 test("a prepared person's goal cannot silently change on retry", async () => {
 	fail.set("Worker", "failed");
 	const request = plan();

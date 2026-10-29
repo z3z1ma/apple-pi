@@ -70,6 +70,40 @@ test("work search retains recorded organization after a participant moves", () =
 	expect(searchOrg(world, "Current team").work).toEqual([]);
 });
 
+test("custom organization names are searchable without renaming people or historical ownership", () => {
+	const names = { new: "Reporting Team", old: "Original Archive" };
+	expect(searchOrg(world, "reporting team", names).people.map((person) => person.id)).toEqual(["new", "moved"]);
+	expect(searchOrg(world, "Maya", names).people).toEqual([
+		expect.objectContaining({ id: "moved", name: "Maya", teamName: "Reporting Team" }),
+	]);
+	expect(searchOrg(world, "moved", names).people.map((person) => person.id)).toEqual(["moved"]);
+	expect(searchOrg(world, "Current team", names).people.map((person) => person.id)).toEqual(["new", "moved"]);
+	expect(searchOrg(world, "Original Archive", names).work).toEqual([
+		expect.objectContaining({
+			id: "closed-work",
+			headquarters: "old",
+			organizationName: "Original Archive",
+			recordedTeam: null,
+		}),
+	]);
+	expect(searchOrg(world, "Reporting Team", names).work).toEqual([]);
+	expect(searchOrg(world, "Original team", names).work.map((task) => task.id)).toEqual(["closed-work"]);
+	expect(
+		searchOrg(world, "Renamed again", { ...names, new: "Renamed again" }).people.map((person) => person.id),
+	).toEqual(["new", "moved"]);
+});
+
+test("recorded work offers a team route only while its own anchor is a visible current root", () => {
+	const route = (extra: Partial<DormantAgent> = {}) =>
+		searchOrg({ ...world, dormant: [...world.dormant!, person("old", "Original head", null, extra)] }, "Past report", {
+			old: "Archive Team",
+		}).work[0];
+	expect(searchOrg(world, "Past report").work[0].recordedTeam).toBeNull();
+	expect(route()).toMatchObject({ headquarters: "old", recordedTeam: "old", organizationName: "Archive Team" });
+	for (const extra of [{ reportsTo: "new" }, { temporary: true }, { retiredAt: 2 }])
+		expect(route(extra)).toMatchObject({ headquarters: "old", recordedTeam: null });
+});
+
 test("blank and unmatched queries offer no people or work", () => {
 	expect(searchOrg(world, "  ")).toEqual({ people: [], work: [] });
 	expect(searchOrg(world, "no matching recorded metadata")).toEqual({ people: [], work: [] });
