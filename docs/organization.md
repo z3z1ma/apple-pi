@@ -17,7 +17,7 @@ This page is the product contract. The runtime mechanics (the database, the comm
 | Soul | Three fragments of the world (random encyclopedia articles) drawn at hire, outside any model, and left unexplained. Never edited. |
 | Self | The person's account of itself in four parts (story, practice, commitments, colleagues), rewritten only in reflection. Never distilled, never capped. |
 | Record | What the harness knows a person did: assignments and their outcomes, manager history, hire and leave dates. |
-| Hire, send home, call in, let go, move | Start a new person with a role and assigned goal; stop a person's process while retaining its membership and context; reopen that dormant person; request irreversible departure after a durable handoff; move a person under another manager. Dormancy preserves context; permanent departure deletes the owned raw session. |
+| Hire, send home, call in, let go, move | Start a new person with a role and optional initial goal; stop a person's process while retaining its membership and context; reopen that dormant person; request irreversible departure after a durable handoff; move a person under another manager. Dormancy preserves context; permanent departure deletes the owned raw session. |
 | Thread | One conversation: a subject, its participants, and its messages in order. Mail, team channels, meetings, and task discussions are all threads. |
 | Push, pull | How a participant gets a thread's messages. A pushed message arrives as mail (a turn). A pulled message waits until the participant reads the thread. |
 | Task | A bundle with a `task.md` goal: a ledger task in a project's `.ledger/`, or an ephemeral task in the state directory. A person works only on tasks assigned to it or taken by it. |
@@ -129,7 +129,7 @@ A person whose role manages, or an unroled organization root, also has ten manag
 
 | Tool | What it does |
 | --- | --- |
-| `hire` (`role`, `goal`, `title`, `value?`, `cost_of_delay?`, `cwd?`, `name?`, `session_id?`, `specialization?`) | Starts a new person in a role, reporting to the caller, with the goal assigned as a task before its first turn. |
+| `hire` (`role`, `goal?`, `title?`, `value?`, `cost_of_delay?`, `cwd?`, `name?`, `session_id?`, `specialization?`) | Starts a new person in a role, reporting to the caller. A nonempty goal requires a title and is assigned before its first turn; an omitted or blank goal brings the person in idle without a task or automatic opening turn. |
 | `call_in` (`person`, `goal?`, `value?`, `cost_of_delay?`) | Reopens a person at home with its history. A goal adds an assignment. Refused for a former member. |
 | `send_home` (`person`) | Quits the person's process. The person sleeps and stays in the organization. |
 | `rename` (`person`, `name`) | Renames a running person. Its id and history stay. |
@@ -170,7 +170,7 @@ The operator can preview or explicitly join channels from Workplace without join
 
 ## Tasks and assignments
 
-Work is explicit. Hiring creates and assigns a task before the person's first turn; calling a person in without a new goal preserves its work, while a new goal adds an assignment and becomes its focus. `take_task` takes a written `goal` with a short `title` (creating an ephemeral task whose `task.md` heading is the title) or an existing `task` (its id or ledger path). A goal without a title is refused: the goal is too long to name the task wherever it is listed. Managers use `assign(person, goal and title, or task)` and `unassign(person, task)`. An assignment records who gave whom what, when, and how it ended; assigning a person at home opens its session and starts the work. A wake failure reports that the assignment was saved, so the manager can call the person in without duplicating it.
+Work is explicit. Hiring with a nonempty goal creates and assigns a task before the person's first turn. Hiring without one preserves the standing role and any creation-time specialization but creates no task or automatic opening turn; later live mail or instructions can start work. Calling a person in without a new goal preserves its work, while a new goal adds an assignment and becomes its focus. `take_task` takes a written `goal` with a short `title` (creating an ephemeral task whose `task.md` heading is the title) or an existing `task` (its id or ledger path). A goal without a title is refused: the goal is too long to name the task wherever it is listed. Managers use `assign(person, goal and title, or task)` and `unassign(person, task)`. An assignment records who gave whom what, when, and how it ended; assigning a person at home opens its session and starts the work. A wake failure reports that the assignment was saved, so the manager can call the person in without duplicating it.
 
 A person can hold several tasks, with one in focus. `focus(task)` rereads its `task.md`; the file is the goal, not a database copy. The goal is appended to context on assignment or focus, and again after compaction. Editing the file and refocusing brings its revision into context. Each task has a thread shared by its assignees and assigners; taking work also tells the person's manager there.
 
