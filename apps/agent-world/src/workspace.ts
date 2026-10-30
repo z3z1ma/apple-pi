@@ -1,4 +1,7 @@
 export type WorkspaceResult<T> = ({ ok: true } & T) | { ok: false; reason: string; conflict?: boolean };
+export type WorkspaceReadResult =
+	| WorkspaceResult<{ root: string; path: string; text: string; hash: string }>
+	| { ok: false; reason: string; nonTextFile: string };
 export interface WorkspacePath {
 	root: string;
 	path: string;
@@ -44,9 +47,7 @@ export interface WorkspaceApi {
 	files(request: { root: string }): Promise<WorkspaceResult<{ root: string; paths: string[] }>>;
 	worktrees(request: { root: string }): Promise<WorkspaceResult<{ root: string; worktrees: WorkspaceWorktree[] }>>;
 	tree(request: WorkspacePath): Promise<WorkspaceResult<{ root: string; path: string; entries: WorkspaceEntry[] }>>;
-	readFile(
-		request: WorkspacePath,
-	): Promise<WorkspaceResult<{ root: string; path: string; text: string; hash: string }>>;
+	readFile(request: WorkspacePath): Promise<WorkspaceReadResult>;
 	saveFile(request: WorkspaceSave): Promise<WorkspaceResult<{ hash: string }>>;
 	gitStatus(request: {
 		root: string;

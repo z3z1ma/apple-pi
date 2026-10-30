@@ -2,7 +2,9 @@ import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { openFileLink } from "../src/backend/links.js";
 import { openWorkspace } from "../src/backend/workspace.js";
 import {
 	isWorkspaceDiff,
@@ -114,6 +116,101 @@ test("rejects traversal, escaped symlinks, metadata, binary, invalid UTF8 and mi
 	});
 	expect(fs.lstatSync(join(root, "inside")).isSymbolicLink()).toBe(true);
 	expect(await workspace.saveFile({ root, path: "absent", text: "new", baseHash: "" })).toMatchObject({ ok: false });
+});
+
+test("only verified non-text content carries a canonical system-open target", async () => {
+	for (const [path, bytes] of [
+		["binary #%:12.pdf", Buffer.from([65, 0, 66])],
+		["invalid", Buffer.from([0xff])],
+	] as const) {
+		fs.writeFileSync(join(root, path), bytes);
+		expect(await workspace.readFile({ root, path })).toMatchObject({
+			ok: false,
+			nonTextFile: pathToFileURL(fs.realpathSync(join(root, path))).href,
+		});
+	}
+	fs.symlinkSync(join(root, "invalid"), join(root, "inside-binary"));
+	expect(await workspace.readFile({ root, path: "inside-binary" })).toMatchObject({
+		ok: false,
+		nonTextFile: pathToFileURL(fs.realpathSync(join(root, "invalid"))).href,
+	});
+	fs.writeFileSync(join(base, "outside"), Buffer.from([0]));
+	fs.symlinkSync(join(base, "outside"), join(root, "escape-binary"));
+	for (const path of ["absent", "../outside", "escape-binary", ".git/config", "."]) {
+		const result = await workspace.readFile({ root, path });
+		expect(result).toMatchObject({ ok: false });
+		expect(result).not.toHaveProperty("nonTextFile");
+	}
+	vi.mocked(fs.readFileSync).mockImplementationOnce(() => {
+		throw Object.assign(new Error("Binary files cannot be edited here."), { code: "EACCES" });
+	});
+	expect(await workspace.readFile({ root, path: "hello.ts" })).toEqual({
+		ok: false,
+		reason: "Binary files cannot be edited here.",
+	});
+	expect(await workspace.readFile({ root, path: "hello.ts" })).toMatchObject({
+		ok: true,
+		text: "export const value = 1;\n",
+	});
+});
+
+test("an ASCII-only PDF is a non-text document regardless of its extension", async () => {
+	const objects = [
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] >>",
+	];
+	let pdf = "%PDF-1.4\n";
+	const offsets = objects.map((object, index) => {
+		const offset = Buffer.byteLength(pdf);
+		pdf += `${index + 1} 0 obj\n${object}\nendobj\n`;
+		return offset;
+	});
+	const start = Buffer.byteLength(pdf);
+	pdf += `xref\n0 4\n0000000000 65535 f \n${offsets.map((offset) => `${String(offset).padStart(10, "0")} 00000 n \n`).join("")}trailer\n<< /Size 4 /Root 1 0 R >>\nstartxref\n${start}\n%%EOF\n`;
+	expect([...Buffer.from(pdf)].every((byte) => byte > 0 && byte < 128)).toBe(true);
+	fs.writeFileSync(join(root, "document.data"), pdf);
+	expect(await workspace.readFile({ root, path: "document.data" })).toMatchObject({
+		ok: false,
+		nonTextFile: pathToFileURL(fs.realpathSync(join(root, "document.data"))).href,
+	});
+	fs.writeFileSync(join(root, "notes.pdf"), "Ordinary UTF-8 notes, despite the extension.\n");
+	const text = await workspace.readFile({ root, path: "notes.pdf" });
+	if (!text.ok) throw new Error(text.reason);
+	expect(text.text).toBe("Ordinary UTF-8 notes, despite the extension.\n");
+	expect(await workspace.saveFile({ root, path: "notes.pdf", text: pdf, baseHash: text.hash })).toMatchObject({
+		ok: false,
+	});
+	expect(fs.readFileSync(join(root, "notes.pdf"), "utf8")).toBe(text.text);
+});
+
+test("classified canonical non-text targets retain the existing system-opener execution guards", async () => {
+	const opened: string[] = [],
+		revealed: string[] = [];
+	for (const path of ["report #%:12.pdf", "script.sh", "executable"]) {
+		fs.writeFileSync(join(root, path), Buffer.from([0, 1]));
+		if (path === "executable") fs.chmodSync(join(root, path), 0o755);
+	}
+	fs.symlinkSync(join(root, "script.sh"), join(root, "disguised.pdf"));
+	for (const path of ["report #%:12.pdf", "disguised.pdf", "executable"]) {
+		const read = await workspace.readFile({ root, path });
+		if (read.ok || !("nonTextFile" in read)) throw new Error("Expected non-text classification");
+		expect(
+			await openFileLink(
+				read.nonTextFile,
+				root,
+				async (file) => {
+					opened.push(file);
+					return "";
+				},
+				(file) => {
+					revealed.push(file);
+				},
+			),
+		).toEqual({ ok: true });
+	}
+	expect(opened).toEqual([fs.realpathSync(join(root, "report #%:12.pdf"))]);
+	expect(revealed).toEqual([fs.realpathSync(join(root, "script.sh")), fs.realpathSync(join(root, "executable"))]);
 });
 
 test("Git reads staged, unstaged, untracked and renamed paths literally without changing index", async () => {

@@ -4351,15 +4351,17 @@ function bytesAt(path) {
 	if (!statSync(path).isFile()) throw new Error("Choose a regular file.");
 	return readFileSync(path);
 }
+var NonTextFileError = class extends Error {};
 function textOf(bytes) {
-	if (bytes.includes(0)) throw new Error("Binary files cannot be edited here.");
+	if (bytes.subarray(0, 5).equals(Buffer.from("%PDF-"))) throw new NonTextFileError("PDF documents cannot be edited here.");
+	if (bytes.includes(0)) throw new NonTextFileError("Binary files cannot be edited here.");
 	try {
 		return new TextDecoder("utf-8", {
 			fatal: true,
 			ignoreBOM: true
 		}).decode(bytes);
 	} catch {
-		throw new Error("This file is not valid UTF-8 text.");
+		throw new NonTextFileError("This file is not valid UTF-8 text.");
 	}
 }
 async function attempt(action) {
@@ -4591,16 +4593,26 @@ function openWorkspace(snapshot) {
 				entries
 			};
 		}),
-		readFile: (request) => attempt(() => {
-			const at = locate(request);
-			const bytes = bytesAt(at.path);
-			return {
-				root: at.root,
-				path: request.path,
-				text: textOf(bytes),
-				hash: hash(bytes)
-			};
-		}),
+		readFile: async (request) => {
+			let file;
+			try {
+				const at = locate(request);
+				const bytes = bytesAt(at.path);
+				file = at.path;
+				return {
+					ok: true,
+					root: at.root,
+					path: request.path,
+					text: textOf(bytes),
+					hash: hash(bytes)
+				};
+			} catch (error) {
+				return {
+					...failure(error),
+					...error instanceof NonTextFileError && file ? { nonTextFile: pathToFileURL(file).href } : {}
+				};
+			}
+		},
 		saveFile: async (request) => save(request),
 		gitStatus: (request) => attempt(async () => {
 			const root = await repositoryRoot(request.root);

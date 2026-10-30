@@ -416,7 +416,10 @@ body.workplace {
 	display: flex;
 	align-items: center;
 	gap: 8px;
-	padding-left: 10px;
+	min-width: 0;
+	margin: 0;
+	padding: 0 0 0 10px;
+	border: 0;
 	border-radius: 6px;
 }
 .wp-dm[data-selected="true"] {
@@ -1865,15 +1868,6 @@ body.workplace {
 	left: 0;
 	top: 0;
 	bottom: 0;
-}
-.wp-sleeper-row {
-	display: flex;
-	align-items: center;
-	gap: 6px;
-}
-.wp-sleeper-row > button:first-child {
-	flex: 1;
-	min-width: 0;
 }
 .wp-profile > header {
 	display: flex;

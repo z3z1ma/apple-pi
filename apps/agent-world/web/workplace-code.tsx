@@ -459,7 +459,12 @@ export function WorkplaceCode({
 				const result = await api.workspace.readFile({ root: repository, path });
 				if (request !== openRequest.current || repository !== rootRef.current) return false;
 				if (!result.ok) {
-					setError(result.reason);
+					if ("nonTextFile" in result) {
+						const opened = await api.openFile(result.nonTextFile, repository);
+						if (request !== openRequest.current || repository !== rootRef.current) return false;
+						if (opened.ok) setNotice("Sent to the system file handler.");
+						else setError(opened.reason);
+					} else setError(result.reason);
 					return;
 				}
 				buffers.current.set(key, { root: repository, path, text: result.text, base: result.text, hash: result.hash });

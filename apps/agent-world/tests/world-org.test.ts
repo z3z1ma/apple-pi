@@ -595,17 +595,27 @@ test("People directory includes teams and independents with visible lifecycle me
 		expect(await page.evaluate(() => (window as any).orgCalls.profiles)).toEqual(beforeWorkingProfiles);
 		const beforeChatMenu = await page.evaluate(() => (window as any).orgCalls.conversations);
 		expect(beforeChatMenu.every((id: string) => id === "solo")).toBe(true);
-		const chatMenu = row.getByRole("button", { name: "Person actions: Solo", exact: true });
-		await chatMenu.click();
+		expect(await sidebar.getByRole("button", { name: /^Person actions:/ }).count()).toBe(0);
+		const vipRow = page
+			.getByRole("region", { name: "VIPs", exact: true })
+			.getByRole("group", { name: "Ada", exact: true });
+		await vipRow.click({ button: "right" });
 		await menu.getByRole("menuitem", { name: "Let go", exact: true }).waitFor();
 		await page.keyboard.press("Escape");
+		expect(await vipRow.evaluate((node) => document.activeElement === node)).toBe(true);
+		const chatMenu = row.locator(".wp-dm-link");
+		expect(await chatMenu.getAttribute("aria-pressed")).toBe("true");
+		await chatMenu.focus();
+		await page.keyboard.press("Shift+F10");
+		await menu.getByRole("menuitem", { name: "Let go", exact: true }).waitFor();
+		await page.keyboard.press("Escape");
+		expect(await chatMenu.evaluate((node) => document.activeElement === node)).toBe(true);
 		expect(await page.evaluate(() => (window as any).orgCalls.conversations)).toEqual(beforeChatMenu);
 		await page.getByText(/^Sleeping agents \(/).click();
-		const homeMenu = page
-			.locator(".wp-sleepers")
-			.getByRole("button", { name: "Person actions: Home alone", exact: true });
+		const homeMenu = page.locator(".wp-sleepers").getByRole("button", { name: /^Home alone/ });
+		expect(await sidebar.getByRole("button", { name: /^Person actions:/ }).count()).toBe(0);
 		expect(await page.locator(".wp-sleepers").getByRole("img", { name: "Working", exact: true }).count()).toBe(0);
-		await homeMenu.click();
+		await homeMenu.click({ button: "right" });
 		await menu.getByRole("menuitem", { name: "Let go", exact: true }).waitFor();
 		await menu.getByRole("menuitem", { name: "Call in", exact: true }).waitFor();
 		await page.keyboard.press("Escape");

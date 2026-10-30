@@ -16,6 +16,7 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { pathToFileURL } from "node:url";
 import type {
 	WorkspaceApi,
 	WorkspaceGitEntry,
@@ -87,12 +88,15 @@ function bytesAt(path: string) {
 	if (!statSync(path).isFile()) throw new Error("Choose a regular file.");
 	return readFileSync(path);
 }
+class NonTextFileError extends Error {}
 function textOf(bytes: Buffer) {
-	if (bytes.includes(0)) throw new Error("Binary files cannot be edited here.");
+	if (bytes.subarray(0, 5).equals(Buffer.from("%PDF-")))
+		throw new NonTextFileError("PDF documents cannot be edited here.");
+	if (bytes.includes(0)) throw new NonTextFileError("Binary files cannot be edited here.");
 	try {
 		return new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes);
 	} catch {
-		throw new Error("This file is not valid UTF-8 text.");
+		throw new NonTextFileError("This file is not valid UTF-8 text.");
 	}
 }
 async function attempt<T>(action: () => T | Promise<T>): Promise<WorkspaceResult<T>> {
@@ -335,12 +339,20 @@ export function openWorkspace(snapshot: () => WorldSnapshot): WorkspaceApi {
 				);
 				return { root: at.root, path: request.path, entries };
 			}),
-		readFile: (request) =>
-			attempt(() => {
+		readFile: async (request) => {
+			let file: string | undefined;
+			try {
 				const at = locate(request);
 				const bytes = bytesAt(at.path);
-				return { root: at.root, path: request.path, text: textOf(bytes), hash: hash(bytes) };
-			}),
+				file = at.path;
+				return { ok: true, root: at.root, path: request.path, text: textOf(bytes), hash: hash(bytes) };
+			} catch (error) {
+				return {
+					...failure(error),
+					...(error instanceof NonTextFileError && file ? { nonTextFile: pathToFileURL(file).href } : {}),
+				};
+			}
+		},
 		saveFile: async (request) => save(request),
 		gitStatus: (request) =>
 			attempt(async () => {

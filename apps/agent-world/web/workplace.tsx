@@ -21,7 +21,7 @@ import { channelName, useWorkplaceNames } from "./workplace-names.js";
 import { descendants, Org, orgPeople } from "./workplace-org.js";
 import { OrganizationNameForm, OrgNameEditor } from "./workplace-org-name.js";
 import { ChatPeople, PersonAvatar, PersonName, PersonProfile, sessionStatus } from "./workplace-people.js";
-import { PersonActionsButton, WorkplacePersonActions } from "./workplace-person-actions.js";
+import { PersonActionsButton, usePersonMenu, WorkplacePersonActions } from "./workplace-person-actions.js";
 import { usePaneResize } from "./workplace-resize.js";
 import { WorkplaceWorld } from "./workplace-world.js";
 import { worldStore } from "./world-store.js";
@@ -356,6 +356,7 @@ function Chat({
 	};
 	const [selection, setSelection] = useState<{ kind: "dm" | "channel"; id: string }>();
 	const [filter, setFilter] = useState("");
+	const personMenu = usePersonMenu();
 	const [showTools, setShowTools] = useState(false);
 	const [profile, setProfile] = useState<{ id: string; name: string }>();
 	const layout = useRef<HTMLDivElement>(null);
@@ -429,7 +430,15 @@ function Chat({
 		(sleeper ? sleeperCharacter(sleeper) : undefined);
 	const matches = (name: string) => name.toLowerCase().includes(filter.toLowerCase());
 	const personRow = (agent: Character, home = false) => (
-		<div className="wp-dm" key={agent.id} data-selected={person?.id === agent.id} data-unread={!!agent.facts?.unseen}>
+		<fieldset
+			className="wp-dm"
+			key={agent.id}
+			tabIndex={-1}
+			aria-label={agent.name}
+			data-selected={person?.id === agent.id}
+			data-unread={!!agent.facts?.unseen}
+			onContextMenu={(event) => personMenu(event, agent.id)}
+		>
 			<PersonAvatar
 				id={agent.id}
 				name={agent.name}
@@ -438,6 +447,8 @@ function Chat({
 			<button
 				type="button"
 				className="wp-dm-link"
+				aria-haspopup="menu"
+				onKeyDown={(event) => personMenu(event, agent.id)}
 				aria-description={agent.facts?.unseen ? "Unread update" : undefined}
 				aria-pressed={person?.id === agent.id}
 				onClick={() => openDM(agent.id)}
@@ -456,8 +467,7 @@ function Chat({
 				{agent.facts?.unseen && <span className="wp-unread-dot" aria-hidden="true" />}
 				{agent.facts?.asking && <b className="wp-needs">?</b>}
 			</button>
-			<PersonActionsButton id={agent.id} />
-		</div>
+		</fieldset>
 	);
 	return (
 		<ChatPeople.Provider
@@ -545,17 +555,18 @@ function Chat({
 							{sleeping
 								.filter((agent) => matches(agent.name))
 								.map((agent) => (
-									<div className="wp-sleeper-row" key={agent.id}>
-										<button
-											type="button"
-											aria-pressed={person?.id === agent.id}
-											onClick={() => setSelection({ kind: "dm", id: agent.id })}
-										>
-											{agent.name}
-											<small>Asleep · history only</small>
-										</button>
-										<PersonActionsButton id={agent.id} />
-									</div>
+									<button
+										key={agent.id}
+										type="button"
+										aria-haspopup="menu"
+										aria-pressed={person?.id === agent.id}
+										onContextMenu={(event) => personMenu(event, agent.id)}
+										onKeyDown={(event) => personMenu(event, agent.id)}
+										onClick={() => setSelection({ kind: "dm", id: agent.id })}
+									>
+										{agent.name}
+										<small>Asleep \u00b7 history only</small>
+									</button>
 								))}
 						</details>
 					)}

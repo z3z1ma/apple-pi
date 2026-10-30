@@ -113,10 +113,13 @@ async function openWorkplace() {
 				osFiles: [],
 			};
 			w.deletedTarget = false;
+			w.nonTextCurrent = false;
+			w.failSystemOpen = false;
 			const body = [
 				`Review ${root}/src/main.ts:3:5.`,
 				"Relative `src/main.ts:3:5` and duplicate src/main.ts:3:5.",
 				"Spaced `src/my file.ts` remains one filename.",
+				"Non-text src/report.pdf and src/encoded.dat; unavailable src/denied.ts.",
 				"Missing src/missing.ts and ambiguous notes stay text.",
 				"[Guide](https://example.com/guide) and [source](src/main.ts:3:5).",
 				"<script>window.injectedFileLink = true</script>",
@@ -133,6 +136,8 @@ async function openWorkplace() {
 					]);
 					if (request.cwd === root) {
 						targets.set("src/main.ts", { root, path: "src/main.ts" });
+						for (const path of ["src/report.pdf", "src/encoded.dat", "src/denied.ts"])
+							targets.set(path, { root, path });
 						targets.set("src/my file.ts", { root, path: "src/my file.ts" });
 						targets.set("src/literal.ts:3:5", { root, path: "src/literal.ts:3:5" });
 					}
@@ -157,6 +162,16 @@ async function openWorkplace() {
 				}),
 				readFile: async (request) => {
 					w.fileLinkCalls.reads.push(structuredClone(request));
+					if (request.path === "src/denied.ts") return { ok: false, reason: "Permission denied." };
+					if (
+						["src/report.pdf", "src/encoded.dat"].includes(request.path) ||
+						(request.path === "src/main.ts" && w.nonTextCurrent)
+					)
+						return {
+							ok: false,
+							reason: "Binary files cannot be edited here.",
+							nonTextFile: `file://${request.root}/${request.path}`,
+						};
 					if (request.path === "src/deleted.ts" && w.deletedTarget)
 						return { ok: false, reason: "The referenced file no longer exists." };
 					return { ok: true, ...request, text: "one\ntwo\n0123456789\nfour\n", hash: "original" };
@@ -230,7 +245,7 @@ async function openWorkplace() {
 				},
 				openFile: async (...args: unknown[]) => {
 					w.fileLinkCalls.osFiles.push(args);
-					return { ok: true };
+					return w.failSystemOpen ? { ok: false, reason: "No default application for this file." } : { ok: true };
 				},
 				workspace,
 			};
@@ -392,6 +407,68 @@ test("mail links open their own canonical root, preserve dirty buffers and surfa
 		expect((await calls(page)).saves).toEqual([]);
 		expect((await calls(page)).osFiles).toEqual([]);
 		expect(errors).toEqual([]);
+	} finally {
+		await page.close();
+	}
+}, 40_000);
+
+test("only explicit non-text activation opens the system handler and preserves dirty Code buffers", async () => {
+	const { page, errors } = await openWorkplace();
+	try {
+		await openDm(page);
+		await fileLink(page, "src/report.pdf").waitFor();
+		expect((await calls(page)).reads).toEqual([]);
+		expect((await calls(page)).osFiles).toEqual([]);
+		await page.getByRole("link", { name: "Open file: source", exact: true }).click();
+		await codeReady(page, "src/main.ts");
+		await page.keyboard.insertText("DRAFT");
+		await page.getByRole("img", { name: "Unsaved changes", exact: true }).waitFor();
+		await page.evaluate(() => {
+			(window as any).nonTextCurrent = true;
+		});
+		await openDm(page);
+		await page.getByRole("button", { name: "Code", exact: true }).click();
+		await page.getByRole("alert").filter({ hasText: "Binary files cannot be edited here." }).waitFor();
+		expect((await calls(page)).osFiles).toEqual([]);
+		await openDm(page);
+		await page.getByRole("link", { name: "Open file: source", exact: true }).click();
+		expect((await calls(page)).osFiles).toEqual([]);
+		expect(await page.locator(".monaco-editor .view-lines").textContent()).toContain("0123DRAFT456789");
+		await page.evaluate(() => {
+			(window as any).nonTextCurrent = false;
+			(window as any).failSystemOpen = true;
+		});
+		await openDm(page);
+		await fileLink(page, "src/report.pdf").click();
+		await page.getByRole("alert").filter({ hasText: "No default application for this file." }).waitFor();
+		expect((await calls(page)).osFiles).toEqual([[`file://${ROOT}/src/report.pdf`, ROOT]]);
+		await page.evaluate(() => {
+			(window as any).failSystemOpen = false;
+		});
+		for (const path of ["src/report.pdf", "src/encoded.dat"]) {
+			await openDm(page);
+			await fileLink(page, path).click();
+			await page.getByText("Sent to the system file handler.", { exact: true }).waitFor();
+			expect(
+				await page
+					.getByRole("tab")
+					.and(page.locator(`[title="${path}"]`))
+					.count(),
+			).toBe(0);
+		}
+		expect((await calls(page)).osFiles).toEqual([
+			[`file://${ROOT}/src/report.pdf`, ROOT],
+			[`file://${ROOT}/src/report.pdf`, ROOT],
+			[`file://${ROOT}/src/encoded.dat`, ROOT],
+		]);
+		await openDm(page);
+		await fileLink(page, "src/denied.ts").click();
+		await page.getByRole("alert").filter({ hasText: "Permission denied." }).waitFor();
+		expect((await calls(page)).osFiles).toHaveLength(3);
+		expect((await calls(page)).saves).toEqual([]);
+		expect(await page.locator(".monaco-editor .view-lines").textContent()).toContain("0123DRAFT456789");
+		expect(errors).toEqual([]);
+		await shot(page, "non-text-dirty-retained");
 	} finally {
 		await page.close();
 	}

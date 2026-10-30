@@ -44,7 +44,7 @@ An independent branch remains independent on reconnect or call-in: a recorded nu
 
 ### Person actions
 
-Use the visible person-menu button on Chat rows, DM headers, profiles, team cards or People directory rows. In the Org chart, right-click a real person's card, or focus it and press Shift+F10, for the same actions. A team card's menu acts on its head, not the whole team. Opening the menu does not read or acknowledge a conversation. Organization-name work history and Rename remain separate controls.
+Right-click a DM, VIP or sleeping row for its person actions; with the name button focused, Shift+F10 or the keyboard's context-menu key opens the same menu. The sidebar has no extra menu buttons. DM headers, profiles, team cards and People directory rows retain their person-menu buttons. In the Org chart, right-click a real person's card, or focus it and press Shift+F10, for the same actions. A team card's menu acts on its head, not the whole team. Opening the menu does not read or acknowledge a conversation. Organization-name work history and Rename remain separate controls.
 
 **Send home** closes only the selected person's session, preserving their identity, work and history. Idle people go home immediately; interrupting someone busy or awaiting input requires confirmation. If they become busy after selection, the backend can require a fresh confirmation. Their reports stay where they are.
 
@@ -143,7 +143,7 @@ Sending, posting, answering or instructing is a real operator action. The interf
 
 ## Code edits local files explicitly
 
-Choose **Code** and a known repository, or enter an absolute local directory. The file tree opens existing UTF-8 text files in Monaco. Open-file tabs and unsaved buffers remain when switching Workplace views or repositories; they are not saved to disk merely by changing selection. Use a tab's close icon, or right-click for **Close**, **Close others**, **Close all** and **Copy relative path**. Closing dirty files requires an explicit discard confirmation; cancelling preserves them. Bulk close applies to the current repository only.
+Choose **Code** and a known repository, or enter an absolute local directory. The file tree opens existing UTF-8 text files in Monaco. Explicitly opening a non-text file, including a PDF document, or a file with unsupported text encoding uses the default system application instead; executable/script targets retain the existing Finder reveal protection. Missing, unreadable or unsafe paths remain errors. Metadata checks and background refresh never open another application. Open-file tabs and unsaved buffers remain when switching Workplace views or repositories; they are not saved to disk merely by changing selection. Use a tab's close icon, or right-click for **Close**, **Close others**, **Close all** and **Copy relative path**. Closing dirty files requires an explicit discard confirmation; cancelling preserves them. Bulk close applies to the current repository only.
 
 Use the file-search action or Cmd+P/Ctrl+P while Code is active for **Quick Open**. It ranks filenames and relative paths, not file contents; choose a result to open it in the existing editor. The **Linked worktree** selector opens another existing working directory for the same Git repository. It does not check out a branch or create a worktree. Each opened directory keeps its own open buffers.
 

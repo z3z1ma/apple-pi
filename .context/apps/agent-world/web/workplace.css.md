@@ -20,7 +20,7 @@ Keep the embedded session overrides scoped under `.wp-session`; the World modal 
 The embedded `.wp-session` also owns a stacking context. World's reused conversation veil keeps its modal z-index; without local isolation it paints over a narrow standalone profile even though that profile and all its content have correct geometry. Verify actual hit targets/pixels, not only bounding boxes or DOM visibility.
 Why: broad `.aw-conv-*` overrides would restyle the original World modal, which still has its own theme, sidebar, and focus boundary. Reusing the session implementation is not permission to merge those two layouts or let modal layers escape into sibling panes.
 Coupled: apps/agent-world/web/overlay/conversation/conversation-panel.tsx, apps/agent-world/web/overlay/conversation/transcript.tsx, apps/agent-world/web/overlay/conversation/conversation.css, apps/agent-world/web/workplace.tsx
-Verify: apps/agent-world/tests/world-conversation.test.ts
+Verify: apps/agent-world/tests/world-conversation.test.ts, apps/agent-world/tests/world-org.test.ts
 
 The embedded composer reuses two bordered pieces from World. Its outer footer resets the inherited grid gap and margins and uses a `minmax(0, 1fr)` track; the top box and action bar must meet at the same edges, including while focused. The lower activity text and keyboard hint shrink and ellipsize, while action labels stay on one line.
 Why: World's 7px grid gap split the apparent composer outline; inherited margins also inset it twice. Shrinking the hint rather than the buttons keeps controls readable in a narrower DM. An automatic grid minimum let the nonwrapping action row grow the composer past the pane even though its hint had `min-width: 0`; the zero-minimum track contains that row.
