@@ -42,10 +42,17 @@ function visibleBundles(directory: string): string[] {
 
 function readThreads(db: DatabaseSync, roots: Map<string, string>): WorkplaceThread[] {
 	if (!hasTable(db, "threads")) return [];
+	const topics = db
+		.prepare("pragma table_info(threads)")
+		.all()
+		.some((column) => column.name === "channel_type");
+	const visible = topics
+		? `(t.kind = 'channel' and (t.channel_type != 'topic' or exists (select 1 from thread_participants own where own.thread_id = t.id and own.participant = 'operator' and own.following = 1))) or (t.kind = 'meeting' and t.closed_at is null)`
+		: "t.kind = 'channel' or (t.kind = 'meeting' and t.closed_at is null)";
 	const members = new Map<string, string[]>();
 	for (const row of db
 		.prepare(`select p.thread_id, p.participant from thread_participants p join threads t on t.id = p.thread_id
-			where t.kind = 'channel' or (t.kind = 'meeting' and t.closed_at is null) order by p.joined_at, p.participant`)
+			where (${visible}) ${topics ? "and (t.kind != 'channel' or p.following = 1)" : ""} order by p.joined_at, p.participant`)
 		.all() as { thread_id: string; participant: string }[]) {
 		const list = members.get(row.thread_id) ?? [];
 		list.push(row.participant);
@@ -53,16 +60,17 @@ function readThreads(db: DatabaseSync, roots: Map<string, string>): WorkplaceThr
 	}
 	const rows = db
 		.prepare(`select t.id, t.kind, t.subject, t.created_by as createdBy, t.closed_at,
+		${topics ? "t.channel_type as channelType, t.scope_head as scopeHead," : ""}
 		coalesce(max(m.seq), 0) as lastSeq, coalesce(max(m.at), t.created_at) as lastAt
 		from threads t left join thread_messages m on m.thread_id = t.id
-		where t.kind = 'channel' or (t.kind = 'meeting' and t.closed_at is null) group by t.id
+		where ${visible} group by t.id
 		order by lastSeq desc, t.id`)
 		.all() as unknown as (Omit<WorkplaceThread, "headquarters" | "participants" | "closed"> & {
 		closed_at: number | null;
 	})[];
 	return rows.map(({ closed_at, ...row }) => ({
 		...row,
-		headquarters: roots.get(row.createdBy) ?? row.createdBy,
+		headquarters: row.scopeHead ?? roots.get(row.createdBy) ?? row.createdBy,
 		closed: closed_at !== null,
 		participants: members.get(row.id) ?? [],
 	}));

@@ -11,6 +11,7 @@ import { app, BrowserWindow, dialog, ipcMain, net, protocol, shell } from "elect
 import { agentDir, statePaths } from "../../../../components/session-state/src/paths.js";
 import { appFile } from "../app-files.js";
 import { openCommands } from "../backend/commands.js";
+import { openCommunications } from "../backend/communications.js";
 import { openConversations } from "../backend/conversations.js";
 import { openEmbeddedTerminals } from "../backend/embedded-terminal.js";
 import { instruct } from "../backend/instructions.js";
@@ -32,6 +33,7 @@ import {
 	isWorkspaceSave,
 	type WorkspaceApi,
 } from "../workspace.js";
+import { wireCommunications } from "./communications-ipc.js";
 import { wireIntegrations } from "./integrations-ipc.js";
 import { wireTerminals } from "./terminal-ipc.js";
 
@@ -107,6 +109,7 @@ function start() {
 	wireWorkspace(openWorkspace(() => world.snapshot()));
 	const conversations = openConversations(statePaths().socket);
 	const commands = openCommands(statePaths().socket);
+	wireCommunications(openCommunications(statePaths().db, commands));
 	let window: BrowserWindow | undefined;
 	const toWindow = (channel: string, message: unknown) => {
 		if (window && !window.isDestroyed()) window.webContents.send(channel, message);

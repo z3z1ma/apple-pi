@@ -176,6 +176,55 @@ try {
 		.waitFor();
 	assert.equal(await page.locator(".wp-chat-sidebar").getByRole("img", { name: "Working", exact: true }).count(), 1);
 	assert.equal((await page.evaluate(() => window.agentWorld.profile("missing-profile"))).ok, false);
+	const communicationProof = await page.evaluate(async () => {
+		const api = window.agentWorld.communications;
+		const created = await api.createChannel({
+			attempt: crypto.randomUUID(),
+			scopeHead: "nav-head",
+			name: "Native communication",
+			purpose: "Verify the actual preload and runtime",
+		});
+		if (created.outcome !== "applied" || !created.effect) throw new Error(JSON.stringify(created));
+		const thread = created.effect.thread.id;
+		const quiet = await api.post({
+			attempt: crypto.randomUUID(),
+			thread,
+			body: "Navigation Report is a name, not a notification.",
+		});
+		const notified = await api.post({
+			attempt: crypto.randomUUID(),
+			thread,
+			body: "Please inspect this context.",
+			notify: ["nav-report"],
+		});
+		const recent = await api.readThread({ thread, view: "recent", limit: 10 });
+		const caughtUp = await api.readThread({ attempt: crypto.randomUUID(), thread, view: "catch_up", limit: 10 });
+		const mailRequest = {
+			attempt: crypto.randomUUID(),
+			to: ["nav-head"],
+			subject: "Native mail",
+			body: "Only one publication",
+		};
+		const mail = await api.sendMail(mailRequest);
+		const replay = await api.sendMail(mailRequest);
+		const status = await api.status({ attempt: mailRequest.attempt });
+		const archived = await api.archive({ attempt: crypto.randomUUID(), thread, summary: "Native boundary checked." });
+		const reopened = await api.reopen({ attempt: crypto.randomUUID(), thread, reason: "Resume the fixture." });
+		return { thread, quiet, notified, recent, caughtUp, mail, replay, status, archived, reopened };
+	});
+	assert.equal(communicationProof.quiet.outcome, "applied");
+	assert.deepEqual(communicationProof.quiet.effect.queued, []);
+	assert.deepEqual(communicationProof.notified.effect.queued, ["nav-report"]);
+	assert.equal(communicationProof.recent.page.acknowledgment, "not_requested");
+	assert.equal(communicationProof.caughtUp.page.acknowledgment, "applied");
+	assert.equal(communicationProof.mail.outcome, "applied");
+	assert.deepEqual(communicationProof.mail, communicationProof.replay);
+	assert.deepEqual(communicationProof.mail, communicationProof.status);
+	assert.equal(communicationProof.archived.effect.thread.archived, true);
+	assert.equal(communicationProof.reopened.effect.thread.archived, false);
+	console.log(
+		"Native communication: real preload/IPC/runtime publication, explicit notification, paged acknowledgment, replay, archive/reopen passed; fake recipients do not prove model reading.",
+	);
 	await page.getByRole("button", { name: "Mail", exact: true }).click();
 	assert.match(page.url(), /workplace=mail/);
 	await page.getByRole("button", { name: "Chat", exact: true }).click();

@@ -5,11 +5,11 @@ import { BrowserWindow, app, dialog, ipcMain, net, protocol, shell } from "elect
 import { homedir } from "node:os";
 import { createHash, randomUUID } from "node:crypto";
 import { createConnection } from "node:net";
-import { spawn } from "@lydell/node-pty";
+import { isDeepStrictEqual, promisify } from "node:util";
 import { DatabaseSync } from "node:sqlite";
 import "@earendil-works/pi-coding-agent";
+import { spawn } from "@lydell/node-pty";
 import { execFile, spawn as spawn$1 } from "node:child_process";
-import { promisify } from "node:util";
 import { inflateSync } from "node:zlib";
 //#region components/session-state/src/paths.ts
 /** Pi's own rule for `PI_CODING_AGENT_DIR`: a leading `~` means the home directory. */
@@ -55,6 +55,28 @@ function openCommands(socketPath) {
 	let connecting;
 	let closed = false;
 	const waiting = /* @__PURE__ */ new Map();
+	function receive(line, source) {
+		let reply;
+		try {
+			reply = JSON.parse(line);
+		} catch {
+			return;
+		}
+		if (reply?.type !== "receipt" || typeof reply.commandId !== "string") return;
+		const handler = waiting.get(reply.commandId);
+		if (!handler || handler.socket !== source) return;
+		const stage = reply.stage;
+		if (stage !== "accepted" && stage !== "delivered" && stage !== "applied" && stage !== "failed") return;
+		const reason = typeof reply.reason === "string" ? reply.reason : void 0;
+		handler.stage = stage;
+		handler.reason = reason;
+		for (const listener of handler.listeners) listener(stage, stage === "failed" ? reason ?? "failed" : reason);
+		if (stage === "applied") handler.settle({ ok: true });
+		else if (stage === "failed") handler.settle({
+			ok: false,
+			reason: reason ?? "failed"
+		});
+	}
 	const connect = () => {
 		if (socket && !socket.destroyed) return Promise.resolve(socket);
 		connecting ??= new Promise((resolve, reject) => {
@@ -63,26 +85,8 @@ function openCommands(socketPath) {
 			next.on("data", (chunk) => {
 				buffer += chunk.toString();
 				for (let end = buffer.indexOf("\n"); end >= 0; end = buffer.indexOf("\n")) {
-					const line = buffer.slice(0, end);
+					receive(buffer.slice(0, end), next);
 					buffer = buffer.slice(end + 1);
-					let reply;
-					try {
-						reply = JSON.parse(line);
-					} catch {
-						continue;
-					}
-					if (reply.type !== "receipt" || typeof reply.commandId !== "string") continue;
-					const handler = waiting.get(reply.commandId);
-					if (!handler) continue;
-					const stage = reply.stage;
-					const reason = typeof reply.reason === "string" ? reply.reason : void 0;
-					if (stage === "accepted") handler.accepted = true;
-					handler.onReceipt(stage, stage === "failed" ? reason ?? "failed" : reason);
-					if (stage === "applied") handler.settle({ ok: true });
-					else if (stage === "failed") handler.settle({
-						ok: false,
-						reason: reason ?? "failed"
-					});
 				}
 			});
 			next.once("connect", () => {
@@ -98,9 +102,9 @@ function openCommands(socketPath) {
 			});
 			next.on("close", () => {
 				if (socket === next) socket = void 0;
-				for (const handler of [...waiting.values()]) handler.settle({
+				for (const handler of [...waiting.values()]) if (handler.socket === next) handler.settle({
 					ok: false,
-					reason: handler.accepted ? LOST : GONE$1
+					reason: handler.stage ? LOST : GONE$1
 				});
 			});
 		});
@@ -122,35 +126,581 @@ function openCommands(socketPath) {
 				};
 			}
 			const commandId = options.commandId ?? `agent-world-${randomUUID()}`;
-			return new Promise((resolve) => {
-				const timer = setTimeout(() => {
-					if (!handler.accepted) handler.settle({
-						ok: false,
-						reason: GONE$1
-					});
-				}, ACCEPT_TIMEOUT_MS);
-				const handler = {
-					accepted: false,
-					onReceipt: (stage, reason) => options.onReceipt?.(stage, reason),
-					settle(result) {
-						if (waiting.get(commandId) !== handler) return;
-						waiting.delete(commandId);
-						clearTimeout(timer);
-						resolve(result);
-					}
+			const request = JSON.parse(JSON.stringify({
+				sessionId,
+				command
+			}));
+			const previous = waiting.get(commandId);
+			if (previous && !previous.socket.destroyed) {
+				if (!isDeepStrictEqual(previous.request, request)) return {
+					ok: false,
+					reason: "This command ID is already waiting for a different request."
 				};
-				waiting.set(commandId, handler);
-				open.write(`${JSON.stringify({
-					type: "command",
-					commandId,
-					sessionId,
-					command
-				})}\n`);
+				if (options.onReceipt) {
+					previous.listeners.add(options.onReceipt);
+					if (previous.stage) options.onReceipt(previous.stage, previous.reason);
+				}
+				return previous.promise;
+			}
+			previous?.settle({
+				ok: false,
+				reason: previous.stage ? LOST : GONE$1
 			});
+			let resolveResult;
+			const promise = new Promise((resolve) => {
+				resolveResult = resolve;
+			});
+			const timer = setTimeout(() => {
+				if (!handler.stage) handler.settle({
+					ok: false,
+					reason: GONE$1
+				});
+			}, ACCEPT_TIMEOUT_MS);
+			const handler = {
+				request,
+				socket: open,
+				promise,
+				listeners: new Set(options.onReceipt ? [options.onReceipt] : []),
+				settle(result) {
+					if (waiting.get(commandId) !== handler) return;
+					waiting.delete(commandId);
+					clearTimeout(timer);
+					resolveResult(result);
+				}
+			};
+			waiting.set(commandId, handler);
+			open.write(`${JSON.stringify({
+				type: "command",
+				commandId,
+				sessionId,
+				command
+			})}\n`);
+			return promise;
 		},
 		close() {
 			closed = true;
 			socket?.destroy();
+		}
+	};
+}
+//#endregion
+//#region components/shared/src/ledger-files.ts
+var LIVE_STATUSES = [
+	"planning",
+	"ready",
+	"in-progress"
+];
+var CLOSED_STATUSES = ["done", "cancelled"];
+[...LIVE_STATUSES, ...CLOSED_STATUSES];
+//#endregion
+//#region components/session-state/src/departures.ts
+/** A permanent identity fact, not a claim that process and filesystem cleanup has finished. */
+function departureOf(db, person) {
+	const row = db.prepare("select data from events where session_id = ? and type = 'person_departed' order by seq desc limit 1").get(person);
+	return row ? JSON.parse(row.data) : void 0;
+}
+//#endregion
+//#region components/session-state/src/threads.ts
+/** The operator, as a participant and an address. */
+var OPERATOR$1 = "operator";
+/** A participant's display name: its session name, else its id; the operator is "the operator". */
+function nameOf$1(db, id) {
+	if (id === "operator") return "the operator";
+	if (id === "harness") return "the harness";
+	const row = db.prepare("select name from sessions where id = ?").get(id);
+	const discarded = row?.name ? void 0 : db.prepare("select json_extract(data, '$.name') as name from events where session_id = ? and type = 'person_discarded' order by seq desc limit 1").get(id);
+	return row?.name || departureOf(db, id)?.name || discarded?.name || id;
+}
+//#endregion
+//#region components/session-state/src/valuation.ts
+var AMOUNT = String.raw`\$([\d.eE+-]+)`;
+new RegExp(String.raw`^Value:\s*${AMOUNT}(?:\s*\(estimated by (.+)\))?\s*$`, "m");
+new RegExp(String.raw`^Cost of delay:\s*${AMOUNT}\s*/\s*(hour|day)\s*$`, "m");
+//#endregion
+//#region components/session-state/src/program-peers.ts
+/** Temporary identity survives person/launch cleanup; a discarded legacy caller may be unknown. */
+function temporaryCallers(db) {
+	const callers = /* @__PURE__ */ new Map();
+	for (const row of db.prepare("select session_id, type, data from events where type in ('program_peer_created', 'program_peer_observed', 'person_discarded') order by seq").all()) {
+		const caller = row.type === "person_discarded" ? null : JSON.parse(row.data ?? "{}").caller;
+		if (!callers.has(row.session_id)) callers.set(row.session_id, typeof caller === "string" ? caller : null);
+	}
+	for (const row of db.prepare("select session_id, created_by from program_peers").all()) if (!callers.has(row.session_id)) callers.set(row.session_id, row.created_by);
+	return callers;
+}
+//#endregion
+//#region components/session-state/src/communication.ts
+function communicationAvailable(db) {
+	return db.prepare("pragma table_info(commands)").all().some((row) => row.name === "result");
+}
+function requireCommunication(db) {
+	if (!communicationAvailable(db)) throw new Error("Restart the session runtime with current code before using communication capabilities.");
+}
+function communicationAttemptId(person, invocation) {
+	return `communication:${createHash("sha256").update(JSON.stringify([person, invocation])).digest("hex")}`;
+}
+function canonicalCommunication(value) {
+	return JSON.stringify(value, (_key, item) => item && typeof item === "object" && !Array.isArray(item) ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => a.localeCompare(b))) : item);
+}
+function communicationAttempt(db, person, attempt, input) {
+	requireCommunication(db);
+	const row = db.prepare("select session_id, kind, command, stage, reason, result from commands where command_id = ?").get(attempt);
+	if (!row) return {
+		attempt,
+		outcome: "not_recorded"
+	};
+	if (row.session_id !== person || row.kind !== "communication") throw new Error("This communication attempt belongs to another caller or operation.");
+	const command = JSON.parse(row.command);
+	if (input && canonicalCommunication(input) !== canonicalCommunication(command.input)) throw new Error("The attempt already records a different input; use a new invocation for changed intent.");
+	return {
+		attempt,
+		outcome: row.stage === "applied" ? "applied" : row.stage === "failed" ? "refused" : "pending",
+		stage: row.stage,
+		...row.reason ? { reason: row.reason } : {},
+		command,
+		...row.result ? { effect: JSON.parse(row.result) } : {}
+	};
+}
+function conversationRow(db, id) {
+	requireCommunication(db);
+	const row = db.prepare("select * from threads where id = ?").get(id);
+	if (!row) throw new Error(`No conversation ${id}.`);
+	return row;
+}
+function conversationInfo(db, person, id) {
+	const row = conversationRow(db, id);
+	const memberships = db.prepare("select participant, invited, following, read_up_to from thread_participants where thread_id = ?").all(id);
+	const mine = memberships.find((member) => member.participant === person);
+	const active = person === "operator" || Boolean(db.prepare("select 1 from sessions where id = ? and retired_at is null").get(person)) && !departureOf(db, person);
+	const orphan = !memberships.some((member) => member.participant !== "operator" && db.prepare("select 1 from sessions where id = ? and retired_at is null").get(member.participant));
+	const operatorAccess = person === "operator" && (row.kind === "channel" || row.kind === "meeting" || row.kind === "task" || orphan);
+	const access = active && Boolean(mine || operatorAccess);
+	const sources = access ? accessSources(db, row, person, Boolean(mine?.invited), operatorAccess) : [];
+	const following = row.kind === "channel" ? Boolean(mine?.following) : null;
+	const participant = access && (person === "operator" && orphan || (row.kind === "channel" ? Boolean(following) : Boolean(mine)));
+	const ordinary = row.kind !== "task" && (row.kind !== "channel" || row.channel_type === "topic");
+	const pinned = row.pinned_seq === null ? null : messageReference(db, id, row.pinned_seq);
+	const readUpTo = mine?.read_up_to ?? 0;
+	const unread = access ? db.prepare("select count(*) as count from thread_messages where thread_id = ? and seq > ? and sender != ?").get(id, readUpTo, person).count : 0;
+	const participantInfo = (member) => ({
+		id: member.participant,
+		name: nameOf$1(db, member.participant),
+		access_sources: accessSources(db, row, member.participant, Boolean(member.invited), member.participant === OPERATOR$1),
+		following: row.kind === "channel" ? Boolean(member.following) : null
+	});
+	return {
+		id,
+		kind: row.kind,
+		channel_type: row.channel_type,
+		name: row.subject,
+		purpose: row.purpose,
+		scope_head: row.scope_head ?? (row.channel_type === "organization" ? id.slice(13) : row.channel_type === "team" ? id.slice(5) : null),
+		archived: row.closed_at !== null,
+		pinned,
+		access,
+		access_sources: sources,
+		following,
+		read_up_to: readUpTo,
+		unread,
+		participants: access ? memberships.filter((member) => row.kind !== "channel" || member.following).map(participantInfo) : [],
+		invitations: access ? memberships.filter((member) => member.invited).map(participantInfo) : [],
+		permissions: {
+			post: access && row.closed_at === null && (row.kind === "channel" ? row.channel_type === "topic" || Boolean(mine) : row.kind !== "task" || Boolean(mine)),
+			join: access && row.kind === "channel",
+			invite: participant && row.kind !== "task",
+			remove: participant && row.kind !== "task",
+			pin: participant,
+			archive: participant && ordinary && row.closed_at === null,
+			reopen: participant && ordinary && row.closed_at !== null
+		}
+	};
+}
+function accessSources(db, row, person, invited, operator) {
+	if (operator) return ["operator"];
+	if (row.kind !== "channel") return ["membership"];
+	const derived = row.channel_type === "team" ? person === row.scope_head || db.prepare("select reports_to from sessions where id = ?").get(person)?.reports_to === row.scope_head : scopeAccess(db, person, row.scope_head);
+	return [...invited ? ["explicit_invitation"] : [], ...derived ? [row.channel_type === "topic" ? "organization" : "structural"] : []];
+}
+function requireConversationAccess(db, person, id) {
+	const info = conversationInfo(db, person, id);
+	if (!info.access) throw new Error("You do not have access to this conversation.");
+	return info;
+}
+function scopeAccess(db, person, head) {
+	if (!head || temporaryCallers(db).has(person)) return false;
+	const seen = /* @__PURE__ */ new Set();
+	let current = person;
+	while (current && !seen.has(current)) {
+		if (current === head) return true;
+		seen.add(current);
+		current = db.prepare("select reports_to from sessions where id = ?").get(current)?.reports_to ?? null;
+	}
+	return false;
+}
+function messageReference(db, thread, seq) {
+	const message = db.prepare("select id from thread_messages where thread_id = ? and seq = ?").get(thread, seq);
+	if (!message) throw new Error("The message reference does not belong to this conversation.");
+	return {
+		thread,
+		seq,
+		id: message.id
+	};
+}
+function message(db, thread, row) {
+	return {
+		thread,
+		seq: row.seq,
+		id: row.id,
+		from: row.sender,
+		fromName: nameOf$1(db, row.sender),
+		body: row.body,
+		at: row.at,
+		reference: {
+			thread,
+			seq: row.seq,
+			id: row.id
+		}
+	};
+}
+function positive(value) {
+	if (!Number.isSafeInteger(value) || value < 1) throw new Error("limit must be a positive safe integer.");
+}
+function continuation(person, kind, options) {
+	if (!options.cursor) return void 0;
+	let decoded;
+	try {
+		decoded = JSON.parse(Buffer.from(options.cursor, "base64url").toString("utf8"));
+	} catch {
+		throw new Error("Invalid continuation cursor.");
+	}
+	if (decoded.person !== person || decoded.kind !== kind || !decoded.query || !Number.isSafeInteger(decoded.position) || !Number.isSafeInteger(decoded.through)) throw new Error("This continuation belongs to another caller or query.");
+	for (const [key, value] of Object.entries(options)) if (key !== "cursor" && value !== void 0 && canonicalCommunication(value) !== canonicalCommunication(decoded.query[key])) throw new Error("Continuation parameters differ from the original query.");
+	return decoded;
+}
+function cursor(value) {
+	return Buffer.from(JSON.stringify(value)).toString("base64url");
+}
+function findChannels(db, person, options) {
+	requireCommunication(db);
+	const resumed = continuation(person, "channels", options);
+	const query = resumed?.query ?? {
+		...options,
+		cursor: void 0,
+		archived: options.archived ?? "exclude"
+	};
+	positive(query.limit);
+	const needle = String(query.query ?? "").toLocaleLowerCase();
+	const rows = accessible(db, person).filter((info) => info.kind === "channel" && (!needle || `${info.name}\n${info.purpose ?? ""}`.toLocaleLowerCase().includes(needle)) && (query.followed === void 0 || info.following === query.followed) && (!query.scopeHead || info.scope_head === query.scopeHead) && (query.archived === "include" || info.archived === (query.archived === "only")));
+	const start = resumed?.position ?? 0;
+	const threads = rows.slice(start, start + query.limit);
+	return {
+		threads,
+		...start + threads.length < rows.length ? { next_cursor: cursor({
+			person,
+			kind: "channels",
+			query,
+			position: start + threads.length,
+			through: 0
+		}) } : {}
+	};
+}
+function accessible(db, person) {
+	return db.prepare("select id from threads order by id").all().map(({ id }) => conversationInfo(db, person, id)).filter((info) => info.access);
+}
+function readConversation(db, person, options) {
+	const resumed = continuation(person, "read", options);
+	const query = resumed?.query ?? {
+		thread: options.thread,
+		view: options.view ?? "catch_up",
+		limit: options.limit,
+		...options.after === void 0 ? {} : { after: options.after },
+		...options.through === void 0 ? {} : { through: options.through }
+	};
+	positive(query.limit);
+	const thread = requireConversationAccess(db, person, String(query.thread));
+	const view = query.view;
+	if (view !== "catch_up" && view !== "recent" && view !== "range") throw new Error("Unknown conversation view.");
+	if (view !== "range" && (query.after !== void 0 || query.through !== void 0)) throw new Error("after and through apply only to range inspection.");
+	if (view === "catch_up" && thread.kind === "channel" && !thread.following) throw new Error("Join this channel before reading catch-up, or inspect with recent/range.");
+	for (const bound of [query.after, query.through]) if (bound !== void 0 && (!Number.isSafeInteger(bound) || Number(bound) < 0)) throw new Error("Message bounds must be nonnegative safe integers.");
+	if (view === "catch_up" && resumed && resumed.position > thread.read_up_to) throw new Error("Catch-up continuation has a gap beyond the confirmed read cursor; begin at the current cursor.");
+	const maximum = db.prepare("select coalesce(max(seq),0) as seq from thread_messages where thread_id = ?").get(thread.id).seq;
+	const through = resumed?.through ?? Math.min(maximum, Number(query.through ?? maximum));
+	const after = resumed?.position ?? (view === "catch_up" ? thread.read_up_to : Number(query.after ?? 0));
+	const backward = view === "recent";
+	const rows = db.prepare(`select seq,id,sender,body,at from thread_messages where thread_id = ? and seq <= ? and seq > ? ${backward && resumed ? "and seq < ?" : ""} order by seq ${backward ? "desc" : "asc"} limit ?`).all(thread.id, through, backward ? 0 : after, ...backward && resumed ? [after] : [], Number(query.limit) + 1);
+	const more = rows.length > Number(query.limit);
+	const selected = rows.slice(0, Number(query.limit));
+	const next = selected.at(-1)?.seq;
+	if (backward) selected.reverse();
+	return {
+		thread,
+		view,
+		messages: selected.map((row) => message(db, thread.id, row)),
+		window_through: through,
+		acknowledgment: "not_requested",
+		acknowledged_through: null,
+		last_confirmed_cursor: thread.read_up_to,
+		...more && next !== void 0 ? { next_cursor: cursor({
+			person,
+			kind: "read",
+			query,
+			position: next,
+			through
+		}) } : {}
+	};
+}
+function searchMessages(db, person, options) {
+	requireCommunication(db);
+	const resumed = continuation(person, "search", options);
+	const query = resumed?.query ?? {
+		query: options.query,
+		limit: options.limit,
+		...options.thread ? { thread: options.thread } : {}
+	};
+	positive(query.limit);
+	if (typeof query.query !== "string" || !query.query.trim()) throw new Error("Search needs nonempty plain text.");
+	if (query.thread) requireConversationAccess(db, person, String(query.thread));
+	const ids = new Set(accessible(db, person).filter((info) => !query.thread || info.id === query.thread).map((info) => info.id));
+	const through = resumed?.through ?? db.prepare("select coalesce(max(seq),0) as seq from thread_messages").get().seq;
+	const matches = db.prepare("select thread_id,seq,id,sender,body,at from thread_messages where seq > ? and seq <= ? order by seq").all(resumed?.position ?? 0, through).filter((row) => ids.has(row.thread_id) && row.body.toLocaleLowerCase().includes(String(query.query).toLocaleLowerCase()));
+	const selected = matches.slice(0, Number(query.limit));
+	return {
+		messages: selected.map((row) => message(db, row.thread_id, row)),
+		...matches.length > selected.length ? { next_cursor: cursor({
+			person,
+			kind: "search",
+			query,
+			position: selected.at(-1).seq,
+			through
+		}) } : {}
+	};
+}
+//#endregion
+//#region apps/agent-world/src/backend/communications.ts
+var reasonOf$1 = (error) => error instanceof Error ? error.message : String(error);
+function text$2(value, label) {
+	if (typeof value !== "string" || !value.trim()) throw new Error(`${label} is required.`);
+	return value;
+}
+function people(value) {
+	if (value === void 0) return [];
+	if (!Array.isArray(value) || !value.every((person) => typeof person === "string" && person.trim())) throw new Error("Recipients must be a list of person IDs.");
+	return value;
+}
+/** Read-only views and operator commands over the runtime's existing communication journal. */
+function openCommunications(path, commands) {
+	function read(query) {
+		const db = new DatabaseSync(path, { readOnly: true });
+		try {
+			db.exec("pragma query_only = 1");
+			requireCommunication(db);
+			return query(db);
+		} finally {
+			db.close();
+		}
+	}
+	function query(run) {
+		try {
+			return {
+				ok: true,
+				value: read(run)
+			};
+		} catch (error) {
+			return {
+				ok: false,
+				reason: reasonOf$1(error)
+			};
+		}
+	}
+	async function mutate(request, tool, operation) {
+		let attempt = "";
+		let submitted = false;
+		try {
+			attempt = communicationAttemptId(OPERATOR$1, text$2(request?.attempt, "An attempt ID"));
+			const { attempt: _invocation, ...arguments_ } = request;
+			const input = {
+				tool: `workplace.${tool}`,
+				arguments: arguments_
+			};
+			const recorded = read((db) => communicationAttempt(db, OPERATOR$1, attempt, input));
+			if (recorded.outcome === "applied" || recorded.outcome === "refused") return recorded;
+			const command = recorded.command ?? {
+				kind: "communication",
+				version: 1,
+				input,
+				operation: operation()
+			};
+			submitted = true;
+			const receipt = await commands.send(OPERATOR$1, command, { commandId: attempt });
+			const result = read((db) => communicationAttempt(db, OPERATOR$1, attempt, input));
+			if (result.outcome === "not_recorded") return {
+				attempt,
+				outcome: "uncertain",
+				reason: receipt.ok ? "The runtime answered, but no communication record is available. Check this attempt before sending again." : receipt.reason
+			};
+			return !receipt.ok && result.outcome === "pending" ? {
+				...result,
+				reason: receipt.reason
+			} : result;
+		} catch (error) {
+			return {
+				attempt,
+				outcome: submitted ? "uncertain" : "refused",
+				reason: reasonOf$1(error)
+			};
+		}
+	}
+	return {
+		sendMail(request) {
+			return mutate(request, "sendMail", () => ({
+				action: "post",
+				thread: `t-${randomUUID()}`,
+				threadKind: "mail",
+				to: people(request.to),
+				cc: people(request.cc),
+				subject: text$2(request.subject, "A subject"),
+				body: text$2(request.body, "A message")
+			}));
+		},
+		async findChannels(options) {
+			return query((db) => findChannels(db, OPERATOR$1, options));
+		},
+		async searchMessages(options) {
+			return query((db) => searchMessages(db, OPERATOR$1, options));
+		},
+		createChannel(request) {
+			return mutate(request, "createChannel", () => ({
+				action: "create_channel",
+				scopeHead: text$2(request.scopeHead, "An organization scope"),
+				name: text$2(request.name, "A channel name"),
+				purpose: text$2(request.purpose, "A channel purpose"),
+				invite: people(request.invite)
+			}));
+		},
+		async readThread(request) {
+			if (request?.view !== void 0 && ![
+				"catch_up",
+				"recent",
+				"range"
+			].includes(request.view)) return {
+				ok: false,
+				reason: "Choose catch_up, recent or range."
+			};
+			if (request?.view === "recent" || request?.view === "range") {
+				const result = query((db) => readConversation(db, OPERATOR$1, {
+					thread: request.thread,
+					view: request.view,
+					limit: request.limit,
+					after: request.after,
+					through: request.through,
+					cursor: request.cursor
+				}));
+				return result.ok ? {
+					ok: true,
+					page: result.value
+				} : result;
+			}
+			const result = await mutate({
+				...request,
+				attempt: request?.attempt ?? ""
+			}, "readThread", () => ({
+				action: "read",
+				thread: text$2(request.thread, "A conversation"),
+				view: "catch_up",
+				limit: request.limit,
+				after: request.after,
+				through: request.through,
+				cursor: request.cursor
+			}));
+			if ("effect" in result && result.effect?.page) return {
+				ok: true,
+				page: result.effect.page,
+				attempt: result.attempt
+			};
+			return {
+				ok: false,
+				reason: result.reason ?? "Catch-up is not confirmed. Check the recorded attempt before retrying.",
+				attempt: result.attempt
+			};
+		},
+		post(request) {
+			return mutate(request, "post", () => ({
+				action: "post",
+				thread: text$2(request.thread, "A conversation"),
+				body: text$2(request.body, "A message"),
+				notify: people(request.notify)
+			}));
+		},
+		join(request) {
+			return mutate(request, "join", () => ({
+				action: "join",
+				thread: text$2(request.thread, "A channel")
+			}));
+		},
+		leave(request) {
+			return mutate(request, "leave", () => ({
+				action: "leave",
+				thread: text$2(request.thread, "A conversation")
+			}));
+		},
+		invite(request) {
+			return mutate(request, "invite", () => ({
+				action: "invite",
+				thread: text$2(request.thread, "A conversation"),
+				people: people(request.people)
+			}));
+		},
+		removeInvitations(request) {
+			return mutate(request, "removeInvitations", () => ({
+				action: "remove",
+				thread: text$2(request.thread, "A conversation"),
+				people: people(request.people)
+			}));
+		},
+		pin(request) {
+			return mutate(request, "pin", () => {
+				if (!Number.isSafeInteger(request.seq) || request.seq < 1) throw new Error("A message sequence is required.");
+				return {
+					action: "pin",
+					thread: text$2(request.thread, "A conversation"),
+					seq: request.seq
+				};
+			});
+		},
+		archive(request) {
+			return mutate(request, "archive", () => ({
+				action: "archive",
+				thread: text$2(request.thread, "A conversation"),
+				body: text$2(request.summary, "A conclusion"),
+				notify: people(request.notify)
+			}));
+		},
+		reopen(request) {
+			return mutate(request, "reopen", () => ({
+				action: "reopen",
+				thread: text$2(request.thread, "A conversation"),
+				body: text$2(request.reason, "A reopening reason"),
+				notify: people(request.notify)
+			}));
+		},
+		async status(request) {
+			let attempt = "";
+			try {
+				attempt = text$2(request?.attempt, "An attempt ID");
+				return read((db) => {
+					const direct = communicationAttempt(db, OPERATOR$1, attempt);
+					if (direct.outcome !== "not_recorded") return direct;
+					const derived = communicationAttempt(db, OPERATOR$1, communicationAttemptId(OPERATOR$1, attempt));
+					return derived.outcome !== "not_recorded" ? derived : direct;
+				});
+			} catch (error) {
+				return {
+					attempt,
+					outcome: "uncertain",
+					reason: reasonOf$1(error)
+				};
+			}
 		}
 	};
 }
@@ -167,7 +717,7 @@ var OUTSIDE_KINDS = [
 	"library"
 ];
 /** The label mail from the operator carries as its sender (`from`), so agents can tell it from mail between them. */
-var OPERATOR$1 = "operator";
+var OPERATOR = "operator";
 var MAIL_BODY_MAX = 4e3;
 /** A place outside any headquarters: the square, or a place off it. */
 function isOutside(place) {
@@ -782,45 +1332,6 @@ async function instruct(commands, character, commandId, instruction, onReceipt) 
 	return result;
 }
 //#endregion
-//#region components/shared/src/ledger-files.ts
-var LIVE_STATUSES = [
-	"planning",
-	"ready",
-	"in-progress"
-];
-var CLOSED_STATUSES = ["done", "cancelled"];
-[...LIVE_STATUSES, ...CLOSED_STATUSES];
-//#endregion
-//#region components/session-state/src/departures.ts
-/** A permanent identity fact, not a claim that process and filesystem cleanup has finished. */
-function departureOf(db, person) {
-	const row = db.prepare("select data from events where session_id = ? and type = 'person_departed' order by seq desc limit 1").get(person);
-	return row ? JSON.parse(row.data) : void 0;
-}
-/** A participant's display name: its session name, else its id; the operator is "the operator". */
-function nameOf$1(db, id) {
-	if (id === "operator") return "the operator";
-	if (id === "harness") return "the harness";
-	return db.prepare("select name from sessions where id = ?").get(id)?.name || departureOf(db, id)?.name || id;
-}
-//#endregion
-//#region components/session-state/src/valuation.ts
-var AMOUNT = String.raw`\$([\d.eE+-]+)`;
-new RegExp(String.raw`^Value:\s*${AMOUNT}(?:\s*\(estimated by (.+)\))?\s*$`, "m");
-new RegExp(String.raw`^Cost of delay:\s*${AMOUNT}\s*/\s*(hour|day)\s*$`, "m");
-//#endregion
-//#region components/session-state/src/program-peers.ts
-/** Temporary identity survives person/launch cleanup; a discarded legacy caller may be unknown. */
-function temporaryCallers(db) {
-	const callers = /* @__PURE__ */ new Map();
-	for (const row of db.prepare("select session_id, type, data from events where type in ('program_peer_created', 'program_peer_observed', 'person_discarded') order by seq").all()) {
-		const caller = row.type === "person_discarded" ? null : JSON.parse(row.data ?? "{}").caller;
-		if (!callers.has(row.session_id)) callers.set(row.session_id, typeof caller === "string" ? caller : null);
-	}
-	for (const row of db.prepare("select session_id, created_by from program_peers").all()) if (!callers.has(row.session_id)) callers.set(row.session_id, row.created_by);
-	return callers;
-}
-//#endregion
 //#region apps/agent-world/src/call-in.ts
 function isCallInRequest(value) {
 	if (!value || typeof value !== "object" || Array.isArray(value)) return false;
@@ -1300,7 +1811,7 @@ function openCallIn(path, wake) {
 function openMailbox(path, commands) {
 	const send = async (command) => {
 		let note;
-		const result = await commands.send(OPERATOR$1, command, { onReceipt(stage, reason) {
+		const result = await commands.send(OPERATOR, command, { onReceipt(stage, reason) {
 			if (stage === "applied") note = reason;
 		} });
 		return result.ok ? {
@@ -1380,15 +1891,20 @@ var hasThreads = (db) => db.prepare("select 1 from sqlite_master where type = 't
 /** The operator is not a session row: its needs-you state is its unread thread cursor. */
 function readOperatorMail(db) {
 	if (!hasThreads(db)) return [];
+	const follows = db.prepare("pragma table_info(thread_participants)").all().some((column) => column.name === "following");
 	return db.prepare(`select t.id, t.subject, max(m.at) as lastAt,
 		count(case when m.seq > p.read_up_to and m.sender != ? then 1 end) as unread
 		from threads t join thread_participants p on p.thread_id = t.id and p.participant = ?
-		join thread_messages m on m.thread_id = t.id group by t.id order by lastAt desc`).all(OPERATOR$1, OPERATOR$1);
+		join thread_messages m on m.thread_id = t.id
+		${follows ? "where t.kind != 'channel' or p.following = 1" : ""}
+		group by t.id order by lastAt desc`).all(OPERATOR, OPERATOR);
 }
 /** Read a thread only if the operator participates. The caller marks the returned sequence read through the runtime. */
 function readOperatorThread(db, id) {
 	if (!hasThreads(db)) return void 0;
-	const participant = db.prepare("select read_up_to from thread_participants where thread_id = ? and participant = ?").get(id, OPERATOR$1);
+	const follows = db.prepare("pragma table_info(thread_participants)").all().some((column) => column.name === "following");
+	const participant = db.prepare(`select p.read_up_to from thread_participants p join threads t on t.id = p.thread_id
+			where p.thread_id = ? and p.participant = ? ${follows ? "and (t.kind != 'channel' or p.following = 1)" : ""}`).get(id, OPERATOR);
 	if (!participant) return void 0;
 	const thread = readStoredThread(db, id);
 	return thread ? {
@@ -1400,8 +1916,10 @@ function readOperatorThread(db, id) {
 function readStoredThread(db, id) {
 	const row = db.prepare("select subject, closed_at from threads where id = ?").get(id);
 	if (!row) return void 0;
+	const follows = db.prepare("pragma table_info(thread_participants)").all().some((column) => column.name === "following");
 	const participants = db.prepare(`select p.participant as id, coalesce(s.name, p.participant) as name
-		from thread_participants p left join sessions s on s.id = p.participant where p.thread_id = ? order by p.joined_at`).all(id);
+		from thread_participants p join threads t on t.id = p.thread_id left join sessions s on s.id = p.participant
+		where p.thread_id = ? ${follows ? "and (t.kind != 'channel' or p.following = 1)" : ""} order by p.joined_at`).all(id);
 	const messages = db.prepare(`select m.seq, m.sender as "from", coalesce(s.name, m.sender) as name, m.body, m.at
 		from thread_messages m left join sessions s on s.id = m.sender where m.thread_id = ? order by m.seq`).all(id);
 	for (const participant of participants) if (participant.name === participant.id && participant.id !== "operator") participant.name = nameOf$1(db, participant.id);
@@ -2208,7 +2726,7 @@ function openOrg(paths, commands, snapshot) {
 				if (!Array.isArray(roster) || roster.some((id) => typeof id !== "string")) throw new Error("The recorded kickoff has an invalid ready-teammate roster.");
 				const initiallyReady = new Set(roster);
 				const prefix = `org-readiness:${key(request.id)}:`;
-				const notices = read((db) => db.prepare("select * from commands where kind = 'thread_post' and substr(command_id, 1, ?) = ? and stage != 'failed'").all(prefix.length, prefix));
+				const notices = read((db) => db.prepare("select * from commands where kind in ('thread_post', 'communication') and substr(command_id, 1, ?) = ? and stage != 'failed'").all(prefix.length, prefix));
 				const pending = notices.find((notice) => notice.stage !== "applied");
 				if (pending) {
 					progress.readiness = {
@@ -2228,9 +2746,21 @@ function openOrg(paths, commands, snapshot) {
 					}
 					const commandId = `${prefix}${late.map((person) => key(person.person)).sort().join("|")}`;
 					const result = await commands.send("operator", {
-						kind: "thread_post",
-						thread: channel,
-						body: `@${headId} Team readiness update: ${late.length} additional teammates are ready (${[...counts].map(([role, count]) => `${count} ${role}`).join(", ")}).`
+						kind: "communication",
+						version: 1,
+						input: {
+							tool: "workplace.orgReadiness",
+							arguments: {
+								plan: request.id,
+								people: late.map((person) => person.person).sort()
+							}
+						},
+						operation: {
+							action: "post",
+							thread: channel,
+							notify: [headId],
+							body: `Team readiness update: ${late.length} additional teammates are ready (${[...counts].map(([role, count]) => `${count} ${role}`).join(", ")}).`
+						}
 					}, { commandId });
 					if (result.ok) progress.readiness = {
 						thread: channel,
@@ -4047,20 +4577,23 @@ function visibleBundles(directory) {
 }
 function readThreads(db, roots) {
 	if (!hasTable(db, "threads")) return [];
+	const topics = db.prepare("pragma table_info(threads)").all().some((column) => column.name === "channel_type");
+	const visible = topics ? `(t.kind = 'channel' and (t.channel_type != 'topic' or exists (select 1 from thread_participants own where own.thread_id = t.id and own.participant = 'operator' and own.following = 1))) or (t.kind = 'meeting' and t.closed_at is null)` : "t.kind = 'channel' or (t.kind = 'meeting' and t.closed_at is null)";
 	const members = /* @__PURE__ */ new Map();
 	for (const row of db.prepare(`select p.thread_id, p.participant from thread_participants p join threads t on t.id = p.thread_id
-			where t.kind = 'channel' or (t.kind = 'meeting' and t.closed_at is null) order by p.joined_at, p.participant`).all()) {
+			where (${visible}) ${topics ? "and (t.kind != 'channel' or p.following = 1)" : ""} order by p.joined_at, p.participant`).all()) {
 		const list = members.get(row.thread_id) ?? [];
 		list.push(row.participant);
 		members.set(row.thread_id, list);
 	}
 	return db.prepare(`select t.id, t.kind, t.subject, t.created_by as createdBy, t.closed_at,
+		${topics ? "t.channel_type as channelType, t.scope_head as scopeHead," : ""}
 		coalesce(max(m.seq), 0) as lastSeq, coalesce(max(m.at), t.created_at) as lastAt
 		from threads t left join thread_messages m on m.thread_id = t.id
-		where t.kind = 'channel' or (t.kind = 'meeting' and t.closed_at is null) group by t.id
+		where ${visible} group by t.id
 		order by lastSeq desc, t.id`).all().map(({ closed_at, ...row }) => ({
 		...row,
-		headquarters: roots.get(row.createdBy) ?? row.createdBy,
+		headquarters: row.scopeHead ?? roots.get(row.createdBy) ?? row.createdBy,
 		closed: closed_at !== null,
 		participants: members.get(row.id) ?? []
 	}));
@@ -4070,7 +4603,7 @@ function readEscalations(db, roots) {
 	return db.prepare(`select distinct t.id, t.created_by from threads t
 		join thread_participants p on p.thread_id = t.id and p.participant = ?
 		join thread_messages m on m.thread_id = t.id and m.seq > p.read_up_to and m.sender != ?
-		where t.kind = 'escalation' and t.closed_at is null`).all(OPERATOR$1, OPERATOR$1).map((row) => ({
+		where t.kind = 'escalation' and t.closed_at is null`).all(OPERATOR, OPERATOR).map((row) => ({
 		thread: row.id,
 		person: row.created_by,
 		headquarters: roots.get(row.created_by) ?? row.created_by
@@ -4228,7 +4761,7 @@ function openWorkplace(path, commands, snapshot) {
 				reason: "That task is no longer on the board."
 			};
 			const tmux = await operatorPane(path);
-			const result = await commands.send(OPERATOR$1, {
+			const result = await commands.send(OPERATOR, {
 				kind: "work",
 				...tmux ? { tmux } : {},
 				action: "assign",
@@ -4242,7 +4775,7 @@ function openWorkplace(path, commands, snapshot) {
 			} : result;
 		},
 		async setChannelMembership(thread, joined) {
-			const result = await commands.send(OPERATOR$1, {
+			const result = await commands.send(OPERATOR, {
 				kind: "channel_membership",
 				thread,
 				joined
@@ -5304,6 +5837,29 @@ var isWorkspaceRoot = (value) => object(value) && typeof value.root === "string"
 var isWorkspacePath = (value) => isWorkspaceRoot(value) && "path" in value && typeof value.path === "string";
 var isWorkspaceSave = (value) => isWorkspacePath(value) && "text" in value && typeof value.text === "string" && "baseHash" in value && typeof value.baseHash === "string";
 var isWorkspaceDiff = (value) => isWorkspacePath(value) && (!("staged" in value) || value.staged === void 0 || typeof value.staged === "boolean");
+//#endregion
+//#region apps/agent-world/src/electron/communications-ipc.ts
+function wireCommunications(api) {
+	for (const method of [
+		"sendMail",
+		"findChannels",
+		"createChannel",
+		"readThread",
+		"searchMessages",
+		"post",
+		"join",
+		"leave",
+		"invite",
+		"removeInvitations",
+		"pin",
+		"archive",
+		"reopen",
+		"status"
+	]) ipcMain.handle(`communications:${method}`, (_event, request) => {
+		if (!request || typeof request !== "object" || Array.isArray(request)) throw new Error("A communication request is required.");
+		return api[method](request);
+	});
+}
 //#endregion
 //#region apps/agent-world/src/backend/integrations/atlassian.ts
 var TIMEOUT_MS$2 = 2e4;
@@ -7459,6 +8015,7 @@ function start() {
 	wireWorkspace(openWorkspace(() => world.snapshot()));
 	const conversations = openConversations(statePaths().socket);
 	const commands = openCommands(statePaths().socket);
+	wireCommunications(openCommunications(statePaths().db, commands));
 	let window;
 	const toWindow = (channel, message) => {
 		if (window && !window.isDestroyed()) window.webContents.send(channel, message);

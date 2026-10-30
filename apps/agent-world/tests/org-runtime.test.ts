@@ -71,7 +71,7 @@ socket.on("data", (chunk) => {
 		const message = JSON.parse(buffer.slice(0, end));
 		buffer = buffer.slice(end + 1);
 		if (message.type !== "command") continue;
-		record({ event: "command", command: message.command });
+		record({ event: "command", command: message.command, replay: message.replay === true });
 		send({ type: "command_progress", commandId: message.commandId, stage: "applied" });
 	}
 });
@@ -218,9 +218,18 @@ process.stdin.on("end", () => socket.end());
 				expect(query(state.dbPath, "select id from work_tasks")).toEqual([]);
 				expect(query(state.dbPath, "select person from assignments")).toEqual([]);
 				expect(query(state.dbPath, "select person from work_focus")).toEqual([]);
-				expect(recorded().filter((entry) => entry.event === "command" && entry.command.kind !== "transfer")).toEqual(
-					[],
-				);
+				expect(recorded().filter((entry) => entry.event === "command" && entry.command.kind !== "transfer")).toEqual([
+					expect.objectContaining({
+						id: report,
+						replay: true,
+						command: expect.objectContaining({
+							kind: "mail",
+							from: "harness",
+							threadKind: "channel",
+							body: expect.stringContaining("Team context at your arrival:"),
+						}),
+					}),
+				]);
 			}
 			expect(query(state.dbPath, "select role, specialization from sessions where id = ?", report)).toEqual([
 				{ role: "implementation-engineer", specialization: "Data correctness" },

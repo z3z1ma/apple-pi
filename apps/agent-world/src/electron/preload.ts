@@ -27,6 +27,46 @@ import type {
 } from "../world.js";
 
 const api: AgentWorldApi = {
+	communications: {
+		sendMail: (request) =>
+			ipcRenderer.invoke("communications:sendMail", request) as ReturnType<AgentWorldApi["communications"]["sendMail"]>,
+		findChannels: (request) =>
+			ipcRenderer.invoke("communications:findChannels", request) as ReturnType<
+				AgentWorldApi["communications"]["findChannels"]
+			>,
+		createChannel: (request) =>
+			ipcRenderer.invoke("communications:createChannel", request) as ReturnType<
+				AgentWorldApi["communications"]["createChannel"]
+			>,
+		readThread: (request) =>
+			ipcRenderer.invoke("communications:readThread", request) as ReturnType<
+				AgentWorldApi["communications"]["readThread"]
+			>,
+		searchMessages: (request) =>
+			ipcRenderer.invoke("communications:searchMessages", request) as ReturnType<
+				AgentWorldApi["communications"]["searchMessages"]
+			>,
+		post: (request) =>
+			ipcRenderer.invoke("communications:post", request) as ReturnType<AgentWorldApi["communications"]["post"]>,
+		join: (request) =>
+			ipcRenderer.invoke("communications:join", request) as ReturnType<AgentWorldApi["communications"]["join"]>,
+		leave: (request) =>
+			ipcRenderer.invoke("communications:leave", request) as ReturnType<AgentWorldApi["communications"]["leave"]>,
+		invite: (request) =>
+			ipcRenderer.invoke("communications:invite", request) as ReturnType<AgentWorldApi["communications"]["invite"]>,
+		removeInvitations: (request) =>
+			ipcRenderer.invoke("communications:removeInvitations", request) as ReturnType<
+				AgentWorldApi["communications"]["removeInvitations"]
+			>,
+		pin: (request) =>
+			ipcRenderer.invoke("communications:pin", request) as ReturnType<AgentWorldApi["communications"]["pin"]>,
+		archive: (request) =>
+			ipcRenderer.invoke("communications:archive", request) as ReturnType<AgentWorldApi["communications"]["archive"]>,
+		reopen: (request) =>
+			ipcRenderer.invoke("communications:reopen", request) as ReturnType<AgentWorldApi["communications"]["reopen"]>,
+		status: (request) =>
+			ipcRenderer.invoke("communications:status", request) as ReturnType<AgentWorldApi["communications"]["status"]>,
+	},
 	terminal: {
 		create: (request) =>
 			ipcRenderer.invoke("terminal:create", request) as ReturnType<AgentWorldApi["terminal"]["create"]>,

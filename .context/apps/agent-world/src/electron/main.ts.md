@@ -7,6 +7,10 @@ Why: Electron keeps the single-instance lock in the userData directory; taking i
 Why: Electron runs only the bundled output; moving the build output breaks the UI, theme, and preload paths at run time, which no test catches.
 Coupled: apps/agent-world/electron.vite.config.ts, apps/agent-world/src/app-files.ts
 
+`communications:*` is a fixed method allowlist wired to the Node-safe communication adapter. Requests cannot supply a raw runtime command or actor: each backend method constructs its own operation, with authority and final validation in the runtime. Recent/range reads remain query-only; catch-up and mutations use recorded UI attempts. The retained World's legacy methods remain separately wired.
+Coupled: apps/agent-world/src/electron/communications-ipc.ts, apps/agent-world/src/backend/communications.ts, apps/agent-world/src/electron/preload.ts
+Verify: apps/agent-world/tests/communications-backend.test.ts
+
 `world:channel-membership` checks that the thread is a string and joined is a boolean, then sends the runtime command. It does not decide whether the thread is a channel.
 Why: the renderer is untrusted, but membership authority stays in the runtime. A local allow-list here would drift from the command the socket actually applies.
 Coupled: apps/agent-world/src/backend/workplace.ts, components/session-state/src/runtime.ts

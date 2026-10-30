@@ -98,19 +98,30 @@ const hasThreads = (db: DatabaseSync) =>
 /** The operator is not a session row: its needs-you state is its unread thread cursor. */
 export function readOperatorMail(db: DatabaseSync): MailThreadSummary[] {
 	if (!hasThreads(db)) return [];
+	const follows = db
+		.prepare("pragma table_info(thread_participants)")
+		.all()
+		.some((column) => column.name === "following");
 	return db
 		.prepare(`select t.id, t.subject, max(m.at) as lastAt,
 		count(case when m.seq > p.read_up_to and m.sender != ? then 1 end) as unread
 		from threads t join thread_participants p on p.thread_id = t.id and p.participant = ?
-		join thread_messages m on m.thread_id = t.id group by t.id order by lastAt desc`)
+		join thread_messages m on m.thread_id = t.id
+		${follows ? "where t.kind != 'channel' or p.following = 1" : ""}
+		group by t.id order by lastAt desc`)
 		.all(OPERATOR, OPERATOR) as unknown as MailThreadSummary[];
 }
 
 /** Read a thread only if the operator participates. The caller marks the returned sequence read through the runtime. */
 export function readOperatorThread(db: DatabaseSync, id: string): MailThread | undefined {
 	if (!hasThreads(db)) return undefined;
+	const follows = db
+		.prepare("pragma table_info(thread_participants)")
+		.all()
+		.some((column) => column.name === "following");
 	const participant = db
-		.prepare("select read_up_to from thread_participants where thread_id = ? and participant = ?")
+		.prepare(`select p.read_up_to from thread_participants p join threads t on t.id = p.thread_id
+			where p.thread_id = ? and p.participant = ? ${follows ? "and (t.kind != 'channel' or p.following = 1)" : ""}`)
 		.get(id, OPERATOR) as { read_up_to: number } | undefined;
 	if (!participant) return undefined;
 	const thread = readStoredThread(db, id);
@@ -123,9 +134,14 @@ export function readStoredThread(db: DatabaseSync, id: string): MailThread | und
 		| { subject: string; closed_at: number | null }
 		| undefined;
 	if (!row) return undefined;
+	const follows = db
+		.prepare("pragma table_info(thread_participants)")
+		.all()
+		.some((column) => column.name === "following");
 	const participants = db
 		.prepare(`select p.participant as id, coalesce(s.name, p.participant) as name
-		from thread_participants p left join sessions s on s.id = p.participant where p.thread_id = ? order by p.joined_at`)
+		from thread_participants p join threads t on t.id = p.thread_id left join sessions s on s.id = p.participant
+		where p.thread_id = ? ${follows ? "and (t.kind != 'channel' or p.following = 1)" : ""} order by p.joined_at`)
 		.all(id) as { id: string; name: string }[];
 	const messages = db
 		.prepare(`select m.seq, m.sender as "from", coalesce(s.name, m.sender) as name, m.body, m.at

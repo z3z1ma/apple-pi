@@ -1,5 +1,6 @@
 // The world as the backend reports it to the world UI. Shared by the backend, the preload bridge, and the renderer.
 import type { CallInRequest, CallInResult } from "./call-in.js";
+import type { CommunicationsApi } from "./communications.js";
 import type { IntegrationsApi } from "./integrations.js";
 
 export type { CallInPerson, CallInRequest, CallInResult } from "./call-in.js";
@@ -160,6 +161,8 @@ export interface WorldSnapshot {
 export interface WorkplaceThread {
 	id: string;
 	kind: "channel" | "meeting";
+	channelType?: "topic" | "team" | "organization" | null;
+	scopeHead?: string | null;
 	subject: string;
 	createdBy: string;
 	headquarters: string;
@@ -481,6 +484,7 @@ export interface NotepadChange {
  * Confluence, Slack, the outside-write gate, delegation) is in `integrations.ts`.
  */
 export interface AgentWorldApi extends IntegrationsApi {
+	communications: CommunicationsApi;
 	workspace: WorkspaceApi;
 	terminal: TerminalApi;
 	snapshot(): Promise<WorldSnapshot>;

@@ -103,7 +103,7 @@ test("joining a channel refreshes the snapshot and the existing read path, and a
 		if (!nextRead.ok) throw new Error(nextRead.reason);
 		const ownPost = nextRead.thread.messages.find((message) => message.body === "My own post.")!;
 		expect(ownPost.seq).toBeGreaterThan(firstSeq);
-		expect(nextRead.thread.readUpTo).toBe(ownPost.seq);
+		expect(nextRead.thread.readUpTo).toBe(firstSeq);
 		await vi.waitFor(
 			() => expect(world.snapshot().operatorMail).toContainEqual(expect.objectContaining({ id: channel, unread: 0 })),
 			{ timeout: 10000 },

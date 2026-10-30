@@ -1,6 +1,22 @@
 let electron = require("electron");
 //#region apps/agent-world/src/electron/preload.ts
 var api = {
+	communications: {
+		sendMail: (request) => electron.ipcRenderer.invoke("communications:sendMail", request),
+		findChannels: (request) => electron.ipcRenderer.invoke("communications:findChannels", request),
+		createChannel: (request) => electron.ipcRenderer.invoke("communications:createChannel", request),
+		readThread: (request) => electron.ipcRenderer.invoke("communications:readThread", request),
+		searchMessages: (request) => electron.ipcRenderer.invoke("communications:searchMessages", request),
+		post: (request) => electron.ipcRenderer.invoke("communications:post", request),
+		join: (request) => electron.ipcRenderer.invoke("communications:join", request),
+		leave: (request) => electron.ipcRenderer.invoke("communications:leave", request),
+		invite: (request) => electron.ipcRenderer.invoke("communications:invite", request),
+		removeInvitations: (request) => electron.ipcRenderer.invoke("communications:removeInvitations", request),
+		pin: (request) => electron.ipcRenderer.invoke("communications:pin", request),
+		archive: (request) => electron.ipcRenderer.invoke("communications:archive", request),
+		reopen: (request) => electron.ipcRenderer.invoke("communications:reopen", request),
+		status: (request) => electron.ipcRenderer.invoke("communications:status", request)
+	},
 	terminal: {
 		create: (request) => electron.ipcRenderer.invoke("terminal:create", request),
 		write: (request) => electron.ipcRenderer.invoke("terminal:write", request),

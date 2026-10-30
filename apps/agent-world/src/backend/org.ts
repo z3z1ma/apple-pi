@@ -402,7 +402,7 @@ export function openOrg(paths: { db: string; agentDir: string }, commands: Comma
 					(db) =>
 						db
 							.prepare(
-								"select * from commands where kind = 'thread_post' and substr(command_id, 1, ?) = ? and stage != 'failed'",
+								"select * from commands where kind in ('thread_post', 'communication') and substr(command_id, 1, ?) = ? and stage != 'failed'",
 							)
 							.all(prefix.length, prefix) as unknown as RecordedCommand[],
 				);
@@ -431,9 +431,18 @@ export function openOrg(paths: { db: string; agentDir: string }, commands: Comma
 					const result = await commands.send(
 						"operator",
 						{
-							kind: "thread_post",
-							thread: channel,
-							body: `@${headId} Team readiness update: ${late.length} additional teammates are ready (${[...counts].map(([role, count]) => `${count} ${role}`).join(", ")}).`,
+							kind: "communication",
+							version: 1,
+							input: {
+								tool: "workplace.orgReadiness",
+								arguments: { plan: request.id, people: late.map((person) => person.person!).sort() },
+							},
+							operation: {
+								action: "post",
+								thread: channel,
+								notify: [headId],
+								body: `Team readiness update: ${late.length} additional teammates are ready (${[...counts].map(([role, count]) => `${count} ${role}`).join(", ")}).`,
+							},
 						},
 						{ commandId },
 					);

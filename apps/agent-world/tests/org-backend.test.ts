@@ -101,6 +101,12 @@ beforeEach(() => {
 			).run(commandId, id, command.kind, JSON.stringify(command), now, now);
 			let reason: string | undefined;
 			let stage = "applied";
+			const post =
+				command.kind === "thread_post"
+					? command
+					: command.kind === "communication" && command.operation.action === "post"
+						? command.operation
+						: undefined;
 			if (command.kind === "start") {
 				if (!db.prepare("select 1 from sessions where id = ?").get(id)) {
 					person(id, command.reportsTo ?? null, false, command.role ?? null);
@@ -127,8 +133,8 @@ beforeEach(() => {
 				db.prepare("update thread_participants set invited = 1 where thread_id = ? and participant = 'operator'").run(
 					command.thread,
 				);
-			} else if (command.kind === "thread_post") {
-				const result = postToThread(db, id, `message:${commandId}`, command, now);
+			} else if (post) {
+				const result = postToThread(db, id, `message:${commandId}`, post, now);
 				if (typeof result === "string") {
 					reason = result;
 					stage = "failed";
@@ -190,7 +196,7 @@ test("prepares managers before reports with held prompts, joins without reading,
 	expect(threadsOf(db, "operator", false).find((thread) => thread.id === result.channel)?.unread).toBe(1);
 });
 
-test("partial starts wait by default, explicit subset kicks off once, late readiness mentions only the head", async () => {
+test("partial starts wait by default, explicit subset kicks off once, late readiness notifies only the head", async () => {
 	fail.set("Worker", "failed");
 	const request = plan();
 	const partial = await org.orgStart(request);
@@ -206,7 +212,12 @@ test("partial starts wait by default, explicit subset kicks off once, late readi
 	const worker = done.people.find((member) => member.id === "worker")!.person!;
 	expect(done.readiness).toBeDefined();
 	const readiness = messagesOf(db, done.channel!).at(-1)!;
-	expect(readiness.body).toContain(`@${head}`);
+	expect(readiness.body).not.toContain(head);
+	expect(sent.find((entry) => entry.commandId === done.readiness!.commandId)?.command).toMatchObject({
+		kind: "communication",
+		version: 1,
+		operation: { action: "post", thread: done.channel, notify: [head] },
+	});
 	expect(readiness.body).toContain("1 implementation-engineer");
 	expect(readiness.body).not.toContain(worker);
 	expect(readiness.body).not.toContain("Worker");
