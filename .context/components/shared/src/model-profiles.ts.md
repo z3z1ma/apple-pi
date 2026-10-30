@@ -9,5 +9,8 @@ Why: a person selects a mind once and persists it; advancing selection before el
 The entire configured catalog is validated before a requested profile is selected. Changes to supported names require coordinated updates to both starting policies and the live user-global policy.
 Why: an obsolete entry can prevent unrelated profiles from resolving; removing only its direct consumers is insufficient.
 
+Validate extension-provider availability against a registry with those extensions loaded, or inspect the installed provider's model metadata. A bare `ModelRuntime.create()` omits extension providers such as Antigravity even when the CLI lists them. Keep portable policy tests independent of the operator's model cache; registration and configured auth establish eligibility, not live quota or provider health.
+Why: an incomplete registry can falsely classify a usable policy as unavailable, while metadata alone cannot establish that requests will succeed.
+
 Coupled: components/organization/src/roles.ts, components/organization/src/session-role.ts, model-profiles.openai.json, model-profiles.anthropic.json
 Verify: components/shared/tests/model-profiles.test.ts, components/shared/tests/profile-request.test.ts

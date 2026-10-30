@@ -4,7 +4,9 @@
 
 The approved proposal requires package checks, selection/cold reading and a small live exercise for every adopted skill before delivery. The implementation task later substituted an exercise-or-reported-limit criterion without a recorded operator waiver. Reporting limits is necessary but does not meet that original requirement.
 
-Source implementation is shipped. Final acceptance remains incomplete: the live metadata selection covered all 15 additions, but native exercises covered only consultation and decision review, and the broader body/role comprehension checks remain unperformed. The archival completion claim was premature against the approved plan. The operator must either retain the original validation requirement or explicitly accept a narrower completion scope; existing evidence remains valid only for what it actually checked.
+The archival completion claim was premature against the original plan: the live metadata selection covered all 15 additions, but native exercises covered only consultation and decision review, and the broader body/role comprehension checks remain unperformed.
+
+**Resolved by explicit operator decision:** after this gap was presented, the operator selected **"Accept current coverage"** rather than finishing the original checks. This amends completion criteria to accept the implementation with its recorded limits and defer further live validation. The undertaking is complete under that accepted scope. Unexercised processes and ongoing management effectiveness remain unproven; no evidence claim has been widened.
 
 The operator authorized personal implementation, extension beyond the first set, and incremental commits. Root authors and integrates the changes; any live participants are controlled exercise subjects, not delegated builders or reviewers.
 

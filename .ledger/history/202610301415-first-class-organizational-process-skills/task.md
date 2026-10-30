@@ -35,13 +35,15 @@ Implementation and controlled exercises were authorized. Root owned all authorin
 
 ## Acceptance correction after closeout
 
-The approved proposal required all three validation layers for every adopted skill. The exercise-or-reported-limit criterion recorded above was weaker and had no explicit operator waiver. Implementation is shipped, but acceptance against the approved plan is incomplete; the archival completion claim below was premature. See implementation-evidence.md, Acceptance gap. Operator clarification is pending on completing the original checks versus explicitly deferring them.
+The approved proposal required all three validation layers for every adopted skill. The exercise-or-reported-limit criterion recorded above was weaker and initially had no explicit operator approval, making the archival completion claim premature against that plan.
+
+After this discrepancy was presented, the operator selected **"Accept current coverage"**: accept the implementation with the recorded limits and defer further live validation. This explicitly amends completion criteria. The task remains complete under that accepted scope; unexercised processes and continuing management effectiveness remain unproven. No further validation is scheduled under this undertaking.
 
 ## Outcome
 
 Implemented all 15 agent-selectable process skills and four writing/managing roles, personally, in verified increments. The catalog now has 34 skills and 36 roles; existing explicit-entry workflows and advisory postures are unchanged. No new runtime machinery or operational restart was needed.
 
-Final focused checks passed: loader/reference assertions, all 46 role tests, Node and Web typechecks, package inspection, scoped formatting and local Markdown links. A live model selected the intended entry in 18/18 synthetic metadata-only cases. Two native participant exercises demonstrated clarification, direct exchange, private initial positions, shared challenge and an accountable toy decision; their closeout exposed and corrected premature discussion archiving. The exercise report names every remaining live-validation limit. Continuing performance of the new managers and real-work benefit remain unverified.
+Final focused checks passed: loader/reference assertions, all 50 role tests after the reflection follow-up, Node and Web typechecks, package inspection, scoped formatting and local Markdown links. A live model selected the intended entry in 18/18 synthetic metadata-only cases. Two native participant exercises demonstrated clarification, direct exchange, private initial positions, shared challenge and an accountable toy decision; their closeout exposed and corrected premature discussion archiving. The exercise report names every remaining live-validation limit. Continuing performance of the new managers and real-work benefit remain unverified.
 
 Use `/reload` in an existing Pi session to discover the new skills and refreshed catalog. Fresh sessions load them through the existing package paths. This session was not reloaded; no daemon or Workplace restart was performed. Unrelated knowledge-file changes remain intact.
 
