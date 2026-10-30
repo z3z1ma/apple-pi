@@ -3,6 +3,7 @@ import wasmUrl from "ghostty-web/ghostty-vt.wasm?url";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { TerminalEvent, TerminalSession } from "../src/terminal.js";
 import { Icon } from "./workplace-icon.js";
+import { usePaneResize } from "./workplace-resize.js";
 import "./workplace-terminal.css";
 
 type Exit = Extract<TerminalEvent, { type: "exit" }>;
@@ -175,6 +176,22 @@ export function WorkplaceTerminal({
 	onLiveCountChange?: (count: number) => void;
 }) {
 	const [open, setOpen] = useState(false);
+	const height = usePaneResize({
+		label: "Terminal height",
+		variable: "--wp-terminal-height",
+		axis: "y",
+		direction: -1,
+		min: 96,
+		max: (): number => {
+			const body = height.pane.current;
+			const dock = body?.parentElement;
+			const editor = dock?.parentElement;
+			const chrome = (dock?.offsetHeight ?? 0) - (body?.offsetHeight ?? 0);
+			const tabs = editor?.querySelector(".wp-code-tabs")?.getBoundingClientRect().height ?? 0;
+			return (editor?.clientHeight ?? 0) - chrome - tabs - 160;
+		},
+		enabled: open,
+	});
 	const [sessions, setSessions] = useState<SessionView[]>([]);
 	const [selected, setSelected] = useState<string>();
 	const ordinal = useRef(0);
@@ -210,7 +227,8 @@ export function WorkplaceTerminal({
 		if (selected === session.id) setSelected(sessions.find((item) => item.id !== session.id)?.id);
 	};
 	return (
-		<section className={`wp-terminal${open ? " is-open" : ""}`} aria-label="Integrated terminal">
+		<section style={height.style} className={`wp-terminal${open ? " is-open" : ""}`} aria-label="Integrated terminal">
+			{height.separator}
 			<header>
 				<button
 					type="button"
@@ -263,7 +281,7 @@ export function WorkplaceTerminal({
 					</button>
 				)}
 			</header>
-			<div className="wp-terminal-body" hidden={!open}>
+			<div ref={height.ref} className="wp-terminal-body" hidden={!open}>
 				{!sessions.length && <p>Open a terminal in the selected repository. Hiding this panel keeps shells running.</p>}
 				{sessions.map((session) => (
 					<TerminalView

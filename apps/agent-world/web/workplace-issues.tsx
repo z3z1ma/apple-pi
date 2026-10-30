@@ -4,6 +4,7 @@ import type { WorldSnapshot } from "../src/world.js";
 import { useOutsideWrite, type WriteState } from "./overlay/places/outside-write.js";
 import { RichView } from "./overlay/places/rich-view.js";
 import { Icon } from "./workplace-icon.js";
+import { usePaneResize } from "./workplace-resize.js";
 import "./workplace-issues.css";
 
 const failure = (error: unknown) => (error instanceof Error ? error.message : String(error));
@@ -503,6 +504,16 @@ export function WorkplaceIssues({
 	const searchInput = useRef<HTMLInputElement>(null);
 	const [issues, setIssues] = useState<JiraIssue[]>([]);
 	const [selected, setSelected] = useState<string>();
+	const layout = useRef<HTMLDivElement>(null);
+	const detailWidth = usePaneResize({
+		label: "Issue details width",
+		variable: "--wp-issue-width",
+		axis: "x",
+		direction: -1,
+		min: 360,
+		max: () => (layout.current?.clientWidth ?? 0) - 326,
+		enabled: !!selected,
+	});
 	const [opened, setOpened] = useState<string[]>([]);
 	const [refresh, setRefresh] = useState(0);
 	const [loading, setLoading] = useState(false);
@@ -625,7 +636,12 @@ export function WorkplaceIssues({
 				</p>
 			)}
 			{signedOut && <JiraSignIn onDone={() => setRefresh((value) => value + 1)} />}
-			<div className={`wp-issues-layout${selected ? " has-detail" : ""}`} hidden={signedOut}>
+			<div
+				ref={layout}
+				style={detailWidth.style}
+				className={`wp-issues-layout${selected ? " has-detail" : ""}`}
+				hidden={signedOut}
+			>
 				<div className="wp-issues-list">
 					<div className="wp-issues-list-heading">
 						<h2>{search ? `Results for “${search}”` : scope === "all" ? "All Jira issues" : "Assigned to you"}</h2>
@@ -681,18 +697,21 @@ export function WorkplaceIssues({
 						))}
 					</div>
 				</div>
-				{opened.map((key) => (
-					<IssueDetail
-						key={key}
-						issueKey={key}
-						world={world}
-						active={active && !signedOut && selected === key}
-						outsideResults={!issues.some((issue) => issue.key === key)}
-						openDM={openDM}
-						onClose={() => setSelected(undefined)}
-						onChanged={() => setRefresh((value) => value + 1)}
-					/>
-				))}
+				{detailWidth.separator}
+				<div className="wp-issues-detail-slot" ref={detailWidth.ref} hidden={!selected}>
+					{opened.map((key) => (
+						<IssueDetail
+							key={key}
+							issueKey={key}
+							world={world}
+							active={active && !signedOut && selected === key}
+							outsideResults={!issues.some((issue) => issue.key === key)}
+							openDM={openDM}
+							onClose={() => setSelected(undefined)}
+							onChanged={() => setRefresh((value) => value + 1)}
+						/>
+					))}
+				</div>
 			</div>
 		</section>
 	);

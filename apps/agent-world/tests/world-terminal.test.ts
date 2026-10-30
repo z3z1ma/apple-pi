@@ -335,6 +335,104 @@ async function nextLayout(page: Page) {
 	);
 }
 
+test("resizable Code panes retain the dirty editor and terminal identity while the icon rail stays fixed", async () => {
+	const { page, errors } = await openCode();
+	try {
+		const files = page.getByRole("complementary", { name: "Files", exact: true });
+		const git = page.getByRole("region", { name: "Source control", exact: true });
+		await files.getByRole("button", { name: "main.ts", exact: true }).click();
+		const editor = page.locator(".monaco-editor");
+		await editor.waitFor();
+		await editor.click();
+		await page.keyboard.press("Meta+A");
+		await page.keyboard.insertText("export const retainedResizeDraft = true;\n");
+		await page.getByRole("img", { name: "Unsaved changes", exact: true }).waitFor();
+		await page.getByRole("button", { name: "Show terminal", exact: true }).click();
+		await createTerminal(page);
+		const terminal = terminalPane(page);
+		const canvas = terminal.locator("canvas");
+		const id = (await calls(page)).creates[0].id;
+		const initialResizeCount = (await calls(page)).resizes.length;
+		const rail = page.getByRole("navigation", { name: "Applications", exact: true });
+		const railBox = await rail.boundingBox();
+		for (const [name, target, axis, delta] of [
+			["Files width", files, "width", 65],
+			["Source control width", git, "width", -65],
+			["Terminal height", terminal, "height", -60],
+		] as const) {
+			const separator = page.getByRole("separator", { name, exact: true });
+			const initial = (await target.boundingBox())!;
+			const handle = (await separator.boundingBox())!;
+			await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2);
+			await page.mouse.down();
+			await page.mouse.move(
+				handle.x + handle.width / 2 + (axis === "width" ? delta : 0),
+				handle.y + handle.height / 2 + (axis === "height" ? delta : 0),
+				{ steps: 6 },
+			);
+			await page.mouse.up();
+			await vi.waitFor(async () => expect((await target.boundingBox())![axis]).toBeGreaterThan(initial[axis]));
+			const afterPointer = (await target.boundingBox())![axis];
+			await separator.focus();
+			await page.keyboard.press(axis === "width" ? "ArrowLeft" : "ArrowDown");
+			await vi.waitFor(async () => expect((await target.boundingBox())![axis]).not.toBe(afterPointer));
+			expect(await separator.evaluate((node) => document.activeElement === node)).toBe(true);
+			await page.keyboard.press("Home");
+			const minimum = (await target.boundingBox())![axis];
+			await page.keyboard.press("End");
+			await vi.waitFor(async () => expect((await target.boundingBox())![axis]).toBeGreaterThan(minimum));
+			await page.keyboard.press("Home");
+			expect(await rail.boundingBox()).toEqual(railBox);
+		}
+		await nextLayout(page);
+		for (const bounds of [
+			await files.boundingBox(),
+			await git.boundingBox(),
+			await terminal.boundingBox(),
+			await editor.boundingBox(),
+		]) {
+			expect(bounds!.width).toBeGreaterThan(0);
+			expect(bounds!.height).toBeGreaterThan(0);
+			expect(bounds!.x).toBeGreaterThanOrEqual(railBox!.x + railBox!.width);
+			expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(1440);
+			expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(900);
+		}
+		await shot(page, "resizable-light-1440");
+		await page.getByRole("button", { name: "Theme: dark mode", exact: true }).click();
+		await page.setViewportSize({ width: 900, height: 900 });
+		await nextLayout(page);
+		expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(900);
+		await shot(page, "resizable-dark-900");
+		await vi.waitFor(async () => expect((await calls(page)).resizes.length).toBeGreaterThan(initialResizeCount));
+		expect((await calls(page)).creates).toHaveLength(1);
+		expect((await calls(page)).closes).toEqual([]);
+		expect((await calls(page)).saves).toEqual([]);
+		await page.getByRole("button", { name: "Chat", exact: true }).click();
+		await page.getByRole("button", { name: "Code", exact: true }).click();
+		await page.getByRole("tab", { name: `Terminal 1: ${ROOT}/canonical`, exact: true }).waitFor();
+		await canvas.click();
+		await page.keyboard.type("resize still live");
+		await vi.waitFor(async () =>
+			expect(
+				(await calls(page)).writes
+					.filter((write: any) => write.id === id)
+					.map((write: any) => write.data)
+					.join(""),
+			).toContain("resize still live"),
+		);
+		expect((await calls(page)).creates).toHaveLength(1);
+		expect((await calls(page)).closes).toEqual([]);
+		expect((await calls(page)).saves).toEqual([]);
+		expect(await page.locator(".monaco-editor .view-lines").textContent()).toContain("retainedResizeDraft");
+		expect(
+			(await calls(page)).resizes.every((request: any) => request.id === id && request.cols > 0 && request.rows > 0),
+		).toBe(true);
+		expect(errors).toEqual([]);
+	} finally {
+		await page.close();
+	}
+}, 45_000);
+
 test("the terminal uses only central editor space, resizes while visible and releases the unload guard after exit or close", async () => {
 	const { page, errors } = await openCode();
 	try {

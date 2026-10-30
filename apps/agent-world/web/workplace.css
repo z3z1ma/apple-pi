@@ -294,7 +294,7 @@ body.workplace {
 	display: flex;
 }
 .wp-chat-sidebar {
-	width: 260px;
+	width: var(--wp-chat-width, 260px);
 	flex: none;
 	overflow-y: auto;
 	background: var(--wp-sidebar);
@@ -438,6 +438,24 @@ body.workplace {
 	white-space: nowrap;
 	font-size: 13px;
 	font-weight: 500;
+}
+.wp-dm-name {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	min-width: 0;
+}
+.wp-dm-name > strong {
+	min-width: 0;
+}
+.wp-dm-working {
+	display: inline-flex;
+	flex: none;
+	color: var(--wp-muted);
+}
+.wp-dm-working .wp-icon {
+	width: 13px;
+	height: 13px;
 }
 .wp-dm[data-selected="true"] strong {
 	font-weight: 650;
@@ -654,7 +672,7 @@ body.workplace {
 	background: var(--wp-panel);
 }
 .wp-mail-sidebar {
-	width: 210px;
+	width: var(--wp-mail-sidebar-width, 210px);
 	flex: none;
 	padding: 25px 14px;
 }
@@ -789,9 +807,9 @@ body.workplace {
 	border: 1px solid var(--wp-border);
 }
 .wp-mail-list {
-	width: 33%;
-	min-width: 255px;
-	max-width: 400px;
+	width: var(--wp-mail-list-width, clamp(255px, 33%, 400px));
+	flex: none;
+	min-width: 0;
 	border-right: 1px solid var(--wp-border);
 	overflow-y: auto;
 	background: var(--wp-panel);
@@ -1326,6 +1344,7 @@ body.workplace {
 /* Session overrides remain inside wp-session: the World modal is a separate surface. */
 .wp-session {
 	position: relative;
+	isolation: isolate;
 	flex: 1;
 	min-height: 0;
 }
@@ -1743,13 +1762,13 @@ body.workplace {
 }
 @media (max-width: 1050px) {
 	.wp-chat-sidebar {
-		width: 225px;
+		width: var(--wp-chat-width, 225px);
 	}
 	.wp-mail-sidebar {
-		width: 175px;
+		width: var(--wp-mail-sidebar-width, 175px);
 	}
 	.wp-mail-list {
-		min-width: 225px;
+		width: var(--wp-mail-list-width, clamp(225px, 33%, 400px));
 	}
 	.wp-session-label {
 		display: none;
@@ -1830,7 +1849,8 @@ body.workplace {
 	text-underline-offset: 3px;
 }
 .wp-profile {
-	width: 340px;
+	position: relative;
+	width: var(--wp-profile-width, 340px);
 	max-width: 100%;
 	min-height: 0;
 	flex: none;
@@ -1839,6 +1859,21 @@ body.workplace {
 	border-left: 1px solid var(--wp-border);
 	background: var(--wp-bg);
 	z-index: 2;
+}
+:where(.wp-profile[data-resizable="true"]) > .wp-pane-resize {
+	position: absolute;
+	left: 0;
+	top: 0;
+	bottom: 0;
+}
+.wp-sleeper-row {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+.wp-sleeper-row > button:first-child {
+	flex: 1;
+	min-width: 0;
 }
 .wp-profile > header {
 	display: flex;
@@ -2033,12 +2068,16 @@ body.workplace {
 		width: 57px;
 	}
 	.wp-chat-sidebar {
-		width: 190px;
+		width: var(--wp-chat-width, 190px);
 	}
 	.wp-mail-sidebar {
-		width: 150px;
+		width: var(--wp-mail-sidebar-width, 150px);
 		padding-left: 5px;
 		padding-right: 5px;
+	}
+	.wp-mail-layout > .wp-pane-resize,
+	.wp-mail-columns > .wp-pane-resize {
+		display: none;
 	}
 	.wp-mail-columns {
 		overflow-x: auto;

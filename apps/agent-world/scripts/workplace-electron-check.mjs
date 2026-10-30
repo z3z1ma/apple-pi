@@ -128,11 +128,11 @@ try {
 				type: "hello",
 				session: { id, kind: "root", cwd: scratch, name },
 				process: { pid: process.pid, startedAt },
-				run: "idle",
+				run: id === "nav-report" ? "thinking" : "idle",
 				facts: {
 					reportsTo,
 					manages,
-					role: manages ? "coordinator" : "implementation-engineer",
+					role: id === "nav-other" ? null : manages ? "coordinator" : "implementation-engineer",
 					self: "## My story\n\nAn isolated navigation fixture.",
 				},
 			})}\n`,
@@ -169,6 +169,12 @@ try {
 	assert.equal(new URL(page.url()).search, "");
 	assert.equal(await page.title(), "Workplace");
 	await page.getByRole("button", { name: "Chat", exact: true }).waitFor();
+	await page
+		.locator(".wp-chat-sidebar .wp-dm")
+		.filter({ hasText: "Navigation Report" })
+		.getByRole("img", { name: "Working", exact: true })
+		.waitFor();
+	assert.equal(await page.locator(".wp-chat-sidebar").getByRole("img", { name: "Working", exact: true }).count(), 1);
 	assert.equal((await page.evaluate(() => window.agentWorld.profile("missing-profile"))).ok, false);
 	await page.getByRole("button", { name: "Mail", exact: true }).click();
 	assert.match(page.url(), /workplace=mail/);
@@ -221,7 +227,26 @@ try {
 	console.log(`Native Code capture: ${codeCapture}`);
 	await page.getByRole("button", { name: "Org", exact: true }).click();
 	await page.locator(".wp-org-team-card").first().waitFor();
-	assert.equal(await page.locator(".wp-org-team-card").count(), 2);
+	assert.equal(await page.locator(".wp-org-team-card").count(), 1);
+	const directory = page.getByRole("table", { name: "People", exact: true });
+	assert.equal(await directory.locator("tbody tr").count(), 3);
+	const beforeDirectory = requests.length;
+	await directory.getByRole("button", { name: "Person actions: Other Head", exact: true }).click();
+	await page.getByRole("menuitem", { name: "Let go", exact: true }).click();
+	const departure = page.getByRole("dialog", { name: "Let Other Head go", exact: true });
+	await departure.waitFor();
+	assert.equal(await departure.getByRole("button", { name: "Let go", exact: true }).isDisabled(), true);
+	await departure.getByRole("button", { name: "Cancel", exact: true }).click();
+	assert.deepEqual(
+		requests
+			.slice(beforeDirectory)
+			.filter(
+				(request) =>
+					["read_entry", "read_entries"].includes(request.type) ||
+					["retire", "mark_seen", "thread_read"].includes(request.command?.kind),
+			),
+		[],
+	);
 	await page.getByRole("button", { name: "Open team: Navigation Head", exact: true }).click();
 	await page.locator(".wp-org-tree-node").first().waitFor();
 	assert.equal(await page.locator(".wp-org-tree-node").count(), 2);
@@ -291,7 +316,7 @@ try {
 	assert.equal(ipc.awakeCallIn.ok, true, JSON.stringify(ipc.awakeCallIn));
 	assert.equal(ipc.awakeCallIn.people.length, 1);
 	assert.equal(ipc.awakeCallIn.people[0].person, "nav-report");
-	assert.equal(ipc.awakeCallIn.people[0].state, "ready");
+	assert.equal(ipc.awakeCallIn.people[0].state, "active");
 	assert.equal(ipc.blocked.complete, false);
 	assert.equal(ipc.blocked.people[0].state, "blocked");
 	assert.ok(

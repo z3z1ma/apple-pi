@@ -1,5 +1,8 @@
 ## file
 
+One stable details slot holds all opened readers with their existing hidden state and keys. The shared Issue details width handle sizes that slot rather than replacing a selected reader. Closing/hiding preserves delegation drafts/receipts; the <=900px replacement layout hides the separator and keeps full-width detail behavior.
+Coupled: apps/agent-world/web/workplace-resize.tsx
+
 Issues reuses the existing IntegrationsApi Jira adapter, sign-in storage and outside-write gate. The first activation reads credentials and assigned issues. Search scope and submitted query stay in component state; typing alone makes no search request. Hiding the tab keeps the query and selection; merely mounting a hidden tab makes no Jira request. Each explicitly opened issue detail stays mounted while hidden, retaining its recipient/goal and receipt observer across issue selection, detail closure and tab changes; inactive panels cancel unsent write confirmations. Description and comments reuse RichView and its existing safeHtml allowlist, falling back to escaped plain text. Workplace supplies RichView's link callback through openLink rather than World's unconnected Atlassian singleton. No unsanitized DTO HTML reaches the page and images remain named placeholders. All external links go through openLink.
 Why: Workplace adds a view of the existing integration, not another credential handler, direct HTTP client or issue store.
 

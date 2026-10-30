@@ -89,7 +89,17 @@
 	overflow: hidden;
 }
 .wp-org-has-panel {
-	grid-template-columns: minmax(0, 1fr) 360px;
+	grid-template-columns: minmax(0, 1fr) 6px var(--wp-org-details, 360px);
+}
+.wp-org-detail-slot {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+	min-height: 0;
+	overflow: hidden;
+}
+.wp-org-detail-slot > aside {
+	flex: 1;
 }
 .wp-org-viewport {
 	position: relative;
@@ -392,7 +402,7 @@
 		justify-content: flex-end;
 	}
 	.wp-org-has-panel {
-		grid-template-columns: minmax(0, 1fr) 320px;
+		grid-template-columns: minmax(0, 1fr) 6px var(--wp-org-details, 320px);
 	}
 	.wp-org-draft {
 		padding: 16px;

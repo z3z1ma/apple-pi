@@ -1,0 +1,45 @@
+.wp-pane-resize {
+	position: relative;
+	z-index: 2;
+	flex: none;
+	align-self: stretch;
+	margin: 0;
+	padding: 0;
+	border: 0;
+	background: var(--wp-panel);
+	touch-action: none;
+	user-select: none;
+}
+.wp-pane-resize-x {
+	width: 6px;
+	min-width: 6px;
+	cursor: col-resize;
+}
+.wp-pane-resize-y {
+	height: 6px;
+	min-height: 6px;
+	cursor: row-resize;
+}
+.wp-pane-resize::after {
+	position: absolute;
+	inset: 0;
+	content: "";
+	background: var(--wp-border);
+}
+.wp-pane-resize:hover::after,
+.wp-pane-resize:focus-visible::after {
+	background: var(--wp-accent);
+}
+.wp-pane-resize:focus-visible {
+	outline: 2px solid var(--wp-accent);
+	outline-offset: -2px;
+}
+.wp-pane-resize-shield {
+	position: fixed;
+	inset: 0;
+	z-index: 2147483647;
+	width: auto;
+	height: auto;
+	background: transparent;
+	user-select: none;
+}

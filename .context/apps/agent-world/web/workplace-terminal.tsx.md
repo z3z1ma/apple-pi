@@ -1,5 +1,8 @@
 ## file
 
+The shared Terminal height handle changes only the retained body's CSS variable. Its maximum measures actual editor, tabs and dock chrome while reserving editor space. The existing terminal-host ResizeObserver remains the sole fit/PTY resize path; resizing creates/closes no terminal. Collapsing retains chosen height and session identity/root.
+Coupled: apps/agent-world/web/workplace-resize.tsx
+
 Mount one retained component inside Code's center editor pane. App-tab, repository and panel-visibility changes retain each terminal and its output. The selected repository seeds only a new session; existing root props are immutable and the returned canonical cwd labels that session's seed directory. Full renderer navigation/reload is a different lifetime: main closes old terminals after navigation commits, and the shell's one beforeunload guard warns while this component reports starting/running sessions. Exit tabs do not count as live.
 
 Mounting an empty panel performs no terminal API call or subscription. An operator-created child subscribes before create and supplies its own identity, because initial output may arrive before the invocation reply. Matching data establishes a live connection before Ghostty processes that output, so cursor/device queries can send their reply while create is still pending. After an exit event, later data may still render but never re-enables input. Cleanup removes subscriptions/observers and disposes the Ghostty terminal; explicit close is idempotent across the button and child teardown. Uncertain IPC errors retain a live count until an exit or explicit close establishes the result.

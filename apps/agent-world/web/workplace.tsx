@@ -22,6 +22,7 @@ import { descendants, Org, orgPeople } from "./workplace-org.js";
 import { OrganizationNameForm, OrgNameEditor } from "./workplace-org-name.js";
 import { ChatPeople, PersonAvatar, PersonName, PersonProfile, sessionStatus } from "./workplace-people.js";
 import { PersonActionsButton, WorkplacePersonActions } from "./workplace-person-actions.js";
+import { usePaneResize } from "./workplace-resize.js";
 import { WorkplaceWorld } from "./workplace-world.js";
 import { worldStore } from "./world-store.js";
 import "./workplace.css";
@@ -357,6 +358,34 @@ function Chat({
 	const [filter, setFilter] = useState("");
 	const [showTools, setShowTools] = useState(false);
 	const [profile, setProfile] = useState<{ id: string; name: string }>();
+	const layout = useRef<HTMLDivElement>(null);
+	const sidebar = usePaneResize({
+		label: "Chat sidebar width",
+		variable: "--wp-chat-width",
+		axis: "x",
+		direction: 1,
+		min: 190,
+		max: (): number => {
+			const available = (layout.current?.clientWidth ?? 0) - 326;
+			const node = profileSize.pane.current;
+			const profileWidth = node && getComputedStyle(node).position !== "absolute" ? node.offsetWidth : 0;
+			return available - Math.min(profileWidth, Math.max(0, available - 190));
+		},
+	});
+	const profileSize = usePaneResize({
+		label: "Person profile width",
+		variable: "--wp-profile-width",
+		axis: "x",
+		direction: -1,
+		min: 280,
+		max: (): number => {
+			const available = (layout.current?.clientWidth ?? 0) - 320;
+			if (profileSize.pane.current && getComputedStyle(profileSize.pane.current).position === "absolute")
+				return available;
+			return available - 6 - Math.min(sidebar.pane.current?.offsetWidth ?? 0, Math.max(0, available - 286));
+		},
+		enabled: !!profile && active,
+	});
 	const profileTrigger = useRef<HTMLElement | null>(null);
 	const consumedDM = useRef<string | undefined>(undefined);
 	const consumedChannel = useRef<string | undefined>(undefined);
@@ -414,12 +443,20 @@ function Chat({
 				onClick={() => openDM(agent.id)}
 			>
 				<span className="wp-dm-summary">
-					<strong>{agent.name}</strong>
+					<span className="wp-dm-name">
+						<strong>{agent.name}</strong>
+						{!home && agent.facts?.status === "working" && (
+							<span className="wp-dm-working" role="img" aria-label="Working" title="Working">
+								<Icon name="activity" />
+							</span>
+						)}
+					</span>
 					<small>{home ? "Asleep \u00b7 history only" : (agent.facts?.title ?? activity(agent))}</small>
 				</span>
 				{agent.facts?.unseen && <span className="wp-unread-dot" aria-hidden="true" />}
 				{agent.facts?.asking && <b className="wp-needs">?</b>}
 			</button>
+			<PersonActionsButton id={agent.id} />
 		</div>
 	);
 	return (
@@ -433,8 +470,8 @@ function Chat({
 				},
 			}}
 		>
-			<div className="wp-chat-layout">
-				<aside className="wp-chat-sidebar">
+			<div className="wp-chat-layout" ref={layout} style={sidebar.style}>
+				<aside className="wp-chat-sidebar" ref={sidebar.ref}>
 					<div className="wp-sidebar-heading">
 						<span className="wp-eyebrow">WORKSPACE</span>
 						<OrgNameEditor id="workspace" name="Your organization" defaultName="Your organization" heading="h1" />
@@ -508,19 +545,22 @@ function Chat({
 							{sleeping
 								.filter((agent) => matches(agent.name))
 								.map((agent) => (
-									<button
-										type="button"
-										key={agent.id}
-										aria-pressed={person?.id === agent.id}
-										onClick={() => setSelection({ kind: "dm", id: agent.id })}
-									>
-										{agent.name}
-										<small>Asleep · history only</small>
-									</button>
+									<div className="wp-sleeper-row" key={agent.id}>
+										<button
+											type="button"
+											aria-pressed={person?.id === agent.id}
+											onClick={() => setSelection({ kind: "dm", id: agent.id })}
+										>
+											{agent.name}
+											<small>Asleep · history only</small>
+										</button>
+										<PersonActionsButton id={agent.id} />
+									</div>
 								))}
 						</details>
 					)}
 				</aside>
+				{sidebar.separator}
 				<main className="wp-chat-main">
 					{person ? (
 						<>
@@ -639,7 +679,9 @@ function Chat({
 						</div>
 					)}
 				</main>
-				{active && profile && <PersonProfile key={profile.id} {...profile} onClose={closeProfile} />}
+				{active && profile && (
+					<PersonProfile key={profile.id} {...profile} onClose={closeProfile} resize={profileSize} />
+				)}
 			</div>
 		</ChatPeople.Provider>
 	);
@@ -653,6 +695,29 @@ function Mail({ world, active }: { world: WorldSnapshot; active: boolean }) {
 	const [recipient, setRecipient] = useState("");
 	const [delivery, setDelivery] = useState<string>();
 	const [unreadOnly, setUnreadOnly] = useState(false);
+	const layout = useRef<HTMLDivElement>(null);
+	const sidebar = usePaneResize({
+		label: "Mail sidebar width",
+		variable: "--wp-mail-sidebar-width",
+		axis: "x",
+		direction: 1,
+		min: 150,
+		max: (): number => {
+			const columns = list.pane.current?.parentElement;
+			const main = columns?.parentElement;
+			const chrome = (main?.clientWidth ?? 0) - (columns?.clientWidth ?? 0);
+			const available = (layout.current?.clientWidth ?? 0) - chrome - 352;
+			return available - Math.min(list.pane.current?.offsetWidth ?? 225, Math.max(0, available - 150));
+		},
+	});
+	const list = usePaneResize({
+		label: "Mail list width",
+		variable: "--wp-mail-list-width",
+		axis: "x",
+		direction: 1,
+		min: 225,
+		max: (): number => (list.pane.current?.parentElement?.clientWidth ?? 0) - 346,
+	});
 	const threads = inboxThreads(world);
 	const deliveries = (world.mail ?? []).filter((item) => folder !== "sent" || item.from === "operator");
 	const item = deliveries.find((mail) => mail.id === delivery);
@@ -665,8 +730,8 @@ function Mail({ world, active }: { world: WorldSnapshot; active: boolean }) {
 		`${mail.fromName} ${mail.toName} ${mail.body}`.toLowerCase().includes(needle),
 	);
 	return (
-		<div className="wp-mail-layout">
-			<aside className="wp-mail-sidebar">
+		<div className="wp-mail-layout" ref={layout} style={{ ...sidebar.style, ...list.style }}>
+			<aside className="wp-mail-sidebar" ref={sidebar.ref}>
 				<h1>
 					<Icon name="mail" />
 					Mail
@@ -699,6 +764,7 @@ function Mail({ world, active }: { world: WorldSnapshot; active: boolean }) {
 					</button>
 				))}
 			</aside>
+			{sidebar.separator}
 			<main className="wp-mail-main">
 				<header className="wp-mail-toolbar">
 					<label className="wp-mail-search">
@@ -725,7 +791,7 @@ function Mail({ world, active }: { world: WorldSnapshot; active: boolean }) {
 					</span>
 				</header>
 				<div className="wp-mail-columns">
-					<section className="wp-mail-list" aria-label={folder === "inbox" ? "Inbox" : "Delivery log"}>
+					<section ref={list.ref} className="wp-mail-list" aria-label={folder === "inbox" ? "Inbox" : "Delivery log"}>
 						<div className="wp-list-title">
 							<h2>{folder === "inbox" ? "Inbox" : folder === "sent" ? "Sent deliveries" : "Activity"}</h2>
 							<span>
@@ -777,6 +843,7 @@ function Mail({ world, active }: { world: WorldSnapshot; active: boolean }) {
 							</p>
 						)}
 					</section>
+					{list.separator}
 					<section className="wp-mail-reader" aria-label="Message reader">
 						{folder === "inbox" && selected ? (
 							active && <ThreadPane key={selected} id={selected} />

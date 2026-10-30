@@ -146,6 +146,7 @@ function world(): WorldSnapshot {
 				},
 			},
 			person("daria", "Daria", null, true),
+			person("daria-report", "Daria report", "daria"),
 			{ ...person("program", "Temporary peer", "ada"), facts: { ...facts("ada"), temporary: true } },
 		],
 		dormant: [
@@ -216,6 +217,8 @@ async function openOrg(appearance: "light" | "dark" = "light", snapshot: WorldSn
 				starts: [],
 				wakes: [],
 				closes: [],
+				departures: [],
+				callIns: [],
 				recruits: [],
 				renames: [],
 				channelReads: [],
@@ -278,6 +281,14 @@ async function openOrg(appearance: "light" | "dark" = "light", snapshot: WorldSn
 					w.orgCalls.closes.push(id);
 					return { ok: true, stage: "applied" };
 				},
+				retire: async (id: string, reason: string) => {
+					w.orgCalls.departures.push({ id, reason });
+					return { ok: true, stage: "accepted" };
+				},
+				callIn: async (request: unknown) => {
+					w.orgCalls.callIns.push(structuredClone(request));
+					return { ok: false, people: [], reason: "Calling in is outside this observation-only journey." };
+				},
 				orgMove: async (request: unknown) => {
 					w.orgCalls.moves.push(structuredClone(request));
 					return await new Promise((resolve) => {
@@ -328,6 +339,17 @@ test.each(["light", "dark"] as const)(
 			await page.getByRole("button", { name: "Open team: Daria", exact: true }).waitFor();
 			await shot(page, `${appearance}-overview`);
 			await openTeam(page, "Ada");
+			const navigatorHandle = page.getByRole("separator", { name: "Org team navigator width", exact: true });
+			if (appearance === "light") {
+				const navigator = page.getByRole("navigation", { name: "Teams", exact: true });
+				const initialWidth = (await navigator.boundingBox())!.width;
+				await navigatorHandle.focus();
+				await page.keyboard.press("ArrowRight");
+				await vi.waitFor(async () => expect((await navigator.boundingBox())!.width).toBeGreaterThan(initialWidth));
+				expect(await navigatorHandle.evaluate((node) => document.activeElement === node)).toBe(true);
+			} else {
+				expect(await navigatorHandle.isVisible()).toBe(false);
+			}
 			for (const name of ["Ada", "Ben", "Cleo", "Ellis"])
 				await page.getByRole("button", { name: `View profile: ${name}`, exact: true }).waitFor();
 			expect(await page.getByRole("button", { name: "View profile: Former", exact: true }).count()).toBe(0);
@@ -434,9 +456,215 @@ test.each(["light", "dark"] as const)(
 	30_000,
 );
 
-test("organization cards align their footers across varied work and explain unavailable recruitment", async () => {
+test("People directory includes teams and independents with visible lifecycle menus and a resizable profile", async () => {
 	const snapshot = world();
 	snapshot.characters.push(person("solo", "Solo", null));
+	snapshot.characters.find((candidate) => candidate.id === "solo")!.facts!.title = null;
+	snapshot.dormant!.push({ ...snapshot.dormant![0]!, id: "home-alone", name: "Home alone", reportsTo: null });
+	const { page, errors } = await openOrg("light", snapshot);
+	try {
+		const directory = page.getByRole("table", { name: "People", exact: true });
+		await directory.waitFor();
+		for (const column of ["Name", "Role", "Status", "Team"])
+			await directory.getByRole("columnheader", { name: column, exact: true }).waitFor();
+		for (const name of ["Ada", "Ben", "Cleo", "Daria", "Daria report", "Ellis", "Solo", "Home alone"])
+			expect(await directory.getByRole("button", { name: `View profile: ${name}`, exact: true }).count()).toBe(1);
+		for (const name of ["Temporary peer", "Former"])
+			expect(await directory.getByRole("button", { name: `View profile: ${name}`, exact: true }).count()).toBe(0);
+		expect(await page.getByRole("button", { name: "Open team: Solo", exact: true }).count()).toBe(0);
+		expect(await page.getByRole("button", { name: "Open team: Home alone", exact: true }).count()).toBe(0);
+		const cards = page.getByRole("region", { name: "All teams", exact: true });
+		expect(await cards.getByRole("group").count()).toBe(2);
+		expect((await cards.boundingBox())!.y + (await cards.boundingBox())!.height).toBeLessThanOrEqual(
+			(await directory.boundingBox())!.y,
+		);
+		const solo = directory
+			.getByRole("row")
+			.filter({ has: page.getByRole("button", { name: "View profile: Solo", exact: true }) });
+		expect(await solo.getByRole("cell", { name: "Independent", exact: true }).count()).toBe(1);
+		const home = directory
+			.getByRole("row")
+			.filter({ has: page.getByRole("button", { name: "View profile: Home alone", exact: true }) });
+		expect(await home.getByRole("cell", { name: /asleep|at home/i }).count()).toBe(1);
+		const soloMenu = solo.getByRole("button", { name: "Person actions: Solo", exact: true });
+		await soloMenu.click();
+		const menu = page.getByRole("menu", { name: "Actions", exact: true });
+		await menu.getByRole("menuitem", { name: "Let go", exact: true }).click();
+		const departure = page.getByRole("dialog", { name: "Let Solo go", exact: true });
+		await departure.waitFor();
+		expect(await departure.getByRole("button", { name: "Let go", exact: true }).isEnabled()).toBe(false);
+		await departure.getByRole("button", { name: "Cancel", exact: true }).click();
+		let calls = await page.evaluate(() => (window as any).orgCalls);
+		for (const kind of ["profiles", "taskReads", "conversations", "seen", "moves", "starts"])
+			expect(calls[kind]).toEqual([]);
+		expect(await soloMenu.evaluate((node) => document.activeElement === node)).toBe(true);
+		const cardMenu = cards
+			.getByRole("group", { name: "Ada's team", exact: true })
+			.getByRole("button", { name: "Person actions: Ada", exact: true });
+		await cardMenu.click();
+		await menu.getByRole("menuitem", { name: "Let go", exact: true }).waitFor();
+		await page.keyboard.press("Escape");
+		expect(await cardMenu.evaluate((node) => document.activeElement === node)).toBe(true);
+		expect(await page.getByRole("complementary", { name: /^Profile:/ }).count()).toBe(0);
+		expect(await page.evaluate(() => (window as any).orgCalls.profiles)).toEqual([]);
+		await shot(page, "directory-light-1440");
+		await solo.getByRole("button", { name: "View profile: Solo", exact: true }).click();
+		const profile = page.getByRole("complementary", { name: "Profile: Solo", exact: true });
+		await profile.getByText("I verify changes before delivery. Session: solo.", { exact: true }).waitFor();
+		const firstProfileReads = await page.evaluate(() => (window as any).orgCalls.profiles);
+		expect(firstProfileReads).toContain("solo");
+		expect(firstProfileReads.every((id: string) => id === "solo")).toBe(true);
+		const splitter = page.getByRole("separator", { name: "Org details width", exact: true });
+		const before = (await profile.boundingBox())!;
+		const rail = (await page.getByRole("navigation", { name: "Applications", exact: true }).boundingBox())!;
+		const handle = (await splitter.boundingBox())!;
+		await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2);
+		await page.mouse.down();
+		await page.mouse.move(handle.x - 70, handle.y + handle.height / 2, { steps: 6 });
+		await page.mouse.up();
+		await vi.waitFor(async () => expect((await profile.boundingBox())!.width).toBeGreaterThan(before.width));
+		await splitter.focus();
+		const pointerWidth = (await profile.boundingBox())!.width;
+		await page.keyboard.press("ArrowRight");
+		await vi.waitFor(async () => expect((await profile.boundingBox())!.width).toBeLessThan(pointerWidth));
+		expect(await splitter.evaluate((node) => document.activeElement === node)).toBe(true);
+		expect(await page.getByRole("navigation", { name: "Applications", exact: true }).boundingBox()).toEqual(rail);
+		await page.getByRole("button", { name: "Theme: dark mode", exact: true }).click();
+		await page.setViewportSize({ width: 900, height: 900 });
+		await splitter.focus();
+		await page.keyboard.press("End");
+		await page.keyboard.press("Home");
+		const bounds = (await profile.boundingBox())!;
+		expect(bounds.x).toBeGreaterThanOrEqual(rail.x + rail.width);
+		expect(bounds.x + bounds.width).toBeLessThanOrEqual(900);
+		await shot(page, "directory-profile-dark-900");
+		await profile.getByRole("button", { name: "Close profile", exact: true }).click();
+		await solo.getByRole("button", { name: "Message Solo", exact: true }).click();
+		await page.getByRole("textbox", { name: "Reply to Solo", exact: true }).fill("Retain my directory journey draft.");
+		const sidebar = page.locator(".wp-chat-sidebar");
+		const sidebarSplitter = page.getByRole("separator", { name: "Chat sidebar width", exact: true });
+		const sidebarWidth = (await sidebar.boundingBox())!.width;
+		await sidebarSplitter.focus();
+		await page.keyboard.press("ArrowRight");
+		await vi.waitFor(async () => expect((await sidebar.boundingBox())!.width).toBeGreaterThan(sidebarWidth));
+		expect(await sidebarSplitter.evaluate((node) => document.activeElement === node)).toBe(true);
+		expect(await page.getByRole("textbox", { name: "Reply to Solo", exact: true }).inputValue()).toBe(
+			"Retain my directory journey draft.",
+		);
+		const row = page
+			.locator(".wp-chat-sidebar .wp-dm")
+			.filter({ has: page.getByRole("button", { name: /^Solo/, exact: false }) });
+		await vi.waitFor(async () =>
+			expect(await page.evaluate(() => (window as any).orgCalls.conversations)).toContain("solo"),
+		);
+		const beforeWorkingProfiles = await page.evaluate(() => (window as any).orgCalls.profiles);
+		const working = structuredClone(snapshot);
+		for (const id of ["solo", "ada"]) {
+			const candidate = working.characters.find((person) => person.id === id)!;
+			candidate.facts!.run = "thinking";
+			candidate.facts!.status = "working";
+		}
+		await page.evaluate((next) => (window as any).pushOrg(next), working);
+		for (const workingRow of [
+			row,
+			page
+				.getByRole("region", { name: "VIPs", exact: true })
+				.locator(".wp-dm")
+				.filter({ has: page.getByRole("button", { name: /^Ada/ }) }),
+		]) {
+			const indicator = workingRow.getByRole("img", { name: "Working", exact: true });
+			await indicator.waitFor();
+			const iconBox = (await indicator.boundingBox())!;
+			const nameBox = (await workingRow.locator("strong").boundingBox())!;
+			expect(iconBox.x).toBeGreaterThanOrEqual(nameBox.x + nameBox.width);
+			expect(iconBox.y).toBeLessThan(nameBox.y + nameBox.height);
+			expect(iconBox.y + iconBox.height).toBeGreaterThan(nameBox.y);
+		}
+		await shot(page, "directory-chat-working-dark-900");
+		await page.evaluate((next) => (window as any).pushOrg(next), snapshot);
+		await row.getByRole("img", { name: "Working", exact: true }).waitFor({ state: "hidden" });
+		expect(
+			await page
+				.getByRole("region", { name: "VIPs", exact: true })
+				.getByRole("img", { name: "Working", exact: true })
+				.count(),
+		).toBe(0);
+		await page.evaluate(
+			() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))),
+		);
+		expect(await page.evaluate(() => (window as any).orgCalls.profiles)).toEqual(beforeWorkingProfiles);
+		const beforeChatMenu = await page.evaluate(() => (window as any).orgCalls.conversations);
+		expect(beforeChatMenu.every((id: string) => id === "solo")).toBe(true);
+		const chatMenu = row.getByRole("button", { name: "Person actions: Solo", exact: true });
+		await chatMenu.click();
+		await menu.getByRole("menuitem", { name: "Let go", exact: true }).waitFor();
+		await page.keyboard.press("Escape");
+		expect(await page.evaluate(() => (window as any).orgCalls.conversations)).toEqual(beforeChatMenu);
+		await page.getByText(/^Sleeping agents \(/).click();
+		const homeMenu = page
+			.locator(".wp-sleepers")
+			.getByRole("button", { name: "Person actions: Home alone", exact: true });
+		expect(await page.locator(".wp-sleepers").getByRole("img", { name: "Working", exact: true }).count()).toBe(0);
+		await homeMenu.click();
+		await menu.getByRole("menuitem", { name: "Let go", exact: true }).waitFor();
+		await menu.getByRole("menuitem", { name: "Call in", exact: true }).waitFor();
+		await page.keyboard.press("Escape");
+		expect(await homeMenu.evaluate((node) => document.activeElement === node)).toBe(true);
+		expect(await page.evaluate(() => (window as any).orgCalls.conversations)).toEqual(beforeChatMenu);
+		expect(await page.evaluate(() => (window as any).orgCalls.profiles)).toEqual(firstProfileReads);
+		await row.getByRole("button", { name: "View profile: Solo", exact: true }).click();
+		const standalone = page.getByRole("complementary", { name: "Profile: Solo", exact: true });
+		await standalone.getByText("I verify changes before delivery. Session: solo.", { exact: true }).waitFor();
+		const explicitProfileReads = await page.evaluate(() => (window as any).orgCalls.profiles);
+		expect(explicitProfileReads.every((id: string) => id === "solo")).toBe(true);
+		const standaloneHandle = page.getByRole("separator", { name: "Person profile width", exact: true });
+		const standaloneWidth = (await standalone.boundingBox())!.width;
+		await standaloneHandle.focus();
+		await page.keyboard.press("ArrowLeft");
+		await vi.waitFor(async () => expect((await standalone.boundingBox())!.width).toBeGreaterThan(standaloneWidth));
+		expect(await standaloneHandle.evaluate((node) => document.activeElement === node)).toBe(true);
+		await shot(page, "directory-chat-dark-900");
+		await vi.waitFor(async () => {
+			const identity = (await standalone.getByRole("heading", { name: "Solo", exact: true }).boundingBox())!;
+			const pane = (await standalone.boundingBox())!;
+			expect(identity.width).toBeGreaterThan(0);
+			expect(identity.height).toBeGreaterThan(0);
+			expect(identity.x).toBeGreaterThanOrEqual(pane.x);
+			expect(identity.x + identity.width).toBeLessThanOrEqual(pane.x + pane.width);
+			expect(identity.y).toBeGreaterThanOrEqual(pane.y);
+			expect(identity.y + identity.height).toBeLessThanOrEqual(
+				Math.min(pane.y + pane.height, page.viewportSize()!.height),
+			);
+		});
+		const identityHeading = standalone.getByRole("heading", { name: "Solo", exact: true });
+		expect(
+			await identityHeading.evaluate((node) => {
+				const bounds = node.getBoundingClientRect();
+				const top = document.elementFromPoint(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+				return !!top && !!node.closest(".wp-profile")?.contains(top);
+			}),
+		).toBe(true);
+		await standalone.getByRole("button", { name: "Message Solo", exact: true }).click({ trial: true });
+		await standalone.getByRole("button", { name: "Close profile", exact: true }).click();
+		await page.getByRole("button", { name: "Org", exact: true }).click();
+		await page.getByRole("button", { name: "Chat", exact: true }).click();
+		expect(await page.getByRole("textbox", { name: "Reply to Solo", exact: true }).inputValue()).toBe(
+			"Retain my directory journey draft.",
+		);
+		calls = await page.evaluate(() => (window as any).orgCalls);
+		expect(calls.profiles).toEqual(explicitProfileReads);
+		expect(calls.conversations.every((id: string) => id === "solo")).toBe(true);
+		for (const kind of ["taskReads", "moves", "starts", "wakes", "closes", "departures", "callIns", "recruits"])
+			expect(calls[kind]).toEqual([]);
+		expect(errors).toEqual([]);
+	} finally {
+		await page.close();
+	}
+}, 30_000);
+
+test("organization cards align their footers across varied work and explain unavailable recruitment", async () => {
+	const snapshot = world();
+	snapshot.characters.push(person("solo", "Solo", null), person("solo-report", "Solo report", "solo"));
 	snapshot.dormant!.push({
 		...snapshot.dormant![0]!,
 		id: "sleeping-head",
@@ -444,6 +672,7 @@ test("organization cards align their footers across varied work and explain unav
 		title: "Coordinator",
 		reportsTo: null,
 	});
+	snapshot.characters.push(person("sleeping-report", "Sleeping report", "sleeping-head"));
 	const longTitle =
 		"Review keyboard access, screen-reader announcements, retained editor drafts, team setup recovery, and all reporting workflows across the complete organization interface.";
 	snapshot.workplace!.workHistory = WORK.map((task, index) =>
@@ -487,7 +716,10 @@ test("organization cards align their footers across varied work and explain unav
 			expect(await add.isEnabled()).toBe(false);
 			expect(await add.getAttribute("title")).toBe(reason);
 		}
-		await page.getByRole("button", { name: "View profile: Ada", exact: true }).click();
+		await page
+			.getByRole("group", { name: "Ada's team", exact: true })
+			.getByRole("button", { name: "View profile: Ada", exact: true })
+			.click();
 		await page.getByRole("complementary", { name: "Profile: Ada", exact: true }).waitFor();
 		const calls = await page.evaluate(() => (window as any).orgCalls);
 		for (const action of ["recruits", "starts", "moves", "conversations", "seen"]) expect(calls[action]).toEqual([]);
@@ -501,7 +733,7 @@ test.each(["light", "dark"] as const)(
 	"%s organization names open metadata-only work and restore the exact trigger without changing rename or chart actions",
 	async (appearance) => {
 		const snapshot = world();
-		snapshot.characters.push(person("solo", "Solo", null));
+		snapshot.characters.push(person("solo", "Solo", null), person("solo-report", "Solo report", "solo"));
 		const { page, errors } = await openOrg(appearance, snapshot);
 		try {
 			await page.setViewportSize({ width: appearance === "dark" ? 900 : 1440, height: 900 });
@@ -1138,7 +1370,13 @@ test("closing and resuming setup preserves partial identities; replacing it need
 		expect(await plan.getByRole("textbox", { name: "Team task", exact: true }).inputValue()).toBe("");
 		expect(await plan.getByRole("button", { name: /^Planned role:/ }).count()).toBe(1);
 		expect(await progress.count()).toBe(0);
-		await page.getByRole("button", { name: "Open team: Retained head", exact: true }).waitFor();
+		expect(await page.getByRole("button", { name: "Open team: Retained head", exact: true }).count()).toBe(0);
+		expect(
+			await page
+				.getByRole("table", { name: "People", exact: true })
+				.getByRole("button", { name: "View profile: Retained head", exact: true })
+				.count(),
+		).toBe(1);
 		const calls = await page.evaluate(() => (window as any).orgCalls);
 		expect(calls.starts).toHaveLength(2);
 		for (const action of ["moves", "wakes", "closes", "recruits", "conversations", "seen"])

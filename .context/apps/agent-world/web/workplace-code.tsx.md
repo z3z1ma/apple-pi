@@ -1,5 +1,8 @@
 ## file
 
+Files and Source control use shared usePaneResize handles as grid siblings; resizing changes CSS tracks, not pane/model keys. Bounds reserve center space and the visible peer pane. Stacked Source control hides its horizontal-width handle and contributes no right-column width. The existing Files focus ref still points to the same pane.
+Coupled: apps/agent-world/web/workplace-resize.tsx
+
 File-reference navigation supplies an immutable fileRequest with backend-validated root/path and optional positive line/column. Code selects that root before using the existing guarded openFile path, retains all other buffers/models, and reveals/focuses the clamped position once the target model exists and Code is visible. Each request is consumed once; later repository changes must not reopen it. The same literal file without a location opens at the start. Missing/deleted files show the existing Code read error rather than an external-open fallback. Decoration itself never reads file contents.
 Why: a first-visit file activation can arrive before repository selection, Monaco loading and model creation complete. Applying focus or caret position earlier loses that navigation; replaying it on later root changes overrides the user's next action.
 Coupled: apps/agent-world/web/file-references.tsx, apps/agent-world/web/file-reference-paths.ts

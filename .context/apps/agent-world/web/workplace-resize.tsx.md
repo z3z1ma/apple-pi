@@ -1,0 +1,14 @@
+## symbol:usePaneResize
+
+Keep size state in the retained layout owner. The unset value leaves existing CSS defaults and responsive breakpoints authoritative; an explicit resize supplies only one CSS variable. Callers retain their actual pane/model/session keys, and the Chat owner passes its layout handle into the otherwise observational shared profile so hiding its reader does not lose the chosen width.
+Why: resizing is a local layout change, not permission to reopen a file, create a PTY, read a profile, save a draft or persist a new setting.
+
+The max callback measures current layout, including other visible panes and reserved center space. Its latest closure stays in a ref while pointer capture is active. Observe ancestor geometry as well as the pane: a fixed-height terminal can otherwise miss a shrinking editor container. CSS-hidden handles skip measurement/clamping so stacked/mobile layouts retain their existing rules and chosen desktop size.
+Why: a pane can keep its own pixel dimensions while its available container changes; stale snapshot closures or hidden zero-size measurements would overwrite a retained size.
+
+Native focusable hr elements expose separator semantics and physical arrow directions. Right/bottom panes invert size change, not keyboard direction. Home/End use current measured bounds. Capture starts on the handle, and a top-document portal shield keeps an iframe from taking the drag. Escape restores the pre-drag value (including an unset CSS default); pointer cancellation, blur and release keep the latest size but end capture/shield ownership. Disabling or unmounting the owner releases listeners/capture and removes the shield.
+Why: Escape must finish a resize before an underlying profile handles that same key, and pointer lifetime must end even when no ordinary pointerup reaches the original layout.
+
+The shared separator track is 6px; grid tracks and caller geometry reserves must change together if that thickness changes. Peer-pane bounds reserve each pane's minimum before allowing a previously wide neighbor to consume a narrower viewport.
+Coupled: apps/agent-world/web/workplace-resize.css, apps/agent-world/web/workplace.tsx, apps/agent-world/web/workplace.css, apps/agent-world/web/workplace-people.tsx, apps/agent-world/web/workplace-org.tsx, apps/agent-world/web/workplace-org.css, apps/agent-world/web/workplace-org-chart.tsx, apps/agent-world/web/workplace-org-chart.css, apps/agent-world/web/workplace-code.tsx, apps/agent-world/web/workplace-code.css, apps/agent-world/web/workplace-terminal.tsx, apps/agent-world/web/workplace-terminal.css, apps/agent-world/web/workplace-issues.tsx, apps/agent-world/web/workplace-issues.css
+Verify: apps/agent-world/tests/world-org.test.ts, apps/agent-world/tests/world-terminal.test.ts, apps/agent-world/tests/world-conversation.test.ts, apps/agent-world/tests/world-issues.test.ts

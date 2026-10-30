@@ -14,7 +14,7 @@ import { useWorkplaceMenu } from "./workplace-context-menu.js";
 import "./workplace-person-actions.css";
 
 type Action = "home" | "call" | "retire";
-type Person = { id: string; name: string; awake: boolean; busy: boolean; hired: boolean };
+type Person = { id: string; name: string; awake: boolean; busy: boolean };
 type CallResult = Awaited<ReturnType<AgentWorldApi["callIn"]>>;
 type Operation = {
 	id: string;
@@ -45,7 +45,6 @@ function personIn(world: WorldSnapshot, id: string): Person | undefined {
 		name: awake?.name ?? asleep!.name,
 		awake: !!awake,
 		busy: !!awake && (awake.facts?.run !== "idle" || awake.facts?.status === "asking"),
-		hired: !!(awake?.facts?.title ?? asleep?.title),
 	};
 }
 
@@ -115,13 +114,7 @@ export function WorkplacePersonActions({ world, children }: { world: WorldSnapsh
 	const [operation, setOperation] = useState<Operation>();
 	const begin = (action: Action, id: string, trigger: HTMLElement) => {
 		const person = personIn(current.current, id);
-		if (
-			!person ||
-			(action === "home" && !person.awake) ||
-			(action === "call" && person.awake) ||
-			(action === "retire" && !person.hired)
-		)
-			return;
+		if (!person || (action === "home" && !person.awake) || (action === "call" && person.awake)) return;
 		const plan = action === "call" ? callPlan(current.current, id) : { affected: [], expected: [] };
 		setOperation({ id: crypto.randomUUID(), person, action, trigger, ...plan });
 	};
@@ -133,7 +126,7 @@ export function WorkplacePersonActions({ world, children }: { world: WorldSnapsh
 			person.awake
 				? { label: "Send home", onSelect: () => begin("home", id, trigger) }
 				: { label: "Call in", onSelect: () => begin("call", id, trigger) },
-			...(person.hired ? [{ label: "Let go", onSelect: () => begin("retire", id, trigger) }] : []),
+			{ label: "Let go", onSelect: () => begin("retire", id, trigger) },
 		]);
 	};
 	return (
@@ -179,7 +172,7 @@ function PersonActionDialog({
 	const blocked =
 		!!operation.problem ||
 		!world.connected ||
-		(action !== "call" && (!current || (action === "home" ? !current.awake : !current.hired)));
+		(action !== "call" && (!current || (action === "home" && !current.awake)));
 	const title =
 		action === "home"
 			? `Send ${person.name} home`

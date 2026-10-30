@@ -8,6 +8,7 @@ import { OrgMoveConfirm } from "./workplace-org-confirm.js";
 import { OrgNameEditor } from "./workplace-org-name.js";
 import { OrgSearch } from "./workplace-org-search.js";
 import { ChatPeople, PersonProfile } from "./workplace-people.js";
+import { usePaneResize } from "./workplace-resize.js";
 import "./workplace-org.css";
 
 type Position = {
@@ -78,6 +79,10 @@ export function Org({
 	const trigger = useRef<HTMLElement | null>(null);
 	const people = orgPeople(world);
 	const parents = new Map(people.map((person) => [person.character.id, person.parent]));
+	const teamCount = people.filter(
+		(candidate) =>
+			(!candidate.parent || !parents.has(candidate.parent)) && descendants(candidate.character.id, parents).length > 1,
+	).length;
 	const person = people.find((candidate) => candidate.character.id === selected);
 	const currentPosition = draft?.positions.find((candidate) => candidate.id === position);
 	const recordedSpecialization = currentPosition?.existing
@@ -364,6 +369,17 @@ export function Org({
 		</>
 	);
 	const draftParents = new Map(draft?.positions.map((candidate) => [candidate.id, candidate.manager]));
+	const layout = useRef<HTMLDivElement>(null);
+	const hasPanel = !!addingTo || !!(draft && !planHidden && !selected) || !!(selected && active && person);
+	const details = usePaneResize({
+		label: "Org details width",
+		variable: "--wp-org-details",
+		axis: "x",
+		direction: -1,
+		min: 320,
+		max: () => (layout.current?.clientWidth ?? 0) - 326,
+		enabled: hasPanel,
+	});
 	return (
 		<ChatPeople.Provider value={{ world, openDM, openProfile: (id, _name, element) => select(id, element) }}>
 			<section className="wp-org" aria-label="Organization chart">
@@ -372,8 +388,7 @@ export function Org({
 						<span className="wp-eyebrow">PEOPLE & TEAMS</span>
 						<OrgNameEditor id="workspace" name="Your organization" defaultName="Your organization" heading="h1" />
 						<p>
-							{people.filter((candidate) => !candidate.parent || !parents.has(candidate.parent)).length} independent
-							teams · {people.length} people
+							{teamCount} teams · {people.length} people
 						</p>
 					</div>
 					<div className="wp-org-tools">
@@ -428,9 +443,7 @@ export function Org({
 						{notice}
 					</div>
 				)}
-				<div
-					className={`wp-org-layout${(draft && !planHidden) || addingTo || (selected && active) ? " wp-org-has-panel" : ""}`}
-				>
+				<div ref={layout} style={details.style} className={`wp-org-layout${hasPanel ? " wp-org-has-panel" : ""}`}>
 					<OrgChart
 						world={world}
 						people={people}
@@ -441,132 +454,304 @@ export function Org({
 						manages={manages}
 						select={select}
 						propose={propose}
+						openDM={openDM}
 						addPerson={(manager) => {
 							if (recruiting) return;
 							setAddingTo(manager);
 							setSelected(undefined);
 						}}
 					/>
-					{addingTo ? (
-						<AddPerson
-							key={addingTo}
-							world={world}
-							manager={addingTo}
-							onBusyChange={setRecruiting}
-							onClose={() => setAddingTo(undefined)}
-							onCreated={(id) => {
-								setAddingTo(undefined);
-								setNotice("Person created.");
-								setSelected(id);
-								setParent(addingTo);
-							}}
-						/>
-					) : draft && !planHidden && !selected ? (
-						<aside className="wp-org-draft" aria-label="Team plan">
-							<header>
-								<div>
-									<span className="wp-eyebrow">{started ? "TEAM SETUP" : "NOT STARTED"}</span>
-									<h2>{started ? "Team setup" : "Plan a team"}</h2>
-								</div>
-								<button type="button" aria-label="Close team plan" disabled={busy} onClick={() => setPlanHidden(true)}>
-									×
-								</button>
-							</header>
-							<p className="wp-org-plan-retained">
-								Closing hides this plan. Resume it here without losing setup progress.
-							</p>
-							{started && setupActions}
-							<details className="wp-org-plan-details" key={started ? "started" : "draft"} open={!started}>
-								<summary>Setup plan</summary>
-								<div className="wp-org-plan-fields">
-									<p>
-										Arrange real roles before any processes start. Existing teammates stay in their current teams until
-										Start team. Starting joins you to the shared team channel as a reader; it does not mark messages
-										read.
-									</p>
-									<label>
-										Team task (optional)
-										<textarea
-											aria-label="Team task"
-											value={draft.goal}
-											disabled={started}
-											onChange={(event) => setDraft({ ...draft, goal: event.target.value })}
-											placeholder="Leave blank to prepare the team without a shared task."
-										/>
-									</label>
-									{!draft.goal.trim() && (
-										<p>
-											{draft.positions.some((item) => !item.existing && item.goal.trim())
-												? "Only position goals will be assigned."
-												: "People will be ready for instructions."}
-										</p>
-									)}
-									<label>
-										Repository
-										<input
-											aria-label="Repository"
-											value={draft.cwd}
-											disabled={started}
-											onChange={(event) => setDraft({ ...draft, cwd: event.target.value })}
-											placeholder="/path/to/repository"
-										/>
-									</label>
-									<label>
-										Head role
-										<select
-											aria-label="Head role"
-											value={draft.positions[0]?.role}
-											disabled={started}
-											onChange={(event) =>
-												setDraft({
-													...draft,
-													positions: draft.positions.map((item, index) =>
-														index === 0 ? { ...item, role: event.target.value } : item,
-													),
-												})
-											}
+					{details.separator}
+					{hasPanel && (
+						<div className="wp-org-detail-slot" ref={details.ref}>
+							{addingTo ? (
+								<AddPerson
+									key={addingTo}
+									world={world}
+									manager={addingTo}
+									onBusyChange={setRecruiting}
+									onClose={() => setAddingTo(undefined)}
+									onCreated={(id) => {
+										setAddingTo(undefined);
+										setNotice("Person created.");
+										setSelected(id);
+										setParent(addingTo);
+									}}
+								/>
+							) : draft && !planHidden && !selected ? (
+								<aside className="wp-org-draft" aria-label="Team plan">
+									<header>
+										<div>
+											<span className="wp-eyebrow">{started ? "TEAM SETUP" : "NOT STARTED"}</span>
+											<h2>{started ? "Team setup" : "Plan a team"}</h2>
+										</div>
+										<button
+											type="button"
+											aria-label="Close team plan"
+											disabled={busy}
+											onClick={() => setPlanHidden(true)}
 										>
-											{roles
-												.filter((choice) => choice.manages)
-												.map((choice) => (
-													<option key={choice.name} value={choice.name}>
-														{choice.title}
-													</option>
-												))}
-										</select>
-									</label>
-									<div className="wp-org-add">
-										<label>
-											Role to add
-											<select
-												aria-label="Role to add"
-												value={roleToAdd}
-												disabled={started}
-												onChange={(event) => setRoleToAdd(event.target.value)}
-											>
-												{roles.map((choice) => (
-													<option key={choice.name} value={choice.name}>
-														{choice.title}
-													</option>
-												))}
-											</select>
-										</label>
-										<button type="button" disabled={started || !roleToAdd} onClick={addRole}>
-											Add role
+											×
 										</button>
-									</div>
-									<div className="wp-org-add">
-										<label>
-											Existing teammate
-											<select
-												aria-label="Existing teammate"
-												value={existingToAdd}
-												disabled={started}
-												onChange={(event) => setExistingToAdd(event.target.value)}
+									</header>
+									<p className="wp-org-plan-retained">
+										Closing hides this plan. Resume it here without losing setup progress.
+									</p>
+									{started && setupActions}
+									<details className="wp-org-plan-details" key={started ? "started" : "draft"} open={!started}>
+										<summary>Setup plan</summary>
+										<div className="wp-org-plan-fields">
+											<p>
+												Arrange real roles before any processes start. Existing teammates stay in their current teams
+												until Start team. Starting joins you to the shared team channel as a reader; it does not mark
+												messages read.
+											</p>
+											<label>
+												Team task (optional)
+												<textarea
+													aria-label="Team task"
+													value={draft.goal}
+													disabled={started}
+													onChange={(event) => setDraft({ ...draft, goal: event.target.value })}
+													placeholder="Leave blank to prepare the team without a shared task."
+												/>
+											</label>
+											{!draft.goal.trim() && (
+												<p>
+													{draft.positions.some((item) => !item.existing && item.goal.trim())
+														? "Only position goals will be assigned."
+														: "People will be ready for instructions."}
+												</p>
+											)}
+											<label>
+												Repository
+												<input
+													aria-label="Repository"
+													value={draft.cwd}
+													disabled={started}
+													onChange={(event) => setDraft({ ...draft, cwd: event.target.value })}
+													placeholder="/path/to/repository"
+												/>
+											</label>
+											<label>
+												Head role
+												<select
+													aria-label="Head role"
+													value={draft.positions[0]?.role}
+													disabled={started}
+													onChange={(event) =>
+														setDraft({
+															...draft,
+															positions: draft.positions.map((item, index) =>
+																index === 0 ? { ...item, role: event.target.value } : item,
+															),
+														})
+													}
+												>
+													{roles
+														.filter((choice) => choice.manages)
+														.map((choice) => (
+															<option key={choice.name} value={choice.name}>
+																{choice.title}
+															</option>
+														))}
+												</select>
+											</label>
+											<div className="wp-org-add">
+												<label>
+													Role to add
+													<select
+														aria-label="Role to add"
+														value={roleToAdd}
+														disabled={started}
+														onChange={(event) => setRoleToAdd(event.target.value)}
+													>
+														{roles.map((choice) => (
+															<option key={choice.name} value={choice.name}>
+																{choice.title}
+															</option>
+														))}
+													</select>
+												</label>
+												<button type="button" disabled={started || !roleToAdd} onClick={addRole}>
+													Add role
+												</button>
+											</div>
+											<div className="wp-org-add">
+												<label>
+													Existing teammate
+													<select
+														aria-label="Existing teammate"
+														value={existingToAdd}
+														disabled={started}
+														onChange={(event) => setExistingToAdd(event.target.value)}
+													>
+														<option value="">Choose a person</option>
+														{people
+															.filter(
+																(candidate) => !draft.positions.some((item) => item.id === candidate.character.id),
+															)
+															.map((candidate) => (
+																<option key={candidate.character.id} value={candidate.character.id}>
+																	{candidate.character.name}
+																</option>
+															))}
+													</select>
+												</label>
+												<button type="button" disabled={started || !existingToAdd} onClick={addExisting}>
+													Add teammate
+												</button>
+											</div>
+											<div className="wp-org-positions">
+												{draft.positions.map((item, index) => (
+													<button
+														type="button"
+														key={item.id}
+														aria-label={`Planned role: ${role(item.role)?.title ?? item.name} ${index + 1}`}
+														aria-pressed={position === item.id}
+														onClick={() => setPosition(item.id)}
+													>
+														<span>{item.manager ? "↳" : "◇"}</span>
+														<span>
+															<strong>{item.name || role(item.role)?.title || "Existing teammate"}</strong>
+															<small>
+																{item.existing ? "Existing person · staged" : "Planned role"}
+																{item.manager
+																	? ` · reports to ${draft.positions.find((parentItem) => parentItem.id === item.manager)?.name || role(draft.positions.find((parentItem) => parentItem.id === item.manager)?.role ?? "")?.title || "head"}`
+																	: " · team head"}
+															</small>
+														</span>
+													</button>
+												))}
+											</div>
+											{currentPosition && (
+												<fieldset disabled={started}>
+													<legend>Position details</legend>
+													<p>{role(currentPosition.role)?.mandate}</p>
+													<p className="wp-org-capabilities">
+														{role(currentPosition.role)?.manages ? "Manages people" : "Individual contributor"} ·{" "}
+														{role(currentPosition.role)?.writes ? "Writes files" : "Advises"}
+													</p>
+													<label>
+														Specialization
+														<textarea
+															aria-label="Specialization"
+															className="wp-specialization"
+															aria-describedby="wp-org-specialization-help"
+															rows={2}
+															value={
+																currentPosition.existing
+																	? (recordedSpecialization ?? "")
+																	: (currentPosition.specialization ?? "")
+															}
+															readOnly={currentPosition.existing}
+															placeholder={
+																currentPosition.existing
+																	? "No specialization recorded."
+																	: "Focus on keyboard and screen-reader behavior."
+															}
+															onChange={(event) => updatePosition({ specialization: event.target.value })}
+														/>
+													</label>
+													<p id="wp-org-specialization-help">
+														A focus within this role. All role responsibilities still apply.
+													</p>
+													<label>
+														Name (optional)
+														<input
+															aria-label="Name (optional)"
+															value={currentPosition.name}
+															disabled={currentPosition.existing}
+															onChange={(event) => updatePosition({ name: event.target.value })}
+														/>
+													</label>
+													{!currentPosition.existing && (
+														<label>
+															Position goal (optional)
+															<textarea
+																aria-label="Position goal"
+																value={currentPosition.goal}
+																onChange={(event) => updatePosition({ goal: event.target.value })}
+																placeholder="Use the team task when one is set"
+															/>
+														</label>
+													)}
+													{currentPosition.manager !== null && (
+														<label>
+															Reports to
+															<select
+																aria-label="Reports to"
+																value={currentPosition.manager}
+																onChange={(event) => updatePosition({ manager: event.target.value })}
+															>
+																{draft.positions
+																	.filter(
+																		(item) =>
+																			role(item.role)?.manages &&
+																			!descendants(currentPosition.id, draftParents).includes(item.id),
+																	)
+																	.map((item) => (
+																		<option key={item.id} value={item.id}>
+																			{item.name || role(item.role)?.title}
+																		</option>
+																	))}
+															</select>
+														</label>
+													)}
+													<button
+														type="button"
+														className="wp-org-remove"
+														disabled={!currentPosition.manager}
+														onClick={() => {
+															const removing = descendants(currentPosition.id, draftParents);
+															setDraft({
+																...draft,
+																positions: draft.positions.filter((item) => !removing.includes(item.id)),
+															});
+															setPosition(draft.positions[0]?.id);
+														}}
+													>
+														Remove branch
+													</button>
+												</fieldset>
+											)}
+										</div>
+									</details>
+									{!started && setupActions}
+								</aside>
+							) : selected && active && person ? (
+								<aside className="wp-org-inspector">
+									<div className="wp-org-reporting">
+										{manages(person) && !person.home && (
+											<button
+												type="button"
+												disabled={busy || recruiting}
+												onClick={() => {
+													setAddingTo(selected);
+													setSelected(undefined);
+												}}
 											>
-												<option value="">Choose a person</option>
+												Add person
+											</button>
+										)}
+										<label>
+											Reports to
+											<select
+												aria-label="Reports to"
+												value={parent}
+												disabled={busy || typeof api.orgMove !== "function"}
+												onChange={(event) => {
+													setParent(event.target.value);
+													if (event.target.value !== (person.parent ?? ""))
+														propose(selected, event.target.value || null);
+												}}
+											>
+												<option value="">Independent</option>
 												{people
-													.filter((candidate) => !draft.positions.some((item) => item.id === candidate.character.id))
+													.filter(
+														(candidate) =>
+															manages(candidate) && !descendants(selected, parents).includes(candidate.character.id),
+													)
 													.map((candidate) => (
 														<option key={candidate.character.id} value={candidate.character.id}>
 															{candidate.character.name}
@@ -574,171 +759,15 @@ export function Org({
 													))}
 											</select>
 										</label>
-										<button type="button" disabled={started || !existingToAdd} onClick={addExisting}>
-											Add teammate
-										</button>
+										<p className="wp-org-reporting-hint">
+											Choose a manager or Independent, then confirm the branch move.
+										</p>
 									</div>
-									<div className="wp-org-positions">
-										{draft.positions.map((item, index) => (
-											<button
-												type="button"
-												key={item.id}
-												aria-label={`Planned role: ${role(item.role)?.title ?? item.name} ${index + 1}`}
-												aria-pressed={position === item.id}
-												onClick={() => setPosition(item.id)}
-											>
-												<span>{item.manager ? "↳" : "◇"}</span>
-												<span>
-													<strong>{item.name || role(item.role)?.title || "Existing teammate"}</strong>
-													<small>
-														{item.existing ? "Existing person · staged" : "Planned role"}
-														{item.manager
-															? ` · reports to ${draft.positions.find((parentItem) => parentItem.id === item.manager)?.name || role(draft.positions.find((parentItem) => parentItem.id === item.manager)?.role ?? "")?.title || "head"}`
-															: " · team head"}
-													</small>
-												</span>
-											</button>
-										))}
-									</div>
-									{currentPosition && (
-										<fieldset disabled={started}>
-											<legend>Position details</legend>
-											<p>{role(currentPosition.role)?.mandate}</p>
-											<p className="wp-org-capabilities">
-												{role(currentPosition.role)?.manages ? "Manages people" : "Individual contributor"} ·{" "}
-												{role(currentPosition.role)?.writes ? "Writes files" : "Advises"}
-											</p>
-											<label>
-												Specialization
-												<textarea
-													aria-label="Specialization"
-													className="wp-specialization"
-													aria-describedby="wp-org-specialization-help"
-													rows={2}
-													value={
-														currentPosition.existing
-															? (recordedSpecialization ?? "")
-															: (currentPosition.specialization ?? "")
-													}
-													readOnly={currentPosition.existing}
-													placeholder={
-														currentPosition.existing
-															? "No specialization recorded."
-															: "Focus on keyboard and screen-reader behavior."
-													}
-													onChange={(event) => updatePosition({ specialization: event.target.value })}
-												/>
-											</label>
-											<p id="wp-org-specialization-help">
-												A focus within this role. All role responsibilities still apply.
-											</p>
-											<label>
-												Name (optional)
-												<input
-													aria-label="Name (optional)"
-													value={currentPosition.name}
-													disabled={currentPosition.existing}
-													onChange={(event) => updatePosition({ name: event.target.value })}
-												/>
-											</label>
-											{!currentPosition.existing && (
-												<label>
-													Position goal (optional)
-													<textarea
-														aria-label="Position goal"
-														value={currentPosition.goal}
-														onChange={(event) => updatePosition({ goal: event.target.value })}
-														placeholder="Use the team task when one is set"
-													/>
-												</label>
-											)}
-											{currentPosition.manager !== null && (
-												<label>
-													Reports to
-													<select
-														aria-label="Reports to"
-														value={currentPosition.manager}
-														onChange={(event) => updatePosition({ manager: event.target.value })}
-													>
-														{draft.positions
-															.filter(
-																(item) =>
-																	role(item.role)?.manages &&
-																	!descendants(currentPosition.id, draftParents).includes(item.id),
-															)
-															.map((item) => (
-																<option key={item.id} value={item.id}>
-																	{item.name || role(item.role)?.title}
-																</option>
-															))}
-													</select>
-												</label>
-											)}
-											<button
-												type="button"
-												className="wp-org-remove"
-												disabled={!currentPosition.manager}
-												onClick={() => {
-													const removing = descendants(currentPosition.id, draftParents);
-													setDraft({
-														...draft,
-														positions: draft.positions.filter((item) => !removing.includes(item.id)),
-													});
-													setPosition(draft.positions[0]?.id);
-												}}
-											>
-												Remove branch
-											</button>
-										</fieldset>
-									)}
-								</div>
-							</details>
-							{!started && setupActions}
-						</aside>
-					) : selected && active && person ? (
-						<aside className="wp-org-inspector">
-							<div className="wp-org-reporting">
-								{manages(person) && !person.home && (
-									<button
-										type="button"
-										disabled={busy || recruiting}
-										onClick={() => {
-											setAddingTo(selected);
-											setSelected(undefined);
-										}}
-									>
-										Add person
-									</button>
-								)}
-								<label>
-									Reports to
-									<select
-										aria-label="Reports to"
-										value={parent}
-										disabled={busy || typeof api.orgMove !== "function"}
-										onChange={(event) => {
-											setParent(event.target.value);
-											if (event.target.value !== (person.parent ?? "")) propose(selected, event.target.value || null);
-										}}
-									>
-										<option value="">Independent</option>
-										{people
-											.filter(
-												(candidate) =>
-													manages(candidate) && !descendants(selected, parents).includes(candidate.character.id),
-											)
-											.map((candidate) => (
-												<option key={candidate.character.id} value={candidate.character.id}>
-													{candidate.character.name}
-												</option>
-											))}
-									</select>
-								</label>
-								<p className="wp-org-reporting-hint">Choose a manager or Independent, then confirm the branch move.</p>
-							</div>
-							<PersonProfile key={selected} id={selected} name={person.character.name} onClose={closeProfile} />
-						</aside>
-					) : null}
+									<PersonProfile key={selected} id={selected} name={person.character.name} onClose={closeProfile} />
+								</aside>
+							) : null}
+						</div>
+					)}
 				</div>
 				{move && (
 					<OrgMoveConfirm

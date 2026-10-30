@@ -7,6 +7,7 @@ import { useWorkplaceMenu } from "./workplace-context-menu.js";
 import { GitDiffText, type GitDiffView, GitPane } from "./workplace-git.js";
 import { Icon } from "./workplace-icon.js";
 import { QuickOpen } from "./workplace-quick-open.js";
+import { usePaneResize } from "./workplace-resize.js";
 import { WorkplaceTerminal } from "./workplace-terminal.js";
 import "./workplace-code.css";
 
@@ -149,6 +150,35 @@ export function WorkplaceCode({
 	const [busy, setBusy] = useState(false);
 	const [saving, setSaving] = useState(false);
 	const [showGit, setShowGit] = useState(true);
+	const panes = useRef<HTMLDivElement>(null);
+	const files = usePaneResize({
+		label: "Files width",
+		variable: "--wp-files-width",
+		axis: "x",
+		direction: 1,
+		min: 150,
+		max: (): number => {
+			const node = git.pane.current;
+			const available = (panes.current?.clientWidth ?? 0) - 160 - 6;
+			const side =
+				showGit && node && getComputedStyle(node).gridColumnEnd !== "-1"
+					? Math.min(node.offsetWidth + 6, Math.max(0, available - 150))
+					: 0;
+			return available - side;
+		},
+	});
+	const git = usePaneResize({
+		label: "Source control width",
+		variable: "--wp-git-width",
+		axis: "x",
+		direction: -1,
+		min: 180,
+		max: () => {
+			const available = (panes.current?.clientWidth ?? 0) - 160 - 12;
+			return available - Math.min(filesPane.current?.offsetWidth ?? 0, Math.max(0, available - 180));
+		},
+		enabled: showGit,
+	});
 	const [diff, setDiff] = useState<GitDiffView>();
 	const buffers = useRef(new Map<string, Buffer>());
 	const [, redraw] = useState(0);
@@ -685,8 +715,20 @@ export function WorkplaceCode({
 					{notice}
 				</div>
 			)}
-			<div className={`wp-code-panes ${showGit ? "with-git" : ""}`}>
-				<aside className="wp-code-files" aria-label="Files" tabIndex={-1} ref={filesPane}>
+			<div
+				ref={panes}
+				style={{ ...files.style, ...git.style }}
+				className={`wp-code-panes ${showGit ? "with-git" : ""}`}
+			>
+				<aside
+					className="wp-code-files"
+					aria-label="Files"
+					tabIndex={-1}
+					ref={(node) => {
+						filesPane.current = node;
+						files.ref(node);
+					}}
+				>
 					<div className="wp-code-pane-heading">
 						<strong>Files</strong>
 						<div className="wp-code-file-actions">
@@ -734,6 +776,7 @@ export function WorkplaceCode({
 						<p className="wp-code-empty">Choose a repository or enter its absolute path.</p>
 					)}
 				</aside>
+				{files.separator}
 				<main className="wp-code-editor-pane">
 					<div className="wp-code-tabs" role="tablist" aria-label="Open files">
 						{openBuffers.map(([key, buffer]) => (
@@ -851,7 +894,8 @@ export function WorkplaceCode({
 					</div>
 					<WorkplaceTerminal root={root} active={active} onLiveCountChange={onTerminalCountChange} />
 				</main>
-				<aside className="wp-code-git" hidden={!showGit} aria-label="Repository changes">
+				{git.separator}
+				<aside ref={git.ref} className="wp-code-git" hidden={!showGit} aria-label="Repository changes">
 					{root ? (
 						<GitPane
 							root={root}

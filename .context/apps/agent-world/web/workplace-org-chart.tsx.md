@@ -1,6 +1,12 @@
 ## symbol:OrgChart
 
-The operator rejected horizontal navigation across all independent hierarchies, then found the intermediate vertical outline less intuitive for dragging. The default is a responsive team overview; opening one team shows a conventional top-down chart fitted to that team's viewport. Zoom and pan stay local to that tree. Team navigation doubles as cross-tree drop targets. The Reports to selector proposes a change through the same confirmation path as drag/drop; it is not a second immediate mutation route.
+The focused desktop team navigator uses the shared Org team navigator width handle. The existing <=1100px stacked layout hides this separator and leaves its saved desktop size untouched. Chart pan/pinch and graph geometry remain separate from outer grid sizing.
+Coupled: apps/agent-world/web/workplace-resize.tsx
+
+The operator rejected horizontal navigation across all independent hierarchies, then found the intermediate vertical outline less intuitive for dragging. The default is a responsive card overview for actual teams (roots with more than one current lasting member, including people at home), followed by a People directory containing every current lasting person. Singleton roots are represented in that list rather than as cards. Opening a team shows a conventional top-down chart fitted to that team's viewport. Zoom and pan stay local to that tree. Team navigation doubles as cross-tree drop targets. The Reports to selector proposes a change through the same confirmation path as drag/drop; it is not a second immediate mutation route.
+
+The overview-only People table aligns identity, role, compact status and actual multi-person team (or Independent). Its name button calls the existing select handler with the exact trigger; Message uses the ordinary DM callback. Each row and card head expose the same visible PersonActionsButton, while team names retain work/Rename and chart cards retain their context actions. Drag/drop handlers stay on directory rows, preserving branch moves for independent people. The table introduces no profile/read state and uses only supplied snapshot metadata; full work content still requires explicit history actions.
+Why: the operator requested a full directory, not only a list of singleton organizations. Reusing the existing side panel and lifecycle owner prevents ambiguous parallel selection, hidden-only management and accidental reads.
 
 The caller supplies only lasting people using authoritative temporary metadata, not role/title/name guesses. A missing visible parent makes a person an independent visible root. Team choices use stable session IDs, not status, so a status change does not rearrange navigation.
 
@@ -17,7 +23,7 @@ Why: direct-card CSS selectors supply flexible summary height and the two-line p
 The overview avatar opens the head's profile through the ChatPeople provider supplied by Org, preserving the clicked trigger for focus restoration. Keep that provider when embedding the chart.
 Why: PersonAvatar becomes decorative without its provider. Removing the repeated Head button must preserve an accessible profile action rather than only remove text.
 
-Actual people in the focused tree have right-click lifecycle actions on the branch card and Shift+F10/ContextMenu on the primary profile button. Shared menu opening prevents profile selection and reads; normal click/drag/report toggling remains unchanged. Organization overview names keep their separate work/Rename actions; their avatar's ordinary profile route exposes the same named lifecycle ellipsis. OrgChart therefore needs the surrounding WorkplacePersonActions owner as well as ChatPeople.
+Actual people in the focused tree have right-click lifecycle actions on the branch card and Shift+F10/ContextMenu on the primary profile button. Shared menu opening prevents profile selection and reads; normal click/drag/report toggling remains unchanged. Organization overview names keep their separate work/Rename actions; their avatar's ordinary profile route and the visible card-head/people-row buttons expose the same named lifecycle ellipsis. OrgChart therefore needs the surrounding WorkplacePersonActions owner as well as ChatPeople.
 Coupled: apps/agent-world/web/workplace-person-actions.tsx
 Verify: apps/agent-world/tests/world-lifecycle.test.ts
 

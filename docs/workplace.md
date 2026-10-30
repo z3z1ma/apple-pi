@@ -8,13 +8,15 @@ Run `/world` in a root Pi session. The app opens in Workplace's **Chat** view. U
 
 The **Theme** switch selects light or dark appearance. It starts with your OS preference and remembers an explicit choice. This appearance choice is separate from the World view's art theme. Compact toolbar and tab icon buttons retain tooltips and accessible action names.
 
+Drag the visible dividers to resize content sidebars, profiles, Org details, Code's Files and Source control panes, and the terminal's height. The narrow icon navigation rail stays fixed. Focus a divider and use arrow keys to move it in that direction; Home and End select its current minimum and maximum. Escape cancels a drag. Sizes stay local to the app across view switches, with bounds that keep the adjacent content usable; stacked narrow layouts hide dividers that no longer apply.
+
 Closing the app leaves Pi sessions running. Switching views, including World, retains team plans, message drafts, open Code buffers, embedded terminals and per-issue delegation drafts. World stays loaded after its first visit, even while another tab is selected. Reloading or quitting discards this memory. Unsaved Code edits, retained team plans and live embedded terminals share one native leave confirmation; choosing to leave discards the drafts and hangs up those terminals. Cancelling preserves them. Already prepared people and their work remain real. Display-name and appearance preferences persist separately.
 
 A page reload updates the renderer, not the main process or backend. After main-process/backend changes, fully quit and relaunch Agent World to load the new APIs, including work history. Relaunching Agent World leaves Pi sessions running but loses the same memory-only drafts. This is separate from restarting the shared session-state daemon, which requires explicit approval and may stop headless people. See [Agent World](agent-world.md) for installation, credentials, external integrations and removal.
 
 ## Org plans teams and changes reporting
 
-Org opens with a responsive overview of independent teams, including people at home. Choose **Open team** to inspect a conventional top-down reporting chart fitted to that team's viewport. **All teams** returns to the overview; the team navigation switches between organizations. Within a team, drag empty chart space to pan, use **Zoom in**, **Zoom out** or **Fit**, and collapse or expand reports. Zoom and pan stay local to the focused chart. Each tree's **head** has no manager; a **branch** is one person and everyone reporting to them, at any depth. **Lasting people** are ordinary Pi sessions, as distinct from temporary peers created for a program. Temporary program peers and departed people stay outside the editable roster. A real person's card opens their existing profile without reading or acknowledging their conversation; a planned position shows catalog role and goal details, not an invented personal history.
+Org opens with cards for teams of two or more lasting people, counting people at home. Beneath them, the **People** directory lists every current lasting person, including independent people and members of those teams. Its compact rows show identity, role, status and team, with explicit profile, message and person-menu actions. It reuses the existing profile panel rather than opening a separate detail screen. Choose **Open team** to inspect a conventional top-down reporting chart fitted to that team's viewport. **All teams** returns to the overview; the team navigation switches between organizations. Within a team, drag empty chart space to pan, use **Zoom in**, **Zoom out** or **Fit**, and collapse or expand reports. Zoom and pan stay local to the focused chart. Each tree's **head** has no manager; a **branch** is one person and everyone reporting to them, at any depth. **Lasting people** are ordinary Pi sessions, as distinct from temporary peers created for a program. Temporary program peers and departed people stay outside the editable roster. A real person's card opens their existing profile without reading or acknowledging their conversation; a planned position shows catalog role and goal details, not an invented personal history.
 
 ### Names are local display preferences
 
@@ -42,7 +44,7 @@ An independent branch remains independent on reconnect or call-in: a recorded nu
 
 ### Person actions
 
-Open the person menu in a DM header or profile. In Org, right-click a real person's card, or focus it and press Shift+F10, for the same actions. Opening the menu does not read or acknowledge a conversation. Organization-name work history and Rename remain separate controls.
+Use the visible person-menu button on Chat rows, DM headers, profiles, team cards or People directory rows. In the Org chart, right-click a real person's card, or focus it and press Shift+F10, for the same actions. A team card's menu acts on its head, not the whole team. Opening the menu does not read or acknowledge a conversation. Organization-name work history and Rename remain separate controls.
 
 **Send home** closes only the selected person's session, preserving their identity, work and history. Idle people go home immediately; interrupting someone busy or awaiting input requires confirmation. If they become busy after selection, the backend can require a fresh confirmation. Their reports stay where they are.
 
@@ -50,7 +52,7 @@ Open the person menu in a DM header or profile. In Org, right-click a real perso
 
 The result lists each affected person's observed state. A failed or uncertain manager blocks remaining starts, while people already called in stay running. **Retry call in** reconciles the same operation and approved people rather than blindly opening replacement sessions. If reporting or the approved scope is stale, close the result and review a new call-in preview. This is a Workplace action, not a new automatic cascade in the native agent tool or standalone World's existing Call in control.
 
-**Let go** is permanent departure, not reversible Send home. Eligible people require a reason and an explicit permanent-removal acknowledgment. The runtime still enforces unfinished-work, reports and other departure checks. Acceptance means the handoff and cleanup have been requested; later runtime updates report the outcome. The UI does not remove the person optimistically or let go of their reports.
+**Let go** is permanent departure, not reversible Send home. The operator can also let independent or unroled people go; an agent still cannot let an organization head go. The action requires a reason and an explicit permanent-removal acknowledgment. First finish or reassign unfinished work, move reports and settle active delegations. The runtime checks those responsibilities again before committing departure after the person's final handoff. Acceptance means the handoff and cleanup have been requested; later runtime updates report the outcome. The UI does not remove the person optimistically or let go of their reports.
 
 ### Add one person immediately
 
@@ -86,7 +88,7 @@ Progress distinguishes pending, preparing, ready, active, blocked, failed and un
 
 ## Chat works with live sessions
 
-The sidebar lists channels, **VIPs**, direct messages and sleeping people's retained histories. VIPs are the heads of organizations with at least four current lasting people, counting the head and people at home. Those heads appear only in VIPs, including when asleep; selecting one opens the same ordinary DM or retained history. Grouping uses organization metadata without reading conversations. Search filters the available names and channels; it is not a server-side transcript search.
+The sidebar lists channels, **VIPs**, direct messages and sleeping people's retained histories. VIPs are the heads of organizations with at least four current lasting people, counting the head and people at home. Those heads appear only in VIPs, including when asleep; selecting one opens the same ordinary DM or retained history. Grouping uses organization metadata without reading conversations. A small **Working** activity icon beside an awake person's name follows their current working status in both VIPs and ordinary DMs; idle, asking and sleeping people have no working icon. It is separate from the presence dot and unread indicator. Search filters the available names and channels; it is not a server-side transcript search.
 
 A direct conversation is the person's actual Pi session. Its transcript, streamed replies, questions, instruction timing and receipts use the same conversation machinery as World. What you send depends on its current state:
 

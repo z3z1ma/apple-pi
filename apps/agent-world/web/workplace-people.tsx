@@ -5,6 +5,7 @@ import { sleeperCharacter } from "./game/layout.js";
 import { factRows } from "./overlay/interface/character-card.js";
 import { OrgNameEditor } from "./workplace-org-name.js";
 import { PersonActionsButton } from "./workplace-person-actions.js";
+import type { usePaneResize } from "./workplace-resize.js";
 import { WorkHistory } from "./workplace-work-history.js";
 
 type PeopleNavigation = {
@@ -162,7 +163,17 @@ function SelfDetails({ id }: { id: string }) {
 	));
 }
 
-export function PersonProfile({ id, name: fallbackName, onClose }: { id: string; name: string; onClose: () => void }) {
+export function PersonProfile({
+	id,
+	name: fallbackName,
+	onClose,
+	resize,
+}: {
+	id: string;
+	name: string;
+	onClose: () => void;
+	resize?: ReturnType<typeof usePaneResize>;
+}) {
 	const people = useContext(ChatPeople)!;
 	const person = personIn(people.world, id);
 	const dormant = people.world.dormant?.find((candidate) => candidate.id === id);
@@ -186,7 +197,14 @@ export function PersonProfile({ id, name: fallbackName, onClose }: { id: string;
 		return () => window.removeEventListener("keydown", onEscape);
 	}, [onClose]);
 	return (
-		<aside className="wp-profile" aria-label={`Profile: ${name}`}>
+		<aside
+			className="wp-profile"
+			aria-label={`Profile: ${name}`}
+			ref={resize?.ref}
+			style={resize?.style}
+			data-resizable={!!resize}
+		>
+			{resize?.separator}
 			<header>
 				<h2>Profile</h2>
 				<div className="wp-profile-actions">

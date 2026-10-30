@@ -1,5 +1,8 @@
 ## file
 
+The optional right rail is a three-track grid: retained center, shared 6px separator, resizable details slot. Its CSS fallback widths keep the existing 360/320px defaults. The slot's direct asides flex within that bounded geometry, leaving their existing header/body scroll ownership intact across plan, Add person and profile modes.
+Coupled: apps/agent-world/web/workplace-resize.css, apps/agent-world/web/workplace-resize.tsx
+
 The overview header's action row aligns to the search input's bottom, not the combined label-and-input center. Profile reporting controls use an Org-qualified button selector to outrank Workplace's late bare-button reset, preserving their border/background at rest without changing the shared button baseline.
 Why: centered action buttons appeared above their adjacent input, and equal-specificity style order made Add person look like floating text.
 
