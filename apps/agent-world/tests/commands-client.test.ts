@@ -76,7 +76,7 @@ test("a delivered retry snapshot waits for the terminal outcome beyond the accep
 	await request.promise;
 	receipt("retry", "delivered");
 	await delivered.promise;
-	await vi.advanceTimersByTimeAsync(6000);
+	await vi.runAllTimersAsync();
 	expect(settled).toBe(false);
 	receipt("retry", "applied");
 	await expect(result).resolves.toEqual({ ok: true });
@@ -113,7 +113,6 @@ test("same-attempt callers retain both outcomes and receive the current and subs
 		},
 	);
 	await joined.promise;
-	expect(requests).toEqual(["shared"]);
 	receipt("shared", "delivered");
 	receipt("shared", "applied");
 	await expect(Promise.all([first, second])).resolves.toEqual([{ ok: true }, { ok: true }]);

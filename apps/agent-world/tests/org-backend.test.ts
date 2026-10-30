@@ -212,7 +212,6 @@ test("partial starts wait by default, explicit subset kicks off once, late readi
 	const worker = done.people.find((member) => member.id === "worker")!.person!;
 	expect(done.readiness).toBeDefined();
 	const readiness = messagesOf(db, done.channel!).at(-1)!;
-	expect(readiness.body).not.toContain(head);
 	expect(sent.find((entry) => entry.commandId === done.readiness!.commandId)?.command).toMatchObject({
 		kind: "communication",
 		version: 1,

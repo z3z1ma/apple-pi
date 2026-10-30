@@ -226,7 +226,8 @@ process.stdin.on("end", () => socket.end());
 							kind: "mail",
 							from: "harness",
 							threadKind: "channel",
-							body: expect.stringContaining("Team context at your arrival:"),
+							thread: `team:${head}`,
+							body: expect.stringContaining(head),
 						}),
 					}),
 				]);
