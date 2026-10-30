@@ -1,4 +1,4 @@
-import { fauxAssistantMessage } from "@earendil-works/pi-ai/compat";
+import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai/compat";
 import type { BeforeAgentStartEvent, ExtensionFactory } from "@earendil-works/pi-coding-agent";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
@@ -150,6 +150,60 @@ test("startup replay is received inside the explicit user run, and retained mail
 	}
 }, 20000);
 
+test("actual host abort and idle reload keep settlement and incarnation boundaries explicit", async () => {
+	let first = true;
+	let release: (reply: Reply) => void = () => {};
+	const run = await fauxSession([bridge], () => {
+		if (!first) return fauxAssistantMessage("resumed");
+		first = false;
+		return new Promise<Reply>((resolve) => {
+			release = resolve;
+		});
+	}, []);
+	const id = run.session.sessionManager.getSessionId();
+	try {
+		await run.session.bindExtensions({
+			onError: (error) => {
+				throw new Error(error.error);
+			},
+		});
+		await vi.waitFor(() => expect(events(id).length).toBeGreaterThan(0), { timeout: 10000 });
+		const turn = run.session.prompt("cancel this response");
+		await vi.waitFor(() => expect(run.requests).toHaveLength(1));
+		const aborted = run.session.abort();
+		release(fauxAssistantMessage("cancelled", { stopReason: "aborted" }));
+		await aborted;
+		await turn;
+		await vi.waitFor(() =>
+			expect(events(id).some((row) => row.observation.phase === "settle" && row.observation.aborted)).toBe(true),
+		);
+		const cutoff = events(id).at(-1)!.seq;
+		await run.session.reload();
+		await vi.waitFor(
+			() =>
+				expect(
+					events(id).some((row) => row.seq > cutoff && row.observation.phase === "resume" && !row.observation.active),
+				).toBe(true),
+			{ timeout: 10000 },
+		);
+		await run.session.prompt("continue after reload");
+		await vi.waitFor(() => expect(events(id).filter((row) => row.observation.phase === "settle")).toHaveLength(2));
+		expect(
+			events(id)
+				.filter((row) => row.observation.phase === "settle")
+				.map((row) => row.observation),
+		).toMatchObject([{ aborted: true }, { aborted: false }]);
+		const starts = events(id).filter((row) => row.observation.phase === "start");
+		expect(starts).toHaveLength(2);
+		expect(new Set(starts.map((row) => row.observation.id)).size).toBe(2);
+		expect(new Set(events(id).map((row) => row.generation)).size).toBe(1);
+	} finally {
+		release(fauxAssistantMessage("done"));
+		await run.session.abort();
+		await close(run);
+	}
+}, 30000);
+
 test("an actual host continuation emits several loop starts inside one observed run", async () => {
 	let loops = 0,
 		continued = false;
@@ -166,11 +220,8 @@ test("an actual host continuation emits several loop starts inside one observed 
 			);
 		});
 	};
-	const run = await fauxSession(
-		[bridge, continuation],
-		[fauxAssistantMessage("first"), fauxAssistantMessage("continued")],
-		[],
-	);
+	const replies: Reply[] = [fauxAssistantMessage("first"), fauxAssistantMessage("continued")];
+	const run = await fauxSession([bridge, continuation], () => replies.shift() ?? fauxAssistantMessage("noted"), []);
 	const id = run.session.sessionManager.getSessionId();
 	try {
 		await vi.waitFor(() => expect(events(id).length).toBeGreaterThan(0), { timeout: 10000 });
@@ -178,6 +229,22 @@ test("an actual host continuation emits several loop starts inside one observed 
 		await vi.waitFor(() => expect(events(id).filter((row) => row.observation.phase === "settle")).toHaveLength(1));
 		expect(loops).toBeGreaterThan(1);
 		expect(events(id).filter((row) => row.observation.phase === "start")).toHaveLength(1);
+		const settledAt = events(id).at(-1)!.at;
+		await vi.waitFor(() => expect(Date.now()).toBeGreaterThan(settledAt));
+		replies.push(
+			fauxAssistantMessage([fauxToolCall("progress", { since: "1h", until: new Date().toISOString(), person: id })], {
+				stopReason: "toolUse",
+			}),
+			fauxAssistantMessage("inspected"),
+		);
+		await run.session.prompt("inspect the completed response");
+		const report = run.session.messages
+			.filter((message) => message.role === "toolResult" && message.toolName === "progress")
+			.at(-1);
+		expect(report).toMatchObject({
+			isError: false,
+			details: { execution: { available: true, summary: { startedRuns: 1, abortedRuns: 0 } } },
+		});
 	} finally {
 		await close(run);
 	}

@@ -1,5 +1,10 @@
 ## file
 
+Pi's `agent_start` is a loop boundary: `agent.continue()` can emit it again inside the same high-level run. `before_agent_start` supplies flattened `messageType` plus `message` or `prompt`/`images`; `agent_settled` marks final settlement. When observing high-level runs, reserve identity at preparation, activate on the first loop start and retain that identity through continuations. Preparation that never executes contributes no execution time; missing boundaries remain explicit unknowns. Retain typed input references rather than bodies or guessed timestamp/text matches.
+Why: the introspection audit checked these boundaries in installed Pi 1.4.0 and published Pi 1.2.0 source. Counting loop starts would split one response into several runs; command delivery and transcript persistence also occur at different times from input consumption. The observer and projection must preserve this host boundary together; source inspection alone is not executed lifecycle proof. See [[session-log-analysis#Incoming-mail time attribution]].
+Coupled: components/session-state/src/run-observation.ts, components/session-state/src/execution-inspection.ts, components/session-state/src/protocol.ts, components/session-state/src/runtime.ts, components/session-state/src/mail.ts, components/session-state/src/peer-turns.ts
+Verify: components/session-state/tests/run-observation.test.ts, components/session-state/tests/execution-inspection.test.ts, components/session-state/tests/mail.test.ts
+
 Mail forwarding carries the runtime's optional conversation kind and exact message reference to the transcript/rendering boundary. Legacy absence stays unknown; a subject or name cannot establish conversation kind. This lets a selected channel notification be answered without retrieving or acknowledging unrelated history.
 Coupled: components/session-state/src/mail.ts, components/session-state/src/protocol.ts
 Verify: components/session-state/tests/mail-render.test.ts, components/session-state/tests/communication-tools.test.ts

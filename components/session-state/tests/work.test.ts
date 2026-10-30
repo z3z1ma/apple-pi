@@ -817,12 +817,17 @@ test("a scripted manager inspects a ready task and relevant idle experience, ass
 		expect(experience.people).toContainEqual(
 			expect.objectContaining({ ref: `person:${specialist.id}`, reads: 1, status: "idle", tasks: [] }),
 		);
-		expect(after.summary.ready).toBe(0);
+		expect(after.summary).toMatchObject({ ready: 0, held: 1, waiting: 1 });
 		expect(after.open.rows).toContainEqual(
 			expect.objectContaining({ ref: `task:${ready.id}`, state: "held", holders: [`person:${specialist.id}`] }),
 		);
 		expect(after.open.rows).toContainEqual(
-			expect.objectContaining({ ref: `task:${blocked.id}`, waits: [`link:${decision.id}`] }),
+			expect.objectContaining({
+				ref: `task:${blocked.id}`,
+				state: "waiting",
+				holders: [`person:${manager.id}`],
+				waits: [`link:${decision.id}`],
+			}),
 		);
 		expect(manager.run.session.agent.state.systemPrompt).toContain("## Adapt with evidence");
 	} finally {
@@ -1068,7 +1073,7 @@ test("/org economics reuses the native breakdown and incomplete or unknown forms
 		const native = who.run.session.messages.filter((message) => message.role === "toolResult").at(-1)!;
 		expect(native.details).toMatchObject({ value: 25 });
 		expect(text).toBe((native.content[0] as { text: string }).text);
-		for (const args of ["unknown", "fitness", "expertise"]) {
+		for (const args of ["unknown", "economics", "experience"]) {
 			const count = notices.length;
 			await who.run.session.prompt(`/org ${args}`);
 			expect(notices).toHaveLength(count + 1);

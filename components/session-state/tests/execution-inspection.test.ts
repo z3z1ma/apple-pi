@@ -1,9 +1,8 @@
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, expect, test } from "vitest";
-import { executionIn } from "../src/execution-inspection.js";
-import { inspectionContext } from "../src/inspection-context.js";
 import type { RunInput, RunObservation } from "../src/run-observation.js";
 import { migrate } from "../src/schema.js";
+import { progressIn } from "../src/work-inspection.js";
 
 const databases: DatabaseSync[] = [];
 afterEach(() => {
@@ -38,8 +37,7 @@ function fixture() {
 		observe,
 		start,
 		settle,
-		inspect: (from = 0, to = 20) =>
-			executionIn(db, inspectionContext(db, "root", { cwd: "/", from, to }), { limit: 100 }),
+		inspect: (from = 0, to = 20) => progressIn(db, "root", { cwd: "/", from, to }, {}, { limit: 100 }).execution,
 	};
 }
 
@@ -134,7 +132,7 @@ test("temporary time follows immutable caller ancestry and historical membership
 	if (!result.available) throw new Error(result.reason);
 	expect(result.summary).toMatchObject({ observedMs: 10, delegatedObservedMs: 10 });
 	expect(result.emitters.rows[0]).toMatchObject({ emitter: "person:peer", accountedTo: "person:a" });
-	const task = executionIn(db, inspectionContext(db, "root", { cwd: "/", from: 0, to: 20 }, { task: "task" }));
+	const task = progressIn(db, "root", { cwd: "/", from: 0, to: 20 }, { task: "task" }).execution;
 	expect(task.available).toBe(false);
 });
 
