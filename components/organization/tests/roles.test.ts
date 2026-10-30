@@ -299,8 +299,8 @@ test.each([
 			if (!role && allowed) {
 				const prompt = run.session.agent.state.systemPrompt;
 				expect(prompt).toContain("<role-catalog>");
-				expect(prompt).toContain("`org_work`");
-				expect(prompt).toContain("work directly or delegate");
+				expect(prompt).toContain("`progress`");
+				expect(prompt).toMatch(/work directly or delegate/i);
 				expect(prompt).not.toContain("<manager>");
 				expect(prompt).not.toContain("<role>");
 				expect(run.session.model).toBe(model);
@@ -332,7 +332,7 @@ test("everyone gets the org section; only a managing role gets the manager chart
 		expect(prompt).toContain("You are the root of your organization");
 		expect(prompt).not.toContain("You hold the manager tools");
 		expect(prompt).toContain("`link`");
-		for (const tool of ["org_waits", "org_work", "org_communication", "org_expertise", "org_fitness", "predictions"])
+		for (const tool of ["bottlenecks", "progress", "coordination", "experience", "economics", "predictions"])
 			expect(prompt).not.toContain(`\`${tool}\``);
 		expect(prompt).not.toContain("<role-catalog>");
 		expect(prompt).not.toContain("<manager>");
@@ -346,7 +346,7 @@ test("everyone gets the org section; only a managing role gets the manager chart
 		expect(prompt).toContain("You report to the session `boss`");
 		expect(prompt).toContain("ask your manager to hire one");
 		expect(prompt).toContain("`link`");
-		for (const tool of ["org_waits", "org_work", "org_communication", "org_expertise", "org_fitness", "predictions"])
+		for (const tool of ["bottlenecks", "progress", "coordination", "experience", "economics", "predictions"])
 			expect(prompt).not.toContain(`\`${tool}\``);
 		expect(prompt).not.toContain("<role-catalog>");
 		expect(prompt).not.toContain("<manager>");
@@ -362,15 +362,7 @@ test("everyone gets the org section; only a managing role gets the manager chart
 		const prompt = manager.session.agent.state.systemPrompt;
 		expect(prompt).toContain("<org>\nYou are Coordinator, a person");
 		expect(prompt).toContain("<role-catalog>");
-		for (const tool of [
-			"org_waits",
-			"org_work",
-			"org_communication",
-			"org_expertise",
-			"org_fitness",
-			"predictions",
-			"link",
-		])
+		for (const tool of ["bottlenecks", "progress", "coordination", "experience", "economics", "predictions", "link"])
 			expect(prompt).toContain(`\`${tool}\``);
 		expect(prompt).toContain("<manager>\nYou are a manager: the operator brings you work");
 		expect(prompt).toMatch(/check-in[\s\S]*remind_me[\s\S]*ordinary mail or channel discussion/);
@@ -394,7 +386,7 @@ test("everyone gets the org section; only a managing role gets the manager chart
 			"in sweeps",
 		])
 			expect(prompt).toContain(moment);
-		expect(prompt).toMatch(/org_expertise[\s\S]*before assigning or hiring/);
+		expect(prompt).toMatch(/experience[\s\S]*before assigning or hiring/);
 		expect(prompt).toContain("investigate causes through tasks, links, history and mail");
 		expect(prompt).toContain("ask a subordinate manager to reorganize its subtree");
 		expect(prompt).toContain("keep the organization stable when change would cost more than it gives");

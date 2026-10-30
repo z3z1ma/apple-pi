@@ -120,7 +120,7 @@ function detectFriction(db: DatabaseSync): FrictionNotice[] {
 				recipient,
 				kind,
 				anchor,
-				body: `${body}\nThis records a coordination pattern, not a diagnosis or a recommended intervention. Inspect org_waits and the referenced task/thread before deciding what to do.`,
+				body: `${body}\nThis records a coordination pattern, not a diagnosis or a recommended intervention. Inspect bottlenecks and the referenced task/thread before deciding what to do.`,
 			});
 		};
 		const incoming = new Map<string, Wait[]>();

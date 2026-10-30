@@ -193,11 +193,12 @@ test("a coordinator starts a session in a new tmux window, and reopens it by id 
 			const delivered = commandsOf("worker-1");
 			const begins = delivered.findIndex((command) => command.kind === "steer");
 			expect(begins).toBeGreaterThan(0);
-			expect(
-				delivered
-					.slice(0, begins)
-					.some((command) => command.kind === "mail" && command.body.includes("the boundary notes are in brief.md")),
-			).toBe(true);
+			const brief = delivered
+				.slice(0, begins)
+				.filter((command) => command.kind === "mail")
+				.find((command) => command.thread === `team:${coordinatorId}`);
+			expect(brief).toMatchObject({ body: expect.stringContaining(coordinatorId) });
+			expect(brief!.body).not.toContain("the boundary notes are in brief.md");
 		});
 
 		tmux("kill-window", "-t", "Ada Lovelace");
@@ -415,31 +416,14 @@ test("a hired person whose role does not manage loses the lifecycle tools; a hir
 	const run = await fauxSession(
 		[bridge],
 		[fauxAssistantMessage("ok"), fauxAssistantMessage("ok")],
-		[
-			...tools,
-			"directory",
-			"org_work",
-			"org_waits",
-			"org_communication",
-			"org_expertise",
-			"org_fitness",
-			"predictions",
-		],
+		[...tools, "directory", "progress", "bottlenecks", "coordination", "experience", "economics", "predictions"],
 	);
 	try {
 		run.session.extensionRunner.setFlagValue("reports-to", "boss");
 		await withRole(run, "staff-engineer-simplicity");
 		await run.session.prompt("hi");
 		const active = run.session.getActiveToolNames();
-		for (const name of [
-			...tools,
-			"org_work",
-			"org_waits",
-			"org_communication",
-			"org_expertise",
-			"org_fitness",
-			"predictions",
-		])
+		for (const name of [...tools, "progress", "bottlenecks", "coordination", "experience", "economics", "predictions"])
 			expect(active).not.toContain(name);
 		expect(active).toEqual(
 			expect.arrayContaining([
@@ -483,12 +467,12 @@ test("a hired person whose role does not manage loses the lifecycle tools; a hir
 				"finish_task",
 				"promote_task",
 				"link",
-				"org_fitness",
+				"economics",
 				"predictions",
-				"org_expertise",
-				"org_waits",
-				"org_work",
-				"org_communication",
+				"experience",
+				"bottlenecks",
+				"progress",
+				"coordination",
 			]),
 		);
 	} finally {
@@ -503,7 +487,7 @@ test.each([undefined, "implementation-engineer", "coordinator"])(
 		const run = await fauxSession(
 			[bridge],
 			[call("directory", {}), fauxAssistantMessage("done")],
-			["read", "hire", "org_work"],
+			["read", "hire", "progress"],
 		);
 		await withRole(run, role);
 		await vi.waitFor(
@@ -531,12 +515,12 @@ test.each([undefined, "implementation-engineer", "coordinator"])(
 				"let_go",
 				"assign",
 				"unassign",
-				"org_fitness",
+				"economics",
 				"predictions",
-				"org_expertise",
-				"org_waits",
-				"org_work",
-				"org_communication",
+				"experience",
+				"bottlenecks",
+				"progress",
+				"coordination",
 			])
 				expect(active.includes(name)).toBe(enabled);
 			expect(active).toEqual(

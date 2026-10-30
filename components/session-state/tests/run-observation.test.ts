@@ -1,13 +1,14 @@
 import { fauxAssistantMessage } from "@earendil-works/pi-ai/compat";
 import type { BeforeAgentStartEvent, ExtensionFactory } from "@earendil-works/pi-coding-agent";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
-import { afterAll, expect, test, vi } from "vitest";
+import { afterAll, beforeAll, expect, test, vi } from "vitest";
 import { fauxSession, type Reply } from "../../../tests/helpers/faux-session.js";
 import bridge from "../src/index.js";
 import { type RunObservation, RunObserver } from "../src/run-observation.js";
 import { close, query, sendCommand, startRuntime, stopRuntime, tempStateDir } from "./helpers.js";
 
 const state = tempStateDir();
+beforeAll(() => startRuntime(state.socketPath));
 afterAll(() => stopRuntime(state));
 const events = (person: string) =>
 	query<{ data: string; at: number; seq: number; generation: number }>(
@@ -114,7 +115,6 @@ test("the bridge records actual consumed mail, not delivery into a busy queue, a
 }, 30000);
 
 test("startup replay is received inside the explicit user run, and retained mail is not received again", async () => {
-	await startRuntime(state.socketPath);
 	const id = "observation-startup";
 	await sendCommand(
 		state.socketPath,

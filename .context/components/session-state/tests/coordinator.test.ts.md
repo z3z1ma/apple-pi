@@ -7,5 +7,7 @@ Why: importing that same list into the assertion makes an accidental removal cha
 Why: unrelated package tools may be added without changing who can manage; an exact registry snapshot would fail for that harmless extension, while subset checks alone would miss a leaked management tool.
 The fake Pi assigns a fixed human name after launch; the start/reopen test checks delegation of initial naming and preservation of the peer's reported name, not the real name generator or collision avoidance.
 Why: these tests run a socket bridge stand-in rather than loading a full root TUI; generator behavior belongs to session-title's tests.
+Arrival evidence checks that a team/manager reference precedes the initial work steer, while earlier channel body text stays out of the onboarding notice. The reader retrieves relevant history separately.
+Why: onboarding supplies identity and authored-brief references, not automatic full backscroll. A baseline fixture expecting channel bodies was obsolete, not evidence that the run observer changed startup ordering.
 Coupled: tests/helpers/faux-session.ts, components/session-state/src/coordinator.ts, components/session-state/src/peers.ts
 Verify: components/session-title/tests/session-title.test.ts

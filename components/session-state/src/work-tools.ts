@@ -5,16 +5,17 @@ import { organizationOf } from "../../organization/src/directory.js";
 import { managesPeople } from "../../organization/src/install.js";
 import { resolvePerson } from "./addresses.js";
 import { sendCommand } from "./client.js";
-import { realizedFitness } from "./fitness.js";
-import { areasOf, communicationIn, expertsOn, type Scope, waitsIn, workIn } from "./inspect.js";
+import { coordinationIn } from "./coordination-inspection.js";
+import { membership, realizedFitness, taskOwnership } from "./fitness.js";
+import { areasOf, communicationIn, expertsOn, type Scope, type Window, waitsIn, workIn } from "./inspect.js";
 import { ENTITY_KINDS, type Entity, type Link, relations } from "./links.js";
 import type { Command } from "./protocol.js";
 import { compareScenarios, predictions, type Scenario, scenarioSchema } from "./scenarios.js";
-import { taskOrganization } from "./tree.js";
 import { goalText, rootOf, taskIdOf, type WorkAction, type WorkTask, withWork } from "./work.js";
+import { bottlenecksIn, progressIn } from "./work-inspection.js";
 
 const PERSON_TASK_TOOLS = ["take_task", "focus", "finish_task", "promote_task", "link"];
-const INSIGHT_TOOLS = ["org_fitness", "predictions", "org_expertise", "org_waits", "org_work", "org_communication"];
+const INSIGHT_TOOLS = ["economics", "predictions", "experience", "bottlenecks", "progress", "coordination"];
 const UNITS: Record<string, number> = { m: 60_000, h: 3_600_000, d: 86_400_000 };
 
 /** A time as a span back from now (`30m`, `8h`, `7d`) or a date. */
@@ -163,18 +164,15 @@ function readExpertise(
 	if (Boolean(args.area) === Boolean(args.person)) throw new Error("Give exactly one of area or person");
 	const now = Date.now();
 	const self = ctx.sessionManager.getSessionId();
-	const window = {
-		cwd: ctx.cwd,
-		from: args.since ? pointInTime(args.since, now) : undefined,
-		to: args.until ? pointInTime(args.until, now) : undefined,
-		subtree: args.subtree ? resolvePerson(self, args.subtree) : undefined,
-	};
+	const window = inspectionWindow(ctx, args);
+	const subtree = args.subtree ? scopeOf(ctx, { subtree: args.subtree }, window).subtree : undefined;
+	const observed = { ...window, subtree };
 	const when = (at: number) => new Date(at).toISOString();
 	const found = withWork((db) => {
 		const organization = rootOf(db, self);
 		if (args.person) {
-			const person = resolvePerson(self, args.person);
-			const areas = areasOf(db, organization, person, window);
+			const person = scopeOf(ctx, { person: args.person }, window).person!;
+			const areas = areasOf(db, organization, person, observed);
 			return {
 				details: { person: `person:${person}`, areas },
 				lines: [
@@ -183,7 +181,7 @@ function readExpertise(
 				],
 			};
 		}
-		const people = expertsOn(db, organization, args.area!, window);
+		const people = expertsOn(db, organization, args.area!, observed);
 		return {
 			details: { area: args.area, people },
 			lines: [
@@ -196,65 +194,147 @@ function readExpertise(
 		};
 	});
 	if (!found) throw new Error("The runtime has no records yet");
-	return { content: [{ type: "text" as const, text: found.lines.join("\n") }], details: found.details };
+	const coverage = [
+		"Read/edit calls show exposure, including failed calls, rather than demonstrated skill or useful output.",
+		"Touch membership and assignment outcomes use the selected cutoff. Availability is current, not historical capacity.",
+		"Paths use retained session directories and 120-character previews; changed historical directories and erased private indexes are unavailable.",
+	];
+	return {
+		content: [{ type: "text" as const, text: [...found.lines, ...coverage].join("\n") }],
+		details: { ...found.details, window: observed, currentAvailabilityAt: now, coverage },
+	};
 }
 
 /** One optional scope for an inspection: a person's subtree, a person, or a task. */
-function scopeOf(ctx: ExtensionContext, args: { subtree?: string; person?: string; task?: string }): Scope {
-	const given = [args.subtree, args.person, args.task].filter(Boolean).length;
-	if (given > 1) throw new Error("Give at most one of subtree, person, or task");
+function scopeOf(
+	ctx: ExtensionContext,
+	args: { subtree?: string; person?: string; task?: string },
+	window: Window,
+): Scope {
+	if ([args.subtree, args.person, args.task].filter(Boolean).length > 1)
+		throw new Error("Give at most one of subtree, person, or task");
+	if (!args.subtree && !args.person && !args.task) return {};
 	const self = ctx.sessionManager.getSessionId();
-	// A scope names someone or something in the caller's own organization.
-	const ours = (person: string) => {
-		if (withWork((db) => rootOf(db, person) !== rootOf(db, self)))
-			throw new Error(`${person} is not in your organization`);
-		return person;
-	};
-	if (args.subtree) return { subtree: ours(resolvePerson(self, args.subtree)) };
-	if (args.person) return { person: ours(resolvePerson(self, args.person)) };
-	if (args.task) {
-		const ref = args.task.replace(/^task:/, "");
-		const task = withWork((db) => {
-			const id = taskIdOf(db, ctx.cwd, ref);
-			if (taskOrganization(db, id) !== rootOf(db, self)) throw new Error(`${ref} is not a task of your organization`);
-			return id;
-		});
-		if (!task) throw new Error("The runtime has no tasks yet");
-		return { task };
-	}
-	return {};
+	const found = withWork((db) => {
+		const organization = rootOf(db, self);
+		const to = window.to ?? Date.now();
+		const from = window.from ?? to;
+		const times = [
+			from,
+			to,
+			...(
+				db
+					.prepare(
+						"select distinct at from events where type in ('reports_to_changed', 'transferred', 'retired', 'rehired', 'person_departed') and at >= ? and at <= ?",
+					)
+					.all(from, to) as { at: number }[]
+			).map((row) => row.at),
+		];
+		if (args.task) {
+			const task = taskIdOf(db, ctx.cwd, args.task.replace(/^task:/, ""));
+			const ownership = taskOwnership(db, organization);
+			if (!times.some((at) => ownership.owns(task, at)))
+				throw new Error(`${args.task} is not a task of your organization in this window`);
+			return { task };
+		}
+		const raw = (args.person ?? args.subtree)!.replace(/^person:/, "");
+		const known = db
+			.prepare("select 1 from sessions where id = ? union all select 1 from events where session_id = ? limit 1")
+			.get(raw, raw);
+		const person = known ? raw : resolvePerson(self, raw);
+		const history = membership(db, organization);
+		if (!times.some((at) => history.memberAt(person, at)))
+			throw new Error(`${raw} is not in your organization in this window`);
+		return args.person ? { person } : { subtree: person };
+	});
+	if (!found) throw new Error("The runtime has no records yet");
+	return found;
 }
 
-function readWaits(
-	ctx: ExtensionContext,
-	args: { since?: string; until?: string; subtree?: string; person?: string; task?: string },
-) {
+interface InspectionArguments {
+	since?: string;
+	until?: string;
+	subtree?: string;
+	person?: string;
+	task?: string;
+	thread?: string;
+	limit?: number;
+	offset?: number;
+}
+
+const inspectionParameters = {
+	since: Type.Optional(
+		Type.String({ minLength: 1, description: "Period start: 30m, 8h, 7d, or a date. Omit for a cutoff snapshot." }),
+	),
+	until: Type.Optional(
+		Type.String({ minLength: 1, description: "Cutoff time, now by default. Every table uses this same cutoff." }),
+	),
+	subtree: Type.Optional(
+		Type.String({
+			minLength: 1,
+			description: "One person's historical reporting subtree; alternative to person or task.",
+		}),
+	),
+	person: Type.Optional(
+		Type.String({
+			minLength: 1,
+			description: "One person, by name or known ID. Historical former-member IDs retain their recorded scope.",
+		}),
+	),
+	task: Type.Optional(taskParameter),
+	limit: Type.Optional(
+		Type.Integer({
+			minimum: 1,
+			description: "Rows per named detail table. Omit for the aggregate overview and coverage.",
+		}),
+	),
+	offset: Type.Optional(
+		Type.Integer({
+			minimum: 0,
+			description:
+				"Row offset in each detail table; requires limit. Paging observes current retained history, not an immutable replay.",
+		}),
+	),
+};
+
+function inspectionWindow(ctx: ExtensionContext, args: { since?: string; until?: string }) {
 	const now = Date.now();
-	const self = ctx.sessionManager.getSessionId();
-	const scope = scopeOf(ctx, args);
-	const window = {
-		cwd: ctx.cwd,
-		from: args.since ? pointInTime(args.since, now) : undefined,
-		to: args.until ? pointInTime(args.until, now) : now,
+	const from = args.since ? pointInTime(args.since, now) : undefined;
+	const to = args.until ? pointInTime(args.until, now) : now;
+	if (!Number.isFinite(to) || to > now || (from !== undefined && (!Number.isFinite(from) || from >= to)))
+		throw new Error("Choose a past window whose start precedes its end");
+	return { cwd: ctx.cwd, from, to };
+}
+
+function inspectionResult<T extends object>(result: T) {
+	return {
+		content: [
+			{
+				type: "text" as const,
+				text: Object.entries(result)
+					.map(([key, value]) => `${key}: ${JSON.stringify(value)}`)
+					.join("\n"),
+			},
+		],
+		details: result,
 	};
-	const waits = withWork((db) => waitsIn(db, rootOf(db, self), window, scope));
-	if (!waits) throw new Error("The runtime has no records yet");
-	const line = (w: (typeof waits.targets)[number]["waits"][number]) =>
-		`  - ${w.ref}: ${w.from} ${w.relation} ${w.to}, open ${w.ageHours.toFixed(1)}h, waiting: ${w.waiters.join(", ")}, recorded by ${w.recordedBy}${w.crossesTeams ? ", crosses teams" : ""}${w.reason ? ` (${w.reason})` : ""}`;
-	const lines = [
-		`Open waits: ${waits.open}, on ${waits.targets.length} targets, most waited-on first.`,
-		...waits.targets.flatMap((t) => [`- ${t.ref}: ${t.waits.length} waiting`, ...t.waits.map(line)]),
-		...(window.from === undefined
-			? []
-			: [
-					`Resolved in the window (unblocked): ${waits.unblocked.length}`,
-					...waits.unblocked.map(
-						(w) =>
-							`  - ${w.ref}: ${w.from} ${w.relation} ${w.to}, waited ${w.ageHours.toFixed(1)}h, resolved ${new Date(w.resolvedAt).toISOString()}${w.reason ? ` (${w.reason})` : ""}`,
-					),
-				]),
-	];
-	return { content: [{ type: "text" as const, text: lines.join("\n") }], details: waits };
+}
+
+function readInspection(
+	ctx: ExtensionContext,
+	args: InspectionArguments,
+	reader: typeof progressIn | typeof bottlenecksIn | typeof coordinationIn,
+) {
+	const window = inspectionWindow(ctx, args);
+	if (args.thread && (args.person || args.subtree || args.task))
+		throw new Error("Choose thread or one of person, subtree and task");
+	const scope = {
+		...scopeOf(ctx, args, window),
+		...(args.thread ? { thread: args.thread.replace(/^thread:/, "") } : {}),
+	};
+	const result = withWork((db) => reader(db, rootOf(db, ctx.sessionManager.getSessionId()), window, scope, args));
+	if (!result) throw new Error("The runtime has no records yet");
+	return inspectionResult(result);
 }
 
 function readFitness(
@@ -341,8 +421,8 @@ function readFitness(
 }
 
 const ORG_HELP = `/org — open waits, ready unowned work, multiple-task holders and pending requests
-/org fitness <since> — recorded dollar breakdown (for example 8h or a date)
-/org expertise <area or person> — read/edit experience; exact organization names/IDs take precedence
+/org economics <since> — recorded dollar breakdown (for example 8h or a date)
+/org experience <area or person> — read/edit experience; exact organization names/IDs take precedence
 Use person:<name-or-id> to name a person explicitly; use ./<path> or an absolute path for a colliding area.`;
 
 function organizationOverview(ctx: ExtensionContext): string {
@@ -377,7 +457,7 @@ function organizationOverview(ctx: ExtensionContext): string {
 
 export function installWork(pi: ExtensionAPI): void {
 	pi.registerCommand("org", {
-		description: "Inspect organization waits, work and requests; fitness or expertise for detail",
+		description: "Inspect organization waits, work and requests; economics or experience for detail",
 		handler: async (args, ctx) => {
 			const input = args.trim();
 			if (!input) {
@@ -386,14 +466,14 @@ export function installWork(pi: ExtensionAPI): void {
 			}
 			const mode = input.split(/\s+/, 1)[0];
 			const query = input.slice(mode.length).trim();
-			if (mode === "fitness" && query) {
+			if (mode === "economics" && query) {
 				ctx.ui.notify(
 					readFitness(ctx, { since: query })
 						.content.map((part) => part.text)
 						.join("\n"),
 					"info",
 				);
-			} else if (mode === "expertise" && query) {
+			} else if (mode === "experience" && query) {
 				const self = ctx.sessionManager.getSessionId();
 				const address = query.replace(/^person:/, "").trim();
 				const members = organizationOf(self, true).members;
@@ -413,134 +493,54 @@ export function installWork(pi: ExtensionAPI): void {
 	});
 	pi.registerTool(
 		defineTool({
-			name: "org_communication",
-			label: "org_communication",
+			name: "progress",
+			label: "progress",
 			description:
-				"Inspect communication in a named window: unordered person pairs and teams by recorded manager, busiest threads, and open decision links or explicit escalation threads awaiting each person's reply at the cutoff. Each message counts for every other participant already in its thread, not proof of delivery or reading; group messages contribute several pairs. Scope to your organization, a person, or a subtree. No message bodies or efficiency verdicts. Historical subject-only escalations are not inferred.",
-			promptSnippet: "Inspect communication counts, open decisions and explicit escalations awaiting replies.",
+				"See what the organization delivered and what remains: arrivals, completions, cancellations, ready/held/waiting work, age, unioned waiting intervals, assignment/focus changes and attributed outcome/result/check links. Start with the aggregate overview; give limit and offset for each named detail table, or select a person, subtree or task. Current owner availability and errors have their own timestamps. Assignment is responsibility, not active execution; task counts and recorded outcomes are not a productivity score or verified value. Give since for a period; compare explicit windows rather than assuming a baseline. Execution evidence distinguishes incoming-mail-associated time, pre-mail prefixes, unknowns and gaps. Follow bottlenecks for dependency paths and coordination for related discussion.",
+			promptSnippet:
+				"Start an organizational investigation with delivery, aging work, waits, outcomes and evidence coverage.",
+			parameters: Type.Object(inspectionParameters, { additionalProperties: false }),
+			execute: async (_id, args, _signal, _update, ctx) => readInspection(ctx, args, progressIn),
+		}),
+	);
+	pi.registerTool(
+		defineTool({
+			name: "bottlenecks",
+			label: "bottlenecks",
+			description:
+				"Find candidate constraints, not diagnoses: explicit wait targets, distinct directly/transitively affected tasks, witness links, cycle groups, age and resolved waits. Beside dependency evidence, inspect responsible people's commitments, pending decisions/escalations, focus changes and fresh availability observations. Counts overlap across targets; resolving one need may leave others. Reporting and assignment supply context, never invented wait edges. A large team or busy person alone is not a bottleneck. Omit limit for the overview; request detail pages and follow task/thread/link references before choosing an ordinary authorized management action. Give since for interval and resolved-wait evidence.",
+			promptSnippet: "Investigate recorded dependency paths and decision queues, with owner context and uncertainty.",
+			parameters: Type.Object(inspectionParameters, { additionalProperties: false }),
+			execute: async (_id, args, _signal, _update, ctx) => readInspection(ctx, args, bottlenecksIn),
+		}),
+	);
+	pi.registerTool(
+		defineTool({
+			name: "coordination",
+			label: "coordination",
+			description:
+				"Inspect coordination beside associated work over a stated window. Count authored posts once and distinguish actual authors, potential audiences, quiet channel publication, explicit notification, addressed delivery, transcript receipts and catch-up watermarks. Follow task-thread or explicit-link associations to outcomes, waits and results; select a thread to investigate otherwise unassociated discussion. High discussion may be useful work, while silence may hide an unresolved dependency. Incoming-mail-associated run time is mixed provider/tool/work time, not exclusive communication effort or wasted chatting; pre-mail, unknown and unobserved time remain separate. Metadata grants no message-body access: use read_thread/search_messages under their normal authority. Overview by default; limit/offset page each named detail table.",
+			promptSnippet:
+				"Relate communication and qualified execution evidence to work without treating activity as waste or value.",
 			parameters: Type.Object(
 				{
+					...inspectionParameters,
 					since: Type.String({ minLength: 1, description: "Window start: 30m, 8h, 7d, or a date." }),
-					until: Type.Optional(
-						Type.String({ minLength: 1, description: "Window end and request snapshot; now by default." }),
+					thread: Type.Optional(
+						Type.String({ minLength: 1, description: "One thread ID, instead of person, subtree or task." }),
 					),
-					person: Type.Optional(Type.String({ minLength: 1 })),
-					subtree: Type.Optional(Type.String({ minLength: 1 })),
 				},
 				{ additionalProperties: false },
 			),
-			execute: async (_id, args, _signal, _update, ctx) => {
-				const now = Date.now();
-				const from = pointInTime(args.since, now);
-				const to = args.until ? pointInTime(args.until, now) : now;
-				if (to > now || from >= to) throw new Error("Choose a past window whose start precedes its end");
-				const scope = scopeOf(ctx, args);
-				const result = withWork((db) =>
-					communicationIn(db, rootOf(db, ctx.sessionManager.getSessionId()), { cwd: ctx.cwd, from, to }, scope),
-				);
-				if (!result) throw new Error("The runtime has no records yet");
-				const lines = [
-					"Participant-pair counts (not delivery/read receipts); group messages contribute to several pairs. Teams use each person's manager at message time, or self for a root.",
-					...result.pairs.map((pair) => `- ${pair.people.join(" <-> ")}: ${pair.messages} messages`),
-					...result.teams.map(
-						(team) => `- teams ${team.managers.join(" <-> ")}: ${team.messages} participant-pair messages`,
-					),
-					...result.requests.map(
-						(request) =>
-							`- ${request.person}: decisions ${request.decisions.join(", ") || "none"}; escalations awaiting reply ${request.escalations.join(", ") || "none"}`,
-					),
-					"Threads by message count:",
-					...result.threads.map((thread) => `- ${thread.ref}: ${thread.messages}`),
-					"Escalations use the explicit kind; older subject-only mail is unclassified. Temporary-peer history remains incomplete until caller attribution is implemented.",
-					`Audience history tracks changes since ${result.audienceHistory.completeSince === null ? "an unknown start" : new Date(result.audienceHistory.completeSince).toISOString()}; ${result.audienceHistory.earlierHistory}.`,
-				];
-				return { content: [{ type: "text" as const, text: lines.join("\n") }], details: result };
-			},
+			execute: async (_id, args, _signal, _update, ctx) => readInspection(ctx, args, coordinationIn),
 		}),
 	);
 	pi.registerTool(
 		defineTool({
-			name: "org_work",
-			label: "org_work",
+			name: "experience",
+			label: "experience",
 			description:
-				"See where work stands: ready without an owner, waiting on explicit links, or held without an open wait. Shows task age, holders and people holding several tasks. Give since for arrivals and closes (done or cancelled) in a window; until selects the snapshot time. Narrow to a subtree, person or task. Read-only facts with task/person/link references, not a judgment of productivity.",
-			promptSnippet: "Inspect ready work, waiting work, assignments and arrivals versus completions.",
-			parameters: Type.Object(
-				{
-					since: Type.Optional(
-						Type.String({ minLength: 1, description: "List arrivals and closes since: 30m, 8h, 7d, or a date." }),
-					),
-					until: Type.Optional(Type.String({ minLength: 1, description: "Snapshot time; now by default." })),
-					subtree: Type.Optional(Type.String({ minLength: 1 })),
-					person: Type.Optional(Type.String({ minLength: 1 })),
-					task: Type.Optional(Type.String({ minLength: 1 })),
-				},
-				{ additionalProperties: false },
-			),
-			execute: async (_id, args, _signal, _update, ctx) => {
-				const now = Date.now();
-				const from = args.since ? pointInTime(args.since, now) : undefined;
-				const to = args.until ? pointInTime(args.until, now) : now;
-				if (to > now || (from !== undefined && from >= to))
-					throw new Error("Choose a past window whose start precedes its end");
-				const scope = scopeOf(ctx, args);
-				const result = withWork((db) =>
-					workIn(db, rootOf(db, ctx.sessionManager.getSessionId()), { cwd: ctx.cwd, from, to }, scope),
-				);
-				if (!result) throw new Error("The runtime has no records yet");
-				const lines = [
-					...(["ready", "waiting", "inProgress"] as const).flatMap((state) => [
-						`${state}: ${result[state].length}`,
-						...result[state].map(
-							(task) =>
-								`- ${task.ref}: ${task.ageHours.toFixed(1)}h old; holders: ${task.holders.join(", ") || "none"}${task.waits.length ? `; waits: ${task.waits.join(", ")}` : ""}`,
-						),
-					]),
-					...result.multiple.map(
-						(load) => `- ${load.person} holds ${load.tasks.length} tasks: ${load.tasks.join(", ")}`,
-					),
-					...(from === undefined
-						? []
-						: [
-								`Opened: ${result.opened.length}; closed done: ${result.closed.filter((task) => task.status === "done").length}; cancelled: ${result.closed.filter((task) => task.status === "cancelled").length}`,
-								...result.opened.map((task) => `- opened ${task.ref} at ${new Date(task.at).toISOString()}`),
-								...result.closed.map((task) => `- ${task.status} ${task.ref} at ${new Date(task.at).toISOString()}`),
-							]),
-				];
-				return { content: [{ type: "text" as const, text: lines.join("\n") }], details: result };
-			},
-		}),
-	);
-	pi.registerTool(
-		defineTool({
-			name: "org_waits",
-			label: "org_waits",
-			description:
-				"What blocks what: the organization's open waits (blocks and requires_decision links), grouped by what they wait on, the most waited-on first, each with what waits, why, for how long, who recorded it, and whether it crosses teams (neither manages the other and they have different managers). Give since to also list waits resolved in that window. Narrow to a person's subtree, a person, or a task. Facts with references, never a verdict.",
-			promptSnippet: "See what is blocked, on what, and for how long.",
-			parameters: Type.Object(
-				{
-					since: Type.Optional(
-						Type.String({ minLength: 1, description: "Also list waits resolved since: 30m, 8h, 7d, or a date." }),
-					),
-					until: Type.Optional(Type.String({ minLength: 1, description: "Look as of this time instead of now." })),
-					subtree: Type.Optional(
-						Type.String({ minLength: 1, description: "Only waits involving this person's subtree." }),
-					),
-					person: Type.Optional(Type.String({ minLength: 1, description: "Only waits involving this person." })),
-					task: Type.Optional(Type.String({ minLength: 1, description: "Only waits from or to this task." })),
-				},
-				{ additionalProperties: false },
-			),
-			execute: async (_id, args, _signal, _update, ctx) => readWaits(ctx, args),
-		}),
-	);
-	pi.registerTool(
-		defineTool({
-			name: "org_expertise",
-			label: "org_expertise",
-			description:
-				"Who knows what, from the read and edit calls people made (counted whether or not they succeeded). Give an area (a path or directory, relative to your directory or absolute, or a word found in paths) to list the people who touched it: reads, edits, last touch, the tasks they held then, whether they are working, idle, at home, or left, and whether a compaction of their session started since. Or give a person to list the directories it touched. Facts sorted by activity, never a verdict on who is best; narrow by area or window.",
+				"Find relevant recorded experience, not a skill ranking. Give an area (path, directory, or word in paths) for people with read/edit exposure, associated assignments and reported outcomes, recency and current availability; or give a person for directories they touched. Calls count even when they failed. Historical membership applies at each touch; current availability is labeled current, and recorded outcomes are not independently verified quality. A compaction means one started, not that it succeeded or erased understanding. Combine this evidence with the person's context and capacity before assigning work.",
 			promptSnippet: "Find who has context on an area, or what a person knows.",
 			parameters: Type.Object(
 				{
@@ -559,12 +559,12 @@ export function installWork(pi: ExtensionAPI): void {
 	);
 	pi.registerTool(
 		defineTool({
-			name: "org_fitness",
-			label: "org_fitness",
+			name: "economics",
+			label: "economics",
 			description:
-				"Compare recorded value, delay and compute in dollars over a past window. This is one optional analytical instrument beside org_waits, org_work, org_communication and org_expertise, not an objective for every management decision. Shows total and rate per hour, task/person/link contributions, recorded impacts with their recorders, findings created in the window by task and recorder with resolution at cutoff, and unvalued coverage. Spend on dropped work explains compute and delay already counted on currently recorded cancelled/replaced tasks, even when that outcome postdates the window; it is not another charge or a waste verdict. Temporary pi_exec peer spend and operator demands follow immutable caller ancestry to the first lasting caller under that caller's observation-time membership, before and after peer cleanup; unknown legacy callers/ancestry/spans remain unavailable. An identity first recorded as discarded stays unknown despite a later observed/live caller; indistinguishable old pending cleanup is conservatively unknown too. New peer identities start with a recorded zero cost baseline, while ordinary/legacy first-sight transcript spend remains a baseline, not new spend. Task compute attribution estimates the accounting person's focus at observation time; temporary peer spend uses the lasting caller's focus, not the emitter's separate task. Unknown/no/ineligible focus is unattributed. Estimates and findings never change the total. Narrow contributions to a person's subtree; the total stays the organization's. Alternatively supply scenarios alone for probability-weighted expected fitness through the same evaluator. Comparisons require identical decision point, horizon, opportunities/task identities, valuations and starting histories. Histories use millisecond offsets; starting state and forecasts are supplied premises, not a certified live snapshot. decisionAt:'recording' binds to one captured preview now; a later recorded prediction binds separately to its link creation time.",
+				"Compare recorded value, delay and compute in dollars over a past window. This is optional economic comparison beside progress, bottlenecks, coordination and experience, not a compulsory objective. Shows totals/rates, task/person/link contributions, incurred impacts, finding records and unvalued coverage. Estimates and findings are evidence, not charges. Dropped-work spend explains costs already counted on currently cancelled/replaced tasks, possibly classified after the window; it is not extra cost or a waste verdict. Temporary-peer spend follows immutable ancestry to a lasting caller under event-time membership; missing legacy callers and spans stay unknown. New peers have recorded zero baselines; legacy first-sight spend remains a baseline. Task compute uses accounting-person focus as an estimate, including caller focus for peers; absent/ineligible focus stays unattributed. Subtree filtering narrows contributions, not organization totals. Alternatively give scenarios alone for probability-weighted comparison through the same evaluator. Scenarios require identical decision point, horizon, opportunity/task identities, valuations and starting histories; their premises are supplied assumptions, not measured benefits or certified live snapshots. Times are millisecond offsets. decisionAt:'recording' binds preview now and a separately recorded prediction at link creation. Use predictions for qualified calibration, not causal proof.",
 			promptSnippet:
-				"Use optional economic comparison with org_fitness alongside direct organizational signals and judgment.",
+				"Use optional economic comparison with economics alongside direct organizational signals and judgment.",
 			parameters: Type.Object(
 				{
 					since: Type.Optional(
@@ -595,7 +595,7 @@ export function installWork(pi: ExtensionAPI): void {
 			name: "predictions",
 			label: "predictions",
 			description:
-				"Read recorded predicts links targeting your current root organization exactly. Record a forecast with link from the message stating the change to organization:<root>, carrying unchanged data.scenario in the org_fitness scenario shape. Relative decisionAt:'recording' binds to immutable link creation time; an absolute origin differing from recording stays a clock mismatch, never shifted. Pending until creation+horizon, then expected and observed dollars with forecast error (observed minus expected), calibration not causal effect. Numeric valuation changes or unmapped/missing/unvalued/not-yet-opened-at-recording opportunities suppress error. Observed coverage, incompleteness, exclusions and unmeasured attention remain visible; incomplete observed valuation suppresses error, while static exclusions alone do not. Nonfinite observed totals or calibration errors are explicitly unavailable/unscored, and bound horizons must advance representably. Expected and available observed totals remain visible. Unreadable scenarios retain raw data and reason. No aggregation of former-root forecasts after a merge.",
+				"Read recorded predicts links targeting your current root organization exactly. Record a forecast with link from the message stating the change to organization:<root>, carrying unchanged data.scenario in the economics scenario shape. Relative decisionAt:'recording' binds to immutable link creation time; an absolute origin differing from recording stays a clock mismatch, never shifted. Pending until creation+horizon, then expected and observed dollars with forecast error (observed minus expected), calibration not causal effect. Numeric valuation changes or unmapped/missing/unvalued/not-yet-opened-at-recording opportunities suppress error. Observed coverage, incompleteness, exclusions and unmeasured attention remain visible; incomplete observed valuation suppresses error, while static exclusions alone do not. Nonfinite observed totals or calibration errors are explicitly unavailable/unscored, and bound horizons must advance representably. Expected and available observed totals remain visible. Unreadable scenarios retain raw data and reason. No aggregation of former-root forecasts after a merge.",
 			promptSnippet: "Read recorded forecasts beside observed fitness for calibration, not causal attribution.",
 			parameters: Type.Object({}, { additionalProperties: false }),
 			execute: async (_id, _args, _signal, _update, ctx) => {

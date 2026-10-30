@@ -94,6 +94,38 @@ test("a subtree scope keeps only people in that subtree", () => {
 	expect(scoped.map((p) => p.ref)).toEqual(["person:bo"]);
 });
 
+test("experience uses touch-time membership and cutoff outcomes, with current availability labeled separately", () => {
+	const { db, repo } = organization();
+	try {
+		db.prepare(
+			"insert into sessions (id, kind, cwd, name, run_state, generation, source, updated_at) values ('outside', 'root', ?, 'Outside', 'idle', 1, 'test', 0)",
+		).run(repo);
+		db.prepare("update sessions set reports_to = 'outside' where id = 'ada'").run();
+		db.prepare(
+			"insert into events (at, source, session_id, type, data) values (?, 'runtime', 'ada', 'transferred', ?)",
+		).run(2 * HOUR, JSON.stringify({ from: "boss", to: "outside" }));
+		db.prepare(
+			"insert into messages (session_id, entry_id, part, at, role, tool, size, preview, source) values ('ada', 'after-move', 'call', ?, 'tool_call', 'read', 0, 'components/session-state/src/fitness.ts', 'test')",
+		).run(2.25 * HOUR);
+		const result = expertsOn(db, "boss", "components/session-state", { cwd: repo, from: 0, to: 2.5 * HOUR });
+		expect(result).toMatchObject([
+			{
+				ref: "person:ada",
+				reads: 2,
+				edits: 1,
+				status: "outside current organization",
+				tasks: [{ ref: "task:fit", finished: false, outcome: null }],
+			},
+			{ ref: "person:bo", compactionSince: false },
+		]);
+		expect(areasOf(db, "outside", "ada", { cwd: repo, from: 0, to: 2.5 * HOUR })).toMatchObject([
+			{ reads: 1, edits: 0 },
+		]);
+	} finally {
+		db.close();
+	}
+});
+
 /** Waits in the organization: ada's two tasks wait on bo's decision, and boss's task waits on ada's task. */
 function waiting() {
 	const { db, repo } = organization();

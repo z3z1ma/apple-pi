@@ -3,9 +3,9 @@ import { homedir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import { organizationIn } from "../../organization/src/directory.js";
-import { membership, openWaits, subtreeOf, taskOwnership } from "./fitness.js";
+import { membership, openWaits, taskOwnership } from "./fitness.js";
 import { WAITS } from "./links.js";
-import { audienceAt } from "./threads.js";
+import { audienceAt, nameOf } from "./threads.js";
 
 /**
  * Read-only views of the organization for the inspection tools. Each reports recorded facts and counts with references
@@ -39,7 +39,19 @@ function statuses(db: DatabaseSync, organization: string): Map<string, string> {
 }
 
 /** Every read, edit, and write the runtime indexed for the organization's people, with the path made absolute. */
-function touches(db: DatabaseSync, people: Set<string>, window: Window): Touch[] {
+function touches(db: DatabaseSync, organization: string, window: Window): Touch[] {
+	const history = membership(db, organization);
+	const within = (person: string, at: number) => {
+		const snapshot = history.replay(at);
+		if (!snapshot.isMember(person)) return false;
+		if (!window.subtree) return true;
+		const seen = new Set<string>();
+		for (let id: string | null = person; id && !seen.has(id); id = snapshot.managerOf(id)) {
+			if (id === window.subtree) return true;
+			seen.add(id);
+		}
+		return false;
+	};
 	const rows = db
 		.prepare(
 			`select m.session_id, m.at, m.tool, m.preview, s.cwd from messages m join sessions s on s.id = m.session_id
@@ -49,7 +61,7 @@ function touches(db: DatabaseSync, people: Set<string>, window: Window): Touch[]
 	return rows
 		.filter(
 			(row) =>
-				people.has(row.session_id) &&
+				within(row.session_id, row.at) &&
 				row.at >= (window.from ?? Number.NEGATIVE_INFINITY) &&
 				row.at < (window.to ?? Number.POSITIVE_INFINITY),
 		)
@@ -85,17 +97,6 @@ export function taskTitleOf(bundle: string): string | null {
 		: null;
 }
 
-/** The people the inspection covers: the organization's members, or one person's subtree of them. */
-function covered(db: DatabaseSync, organization: string, window: Window) {
-	const status = statuses(db, organization);
-	const people = new Set(status.keys());
-	if (window.subtree) {
-		const kept = subtreeOf(db, window.subtree);
-		for (const person of people) if (!kept.has(person)) people.delete(person);
-	}
-	return { status, people };
-}
-
 /**
  * Who knows an area (a path, or a word within paths): the people who called read or edit there, with counts, last
  * touch, the tasks they held while touching it (with the outcome of a finished one), their status, and whether a
@@ -103,17 +104,18 @@ function covered(db: DatabaseSync, organization: string, window: Window) {
  * counted whether or not they succeeded, and a compaction that started may have failed: both are what the runtime records.
  */
 export function expertsOn(db: DatabaseSync, organization: string, area: string, window: Window) {
-	const { status, people } = covered(db, organization, window);
+	const status = statuses(db, organization);
+	const ownership = taskOwnership(db, organization);
 	const inArea = matcher(area, window.cwd);
 	const held = db.prepare(
 		`select a.task_id, a.assigned_at, a.ended_at, a.end_reason, a.outcome, t.bundle from assignments a
 		join work_tasks t on t.id = a.task_id where a.person = ?`,
 	);
 	const compacted = db.prepare(
-		"select 1 from events where session_id = ? and type = 'run_state' and json_extract(data, '$.to') = 'compacting' and at > ?",
+		"select 1 from events where session_id = ? and type = 'run_state' and json_extract(data, '$.to') = 'compacting' and at > ? and at < ?",
 	);
 	const found = new Map<string, Touch[]>();
-	for (const touch of touches(db, people, window).filter((t) => inArea(t.path)))
+	for (const touch of touches(db, organization, window).filter((t) => inArea(t.path)))
 		found.set(touch.person, [...(found.get(touch.person) ?? []), touch]);
 	return [...found]
 		.map(([person, mine]) => {
@@ -127,20 +129,26 @@ export function expertsOn(db: DatabaseSync, organization: string, area: string, 
 				bundle: string;
 			}[];
 			const tasks = assignments
-				.filter((a) => mine.some((t) => a.assigned_at <= t.at && (a.ended_at === null || t.at < a.ended_at)))
+				.filter((a) =>
+					mine.some(
+						(t) =>
+							ownership.owns(a.task_id, t.at) && a.assigned_at <= t.at && (a.ended_at === null || t.at < a.ended_at),
+					),
+				)
 				.map((a) => ({
 					ref: `task:${a.task_id}`,
 					title: taskTitleOf(a.bundle),
-					finished: a.end_reason === "finished",
-					outcome: a.outcome,
+					finished: a.end_reason === "finished" && a.ended_at !== null && a.ended_at <= (window.to ?? Date.now()),
+					outcome: a.ended_at !== null && a.ended_at <= (window.to ?? Date.now()) ? a.outcome : null,
 				}));
 			return {
 				ref: `person:${person}`,
-				status: status.get(person) ?? "unknown",
+				name: nameOf(db, person),
+				status: status.get(person) ?? "outside current organization",
 				reads: mine.filter((t) => !t.edit).length,
 				edits: mine.filter((t) => t.edit).length,
 				lastTouch,
-				compactionSince: Boolean(compacted.get(person, lastTouch)),
+				compactionSince: Boolean(compacted.get(person, lastTouch, window.to ?? Date.now())),
 				tasks,
 			};
 		})
@@ -149,9 +157,8 @@ export function expertsOn(db: DatabaseSync, organization: string, area: string, 
 
 /** What a person knows: the directories it read or edited in, with counts and last touch, most touched first. */
 export function areasOf(db: DatabaseSync, organization: string, person: string, window: Window) {
-	const { people } = covered(db, organization, window);
 	const areas = new Map<string, { ref: string; reads: number; edits: number; lastTouch: number }>();
-	for (const touch of touches(db, people, window).filter((t) => t.person === person)) {
+	for (const touch of touches(db, organization, window).filter((t) => t.person === person)) {
 		const directory = dirname(touch.path);
 		const area = areas.get(directory) ?? { ref: `file:${directory}`, reads: 0, edits: 0, lastTouch: 0 };
 		if (touch.edit) area.edits++;
@@ -163,10 +170,10 @@ export function areasOf(db: DatabaseSync, organization: string, person: string, 
 }
 
 function byActivity(
-	a: { reads: number; edits: number; lastTouch: number },
-	b: { reads: number; edits: number; lastTouch: number },
+	a: { ref: string; reads: number; edits: number; lastTouch: number },
+	b: { ref: string; reads: number; edits: number; lastTouch: number },
 ) {
-	return b.reads + b.edits - (a.reads + a.edits) || b.lastTouch - a.lastTouch;
+	return b.reads + b.edits - (a.reads + a.edits) || b.lastTouch - a.lastTouch || a.ref.localeCompare(b.ref);
 }
 
 /** Narrow a view to one person's subtree, one person, or one task; the whole organization when empty. */

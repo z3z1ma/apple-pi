@@ -231,7 +231,7 @@ test("links stay inside an organization: another one's tasks and people cannot b
 		const resolved = await ours.attempt("link", { id: theirLink.id, resolution: "closed by a stranger" });
 		expect(resolved).toMatchObject({ isError: true });
 		expect(linkRow(theirLink.id).resolved_at).toBeNull();
-		const scoped = await ours.attempt("org_waits", { person: theirs.id });
+		const scoped = await ours.attempt("bottlenecks", { person: theirs.id });
 		expect(scoped).toMatchObject({ isError: true });
 		expect(JSON.stringify(scoped.content)).toContain("is not in your organization");
 	} finally {

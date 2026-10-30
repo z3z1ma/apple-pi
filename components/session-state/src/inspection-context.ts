@@ -12,7 +12,7 @@ export function pageRows<T>(rows: T[], page: DetailPage) {
 	const offset = page.offset ?? 0;
 	if (page.limit !== undefined && (!Number.isSafeInteger(page.limit) || page.limit < 1))
 		throw new Error("Choose a positive integer limit");
-	if (!Number.isSafeInteger(offset) || offset < 0 || (page.limit === undefined && offset !== 0))
+	if (!Number.isSafeInteger(offset) || offset < 0 || (page.limit === undefined && page.offset !== undefined))
 		throw new Error("Give a nonnegative offset with a limit");
 	const selected = page.limit === undefined ? [] : rows.slice(offset, offset + page.limit);
 	return {

@@ -288,35 +288,41 @@ try {
 				extension.tools.has("finish_task") &&
 				extension.tools.has("promote_task") &&
 				extension.tools.has("link") &&
-				extension.tools.has("org_fitness") &&
+				extension.tools.has("economics") &&
 				extension.tools.has("predictions") &&
 				!extension.tools.has("fitness") &&
-				extension.tools.has("org_expertise") &&
-				extension.tools.has("org_waits") &&
-				extension.tools.has("org_work") &&
-				extension.tools.has("org_communication") &&
+				extension.tools.has("experience") &&
+				extension.tools.has("bottlenecks") &&
+				extension.tools.has("progress") &&
+				extension.tools.has("coordination") &&
 				extension.tools.has("update_self"),
 		),
 		"session-state extension must own the mail, directory, manager, and self tools",
 	);
 
+	for (const oldName of ["org_work", "org_waits", "org_communication", "org_expertise", "org_fitness"]) {
+		assert(
+			result.extensions.every((extension) => !extension.tools.has(oldName)),
+			`${oldName} has been replaced`,
+		);
+	}
 	const fitnessTool = result.extensions
 		.flatMap((extension) => [...extension.tools.values()])
-		.find((tool) => tool.definition.name === "org_fitness");
+		.find((tool) => tool.definition.name === "economics");
 	assert(
-		fitnessTool?.definition.description.includes("optional analytical instrument") &&
-			fitnessTool.definition.description.includes("not an objective") &&
-			["org_waits", "org_work", "org_communication", "org_expertise"].every((name) =>
+		fitnessTool?.definition.description.includes("optional economic comparison") &&
+			fitnessTool.definition.description.includes("not a compulsory objective") &&
+			["bottlenecks", "progress", "coordination", "experience"].every((name) =>
 				fitnessTool.definition.description.includes(name),
 			),
-		"org_fitness must teach optional economic comparison alongside inspection",
+		"economics must teach optional economic comparison alongside inspection",
 	);
 	assert(
 		fitnessTool.definition.parameters.type === "object" &&
 			fitnessTool.definition.parameters.properties.scenarios &&
 			fitnessTool.definition.parameters.properties.since &&
 			!fitnessTool.definition.parameters.required?.includes("since"),
-		"org_fitness must expose scenario/window alternatives as root object properties",
+		"economics must expose scenario/window alternatives as root object properties",
 	);
 
 	const searchBranchesTool = result.extensions

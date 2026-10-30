@@ -7,12 +7,14 @@ import { afterAll, beforeAll, expect, test, vi } from "vitest";
 import installLedger from "../../../extensions/ledger.js";
 import { fauxSession, type Reply } from "../../../tests/helpers/faux-session.js";
 import { addLedgerTask } from "../../shared/src/ledger-files.js";
+import type { CommunicationAttempt, ConversationInfo } from "../src/communication-types.js";
+import type { coordinationIn } from "../src/coordination-inspection.js";
 import bridge from "../src/index.js";
-import type { communicationIn, waitsIn, workIn } from "../src/inspect.js";
 import { MAIL_CUSTOM_TYPE } from "../src/mail.js";
 import { migrate } from "../src/schema.js";
 import { readValuation } from "../src/valuation.js";
 import type { WorkTask } from "../src/work.js";
+import type { bottlenecksIn, progressIn } from "../src/work-inspection.js";
 import { TASK_GOAL_CUSTOM_TYPE } from "../src/work-tools.js";
 import { close, query, startRuntime, stopRuntime, tempStateDir } from "./helpers.js";
 import { rewindRecentSchema } from "./historical-schema.js";
@@ -89,7 +91,7 @@ test("ledger creation and status callers remain task participants without assign
 	const creator = await person();
 	const editor = await person(creator.id, undefined, creator.run.cwd);
 	const closer = await person(creator.id, undefined, creator.run.cwd);
-	type TaskThread = { id: string; kind: string; subject: string; participants: { id: string }[] };
+	type TaskThread = ConversationInfo;
 	const taskThreads = async (who: typeof creator) =>
 		(await who.invoke<{ threads: TaskThread[] }>("inbox", { all: true })).threads.filter(
 			(thread) => thread.kind === "task",
@@ -104,7 +106,7 @@ test("ledger creation and status callers remain task participants without assign
 		const threads = await taskThreads(creator);
 		expect(threads).toHaveLength(1);
 		const thread = threads[0];
-		expect(thread.subject).toBe("Preserve task context");
+		expect(thread.name).toBe("Preserve task context");
 		expect(participantIds(thread)).toEqual([creator.id]);
 		for (const status of ["ready", "in-progress"]) await editor.invoke("ledger_status", { task: bundle, status });
 		const edited = (await taskThreads(editor)).find((entry) => entry.id === thread.id)!;
@@ -113,8 +115,9 @@ test("ledger creation and status callers remain task participants without assign
 		for (const who of [creator, editor, closer]) {
 			const retained = (await taskThreads(who)).find((entry) => entry.id === thread.id)!;
 			expect(participantIds(retained)).toEqual([creator.id, editor.id, closer.id].sort());
-			const read = await who.invoke<{ thread: { id: string; subject: string } }>("read_thread", { thread: thread.id });
-			expect(read.thread).toMatchObject({ id: thread.id, subject: "Preserve task context" });
+			const read = await who.invoke<CommunicationAttempt>("read_thread", { thread: thread.id, limit: 1 });
+			expect(read.outcome).toBe("applied");
+			expect(read.effect!.page!.thread).toMatchObject({ id: thread.id, name: "Preserve task context" });
 		}
 		const directory = await creator.invoke<{
 			members: { id: string; held: number; finished: number; focus: unknown }[];
@@ -298,17 +301,9 @@ test("links stay universal; insights belong to an unroled root, not its unroled 
 				relation: "produced",
 			});
 			await who.invoke("link", { id: relationship.id, resolution: "recorded" });
-			for (const tool of [
-				"org_work",
-				"org_waits",
-				"org_expertise",
-				"org_communication",
-				"org_fitness",
-				"predictions",
-				"hire",
-			])
+			for (const tool of ["progress", "bottlenecks", "experience", "coordination", "economics", "predictions", "hire"])
 				expect(who.run.session.getActiveToolNames().includes(tool)).toBe(who === root);
-			expect(await who.attempt("org_work", {})).toMatchObject({ isError: who !== root });
+			expect(await who.attempt("progress", {})).toMatchObject({ isError: who !== root });
 		}
 		// The human inspection command remains available without granting model tools.
 		const notices: string[] = [];
@@ -322,7 +317,7 @@ test("links stay universal; insights belong to an unroled root, not its unroled 
 		expect(errors).toEqual([]);
 		expect(notices.at(-1)).toContain("Open waits:");
 		expect(root.run.requests).toHaveLength(turns);
-		expect(root.run.session.getActiveToolNames()).toContain("org_work");
+		expect(root.run.session.getActiveToolNames()).toContain("progress");
 	} finally {
 		await close(unroled.run);
 		await close(worker.run);
@@ -495,8 +490,8 @@ test("a managing role reads its organization's realized fitness over a window it
 		await engineer.invoke("focus", { task: flaky.id });
 		await engineer.invoke("finish_task", { outcome: "Fixed." });
 		type Fitness = { value: number; delay: number; total: number; coverage: { unvalued: number }; incomplete: boolean };
-		const fitness = await engineer.invoke<Fitness>("org_fitness", { since: "1h" });
-		const ahead = await engineer.attempt("org_fitness", {
+		const fitness = await engineer.invoke<Fitness>("economics", { since: "1h" });
+		const ahead = await engineer.attempt("economics", {
 			since: "1h",
 			until: new Date(Date.now() + 3_600_000).toISOString(),
 		});
@@ -517,7 +512,7 @@ test("a managing role reads its organization's realized fitness over a window it
 			to: `task:${flaky.id}`,
 			relation: "supersedes",
 		});
-		const evidence = await engineer.attempt("org_fitness", { since: "1h" });
+		const evidence = await engineer.attempt("economics", { since: "1h" });
 		expect(evidence.isError).not.toBe(true);
 		const text = JSON.stringify(evidence.content);
 		expect(text).toContain("estimated $-120.00");
@@ -591,7 +586,7 @@ test("a managing role compares optional scenarios and reads recorded predictions
 		reviewed.outcomes[0].probability = 0.9;
 		reviewed.outcomes[1].probability = 0.1;
 		for (const outcome of reviewed.outcomes) outcome.compute[0].dollars = 16;
-		const comparison = await engineer.invoke<{ scenarios: { expected: number; decisionAt: number }[] }>("org_fitness", {
+		const comparison = await engineer.invoke<{ scenarios: { expected: number; decisionAt: number }[] }>("economics", {
 			scenarios: [scenario, reviewed],
 		});
 		expect(comparison.scenarios.map((row) => row.expected)).toEqual([200, 254]);
@@ -603,7 +598,7 @@ test("a managing role compares optional scenarios and reads recorded predictions
 			{ subtree: manager.id, scenarios: [scenario] },
 		];
 		for (const args of invalidModes) {
-			const invalid = await engineer.attempt("org_fitness", args);
+			const invalid = await engineer.attempt("economics", args);
 			expect(invalid.isError).toBe(true);
 			expect(JSON.stringify(invalid.content)).toContain("exactly one mode");
 		}
@@ -694,7 +689,7 @@ test("a managing role finds who has context on an area from what people actually
 			).not.toHaveLength(0),
 		);
 		type Expertise = { people: { ref: string; reads: number; status: string }[] };
-		const found = await manager.invoke<Expertise>("org_expertise", { area: "app.ts" });
+		const found = await manager.invoke<Expertise>("experience", { area: "app.ts" });
 		expect(found.people).toMatchObject([{ ref: `person:${engineer.id}`, reads: 1 }]);
 	} finally {
 		await close(engineer.run);
@@ -702,17 +697,19 @@ test("a managing role finds who has context on an area from what people actually
 	}
 }, 30000);
 
-test("a manager inspects explicitly recorded escalation requests through org_communication", async () => {
+test("a manager inspects explicitly recorded escalation requests through coordination", async () => {
 	const manager = await person(undefined, "coordinator");
 	const report = await person(manager.id);
 	try {
-		const result = await report.invoke<{ thread: string }>("escalate", { body: "Need a decision." });
-		const view = await manager.invoke<{ requests: { person: string; escalations: string[] }[] }>("org_communication", {
+		const result = await report.invoke<CommunicationAttempt>("escalate", { body: "Need a decision." });
+		expect(result.outcome).toBe("applied");
+		const view = await manager.invoke<ReturnType<typeof coordinationIn>>("coordination", {
 			since: "1h",
 			person: manager.id,
+			limit: 1,
 		});
-		expect(view.requests).toContainEqual(
-			expect.objectContaining({ person: `person:${manager.id}`, escalations: [`thread:${result.thread}`] }),
+		expect(view.pending.rows).toContainEqual(
+			expect.objectContaining({ person: `person:${manager.id}`, escalations: [`thread:${result.effect!.thread.id}`] }),
 		);
 	} finally {
 		await close(report.run);
@@ -724,11 +721,14 @@ test("escalate records an explicit escalation kind, not merely a subject", async
 	const manager = await person(undefined, "coordinator");
 	const report = await person(manager.id);
 	try {
-		const result = await report.invoke<{ thread: string }>("escalate", { body: "Need a decision." });
-		const read = await manager.invoke<{ thread: { kind: string; subject: string } }>("read_thread", {
-			thread: result.thread,
+		const result = await report.invoke<CommunicationAttempt>("escalate", { body: "Need a decision." });
+		expect(result.outcome).toBe("applied");
+		const read = await manager.invoke<CommunicationAttempt>("read_thread", {
+			thread: result.effect!.thread.id,
+			limit: 1,
 		});
-		expect(read.thread).toMatchObject({ kind: "escalation", subject: "Escalation" });
+		expect(read.outcome).toBe("applied");
+		expect(read.effect!.page!.thread).toMatchObject({ kind: "escalation", name: "Escalation" });
 	} finally {
 		await close(report.run);
 		await close(manager.run);
@@ -767,10 +767,13 @@ test("a scripted manager inspects a ready task and relevant idle experience, ass
 		).toEqual([]);
 		const start = manager.run.session.messages.length;
 		manager.script.push(
-			call("org_work", {}),
-			call("org_expertise", { area: "app.ts" }),
+			call("progress", {}),
+			call("bottlenecks", { task: blocked.id, limit: 1 }),
+			call("coordination", { since: "1h", task: blocked.id, limit: 1 }),
+			call("progress", { limit: 2 }),
+			call("experience", { area: "app.ts" }),
 			call("assign", { person: specialist.id, task: ready.id }),
-			call("org_work", {}),
+			call("progress", { limit: 2 }),
 			fauxAssistantMessage(
 				"The experienced idle specialist now holds the ready review; the API decision remains blocked.",
 			),
@@ -779,25 +782,46 @@ test("a scripted manager inspects a ready task and relevant idle experience, ass
 			"Inspect the work and relevant experience, assign the ready review, then inspect the result.",
 		);
 		const results = manager.run.session.messages.slice(start).filter((message) => message.role === "toolResult");
-		expect(results.map((result) => result.toolName)).toEqual(["org_work", "org_expertise", "assign", "org_work"]);
+		expect(results.map((result) => result.toolName)).toEqual([
+			"progress",
+			"bottlenecks",
+			"coordination",
+			"progress",
+			"experience",
+			"assign",
+			"progress",
+		]);
 		for (const result of results) expect(result.isError).toBe(false);
-		const before = results[0].details as ReturnType<typeof workIn>;
-		const experience = results[1].details as {
+		expect(results[0].details).toMatchObject({
+			summary: { ready: 1, waiting: 1 },
+			open: { total: 2, returned: 0, rows: [] },
+		});
+		expect(results[1].details).toMatchObject({
+			targets: { rows: [{ ref: `person:${manager.id}`, waits: [{ ref: `link:${decision.id}` }] }] },
+		});
+		expect(results[2].details).toMatchObject({
+			summary: { pendingDecisions: 1 },
+			work: { rows: [{ ref: `task:${blocked.id}` }] },
+		});
+		const before = results[3].details as unknown as ReturnType<typeof progressIn>;
+		const experience = results[4].details as {
 			people: { ref: string; reads: number; status: string; tasks: unknown[] }[];
 		};
-		const after = results[3].details as ReturnType<typeof workIn>;
-		expect(before.ready).toContainEqual(expect.objectContaining({ ref: `task:${ready.id}`, holders: [] }));
-		expect(before.waiting).toContainEqual(
+		const after = results[6].details as unknown as ReturnType<typeof progressIn>;
+		expect(before.open.rows).toContainEqual(
+			expect.objectContaining({ ref: `task:${ready.id}`, state: "ready", holders: [] }),
+		);
+		expect(before.open.rows).toContainEqual(
 			expect.objectContaining({ ref: `task:${blocked.id}`, waits: [`link:${decision.id}`] }),
 		);
 		expect(experience.people).toContainEqual(
 			expect.objectContaining({ ref: `person:${specialist.id}`, reads: 1, status: "idle", tasks: [] }),
 		);
-		expect(after.ready.map((task) => task.ref)).not.toContain(`task:${ready.id}`);
-		expect(after.inProgress).toContainEqual(
-			expect.objectContaining({ ref: `task:${ready.id}`, holders: [`person:${specialist.id}`] }),
+		expect(after.summary.ready).toBe(0);
+		expect(after.open.rows).toContainEqual(
+			expect.objectContaining({ ref: `task:${ready.id}`, state: "held", holders: [`person:${specialist.id}`] }),
 		);
-		expect(after.waiting).toContainEqual(
+		expect(after.open.rows).toContainEqual(
 			expect.objectContaining({ ref: `task:${blocked.id}`, waits: [`link:${decision.id}`] }),
 		);
 		expect(manager.run.session.agent.state.systemPrompt).toContain("## Adapt with evidence");
@@ -807,14 +831,25 @@ test("a scripted manager inspects a ready task and relevant idle experience, ass
 	}
 }, 40000);
 
-test("a managing role inspects held work through org_work", async () => {
+test("a managing role inspects held work through progress", async () => {
 	const who = await person(undefined, "coordinator");
 	try {
 		const task = await who.invoke("take_task", { goal: "Ship the change.", title: "Change" });
-		const work = await who.invoke<{ inProgress: { ref: string; holders: string[] }[] }>("org_work", { task: task.id });
-		expect(work.inProgress).toEqual([
+		const overview = await who.invoke<ReturnType<typeof progressIn>>("progress", { task: task.id });
+		expect(overview.open).toMatchObject({ total: 1, returned: 0, rows: [] });
+		const work = await who.invoke<ReturnType<typeof progressIn>>("progress", { task: task.id, limit: 1 });
+		expect(work.open.rows).toEqual([
 			expect.objectContaining({ ref: `task:${task.id}`, holders: [`person:${who.id}`] }),
 		]);
+		const invalid: Parameters<typeof fauxToolCall>[1][] = [
+			{ offset: 0 },
+			{ person: who.id, task: task.id },
+			{ until: "2200-01-01" },
+			{ since: "bad" },
+		];
+		for (const args of invalid) {
+			expect(await who.attempt("progress", args)).toMatchObject({ isError: true });
+		}
 	} finally {
 		await close(who.run);
 	}
@@ -831,11 +866,10 @@ test("a manager sees a wait its report recorded, grouped under what it waits on"
 			relation: "requires_decision",
 			reason: "Which version?",
 		});
-		type Waits = { open: number; targets: { ref: string; waits: { reason: string }[] }[] };
-		const waits = await manager.invoke<Waits>("org_waits", {});
+		const waits = await manager.invoke<ReturnType<typeof bottlenecksIn>>("bottlenecks", { limit: 1 });
 		expect(waits).toMatchObject({
-			open: 1,
-			targets: [{ ref: `person:${manager.id}`, waits: [{ reason: "Which version?" }] }],
+			summary: { openWaits: 1 },
+			targets: { rows: [{ ref: `person:${manager.id}`, waits: [{ reason: "Which version?" }] }] },
 		});
 	} finally {
 		await close(engineer.run);
@@ -866,34 +900,35 @@ test("/org shares the native organization snapshot counts and references without
 		const text = notices.at(-1)!;
 		const until = text.split("\n")[0].split(" at ")[1];
 		expect(Date.parse(until)).not.toBeNaN();
-		const waits = await manager.invoke<ReturnType<typeof waitsIn>>("org_waits", { until });
-		const work = await manager.invoke<ReturnType<typeof workIn>>("org_work", { until });
-		const communication = await manager.invoke<ReturnType<typeof communicationIn>>("org_communication", {
+		const waits = await manager.invoke<ReturnType<typeof bottlenecksIn>>("bottlenecks", { until, limit: 1 });
+		const work = await manager.invoke<ReturnType<typeof progressIn>>("progress", { until, limit: 4 });
+		const communication = await manager.invoke<ReturnType<typeof coordinationIn>>("coordination", {
 			since: new Date(Date.parse(until) - 3_600_000).toISOString(),
 			until,
+			limit: 1,
 		});
-		expect(waits.open).toBe(1);
-		expect(work.ready).toHaveLength(1);
-		expect(work.multiple).toHaveLength(1);
-		expect(text).toContain(`Open waits: ${waits.open}, on ${waits.targets.length} targets.`);
-		expect(text).toContain(`Ready unowned work: ${work.ready.length}`);
-		expect(text).toContain(`Multiple-task holders: ${work.multiple.length}`);
-		for (const target of waits.targets) {
+		expect(waits.summary.openWaits).toBe(1);
+		expect(work.summary.ready).toBe(1);
+		expect(work.summary.multipleTaskHolders).toBe(1);
+		expect(text).toContain(`Open waits: ${waits.summary.openWaits}, on ${waits.targets.total} targets.`);
+		expect(text).toContain(`Ready unowned work: ${work.summary.ready}`);
+		expect(text).toContain(`Multiple-task holders: ${work.summary.multipleTaskHolders}`);
+		for (const target of waits.targets.rows) {
 			expect(text).toContain(`- ${target.ref}: ${target.waits.length} waits;`);
 			for (const wait of target.waits) expect(text).toContain(wait.ref);
 		}
-		for (const task of work.ready) expect(text).toContain(task.ref);
-		for (const holder of work.multiple) {
-			expect(text).toContain(holder.person);
+		for (const task of work.open.rows.filter((row) => row.state === "ready")) expect(text).toContain(task.ref);
+		for (const holder of work.holders.rows.filter((row) => row.tasks.length > 1)) {
+			expect(text).toContain(holder.ref);
 			for (const task of holder.tasks) expect(text).toContain(task);
 		}
-		expect(communication.requests).toMatchObject([
+		expect(communication.pending.rows).toMatchObject([
 			{ person: `person:${manager.id}`, decisions: [expect.any(String)], escalations: [expect.any(String)] },
 		]);
 		expect(text).toContain(
-			`Pending decisions: ${communication.requests.reduce((n, request) => n + request.decisions.length, 0)}; escalations: ${communication.requests.reduce((n, request) => n + request.escalations.length, 0)}`,
+			`Pending decisions: ${communication.summary.pendingDecisions}; escalations: ${communication.summary.pendingEscalations}`,
 		);
-		for (const request of communication.requests) {
+		for (const request of communication.pending.rows) {
 			expect(text).toContain(request.person);
 			for (const ref of [...request.decisions, ...request.escalations]) expect(text).toContain(ref);
 		}
@@ -903,7 +938,7 @@ test("/org shares the native organization snapshot counts and references without
 	}
 }, 40000);
 
-test("/org expertise shares area and spaced-person rendering, and preserves explicit-person errors", async () => {
+test("/org experience shares area and spaced-person rendering, and preserves explicit-person errors", async () => {
 	const manager = await person(undefined, "coordinator");
 	const report = await person(manager.id);
 	const notices: string[] = [];
@@ -925,16 +960,16 @@ test("/org expertise shares area and spaced-person rendering, and preserves expl
 				query(state.dbPath, "select 1 from messages where session_id = ? and tool = 'read'", report.id).length,
 			).toBeGreaterThan(0),
 		);
-		await manager.invoke("org_expertise", { area: "app.ts" });
+		await manager.invoke("experience", { area: "app.ts" });
 		const area = manager.run.session.messages.filter((message) => message.role === "toolResult").at(-1)!;
-		await manager.run.session.prompt("/org expertise app.ts");
+		await manager.run.session.prompt("/org experience app.ts");
 		expect(notices.at(-1)).toBe((area.content[0] as { text: string }).text);
 		expect(notices.at(-1)).toContain(`person:${report.id}`);
-		await manager.invoke("org_expertise", { person: report.id });
+		await manager.invoke("experience", { person: report.id });
 		const personView = manager.run.session.messages.filter((message) => message.role === "toolResult").at(-1)!;
 		for (const argument of ["Ada Example", report.id, "person:Ada Example"]) {
 			const count = notices.length;
-			await manager.run.session.prompt(`/org expertise ${argument}`);
+			await manager.run.session.prompt(`/org experience ${argument}`);
 			expect(notices).toHaveLength(count + 1);
 			expect(notices.at(-1)).toBe((personView.content[0] as { text: string }).text);
 		}
@@ -945,16 +980,16 @@ test("/org expertise shares area and spaced-person rendering, and preserves expl
 				{ name: "Root Example" },
 			]),
 		);
-		await manager.invoke("org_expertise", { person: manager.id });
+		await manager.invoke("experience", { person: manager.id });
 		const selfView = manager.run.session.messages.filter((message) => message.role === "toolResult").at(-1)!;
 		for (const argument of ["Root Example", manager.id, "person:Root Example", `person:${manager.id}`]) {
 			const count = notices.length;
-			await manager.run.session.prompt(`/org expertise ${argument}`);
+			await manager.run.session.prompt(`/org experience ${argument}`);
 			expect(notices).toHaveLength(count + 1);
 			expect(notices.at(-1)).toBe((selfView.content[0] as { text: string }).text);
 		}
 		expect(errors).toEqual([]);
-		await manager.run.session.prompt("/org expertise person:Unknown Person");
+		await manager.run.session.prompt("/org experience person:Unknown Person");
 		expect(errors.at(-1)).toMatch(/Nobody in your organization is named Unknown Person/);
 	} finally {
 		await close(report.run);
@@ -962,7 +997,7 @@ test("/org expertise shares area and spaced-person rendering, and preserves expl
 	}
 }, 40000);
 
-test("/org expertise rejects duplicate names including the caller, while IDs select native views", async () => {
+test("/org experience rejects duplicate names including the caller, while IDs select native views", async () => {
 	const manager = await person(undefined, "coordinator");
 	const first = await person(manager.id);
 	const second = await person(manager.id);
@@ -993,16 +1028,16 @@ test("/org expertise rejects duplicate names including the caller, while IDs sel
 			for (const argument of ["Shared Name", "person:Shared Name"]) {
 				const count = notices.length;
 				const failures = errors.length;
-				await manager.run.session.prompt(`/org expertise ${argument}`);
+				await manager.run.session.prompt(`/org experience ${argument}`);
 				expect(errors).toHaveLength(failures + 1);
 				expect(errors.at(-1)).toBe("More than one person is named Shared Name; use the session id.");
 				expect(notices).toHaveLength(count);
 			}
 			for (const id of includeCaller ? [manager.id, first.id] : [first.id, second.id]) {
-				await manager.invoke("org_expertise", { person: id });
+				await manager.invoke("experience", { person: id });
 				const native = manager.run.session.messages.filter((message) => message.role === "toolResult").at(-1)!;
 				const count = notices.length;
-				await manager.run.session.prompt(`/org expertise person:${id}`);
+				await manager.run.session.prompt(`/org experience person:${id}`);
 				expect(notices).toHaveLength(count + 1);
 				expect(notices.at(-1)).toBe((native.content[0] as { text: string }).text);
 			}
@@ -1014,7 +1049,7 @@ test("/org expertise rejects duplicate names including the caller, while IDs sel
 	}
 }, 40000);
 
-test("/org fitness reuses the native breakdown and incomplete or unknown forms show help", async () => {
+test("/org economics reuses the native breakdown and incomplete or unknown forms show help", async () => {
 	const who = await person(undefined, "coordinator");
 	const notices: string[] = [];
 	try {
@@ -1026,10 +1061,10 @@ test("/org fitness reuses the native breakdown and incomplete or unknown forms s
 		});
 		writeFileSync(join(task.bundle, "retrospective.md"), "# Retrospective\n\nDelivered the priced result.\n");
 		await who.invoke("finish_task", { outcome: "Delivered the priced result." });
-		await who.run.session.prompt("/org fitness 1h");
+		await who.run.session.prompt("/org economics 1h");
 		const text = notices.at(-1)!;
 		const [, since, until] = text.split("\n")[0].match(/from (\S+) to (\S+)\./)!;
-		await who.invoke("org_fitness", { since, until });
+		await who.invoke("economics", { since, until });
 		const native = who.run.session.messages.filter((message) => message.role === "toolResult").at(-1)!;
 		expect(native.details).toMatchObject({ value: 25 });
 		expect(text).toBe((native.content[0] as { text: string }).text);
@@ -1037,8 +1072,8 @@ test("/org fitness reuses the native breakdown and incomplete or unknown forms s
 			const count = notices.length;
 			await who.run.session.prompt(`/org ${args}`);
 			expect(notices).toHaveLength(count + 1);
-			expect(notices.at(-1)).toContain("/org fitness <since>");
-			expect(notices.at(-1)).toContain("/org expertise <area or person>");
+			expect(notices.at(-1)).toContain("/org economics <since>");
+			expect(notices.at(-1)).toContain("/org experience <area or person>");
 			expect(notices.at(-1)).toContain("person:<name-or-id>");
 		}
 	} finally {
