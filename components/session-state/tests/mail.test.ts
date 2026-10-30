@@ -197,11 +197,12 @@ test("mail to a stopped session waits and arrives in its next turn after it open
 		// The reopened session's bridge has the waiting mail before the first prompt.
 		await vi.waitFor(
 			() =>
-				expect(query(state.dbPath, "select stage from commands where session_id = ?", id)).toEqual([
+				expect(query(state.dbPath, "select stage from commands where session_id = ? and kind = 'mail'", id)).toEqual([
 					{ stage: "delivered" },
 				]),
 			{ timeout: 15000 },
 		);
+		expect(reopened.requests).toHaveLength(0);
 		await reopened.session.prompt("resume");
 		expect(sawText(reopened.requests, "pick up ticket 7")).toBe(true);
 		expect(mailIn(reopened.session)).toHaveLength(1);

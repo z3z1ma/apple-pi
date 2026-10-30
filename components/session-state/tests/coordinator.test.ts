@@ -5,7 +5,6 @@ import { join } from "node:path";
 import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai/compat";
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
 import { fauxSession, type Reply } from "../../../tests/helpers/faux-session.js";
-import { COMMUNICATION_TOOLS } from "../src/communication-tools.js";
 import bridge from "../src/index.js";
 import type { Command } from "../src/protocol.js";
 import { close, query, sendCommand, startRuntime, stopRuntime, tempStateDir } from "./helpers.js";
@@ -544,7 +543,23 @@ test.each([undefined, "implementation-engineer", "coordinator"])(
 				expect.arrayContaining([
 					"read",
 					"directory",
-					...COMMUNICATION_TOOLS,
+					"send_mail",
+					"reply",
+					"inbox",
+					"read_thread",
+					"post",
+					"escalate",
+					"create_channel",
+					"find_channels",
+					"join_channel",
+					"leave_thread",
+					"invite_to_thread",
+					"remove_thread_invitation",
+					"search_messages",
+					"pin_message",
+					"archive_thread",
+					"reopen_thread",
+					"communication_status",
 					"take_task",
 					"focus",
 					"finish_task",
