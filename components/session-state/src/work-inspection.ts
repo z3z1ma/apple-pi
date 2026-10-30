@@ -1,4 +1,5 @@
 import type { DatabaseSync } from "node:sqlite";
+import { executionIn } from "./execution-inspection.js";
 import { linkOwnership } from "./fitness.js";
 import { waitComponents } from "./friction.js";
 import { communicationIn, type Scope, taskTitleOf, type Window, waitsIn, workIn } from "./inspect.js";
@@ -112,21 +113,12 @@ function waitDuration(task: WorkTask, context: InspectionContext, waits: Link[])
 	);
 }
 
-/** Delivery records and waiting exposure share the existing work classification and historical ownership. */
-export function progressIn(
-	db: DatabaseSync,
-	organization: string,
-	window: Window,
-	scope: Scope = {},
-	page: DetailPage = {},
-) {
-	const context = inspectionContext(db, organization, window, scope);
-	const base = workIn(db, organization, { ...window, to: context.to }, scope);
+/** Shared task evidence for delivery reports and explicitly associated conversations. */
+export function taskEvidence(db: DatabaseSync, organization: string, context: InspectionContext) {
 	const tasks = new Map(context.tasks.map((task) => [task.id, task]));
 	const evidence = evidenceByTask(db, organization, context.to);
 	const waits = taskWaits(db, context);
-	const changes = focusChanges(db, context);
-	const describe = (ref: string, at = context.to) => {
+	return (ref: string, at = context.to) => {
 		const task = tasks.get(ref.slice(5))!;
 		return {
 			ref,
@@ -147,6 +139,21 @@ export function progressIn(
 				})),
 		};
 	};
+}
+
+/** Delivery records and waiting exposure share the existing work classification and historical ownership. */
+export function progressIn(
+	db: DatabaseSync,
+	organization: string,
+	window: Window,
+	scope: Scope = {},
+	page: DetailPage = {},
+) {
+	const context = inspectionContext(db, organization, window, scope);
+	const base = workIn(db, organization, { ...window, to: context.to }, scope);
+	const tasks = new Map(context.tasks.map((task) => [task.id, task]));
+	const changes = focusChanges(db, context);
+	const describe = taskEvidence(db, organization, context);
 	const open = (
 		[
 			["ready", base.ready],
@@ -204,7 +211,9 @@ export function progressIn(
 		}));
 	return {
 		organization: `organization:${organization}`,
+		scope,
 		window: { from: context.from ?? null, to: context.to },
+		execution: executionIn(db, context, page),
 		summary: {
 			opened: context.from === undefined ? null : base.opened.length,
 			completed: context.from === undefined ? null : completed.length,
@@ -227,10 +236,7 @@ export function progressIn(
 			waitingTaskMs:
 				context.from === undefined
 					? null
-					: context.tasks.reduce(
-							(total, task) => total + (waitDuration(task, context, waits.get(task.id) ?? []) ?? 0),
-							0,
-						),
+					: context.tasks.reduce((total, task) => total + (describe(`task:${task.id}`).waitingMs ?? 0), 0),
 			focusChanges: changes.length,
 			multipleTaskHolders: people.filter((row) => row.tasks.length > 1).length,
 		},
@@ -363,7 +369,9 @@ export function bottlenecksIn(
 		);
 	return {
 		organization: `organization:${organization}`,
+		scope,
 		window: { from: context.from ?? null, to: context.to },
+		execution: executionIn(db, context, page),
 		summary: {
 			openWaits: selected.open,
 			targets: targets.length,
