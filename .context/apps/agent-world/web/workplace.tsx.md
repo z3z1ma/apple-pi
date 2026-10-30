@@ -12,7 +12,7 @@ One stable FileReferenceNavigation callback spans the retained views and profile
 Coupled: apps/agent-world/web/file-references.tsx, apps/agent-world/web/workplace-code.tsx, apps/agent-world/web/overlay/conversation/transcript.tsx
 Verify: apps/agent-world/tests/world-file-links.test.ts
 
-One WorkplacePersonActions provider spans the retained views inside wp-surface; profile disappearance or a changed snapshot does not dismiss an issued lifecycle operation. DM ellipsis and shared profile/card consumers use its single dialog, independent of conversation selection/drafts and the original World iframe actions.
+One WorkplacePersonActions provider spans the retained views inside wp-surface; profile disappearance or a changed snapshot does not dismiss an issued lifecycle operation. DM-header menus, sidebar context menus and shared profile/card consumers use its single dialog, independent of conversation selection/drafts and the original World iframe actions.
 Coupled: apps/agent-world/web/workplace-person-actions.tsx, apps/agent-world/web/workplace-people.tsx, apps/agent-world/web/workplace-org-chart.tsx
 Verify: apps/agent-world/tests/world-lifecycle.test.ts
 
