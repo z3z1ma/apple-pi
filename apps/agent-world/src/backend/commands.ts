@@ -4,6 +4,7 @@
 // that acts on a session (the conversation panel's instructions, waking, mail) sends through it.
 import { randomUUID } from "node:crypto";
 import { createConnection, type Socket } from "node:net";
+import { isDeepStrictEqual } from "node:util";
 import type { Command } from "../../../../components/session-state/src/protocol.js";
 import type { CommandResult, ReceiptStage } from "../world.js";
 
@@ -26,8 +27,12 @@ export interface Commands {
 }
 
 interface Waiting {
-	accepted: boolean;
-	onReceipt(stage: ReceiptStage, reason?: string): void;
+	request: unknown;
+	socket: Socket;
+	promise: Promise<CommandResult>;
+	listeners: Set<NonNullable<SendOptions["onReceipt"]>>;
+	stage?: ReceiptStage;
+	reason?: string;
 	settle(result: CommandResult): void;
 }
 
@@ -37,6 +42,26 @@ export function openCommands(socketPath: string): Commands {
 	let closed = false;
 	const waiting = new Map<string, Waiting>();
 
+	function receive(line: string, source: Socket) {
+		let reply: { type?: unknown; commandId?: unknown; stage?: unknown; reason?: unknown };
+		try {
+			reply = JSON.parse(line);
+		} catch {
+			return;
+		}
+		if (reply?.type !== "receipt" || typeof reply.commandId !== "string") return;
+		const handler = waiting.get(reply.commandId);
+		if (!handler || handler.socket !== source) return;
+		const stage = reply.stage;
+		if (stage !== "accepted" && stage !== "delivered" && stage !== "applied" && stage !== "failed") return;
+		const reason = typeof reply.reason === "string" ? reply.reason : undefined;
+		handler.stage = stage;
+		handler.reason = reason;
+		for (const listener of handler.listeners) listener(stage, stage === "failed" ? (reason ?? "failed") : reason);
+		if (stage === "applied") handler.settle({ ok: true });
+		else if (stage === "failed") handler.settle({ ok: false, reason: reason ?? "failed" });
+	}
+
 	const connect = (): Promise<Socket> => {
 		if (socket && !socket.destroyed) return Promise.resolve(socket);
 		connecting ??= new Promise<Socket>((resolve, reject) => {
@@ -45,23 +70,8 @@ export function openCommands(socketPath: string): Commands {
 			next.on("data", (chunk) => {
 				buffer += chunk.toString();
 				for (let end = buffer.indexOf("\n"); end >= 0; end = buffer.indexOf("\n")) {
-					const line = buffer.slice(0, end);
+					receive(buffer.slice(0, end), next);
 					buffer = buffer.slice(end + 1);
-					let reply: { type?: unknown; commandId?: unknown; stage?: unknown; reason?: unknown };
-					try {
-						reply = JSON.parse(line);
-					} catch {
-						continue;
-					}
-					if (reply.type !== "receipt" || typeof reply.commandId !== "string") continue;
-					const handler = waiting.get(reply.commandId);
-					if (!handler) continue;
-					const stage = reply.stage as ReceiptStage;
-					const reason = typeof reply.reason === "string" ? reply.reason : undefined;
-					if (stage === "accepted") handler.accepted = true;
-					handler.onReceipt(stage, stage === "failed" ? (reason ?? "failed") : reason);
-					if (stage === "applied") handler.settle({ ok: true });
-					else if (stage === "failed") handler.settle({ ok: false, reason: reason ?? "failed" });
 				}
 			});
 			next.once("connect", () => {
@@ -78,7 +88,7 @@ export function openCommands(socketPath: string): Commands {
 			next.on("close", () => {
 				if (socket === next) socket = undefined;
 				for (const handler of [...waiting.values()])
-					handler.settle({ ok: false, reason: handler.accepted ? LOST : GONE });
+					if (handler.socket === next) handler.settle({ ok: false, reason: handler.stage ? LOST : GONE });
 			});
 		});
 		return connecting;
@@ -94,23 +104,40 @@ export function openCommands(socketPath: string): Commands {
 				return { ok: false, reason: GONE };
 			}
 			const commandId = options.commandId ?? `agent-world-${randomUUID()}`;
-			return new Promise<CommandResult>((resolve) => {
-				const timer = setTimeout(() => {
-					if (!handler.accepted) handler.settle({ ok: false, reason: GONE });
-				}, ACCEPT_TIMEOUT_MS);
-				const handler: Waiting = {
-					accepted: false,
-					onReceipt: (stage, reason) => options.onReceipt?.(stage, reason),
-					settle(result) {
-						if (waiting.get(commandId) !== handler) return;
-						waiting.delete(commandId);
-						clearTimeout(timer);
-						resolve(result);
-					},
-				};
-				waiting.set(commandId, handler);
-				open.write(`${JSON.stringify({ type: "command", commandId, sessionId, command })}\n`);
+			const request = JSON.parse(JSON.stringify({ sessionId, command })) as unknown;
+			const previous = waiting.get(commandId);
+			if (previous && !previous.socket.destroyed) {
+				if (!isDeepStrictEqual(previous.request, request))
+					return { ok: false, reason: "This command ID is already waiting for a different request." };
+				if (options.onReceipt) {
+					previous.listeners.add(options.onReceipt);
+					if (previous.stage) options.onReceipt(previous.stage, previous.reason);
+				}
+				return previous.promise;
+			}
+			previous?.settle({ ok: false, reason: previous.stage ? LOST : GONE });
+			let resolveResult!: (result: CommandResult) => void;
+			const promise = new Promise<CommandResult>((resolve) => {
+				resolveResult = resolve;
 			});
+			const timer = setTimeout(() => {
+				if (!handler.stage) handler.settle({ ok: false, reason: GONE });
+			}, ACCEPT_TIMEOUT_MS);
+			const handler: Waiting = {
+				request,
+				socket: open,
+				promise,
+				listeners: new Set(options.onReceipt ? [options.onReceipt] : []),
+				settle(result) {
+					if (waiting.get(commandId) !== handler) return;
+					waiting.delete(commandId);
+					clearTimeout(timer);
+					resolveResult(result);
+				},
+			};
+			waiting.set(commandId, handler);
+			open.write(`${JSON.stringify({ type: "command", commandId, sessionId, command })}\n`);
+			return promise;
 		},
 		close() {
 			closed = true;
