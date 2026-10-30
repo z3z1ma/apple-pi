@@ -69,9 +69,21 @@ Verify: components/session-state/tests/organization.test.ts, components/session-
 
 ## symbol:Runtime.repeatCommand
 
-Retry receipt observers are separate from `commandClients`, which retains ownership of correlated turns, their stream/result and disconnect cancellation. A retry follows receipt progress without acquiring a turn or replacing a still-live original waiter. Closing an observer drops only its receipt subscription.
+Canonical retries compare requested generation against immutable `commands.bound_generation`; `commands.generation` is overwritten with the dispatched target incarnation. A conflicting caller/input fails that request without changing the original operation. Retry receipt observers are separate from `commandClients`, which retains ownership of correlated turns, their stream/result and disconnect cancellation. A retry follows receipt progress without acquiring a turn or replacing a still-live original waiter. Closing an observer drops only its receipt subscription.
 Coupled: components/session-state/src/client.ts
 Verify: components/session-state/tests/communication-reliability.test.ts, components/session-state/tests/peer-turns.test.ts, components/session-state/tests/streaming.test.ts
+
+## symbol:Runtime.communicationCommand
+
+The existing commands.result commits with the mutation, frozen read page/ack, and all publication/outbox rows. Startup replays an accepted operation only when that result is absent; a committed result whose terminal receipt was lost becomes applied without re-running the action or choosing a new page/audience. Receipt application proves the requested publication/mutation, not downstream notification delivery.
+Coupled: components/session-state/src/communication-actions.ts, components/session-state/src/communication.ts, components/session-state/src/protocol.ts
+Verify: components/session-state/tests/communication-tools.test.ts, components/session-state/tests/communication-core.test.ts
+
+## symbol:Runtime.queueTeamHistory
+
+New-hire context points to the team identity, purpose and pinned current-brief reference rather than copying full backscroll. The harness authors this startup context; it does not impersonate the manager or acknowledge channel history. Selective read/search owns later recall.
+Coupled: components/session-state/src/communication.ts, components/session-state/src/mail.ts
+Verify: components/session-state/tests/channels.test.ts
 
 ## symbol:Runtime.command
 

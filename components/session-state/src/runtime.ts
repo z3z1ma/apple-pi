@@ -58,6 +58,9 @@ const JSON_FACTS = new Set<string>(["prompt", "queue", "config", "previousSessio
 import { type AttentionRow, jumpTarget, statusSummary } from "./attention.js";
 import { syncChannels } from "./channels.js";
 import { RETRY_MS, sendCommand } from "./client.js";
+import { canonicalCommunication } from "./communication.js";
+import { applyCommunication, type PublishCommunication } from "./communication-actions.js";
+import type { CommunicationCommand } from "./communication-types.js";
 import {
 	type Departure,
 	type DepartureWriter,
@@ -71,17 +74,7 @@ import {
 import { recordLink, resolveLink } from "./links.js";
 import { discardProgramPeople, programDescendants, temporaryCallers } from "./program-peers.js";
 import { migrate } from "./schema.js";
-import {
-	HARNESS,
-	markRead,
-	messagesOf,
-	nameOf,
-	OPERATOR,
-	participateIn,
-	postToThread,
-	type ThreadPost,
-	threadOf,
-} from "./threads.js";
+import { HARNESS, markRead, nameOf, OPERATOR, participateIn, postToThread, type ThreadPost } from "./threads.js";
 import {
 	canonicalSocket,
 	killPane,
@@ -292,6 +285,7 @@ export class Runtime {
 		cleanMovedBundles(this.db);
 		syncChannels(this.db, Date.now());
 		this.recoverThreadPosts();
+		this.recoverCommunications();
 		this.recoverChannelMembership();
 		this.recoverWorkCommands();
 		this.recoverWorkRecords();
@@ -758,6 +752,11 @@ export class Runtime {
 			this.workCommand(commandId, sessionId, command, now);
 			return;
 		}
+		if (command.kind === "communication") {
+			receipt("accepted");
+			this.communicationCommand(commandId, sessionId, command, now);
+			return;
+		}
 		if (command.kind === "thread_post") {
 			receipt("accepted");
 			this.threadPost(commandId, sessionId, command, now);
@@ -792,10 +791,22 @@ export class Runtime {
 	}
 
 	private repeatCommand(client: Connection, request: CommandRequest): boolean {
-		const row = this.db!.prepare("select stage, reason from commands where command_id = ?").get(request.commandId) as
-			| { stage: ReceiptStage; reason: string | null }
+		const row = this.db!.prepare(
+			"select session_id, bound_generation as generation, command, stage, reason from commands where command_id = ?",
+		).get(request.commandId) as
+			| { session_id: string; generation: number | null; command: string; stage: ReceiptStage; reason: string | null }
 			| undefined;
 		if (!row) return false;
+		if (
+			row.session_id !== request.sessionId ||
+			row.generation !== (request.generation ?? null) ||
+			canonicalCommunication(JSON.parse(row.command)) !== canonicalCommunication(request.command)
+		) {
+			client.socket.write(
+				`${JSON.stringify({ type: "receipt", commandId: request.commandId, stage: "failed", reason: "This command ID already records a different caller or canonical input." } satisfies Receipt)}\n`,
+			);
+			return true;
+		}
 		if (row.stage !== "applied" && row.stage !== "failed") {
 			const waiters = this.receiptWaiters.get(request.commandId) ?? new Set<Connection>();
 			waiters.add(client);
@@ -1213,6 +1224,10 @@ export class Runtime {
 				thread: posted.thread,
 				subject: posted.subject,
 				seq: posted.seq,
+				threadKind: (
+					db.prepare("select kind from threads where id = ?").get(posted.thread) as { kind: ThreadPost["threadKind"] }
+				).kind,
+				reference: { thread: posted.thread, seq: posted.seq, id: commandId },
 				...(fromName ? { fromName } : {}),
 				...(changed?.person === participant && changed.goal ? { taskGoal: true } : {}),
 			};
@@ -1225,7 +1240,71 @@ export class Runtime {
 						?.name || participant,
 				);
 		}
-		return { asleep, deliveries };
+		return { asleep, deliveries, posted };
+	}
+
+	private communicationCommand(commandId: string, person: string, command: CommunicationCommand, now: number): void {
+		const db = this.db!;
+		const completed = db.prepare("select result from commands where command_id = ?").get(commandId) as {
+			result: string | null;
+		};
+		if (completed.result !== null) {
+			this.setCommandStage(commandId, "applied");
+			return;
+		}
+		const pending: ReturnType<Runtime["preparePost"]>[] = [];
+		db.exec("begin");
+		try {
+			if (command.version !== 1 || !command.input || typeof command.input.tool !== "string" || !command.operation)
+				throw new Error("Unsupported communication protocol; use current callers and runtime.");
+			const publish: PublishCommunication = (post, suffix, sender = person) => {
+				const id = suffix ? `${commandId}:${suffix}` : commandId;
+				const item = this.preparePost(id, sender, post, now);
+				pending.push(item);
+				const { seq } = item.posted;
+				const message = {
+					thread: post.thread,
+					seq,
+					id,
+					from: sender,
+					fromName: nameOf(db, sender),
+					body: post.body,
+					at: now,
+					reference: { thread: post.thread, seq, id },
+				};
+				return {
+					message,
+					audience: (
+						db.prepare("select participant from thread_participants where thread_id = ?").all(post.thread) as {
+							participant: string;
+						}[]
+					).map((row) => row.participant),
+					queued: item.posted.push.filter((id) => id !== OPERATOR && id !== sender),
+				};
+			};
+			const effect = applyCommunication(db, person, command.operation, now, commandId, publish);
+			db.prepare("update commands set result = ? where command_id = ?").run(JSON.stringify(effect), commandId);
+			this.event("client", person, null, "communication_applied", {
+				commandId,
+				action: command.operation.action,
+				thread: effect.thread.id,
+			});
+			db.exec("commit");
+		} catch (error) {
+			db.exec("rollback");
+			this.setCommandStage(commandId, "failed", error instanceof Error ? error.message : String(error));
+			return;
+		}
+		for (const item of pending) for (const { target, id, mail } of item.deliveries) this.dispatch(target, id, mail);
+		this.setCommandStage(commandId, "applied");
+	}
+
+	private recoverCommunications(): void {
+		const rows = this.db!.prepare(
+			"select command_id, session_id, command, created_at from commands where kind = 'communication' and stage = 'accepted' order by created_at",
+		).all() as { command_id: string; session_id: string; command: string; created_at: number }[];
+		for (const row of rows)
+			this.communicationCommand(row.command_id, row.session_id, JSON.parse(row.command), row.created_at);
 	}
 
 	/** Store a thread message and push it as mail to each pushed participant; the receipt names who is at home. */
@@ -2086,21 +2165,29 @@ export class Runtime {
 		syncChannels(db, Date.now());
 		if (!manager) return;
 		const channel = `team:${manager}`;
-		const history = messagesOf(db, channel);
-		if (history.length === 0) return;
+		const thread = db.prepare("select subject, purpose, pinned_seq from threads where id = ?").get(channel) as {
+			subject: string;
+			purpose: string | null;
+			pinned_seq: number | null;
+		};
 		this.queueDelivery(`${commandId}:team-history`, person, {
 			kind: "mail",
-			from: manager,
-			fromName: nameOf(db, manager),
+			from: HARNESS,
+			fromName: nameOf(db, HARNESS),
 			sentAt: new Date().toISOString(),
 			thread: channel,
-			subject: threadOf(db, channel)!.subject,
-			seq: history.at(-1)!.seq,
-			body: `Team context at your arrival, from ${channel}. Use read_thread to catch up later.\n\n${history
-				.map(
-					(message) => `${message.fromName} (${message.from}), ${new Date(message.at).toISOString()}:\n${message.body}`,
-				)
-				.join("\n\n")}`,
+			threadKind: "channel",
+			subject: thread.subject,
+			body: [
+				`Team context at your arrival: ${thread.subject} (${channel}). Manager: ${nameOf(db, manager)} (${manager}).`,
+				thread.purpose ? `Purpose: ${thread.purpose}` : "",
+				thread.pinned_seq === null
+					? "No current brief is pinned."
+					: `Current brief: message ${thread.pinned_seq} in ${channel}.`,
+				"Inspect recent/range or search for relevant evidence. Use catch_up for unread history. This notice does not acknowledge channel history or accept work.",
+			]
+				.filter(Boolean)
+				.join("\n\n"),
 		});
 	}
 

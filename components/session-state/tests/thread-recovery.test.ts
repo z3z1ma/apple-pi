@@ -71,10 +71,30 @@ test("startup completes accepted posts, never duplicates committed messages, and
 	const retry = await sendCommand(
 		state.socketPath,
 		"sender",
-		{ kind: "thread_post", thread: "t-done", body: "Ignored duplicate" },
+		{
+			kind: "thread_post",
+			thread: "t-done",
+			threadKind: "meeting",
+			subject: "Meeting",
+			to: ["recipient"],
+			body: "Agenda done",
+		},
 		{ commandId: "command-done" },
 	);
 	expect(retry.at(-1)?.stage).toBe("applied");
+	const conflict = await sendCommand(
+		state.socketPath,
+		"sender",
+		{ kind: "thread_post", thread: "t-done", body: "Changed intent" },
+		{ commandId: "command-done" },
+	);
+	expect(conflict.at(-1)).toMatchObject({
+		stage: "failed",
+		reason: expect.stringContaining("different caller or canonical input"),
+	});
+	expect(query(state.dbPath, "select stage from commands where command_id = 'command-done'")).toEqual([
+		{ stage: "applied" },
+	]);
 	const stand = standInProcess();
 	const reader = await fakeBridge(state.socketPath, "recipient", stand.pid, stand.startedAt);
 	const bodies: string[] = [];

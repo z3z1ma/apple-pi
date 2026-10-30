@@ -144,7 +144,10 @@ export function discardProgramPeople(
 			db.prepare(
 				"update assignments set ended_at = ?, end_reason = 'discarded' where person = ? and ended_at is null",
 			).run(now, id);
-			changed.run(now, "person_discarded", "{}", id);
+			const identity = db.prepare("select name from sessions where id = ?").get(id) as
+				| { name: string | null }
+				| undefined;
+			changed.run(now, "person_discarded", JSON.stringify({ name: identity?.name ?? null }), id);
 			const manager = replacement(id);
 			const memberships = db
 				.prepare(
@@ -156,7 +159,7 @@ export function discardProgramPeople(
 				participateIn(db, entry.thread_id, id, now, null);
 			}
 			db.prepare(
-				"update threads set closed_at = ? where created_by = ? and kind in ('meeting', 'channel') and closed_at is null",
+				"update threads set closed_at = ? where created_by = ? and (kind = 'meeting' or (kind = 'channel' and channel_type != 'topic')) and closed_at is null",
 			).run(now, id);
 			for (const [table, column] of [
 				["work_focus", "person"],

@@ -26,6 +26,8 @@ export interface ThreadPost {
 	threadKind?: ThreadKind;
 	to?: string[];
 	cc?: string[];
+	/** Explicit attention targets; names in prose are ordinary text. */
+	notify?: string[];
 	/** The organizer ends a meeting by posting its summary and closing it together. */
 	closeMeeting?: boolean;
 }
@@ -48,6 +50,7 @@ export function participateIn(
 	person: string,
 	now: number,
 	delivery: Delivery | null,
+	following = true,
 ): void {
 	db.exec("savepoint participation");
 	try {
@@ -56,9 +59,9 @@ export function participateIn(
 				? db.prepare("delete from thread_participants where thread_id = ? and participant = ?").run(thread, person)
 				: db
 						.prepare(
-							"insert into thread_participants (thread_id, participant, delivery, read_up_to, joined_at) values (?, ?, ?, 0, ?) on conflict do nothing",
+							"insert into thread_participants (thread_id, participant, delivery, read_up_to, joined_at, following) values (?, ?, ?, 0, ?, ?) on conflict do nothing",
 						)
-						.run(thread, person, delivery, now);
+						.run(thread, person, delivery, now, Number(following));
 		if (result.changes)
 			db.prepare("insert into events (at, source, session_id, type, data) values (?, 'runtime', ?, ?, ?)").run(
 				now,
@@ -99,7 +102,10 @@ export function postToThread(
 	if (typeof post.thread !== "string" || !post.thread) return "a post needs a thread id";
 	if (typeof post.body !== "string" || !post.body) return "a post needs a body";
 	const addresses = [...new Set([...(post.to ?? []), ...(post.cc ?? [])])].filter((id) => id !== sender);
-	for (const id of addresses) if (!known(db, id)) return `nobody has the address ${id}`;
+	for (const id of [...addresses, ...(post.notify ?? [])]) if (!known(db, id)) return `nobody has the address ${id}`;
+	for (const id of post.notify ?? [])
+		if (!addresses.includes(id) && !isParticipant(db, post.thread, id))
+			return `notification target ${id} does not have access`;
 	const thread = db.prepare("select subject, kind, created_by, closed_at from threads where id = ?").get(post.thread) as
 		| { subject: string; kind: ThreadKind; created_by: string; closed_at: number | null }
 		| undefined;
@@ -135,21 +141,11 @@ export function postToThread(
 		.prepare("select participant, delivery from thread_participants where thread_id = ? and participant != ?")
 		.all(post.thread, sender) as { participant: string; delivery: Delivery }[];
 	const push = participants
-		.filter(
-			({ participant, delivery }) =>
-				delivery === "push" ||
-				(thread?.kind === "channel" && mentions(post.body, [participant, nameOf(db, participant)])),
+		.filter(({ participant, delivery }) =>
+			thread?.kind === "channel" ? post.notify?.includes(participant) : delivery === "push",
 		)
 		.map((row) => row.participant);
 	return { thread: post.thread, subject: thread?.subject ?? (post.subject as string), seq, push };
-}
-
-/** A complete name or id, not a substring of another word. An @ prefix is welcome but not required. */
-function mentions(body: string, names: string[]): boolean {
-	return names.some((name) => {
-		const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-		return new RegExp(`(?<![\\p{L}\\p{N}_-])${escaped}(?![\\p{L}\\p{N}_-])`, "iu").test(body);
-	});
 }
 
 export function isParticipant(db: DatabaseSync, thread: string, participant: string): boolean {
@@ -203,7 +199,14 @@ export function nameOf(db: DatabaseSync, id: string): string {
 	if (id === OPERATOR) return "the operator";
 	if (id === HARNESS) return "the harness";
 	const row = db.prepare("select name from sessions where id = ?").get(id) as { name: string | null } | undefined;
-	return row?.name || departureOf(db, id)?.name || id;
+	const discarded = row?.name
+		? undefined
+		: (db
+				.prepare(
+					"select json_extract(data, '$.name') as name from events where session_id = ? and type = 'person_discarded' order by seq desc limit 1",
+				)
+				.get(id) as { name: string | null } | undefined);
+	return row?.name || departureOf(db, id)?.name || discarded?.name || id;
 }
 
 /** The threads `participant` is in, newest activity first; with `unreadOnly`, only those with unread messages. */

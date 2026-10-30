@@ -68,7 +68,7 @@ async function colleague(name: string, manager?: string) {
 	return { run, id, script };
 }
 
-test("channels are pulled; only a named participant receives a post as a turn", async () => {
+test("channels are pulled; only explicit notification requests a participant's attention", async () => {
 	const lead = await colleague("Lead");
 	const ada = await colleague("Ada Lovelace", lead.id);
 	const channel = `team:${lead.id}`;
@@ -86,14 +86,21 @@ test("channels are pulled; only a named participant receives a post as a turn", 
 			isError: false,
 			details: { threads: [expect.objectContaining({ id: channel, unread: 1 })] },
 		});
-		ada.script.push(call("read_thread", { thread: channel }));
+		ada.script.push(call("read_thread", { thread: channel, limit: 10 }));
 		await ada.run.session.prompt("read it");
 		expect(result(ada.run)).toMatchObject({
 			isError: false,
-			details: { messages: [expect.objectContaining({ body: "Build is green. Adaline is not a mention." })] },
+			details: {
+				effect: {
+					page: { messages: [expect.objectContaining({ body: "Build is green. Adaline is not a mention." })] },
+				},
+			},
 		});
 
-		lead.script.push(call("post", { channel, body: "@Ada Lovelace, check the deployment." }));
+		lead.script.push(call("post", { channel, body: "@Ada Lovelace is quoted context, not an alert." }));
+		await lead.run.session.prompt("post quoted context");
+		expect(query(state.dbPath, "select 1 from commands where kind = 'mail'")).toEqual([]);
+		lead.script.push(call("post", { channel, body: "Check the deployment.", notify: ["Ada Lovelace"] }));
 		await lead.run.session.prompt("ask Ada");
 		await vi.waitFor(() => expect(mails(ada.run)).toHaveLength(1), { timeout: 10000 });
 		expect(query(state.dbPath, "select session_id from commands where kind = 'mail'")).toEqual([
@@ -160,11 +167,11 @@ test("moving teams changes channel membership and an outsider needs an invitatio
 	expect(members(next)).toEqual(["ch-guest", "ch-new"]);
 }, 30000);
 
-test("post invites by name and refuses a mail thread in place of a channel", async () => {
+test("explicit invitations grant channel access and post refuses a mail thread", async () => {
 	const lead = await colleague("Inviter");
 	try {
 		await person("ch-invitee", lead.id);
-		lead.script.push(call("post", { channel: `team:${lead.id}`, body: "Shared context.", invite: ["ch-invitee"] }));
+		lead.script.push(call("invite_to_thread", { thread: `team:${lead.id}`, people: ["ch-invitee"] }));
 		await lead.run.session.prompt("invite");
 		expect(result(lead.run)).toMatchObject({ isError: false });
 		await command(lead.id, {

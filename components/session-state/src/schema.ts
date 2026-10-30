@@ -301,6 +301,15 @@ const MIGRATIONS = [
 	// When a manager-tool hire first connected. Null is unknown, including every person recorded before this column.
 	`alter table sessions add column hired_at integer;`,
 	`alter table sessions add column specialization text;`,
+	`alter table threads add column channel_type text;
+	 alter table threads add column purpose text;
+	 alter table threads add column scope_head text;
+	 alter table threads add column pinned_seq integer;
+	 alter table thread_participants add column following integer not null default 1;
+	 alter table commands add column result text;
+	 update threads set channel_type = case when id like 'organization:%' then 'organization' else 'team' end
+	 where kind = 'channel';
+	 update threads set scope_head = case when id like 'organization:%' then substr(id, 14) when id like 'team:%' then substr(id, 6) else created_by end where kind = 'channel';`,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

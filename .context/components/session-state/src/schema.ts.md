@@ -1,5 +1,9 @@
 ## file
 
+Communication capability adds metadata/following and commands.result to the existing stores. Legacy participant cursors, explicit invitation flags and conversation kinds remain recorded facts; existing channel rows receive structural type/scope, while topic scope is recorded on creation. Result persistence is the existing command journal's original effect/page, not another outbox or memory store. The query capability check reads this migration marker, and new versioned command kinds fail on an older daemon.
+Coupled: components/session-state/src/communication.ts, components/session-state/src/runtime.ts
+Verify: components/session-state/tests/communication-core.test.ts
+
 Forward migrations preserve recorded provenance. The link-origin migration leaves existing links' organization null rather than deriving a historical origin from today's tree; the links reader uses surviving evidence for legacy resolution and explicitly reports unknown ownership when none remains. New links write their organization with their endpoints and recorder in one insert.
 Why: a discarded temporary peer can leave artifact-only links with no surviving ownership evidence. Guessing an origin during migration would turn missing history into authorization.
 Migration tests reconstruct a particular historical physical schema and pin its actual user_version (24 before task lifecycle columns, 26 before link origins), rather than subtracting from the latest version.

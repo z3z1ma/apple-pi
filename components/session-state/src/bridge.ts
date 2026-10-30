@@ -631,6 +631,8 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 								: command.body,
 							...(command.thread ? { thread: command.thread, subject: command.subject } : {}),
 							...(command.fromName ? { fromName: command.fromName } : {}),
+							threadKind: command.threadKind,
+							reference: command.reference,
 						};
 						deliverMail(pi, mail, startingUp && replay);
 					}

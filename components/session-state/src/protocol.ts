@@ -2,6 +2,7 @@
 
 import type { QuestionnaireReply } from "../../shared/src/questionnaire-events.js";
 import type { TurnProgress, TurnResult } from "../../shared/src/turn-observer.js";
+import type { CommunicationCommand, MessageReference } from "./communication-types.js";
 import type { LinkRecord } from "./links.js";
 import type { PeerTurn } from "./peer-turns.js";
 import type { ThreadPost } from "./threads.js";
@@ -138,10 +139,13 @@ export type Command =
 			subject?: string;
 			seq?: number;
 			fromName?: string;
+			threadKind?: import("./threads.js").ThreadKind;
+			reference?: MessageReference;
 			/** Read the recipient's current goal when delivering this assignment/focus notification. */
 			taskGoal?: boolean;
 	  }
 	| WorkCommand
+	| CommunicationCommand
 	/** Record a link from the sending session; its id is the command id. */
 	| ({ kind: "link_record" } & LinkRecord)
 	/** Resolve a link once, optionally with a word such as `accepted` or `rejected`. */
