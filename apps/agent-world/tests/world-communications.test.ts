@@ -320,12 +320,17 @@ async function openWorkplace() {
 					record("readThread", request);
 					const currentThread = request.thread === mailInfo.id ? mailInfo : thread;
 					const currentMessages = request.thread === mailInfo.id ? mailMessages : messages;
-					const inspection = request.view !== "catch_up";
+					const view = request.view ?? "catch_up";
+					const inspection = view !== "catch_up";
 					const before = request.cursor?.startsWith("before:") ? Number(request.cursor.slice(7)) : Infinity;
-					const eligible = inspection
-						? currentMessages.filter((message) => message.seq < before)
-						: currentMessages.filter((message) => message.seq > currentThread.read_up_to);
-					const returned = inspection ? eligible.slice(-request.limit) : eligible.slice(0, request.limit);
+					const eligible = currentMessages.filter((message) =>
+						view === "range"
+							? message.seq > (request.after ?? 0) && message.seq <= (request.through ?? Infinity)
+							: inspection
+								? message.seq < before
+								: message.seq > currentThread.read_up_to,
+					);
+					const returned = view === "recent" ? eligible.slice(-request.limit) : eligible.slice(0, request.limit);
 					const next =
 						eligible.length > returned.length
 							? inspection
@@ -335,7 +340,7 @@ async function openWorkplace() {
 					const failed = !inspection && w.failAck;
 					if (!inspection && !failed && returned.length) currentThread.read_up_to = returned.at(-1).seq;
 					const page = {
-						view: request.view ?? "catch_up",
+						view,
 						thread: structuredClone(currentThread),
 						messages: structuredClone(returned),
 						next_cursor: next,
@@ -456,10 +461,18 @@ test("channel history pages and searches without catch-up and posts only explici
 				expect.objectContaining({ cursor: "before:49", limit: 1 }),
 			),
 		);
-		await page.getByRole("textbox", { name: "Search conversation" }).fill("Evidence 28");
+		await page.getByText("Evidence 28: Ben is named in ordinary prose.", { exact: true }).waitFor();
+		expect(await page.locator(".wp-message-reference").allTextContents()).toEqual(["#28", "#49"]);
+		await page.getByRole("textbox", { name: "Search conversation" }).fill("Evidence 11");
 		await page.getByRole("button", { name: "Search", exact: true }).click();
 		await page.getByText("Search results are inspection only; catch-up is unchanged.", { exact: true }).waitFor();
-		expect((await calls(page, "readThread")).every((read: any) => read.view !== "catch_up")).toBe(true);
+		await page.getByText("Evidence 11: Ben is named in ordinary prose.", { exact: true }).waitFor();
+		expect(await page.getByText("Evidence 28: Ben is named in ordinary prose.", { exact: true }).count()).toBe(0);
+		expect(
+			(await calls(page, "readThread")).every(
+				(read: any) => (read.view === "recent" || read.view === "range") && !read.attempt,
+			),
+		).toBe(true);
 		const body = page.getByRole("textbox", { name: "Post to channel", exact: true });
 		await body.fill("Ben is quoted here; this post stays quiet.");
 		await page.getByRole("button", { name: "Post message", exact: true }).click();
@@ -487,6 +500,8 @@ test("channel history pages and searches without catch-up and posts only explici
 				expect.objectContaining({ view: "range", after: 62, through: 63 }),
 			),
 		);
+		await page.getByText("Please inspect the refresh evidence.", { exact: true }).waitFor();
+		expect(await page.getByText("Evidence 49: Ben is named in ordinary prose.", { exact: true }).count()).toBe(0);
 		await shot(page, "pin-and-notify-light-1440");
 		expect(errors).toEqual([]);
 	} finally {
