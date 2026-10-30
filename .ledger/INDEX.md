@@ -15,5 +15,3 @@
 - `.ledger/202610232305-handbook-org-runtime/task.md` — planning — Organization runtime for the handbook model — Runtime changes the skill handbook needs: <manager> guidance for unroled roots, working sessions reporting to the coordinator by default, and plain workplace tool renames added as skills come up.
 
 - `.ledger/202610241552-run-bash-through-a-pty-by-default/task.md` — in-progress — Run Bash through a PTY by default — Bash stdout/stderr on PTY slaves (no controlling terminal) so programs emit terminal colors; plain text to the model, styled view in the UI, pipe fallback.
-
-- `.ledger/202610301415-first-class-organizational-process-skills/task.md` — in-progress — First-class organizational process skills — Implement agent-selectable organizational processes and accountable management roles over existing people, tasks and communication, with explicit authority and qualified validation.

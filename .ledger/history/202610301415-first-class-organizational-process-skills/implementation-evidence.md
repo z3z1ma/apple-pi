@@ -58,4 +58,6 @@ Final checks:
 - Both toy programs passed again after scoped formatting. Their outputs remain in the bundle.
 - Scoped Biome and whitespace checks passed. Changed Markdown text integrity, local targets and heading references passed.
 
+After archive, local-reference validation covered 32 Markdown files, 114 local links and 18 heading targets; both toy programs also ran successfully from the history path. The first archive whitespace check caught an extra terminal blank line left in the live index when its last row moved. Root removed that blank line before the final archive commit; archiving alone is not a whitespace check.
+
 No full repository suite or installed-tarball startup was run. The running root session has not reloaded resources; existing sessions need `/reload`, while fresh sessions use the existing package loader. No daemon or Workplace restart, new runtime store, tool or workflow engine was introduced. Existing unrelated knowledge-file changes were left intact.
