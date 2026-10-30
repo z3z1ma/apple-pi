@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import { syncChannels } from "../src/channels.js";
@@ -10,6 +13,7 @@ import {
 } from "../src/communication.js";
 import { applyCommunication, type PublishCommunication } from "../src/communication-actions.js";
 import type { CommunicationOperation } from "../src/communication-types.js";
+import { discardProgramPeople } from "../src/program-peers.js";
 import { migrate, SCHEMA_VERSION } from "../src/schema.js";
 import { nameOf, postToThread } from "../src/threads.js";
 
@@ -192,6 +196,40 @@ test("temporary explicit access survives reconciliation while derived scope neve
 	db.prepare("update sessions set retired_at = 22 where id = 'temporary'").run();
 	syncChannels(db, 22);
 	expect(conversationInfo(db, "temporary", id).access).toBe(false);
+});
+
+test("actual temporary disposal retains its shared topic and attributed message", () => {
+	const directory = mkdtempSync(join(tmpdir(), "communication-disposal-"));
+	try {
+		db.prepare(
+			"insert into sessions (id,kind,cwd,name,run_state,generation,source,updated_at,reports_to) values ('temporary','root','/','Temporary author','idle',1,'test',1,'a')",
+		).run();
+		db.prepare(
+			"insert into events(at,source,session_id,type,data) values (1,'test','temporary','program_peer_created',?)",
+		).run(JSON.stringify({ caller: "a" }));
+		db.prepare(
+			"insert into program_peers(session_id,program_id,created_by,task_id) values ('temporary','fixture','a','no-task-files')",
+		).run();
+		const id = perform("temporary", {
+			action: "create_channel",
+			name: "Shared evidence",
+			purpose: "Keep the recorded finding",
+			invite: [],
+		}).thread.id;
+		perform("temporary", { action: "post", thread: id, body: "Retained finding" });
+		discardProgramPeople(db, directory, new Set(["temporary"]), 50);
+		expect(db.prepare("select id from sessions where id = 'temporary'").get()).toBeUndefined();
+		const page = readConversation(db, "a", { thread: id, view: "recent", limit: 1 });
+		expect(page.thread).toMatchObject({ archived: false, scope_head: "a" });
+		expect(page.messages[0]).toMatchObject({
+			from: "temporary",
+			fromName: "Temporary author",
+			body: "Retained finding",
+		});
+		expect(db.prepare("select 1 from thread_participants where participant = 'temporary'").all()).toEqual([]);
+	} finally {
+		rmSync(directory, { recursive: true, force: true });
+	}
 });
 
 test("missing reply targets refuse before creating a sender-only conversation", () => {

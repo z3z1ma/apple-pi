@@ -17,6 +17,7 @@ import { migrate } from "../src/schema.js";
 import { participateIn, postToThread } from "../src/threads.js";
 import { changeWork } from "../src/work.js";
 import { close, tempStateDir } from "./helpers.js";
+import { rewindRecentSchema } from "./historical-schema.js";
 
 const HOUR = 3_600_000;
 afterEach(() => vi.restoreAllMocks());
@@ -544,7 +545,7 @@ test("migration preserves observed surviving callers once, never invents legacy 
 	mail("legacy", HOUR / 2);
 	event(HOUR, "legacy", "transferred", { from: "caller", to: "dev", by: "root" });
 	event(HOUR, "lost", "person_discarded");
-	db.exec("drop index events_by_type; pragma user_version = 28");
+	rewindRecentSchema(db, 28);
 	migrate(db);
 	migrate(db);
 	expect(
@@ -592,7 +593,7 @@ test.each([false, true])(
 		if (provisional) person("legacy", "r2");
 		expect(temporaryCallers(db).get("legacy")).toBeNull();
 		expect(realizedFitness(db, "r2", 0, 10)).toMatchObject({ compute: 0, interruptions: 0 });
-		db.exec("drop index events_by_type; pragma user_version = 28");
+		rewindRecentSchema(db, 28);
 		migrate(db);
 		migrate(db);
 		expect(
@@ -638,7 +639,7 @@ test.each(["created", "observed"] as const)(
 			db.prepare(
 				"insert into program_peers (session_id, program_id, created_by, task_id) values ('known', 'old', 'caller', 'old-task')",
 			).run();
-			db.exec("drop index events_by_type; pragma user_version = 28");
+			rewindRecentSchema(db, 28);
 			migrate(db);
 		}
 		db.prepare("update sessions set reports_to = 'known' where id = 'dev'").run();

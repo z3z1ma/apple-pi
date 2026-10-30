@@ -16,6 +16,7 @@ import { installCoordinator } from "../src/coordinator.js";
 import bridge from "../src/index.js";
 import { migrate } from "../src/schema.js";
 import { close, fakeBridge, query, standInProcess, startRuntime, stopRuntime, tempStateDir } from "./helpers.js";
+import { rewindRecentSchema } from "./historical-schema.js";
 
 const fixture = new URL("../../../tests/fixtures/peer-pi.mjs", import.meta.url).pathname;
 afterEach(() => {
@@ -226,7 +227,7 @@ test("manager hire refuses nonempty focus before transport on old schemas, but o
 	const manager = SessionManager.inMemory(state.agentDir);
 	const db = new DatabaseSync(state.dbPath);
 	migrate(db);
-	db.exec("alter table sessions drop column specialization; pragma user_version=31");
+	rewindRecentSchema(db, 31);
 	db.prepare(
 		"insert into sessions (id, kind, cwd, run_state, generation, source, updated_at) values (?, 'root', ?, 'idle', 1, 'fixture', 1)",
 	).run(manager.getSessionId(), state.agentDir);
@@ -296,7 +297,11 @@ test("older schemas read no focus and migration never backfills historical peopl
 	const state = tempStateDir();
 	mkdirSync(state.stateDir);
 	const db = new DatabaseSync(state.dbPath);
-	db.exec("create table sessions (id text primary key); insert into sessions values ('old'); pragma user_version=31");
+	migrate(db);
+	rewindRecentSchema(db, 31);
+	db.exec(
+		"insert into sessions (id,kind,cwd,run_state,generation,source,updated_at) values ('old','root','/','idle',1,'fixture',1)",
+	);
 	try {
 		expect(specializationOf("old")).toBeNull();
 		migrate(db);

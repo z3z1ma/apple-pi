@@ -1,16 +1,15 @@
 import { DatabaseSync } from "node:sqlite";
 import { expect, test } from "vitest";
 import { migrate } from "../src/schema.js";
+import { rewindRecentSchema } from "./historical-schema.js";
 
 test("the journal migration preserves recorded payloads, sequence and repeated-upgrade safety", () => {
 	const db = new DatabaseSync(":memory:");
 	try {
-		// Only the physical v29 event table is needed by this migration, not a full workplace fixture.
-		db.exec(`create table events (
-			seq integer primary key autoincrement, at integer not null, source text not null,
-			session_id text, generation integer, type text not null, data text
-		) strict;
-		pragma user_version = 29;
+		migrate(db);
+		rewindRecentSchema(db, 29);
+		db.exec(`delete from events;
+		delete from sqlite_sequence where name = 'events';
 		insert into events (at, source, session_id, generation, type, data) values
 			(50, 'bridge', 'p', 1, 'cost_changed', '{"from":0,"to":1}'),
 			(20, 'runtime', 'p', 1, 'retired', '{"reason":"example"}'),

@@ -1,0 +1,5 @@
+## file
+
+These fixtures start with the complete current schema, then remove physical changes introduced in versions30-33 before declaring a historical user_version. Their own earlier column/data setup remains local to each scenario. Keeping the helper test-only lets the public migrator stay a single forward-upgrade path while tests retain real old-table shapes instead of duplicate new columns or missing later-migration tables. Updating a later migration requires updating this fixture boundary as well.
+Coupled: components/session-state/src/schema.ts, components/session-state/tests/event-index.test.ts, components/session-state/tests/participation.test.ts, components/session-state/tests/specialization.test.ts, components/session-state/tests/work.test.ts, components/session-state/tests/links.test.ts, components/session-state/tests/peer-history.test.ts
+Verify: components/session-state/tests/event-index.test.ts, components/session-state/tests/participation.test.ts, components/session-state/tests/specialization.test.ts, components/session-state/tests/work.test.ts, components/session-state/tests/links.test.ts, components/session-state/tests/peer-history.test.ts

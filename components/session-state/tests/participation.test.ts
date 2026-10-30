@@ -3,6 +3,7 @@ import { expect, test } from "vitest";
 import { communicationIn } from "../src/inspect.js";
 import { migrate } from "../src/schema.js";
 import { audienceAt, isParticipant, participateIn } from "../src/threads.js";
+import { rewindRecentSchema } from "./historical-schema.js";
 
 test("participation history survives leave/rejoin and changes access atomically with its event", () => {
 	const db = new DatabaseSync(":memory:");
@@ -27,9 +28,8 @@ test("participation history survives leave/rejoin and changes access atomically 
 test("the participation migration seeds only surviving known joins and marks the coverage boundary", () => {
 	const db = new DatabaseSync(":memory:");
 	migrate(db);
-	db.exec(
-		"drop index events_by_type; alter table sessions drop column hired_at; delete from events; pragma user_version = 27",
-	);
+	rewindRecentSchema(db, 27);
+	db.exec("delete from events");
 	db.prepare(
 		"insert into thread_participants (thread_id, participant, delivery, read_up_to, joined_at) values ('t', 'a', 'push', 0, 10)",
 	).run();

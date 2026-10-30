@@ -1,5 +1,9 @@
 ## file
 
+The lifecycle upgrade case removes its old task/link schema differences and uses historical-schema.ts for later physical fields/index before declaring version24. It then invokes the public forward migrator with its original assignment/close-status assertions; merely lowering user_version leaves duplicate later columns.
+Coupled: components/session-state/tests/historical-schema.ts, components/session-state/src/schema.ts
+Verify: components/session-state/tests/work.test.ts
+
 Ledger participation tests use native `inbox` discovery, `read_thread` access and filtered compact `directory` rows for independent callers sharing one project. Participation remains visible after archive, while callers without assignments still have zero held/finished assignments and no focus. The directory responsibility case requests a current person profile, then explicit finished-history pages: unassigning stays out of the finished count/page, finishing supplies one exact outcome, and neither default details nor the profile embeds that outcome. Work/backlog discovery belongs to org_work, not directory.
 Why: a participant row or audience-event count alone does not prove that a caller can discover and read its task thread; directory results separately test ownership without pinning storage tables or event encoding.
 
