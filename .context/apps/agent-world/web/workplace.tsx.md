@@ -1,7 +1,9 @@
 ## file
 
 Chat and Mail keep shared usePaneResize state in these retained shells. The standalone profile receives Chat's handle rather than owning width inside its on-demand reader. Sidebar lifecycle actions use right-click on DM/VIP rows and sleeping buttons, with Shift+F10/ContextMenu on the native name buttons. The rail has no visible ellipsis buttons: the operator rejected their repeated visual weight. Row context opening preserves selection and uses the existing shared person-menu owner; keyboard closing returns to the name button. The name-adjacent Working image uses only awake facts.status=working, excluding home rows; it changes neither presence/unread state nor conversation selection.
-Coupled: apps/agent-world/web/workplace-resize.tsx
+Why: a person menu belongs to the row's person, not the selected conversation; inspecting and cancelling another person's action must preserve the active reader and draft. Home-history status must stay readable in both VIP and ordinary sleeping rows: Unicode escapes are interpreted inside JavaScript strings, but print literally in raw JSX text.
+Coupled: apps/agent-world/web/workplace-resize.tsx, apps/agent-world/web/workplace-person-actions.tsx
+Verify: apps/agent-world/tests/world-org.test.ts
 
 World is a lazy retained application tab under the permanent rail/header. Its button selects ?workplace=world without full navigation; the World iframe stays mounted after first visit, while Chat/Mail readers follow their existing active-tab gate. The decorative brand is not a second full-navigation route. Code drafts, live PTYs and planned teams keep their parent component identities across World switches.
 Why: World used to be a separate top-level page, which unloaded the editor and triggered terminal cleanup. The existing root beforeunload protection now applies to actual page exit, not switching this tab.

@@ -456,7 +456,63 @@ test.each(["light", "dark"] as const)(
 	30_000,
 );
 
-test("People directory includes teams and independents with visible lifecycle menus and a resizable profile", async () => {
+test("DM and VIP hover highlights the whole row while selection remains distinct in both themes", async () => {
+	const { page, errors } = await openOrg("light");
+	try {
+		await page.getByRole("button", { name: "Chat", exact: true }).click();
+		const sidebar = page
+			.getByRole("complementary")
+			.filter({ has: page.getByRole("textbox", { name: "Find a channel or agent", exact: true }) });
+		const selected = sidebar.getByRole("group", { name: "Ben", exact: true });
+		const selectedName = selected.getByRole("button", { name: /^Ben/ });
+		const paint = async (name: string, part: "gutter" | "name") => {
+			const row = sidebar.getByRole("group", { name, exact: true });
+			const rowBox = (await row.boundingBox())!;
+			const avatar = (await row.getByRole("button", { name: `View profile: ${name}`, exact: true }).boundingBox())!;
+			const button = (await row.getByRole("button", { name: new RegExp(`^${name}`) }).boundingBox())!;
+			const label = (await row.getByText(name, { exact: true }).boundingBox())!;
+			return page.screenshot({
+				animations: "disabled",
+				clip: {
+					x: Math.floor(part === "gutter" ? (rowBox.x + avatar.x) / 2 : button.x + button.width / 2),
+					y: Math.floor(part === "gutter" ? avatar.y + avatar.height / 2 : (button.y + label.y) / 2),
+					width: 1,
+					height: 1,
+				},
+			});
+		};
+		await selectedName.click();
+		await page.getByRole("textbox", { name: "Reply to Ben", exact: true }).waitFor();
+		for (const appearance of ["light", "dark"]) {
+			if (appearance === "dark") await page.getByRole("button", { name: "Theme: dark mode", exact: true }).click();
+			await page.mouse.move(0, 0);
+			const selectionPaint = await paint("Ben", "gutter");
+			for (const name of ["Ada", "Cleo"]) {
+				const row = sidebar.getByRole("group", { name, exact: true });
+				const restingPaint = await paint(name, "gutter");
+				await row.getByRole("button", { name: new RegExp(`^${name}`) }).hover();
+				const hoverPaint = await paint(name, "gutter");
+				expect(hoverPaint.equals(restingPaint)).toBe(false);
+				expect((await paint(name, "name")).equals(hoverPaint)).toBe(true);
+				expect(hoverPaint.equals(selectionPaint)).toBe(false);
+				if (name === "Ada") await shot(page, `dm-hover-${appearance}`);
+				await row.getByRole("button", { name: `View profile: ${name}`, exact: true }).hover();
+				expect((await paint(name, "gutter")).equals(hoverPaint)).toBe(true);
+				await page.mouse.move(0, 0);
+				expect((await paint(name, "gutter")).equals(restingPaint)).toBe(true);
+			}
+			await selectedName.hover();
+			expect((await paint("Ben", "gutter")).equals(selectionPaint)).toBe(true);
+			expect((await paint("Ben", "name")).equals(selectionPaint)).toBe(true);
+			expect(await selectedName.getAttribute("aria-pressed")).toBe("true");
+		}
+		expect(errors).toEqual([]);
+	} finally {
+		await page.close();
+	}
+}, 30_000);
+
+test("People directory and sidebar actions preserve selection, drafts and resizable profiles", async () => {
 	const snapshot = world();
 	snapshot.characters.push(person("solo", "Solo", null));
 	snapshot.characters.find((candidate) => candidate.id === "solo")!.facts!.title = null;
@@ -541,7 +597,9 @@ test("People directory includes teams and independents with visible lifecycle me
 		await profile.getByRole("button", { name: "Close profile", exact: true }).click();
 		await solo.getByRole("button", { name: "Message Solo", exact: true }).click();
 		await page.getByRole("textbox", { name: "Reply to Solo", exact: true }).fill("Retain my directory journey draft.");
-		const sidebar = page.locator(".wp-chat-sidebar");
+		const sidebar = page
+			.getByRole("complementary")
+			.filter({ has: page.getByRole("textbox", { name: "Find a channel or agent", exact: true }) });
 		const sidebarSplitter = page.getByRole("separator", { name: "Chat sidebar width", exact: true });
 		const sidebarWidth = (await sidebar.boundingBox())!.width;
 		await sidebarSplitter.focus();
@@ -551,9 +609,7 @@ test("People directory includes teams and independents with visible lifecycle me
 		expect(await page.getByRole("textbox", { name: "Reply to Solo", exact: true }).inputValue()).toBe(
 			"Retain my directory journey draft.",
 		);
-		const row = page
-			.locator(".wp-chat-sidebar .wp-dm")
-			.filter({ has: page.getByRole("button", { name: /^Solo/, exact: false }) });
+		const row = sidebar.getByRole("group", { name: "Solo", exact: true });
 		await vi.waitFor(async () =>
 			expect(await page.evaluate(() => (window as any).orgCalls.conversations)).toContain("solo"),
 		);
@@ -600,25 +656,32 @@ test("People directory includes teams and independents with visible lifecycle me
 			.getByRole("region", { name: "VIPs", exact: true })
 			.getByRole("group", { name: "Ada", exact: true });
 		await vipRow.click({ button: "right" });
-		await menu.getByRole("menuitem", { name: "Let go", exact: true }).waitFor();
-		await page.keyboard.press("Escape");
+		await menu.getByRole("menuitem", { name: "Let go", exact: true }).click();
+		const vipDeparture = page.getByRole("dialog", { name: "Let Ada go", exact: true });
+		await vipDeparture.getByRole("button", { name: "Cancel", exact: true }).click();
 		expect(await vipRow.evaluate((node) => document.activeElement === node)).toBe(true);
-		const chatMenu = row.locator(".wp-dm-link");
+		const chatMenu = row.getByRole("button", { name: /^Solo/ });
 		expect(await chatMenu.getAttribute("aria-pressed")).toBe("true");
 		await chatMenu.focus();
 		await page.keyboard.press("Shift+F10");
 		await menu.getByRole("menuitem", { name: "Let go", exact: true }).waitFor();
 		await page.keyboard.press("Escape");
 		expect(await chatMenu.evaluate((node) => document.activeElement === node)).toBe(true);
+		await page.keyboard.press("ContextMenu");
+		await menu.getByRole("menuitem", { name: "Let go", exact: true }).click();
+		await departure.getByRole("button", { name: "Cancel", exact: true }).click();
+		expect(await chatMenu.evaluate((node) => document.activeElement === node)).toBe(true);
 		expect(await page.evaluate(() => (window as any).orgCalls.conversations)).toEqual(beforeChatMenu);
 		await page.getByText(/^Sleeping agents \(/).click();
-		const homeMenu = page.locator(".wp-sleepers").getByRole("button", { name: /^Home alone/ });
+		const homeMenu = sidebar.getByRole("button", { name: /^Home alone/ });
+		expect(await homeMenu.textContent()).toContain("Asleep \u00b7 history only");
 		expect(await sidebar.getByRole("button", { name: /^Person actions:/ }).count()).toBe(0);
 		expect(await page.locator(".wp-sleepers").getByRole("img", { name: "Working", exact: true }).count()).toBe(0);
 		await homeMenu.click({ button: "right" });
-		await menu.getByRole("menuitem", { name: "Let go", exact: true }).waitFor();
 		await menu.getByRole("menuitem", { name: "Call in", exact: true }).waitFor();
-		await page.keyboard.press("Escape");
+		await menu.getByRole("menuitem", { name: "Let go", exact: true }).click();
+		const homeDeparture = page.getByRole("dialog", { name: "Let Home alone go", exact: true });
+		await homeDeparture.getByRole("button", { name: "Cancel", exact: true }).click();
 		expect(await homeMenu.evaluate((node) => document.activeElement === node)).toBe(true);
 		expect(await page.evaluate(() => (window as any).orgCalls.conversations)).toEqual(beforeChatMenu);
 		expect(await page.evaluate(() => (window as any).orgCalls.profiles)).toEqual(firstProfileReads);

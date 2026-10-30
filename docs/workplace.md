@@ -153,7 +153,7 @@ The **Repository changes** panel is read-only Git status and diff inspection: st
 
 ### File references
 
-Recognized local file paths in DMs, mail and task-history views receive a subtle wavy underline once the file is validated. Activate one to open it in Code, retaining existing editor buffers and drafts. A file opened from task history closes that modal and moves focus to the editor. Normal web links keep their existing behavior. Inline-code and quoted paths can contain spaces. Plain-text mail keeps its surrounding quotes or backticks; Markdown keeps its normal inline-code formatting.
+Recognized local file paths in DMs, mail and task-history views receive a subtle wavy underline once the file is validated. Activate one to open text in Code or a non-text file in its default system application, retaining existing editor buffers and drafts. Activating a task-history path closes that modal; text files receive editor focus. Normal web links keep their existing behavior. Inline-code and quoted paths can contain spaces. Plain-text mail keeps its surrounding quotes or backticks; Markdown keeps its normal inline-code formatting.
 
 Absolute paths and `~/` paths do not depend on Code's currently selected repository. Relative paths need an explicit source working directory, such as the DM person's directory or a task's project; unknown or ambiguous contexts stay plain text. Relative paths remain inside that directory. Conventional `:line[:column]` references select that editor location, while a real filename containing the suffix takes precedence. Validation checks regular files and containment without reading their contents or crawling directories; content is read only after activation. A file removed afterward produces the existing Code read error.
 

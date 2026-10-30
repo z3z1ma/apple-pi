@@ -565,7 +565,7 @@ function Chat({
 										onClick={() => setSelection({ kind: "dm", id: agent.id })}
 									>
 										{agent.name}
-										<small>Asleep \u00b7 history only</small>
+										<small>{"Asleep \u00b7 history only"}</small>
 									</button>
 								))}
 						</details>

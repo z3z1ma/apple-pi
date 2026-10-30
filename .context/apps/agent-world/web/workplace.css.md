@@ -25,6 +25,11 @@ Verify: apps/agent-world/tests/world-conversation.test.ts, apps/agent-world/test
 The embedded composer reuses two bordered pieces from World. Its outer footer resets the inherited grid gap and margins and uses a `minmax(0, 1fr)` track; the top box and action bar must meet at the same edges, including while focused. The lower activity text and keyboard hint shrink and ellipsize, while action labels stay on one line.
 Why: World's 7px grid gap split the apparent composer outline; inherited margins also inset it twice. Shrinking the hint rather than the buttons keeps controls readable in a narrower DM. An automatic grid minimum let the nonwrapping action row grow the composer past the pane even though its hint had `min-width: 0`; the zero-minimum track contains that row.
 
+The DM/VIP row presents one continuous hover/selection background behind its separate avatar and name controls. Selected styling follows the equal-specificity hover rule so selection stays distinct. The name-button override must beat the generic sidebar-button states; the avatar keeps its identity color and profile action.
+Why: the hover palette is translucent. Painting it on both the row and the name button would darken only the name section, recreating a visual cut even though the row also has a background. Verify actual paint across the avatar gutter and name-button padding in both themes, rather than requiring a particular element to be transparent.
+Coupled: apps/agent-world/web/workplace.tsx
+Verify: apps/agent-world/tests/world-org.test.ts
+
 Only `.wp-dm-summary` grows inside the DM row. The unread indicator owns a fixed square slot, with DM-specific styling separate from Mail's smaller dot. Verify unread-state dimensions in both themes.
 Why: the former generic direct-child span rule also matched the unread dot and stretched it to an 81-by-7 oval, squeezing the person's name. State/acknowledgment tests passed without checking this appearance; the rendered regression and smoke now exercise it.
 Verify: apps/agent-world/tests/world-conversation.test.ts, apps/agent-world/scripts/workplace-smoke.mjs

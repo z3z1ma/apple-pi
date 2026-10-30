@@ -422,13 +422,17 @@ body.workplace {
 	border: 0;
 	border-radius: 6px;
 }
+.wp-dm:hover {
+	background: var(--wp-hover);
+}
 .wp-dm[data-selected="true"] {
 	background: var(--wp-selected);
 }
-.wp-dm .wp-dm-link {
+.wp-chat-sidebar .wp-dm .wp-dm-link {
 	flex: 1;
 	min-width: 0;
 	padding-left: 0;
+	background: transparent;
 }
 .wp-dm-link > .wp-dm-summary {
 	min-width: 0;
