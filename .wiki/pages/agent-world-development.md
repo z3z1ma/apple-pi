@@ -21,6 +21,16 @@ Hazards found while building Agent World (`apps/agent-world/`, ledger task `2026
 - Biome rejects `role="radio"` on a button; use real radio inputs in a fieldset and click their labels in tests.
 - Agent World's Electron types come from a local shim (`src/electron/electron.d.ts`); pass the objects you have rather than adding API surface.
 
+## macOS Electron process and window diagnostics
+
+For a window-state probe, first select the verified process in System Events: `set targetProcess to first application process whose unix id is <pid>`. Then query that object with `count of windows of targetProcess` or its window attributes. The combined query `get {name, unix id, count of windows} of every application process whose ...` failed with AppleScript error -1728 and expanded unrelated process properties; the two-step query worked.
+
+Keep process identity and window state separate. A surviving PID does not establish an open window. A successful window query records that moment, not what the operator saw earlier or why an earlier Quit was cancelled. Use a freshly verified PID rather than a historical activation record.
+
+After a launch check times out, inspect the same newly launched process: verify its exact executable/arguments and incarnation, query its window, and establish its Unix-socket connection to the expected daemon. Treat the deadline as an observation limit and preserve an independently verified healthy instance. During build70 activation, the initial connection check expired but fresh process/window/socket evidence established that the same app was connected; the cause of the delayed verification remains unproven.
+
+Sources: Workplace relaunch investigations, session learnings `87f3b9a0245f` and `2126124b88bf`, distilled 2026-10-30. The successful probes were observed in those investigations; they were not rerun during this synthesis.
+
 ## Place data and art
 
 - Trace walk grids on a world-size render with a labelled half-tile grid. Find occlusion defects by walking the avatar just north of every blocked rect; a foreground piece's bottom edge is its `feet` line, so a sloping rail is several stepped pieces.

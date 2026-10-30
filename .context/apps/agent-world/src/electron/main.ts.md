@@ -4,7 +4,7 @@
 Why: Electron keeps the single-instance lock in the userData directory; taking it first would lock the default "Electron" directory, so a `/world` with another agent directory or the default one would not find the running window.
 
 `appDir` assumes this file runs as `dist/electron/main.js` and the preload as `dist/electron/preload.cjs`.
-Why: Electron runs only the bundled output; moving the build output breaks the UI, theme, and preload paths at run time, which no test catches.
+Why: Electron runs only the bundled output; moving it can break UI, theme and preload paths despite a passing source typecheck. The built-host check must validate that path contract.
 Coupled: apps/agent-world/electron.vite.config.ts, apps/agent-world/src/app-files.ts
 
 `communications:*` is a fixed method allowlist wired to the Node-safe communication adapter. Requests cannot supply a raw runtime command or actor: each backend method constructs its own operation, with authority and final validation in the runtime. Recent/range reads remain query-only; catch-up and mutations use recorded UI attempts. The retained World's legacy methods remain separately wired.
