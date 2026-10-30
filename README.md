@@ -492,6 +492,11 @@ These model-selectable skills coordinate people within an already authorized goa
 | --- | --- |
 | `peer-consultation` | Unblock a concrete problem through peer advice while its owner retains the choice. |
 | `decision-review` | Reach an accountable choice from independent positions, shared challenge and explicit evidence. |
+| `tiger-team` | Deliver one integrated cross-team outcome with direct collaboration and an integration owner. |
+| `handoff` | Transfer responsibility only after the receiver demonstrates understanding and accepts it. |
+| `incident-response` | Coordinate safe recovery, operational changes, updates and command handoffs. |
+| `operating-review` | Investigate an operating constraint and choose an evidence-led change or no change. |
+| `retrospective` | Separate observations from explanations and turn useful learning into owned follow-up. |
 
 ## What Is Deliberately Excluded (And What Still Hurts)
 

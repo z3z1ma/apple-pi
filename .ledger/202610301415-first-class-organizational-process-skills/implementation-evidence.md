@@ -15,3 +15,16 @@ Checks:
 - Provenance insertion preserved all pre-existing THIRD_PARTY_NOTICES.md bytes, including embedded mixed-line-ending licenses.
 
 These checks establish packaging, discovery and role capability integration. Real-model selection and process execution are still pending; no effectiveness claim is made from the scripted role tests.
+
+Committed: `bf8c36e7`.
+
+## Deliver, transfer, recover and learn
+
+Added `tiger-team`, `handoff`, `incident-response`, `operating-review` and `retrospective`, plus writing/managing `engineering-manager` and `service-owner` roles. All seven initial skills are now registered, documented and packaged. These concise prose changes share the same integration checks, so the remaining first-set increments land together rather than repeat a commit gate for each document.
+
+- Loader passed: `/tmp/process-skills-core-loader.log`.
+- Focused role catalog/capability selection: 10 passed, 35 deliberately skipped; `/tmp/process-skills-core-roles.log`.
+- Package dry run confirmed all five added skills and both roles; `/tmp/process-skills-core-pack.json`.
+- Scoped Biome and whitespace checks passed.
+
+Live process exercises and model-selection evidence remain pending.

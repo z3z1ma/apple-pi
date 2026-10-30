@@ -477,7 +477,15 @@ try {
 	];
 	const fundamentalSkills = ["code-review", "handbook-writing", "llm-wiki"];
 	const browserSkills = ["operator-sign-off", "explain-change"];
-	const processSkills = ["peer-consultation", "decision-review"];
+	const processSkills = [
+		"peer-consultation",
+		"decision-review",
+		"tiger-team",
+		"handoff",
+		"incident-response",
+		"operating-review",
+		"retrospective",
+	];
 	const packagedSkills = [
 		...explicitWorkflowSkills,
 		...engineeringSkills,
