@@ -1,5 +1,9 @@
 ## file
 
+Channel catch-up advances through explicit history reads, not publishing or receiving one selected notification. The sender and applied-mail writers must preserve that distinction together; a cumulative cursor cannot represent a sparse read.
+Coupled: components/session-state/src/runtime.ts
+Verify: components/session-state/tests/communication-reliability.test.ts
+
 The explicit `escalation` kind uses the same participant, delivery and read-cursor semantics as mail. The native escalation writer sets the kind on creation; readers identify it by kind rather than the mutable human-facing subject. Historical mail titled `Escalation` remains ordinary mail because its title alone cannot establish why it was sent.
 Why: communication inspection and Agent World need a durable distinction between an escalation and an ordinary conversation with the same title. Inferring it from a subject would invent organizational facts. The schema stores kind as text, so adding this value requires no data migration.
 `participateIn` updates current access and appends a `thread_joined` or `thread_left` fact in one savepoint; a no-op join emits nothing. It works inside runtime transactions and standalone startup channel reconciliation. All production participation producers, including task assignment and peer cleanup, use it. Invitation flags and read cursors are independent of audience transitions.

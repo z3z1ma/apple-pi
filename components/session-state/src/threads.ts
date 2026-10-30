@@ -130,7 +130,7 @@ export function postToThread(
 		.run(messageId, post.thread, sender, post.body, now);
 	const seq = Number(lastInsertRowid);
 	if (post.closeMeeting) db.prepare("update threads set closed_at = ? where id = ?").run(now, post.thread);
-	markRead(db, post.thread, sender, seq);
+	if (thread?.kind !== "channel") markRead(db, post.thread, sender, seq);
 	const participants = db
 		.prepare("select participant, delivery from thread_participants where thread_id = ? and participant != ?")
 		.all(post.thread, sender) as { participant: string; delivery: Delivery }[];

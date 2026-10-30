@@ -247,6 +247,8 @@ export class Runtime {
 	private readonly failingServers = new Set<string>();
 	/** The client that sent each command still in flight, so its receipts reach it. */
 	private readonly commandClients = new Map<string, Connection>();
+	/** Receipt observers do not own a correlated turn, its stream, or cancellation. */
+	private readonly receiptWaiters = new Map<string, Set<Connection>>();
 	/** The status-line options last written to each tmux server, so they are written only when they change. */
 	private readonly attentionShown = new Map<string, string>();
 	/** Sessions this runtime opened a window for, until their bridge connects or the window closes. */
@@ -642,13 +644,7 @@ export class Runtime {
 			receipt("failed", "The program is closing");
 			return;
 		}
-		const existing = db.prepare("select stage, reason from commands where command_id = ?").get(commandId) as
-			| { stage: ReceiptStage; reason: string | null }
-			| undefined;
-		if (existing) {
-			receipt(existing.stage, existing.reason ?? undefined);
-			return;
-		}
+		if (this.repeatCommand(client, request)) return;
 		if (command.kind !== "close" && departureOf(db, sessionId)) {
 			receipt("failed", "This person has permanently departed and cannot accept new commands.");
 			return;
@@ -793,6 +789,22 @@ export class Runtime {
 			return;
 		}
 		this.dispatch(target, commandId, command);
+	}
+
+	private repeatCommand(client: Connection, request: CommandRequest): boolean {
+		const row = this.db!.prepare("select stage, reason from commands where command_id = ?").get(request.commandId) as
+			| { stage: ReceiptStage; reason: string | null }
+			| undefined;
+		if (!row) return false;
+		if (row.stage !== "applied" && row.stage !== "failed") {
+			const waiters = this.receiptWaiters.get(request.commandId) ?? new Set<Connection>();
+			waiters.add(client);
+			this.receiptWaiters.set(request.commandId, waiters);
+		}
+		client.socket.write(
+			`${JSON.stringify({ type: "receipt", commandId: request.commandId, stage: row.stage, ...(row.reason ? { reason: row.reason } : {}) } satisfies Receipt)}\n`,
+		);
+		return true;
 	}
 
 	/** One transaction per record; every kind is idempotent, so startup replays any that stayed accepted. */
@@ -2380,6 +2392,10 @@ export class Runtime {
 	 * whether they were applied; mail stays, and the session's next bridge gets it again.
 	 */
 	private dropCommandsOf(connection: Connection): void {
+		for (const [id, waiters] of this.receiptWaiters) {
+			waiters.delete(connection);
+			if (!waiters.size) this.receiptWaiters.delete(id);
+		}
 		for (const [commandId, client] of this.commandClients) {
 			if (client !== connection) continue;
 			const target = this.dispatched.get(commandId);
@@ -2467,7 +2483,12 @@ export class Runtime {
 			// Mail of a thread that reached the transcript has been read there.
 			if (stage === "applied" && row.kind === "mail") {
 				const mail = JSON.parse(row.command) as { thread?: string; seq?: number };
-				if (mail.thread && typeof mail.seq === "number") markRead(db, mail.thread, row.session_id, mail.seq);
+				if (mail.thread && typeof mail.seq === "number") {
+					const thread = db.prepare("select kind from threads where id = ?").get(mail.thread) as
+						| { kind: string }
+						| undefined;
+					if (thread?.kind !== "channel") markRead(db, mail.thread, row.session_id, mail.seq);
+				}
 			}
 			db.prepare("update commands set stage = ?, reason = ?, updated_at = ? where command_id = ?").run(
 				stage,
@@ -2488,7 +2509,14 @@ export class Runtime {
 		client?.socket.write(
 			`${JSON.stringify({ type: "receipt", commandId, stage, ...(reason ? { reason } : {}), ...(result ? { result } : {}) } satisfies Receipt)}\n`,
 		);
+		for (const waiter of this.receiptWaiters.get(commandId) ?? []) {
+			if (waiter !== client)
+				waiter.socket.write(
+					`${JSON.stringify({ type: "receipt", commandId, stage, ...(reason ? { reason } : {}) } satisfies Receipt)}\n`,
+				);
+		}
 		if (stage === "applied" || stage === "failed") {
+			this.receiptWaiters.delete(commandId);
 			this.commandClients.delete(commandId);
 			this.dispatched.delete(commandId);
 			if (row.program_id) void this.cleanPrograms();

@@ -67,6 +67,12 @@ Ordinary close receipts remain incarnation-bound: a later ordinary call_in can r
 Coupled: components/session-state/src/bridge.ts, components/session-state/src/coordinator.ts
 Verify: components/session-state/tests/organization.test.ts, components/session-state/tests/organization-move.test.ts, components/session-state/tests/program-peers.test.ts
 
+## symbol:Runtime.repeatCommand
+
+Retry receipt observers are separate from `commandClients`, which retains ownership of correlated turns, their stream/result and disconnect cancellation. A retry follows receipt progress without acquiring a turn or replacing a still-live original waiter. Closing an observer drops only its receipt subscription.
+Coupled: components/session-state/src/client.ts
+Verify: components/session-state/tests/communication-reliability.test.ts, components/session-state/tests/peer-turns.test.ts, components/session-state/tests/streaming.test.ts
+
 ## symbol:Runtime.command
 
 Keep command-specific receipt completion and follow-up delivery in a cohesive handler when adding dispatch cases.
