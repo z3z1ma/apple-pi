@@ -215,14 +215,23 @@ test("mail to a stopped session waits and arrives in its next turn after it open
 test("a worker that closes mails its supervisor, but not on reload", async () => {
 	const supervisor = await fauxSession([bridge], [fauxAssistantMessage("noted")], []);
 	const supervisorId = supervisor.session.sessionManager.getSessionId();
-	const worker = await fauxSession([bridge], [], []);
+	const worker = await fauxSession(
+		[
+			(pi) => {
+				const getFlag = pi.getFlag.bind(pi);
+				pi.getFlag = (name) => (name === "reports-to" ? supervisorId : getFlag(name));
+				bridge(pi);
+			},
+		],
+		[],
+		[],
+	);
 	try {
 		await seen(supervisorId);
 		await supervisor.session.prompt("start"); // past startup, so mail starts a turn
-		worker.session.extensionRunner.setFlagValue("reports-to", supervisorId);
 		worker.session.sessionManager.appendSessionInfo("docs-worker");
 		const workerId = worker.session.sessionManager.getSessionId();
-		await worker.session.bindExtensions({}); // a rebind reads the flag
+		await worker.session.bindExtensions({}); // the recorded reporting line survives a rebind
 		await vi.waitFor(
 			() =>
 				expect(query(state.dbPath, "select reports_to from sessions where id = ?", workerId)).toEqual([

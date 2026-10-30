@@ -367,6 +367,18 @@ export class Runtime {
 		socket.on("error", () => {});
 		socket.on("close", () => {
 			this.connections.delete(connection);
+			if (
+				this.db &&
+				!connection.shutdown &&
+				connection.sessionId !== undefined &&
+				connection.generation !== undefined &&
+				this.isCurrent(connection.sessionId, connection.generation) &&
+				![...this.connections].some(
+					(other) =>
+						other.sessionId === connection.sessionId && other.generation === connection.generation && !other.shutdown,
+				)
+			)
+				this.event("runtime", connection.sessionId, connection.generation, "execution", { phase: "break", id: null });
 			this.dropCommandsOf(connection);
 			if (this.db && connection.program) this.closeProgram(connection);
 			this.checkLiveness();
@@ -428,7 +440,10 @@ export class Runtime {
 			return;
 		}
 		if (message.type === "run") this.setRunState(sessionId, generation, message.run);
-		else if (message.type === "index") this.index(sessionId, generation, message.rows);
+		else if (message.type === "execution") {
+			if (this.isCurrent(sessionId, generation))
+				this.event("bridge", sessionId, generation, "execution", message.observation);
+		} else if (message.type === "index") this.index(sessionId, generation, message.rows);
 		else if (message.type === "facts") this.applyFacts(sessionId, generation, message.facts);
 		else if (message.type === "tool_start") this.startTool(sessionId, generation, message.tool);
 		else if (message.type === "tool_end") {
@@ -589,6 +604,8 @@ export class Runtime {
 		// A launch flag seeds the manager only on first admission. A later null is an intentional split.
 		const seedManager = stored.reports_to === null && Boolean(reportsTo) && !latest && !reportingRecorded;
 		this.applyFacts(session.id, generation, seedManager ? { ...facts, reportsTo } : facts, true);
+		if (hello.execution)
+			this.event("bridge", session.id, generation, "execution", { ...hello.execution, phase: "resume" });
 		// A bridge started with a stale flag learns its manager from the record, including none.
 		if (!seedManager && reportsTo !== undefined && (stored.reports_to ?? "") !== reportsTo)
 			this.issue(connection, { kind: "transfer", manager: stored.reports_to ?? "", by: "runtime" });

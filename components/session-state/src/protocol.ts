@@ -5,6 +5,7 @@ import type { TurnProgress, TurnResult } from "../../shared/src/turn-observer.js
 import type { CommunicationCommand, MessageReference } from "./communication-types.js";
 import type { LinkRecord } from "./links.js";
 import type { PeerTurn } from "./peer-turns.js";
+import type { RunObservation, RunSnapshot } from "./run-observation.js";
 import type { ThreadPost } from "./threads.js";
 import type { Worth } from "./valuation.js";
 import type { WorkCommand } from "./work.js";
@@ -299,6 +300,7 @@ export interface Hello {
 	/** The tmux server socket and pane this session runs in, from its `TMUX` and `TMUX_PANE`; absent outside tmux. */
 	tmux?: { socket: string; pane: string };
 	run: RunState;
+	execution?: RunSnapshot;
 	facts: Facts;
 	tool?: Tool;
 }
@@ -309,6 +311,7 @@ export type BridgeMessage =
 	| Hello
 	| { type: "heartbeat" }
 	| { type: "run"; run: RunState }
+	| { type: "execution"; observation: RunObservation }
 	| { type: "facts"; facts: Partial<Facts> }
 	| { type: "tool_start"; tool: Tool }
 	| { type: "tool_end"; id: string; name: string; durationMs: number; isError: boolean; current: Tool | null }

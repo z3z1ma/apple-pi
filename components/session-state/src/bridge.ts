@@ -33,6 +33,7 @@ import {
 	type RunState,
 	type Tool,
 } from "./protocol.js";
+import { type RunObservation, RunObserver, type RunSnapshot } from "./run-observation.js";
 import { goalText } from "./work.js";
 import { installWork } from "./work-tools.js";
 
@@ -98,6 +99,11 @@ class StateLink {
 			return;
 		}
 		this.send({ type: "turn_progress", commandId, progress });
+	}
+
+	observe(observation: RunObservation, snapshot: RunSnapshot): void {
+		this.hello.execution = snapshot;
+		this.send({ type: "execution", observation });
 	}
 
 	run(run: RunState): void {
@@ -480,6 +486,7 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 	installWork(pi);
 	const peerTurns = installPeerTurns(pi);
 	let link: StateLink | undefined;
+	let observations: RunObserver | undefined;
 	let current: ExtensionContext | undefined;
 	let skills: string[] = [];
 	let mcpServers: string[] = [];
@@ -660,6 +667,7 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 	};
 
 	pi.on("session_start", (event, ctx) => {
+		observations?.close(event.reason === "reload");
 		link?.close();
 		stop();
 		current = ctx;
@@ -680,8 +688,16 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 		};
 		// A switch, resume, or fork in this process names the session file that ran here before.
 		const previous = event.previousSessionFile ? { file: event.previousSessionFile, reason: event.reason } : null;
+		observations = new RunObserver(
+			ctx.sessionManager.getSessionId(),
+			event.reason === "reload",
+			ctx.isIdle(),
+			(observation) => {
+				if (observations) link?.observe(observation, observations.snapshot());
+			},
+		);
 		link = new StateLink(
-			helloFor(pi, ctx, skills, mcpServers, previous),
+			{ ...helloFor(pi, ctx, skills, mcpServers, previous), execution: observations.snapshot() },
 			warn,
 			(from, commandId, command, replay) => {
 				void apply(from, commandId, command, replay);
@@ -695,6 +711,8 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 		watcher.unref();
 	});
 	pi.on("session_shutdown", (event) => {
+		observations?.close(event.reason === "reload");
+		observations = undefined;
 		stop();
 		for (const resolve of settledWaiters.splice(0)) resolve();
 		const reportsTo = link?.hello.facts.reportsTo;
@@ -714,6 +732,7 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 	});
 
 	pi.on("before_agent_start", (event, ctx) => {
+		observations?.prepare(event);
 		skills = (event.systemPromptOptions?.skills ?? []).map((skill) => skill.name).sort();
 		link?.facts({ config: config(pi, ctx, skills, mcpServers) });
 	});
@@ -734,10 +753,12 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 	});
 
 	pi.on("agent_start", () => {
+		observations?.start();
 		startingUp = false;
 		link?.run("thinking");
 	});
 	pi.on("message_start", (event, ctx) => {
+		observations?.consume(event.message);
 		if (event.message.role === "assistant") link?.run("thinking");
 		if (event.message.role === "user" && queued.steers + queued.followUps > 0) {
 			if (queued.steers > 0) queued.steers--;
@@ -812,6 +833,7 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 	});
 	pi.on("session_compact_failed", (_event, ctx) => compactionEnded(ctx));
 	pi.on("agent_settled", (event, ctx) => {
+		observations?.settle(event.aborted);
 		// A completed run has recorded every steer it was given; an aborted one may have dropped its queue or kept it.
 		if (!event.aborted) handedOver(ctx.sessionManager.getSessionId()).clear();
 		link?.run("idle");
