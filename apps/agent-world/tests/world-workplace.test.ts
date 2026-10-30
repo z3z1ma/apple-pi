@@ -5,6 +5,7 @@ import { type Browser, chromium, type Page } from "playwright-core";
 import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
 import { appFile, contentType } from "../src/app-files.js";
 import type { Character, CharacterFacts, WorldSnapshot } from "../src/world.js";
+import { installWorkplaceCommunications } from "./helpers/workplace-communications.js";
 
 // The workplace in the built world UI over a fixture backend. The backend suites prove that these calls reach the
 // runtime; this proves where the operator finds them and what the UI sends.
@@ -206,6 +207,7 @@ async function openWorld(theme: string) {
 		},
 		[world(theme), themes] as const,
 	);
+	await page.addInitScript(installWorkplaceCommunications);
 	await page.goto(`${ORIGIN}/index.html?world`);
 	await vi.waitFor(async () => expect(await page.evaluate(() => document.documentElement.dataset.theme)).toBe(theme), {
 		timeout: 20000,

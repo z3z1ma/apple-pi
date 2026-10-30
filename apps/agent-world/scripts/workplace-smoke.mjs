@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright-core";
+import { installWorkplaceCommunications } from "../tests/helpers/workplace-communications.ts";
 
 let root = dirname(fileURLToPath(import.meta.url));
 while (!existsSync(join(root, "apps/agent-world"))) {
@@ -24,7 +25,7 @@ try {
 	page.on("console", (message) => {
 		if (message.type() === "error") errors.push(message.text());
 	});
-	await page.route("http://workplace.test/**", (route) => {
+	await page.route("http://localhost/**", (route) => {
 		const path = new URL(route.request().url()).pathname;
 		const file = join(root, "apps/agent-world/dist/web", path === "/" ? "index.html" : path);
 		if (!existsSync(file)) return route.fulfill({ status: 404 });
@@ -179,6 +180,7 @@ try {
 						"\n\n## How I work\n\nI read the owning code, make the smallest useful change, and check the behavior.\n\n## What I hold myself to\n\nKeep the next maintainer in mind.\n\n## The people I work with\n\nI ask colleagues when their perspective can change the decision.",
 				};
 			},
+			workspace: { resolvePaths: async () => ({ ok: true, files: [] }) },
 			snapshot: async () => world,
 			onUpdate: (fn) => {
 				window.updateWorld = fn;
@@ -303,11 +305,12 @@ try {
 		};
 	});
 	await page.emulateMedia({ colorScheme: "light" });
-	await page.goto("http://workplace.test/");
+	await page.addInitScript(installWorkplaceCommunications);
+	await page.goto("http://localhost/");
 	await page.locator(".wp-app").waitFor();
 	assert.equal(new URL(page.url()).search, "");
 	assert.equal(await page.title(), "Workplace");
-	assert.equal(await page.getByRole("link", { name: "World", exact: true }).getAttribute("href"), "?world");
+	assert.equal(await page.getByRole("button", { name: "World", exact: true }).getAttribute("aria-pressed"), "false");
 	const theme = page.getByRole("button", { name: "Theme: dark mode", exact: true });
 	await theme.waitFor();
 	assert.equal(await theme.getAttribute("aria-pressed"), "false");
@@ -418,10 +421,11 @@ try {
 	await page.getByText("<script>window.channelInjected = true</script>", { exact: false }).waitFor();
 	await page.getByText("diagram", { exact: true }).waitFor();
 	assert.equal(await page.getByRole("img", { name: "diagram", exact: true }).count(), 0);
+	const channelUrl = page.url();
 	await page.getByRole("link", { name: "release guide", exact: true }).focus();
 	await page.keyboard.press("Enter");
 	await page.getByRole("alert").filter({ hasText: "This window cannot open links." }).waitFor();
-	assert.equal(new URL(page.url()).search, "?workplace=chat");
+	assert.equal(page.url(), channelUrl);
 	await page.getByRole("textbox", { name: "Post to channel", exact: true }).fill("Proceed with the warning.");
 	await page.getByRole("button", { name: /^Post message/ }).click();
 	await page.waitForFunction(() => window.calls.some((call) => call[0] === "reply" && call[1] === "engineering"));
@@ -436,14 +440,14 @@ try {
 	await page.getByRole("region", { name: "Conversation with Maya Chen", exact: true }).waitFor();
 	await page.getByRole("button", { name: "# Engineering", exact: true }).click();
 	await page.getByRole("button", { name: "# Platform", exact: true }).click();
-	await page.getByRole("heading", { name: "You're previewing # Platform", exact: true }).waitFor();
-	assert.equal(await page.getByRole("textbox", { name: "Post to channel", exact: true }).count(), 0);
+	await page.getByText("Previewing #Platform.", { exact: false }).waitFor();
+	await page.getByRole("textbox", { name: "Post to channel", exact: true }).waitFor();
 	await page.evaluate(() => {
 		window.refuseMembership = true;
 	});
 	await page.getByRole("button", { name: "Join channel", exact: true }).click();
 	await page.getByRole("alert").filter({ hasText: "Membership change refused by fixture." }).waitFor();
-	assert.equal(await page.getByRole("textbox", { name: "Post to channel", exact: true }).count(), 0);
+	await page.getByRole("textbox", { name: "Post to channel", exact: true }).waitFor();
 	await page.getByRole("button", { name: "Join channel", exact: true }).click();
 	await page.getByRole("textbox", { name: "Post to channel", exact: true }).waitFor();
 	await page.getByRole("textbox", { name: "Post to channel", exact: true }).fill("Joined and ready.");
@@ -455,10 +459,26 @@ try {
 	await page.keyboard.press("Enter");
 	await page.getByText("Joined and ready.", { exact: true }).waitFor();
 	await page.screenshot({ path: join(output, "channel-joined.png"), animations: "disabled" });
-	await page.getByLabel("Joined: channel membership", { exact: true }).click();
+	await page.getByLabel("Conversation actions", { exact: true }).click();
 	await page.getByRole("button", { name: "Leave channel", exact: true }).click();
 	await page.getByRole("button", { name: "Join channel", exact: true }).waitFor();
-	assert.equal(await page.getByRole("textbox", { name: "Post to channel", exact: true }).count(), 0);
+	await page.getByRole("textbox", { name: "Post to channel", exact: true }).waitFor();
+	assert.equal(
+		await page.evaluate(() =>
+			window.communicationCalls
+				.filter((call) => call.method === "readThread")
+				.every((call) => call.request.view === "recent"),
+		),
+		true,
+	);
+	assert.equal(
+		await page.evaluate(() =>
+			window.communicationCalls
+				.filter((call) => call.method === "post")
+				.every((call) => (call.request.notify ?? []).length === 0),
+		),
+		true,
+	);
 	await page.screenshot({ path: join(output, "channel-preview.png"), animations: "disabled" });
 	await page.getByRole("button", { name: /Mail/ }).click();
 	await page.getByRole("button", { name: "Unread", exact: true }).click();
@@ -477,7 +497,11 @@ try {
 	await page.getByRole("button", { name: "Compose", exact: true }).click();
 	await page.getByRole("textbox", { name: "Mail body", exact: true }).fill("Please summarize the release checks.");
 	await page.getByRole("button", { name: "Send mail", exact: true }).click();
-	await page.getByText("Mail applied.", { exact: true }).waitFor();
+	await page.getByRole("status").filter({ hasText: "Mail applied" }).waitFor();
+	assert.equal(
+		await page.evaluate(() => window.communicationCalls.filter((call) => call.method === "sendMail").length),
+		1,
+	);
 	await page.getByRole("button", { name: "Close new message", exact: true }).click();
 	await page.getByRole("button", { name: "Chat", exact: true }).click();
 	await page.evaluate(() => {

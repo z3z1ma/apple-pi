@@ -5,6 +5,7 @@ import { type Browser, chromium, type Page } from "playwright-core";
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
 import { appFile, contentType } from "../src/app-files.js";
 import type { Character, CharacterFacts, RoleChoice, WorkplaceTaskHistory, WorldSnapshot } from "../src/world.js";
+import { installWorkplaceCommunications } from "./helpers/workplace-communications.js";
 
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const ORIGIN = "http://localhost";
@@ -316,6 +317,7 @@ async function openOrg(appearance: "light" | "dark" = "light", snapshot: WorldSn
 		},
 		[snapshot, CATALOG] as const,
 	);
+	await page.addInitScript(installWorkplaceCommunications);
 	await page.goto(`${ORIGIN}/index.html?world`);
 	await page.getByRole("link", { name: "Workplace", exact: true }).click();
 	await page.getByRole("button", { name: "Org", exact: true }).click();
@@ -915,7 +917,7 @@ test("organization display names persist locally, cancel cleanly and relabel cha
 	const { page, errors } = await openOrg("light", snapshot);
 	try {
 		expect(await page.getByRole("button", { name: /^Rename organization:/ }).count()).toBe(0);
-		const rename = page.getByText("Ada organization", { exact: true });
+		const rename = page.getByRole("button", { name: "Ada organization", exact: true });
 		const menu = page.getByRole("menu", { name: "Actions", exact: true });
 		await rename.focus();
 		await page.keyboard.press("Shift+F10");
@@ -937,7 +939,7 @@ test("organization display names persist locally, cancel cleanly and relabel cha
 		await menu.getByRole("menuitem", { name: "Rename", exact: true }).click();
 		await form.getByRole("textbox", { name: "Organization name", exact: true }).fill("Reporting Team");
 		await form.getByRole("button", { name: "Save name", exact: true }).click();
-		await page.getByText("Reporting Team", { exact: true }).waitFor();
+		await page.getByRole("button", { name: "Reporting Team", exact: true }).waitFor();
 		await openTeam(page, "Ada");
 		await page.getByRole("heading", { name: "Reporting Team", exact: true }).waitFor();
 		await page.getByRole("button", { name: "View profile: Ada", exact: true }).waitFor();
@@ -975,7 +977,7 @@ test("organization display names persist locally, cancel cleanly and relabel cha
 		await page.reload();
 		await page.getByRole("button", { name: "# org-reporting-delivery", exact: true }).waitFor();
 		await page.getByRole("button", { name: "Org", exact: true }).click();
-		await page.getByText("Reporting Delivery", { exact: true }).waitFor();
+		await page.getByRole("button", { name: "Reporting Delivery", exact: true }).waitFor();
 		await page.getByRole("button", { name: "Chat", exact: true }).click();
 		await page.getByRole("button", { name: "# org-reporting-delivery", exact: true }).click();
 		await page.getByRole("heading", { name: "# org-reporting-delivery", exact: true }).waitFor();

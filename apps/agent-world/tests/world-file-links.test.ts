@@ -6,6 +6,7 @@ import { afterAll, beforeAll, expect, test, vi } from "vitest";
 import { appFile, contentType } from "../src/app-files.js";
 import type { WorkspaceApi, WorkspacePath } from "../src/workspace.js";
 import type { ConversationPage, WorldSnapshot } from "../src/world.js";
+import { installWorkplaceCommunications } from "./helpers/workplace-communications.js";
 
 const APP = fileURLToPath(new URL("..", import.meta.url));
 const ORIGIN = "http://localhost";
@@ -252,6 +253,7 @@ async function openWorkplace() {
 		},
 		{ root: ROOT, other: OTHER },
 	);
+	await page.addInitScript(installWorkplaceCommunications);
 	await page.goto(`${ORIGIN}/index.html`);
 	await page.getByRole("button", { name: "Chat", exact: true }).waitFor();
 	return { page, errors, remoteRequests };

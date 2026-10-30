@@ -5,6 +5,7 @@ import { type Browser, chromium, type Page } from "playwright-core";
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
 import { appFile, contentType } from "../src/app-files.js";
 import type { WorldSnapshot } from "../src/world.js";
+import { installWorkplaceCommunications } from "./helpers/workplace-communications.js";
 
 const APP = fileURLToPath(new URL("..", import.meta.url));
 const ORIGIN = "http://localhost";
@@ -227,6 +228,7 @@ async function openWorkplace() {
 			},
 		};
 	}, ROOT);
+	await page.addInitScript(installWorkplaceCommunications);
 	await page.goto(`${ORIGIN}/index.html`);
 	await page.getByRole("button", { name: "World", exact: true }).waitFor();
 	return { page, errors, dialogs };

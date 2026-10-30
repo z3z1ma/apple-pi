@@ -5,6 +5,7 @@ import { type Browser, chromium, type Page } from "playwright-core";
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
 import { appFile, contentType } from "../src/app-files.js";
 import type { Character, CharacterFacts, MailThread, TranscriptEntry, WorldSnapshot } from "../src/world.js";
+import { installWorkplaceCommunications } from "./helpers/workplace-communications.js";
 
 // Seam 2 for the conversation panel: the committed, built world UI in headless Chrome, with the preload API replaced by
 // a fixture backend that pages fixture transcripts and records what the panel asks of it.
@@ -279,6 +280,22 @@ async function openWorld(
 			w.reply = (event: unknown) => {
 				for (const listener of w.replyListeners) listener(event);
 			};
+			w.communicationFixture = {
+				read: async (id: string) => {
+					w.threadReads.push(id);
+					if (w.readError) {
+						w.readError = false;
+						return { ok: false, reason: "The channel could not be read." };
+					}
+					const thread = threads.find((item) => item.id === id);
+					return thread ? { ok: true, thread: structuredClone(thread) } : { ok: false, reason: "Unknown channel" };
+				},
+				ack: (id: string, through: number) => {
+					const thread = threads.find((item) => item.id === id)!;
+					thread.readUpTo = through;
+					publishThread(thread);
+				},
+			};
 			w.agentWorld = {
 				snapshot: async () => current,
 				async profile(id: string) {
@@ -310,10 +327,7 @@ async function openWorld(
 					}
 					const thread = threads.find((thread) => thread.id === id)!;
 					thread.participants = thread.participants.filter((person) => person.id !== "operator");
-					if (joined) {
-						thread.participants.push({ id: "operator", name: "You" });
-						thread.readUpTo = 0;
-					} else delete thread.readUpTo;
+					if (joined) thread.participants.push({ id: "operator", name: "You" });
 					w.push({
 						...current,
 						workplace: {
@@ -337,7 +351,6 @@ async function openWorld(
 						at: Date.now(),
 						body,
 					});
-					thread.readUpTo = thread.messages.at(-1)?.seq ?? 0;
 					publishThread(thread);
 					return { ok: true, stage: "applied" };
 				},
@@ -385,6 +398,7 @@ async function openWorld(
 					w.links.push(["file", href, base]);
 					return { ok: true };
 				},
+				workspace: { resolvePaths: async () => ({ ok: true, files: [] }) },
 				// Instructions answer with the runtime's receipt stages, a moment apart; `refuse` fails the next one at once
 				// (as the backend refuses an unconfirmed Stop), `failNext` after it was delivered.
 				async instruct(id: string, commandId: string, instruction: unknown) {
@@ -442,6 +456,7 @@ async function openWorld(
 		},
 		[first, transcripts, PAGE, threads] as const,
 	);
+	await page.addInitScript(installWorkplaceCommunications);
 	await page.goto(`${ORIGIN}/index.html?world`);
 	await vi.waitFor(async () => expect(await page.evaluate(() => (window as any).agentWorldView.place())).toBeTruthy(), {
 		timeout: 15000,
@@ -1769,7 +1784,7 @@ test("workplace starts with the OS appearance and remembers an explicit choice a
 	}
 }, 30000);
 
-test("team channels render safe Markdown and open links through the bridge without navigating", async () => {
+test("team channels render safe Markdown, keep unresolved files inert and open web links without navigating", async () => {
 	const { page, errors } = await openWorkplaceChannel();
 	try {
 		await page.getByRole("heading", { name: "Release plan", exact: true }).waitFor();
@@ -1783,11 +1798,9 @@ test("team channels render safe Markdown and open links through the bridge witho
 		const before = page.url();
 		await page.getByRole("link", { name: "Release notes", exact: true }).focus();
 		await page.keyboard.press("Enter");
-		await page.getByRole("link", { name: "spec", exact: true }).click({ button: "middle" });
-		expect(await page.evaluate(() => (window as any).links)).toEqual([
-			"https://example.com/release",
-			["file", "docs/api.md", "/Users/op/code/apple-pi"],
-		]);
+		await page.getByText("spec", { exact: true }).waitFor();
+		expect(await page.getByRole("link", { name: "Open file: spec", exact: true }).count()).toBe(0);
+		expect(await page.evaluate(() => (window as any).links)).toEqual(["https://example.com/release"]);
 		expect(page.url()).toBe(before);
 		expect(errors).toEqual([]);
 	} finally {
@@ -1795,37 +1808,48 @@ test("team channels render safe Markdown and open links through the bridge witho
 	}
 }, 30000);
 
-test("channel preview requires an explicit successful join to post; failed membership changes and leave/rejoin retain drafts", async () => {
+test("channel access permits quiet posting while unfollowed; failed follow changes and leave/rejoin retain drafts", async () => {
 	const { page, errors, id } = await openWorkplaceChannel();
 	try {
-		expect(await page.getByRole("textbox", { name: "Post to channel", exact: true }).count()).toBe(0);
+		const composer = page.getByRole("textbox", { name: "Post to channel", exact: true });
+		await composer.waitFor();
 		expect(await page.evaluate(() => (window as any).membershipCommands)).toEqual([]);
+		await composer.fill("A quiet post mentioning Orla");
+		await composer.press("Enter");
+		await page.getByText("A quiet post mentioning Orla", { exact: true }).waitFor();
+		expect(
+			await page.evaluate(
+				() => (window as any).communicationCalls.filter((call: any) => call.method === "post").at(-1).request.notify,
+			),
+		).toEqual([]);
 		await page.evaluate(() => {
 			(window as any).membershipError = "Joining was refused";
 		});
 		await page.getByRole("button", { name: "Join channel", exact: true }).click();
 		await page.getByRole("alert").filter({ hasText: "Joining was refused" }).waitFor();
-		expect(await page.getByRole("textbox", { name: "Post to channel", exact: true }).count()).toBe(0);
+		await composer.waitFor();
 		await page.getByRole("button", { name: "Join channel", exact: true }).click();
-		const composer = page.getByRole("textbox", { name: "Post to channel", exact: true });
 		await composer.fill("A channel post");
 		await composer.press("Shift+Enter");
 		expect(await composer.inputValue()).toBe("A channel post\n");
-		expect(await page.evaluate(() => (window as any).threadReplies)).toEqual([]);
+		expect(await page.evaluate(() => (window as any).threadReplies)).toEqual([[id, "A quiet post mentioning Orla"]]);
 		await composer.press("Enter");
 		await page.getByText("A channel post", { exact: true }).waitFor();
-		expect(await page.evaluate(() => (window as any).threadReplies)).toEqual([[id, "A channel post\n"]]);
+		expect(await page.evaluate(() => (window as any).threadReplies)).toEqual([
+			[id, "A quiet post mentioning Orla"],
+			[id, "A channel post\n"],
+		]);
 		await composer.fill("Unsent draft");
-		await page.getByLabel("Joined: channel membership", { exact: true }).click();
+		await page.getByLabel("Conversation actions", { exact: true }).click();
 		await page.evaluate(() => {
 			(window as any).membershipError = "Leaving was refused";
 		});
 		await page.getByRole("button", { name: "Leave channel", exact: true }).click();
 		await page.getByRole("alert").filter({ hasText: "Leaving was refused" }).waitFor();
 		expect(await composer.inputValue()).toBe("Unsent draft");
+		await page.getByLabel("Conversation actions", { exact: true }).click();
 		await page.getByRole("button", { name: "Leave channel", exact: true }).click();
-		await page.getByRole("button", { name: "Join channel", exact: true }).waitFor();
-		expect(await composer.count()).toBe(0);
+		expect(await composer.inputValue()).toBe("Unsent draft");
 		await page.getByRole("button", { name: "Join channel", exact: true }).click();
 		await composer.waitFor();
 		expect(await composer.inputValue()).toBe("Unsent draft");
@@ -1967,7 +1991,7 @@ test("profiles load full Self only on demand, expand fields independently at 200
 				},
 			});
 		});
-		await profile.getByRole("button", { name: "View recorded work (1)", exact: true }).waitFor();
+		await profile.getByRole("button", { name: "View all recorded work (1)", exact: true }).waitFor();
 		await profile.getByText("Recorded completed work", { exact: true }).waitFor();
 		expect(await profile.getByText("Record", { exact: true }).count()).toBe(0);
 		await storyField.getByText(`${"s".repeat(200)}\u2026`, { exact: true }).waitFor();
@@ -2101,7 +2125,7 @@ test("DM unread updates survive another conversation, older reading and window b
 	}
 }, 30000);
 
-test("channel unread boundaries use the real pre-read cursor, and new posts respect older reading and recover from a read failure", async () => {
+test("channel inspections preserve the unread cursor; explicit catch-up and selected-reader refresh recover from a read failure", async () => {
 	const id = "team:unread";
 	const participants = [
 		{ id: "operator", name: "You" },
@@ -2155,6 +2179,15 @@ test("channel unread boundaries use the real pre-read cursor, and new posts resp
 			.locator("xpath=following-sibling::article[1]")
 			.getByText("The first unread incoming post.", { exact: true })
 			.waitFor();
+		expect(await channel.getAttribute("data-unread")).toBe("true");
+		expect(
+			await page.evaluate(() =>
+				(window as any).communicationCalls.every(
+					(call: any) => call.method !== "readThread" || call.request.view === "recent",
+				),
+			),
+		).toBe(true);
+		await page.getByRole("button", { name: "Catch up", exact: true }).click();
 		await vi.waitFor(async () => expect(await channel.getAttribute("data-unread")).toBe("false"));
 		const scroll = page.locator(".wp-thread-messages");
 		await scroll.evaluate((el) => {
@@ -2180,7 +2213,10 @@ test("channel unread boundaries use the real pre-read cursor, and new posts resp
 		expect(await scroll.evaluate((el) => el.scrollTop)).toBe(100);
 		await jump.click();
 		await scroll.getByText("Incoming while reading older posts.", { exact: true }).waitFor();
+		expect(await channel.getAttribute("data-unread")).toBe("true");
+		await page.getByRole("button", { name: "Catch up", exact: true }).click();
 		await vi.waitFor(async () => expect(await channel.getAttribute("data-unread")).toBe("false"));
+		await page.getByRole("button", { name: "Read latest", exact: true }).click();
 		await page.evaluate(
 			({ id, at }) =>
 				(window as any).channelPost(id, {
@@ -2193,7 +2229,7 @@ test("channel unread boundaries use the real pre-read cursor, and new posts resp
 			{ id, at: at(34) },
 		);
 		await scroll.getByText("Incoming while following the latest posts.", { exact: true }).waitFor();
-		await vi.waitFor(async () => expect(await channel.getAttribute("data-unread")).toBe("false"));
+		expect(await channel.getAttribute("data-unread")).toBe("true");
 		await page.evaluate(
 			({ id, at }) => {
 				const w = window as any;
@@ -2209,6 +2245,8 @@ test("channel unread boundaries use the real pre-read cursor, and new posts resp
 		expect(await channel.getAttribute("data-unread")).toBe("true");
 		await jump.click();
 		await scroll.getByText("The retried post.", { exact: true }).waitFor();
+		expect(await channel.getAttribute("data-unread")).toBe("true");
+		await page.getByRole("button", { name: "Catch up", exact: true }).click();
 		await vi.waitFor(async () => expect(await channel.getAttribute("data-unread")).toBe("false"));
 		expect(errors).toEqual([]);
 	} finally {

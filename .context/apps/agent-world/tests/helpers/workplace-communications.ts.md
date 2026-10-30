@@ -1,0 +1,8 @@
+## file
+
+This function is serialized into the browser after an existing fixture's preload substitute is installed. Its body is self-contained; imported types are erased. It runs only in the top document, leaving embedded World to acquire the parent API through the real entry path. The five retained suites and maintained smoke script consume it; it is test-only and is never installed in production.
+
+The fixture preserves each suite's legacy World read/reply methods, held promises and request traces. Enhanced recent/range inspections must not delegate to a legacy cursor-advancing read: world-conversation supplies a raw cloned-thread reader and separate ack callback. Catch up alone invokes that callback. Existing mutation traces remain useful, but successful results have the enhanced attempt/effect shape and are cached by attempt. Posting permission is independent of following; joined participants are not a permission prerequisite. The helper deliberately refuses unrelated management actions instead of pretending to prove invite/archive authorization; world-communications owns those focused UI cases and backend/core tests own actual persistence/deduplication.
+
+Coupled: apps/agent-world/tests/world-conversation.test.ts, apps/agent-world/tests/world-org.test.ts, apps/agent-world/tests/world-navigation.test.ts, apps/agent-world/tests/world-workplace.test.ts, apps/agent-world/tests/world-file-links.test.ts, apps/agent-world/scripts/workplace-smoke.mjs
+Verify: apps/agent-world/tests/world-conversation.test.ts, apps/agent-world/tests/world-navigation.test.ts, apps/agent-world/scripts/workplace-smoke.mjs
