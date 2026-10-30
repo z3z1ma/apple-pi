@@ -20,7 +20,7 @@ Source inspection on 2026-10-30. This is planning evidence, not an executed proc
 
 Seven skills are explicit-entry workflows: `implement`, `improve-codebase-architecture`, `interrogate-to-design`, `to-spec`, `to-tickets`, `wayfinder`, `ralph`. The other twelve are model-discoverable. In particular, code review and the diagnostic hypothesis board already coordinate people from model-discoverable skills.
 
-`handbook-writing` distinguishes user-invoked processes from model-invoked disciplines/vocabulary. New organizational processes need an explicit selection-policy decision rather than an accidental blanket extension of either group. Existing explicit-entry engineering workflows need not change with that decision.
+`handbook-writing` distinguishes user-invoked processes from model-invoked disciplines/vocabulary. The operator has now selected [agent-selectable processes](proposal.md#make-selection-authority-and-interruption-behavior-explicit) for the new portfolio; implementing that policy requires updating the authoring guidance. Existing explicit-entry engineering workflows retain their current policy.
 
 ## Several communication patterns already have real owners
 

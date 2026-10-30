@@ -176,6 +176,16 @@ No source code was copied from these projects:
 - Plannotator (<https://github.com/backnotprop/plannotator>) informed the browser review pages: a local page that returns anchored feedback to the agent, and the rule that every changed file appears in a guide. No source code was copied.
 - Geoffrey Huntley's Ralph writings (<https://ghuntley.com/ralph/> and <https://ghuntley.com/loop/>) informed the fresh-context, one-increment-per-loop, deterministic-stack, backpressure, and outer-harness model. No source code was copied.
 
+## Organizational process guidance (conceptual references)
+
+The organizational process skills are original prose for apple-pi's people, authority and communication model. These references informed mechanisms; no source prose, diagrams, templates or assets are reproduced:
+
+- GitLab's [Directly Responsible Individuals](https://handbook.gitlab.com/handbook/people-group/directly-responsible-individuals/): accountable decision ownership with consultation. Local guidance retains reasons and evidence limits rather than importing GitLab's internal approval policies.
+- Henri Lipmanowicz and Keith McCandless's Liberating Structures [Troika Consulting](https://www.liberatingstructures.com/troika-consulting) and [What, So What, Now What](https://www.liberatingstructures.com/what-so-what-now-what): clarify before advice, return the choice to the owner, and separate observations, interpretations and actions. Human timings, room arrangements and group sizes are not imported.
+- Andrew Stribblehill's [Managing Incidents](https://sre.google/sre-book/managing-incidents/), edited by Kavita Guliani, in Google's SRE book: distinct operational and communication responsibilities, current incident state and acknowledged handoffs. The source is CC BY-NC-ND 4.0; its text and assets are not copied or distributed here.
+
+These are design references, not evidence that the resulting agent processes are effective.
+
 ## Monaco Editor and bundled Workplace Code dependencies
 
 - Monaco Editor (<https://github.com/microsoft/monaco-editor>), verified installed version `0.57.0`, MIT, Copyright (c) 2016 - present Microsoft Corporation. It is a development dependency bundled into `apps/agent-world/dist/web/assets/`, including editor/language workers and Codicons; the installed app does not download the editor.

@@ -58,7 +58,10 @@ test("the package catalog loads, a project file overrides by name, and a bad fil
 	const cwd = tempDir();
 	const packaged = loadRoles(cwd);
 	expect(packaged.problems).toEqual([]);
-	expect(packaged.roles.get("coordinator")).toMatchObject({ manages: true, writes: true });
+	for (const name of ["coordinator", "director-of-engineering", "product-manager"])
+		expect(packaged.roles.get(name)).toMatchObject({ manages: true, writes: true });
+	for (const name of ["vp-of-product", "quality-engineering-director"])
+		expect(packaged.roles.get(name)).toMatchObject({ manages: false, writes: false });
 	expect(packaged.roles.get("staff-engineer-simplicity")).toMatchObject({ manages: false, writes: false });
 	for (const role of packaged.roles.values()) {
 		expect(role.path.startsWith(PACKAGE_ROLES_DIR)).toBe(true);
@@ -262,6 +265,7 @@ test.each([
 	{ role: "implementation-engineer", parent: null, allowed: false },
 	{ role: "coordinator", parent: "boss", allowed: true },
 	{ role: "director-of-engineering", parent: null, allowed: true },
+	{ role: "product-manager", parent: "boss", allowed: true },
 ])(
 	"peer schemas and guidance follow current capabilities (role=$role, parent=$parent)",
 	async ({ role, parent, allowed }) => {

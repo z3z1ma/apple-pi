@@ -23,23 +23,25 @@ A skill's description and a role's mandate are always in context, and their word
 
 A process skill describes work that people in the organization do together. State:
 
-- **Perspectives**: the views the work needs, each with a default role from `roles/` (for example `code-review-specialist`). Whoever runs the process adjusts the team with judgment.
+- **Perspectives**: the views and continuing responsibilities the work needs, with suitable default roles. Start from the work; use or author the jobs that can carry it. Whoever runs the process adjusts the team with judgment.
 - **Chair**: who runs it and owns the result.
 - **Handoffs**: who gives what to whom, and where: the task thread for work discussion, group mail and `reply` when people must answer each other's positions, and a channel for shared context with explicit `notify` when attention is needed.
 - **Sign-off**: the points where the operator decides, and how they are asked. Everything else stays readable in threads.
 - **Done**: the observable result and how it is verified.
 - **Close**: a process with several people ends with a short team discussion that feeds the task's `retrospective.md`.
 
-Staff with standing people first: find someone with matching experience in the directory, call them in if they are at home, and hire when nobody fits. Let go a person who should not persist. The coordinator holds the standing teams, so write staffing to work both ways: with your own manager tools, or by asking your manager for the perspectives. Announce a hire; it needs no approval.
+Link to the [shared process conventions](references/processes.md) for staffing, authority, communication, recovery and closeout. Keep the sequence that makes this particular process work in its own skill. A process can be light; a familiar name is not a reason to form a board.
 
-The role owns the person: how they think and what they deliver. The skill owns the process. When a process needs a perspective the catalog lacks, or a skill carries text about how one person thinks, add or change a role in `roles/`, following the shape of the existing role files.
+The role owns a standing job: how the person thinks, what they own and what they deliver. The skill owns how people work together. Add a role when a recurring responsibility lacks a good owner; distinguish advisory judgment, writing and management by actual mandates and capabilities, not titles. Preserve an existing person's lifelong role.
+
+Check the inverse too: an overlooked role may expose a missing perspective or useful process, or may already be served through another skill. Repeated reliance on a few roles is a question about fit, discovery and overlap, not a participation quota. A new job should earn its responsibility rather than complete a matrix or require another reporting layer.
 
 Write the process in prose. Add a `pi_exec` program only when it does what prose cannot do reliably, such as typed fan-in or exact coverage accounting.
 
 ## Skills
 
 - Frontmatter has `name` (lowercase letters, numbers, hyphens; matches the directory) and `description`.
-- A user-invoked skill starts a process and sets `disable-model-invocation: true`. A model-invoked skill gives a discipline or vocabulary that any process can use.
+- A process may be agent-selectable or operator-started. Leave `disable-model-invocation` unset for selection within an existing authorized goal; explicit `/skill:<name>` invocation also works. Set it to `true` when starting that workflow requires a deliberate operator choice. Preserve the established entry policy of existing workflows. Selection never expands authority.
 - A user-invoked skill names another user-invoked skill as the next step (`/skill:<name>`) rather than handing it the workflow. It may use another skill's method for one step of its own process, as `wayfinder` uses the interview for one ticket. To use a model-invoked skill, link its `SKILL.md` with a relative path and tell the reader to read and follow it.
 - Add a supporting file only when the skill links to it and it holds a part that only some cases need. A skill with several workflows is a short router to one file per workflow.
 

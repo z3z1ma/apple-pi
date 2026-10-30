@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 import { createEventBus } from "../node_modules/@earendil-works/pi-coding-agent/dist/core/event-bus.js";
 import {
@@ -477,7 +477,14 @@ try {
 	];
 	const fundamentalSkills = ["code-review", "handbook-writing", "llm-wiki"];
 	const browserSkills = ["operator-sign-off", "explain-change"];
-	const packagedSkills = [...explicitWorkflowSkills, ...engineeringSkills, ...fundamentalSkills, ...browserSkills];
+	const processSkills = ["peer-consultation", "decision-review"];
+	const packagedSkills = [
+		...explicitWorkflowSkills,
+		...engineeringSkills,
+		...fundamentalSkills,
+		...browserSkills,
+		...processSkills,
+	];
 	const loadedSkills = loadSkills({
 		cwd: process.cwd(),
 		skillPaths: manifest.pi.skills,
@@ -498,6 +505,13 @@ try {
 	}
 	for (const skill of packagedSkills) {
 		assert(existsSync(`skills/${skill}/SKILL.md`), `missing packaged skill: ${skill}`);
+	}
+	for (const name of [...processSkills, "handbook-writing"]) {
+		const file = `skills/${name}/SKILL.md`;
+		for (const [, link] of readFileSync(file, "utf8").matchAll(/\]\(([^)]+)\)/g)) {
+			if (/^(https?:|#)/.test(link)) continue;
+			assert(existsSync(resolve(dirname(file), link.split("#")[0])), `${file}: missing reference ${link}`);
+		}
 	}
 	// Browser skills are self-contained: no links into another skill's directory.
 	for (const skill of browserSkills) {

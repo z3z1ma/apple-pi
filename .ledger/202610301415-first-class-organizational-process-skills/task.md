@@ -1,17 +1,25 @@
-Status: ready
+Status: in-progress
 Created: 2026-10-30
 
-# Plan first-class organizational process skills
+# Implement organizational process skills and roles
 
 ## Intent
 
-Plan first-class repository skills that express reusable business processes over existing people, task and communication capabilities. Inspect current skills, role/handbook guidance, package boundaries and prior decisions before proposing additions. Produce a grounded proposal covering the useful process families, concrete candidate skills and selection boundaries, participant/authority/handoff/done semantics, reuse versus new runtime requirements, first-delivery priorities and executable validation. Collaborate with the operator on material scope, then seek plan sign-off. Planning only; no skill or runtime implementation is authorized by this task.
+Implement the approved agent-selectable process portfolio and management roles personally, extending into the wider candidates where they earn a distinct outcome. The operator authorized implementation and commits with: "lgtm. implement this and beyond. do it yourself. commit as you go." Preserve the existing explicit-entry engineering workflows and runtime authority boundaries. Author and integrate the skills/roles, update their real catalog and documentation consumers, run focused package/role/selection checks and controlled process exercises, record evidence and limitations, and commit coherent verified increments. No delegated implementation, new workflow runtime, external actions or changes to existing live work ownership.
 
 ## Settled direction
 
 The operator selected agent-selectable process skills: agents can choose an appropriate process within their assigned work and existing authority, and the operator can also invoke it explicitly. Keep the existing explicit-entry engineering workflows unchanged. Skill selection itself grants no new staffing, spending, external-action or goal-changing authority.
 
-## Current state
+## Acceptance criteria
+
+- New skills are model-discoverable and explicitly invocable, with distinct selection boundaries, accountable outcomes and safe handoffs.
+- New management jobs have distinct continuing obligations and use existing role capabilities; existing advisory postures stay unchanged.
+- The wider portfolio is implemented or explicitly consolidated into a real existing owner, based on its outcome rather than a catalog-size target.
+- Loader, package inventory, role capability and relative-reference checks pass. Each delivered process has a controlled exercise or a clearly reported validation limit; scripted tests are not claimed as real-model understanding.
+- Production guidance is concise and lives with its existing owners. Commits contain only owned, verified increments; unrelated work remains intact.
+
+## Planning record
 
 The operator approved the [proposal](proposal.md) with notes: design roles and processes together, investigate overlooked existing roles, and broaden management jobs. Those notes are applied. The plan retains seven first-delivery process skills and four coherent increments; it now includes three recommended management jobs, eight further process candidates, and package/selection/live-exercise validation. The [inventory](inventory.md) records existing repository owners; [source notes](source-notes.md) distinguish verified human-process mechanisms from unproven agent benefits.
 
@@ -19,11 +27,15 @@ The [role-to-process audit](role-process-map.md) covers all 32 current roles, di
 
 Pilar Aksoy independently cold-read the pre-sign-off proposal and correctly identified its approval scope. She reported no material comprehension blocker; one optional link clarification was applied. Her review did not inspect code, cover the later role-related revisions, or establish process effectiveness. Planning checks and review provenance are in [evidence.md](evidence.md).
 
-No skill, runtime, role or product documentation has been implemented or changed. Plan approval and implementation/live-exercise authorization remain separate.
+## Execution
+
+Implementation and controlled exercises are now authorized. Root owns all authoring and integration. Begin with [Help and decide](proposal.md#deliver-in-coherent-increments), then deliver the remaining first set and useful wider processes. Validation participants, if used, exercise the authored process; they do not build or review the implementation on root's behalf. Keep exercise state and effects apart from existing work and production systems.
+
+Track commits and actual checks in implementation-evidence.md as each increment lands.
 
 ## Outcome
 
-Planning approved with notes applied. Ready for separately authorized implementation. No new skills or roles have been implemented.
+Implementation in progress. The completed planning outcome below remains historical evidence.
 
 ### Assignment 555: Tadhg Marinescu
 

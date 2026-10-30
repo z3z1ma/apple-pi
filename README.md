@@ -484,6 +484,15 @@ flowchart LR
 
 ---
 
+### Organizational processes
+
+These model-selectable skills coordinate people within an already authorized goal; `/skill:<name>` also starts them explicitly. They use ordinary tasks, mail and channels, not another workflow runtime. Choose the smallest useful exchange rather than run a mandatory sequence. The [organization handbook](docs/organization.md#processes) explains authority, roles and selection.
+
+| Skill | Outcome |
+| --- | --- |
+| `peer-consultation` | Unblock a concrete problem through peer advice while its owner retains the choice. |
+| `decision-review` | Reach an accountable choice from independent positions, shared challenge and explicit evidence. |
+
 ## What Is Deliberately Excluded (And What Still Hurts)
 
 A system's character is defined by what it refuses to include.

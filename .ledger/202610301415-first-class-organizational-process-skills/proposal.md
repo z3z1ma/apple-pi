@@ -1,6 +1,8 @@
 # Give the organization a practical process handbook
 
-**Decision requested:** approve the portfolio, the first delivery set, and how we will evaluate it. This is a plan; approval of this document does not start implementation or live exercises.
+**Planning status:** approved with notes on 2026-10-30; the role-related revisions below apply those notes. This document records the portfolio, first delivery set, and evaluation plan. The operator subsequently authorized implementation, controlled exercises and incremental commits; [task.md](task.md) now owns execution scope.
+
+**Delivery sequence:** begin with [Help and decide, the first delivery increment](#deliver-in-coherent-increments), and apply the [validation requirements](#validate-usefulness-as-well-as-packaging) as each increment is delivered.
 
 **Recommendation:** add seven agent-selectable process skills first: **peer consultation, decision review, tiger team, handoff, incident response, operating review, and retrospective**. Together they cover getting help, deciding, delivering across boundaries, transferring responsibility, recovering service, correcting constraints, and learning. Keep a wider candidate portfolio visible rather than implementing the whole catalog at once. Develop the roles alongside the processes: today's catalog is a starting point, not a ceiling.
 
