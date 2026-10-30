@@ -1,8 +1,8 @@
-Status: complete for planning
+Status: complete
 Created: 2026-10-30
 Updated: 2026-10-30
 
-# Planning retrospective
+# Planning and implementation retrospective
 
 ## What mattered
 
@@ -26,4 +26,16 @@ The operator approved it but exposed a limitation: it treated today's role catal
 
 Each process has a trigger, authority boundary, accountable result and concrete live-exercise counterexample. Proposed management roles have continuing jobs and boundaries against existing advisors and managers. Evaluation covers discovery, package contents, selection/comprehension and actual controlled collaboration; it does not substitute a loader pass or scripted trace for useful behavior.
 
-The implementation phase should preserve these distinctions, record which perspectives actually changed outcomes, and narrow or merge skills and roles that do not earn their place. This plan is ready for separately authorized implementation; delivery and live exercises remain unperformed.
+These were the planning-phase criteria, not implementation evidence. The operator subsequently authorized personal implementation and incremental commits.
+
+## Implementation
+
+Root authored and integrated all 15 skills and four management roles, committing coherent groups rather than adding another approval gate. Existing runtime capabilities were sufficient: no new tool, workflow entity, scheduler, schema or runtime restart was required. Due diligence earns its own entry as an inquiry into inherited obligations; decision review still owns the eventual choice. Research leadership carries a continuing inquiry rather than replacing a bounded research call.
+
+Packaging, role capability wiring and a live model's selection were checked separately. All 18 metadata-only selection cases passed, but that is not autonomous adoption or process effectiveness. The per-process evidence table explicitly leaves most live execution unverified. New managers' continuing performance was not exercised.
+
+The two native participant exercises exposed useful exchange, not just independent essays. Different supplied facts led to shared clarification; peers improved the observation by adding lookup keys and a cache-hit check. Private first positions were gathered before shared discussion. A seeded objection was answered, and root chose and executed the toy comparison. Neither participant built or reviewed the implementation.
+
+There was also real friction. Root archived the consultation before one participant's reflection arrived, causing a refused reply. Shared guidance now says to collect closeout before archive; the decision conversation waited for both closeouts. The extra exchange over a fourth request had little value after the shorter sequence already discriminated the proposals. This supports stopping at an adequate result, not imposing a fixed message budget.
+
+Both participants finished their own assignments and were verified idle with zero held work before going home. Synthetic fixtures remained in this bundle; native exercise records are in the real organization, distinct from existing live work. The exercises establish bounded behavior with explicit selection and supplied facts, not production cache correctness, spontaneous dissent, recovery from unavailable peers or general delivery improvement.

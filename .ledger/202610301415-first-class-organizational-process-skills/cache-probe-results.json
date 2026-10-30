@@ -1,0 +1,25 @@
+{
+  "fixture": "Synthetic tenant-keyed cache with fixed viewer identities and permissions",
+  "trace": [
+    {
+      "viewer": "B",
+      "key": "tenant",
+      "hit": false,
+      "value": "tenant:B"
+    },
+    {
+      "viewer": "A",
+      "key": "tenant",
+      "hit": false,
+      "value": "tenant:A"
+    },
+    {
+      "viewer": "B",
+      "key": "tenant",
+      "hit": true,
+      "value": "tenant:A"
+    }
+  ],
+  "conclusion": "The constructed warm-cache case reuses A's value for B; the cold-B control succeeds.",
+  "limit": "This demonstrates the chosen probe in an authored faulty fixture, not a defect in any real application."
+}

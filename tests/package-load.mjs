@@ -522,8 +522,11 @@ try {
 	for (const skill of packagedSkills) {
 		assert(existsSync(`skills/${skill}/SKILL.md`), `missing packaged skill: ${skill}`);
 	}
-	for (const name of [...processSkills, "handbook-writing"]) {
-		const file = `skills/${name}/SKILL.md`;
+	const processGuidance = [
+		...[...processSkills, "handbook-writing"].map((name) => `skills/${name}/SKILL.md`),
+		"skills/handbook-writing/references/processes.md",
+	];
+	for (const file of processGuidance) {
 		for (const [, link] of readFileSync(file, "utf8").matchAll(/\]\(([^)]+)\)/g)) {
 			if (/^(https?:|#)/.test(link)) continue;
 			assert(existsSync(resolve(dirname(file), link.split("#")[0])), `${file}: missing reference ${link}`);

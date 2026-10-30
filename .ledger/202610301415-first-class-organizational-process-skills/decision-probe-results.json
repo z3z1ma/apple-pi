@@ -1,0 +1,52 @@
+{
+  "results": [
+    {
+      "policy": "viewer-key",
+      "trace": [
+        {
+          "viewer": "A",
+          "key": "[\"tenant\",\"A\"]",
+          "hit": false,
+          "value": "tenant:A"
+        },
+        {
+          "viewer": "B",
+          "key": "[\"tenant\",\"B\"]",
+          "hit": false,
+          "value": "tenant:B"
+        },
+        {
+          "viewer": "A",
+          "key": "[\"tenant\",\"A\"]",
+          "hit": true,
+          "value": "tenant:A"
+        }
+      ]
+    },
+    {
+      "policy": "clear-on-logout",
+      "trace": [
+        {
+          "viewer": "A",
+          "key": "tenant",
+          "hit": false,
+          "value": "tenant:A"
+        },
+        {
+          "viewer": "B",
+          "key": "tenant",
+          "hit": true,
+          "value": "tenant:A"
+        },
+        {
+          "viewer": "A",
+          "key": "tenant",
+          "hit": true,
+          "value": "tenant:A"
+        }
+      ]
+    }
+  ],
+  "decision": "Choose tenant+viewer keys for this fixture; logout clearing occurs too late for simultaneous logged-in viewers.",
+  "limit": "Sequential requests from concurrently valid identities, not a thread-race, changing-permission, cost or production-security test."
+}

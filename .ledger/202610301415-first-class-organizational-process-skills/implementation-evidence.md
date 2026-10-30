@@ -39,4 +39,23 @@ Added eight distinct processes: pre-mortem, prioritization, release readiness, d
 - Scoped Biome and whitespace checks passed.
 - `selection-check.mjs` used the configured live `openai/gpt-6.1-sol` model with the actual packaged model-visible names/descriptions, fresh independent contexts, no skill bodies and no tools. **18/18** cases selected the intended entry, including a no-process case and code-review/diagnosing-bugs controls. Raw requests, answers and recorded model cost ($0.0498724) are in `selection-results.json`. No runtime people, tasks or production effects were created by this metadata check.
 
-This is one model and an explicit synthetic classification request, not autonomous process adoption during real work. It does not establish actual collaboration, role effectiveness or business benefit. Native consultation/decision exercises are next; the remaining processes still have no live-execution proof.
+Wider portfolio committed: `7ed2f649`.
+
+This is one model and an explicit synthetic classification request, not autonomous process adoption during real work. It does not establish actual collaboration, role effectiveness or business benefit. Native consultation/decision exercises subsequently ran as described below. The remaining processes still have no live-execution proof.
+
+## Native exchanges and final verification
+
+`exercises.md` records the actual consultation and decision exchanges, source thread/message references, isolated toy programs/results, participant closeouts and a per-process coverage table. Root authored and executed both probes. Niamh and Riku were subjects, not builders or reviewers. Both finished their assignments and were verified idle and unassigned before going home.
+
+One observed procedural failure changed the handbook: root archived the consultation before Niamh's reflection reply arrived. The shared convention now collects the closing exchange before archiving; the later decision discussion waited for both closeouts. A separate repeated pre-execution Pi Exec type-checker failure prevented a composed archive call; root verified the thread was still open and used the native tool directly. No runtime workaround was added.
+
+Final checks:
+
+- Loader passed after the closing-order change, including references in the shared convention: `/tmp/process-skills-final-loader.log`.
+- Full relevant role test file: **46 passed**, serialized with `--maxWorkers=1`: `/tmp/process-skills-final-roles.log`.
+- `npm run typecheck`: both Node and Web passed; `/tmp/process-skills-final-types.log`.
+- Final package dry run: **2,738 files**, all 15 new skills, four roles and shared reference included; exercise artifacts excluded. `/tmp/process-skills-final-pack.json`.
+- Both toy programs passed again after scoped formatting. Their outputs remain in the bundle.
+- Scoped Biome and whitespace checks passed. Changed Markdown text integrity, local targets and heading references passed.
+
+No full repository suite or installed-tarball startup was run. The running root session has not reloaded resources; existing sessions need `/reload`, while fresh sessions use the existing package loader. No daemon or Workplace restart, new runtime store, tool or workflow engine was introduced. Existing unrelated knowledge-file changes were left intact.

@@ -20,4 +20,4 @@ When a contributor is unavailable, distinguish missing critical input from an op
 
 End with the process's observable result, what was verified and what remains uncertain. A receiver confirms a handoff; until then, keep responsibility explicit. Finish or reassign actual work separately from closing its discussion. Return borrowed capacity through its manager; closing a process is not permission to delete people.
 
-A multi-person process closes with a short exchange on what helped or hindered it, feeding the task's retrospective. Use a deeper retrospective only when the experience warrants it. Keep durable follow-up in an owned task; reminders are session-local, not durable scheduling.
+A multi-person process closes with a short exchange on what helped or hindered it, feeding the task's retrospective. Collect that exchange before archiving the shared discussion so expected replies still have a destination. Use a deeper retrospective only when the experience warrants it. Keep durable follow-up in an owned task; reminders are session-local, not durable scheduling.
