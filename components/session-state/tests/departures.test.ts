@@ -46,7 +46,7 @@ function fixture() {
 		applyFacts(person: string, generation: number, facts: Partial<Facts>, hello?: boolean): void;
 		transfer(person: string, command: Extract<Command, { kind: "transfer" }>): string | undefined;
 	};
-	const depart = (manager: string, removeLiveRow = true) => {
+	const depart = (manager: string | null, removeLiveRow = true) => {
 		const departure: Departure = {
 			commandId: "departure",
 			reason: "Assignment complete.",
@@ -180,6 +180,22 @@ test("removing an untransferred person's live row preserves earlier spend and hi
 	expect(departureOf(db, "person")).toEqual(departure);
 	expect(departedPeople(db).get("person")).toEqual(departure);
 	expect(membership(db, "root").memberAt("person", 5 * HOUR)).toBe(false);
+});
+
+test("independent departure keeps null reporting and historical spend after live removal", () => {
+	const { db, runtime, clock, depart } = fixture();
+	db.prepare("update sessions set reports_to = null where id = 'person'").run();
+	clock.mockReturnValue(HOUR);
+	runtime.applyFacts("person", 1, { cost: 5 });
+	expect(realizedFitness(db, "person", 0, 3 * HOUR).compute).toBe(5);
+	depart(null);
+	const history = membership(db, "person");
+	expect(history.managerAt("person", HOUR)).toBeNull();
+	expect(history.memberAt("person", HOUR)).toBe(true);
+	expect(history.memberAt("person", 5 * HOUR)).toBe(false);
+	expect(realizedFitness(db, "person", 0, 3 * HOUR).compute).toBe(5);
+	expect(departureOf(db, "person")?.reportsTo).toBeNull();
+	expect(nameOf(db, "person")).toBe("Pat Worker");
 });
 
 test("a departed person's snapshot does not rewrite reporting before a recorded transfer", () => {

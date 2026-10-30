@@ -146,7 +146,7 @@ A person whose role manages, or an unroled organization root, also has ten manag
 
 Use `send_home` and `call_in` when you want to retain someone's accumulated context. `let_go` is irreversible; a handoff is a summary, not a transcript backup.
 
-1. Finish or reassign every unfinished assignment and move direct reports first. Outstanding owned program resources must finish cleanup. The request also refuses an organization root, self-departure, a duplicate departure, or a program-owned temporary peer (its program owns disposal).
+1. Finish or reassign every unfinished assignment and move direct reports first. Outstanding owned program resources must finish cleanup. Requests also refuse self-departure, a duplicate departure, or a program-owned temporary peer (its program owns disposal). Agents cannot let an organization root go. The operator can explicitly let an independent person go, with or without a role; the same work, reports, program-resource, handoff and cleanup checks apply. With no manager, departure notices go to the operator alone.
 2. Acceptance returns an operation id, not a claim that the person or its resources are gone. The runtime obtains a final Markdown handoff in the person's own session, waking it with its retained context when needed, and saves the document privately under `~/.pi/agent/state/handoffs/`.
 3. The runtime rechecks responsibilities before committing permanent departure. It then closes admission and new obligations, proves that known writing processes have stopped, removes checked owned transcript/usage files, and deletes the live person and private session records. Cleanup retries after errors and restart; read the later outcome before treating it as complete.
 

@@ -153,6 +153,8 @@ Verify: components/session-state/tests/program-peers.test.ts, components/session
 
 ## symbol:Runtime.retireSession
 
+Only explicit `by: operator` may let an independent root depart, including an unroled one. Root status is not a waiver for unfinished assignments, reports, program ownership, duplicate/self departure or the second responsibility check. Agent-facing organization/self authority stays unchanged. The existing notice path accepts a null manager and addresses only the operator; no synthetic parent or separate deletion route is introduced.
+
 Acceptance starts a runtime-owned departure job; caller disconnection does not cancel it. It waits for ordinary work to finish, wakes a dormant person under its stored identity and requests a correlated final turn in that person's retained session. Successful final prose is saved verbatim as private durable Markdown, not posted as shared mail. Empty/failed handoffs and newly arrived responsibilities refuse the irreversible commit while preserving the live person/transcript.
 
 The durable handoff precedes the atomic person_departed marker, retired snapshot, notices and incarnation-bound close. From that commit the identity cannot return. File/private-record removal is a separate retryable phase gated by observed writer/process/pane proof; applied means cleanup completed, not merely that the model replied. Startup resumes committed cleanup without another paid turn, while an interrupted precommit job fails for inspection. Final-turn cost arrives through the existing bridge observation convention before departure rather than being synthesized from reply.usage.

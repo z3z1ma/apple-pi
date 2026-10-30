@@ -947,7 +947,8 @@ export class Runtime {
 			| undefined;
 		if (!person) throw new Error("unknown person");
 		if (person.retired_at !== null || departureOf(db, sessionId)) throw new Error("This person has already left.");
-		if (person.reports_to === null) throw new Error("An organization root cannot be let go.");
+		if (person.reports_to === null && command.by !== OPERATOR)
+			throw new Error("Only the operator can let an organization root go.");
 		if (temporaryCallers(db).has(sessionId))
 			throw new Error("Temporary program peers belong to their program's discard lifecycle, not let_go.");
 		if (db.prepare("select 1 from assignments where person = ? and ended_at is null").get(sessionId))
@@ -1098,7 +1099,7 @@ export class Runtime {
 		command: Extract<Command, { kind: "retire" }>,
 		phase: string,
 		body: string,
-		manager?: string,
+		manager?: string | null,
 	) {
 		const db = this.db!;
 		const to = [...new Set([manager, command.by ?? OPERATOR])].filter(

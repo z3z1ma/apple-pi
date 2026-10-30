@@ -3,13 +3,15 @@
 These cases use the existing scripted-model SDK harness in an isolated child process with only the native workplace extension. A retained SessionManager, actual bridge, daemon, filesystem and OS exit participate; the choice and prose remain scripted. The parent calls native let_go and receives its accepted reference before releasing the held final turn. Its production command client disconnects at acceptance, so later completion also exercises daemon ownership after caller disconnection.
 Why: an in-process SDK victim shares the test/manager PID and cannot honestly prove process death or authorize signalling that host. A prototype guard or socket reply alone is not full native-session proof.
 
+Independent controls run both roled and unroled real SDK hosts with no manager. Operator requests reuse the full retained-session departure path, preserving null reporting and operator-only notices, while ordinary callers and self remain refused. Work, reports and an actual open program scope still block admission. Empty-reply and newly-arriving-work failures run for both dependent and independent people; header-cleanup recovery runs both across scratch-daemon restart without repeating a final turn.
+
 The child can end its SDK session while keeping the OS host alive, or replace it with another SDK session in the same process. These are separate safety controls. Rejected flag-free resumes are observed through their actual close and owned-file cleanup, without new incarnations; a later attempt leaves the earlier applied receipt truthful. Legacy former controls retain their row/file/history and acquire no cleanup ownership.
 
 Final synthetic handoff usage is a positive increment. Compare recorded compute before/after and its cost event before the departure marker, rather than guessing a cumulative transcript total or inventing an extra charge from the reply. Work/mail setup asserts applied receipts before relying on the produced assignment/outcome; a resolved command promise can carry failure.
 Why: initial retained costs and observation conventions are separate from whether this final turn's observed spend survives removal.
 
 Production and fixture helpers both export `sendCommand` with different call shapes. Use the production import's positional `(sessionId, command, options)` contract and typecheck new harness code before execution.
-Why: a miscalled producer can resolve with a failed receipt; a later missing-assignment assertion then reports the setup error as a retention failure.
+Why: a miscalled producer can resolve with a failed receipt; a later missing-assignment assertion then reports the setup error as a retention failure. A test holding the final turn must request `until: accepted` before releasing it: the default waits for applied/failed, so a red admission failure can mask a circular wait until the feature is fixed.
 
 Expected sidecar files are spelled independently using the existing agent-directory `.ndjson` layout and rotation. Read the producer's complete path composition before changing those expectations; using a guessed suffix/root exercises unrelated files, not cleanup.
 

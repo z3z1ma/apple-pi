@@ -8,7 +8,8 @@ import bridge from "../../src/index.js";
 interface Configuration {
 	cwd: string;
 	person: string;
-	manager: string;
+	manager: string | null;
+	role?: string;
 	file?: string;
 	flagFree?: boolean;
 	holdHandoff?: boolean;
@@ -55,7 +56,8 @@ async function open(person: string, file?: string) {
 		[
 			(pi) => {
 				const flag = pi.getFlag.bind(pi);
-				pi.getFlag = (name) => (name === "reports-to" && !configuration.flagFree ? configuration.manager : flag(name));
+				pi.getFlag = (name) =>
+					name === "reports-to" && !configuration.flagFree ? (configuration.manager ?? undefined) : flag(name);
 				bridge(pi);
 			},
 		],
@@ -79,6 +81,7 @@ async function open(person: string, file?: string) {
 		[],
 		{ cwd: configuration.cwd, sessionManager: manager },
 	);
+	if (configuration.role) current.session.extensionRunner.setFlagValue("role", configuration.role);
 	current.session.setSessionName(person === configuration.person ? "Retained Worker" : "Successor Worker");
 	await current.session.bindExtensions({
 		shutdownHandler: () => {
