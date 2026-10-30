@@ -80,7 +80,7 @@ test("mail is a thread: send_mail with a copy reaches everyone, a reply reaches 
 		await manager.session.prompt("ask the team");
 		const [sent] = results(manager);
 		expect(sent.isError).toBe(false);
-		const thread = /thread (t-[0-9a-f]+)/.exec(sent.text)?.[1] as string;
+		const thread = JSON.parse(sent.text).effect.thread.id as string;
 		expect(thread).toBeDefined();
 		for (const who of [ada, ben])
 			await vi.waitFor(() =>
@@ -104,10 +104,15 @@ test("mail is a thread: send_mail with a copy reaches everyone, a reply reaches 
 			).toHaveLength(1),
 		);
 
-		script.push(call("read_thread", { thread }));
+		script.push(call("read_thread", { thread, view: "range", limit: 10 }));
 		await manager.session.prompt("read it");
 		const read = results(manager).at(-1)!;
-		expect(read.text).toMatch(/"Release plan"[\s\S]*Who takes the rollout\?[\s\S]*Ada \(thr-ada\)[\s\S]*I take it\./);
+		const page = JSON.parse(read.text).effect.page;
+		expect(page.thread.name).toBe("Release plan");
+		expect(page.messages).toMatchObject([
+			{ body: "Who takes the rollout?" },
+			{ from: "thr-ada", fromName: "Ada", body: "I take it." },
+		]);
 
 		script.push(call("reply", { thread, body: "Thanks, Ada." }));
 		await manager.session.prompt("thank her");
@@ -140,7 +145,7 @@ test("my-team and my-manager follow the tree; mail to a sleeping person waits an
 		await lead.session.prompt("ask the team");
 		const [sent] = results(lead);
 		expect(sent).toMatchObject({ isError: false });
-		expect(sent.text).toContain("At home, the mail waits: Dee.");
+		expect(JSON.parse(sent.text).effect.queued).toContain("thr-dee");
 		await vi.waitFor(() => expect(cy.mail.map((m) => m.body)).toEqual(["Status, please."]));
 		const waiting = query(state.dbPath, "select stage from commands where session_id = 'thr-dee' and kind = 'mail'");
 		expect(waiting).toEqual([{ stage: "accepted" }]);
@@ -194,12 +199,15 @@ test("inbox lists only the caller's threads, counts what it has not read, and re
 		await vi.waitFor(() => expect(withThreads((db) => threadsOf(db, readerId, true))).toEqual([]));
 		script.push(call("inbox", { all: true }));
 		await reader.session.prompt("what threads am I in");
-		const listed = results(reader).at(-1)!.text;
-		expect(listed).toContain('t-inbox1 [mail] "Question for the lead" with Eve; 0 new.');
-		expect(listed).not.toContain("t-inbox2");
-		script.push(call("read_thread", { thread: "t-inbox2" }));
+		const listed = JSON.parse(results(reader).at(-1)!.text);
+		expect(listed.threads).toContainEqual(
+			expect.objectContaining({ id: "t-inbox1", name: "Question for the lead", unread: 0 }),
+		);
+		expect(listed.threads).not.toContainEqual(expect.objectContaining({ id: "t-inbox2" }));
+		script.push(call("read_thread", { thread: "t-inbox2", limit: 1 }));
 		await reader.session.prompt("snoop");
-		expect(results(reader).at(-1)).toMatchObject({ isError: true, text: "You are not in thread t-inbox2." });
+		expect(results(reader).at(-1)).toMatchObject({ isError: true });
+		expect(results(reader).at(-1)!.text).not.toContain("Not for the lead.");
 		// Reading marks a thread read for its reader.
 		await sendCommand(state.socketPath, "thr-fay", { kind: "thread_read", thread: "t-inbox2", seq: 1_000_000 });
 		expect(withThreads((db) => threadsOf(db, "thr-fay", true))).toEqual([]);

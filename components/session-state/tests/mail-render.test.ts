@@ -2,7 +2,7 @@ import { CustomMessageComponent, initTheme } from "@earendil-works/pi-coding-age
 import { visibleWidth } from "@earendil-works/pi-tui";
 import { afterEach, beforeAll, expect, test } from "vitest";
 import { fauxSession } from "../../../tests/helpers/faux-session.js";
-import { installMail, MAIL_CUSTOM_TYPE, type Mail } from "../src/mail.js";
+import { installMail, MAIL_CUSTOM_TYPE, type Mail, mailText } from "../src/mail.js";
 
 const strip = (text: string) => text.replace(/\x1b\[[0-9;]*m/g, "");
 const cleanup: Array<() => Promise<void>> = [];
@@ -42,6 +42,30 @@ async function fixture(hidden: boolean, toolsExpanded: boolean) {
 	component.setExpanded(toolsExpanded);
 	return { component, run };
 }
+
+test("a notification envelope exposes its actual conversation kind and stable message reference", () => {
+	const envelope = mailText({
+		...mail,
+		thread: 'topic-"quoted',
+		subject: "Shared <context>",
+		threadKind: "channel",
+		reference: { thread: 'topic-"quoted', seq: 42, id: 'message-&"' },
+	});
+	expect(envelope).toContain('thread="topic-&quot;quoted"');
+	expect(envelope).toContain('subject="Shared &lt;context>"');
+	expect(envelope).toContain('kind="channel"');
+	expect(envelope).toContain('seq="42"');
+	expect(envelope).toContain('message="message-&amp;&quot;"');
+	expect(envelope).toContain(`\n${mail.body}\n</mail>`);
+});
+
+test("legacy mail keeps unknown metadata unknown even when its title resembles a meeting", () => {
+	const envelope = mailText({ ...mail, thread: "t-legacy", subject: "Meeting" });
+	expect(envelope).not.toContain(' kind="');
+	expect(envelope).not.toContain(' seq="');
+	expect(envelope).not.toContain(' message="');
+	expect(envelope).toContain('subject="Meeting"');
+});
 
 beforeAll(() => initTheme("dark"));
 

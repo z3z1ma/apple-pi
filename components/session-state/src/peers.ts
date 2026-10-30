@@ -8,6 +8,7 @@ import {
 	organizationColumns,
 	organizationOf,
 } from "../../organization/src/directory.js";
+import { COMMUNICATION_TOOLS } from "./communication-tools.js";
 import { statePaths } from "./paths.js";
 import { hasWork } from "./work-read.js";
 
@@ -60,7 +61,7 @@ export function livePeers(self: string | null): Peer[] {
 }
 
 /** Restore newly registered person tools when resume loads an older transcript's tool set. */
-const PERSON_TOOLS = ["directory", "send_mail", "reply", "inbox", "read_thread", "post", "escalate"];
+const PERSON_TOOLS = ["directory", ...COMMUNICATION_TOOLS];
 const statuses = ["working", "idle", "asking the operator", "at home"] as const;
 export interface DirectoryOptions {
 	person?: string;

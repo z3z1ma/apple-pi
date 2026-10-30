@@ -373,7 +373,19 @@ test("everyone gets the org section; only a managing role gets the manager chart
 		])
 			expect(prompt).toContain(`\`${tool}\``);
 		expect(prompt).toContain("<manager>\nYou are a manager: the operator brings you work");
-		expect(prompt).toMatch(/standup[\s\S]*remind_me[\s\S]*meet/);
+		expect(prompt).toMatch(/check-in[\s\S]*remind_me[\s\S]*ordinary mail or channel discussion/);
+		for (const tool of [
+			"create_channel",
+			"invite_to_thread",
+			"search_messages",
+			"communication_status",
+			"archive_thread",
+		])
+			expect(prompt).toContain(`\`${tool}\``);
+		expect(prompt).toContain("names and @names in prose are ordinary text");
+		expect(prompt).toContain("organization-derived access remains");
+		expect(prompt).not.toContain("`meet`");
+		expect(prompt).not.toContain("`end_meeting`");
 		for (const moment of [
 			"when the operator asks",
 			"during planning or implementation",

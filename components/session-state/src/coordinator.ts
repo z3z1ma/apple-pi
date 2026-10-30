@@ -5,23 +5,11 @@ import { loadRoles, managesPeople, organizationOf } from "../../organization/src
 import { resolvePerson } from "./addresses.js";
 import { sendCommand } from "./client.js";
 import { departureOf } from "./departures.js";
-import { installMeetings } from "./meetings.js";
 import type { Command, Receipt } from "./protocol.js";
 import { focusedTask, withWork } from "./work.js";
 import { goalTitle, goalWorth, installAssignments, requireTitle } from "./work-tools.js";
 
-const MANAGER_TOOLS = [
-	"hire",
-	"call_in",
-	"send_home",
-	"rename",
-	"move",
-	"let_go",
-	"meet",
-	"end_meeting",
-	"assign",
-	"unassign",
-];
+const MANAGER_TOOLS = ["hire", "call_in", "send_home", "rename", "move", "let_go", "assign", "unassign"];
 
 /** The tmux pane this session runs in, which new windows open next to. */
 function ownPane(): { socket: string; pane: string } | undefined {
@@ -54,7 +42,6 @@ const personParameter = Type.String({
 
 /** Manager tools follow the shared management capability gate. */
 export function installCoordinator(pi: ExtensionAPI): void {
-	installMeetings(pi);
 	installAssignments(pi);
 	pi.registerTool(
 		defineTool({

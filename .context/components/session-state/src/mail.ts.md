@@ -2,13 +2,17 @@
 
 A session's own `custom_message` entries of `MAIL_CUSTOM_TYPE` (on every branch, from `getEntries()`) are the delivery record: mail is applied only when the transcript holds it and the session file exists (Pi writes a new session's file only once it holds a user or assistant message; the bridge waits for one), and the runtime sends every mail not yet applied to each new bridge, which skips ids already recorded.
 Why: a mail marked done when Pi merely queued it is lost when the process ends before the queue is delivered (closing a busy worker), and reading `getBranch()` instead would redeliver after `/tree` plus a restart.
-The native escalation writer sets `threadKind: escalation`; its subject stays a human label. Fitness treats this kind as operator mail, while communication inspection and Agent World use the kind for escalation identification. Historical subject-only mail remains unclassified.
-Why: adding a semantic kind must preserve ordinary mail delivery and operator-demand accounting; otherwise improved identification would silently remove real interruptions or attention indicators.
 Coupled: components/session-state/src/bridge.ts, components/session-state/src/runtime.ts, components/session-state/src/threads.ts, components/session-state/src/fitness.ts, components/session-state/src/inspect.ts, apps/agent-world/src/backend/workplace.ts
 Verify: components/session-state/tests/mail.test.ts
 
 The custom type keeps its old name, `apple-pi.mailbox-message`.
 Why: transcripts written before mail moved onto the database use it; they must still render and count as delivered.
+
+## symbol:sendThreadMessage
+
+The pair's successful staged second-opinion review still calls this internal normal-mail writer. Native agent tools use the versioned communication boundary in communication-tools.ts instead. Preserve the existing exported writer while that real internal consumer exists; removing manager meeting tools does not remove the pair's publishing path.
+Coupled: components/pair-programmer/src/second-opinion.ts, components/session-state/src/communication-tools.ts
+Verify: components/pair-programmer/tests/second-opinion.test.ts
 
 ## symbol:installMail
 
@@ -19,6 +23,12 @@ Mail expansion reads the live thinking-visibility setting when drawing, independ
 Why: Pi rebuilds custom messages when tool expansion changes, but thinking toggles can only request a redraw. Reading the setting in the renderer-registration callback would leave already displayed mail stale; waiting for a first prompt would leave restored history stale.
 Coupled: components/shared/src/forked-continuation.ts
 Verify: components/session-state/tests/mail.test.ts, components/session-state/tests/mail-render.test.ts
+
+## symbol:mailText
+
+New notifications carry the actual thread kind and stable message reference through the model-visible envelope, so a recipient can distinguish channel attention from addressed mail and cite the event without fetching backscroll. Older rows may omit both; a subject never establishes kind. Preserve the delivery ID separately from the shared-message reference.
+Coupled: components/session-state/src/bridge.ts, components/session-state/src/protocol.ts, components/session-state/src/runtime.ts
+Verify: components/session-state/tests/mail-render.test.ts
 
 ## symbol:deliverMail
 

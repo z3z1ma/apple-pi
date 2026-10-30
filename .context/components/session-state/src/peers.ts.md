@@ -1,6 +1,6 @@
 ## symbol:installPeers
 
-The bridge installs peer discovery in every root session, not only managers. Restore activation at session start and before a turn while preserving other active tools: Pi can restore a transcript's older tool set on resume and tree navigation.
+The bridge installs directory and all native communication capabilities in every root session, not only managers. Restore activation from COMMUNICATION_TOOLS at session start and before a turn while preserving other active tools: Pi can restore a transcript's older tool set on resume and tree navigation. Ordinary roles can convene addressed exchanges or topic context; staffing/work authority remains separate.
 Coupled: components/session-state/src/bridge.ts, components/session-state/src/coordinator.ts
 Verify: components/session-state/tests/coordinator.test.ts, components/session-state/tests/peers.test.ts
 

@@ -30,7 +30,7 @@ The **chair** runs the board and rules on findings. The chair is never the autho
 ## Run the board
 
 1. **First findings, alone.** Each reviewer works only from the brief and sends findings for one axis to the chair privately, before seeing anyone else's.
-2. **Challenge.** The chair posts all findings in one review thread, a `send_mail` thread to the whole board; each member's assignment has its own task thread, so none of those reaches everyone. The skeptic challenges each finding's evidence; the author answers what the change was for and what it guards. Use `meet` only for a dispute that needs live exchange.
+2. **Challenge.** The chair posts all findings in one review thread, a `send_mail` thread to the whole board; each member's assignment has its own task thread, so none of those reaches everyone. The skeptic challenges each finding's evidence; the author answers what the change was for and what it guards. Continue a disputed point with `reply` in that shared thread so the board sees the evidence and answers.
 3. **Ruling.** Once every reviewer, the skeptic, and the author have replied, the chair checks each finding against current source and rules it **confirmed**, **rejected**, or **unresolved**.
 4. **Close.** The board spends a short exchange on what made this review harder or easier, and the chair records it in the task's `retrospective.md`.
 

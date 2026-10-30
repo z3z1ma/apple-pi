@@ -125,7 +125,7 @@ In any root Pi session, the human `/org` command remains available regardless of
 
 ## Manager tools
 
-A person whose role manages, or an unroled organization root, also has ten manager tools:
+A person whose role manages, or an unroled organization root, also has eight manager tools:
 
 | Tool | What it does |
 | --- | --- |
@@ -137,8 +137,6 @@ A person whose role manages, or an unroled organization root, also has ten manag
 | `let_go` (`person`, `reason`) | Accepts an asynchronous permanent departure after explicit responsibility handoff. Saves an own-context handoff file before irreversible removal; later mail reports the outcome. |
 | `assign` (`person`, `goal` and `title`, or `task`; `value?`, `cost_of_delay?`) | Gives a person a task or a written goal. It becomes the person's focus. |
 | `unassign` (`person`, `task`) | Takes an assignment back without finishing it. |
-| `meet` (`people`, `agenda`) | Opens a meeting thread. Every message is pushed to every participant. |
-| `end_meeting` (`thread`, `summary`) | Sends the summary and closes the meeting. Only the organizer can end it. |
 
 `person` and `manager` accept a name in the caller's organization or a session id. You can do the same acts from Agent World (hire at a manager's desk, give a goal to a person, let go from a person's actions). The details are in [session-state](session-state.md#manager-tools).
 
@@ -156,13 +154,38 @@ Shared thread messages, finished assignment outcomes, explicit links, audience h
 
 This removes known session-owned resources, not independent fork/copy transcripts, project files, browser artifacts, unrelated logs or arbitrary orphan processes outside harness ownership. Existing legacy former records are not silently purged; their historical retirement/rehire intervals remain readable without restoring a rehire tool.
 
-The `<org>` section teaches the push and pull model. A new hire's first turn includes its team channel's history, when the channel has any. The `<manager>` charter suggests a short regular meeting, arranged with `remind_me` and held with `meet`, when the team benefits from one.
+The always-present `<org>` section teaches communication selection, access/following/attention and truthful recovery for every role. Newcomer context points to the channel's identity, purpose and current-context reference rather than automatically copying its whole backscroll. The `<manager>` charter composes `remind_me` with ordinary mail/channel discussion for a useful check-in; skills choose facilitation and decision authority.
 
 ## Threads
 
-Every exchange is a thread that the runtime stores. Mail and meetings push every message to every participant. Team channels are pulled: a post waits until the participant reads it, unless the post names that person. Each task has a task thread for its assignees and assigners, also pushed. A pushed message to a person at home waits and arrives when the person wakes. The sender is told who is asleep.
+Every exchange is a thread with stable identity and ordered messages in the runtime's shared store. Direct/group mail and task discussions push replies to their current members. Channels are pulled; only an explicit `notify` list requests selected accessible people's attention. Names and @names in prose are ordinary text. Mail for someone at home waits for a future opening; inviting or notifying them does not start their process or assign work.
 
-Each manager has a local team channel, `team:<manager-id>`, for the manager and its direct reports. Each independent head also has a whole-tree channel, `organization:<head-id>`, for the head and its lasting descendants, including people at home. Temporary program peers stay outside whole-tree membership. Both are ordinary pull channels with mention-triggered pushes.
+Ordinary roles and managers share the communication tools:
+
+| Need | Tool |
+| --- | --- |
+| Start an addressed exchange / continue its history | `send_mail(to, cc?, subject, body)` / `reply(thread, body, notify?)` |
+| Raise a beyond-authority decision or blocker | `escalate(body)`; use `ask_user_question` for an immediate operator interruption |
+| Shared context / explicit attention | `post(channel, body, notify?)`; notification targets must already have access |
+| Independent pull-first context / discovery | `create_channel(name, purpose, invite?)` / `find_channels(query?, followed?, archived?, limit, cursor?)` |
+| Follow / depart | `join_channel(channel)` / `leave_thread(thread)` |
+| Grant retained history / remove an explicit grant | `invite_to_thread(thread, people)` / `remove_thread_invitation(thread, people)` |
+| Unread conversations / paged history | `inbox(all?, limit?, cursor?)` / `read_thread(thread, view?, limit, after?, through?, cursor?)` |
+| Authorized shared evidence / current context | `search_messages(query, thread?, limit, cursor?)` / `pin_message(thread, seq)` |
+| Conclude / resume ordinary discussion | `archive_thread(thread, summary, notify?)` / `reopen_thread(thread, reason, notify?)` |
+| Outcome of one prior action | `communication_status(attempt)`; this is not traffic inspection or proof of understanding |
+
+A topic channel's recorded scope is its creating organization's head and descendants. People in that scope may discover/read/post without following. Foreign people need an explicit invitation by known ID; directory discovery remains organization-local. Temporary program peers retain their explicit-access boundary. Creating a channel follows its creator without changing reporting. Its history survives a creator or last participant.
+
+Access, following and attention are independent. Joining only follows under existing access. An invitation records a persistent explicit grant, even for someone already in scope, and follows the channel for them; the grant survives a later scope change until revoked. Leaving a channel stops following while preserving access/grants and future explicit notifications. In private mail, leaving removes explicit membership. Removing an invitation cannot revoke organization-derived access; results show remaining access and following separately. Task audiences remain owned by work operations.
+
+Use `read_thread` with `view:"catch_up"` (the default) to acknowledge only the returned page; follow its continuation to the captured upper sequence bound. `recent`, `range`, inbox previews and message search are inspection and leave catch-up unchanged. Channel notifications and the reader's own posts also leave it unchanged. A failed acknowledgment returns fetched content and failure/uncertainty separately, not a false caught-up claim. Message references cite a thread and sequence. One pin points to an ordinary authored brief or authoritative task/wiki link while retaining earlier messages.
+
+Any current mail member or joined topic participant may archive/reopen with an attributed conclusion/reason. Publication and lifecycle change are atomic; normal delivery applies. Archive retains unread final messages, search and evidence. It proves neither consensus nor task completion; structural and task lifecycle stay with their existing owners. Historical meeting records use this generic lifecycle without changing their classification. Authorized pin-reference changes remain possible on archives.
+
+Native mutations use SDK-assigned attempt identities and expose them in results. After uncertainty, inspect `communication_status` with the handle or original SDK tool-call ID; the lookup never resends. A recorded attempt preserves its canonical recipients and page/effect. A new model call is a new attempt even with identical prose. Without a durable original envelope, report the limit rather than reconstructing an earlier alias expansion or promising exactly-once intent. Applied publication means message/outbox commit, not transcript delivery, understanding, agreement or finished work. Queued messages retain their posting-time audience.
+
+Each manager has a local team channel, `team:<manager-id>`, for the manager and its direct reports. Each independent head also has a whole-tree channel, `organization:<head-id>`, for the head and its lasting descendants, including people at home. Temporary program peers stay outside whole-tree membership. Both are ordinary pull channels with explicit `notify` attention requests.
 
 A whole-tree channel follows its original head's branch after a merge, while the larger organization's channel gains that branch. Splitting reuses the head's existing whole-tree channel or creates one when absent; history remains in its original thread. Ordinary membership follows the tree, explicit invitations survive reporting changes, and departed people leave channels.
 

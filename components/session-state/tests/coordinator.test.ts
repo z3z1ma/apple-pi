@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai/compat";
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
 import { fauxSession, type Reply } from "../../../tests/helpers/faux-session.js";
+import { COMMUNICATION_TOOLS } from "../src/communication-tools.js";
 import bridge from "../src/index.js";
 import type { Command } from "../src/protocol.js";
 import { close, query, sendCommand, startRuntime, stopRuntime, tempStateDir } from "./helpers.js";
@@ -411,18 +412,7 @@ test("hiring into a role the catalog lacks fails before any window opens", async
 }, 20000);
 
 test("a hired person whose role does not manage loses the lifecycle tools; a hired manager keeps them", async () => {
-	const tools = [
-		"hire",
-		"call_in",
-		"send_home",
-		"rename",
-		"move",
-		"let_go",
-		"meet",
-		"end_meeting",
-		"assign",
-		"unassign",
-	];
+	const tools = ["hire", "call_in", "send_home", "rename", "move", "let_go", "assign", "unassign"];
 	const run = await fauxSession(
 		[bridge],
 		[fauxAssistantMessage("ok"), fauxAssistantMessage("ok")],
@@ -532,6 +522,7 @@ test.each([undefined, "implementation-engineer", "coordinator"])(
 			await run.session.prompt("list my peers");
 			expect(toolResults(run)[0]).toMatchObject({ isError: false });
 			const active = run.session.getActiveToolNames();
+			for (const removed of ["meet", "end_meeting"]) expect(active).not.toContain(removed);
 			for (const name of [
 				"hire",
 				"call_in",
@@ -539,8 +530,6 @@ test.each([undefined, "implementation-engineer", "coordinator"])(
 				"rename",
 				"move",
 				"let_go",
-				"meet",
-				"end_meeting",
 				"assign",
 				"unassign",
 				"org_fitness",
@@ -555,12 +544,7 @@ test.each([undefined, "implementation-engineer", "coordinator"])(
 				expect.arrayContaining([
 					"read",
 					"directory",
-					"send_mail",
-					"reply",
-					"inbox",
-					"read_thread",
-					"post",
-					"escalate",
+					...COMMUNICATION_TOOLS,
 					"take_task",
 					"focus",
 					"finish_task",

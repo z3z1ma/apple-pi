@@ -25,7 +25,7 @@ A process skill describes work that people in the organization do together. Stat
 
 - **Perspectives**: the views the work needs, each with a default role from `roles/` (for example `code-review-specialist`). Whoever runs the process adjusts the team with judgment.
 - **Chair**: who runs it and owns the result.
-- **Handoffs**: who gives what to whom, and where: the task thread or mail for work, `meet` when people must answer each other's positions, the team channel for shared context.
+- **Handoffs**: who gives what to whom, and where: the task thread for work discussion, group mail and `reply` when people must answer each other's positions, and a channel for shared context with explicit `notify` when attention is needed.
 - **Sign-off**: the points where the operator decides, and how they are asked. Everything else stays readable in threads.
 - **Done**: the observable result and how it is verified.
 - **Close**: a process with several people ends with a short team discussion that feeds the task's `retrospective.md`.

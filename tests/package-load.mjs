@@ -170,18 +170,32 @@ try {
 		0,
 	);
 	assert(workCommandCount === 1, `expected exactly one /work registration, got ${workCommandCount}`);
-	for (const tool of [
-		"acknowledge_pair_findings",
-		"update_notebook",
-		"ask_user_question",
-		"remind_me",
-		"monitor",
+	const communicationTools = [
 		"send_mail",
 		"reply",
 		"inbox",
 		"read_thread",
 		"post",
 		"escalate",
+		"create_channel",
+		"find_channels",
+		"join_channel",
+		"leave_thread",
+		"invite_to_thread",
+		"remove_thread_invitation",
+		"search_messages",
+		"pin_message",
+		"archive_thread",
+		"reopen_thread",
+		"communication_status",
+	];
+	for (const tool of [
+		"acknowledge_pair_findings",
+		"update_notebook",
+		"ask_user_question",
+		"remind_me",
+		"monitor",
+		...communicationTools,
 		"search_session",
 		"revisit_note",
 		"pi_exec",
@@ -209,6 +223,8 @@ try {
 		"steer_subagent",
 		"stop_subagent",
 		"standup",
+		"meet",
+		"end_meeting",
 		"schedule",
 		"list_peer_sessions",
 		"start_peer_session",
@@ -254,12 +270,7 @@ try {
 		result.extensions.some(
 			(extension) =>
 				extension.path.endsWith("session-state.ts") &&
-				extension.tools.has("send_mail") &&
-				extension.tools.has("reply") &&
-				extension.tools.has("inbox") &&
-				extension.tools.has("read_thread") &&
-				extension.tools.has("post") &&
-				extension.tools.has("escalate") &&
+				communicationTools.every((name) => extension.tools.has(name)) &&
 				extension.tools.has("directory") &&
 				extension.tools.has("hire") &&
 				extension.tools.has("call_in") &&
@@ -268,8 +279,8 @@ try {
 				extension.tools.has("rename") &&
 				extension.tools.has("move") &&
 				extension.tools.has("let_go") &&
-				extension.tools.has("meet") &&
-				extension.tools.has("end_meeting") &&
+				!extension.tools.has("meet") &&
+				!extension.tools.has("end_meeting") &&
 				extension.tools.has("take_task") &&
 				extension.tools.has("assign") &&
 				extension.tools.has("unassign") &&
