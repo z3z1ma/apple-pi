@@ -76,7 +76,7 @@ function matcher(area: string, cwd: string): (path: string) => boolean {
 	return (path) => path.toLowerCase().includes(word);
 }
 
-function taskTitleOf(bundle: string): string | null {
+export function taskTitleOf(bundle: string): string | null {
 	const goal = join(bundle, "task.md");
 	return existsSync(goal)
 		? (readFileSync(goal, "utf8")

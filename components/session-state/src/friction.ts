@@ -129,7 +129,7 @@ function detectFriction(db: DatabaseSync): FrictionNotice[] {
 			incoming.set(wait.to, [...(incoming.get(wait.to) ?? []), wait]);
 			outgoing.set(wait.from, [...(outgoing.get(wait.from) ?? []), wait]);
 		}
-		for (const component of components(waits)) {
+		for (const component of waitComponents(waits)) {
 			const nodes = new Set(component);
 			const cycle = waits.filter((wait) => nodes.has(wait.from) && nodes.has(wait.to));
 			if (component.length === 1 && !cycle.some((wait) => wait.from === wait.to)) continue;
@@ -222,7 +222,7 @@ function waitingOrganizations(db: DatabaseSync, roots: Set<string>): Set<string>
 }
 
 /** Strongly connected components keep a single cyclic dependency group together. */
-function components(waits: Wait[]): string[][] {
+export function waitComponents(waits: Pick<Wait, "from" | "to">[]): string[][] {
 	const edges = new Map<string, string[]>();
 	for (const wait of waits) {
 		edges.set(wait.from, [...(edges.get(wait.from) ?? []), wait.to]);
