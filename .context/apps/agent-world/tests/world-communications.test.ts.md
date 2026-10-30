@@ -1,0 +1,9 @@
+## file
+
+These cases exercise built Workplace assets in headless Chrome against an in-memory typed-facade fixture. Recent/range/search do not acknowledge the fixture cursor; Catch up has separate success/failure acknowledgment facts and stable attempt identity. Actual runtime authorization, command deduplication, persistence and delivery remain backend/core test responsibilities.
+
+The held publication commits its fixture effect before losing the visible result. It is released while Mail is active; the test observes settlement without new hidden reads, then returns to the original draft and recovers through status with the original attempt and only one post. This controls post acceptance versus reader disposal, not real socket timing or process startup. Ordinary names in prose and explicit notify IDs are asserted separately; a permissive fixture does not prove audience access.
+
+Creation chooses the nonfirst organization head to distinguish explicit recorded scope from an accidental default, and compares the recipient input with its Add button to catch sidebar CSS leaking into the native modal. Ordinary Mail remains plain text with addressed replies and no channel notify argument; its draft survives Chat switches. Compose loses its send result after fixture publication, closes/reopens, then recovers the original attempt without a second enhanced send or any legacy send. Invitation-removal effects keep derived access/following true to catch misleading total-removal wording. Archive/reopen affects only discussion, never task completion or actor lifetime. Rebuild named assets before running; use one Chrome worker and coordinate the shared slot.
+Coupled: apps/agent-world/web/workplace.tsx, apps/agent-world/web/workplace-thread.tsx, apps/agent-world/web/workplace-channels.tsx, apps/agent-world/src/communications.ts
+Verify: apps/agent-world/tests/world-communications.test.ts, apps/agent-world/tests/build.test.ts

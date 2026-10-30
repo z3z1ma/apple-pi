@@ -41,13 +41,13 @@ Names open the known sender's DM by ID; avatars open the observational profile, 
 Coupled: apps/agent-world/web/workplace-people.tsx
 Verify: apps/agent-world/tests/world-conversation.test.ts
 
-Keep the Chat and Mail shells mounted to retain selection, but mount their readers only while that application is visible. Key each thread reader by its id; request completions belong to that instance, while unsent message bodies outlive it in memory. The opening read runs once per key; later channel updates use the focused follow-latest gate rather than rerunning the mount effect for a changed channel object.
-Why: inbox reads advance the operator's cursor, and session readers mark results seen and watch live replies. CSS visibility alone would leave those effects running for a hidden conversation. A newly selected thread must also get fresh request state rather than accepting a previous thread's late response. Snapshots replace channel objects even on unrelated updates; treating that identity change as another opening read would acknowledge posts while the operator reads older content.
-Coupled: apps/agent-world/web/overlay/conversation/conversation-panel.tsx, apps/agent-world/web/overlay/conversation/live-reply.ts, apps/agent-world/src/backend/mail.ts
+Keep the Chat and Mail shells mounted to retain selection, but mount their keyed workplace-thread readers only while that application is visible. Unsent bodies remain in this shell's shared draft map; selected notification targets and uncertain attempt identities belong to the communication reader's renderer-lifetime state. Discovery stores metadata for an explicitly opened channel even before it is followed; followed topics later arrive in the ordinary snapshot. No channel is joined or read just because discovery lists it.
+Why: session readers mark results seen and watch live replies, while explicit communication Catch up advances a returned page only. Hidden readers must not chain fresh reads after accepted operations complete. A newly selected thread owns fresh request state; changed snapshot object identity is not a new opening.
+Coupled: apps/agent-world/web/workplace-thread.tsx, apps/agent-world/web/workplace-channels.tsx, apps/agent-world/web/overlay/conversation/conversation-panel.tsx, apps/agent-world/web/overlay/conversation/live-reply.ts
 Verify: apps/agent-world/scripts/workplace-smoke.mjs
 
 Unread channel counts come from the operator inbox summaries matched by thread ID, while DM dots reflect the existing runtime update flag. The Chat rail counts unread conversations; Mail counts unread messages, with channel threads kept in Chat rather than duplicated in its Inbox. Descriptions name these units. A channel's New messages boundary uses the returned pre-read cursor, not arithmetic on its unread count.
-While focused and following the latest channel posts, a changed last sequence triggers one read. Reading older content or losing focus leaves later posts waiting behind an explicit jump; one failed read per observed sequence stays actionable without a retry loop. Each reader still acknowledges only its returned history through the existing API.
+While focused and following the latest channel posts, a changed last sequence triggers one recent inspection, without acknowledgment. Reading older content or losing focus leaves later posts waiting behind an explicit jump; one failed read per observed sequence stays actionable without a retry loop. The explicit Catch up action alone acknowledges its returned page; recent, range, pin inspection and search preserve catch-up.
 Coupled: apps/agent-world/src/backend/mail.ts, apps/agent-world/web/use-window-focus.ts
 Verify: apps/agent-world/tests/world-conversation.test.ts, apps/agent-world/tests/channel-membership.test.ts
 
@@ -55,7 +55,13 @@ Activity is the display name of the existing organization delivery log in both n
 Why: renaming only the navigation button left the destination with the old name, which a button-only test missed.
 Verify: apps/agent-world/tests/world-conversation.test.ts
 
-Channel observation uses the shared-workplace reader; mail uses the participant-only inbox reader. Replies remain ordinary runtime thread posts, and the post form appears only for the operator's participation in the returned thread. Join and Leave call the explicit operator membership bridge, then reread after an applied receipt. A failed membership change keeps the existing participation and draft; joining acknowledges only the now-visible returned history through the normal reader.
-Why: observing a shared channel is separate from the operator choosing to join it; neither permits advancing someone else's cursor or posting as another person. Delivery records are not complete conversations and cannot safely supply a reply target.
-Coupled: apps/agent-world/src/backend/workplace.ts, apps/agent-world/src/backend/mail.ts
+Chat channels and Mail threads use the typed communications API through workplace-thread. Returned permissions govern controls; channel access permits posting without following. Join/Leave changes following, not read position or organization-derived access. Explicit notify targets alone request channel attention; prose names remain text. Mail retains addressed delivery. Archived ordinary conversations expose participant-controlled reopening; structural/work lifecycle restrictions remain runtime permissions.
+Why: access, following, attention and catch-up are separate effects. Delivery records are not complete conversations and cannot safely supply a reply target. Native and human posts must share the same explicit-notification protocol rather than silently invoking the old name-matching post path.
+Coupled: apps/agent-world/web/workplace-thread.tsx, apps/agent-world/src/communications.ts, apps/agent-world/src/backend/communications.ts
 Verify: apps/agent-world/scripts/workplace-smoke.mjs
+
+## symbol:Compose
+
+The existing single-recipient, fixed-subject form submits through communications.sendMail with a renderer-allocated attempt UUID retained before the request. Its canonical recipient/body survive uncertain outcomes and closing/reopening the form. Outcome recovery uses the same UUID; it never constructs another thread. A fresh send after not_recorded requires explicit duplicate-risk acknowledgment and preserves the draft without sending it automatically. Applied results clear only the matching saved body and report actual audience/queued state separately from acknowledgment. Legacy World sendMail remains a separate consumer and is intentionally unchanged here.
+Coupled: apps/agent-world/src/communications.ts, apps/agent-world/src/backend/communications.ts
+Verify: apps/agent-world/tests/world-communications.test.ts

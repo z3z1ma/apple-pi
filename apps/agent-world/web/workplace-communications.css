@@ -1,0 +1,193 @@
+.wp-communication-dialog {
+	width: min(660px, calc(100vw - 32px));
+	max-height: calc(100dvh - 48px);
+	padding: 20px;
+	overflow: auto;
+	border: 1px solid var(--wp-border);
+	border-radius: 10px;
+	background: var(--wp-panel);
+	color: var(--wp-text);
+	box-shadow: var(--wp-shadow);
+}
+.wp-communication-dialog::backdrop {
+	background: #0008;
+}
+.wp-communication-dialog > header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 16px;
+	margin-bottom: 16px;
+}
+.wp-communication-dialog h2 {
+	margin: 0;
+	font-size: 18px;
+}
+.wp-communication-dialog form {
+	display: grid;
+	gap: 12px;
+}
+.wp-communication-dialog label {
+	display: grid;
+	gap: 6px;
+}
+.wp-communication-dialog :is(input, textarea, select) {
+	width: 100%;
+	min-width: 0;
+	padding: 9px;
+	border: 1px solid var(--wp-border);
+	border-radius: 5px;
+	background: var(--wp-bg);
+	color: var(--wp-text);
+	font: inherit;
+}
+.wp-communication-dialog textarea {
+	min-height: 90px;
+	resize: vertical;
+}
+.wp-communication-dialog button,
+.wp-communication-recipients button {
+	padding: 6px 10px;
+	border: 1px solid var(--wp-border);
+	border-radius: 5px;
+	background: var(--wp-panel);
+	color: var(--wp-text);
+	font: inherit;
+	cursor: pointer;
+}
+.wp-communication-dialog button:disabled,
+.wp-communication-recipients button:disabled {
+	opacity: 0.5;
+	cursor: default;
+}
+.wp-communication-dialog p {
+	font-size: 13px;
+	line-height: 1.5;
+}
+.wp-communication-dialog [role="alert"] {
+	color: var(--wp-danger);
+}
+.wp-communication-dialog footer {
+	display: flex;
+	justify-content: flex-end;
+	gap: 8px;
+}
+.wp-communication-recipients {
+	border: 0;
+	margin: 0;
+	padding: 0;
+	min-width: 0;
+	font-size: 12px;
+}
+.wp-communication-recipients legend {
+	margin-bottom: 6px;
+	color: var(--wp-muted);
+}
+.wp-communication-address {
+	display: flex;
+	gap: 8px;
+}
+.wp-communication-address input {
+	min-width: 0;
+	flex: 1;
+	padding: 6px 8px;
+	border: 1px solid var(--wp-border);
+	border-radius: 5px;
+	background: var(--wp-bg);
+	color: var(--wp-text);
+	font: inherit;
+}
+.wp-communication-recipients ul {
+	list-style: none;
+	padding: 0;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+.wp-communication-recipients li {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+.wp-chat-sidebar .wp-channel-heading {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+.wp-chat-sidebar .wp-channel-heading .wp-channel-tools button {
+	width: auto;
+	padding: 3px 6px;
+}
+.wp-channel-tools {
+	display: flex;
+	gap: 6px;
+	margin-left: auto;
+}
+.wp-channel-tools button {
+	border: 1px solid var(--wp-border);
+	border-radius: 5px;
+	padding: 3px 6px;
+	color: var(--wp-muted);
+}
+.wp-channel-discovery {
+	display: grid;
+	gap: 10px;
+}
+.wp-channel-discovery article {
+	border-bottom: 1px solid var(--wp-border);
+	padding: 12px 0;
+}
+.wp-channel-discovery article h3 {
+	margin: 0;
+	font-size: 14px;
+}
+.wp-channel-discovery article p {
+	margin: 6px 0;
+}
+.wp-channel-discovery article button {
+	margin-right: 8px;
+}
+.wp-channel-recall {
+	border-bottom: 1px solid var(--wp-border);
+	padding: 10px 20px;
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+}
+.wp-channel-recall input {
+	background: var(--wp-bg);
+	border: 1px solid var(--wp-border);
+	border-radius: 4px;
+	padding: 5px 8px;
+	color: var(--wp-text);
+}
+.wp-channel-pin {
+	border-bottom: 1px solid var(--wp-border);
+	padding: 10px 20px;
+	font-size: 12px;
+}
+.wp-message-reference {
+	color: var(--wp-muted);
+	font-size: 11px;
+	margin-left: auto;
+}
+.wp-message-pin {
+	border: 1px solid var(--wp-border);
+	border-radius: 4px;
+	padding: 2px 6px;
+	font-size: 11px;
+	color: var(--wp-muted);
+}
+.wp-thread-notify {
+	padding: 0 0 10px;
+}
+.wp-thread-notify summary {
+	cursor: pointer;
+	color: var(--wp-muted);
+	font-size: 12px;
+	padding: 6px 0;
+}
+.wp-thread-attempt {
+	overflow-wrap: anywhere;
+}

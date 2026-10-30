@@ -1,18 +1,14 @@
-import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createRoot } from "react-dom/client";
-import type { Character, CommandResult, MailThread, WorkplaceThread, WorldSnapshot } from "../src/world.js";
-import {
-	FileReferenceCwd,
-	FileReferenceNavigation,
-	type FileReferenceTarget,
-	FileReferenceText,
-} from "./file-references.js";
+import type { CommunicationResult, ConversationInfo } from "../src/communications.js";
+import type { Character, WorkplaceThread, WorldSnapshot } from "../src/world.js";
+import { FileReferenceCwd, FileReferenceNavigation, type FileReferenceTarget } from "./file-references.js";
 import { sleeperCharacter } from "./game/layout.js";
 import { EmbeddedConversation } from "./overlay/conversation/conversation-panel.js";
 import { conversationPanel } from "./overlay/conversation/panel-state.js";
-import { Markdown, TranscriptAuthor } from "./overlay/conversation/transcript.js";
+import { TranscriptAuthor } from "./overlay/conversation/transcript.js";
 import { activity } from "./overlay/interface/model.js";
-import { useWindowFocus } from "./use-window-focus.js";
+import { ChannelBrowser } from "./workplace-channels.js";
 import { WorkplaceCode } from "./workplace-code.js";
 import { useWorkplaceMenu, WorkplaceMenuProvider } from "./workplace-context-menu.js";
 import { Icon } from "./workplace-icon.js";
@@ -23,6 +19,7 @@ import { OrganizationNameForm, OrgNameEditor } from "./workplace-org-name.js";
 import { ChatPeople, PersonAvatar, PersonName, PersonProfile, sessionStatus } from "./workplace-people.js";
 import { PersonActionsButton, usePersonMenu, WorkplacePersonActions } from "./workplace-person-actions.js";
 import { usePaneResize } from "./workplace-resize.js";
+import { ThreadPane } from "./workplace-thread.js";
 import { WorkplaceWorld } from "./workplace-world.js";
 import { worldStore } from "./world-store.js";
 import "./workplace.css";
@@ -33,6 +30,7 @@ conversationPanel.connect(api);
 document.body.classList.add("workplace");
 document.title = "Workplace";
 const drafts = new Map<string, string>();
+let composeAttempt: { id: string; to: string; body: string; result?: CommunicationResult } | undefined;
 const date = (at: number) => new Date(at).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 
 function channelUnreads(world: WorldSnapshot) {
@@ -337,7 +335,7 @@ function Chat({
 	const [renameChannel, setRenameChannel] = useState<{ id: string; name: string; trigger: HTMLElement }>();
 	const channelMenu = (
 		event: React.MouseEvent<HTMLElement> | React.KeyboardEvent<HTMLElement>,
-		channel: WorkplaceThread,
+		channel: Pick<WorkplaceThread, "id">,
 	) => {
 		const head = /^(?:organization|team):(.+)$/.exec(channel.id)?.[1];
 		if (!head) return;
@@ -412,7 +410,20 @@ function Chat({
 		setSelection({ kind: "dm", id });
 		setProfile(undefined);
 	};
-	const channels = world.workplace?.threads.filter((thread) => thread.kind === "channel") ?? [];
+	const [discovering, setDiscovering] = useState(false);
+	const [openedChannels, setOpenedChannels] = useState<ConversationInfo[]>([]);
+	const snapshotChannels = world.workplace?.threads.filter((thread) => thread.kind === "channel") ?? [];
+	const channels = [
+		...snapshotChannels,
+		...openedChannels
+			.filter((thread) => !snapshotChannels.some((item) => item.id === thread.id))
+			.map((thread) => ({
+				id: thread.id,
+				subject: thread.name,
+				participants: thread.participants.map((person) => person.id),
+				lastSeq: 0,
+			})),
+	];
 	const unreads = channelUnreads(world);
 	const selectedChannel = channels.find((thread) => selection?.kind === "channel" && thread.id === selection.id);
 	const lasting = orgPeople(world);
@@ -496,8 +507,18 @@ function Chat({
 							onChange={(e) => setFilter(e.target.value)}
 						/>
 					</label>
-					<h2>
+					<h2 className="wp-channel-heading">
 						Channels <span>{channels.length}</span>
+						<span className="wp-channel-tools">
+							<button
+								type="button"
+								aria-label="Discover or create channels"
+								title="Discover or create channels"
+								onClick={() => setDiscovering(true)}
+							>
+								+
+							</button>
+						</span>
 					</h2>
 					{renameChannel && (
 						<div className="wp-channel-rename">
@@ -534,9 +555,7 @@ function Chat({
 								)}
 							</button>
 						))}
-					{!channels.length && (
-						<p className="wp-sidebar-note">Team channels appear here when the runtime creates them.</p>
-					)}
+					{!channels.length && <p className="wp-sidebar-note">Discover shared context or create a topic channel.</p>}
 					{heads.length > 0 && (
 						<section aria-label="VIPs">
 							<h2>
@@ -672,6 +691,8 @@ function Chat({
 									id={selectedChannel.id}
 									channel={selectedChannel}
 									channelLabel={channelName(selectedChannel.id, selectedChannel.subject, world)}
+									world={world}
+									drafts={drafts}
 								/>
 							)}
 						</>
@@ -690,6 +711,18 @@ function Chat({
 						</div>
 					)}
 				</main>
+				{active && discovering && (
+					<ChannelBrowser
+						world={world}
+						close={() => setDiscovering(false)}
+						open={(thread) => {
+							setOpenedChannels((previous) => [...previous.filter((item) => item.id !== thread.id), thread]);
+							setSelection({ kind: "channel", id: thread.id });
+							setProfile(undefined);
+							setDiscovering(false);
+						}}
+					/>
+				)}
 				{active && profile && (
 					<PersonProfile key={profile.id} {...profile} onClose={closeProfile} resize={profileSize} />
 				)}
@@ -857,7 +890,7 @@ function Mail({ world, active }: { world: WorldSnapshot; active: boolean }) {
 					{list.separator}
 					<section className="wp-mail-reader" aria-label="Message reader">
 						{folder === "inbox" && selected ? (
-							active && <ThreadPane key={selected} id={selected} />
+							active && <ThreadPane key={selected} id={selected} world={world} drafts={drafts} />
 						) : item && folder !== "inbox" ? (
 							<article className="wp-delivery">
 								<span className="wp-eyebrow">DELIVERY RECORD · READ ONLY</span>
@@ -896,347 +929,6 @@ function Mail({ world, active }: { world: WorldSnapshot; active: boolean }) {
 	);
 }
 
-function Messages({
-	thread,
-	channel,
-	followLink,
-	unreadAfter,
-}: {
-	thread: MailThread;
-	channel: boolean;
-	unreadAfter?: number;
-	followLink: (author: string, href: string, file: boolean) => void;
-}) {
-	const world = store.get();
-	const firstUnread =
-		unreadAfter === undefined
-			? undefined
-			: thread.messages.find((message) => message.seq > unreadAfter && message.from !== "operator")?.seq;
-	return thread.messages.map((message) => (
-		<Fragment key={message.seq}>
-			{message.seq === firstUnread && (
-				<div className="wp-unread-divider">
-					<span aria-hidden="true">New messages</span>
-					<hr aria-label="New messages" />
-				</div>
-			)}
-			<article className="wp-message">
-				<PersonAvatar
-					id={message.from}
-					name={message.from === "operator" ? "You" : message.name}
-					className="wp-message-avatar"
-				/>
-				<div className="wp-message-content">
-					<header>
-						<strong>
-							<PersonName id={message.from} name={message.from === "operator" ? "You" : message.name} />
-						</strong>
-						<time dateTime={new Date(message.at).toISOString()} title={new Date(message.at).toLocaleString()}>
-							{channel
-								? new Date(message.at).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })
-								: new Date(message.at).toLocaleString(undefined, {
-										month: "short",
-										day: "numeric",
-										hour: "numeric",
-										minute: "2-digit",
-									})}
-						</time>
-					</header>
-					{!channel && (
-						<p className="wp-message-to">
-							to{" "}
-							{thread.participants
-								.filter((person) => person.id !== message.from)
-								.map((person) => (person.id === "operator" ? "you" : person.name))
-								.join(", ")}
-						</p>
-					)}
-					<div className="wp-message-body">
-						<FileReferenceCwd.Provider
-							value={
-								message.from === "operator"
-									? undefined
-									: (world?.characters.find((person) => person.id === message.from)?.facts?.cwd ??
-										world?.dormant?.find((person) => person.id === message.from)?.cwd)
-							}
-						>
-							{channel ? (
-								<Markdown text={message.body} onLink={(href, file) => followLink(message.from, href, file)} />
-							) : (
-								<FileReferenceText text={message.body} />
-							)}
-						</FileReferenceCwd.Provider>
-					</div>
-				</div>
-			</article>
-		</Fragment>
-	));
-}
-
-function ThreadPane({ id, channel, channelLabel }: { id: string; channel?: WorkplaceThread; channelLabel?: string }) {
-	const [thread, setThread] = useState<MailThread>();
-	const [draft, setDraft] = useState(drafts.get(id) ?? "");
-	const [pending, setPending] = useState(false);
-	const [changingMembership, setChangingMembership] = useState(false);
-	const [error, setError] = useState("");
-	const [note, setNote] = useState("");
-	const mounted = useRef(true);
-	const messages = useRef<HTMLDivElement>(null);
-	const followLatest = useRef(!!channel);
-	const attemptedSeq = useRef(0);
-	const focused = useWindowFocus();
-	const [unreadAfter, setUnreadAfter] = useState<number>();
-	useLayoutEffect(() => {
-		if (thread && followLatest.current && messages.current) messages.current.scrollTop = messages.current.scrollHeight;
-	}, [thread]);
-	const read = useCallback(async () => {
-		setPending(true);
-		setError("");
-		try {
-			const result = await (channel ? api.readWorkplaceThread(id) : api.readThread(id));
-			if (!mounted.current) return;
-			if (result.ok) {
-				setThread(result.thread);
-				const cursor = result.thread.readUpTo;
-				if (
-					channel &&
-					cursor !== undefined &&
-					result.thread.messages.some((message) => message.seq > cursor && message.from !== "operator")
-				)
-					setUnreadAfter((before) => before ?? cursor);
-			} else setError(result.reason);
-		} catch (failure) {
-			if (mounted.current) setError(String(failure));
-		} finally {
-			if (mounted.current) setPending(false);
-		}
-	}, [id, channel]);
-	// Each instance owns a single thread; opening it reads only that thread's displayed sequence.
-	// biome-ignore lint/correctness/useExhaustiveDependencies: the parent's key owns opening reads; channel updates use the focused follow-latest gate
-	useEffect(() => {
-		mounted.current = true;
-		void read();
-		return () => {
-			mounted.current = false;
-		};
-	}, []);
-	const member = thread?.participants.some((person) => person.id === "operator");
-	const hasNew = !!channel && channel.lastSeq > (thread?.messages.at(-1)?.seq ?? 0);
-	// One refresh per observed sequence; a failed read stays actionable instead of retrying in a loop.
-	useEffect(() => {
-		if (
-			!channel ||
-			!thread ||
-			!hasNew ||
-			pending ||
-			changingMembership ||
-			!focused ||
-			!followLatest.current ||
-			attemptedSeq.current >= channel.lastSeq
-		)
-			return;
-		attemptedSeq.current = channel.lastSeq;
-		void read();
-	}, [channel, thread, hasNew, pending, changingMembership, focused, read]);
-	const changeMembership = async (joined: boolean) => {
-		setChangingMembership(true);
-		setError("");
-		setNote("");
-		try {
-			const receipt = await api.setChannelMembership(id, joined);
-			if (!mounted.current) return;
-			if (!receipt.ok) setError(receipt.reason ?? "Channel membership could not be changed.");
-			else {
-				setNote(joined ? "You joined this channel." : "You left this channel. You can still preview its messages.");
-				if (!joined) setUnreadAfter(undefined);
-				await read();
-			}
-		} catch (failure) {
-			if (mounted.current) setError(String(failure));
-		} finally {
-			if (mounted.current) setChangingMembership(false);
-		}
-	};
-	const followLink = async (author: string, href: string, file: boolean) => {
-		try {
-			let result: CommandResult | undefined;
-			if (file) {
-				const world = store.get();
-				const cwd =
-					world?.characters.find((person) => person.id === author)?.facts?.cwd ??
-					world?.dormant?.find((person) => person.id === author)?.cwd;
-				result = await api.openFile?.(href, cwd ?? "");
-			} else result = await api.openLink?.(href);
-			if (mounted.current && !result?.ok) setError(result?.reason ?? "This window cannot open links.");
-		} catch (failure) {
-			if (mounted.current) setError(String(failure));
-		}
-	};
-	const send = async () => {
-		if (pending || changingMembership || !member || thread?.closed || !draft.trim()) return;
-		setPending(true);
-		setError("");
-		setNote("");
-		try {
-			const receipt = await api.replyThread(id, draft);
-			if (receipt.ok) drafts.delete(id);
-			if (!mounted.current) return;
-			if (!receipt.ok) setError(receipt.reason ?? "The reply failed.");
-			else {
-				setDraft("");
-				followLatest.current = true;
-				setNote(`${channel ? "Post" : "Reply"} ${receipt.stage}.`);
-				await read();
-			}
-		} catch (failure) {
-			if (mounted.current) setError(String(failure));
-		} finally {
-			if (mounted.current) setPending(false);
-		}
-	};
-	return (
-		<article className={`wp-thread${channel ? " wp-thread-channel" : ""}`}>
-			<header className="wp-thread-header">
-				{!channel && <h1>{thread?.subject ?? "Reading conversation…"}</h1>}
-				<p>
-					{!channel && <span className="wp-inbox-tag">Inbox</span>}
-					{thread?.participants.map((person, index) => (
-						<span key={person.id}>
-							{index > 0 && ", "}
-							<PersonName id={person.id} name={person.id === "operator" ? "You" : person.name} />
-						</span>
-					))}
-				</p>
-				<button
-					type="button"
-					disabled={pending || changingMembership}
-					onClick={() => {
-						followLatest.current = !!channel;
-						void read();
-					}}
-				>
-					{pending ? "Reading..." : "Read latest"}
-				</button>
-				{channel && member && !thread?.closed && (
-					<details className="wp-channel-menu">
-						<summary aria-label="Joined: channel membership">
-							Joined <span aria-hidden="true">⌄</span>
-						</summary>
-						<div>
-							<p>You're a member of this channel.</p>
-							<button
-								type="button"
-								disabled={changingMembership || pending}
-								onClick={() => void changeMembership(false)}
-							>
-								Leave channel
-							</button>
-						</div>
-					</details>
-				)}
-				{hasNew && !pending && (
-					<button
-						type="button"
-						className="wp-new-posts"
-						onClick={() => {
-							followLatest.current = true;
-							void read();
-						}}
-					>
-						New messages - jump to latest
-					</button>
-				)}
-			</header>
-			<div
-				className="wp-thread-messages"
-				ref={messages}
-				onScroll={() => {
-					const el = messages.current;
-					if (el) followLatest.current = el.scrollHeight - el.clientHeight - el.scrollTop < 24;
-				}}
-			>
-				{!thread && pending && <p role="status">Reading conversation...</p>}
-				{thread && (
-					<Messages
-						thread={thread}
-						channel={!!channel}
-						unreadAfter={channel ? unreadAfter : undefined}
-						followLink={(author, href, file) => void followLink(author, href, file)}
-					/>
-				)}
-				{error && <p role="alert">{error}</p>}
-				{note && <p role="status">{note}</p>}
-			</div>
-			{thread &&
-				(thread.closed ? (
-					<p className="wp-thread-note">This conversation is closed.</p>
-				) : !member ? (
-					<div className="wp-channel-preview">
-						<div>
-							<h2>
-								{channel ? `You're previewing # ${channelLabel ?? channel.subject}` : "You are not a participant"}
-							</h2>
-							<p>
-								{channel
-									? "Join to take part in the conversation. Previewing does not change anyone's read status."
-									: "Only participants can reply to this conversation."}
-							</p>
-						</div>
-						{channel && (
-							<button
-								type="button"
-								className="wp-primary"
-								disabled={changingMembership || pending}
-								onClick={() => void changeMembership(true)}
-							>
-								{changingMembership ? "Joining..." : "Join channel"}
-							</button>
-						)}
-					</div>
-				) : (
-					<form
-						className="wp-thread-compose"
-						onSubmit={(e) => {
-							e.preventDefault();
-							void send();
-						}}
-					>
-						<label>
-							{channel ? "Post to channel as operator" : "Reply to everyone"}
-							<textarea
-								aria-label={channel ? "Post to channel" : "Reply to everyone"}
-								placeholder={channel ? "Write to this channel…" : "Write your reply…"}
-								value={draft}
-								disabled={pending || changingMembership}
-								onKeyDown={(event) => {
-									if (
-										event.key === "Enter" &&
-										!event.nativeEvent.isComposing &&
-										(event.metaKey || event.ctrlKey || (channel && !event.shiftKey))
-									) {
-										event.preventDefault();
-										void send();
-									}
-								}}
-								onChange={(e) => {
-									setDraft(e.target.value);
-									drafts.set(id, e.target.value);
-								}}
-							/>
-						</label>
-						<div className="wp-compose-footer">
-							<span>{channel ? "Enter to send · Shift + Enter for a new line" : "⌘ / Ctrl + Enter to send"}</span>
-							<button className="wp-primary" type="submit" disabled={pending || changingMembership || !draft.trim()}>
-								{channel ? "Post message" : "Send reply"}
-								<span aria-hidden="true"> ↗</span>
-							</button>
-						</div>
-					</form>
-				))}
-		</article>
-	);
-}
-
 function Compose({
 	world,
 	close,
@@ -1249,32 +941,82 @@ function Compose({
 	setRecipient: (id: string) => void;
 }) {
 	const people = [...world.characters, ...(world.dormant ?? []).filter((person) => !person.retiredAt)];
-	const to = recipient || people[0]?.id || "";
+	const [attempt, setAttempt] = useState(composeAttempt);
+	const to = attempt?.to ?? (recipient || people[0]?.id || "");
 	const [body, setBody] = useState(drafts.get("compose") ?? "");
 	const [pending, setPending] = useState(false);
-	const [status, setStatus] = useState("");
-	const [sent, setSent] = useState(false);
+	const [status, setStatus] = useState(composeAttempt ? "Saved mail attempt; check its original outcome." : "");
+	const [sent, setSent] = useState(composeAttempt?.result?.outcome === "applied");
+	const [acknowledgeDuplicate, setAcknowledgeDuplicate] = useState(false);
+	const mounted = useRef(true);
+	useEffect(() => {
+		mounted.current = true;
+		return () => {
+			mounted.current = false;
+		};
+	}, []);
+	const unresolved = !!attempt && !["applied", "refused"].includes(attempt.result?.outcome ?? "pending");
+	const locked = pending || sent || unresolved;
+	const reflect = (result: CommunicationResult, entry: NonNullable<typeof composeAttempt>) => {
+		entry.result = result;
+		composeAttempt = entry;
+		if (result.outcome === "applied" && drafts.get("compose") === entry.body) drafts.delete("compose");
+		if (!mounted.current) return;
+		setAttempt({ ...entry });
+		if (result.outcome === "applied") {
+			setSent(true);
+			const audience = result.effect?.audience ?? result.effect?.to;
+			const names = (ids: string[]) =>
+				ids.map((id) => people.find((person) => person.id === id)?.name ?? id).join(", ");
+			setStatus(
+				`Mail applied.${audience ? ` Addressed: ${names(audience)}.` : ""}${result.effect?.queued?.length ? ` Queued for a later opening: ${names(result.effect.queued)}.` : ""} Publication is not acknowledgment.`,
+			);
+		} else setStatus(result.reason ?? `Mail ${result.outcome}. Check this attempt before sending again.`);
+	};
 	const send = async () => {
+		if (
+			locked ||
+			!to ||
+			!body.trim() ||
+			(composeAttempt && !["applied", "refused"].includes(composeAttempt.result?.outcome ?? "pending"))
+		)
+			return;
+		const entry = { id: crypto.randomUUID(), to, body };
+		composeAttempt = entry;
+		setAttempt(entry);
 		setPending(true);
 		setStatus("");
 		try {
-			const result = await api.sendMail(to, body);
-			if (result.ok) {
-				setSent(true);
-				drafts.delete("compose");
-				setStatus(`Mail ${result.stage}.${result.note ? ` ${result.note}` : ""}`);
-			} else setStatus(result.reason ?? "Mail failed.");
+			reflect(
+				await api.communications.sendMail({ attempt: entry.id, to: [to], subject: "Message from the operator", body }),
+				entry,
+			);
 		} catch (failure) {
-			setStatus(String(failure));
+			reflect({ attempt: entry.id, outcome: "uncertain", reason: `Mail outcome uncertain: ${String(failure)}` }, entry);
 		} finally {
-			setPending(false);
+			if (mounted.current) setPending(false);
 		}
+	};
+	const recover = async () => {
+		if (!attempt || pending) return;
+		setPending(true);
+		try {
+			reflect(await api.communications.status({ attempt: attempt.id }), attempt);
+		} catch (failure) {
+			if (mounted.current) setStatus(String(failure));
+		} finally {
+			if (mounted.current) setPending(false);
+		}
+	};
+	const dismiss = () => {
+		if (!unresolved) composeAttempt = undefined;
+		close();
 	};
 	return (
 		<section className="wp-compose-window" role="dialog" aria-label="New message">
 			<header>
 				<strong>New message</strong>
-				<button type="button" disabled={pending} onClick={close} aria-label="Close new message">
+				<button type="button" disabled={pending} onClick={dismiss} aria-label="Close new message">
 					×
 				</button>
 			</header>
@@ -1289,8 +1031,12 @@ function Compose({
 					<select
 						aria-label="Mail recipient"
 						value={to}
-						disabled={pending || sent}
-						onChange={(e) => setRecipient(e.target.value)}
+						disabled={locked}
+						onChange={(e) => {
+							setRecipient(e.target.value);
+							setAttempt(undefined);
+							composeAttempt = undefined;
+						}}
 					>
 						{people.map((person) => (
 							<option key={person.id} value={person.id}>
@@ -1308,7 +1054,7 @@ function Compose({
 					aria-label="Mail body"
 					placeholder="Write a message…"
 					value={body}
-					disabled={pending || sent}
+					disabled={locked}
 					onChange={(e) => {
 						setBody(e.target.value);
 						drafts.set("compose", e.target.value);
@@ -1316,7 +1062,43 @@ function Compose({
 				/>
 				<p className="wp-muted">Durable mail, signed as you. Sleeping agents receive it when they wake.</p>
 				{status && <p role="status">{status}</p>}
-				<button type="submit" className="wp-primary" disabled={pending || sent || !to || !body.trim()}>
+				{attempt && (
+					<p className="wp-thread-attempt">
+						Mail attempt: {attempt.id} · {attempt.result?.outcome ?? "pending"}{" "}
+						<button type="button" disabled={pending} onClick={() => void recover()}>
+							Check mail outcome
+						</button>
+					</p>
+				)}
+				{attempt?.result?.outcome === "not_recorded" && (
+					<div className="wp-communication-restart">
+						<p>
+							No durable record was found. A disconnected original send could still arrive; a fresh send may duplicate
+							it.
+						</p>
+						<label>
+							<input
+								type="checkbox"
+								checked={acknowledgeDuplicate}
+								onChange={(event) => setAcknowledgeDuplicate(event.target.checked)}
+							/>
+							I understand a fresh attempt may duplicate the original.
+						</label>
+						<button
+							type="button"
+							disabled={pending || !acknowledgeDuplicate}
+							onClick={() => {
+								composeAttempt = undefined;
+								setAttempt(undefined);
+								setAcknowledgeDuplicate(false);
+								setStatus("Draft retained. A new send will use a fresh attempt.");
+							}}
+						>
+							Keep draft and prepare a new mail attempt
+						</button>
+					</div>
+				)}
+				<button type="submit" className="wp-primary" disabled={locked || !to || !body.trim()}>
 					{pending ? "Sending…" : sent ? "Sent" : "Send mail"}
 				</button>
 			</form>
