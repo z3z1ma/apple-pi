@@ -265,6 +265,7 @@ async function openWorkplace() {
 			return structuredClone(result);
 		};
 		w.agentWorld = {
+			workspace: { resolvePaths: async () => ({ ok: true, files: [] }) },
 			snapshot: async () => world,
 			onUpdate: (listener: (snapshot: unknown) => void) => {
 				listeners.add(listener);
@@ -624,6 +625,12 @@ test("Mail keeps addressed replies and plain text while its draft survives Chat 
 		await page.getByRole("button", { name: /Review exchange/ }).click();
 		await page.getByText("Mail evidence remains literal: <b>private</b>.", { exact: true }).waitFor();
 		expect(await page.locator(".wp-message-body b").count()).toBe(0);
+		const latest = (await page.getByRole("button", { name: "Read latest", exact: true }).boundingBox())!;
+		const actions = (await page.getByLabel("Conversation actions", { exact: true }).boundingBox())!;
+		expect(actions.y).toBeCloseTo(latest.y, 0);
+		expect(actions.width).toBeLessThan(latest.width);
+		expect(await page.getByText(/File links unavailable/).count()).toBe(0);
+		await shot(page, "mail-controls-light-1440");
 		await page.getByRole("textbox", { name: "Reply to everyone", exact: true }).fill("Keep my addressed reply draft.");
 		await page.getByRole("button", { name: "Chat", exact: true }).click();
 		await openChannel(page);
