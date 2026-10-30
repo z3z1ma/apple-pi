@@ -64,6 +64,7 @@ test("the package catalog loads, a project file overrides by name, and a bad fil
 		"product-manager",
 		"engineering-manager",
 		"service-owner",
+		"research-lead",
 	])
 		expect(packaged.roles.get(name)).toMatchObject({ manages: true, writes: true });
 	for (const name of ["vp-of-product", "quality-engineering-director"])
@@ -274,6 +275,7 @@ test.each([
 	{ role: "product-manager", parent: "boss", allowed: true },
 	{ role: "engineering-manager", parent: "boss", allowed: true },
 	{ role: "service-owner", parent: null, allowed: true },
+	{ role: "research-lead", parent: "boss", allowed: true },
 ])(
 	"peer schemas and guidance follow current capabilities (role=$role, parent=$parent)",
 	async ({ role, parent, allowed }) => {

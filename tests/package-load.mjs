@@ -485,6 +485,14 @@ try {
 		"incident-response",
 		"operating-review",
 		"retrospective",
+		"pre-mortem",
+		"prioritization",
+		"release-readiness",
+		"discovery-workshop",
+		"onboarding",
+		"failure-exercise",
+		"due-diligence",
+		"experiment-cycle",
 	];
 	const packagedSkills = [
 		...explicitWorkflowSkills,

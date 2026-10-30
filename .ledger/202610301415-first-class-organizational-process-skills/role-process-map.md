@@ -1,6 +1,6 @@
 # Let processes and roles challenge each other
 
-This is a planning audit after the operator's sign-off notes, not a runtime routing table or a usage report.
+This is a planning audit of the pre-implementation catalog after the operator's sign-off notes, not a runtime routing table or a usage report. Shipped additions and their validation are tracked in [implementation evidence](implementation-evidence.md).
 
 ## What the current catalog actually contains
 

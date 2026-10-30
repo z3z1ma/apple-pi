@@ -1,0 +1,170 @@
+{
+  "provider": "openai",
+  "model": "gpt-6.1-sol",
+  "evidence": "Live model selection from actual packaged descriptions, synthetic cases, no skill bodies or tools",
+  "cases": [
+    {
+      "expected": "peer-consultation",
+      "request": "I own this problem and am stuck after two attempts. Two colleagues may see a better next probe. I still own the choice; there is no consequential disputed commitment.",
+      "answer": {
+        "skill": "peer-consultation",
+        "reason": "You are stuck on a concrete problem and want colleagues’ advice on the next probe while retaining ownership of the decision."
+      },
+      "passed": true
+    },
+    {
+      "expected": "decision-review",
+      "request": "Three teams disagree about two costly-to-reverse architecture options. We need an accountable choice after each owner challenges the alternatives.",
+      "answer": {
+        "skill": "decision-review",
+        "reason": "The request calls for an accountable choice between costly-to-reverse architecture alternatives, with each owner challenging the options."
+      },
+      "passed": true
+    },
+    {
+      "expected": "tiger-team",
+      "request": "The migration has repeatedly failed at the seams between teams. We need one bounded end-to-end delivery, not another set of independently finished tickets.",
+      "answer": {
+        "skill": "tiger-team",
+        "reason": "The migration needs a bounded end-to-end outcome with integration ownership across teams, rather than independently completed tickets."
+      },
+      "passed": true
+    },
+    {
+      "expected": "handoff",
+      "request": "I am transferring operations to a successor tomorrow. They have received the documents but have never used the recovery path. We need to establish accepted ownership.",
+      "answer": {
+        "skill": "handoff",
+        "reason": "Operations are transferring to a successor, and accepted ownership requires demonstrated recovery capability and explicit acceptance, not merely receiving documents."
+      },
+      "passed": true
+    },
+    {
+      "expected": "incident-response",
+      "request": "Users are currently unable to pay. Two authorized responders are proposing conflicting changes while stakeholders request updates. Coordinate recovery.",
+      "answer": {
+        "skill": "incident-response",
+        "reason": "Active payment disruption requires coordinated recovery, controlled responder changes, and stakeholder updates."
+      },
+      "passed": true
+    },
+    {
+      "expected": "operating-review",
+      "request": "Several commitments keep stalling and decisions take too long. I want to find the actual organizational constraint before deciding whether to change anything.",
+      "answer": {
+        "skill": "operating-review",
+        "reason": "Investigate stalled commitments and slow decisions to identify the actual organizational constraint before choosing an evidence-led response or no change."
+      },
+      "passed": true
+    },
+    {
+      "expected": "retrospective",
+      "request": "The launch is over. A surprising failure recurred and then passed on rerun. We need to reconcile what happened and choose useful improvements without inventing its cause.",
+      "answer": {
+        "skill": "retrospective",
+        "reason": "The launch is complete, and the recurring unexplained failure calls for evidence-backed learning and owned improvements without asserting an unproven cause."
+      },
+      "passed": true
+    },
+    {
+      "expected": "pre-mortem",
+      "request": "Before we commit this consequential plan, ask people to imagine concrete ways it could fail and agree risk decisions. We are not injecting a fault.",
+      "answer": {
+        "skill": "pre-mortem",
+        "reason": "The request calls for imagining concrete failure mechanisms and agreeing risk decisions before committing a consequential plan, not observing an injected fault."
+      },
+      "passed": true
+    },
+    {
+      "expected": "prioritization",
+      "request": "Five worthwhile requests exceed our team's commitments. Decide which to accept, defer or stop and make the displaced work explicit.",
+      "answer": {
+        "skill": "prioritization",
+        "reason": "The request explicitly asks to choose which competing work to accept, defer, or stop within limited team commitments and identify displaced work."
+      },
+      "passed": true
+    },
+    {
+      "expected": "release-readiness",
+      "request": "The exact release artifact is built. Decide whether it may proceed based on rollback, support, user-path and compatibility evidence.",
+      "answer": {
+        "skill": "release-readiness",
+        "reason": "The request calls for a go/no-go decision on a built release using rollback, support, user-path, and compatibility evidence."
+      },
+      "passed": true
+    },
+    {
+      "expected": "discovery-workshop",
+      "request": "We disagree about whose problem this proposed feature would solve. Gather actual evidence and decide which problem or inquiry matters before designing it.",
+      "answer": {
+        "skill": "discovery-workshop",
+        "reason": "Resolve disputed customer needs with evidence and determine which problem or inquiry matters before designing the feature."
+      },
+      "passed": true
+    },
+    {
+      "expected": "onboarding",
+      "request": "A colleague is new to this subsystem. No ownership is changing. Help them gain enough working understanding to perform their already assigned responsibility.",
+      "answer": {
+        "skill": "onboarding",
+        "reason": "Help a newcomer gain working understanding for an assigned responsibility without transferring ownership."
+      },
+      "passed": true
+    },
+    {
+      "expected": "failure-exercise",
+      "request": "In an authorized disposable environment, inject the agreed dependency failure, observe response, and verify restoration against a healthy control.",
+      "answer": {
+        "skill": "failure-exercise",
+        "reason": "The request is an authorized controlled fault injection to observe response and verify recovery against a healthy control."
+      },
+      "passed": true
+    },
+    {
+      "expected": "due-diligence",
+      "request": "Before adopting this vendor, establish the inherited obligations, security liabilities, continuing costs and exit options. The owner will decide later.",
+      "answer": {
+        "skill": "due-diligence",
+        "reason": "Establish the vendor’s inherited obligations, security liabilities, ongoing costs, and exit options as evidence for the owner’s later decision."
+      },
+      "passed": true
+    },
+    {
+      "expected": "experiment-cycle",
+      "request": "Two competing explanations support different investment choices. Design a discriminating test, observe it and decide whether to continue, change or stop.",
+      "answer": {
+        "skill": "experiment-cycle",
+        "reason": "The request explicitly calls for testing competing explanations with a discriminating experiment and using observations to decide whether to continue, change, or stop."
+      },
+      "passed": true
+    },
+    {
+      "expected": "none",
+      "request": "Ask the maintainer which command starts the local dev server. A single factual answer is enough.",
+      "answer": {
+        "skill": "none",
+        "reason": "This is a straightforward factual question for the maintainer; no specialized skill is needed."
+      },
+      "passed": true
+    },
+    {
+      "expected": "code-review",
+      "request": "Review this branch for concrete implementation defects and regressions against its originating intent.",
+      "answer": {
+        "skill": "code-review",
+        "reason": "The request explicitly asks to review a branch for implementation defects and regressions against its originating intent."
+      },
+      "passed": true
+    },
+    {
+      "expected": "diagnosing-bugs",
+      "request": "This unit test now fails reliably. Diagnose the shared cause and reproduce it. No active user harm or multi-team response is involved.",
+      "answer": {
+        "skill": "diagnosing-bugs",
+        "reason": "The request explicitly asks to diagnose and reproduce a reliably failing test; no incident coordination is needed."
+      },
+      "passed": true
+    }
+  ],
+  "cost": 0.0498724
+}

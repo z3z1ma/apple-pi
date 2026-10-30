@@ -497,6 +497,14 @@ These model-selectable skills coordinate people within an already authorized goa
 | `incident-response` | Coordinate safe recovery, operational changes, updates and command handoffs. |
 | `operating-review` | Investigate an operating constraint and choose an evidence-led change or no change. |
 | `retrospective` | Separate observations from explanations and turn useful learning into owned follow-up. |
+| `pre-mortem` | Challenge a plan with plausible failure mechanisms and explicit risk decisions before commitment. |
+| `prioritization` | Accept, defer or stop competing work with reasons and credible commitments. |
+| `release-readiness` | Make a release-specific go/no-go decision from receiving-path and recovery evidence. |
+| `discovery-workshop` | Establish whose problem matters and which evidence can settle it. |
+| `onboarding` | Demonstrate readiness for an unfamiliar area through current sources and representative use. |
+| `failure-exercise` | Observe an authorized controlled fault, verify restoration and own improvements. |
+| `due-diligence` | Expose inherited obligations, risks and exit options before a consequential adoption. |
+| `experiment-cycle` | Test a consequential assumption and use the evidence to continue, change or stop. |
 
 ## What Is Deliberately Excluded (And What Still Hurts)
 

@@ -27,4 +27,16 @@ Added `tiger-team`, `handoff`, `incident-response`, `operating-review` and `retr
 - Package dry run confirmed all five added skills and both roles; `/tmp/process-skills-core-pack.json`.
 - Scoped Biome and whitespace checks passed.
 
-Live process exercises and model-selection evidence remain pending.
+Committed: `a4c877d5`.
+
+## Wider portfolio and selection
+
+Added eight distinct processes: pre-mortem, prioritization, release readiness, discovery workshop, onboarding, failure exercise, due diligence and experiment cycle. Added research-lead for sustained multi-person inquiry; a bounded lookup still belongs with one researcher. Due diligence remains its own selectable inquiry because its result is evidence of inherited obligations and exit options, not a decision board; decision-review retains the choice. Imagined risks, injected faults, problem framing and observed experiments retain different outputs rather than share a vague workshop skill.
+
+- Loader passed: `/tmp/process-skills-wide-loader.log`.
+- Focused role catalog/capability selection: 11 passed, 35 deliberately skipped; `/tmp/process-skills-wide-roles.log`.
+- Package dry run confirmed the eight skills and research-lead; `/tmp/process-skills-wide-pack.json`.
+- Scoped Biome and whitespace checks passed.
+- `selection-check.mjs` used the configured live `openai/gpt-6.1-sol` model with the actual packaged model-visible names/descriptions, fresh independent contexts, no skill bodies and no tools. **18/18** cases selected the intended entry, including a no-process case and code-review/diagnosing-bugs controls. Raw requests, answers and recorded model cost ($0.0498724) are in `selection-results.json`. No runtime people, tasks or production effects were created by this metadata check.
+
+This is one model and an explicit synthetic classification request, not autonomous process adoption during real work. It does not establish actual collaboration, role effectiveness or business benefit. Native consultation/decision exercises are next; the remaining processes still have no live-execution proof.
