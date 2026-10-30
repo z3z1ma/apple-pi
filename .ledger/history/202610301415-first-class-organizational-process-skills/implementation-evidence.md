@@ -1,5 +1,11 @@
 # Implementation evidence
 
+## Acceptance gap
+
+The approved proposal requires package checks, selection/cold reading and a small live exercise for every adopted skill before delivery. The implementation task later substituted an exercise-or-reported-limit criterion without a recorded operator waiver. Reporting limits is necessary but does not meet that original requirement.
+
+Source implementation is shipped. Final acceptance remains incomplete: the live metadata selection covered all 15 additions, but native exercises covered only consultation and decision review, and the broader body/role comprehension checks remain unperformed. The archival completion claim was premature against the approved plan. The operator must either retain the original validation requirement or explicitly accept a narrower completion scope; existing evidence remains valid only for what it actually checked.
+
 The operator authorized personal implementation, extension beyond the first set, and incremental commits. Root authors and integrates the changes; any live participants are controlled exercise subjects, not delegated builders or reviewers.
 
 ## Help and decide
@@ -14,7 +20,7 @@ Checks:
 - Scoped Biome checks and `git diff --check`: passed.
 - Provenance insertion preserved all pre-existing THIRD_PARTY_NOTICES.md bytes, including embedded mixed-line-ending licenses.
 
-These checks establish packaging, discovery and role capability integration. Real-model selection and process execution are still pending; no effectiveness claim is made from the scripted role tests.
+These checks established packaging, discovery and role capability integration. At this increment, real-model selection and process execution were still pending; the later sections record them. No effectiveness claim is made from the scripted role tests.
 
 Committed: `bf8c36e7`.
 
@@ -61,3 +67,24 @@ Final checks:
 After archive, local-reference validation covered 32 Markdown files, 114 local links and 18 heading targets; both toy programs also ran successfully from the history path. The first archive whitespace check caught an extra terminal blank line left in the live index when its last row moved. Root removed that blank line before the final archive commit; archiving alone is not a whitespace check.
 
 No full repository suite or installed-tarball startup was run. The running root session has not reloaded resources; existing sessions need `/reload`, while fresh sessions use the existing package loader. No daemon or Workplace restart, new runtime store, tool or workflow engine was introduced. Existing unrelated knowledge-file changes were left intact.
+
+## Maintainer review follow-up
+
+The added catalog names, invocation-policy expectations, relative-reference checks and advisory-role constraints protect the stated public contract, so they were retained. Four additional SDK cases now execute native write and edit calls for the new managing jobs and inspect the resulting artifact; metadata flags alone did not prove that writing worked after role activation. The relevant role file now has **50 passing tests**, with one worker. Node/Web typechecks and the loader passed again. Logs: `/tmp/process-handbook-reflection-roles.log`, `/tmp/process-handbook-reflection-types.log`, `/tmp/process-handbook-reflection-loader.log`.
+
+The selection script's existing cleanup guard now includes setup. An isolated missing-settings failure reproduced one leaked scratch directory before the change and zero after it, without constructing the model runtime or making a model request. Its live classification loop was not rerun; the original paid result remains historical evidence. Both unchanged toy probes were rerun from disposable copies and reproduced their saved reports without rewriting those reports. They remain separate explicit fixtures rather than acquiring a shared cache abstraction.
+
+The decision-review chair sentence and chronological evidence wording were clarified. New context files record the three scripts' experimental/provenance limits, and the two existing test contexts now distinguish catalog flags from executable capabilities. Context lint passed over 326 files.
+
+**Open validation-scope question for the operator:** the original proposal required all three evaluation layers before each skill's delivery, while the implementation task accepts a live exercise or a reported validation limit. Does the original per-skill live-exercise gate still apply, or are the explicitly reported limits accepted? This review leaves those policies unchanged and does not treat selection checks as the missing live trials.
+
+## Post-completion reflection follow-up
+
+Reflection added four native write/edit execution cases for the new management roles, corrected setup-failure cleanup in the selection script, and clarified the decision-owner sentence. Root inspected the source and test diffs before retaining them. The capability tests inspect actual file contents after the role lifecycle, rather than treating metadata or a scripted final answer as proof of writing.
+
+- Relevant role suite: **50 passed** with `--maxWorkers=1`; `/tmp/process-handbook-reflection-roles.log`.
+- Node/Web typechecks and loader passed again: `/tmp/process-handbook-reflection-types.log`, `/tmp/process-handbook-reflection-loader.log`.
+- The isolated missing-settings probe failed before model-runtime construction and left **zero scratch directories**. Its repeatable form is retained as `selection-cleanup-check.mjs`. The setup cleanup is now inside the same try/finally as provider calls.
+- The original paid selection run and `selection-results.json` were preserved; this follow-up made no new selection or effectiveness claim.
+
+The retained cleanup probe was rerun successfully; scoped Biome and whitespace checks passed. Context lint passed for 326 files. Context notes preserve the distinct packaging, capability, toy-exercise and selection boundaries. An optional Verify-line addition to the selection context file was refused by the context gate even after a fresh direct read; it was left out rather than bypassed. The cause is unresolved and the check remains linked here. The four pre-existing unrelated knowledge-file changes remain outside this follow-up.

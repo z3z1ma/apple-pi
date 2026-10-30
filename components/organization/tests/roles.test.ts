@@ -1,7 +1,7 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fauxAssistantMessage } from "@earendil-works/pi-ai/compat";
+import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai/compat";
 import { type ExtensionAPI, SessionManager } from "@earendil-works/pi-coding-agent";
 import { afterEach, expect, test, vi } from "vitest";
 import { fauxSession } from "../../../tests/helpers/faux-session.js";
@@ -264,6 +264,32 @@ test("a resumed session takes its role from its transcript, with no flag", async
 		resumed.dispose();
 	}
 });
+
+test.each(["product-manager", "engineering-manager", "service-owner", "research-lead"])(
+	"%s can write and revise an artifact through native tools",
+	async (role) => {
+		const run = await fauxSession(
+			[organization],
+			[
+				fauxAssistantMessage([fauxToolCall("write", { path: "outcome.md", content: "Planned" })], {
+					stopReason: "toolUse",
+				}),
+				fauxAssistantMessage([fauxToolCall("edit", { path: "outcome.md", oldText: "Planned", newText: "Verified" })], {
+					stopReason: "toolUse",
+				}),
+				fauxAssistantMessage("done"),
+			],
+			["read", "edit", "write"],
+		);
+		try {
+			await restartWithRole(run, role);
+			await run.session.prompt("Record and revise the outcome.");
+			expect(readFileSync(join(run.cwd, "outcome.md"), "utf8")).toBe("Verified");
+		} finally {
+			run.dispose();
+		}
+	},
+);
 
 test.each([
 	{ role: undefined, parent: undefined, allowed: false },

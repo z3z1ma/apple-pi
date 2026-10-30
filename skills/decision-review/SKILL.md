@@ -7,7 +7,7 @@ description: "Reach an accountable choice between meaningful alternatives. Use f
 
 Expose the trade-off and let the authorized owner decide. Read and follow the [shared process conventions](../handbook-writing/references/processes.md).
 
-The decision owner names a chair, which may be themselves, affected owners and the views that could change the choice. A `product-manager` can own an authorized product choice; `vp-of-product` challenges its value. Select specialists from the risk: security, architecture, maintenance, cost or operational consequences. Use `scientific-skeptic` when the evidence is disputed, not as a substitute for subject expertise.
+The decision owner names the chair (possibly themselves), the affected owners and the views that could change the choice. A `product-manager` can own an authorized product choice; `vp-of-product` challenges its value. Select specialists from the risk: security, architecture, maintenance, cost or operational consequences. Use `scientific-skeptic` when the evidence is disputed, not as a substitute for subject expertise.
 
 1. **Bound the decision.** State the question, constraints, authority, alternatives including doing nothing, and evidence needed before commitment. Identify any required input that is still missing.
 2. **Hear first positions independently.** Give participants the same facts and constraints before a preferred conclusion. Each sends the chair a recommendation, reasons, uncertainties and what evidence would reverse it.

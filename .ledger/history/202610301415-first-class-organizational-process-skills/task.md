@@ -29,9 +29,13 @@ Pilar Aksoy independently cold-read the pre-sign-off proposal and correctly iden
 
 ## Execution
 
-Implementation and controlled exercises are now authorized. Root owns all authoring and integration. Begin with [Help and decide](proposal.md#deliver-in-coherent-increments), then deliver the remaining first set and useful wider processes. Validation participants, if used, exercise the authored process; they do not build or review the implementation on root's behalf. Keep exercise state and effects apart from existing work and production systems.
+Implementation and controlled exercises were authorized. Root owned all authoring and integration, beginning with [Help and decide](proposal.md#deliver-in-coherent-increments), then delivering the remaining first set and wider processes. Validation participants exercised the authored process; they did not build or review the implementation. Synthetic fixtures and new exercise assignments stayed separate from existing work and production systems; the native conversations used the real organization, as qualified in the exercise report.
 
 [Implementation evidence](implementation-evidence.md) records commits and checks. [Controlled exercises](exercises.md) records the native exchanges and a per-process validation limit. All 15 processes and four new roles are authored and packaged; root owns every implementation change. The two exercise participants have completed their separate assignments and returned home.
+
+## Acceptance correction after closeout
+
+The approved proposal required all three validation layers for every adopted skill. The exercise-or-reported-limit criterion recorded above was weaker and had no explicit operator waiver. Implementation is shipped, but acceptance against the approved plan is incomplete; the archival completion claim below was premature. See implementation-evidence.md, Acceptance gap. Operator clarification is pending on completing the original checks versus explicitly deferring them.
 
 ## Outcome
 
