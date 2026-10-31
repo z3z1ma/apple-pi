@@ -115,7 +115,7 @@ export class ReviewJobs {
 					);
 			});
 			const controller = new AbortController();
-			const done = this.capture(id, actor, controller);
+			const done = this.capture(id, actor, controller, operation.expectedDigest);
 			this.captures.set(id, { controller, done });
 			try {
 				await done;
@@ -402,13 +402,20 @@ export class ReviewJobs {
 		}
 	}
 
-	private async capture(id: string, actor: string, controller: AbortController): Promise<void> {
+	private async capture(
+		id: string,
+		actor: string,
+		controller: AbortController,
+		expectedDigest?: string,
+	): Promise<void> {
 		const job = readReview(this.db, actor, id);
 		try {
 			mkdirSync(dirname(job.artifactDirectory), { recursive: true, mode: 0o700 });
 			const artifact = await captureReview(job.request, job.artifactDirectory, controller.signal);
 			this.live();
 			controller.signal.throwIfAborted();
+			if (expectedDigest && artifact.digest !== expectedDigest)
+				throw new Error("Target changed after preview; inspect a fresh preview before queueing review");
 			const changed = this.db
 				.prepare(
 					"update review_jobs set artifact = ?, state = 'queued', revision = revision + 1, updated_at = ? where id = ? and state = 'capturing'",

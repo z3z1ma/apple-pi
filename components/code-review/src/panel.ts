@@ -10,6 +10,7 @@ import {
 	visibleWidth,
 	wrapTextWithAnsi,
 } from "@earendil-works/pi-tui";
+import { createViewerKeys, type ViewerKeybindings, type ViewerKeys } from "../../shared/src/viewer-keys.js";
 import { approvalLabel, targetLabel } from "./presentation.js";
 import type { ReviewQueue, ReviewSummary } from "./results.js";
 
@@ -38,6 +39,51 @@ const pad = (text: string, width: number) => {
 	const clipped = truncateToWidth(text, width, "");
 	return clipped + " ".repeat(Math.max(0, width - visibleWidth(clipped)));
 };
+
+export class CaptureConfirmation implements Component {
+	private scroll = 0;
+	private bodyRows = 1;
+	private canConfirm = false;
+	private readonly keys: ViewerKeys;
+	constructor(
+		private readonly tui: { terminal: { rows: number }; requestRender(): void },
+		private readonly theme: ReviewTheme,
+		private readonly content: string[],
+		private readonly done: (confirmed: boolean) => void,
+		keybindings?: ViewerKeybindings,
+	) {
+		this.keys = createViewerKeys(keybindings);
+	}
+	handleInput(data: string): void {
+		if (isKeyRelease(data)) return;
+		if (matchesKey(data, Key.escape) || matchesKey(data, "q")) this.done(false);
+		else if (matchesKey(data, "y") && this.canConfirm) this.done(true);
+		else if (this.keys.scrollUp(data)) this.scroll = Math.max(0, this.scroll - 1);
+		else if (this.keys.scrollDown(data)) this.scroll += 1;
+		else if (this.keys.pageUp(data)) this.scroll = Math.max(0, this.scroll - this.bodyRows);
+		else if (this.keys.pageDown(data)) this.scroll += this.bodyRows;
+		else if (matchesKey(data, Key.home)) this.scroll = 0;
+		else if (matchesKey(data, Key.end)) this.scroll = Number.MAX_SAFE_INTEGER;
+		this.tui.requestRender();
+	}
+	render(width: number): string[] {
+		const height = Math.max(1, Math.floor(this.tui.terminal.rows * 0.8));
+		const footer = "y queue  Esc cancel";
+		this.canConfirm = width >= visibleWidth(footer) && height >= 3;
+		if (!this.canConfirm) return [truncateToWidth("Enlarge terminal; Esc cancels", Math.max(0, width), "")];
+		this.bodyRows = height - 2;
+		const lines = this.content.flatMap((line) => wrapTextWithAnsi(terminalText(line), width));
+		this.scroll = Math.min(this.scroll, Math.max(0, lines.length - this.bodyRows));
+		return [
+			truncateToWidth(this.theme.bold("Capture preview | arrows/PgUp/PgDn scroll"), width, ""),
+			...Array.from({ length: this.bodyRows }, (_, index) =>
+				truncateToWidth(lines[this.scroll + index] ?? "", width, ""),
+			),
+			truncateToWidth(footer, width, ""),
+		];
+	}
+	invalidate(): void {}
+}
 
 export class ReviewPanel implements Component {
 	focused = false;

@@ -14,7 +14,7 @@ function parseSize(value: number | string | undefined, total: number): number | 
 }
 
 /**
- * A fake TUI that models the parts of Pi's overlay stack the work panel relies on:
+ * A fake TUI that models the parts of Pi's overlay stack persistent panels rely on:
  * overlay options are read on every render, `hideOverlay()` pops the topmost
  * entry, and `custom()` follows Pi's `showExtensionCustom`, including a factory
  * that completes synchronously (the editor is restored and nothing is mounted).
@@ -33,6 +33,7 @@ export function fakeTui(columns = 160, rows = 40) {
 		requestRender: vi.fn(),
 		showOverlay: vi.fn((component: any, options: any): any => {
 			const preFocus = focused;
+			let hidden = false;
 			const entry: FakeOverlayEntry = { component, options, handle: undefined };
 			entry.handle = {
 				hide: vi.fn(() => {
@@ -41,10 +42,13 @@ export function fakeTui(columns = 160, rows = 40) {
 					stack.splice(index, 1);
 					if (focused === component) setFocus(preFocus);
 				}),
-				setHidden: vi.fn(),
-				isHidden: () => false,
+				setHidden: vi.fn((value: boolean) => {
+					hidden = value;
+					if (hidden && focused === component) setFocus(preFocus);
+				}),
+				isHidden: () => hidden,
 				focus: vi.fn(() => {
-					if (stack.includes(entry)) setFocus(component);
+					if (stack.includes(entry) && !hidden) setFocus(component);
 				}),
 				unfocus: vi.fn(() => {
 					if (focused === component) setFocus(preFocus);

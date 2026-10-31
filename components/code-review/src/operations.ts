@@ -29,6 +29,7 @@ export const ReviewOperationSchema = Type.Union([
 		{
 			action: Type.Literal("enqueue"),
 			request: ReviewRequestSchema,
+			expectedDigest: Type.Optional(text),
 			owner: Type.Optional(text),
 			parent: Type.Optional(text),
 		},

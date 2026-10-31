@@ -4,9 +4,11 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 import type { OverlayHandle, TUI } from "@earendil-works/pi-tui";
 import { sendCommand } from "../../session-state/src/client.js";
 import { readReview, readReviewPart, reviewQueue, withReviews } from "../../session-state/src/review-read.js";
+import { resolveToolPath } from "../../shared/src/tool-path.js";
 import type { ReviewOperation } from "./operations.js";
-import { ReviewPanel } from "./panel.js";
-import { evidenceLines, summaryLines, targetLabel } from "./presentation.js";
+import { CaptureConfirmation, ReviewPanel } from "./panel.js";
+import { evidenceLines, previewLines, summaryLines } from "./presentation.js";
+import { previewReview } from "./preview.js";
 import type { ReviewSummary } from "./results.js";
 import type { ReviewTarget } from "./types.js";
 
@@ -43,15 +45,13 @@ export class ReviewManager {
 			description: "Move focus between the editor and review queue",
 			handler: () => {
 				const current = this.mounted;
-				if (!current) return;
+				if (!current || current.handle.isHidden()) return;
 				if (current.handle.isFocused()) current.handle.unfocus();
 				else current.handle.focus();
 				current.tui.requestRender();
 			},
 		});
 		const reset = () => {
-			this.action?.abort();
-			this.action = undefined;
 			this.close();
 			this.selected = undefined;
 			this.pending.clear();
@@ -129,6 +129,8 @@ export class ReviewManager {
 	}
 
 	close(): void {
+		this.action?.abort();
+		this.action = undefined;
 		const current = this.mounted;
 		this.mounted = undefined;
 		if (!current) return;
@@ -166,6 +168,7 @@ export class ReviewManager {
 		const controller = new AbortController();
 		this.action = controller;
 		mounted.handle.unfocus();
+		mounted.handle.setHidden(true);
 		try {
 			await run(controller.signal);
 		} catch (error) {
@@ -173,6 +176,7 @@ export class ReviewManager {
 		} finally {
 			if (this.action === controller) this.action = undefined;
 			if (this.mounted === mounted && !controller.signal.aborted) {
+				mounted.handle.setHidden(false);
 				mounted.panel.refresh();
 				mounted.handle.focus();
 			}
@@ -225,20 +229,75 @@ export class ReviewManager {
 			}
 		}
 		if (!operation || stop.aborted) return;
-		if (
-			!(await ctx.ui.confirm(
-				choice,
-				`${operation.action === "enqueue" ? `${operation.request.cwd}: ${targetLabel(operation.request.target)}\nCapture a new target and queue independent reviewers. Model usage can incur cost; coverage and approval are not inherited.` : `${operation.review}\n${operation.action === "priority" ? `Set priority to ${operation.priority}.` : operation.action === "reassign" ? `Assign responsibility to ${operation.owner}.` : `Apply ${operation.action} to this recorded review.`}`}${this.pending.size ? "\nAn earlier request is still uncertain. Recover it to avoid repeating work." : ""}`,
-				{ signal: stop },
-			)) ||
-			stop.aborted
-		)
-			return;
-		await this.send(`review-ui:${randomUUID()}`, operation, stop);
+		const confirmed = await this.confirmOperation(ctx, choice, operation, stop);
+		if (confirmed && !stop.aborted) await this.send(`review-ui:${randomUUID()}`, confirmed, stop);
+	}
+
+	private async confirmOperation(
+		ctx: ExtensionContext,
+		choice: string,
+		operation: ReviewOperation,
+		stop: AbortSignal,
+	): Promise<ReviewOperation | undefined> {
+		let confirmation: string;
+		if (operation.action === "enqueue") {
+			this.mounted?.handle.setHidden(false);
+			this.mounted?.panel.setNote("Capturing target preview; this request has not started reviewers.");
+			const preview = await previewReview(operation.request, stop);
+			if (stop.aborted) return;
+			if (!preview.changes.length) {
+				this.mounted?.panel.setNote("No changed paths in the selected comparison; nothing was queued.");
+				return;
+			}
+			operation = { ...operation, expectedDigest: preview.digest };
+			confirmation = `${previewLines(preview).join("\n")}\n\nQueue independent reviewers for this exact identity. Model usage can incur cost; coverage and approval are not inherited. Admission captures again and refuses any changed identity.`;
+		} else {
+			confirmation = `${operation.review}\n${operation.action === "priority" ? `Set priority to ${operation.priority}.` : operation.action === "reassign" ? `Assign responsibility to ${operation.owner}.` : `Apply ${operation.action} to this recorded review.`}`;
+		}
+		if (this.pending.size)
+			confirmation += "\nAn earlier request is still uncertain. Recover it to avoid repeating work.";
+		const confirmed =
+			operation.action === "enqueue"
+				? await this.confirmCapture(ctx, confirmation.split("\n"), stop)
+				: await ctx.ui.confirm(choice, confirmation, { signal: stop });
+		return confirmed && !stop.aborted ? operation : undefined;
+	}
+
+	private async confirmCapture(ctx: ExtensionContext, lines: string[], stop: AbortSignal): Promise<boolean> {
+		if (stop.aborted) return false;
+		let finish!: (confirmed: boolean) => void;
+		const answer = new Promise<boolean>((resolve) => {
+			finish = resolve;
+		});
+		const mounted: { handle?: OverlayHandle } = {};
+		const queue = this.mounted;
+		queue?.handle.setHidden(true);
+		const abort = () => finish(false);
+		stop.addEventListener("abort", abort, { once: true });
+		try {
+			await ctx.ui.custom<undefined>((tui, theme, keys, done) => {
+				if (!stop.aborted)
+					mounted.handle = tui.showOverlay(new CaptureConfirmation(tui, theme, lines, finish, keys), {
+						anchor: "center",
+						width: "90%",
+						maxHeight: "80%",
+					});
+				done(undefined);
+				return { render: () => [], invalidate: () => {} };
+			});
+			if (stop.aborted) return false;
+			mounted.handle?.focus();
+			return await answer;
+		} finally {
+			stop.removeEventListener("abort", abort);
+			mounted.handle?.hide();
+			if (this.mounted === queue && !stop.aborted) queue?.handle.setHidden(false);
+		}
 	}
 
 	private async send(request: string, operation: ReviewOperation, stop: AbortSignal): Promise<void> {
 		this.pending.set(request, operation);
+		this.mounted?.handle.setHidden(false);
 		this.mounted?.panel.setNote(`Request ${request}: waiting for the runtime`);
 		try {
 			const receipt = await sendCommand(
@@ -262,6 +321,9 @@ export class ReviewManager {
 		ctx: ExtensionContext,
 		stop: AbortSignal,
 	): Promise<Extract<ReviewOperation, { action: "enqueue" }> | undefined> {
+		const directory = await ctx.ui.input("Repository or worktree directory", ctx.cwd, { signal: stop });
+		if (directory === undefined || stop.aborted) return;
+		const cwd = resolveToolPath(directory.trim() || ctx.cwd, ctx.cwd);
 		const kind = await ctx.ui.select(
 			"Capture which comparison?",
 			["working-tree", "staged", "commit", "range", "branch"],
@@ -292,7 +354,7 @@ export class ReviewManager {
 		return {
 			action: "enqueue",
 			owner: ctx.sessionManager.getSessionId(),
-			request: { cwd: ctx.cwd, target, ...(intent.trim() ? { intent: { path: intent.trim() } } : {}) },
+			request: { cwd, target, ...(intent.trim() ? { intent: { path: intent.trim() } } : {}) },
 		};
 	}
 }

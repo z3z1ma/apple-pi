@@ -124,6 +124,18 @@ The manifest now selects extensions/code-review.ts instead of extensions/work.ts
 
 The package change affects new/reloaded sessions. The already-running production runtime has not been restarted or migrated for reviews; an old store remains explicitly unavailable. No actual terminal paint, paid review, Workplace integration or browser approval is claimed.
 
+## Bound capture preview
+
+The TUI chooses a repository/worktree directory and shows resolved comparison endpoints, trees, digest, scope, intent hash and omissions before queueing. Its temporary capture is removed; durable admission captures again and compares expectedDigest before making work runnable. A changed target is a failed unadmitted request with no reviewer attempts. Empty TUI comparisons stop without enqueue. Native review_code still needs its explicit no-change outcome.
+
+- **50 tests in four files passed**, one worker, 92.09 seconds: `/tmp/review-preview-tests3.log`. These cover real preview filesystem cleanup, digest stability, a changed target between preview and admission, a matching capture that executes, and the loaded /reviews command against an isolated runtime. The UI checks still use a fake terminal.
+- Confirmation tests cover scrolling long metadata with fixed controls, tiny-layout refusal, hidden-queue focus, selected directory resolution, cancel/no-change without enqueue, displayed/admitted digest equality and cancellation beside a different overlay. Source inspection established why the ordinary Pi confirm title cannot contain this bounded view; it does not prove actual terminal paint.
+- An initial test failed before exercising cleanup because Node's ESM namespace disallowed spying on rm. A test-owned TMPDIR now verifies actual empty scratch storage after success, failure and cancellation. A prose assertion also needed to respect terminal wrapping. Those failures are retained in `/tmp/review-preview-tests2.log`; the final geometry assertions still use actual physical rows and widths.
+- Node/web types and scoped Biome passed: `/tmp/review-preview-types3.log`, `/tmp/review-preview-format3.log`. Package loader passed: `/tmp/review-preview-loader.log`. Context lint passed for **346 files**, and scoped whitespace passed.
+- Package dry-run includes the new preview source among **2,754 files**: `/tmp/review-preview-pack.json`. This is inventory, not installed operation or activation.
+
+The deliberate cost is two captures rather than a draft-job store or adoption of UI-owned source. No paid reviewer, actual terminal paint, browser approval or production restart was performed.
+
 ## Remaining delivery
 
-Complete capture preview, exact resolved-target presentation, observed cost and captured-source drill-down, coverage/extra-work decisions, freshness and no-change outcomes, remaining native integration, Workplace Code and artifact-bound sign-off, focused native/IPC/UI integration, applicable builds and real-host validation. No part of that remaining scope has been waived. No paid reviewer or live daemon/app activation has occurred.
+Complete observed cost and captured-source drill-down, coverage/extra-work decisions, source/policy freshness and native no-change outcomes, remaining native integration, Workplace Code and artifact-bound sign-off, focused native/IPC/UI integration, applicable builds and real-host validation. No part of that remaining scope has been waived. No paid reviewer or live daemon/app activation has occurred.

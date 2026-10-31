@@ -14,6 +14,7 @@ import {
 } from "../../../node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/loader.js";
 import { fakeCustom, fakeTui } from "../../../tests/helpers/fake-tui.js";
 import { fauxSession } from "../../../tests/helpers/faux-session.js";
+import { captureReview } from "../../code-review/src/capture.js";
 import type { FindingResponse } from "../../code-review/src/decisions.js";
 import { sendCommand } from "../src/client.js";
 import { readReview, reviewAssessment, reviewQueue, reviewSummary } from "../src/review-read.js";
@@ -94,6 +95,41 @@ test("capture and admission survive the requesting connection closing and exact 
 	expect(query(state.dbPath, "select id from review_jobs")).toEqual([{ id: row!.id }]);
 	expect(readFileSync(join(artifact.source, "value.ts"), "utf8")).toBe("export const value = 2;\n");
 }, 15000);
+
+test("admission refuses changed preview content before starting any reviewer", async () => {
+	writeFileSync(join(state.agentDir, "peer-control.json"), JSON.stringify({ review: true }));
+	const request = { cwd: repository, target: { kind: "working-tree" as const, base: "HEAD" } };
+	const preview = await captureReview(request, join(state.agentDir, "preview"));
+	writeFileSync(join(repository, "value.ts"), "export const value = 7;\n");
+	const command = {
+		kind: "review" as const,
+		version: 1 as const,
+		operation: { action: "enqueue" as const, request, expectedDigest: preview.digest },
+	};
+	const receipt = await sendCommand("owner", command, { socketPath: state.socketPath });
+	expect(receipt).toMatchObject({ stage: "failed", reason: expect.stringContaining("Target changed after preview") });
+	expect(query(state.dbPath, "select id from review_attempts")).toEqual([]);
+	expect(query(state.dbPath, "select id from program_scopes")).toEqual([]);
+	const refreshed = await captureReview(request, join(state.agentDir, "refreshed"));
+	const commandId = randomUUID();
+	const admitted = await sendCommand(
+		"owner",
+		{
+			...command,
+			operation: { ...command.operation, expectedDigest: refreshed.digest },
+		},
+		{ socketPath: state.socketPath, commandId },
+	);
+	expect(admitted.stage, admitted.reason).toBe("applied");
+	const job = query<{ id: string; digest: string }>(
+		state.dbPath,
+		"select j.id, json_extract(j.artifact, '$.digest') as digest from review_jobs j join commands c on j.id = json_extract(c.result, '$.review') where c.command_id = ?",
+		commandId,
+	)[0]!;
+	expect(job.digest).toBe(refreshed.digest);
+	await settled(job.id, "completed");
+	expect(query(state.dbPath, "select id from program_scopes")).toEqual([]);
+}, 30000);
 
 test("an ordinary reviewer runs in captured source and its result survives guarded peer cleanup", async () => {
 	writeFileSync(join(state.agentDir, "peer-control.json"), JSON.stringify({ review: true }));
@@ -554,13 +590,12 @@ test("the loaded reviews command shows the queue, keeps selection and sends a co
 	const extension = loaded.extensions[0]!;
 	const command = [...extension.commands.values()].find((entry) => entry.name === "reviews")!;
 	const screen = fakeTui(100, 15);
-	const confirm = vi.fn(async (_title: string, _message: string) => true);
 	const ctx = {
 		cwd: repository,
 		hasUI: true,
 		mode: "tui",
 		sessionManager: SessionManager.inMemory(repository, { id: "owner" }),
-		ui: { custom: fakeCustom(screen).custom, select: vi.fn(async () => "Capture a fresh rerun"), confirm },
+		ui: { custom: fakeCustom(screen).custom, select: vi.fn(async () => "Capture a fresh rerun") },
 	} as unknown as ExtensionCommandContext;
 	try {
 		await command.handler("", ctx);
@@ -575,20 +610,37 @@ test("the loaded reviews command shows the queue, keeps selection and sends a co
 		panel.handleInput("\x1b[B");
 		expect(screen.layout(screen.stack[0]!).lines.join("\n")).toContain(first.id);
 		panel.handleInput("a");
+		const preview = await captureConfirmation(screen);
+		expect(preview.text.replace(/\s+/g, " ")).toContain("coverage and approval are not inherited");
+		expect(screen.stack[0]!.handle.isHidden()).toBe(true);
+		await extension.shortcuts.get("alt+g")!.handler(ctx);
+		expect(screen.focused()).toBe(preview.component);
+		preview.component.handleInput("y");
 		await vi.waitFor(
 			() => expect(query(state.dbPath, "select id from review_jobs where parent = ?", first.id)).toHaveLength(1),
 			{ timeout: 10000 },
 		);
 		const rerun = query<{ id: string }>(state.dbPath, "select id from review_jobs where parent = ?", first.id)[0]!;
 		await settled(rerun.id, "completed");
-		expect(confirm.mock.calls[0]?.[1]).toContain("coverage and approval are not inherited");
+		const admitted = query<{ digest: string }>(
+			state.dbPath,
+			"select json_extract(artifact, '$.digest') as digest from review_jobs where id = ?",
+			rerun.id,
+		)[0]!;
+		expect(preview.text).toContain(admitted.digest);
 		panel.handleInput("q");
 		expect(screen.stack).toHaveLength(0);
 		await command.handler("", ctx);
 		expect(screen.layout(screen.stack[0]!).lines.join("\n")).toContain(first.id);
 		expect(query(state.dbPath, "select id from program_scopes")).toEqual([]);
+		screen.stack[0]!.component.handleInput("a");
+		await captureConfirmation(screen);
+		const neighbor = { render: () => ["Another dialog"], invalidate: () => {} };
+		const neighborHandle = screen.tui.showOverlay(neighbor, {});
 		for (const handler of extension.handlers.get("session_before_tree") ?? [])
 			await handler({ type: "session_before_tree" }, ctx);
+		await vi.waitFor(() => expect(screen.stack.map((entry) => entry.component)).toEqual([neighbor]));
+		neighborHandle.hide();
 		expect(screen.stack).toHaveLength(0);
 		await command.handler("", ctx);
 		expect(screen.layout(screen.stack[0]!).lines.join("\n")).toContain(rerun.id);
@@ -598,6 +650,77 @@ test("the loaded reviews command shows the queue, keeps selection and sends a co
 	}
 	expect(screen.stack).toHaveLength(0);
 }, 30000);
+
+test("new capture previews the chosen directory and cancellation or changed source starts no reviewer", async () => {
+	const loaded = await loadExtensions(
+		[resolve("extensions/code-review.ts")],
+		repository,
+		createEventBus(),
+		createExtensionRuntime(),
+	);
+	expect(loaded.errors).toEqual([]);
+	const extension = loaded.extensions[0]!;
+	const command = extension.commands.get("reviews")!;
+	const screen = fakeTui(90, 24);
+	const ctx = {
+		cwd: state.agentDir,
+		hasUI: true,
+		mode: "tui",
+		sessionManager: SessionManager.inMemory(state.agentDir, { id: "owner" }),
+		ui: {
+			custom: fakeCustom(screen).custom,
+			select: async (title: string) => (title === "Review actions" ? "Capture a review" : "working-tree"),
+			input: async (title: string) => (title === "Repository or worktree directory" ? "checkout" : ""),
+		},
+	} as unknown as ExtensionCommandContext;
+	try {
+		await command.handler("", ctx);
+		screen.stack[0]!.component.handleInput("a");
+		const cancelled = await captureConfirmation(screen);
+		expect(cancelled.text).toContain(repository);
+		expect(cancelled.text).toContain("intent compliance stays unassessed");
+		cancelled.component.handleInput("\x1b");
+		await vi.waitFor(() => expect(screen.stack).toHaveLength(1));
+		expect(query(state.dbPath, "select id from review_jobs")).toEqual([]);
+		screen.stack[0]!.component.handleInput("a");
+		const preview = await captureConfirmation(screen);
+		writeFileSync(join(repository, "value.ts"), "export const value = 9;\n");
+		preview.component.handleInput("y");
+		await vi.waitFor(
+			() =>
+				expect(
+					query(state.dbPath, "select state, artifact, json_extract(request, '$.cwd') as cwd from review_jobs"),
+				).toEqual([{ state: "failed", artifact: null, cwd: repository }]),
+			{ timeout: 10000 },
+		);
+		expect(query(state.dbPath, "select id from review_attempts")).toEqual([]);
+		expect(query(state.dbPath, "select id from program_scopes")).toEqual([]);
+		await vi.waitFor(() => expect(screen.focused()).toBe(screen.stack[0]!.component));
+		writeFileSync(join(repository, "value.ts"), "export const value = 1;\n");
+		screen.stack[0]!.component.handleInput("a");
+		await vi.waitFor(() => expect(screen.layout(screen.stack[0]!).lines.join("\n")).toContain("No changed paths"), {
+			timeout: 10000,
+		});
+		expect(query(state.dbPath, "select id from review_jobs")).toHaveLength(1);
+		expect(query(state.dbPath, "select id from review_attempts")).toEqual([]);
+	} finally {
+		for (const handler of extension.handlers.get("session_shutdown") ?? [])
+			await handler({ type: "session_shutdown" }, ctx);
+	}
+}, 20000);
+
+async function captureConfirmation(screen: ReturnType<typeof fakeTui>) {
+	await vi.waitFor(() => expect(screen.stack).toHaveLength(2), { timeout: 10000 });
+	const entry = screen.stack[1]!;
+	const pages: string[] = [];
+	for (;;) {
+		const page = screen.layout(entry).lines.join("\n");
+		if (pages.at(-1) === page) break;
+		pages.push(page);
+		entry.component.handleInput("\x1b[6~");
+	}
+	return { component: entry.component, text: pages.join("\n") };
+}
 
 async function settled(id: string, expected: string) {
 	await vi.waitFor(

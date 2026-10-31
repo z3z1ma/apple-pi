@@ -2,7 +2,7 @@
 
 The native review queue captures exact source and intent, divides changed behavior into focused scopes, assigns independent risk questions, checks cross-scope interactions and retains findings and coverage. It uses ordinary advisory-role peers and the existing session-state runtime, not another model engine or a custom sandbox.
 
-The queue and `/reviews` are implemented. The wider integration is still in progress: pre-queue preview, live-target freshness, additional-work decisions, captured-artifact browser sign-off and Workplace Code remain pending. Existing ad hoc `sign_off_code` is not yet connected to a recorded review ID. Registering the extension does not restart an already-running runtime; an older store reports that it is unavailable instead of showing an empty queue.
+The queue and `/reviews`, including the TUI's pre-queue target preview, are implemented. The wider integration is still in progress: live-target/policy freshness, native no-change outcomes, additional-work decisions, captured-artifact browser sign-off and Workplace Code remain pending. Existing ad hoc `sign_off_code` is not yet connected to a recorded review ID. Registering the extension does not restart an already-running runtime; an older store reports that it is unavailable instead of showing an empty queue.
 
 ## Native tools
 
@@ -46,6 +46,10 @@ The master list shows execution state, the current pass, owner, completed/requir
 | `[` / `]` | Read the previous/next queue or evidence page |
 | `v` | Choose the evidence view |
 | `a` | Capture, cancel, resume, rerun, change priority, reassign or recover an uncertain request |
+
+Capture asks for the repository/worktree directory and comparison. Before queueing it shows resolved commits and tree identities, the target digest, scope counts, approved-intent hash and omissions. The confirmation scrolls independently of its fixed controls: `y` queues, `Esc` cancels. A too-small terminal cannot confirm. Empty comparisons stop without queueing.
+
+Preview uses temporary capture storage and removes it on success, failure or cancellation. Durable admission captures again and must match the displayed digest before any reviewer starts. This costs a second capture but avoids another draft-job store or transferring ownership of UI scratch. If source or intent changed, inspect a fresh preview rather than silently queueing different code.
 
 Wide terminals show the queue beside evidence; narrow terminals stack them. Selection follows the review ID through live reordering, resizing and hide/reopen. Confirmations identify the affected review or capture request. The uncertain-request menu retains exact arguments in memory while this session context remains alive; context changes and reload clear that menu, not the runtime journal or admitted jobs.
 

@@ -10,6 +10,8 @@ Enqueue fixtures correlate each response through its exact command ID and comman
 
 The loaded /reviews command uses the real extension loader, SessionManager and isolated runtime with a fake TUI. A one-row queue page forces identity-based paging and selection retention through a confirmed fresh rerun. The test checks editor/queue focus, hide/reopen, session reset and scope cleanup; this is not an actual terminal paint or public activation check.
 
+The capture preview uses the actual capture helper and viewport-scrolled confirmation. Tests verify selected-directory resolution, cancel/no-change without enqueue, changed source between preview and confirmation without reviewer dispatch, and matching displayed/admitted digests. Context reset closes the preview by its own handle while a different dialog stays mounted. The fake TUI models hidden handles so Alt+G cannot steal focus back to a hidden queue.
+
 The ordinary-hire first-input positive control lives in workplace.test.ts: it retains the team context pointer and assigned goal. Its previous full-backscroll assertions failed unchanged at ecae1117 and contradicted the current pointer contract.
 
 Coupled: tests/fixtures/peer-pi.mjs, tests/fixtures/review-reply.ts, tests/fixtures/review-sdk-peer.ts, components/session-state/src/review-jobs.ts, components/session-state/src/review-attempt.ts, components/session-state/tests/workplace.test.ts

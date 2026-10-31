@@ -1,3 +1,4 @@
+import type { ReviewPreview } from "./preview.js";
 import type { ReviewSummary } from "./results.js";
 import type { ReviewTarget } from "./types.js";
 
@@ -14,6 +15,30 @@ export function targetLabel(target: ReviewTarget): string {
 		case "branch":
 			return `${target.head} since ${target.base}`;
 	}
+}
+
+export function previewLines(preview: ReviewPreview): string[] {
+	const mutable = ["working-tree", "staged"].includes(preview.request.target.kind);
+	const omissions = new Map<string, number>();
+	for (const entry of preview.omissions) omissions.set(entry.reason, (omissions.get(entry.reason) ?? 0) + 1);
+	return [
+		`Directory: ${JSON.stringify(preview.request.cwd)}`,
+		`Git worktree: ${JSON.stringify(preview.repository)}`,
+		`Common Git directory: ${JSON.stringify(preview.commonDirectory)}`,
+		`Comparison: ${JSON.stringify(targetLabel(preview.request.target))}`,
+		`Base commit: ${preview.baseCommit ?? "empty tree"}`,
+		`${mutable ? "Checkout HEAD" : "Head commit"}: ${preview.headCommit ?? "none"}`,
+		`Base tree: ${preview.baseTree}`,
+		`Review tree: ${preview.headTree}`,
+		`Digest: ${preview.digest}`,
+		`Changed paths: ${preview.changes.length}; regions: ${preview.regions}`,
+		`Scope: ${preview.request.paths?.length ? `${preview.request.paths.length} requested path prefixes` : "all changed paths"}`,
+		`Requested lenses: ${JSON.stringify(preview.request.lenses ?? [])}`,
+		preview.intent
+			? `Approved intent: ${JSON.stringify(preview.intent.origin)} (hash ${preview.intent.hash})`
+			: "Approved intent: not supplied; intent compliance stays unassessed",
+		...Array.from(omissions, ([reason, count]) => `Limit (${count} paths): ${reason}`),
+	];
 }
 
 export function approvalLabel(review: ReviewSummary): string {

@@ -2,7 +2,7 @@ import { stripVTControlCharacters } from "node:util";
 import { visibleWidth } from "@earendil-works/pi-tui";
 import { describe, expect, it, vi } from "vitest";
 import { fakeTui, plainTheme } from "../../../tests/helpers/fake-tui.js";
-import { ReviewPanel, type ReviewPanelSource } from "../src/panel.js";
+import { CaptureConfirmation, ReviewPanel, type ReviewPanelSource } from "../src/panel.js";
 import { summaryLines } from "../src/presentation.js";
 import type { ReviewSummary } from "../src/results.js";
 
@@ -52,12 +52,47 @@ function source(rows: () => ReviewSummary[]): ReviewPanelSource {
 
 const actions = () => ({ close: vi.fn(), unfocus: vi.fn(), menu: vi.fn(), view: vi.fn() });
 
+it("keeps capture consent visible while long evidence scrolls, and refuses unreadable tiny layouts", () => {
+	const screen = fakeTui(80, 24);
+	const done = vi.fn();
+	const confirmation = new CaptureConfirmation(
+		screen.tui,
+		plainTheme,
+		[
+			`Source path\x07 ${"long path ".repeat(50)}`,
+			`Exact digest: ${"a".repeat(64)}`,
+			"Final cost and identity warning",
+		],
+		done,
+	);
+	for (const width of [80, 35, 19]) {
+		const lines = confirmation.render(width);
+		expect(lines.length).toBeLessThanOrEqual(Math.floor(screen.tui.terminal.rows * 0.8));
+		expect(lines[0]).toContain("Capture preview");
+		expect(lines.at(-1)).toBe("y queue  Esc cancel");
+		for (const line of lines) {
+			expect(visibleWidth(line)).toBeLessThanOrEqual(width);
+			expect(stripVTControlCharacters(line)).not.toMatch(/[\u0000-\u001f\u007f-\u009f]/);
+		}
+	}
+	confirmation.handleInput("\x1b[F");
+	expect(confirmation.render(80).join("\n")).toContain("Final cost and identity warning");
+	confirmation.render(5);
+	confirmation.handleInput("y");
+	expect(done).not.toHaveBeenCalled();
+	confirmation.render(80);
+	confirmation.handleInput("y");
+	expect(done).toHaveBeenCalledWith(true);
+	confirmation.handleInput("\x1b");
+	expect(done).toHaveBeenCalledWith(false);
+});
+
 describe("review queue master-detail", () => {
 	it("shows status, partial coverage and findings in the master list and preserves selection across reorder and resize", () => {
 		const screen = fakeTui(180, 40);
 		let rows = [review("first-review", "running"), review("second-review", "incomplete")];
 		rows[1]!.ownerName = "Owner\nwith\tcontrols\x07";
-		rows[1]!.reason = "Long evidence ".repeat(30) + "\nAnother line\rcarriage return\x07";
+		rows[1]!.reason = `${"Long evidence ".repeat(30)}\nAnother line\rcarriage return\x07`;
 		const panel = new ReviewPanel(
 			screen.tui,
 			plainTheme,

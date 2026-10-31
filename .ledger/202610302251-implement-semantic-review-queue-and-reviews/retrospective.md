@@ -30,6 +30,8 @@ The TUI checkpoint uses one-row queue pages in its loaded-command test. That mak
 
 The retirement increment moved runtime assertions out of the deleted Pi Exec panel tests rather than discarding them with the renderer. Five initial failures were presentation assumptions: native child traces keep pi.read/pi.grep/pi.bash while the old panel shortened those names. The corrected tests inspect native evidence and still exercise real role-loader boundaries and guarded cleanup. A task cancellation test now uses the native tool, and old UI storage/registration is removed without a parallel replacement dashboard. These checks do not establish an actual review in a live provider or an assembled Workplace/sign-off experience.
 
+Capture preview deliberately uses the existing acquisition twice rather than introducing draft jobs or adopting UI-owned source. Exact digest comparison then makes an ordinary edit between preview and confirmation a refusal before reviewer dispatch. Source inspection also exposed two UI constraints before relying on the native confirm dialog: its title is not scrollable, and editor-container dialogs can sit beneath a floating panel. The bounded confirmation has fixed controls and its own overlay handle, with tests for long/narrow content, hidden-panel focus and abort beside an unrelated dialog. These remain fake-terminal checks. A non-configurable Node ESM export prevented a cleanup spy; a test-owned TMPDIR and real empty-directory assertions gave stronger cleanup evidence instead.
+
 ## Improvements
 
 Pending completion of the undertaking.
