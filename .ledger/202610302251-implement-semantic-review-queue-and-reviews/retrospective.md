@@ -62,4 +62,8 @@ An uncertain capture must disable the fresh enqueue action while retaining exact
 
 ## Improvements
 
-Pending production activation and operator acceptance of the assembled experience. The operator's repeated request to continue is evidence that serial component checkpoints took too long; completing the integration, not adding another design stage, is the corrective work.
+Production activation preserved the immediate non-retired-person list, settled review evidence and retained pending mail. Pending accepted/delivered mail was not an active control operation: inspecting the actual command kind allowed a safe restart without resending mail or weakening checks on controls. Runtime/schema activation and app relaunch are now complete, while extension reload and operator acceptance remain distinct.
+
+The first full live freshness probe timed out at60s; a signal-bounded retry completed in57.8s. Automatically doing that work before showing sign-off was unnecessary and obstructed the user journey. Opening the page now verifies the retained assessment and labels live freshness explicitly unchecked, while the separate freshness action remains available. A production captured-page probe still took16.8s for retained verification; the correction removes the extra live capture, not all I/O cost or the verification guarantee.
+
+Pending operator acceptance of the assembled experience. The operator's repeated request to continue is evidence that serial component checkpoints took too long; completing the integration, not adding another design stage, is the corrective work.
