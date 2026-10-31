@@ -6,6 +6,8 @@ import type { ReviewTarget } from "./types.js";
 export interface ReviewSummary {
 	id: string;
 	owner: string;
+	ownerName: string;
+	summary: string | null;
 	state: ReviewState;
 	phase: Pick<ReviewAttempt, "kind" | "state" | "pass"> | null;
 	priority: number;

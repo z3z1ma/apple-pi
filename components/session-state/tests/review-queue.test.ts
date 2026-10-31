@@ -1,12 +1,18 @@
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai/compat";
-import { SessionManager } from "@earendil-works/pi-coding-agent";
+import { type ExtensionCommandContext, SessionManager } from "@earendil-works/pi-coding-agent";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import codeReview from "../../../extensions/code-review.js";
+import { createEventBus } from "../../../node_modules/@earendil-works/pi-coding-agent/dist/core/event-bus.js";
+import {
+	createExtensionRuntime,
+	loadExtensions,
+} from "../../../node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/loader.js";
+import { fakeCustom, fakeTui } from "../../../tests/helpers/fake-tui.js";
 import { fauxSession } from "../../../tests/helpers/faux-session.js";
 import type { FindingResponse } from "../../code-review/src/decisions.js";
 import { sendCommand } from "../src/client.js";
@@ -529,6 +535,68 @@ test("finding responses retain allegations and approval binds a stable artifact 
 	} finally {
 		db.close();
 	}
+}, 30000);
+
+test("the loaded reviews command shows the queue, keeps selection and sends a confirmed fresh rerun", async () => {
+	writeFileSync(join(state.agentDir, "peer-control.json"), JSON.stringify({ review: true }));
+	const first = await enqueue();
+	await settled(first.id, "completed");
+	writeFileSync(join(repository, "value.ts"), "export const value = 3;\n");
+	const second = await enqueue();
+	await settled(second.id, "completed");
+	const loaded = await loadExtensions(
+		[resolve("extensions/code-review.ts")],
+		repository,
+		createEventBus(),
+		createExtensionRuntime(),
+	);
+	expect(loaded.errors).toEqual([]);
+	const extension = loaded.extensions[0]!;
+	const command = [...extension.commands.values()].find((entry) => entry.name === "reviews")!;
+	const screen = fakeTui(100, 15);
+	const confirm = vi.fn(async (_title: string, _message: string) => true);
+	const ctx = {
+		cwd: repository,
+		hasUI: true,
+		mode: "tui",
+		sessionManager: SessionManager.inMemory(repository, { id: "owner" }),
+		ui: { custom: fakeCustom(screen).custom, select: vi.fn(async () => "Capture a fresh rerun"), confirm },
+	} as unknown as ExtensionCommandContext;
+	try {
+		await command.handler("", ctx);
+		expect(screen.stack).toHaveLength(1);
+		const panel = screen.stack[0]!.component;
+		expect(screen.focused()).toBe(panel);
+		expect(screen.layout(screen.stack[0]!).lines.join("\n")).toContain("Review queue (2)");
+		panel.handleInput("\x1b");
+		expect(screen.focused()).toBe(screen.editor);
+		await extension.shortcuts.get("alt+g")!.handler(ctx);
+		expect(screen.focused()).toBe(panel);
+		panel.handleInput("\x1b[B");
+		expect(screen.layout(screen.stack[0]!).lines.join("\n")).toContain(first.id);
+		panel.handleInput("a");
+		await vi.waitFor(
+			() => expect(query(state.dbPath, "select id from review_jobs where parent = ?", first.id)).toHaveLength(1),
+			{ timeout: 10000 },
+		);
+		const rerun = query<{ id: string }>(state.dbPath, "select id from review_jobs where parent = ?", first.id)[0]!;
+		await settled(rerun.id, "completed");
+		expect(confirm.mock.calls[0]?.[1]).toContain("coverage and approval are not inherited");
+		panel.handleInput("q");
+		expect(screen.stack).toHaveLength(0);
+		await command.handler("", ctx);
+		expect(screen.layout(screen.stack[0]!).lines.join("\n")).toContain(first.id);
+		expect(query(state.dbPath, "select id from program_scopes")).toEqual([]);
+		for (const handler of extension.handlers.get("session_before_tree") ?? [])
+			await handler({ type: "session_before_tree" }, ctx);
+		expect(screen.stack).toHaveLength(0);
+		await command.handler("", ctx);
+		expect(screen.layout(screen.stack[0]!).lines.join("\n")).toContain(rerun.id);
+	} finally {
+		for (const handler of extension.handlers.get("session_shutdown") ?? [])
+			await handler({ type: "session_shutdown" }, ctx);
+	}
+	expect(screen.stack).toHaveLength(0);
 }, 30000);
 
 async function settled(id: string, expected: string) {

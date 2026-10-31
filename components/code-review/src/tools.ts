@@ -1,10 +1,14 @@
 import { resolve } from "node:path";
-import type { DatabaseSync } from "node:sqlite";
 import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { sendCommand } from "../../session-state/src/client.js";
-import { readReview, readReviewPart, reviewQueue, reviewSummary } from "../../session-state/src/review-read.js";
-import { withThreads } from "../../session-state/src/threads.js";
+import {
+	withReviews as database,
+	readReview,
+	readReviewPart,
+	reviewQueue,
+	reviewSummary,
+} from "../../session-state/src/review-read.js";
 import { FindingResponseSchema } from "./decisions.js";
 import { type ReviewOperation, ReviewRequestSchema, ReviewTargetSchema } from "./operations.js";
 
@@ -57,18 +61,6 @@ const parts = Type.Union([
 	Type.Literal("regions"),
 	Type.Literal("decisions"),
 ]);
-
-function database<T>(read: (db: DatabaseSync) => T): T {
-	const value = withThreads((db) => {
-		if (!db.prepare("select 1 from sqlite_master where type = 'table' and name = 'review_decisions'").get())
-			throw new Error(
-				"The review store is unavailable. Ask the operator to update the session-state runtime before using review tools.",
-			);
-		return read(db);
-	});
-	if (value === undefined) throw new Error("The session-state review store is unavailable.");
-	return value;
-}
 
 function result(details: unknown) {
 	return { content: [{ type: "text" as const, text: JSON.stringify(details, null, 2) }], details };

@@ -26,6 +26,8 @@ The reader checkpoint exposed two different failures that a completed report did
 
 The decision checkpoint keeps a fix in later code separate from the original snapshot. Even a selected verification question on a different artifact cannot make the old code repaired or silently approved. The old finding remains a sign-off limitation, and substantive owner judgments remain visible even when they disagree with model rejection. Scripted tests establish those recording and consent boundaries, not whether the evidence actually proves a real fix.
 
+The TUI checkpoint uses one-row queue pages in its loaded-command test. That makes live reordering an identity test rather than an incidental same-page label check. It also keeps fake-terminal geometry distinct from a real terminal paint and leaves the unactivated entrypoint out of the completion claim.
+
 ## Improvements
 
 Pending completion of the undertaking.

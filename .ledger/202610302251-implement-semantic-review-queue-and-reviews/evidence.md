@@ -100,6 +100,18 @@ Operator approval requires a settled assessment, verified retained source and an
 
 No approval page, live operator sign-off, public extension activation, paid model-quality check or production migration has occurred.
 
+## Review TUI checkpoint
+
+The /reviews entrypoint now mounts a standalone master-detail queue rather than the old combined panel. The shared reader supplies names, plan summaries and identity-based paging under one read snapshot. The panel derives detail/page sizes from its viewport, preserves selection across live reordering and hide/reopen, separates queue/evidence focus and exposes progressive evidence and confirmed mutations. It reports missing stores rather than an empty queue and labels live freshness as unchecked.
+
+- **22 tests in two files passed**, one worker, 60.13 seconds: `/tmp/review-panel-final-tests.log`. The loaded command uses the actual extension loader, SessionManager, database reader and isolated runtime, but a fake TUI. Its single-row pages exercise identity-based selection after a fresh rerun, editor focus, hide/reopen, context reset and explicit scope cleanup.
+- Component checks cover wide/narrow/tiny layouts, long text/control characters, page/scroll separation, visible operation outcomes and genuine empty versus unavailable stores. A prior control-character assertion incorrectly rejected a generated ANSI reset from the TUI's truncation helper; the assertion now separates VT styling from raw controls. `/tmp/review-panel-close-tests.log` retains that failure.
+- Node/web types and scoped Biome passed: `/tmp/review-panel-close-types.log`, `/tmp/review-panel-close-format.log`, `/tmp/review-panel-final-format.log`. Context lint passed for **344 files**.
+- Scoped whitespace check passed. Package dry-run contains **2,757 files**, including all three new UI source modules: `/tmp/review-panel-pack.json`. This verifies inventory, not activation.
+- Unknown-operation recovery retains the exact command and payload in memory while this UI context survives. It is not a durable recovery-menu claim; session/context changes and reload clear that map while the runtime journal and admitted jobs remain.
+
+The extension is still absent from the activation list, /work remains installed, and there has been no actual terminal paint, production restart, paid review or Workplace/browser approval claim.
+
 ## Remaining delivery
 
-Coverage/extra-work decisions, freshness readers, the extra-work decision path, remaining native integration, single master-detail `/reviews` with visible list status and retirement of the old work panel, Workplace Code and artifact-bound sign-off, focused native/IPC/UI integration, applicable builds and real-host validation. No part of that remaining scope has been waived. No paid reviewer or live daemon/app activation has occurred.
+Retire the old combined panel while preserving native execution/passive activity. Complete capture preview, exact resolved-target presentation, observed cost and captured-source drill-down, coverage/extra-work decisions, freshness and no-change outcomes, remaining native integration, Workplace Code and artifact-bound sign-off, focused native/IPC/UI integration, applicable builds and real-host validation. No part of that remaining scope has been waived. No paid reviewer or live daemon/app activation has occurred.

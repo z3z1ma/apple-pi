@@ -8,6 +8,8 @@ The restart case injects an obsolete result through the replacement peer's real 
 
 Enqueue fixtures correlate each response through its exact command ID and commands.result.review. Selecting review_jobs[0] passed single-job tests but returned the wrong identity as soon as a priority/FIFO case queued several jobs. The reader tests also cover whole-root merge visibility without surviving work tasks, stable per-attempt allegation IDs, and a validator challenge that forces a fresh inspection rather than reusing its earlier completed claim. Include an intervening failed retry: keeping the challenge only in the current selection lost it on the following resume.
 
+The loaded /reviews command uses the real extension loader, SessionManager and isolated runtime with a fake TUI. A one-row queue page forces identity-based paging and selection retention through a confirmed fresh rerun. The test checks editor/queue focus, hide/reopen, session reset and scope cleanup; this is not an actual terminal paint or public activation check.
+
 The ordinary-hire first-input positive control lives in workplace.test.ts: it retains the team context pointer and assigned goal. Its previous full-backscroll assertions failed unchanged at ecae1117 and contradicted the current pointer contract.
 
 Coupled: tests/fixtures/peer-pi.mjs, tests/fixtures/review-reply.ts, tests/fixtures/review-sdk-peer.ts, components/session-state/src/review-jobs.ts, components/session-state/src/review-attempt.ts, components/session-state/tests/workplace.test.ts

@@ -3,6 +3,7 @@ import { type FindingValidation, findingKey, planPasses, type ReviewReport } fro
 import type { FindingDecision, ReviewApproval, ReviewDecision } from "../../code-review/src/decisions.js";
 import type { ReviewJob, ReviewState } from "../../code-review/src/operations.js";
 import type { ReviewAssessment, ReviewAttempt, ReviewQueue, ReviewSummary } from "../../code-review/src/results.js";
+import { nameOf, withThreads } from "./threads.js";
 import { rootOf } from "./tree.js";
 
 const columns = `id, command_id as commandId, requester, owner, organization, origin_task as originTask,
@@ -122,6 +123,18 @@ export function reviewAssessment(db: DatabaseSync, actor: string, id: string): R
 	});
 }
 
+export function withReviews<T>(read: (db: DatabaseSync) => T): T {
+	const value = withThreads((db) => {
+		if (!db.prepare("select 1 from sqlite_master where type = 'table' and name = 'review_decisions'").get())
+			throw new Error(
+				"The review store is unavailable. Ask the operator to update the session-state runtime before using reviews.",
+			);
+		return snapshot(db, () => read(db));
+	});
+	if (value === undefined) throw new Error("The session-state review store is unavailable.");
+	return value;
+}
+
 export function reviewSummary(db: DatabaseSync, actor: string, id: string): ReviewSummary {
 	return snapshot(db, () => {
 		const { job, passes, findings, validation, decisions } = reviewAssessment(db, actor, id);
@@ -142,6 +155,8 @@ export function reviewSummary(db: DatabaseSync, actor: string, id: string): Revi
 		return {
 			id: job.id,
 			owner: job.owner,
+			ownerName: nameOf(db, job.owner),
+			summary: job.plan?.summary ?? null,
 			state: job.state,
 			phase: phase ?? null,
 			priority: job.priority,
@@ -183,7 +198,7 @@ export function reviewSummary(db: DatabaseSync, actor: string, id: string): Revi
 export function reviewQueue(
 	db: DatabaseSync,
 	actor: string,
-	options: { limit?: number; offset?: number; state?: ReviewState; cwd?: string } = {},
+	options: { limit?: number; offset?: number; state?: ReviewState; cwd?: string; around?: string } = {},
 ): ReviewQueue {
 	if (options.offset !== undefined && options.limit === undefined) throw new Error("A page offset requires a limit");
 	if (options.limit !== undefined && (!Number.isSafeInteger(options.limit) || options.limit < 1))
@@ -216,11 +231,19 @@ export function reviewQueue(
 		const total = groups.reduce((sum, row) => sum + row.count, 0);
 		const states = Object.fromEntries(groups.map((row) => [row.state, row.count]));
 		if (options.limit === undefined) return { total, states, page: null };
-		const offset = options.offset ?? 0;
+		const order =
+			"case when state in ('capturing', 'running', 'cancelling') then 0 when state = 'queued' then 1 else 2 end, case when state = 'queued' then priority end desc, case when state = 'queued' then created_at end asc, case when state = 'queued' then rowid end asc, updated_at desc, rowid desc";
+		let offset = options.offset ?? 0;
+		if (options.around) {
+			const position = db
+				.prepare(
+					`select position from (select id, row_number() over (order by ${order}) - 1 as position from review_jobs ${filter}) where id = ?`,
+				)
+				.get(...args, options.around) as { position: number } | undefined;
+			if (position) offset = Math.floor(position.position / options.limit) * options.limit;
+		}
 		const rows = db
-			.prepare(
-				`select id from review_jobs ${filter} order by case when state in ('capturing', 'running', 'cancelling') then 0 when state = 'queued' then 1 else 2 end, case when state = 'queued' then priority end desc, case when state = 'queued' then created_at end asc, case when state = 'queued' then rowid end asc, updated_at desc, rowid desc limit ? offset ?`,
-			)
+			.prepare(`select id from review_jobs ${filter} order by ${order} limit ? offset ?`)
 			.all(...args, options.limit, offset) as { id: string }[];
 		return {
 			total,
