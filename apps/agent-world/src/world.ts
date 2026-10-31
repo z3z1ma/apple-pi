@@ -7,6 +7,7 @@ import type { IntegrationsApi } from "./integrations.js";
 export type { CallInPerson, CallInRequest, CallInResult } from "./call-in.js";
 
 import type { OrgMoveRequest, OrgMoveResult, OrgStartProgress, OrgStartRequest } from "./org.js";
+import type { ReviewsApi } from "./reviews.js";
 import type { TerminalApi } from "./terminal.js";
 import type { WorkspaceApi } from "./workspace.js";
 
@@ -486,6 +487,7 @@ export interface NotepadChange {
  */
 export interface AgentWorldApi extends IntegrationsApi {
 	communications: CommunicationsApi;
+	reviews: ReviewsApi;
 	workspace: WorkspaceApi;
 	terminal: TerminalApi;
 	snapshot(): Promise<WorldSnapshot>;

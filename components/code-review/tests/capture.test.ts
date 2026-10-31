@@ -2,12 +2,19 @@ import { watch, writeFileSync } from "node:fs";
 import { chmod, lstat, mkdir, mkdtemp, readFile, readlink, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { afterEach, expect, test } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { git } from "../../shared/src/git.js";
 import { captureReview, readCapturedSource, verifyArtifact } from "../src/capture.js";
 
 const directories: string[] = [];
+let agentDirectory: string;
+beforeEach(async () => {
+	agentDirectory = await mkdtemp(join(tmpdir(), "review-capture-agent-"));
+	directories.push(agentDirectory);
+	vi.stubEnv("PI_CODING_AGENT_DIR", agentDirectory);
+});
 afterEach(async () => {
+	vi.unstubAllEnvs();
 	for (const directory of directories.splice(0)) await rm(directory, { recursive: true, force: true });
 });
 
@@ -23,6 +30,47 @@ async function repository() {
 	await git(root, ["commit", "-qm", "base"]);
 	return root;
 }
+
+test("capture binds review instructions and configured references without resolving a model", async () => {
+	const cwd = await repository();
+	const rolePath = join(agentDirectory, "roles", "capture-reader.md");
+	await mkdir(dirname(rolePath));
+	const role = (profile: string) =>
+		`---\ntitle: Capture Reader\nmandate: Inspect the source.\nmodels: ["${profile}", "fixture/fallback:high"]\nwrites: false\nmanages: false\n---\nRead the source.\n`;
+	await writeFile(rolePath, role("balanced"));
+	await writeFile(join(agentDirectory, "model-profiles.json"), "invalid JSON, resolved only when an attempt needs it");
+	const request = { cwd, target: { kind: "commit" as const, commit: "HEAD" } };
+	const first = await captureReview(request, await destination());
+	expect(first).toMatchObject({
+		configuration: {
+			instructions: {
+				planning: expect.stringContaining("behavior or contract"),
+				inspection: expect.stringContaining("first inspection independently"),
+				validation: expect.stringContaining("sealed first-inspection reports"),
+			},
+			roleReferences: expect.arrayContaining([
+				{ role: "capture-reader", models: ["balanced", "fixture/fallback:high"] },
+			]),
+			catalogIssues: 0,
+		},
+	});
+	const same = await captureReview(request, await destination());
+	expect(same.digest).toBe(first.digest);
+	await writeFile(rolePath, role("deep"));
+	const changed = await captureReview(request, await destination());
+	expect(changed.headTree).toBe(first.headTree);
+	expect(changed.digest).not.toBe(first.digest);
+	expect(first.configuration!.roleReferences).toContainEqual({
+		role: "capture-reader",
+		models: ["balanced", "fixture/fallback:high"],
+	});
+	const tampered = structuredClone(first);
+	tampered.configuration!.instructions.planning = "Changed review instructions";
+	await expect(verifyArtifact(tampered)).rejects.toThrow("manifest identity");
+	await expect(lstat(join(agentDirectory, "state", "model-profile-selection.sqlite"))).rejects.toMatchObject({
+		code: "ENOENT",
+	});
+});
 
 test("source browsing reads retained before and after objects, not either working copy", async () => {
 	const cwd = await repository();

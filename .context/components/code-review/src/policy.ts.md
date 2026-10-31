@@ -4,5 +4,7 @@ This observes declared role/model policy; the ordinary role resolver still selec
 
 The planner's catalog fingerprints intentionally include advisory role source and resolved candidate/selection policy. A change makes the old plan ineligible on explicit resume, even if its role names or reported output would be identical. Selected attempts retain full role policy; planner context retains the descriptors, configured references and fingerprints it received. The shared fingerprint function binds each attempted role policy to that planner catalog before reuse/launch. This is conservative identity, not semantic equivalence between differently written instructions.
 
+Capture-time configuration records shipped review prompts and declared advisory model/profile references without resolving profiles or advancing pool counters. Actual resolved role/model/thinking policy remains per attempt. Ambient guidance and external resources are not frozen; legacy artifacts disclose absent capture-time configuration rather than changing their digest.
+
 Coupled: components/session-state/src/review-attempt.ts, components/session-state/src/review-jobs.ts, components/organization/src/roles.ts, components/shared/src/model-profiles.ts
 Verify: components/code-review/tests/policy.test.ts, components/session-state/tests/review-queue.test.ts

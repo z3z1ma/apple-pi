@@ -14,11 +14,24 @@ import {
 } from "../../../node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/loader.js";
 import { fakeCustom, fakeTui } from "../../../tests/helpers/fake-tui.js";
 import { fauxSession } from "../../../tests/helpers/faux-session.js";
+import {
+	buildCapturedReview,
+	capturedSubmission,
+	submitCapturedReview,
+} from "../../browser-pages/src/captured-review.js";
 import { captureReview } from "../../code-review/src/capture.js";
 import type { FindingResponse } from "../../code-review/src/decisions.js";
+import type { ReviewTarget } from "../../code-review/src/types.js";
 import { loadRoles } from "../../organization/src/roles.js";
 import { sendCommand } from "../src/client.js";
-import { readReview, readReviewSource, reviewAssessment, reviewQueue, reviewSummary } from "../src/review-read.js";
+import {
+	readReview,
+	readReviewFreshness,
+	readReviewSource,
+	reviewAssessment,
+	reviewQueue,
+	reviewSummary,
+} from "../src/review-read.js";
 import { fakeBridge, query, runtimePid, standInProcess, startRuntime, stopRuntime, tempStateDir } from "./helpers.js";
 
 let state: ReturnType<typeof tempStateDir>;
@@ -166,6 +179,192 @@ test("an ordinary reviewer runs in captured source and its result survives guard
 	expect(query(state.dbPath, "select * from work_tasks")).toEqual([]);
 	expect(readFileSync(join(repository, "value.ts"), "utf8")).toBe("export const value = 3;\n");
 }, 20000);
+
+test("browser approval binds displayed captured bytes and revision, not live edits or tampered submissions", async () => {
+	writeFileSync(join(state.agentDir, "peer-control.json"), JSON.stringify({ review: true }));
+	const job = await enqueue();
+	await settled(job.id, "completed");
+	writeFileSync(join(repository, "value.ts"), "export const value = 999;\n");
+	const { page } = await buildCapturedReview(
+		{
+			review: job.id,
+			title: "Captured value",
+			intent: "Inspect the retained value.",
+			chapters: [
+				{
+					title: "Value",
+					kind: "core",
+					attention: "high",
+					brief: "Check consumers.",
+					changes: [{ file: "value.ts", summary: "Change the value." }],
+				},
+			],
+		},
+		"owner",
+		"captured-browser-test",
+	);
+	expect(page.capture).toMatchObject({
+		review: job.id,
+		freshness: { requestedTarget: "changed", checkout: "changed" },
+	});
+	const shown = Object.values(page.hunks)
+		.flatMap((hunk) => hunk.lines.map((line) => line.s.map((segment) => segment.t).join("")))
+		.join("\n");
+	expect(shown).toContain("export const value = 2;");
+	expect(shown).not.toContain("999");
+	const binding = page.capture!;
+	const body = {
+		verdict: "approve",
+		comments: [
+			{
+				hunk: Object.keys(page.hunks)[0]!,
+				start: 0,
+				end: 0,
+				kind: "concern",
+				text: "Keep the operator's line feedback with the signed assessment.",
+			},
+		],
+		decisions: [],
+		seen: [],
+		capture: {
+			review: binding.review,
+			digest: binding.digest,
+			revision: binding.revision,
+			planRevision: binding.planRevision,
+			acceptLimits: true,
+		},
+	};
+	expect(capturedSubmission({ ...body, capture: { ...body.capture, digest: "tampered" } }, page)).toBeUndefined();
+	expect(capturedSubmission({ ...body, capture: { ...body.capture, acceptLimits: false } }, page)).toBeUndefined();
+	expect(await submitCapturedReview(body, page)).toMatchObject({ verdict: "approve", capture: body.capture });
+	const db = new DatabaseSync(state.dbPath, { readOnly: true });
+	try {
+		expect(reviewSummary(db, "owner", job.id).approval).toMatchObject({
+			matchesAssessment: true,
+			record: {
+				actor: "operator",
+				digest: binding.digest,
+				revision: binding.revision,
+				data: { note: expect.stringContaining("Keep the operator's line feedback") },
+			},
+		});
+		const finding = await sendCommand(
+			"owner",
+			{
+				kind: "review",
+				version: 1,
+				operation: {
+					action: "extend",
+					review: job.id,
+					revision: binding.revision,
+					digest: binding.digest,
+					question: "Check retry",
+					reason: "Missing path",
+					doneWhen: "Trace retries",
+				},
+			},
+			{ socketPath: state.socketPath },
+		);
+		expect(finding.stage).toBe("applied");
+		await settled(job.id, "completed");
+		await expect(
+			submitCapturedReview({ ...body, summary: "Another verdict for the stale page" }, page),
+		).rejects.toThrow("assessment changed");
+		expect(reviewSummary(db, "owner", job.id).approval?.matchesAssessment).toBe(false);
+	} finally {
+		db.close();
+	}
+}, 30000);
+
+test("authorized additional work replans the retained target and exact replay does not run it twice", async () => {
+	writeFileSync(join(state.agentDir, "peer-control.json"), JSON.stringify({ review: true }));
+	const job = await enqueue();
+	await settled(job.id, "completed");
+	const db = new DatabaseSync(state.dbPath, { readOnly: true });
+	try {
+		const before = readReview(db, "owner", job.id);
+		writeFileSync(join(repository, "value.ts"), "export const value = 999;\n");
+		const command = {
+			kind: "review" as const,
+			version: 1 as const,
+			operation: {
+				action: "extend" as const,
+				review: job.id,
+				revision: before.revision,
+				digest: before.artifact!.digest,
+				question: "Does the value remain safe for callers during retry?",
+				reason: "The first plan did not inspect retry behavior.",
+				doneWhen: "Trace caller retry and record the observed value.",
+			},
+		};
+		const receipt = await sendCommand("owner", command, {
+			socketPath: state.socketPath,
+			commandId: "authorize-retry-question",
+		});
+		expect(receipt.stage, receipt.reason).toBe("applied");
+		await settled(job.id, "completed");
+		const after = readReview(db, "owner", job.id);
+		expect(after.artifact!.digest).toBe(before.artifact!.digest);
+		expect(after.planRevision).toBeGreaterThan(before.planRevision);
+		expect(after.additionalWork).toEqual([
+			expect.objectContaining({ id: "authorize-retry-question", actor: "owner", question: command.operation.question }),
+		]);
+		expect(reviewAssessment(db, "owner", job.id).passes).toContainEqual(
+			expect.objectContaining({
+				pass: expect.objectContaining({ id: "authorize-retry-question" }),
+				report: expect.objectContaining({
+					coverage: [expect.objectContaining({ state: "completed", evidence: ["export const value = 2;"] })],
+				}),
+			}),
+		);
+		const attempts = query(state.dbPath, "select id from review_attempts where review_id = ?", job.id);
+		expect(
+			(await sendCommand("owner", command, { socketPath: state.socketPath, commandId: "authorize-retry-question" }))
+				.stage,
+		).toBe("applied");
+		expect(query(state.dbPath, "select id from review_attempts where review_id = ?", job.id)).toEqual(attempts);
+		const stale = await sendCommand("owner", command, { socketPath: state.socketPath });
+		expect(stale).toMatchObject({ stage: "failed", reason: expect.stringContaining("assessment changed") });
+	} finally {
+		db.close();
+	}
+}, 30000);
+
+test("freshness separates a stable committed target from checkout changes, policy changes and unavailable source", async () => {
+	writeFileSync(join(state.agentDir, "peer-control.json"), JSON.stringify({ review: true }));
+	const job = await enqueue({ kind: "commit", commit: "HEAD" });
+	await settled(job.id, "completed");
+	expect(await readReviewFreshness("owner", job.id)).toMatchObject({
+		requestedTarget: "matches",
+		checkout: "changed",
+		policy: "matches",
+	});
+	const rolePath = join(state.agentDir, "roles", "code-review-specialist.md");
+	const role = readFileSync(rolePath, "utf8");
+	writeFileSync(rolePath, role.replace("fixture/code-review-specialist:high", "fixture/replacement:high"));
+	expect(await readReviewFreshness("owner", job.id)).toMatchObject({ requestedTarget: "changed", policy: "changed" });
+	writeFileSync(rolePath, role);
+	execFileSync("git", ["branch", "-m", "renamed"], { cwd: repository });
+	expect(await readReviewFreshness("owner", job.id)).toMatchObject({
+		requestedTarget: "matches",
+		checkout: "changed",
+		policy: "matches",
+	});
+	execFileSync("git", ["add", "."], { cwd: repository });
+	execFileSync(
+		"git",
+		["-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "-qm", "moved"],
+		{ cwd: repository },
+	);
+	expect(await readReviewFreshness("owner", job.id)).toMatchObject({ requestedTarget: "changed", checkout: "changed" });
+	execFileSync("mv", [repository, `${repository}-moved`]);
+	expect(await readReviewFreshness("owner", job.id)).toMatchObject({
+		requestedTarget: "unavailable",
+		checkout: "unavailable",
+		errors: [expect.stringContaining("Live source:")],
+	});
+	await expect(readReviewFreshness("missing-person", job.id)).rejects.toThrow("current person");
+}, 30000);
 
 test("the queue reader separates required coverage, absent intent and findings with explicit paging and scope", async () => {
 	writeFileSync(join(state.agentDir, "peer-control.json"), JSON.stringify({ review: true }));
@@ -389,8 +588,24 @@ test("native tools admit, read, cancel, recover exact requests and explicitly ca
 		expect(await callTool("read_review", { review: id, part: "findings", limit: 1 })).toMatchObject({
 			page: { rows: [{ finding: { title: "The value disagrees with its consumer" }, validation: null }] },
 		});
+		expect(await callTool("read_review", { review: handle, part: "freshness" })).toMatchObject({
+			requestedTarget: "matches",
+			checkout: "matches",
+			policy: "matches",
+		});
 		const target = await callTool("read_review", { review: handle, part: "target" });
-		expect(target).toMatchObject({ review: id, target: { intent: { text: "Export the value two." } } });
+		expect(target).toMatchObject({
+			review: id,
+			target: { intent: { text: "Export the value two." }, configuration: { hash: expect.any(String) } },
+		});
+		expect(await callTool("read_review", { review: id, part: "configuration" })).toMatchObject({
+			configuration: {
+				instructions: { planning: expect.stringContaining("behavior or contract") },
+				roleReferences: expect.arrayContaining([
+					{ role: "code-review-specialist", models: ["fixture/code-review-specialist:high"] },
+				]),
+			},
+		});
 		expect(readFileSync(join((target.target as { source: string }).source, "value.ts"), "utf8")).toBe(
 			"export const value = 2;\n",
 		);
@@ -437,6 +652,10 @@ test("native tools admit, read, cancel, recover exact requests and explicitly ca
 			page: { rows: [{ kind: "finding", actor: "owner", data: { disposition: "acknowledged" } }] },
 		});
 		writeFileSync(join(repository, "value.ts"), "export const value = 3;\n");
+		expect(await callTool("read_review", { review: id, part: "freshness" })).toMatchObject({
+			requestedTarget: "changed",
+			checkout: "changed",
+		});
 		expect(await callTool("read_review", { review: id, part: "source", path: "value.ts", limit: 1 })).toMatchObject({
 			page: { rows: ["export const value = 2;"] },
 		});
@@ -1430,14 +1649,14 @@ test("actual first provider inputs keep author narrative and other first reports
 	expect(query(state.dbPath, "select id from program_scopes")).toEqual([]);
 }, 30000);
 
-async function enqueue() {
+async function enqueue(target: ReviewTarget = { kind: "working-tree", base: "HEAD" }) {
 	const commandId = randomUUID();
 	const receipt = await sendCommand(
 		"owner",
 		{
 			kind: "review",
 			version: 1,
-			operation: { action: "enqueue", request: { cwd: repository, target: { kind: "working-tree", base: "HEAD" } } },
+			operation: { action: "enqueue", request: { cwd: repository, target } },
 		},
 		{ socketPath: state.socketPath, commandId },
 	);

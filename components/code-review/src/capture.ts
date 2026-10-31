@@ -5,6 +5,7 @@ import { dirname, join, resolve } from "node:path";
 import { type GitOptions, gitBytes } from "../../shared/src/git.js";
 import { canonical, within } from "../../shared/src/real-path.js";
 import { blobStore, gitObjects } from "./git-objects.js";
+import { reviewConfiguration } from "./policy.js";
 import type { ChangeRegion, ReviewArtifact, ReviewRequest, ReviewTarget, SourceEntry } from "./types.js";
 
 type BlobStore = Awaited<ReturnType<typeof blobStore>>;
@@ -40,6 +41,7 @@ function artifactDigest(artifact: ReviewArtifact): string {
 			headCommit: artifact.headCommit,
 			paths: [...new Set(artifact.request.paths ?? [])].sort(),
 			intent: artifact.intent,
+			configuration: artifact.configuration,
 			index: artifact.index,
 			lenses: [...new Set(artifact.request.lenses ?? [])].sort(),
 			baseTree: artifact.baseTree,
@@ -523,6 +525,7 @@ export async function captureReview(
 			files,
 			index,
 			intent,
+			configuration: reviewConfiguration(source),
 			regions,
 			changes,
 			omissions,
@@ -541,6 +544,8 @@ export async function captureReview(
 		await writeFile(join(destination, "change.patch"), patch);
 		await writeFile(join(destination, "manifest.json"), `${JSON.stringify(artifact, null, 2)}\n`);
 		await verifyArtifact(artifact, signal);
+		if (JSON.stringify(artifact.configuration) !== JSON.stringify(reviewConfiguration(source)))
+			throw new Error("Review configuration changed during capture; capture the review again");
 		return artifact;
 	} catch (error) {
 		await rm(destination, { recursive: true, force: true });

@@ -5,7 +5,7 @@ import { useReview } from "./context";
 import { answerText, COMMENT_KINDS, Units } from "./diff";
 import { drawDiagrams } from "./markdown/mermaid";
 import { renderBlock } from "./markdown/render";
-import { anchorLabel, ATT_LABEL, ATTENTION, hunkRange, KIND_LABEL, UNPLACED } from "./model";
+import { ATT_LABEL, ATTENTION, anchorLabel, hunkRange, KIND_LABEL, UNPLACED } from "./model";
 import {
 	chapterStep,
 	focusHunk,
@@ -555,6 +555,28 @@ export function Overview() {
 				<Md text={page.title} />
 			</h1>
 			<Prose className="ov-intent" blocks={page.intent} />
+			{page.capture ? (
+				<section className="card warnings">
+					<div className="card-k">Captured assessment - approval stays with this code</div>
+					<p>
+						{page.capture.review} - revision {page.capture.revision}, plan {page.capture.planRevision}
+					</p>
+					<p style={{ overflowWrap: "anywhere" }}>
+						Digest: <code>{page.capture.digest}</code>
+					</p>
+					<p>
+						Requested target: {page.capture.freshness.requestedTarget}. Checkout: {page.capture.freshness.checkout}.
+						Policy: {page.capture.freshness.policy}. Checked{" "}
+						{new Date(page.capture.freshness.checkedAt).toLocaleString()}.
+					</p>
+					<p>Live changes never transfer this approval. External resources and ambient instructions are not frozen.</p>
+					<ul>
+						{[...new Set([...page.capture.freshness.errors, ...page.capture.limits])].map((limit) => (
+							<li key={limit}>{limit}</li>
+						))}
+					</ul>
+				</section>
+			) : null}
 			{page.warnings.length ? (
 				<section className="card warnings">
 					<div className="card-k">
@@ -961,13 +983,44 @@ function VerdictPanel({
 					});
 				}}
 			/>
+			{m.page.capture ? (
+				<section className="card warnings">
+					<p>
+						Approve captured digest <code style={{ overflowWrap: "anywhere" }}>{m.page.capture.digest}</code>,
+						assessment {m.page.capture.revision} only. This does not approve later edits.
+					</p>
+					<ul>
+						{[...new Set(m.page.capture.limits)].map((limit) => (
+							<li key={limit}>{limit}</li>
+						))}
+					</ul>
+					{m.page.capture.limits.length ? (
+						<label>
+							<input
+								type="checkbox"
+								checked={s.acceptLimits}
+								onChange={(event) => {
+									const checked = event.target.checked;
+									update((draft) => {
+										draft.acceptLimits = checked;
+									});
+								}}
+							/>{" "}
+							I acknowledge these displayed limits; missing review work remains missing.
+						</label>
+					) : null}
+				</section>
+			) : null}
 			<div className="vd-foot">
 				<button type="button" className="link" onClick={() => onSubmit("dismissed")}>
 					Close without a verdict
 				</button>
 				<span className="sp" />
 				{s.submit === "failed" ? (
-					<span className="warn">Could not reach the agent. Is the session still open?</span>
+					<span className="warn">
+						Submission was not confirmed. The assessment may have changed, or the runtime is unavailable. Inspect the
+						review before retrying.
+					</span>
 				) : null}
 				<span className="kbd-hint">
 					<Kbd>⌘</Kbd>
@@ -976,10 +1029,14 @@ function VerdictPanel({
 				<button
 					type="button"
 					className="btn primary lg"
-					disabled={!s.verdict || s.submit === "sending"}
+					disabled={
+						!s.verdict ||
+						s.submit === "sending" ||
+						(!!m.page.capture?.limits.length && s.verdict.startsWith("approve") && !s.acceptLimits)
+					}
 					onClick={() => s.verdict && s.verdict !== "dismissed" && onSubmit(s.verdict)}
 				>
-					<Icon.send /> Send to agent
+					<Icon.send /> {m.page.capture ? "Record verdict" : "Send to agent"}
 				</button>
 			</div>
 		</div>

@@ -28,6 +28,22 @@ import type {
 } from "../world.js";
 
 const api: AgentWorldApi = {
+	reviews: {
+		queue: (request) => ipcRenderer.invoke("reviews:queue", request) as ReturnType<AgentWorldApi["reviews"]["queue"]>,
+		read: (request) => ipcRenderer.invoke("reviews:read", request) as ReturnType<AgentWorldApi["reviews"]["read"]>,
+		source: (request) =>
+			ipcRenderer.invoke("reviews:source", request) as ReturnType<AgentWorldApi["reviews"]["source"]>,
+		freshness: (request) =>
+			ipcRenderer.invoke("reviews:freshness", request) as ReturnType<AgentWorldApi["reviews"]["freshness"]>,
+		preview: (request) =>
+			ipcRenderer.invoke("reviews:preview", request) as ReturnType<AgentWorldApi["reviews"]["preview"]>,
+		enqueue: (request) =>
+			ipcRenderer.invoke("reviews:enqueue", request) as ReturnType<AgentWorldApi["reviews"]["enqueue"]>,
+		manage: (request) =>
+			ipcRenderer.invoke("reviews:manage", request) as ReturnType<AgentWorldApi["reviews"]["manage"]>,
+		signOff: (request) =>
+			ipcRenderer.invoke("reviews:signOff", request) as ReturnType<AgentWorldApi["reviews"]["signOff"]>,
+	},
 	communications: {
 		sendMail: (request) =>
 			ipcRenderer.invoke("communications:sendMail", request) as ReturnType<AgentWorldApi["communications"]["sendMail"]>,

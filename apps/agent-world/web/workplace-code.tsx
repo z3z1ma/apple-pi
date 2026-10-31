@@ -8,6 +8,7 @@ import { GitDiffText, type GitDiffView, GitPane } from "./workplace-git.js";
 import { Icon } from "./workplace-icon.js";
 import { QuickOpen } from "./workplace-quick-open.js";
 import { usePaneResize } from "./workplace-resize.js";
+import { WorkplaceReviews } from "./workplace-reviews.js";
 import { WorkplaceTerminal } from "./workplace-terminal.js";
 import "./workplace-code.css";
 
@@ -116,7 +117,7 @@ function FileTree({
 
 export function WorkplaceCode({
 	world,
-	active,
+	active: visible,
 	onDirtyChange,
 	onTerminalCountChange,
 	fileRequest,
@@ -127,6 +128,11 @@ export function WorkplaceCode({
 	onTerminalCountChange?: (count: number) => void;
 	fileRequest?: FileReferenceTarget;
 }) {
+	const [showReviews, setShowReviews] = useState(false);
+	const active = visible && !showReviews;
+	useEffect(() => {
+		if (fileRequest) setShowReviews(false);
+	}, [fileRequest]);
 	const openMenu = useWorkplaceMenu();
 	const tabButtons = useRef(new Map<string, HTMLButtonElement>());
 	const filesPane = useRef<HTMLElement>(null);
@@ -700,6 +706,9 @@ export function WorkplaceCode({
 						Open
 					</button>
 				</form>
+				<button type="button" aria-pressed={showReviews} onClick={() => setShowReviews(!showReviews)}>
+					Reviews
+				</button>
 				<button type="button" aria-pressed={showGit} onClick={() => setShowGit(!showGit)}>
 					Git
 				</button>
@@ -720,7 +729,9 @@ export function WorkplaceCode({
 					{notice}
 				</div>
 			)}
+			<WorkplaceReviews root={root} active={visible && showReviews} world={world} />
 			<div
+				hidden={showReviews}
 				ref={panes}
 				style={{ ...files.style, ...git.style }}
 				className={`wp-code-panes ${showGit ? "with-git" : ""}`}

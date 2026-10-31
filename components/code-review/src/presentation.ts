@@ -54,6 +54,10 @@ export function previewLines(preview: ReviewPreview): string[] {
 		`Base tree: ${preview.baseTree}`,
 		`Review tree: ${preview.headTree}`,
 		`Digest: ${preview.digest}`,
+		`Review configuration: ${preview.configuration?.hash ?? "not recorded"}`,
+		...(preview.configuration?.catalogIssues
+			? [`Limit: ${preview.configuration.catalogIssues} role-catalog issues; configured references may be partial`]
+			: []),
 		`Changed paths: ${preview.changes.length}; regions: ${preview.regions}`,
 		`Scope: ${preview.request.paths?.length ? `${preview.request.paths.length} requested path prefixes` : "all changed paths"}`,
 		`Requested lenses: ${JSON.stringify(preview.request.lenses ?? [])}`,

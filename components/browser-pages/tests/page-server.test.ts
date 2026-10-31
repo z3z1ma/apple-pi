@@ -62,6 +62,54 @@ describe("openPageSession", () => {
 		expect((await post("secret", { ok: true })).status).toBe(409);
 	});
 
+	it("awaits committed submission and refuses simultaneous approval writes", async () => {
+		let release: (() => void) | undefined;
+		const gate = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		let entered: (() => void) | undefined;
+		const started = new Promise<void>((resolve) => {
+			entered = resolve;
+		});
+		const session = await openPageSession("page", "secret", async (body) => {
+			entered!();
+			await gate;
+			return parse(body);
+		});
+		closers.push(session.close);
+		const post = () =>
+			fetch(new URL("/result", session.url), {
+				method: "POST",
+				headers: { "x-page-token": "secret" },
+				body: '{"ok":true}',
+			});
+		let returned = false;
+		const first = post().then((response) => {
+			returned = true;
+			return response;
+		});
+		await started;
+		expect(returned).toBe(false);
+		expect((await post()).status).toBe(409);
+		release!();
+		expect((await first).status).toBe(200);
+		await expect(session.result).resolves.toEqual({ ok: true });
+	});
+
+	it("a failed durable write is not acknowledged as an approval", async () => {
+		const session = await openPageSession("page", "secret", async () => {
+			throw new Error("The assessment changed");
+		});
+		closers.push(session.close);
+		const response = await fetch(new URL("/result", session.url), {
+			method: "POST",
+			headers: { "x-page-token": "secret" },
+			body: "{}",
+		});
+		expect(response.status).toBe(502);
+		expect(await response.text()).toContain("assessment changed");
+	});
+
 	it("answers questions with the token, rejects malformed ones, and reports failures", async () => {
 		const session = await open(undefined, async (body) => {
 			const { question } = body as { question?: string };

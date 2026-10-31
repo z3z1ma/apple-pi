@@ -37,6 +37,18 @@ export const ReviewOperationSchema = Type.Union([
 	),
 	Type.Object({ action: Type.Literal("cancel"), review: text }, object),
 	Type.Object({ action: Type.Literal("resume"), review: text }, object),
+	Type.Object(
+		{
+			action: Type.Literal("extend"),
+			review: text,
+			revision: Type.Integer({ minimum: 0 }),
+			digest: text,
+			question: text,
+			reason: text,
+			doneWhen: text,
+		},
+		object,
+	),
 	Type.Object({ action: Type.Literal("priority"), review: text, priority: Type.Number() }, object),
 	Type.Object({ action: Type.Literal("reassign"), review: text, owner: text }, object),
 	Type.Object(
@@ -98,6 +110,14 @@ export interface ReviewJob {
 	artifact: ReviewArtifact | null;
 	plan: ReviewPlan | null;
 	selectedAttempts: Record<string, string>;
+	additionalWork: {
+		id: string;
+		actor: string;
+		question: string;
+		reason: string;
+		doneWhen: string;
+		createdAt: number;
+	}[];
 	reason: string | null;
 	createdAt: number;
 	updatedAt: number;

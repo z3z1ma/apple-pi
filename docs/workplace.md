@@ -169,6 +169,12 @@ Use **Save** or Cmd+S/Ctrl+S to write the selected file. Saves compare the disk 
 
 The **Repository changes** panel is read-only Git status and diff inspection: staged, unstaged and untracked paths, with explicit refresh. Git inspection requires the repository's top-level directory. It does not stage, commit, discard, push or execute arbitrary commands.
 
+### Captured reviews
+
+Choose **Reviews** in Code for the same durable assessment queue as `/reviews`. Switching retains unsaved Monaco models and running terminals; it does not save files or stop shells. The queue follows the selected repository and reads on demand with explicit **Refresh**. Inspect retained source and evidence, check freshness, cancel/resume, authorize a concrete additional question, or open browser sign-off. Capture first previews the exact target; choosing **Queue this captured identity** authorizes reviewer cost and binds admission to that digest. Pick a lasting owner, with names suggested from the roster. An uncertain capture can retry only its original request until reconciled; closing the view does not undo runtime work.
+
+Browser approval displays and binds the captured digest, assessment revision and limits. A later edit does not inherit that approval, and only the human browser verdict can record operator sign-off. See [Captured code review](code-review.md) for source/configuration boundaries, recovery and evidence limits. An old runtime needs updating before the new queue reader becomes available.
+
 ### File references
 
 Recognized local file paths in DMs, mail and task-history views receive a subtle wavy underline once the file is validated. Activate one to open text in Code or a non-text file in its default system application, retaining existing editor buffers and drafts. Activating a task-history path closes that modal; text files receive editor focus. Normal web links keep their existing behavior. Inline-code and quoted paths can contain spaces. Plain-text mail keeps its surrounding quotes or backticks; Markdown keeps its normal inline-code formatting.

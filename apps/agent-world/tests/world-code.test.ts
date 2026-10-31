@@ -208,6 +208,123 @@ async function shot(page: Page, name: string) {
 	await page.screenshot({ path: join(SHOTS, `aw-code-${name}.png`), animations: "disabled" });
 }
 
+test("Code reviews show retained evidence and explicit capture consent without losing a dirty editor", async () => {
+	const { page, errors } = await openCode();
+	try {
+		await openMain(page);
+		await replaceText(page, 'export const message = "keep draft";\n');
+		await page.evaluate(() => {
+			const w = window as any;
+			w.reviewCalls = { captures: [], signOffs: [], sources: [] };
+			const review = {
+				id: "review-fixture",
+				state: "completed",
+				phase: null,
+				target: { kind: "commit", commit: "abc" },
+				passes: { required: 2, completed: 2 },
+				findings: { reported: 1, confirmed: 1, unresolved: 0 },
+				cost: { reportedDollars: 1.23, reportedAttempts: 4, totalAttempts: 4 },
+				ownerName: "Reviewer",
+				owner: "owner",
+				revision: 7,
+				digest: "captured-digest",
+				approval: null,
+			};
+			w.agentWorld.reviews = {
+				queue: async () => ({
+					total: 1,
+					states: { completed: 1 },
+					page: { offset: 0, nextOffset: null, rows: [review] },
+				}),
+				read: async (request: { part: string }) =>
+					request.part === "summary" ? review : { retained: "Captured assessment", request },
+				source: async (request: { path?: string; side: string }) => {
+					w.reviewCalls.sources.push(request);
+					if (!request.path)
+						return {
+							review: review.id,
+							kind: "files",
+							side: request.side,
+							total: 1,
+							page: { offset: 0, nextOffset: null, rows: [{ path: "value.ts", mode: "100644", blob: "captured" }] },
+						};
+					return {
+						review: review.id,
+						kind: "file",
+						side: request.side,
+						file: { path: request.path },
+						representation: "Text from captured blob.",
+						note: "Live checkout is not checked.",
+						page: { offset: 0, nextOffset: null, rows: ["original captured source"] },
+					};
+				},
+				freshness: async () => ({
+					requestedTarget: "changed",
+					checkout: "changed",
+					policy: "matches",
+					checkedAt: 1,
+					errors: [],
+				}),
+				preview: async () => ({
+					digest: "preview-digest",
+					changedPaths: 1,
+					lines: ["Directory: /fixture/project", "Digest: preview-digest"],
+				}),
+				enqueue: async (request: unknown) => {
+					w.reviewCalls.captures.push(request);
+					if (w.reviewCalls.captures.length === 1) throw new Error("The admission receipt was lost.");
+					return review;
+				},
+				signOff: async (request: unknown) => {
+					w.reviewCalls.signOffs.push(request);
+					return { url: "http://127.0.0.1/fixture" };
+				},
+			};
+		});
+		await page.getByRole("button", { name: "Reviews", exact: true }).click();
+		const reviews = page.getByRole("region", { name: "Code reviews", exact: true });
+		await reviews.getByRole("button", { name: /completed.*2\/2 passes/ }).waitFor();
+		expect(await reviews.innerText()).toContain("1 confirmed");
+		expect(await reviews.innerText()).toContain("$1.23 (4/4 reported)");
+		await reviews.getByLabel("Review evidence view").selectOption("source");
+		await reviews.getByRole("button", { name: "value.ts", exact: true }).click();
+		await reviews.getByLabel("Captured side").selectOption("before");
+		await reviews.getByText("1 | original captured source", { exact: true }).waitFor();
+		await reviews.getByRole("button", { name: "Open captured sign-off" }).click();
+		expect(await page.evaluate(() => (window as any).reviewCalls.signOffs)).toEqual([{ review: "review-fixture" }]);
+		await reviews.getByRole("button", { name: "Capture review", exact: true }).click();
+		await reviews.getByLabel("Lasting owner ID").fill("owner");
+		await reviews.getByRole("button", { name: "Preview without reviewers" }).click();
+		await reviews.getByRole("button", { name: "Queue this captured identity" }).waitFor();
+		expect(await page.evaluate(() => (window as any).reviewCalls.captures)).toEqual([]);
+		await reviews.getByRole("button", { name: "Queue this captured identity" }).click();
+		await reviews.getByRole("alert").waitFor();
+		expect(await reviews.getByRole("button", { name: "Queue this captured identity" }).isEnabled()).toBe(false);
+		await reviews.getByRole("button", { name: "Retry original capture request" }).click();
+		const attempts = await page.evaluate(() => (window as any).reviewCalls.captures);
+		expect(attempts[1]).toEqual(attempts[0]);
+		expect(attempts.slice(0, 1)).toEqual([
+			expect.objectContaining({
+				owner: "owner",
+				expectedDigest: "preview-digest",
+				request: { cwd: ROOT, target: { kind: "working-tree", base: "HEAD" } },
+			}),
+		]);
+		await shot(page, "reviews-wide");
+		await page.setViewportSize({ width: 900, height: 700 });
+		await shot(page, "reviews-narrow");
+		const bounds = (await reviews.boundingBox())!;
+		expect(bounds.x + bounds.width).toBeLessThanOrEqual(900);
+		expect(bounds.y + bounds.height).toBeLessThanOrEqual(700);
+		await page.getByRole("button", { name: "Reviews", exact: true }).click();
+		await vi.waitFor(async () => expect(await editorText(page)).toContain("keep draft"));
+		expect(await page.evaluate(() => (window as any).workspaceCalls.saves)).toEqual([]);
+		expect(errors).toEqual([]);
+	} finally {
+		await page.close();
+	}
+}, 30000);
+
 test("real Monaco retains dirty files across file and app switches, then saves explicitly and with CmdS", async () => {
 	const { page, errors } = await openCode();
 	try {

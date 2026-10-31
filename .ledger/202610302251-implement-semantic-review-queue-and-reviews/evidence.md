@@ -215,6 +215,26 @@ The native source part and TUI source view read recorded before/after Git object
 
 ![Captured source in a narrow terminal](assets/reviews-source-compact.png)
 
+## Assembled review delivery
+
+- Capture now records shipped review prompts and declared advisory model/profile references without freezing ambient instructions/resources. Attempts retain actual resolved policy. Legacy artifacts disclose absent capture identity. The fixed profile-name fixture failed before ordinary role loading accepted supported balanced/deep values; the corrected capture regression passed.
+- Freshness explicitly distinguishes the requested comparison, checkout and policy. Stable committed targets, dirty checkout changes, changed policy, missing source and authorization are exercised. These are timestamped observations, not atomic snapshots or approval.
+- Migration39 adds additional-work history. Revision/digest-bound question, reason and stopping condition authorize required replanning on the retained source; exact replay cannot duplicate paid attempts. Stale revision is refused. Native tools, TUI and Workplace Code expose this operation.
+- Captured browser sign-off displays retained patches, binding, freshness and limits. Tampered binding/missing acknowledgment fail; an assessment change refuses the old page. Human line feedback retains captured file/line provenance in the approval note. The server awaits the runtime mutation before success; concurrent submission and rejected commit are exercised. Actual Chrome checks the disabled approve action before acknowledgment, then records operator approval against an isolated runtime while live source is 999 and displayed captured source remains 2.
+- Workplace Code uses typed on-demand backend/main/preload methods, not snapshot polling or another writer. Built Chrome exercises queue status/cost, source inventory then file/side navigation, consent before capture, a deliberately lost receipt with exact retry and retained unsaved Monaco text. It exposed a render-before-effect crash: old summary data was being cast as source. Request-keyed rendering now prevents that transition. Fresh enqueue is disabled while the original capture is uncertain.
+- Actual isolated Electron exposed a separate integration failure: bundling relocated the role catalog's import.meta.url, so preview and runtime capture disagreed on configuration identity. The build now rebases packaged role/template/Mermaid consumers to source-relative package paths. The actual preload/main/runtime probe then passed preview, no-change enqueue/replay, queue, retained source, freshness and captured sign-off template serving, with zero attempts. External browser opening was replaced only inside that test process. Existing native communications, Monaco, file/Git guards, Org and retained World checks also passed. Stand-in recipients do not establish model reading.
+- Core cohort: **81 tests in six files**, one worker, 175.03s (`/tmp/review-delivery-core-tests.log`), followed by loader and Node/web types. After preserving browser feedback, the targeted approval regression passed again (`/tmp/review-feedback-core.log`, one test, 33 skipped). These overlapping counts are not additive.
+- Final renderer/server/backend cohort: **23 tests in three files**, one worker, 19.45s (`/tmp/review-feedback-ui.log`); final types, scoped static and built Electron probe passed (`/tmp/review-feedback-{types,static,electron}.log`). The static inventory subsequently checked all39 owned source/style files (`/tmp/review-delivery-static-final.log`), and build-consistency tests passed for browser pages and Agent World (`/tmp/review-delivery-build-tests.log`). Context lint passed350 files. No full test suite or new paid review.
+- Both web surfaces and Electron main/preload are rebuilt. The package dry run contains2,760 files, includes new source owners and both Electron entries, and excludes ledger assets (`/tmp/review-delivery-pack.json`). A read-only production observation still found PID28293, schema38 and two settled reviews; the new writer needs activation. The current117-person count is not the earlier63-person restart baseline and must be reobserved immediately before any later restart.
+
+These are isolated rendered/IPC/runtime checks, not production activation or operator acceptance. Images use fixture content rather than the operator's desktop.
+
+![Workplace captured reviews](reviews-workplace-wide.png)
+
+![Workplace captured reviews, narrow](reviews-workplace-narrow.png)
+
+![Human sign-off with exact digest and acknowledged limits](reviews-captured-signoff.png)
+
 ## Remaining delivery
 
-Complete coverage/extra-work decisions, source/policy freshness, remaining native integration, Workplace Code and artifact-bound sign-off, operator acceptance of the revised terminal design, focused native/IPC/UI integration and applicable builds. The first live review and no-change cohort are now evidenced above; comparative effectiveness and new-target fix verification remain unmeasured. No part of that remaining scope has been waived.
+Appropriate production activation and operator acceptance of the revised terminal and assembled app remain pending. The first live review and no-change cohort are evidenced above; comparative effectiveness and new-target fix verification remain unmeasured. No acceptance criterion has been waived.

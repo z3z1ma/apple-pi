@@ -11,6 +11,10 @@ Coupled: apps/agent-world/electron.vite.config.ts, apps/agent-world/src/app-file
 Coupled: apps/agent-world/src/electron/communications-ipc.ts, apps/agent-world/src/backend/communications.ts, apps/agent-world/src/electron/preload.ts
 Verify: apps/agent-world/tests/communications-backend.test.ts
 
+`reviews:*` exposes typed on-demand reads and fixed operator mutations through the query-only adapter and existing Commands connection. Management refuses approval; browser submission commits its displayed digest/revision and limits before reporting success. Application shutdown closes owned browser sessions. The bundled preload/runtime probe checks preview/admission identity and template availability without opening the operator's browser or starting reviewers.
+Coupled: apps/agent-world/src/backend/reviews.ts, apps/agent-world/src/electron/reviews-ipc.ts, apps/agent-world/src/reviews.ts
+Verify: apps/agent-world/tests/reviews-backend.test.ts, apps/agent-world/scripts/workplace-electron-check.mjs
+
 `world:channel-membership` checks that the thread is a string and joined is a boolean, then sends the runtime command. It does not decide whether the thread is a channel.
 Why: the renderer is untrusted, but membership authority stays in the runtime. A local allow-list here would drift from the command the socket actually applies.
 Coupled: apps/agent-world/src/backend/workplace.ts, components/session-state/src/runtime.ts

@@ -1,10 +1,10 @@
-import { execFile } from "node:child_process";
 import { randomBytes } from "node:crypto";
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 import { liveSession, trackLiveSessions } from "../../shared/src/forked-continuation.js";
 import { askAgent, askFork, type Passage } from "./ask-agent.js";
+import { buildCapturedReview, submitCapturedReview } from "./captured-review.js";
 import {
 	buildCodeReviewPage,
 	codeReviewTemplate,
@@ -12,33 +12,10 @@ import {
 	parseQuestion,
 	parseReviewResult,
 	questionPassage,
-	SIGN_OFF_CODE_TOOL_NAME,
-	ReviewCodeParamsSchema,
 	type ReviewCodeParams,
+	ReviewCodeParamsSchema,
+	SIGN_OFF_CODE_TOOL_NAME,
 } from "./code-review.js";
-import {
-	buildMarkdownPage,
-	formatMarkdownResult,
-	markdownPassage,
-	markdownTemplate,
-	parseMarkdownQuestion,
-	parseMarkdownResult,
-	SIGN_OFF_DOCUMENT_TOOL_NAME,
-	ReviewMarkdownParamsSchema,
-	type ReviewMarkdownParams,
-} from "./markdown-review.js";
-import {
-	buildLedgerPage,
-	formatLedgerResult,
-	ledgerPassage,
-	ledgerTemplate,
-	parseLedgerQuestion,
-	parseLedgerResult,
-	SIGN_OFF_TASK_TOOL_NAME,
-	type ReviewLedgerTaskParams,
-	ReviewLedgerTaskParamsSchema,
-	serveEvidence,
-} from "./ledger-review.js";
 import {
 	buildExplainPage,
 	EXPLAIN_CHANGE_TOOL_NAME,
@@ -49,14 +26,33 @@ import {
 	readerNote,
 	tutorPrompt,
 } from "./explain-change.js";
+import {
+	buildLedgerPage,
+	formatLedgerResult,
+	ledgerPassage,
+	ledgerTemplate,
+	parseLedgerQuestion,
+	parseLedgerResult,
+	type ReviewLedgerTaskParams,
+	ReviewLedgerTaskParamsSchema,
+	SIGN_OFF_TASK_TOOL_NAME,
+	serveEvidence,
+} from "./ledger-review.js";
+import {
+	buildMarkdownPage,
+	formatMarkdownResult,
+	markdownPassage,
+	markdownTemplate,
+	parseMarkdownQuestion,
+	parseMarkdownResult,
+	type ReviewMarkdownParams,
+	ReviewMarkdownParamsSchema,
+	SIGN_OFF_DOCUMENT_TOOL_NAME,
+} from "./markdown-review.js";
+import { openInBrowser } from "./open-browser.js";
 import type { PageData } from "./page-data.js";
 import { openPageSession } from "./page-server.js";
 import { embedPage, savePage } from "./saved-page.js";
-
-function openInBrowser(url: string): void {
-	const command = process.platform === "darwin" ? "open" : process.platform === "win32" ? "explorer" : "xdg-open";
-	execFile(command, [url], () => {});
-}
 
 const text = (value: string) => [{ type: "text" as const, text: value }];
 const NO_USER = "No user is attached to this run, so no review page was opened.";
@@ -66,7 +62,7 @@ interface PageRun<P extends PageData, R extends { verdict: string }> {
 	/** The built app the page data goes into. */
 	template: string;
 	root: string;
-	parse: (body: unknown) => R | undefined;
+	parse: (body: unknown) => R | undefined | Promise<R | undefined>;
 	/** The passage and question a page asks about, or undefined for a malformed question. */
 	question: (body: unknown) => { passage: Passage; question: string } | undefined;
 	format: (result: R, saved: string) => string;
@@ -117,7 +113,7 @@ export default function browserPages(pi: ExtensionAPI): void {
 		name: SIGN_OFF_CODE_TOOL_NAME,
 		label: "Sign off code",
 		description:
-			'Open a code review page in the user\'s browser and wait for their verdict. You supply the structure: chapters in the order you reasoned, a brief for each, the diff pieces by file and line range, notes on lines, and real judgment calls. The page shows the real diff from git, so you cannot hide or invent code: any hunk you do not place appears under "Not in the story". Returns the verdict, line-anchored comments, decision answers, and which hunks were seen.',
+			'Open a code review page in the user\'s browser and wait for their verdict. You supply the structure: chapters in the order you reasoned, a brief for each, the diff pieces by file and line range, notes on lines, and real judgment calls. The page shows the real diff from git, so you cannot hide or invent code: any hunk you do not place appears under "Not in the story". With review, it renders that retained artifact and assessment; human submission binds its digest/revision and waits for the runtime to commit the verdict. Changed checkout/policy and review limits remain explicit. Returns the verdict, line-anchored comments, decision answers, and which hunks were seen.',
 		promptSnippet: "Open a structured code review of your change in the user's browser and get line-anchored feedback",
 		promptGuidelines: [
 			"Use sign_off_code when the user asks to review your work or when a finished change deserves their review before you continue. It blocks until they submit, so call it at a natural stopping point.",
@@ -131,17 +127,17 @@ export default function browserPages(pi: ExtensionAPI): void {
 		executionMode: "sequential",
 		async execute(_toolCallId, params, signal, onUpdate, ctx) {
 			if (!ctx.hasUI) return { content: text(NO_USER), details: undefined };
-			const { page, root } = await buildCodeReviewPage(
-				params as ReviewCodeParams,
-				ctx.cwd,
-				randomBytes(24).toString("hex"),
-			);
+			const typed = params as ReviewCodeParams;
+			const token = randomBytes(24).toString("hex");
+			const { page, root } = typed.review
+				? await buildCapturedReview(typed, ctx.sessionManager.getSessionId(), token, signal)
+				: await buildCodeReviewPage(typed, ctx.cwd, token);
 			return review(
 				{
 					page,
 					template: await codeReviewTemplate(page),
 					root,
-					parse: (body) => parseReviewResult(body, page),
+					parse: (body) => (page.capture ? submitCapturedReview(body, page) : parseReviewResult(body, page)),
 					question: (body) => {
 						const q = parseQuestion(body, page);
 						return q && { passage: questionPassage(page, q), question: q.question };

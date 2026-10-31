@@ -20,6 +20,14 @@ export function reviewLimits(assessment: ReviewAssessment): string[] {
 	const limits: string[] = [];
 	if (job.state !== "completed") limits.push(`Review execution is ${job.state}: ${job.reason ?? "not completed"}`);
 	if (!job.artifact?.intent) limits.push("Approved intent was not supplied; intent compliance is unassessed.");
+	if (!job.artifact?.configuration)
+		limits.push(
+			"Capture-time review instructions/configured references were not recorded; inspect retained attempt inputs.",
+		);
+	else if (job.artifact.configuration.catalogIssues)
+		limits.push(
+			`${job.artifact.configuration.catalogIssues} role-catalog issues; captured configured references may be partial.`,
+		);
 	if (job.artifact?.omissions.length)
 		limits.push(
 			`${job.artifact.omissions.length} captured source/scope omissions remain; inspect the target's omission list.`,

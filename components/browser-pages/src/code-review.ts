@@ -3,10 +3,9 @@ import { isAbsolute, join, relative, resolve } from "node:path";
 
 import { type Static, Type } from "typebox";
 
-import { generatedPaths, readBaseFile, readRepoDiff, type RawLine } from "./git-diff.js";
+import { generatedPaths, type RawLine, type RepoDiff, readBaseFile, readRepoDiff } from "./git-diff.js";
 import { highlightLines, markRange } from "./highlight.js";
 import { blocksOf, withDiagrams } from "./markdown-review.js";
-import { readTemplate } from "./saved-page.js";
 import type {
 	Attention,
 	Chapter,
@@ -20,6 +19,7 @@ import type {
 	ReviewResult,
 	Segment,
 } from "./page-data.js";
+import { readTemplate } from "./saved-page.js";
 
 export const SIGN_OFF_CODE_TOOL_NAME = "sign_off_code";
 
@@ -34,6 +34,13 @@ const RefSchema = Type.Object({
 });
 
 export const ReviewCodeParamsSchema = Type.Object({
+	review: Type.Optional(
+		Type.String({
+			minLength: 1,
+			description:
+				"Captured review ID or request handle. Uses its retained source and assessment for exact-artifact operator sign-off; cwd/base cannot replace that target.",
+		}),
+	),
 	cwd: Type.Optional(
 		Type.String({
 			description:
@@ -364,13 +371,16 @@ export async function buildCodeReviewPage(
 	params: ReviewCodeParams,
 	cwd: string,
 	token: string,
+	captured?: RepoDiff,
 ): Promise<{ page: CodeReviewPage; root: string }> {
 	cwd = resolve(cwd, params.cwd ?? ".");
-	const diff = await readRepoDiff(cwd, params.base ?? "HEAD");
-	const generated = await generatedPaths(
-		diff.root,
-		diff.files.map((f) => f.path),
-	);
+	const diff = captured ?? (await readRepoDiff(cwd, params.base ?? "HEAD"));
+	const generated = captured
+		? new Set<string>()
+		: await generatedPaths(
+				diff.root,
+				diff.files.map((f) => f.path),
+			);
 	const files: DiffFile[] = [];
 	const runs: Island[] = [];
 	let block = 0;
@@ -385,11 +395,11 @@ export async function buildCodeReviewPage(
 		});
 		const textual = !isGenerated && !raw.binary && raw.hunks.some((h) => h.lines.length > 0);
 		const newSegs =
-			textual && raw.status !== "D"
+			textual && !captured && raw.status !== "D"
 				? await highlighted(raw.path, await readFile(join(diff.root, raw.path), "utf8").catch(() => undefined))
 				: undefined;
 		const oldSegs =
-			textual && raw.status !== "A"
+			textual && !captured && raw.status !== "A"
 				? await highlighted(
 						raw.oldPath ?? raw.path,
 						await readBaseFile(diff.root, diff.baseCommit, raw.oldPath ?? raw.path),

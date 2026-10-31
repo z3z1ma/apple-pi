@@ -14,5 +14,7 @@ Only the active source page is cached, keyed by review/digest, before/after side
 
 The target response nests its paged omissions under target. Reading data.omissions made the last limits unreachable even though other views paged normally; the loaded-entry regression uses more LFS limits than fit in one viewport and reaches the final path through the ordinary controls.
 
+Explicit freshness uses the same async page ownership but reports requested comparison, checkout and policy independently at its observation time. Additional work requires a settled revision/digest plus a concrete question, reason and stopping condition; it authorizes model cost on retained source rather than capturing live edits. Captured browser sign-off shares the approval writer and waits for its receipt before success. Closing interaction cannot undo an already committed human verdict.
+
 Coupled: components/code-review/src/preview.ts, components/code-review/src/panel.ts, components/session-state/src/review-read.ts, components/session-state/src/client.ts, extensions/code-review.ts, package.json
 Verify: components/session-state/tests/review-queue.test.ts, components/code-review/tests/panel.test.ts

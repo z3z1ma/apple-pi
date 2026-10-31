@@ -33,7 +33,7 @@ function send(res: ServerResponse, status: number, body: string, type = "text/pl
 export async function openPageSession<R>(
 	html: string,
 	token: string,
-	parse: ((body: unknown) => R | undefined) | undefined,
+	parse: ((body: unknown) => R | undefined | Promise<R | undefined>) | undefined,
 	options: {
 		signal?: AbortSignal;
 		ask?: (body: unknown, signal: AbortSignal) => Promise<string | undefined>;
@@ -51,20 +51,35 @@ export async function openPageSession<R>(
 	// A session closed before anyone awaits it must not surface as an unhandled rejection.
 	result.catch(() => {});
 	let done = false;
+	let submitting = false;
 	let host = "";
 
-	const settleWith = async (req: IncomingMessage, res: ServerResponse, parse: (body: unknown) => R | undefined) => {
-		if (done) return send(res, 409, "This review was already closed.");
-		let value: R | undefined;
+	const settleWith = async (
+		req: IncomingMessage,
+		res: ServerResponse,
+		parse: (body: unknown) => R | undefined | Promise<R | undefined>,
+	) => {
+		if (done || submitting) return send(res, 409, "This review is closed or already submitting.");
+		submitting = true;
 		try {
-			value = parse(JSON.parse(await readBody(req)));
-		} catch {
-			value = undefined;
+			let body: unknown;
+			try {
+				body = JSON.parse(await readBody(req));
+			} catch {
+				return send(res, 400, "Invalid review.");
+			}
+			const value = await parse(body);
+			if (value === undefined) return send(res, 400, "Invalid review.");
+			if (done)
+				return send(res, 409, "The page closed while submission was in progress; the operation may have committed.");
+			done = true;
+			send(res, 200, "{}", "application/json");
+			settle?.resolve(value);
+		} catch (error) {
+			return send(res, 502, error instanceof Error ? error.message : String(error));
+		} finally {
+			submitting = false;
 		}
-		if (value === undefined) return send(res, 400, "Invalid review.");
-		done = true;
-		send(res, 200, "{}", "application/json");
-		settle?.resolve(value);
 	};
 
 	const answer = async (

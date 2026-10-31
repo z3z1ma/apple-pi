@@ -51,7 +51,7 @@ function stripPrefix(path: string): string {
 }
 
 /** Parses `git diff` output into files and hunks with old and new line numbers. */
-function parseUnifiedDiff(text: string): RawFile[] {
+export function parseUnifiedDiff(text: string): RawFile[] {
 	const files: RawFile[] = [];
 	let file: RawFile | undefined;
 	let hunk: RawHunk | undefined;

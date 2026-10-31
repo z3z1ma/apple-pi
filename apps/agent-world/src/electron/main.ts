@@ -20,6 +20,7 @@ import { openLifecycle } from "../backend/lifecycle.js";
 import { openFileLink, openLink } from "../backend/links.js";
 import { openNotepads } from "../backend/notepad.js";
 import { openOrg } from "../backend/org.js";
+import { openReviews } from "../backend/reviews.js";
 import { listThemes, themeBackdrop } from "../backend/theme-packs.js";
 import { openWorkplace } from "../backend/workplace.js";
 import { openWorkspace } from "../backend/workspace.js";
@@ -37,6 +38,7 @@ import {
 } from "../workspace.js";
 import { wireCommunications } from "./communications-ipc.js";
 import { wireIntegrations } from "./integrations-ipc.js";
+import { wireReviews } from "./reviews-ipc.js";
 import { wireTerminals } from "./terminal-ipc.js";
 
 // This file runs as dist/electron/main.js, two levels below the app directory.
@@ -112,6 +114,8 @@ function start() {
 	const conversations = openConversations(statePaths().socket);
 	const commands = openCommands(statePaths().socket);
 	wireCommunications(openCommunications(statePaths().db, commands));
+	const reviews = openReviews(statePaths().db, commands);
+	wireReviews(reviews.api);
 	let window: BrowserWindow | undefined;
 	const toWindow = (channel: string, message: unknown) => {
 		if (window && !window.isDestroyed()) window.webContents.send(channel, message);
@@ -298,6 +302,7 @@ function start() {
 	});
 	app.on("window-all-closed", () => app.quit());
 	app.on("will-quit", () => {
+		reviews.close();
 		departures.close();
 		terminals.dispose();
 		world.close();

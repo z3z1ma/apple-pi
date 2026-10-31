@@ -45,6 +45,7 @@ export interface State {
 	composer: Composer | null;
 	verdict: Verdict | null;
 	summary: string;
+	acceptLimits: boolean;
 	modal: null | "verdict" | "keys" | "comments";
 	theme: "light" | "dark";
 	submit: "idle" | "sending" | "sent" | "failed";
@@ -78,6 +79,7 @@ export function initialState(result: ReviewResult | undefined): State {
 		composer: null,
 		verdict: result?.verdict ?? null,
 		summary: result?.summary ?? "",
+		acceptLimits: result?.capture?.acceptLimits ?? false,
 		modal: null,
 		theme: dark ? "dark" : "light",
 		submit: result ? "sent" : "idle",
@@ -279,6 +281,17 @@ export function saveComposer(s: State): void {
 export function toResult(m: Model, s: State, verdict: Verdict) {
 	return {
 		verdict,
+		...(m.page.capture
+			? {
+					capture: {
+						review: m.page.capture.review,
+						digest: m.page.capture.digest,
+						revision: m.page.capture.revision,
+						planRevision: m.page.capture.planRevision,
+						acceptLimits: s.acceptLimits,
+					},
+				}
+			: {}),
 		summary: s.summary.trim() || undefined,
 		comments: s.comments.map(({ id: _id, ...c }) => c),
 		asked: s.asks.flatMap(({ id: _id, error: _error, answer, ...a }) => (answer ? [{ ...a, answer }] : [])),

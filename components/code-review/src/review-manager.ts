@@ -2,9 +2,12 @@ import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { OverlayHandle, TUI } from "@earendil-works/pi-tui";
+import { openCapturedSignOff } from "../../browser-pages/src/captured-review.js";
+import { openInBrowser } from "../../browser-pages/src/open-browser.js";
 import { sendCommand } from "../../session-state/src/client.js";
 import {
 	readReview,
+	readReviewFreshness,
 	readReviewPart,
 	readReviewSource,
 	reviewQueue,
@@ -18,7 +21,18 @@ import { previewReview } from "./preview.js";
 import type { ReviewAssessment, ReviewSummary } from "./results.js";
 import type { ReviewTarget } from "./types.js";
 
-const views = ["summary", "target", "source", "plan", "findings", "coverage", "attempts", "decisions"] as const;
+const views = [
+	"summary",
+	"target",
+	"source",
+	"plan",
+	"findings",
+	"coverage",
+	"attempts",
+	"decisions",
+	"configuration",
+	"freshness",
+] as const;
 type EvidenceView = (typeof views)[number];
 type EvidenceDetail = { lines: string[]; nextOffset: number | null };
 type Mounted = {
@@ -160,7 +174,7 @@ export class ReviewManager {
 		offset: number,
 	): EvidenceDetail {
 		if (this.view === "summary") return { lines: summaryLines(review), nextOffset: null };
-		if (this.view === "source") return this.sourceDetail(actor, review, limit, offset);
+		if (this.view === "source" || this.view === "freshness") return this.sourceDetail(actor, review, limit, offset);
 		const data = readReviewPart(db, actor, review.id, { part: this.view, limit, offset });
 		if (this.view === "findings") {
 			const findings = data as {
@@ -199,18 +213,32 @@ export class ReviewManager {
 	private sourceDetail(actor: string, review: ReviewSummary, limit: number, offset: number) {
 		const selected = this.sourceSelection?.review === review.id ? this.sourceSelection : undefined;
 		const options = { path: selected?.path, side: selected?.side ?? "after", limit, offset } as const;
-		const key = JSON.stringify([review.id, review.digest, options]);
+		const view = this.view;
+		const key = JSON.stringify([view, review.id, review.digest, options]);
 		if (this.sourcePage?.key === key) return this.sourcePage.detail;
 		this.stopSource();
 		const mounted = this.mounted;
-		const pending: EvidenceDetail = { lines: ["Loading retained source..."], nextOffset: null };
+		const pending: EvidenceDetail = {
+			lines: [view === "freshness" ? "Checking live applicability..." : "Loading retained source..."],
+			nextOffset: null,
+		};
 		if (!mounted) return pending;
 		const page = { key, stop: new AbortController(), detail: pending };
 		this.sourcePage = page;
-		void readReviewSource(actor, review.id, options, page.stop.signal)
-			.then((data) => {
+		void (
+			view === "freshness"
+				? readReviewFreshness(actor, review.id, page.stop.signal).then((data) => ({
+						lines: evidenceLines(data),
+						nextOffset: null,
+					}))
+				: readReviewSource(actor, review.id, options, page.stop.signal).then((data) => ({
+						lines: sourceLines(data),
+						nextOffset: data.page?.nextOffset ?? null,
+					}))
+		)
+			.then((detail) => {
 				if (this.sourcePage !== page || page.stop.signal.aborted || this.mounted !== mounted) return;
-				page.detail = { lines: sourceLines(data), nextOffset: data.page?.nextOffset ?? null };
+				page.detail = detail;
 				mounted.panel.refresh();
 			})
 			.catch((error) => {
@@ -273,10 +301,24 @@ export class ReviewManager {
 		if (review) {
 			if (!["completed", "cancelled", "no-changes"].includes(review.state)) actions.push("Cancel", "Set priority");
 			if (["interrupted", "failed", "incomplete"].includes(review.state)) actions.push("Resume same target");
+			if (["completed", "incomplete", "failed", "interrupted", "cancelled"].includes(review.state))
+				actions.push("Authorize additional work", "Open captured sign-off");
 			actions.push("Capture a fresh rerun", "Reassign");
 		}
 		const choice = await ctx.ui.select("Review actions", actions, { signal: stop });
 		if (!choice || stop.aborted) return;
+		if (choice === "Authorize additional work" && review) return this.authorizeWork(ctx, review, stop);
+		if (choice === "Open captured sign-off" && review) {
+			const page = await openCapturedSignOff(ctx.sessionManager.getSessionId(), review.id, stop);
+			openInBrowser(page.url);
+			try {
+				const receipt = await page.result;
+				this.mounted?.panel.setNote(`Operator verdict recorded: ${receipt.result.verdict}. Saved ${receipt.saved}`);
+			} finally {
+				page.close();
+			}
+			return;
+		}
 		if (choice === "Recover an uncertain request") {
 			const request = await ctx.ui.select(
 				"Replay the original request (same arguments and identity)",
@@ -315,6 +357,44 @@ export class ReviewManager {
 		if (!operation || stop.aborted) return;
 		const confirmed = await this.confirmOperation(ctx, choice, operation, stop);
 		if (confirmed && !stop.aborted) await this.send(`review-ui:${randomUUID()}`, confirmed, stop);
+	}
+
+	private async authorizeWork(ctx: ExtensionContext, review: ReviewSummary, stop: AbortSignal): Promise<void> {
+		const question = await ctx.ui.input("Additional review question", "Concrete uncertainty to resolve", {
+			signal: stop,
+		});
+		if (!question?.trim() || stop.aborted) return;
+		const reason = await ctx.ui.input("Why is more work justified?", "New risk, disagreement or missing evidence", {
+			signal: stop,
+		});
+		if (!reason?.trim() || stop.aborted) return;
+		const doneWhen = await ctx.ui.input("What evidence settles this question?", "A concrete stopping condition", {
+			signal: stop,
+		});
+		if (!doneWhen?.trim() || stop.aborted) return;
+		if (
+			!(await ctx.ui.confirm(
+				"Authorize new reviewer work?",
+				"Replan this retained target with the additional question. Required inspections run again and can incur model cost; live edits are not captured.",
+				{ signal: stop },
+			)) ||
+			stop.aborted
+		)
+			return;
+		await this.send(
+			`review-ui:${randomUUID()}`,
+			{
+				action: "extend",
+				review: review.id,
+				digest: review.digest!,
+				revision: review.revision,
+				question,
+				reason,
+				doneWhen,
+			},
+			stop,
+		);
+		return;
 	}
 
 	private async confirmOperation(

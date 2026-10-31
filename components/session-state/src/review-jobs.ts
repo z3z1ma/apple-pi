@@ -167,6 +167,42 @@ export class ReviewJobs {
 					.run(Date.now(), job.id, job.state, job.generation, job.owner, job.revision);
 				if (!changed.changes) throw new Error("The review changed while its target was verified; inspect it again");
 			});
+		} else if (operation.action === "extend") {
+			if (!reviewSettled(job.state) || !job.artifact || job.state === "no-changes")
+				throw new Error("Additional review work requires a settled captured change");
+			this.availableOwner(job.owner);
+			await this.waitCleanup(job.id);
+			await verifyArtifact(job.artifact);
+			this.live();
+			this.commit(commandId, job.id, () => {
+				const additionalWork = [
+					...job.additionalWork,
+					{
+						id: commandId,
+						actor,
+						question: operation.question,
+						reason: operation.reason,
+						doneWhen: operation.doneWhen,
+						createdAt: Date.now(),
+					},
+				];
+				const changed = this.db
+					.prepare(
+						"update review_jobs set additional_work = ?, selected_attempts = '{}', state = 'queued', generation = generation + 1, revision = revision + 1, reason = null, updated_at = ? where id = ? and revision = ? and generation = ? and owner = ? and state = ? and json_extract(artifact, '$.digest') = ?",
+					)
+					.run(
+						JSON.stringify(additionalWork),
+						Date.now(),
+						job.id,
+						operation.revision,
+						job.generation,
+						job.owner,
+						job.state,
+						operation.digest,
+					);
+				if (!changed.changes)
+					throw new Error("The review assessment changed; inspect it again before authorizing work");
+			});
 		} else if (operation.action === "priority") {
 			this.commit(commandId, job.id, () =>
 				this.db
@@ -260,22 +296,20 @@ export class ReviewJobs {
 					role: "code-review-specialist",
 					policyFingerprint: roles.find((role) => role.name === "code-review-specialist")?.policy,
 					kind: "planner",
-					goal: `${PLAN_REVIEW}\nCaptured source: ${artifact.source}`,
+					goal: `${artifact.configuration?.instructions.planning ?? PLAN_REVIEW}\nEach authorized additionalWork entry is required work. Assign its id as a lens to a focused pass and answer its question with the stated doneWhen evidence; preserve its reason.\nCaptured source: ${artifact.source}`,
 					schema: ReviewPlanSchema,
 					context: {
 						phase: "planning",
 						artifact: source,
 						regions: artifact.regions,
 						roles,
+						additionalWork: job.additionalWork,
 					},
 					validate: (value) =>
-						validatePlan(
-							value,
-							artifact.digest,
-							artifact.regions,
-							new Set(roles.map((role) => role.name)),
-							artifact.request.lenses,
-						),
+						validatePlan(value, artifact.digest, artifact.regions, new Set(roles.map((role) => role.name)), [
+							...(artifact.request.lenses ?? []),
+							...job.additionalWork.map((request) => request.id),
+						]),
 				},
 				signal,
 			);
@@ -305,7 +339,7 @@ export class ReviewJobs {
 						role: pass.role,
 						policyFingerprint: roles.find((role) => role.name === pass.role)?.policy,
 						kind: pass.kind,
-						goal: `${INSPECT_REVIEW}\nCaptured source: ${artifact.source}`,
+						goal: `${artifact.configuration?.instructions.inspection ?? INSPECT_REVIEW}\nCaptured source: ${artifact.source}`,
 						schema: ReviewReportSchema,
 						context: {
 							phase: "inspection",
@@ -339,7 +373,7 @@ export class ReviewJobs {
 					role: "code-review-specialist",
 					policyFingerprint: roles.find((role) => role.name === "code-review-specialist")?.policy,
 					kind: "validation",
-					goal: `${VALIDATE_REVIEW}\nCaptured source: ${artifact.source}`,
+					goal: `${artifact.configuration?.instructions.validation ?? VALIDATE_REVIEW}\nCaptured source: ${artifact.source}`,
 					schema: FindingValidationSchema,
 					context: { phase: "validation", artifact: source, plan, reports, reviewedAttempts },
 					reviewedAttempts,

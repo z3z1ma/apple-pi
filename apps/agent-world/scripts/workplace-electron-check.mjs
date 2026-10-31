@@ -31,6 +31,12 @@ const repository = join(scratch, "repository");
 mkdirSync(repository);
 writeFileSync(join(repository, "example.ts"), "export const answer = 1;\n");
 execFileSync("git", ["init", repository], { stdio: "ignore", timeout: 5000 });
+execFileSync("git", ["-C", repository, "add", "."], { timeout: 5000 });
+execFileSync(
+	"git",
+	["-C", repository, "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "-qm", "base"],
+	{ timeout: 5000 },
+);
 const socketPath = join(state, "apple-pi.sock");
 const upstreamPath = join(state, "trace-upstream.sock");
 const bin = join(scratch, "bin");
@@ -169,6 +175,40 @@ try {
 	assert.equal(new URL(page.url()).search, "");
 	assert.equal(await page.title(), "Workplace");
 	await page.getByRole("button", { name: "Chat", exact: true }).waitFor();
+	const reviewProbe = await page.evaluate(async (cwd) => {
+		const api = window.agentWorld.reviews;
+		const request = { cwd, target: { kind: "working-tree", base: "HEAD" } };
+		const preview = await api.preview(request);
+		const input = { attempt: "native-empty-review", request, expectedDigest: preview.digest, owner: "nav-head" };
+		const review = await api.enqueue(input);
+		const replay = await api.enqueue(input);
+		return {
+			preview,
+			review,
+			replay,
+			queue: await api.queue({ cwd, limit: 1 }),
+			source: await api.source({ review: review.id, side: "after", path: "example.ts", limit: 1 }),
+			freshness: await api.freshness({ review: review.id }),
+		};
+	}, repository);
+	assert.equal(reviewProbe.preview.changedPaths, 0);
+	assert.equal(reviewProbe.review.state, "no-changes");
+	assert.equal(reviewProbe.replay.id, reviewProbe.review.id);
+	assert.equal(reviewProbe.queue.total, 1);
+	assert.deepEqual(reviewProbe.source.page.rows, ["export const answer = 1;"]);
+	assert.equal(reviewProbe.freshness.requestedTarget, "matches");
+	assert.equal(query("select id from review_attempts").length, 0);
+	await app.evaluate(({ shell }) => {
+		shell.openExternal = async () => {};
+	});
+	const signOff = await page.evaluate((review) => window.agentWorld.reviews.signOff({ review }), reviewProbe.review.id);
+	const signOffHtml = await (await fetch(signOff.url)).text();
+	assert(signOffHtml.includes(reviewProbe.review.digest));
+	assert(signOffHtml.includes('"review":"' + reviewProbe.review.id + '"'));
+	assert(!existsSync(join(scratch, "unexpected-pi")));
+	console.log(
+		"Native reviews: actual preload/IPC/runtime preview, empty admission, replay, queue, captured source and explicit freshness passed; no reviewers started.",
+	);
 	await page
 		.locator(".wp-chat-sidebar .wp-dm")
 		.filter({ hasText: "Navigation Report" })

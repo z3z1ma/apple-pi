@@ -8,7 +8,11 @@ import type {
 } from "../../components/code-review/src/contracts.js";
 
 export type ReviewInput = { artifact: { digest: string } } & (
-	| { phase: "planning"; regions: { id: string }[] }
+	| {
+			phase: "planning";
+			regions: { id: string }[];
+			additionalWork?: { id: string; question: string; doneWhen: string }[];
+	  }
 	| { phase: "inspection"; pass: PlannedPass }
 	| { phase: "validation"; reports: ReviewReport[] }
 );
@@ -66,6 +70,14 @@ export function reviewReply(
 				],
 			},
 		};
+		for (const request of input.additionalWork ?? []) {
+			plan.chunks[0]!.passes.push({
+				id: request.id,
+				role: "code-review-specialist",
+				lenses: [request.id],
+				questions: [{ id: "additional", question: request.question, verification: request.doneWhen }],
+			});
+		}
 		if (settings.authority) {
 			plan.chunks[0]!.risks.push({ kind: "authority", reason: "The change removes stored records." });
 			plan.chunks[0]!.passes.push({

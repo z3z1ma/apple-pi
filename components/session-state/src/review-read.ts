@@ -3,6 +3,8 @@ import { readCapturedSource } from "../../code-review/src/capture.js";
 import { type FindingValidation, findingKey, planPasses, type ReviewReport } from "../../code-review/src/contracts.js";
 import type { FindingDecision, ReviewApproval, ReviewDecision } from "../../code-review/src/decisions.js";
 import type { ReviewJob, ReviewState } from "../../code-review/src/operations.js";
+import { configurationSummary, reviewConfiguration, reviewRolePolicy } from "../../code-review/src/policy.js";
+import { previewReview } from "../../code-review/src/preview.js";
 import type {
 	ReviewAssessment,
 	ReviewAttempt,
@@ -15,13 +17,14 @@ import { rootOf } from "./tree.js";
 
 const columns = `id, command_id as commandId, requester, owner, organization, origin_task as originTask,
  parent, state, priority, generation, revision, plan_revision as planRevision, request,
- artifact_directory as artifactDirectory, artifact, plan, selected_attempts as selectedAttempts,
+ artifact_directory as artifactDirectory, artifact, plan, selected_attempts as selectedAttempts, additional_work as additionalWork,
  reason, created_at as createdAt, updated_at as updatedAt`;
-type StoredJob = Omit<ReviewJob, "request" | "artifact" | "plan" | "selectedAttempts"> & {
+type StoredJob = Omit<ReviewJob, "request" | "artifact" | "plan" | "selectedAttempts" | "additionalWork"> & {
 	request: string;
 	artifact: string | null;
 	plan: string | null;
 	selectedAttempts: string;
+	additionalWork: string;
 };
 
 function organization(db: DatabaseSync, actor: string): string | null {
@@ -50,6 +53,7 @@ export function readReview(db: DatabaseSync, actor: string, id: string): ReviewJ
 		artifact: row.artifact ? JSON.parse(row.artifact) : null,
 		plan: row.plan ? JSON.parse(row.plan) : null,
 		selectedAttempts: JSON.parse(row.selectedAttempts),
+		additionalWork: JSON.parse(row.additionalWork),
 	};
 }
 
@@ -132,7 +136,7 @@ export function reviewAssessment(db: DatabaseSync, actor: string, id: string): R
 
 export function withReviews<T>(read: (db: DatabaseSync) => T): T {
 	const value = withThreads((db) => {
-		if (!db.prepare("select 1 from sqlite_master where type = 'table' and name = 'review_decisions'").get())
+		if (!db.prepare("select 1 from pragma_table_info('review_jobs') where name = 'additional_work'").get())
 			throw new Error(
 				"The review store is unavailable. Ask the operator to update the session-state runtime before using reviews.",
 			);
@@ -284,6 +288,7 @@ export function reviewQueue(
 export interface ReviewReadOptions {
 	part?:
 		| "summary"
+		| "configuration"
 		| "target"
 		| "plan"
 		| "pass"
@@ -300,13 +305,83 @@ export interface ReviewReadOptions {
 	offset?: number;
 }
 
+export type ReviewStore = <T>(read: (db: DatabaseSync) => T) => T;
+
+export async function readReviewFreshness(
+	actor: string,
+	id: string,
+	signal?: AbortSignal,
+	store: ReviewStore = withReviews,
+) {
+	const { job, policies } = store((db) => {
+		const job = readReview(db, actor, id);
+		const policies = Object.values(job.selectedAttempts).map((attempt) => {
+			const row = db
+				.prepare("select role, policy from review_attempts where id = ? and review_id = ?")
+				.get(attempt, job.id) as { role: string; policy: string } | undefined;
+			return row;
+		});
+		return { job, policies };
+	});
+	const artifact = job.artifact;
+	if (!artifact) throw new Error("The review has no captured target");
+	const errors: string[] = [];
+	type Match = "matches" | "changed" | "unavailable";
+	let requestedTarget: Match = "unavailable";
+	let checkout: Match = "unavailable";
+	let policy: Match = "unavailable";
+	try {
+		const current = await previewReview(job.request, signal);
+		if (artifact.configuration) requestedTarget = current.digest === artifact.digest ? "matches" : "changed";
+		else errors.push("Capture-time configuration is absent; complete target identity cannot be compared.");
+		const working =
+			job.request.target.kind === "working-tree"
+				? current
+				: await previewReview(
+						{
+							cwd: job.request.cwd,
+							target: { kind: "working-tree", base: "HEAD" },
+						},
+						signal,
+					);
+		checkout =
+			working.headTree === artifact.headTree && working.headCommit === artifact.headCommit ? "matches" : "changed";
+	} catch (error) {
+		if (signal?.aborted) throw error;
+		errors.push(`Live source: ${error instanceof Error ? error.message : String(error)}`);
+	}
+	try {
+		if (artifact.configuration) {
+			policy =
+				JSON.stringify(reviewConfiguration(artifact.source)) === JSON.stringify(artifact.configuration) &&
+				policies.every((row) => row && JSON.stringify(reviewRolePolicy(artifact.source, row.role)) === row.policy)
+					? "matches"
+					: "changed";
+		} else errors.push("Capture-time review policy was not recorded.");
+	} catch (error) {
+		errors.push(`Review policy: ${error instanceof Error ? error.message : String(error)}`);
+	}
+	return {
+		review: job.id,
+		revision: job.revision,
+		artifact: artifact.digest,
+		requestedTarget,
+		checkout,
+		policy,
+		checkedAt: Date.now(),
+		errors,
+		note: "Point-in-time observation, not approval or an atomic filesystem snapshot. Requested comparison and current checkout are distinct; external resources and ambient instructions are not frozen. Recheck before relying on applicability.",
+	};
+}
+
 export async function readReviewSource(
 	actor: string,
 	id: string,
 	options: { path?: string; side?: "before" | "after"; limit?: number; offset?: number } = {},
 	signal?: AbortSignal,
+	store: ReviewStore = withReviews,
 ): Promise<ReviewSource> {
-	const job = withReviews((db) => readReview(db, actor, id));
+	const job = store((db) => readReview(db, actor, id));
 	if (!job.artifact) throw new Error("The review has no captured source");
 	page([], options);
 	const source = await readCapturedSource(job.artifact, options, signal);
@@ -362,6 +437,7 @@ export function readReviewPart(db: DatabaseSync, actor: string, id: string, opti
 								baseRevision: artifact.baseRevision,
 								headRevision: artifact.headRevision,
 								intent: artifact.intent,
+								configuration: configurationSummary(artifact.configuration),
 								files: artifact.files.length,
 								regions: artifact.regions.length,
 								omissions: page(artifact.omissions, options),
@@ -370,6 +446,13 @@ export function readReviewPart(db: DatabaseSync, actor: string, id: string, opti
 					reason: job.reason,
 				};
 			}
+			case "configuration":
+				return {
+					review: job.id,
+					revision: job.revision,
+					configuration: job.artifact?.configuration ?? null,
+					note: "Captured review prompts and configured model references; actual role/model policy belongs to each attempt. Ambient instructions and external resources are not a frozen environment.",
+				};
 			case "plan":
 				return {
 					review: job.id,
@@ -378,6 +461,7 @@ export function readReviewPart(db: DatabaseSync, actor: string, id: string, opti
 					planner: job.selectedAttempts.planner ?? null,
 					integration: job.plan?.integration ?? null,
 					gaps: job.plan?.gaps ?? [],
+					additionalWork: job.additionalWork,
 					chunks: page(job.plan?.chunks ?? [], options),
 				};
 			case "changes":

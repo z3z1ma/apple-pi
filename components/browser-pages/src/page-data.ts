@@ -92,6 +92,14 @@ export interface Verification {
 
 export interface CodeReviewPage {
 	kind: "code-review";
+	capture?: {
+		review: string;
+		digest: string;
+		revision: number;
+		planRevision: number;
+		limits: string[];
+		freshness: { requestedTarget: string; checkout: string; policy: string; checkedAt: number; errors: string[] };
+	};
 	title: string;
 	intent: MarkdownBlock[];
 	base: string;
@@ -138,6 +146,7 @@ export interface AskedQuestion {
 }
 
 export interface ReviewResult {
+	capture?: { review: string; digest: string; revision: number; planRevision: number; acceptLimits: boolean };
 	verdict: Verdict;
 	summary?: string;
 	comments: ReviewComment[];

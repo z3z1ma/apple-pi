@@ -5,6 +5,7 @@ import { sendCommand } from "../../session-state/src/client.js";
 import {
 	withReviews as database,
 	readReview,
+	readReviewFreshness,
 	readReviewPart,
 	readReviewSource,
 	reviewQueue,
@@ -54,6 +55,8 @@ const parts = Type.Union([
 	Type.Literal("summary"),
 	Type.Literal("target"),
 	Type.Literal("source"),
+	Type.Literal("configuration"),
+	Type.Literal("freshness"),
 	Type.Literal("plan"),
 	Type.Literal("pass"),
 	Type.Literal("findings"),
@@ -233,7 +236,7 @@ export function installReviewTools(pi: ExtensionAPI): void {
 			name: "read_review",
 			label: "Read review",
 			description:
-				"Read one captured review progressively. Summary separates execution, missing intent, question coverage, findings and reported primary-turn cost across all attempts. Cost excludes unobserved internal activity; missing observations and unavailable totals stay explicit. Target gives captured source and Git revisions; ordinary tools remain available there. Source browses retained Git objects on the before or after side: omit path to list files, or name a captured file to read lines. It never follows symlinks or automatically appends .context sidecars; inspect captured context files and applicable docs separately. Source and the other collections return counts until limit is supplied; source file offsets are zero-based line offsets. Plan, changes, regions, findings, coverage and attempts also page explicitly. Pass requires its pass ID; attempt requires its attempt ID and exposes that retained input policy, raw result, observed turn usage and validated output. Original allegations and validation remain distinct. These reads establish neither freshness nor approval.",
+				"Read one captured review progressively. Summary separates execution, missing intent, question coverage, findings and reported primary-turn cost across all attempts. Cost excludes unobserved internal activity; missing observations and unavailable totals stay explicit. Freshness explicitly rechecks the requested target, current checkout and recorded review policy at a stated time; changed or unavailable is not current, and this read never transfers coverage/approval. Configuration shows captured review instructions and declared model/profile references, not a frozen ambient environment; actual role/model policy belongs to each attempt. Target gives captured source and Git revisions; ordinary tools remain available there. Source browses retained Git objects on the before or after side: omit path to list files, or name a captured file to read lines. It never follows symlinks or automatically appends .context sidecars; inspect captured context files and applicable docs separately. Source and the other collections return counts until limit is supplied; source file offsets are zero-based line offsets. Plan, changes, regions, findings, coverage and attempts also page explicitly. Pass requires its pass ID; attempt requires its attempt ID and exposes that retained input policy, raw result, observed turn usage and validated output. Original allegations and validation remain distinct. These reads establish neither freshness nor approval.",
 			promptSnippet: "Inspect review scope, evidence and retained attempts without treating partial work as clean.",
 			parameters: Type.Object(
 				{
@@ -257,6 +260,7 @@ export function installReviewTools(pi: ExtensionAPI): void {
 				const actor = ctx.sessionManager.getSessionId();
 				const { part } = params;
 				if (part === "source") return result(await readReviewSource(actor, params.review, params, signal));
+				if (part === "freshness") return result(await readReviewFreshness(actor, params.review, signal));
 				return result(database((db) => readReviewPart(db, actor, params.review, { ...params, part })));
 			},
 		}),
@@ -266,7 +270,7 @@ export function installReviewTools(pi: ExtensionAPI): void {
 			name: "manage_review",
 			label: "Manage review",
 			description:
-				"Cancel unfinished review work and wait for guarded cleanup, explicitly resume interrupted/failed/incomplete work on the same verified artifact, reprioritize queued work, reassign responsibility, or rerun the original capture request as a new review linked to this one (owned by you unless owner is supplied). Resume checks current role/profile policy before reusing exact-input work. A changed policy or advisory catalog requires a new plan and fresh inspections; challenged or incomplete work also reruns. Rerun resolves mutable targets again and grants no old coverage credit. Extra questions still need a plan-owner decision; a resume is not a waiver.",
+				"Cancel unfinished review work and wait for guarded cleanup, explicitly resume interrupted/failed/incomplete work on the same verified artifact, reprioritize queued work, reassign responsibility, or rerun the original capture request as a new review linked to this one (owned by you unless owner is supplied). Resume checks current role/profile policy before reusing exact-input work. A changed policy or advisory catalog requires a new plan and fresh inspections; challenged or incomplete work also reruns. Rerun resolves mutable targets again and grants no old coverage credit. Extend explicitly authorizes a concrete additional question with its reason and doneWhen evidence on the same retained target, bound to the current revision/digest. It replans required work and can incur new model cost; old attempts remain history, not automatic coverage credit. Resume alone is not a waiver or authorization of new questions.",
 			promptSnippet: "Manage review responsibility, recovery and fresh reruns without recapturing silently.",
 			parameters: Type.Object(
 				{
@@ -277,11 +281,19 @@ export function installReviewTools(pi: ExtensionAPI): void {
 						Type.Literal("priority"),
 						Type.Literal("reassign"),
 						Type.Literal("rerun"),
+						Type.Literal("extend"),
 					]),
 					priority: Type.Optional(
 						Type.Number({ description: "Queue priority; higher values precede lower ones. Required for priority." }),
 					),
 					owner: Type.Optional(text("Existing lasting person's ID; required for reassign, optional for rerun.")),
+					revision: Type.Optional(
+						Type.Integer({ minimum: 0, description: "Current assessment revision; required for extend." }),
+					),
+					digest: Type.Optional(text("Captured target digest; required for extend.")),
+					question: Type.Optional(text("Concrete additional review question; required for extend.")),
+					reason: Type.Optional(text("Why additional work is justified; required for extend.")),
+					doneWhen: Type.Optional(text("Evidence that settles this question; required for extend.")),
 					request,
 				},
 				{ additionalProperties: false },
@@ -293,6 +305,25 @@ export function installReviewTools(pi: ExtensionAPI): void {
 				switch (params.action) {
 					case "rerun":
 						operation = { action: "enqueue", request: job.request, owner: params.owner ?? self, parent: job.id };
+						break;
+					case "extend":
+						if (
+							params.revision === undefined ||
+							!params.digest ||
+							!params.question ||
+							!params.reason ||
+							!params.doneWhen
+						)
+							throw new Error("Extend requires revision, digest, question, reason and doneWhen");
+						operation = {
+							action: "extend",
+							review: job.id,
+							revision: params.revision,
+							digest: params.digest,
+							question: params.question,
+							reason: params.reason,
+							doneWhen: params.doneWhen,
+						};
 						break;
 					case "priority":
 						if (params.priority === undefined) throw new Error("Priority requires a priority value");

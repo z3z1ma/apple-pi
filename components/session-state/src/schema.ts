@@ -370,6 +370,7 @@ const MIGRATIONS = [
 		created_at integer not null
 	) strict;
 	create index review_decisions_by_review on review_decisions(review_id, created_at);`,
+	`alter table review_jobs add column additional_work text not null default '[]';`,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

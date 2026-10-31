@@ -52,6 +52,14 @@ The cost projection follows retained attempts rather than selected coverage, so 
 
 Source browsing needed a narrower claim than recovery verification: retained Git objects can still show the captured code when the materialized copy changes, while recovery/sign-off must continue refusing that changed copy. The shared owner now separates those checks rather than falling back to live files. The real terminal also showed why source line ranges and wrapped display-line ranges need separate labels. A loaded-entry case with more limits than fit in one viewport caught an older target paging defect: the common page shape was nested under target, unlike other views. Reading the actual envelope restored access to the last limit; the regression exercises ordinary controls rather than internal page state.
 
+The capture-reference fixture initially invented profile-a/profile-b, which ordinary role loading rejected before capture behavior ran. Inference profiles have a fixed named catalog; supported balanced/deep references exercise configuration changes without bypassing resolver validation. Inspect the ordinary configuration consumer before inventing fixture values, and separate a setup rejection from evidence against the feature.
+
+Built Workplace navigation exposed a synchronous transition that late-result cancellation did not cover: the previous summary payload rendered as source before the loading effect cleared it. Cache identity must govern rendering as well as asynchronous acceptance. The view now binds data to its entire request and scopes queue data to its directory; the built navigation regression and its context file own this rule.
+
+Source-only backend and Chrome checks also missed Electron's relocated import.meta.url. Bundling moved the packaged role path, so preview and runtime admission disagreed on the configuration digest. Browser-template and Mermaid assets had the same ownership hazard. The build now rebases those real consumers to their package-relative source locations. An actual isolated preload/runtime probe checks identity, source, freshness and sign-off template availability without launching reviewers or opening the operator's browser. This is activation-path evidence, not production activation.
+
+An uncertain capture must disable the fresh enqueue action while retaining exact replay. The built UI test loses the first receipt and proves the retry uses identical arguments/attempt identity. Browser submission separately awaits committed runtime approval, retains line feedback with captured file/line provenance, and refuses stale assessment binding. Passing orchestration and rendering checks still does not establish model quality or the operator's acceptance.
+
 ## Improvements
 
-Pending completion of the undertaking.
+Pending production activation and operator acceptance of the assembled experience. The operator's repeated request to continue is evidence that serial component checkpoints took too long; completing the integration, not adding another design stage, is the corrective work.

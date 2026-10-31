@@ -2,6 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { captureReview } from "./capture.js";
+import { configurationSummary } from "./policy.js";
 import type { ReviewRequest } from "./types.js";
 
 /** Preview identity without retaining a second source store or starting model work. */
@@ -22,6 +23,7 @@ export async function previewReview(request: ReviewRequest, signal?: AbortSignal
 			regions: artifact.regions.length,
 			omissions: artifact.omissions,
 			intent: artifact.intent ? { origin: artifact.intent.origin, hash: artifact.intent.hash } : null,
+			configuration: configurationSummary(artifact.configuration),
 			capturedAt: artifact.capturedAt,
 		};
 	} finally {

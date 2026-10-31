@@ -1,6 +1,16 @@
 let electron = require("electron");
 //#region apps/agent-world/src/electron/preload.ts
 var api = {
+	reviews: {
+		queue: (request) => electron.ipcRenderer.invoke("reviews:queue", request),
+		read: (request) => electron.ipcRenderer.invoke("reviews:read", request),
+		source: (request) => electron.ipcRenderer.invoke("reviews:source", request),
+		freshness: (request) => electron.ipcRenderer.invoke("reviews:freshness", request),
+		preview: (request) => electron.ipcRenderer.invoke("reviews:preview", request),
+		enqueue: (request) => electron.ipcRenderer.invoke("reviews:enqueue", request),
+		manage: (request) => electron.ipcRenderer.invoke("reviews:manage", request),
+		signOff: (request) => electron.ipcRenderer.invoke("reviews:signOff", request)
+	},
 	communications: {
 		sendMail: (request) => electron.ipcRenderer.invoke("communications:sendMail", request),
 		findChannels: (request) => electron.ipcRenderer.invoke("communications:findChannels", request),
