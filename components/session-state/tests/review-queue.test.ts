@@ -16,6 +16,7 @@ import { fakeCustom, fakeTui } from "../../../tests/helpers/fake-tui.js";
 import { fauxSession } from "../../../tests/helpers/faux-session.js";
 import { captureReview } from "../../code-review/src/capture.js";
 import type { FindingResponse } from "../../code-review/src/decisions.js";
+import { loadRoles } from "../../organization/src/roles.js";
 import { sendCommand } from "../src/client.js";
 import { readReview, reviewAssessment, reviewQueue, reviewSummary } from "../src/review-read.js";
 import { fakeBridge, query, runtimePid, standInProcess, startRuntime, stopRuntime, tempStateDir } from "./helpers.js";
@@ -1006,6 +1007,25 @@ test("a policy change during a real SDK turn retains raw results without accepti
 	expect(JSON.parse(attempt.result)).toMatchObject({ status: "completed", value: { pass: "value-correctness" } });
 	expect(query(state.dbPath, "select id from program_scopes")).toEqual([]);
 }, 30000);
+
+test("an all-concrete review completes without consulting an unrelated malformed profile file", async () => {
+	for (const role of loadRoles(repository).roles.values()) {
+		if (role.writes || role.manages) continue;
+		writeFileSync(
+			join(state.agentDir, "roles", `${role.name}.md`),
+			`---\ntitle: ${role.title}\nmandate: Inspect captured source.\nmodels: ["fixture/${role.name}:high"]\nwrites: false\nmanages: false\n---\nRead source and report evidence.\n`,
+		);
+	}
+	writeFileSync(join(state.agentDir, "model-profiles.json"), "invalid");
+	writeFileSync(join(state.agentDir, "peer-control.json"), JSON.stringify({ review: true }));
+	const job = await enqueue();
+	await settled(job.id, "completed");
+	expect(query(state.dbPath, "select state from review_attempts where review_id = ?", job.id)).toEqual(
+		Array.from({ length: 4 }, () => ({ state: "completed" })),
+	);
+	expect(query(state.dbPath, "select id from program_scopes")).toEqual([]);
+	expect(existsSync(join(state.agentDir, "state", "model-profile-selection.sqlite"))).toBe(false);
+}, 20000);
 
 test("a malformed planner result retains its observed usage without turning zero findings into a clean review", async () => {
 	const job = await enqueue();

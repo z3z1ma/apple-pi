@@ -23,16 +23,17 @@ export function reviewRolePolicy(source: string, name: string) {
 }
 
 export function reviewRoleCatalog(source: string) {
-	const profiles = loadModelProfiles({ optional: true });
-	return [...loadRoles(source).roles.values()]
-		.filter((role) => !role.writes && !role.manages)
-		.map((role) => ({
-			name: role.name,
-			title: role.title,
-			mandate: role.mandate,
-			models: role.models,
-			policy: createHash("sha256")
-				.update(JSON.stringify(rolePolicy(role, profiles)))
-				.digest("hex"),
-		}));
+	const roles = [...loadRoles(source).roles.values()].filter((role) => !role.writes && !role.manages);
+	const profiles = roles.some((role) => isInferenceProfileName(role.models[0]!))
+		? loadModelProfiles({ optional: true })
+		: undefined;
+	return roles.map((role) => ({
+		name: role.name,
+		title: role.title,
+		mandate: role.mandate,
+		models: role.models,
+		policy: createHash("sha256")
+			.update(JSON.stringify(rolePolicy(role, profiles)))
+			.digest("hex"),
+	}));
 }

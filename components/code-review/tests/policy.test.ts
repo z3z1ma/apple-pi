@@ -2,7 +2,32 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test, vi } from "vitest";
+import { loadRoles } from "../../organization/src/roles.js";
 import { reviewRoleCatalog, reviewRolePolicy } from "../src/policy.js";
+
+test("an all-concrete advisory catalog ignores unrelated malformed profiles, but a profile reference makes them required", () => {
+	directory = mkdtempSync(join(tmpdir(), "review-catalog-"));
+	vi.stubEnv("PI_CODING_AGENT_DIR", directory);
+	mkdirSync(join(directory, "roles"));
+	const advisory = [...loadRoles(directory).roles.values()].filter((role) => !role.writes && !role.manages);
+	for (const role of advisory)
+		writeFileSync(
+			join(directory, "roles", `${role.name}.md`),
+			`---\ntitle: ${role.title}\nmandate: Inspect the contract.\nmodels: ["fixture/concrete:high"]\nwrites: false\nmanages: false\n---\nRead the source.\n`,
+		);
+	writeFileSync(join(directory, "model-profiles.json"), "invalid");
+	expect(
+		reviewRoleCatalog(directory)
+			.map((role) => role.name)
+			.sort(),
+	).toEqual(advisory.map((role) => role.name).sort());
+	writeFileSync(
+		join(directory, "roles", "profile-reader.md"),
+		'---\ntitle: Profile Reader\nmandate: Inspect the contract.\nmodels: ["balanced", "fixture/concrete:high"]\nwrites: false\nmanages: false\n---\nRead the source.\n',
+	);
+	expect(() => reviewRoleCatalog(directory)).toThrow("invalid JSON");
+	expect(existsSync(join(directory, "state", "model-profile-selection.sqlite"))).toBe(false);
+});
 
 let directory: string;
 afterEach(() => {

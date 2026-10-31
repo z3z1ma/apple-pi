@@ -160,6 +160,12 @@ The reloaded native review_queue returned an empty queue. review_code for43448e2
 
 The operator's first live assessment explicitly rejected the /reviews visual quality. A substantial visual pass is now explicit acceptance work: hierarchy, chrome/borders, colors, status iconography, visible actions/focus and readable evidence, checked in a real rendered terminal. Fake-terminal success did not establish that quality.
 
+## First live finding: all-concrete catalog dependency
+
+Hoa Whitlock's independent policy-correctness pass reported catalog-loads-unreferenced-profiles against43448e2e. Source inspection confirmed reviewRoleCatalog loaded the global profile file before discovering whether any advisory role referenced it. A local regression reproduced the invalid-JSON failure (`/tmp/review-catalog-red.log`). The fix enumerates advisory roles first and loads profiles only when one references a profile; referenced configurations still receive complete-file validation.
+
+The new unit case covers an all-concrete catalog and the control where one added profile reference makes malformed configuration fatal. An isolated runtime review now completes all four attempts with the all-concrete/malformed-file setup and leaves no scopes or selection counter. **31 tests in two files passed**, one worker,104.47 seconds (`/tmp/review-catalog-tests.log`), plus Node/web types, scoped Biome and loader (`/tmp/review-catalog-{types,format,loader}.log`). The original live review continues against its unchanged old capture; this correction does not repair that artifact, and its finding validation remains pending. The running daemon has not been restarted to load this correction.
+
 ## Remaining delivery
 
 Complete observed cost and captured-source drill-down, coverage/extra-work decisions, source/policy freshness, remaining native integration, Workplace Code and artifact-bound sign-off, the substantial terminal visual pass, focused native/IPC/UI integration and applicable builds. Close the live review evidence above; the no-change cohort is verified. No part of that remaining scope has been waived.

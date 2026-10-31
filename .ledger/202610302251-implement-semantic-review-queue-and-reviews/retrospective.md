@@ -38,6 +38,8 @@ The first live terminal feedback rejected the visual result despite passing func
 
 Native no-change testing also crossed a fixture boundary: a restarted runtime had lost fakeBridge's connection but the stand-in writer was still alive. The dormant-departure assertion timed out behind the correct exclusive-binding guard. Explicit test-owned process exit, rather than weaker cleanup or a longer wait, supplies the state the test intended.
 
+The first real policy-correctness pass found a dependency the selected-role regression had missed: the all-advisory catalog still loaded malformed profile configuration even when no role referenced it. The helper's local lazy read was not sufficient for its aggregate consumer. A local regression reproduced this, and the catalog now applies the same dependency rule before loading shared configuration. That is one independently found, reproduced defect; it does not establish comparative review effectiveness.
+
 ## Improvements
 
 Pending completion of the undertaking.
