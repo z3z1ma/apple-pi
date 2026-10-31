@@ -9,7 +9,7 @@
 
 ## Design
 
-- [[tui-interaction-model]]: the interaction model for Apple Pi overlays and the glanceable work panel (settled; `docs/tasks.md` owns the contract).
+- [[tui-interaction-model]]: the historical glanceable work-panel design and reusable overlay facts. `/reviews` now replaces that panel; `docs/code-review.md` owns its current contract.
 - [[epistemic-grounding]]: why the harness ties beliefs to what actually ran; adopted, tried, untried, and rejected ideas, including what branch search showed.
 
 ## Method

@@ -9,4 +9,4 @@ Why: a schema-only assertion can pass while a managing session never receives or
 Saved-program schemas inherit the same role-appropriate limits. Keep limits identity stable between capability changes; saved-program registration observes that identity to refresh at the role boundary rather than rescanning scripts or changing schemas every turn.
 Why: new managers must receive peer budget controls in their saved tools too, while unrelated turns should preserve stable tool definitions and prompt caching.
 Coupled: components/organization/src/session-role.ts, components/pi-exec/src/guest-api.ts, components/pi-exec/src/peer-calls.ts, components/pi-exec/src/saved-programs.ts
-Verify: components/organization/tests/roles.test.ts, tests/pi-exec-work-panel.test.ts, components/pi-exec/tests/saved-programs.test.ts
+Verify: components/organization/tests/roles.test.ts, tests/pi-exec-integration.test.ts, components/pi-exec/tests/saved-programs.test.ts

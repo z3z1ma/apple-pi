@@ -149,8 +149,7 @@ try {
 	const tools = new Set(result.extensions.flatMap((extension) => [...extension.tools.keys()]));
 	for (const command of [
 		"pair",
-		"work",
-		"tasks",
+		"reviews",
 		"btw",
 		"fast",
 		"notify-setup",
@@ -165,11 +164,21 @@ try {
 		assert(commands.has(command), `missing /${command}`);
 	}
 	assert(!commands.has("branch-search"), "branch search is the model's tool; there is no /branch-search command");
-	const workCommandCount = result.extensions.reduce(
-		(count, extension) => count + Number(extension.commands.has("work")),
+	assert(!commands.has("work") && !commands.has("tasks"), "the combined work panel is retired");
+	const reviewCommandCount = result.extensions.reduce(
+		(count, extension) => count + Number(extension.commands.has("reviews")),
 		0,
 	);
-	assert(workCommandCount === 1, `expected exactly one /work registration, got ${workCommandCount}`);
+	assert(reviewCommandCount === 1, `expected exactly one /reviews registration, got ${reviewCommandCount}`);
+	const reviewTool = result.extensions
+		.flatMap((extension) => [...extension.tools.values()])
+		.find((tool) => tool.definition.name === "review_code")?.definition;
+	assert(
+		reviewTool?.promptGuidelines?.some(
+			(line) => line.includes("already assigned review pass") && line.includes("plan owner"),
+		),
+		"review guidance must distinguish initiating a job from fulfilling an assigned pass",
+	);
 	const communicationTools = [
 		"send_mail",
 		"reply",
@@ -199,6 +208,11 @@ try {
 		"search_session",
 		"revisit_note",
 		"pi_exec",
+		"review_code",
+		"review_queue",
+		"read_review",
+		"manage_review",
+		"resolve_finding",
 		"explore",
 		"research",
 		"ledger_add",

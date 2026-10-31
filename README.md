@@ -174,7 +174,7 @@ flowchart LR
     subgraph Bridge["Host Bridge (host-calls.ts)"]
         Tools["Core & Callable Tools<br/>(read / grep / bash / MCP / fetch)"]
         Peers["Role Peers<br/>(peer-calls.ts)"]
-        Panel["Work Panel Pi Exec Tab<br/>(work-panel.ts / active-work.ts)"]
+        Panel["Passive Activity & Native Results<br/>(active-work.ts / ui.ts)"]
     end
 
     Turn --> Py
@@ -190,7 +190,7 @@ flowchart LR
 When I first wired `pi-exec`, I thought of it merely as a token-saving batch runner. In sustained use, three much larger behaviors emerged:
 
 * **The Workspace Grows an Executable Vocabulary:** There is an old Lisp ideal where you grow an application by talking to it: you write a function, register it in the image, and never have to re-derive that capability again. Saved programs bring a version of that dynamic to the coding harness. When an agent writes a Python program to trace SQLMesh lineage, audit BigQuery schema drift, or verify Looker dashboard references, and it is saved to `.pi/programs/`, **ad-hoc reasoning crystallizes into a reusable tool**. Three days later, the agent doesn't "think" about how to audit the schema; it calls `program_<name>`. The repository accumulates its own library of project procedures through daily work.
-* **Data-Dependent Work Graphs:** Static multi-agent frameworks force you to define orchestration graphs *ahead of time* in YAML or TypeScript. Because `pi_exec` exposes peers inside Python, the model can synthesize **dynamic, data-dependent work graphs on the fly**, within Monty's Python subset and the call's budgets. A single 35-line snippet can parse a dependency tree, ask five peers about the leaf nodes in parallel, run a deterministic test suite as a barrier step, and conditionally bring in an Implementation Engineer only for the branch that failed—while the Pi Exec tab of the `/work` panel shows each host call as it runs.
+* **Data-Dependent Work Graphs:** Static multi-agent frameworks force you to define orchestration graphs *ahead of time* in YAML or TypeScript. Because `pi_exec` exposes peers inside Python, the model can synthesize **dynamic, data-dependent work graphs on the fly**, within Monty's Python subset and the call's budgets. A single 35-line snippet can parse a dependency tree, ask five peers about the leaf nodes in parallel, run a deterministic test suite as a barrier step, and conditionally bring in an Implementation Engineer only for the branch that failed—while passive activity shows call progress and native results retain the operation trace.
 * **Epistemic Compression:** Because the Python snippet acts as a loss-absorbing membrane between the messy filesystem and the primary context window, the root agent's transcript stays almost eerily quiet. A program can grep through megabytes of logs and return a few counts and excerpts; only what it returns or prints enters the context, so the program has to do the reducing.
 
 ---
@@ -379,7 +379,7 @@ Once your harness is reliable enough to run 15-minute `pi-exec` work graphs, `ra
 
 #### The Mechanical Response (`tmux-sessions`, `notify`, `terse-tools`, `input-editor`, `prompt-stash`, `wiki`)
 
-An illustrative layout; the work panel (`/work` or `Ctrl+W`) and the `/btw` overlay open on demand:
+An illustrative layout; passive activity accompanies the turn stream, while `/reviews` (`Ctrl+W`) and `/btw` open on demand:
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────┐
@@ -387,7 +387,7 @@ An illustrative layout; the work panel (`/work` or `Ctrl+W`) and the `/btw` over
 ├──────────────────────────────────────┬───────────────────────────────────────┤
 │ Primary Turn Stream (terse-tools)    │ Live Inspection & Sidecars            │
 │                                      │                                       │
-│ ▸ read components/notebook/fold.ts   │ ┌─ Work Panel · Pi Exec ────────────┐ │
+│ ▸ read components/notebook/fold.ts   │ ┌─ Active Work: Pi Exec ────────────┐ │
 │ ▸ pi-exec: audit_ledger_tokens.py    │ │ ● reviewer (peer)        [12.4s]  │ │
 │   └─ ✓ 14 files checked, 0 leaks     │ │ ● test-runner (peer)     [ 8.1s]  │ │
 │ ● CONCERN token cap edge case is     │ │ ○ read (core tool)       [queued] │ │
@@ -426,9 +426,10 @@ The codebase enforces a strict separation between **implementation machinery** (
 | `interns` | `interns.ts` | Cheap one-shot `explore` and `research` tools: fixed reading prompts, the `quick` profile, live tool activity, cancellation, and no retained process or transcript. See [interns](docs/interns.md). |
 | `btw` | `btw.ts` | One directly owned private, read-only SDK conversation and answer-first overlay (`session.ts`, `ui/viewer.ts`). See [BTW](docs/btw.md). |
 | `branch-search` | `branch-search.ts` | `search_branches`: parallel approach attempts as conversation forks in isolated git worktrees (`workspace.ts`, `orchestrator.ts`), scored by caller-written gates and numeric judge commands, with an optional judge-profile model (`judge.ts`, `report.ts`). |
+| `code-review` | `code-review.ts` | Exact source capture, semantic/risk review contracts, five native tools and the dedicated `/reviews` queue. The existing session-state runtime owns durable jobs, ordinary peer attempts, recovery and decisions. See [code review](docs/code-review.md) for the current integration boundary. |
 | `code-context` | `code-context.ts` | Delivers `.context/<path>.md` context files on top-level reads and blocks a top-level `edit`/`write` of a file only while its context file exists and its current marker is not in context (`installer.ts`); `context_lint` (`lint.ts`). |
 | `session-search` | `session-search.ts` | `search_session` over this session's transcript, tool calls, and write/edit payloads: active lineage by default (`lineage.ts`), file scopes (`recall-scope.ts`), and progressive drill-down (`drill-down.ts`). |
-| `tasks` | `tasks.ts`, `work.ts` | Asynchronous bash process manager (`task-manager.ts`, `process-killer.ts`), output capture (`output-buffer.ts`), one-shot reminders (`remind_me`, `schedule-tool.ts`), monitoring (`monitor-tool.ts`), and the `/work` panel commands. |
+| `tasks` | `tasks.ts` | Asynchronous bash process manager (`task-manager.ts`, `process-killer.ts`), output capture (`output-buffer.ts`), one-shot reminders (`remind_me`, `schedule-tool.ts`), monitoring (`monitor-tool.ts`), and shared passive activity. |
 | `terse-tools` | `terse-tools.ts` | TUI renderer patches (`patch.ts`, `formatters.ts`) that compress verbose tool output into dense one-liners, mouse-navigable in fullscreen mode, with an interactive modal inspector (`inspector.ts`, `tool-viewer.ts`). |
 | `rtk` | `rtk.ts` | RTK binary detector (`detector.ts`) and `rtk rewrite` wrapper (`rewrite.ts`), which the tasks bash tool calls to route eligible commands through `rtk` for token compression; the extension (`rtk.ts`) adds only the prompt section. |
 | `wiki` | `wiki.ts` | Project-local Markdown knowledge base with a derived page-link graph (`graph.ts`), `wiki_lint` and `wiki_references` tools (`installer.ts`), and a compact workbench prompt (`system-prompt.ts`). |
@@ -445,7 +446,7 @@ The codebase enforces a strict separation between **implementation machinery** (
 | `vroom` | `vroom.ts` | `/fast`: priority service tier for OpenAI, Codex, and xAI requests. |
 | `xai-hosted-tools` | `xai-hosted-tools.ts` | Injects xAI's hosted web and X search tools into eligible xAI Responses requests (`payload.ts`). |
 | `apps/agent-world` | `agent-world.ts` | `/world` opens Agent World, an Electron app. [Workplace](docs/workplace.md) starts in Chat and offers named organizations, profiles, team setup, local file editing and Jira issues. Its companion World view represents every live Pi session as a character. Electron is installed on first use under `~/.pi/agent/agent-world/`; its main process reads the session-state database (`src/backend/`) and hands snapshots to a Phaser and React UI through a narrow preload API (`src/electron/`, built UI in `dist/`, art in `themes/`). From it you talk to and steer agents, and work GitHub, Jira, Confluence, and Slack, writing outside only after you confirm. See [docs/agent-world.md](docs/agent-world.md). |
-| `shared` | *(Internal library)* | Cross-component primitives: `work-manager.ts`, `exclusive-lease.ts`, `forked-continuation.ts`, `fork-context.ts`, `model-profiles.ts`, `sidecar-usage.ts`, `file-changes.ts`, and `git.ts`. |
+| `shared` | *(Internal library)* | Cross-component primitives: `active-work.ts`, `exclusive-lease.ts`, `forked-continuation.ts`, `fork-context.ts`, `model-profiles.ts`, `sidecar-usage.ts`, `file-changes.ts`, and `git.ts`. |
 
 ---
 

@@ -1,7 +1,13 @@
 import { truncateToWidth } from "@earendil-works/pi-tui";
 import type { ActiveWorkSource, ActiveWorkTheme } from "../../shared/src/active-work.js";
+import type { ExecutionOutcome } from "./types.js";
 import { callLabel, type ExecActivitySnapshot, formatDuration, safeText } from "./ui.js";
-import type { ExecInvocation } from "./work-panel.js";
+
+export interface ExecInvocation {
+	id: string;
+	status: "running" | ExecutionOutcome;
+	activity: ExecActivitySnapshot;
+}
 
 const displayText = (text: string): string => safeText(text).replace(/\s+/g, " ").trim();
 

@@ -4,8 +4,7 @@ import { type TSchema, Type } from "typebox";
 import { managesPeople } from "../../organization/src/install.js";
 import { getActiveWorkSurface } from "../../shared/src/active-work.js";
 import { setSystemPromptSection } from "../../shared/src/system-prompt-section.js";
-import { registerWorkSection } from "../../shared/src/work-manager.js";
-import { createExecActiveWorkSource } from "./active-work.js";
+import { createExecActiveWorkSource, type ExecInvocation } from "./active-work.js";
 import { deriveProgramEnvelope, PROGRAM_ENVELOPE_MAXIMA } from "./envelope.js";
 import {
 	attachLiveDescription,
@@ -20,13 +19,12 @@ import { createHostCalls } from "./host-calls.js";
 import { installSavedProgramTools, SAVED_PROGRAM_PROMPT_GUIDELINE } from "./saved-programs.js";
 import { installProgramSession } from "./session.js";
 import { type ExecActivitySnapshot, renderExecCall, renderExecResult } from "./ui.js";
-import { type ExecInvocation, ExecPanel } from "./work-panel.js";
 
 function errorText(error: unknown): string {
 	return error instanceof Error ? error.message : String(error);
 }
 
-/** Tool details keep their existing shape; live worker children belong to the in-memory inspection record only. */
+/** Activity snapshots omit child detail; the retained execution trace includes it. */
 function detailsActivity(snapshot: ExecActivitySnapshot): ExecActivitySnapshot {
 	return { ...snapshot, calls: snapshot.calls.map(({ children: _children, ...call }) => call) };
 }
@@ -57,17 +55,11 @@ export default function piExec(pi: ExtensionAPI): void {
 		invocations.clear();
 		activeWork.update();
 	};
-	// All extension installers have finished before session_start; work loads after Pi Exec.
 	pi.on("session_start", (_event, ctx) => {
 		tuiMode = ctx.hasUI && ctx.mode === "tui";
 		clearInvocations();
 		if (!tuiMode) return;
 		activeWork.setUICtx(ctx.ui);
-		registerWorkSection(pi, {
-			key: "exec",
-			label: "Pi Exec",
-			create: (ui, selectedId) => new ExecPanel(ui, () => [...invocations.values()].reverse(), selectedId),
-		});
 	});
 	pi.on("session_tree", clearInvocations);
 	pi.on("session_shutdown", () => {
@@ -177,7 +169,6 @@ export default function piExec(pi: ExtensionAPI): void {
 			const logs: string[] = [];
 			const invocation: ExecInvocation = {
 				id: toolCallId,
-				code: params.code,
 				status: "running",
 				activity: { name: programName, description: params.display?.description, startedAt, calls: [] },
 			};
@@ -254,10 +245,8 @@ export default function piExec(pi: ExtensionAPI): void {
 				const finalActivity = activity();
 				invocation.activity = finalActivity;
 				invocation.status = result.outcome;
-				invocation.trace = trace.operations;
 				const usage = host.usage();
 				if (result.outcome !== "succeeded") {
-					if (logs.length > 0) invocation.output = `Logs:\n${logs.join("\n")}`;
 					failedDetails.set(toolCallId, {
 						details: {
 							trace,
@@ -277,7 +266,6 @@ export default function piExec(pi: ExtensionAPI): void {
 				]
 					.filter(Boolean)
 					.join("\n\n");
-				invocation.output = output;
 				return {
 					content: [{ type: "text" as const, text: output }],
 					details: {
@@ -290,15 +278,14 @@ export default function piExec(pi: ExtensionAPI): void {
 					...(usage ? { usage } : {}),
 				};
 			} catch (error) {
-				invocation.error = errorText(error);
 				if (invocation.status === "running") {
 					finishedAt = Date.now();
 					invocation.status = "failed";
-					invocation.trace = host.finish("failed");
+					const operations = host.finish("failed");
 					invocation.activity = activity();
 					failedDetails.set(toolCallId, {
 						details: {
-							trace: { kind: "apple-pi.execution", version: 1, outcome: "failed", operations: invocation.trace },
+							trace: { kind: "apple-pi.execution", version: 1, outcome: "failed", operations },
 							logs,
 							activity: detailsActivity(invocation.activity),
 							policy: envelope,
@@ -309,7 +296,7 @@ export default function piExec(pi: ExtensionAPI): void {
 				throw error;
 			} finally {
 				executing = false;
-				// The settled program leaves passive activity; its detail stays in the work panel.
+				invocations.delete(toolCallId);
 				activeWork.update();
 			}
 		},

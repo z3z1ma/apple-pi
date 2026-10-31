@@ -1,36 +1,66 @@
-# Code Review
+# Captured code review
 
-`code-review` is a business process, not an automatic lifecycle gate. The model loads it when asked to review a branch, a pull request, the working tree, or the changes since a revision, and `implement` uses it before committing:
+The native review queue captures exact source and intent, divides changed behavior into focused scopes, assigns independent risk questions, checks cross-scope interactions and retains findings and coverage. It uses ordinary advisory-role peers and the existing session-state runtime, not another model engine or a custom sandbox.
 
-```text
-/skill:code-review
+The queue and `/reviews` are implemented. The wider integration is still in progress: pre-queue preview, live-target freshness, additional-work decisions, captured-artifact browser sign-off and Workplace Code remain pending. Existing ad hoc `sign_off_code` is not yet connected to a recorded review ID. Registering the extension does not restart an already-running runtime; an older store reports that it is unavailable instead of showing an empty queue.
+
+## Native tools
+
+| Tool | Purpose |
+| --- | --- |
+| `review_code` | Capture a commit, range, branch, staged tree or working tree and admit it to the durable queue, with optional approved intent, scope and risk lenses. |
+| `review_queue` | Read accessible queue counts; request an explicit limit for a detail page. |
+| `read_review` | Read summaries, retained targets, plans, findings, coverage, attempts, changes and decisions progressively. |
+| `manage_review` | Cancel, resume the same captured target, capture a fresh linked rerun, reprioritize or reassign. |
+| `resolve_finding` | Record an accountable finding response against an exact digest and assessment revision. |
+
+For example:
+
+```json
+{
+  "cwd": "/projects/example",
+  "target": { "kind": "branch", "base": "main", "head": "feature" },
+  "intent": { "path": ".ledger/change/task.md" }
+}
 ```
 
-## Two independent axes
+A branch comparison uses its merge base; a range uses exact endpoints. A working-tree capture includes tracked changes and nonignored untracked files. A staged capture uses the index. Merge commits need an explicit parent comparison. A path filter narrows review accounting and is a visible limit, while the surrounding captured source remains available as context.
 
-A complete review asks:
+An applied enqueue confirms admission, not review completion. Retain the returned request handle to recover an uncertain mutation with the same arguments. A fresh rerun captures again and receives new review work; it is not a retry of an uncertain request. Admitted jobs outlive the requesting connection.
 
-1. **Standards**: does the change follow the repository's documented conventions and engineering constraints?
-2. **Intent**: does the change deliver what the originating request, task, or specification asked for?
+## Review queue TUI
 
-The axes stay separate from the first findings to the report. When no intent source exists, the report says the Intent axis was not assessed rather than calling it a pass.
+Open `/reviews` or press `Ctrl+W`. The single master-detail interface replaces the combined `/work` and `/tasks` panel. Tasks and Pi Exec keep their tools, transcript results and shared passive activity independently.
 
-## The review board
+The master list shows execution state, the current pass, owner, completed/required passes, findings and approval. The detail view exposes summary, retained target, plan, findings, question coverage, attempts and decision history. Live freshness is currently labeled **not checked**; approval matching an assessment is not a claim that the checkout still matches.
 
-The requester pins the boundary and the sources, then staffs a board with standing people (see [organization](organization.md#processes)):
-
-| Change | Board |
+| Key | Action |
 | --- | --- |
-| Small | one Code Review Specialist covering both axes |
-| Normal | one Code Review Specialist per axis, a Scientific Skeptic, and the author |
-| Risky area | the normal board plus a domain lens from the role catalog |
+| `Ctrl+W` | Toggle the queue |
+| `q` | Close the focused queue |
+| `Alt+G` | Move focus between editor and queue |
+| `Esc` | Return focus to the editor |
+| `Tab` / `Enter` | Switch between queue selection and evidence scrolling |
+| Arrow keys | Select a review or scroll evidence |
+| Page Up / Page Down | Page the queue or scroll evidence by a viewport |
+| `[` / `]` | Read the previous/next queue or evidence page |
+| `v` | Choose the evidence view |
+| `a` | Capture, cancel, resume, rerun, change priority, reassign or recover an uncertain request |
 
-The chair runs the board and rules on findings, and is never the author. Reviewers send their first findings to the chair alone, so no view is shaped by another. The chair then posts them in one review thread, where the skeptic challenges the evidence and the author answers; the chair rules each finding confirmed, rejected, or unresolved against current source. The board closes with a short exchange recorded in the task's retrospective.
+Wide terminals show the queue beside evidence; narrow terminals stack them. Selection follows the review ID through live reordering, resizing and hide/reopen. Confirmations identify the affected review or capture request. The uncertain-request menu retains exact arguments in memory while this session context remains alive; context changes and reload clear that menu, not the runtime journal or admitted jobs.
 
-How a reviewer thinks, including the smell baseline, lives in the `code-review-specialist` role. The skill holds only the process.
+## Evidence, decisions and recovery
 
-## Evidence and authority
+Each behavior scope requires correctness inspection, applicable repository standards and captured approved intent. Missing intent remains unassessed. Declared authority and reliability risks require independent passes; other risks carry explicit questions. First inspections do not receive the author's conversation or other first reports. Later validation receives the sealed reports and challenges both allegations and completed-coverage claims.
 
-Every finding states its location, the broken standard or requirement, the trigger, the evidence, the impact, and the smallest fix, with severity critical, significant, or minor. The report lists confirmed findings, unresolved questions, and coverage limits per axis. The review reports; fixes follow only when the requester holds that authority.
+Findings retain their originating attempt, location, triggering conditions, broken invariant, impact, cause, severity, certainty, evidence and counterevidence. Model validation and later owner responses are separate records. Rejection requires evidence; accepted risk requires evidence and scope. A claimed fix stays unverified until a response cites a completed, unchallenged verification question on another captured target. That records the responder's judgment, not automatic proof of semantic correctness. It never repairs the old snapshot.
 
-Ralph remains an implementation loop. Run `code-review` after Ralph when independent review is warranted.
+Execution, question coverage, findings and approval remain separate. Zero findings cannot make an interrupted or incomplete review clean. A validator's challenge remains attached to the exact inspected attempt, including across failed recovery. Same-target resume retains eligible completed work and starts new attempts for unfinished or challenged work; runtime restart does not automatically repeat paid work. Cancellation waits for guarded peer cleanup and preserves partial results and observed usage.
+
+The runtime also retains operator-only approvals bound to a settled digest and assessment revision, with explicit acknowledgment of known limits. Later finding responses stale the previous approval's match. The browser integration that submits this binding is not yet available.
+
+## Procedure and authority
+
+The [code-review skill](../skills/code-review/SKILL.md) guides scope, risk, interpretation and evidence challenge. A standing board is optional consultation rather than a prerequisite for queued review. The review reports; fixes, publication and production activation need their own authority. Pair assistance and change reflection are not substitutes for independent inspection.
+
+These mechanisms provide provenance and recovery guarantees. They do not establish that semantic decomposition finds more real defects than a simpler independent review; that comparison remains unmeasured.

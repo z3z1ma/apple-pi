@@ -5,5 +5,5 @@ Why: operator decision (2026-10-24): the model receives no escape sequences. Tru
 
 The full-output file is written synchronously, once per appended chunk, and opened by the first snapshot that is truncated.
 Why: a result is read as soon as the command finishes; an asynchronous stream lost the last lines in tests. The transcript keeps the last screen of lines editable, so totals can exceed the limits before the lines become final.
-Coupled: components/tasks/src/terminal-transcript.ts, components/tasks/src/bash-tool.ts, components/tasks/src/ui/task-manager.ts
+Coupled: components/tasks/src/terminal-transcript.ts, components/tasks/src/bash-tool.ts, components/tasks/src/task-tool.ts
 Verify: components/tasks/tests/terminal.test.ts, components/tasks/tests/tasks.test.ts

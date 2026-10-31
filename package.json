@@ -81,7 +81,7 @@
       "./extensions/vroom.ts",
       "./extensions/home-search-guard.ts",
       "./extensions/pi-exec.ts",
-      "./extensions/work.ts",
+      "./extensions/code-review.ts",
       "./extensions/interns.ts",
       "./extensions/btw.ts",
       "./extensions/ledger.ts",

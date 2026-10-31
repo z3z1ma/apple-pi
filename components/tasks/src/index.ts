@@ -1,11 +1,9 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import { getActiveWorkSurface } from "../../shared/src/active-work.js";
-import { registerWorkSection } from "../../shared/src/work-manager.js";
 import { createTaskActiveWorkSource } from "./active-work.js";
 import { createBackgroundTaskBashTool } from "./bash-tool.js";
 import { createMonitorTool } from "./monitor-tool.js";
-import { terminalShellOperations } from "./user-bash.js";
 import { formatMonitorEvent, formatTaskNotification } from "./notifications.js";
 import { createScheduleTool } from "./schedule-tool.js";
 import { TaskManager } from "./task-manager.js";
@@ -18,7 +16,7 @@ import {
 	TASK_NOTIFICATION_CUSTOM_TYPE,
 	type TaskNotificationDetails,
 } from "./types.js";
-import { type TaskDetailView, TaskPanel } from "./ui/task-manager.js";
+import { terminalShellOperations } from "./user-bash.js";
 
 function formatScheduledPrompt({ id, prompt }: PromptTask): string {
 	return `<scheduled-prompt id="${id}">
@@ -139,29 +137,8 @@ export function installTasks(pi: ExtensionAPI): void {
 	pi.registerTool(createMonitorTool(taskManager));
 	pi.registerTool(createTaskManagementTool(taskManager));
 
-	// Where each task's detail was left. Memory only: never written to the session,
-	// and cleared with the roster because task IDs restart per session.
-	const detailViews = new Map<string, TaskDetailView>();
-	registerWorkSection(pi, {
-		key: "tasks",
-		label: "Tasks",
-		create: ({ tui, theme, keybindings }, selectedId) =>
-			new TaskPanel(
-				tui,
-				theme,
-				() => taskManager.list(),
-				selectedId,
-				(id) => {
-					taskManager.cancel(id);
-				},
-				keybindings,
-				detailViews,
-			),
-	});
-
 	const cleanup = () => {
 		taskManager.reset();
-		detailViews.clear();
 		activeWork.update();
 	};
 	pi.on("session_start", (_event, ctx) => {

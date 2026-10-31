@@ -112,6 +112,18 @@ The /reviews entrypoint now mounts a standalone master-detail queue rather than 
 
 The extension is still absent from the activation list, /work remains installed, and there has been no actual terminal paint, production restart, paid review or Workplace/browser approval claim.
 
+## Combined-panel retirement
+
+The manifest now selects extensions/code-review.ts instead of extensions/work.ts. The old shared manager, Tasks/Pi Exec panels and panel-only tests are removed. The renamed Pi Exec integration suite keeps execution guarantees through native results, the error-result hook, traces and passive activity: serial queueing, saved programs, handled/terminal errors, long output, role authority, correlated peer children, cancellation and cleanup, late results, redacted bound inputs and context resets. Tasks cancellation now uses the native task tool. The shared viewer keys remain because BTW and the tool inspector still consume them.
+
+- **105 tests in six files passed**, one worker, 38.89 seconds: `/tmp/review-retire-final-tests.log`. Five earlier integration failures were incorrect expectations of abbreviated display names; native refs retain pi.read/pi.grep/pi.bash. The passing suite keeps the original runtime cases rather than testing the retired UI.
+- Node/web typecheck and scoped Biome passed; package loader passed with exactly one /reviews and no /work or /tasks. Final logs: `/tmp/review-retire-close-types.log`, `/tmp/review-retire-close-format.log`, `/tmp/review-retire-close-loader.log`.
+- Package inventory: **2,753 files**, with the review entrypoint and UI sources included and all four retired production modules absent. `/tmp/review-retire-pack.json` is a dry-run inventory, not an installed-package or runtime activation test.
+- Context lint passed for **345 files**. Wiki lint passed for **12 pages / 48 links** before the append-only repair log. The historical TUI page retains its old prototype evidence and now points to the new authoritative contract.
+- Docs and the code-review skill describe the native queue and optional consultation rather than a mandatory board. Always-present tool guidance distinguishes fulfilling an assigned pass from initiating another review; package loading asserts that guidance exists. This is not an autonomous skill-use or paid-review-quality check.
+
+The package change affects new/reloaded sessions. The already-running production runtime has not been restarted or migrated for reviews; an old store remains explicitly unavailable. No actual terminal paint, paid review, Workplace integration or browser approval is claimed.
+
 ## Remaining delivery
 
-Retire the old combined panel while preserving native execution/passive activity. Complete capture preview, exact resolved-target presentation, observed cost and captured-source drill-down, coverage/extra-work decisions, freshness and no-change outcomes, remaining native integration, Workplace Code and artifact-bound sign-off, focused native/IPC/UI integration, applicable builds and real-host validation. No part of that remaining scope has been waived. No paid reviewer or live daemon/app activation has occurred.
+Complete capture preview, exact resolved-target presentation, observed cost and captured-source drill-down, coverage/extra-work decisions, freshness and no-change outcomes, remaining native integration, Workplace Code and artifact-bound sign-off, focused native/IPC/UI integration, applicable builds and real-host validation. No part of that remaining scope has been waived. No paid reviewer or live daemon/app activation has occurred.

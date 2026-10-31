@@ -28,6 +28,8 @@ The decision checkpoint keeps a fix in later code separate from the original sna
 
 The TUI checkpoint uses one-row queue pages in its loaded-command test. That makes live reordering an identity test rather than an incidental same-page label check. It also keeps fake-terminal geometry distinct from a real terminal paint and leaves the unactivated entrypoint out of the completion claim.
 
+The retirement increment moved runtime assertions out of the deleted Pi Exec panel tests rather than discarding them with the renderer. Five initial failures were presentation assumptions: native child traces keep pi.read/pi.grep/pi.bash while the old panel shortened those names. The corrected tests inspect native evidence and still exercise real role-loader boundaries and guarded cleanup. A task cancellation test now uses the native tool, and old UI storage/registration is removed without a parallel replacement dashboard. These checks do not establish an actual review in a live provider or an assembled Workplace/sign-off experience.
+
 ## Improvements
 
 Pending completion of the undertaking.

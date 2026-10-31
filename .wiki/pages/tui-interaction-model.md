@@ -1,6 +1,6 @@
 # TUI interaction model
 
-Status: settled and built. The product contracts are the work panel in `docs/tasks.md` (section "Work panel") and the `/btw` overlay in `docs/btw.md`. The design record lives in `.ledger/history/202610030008-tui-glanceable-panels/`.
+Status: historical work-panel design, superseded by the single `/reviews` queue on 2026-10-31. Current contracts are `docs/code-review.md` (Review queue TUI) and `docs/btw.md`; the old design record remains in `.ledger/history/202610030008-tui-glanceable-panels/`. The original prototype evidence below is not a real-terminal validation of the new queue.
 
 A **glanceable panel** is an overlay that stays visible without taking keyboard focus, so the editor keeps input. A **modal overlay** takes focus until it closes.
 
@@ -11,7 +11,7 @@ A centered modal overlay takes keyboard focus. The operator named two problems:
 - An open overlay blocks typing to the main agent.
 - An overlay covers the transcript.
 
-## The model
+## Historical work-panel model
 
 - **Scope:** the interaction model for all Apple Pi overlays and panels, not one panel.
 - **Platform limit:** public Pi API only. Overlays draw over the transcript; nothing reflows it into columns. Patching Pi internals and proposing an upstream layout API are out for now; upstream stays the option if the public API proves too limiting.
@@ -31,7 +31,7 @@ A centered modal overlay takes keyboard focus. The operator named two problems:
 Checked against Pi's interactive mode and `pi-tui`:
 
 - `OverlayOptions` supports `nonCapturing`, edge `anchor` with offsets, `width`/`minWidth`/`maxHeight`, and `visible(termWidth, termHeight)`. `OverlayHandle` supports `focus()`, `unfocus()`, `setHidden()`, and `hide()`.
-- Closing a `ctx.ui.custom()` overlay calls `hideOverlay()`, which removes the topmost overlay, not necessarily its own. A persistent panel must be mounted with `tui.showOverlay` and hide through its own handle, as `components/shared/src/work-manager.ts` does.
+- Closing a `ctx.ui.custom()` overlay calls `hideOverlay()`, which removes the topmost overlay, not necessarily its own. A persistent panel must be mounted with `tui.showOverlay` and hide through its own handle, as the current `components/code-review/src/review-manager.ts` does.
 - pi-tui resolves an overlay's options on every render, so getter-based placement follows the terminal width without remounting the panel.
 - The operator runs `tuiMode: fullscreen`, so mouse regions and wheel scrolling are available.
 - The `/btw` conversation outlives its overlay.

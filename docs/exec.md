@@ -87,28 +87,13 @@ Parameters are typed tool arguments and arrive as strings in `inputs`; convert n
 
 `limits` can adjust call budget, concurrency, agent budget, and timeout within package maxima. The host queues gathered calls above the concurrency limit. Monty enforces a fixed 512 MiB memory limit, feed/turn execution time, recursion, and a session-wide suspension ceiling; the host enforces the per-call wall deadline and call budget. On cancellation, pending host calls are rejected and new calls are refused. Peer cleanup is awaited before the tool reports settlement, so cleanup can outlast the Python deadline; a cleanup failure is reported rather than treated as a successful release. Terminal failures discard the worker and restore the preceding checkpoint on the next call. Completed tool, file, and process effects are **not** undone by that rollback.
 
-Each tool call has a durable trace and live TUI activity. Error results retain the trace through Pi's `tool_result` hook. In a TUI, the card shows a bounded Python preview, active calls, and elapsed time. While a program runs, including a saved `program_*` execution, it appears as one entry in the shared above-editor active-work surface beside other active work, with its name, observed call progress, and elapsed time. Its peer turns belong to that entry; the people themselves also appear in the organization while they are alive. The entry does not open or focus the work panel, and it leaves the surface when the program settles; its outcome and trace stay inspectable in `Ctrl+W`.
+Each tool call has a durable trace and live TUI activity. Error results retain the trace through Pi's `tool_result` hook. In a TUI, the card shows a bounded Python preview, active calls, and elapsed time. While a program runs, including a saved `program_*` execution, it appears as one entry in the shared above-editor active-work surface beside other active work, with its name, observed call progress, and elapsed time. Its peer turns belong to that entry; the people themselves also appear in the organization while they are alive. The entry leaves the surface when the program settles; its outcome and trace remain in the native tool result.
 
-## Work-panel inspection
+## Inspecting results
 
-Open `/work` or Ctrl+W and select **Pi Exec** to inspect direct snippets and saved `program_*` executions. The tab shows the selected program's name, supplied objective, execution state, elapsed time, and host calls. A host call is work the script asks the harness to perform, such as a file read, shell command, HTTP request, or peer turn. Queued calls are waiting for a concurrency slot; running calls have acquired one. Call detail separates queue time from execution time and includes the existing trace-safe arguments, activity, result, and error. Counts describe calls already issued, not a percentage of the script's eventual work.
+Read the native tool result and its retained structured details, including the execution trace, captured output, failures and observed usage. The [tool inspector](terse-tools.md#tool-inspector-and-mouse-interaction) exposes those retained details without running the program again. A handled call failure stays in the trace even if the program succeeds. Peer child operations remain correlated with their parent call, including observed effects that finish during cancellation. Trace arguments retain their redaction boundaries.
 
-With focus in the panel:
-
-| Key | Action |
-| --- | --- |
-| `Tab` / `Shift+Tab` | Select the next or previous program |
-| `v` | Cycle Calls, Source, Result, and Trace views |
-| `[` / `]` | Select the previous or next host call and return to Calls |
-| Configured scroll keys, `k`/`j`, page keys, `Home`/`End` | Scroll detail; `End` follows the live tail |
-
-The [shared work-panel controls](tasks.md#work-panel) handle tabs, focus, closing, and responsive placement. Keyboard inspection and fullscreen mouse-wheel scrolling preserve the main editor draft. Each invocation retains its view and scroll position through tab changes, resizing, and panel reopening.
-
-Successful, failed, aborted, and timed-out programs remain inspectable after settlement, with their available result, error, captured output, and operation trace. A failed call remains visible even if the script handles it and succeeds. This inspection history is in memory for the current session/branch only; session replacement, reload, tree navigation, and shutdown clear it. It is not rebuilt from checkpoint or transcript entries.
-
-Peer turns appear as program-owned host calls. Selecting one shows its call label, role or peer id, task, current activity, and live tools. Each tool shows its status, name, trace-safe target, and result or error once it finishes. During parallel execution a tool appears only under the turn that issued it. A failed peer status record stays visible even when the script handles it and the program succeeds. Cancellation waits for cleanup; tool effects that finish during cancellation remain visible rather than being claimed undone. This inspection view offers no resume or steering controls.
-
-Inspection adds no steering or cancellation controls and leaves execution semantics unchanged. Source displays the executed script; call and trace views retain their existing redaction boundaries and omit deliberately excluded payloads.
+The combined Tasks/Pi Exec panel and its in-memory inspection history are retired. `/reviews` and `Ctrl+W` are the dedicated review queue; they neither own nor change Pi Exec execution.
 
 ## Session checkpoints
 

@@ -74,11 +74,11 @@ The inspector has **Inputs** and **Output** tabs. Inputs show every argument. Re
 
 Use Tab or Shift+Tab to switch tabs, the mouse wheel or arrow keys to scroll, Page Up/Page Down to page, and Home/End to jump. Esc or `q` closes the inspector and returns to the transcript.
 
-In fullscreen mode, a left click outside the inspector also closes it. The same behavior applies to other focused modal overlays: an outside click follows their Escape/cancel path and does not activate anything behind them. Clicks inside, scrolling, and dragging keep their normal behavior. Non-modal panels such as `/work` stay open.
+In fullscreen mode, a left click outside the inspector also closes it. The same behavior applies to other focused modal overlays: an outside click follows their Escape/cancel path and does not activate anything behind them. Clicks inside, scrolling, and dragging keep their normal behavior. Non-modal panels such as `/reviews` stay open.
 
 Run `/inspect-tool` to select a call from the current branch, newest first. This is also the keyboard entry point in regular terminal mode, where Pi leaves transcript mouse interaction to the terminal.
 
-The inspector displays retained results; it does not rerun tools, recover RTK-compressed content, or load full-output files automatically. A truncated result retains its truncation notice and any recorded full-output path. Background commands show their launch result; inspect their later output through `/tasks`. `Exec` shows its arguments and returned result, not unreturned intermediate operations.
+The inspector displays retained results; it does not rerun tools, recover RTK-compressed content, or load full-output files automatically. A truncated result retains its truncation notice and any recorded full-output path. Background commands show their launch result; inspect their later output through the `task` tool's `status` action. `Exec` shows its arguments and returned result, not unreturned intermediate operations.
 
 ## Implementation Details
 

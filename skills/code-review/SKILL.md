@@ -1,52 +1,38 @@
 ---
 name: code-review
-description: "Review a change with a review board on two axes, repository standards and originating intent. Use when asked to review a branch, a pull request, the working tree, or the changes since a revision."
+description: "Review an exact change against repository standards and approved intent, using behavior-based scopes and risk-directed evidence. Use when asked to review a branch, a pull request, the working tree, or changes since a revision."
 ---
 
 # Code review
 
-A review board decides whether a change is well made (**Standards**) and whether it is the right change (**Intent**). The two axes stay separate from first look to final report, so success on one cannot hide failure on the other.
+Use the native review queue to inspect an exact captured target. Keep correctness, repository standards and approved intent distinct: missing intent is unassessed, not passed. The requester owns the scope and follow-through; ordinary independent advisory peers provide inspection and challenge.
 
-## Prepare the brief
+For a pass already assigned within a review, inspect its captured source and answer its questions in the requested report schema. Route additional questions through that report to the plan owner. The requester initiates new reviews using the steps below.
 
-The requester (whoever runs this skill) pins the boundary and gathers the sources before anyone is staffed:
+## Set the boundary
 
-- **Boundary**: the comparison (`git diff <base>...HEAD` and its commit list, or `HEAD` plus staged, unstaged, and untracked files for the working tree), resolved and non-empty. Ask when a branch has no sound base.
-- **Standards sources**: the repository instructions and documents that govern the changed area.
-- **Intent source**: the governing ledger task, specification, issue, or the request itself. When none exists, the Intent axis is reported as not assessed.
+Choose the comparison the request actually means: one commit with its parent, an endpoint range, a branch against its merge base, the staged tree, or the working tree including nonignored untracked files. Resolve ambiguity with the requester. Supply the approved task, specification or request as intent, and identify the repository standards that govern the behavior. Preserve their authority separately from the author's explanation.
 
-The brief holds the boundary, the changed paths, the sources, and the checks already run. It leaves out the author's reasoning: reviewers judge what the change does, not what it was meant to do.
+Use `review_code` to capture and enqueue. Read the returned identity and retained target before interpreting results. Keep any path restriction and omitted evidence explicit. Capture and model execution are different steps; an admitted request is not a completed review. Recover an uncertain request with its original handle rather than starting duplicate work.
 
-## Staff the board
+## Direct depth at the risk
 
-| Change | Board |
-| --- | --- |
-| Small | one `code-review-specialist` covering both axes |
-| Normal | one `code-review-specialist` per axis, a `scientific-skeptic`, and the author |
-| Risky area | the normal board plus a domain lens, such as `staff-security-engineer`, `database-reliability-architect`, or `performance-engineering-lead` |
+Use behavior and contracts as inspection scopes, with changed regions as coverage accounting. Inspect the relevant unchanged callers, tests and constraints. A file boundary alone is not a behavior boundary.
 
-The **chair** runs the board and rules on findings. The chair is never the author: when the requester wrote the change, a standing `code-review-specialist` chairs, and the requester takes part only as author. Staff with standing people as [handbook-writing](../handbook-writing/SKILL.md) describes, and give a large change's paths to reviewers so the chair can check that every changed path was covered. Staff the whole board before briefing anyone, and give every member the names of the others.
+Every scope needs correctness, applicable standards and intent inspection. Add independent authority or reliability work for destructive, private-data or state-transition paths; use compatibility, usability and other lenses for concrete risks. A small diff can carry a large obligation. Further work names the unresolved question, why it matters and the evidence that would settle it.
 
-## Run the board
+Read `review_queue` and `read_review` progressively. Examine gaps, requested work, attempt failures and retained evidence as well as findings. A completed model claim is evidence to challenge, not a correctness certificate. Source inspection, a causal trace, an executed reproducer and a model hypothesis support different claims. Initial inspections stay independent; later challenge can compare their reports.
 
-1. **First findings, alone.** Each reviewer works only from the brief and sends findings for one axis to the chair privately, before seeing anyone else's.
-2. **Challenge.** The chair posts all findings in one review thread, a `send_mail` thread to the whole board; each member's assignment has its own task thread, so none of those reaches everyone. The skeptic challenges each finding's evidence; the author answers what the change was for and what it guards. Continue a disputed point with `reply` in that shared thread so the board sees the evidence and answers.
-3. **Ruling.** Once every reviewer, the skeptic, and the author have replied, the chair checks each finding against current source and rules it **confirmed**, **rejected**, or **unresolved**.
-4. **Close.** The board spends a short exchange on what made this review harder or easier, and the chair records it in the task's `retrospective.md`.
+## Resolve with evidence
 
-A finding states its location, the standard or requirement it breaks, the input or path that triggers it, the evidence, the impact, and the smallest fix. Severity is **critical** (security compromise, data loss, outage), **significant** (a reachable failure that should block completion), or **minor** (bounded and worth fixing). Style preferences and speculative defenses are not findings. Report every supported finding and nothing else.
+For each material allegation, establish the triggering path, broken invariant, impact, cause, location and counterevidence. Distinguish severity from certainty. Use `resolve_finding` to retain an accountable response without erasing the original allegation or model validation.
 
-## Report
+Rejection needs counterevidence. Accepted risk needs evidence, authority and explicit scope. Record a proposed or unverified fix as a claim; a verified fix names a completed, unchallenged question on another captured target. A later correction does not repair the earlier snapshot. Changes to source, intent or policy require new review work rather than inherited approval.
 
-```markdown
-## Standards
-Confirmed findings, worst first. Unresolved. Coverage limits.
+Use `manage_review` for cancellation, same-target recovery, priority, reassignment or an explicit fresh rerun. Keep failed, interrupted, incomplete and missing work visible. Finish when the authorized obligations have evidence, or report exactly what remains unresolved and who owns the next action.
 
-## Intent
-Intent source: <source, or not assessed>
-Confirmed findings, worst first. Unresolved. Coverage limits.
+## Report and consult
 
-Verdict: Standards: <clean, or N confirmed, worst ...>; Intent: <...>
-```
+Report the target identity and assessment revision, material findings, standards and intent coverage, unassessed axes, source/current-target limits, and the checks actually run. Keep execution completion, coverage, finding judgments and operator approval separate. Fixes and publication require their own authority.
 
-Coverage limits name every path, axis, or reviewer the board did not complete. A clean axis says so plainly. The review reports; fixes follow only when the requester holds that authority.
+For consequential disagreement, use [peer consultation](../peer-consultation/SKILL.md) over the retained evidence. Choose the perspectives needed by the question; a standing board is optional, not a second review engine. Preserve independent first inspection and let an accountable owner judge evidence rather than count votes. If several people participate, close their exchange and record useful learning under the [shared process conventions](../handbook-writing/references/processes.md).
