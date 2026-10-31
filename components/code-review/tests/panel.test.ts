@@ -3,7 +3,7 @@ import { visibleWidth } from "@earendil-works/pi-tui";
 import { describe, expect, it, vi } from "vitest";
 import { fakeTui, plainTheme } from "../../../tests/helpers/fake-tui.js";
 import { CaptureConfirmation, ReviewPanel, type ReviewPanelSource } from "../src/panel.js";
-import { summaryLines } from "../src/presentation.js";
+import { findingLines, summaryLines } from "../src/presentation.js";
 import type { ReviewSummary } from "../src/results.js";
 
 function review(id: string, state: ReviewSummary["state"]): ReviewSummary {
@@ -45,12 +45,70 @@ function source(rows: () => ReviewSummary[]): ReviewPanelSource {
 				page: { offset, nextOffset: offset + page.length < all.length ? offset + page.length : null, rows: page },
 			},
 			selected: selected?.id,
-			detail: { lines: selected ? summaryLines(selected) : ["No review selected"], nextOffset: null, offset: 0 },
+			detail: {
+				title: "Summary",
+				lines: selected ? summaryLines(selected) : ["No review selected"],
+				nextOffset: null,
+				offset: 0,
+			},
 		};
 	};
 }
 
 const actions = () => ({ close: vi.fn(), unfocus: vi.fn(), menu: vi.fn(), view: vi.fn() });
+
+it("leads finding evidence with the allegation and keeps validation and later claims distinct", () => {
+	const lines = findingLines({
+		id: "attempt:finding",
+		attempt: "attempt",
+		pass: "correctness",
+		finding: {
+			id: "finding",
+			title: "Recorded policy differs",
+			path: "worker.ts",
+			line: 20,
+			side: "after",
+			severity: "medium",
+			certainty: "probable",
+			trigger: "Change policy between turns",
+			invariant: "Selected policies agree",
+			impact: "Incorrect coverage",
+			cause: "No cross-pass comparison",
+			correction: "Bind the recorded policies",
+			evidence: [{ kind: "source", detail: "The policies differ", provenance: "captured worker.ts:20" }],
+			counterevidence: "Within-turn checks work",
+		},
+		validation: null,
+		decision: {
+			id: "response",
+			kind: "finding",
+			finding: "attempt:finding",
+			review: "review",
+			digest: "digest",
+			revision: 2,
+			actor: "owner",
+			createdAt: 1,
+			data: {
+				disposition: "fixed-claimed",
+				reason: "Later source changed",
+				evidence: ["A local regression passes"],
+				verifiedAgainst: null,
+			},
+		},
+	});
+	expect(lines[0]).toBe("[medium] Recorded policy differs");
+	expect(lines).toContain("Validation: not yet validated");
+	expect(lines).toContain("Owner response: fixed-claimed");
+	for (const text of [
+		"Incorrect coverage",
+		"No cross-pass comparison",
+		"Within-turn checks work",
+		"captured worker.ts:20",
+		"A local regression passes",
+		"attempt:finding",
+	])
+		expect(lines.join("\n")).toContain(text);
+});
 
 it("keeps capture consent visible while long evidence scrolls, and refuses unreadable tiny layouts", () => {
 	const screen = fakeTui(80, 24);
@@ -65,11 +123,11 @@ it("keeps capture consent visible while long evidence scrolls, and refuses unrea
 		],
 		done,
 	);
-	for (const width of [80, 35, 19]) {
+	for (const width of [80, 35, 24]) {
 		const lines = confirmation.render(width);
 		expect(lines.length).toBeLessThanOrEqual(Math.floor(screen.tui.terminal.rows * 0.8));
 		expect(lines[0]).toContain("Capture preview");
-		expect(lines.at(-1)).toBe("y queue  Esc cancel");
+		expect(lines.at(-2)).toContain("y queue  Esc cancel");
 		for (const line of lines) {
 			expect(visibleWidth(line)).toBeLessThanOrEqual(width);
 			expect(stripVTControlCharacters(line)).not.toMatch(/[\u0000-\u001f\u007f-\u009f]/);
@@ -88,6 +146,68 @@ it("keeps capture consent visible while long evidence scrolls, and refuses unrea
 });
 
 describe("review queue master-detail", () => {
+	it("frames both panes, exposes focus and actions, and colors status without treating completion as approval", () => {
+		const screen = fakeTui(180, 40);
+		const rows = [
+			review("completed-review", "completed"),
+			review("failed-review", "failed"),
+			review("running-review", "running"),
+		];
+		const theme = {
+			fg: vi.fn((_color: string, text: string) => `\x1b[36m${text}\x1b[39m`),
+			bg: (_color: string, text: string) => `\x1b[48;5;235m${text}\x1b[49m`,
+			bold: (text: string) => `\x1b[1m${text}\x1b[22m`,
+		};
+		const panel = new ReviewPanel(
+			screen.tui,
+			theme,
+			source(() => rows),
+			actions(),
+		);
+		panel.focused = true;
+		let lines = panel.render(160);
+		expect(lines.map(stripVTControlCharacters).join("\n")).toContain("> Queue");
+		expect(theme.fg).toHaveBeenCalledWith("error", expect.stringContaining("failed"));
+		expect(theme.fg).toHaveBeenCalledWith("warning", expect.stringContaining("1 confirmed"));
+		expect(theme.fg).not.toHaveBeenCalledWith("success", expect.stringContaining("completed"));
+		panel.handleInput("\t");
+		expect(panel.render(160).map(stripVTControlCharacters).join("\n")).toContain("> Summary");
+		const click = (y: number) =>
+			panel.handleMouse({
+				type: "press",
+				button: "left",
+				x: 3,
+				y,
+				screenX: 3,
+				screenY: y,
+				width: 160,
+				height: 32,
+				shift: false,
+				alt: false,
+				ctrl: false,
+			});
+		click(7);
+		expect(panel.getSelectedId()).toBe("failed-review");
+		panel.handleInput("\t");
+		click(2);
+		expect(panel.render(160).map(stripVTControlCharacters).join("\n")).toContain("> Queue");
+		expect(panel.getSelectedId()).toBe("failed-review");
+		for (const width of [160, 100, 90, 35]) {
+			lines = panel.render(width);
+			expect(lines).toHaveLength(32);
+			for (const line of lines) expect(visibleWidth(line)).toBe(width);
+			const text = lines.map(stripVTControlCharacters).join("\n");
+			expect(text).toContain("a actions");
+			expect(text).toContain("q close");
+			expect(text).toContain("not signed off");
+		}
+		rows.length = 0;
+		panel.refresh();
+		lines = panel.render(160);
+		expect(lines.map(stripVTControlCharacters).join("\n")).toContain("No recorded reviews.");
+		for (const line of lines) expect(visibleWidth(line)).toBe(160);
+	});
+
 	it("shows status, partial coverage and findings in the master list and preserves selection across reorder and resize", () => {
 		const screen = fakeTui(180, 40);
 		let rows = [review("first-review", "running"), review("second-review", "incomplete")];
@@ -123,22 +243,19 @@ describe("review queue master-detail", () => {
 		const screen = fakeTui(180, 15);
 		const rows = Array.from({ length: 12 }, (_, index) => review(`review-${index}`, "completed"));
 		const events = actions();
-		const panel = new ReviewPanel(
-			screen.tui,
-			plainTheme,
-			source(() => rows),
-			events,
-		);
+		const read = vi.fn(source(() => rows));
+		const panel = new ReviewPanel(screen.tui, plainTheme, read, events);
 		panel.render(160);
+		const pageSize = read.mock.lastCall![0].limit;
 		panel.handleInput("]");
-		expect(panel.getSelectedId()).toBe("review-3");
+		expect(panel.getSelectedId()).toBe(rows[pageSize]!.id);
 		panel.handleInput("\t");
 		panel.handleInput("\x1b[B");
-		expect(panel.getSelectedId()).toBe("review-3");
+		expect(panel.getSelectedId()).toBe(rows[pageSize]!.id);
 		panel.handleInput("v");
-		expect(events.view).toHaveBeenCalledWith(rows[3]);
+		expect(events.view).toHaveBeenCalledWith(rows[pageSize]);
 		panel.handleInput("a");
-		expect(events.menu).toHaveBeenCalledWith(rows[3]);
+		expect(events.menu).toHaveBeenCalledWith(rows[pageSize]);
 		panel.handleInput("\x1b");
 		expect(events.unfocus).toHaveBeenCalledOnce();
 		panel.handleInput("q");
@@ -148,13 +265,14 @@ describe("review queue master-detail", () => {
 	it("pages evidence separately, scrolls within a page and brings operation outcomes into view", () => {
 		const screen = fakeTui(180, 15);
 		const row = review("paged-review", "completed");
-		const page = source(() => [row]);
+		const page = vi.fn(source(() => [row]));
 		const panel = new ReviewPanel(
 			screen.tui,
 			plainTheme,
 			(options) => ({
 				...page(options),
 				detail: {
+					title: "Findings",
 					lines: Array.from(
 						{ length: options.detailLimit * 3 },
 						(_, index) => `Evidence ${options.detailOffset}: line ${index}`,
@@ -166,16 +284,17 @@ describe("review queue master-detail", () => {
 			actions(),
 		);
 		panel.render(160);
+		const detailSize = page.mock.lastCall![0].detailLimit;
 		panel.handleInput("\t");
 		panel.handleInput("\x1b[6~");
-		expect(panel.render(160).join("\n")).toContain("Evidence 0: line 10");
+		expect(panel.render(160).join("\n")).toContain(`Evidence 0: line ${detailSize}`);
 		panel.setNote("Request handle: outcome unknown");
 		expect(panel.render(160).join("\n")).toContain("Request handle: outcome unknown");
 		panel.setNote("");
 		panel.handleInput("]");
-		expect(panel.render(160).join("\n")).toContain("Evidence 10: line 0");
+		expect(panel.render(160).join("\n")).toContain(`Evidence ${detailSize}: line 0`);
 		panel.handleInput("]");
-		expect(panel.render(160).join("\n")).toContain("Evidence 10: line 0");
+		expect(panel.render(160).join("\n")).toContain(`Evidence ${detailSize}: line 0`);
 		expect(panel.getSelectedId()).toBe(row.id);
 	});
 

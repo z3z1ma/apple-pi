@@ -662,7 +662,7 @@ test("finding responses retain allegations and approval binds a stable artifact 
 }, 30000);
 
 test("the loaded reviews command shows the queue, keeps selection and sends a confirmed fresh rerun", async () => {
-	writeFileSync(join(state.agentDir, "peer-control.json"), JSON.stringify({ review: true }));
+	writeFileSync(join(state.agentDir, "peer-control.json"), JSON.stringify({ review: { finding: true } }));
 	const first = await enqueue();
 	await settled(first.id, "completed");
 	writeFileSync(join(repository, "value.ts"), "export const value = 3;\n");
@@ -696,7 +696,13 @@ test("the loaded reviews command shows the queue, keeps selection and sends a co
 		await extension.shortcuts.get("alt+g")!.handler(ctx);
 		expect(screen.focused()).toBe(panel);
 		panel.handleInput("\x1b[B");
-		expect(screen.layout(screen.stack[0]!).lines.join("\n")).toContain(first.id);
+		expect(screen.layout(screen.stack[0]!).lines.join("\n")).toContain(first.id.slice(-8));
+		vi.mocked(ctx.ui.select).mockResolvedValueOnce("findings");
+		panel.handleInput("v");
+		await vi.waitFor(() => expect(screen.layout(screen.stack[0]!).lines.join("\n")).toContain("Findings"));
+		panel.handleInput("\t");
+		panel.handleInput("\x1b[6~");
+		expect(screen.layout(screen.stack[0]!).lines.join("\n")).toContain("The value disagrees with its consumer");
 		panel.handleInput("a");
 		const preview = await captureConfirmation(screen);
 		expect(preview.text.replace(/\s+/g, " ")).toContain("coverage and approval are not inherited");
@@ -719,7 +725,7 @@ test("the loaded reviews command shows the queue, keeps selection and sends a co
 		panel.handleInput("q");
 		expect(screen.stack).toHaveLength(0);
 		await command.handler("", ctx);
-		expect(screen.layout(screen.stack[0]!).lines.join("\n")).toContain(first.id);
+		expect(screen.layout(screen.stack[0]!).lines.join("\n")).toContain(first.id.slice(-8));
 		expect(query(state.dbPath, "select id from program_scopes")).toEqual([]);
 		screen.stack[0]!.component.handleInput("a");
 		await captureConfirmation(screen);
@@ -731,7 +737,7 @@ test("the loaded reviews command shows the queue, keeps selection and sends a co
 		neighborHandle.hide();
 		expect(screen.stack).toHaveLength(0);
 		await command.handler("", ctx);
-		expect(screen.layout(screen.stack[0]!).lines.join("\n")).toContain(rerun.id);
+		expect(screen.layout(screen.stack[0]!).lines.join("\n")).toContain(rerun.id.slice(-8));
 	} finally {
 		for (const handler of extension.handlers.get("session_shutdown") ?? [])
 			await handler({ type: "session_shutdown" }, ctx);
@@ -769,6 +775,11 @@ test("new capture previews the chosen directory and cancellation or changed sour
 		expect(cancelled.text).toContain("intent compliance stays unassessed");
 		cancelled.component.handleInput("\x1b");
 		await vi.waitFor(() => expect(screen.stack).toHaveLength(1));
+		await vi.waitFor(() =>
+			expect(screen.layout(screen.stack[0]!).lines.join("\n")).toContain(
+				"Capture cancelled; this request was not queued.",
+			),
+		);
 		expect(query(state.dbPath, "select id from review_jobs")).toEqual([]);
 		screen.stack[0]!.component.handleInput("a");
 		const preview = await captureConfirmation(screen);

@@ -7,9 +7,9 @@ import { readReview, readReviewPart, reviewQueue, withReviews } from "../../sess
 import { resolveToolPath } from "../../shared/src/tool-path.js";
 import type { ReviewOperation } from "./operations.js";
 import { CaptureConfirmation, ReviewPanel } from "./panel.js";
-import { evidenceLines, previewLines, summaryLines } from "./presentation.js";
+import { evidenceLines, findingLines, previewLines, summaryLines } from "./presentation.js";
 import { previewReview } from "./preview.js";
-import type { ReviewSummary } from "./results.js";
+import type { ReviewAssessment, ReviewSummary } from "./results.js";
 import type { ReviewTarget } from "./types.js";
 
 const views = ["summary", "target", "plan", "findings", "coverage", "attempts", "decisions"] as const;
@@ -84,6 +84,7 @@ export class ReviewManager {
 							queue,
 							selected: review?.id,
 							detail: {
+								title: this.view[0]!.toUpperCase() + this.view.slice(1),
 								...(review
 									? this.detail(db, actor, review, options.detailLimit, offset)
 									: { lines: ["No review selected."], nextOffset: null }),
@@ -148,6 +149,22 @@ export class ReviewManager {
 	): { lines: string[]; nextOffset: number | null } {
 		if (this.view === "summary") return { lines: summaryLines(review), nextOffset: null };
 		const data = readReviewPart(db, actor, review.id, { part: this.view, limit, offset });
+		if (this.view === "findings") {
+			const findings = data as {
+				total: number;
+				page: { rows: ReviewAssessment["findings"]; nextOffset: number | null };
+			};
+			return {
+				lines: [
+					`${findings.total} reported findings. Responses do not repair this captured code.`,
+					"",
+					...(findings.page.rows.length
+						? findings.page.rows.flatMap(findingLines)
+						: ["None reported; this is not a clean-review claim."]),
+				],
+				nextOffset: findings.page.nextOffset,
+			};
+		}
 		const paged = (
 			this.view === "target"
 				? (data as { omissions?: unknown }).omissions
@@ -260,6 +277,8 @@ export class ReviewManager {
 			operation.action === "enqueue"
 				? await this.confirmCapture(ctx, confirmation.split("\n"), stop)
 				: await ctx.ui.confirm(choice, confirmation, { signal: stop });
+		if (!confirmed && !stop.aborted && operation.action === "enqueue")
+			this.mounted?.panel.setNote("Capture cancelled; this request was not queued.");
 		return confirmed && !stop.aborted ? operation : undefined;
 	}
 

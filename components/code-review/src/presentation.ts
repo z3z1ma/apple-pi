@@ -1,5 +1,5 @@
 import type { ReviewPreview } from "./preview.js";
-import type { ReviewSummary } from "./results.js";
+import type { ReviewAssessment, ReviewSummary } from "./results.js";
 import type { ReviewTarget } from "./types.js";
 
 export function targetLabel(target: ReviewTarget): string {
@@ -54,19 +54,17 @@ export function reviewStatus(review: ReviewSummary): string {
 
 export function summaryLines(review: ReviewSummary): string[] {
 	return [
-		targetLabel(review.target),
-		review.cwd,
-		review.id,
-		...(review.summary ? [review.summary] : []),
-		"",
-		reviewStatus(review),
-		`Owner: ${review.ownerName} (${review.owner})`,
+		"Assessment",
+		`Execution: ${review.state}${review.phase ? ` - ${review.phase.pass}` : ""}`,
+		`Coverage: ${review.passes ? `${review.passes.completed}/${review.passes.required} passes` : "not planned"}`,
+		`Findings: ${review.findings.confirmed} confirmed / ${review.findings.unresolved} unresolved`,
+		`Target: ${targetLabel(review.target)}`,
+		`Owner: ${review.ownerName}`,
 		`Priority: ${review.priority}`,
 		`Intent: ${review.intent}`,
 		`Approval: ${approvalLabel(review)}`,
 		"Live target freshness: not checked",
 		`Assessment revision: ${review.revision}`,
-		`Captured digest: ${review.digest ?? "not admitted"}`,
 		...(review.coverage
 			? [
 					`Questions: ${review.coverage.completedQuestions}/${review.coverage.requiredQuestions}`,
@@ -76,7 +74,59 @@ export function summaryLines(review: ReviewSummary): string[] {
 			: []),
 		...(review.reason ? ["", review.reason] : []),
 		"",
-		"Completion, coverage, findings and approval are separate. A completed review is not a correctness certificate.",
+		"Completion is not approval or a correctness certificate.",
+		"",
+		"Review plan",
+		...(review.summary ? [review.summary] : ["Not recorded"]),
+		"",
+		"Captured target",
+		`Directory: ${review.cwd}`,
+		`Review: ${review.id}`,
+		`Owner identity: ${review.owner}`,
+		`Digest: ${review.digest ?? "not admitted"}`,
+	];
+}
+
+export function findingLines(entry: ReviewAssessment["findings"][number]): string[] {
+	const finding = entry.finding;
+	return [
+		`[${finding.severity}] ${finding.title}`,
+		`${finding.path}:${finding.line} (${finding.side})`,
+		`Validation: ${entry.validation?.disposition ?? "not yet validated"}`,
+		`Owner response: ${entry.decision?.data.disposition ?? "none"}`,
+		`Reported certainty: ${finding.certainty}`,
+		"",
+		"Trigger",
+		finding.trigger,
+		"",
+		"Impact",
+		finding.impact,
+		"",
+		"Invariant",
+		finding.invariant,
+		"",
+		"Cause",
+		finding.cause,
+		"",
+		"Proposed correction",
+		finding.correction,
+		"",
+		"Evidence",
+		...evidenceLines(finding.evidence),
+		"",
+		"Counterevidence",
+		finding.counterevidence,
+		"",
+		"Validation evidence",
+		...evidenceLines(entry.validation),
+		"",
+		"Owner response evidence",
+		...evidenceLines(entry.decision),
+		"",
+		`Finding: ${entry.id}`,
+		`Pass: ${entry.pass}`,
+		`Attempt: ${entry.attempt}`,
+		"",
 	];
 }
 

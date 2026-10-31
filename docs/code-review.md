@@ -2,7 +2,7 @@
 
 The native review queue captures exact source and intent, divides changed behavior into focused scopes, assigns independent risk questions, checks cross-scope interactions and retains findings and coverage. It uses ordinary advisory-role peers and the existing session-state runtime, not another model engine or a custom sandbox.
 
-The queue and `/reviews`, including the TUI's pre-queue target preview, are implemented. The wider integration is still in progress: live-target/policy freshness, cost/source drill-down, additional-work decisions, captured-artifact browser sign-off, Workplace Code and a substantial terminal visual pass remain pending. Existing ad hoc `sign_off_code` is not yet connected to a recorded review ID. Registering the extension does not restart an already-running runtime; an older store reports that it is unavailable instead of showing an empty queue.
+The queue and `/reviews`, including the TUI's pre-queue target preview, are implemented. The wider integration is still in progress: live-target/policy freshness, cost/source drill-down, additional-work decisions, captured-artifact browser sign-off and Workplace Code remain pending. Existing ad hoc `sign_off_code` is not yet connected to a recorded review ID. Registering the extension does not restart an already-running runtime; an older store reports that it is unavailable instead of showing an empty queue.
 
 ## Native tools
 
@@ -34,7 +34,7 @@ An applied enqueue confirms admission, not review completion. Retain the returne
 
 Open `/reviews` or press `Ctrl+W`. The single master-detail interface replaces the combined `/work` and `/tasks` panel. Tasks and Pi Exec keep their tools, transcript results and shared passive activity independently.
 
-The master list shows execution state, the current pass, owner, completed/required passes, findings and approval. The detail view exposes summary, retained target, plan, findings, question coverage, attempts and decision history. Live freshness is currently labeled **not checked**; approval matching an assessment is not a claim that the checkout still matches.
+The framed master list shows execution state with a status icon, the current pass, owner, completed/required passes, findings and approval. The active pane is highlighted; fixed key hints remain visible while evidence scrolls, and its heading reports the visible line range. The detail view exposes summary, retained target, plan, findings, question coverage, attempts and decision history. Findings lead with their allegation and location, followed by validation, owner response, cause and evidence. Completed execution uses a neutral accent rather than a clean-approval color. Live freshness is currently labeled **not checked**; approval matching an assessment is not a claim that the checkout still matches.
 
 | Key | Action |
 | --- | --- |
