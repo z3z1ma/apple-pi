@@ -64,7 +64,7 @@ const releaseTeam = async (members: Awaited<ReturnType<typeof team>>) => {
 	await close(members.manager);
 };
 
-test("a hire's first model request includes its team's channel history and assigned goal", async () => {
+test("a hire's first model request includes its team context pointer and assigned goal", async () => {
 	const members = await team([fauxAssistantMessage("Ready.")]);
 	const id = "onboarding-person";
 	const controller = new AbortController();
@@ -107,8 +107,10 @@ test("a hire's first model request includes its team's channel history and assig
 		expect((await starting).stage).toBe("applied");
 		await vi.waitFor(() => expect(hired!.requests.length).toBeGreaterThan(0));
 		const first = JSON.stringify(hired.requests[0]!.messages.filter((message) => message.role === "user"));
-		expect(first).toContain("docs/retry.md");
-		expect(first).toContain("queue boundary is still unverified");
+		expect(first).toContain("Team context at your arrival");
+		expect(first).toContain(`team:${members.managerId}`);
+		expect(first).not.toContain("docs/retry.md");
+		expect(first).not.toContain("queue boundary is still unverified");
 		expect(first).toContain("Investigate the retry boundary.");
 	} finally {
 		controller.abort();

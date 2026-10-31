@@ -332,6 +332,30 @@ const MIGRATIONS = [
 		updated_at integer not null
 	) strict;
 	create index review_jobs_by_state on review_jobs(state, priority desc, created_at);`,
+	`create table review_attempts (
+		id text primary key,
+		review_id text not null,
+		generation integer not null,
+		plan_revision integer not null,
+		pass_id text not null,
+		kind text not null,
+		program_id text not null unique,
+		person text not null unique,
+		role text not null,
+		policy text not null,
+		input text not null,
+		input_key text not null,
+		state text not null,
+		model text,
+		thinking text,
+		session_file text,
+		result text,
+		output text,
+		reason text,
+		created_at integer not null,
+		finished_at integer
+	) strict;
+	create index review_attempts_by_review on review_attempts(review_id, plan_revision, pass_id, created_at);`,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

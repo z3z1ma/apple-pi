@@ -81,9 +81,15 @@ Verify: components/session-state/tests/communication-tools.test.ts, components/s
 
 ## symbol:Runtime.queueTeamHistory
 
-New-hire context points to the team identity, purpose and pinned current-brief reference rather than copying full backscroll. The harness authors this startup context; it does not impersonate the manager or acknowledge channel history. Selective read/search owns later recall.
+New-hire context points to the team identity, purpose and pinned current-brief reference rather than copying full backscroll. The harness authors this startup context; it does not impersonate the manager or acknowledge channel history. Selective read/search owns later recall. Ordinary hires retain this notice; review-owned launches preserve channel membership but omit the automatic notice from their first brief. This is an initial-context rule, not a tool restriction. The actual-provider-input positive control in workplace.test.ts previously expected full backscroll and failed unchanged at ecae1117; keep its pointer/goal assertions when changing review startup.
 Coupled: components/session-state/src/communication.ts, components/session-state/src/mail.ts
-Verify: components/session-state/tests/channels.test.ts
+Verify: components/session-state/tests/channels.test.ts, components/session-state/tests/workplace.test.ts, components/session-state/tests/review-queue.test.ts
+
+## symbol:Runtime.prepareProgramLaunch
+
+Review ownership is derived from the attempt's persisted program ID, without a parallel launcher or another wire-level permission. Recheck generation, plan revision, owner, person and role at launch; use captured source and a headless ordinary peer. Other program calls continue to inherit caller cwd/tmux. First inspections share source and questions rather than prior reports; the later validator receives those reports explicitly. Guarded program disposal still owns cleanup.
+Coupled: components/session-state/src/review-attempt.ts, components/session-state/src/review-jobs.ts
+Verify: components/session-state/tests/review-queue.test.ts, components/session-state/tests/program-peers.test.ts
 
 ## symbol:Runtime.command
 

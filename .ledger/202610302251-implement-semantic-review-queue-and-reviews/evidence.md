@@ -2,7 +2,7 @@
 
 ## Capture foundation (in progress)
 
-Implemented personally in `components/code-review/`; no reviewer or live runtime changes have been started. This foundation is not the complete first vertical slice and is not exposed as an installed native tool yet.
+Implemented personally in `components/code-review/`. At this capture checkpoint no review peers or live runtime changes had been started. This foundation is not the complete first vertical slice and is not exposed as an installed native tool yet.
 
 The public capture boundary has red/green evidence for working-tree, staged and committed targets, scoped region coverage, ordinary Git inspection, retained intent, integrity checks, non-UTF8 obligations, rename records, uninitialized submodules and external-link limitations. Additional fixtures cover root and merge commits, branch versus endpoint ranges, odd filenames/bytes/modes, concurrent mutation, configured Git drivers/filters/monitors, conflicts, ambiguous merge bases, unknown paths and missing references.
 
@@ -31,7 +31,7 @@ Logs: `/tmp/review-capture-benchmark.log`, `/tmp/review-capture-benchmark-batche
 
 ## Durable admission and review contracts
 
-The runtime now owns capture jobs independently of the requesting socket. It records verified target admission, interruption on restart, explicit same-artifact resume, cancellation, priority and reassignment. Unfinished review ownership participates in the shared departure and cross-organization move guards. No peer execution loop or native tool is wired yet: an admitted job remains queued until the next implementation increment supplies that owner.
+The runtime now owns capture jobs independently of the requesting socket. It records verified target admission, interruption on restart, explicit same-artifact resume, cancellation, priority and reassignment. Unfinished review ownership participates in the shared departure and cross-organization move guards. At this admission checkpoint no peer execution loop or native tool was wired: admitted jobs remained queued pending the execution increment below.
 
 The semantic contracts account for every changed region exactly once as primary ownership or a gap, retain distinct questions over identical files, require independent work for declared reliability/authority risk, preserve requested lenses, require question-level evidence accounting and retain every reported finding through validation/deduplication. These deterministic checks do not establish the quality of model planning or reported evidence.
 
@@ -51,6 +51,26 @@ The work-recovery fixture also used a different goal for an allegedly identical 
 
 No live daemon or app was restarted. All new socket/process checks used private state and fake peers. No paid reviewer, actual first-provider-input isolation, stale-attempt execution fence, native enqueue tool, `/reviews`, Workplace entry path or artifact-bound approval has been exercised yet.
 
+## Durable review execution checkpoint
+
+Migration35 adds attempt records. Jobs claim priority/FIFO work and use the existing program-peer client, launcher, correlated turns and guarded cleanup. A persisted program ID identifies its review attempt; no extra launcher, daemon, wire-level permission or tool sandbox was added. Ordinary Pi Exec launch behavior remains unchanged.
+
+The worker now runs a code-informed planning request, validated semantic/risk obligations, separate first-inspection peers including whole-change integration, then finding and coverage challenge. The source directory and role policy are recorded; selected model/thinking are observed at turn start. Structured turn results and observed usage are retained before cleanup, including cancelled or malformed results. These data are model claims and observations, not independent proof of semantic correctness. Internal model overhead outside the correlated turn is not invented into its usage total.
+
+- A public-command red step left the job queued instead of completed: `/tmp/review-worker-red.log`. The runtime now executes the pipeline and retains the captured value after the live checkout changes.
+- Declared authority risk dispatches a distinct actual pass over the same regions. This uses a scripted planner; it does not establish that a real model reliably identifies that risk.
+- Incomplete questions with zero findings remain incomplete. Resume reruns those questions while preserving completed planning. Unavailable role-model policy fails before a review turn is sent. A completed but malformed model response retains observed usage and fails validation rather than becoming a clean review.
+- Cancellation retains the observed cancelled turn result and waits for scope/person cleanup. Restart interrupts an active attempt; explicit resume uses a new attempt/person/generation on the same artifact. A scripted obsolete receipt is sent through the replacement peer's real socket; a later fact on that socket proves processing order before assertions show the new attempt remains unfinished.
+- Separate child processes run actual AgentSessions on a scripted SDK model with the organization/bridge/peer-turn installers. Captured provider messages include role system sections and ordinary read/bash results: relative source reads, Git comparison and search use the captured checkout. An author-self marker and another first report stay out of first inspections; validation receives the other report as a positive control. This is not every package extension, a live provider, or a model-quality experiment.
+- Focused cohort: **108 tests in 10 files passed**, one worker, 69.07 seconds. `/tmp/review-worker-verified-tests.log` covers capture/contracts, queue execution, peer cleanup/history, ordinary onboarding, work recovery and inspection consumers.
+- After strengthening the SDK test with ordinary shell/Git/search and a positive role-system-section check, **52 tests in six files passed**, one worker, 46.35 seconds. `/tmp/review-worker-sdk-final.log` also covers the remaining historical-schema fixture consumers. The two cohorts overlap; neither is a full-suite run.
+- Final focused recheck after the prompt and provider-input assertions: **20 tests in two files passed**, plus Node/web types, scoped Biome across 13 source/test files and whitespace checks. Logs: `/tmp/review-worker-close-tests.log`, `/tmp/review-worker-close-types.log`. Context lint passed for **338 files**.
+- Node/web types also passed in `/tmp/review-worker-types-final.log`. Package dry run: **2,748 files**, including `prompts.ts` and `review-attempt.ts`; `/tmp/review-worker-pack.json`. Inventory only, not an installed-package test.
+
+### Ordinary onboarding baseline correction
+
+The broad cohort found one failure in workplace.test.ts: it expected copied team backscroll. Unchanged ecae1117 reproduced it in a detached worktree (`/tmp/review-worker-onboarding-baseline.log`). The existing runtime already sends a channel/brief pointer. The test now positively checks that pointer and assigned goal, and excludes copied backscroll. Review-specific startup omits that automatic team notice while preserving ordinary tools and membership. The scratch worktree and its node_modules symlink were removed normally.
+
 ## Remaining delivery
 
-Runtime-owned attempt execution/recovery and ordinary peer dispatch; semantic plans and independent risk/integration passes; result/disposition/freshness handling; native tools; single master-detail `/reviews` with visible list status and removal of the old work panel; Workplace Code and artifact-bound sign-off; focused integration, builds, package and isolated real-host validation. No part of that remaining scope has been waived.
+Durable finding/coverage decisions, progressive result and freshness readers, the extra-work decision path, native tools, single master-detail `/reviews` with visible list status and retirement of the old work panel, Workplace Code and artifact-bound sign-off, focused native/IPC/UI integration, applicable builds and real-host validation. No part of that remaining scope has been waived. No paid reviewer or live daemon/app activation has occurred.

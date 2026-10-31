@@ -6,5 +6,9 @@ SQLite and source acquisition have no shared transaction. After restart, an inte
 
 Organization scope follows the recorded root using the existing work-task tree semantics. Lasting people own durable reviews; temporary program peers cannot own one. Pending reviews block irreversible departure and reporting moves that would strand their owner outside the recorded organization. These checks belong with the shared runtime responsibility guards, not with each UI.
 
-Coupled: components/session-state/src/runtime.ts, components/session-state/src/schema.ts, components/session-state/src/program-client.ts, components/code-review/src/capture.ts, components/code-review/src/operations.ts
+The queue now claims jobs serially in priority/FIFO order and runs planning, focused obligations, a separately briefed integration inspection and then validation. Scope/accounting checks validate model output; they do not certify that a semantic decomposition or finding is correct. Completed execution, coverage, findings and approval remain separate. Gaps, incomplete questions and requested additional work remain incomplete even with zero findings.
+
+Restart interrupts outstanding attempts and jobs; explicit resume waits for prior program cleanup. Completed exact-input passes can be reused on the same target, while incomplete passes run with new identities. Approval must use a stable terminal assessment and its revision: in-flight progress is not a signable frozen result.
+
+Coupled: components/session-state/src/review-attempt.ts, components/session-state/src/runtime.ts, components/session-state/src/schema.ts, components/session-state/src/program-client.ts, components/code-review/src/capture.ts, components/code-review/src/operations.ts
 Verify: components/session-state/tests/review-queue.test.ts

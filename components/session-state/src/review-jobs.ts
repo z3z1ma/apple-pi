@@ -3,12 +3,46 @@ import { mkdirSync } from "node:fs";
 import { dirname, isAbsolute, join } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import { captureReview, verifyArtifact } from "../../code-review/src/capture.js";
-import { checkShape } from "../../code-review/src/contracts.js";
+import {
+	checkShape,
+	type FindingValidation,
+	FindingValidationSchema,
+	planPasses,
+	type ReviewPlan,
+	ReviewPlanSchema,
+	type ReviewReport,
+	ReviewReportSchema,
+	validateFindings,
+	validatePlan,
+	validateReport,
+} from "../../code-review/src/contracts.js";
 import { type ReviewJob, ReviewOperationSchema } from "../../code-review/src/operations.js";
+import { INSPECT_REVIEW, PLAN_REVIEW, VALIDATE_REVIEW } from "../../code-review/src/prompts.js";
+import type { ReviewArtifact } from "../../code-review/src/types.js";
+import { loadRoles } from "../../organization/src/roles.js";
+import { RETRY_MS } from "./client.js";
 import type { StatePaths } from "./paths.js";
 import { temporaryCallers } from "./program-peers.js";
+import { runReviewAttempt } from "./review-attempt.js";
 import { rootOf } from "./tree.js";
 import { focusedTask, mayManage } from "./work.js";
+
+function reviewSource(artifact: ReviewArtifact) {
+	return {
+		digest: artifact.digest,
+		source: artifact.source,
+		base: artifact.baseRevision,
+		head: artifact.headRevision,
+		originalBase: artifact.baseCommit,
+		originalHead: artifact.headCommit,
+		target: artifact.request.target,
+		paths: artifact.request.paths ?? [],
+		lenses: artifact.request.lenses ?? [],
+		intent: artifact.intent,
+		omissions: artifact.omissions,
+		changes: artifact.changes,
+	};
+}
 
 const columns = `id, command_id as commandId, requester, owner, organization, origin_task as originTask,
  parent, state, priority, generation, revision, plan_revision as planRevision, request,
@@ -39,6 +73,8 @@ export function readReview(db: DatabaseSync, actor: string, id: string): ReviewJ
 /** Runtime-owned capture and admission. Request sockets never own this work. */
 export class ReviewJobs {
 	private stopped = false;
+	private pumping?: Promise<void>;
+	private active?: { id: string; controller: AbortController; done: Promise<void> };
 	private readonly captures = new Map<string, { controller: AbortController; done: Promise<void> }>();
 	private readonly db: DatabaseSync;
 	private readonly paths: StatePaths;
@@ -50,6 +86,11 @@ export class ReviewJobs {
 	recover(): void {
 		this.db
 			.prepare(
+				"update review_attempts set state = 'interrupted', reason = 'The runtime restarted before this attempt completed', finished_at = ? where state in ('starting', 'running', 'cleaning')",
+			)
+			.run(Date.now());
+		this.db
+			.prepare(
 				`update review_jobs set state = 'interrupted', reason = 'The runtime restarted. Inspect the retained work and explicitly resume a verified target.', updated_at = ? where state in ('capturing', 'queued', 'running', 'cancelling')`,
 			)
 			.run(Date.now());
@@ -57,6 +98,7 @@ export class ReviewJobs {
 
 	stop(): void {
 		this.stopped = true;
+		this.active?.controller.abort(new Error("The runtime stopped during review"));
 		for (const capture of this.captures.values())
 			capture.controller.abort(new Error("The runtime stopped during capture"));
 	}
@@ -110,14 +152,17 @@ export class ReviewJobs {
 		if (actor !== job.owner) mayManage(this.db, actor, job.owner);
 		if (operation.action === "cancel") {
 			if (job.state !== "completed" && job.state !== "cancelled") {
-				if (job.state === "running")
-					throw new Error("The running attempt must finish guarded cleanup before cancellation completes");
 				this.db
 					.prepare("update review_jobs set state = 'cancelling', updated_at = ? where id = ?")
 					.run(Date.now(), job.id);
 				const capture = this.captures.get(job.id);
 				capture?.controller.abort(new Error("Review capture cancelled"));
 				if (capture) await capture.done.catch(() => {});
+				if (this.active?.id === job.id) {
+					this.active.controller.abort(new Error("Review cancelled"));
+					await this.active.done;
+				}
+				await this.waitCleanup(job.id);
 				this.live();
 				this.commit(commandId, job.id, () =>
 					this.db
@@ -131,6 +176,7 @@ export class ReviewJobs {
 			if (!job.artifact)
 				throw new Error("No verified target was admitted. Capture a new review rather than resume live source");
 			this.availableOwner(job.owner);
+			await this.waitCleanup(job.id);
 			await verifyArtifact(job.artifact);
 			this.live();
 			this.commit(commandId, job.id, () => {
@@ -160,7 +206,178 @@ export class ReviewJobs {
 					.run(operation.owner, Date.now(), job.id),
 			);
 		}
+		this.wake();
 		return job.id;
+	}
+
+	wake(): void {
+		if (this.stopped || this.pumping) return;
+		this.pumping = this.drain()
+			.catch((error) => {
+				console.error(`Review queue: ${error instanceof Error ? error.stack : error}`);
+			})
+			.finally(() => {
+				this.pumping = undefined;
+				if (!this.stopped && this.db.prepare("select 1 from review_jobs where state = 'queued'").get()) this.wake();
+			});
+	}
+
+	private async drain(): Promise<void> {
+		while (!this.stopped) {
+			const claimed = this.db
+				.prepare(
+					"update review_jobs set state = 'running', generation = generation + 1, updated_at = ? where id = (select id from review_jobs where state = 'queued' order by priority desc, created_at, rowid limit 1) and state = 'queued' returning id",
+				)
+				.get(Date.now()) as { id: string } | undefined;
+			if (!claimed) return;
+			const controller = new AbortController();
+			const done = this.inspect(claimed.id, controller.signal);
+			this.active = { id: claimed.id, controller, done };
+			try {
+				await done;
+			} finally {
+				this.active = undefined;
+			}
+		}
+	}
+
+	private async inspect(id: string, signal: AbortSignal): Promise<void> {
+		let job = readReview(this.db, "operator", id);
+		try {
+			this.availableOwner(job.owner);
+			const artifact = job.artifact!;
+			const source = reviewSource(artifact);
+			const roles = [...loadRoles(artifact.source).roles.values()].filter((role) => !role.writes && !role.manages);
+			if (!job.plan) {
+				const plan = (await runReviewAttempt(
+					this.db,
+					this.paths,
+					job,
+					{
+						id: "planner",
+						role: "code-review-specialist",
+						kind: "planner",
+						goal: `${PLAN_REVIEW}\nCaptured source: ${artifact.source}`,
+						schema: ReviewPlanSchema,
+						context: {
+							phase: "planning",
+							artifact: source,
+							regions: artifact.regions,
+							roles: roles.map(({ name, title, mandate }) => ({ name, title, mandate })),
+						},
+						validate: (value) =>
+							validatePlan(
+								value,
+								artifact.digest,
+								artifact.regions,
+								new Set(roles.map((role) => role.name)),
+								artifact.request.lenses,
+							),
+					},
+					signal,
+				)) as ReviewPlan;
+				this.live();
+				signal.throwIfAborted();
+				const changed = this.db
+					.prepare(
+						"update review_jobs set plan = ?, plan_revision = plan_revision + 1, revision = revision + 1, updated_at = ? where id = ? and generation = ? and state = 'running'",
+					)
+					.run(JSON.stringify(plan), Date.now(), id, job.generation);
+				if (!changed.changes) throw new Error("The planner no longer owns this review");
+				job = readReview(this.db, "operator", id);
+			}
+			const plan = job.plan!;
+			const reports: ReviewReport[] = [];
+			const paths = new Set([...artifact.files, ...artifact.regions, ...artifact.omissions].map((entry) => entry.path));
+			for (const pass of planPasses(plan)) {
+				const report = (await runReviewAttempt(
+					this.db,
+					this.paths,
+					job,
+					{
+						id: pass.id,
+						role: pass.role,
+						kind: pass.kind,
+						goal: `${INSPECT_REVIEW}\nCaptured source: ${artifact.source}`,
+						schema: ReviewReportSchema,
+						context: {
+							phase: "inspection",
+							artifact: source,
+							pass,
+							regions: artifact.regions.filter((region) => pass.regions.includes(region.id)),
+							chunks: plan.chunks.map(({ id, title, regions, context, risks }) => ({
+								id,
+								title,
+								regions,
+								context,
+								risks,
+							})),
+						},
+						validate: (value) => validateReport(value, artifact.digest, pass, paths),
+						reuse: (value) => (value as ReviewReport).coverage.every((entry) => entry.state === "completed"),
+					},
+					signal,
+				)) as ReviewReport;
+				reports.push(report);
+			}
+			const validation = (await runReviewAttempt(
+				this.db,
+				this.paths,
+				job,
+				{
+					id: "validator",
+					role: "code-review-specialist",
+					kind: "validation",
+					goal: `${VALIDATE_REVIEW}\nCaptured source: ${artifact.source}`,
+					schema: FindingValidationSchema,
+					context: { phase: "validation", artifact: source, plan, reports },
+					validate: (value) => validateFindings(value, artifact.digest, reports),
+					reuse: (value) => !(value as FindingValidation).coverageGaps.length,
+				},
+				signal,
+			)) as FindingValidation;
+			this.live();
+			signal.throwIfAborted();
+			const incomplete =
+				plan.gaps.length ||
+				reports.some(
+					(report) => report.coverage.some((entry) => entry.state === "incomplete") || report.extraPasses.length,
+				) ||
+				validation.coverageGaps.length;
+			this.db
+				.prepare(
+					"update review_jobs set state = ?, reason = ?, revision = revision + 1, updated_at = ? where id = ? and generation = ? and state = 'running'",
+				)
+				.run(
+					incomplete ? "incomplete" : "completed",
+					incomplete ? "Required coverage is incomplete or additional questions need the plan owner's decision" : null,
+					Date.now(),
+					id,
+					job.generation,
+				);
+		} catch (error) {
+			if (!this.stopped)
+				this.db
+					.prepare(
+						"update review_jobs set state = 'failed', reason = ?, revision = revision + 1, updated_at = ? where id = ? and generation = ? and state = 'running'",
+					)
+					.run(error instanceof Error ? error.message : String(error), Date.now(), id, job.generation);
+		}
+	}
+
+	private async waitCleanup(id: string): Promise<void> {
+		for (;;) {
+			this.live();
+			const scopes = this.db
+				.prepare(
+					"select s.last_error from program_scopes s join review_attempts a on a.program_id = s.id where a.review_id = ?",
+				)
+				.all(id) as { last_error: string | null }[];
+			if (!scopes.length) return;
+			const failure = scopes.find((scope) => scope.last_error);
+			if (failure) throw new Error(`Previous reviewer cleanup is unresolved: ${failure.last_error}`);
+			await new Promise((resolve) => setTimeout(resolve, RETRY_MS));
+		}
 	}
 
 	private async capture(id: string, actor: string, controller: AbortController): Promise<void> {
@@ -176,6 +393,7 @@ export class ReviewJobs {
 				)
 				.run(JSON.stringify(artifact), Date.now(), id);
 			if (!changed.changes) throw new Error("Review capture no longer owns admission");
+			this.wake();
 		} catch (error) {
 			if (!this.stopped)
 				this.db

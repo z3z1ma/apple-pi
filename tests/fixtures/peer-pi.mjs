@@ -1,6 +1,7 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { createConnection } from "node:net";
 import { join } from "node:path";
+import { reviewReply } from "./review-reply.ts";
 
 const argument = (name) => process.argv[process.argv.indexOf(name) + 1];
 const id = argument("--session-id");
@@ -74,7 +75,7 @@ if (!stopping) {
 				reportsTo: parent,
 				role,
 				manages: role === "team-lead",
-				model: `fixture/${role}`,
+				model: control.model ?? `fixture/${role}`,
 				thinkingLevel: "high",
 			},
 		}),
@@ -201,6 +202,26 @@ if (!stopping) {
 					});
 					continue;
 				}
+				let value = command.contextFile
+					? JSON.parse(readFileSync(command.contextFile, "utf8"))
+					: { value: command.task };
+				if (control.review && command.outputSchema) {
+					if (control.replayReviewTurn) {
+						result(control.replayReviewTurn, {
+							status: "completed",
+							text: "Obsolete result",
+							value: reviewReply(value),
+							operations: [],
+							changes: [],
+						});
+						send({ type: "facts", facts: { lastError: `Observed obsolete receipt ${control.replayReviewTurn}` } });
+					}
+					if (control.review.hold === value.phase) {
+						held.set(commandId, command);
+						continue;
+					}
+					value = reviewReply(value, control.review === true ? {} : control.review);
+				}
 				const text = `Reply from ${role}: ${command.task}`;
 				appendFileSync(
 					file,
@@ -209,13 +230,7 @@ if (!stopping) {
 				result(commandId, {
 					status: "completed",
 					text,
-					...(command.outputSchema
-						? {
-								value: command.contextFile
-									? JSON.parse(readFileSync(command.contextFile, "utf8"))
-									: { value: command.task },
-							}
-						: {}),
+					...(command.outputSchema ? { value } : {}),
 					operations: [],
 					changes: [],
 				});

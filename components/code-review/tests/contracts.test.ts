@@ -139,6 +139,21 @@ test("a report accounts for every question and cannot claim completed coverage w
 	expect(() => validateReport(report(), "new-target", pass, paths)).toThrow("different artifact");
 });
 
+test("validation coverage gaps name actual inspected questions", () => {
+	const value = {
+		artifact: "captured-target",
+		summary: "Check the claim",
+		findings: [],
+		coverageGaps: [
+			{ pass: "request-correctness", question: "consent", reason: "The evidence does not trace the called guard." },
+		],
+		limitations: [],
+	};
+	expect(validateFindings(value, "captured-target", [report()]).coverageGaps).toHaveLength(1);
+	value.coverageGaps[0]!.question = "invented-question";
+	expect(() => validateFindings(value, "captured-target", [report()])).toThrow("Unknown coverage gap");
+});
+
 test("finding validation retains every allegation and rejects circular or invented duplicate associations", () => {
 	const findings = report();
 	findings.findings = ["first", "second"].map((id) => ({
@@ -157,7 +172,13 @@ test("finding validation retains every allegation and rejects circular or invent
 		evidence: [{ kind: "source", detail: "api.ts:10 expands the current roster.", provenance: "captured source" }],
 		counterevidence: "No caller guard was found.",
 	}));
-	const incomplete = { artifact: "captured-target", summary: "Challenge findings", findings: [], limitations: [] };
+	const incomplete = {
+		artifact: "captured-target",
+		summary: "Challenge findings",
+		findings: [],
+		coverageGaps: [],
+		limitations: [],
+	};
 	expect(() => validateFindings(incomplete, "captured-target", [findings])).toThrow("Missing finding dispositions");
 	const valid = {
 		...incomplete,

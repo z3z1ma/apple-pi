@@ -117,6 +117,7 @@ export const FindingValidationSchema = Type.Object(
 	{
 		artifact: text,
 		summary: text,
+		coverageGaps: Type.Array(Type.Object({ pass: text, question: text, reason: text }, object)),
 		findings: Type.Array(
 			Type.Object(
 				{
@@ -269,6 +270,14 @@ export function validateFindings(value: unknown, artifact: string, reports: Revi
 			throw new Error(`Only a duplicate can point to another finding: ${entry.finding}`);
 	}
 	if (expected.size) throw new Error(`Missing finding dispositions: ${[...expected].join(", ")}`);
+	for (const gap of result.coverageGaps) {
+		if (
+			!reports.some(
+				(report) => report.pass === gap.pass && report.coverage.some((entry) => entry.question === gap.question),
+			)
+		)
+			throw new Error(`Unknown coverage gap: ${gap.pass}/${gap.question}`);
+	}
 	const decisions = new Map(result.findings.map((entry) => [entry.finding, entry]));
 	for (const entry of result.findings) {
 		const visited = new Set<string>();

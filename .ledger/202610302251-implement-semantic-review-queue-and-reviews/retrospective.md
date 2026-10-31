@@ -18,6 +18,10 @@ The first runtime increment kept capture/admission and actual review execution s
 
 Peer regression checks found eight pre-existing cleanup failures at the committed baseline. The program lifecycle already journaled temporary task disposal, but its shared file-cleanup reader ignored that action. Fixing the shared reader restored cleanup without changing the process-death guards or deleting historical finished-task evidence. An explicit close assertion also prevents a test teardown's Promise.allSettled from hiding cleanup failure.
 
+The execution checkpoint exercises the real runtime and separate SDK sessions on scripted models. It now proves more than fresh identities: first provider messages include the normal role section and captured-source tool results, exclude author narrative and other first reports, and expose those reports only during validation. Scripted risk labels still prove dispatch rather than the model's ability to choose a good plan or find a defect. Completion of this kernel is not delivery of the pending tools and UI.
+
+The ordinary-onboarding positive control initially failed because it still expected full backscroll. An unchanged baseline reproduced it; the existing pointer contract, rather than the new review behavior, determined the correction. Keep the ordinary-hire positive control beside independent-review tests so an indiscriminate removal of startup context cannot look like success.
+
 ## Improvements
 
 Pending completion of the undertaking.

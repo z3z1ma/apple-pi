@@ -11,9 +11,11 @@ Implement the approved semantic risk-based review proposal from .ledger/history/
 
 Capture foundation implemented and checked; see [evidence](evidence.md). It retains source and intent, preserves the author's index, detects observed mutation, and supports ordinary Git inspection from a self-contained artifact. A measured per-blob subprocess bottleneck was replaced with Git batch acquisition. This is not yet a usable native review or the completed first delivery slice.
 
-Runtime-owned capture admission and interruption/resume are now implemented, with owner-departure and reporting-move guards. Semantic coverage/result contracts and explicit-runtime peer connection support are checked. The latest focused cohort passed 128 tests in 13 files, plus Node/web types and package inventory checks. An existing temporary-task cleanup defect was reproduced at the committed baseline and fixed at its shared owner.
+Runtime-owned capture, durable attempt claims and ordinary peer execution now run through planning, focused risk obligations, an independently briefed integration pass and finding/coverage validation. Results and observed turn usage survive guarded cleanup; cancellation, restart and explicit same-target resume retain partial work. Completed exact-input passes can be reused during resume. Scripted real-socket and SDK tests cover dispatch, actual provider inputs, captured relative reads/searches, cleanup, malformed/partial results and obsolete receipts. These prove orchestration and evidence boundaries, not model review quality.
 
-Next: durable attempt claims and ordinary peer execution, then semantic/risk/integration execution and the shared native/TUI/Workplace result surfaces. Jobs currently stop at queued admission; no review worker or native enqueue tool is wired yet. `/work` has not yet been removed, and `/reviews` is not yet available. No live activation or paid review turn has occurred.
+Two focused cohorts passed 108 tests in 10 files and 52 tests in six files (overlapping), plus Node/web types and package inventory. The ordinary-onboarding test's obsolete backscroll expectations failed unchanged at ecae1117 and were corrected to its existing channel-pointer contract. See evidence.md for the exact checks and limits.
+
+Next: durable decisions and progressive result/freshness readers, native tools, single-queue `/reviews`, Workplace Code and exact-artifact approval. Extra-pass requests currently stop incomplete for a plan-owner decision; that decision path still needs the operator-facing integration. No native enqueue tool is exposed, `/work` is still present, and `/reviews` is not available. No live activation, paid review, comparative effectiveness result or completed-delivery claim.
 
 ## Acceptance
 

@@ -73,6 +73,7 @@ import {
 } from "./departures.js";
 import { recordLink, resolveLink } from "./links.js";
 import { discardProgramPeople, programDescendants, temporaryCallers } from "./program-peers.js";
+import { reviewScope } from "./review-attempt.js";
 import { ReviewJobs } from "./review-jobs.js";
 import { migrate } from "./schema.js";
 import { HARNESS, markRead, nameOf, OPERATOR, participateIn, postToThread, type ThreadPost } from "./threads.js";
@@ -156,7 +157,14 @@ interface Connection {
 	held?: Map<string, { end?: ReplyEnd; delta?: ReplyDelta }>;
 	heldTurns?: Map<string, Extract<BridgeMessage, { type: "turn_progress" }>>;
 	turnsAwaitingDrain?: boolean;
-	program?: { id: string; caller: string; closing: boolean; created: Set<string>; discarded: Set<string> };
+	program?: {
+		id: string;
+		caller: string;
+		closing: boolean;
+		created: Set<string>;
+		discarded: Set<string>;
+		review?: boolean;
+	};
 }
 
 interface SessionLaunch {
@@ -1734,6 +1742,15 @@ export class Runtime {
 			);
 			return;
 		}
+		let review = false;
+		try {
+			review = Boolean(reviewScope(db, request.id, request.caller));
+		} catch (error) {
+			connection.socket.end(
+				`${JSON.stringify({ type: "program_error", error: error instanceof Error ? error.message : String(error) })}\n`,
+			);
+			return;
+		}
 		const parent = (
 			db.prepare("select program_id from program_peers where session_id = ?").get(request.caller) as
 				| { program_id: string }
@@ -1747,6 +1764,7 @@ export class Runtime {
 		connection.program = {
 			id: request.id,
 			caller: request.caller,
+			review,
 			closing: false,
 			created: new Set(),
 			discarded: new Set(),
@@ -2279,6 +2297,36 @@ export class Runtime {
 		});
 	}
 
+	private prepareProgramLaunch(
+		sessionId: string,
+		command: Extract<Command, { kind: "start" }>,
+		program: NonNullable<Connection["program"]>,
+	): Extract<Command, { kind: "start" }> | string {
+		if (!command.role || !command.goal?.text.trim()) return "A program peer needs a role and a goal";
+		const db = this.db!;
+		const caller = db
+			.prepare(
+				`select s.cwd, i.tmux_socket, i.pane_id from sessions s left join incarnations i on i.session_id = s.id and i.generation = s.generation where s.id = ?`,
+			)
+			.get(program.caller) as { cwd: string; tmux_socket: string | null; pane_id: string | null } | undefined;
+		if (!caller) return "The calling person no longer exists";
+		const review = program.review ? reviewScope(db, program.id, program.caller) : undefined;
+		if (review && (review.person !== sessionId || review.role !== command.role))
+			return "The review attempt owns a different reviewer identity or role";
+		program.created.add(sessionId);
+		return {
+			...command,
+			cwd: review?.source ?? caller.cwd,
+			reportsTo: program.caller,
+			prompt: "",
+			goal: { by: program.caller, text: command.goal.text },
+			tmux:
+				!review && caller.tmux_socket && caller.pane_id
+					? { socket: caller.tmux_socket, pane: caller.pane_id }
+					: undefined,
+		};
+	}
+
 	/** The bridge connecting applies a launch, whether it opened a terminal or a headless RPC process. */
 	private async startSession(
 		commandId: string,
@@ -2318,21 +2366,9 @@ export class Runtime {
 		if (temporaryCallers(db).has(sessionId)) return fail("Program peers cannot be reopened; create a new handle");
 		if (program) {
 			if (row) return fail("A program must create a new peer, not take ownership of an existing person");
-			if (!command.role || !command.goal?.text.trim()) return fail("A program peer needs a role and a goal");
-			const caller = db
-				.prepare(`select s.cwd, i.tmux_socket, i.pane_id from sessions s
-				left join incarnations i on i.session_id = s.id and i.generation = s.generation where s.id = ?`)
-				.get(program.caller) as { cwd: string; tmux_socket: string | null; pane_id: string | null } | undefined;
-			if (!caller) return fail("The calling person no longer exists");
-			program.created.add(sessionId);
-			command = {
-				...command,
-				cwd: caller.cwd,
-				reportsTo: program.caller,
-				prompt: "",
-				goal: { by: program.caller, text: command.goal.text },
-				tmux: caller.tmux_socket && caller.pane_id ? { socket: caller.tmux_socket, pane: caller.pane_id } : undefined,
-			};
+			const launch = this.prepareProgramLaunch(sessionId, command, program);
+			if (typeof launch === "string") return fail(launch);
+			command = launch;
 		}
 		const directory = command.cwd ?? row?.cwd;
 		if (!directory) return fail("unknown session; give a directory to start it in");
@@ -2385,6 +2421,7 @@ export class Runtime {
 				{ cwd, name, reportsTo: reportsTo ?? undefined },
 				Boolean(row),
 				specialization,
+				Boolean(program?.review),
 			)
 		)
 			return;
@@ -2409,6 +2446,7 @@ export class Runtime {
 		launch: Pick<SessionLaunch, "cwd" | "name" | "reportsTo">,
 		existing: boolean,
 		specialization: string | null,
+		independent: boolean,
 	): boolean {
 		const db = this.db!;
 		const { cwd, name, reportsTo } = launch;
@@ -2424,7 +2462,8 @@ export class Runtime {
 					specialization,
 					Date.now(),
 				);
-				this.queueTeamHistory(commandId, sessionId, reportsTo ?? undefined);
+				if (independent) syncChannels(db, Date.now());
+				else this.queueTeamHistory(commandId, sessionId, reportsTo ?? undefined);
 			}
 		};
 		if (!command.goal && (command.role || specialization)) this.atomically(prepare);
