@@ -205,7 +205,7 @@ test("browser approval binds displayed captured bytes and revision, not live edi
 	);
 	expect(page.capture).toMatchObject({
 		review: job.id,
-		freshness: { requestedTarget: "changed", checkout: "changed" },
+		freshness: { requestedTarget: "not checked", checkout: "not checked", checkedAt: null },
 	});
 	const shown = Object.values(page.hunks)
 		.flatMap((hunk) => hunk.lines.map((line) => line.s.map((segment) => segment.t).join("")))

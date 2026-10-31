@@ -566,8 +566,9 @@ export function Overview() {
 					</p>
 					<p>
 						Requested target: {page.capture.freshness.requestedTarget}. Checkout: {page.capture.freshness.checkout}.
-						Policy: {page.capture.freshness.policy}. Checked{" "}
-						{new Date(page.capture.freshness.checkedAt).toLocaleString()}.
+						Policy: {page.capture.freshness.policy}.
+						{page.capture.freshness.checkedAt !== null &&
+							` Checked ${new Date(page.capture.freshness.checkedAt).toLocaleString()}.`}
 					</p>
 					<p>Live changes never transfer this approval. External resources and ambient instructions are not frozen.</p>
 					<ul>

@@ -3,12 +3,7 @@ import { verifyArtifact } from "../../code-review/src/capture.js";
 import type { ReviewOperation } from "../../code-review/src/operations.js";
 import { sendCommand } from "../../session-state/src/client.js";
 import { reviewLimits, reviewSettled } from "../../session-state/src/review-decisions.js";
-import {
-	type ReviewStore,
-	readReviewFreshness,
-	reviewAssessment,
-	withReviews,
-} from "../../session-state/src/review-read.js";
+import { type ReviewStore, reviewAssessment, withReviews } from "../../session-state/src/review-read.js";
 import { buildCodeReviewPage, codeReviewTemplate, parseReviewResult, type ReviewCodeParams } from "./code-review.js";
 import { parseUnifiedDiff, type RawFile } from "./git-diff.js";
 import type { CodeReviewPage, ReviewResult } from "./page-data.js";
@@ -49,7 +44,15 @@ export async function buildCapturedReview(
 		revision: job.revision,
 		planRevision: job.planRevision,
 		limits: reviewLimits(assessment),
-		freshness: await readReviewFreshness(actor, job.id, signal, store),
+		freshness: {
+			requestedTarget: "not checked",
+			checkout: "not checked",
+			policy: "not checked",
+			checkedAt: null,
+			errors: [
+				"This page verifies captured code, not the live checkout. Request freshness explicitly from the review queue before relying on current applicability.",
+			],
+		},
 	};
 	page.base = artifact.baseCommit ?? artifact.baseTree;
 	page.head = artifact.headCommit ?? artifact.headTree;

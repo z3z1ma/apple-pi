@@ -98,7 +98,13 @@ export interface CodeReviewPage {
 		revision: number;
 		planRevision: number;
 		limits: string[];
-		freshness: { requestedTarget: string; checkout: string; policy: string; checkedAt: number; errors: string[] };
+		freshness: {
+			requestedTarget: string;
+			checkout: string;
+			policy: string;
+			checkedAt: number | null;
+			errors: string[];
+		};
 	};
 	title: string;
 	intent: MarkdownBlock[];

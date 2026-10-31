@@ -5918,7 +5918,13 @@ async function buildCapturedReview(params, actor, token, signal, store = withRev
 		revision: job.revision,
 		planRevision: job.planRevision,
 		limits: reviewLimits(assessment),
-		freshness: await readReviewFreshness(actor, job.id, signal, store)
+		freshness: {
+			requestedTarget: "not checked",
+			checkout: "not checked",
+			policy: "not checked",
+			checkedAt: null,
+			errors: ["This page verifies captured code, not the live checkout. Request freshness explicitly from the review queue before relying on current applicability."]
+		}
 	};
 	page.base = artifact.baseCommit ?? artifact.baseTree;
 	page.head = artifact.headCommit ?? artifact.headTree;

@@ -81,6 +81,12 @@ test("Workplace previews, queues, reads retained source and commits browser appr
 		/<script id="page-data" type="application\/json">(.*?)<\/script>/s.exec(html)![1]!,
 	) as CodeReviewPage;
 	expect(page.capture?.digest).toBe(job.digest);
+	expect(page.capture?.freshness).toMatchObject({
+		requestedTarget: "not checked",
+		checkout: "not checked",
+		policy: "not checked",
+		checkedAt: null,
+	});
 	expect(
 		Object.values(page.hunks)
 			.flatMap((hunk) => hunk.lines)
