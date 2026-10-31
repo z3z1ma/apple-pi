@@ -25,6 +25,7 @@ export interface ReviewSummary {
 		additionalRequests: number;
 	} | null;
 	findings: { reported: number; confirmed: number; unresolved: number };
+	cost: { reportedDollars: number | null; reportedAttempts: number; totalAttempts: number };
 	approval: { record: ReviewApproval; matchesAssessment: boolean } | null;
 	reason: string | null;
 	createdAt: number;

@@ -135,6 +135,22 @@ export function withReviews<T>(read: (db: DatabaseSync) => T): T {
 	return value;
 }
 
+function reviewCost(db: DatabaseSync, review: string): ReviewSummary["cost"] {
+	const attempts = db
+		.prepare("select result -> '$.usage.cost.total' as cost from review_attempts where review_id = ?")
+		.all(review);
+	const reported = attempts.flatMap((row) => {
+		const cost: unknown = row.cost === null ? undefined : JSON.parse(row.cost as string);
+		return typeof cost === "number" && Number.isFinite(cost) && cost >= 0 ? [cost] : [];
+	});
+	const total = reported.reduce((sum, cost) => sum + cost, 0);
+	return {
+		reportedDollars: Number.isFinite(total) && (reported.length || !attempts.length) ? total : null,
+		reportedAttempts: reported.length,
+		totalAttempts: attempts.length,
+	};
+}
+
 export function reviewSummary(db: DatabaseSync, actor: string, id: string): ReviewSummary {
 	return snapshot(db, () => {
 		const { job, passes, findings, validation, decisions } = reviewAssessment(db, actor, id);
@@ -177,6 +193,7 @@ export function reviewSummary(db: DatabaseSync, actor: string, id: string): Revi
 						additionalRequests: passes.reduce((sum, { report }) => sum + (report?.extraPasses.length ?? 0), 0),
 					}
 				: null,
+			cost: reviewCost(db, job.id),
 			findings: {
 				reported: findings.length,
 				confirmed: findings.filter(({ validation }) => validation?.disposition === "confirmed").length,

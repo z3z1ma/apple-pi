@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { DatabaseSync } from "node:sqlite";
+import { backup, DatabaseSync } from "node:sqlite";
 import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai/compat";
 import { type ExtensionCommandContext, SessionManager } from "@earendil-works/pi-coding-agent";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
@@ -471,7 +471,12 @@ test.each(["empty", "scoped"])(
 			const result = await callTool("review_code", request);
 			expect(result).toMatchObject({
 				stage: "applied",
-				review: { state: "no-changes", passes: null, reason: expect.stringContaining("no reviewers ran") },
+				review: {
+					state: "no-changes",
+					passes: null,
+					reason: expect.stringContaining("no reviewers ran"),
+					cost: { reportedDollars: 0, reportedAttempts: 0, totalAttempts: 0 },
+				},
 			});
 			const id = (result.review as { id: string }).id;
 			expect(await callTool("review_queue", { state: "no-changes" })).toMatchObject({
@@ -1113,6 +1118,59 @@ test("an all-concrete review completes without consulting an unrelated malformed
 	expect(existsSync(join(state.agentDir, "state", "model-profile-selection.sqlite"))).toBe(false);
 }, 20000);
 
+test("reported cost keeps invalid observations and nonfinite totals unavailable", async () => {
+	const job = await enqueue();
+	await settled(job.id, "failed");
+	const resumed = await sendCommand(
+		"owner",
+		{ kind: "review", version: 1, operation: { action: "resume", review: job.id } },
+		{ socketPath: state.socketPath },
+	);
+	expect(resumed.stage, resumed.reason).toBe("applied");
+	await settled(job.id, "failed");
+	const live = new DatabaseSync(state.dbPath, { readOnly: true });
+	const snapshotPath = join(state.agentDir, "cost-snapshot.db");
+	try {
+		await backup(live, snapshotPath);
+	} finally {
+		live.close();
+	}
+	const db = new DatabaseSync(snapshotPath);
+	try {
+		const setCost = db.prepare(
+			"update review_attempts set result = json_set(result, '$.usage.cost.total', json(?)) where review_id = ?",
+		);
+		for (const cost of ["null", '"0.3"', "-1", "1e999"]) {
+			setCost.run(cost, job.id);
+			expect(reviewSummary(db, "owner", job.id).cost).toEqual({
+				reportedDollars: null,
+				reportedAttempts: 0,
+				totalAttempts: 2,
+			});
+		}
+		setCost.run("0", job.id);
+		expect(reviewSummary(db, "owner", job.id).cost).toEqual({
+			reportedDollars: 0,
+			reportedAttempts: 2,
+			totalAttempts: 2,
+		});
+		setCost.run(String(2 ** 53), job.id);
+		expect(reviewSummary(db, "owner", job.id).cost).toEqual({
+			reportedDollars: 2 ** 54,
+			reportedAttempts: 2,
+			totalAttempts: 2,
+		});
+		setCost.run(String(Number.MAX_VALUE), job.id);
+		expect(reviewSummary(db, "owner", job.id).cost).toEqual({
+			reportedDollars: null,
+			reportedAttempts: 2,
+			totalAttempts: 2,
+		});
+	} finally {
+		db.close();
+	}
+}, 30000);
+
 test("a malformed planner result retains its observed usage without turning zero findings into a clean review", async () => {
 	const job = await enqueue();
 	await settled(job.id, "failed");
@@ -1127,6 +1185,25 @@ test("a malformed planner result retains its observed usage without turning zero
 		reason: expect.stringContaining("Invalid review output"),
 	});
 	expect(JSON.parse(attempt!.result)).toMatchObject({ status: "completed", usage: { cost: { total: 0.3 } } });
+	const db = new DatabaseSync(state.dbPath, { readOnly: true });
+	try {
+		expect(reviewSummary(db, "owner", job.id)).toMatchObject({
+			cost: { reportedDollars: 0.3, reportedAttempts: 1, totalAttempts: 1 },
+		});
+		writeFileSync(join(state.agentDir, "peer-control.json"), JSON.stringify({ review: true }));
+		const resumed = await sendCommand(
+			"owner",
+			{ kind: "review", version: 1, operation: { action: "resume", review: job.id } },
+			{ socketPath: state.socketPath },
+		);
+		expect(resumed.stage, resumed.reason).toBe("applied");
+		await settled(job.id, "completed");
+		expect(reviewSummary(db, "owner", job.id)).toMatchObject({
+			cost: { reportedDollars: 1.5, reportedAttempts: 5, totalAttempts: 5 },
+		});
+	} finally {
+		db.close();
+	}
 	expect(query(state.dbPath, "select id from program_scopes")).toEqual([]);
 }, 30000);
 
@@ -1143,8 +1220,35 @@ test("a model outside the recorded role policy fails before a review turn is dis
 		job.id,
 	);
 	expect(attempt).toEqual({ model: "unexpected/fallback", result: null });
+	const db = new DatabaseSync(state.dbPath, { readOnly: true });
+	try {
+		expect(reviewSummary(db, "owner", job.id)).toMatchObject({
+			cost: { reportedDollars: null, reportedAttempts: 0, totalAttempts: 1 },
+		});
+	} finally {
+		db.close();
+	}
 	expect(query(state.dbPath, "select id from program_scopes")).toEqual([]);
 	expect(query(state.dbPath, "select command_id from commands where kind = 'run_turn'")).toEqual([]);
+	writeFileSync(join(state.agentDir, "peer-control.json"), JSON.stringify({ review: true }));
+	const resumed = await sendCommand(
+		"owner",
+		{ kind: "review", version: 1, operation: { action: "resume", review: job.id } },
+		{ socketPath: state.socketPath },
+	);
+	expect(resumed.stage, resumed.reason).toBe("applied");
+	await settled(job.id, "completed");
+	const completed = new DatabaseSync(state.dbPath, { readOnly: true });
+	try {
+		expect(reviewSummary(completed, "owner", job.id).cost).toEqual({
+			reportedDollars: 1.2,
+			reportedAttempts: 4,
+			totalAttempts: 5,
+		});
+	} finally {
+		completed.close();
+	}
+	expect(query(state.dbPath, "select id from program_scopes")).toEqual([]);
 }, 30000);
 
 test("cancellation retains observed turn usage and waits for reviewer cleanup", async () => {
@@ -1175,6 +1279,14 @@ test("cancellation retains observed turn usage and waits for reviewer cleanup", 
 	);
 	expect(attempt!.state).toBe("cancelled");
 	expect(JSON.parse(attempt!.result)).toMatchObject({ status: "failed", usage: { cost: { total: 0.3 } } });
+	const db = new DatabaseSync(state.dbPath, { readOnly: true });
+	try {
+		expect(reviewSummary(db, "owner", job.id)).toMatchObject({
+			cost: { reportedDollars: 0.6, reportedAttempts: 2, totalAttempts: 2 },
+		});
+	} finally {
+		db.close();
+	}
 	expect(query(state.dbPath, "select id from program_scopes")).toEqual([]);
 	expect(query(state.dbPath, "select session_id from program_peers")).toEqual([]);
 }, 30000);

@@ -48,6 +48,8 @@ The reliability pass found a second, cross-phase defect: individually valid chec
 
 The actual terminal check also found a stale progress claim after preview cancellation. Existing tests proved that no review started, but not that the UI described that outcome truthfully. A native-entry regression reproduced the Capturing message; the shared confirmation owner now replaces it with a scoped not-queued outcome, also observed through installed Pi. The visual pass gives status, focus and findings an explicit hierarchy while keeping completion, validation, later fix claims and approval separate. Component tests, actual terminal cells and operator acceptance remain different evidence. Final renderer changes received focused rechecks rather than relying on a suite that had started before those edits.
 
+The cost projection follows retained attempts rather than selected coverage, so failed and cancelled work remains visible without charging reused evidence twice. Missing usage is not zero, and primary-turn cost is not total internal activity or an invoice. Two fixture/representation failures sharpened the check: stopRuntime deletes its state directory, so altered stored-data tests now use an online copy; and SQLite numeric extraction rejected 2**53 at Node's safe-integer binding, so the projection reads JSON text before validating numbers. Both lessons are placed with the reader/tests.
+
 ## Improvements
 
 Pending completion of the undertaking.

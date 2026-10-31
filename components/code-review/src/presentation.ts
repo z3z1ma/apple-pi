@@ -47,9 +47,11 @@ export function approvalLabel(review: ReviewSummary): string {
 	return review.approval.record.data.verdict;
 }
 
-export function reviewStatus(review: ReviewSummary): string {
-	const coverage = review.passes ? `${review.passes.completed}/${review.passes.required} passes` : "coverage pending";
-	return `${review.state}${review.phase ? `: ${review.phase.pass}` : ""} | ${coverage} | ${review.findings.confirmed} confirmed, ${review.findings.unresolved} unresolved`;
+export function costLabel(cost: ReviewSummary["cost"]): string {
+	if (!cost.totalAttempts) return "no attempts";
+	const dollars = cost.reportedDollars;
+	const amount = dollars === null ? "unavailable" : dollars > 0 && dollars < 0.01 ? "<$0.01" : `$${dollars.toFixed(2)}`;
+	return `${amount} (${cost.reportedAttempts}/${cost.totalAttempts} reported)`;
 }
 
 export function summaryLines(review: ReviewSummary): string[] {
@@ -58,6 +60,7 @@ export function summaryLines(review: ReviewSummary): string[] {
 		`Execution: ${review.state}${review.phase ? ` - ${review.phase.pass}` : ""}`,
 		`Coverage: ${review.passes ? `${review.passes.completed}/${review.passes.required} passes` : "not planned"}`,
 		`Findings: ${review.findings.confirmed} confirmed / ${review.findings.unresolved} unresolved`,
+		`Primary-turn cost: ${costLabel(review.cost)}`,
 		`Target: ${targetLabel(review.target)}`,
 		`Owner: ${review.ownerName}`,
 		`Priority: ${review.priority}`,
@@ -75,6 +78,7 @@ export function summaryLines(review: ReviewSummary): string[] {
 		...(review.reason ? ["", review.reason] : []),
 		"",
 		"Completion is not approval or a correctness certificate.",
+		"Cost includes all recorded attempts; unobserved internal activity is excluded.",
 		"",
 		"Review plan",
 		...(review.summary ? [review.summary] : ["Not recorded"]),

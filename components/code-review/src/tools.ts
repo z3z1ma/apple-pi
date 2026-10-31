@@ -204,7 +204,7 @@ export function installReviewTools(pi: ExtensionAPI): void {
 			name: "review_queue",
 			label: "Review queue",
 			description:
-				"Inspect the durable review queue in your organization. Without limit, return state counts; with limit, return a page of meaningful status, coverage, findings and captured-target identity. Active work precedes queued priority/FIFO work and history. Completion is not approval or proof of correctness. These reads do not establish current-checkout freshness.",
+				"Inspect the durable review queue in your organization. Without limit, return state counts; with limit, return a page of meaningful status, coverage, findings and captured-target identity. Active work precedes queued priority/FIFO work and history. Reported cost covers retained primary turns across all attempts, including failures; missing observations stay explicit. Completion is not approval or proof of correctness. These reads do not establish current-checkout freshness.",
 			promptSnippet: "See review progress and incomplete work, with explicit detail paging.",
 			parameters: Type.Object(
 				{
@@ -231,7 +231,7 @@ export function installReviewTools(pi: ExtensionAPI): void {
 			name: "read_review",
 			label: "Read review",
 			description:
-				"Read one captured review progressively. Summary separates execution, missing intent, question coverage and findings. Target gives captured source and Git revisions; use ordinary source tools there. Plan, changes, regions, findings, coverage and attempts return counts until limit is supplied. Pass requires its pass ID; attempt requires its attempt ID and exposes that retained input policy, raw result, observed turn usage and validated output. Original allegations and validation remain distinct. These reads establish neither freshness nor approval.",
+				"Read one captured review progressively. Summary separates execution, missing intent, question coverage, findings and reported primary-turn cost across all attempts. Cost excludes unobserved internal activity; missing observations and unavailable totals stay explicit. Target gives captured source and Git revisions; use ordinary source tools there. Plan, changes, regions, findings, coverage and attempts return counts until limit is supplied. Pass requires its pass ID; attempt requires its attempt ID and exposes that retained input policy, raw result, observed turn usage and validated output. Original allegations and validation remain distinct. These reads establish neither freshness nor approval.",
 			promptSnippet: "Inspect review scope, evidence and retained attempts without treating partial work as clean.",
 			parameters: Type.Object(
 				{

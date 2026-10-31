@@ -11,7 +11,7 @@ import {
 	wrapTextWithAnsi,
 } from "@earendil-works/pi-tui";
 import { createViewerKeys, type ViewerKeybindings, type ViewerKeys } from "../../shared/src/viewer-keys.js";
-import { approvalLabel, targetLabel } from "./presentation.js";
+import { approvalLabel, costLabel, targetLabel } from "./presentation.js";
 import type { ReviewQueue, ReviewSummary } from "./results.js";
 
 export interface ReviewTheme {
@@ -377,7 +377,7 @@ export class ReviewPanel implements Component {
 				),
 				row(`  ${review.cwd.split(/[\\/]/).at(-1)}: ${targetLabel(review.target)} | ${review.ownerName}`, "text"),
 				row(
-					`  ${review.passes ? `${review.passes.completed}/${review.passes.required} passes` : review.state === "no-changes" ? "no reviewers" : "not planned"} | ${review.findings.confirmed} confirmed`,
+					`  ${review.passes ? `${review.passes.completed}/${review.passes.required} passes` : review.state === "no-changes" ? "no reviewers" : "not planned"} | ${review.findings.confirmed} confirmed | ${costLabel(review.cost)}`,
 					review.findings.confirmed ? "warning" : "muted",
 				),
 				row(

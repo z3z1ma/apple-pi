@@ -2,7 +2,7 @@
 
 The native review queue captures exact source and intent, divides changed behavior into focused scopes, assigns independent risk questions, checks cross-scope interactions and retains findings and coverage. It uses ordinary advisory-role peers and the existing session-state runtime, not another model engine or a custom sandbox.
 
-The queue and `/reviews`, including the TUI's pre-queue target preview, are implemented. The wider integration is still in progress: live-target/policy freshness, cost/source drill-down, additional-work decisions, captured-artifact browser sign-off and Workplace Code remain pending. Existing ad hoc `sign_off_code` is not yet connected to a recorded review ID. Registering the extension does not restart an already-running runtime; an older store reports that it is unavailable instead of showing an empty queue.
+The queue and `/reviews`, including the TUI's pre-queue target preview, are implemented. The wider integration is still in progress: live-target/policy freshness, captured-source drill-down, additional-work decisions, captured-artifact browser sign-off and Workplace Code remain pending. Existing ad hoc `sign_off_code` is not yet connected to a recorded review ID. Registering the extension does not restart an already-running runtime; an older store reports that it is unavailable instead of showing an empty queue.
 
 ## Native tools
 
@@ -34,7 +34,7 @@ An applied enqueue confirms admission, not review completion. Retain the returne
 
 Open `/reviews` or press `Ctrl+W`. The single master-detail interface replaces the combined `/work` and `/tasks` panel. Tasks and Pi Exec keep their tools, transcript results and shared passive activity independently.
 
-The framed master list shows execution state with a status icon, the current pass, owner, completed/required passes, findings and approval. The active pane is highlighted; fixed key hints remain visible while evidence scrolls, and its heading reports the visible line range. The detail view exposes summary, retained target, plan, findings, question coverage, attempts and decision history. Findings lead with their allegation and location, followed by validation, owner response, cause and evidence. Completed execution uses a neutral accent rather than a clean-approval color. Live freshness is currently labeled **not checked**; approval matching an assessment is not a claim that the checkout still matches.
+The framed master list shows execution state with a status icon, the current pass, owner, completed/required passes, findings, reported cost and approval. The active pane is highlighted; fixed key hints remain visible while evidence scrolls, and its heading reports the visible line range. The detail view exposes summary, retained target, plan, findings, question coverage, attempts and decision history. Findings lead with their allegation and location, followed by validation, owner response, cause and evidence. Completed execution uses a neutral accent rather than a clean-approval color. Live freshness is currently labeled **not checked**; approval matching an assessment is not a claim that the checkout still matches.
 
 | Key | Action |
 | --- | --- |
@@ -64,6 +64,12 @@ Findings retain their originating attempt, location, triggering conditions, brok
 Execution, question coverage, findings and approval remain separate. Zero findings cannot make an interrupted or incomplete review clean. A validator's challenge remains attached to the exact inspected attempt, including across failed recovery. Same-target resume re-resolves role instructions, profile candidates and pool policy before reusing work. It rechecks the planner too: a changed advisory catalog or policy produces a new plan revision and fresh inspections; unchanged inputs retain eligible planning. Each attempt must match its role's policy in the planner catalog before reuse or launch. Restoring the initial policy after an intervening change therefore cannot grant coverage to a differently recorded policy. Changes during startup or execution stop visibly while preserving raw results. This is conservative policy identity checking, not a claim of semantic equivalence or provider availability. Unfinished or challenged work gets new attempts; runtime restart does not automatically repeat paid work. Cancellation waits for guarded peer cleanup and preserves partial results and observed usage.
 
 The runtime also retains operator-only approvals bound to a settled digest and assessment revision, with explicit acknowledgment of known limits. Later finding responses stale the previous approval's match. The browser integration that submits this binding is not yet available.
+
+## Reported cost
+
+Queue rows and summaries expose `cost.reportedDollars`, `reportedAttempts` and `totalAttempts`. The amount sums each recorded attempt's primary-turn usage once, including failed and cancelled attempts and earlier plan revisions. Reusing a result creates no new attempt or charge in this projection. No attempts means zero recorded turn cost; an attempt with no usable cost observation remains missing rather than becoming zero. Invalid observations and nonfinite totals stay unavailable. A partial amount is accompanied by its observation count.
+
+This is retained primary-turn cost reported by the SDK, not an invoice or a full accounting of internal sessions and other unobserved activity. A running turn may not have returned its usage yet. The attempts view retains the individual observations. Displayed amounts are rounded to cents, with positive sub-cent amounts shown as `<$0.01`; the native amount retains the unrounded numeric sum.
 
 ## Procedure and authority
 

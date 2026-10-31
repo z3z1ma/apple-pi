@@ -3,7 +3,7 @@ import { visibleWidth } from "@earendil-works/pi-tui";
 import { describe, expect, it, vi } from "vitest";
 import { fakeTui, plainTheme } from "../../../tests/helpers/fake-tui.js";
 import { CaptureConfirmation, ReviewPanel, type ReviewPanelSource } from "../src/panel.js";
-import { findingLines, summaryLines } from "../src/presentation.js";
+import { costLabel, findingLines, summaryLines } from "../src/presentation.js";
 import type { ReviewSummary } from "../src/results.js";
 
 function review(id: string, state: ReviewSummary["state"]): ReviewSummary {
@@ -24,6 +24,7 @@ function review(id: string, state: ReviewSummary["state"]): ReviewSummary {
 		passes: { completed: 1, required: 2 },
 		coverage: { completedQuestions: 1, requiredQuestions: 2, unassignedRegions: 0, additionalRequests: 1 },
 		findings: { reported: 2, confirmed: 1, unresolved: 1 },
+		cost: { reportedDollars: 1.2, reportedAttempts: 4, totalAttempts: 5 },
 		approval: null,
 		reason: "A consumer check remains unverified",
 		createdAt: 1,
@@ -56,6 +57,23 @@ function source(rows: () => ReviewSummary[]): ReviewPanelSource {
 }
 
 const actions = () => ({ close: vi.fn(), unfocus: vi.fn(), menu: vi.fn(), view: vi.fn() });
+
+it("labels reported cost without hiding missing attempts or rounding small positive cost to zero", () => {
+	expect(costLabel({ reportedDollars: 0, reportedAttempts: 0, totalAttempts: 0 })).toBe("no attempts");
+	expect(costLabel({ reportedDollars: null, reportedAttempts: 0, totalAttempts: 2 })).toBe(
+		"unavailable (0/2 reported)",
+	);
+	expect(costLabel({ reportedDollars: 0.001, reportedAttempts: 1, totalAttempts: 2 })).toBe("<$0.01 (1/2 reported)");
+	const item = review("cost-review", "completed");
+	expect(summaryLines(item)).toContain("Primary-turn cost: $1.20 (4/5 reported)");
+	const panel = new ReviewPanel(
+		fakeTui(180, 40).tui,
+		plainTheme,
+		source(() => [item]),
+		actions(),
+	);
+	expect(panel.render(160).join("\n")).toContain("$1.20 (4/5 reported)");
+});
 
 it("leads finding evidence with the allegation and keeps validation and later claims distinct", () => {
 	const lines = findingLines({

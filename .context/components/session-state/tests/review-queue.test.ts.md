@@ -18,5 +18,7 @@ Native empty and unchanged-scope comparisons must retain exact no-change outcome
 
 The ordinary-hire first-input positive control lives in workplace.test.ts: it retains the team context pointer and assigned goal. Its previous full-backscroll assertions failed unchanged at ecae1117 and contradicted the current pointer contract.
 
+The invalid-cost reader fixture takes an online backup of real executed state and edits only that copy. stopRuntime also removes the private agent directory, so calling it before opening a persisted-data fixture erases the fixture. Normal afterEach owns runtime shutdown and temporary-directory cleanup. Cost checks distinguish missing observations, zero, numeric strings, invalid/nonfinite values, aggregate overflow and SQLite's safe-integer binding boundary; lifecycle cases retain failed/cancelled and partial costs across resume.
+
 Coupled: tests/fixtures/peer-pi.mjs, tests/fixtures/review-reply.ts, tests/fixtures/review-sdk-peer.ts, components/session-state/src/review-jobs.ts, components/session-state/src/review-attempt.ts, components/session-state/tests/workplace.test.ts
 Verify: components/session-state/tests/review-queue.test.ts, components/session-state/tests/workplace.test.ts
