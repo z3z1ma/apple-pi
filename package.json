@@ -27,6 +27,7 @@
     "components/home-search-guard/src/",
     "components/wiki/src/",
     "components/code-context/src/",
+    "components/code-review/src/",
     "components/shared/src/",
     "components/session-search/src/",
     "components/notebook/src/",

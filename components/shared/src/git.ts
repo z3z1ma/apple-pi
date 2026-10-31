@@ -7,23 +7,32 @@ import { dirname, join, resolve } from "node:path";
 export interface GitOptions {
 	env?: NodeJS.ProcessEnv;
 	/** Written to git's stdin. */
-	input?: string;
+	input?: string | Uint8Array;
+	signal?: AbortSignal;
 }
 
-export function git(cwd: string, args: string[], options: GitOptions = {}): Promise<string> {
+export async function git(cwd: string, args: string[], options: GitOptions = {}): Promise<string> {
+	return (await gitBytes(cwd, args, options)).toString("utf8").trim();
+}
+
+/** Exact bytes for blobs, patches and NUL-delimited paths; the text helper intentionally trims. */
+export function gitBytes(cwd: string, args: string[], options: GitOptions = {}): Promise<Buffer> {
 	return new Promise((resolvePromise, reject) => {
 		const child = execFile(
 			"git",
 			args,
 			{
 				cwd,
+				encoding: "buffer",
+				signal: options.signal,
 				// No optional locks: status-like reads never refresh the user's index.
 				env: { ...process.env, GIT_OPTIONAL_LOCKS: "0", ...options.env },
 				maxBuffer: 256 * 1024 * 1024,
 			},
 			(error, stdout, stderr) => {
-				if (error) reject(new Error(`git ${args.join(" ")} failed: ${stderr.trim() || error.message}`));
-				else resolvePromise(stdout.trim());
+				if (error)
+					reject(new Error(`git ${args.join(" ")} failed: ${stderr.toString("utf8").trim() || error.message}`));
+				else resolvePromise(stdout);
 			},
 		);
 		if (options.input !== undefined) child.stdin?.end(options.input);
