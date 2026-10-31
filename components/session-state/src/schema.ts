@@ -356,6 +356,8 @@ const MIGRATIONS = [
 		finished_at integer
 	) strict;
 	create index review_attempts_by_review on review_attempts(review_id, plan_revision, pass_id, created_at);`,
+	`alter table review_jobs add column selected_attempts text not null default '{}';`,
+	`alter table review_attempts add column reuse_blocked_by text;`,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

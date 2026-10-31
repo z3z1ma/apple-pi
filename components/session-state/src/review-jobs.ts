@@ -24,6 +24,7 @@ import { RETRY_MS } from "./client.js";
 import type { StatePaths } from "./paths.js";
 import { temporaryCallers } from "./program-peers.js";
 import { runReviewAttempt } from "./review-attempt.js";
+import { readReview } from "./review-read.js";
 import { rootOf } from "./tree.js";
 import { focusedTask, mayManage } from "./work.js";
 
@@ -41,32 +42,6 @@ function reviewSource(artifact: ReviewArtifact) {
 		intent: artifact.intent,
 		omissions: artifact.omissions,
 		changes: artifact.changes,
-	};
-}
-
-const columns = `id, command_id as commandId, requester, owner, organization, origin_task as originTask,
- parent, state, priority, generation, revision, plan_revision as planRevision, request,
- artifact_directory as artifactDirectory, artifact, plan, reason, created_at as createdAt, updated_at as updatedAt`;
-
-type StoredJob = Omit<ReviewJob, "request" | "artifact" | "plan"> & {
-	request: string;
-	artifact: string | null;
-	plan: string | null;
-};
-export function readReview(db: DatabaseSync, actor: string, id: string): ReviewJob {
-	const row = db.prepare(`select ${columns} from review_jobs where id = ?`).get(id) as StoredJob | undefined;
-	if (!row) throw new Error(`Unknown review: ${id}`);
-	if (
-		actor !== "operator" &&
-		(!db.prepare("select 1 from sessions where id = ? and kind = 'root' and retired_at is null").get(actor) ||
-			rootOf(db, actor) !== rootOf(db, row.organization))
-	)
-		throw new Error("The review belongs to another organization");
-	return {
-		...row,
-		request: JSON.parse(row.request),
-		artifact: row.artifact ? JSON.parse(row.artifact) : null,
-		plan: row.plan ? JSON.parse(row.plan) : null,
 	};
 }
 
@@ -245,11 +220,13 @@ export class ReviewJobs {
 		let job = readReview(this.db, "operator", id);
 		try {
 			this.availableOwner(job.owner);
+			job.selectedAttempts = job.selectedAttempts.planner ? { planner: job.selectedAttempts.planner } : {};
+			this.storeSelection(job);
 			const artifact = job.artifact!;
 			const source = reviewSource(artifact);
 			const roles = [...loadRoles(artifact.source).roles.values()].filter((role) => !role.writes && !role.manages);
 			if (!job.plan) {
-				const plan = (await runReviewAttempt(
+				const planned = await runReviewAttempt(
 					this.db,
 					this.paths,
 					job,
@@ -275,14 +252,16 @@ export class ReviewJobs {
 							),
 					},
 					signal,
-				)) as ReviewPlan;
+				);
+				const plan = planned.output as ReviewPlan;
+				job.selectedAttempts.planner = planned.attempt;
 				this.live();
 				signal.throwIfAborted();
 				const changed = this.db
 					.prepare(
-						"update review_jobs set plan = ?, plan_revision = plan_revision + 1, revision = revision + 1, updated_at = ? where id = ? and generation = ? and state = 'running'",
+						"update review_jobs set plan = ?, selected_attempts = ?, plan_revision = plan_revision + 1, revision = revision + 1, updated_at = ? where id = ? and generation = ? and state = 'running'",
 					)
-					.run(JSON.stringify(plan), Date.now(), id, job.generation);
+					.run(JSON.stringify(plan), JSON.stringify(job.selectedAttempts), Date.now(), id, job.generation);
 				if (!changed.changes) throw new Error("The planner no longer owns this review");
 				job = readReview(this.db, "operator", id);
 			}
@@ -290,7 +269,7 @@ export class ReviewJobs {
 			const reports: ReviewReport[] = [];
 			const paths = new Set([...artifact.files, ...artifact.regions, ...artifact.omissions].map((entry) => entry.path));
 			for (const pass of planPasses(plan)) {
-				const report = (await runReviewAttempt(
+				const inspected = await runReviewAttempt(
 					this.db,
 					this.paths,
 					job,
@@ -317,10 +296,13 @@ export class ReviewJobs {
 						reuse: (value) => (value as ReviewReport).coverage.every((entry) => entry.state === "completed"),
 					},
 					signal,
-				)) as ReviewReport;
-				reports.push(report);
+				);
+				job.selectedAttempts = { ...job.selectedAttempts, [pass.id]: inspected.attempt };
+				this.storeSelection(job);
+				reports.push(inspected.output as ReviewReport);
 			}
-			const validation = (await runReviewAttempt(
+			const reviewedAttempts = { ...job.selectedAttempts };
+			const validated = await runReviewAttempt(
 				this.db,
 				this.paths,
 				job,
@@ -330,12 +312,16 @@ export class ReviewJobs {
 					kind: "validation",
 					goal: `${VALIDATE_REVIEW}\nCaptured source: ${artifact.source}`,
 					schema: FindingValidationSchema,
-					context: { phase: "validation", artifact: source, plan, reports },
+					context: { phase: "validation", artifact: source, plan, reports, reviewedAttempts },
+					reviewedAttempts,
 					validate: (value) => validateFindings(value, artifact.digest, reports),
 					reuse: (value) => !(value as FindingValidation).coverageGaps.length,
 				},
 				signal,
-			)) as FindingValidation;
+			);
+			job.selectedAttempts.validator = validated.attempt;
+			this.storeSelection(job);
+			const validation = validated.output as FindingValidation;
 			this.live();
 			signal.throwIfAborted();
 			const incomplete =
@@ -363,6 +349,16 @@ export class ReviewJobs {
 					)
 					.run(error instanceof Error ? error.message : String(error), Date.now(), id, job.generation);
 		}
+	}
+
+	private storeSelection(job: ReviewJob): void {
+		this.live();
+		const changed = this.db
+			.prepare(
+				"update review_jobs set selected_attempts = ?, revision = revision + 1, updated_at = ? where id = ? and generation = ? and plan_revision = ? and state = 'running'",
+			)
+			.run(JSON.stringify(job.selectedAttempts), Date.now(), job.id, job.generation, job.planRevision);
+		if (!changed.changes) throw new Error("The attempt no longer owns the review assessment");
 	}
 
 	private async waitCleanup(id: string): Promise<void> {

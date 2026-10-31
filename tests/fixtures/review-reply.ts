@@ -16,6 +16,9 @@ export interface ReviewSettings {
 	authority?: boolean;
 	partial?: boolean;
 	otherReport?: string;
+	passId?: string;
+	challenged?: boolean;
+	finding?: boolean;
 }
 
 export function reviewReply(
@@ -36,7 +39,7 @@ export function reviewReply(
 					risks: [],
 					passes: [
 						{
-							id: "value-correctness",
+							id: settings.passId ?? "value-correctness",
 							role: "code-review-specialist",
 							lenses: ["correctness"],
 							questions: [
@@ -90,9 +93,51 @@ export function reviewReply(
 				evidence: settings.partial ? [] : [summary],
 				reason: settings.partial ? "The required service is unavailable." : "",
 			})),
-			findings: [],
+			findings:
+				settings.finding && input.pass.kind === "focused"
+					? [
+							{
+								id: "mismatch",
+								title: "The value disagrees with its consumer",
+								path: "value.ts",
+								line: 1,
+								side: "after",
+								severity: "high",
+								certainty: "probable",
+								trigger: "A consumer requests the original value.",
+								invariant: "The exported value and consumer must agree.",
+								impact: "The consumer takes the wrong branch.",
+								cause: "The export changes without its consumer.",
+								correction: "Update the dependent contract together.",
+								evidence: [{ kind: "source", detail: summary, provenance: "Captured value.ts" }],
+								counterevidence: "No consumer execution was attempted by this scripted fixture.",
+							},
+						]
+					: [],
 			limitations: [],
 			extraPasses: [],
 		};
-	return { artifact: input.artifact.digest, summary, findings: [], coverageGaps: [], limitations: [] };
+	return {
+		artifact: input.artifact.digest,
+		summary,
+		findings: input.reports.flatMap((report) =>
+			report.findings.map((finding) => ({
+				finding: `${encodeURIComponent(report.pass)}:${encodeURIComponent(finding.id)}`,
+				disposition: "confirmed" as const,
+				reason: "The scripted challenge retains this allegation.",
+				evidence: [summary],
+				duplicateOf: null,
+			})),
+		),
+		coverageGaps: settings.challenged
+			? [
+					{
+						pass: input.reports[0]!.pass,
+						question: input.reports[0]!.coverage[0]!.question,
+						reason: "The claimed consumer check has no supporting trace.",
+					},
+				]
+			: [],
+		limitations: [],
+	};
 }

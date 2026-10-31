@@ -15,7 +15,9 @@ Runtime-owned capture, durable attempt claims and ordinary peer execution now ru
 
 Two focused cohorts passed 108 tests in 10 files and 52 tests in six files (overlapping), plus Node/web types and package inventory. The ordinary-onboarding test's obsolete backscroll expectations failed unchanged at ecae1117 and were corrected to its existing channel-pointer contract. See evidence.md for the exact checks and limits.
 
-Next: durable decisions and progressive result/freshness readers, native tools, single-queue `/reviews`, Workplace Code and exact-artifact approval. Extra-pass requests currently stop incomplete for a plan-owner decision; that decision path still needs the operator-facing integration. No native enqueue tool is exposed, `/work` is still present, and `/reviews` is not available. No live activation, paid review, comparative effectiveness result or completed-delivery claim.
+The shared result reader now records exact selected attempt identities and projects queue, coverage, allegations and retained attempts. It subtracts validated coverage challenges and forces challenged inspections to rerun. Four native tools are implemented and exercised through the real SDK entrypoint, but the extension is deliberately not in the package's activation list yet. The final reader/native cohort passed 88 tests in eight files, plus Node/web types, scoped static/context checks and package inventory.
+
+Next: durable decisions and freshness, the remaining native resolution/sign-off surface, single-queue `/reviews`, Workplace Code and exact-artifact approval. Extra-pass requests currently stop incomplete for a plan-owner decision; that decision path still needs the operator-facing integration. No native enqueue tool is exposed, `/work` is still present, and `/reviews` is not available. No live activation, paid review, comparative effectiveness result or completed-delivery claim.
 
 ## Acceptance
 

@@ -1,8 +1,15 @@
 import { execFileSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
+import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai/compat";
+import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import codeReview from "../../../extensions/code-review.js";
+import { fauxSession } from "../../../tests/helpers/faux-session.js";
 import { sendCommand } from "../src/client.js";
+import { readReview, reviewAssessment, reviewQueue } from "../src/review-read.js";
 import { fakeBridge, query, runtimePid, standInProcess, startRuntime, stopRuntime, tempStateDir } from "./helpers.js";
 
 let state: ReturnType<typeof tempStateDir>;
@@ -115,6 +122,258 @@ test("an ordinary reviewer runs in captured source and its result survives guard
 	expect(query(state.dbPath, "select * from work_tasks")).toEqual([]);
 	expect(readFileSync(join(repository, "value.ts"), "utf8")).toBe("export const value = 3;\n");
 }, 20000);
+
+test("the queue reader separates required coverage, absent intent and findings with explicit paging and scope", async () => {
+	writeFileSync(join(state.agentDir, "peer-control.json"), JSON.stringify({ review: true }));
+	const job = await enqueue();
+	await settled(job.id, "completed");
+	const db = new DatabaseSync(state.dbPath, { readOnly: true });
+	const outsider = await fakeBridge(state.socketPath, "outsider", parent.pid, parent.startedAt, {
+		facts: { manages: true },
+	});
+	try {
+		await vi.waitFor(() =>
+			expect(query(state.dbPath, "select id from sessions where id = 'outsider'")).toHaveLength(1),
+		);
+		expect(reviewQueue(db, "owner")).toEqual({ total: 1, states: { completed: 1 }, page: null });
+		const page = reviewQueue(db, "owner", { limit: 1 });
+		expect(page.page).toMatchObject({
+			offset: 0,
+			nextOffset: null,
+			rows: [
+				{
+					id: job.id,
+					state: "completed",
+					intent: "not-assessed",
+					chunks: 1,
+					passes: { completed: 2, required: 2 },
+					findings: { reported: 0, confirmed: 0, unresolved: 0 },
+				},
+			],
+		});
+		const assessment = reviewAssessment(db, "owner", job.id);
+		expect(assessment.passes.map((entry) => entry.report?.pass)).toEqual(["value-correctness", "integration"]);
+		expect(assessment.validation?.attempt.state).toBe("completed");
+		expect(reviewQueue(db, "outsider", { limit: 1 }).total).toBe(0);
+		expect(() => readReview(db, "outsider", job.id)).toThrow("another organization");
+		expect(() => reviewQueue(db, "missing-person")).toThrow();
+		expect(() => reviewQueue(db, "owner", { offset: 1 })).toThrow("limit");
+		expect(query(state.dbPath, "select id from work_tasks")).toEqual([]);
+		const moved = await sendCommand("operator", {
+			kind: "organization_move",
+			person: "owner",
+			manager: "outsider",
+			branch: ["owner"],
+		});
+		expect(moved.stage, moved.reason).toBe("applied");
+		expect(reviewQueue(db, "outsider", { limit: 1 }).total).toBe(1);
+		expect(readReview(db, "outsider", job.id).id).toBe(job.id);
+	} finally {
+		db.close();
+		outsider.socket.destroy();
+	}
+}, 30000);
+
+test("a challenged question is not completed coverage and resume obtains a new inspection", async () => {
+	writeFileSync(
+		join(state.agentDir, "peer-control.json"),
+		JSON.stringify({ review: { passId: "constructor", finding: true, challenged: true } }),
+	);
+	const job = await enqueue();
+	await settled(job.id, "incomplete");
+	const db = new DatabaseSync(state.dbPath, { readOnly: true });
+	try {
+		const before = reviewAssessment(db, "owner", job.id);
+		expect(before.findings).toMatchObject([
+			{
+				id: `${before.passes[0]!.attempt!.id}:mismatch`,
+				pass: "constructor",
+				validation: { disposition: "confirmed" },
+			},
+		]);
+		expect(reviewQueue(db, "owner", { limit: 1 }).page!.rows[0]).toMatchObject({
+			state: "incomplete",
+			passes: { completed: 1, required: 2 },
+			coverage: { completedQuestions: 1, requiredQuestions: 2, unassignedRegions: 0, additionalRequests: 0 },
+			findings: { reported: 1, confirmed: 1, unresolved: 0 },
+		});
+		writeFileSync(join(state.agentDir, "peer-control.json"), JSON.stringify({ review: false }));
+		expect(
+			(await sendCommand("owner", { kind: "review", version: 1, operation: { action: "resume", review: job.id } }))
+				.stage,
+		).toBe("applied");
+		await settled(job.id, "failed");
+		writeFileSync(
+			join(state.agentDir, "peer-control.json"),
+			JSON.stringify({ review: { passId: "constructor", finding: true } }),
+		);
+		expect(
+			(await sendCommand("owner", { kind: "review", version: 1, operation: { action: "resume", review: job.id } }))
+				.stage,
+		).toBe("applied");
+		await settled(job.id, "completed");
+		const after = reviewAssessment(db, "owner", job.id);
+		expect(after.passes[0]!.attempt!.id).not.toBe(before.passes[0]!.attempt!.id);
+		expect(after.passes[1]!.attempt!.id).toBe(before.passes[1]!.attempt!.id);
+		expect(after.findings[0]!.id).not.toBe(before.findings[0]!.id);
+		expect(reviewQueue(db, "owner", { limit: 1 }).page!.rows[0]).toMatchObject({
+			state: "completed",
+			coverage: { completedQuestions: 2, requiredQuestions: 2 },
+		});
+	} finally {
+		db.close();
+	}
+}, 30000);
+
+test("partial allegations stay unvalidated while queue pages follow priority and FIFO", async () => {
+	writeFileSync(
+		join(state.agentDir, "peer-control.json"),
+		JSON.stringify({ review: { finding: true, hold: "validation" } }),
+	);
+	const active = await enqueue();
+	await vi.waitFor(
+		() =>
+			expect(
+				query(
+					state.dbPath,
+					"select id from review_attempts where review_id = ? and kind = 'validation' and state = 'running'",
+					active.id,
+				),
+			).toHaveLength(1),
+		{ timeout: 15000 },
+	);
+	const first = await enqueue();
+	const second = await enqueue();
+	const db = new DatabaseSync(state.dbPath, { readOnly: true });
+	try {
+		expect(reviewQueue(db, "owner", { limit: 1 }).page!.rows[0]).toMatchObject({
+			id: active.id,
+			phase: { kind: "validation", state: "running" },
+			findings: { reported: 1, confirmed: 0, unresolved: 1 },
+		});
+		expect(reviewQueue(db, "owner", { state: "queued", limit: 1 }).page).toMatchObject({
+			nextOffset: 1,
+			rows: [{ id: first.id }],
+		});
+		expect(reviewQueue(db, "owner", { state: "queued", limit: 1, offset: 1 }).page).toMatchObject({
+			nextOffset: null,
+			rows: [{ id: second.id }],
+		});
+		expect(readReview(db, "owner", first.id).artifact!.digest).toBe(
+			readReview(db, "owner", second.id).artifact!.digest,
+		);
+		expect(
+			(
+				await sendCommand("owner", {
+					kind: "review",
+					version: 1,
+					operation: { action: "priority", review: second.id, priority: 1 },
+				})
+			).stage,
+		).toBe("applied");
+		expect(reviewQueue(db, "owner", { state: "queued", limit: 1 }).page!.rows[0]!.id).toBe(second.id);
+		for (const job of [first, second, active])
+			expect(
+				(await sendCommand("owner", { kind: "review", version: 1, operation: { action: "cancel", review: job.id } }))
+					.stage,
+			).toBe("applied");
+		expect(query(state.dbPath, "select id from program_scopes")).toEqual([]);
+		expect(reviewQueue(db, "owner").states).toEqual({ cancelled: 3 });
+	} finally {
+		db.close();
+	}
+}, 30000);
+
+test("native tools admit, read, cancel, recover exact requests and explicitly capture a fresh rerun", async () => {
+	writeFileSync(
+		join(state.agentDir, "peer-control.json"),
+		JSON.stringify({ review: { finding: true, hold: "validation" } }),
+	);
+	const replies: ReturnType<typeof fauxAssistantMessage>[] = [];
+	const run = await fauxSession(
+		[codeReview],
+		replies,
+		["review_code", "review_queue", "read_review", "manage_review"],
+		{ cwd: repository, sessionManager: SessionManager.inMemory(repository, { id: "owner" }) },
+	);
+	async function callTool(name: string, args: Parameters<typeof fauxToolCall>[1]): Promise<Record<string, unknown>> {
+		replies.push(
+			fauxAssistantMessage([{ ...fauxToolCall(name, args), id: randomUUID() }], { stopReason: "toolUse" }),
+			fauxAssistantMessage("Done."),
+		);
+		await run.session.prompt("Use the requested review tool.");
+		const response = run.session.messages.findLast((message) => message.role === "toolResult");
+		expect(response).toMatchObject({ role: "toolResult", toolName: name, isError: false });
+		if (response?.role !== "toolResult") throw new Error("No native review result");
+		const text = response.content.find((entry) => entry.type === "text");
+		if (text?.type !== "text") throw new Error("No serialized review result");
+		return JSON.parse(text.text);
+	}
+	try {
+		const request = {
+			target: { kind: "working-tree", base: "HEAD" },
+			intent: { text: "Export the value two." },
+		};
+		const admission = await callTool("review_code", request);
+		const handle = admission.request as string;
+		expect(handle).toBeTypeOf("string");
+		expect(admission).toMatchObject({
+			stage: "applied",
+			review: { owner: "owner", intent: "captured" },
+		});
+		const id = (admission.review as { id: string }).id;
+		await vi.waitFor(
+			() =>
+				expect(
+					query(
+						state.dbPath,
+						"select id from review_attempts where review_id = ? and kind = 'validation' and state = 'running'",
+						id,
+					),
+				).toHaveLength(1),
+			{ timeout: 15000 },
+		);
+		expect(await callTool("review_queue", {})).toMatchObject({ total: 1, states: { running: 1 }, page: null });
+		expect(await callTool("read_review", { review: id, part: "findings" })).toEqual({ total: 1, page: null });
+		expect(await callTool("read_review", { review: id, part: "findings", limit: 1 })).toMatchObject({
+			page: { rows: [{ finding: { title: "The value disagrees with its consumer" }, validation: null }] },
+		});
+		const target = await callTool("read_review", { review: handle, part: "target" });
+		expect(target).toMatchObject({ review: id, target: { intent: { text: "Export the value two." } } });
+		expect(readFileSync(join((target.target as { source: string }).source, "value.ts"), "utf8")).toBe(
+			"export const value = 2;\n",
+		);
+		expect(await callTool("manage_review", { review: id, action: "cancel" })).toMatchObject({
+			stage: "applied",
+			review: { id, state: "cancelled" },
+		});
+		expect(query(state.dbPath, "select id from program_scopes")).toEqual([]);
+		writeFileSync(join(repository, "value.ts"), "export const value = 3;\n");
+		expect(await callTool("review_code", { ...request, request: handle })).toMatchObject({
+			stage: "applied",
+			review: { id, state: "cancelled" },
+		});
+		expect(query(state.dbPath, "select id from review_jobs")).toHaveLength(1);
+		writeFileSync(join(state.agentDir, "peer-control.json"), JSON.stringify({ review: true }));
+		const rerun = await callTool("manage_review", { review: id, action: "rerun" });
+		const next = (rerun.review as { id: string }).id;
+		expect(next).not.toBe(id);
+		await settled(next, "completed");
+		expect(query(state.dbPath, "select parent from review_jobs where id = ?", next)).toEqual([{ parent: id }]);
+		expect(await callTool("read_review", { review: next, part: "attempts", limit: 1 })).toMatchObject({
+			total: 4,
+			page: { nextOffset: 1, rows: [{ kind: "planner", state: "completed", selected: true }] },
+		});
+		const fresh = await callTool("read_review", { review: next, part: "target" });
+		expect(readFileSync(join((fresh.target as { source: string }).source, "value.ts"), "utf8")).toBe(
+			"export const value = 3;\n",
+		);
+	} finally {
+		await run.session.abort();
+		await run.session.extensionRunner.emit({ type: "session_shutdown", reason: "quit" });
+		run.dispose();
+	}
+}, 40000);
 
 async function settled(id: string, expected: string) {
 	await vi.waitFor(
@@ -293,6 +552,7 @@ test("actual first provider inputs keep author narrative and other first reports
 }, 30000);
 
 async function enqueue() {
+	const commandId = randomUUID();
 	const receipt = await sendCommand(
 		"owner",
 		{
@@ -300,12 +560,13 @@ async function enqueue() {
 			version: 1,
 			operation: { action: "enqueue", request: { cwd: repository, target: { kind: "working-tree", base: "HEAD" } } },
 		},
-		{ socketPath: state.socketPath },
+		{ socketPath: state.socketPath, commandId },
 	);
 	expect(receipt.stage, receipt.reason).toBe("applied");
 	return query<{ id: string; artifact: string; generation: number }>(
 		state.dbPath,
-		"select id, artifact, generation from review_jobs",
+		"select j.id, j.artifact, j.generation from review_jobs j join commands c on j.id = json_extract(c.result, '$.review') where c.command_id = ?",
+		commandId,
 	)[0]!;
 }
 

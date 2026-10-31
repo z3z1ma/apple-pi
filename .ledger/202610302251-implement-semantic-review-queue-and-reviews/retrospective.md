@@ -22,6 +22,8 @@ The execution checkpoint exercises the real runtime and separate SDK sessions on
 
 The ordinary-onboarding positive control initially failed because it still expected full backscroll. An unchanged baseline reproduced it; the existing pointer contract, rather than the new review behavior, determined the correction. Keep the ordinary-hire positive control beside independent-review tests so an indiscriminate removal of startup context cannot look like success.
 
+The reader checkpoint exposed two different failures that a completed report did not settle: a validator challenge still counted as completed coverage, and resume reused the challenged report because its inputs matched. The corrected test forces a new inspection while preserving unaffected work. An intervening failed retry exposed that the challenge also needed to persist independently of current selections; it now blocks reuse on the exact challenged attempt, atomically with the validator output. Identity also mattered in the fixtures: selecting the first review row concealed the wrong request/result association until several jobs were queued. Shared organizational tree rules remained useful, but the work-task anchor inventory was not a review inventory; a merge without surviving work tasks reproduced the difference. These lessons now live with the reader, worker and tests.
+
 ## Improvements
 
 Pending completion of the undertaking.

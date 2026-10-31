@@ -3,6 +3,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import { verifyArtifact } from "../../code-review/src/capture.js";
+import type { FindingValidation } from "../../code-review/src/contracts.js";
 import type { ReviewJob } from "../../code-review/src/operations.js";
 import { loadRoles, parseRoleModel } from "../../organization/src/roles.js";
 import { isInferenceProfileName, loadModelProfiles } from "../../shared/src/model-profiles.js";
@@ -18,6 +19,7 @@ export interface ReviewPassRequest {
 	goal: string;
 	context: unknown;
 	schema: unknown;
+	reviewedAttempts?: Record<string, string>;
 	validate(value: unknown): unknown;
 	reuse?(value: unknown): boolean;
 }
@@ -46,7 +48,7 @@ export async function runReviewAttempt(
 	job: ReviewJob,
 	pass: ReviewPassRequest,
 	signal: AbortSignal,
-): Promise<unknown> {
+): Promise<{ attempt: string; output: unknown }> {
 	const artifact = job.artifact;
 	if (!artifact) throw new Error("Review execution requires an admitted artifact");
 	await verifyArtifact(artifact, signal);
@@ -56,12 +58,12 @@ export async function runReviewAttempt(
 		.digest("hex");
 	const previous = db
 		.prepare(
-			"select output from review_attempts where review_id = ? and plan_revision = ? and pass_id = ? and input_key = ? and state = 'completed' order by created_at desc, rowid desc limit 1",
+			"select id, output from review_attempts where review_id = ? and plan_revision = ? and pass_id = ? and input_key = ? and state = 'completed' and reuse_blocked_by is null order by created_at desc, rowid desc limit 1",
 		)
-		.get(job.id, job.planRevision, pass.id, inputKey) as { output: string } | undefined;
+		.get(job.id, job.planRevision, pass.id, inputKey) as { id: string; output: string } | undefined;
 	if (previous) {
 		const value = pass.validate(JSON.parse(previous.output));
-		if (!pass.reuse || pass.reuse(value)) return value;
+		if (!pass.reuse || pass.reuse(value)) return { attempt: previous.id, output: value };
 	}
 	const role = loadRoles(artifact.source).roles.get(pass.role);
 	if (!role || role.writes || role.manages) throw new Error(`Unavailable advisory review role: ${pass.role}`);
@@ -151,7 +153,7 @@ export async function runReviewAttempt(
 			throw new Error(receipt.reason ?? receipt.result?.error ?? "The review turn did not complete");
 		await verifyArtifact(artifact, signal);
 		output = pass.validate(receipt.result.value);
-		db.prepare("update review_attempts set output = ? where id = ?").run(JSON.stringify(output), id);
+		storeOutput(db, job, id, pass, output);
 	} catch (error) {
 		failure = error;
 	} finally {
@@ -175,7 +177,29 @@ export async function runReviewAttempt(
 		id,
 	);
 	if (failure) throw failure;
-	return output;
+	return { attempt: id, output };
+}
+
+function storeOutput(db: DatabaseSync, job: ReviewJob, id: string, pass: ReviewPassRequest, output: unknown): void {
+	if (!current(db, job)) throw new Error("The review no longer owns this output");
+	db.exec("begin");
+	try {
+		db.prepare("update review_attempts set output = ? where id = ?").run(JSON.stringify(output), id);
+		if (pass.kind === "validation") {
+			for (const gap of (output as FindingValidation).coverageGaps) {
+				const attempts = pass.reviewedAttempts;
+				if (!attempts || !Object.hasOwn(attempts, gap.pass))
+					throw new Error("The coverage challenge has no inspected attempt");
+				db.prepare(
+					"update review_attempts set reuse_blocked_by = ? where id = ? and review_id = ? and state = 'completed'",
+				).run(id, attempts[gap.pass], job.id);
+			}
+		}
+		db.exec("commit");
+	} catch (error) {
+		db.exec("rollback");
+		throw error;
+	}
 }
 
 function current(db: DatabaseSync, job: ReviewJob): boolean {

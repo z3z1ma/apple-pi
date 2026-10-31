@@ -71,6 +71,7 @@ export interface ReviewJob {
 	artifactDirectory: string;
 	artifact: ReviewArtifact | null;
 	plan: ReviewPlan | null;
+	selectedAttempts: Record<string, string>;
 	reason: string | null;
 	createdAt: number;
 	updatedAt: number;

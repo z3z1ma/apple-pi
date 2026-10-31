@@ -71,6 +71,20 @@ The worker now runs a code-informed planning request, validated semantic/risk ob
 
 The broad cohort found one failure in workplace.test.ts: it expected copied team backscroll. Unchanged ecae1117 reproduced it in a detached worktree (`/tmp/review-worker-onboarding-baseline.log`). The existing runtime already sends a channel/brief pointer. The test now positively checks that pointer and assigned goal, and excludes copied backscroll. Review-specific startup omits that automatic team notice while preserving ordinary tools and membership. The scratch worktree and its node_modules symlink were removed normally.
 
+## Selected assessments and native entrypoint checkpoint
+
+Migration36 records the selected attempt IDs explicitly. Read-only queue and detail projections share a consistent snapshot, retain attempt-scoped allegations and distinguish validator-challenged questions from completed coverage. A challenged inspection gets a new attempt on resume while the unaffected integration result can be retained. Review visibility follows review-owned organizational anchors, including a whole-root merge with no surviving work-task rows.
+
+The SDK fixture calls the real extension's review_code, review_queue, read_review and manage_review tools against the isolated runtime. It admits work, reads unvalidated partial allegations, waits for guarded cancellation, recovers the original admission after the live checkout changes, then explicitly captures a different rerun linked to the first review. The extension is not yet registered in package.json; this is an entrypoint integration check, not a public activation claim.
+
+- Initial reader/challenge/resume/scope failures: `/tmp/review-reader-red.log`, `/tmp/review-reader-coverage-red.log`, `/tmp/review-reader-resume-red.log`, `/tmp/review-reader-scope-red.log`.
+- The 87-test reader cohort had one remaining failure: its multi-job fixture returned review_jobs[0] for every enqueue. The helper now follows the exact command's recorded review ID rather than inferring identity from table order. `/tmp/review-reader-final-tests.log` retains that failure.
+- Final focused cohort: **88 tests in eight files passed**, one worker, 68.92 seconds. `/tmp/review-native-cohort.log` includes queue/native behavior, reporting moves and historical-schema consumers. The earlier **16-test single-file pass** overlaps this cohort: `/tmp/review-native-tests3.log`.
+- Node and web types passed: `/tmp/review-native-types3.log`. Scoped Biome and whitespace checks passed; context lint passed for **340 files**.
+- Package dry run: **2,752 files**; new result/read/tool modules and the entrypoint are present. `/tmp/review-native-pack.json`. This is inventory, not installed activation or model-quality evidence.
+
+A stronger recovery case then reproduced loss of that coverage challenge after an intervening failed retry: `/tmp/review-challenge-recovery-red.log`. Current selections had been cleared, so a second resume reused the old challenged report. Migration37 now retains a reuse block on that exact attempt, atomically with the validator's output, before cleanup. The validator input names the attempts it challenges. Final recheck after this correction: **88 tests in eight files passed**, Node/web types and scoped Biome; `/tmp/review-checkpoint-tests2.log`, `/tmp/review-checkpoint-types2.log`. The earlier passing cohort did not cover this extra transition.
+
 ## Remaining delivery
 
-Durable finding/coverage decisions, progressive result and freshness readers, the extra-work decision path, native tools, single master-detail `/reviews` with visible list status and retirement of the old work panel, Workplace Code and artifact-bound sign-off, focused native/IPC/UI integration, applicable builds and real-host validation. No part of that remaining scope has been waived. No paid reviewer or live daemon/app activation has occurred.
+Durable finding/coverage decisions, freshness readers, the extra-work decision path, remaining native integration, single master-detail `/reviews` with visible list status and retirement of the old work panel, Workplace Code and artifact-bound sign-off, focused native/IPC/UI integration, applicable builds and real-host validation. No part of that remaining scope has been waived. No paid reviewer or live daemon/app activation has occurred.
