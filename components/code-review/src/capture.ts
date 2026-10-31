@@ -53,7 +53,7 @@ function artifactDigest(artifact: ReviewArtifact): string {
 	);
 }
 
-export async function verifyArtifact(artifact: ReviewArtifact, signal?: AbortSignal): Promise<void> {
+async function verifyCapturedGit(artifact: ReviewArtifact, signal?: AbortSignal): Promise<void> {
 	if (artifactDigest(artifact) !== artifact.digest) throw new Error("Review manifest identity changed");
 	if (hash(await readFile(join(dirname(artifact.source), "change.patch"))) !== artifact.patchHash)
 		throw new Error("Captured patch changed");
@@ -81,6 +81,10 @@ export async function verifyArtifact(artifact: ReviewArtifact, signal?: AbortSig
 		) !== artifact.patchHash
 	)
 		throw new Error("Captured comparison changed");
+}
+
+export async function verifyArtifact(artifact: ReviewArtifact, signal?: AbortSignal): Promise<void> {
+	await verifyCapturedGit(artifact, signal);
 	for await (const { entry, data: expected } of entryContents(artifact.source, artifact.files, signal)) {
 		const path = join(artifact.source, safePath(entry.path));
 		const stat = await lstat(path).catch(absent);
@@ -98,6 +102,31 @@ export async function verifyArtifact(artifact: ReviewArtifact, signal?: AbortSig
 		const data = mode === "120000" ? await readlink(path, { encoding: "buffer" }) : await readFile(path);
 		if (!data.equals(expected)) throw new Error(`Captured source changed: ${entry.path}`);
 	}
+}
+
+export async function readCapturedSource(
+	artifact: ReviewArtifact,
+	options: { path?: string; side?: "before" | "after" } = {},
+	signal?: AbortSignal,
+) {
+	const path = options.path === undefined ? undefined : safePath(options.path);
+	await verifyCapturedGit(artifact, signal);
+	const side = options.side ?? "after";
+	const tree = side === "before" ? artifact.baseTree : artifact.headTree;
+	const identity = { artifact: artifact.digest, side, tree };
+	const entries = await treeReferences(artifact.source, tree, signal);
+	if (path === undefined) return { ...identity, kind: "files" as const, files: entries };
+	const entry = entries.find((entry) => entry.path === path);
+	if (!entry) throw new Error(`No captured file on the ${side} side: ${JSON.stringify(path)}`);
+	const data =
+		entry.mode === "160000" ? null : await bytes(artifact.source, ["cat-file", "blob", entry.blob], { signal });
+	return {
+		...identity,
+		kind: "file" as const,
+		file: { ...entry, content: classify(entry.mode, data ?? Buffer.from(entry.blob)) },
+		bytes: data?.length ?? null,
+		text: data && !data.includes(0) && isUtf8(data) ? data.toString("utf8") : null,
+	};
 }
 
 function bytes(cwd: string, args: string[], options: GitOptions = {}) {
@@ -165,13 +194,16 @@ async function copyEntries(root: string, entries: EntryReference[], blobs: BlobS
 	return result;
 }
 
-async function treeEntries(root: string, tree: string, blobs: BlobStore, signal?: AbortSignal): Promise<SourceEntry[]> {
-	const entries = paths(await bytes(root, ["ls-tree", "-rz", "--full-tree", tree], { signal })).map((record) => {
+async function treeReferences(root: string, tree: string, signal?: AbortSignal): Promise<EntryReference[]> {
+	return paths(await bytes(root, ["ls-tree", "-rz", "--full-tree", tree], { signal })).map((record) => {
 		const tab = record.indexOf("\t");
 		const [mode, , blob] = record.slice(0, tab).split(" ");
 		return { path: safePath(record.slice(tab + 1)), mode: mode!, blob: blob! };
 	});
-	return copyEntries(root, entries, blobs, signal);
+}
+
+async function treeEntries(root: string, tree: string, blobs: BlobStore, signal?: AbortSignal): Promise<SourceEntry[]> {
+	return copyEntries(root, await treeReferences(root, tree, signal), blobs, signal);
 }
 
 async function indexEntries(root: string, signal?: AbortSignal) {

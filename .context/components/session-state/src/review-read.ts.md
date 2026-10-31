@@ -10,5 +10,7 @@ Cost sums all recorded attempts, not only selected coverage: failed/cancelled tu
 
 The cost projection reads JSON text with SQLite's -> operator, then validates the parsed number. Numeric json_extract crosses Node SQLite's safe-integer binding boundary and threw on a recorded 2**53 value; JSON text preserves the producer's JavaScript number semantics and the distinction between numeric and string-valued cost.
 
-Coupled: components/session-state/src/review-jobs.ts, components/session-state/src/review-attempt.ts, components/code-review/src/results.ts, components/code-review/src/tools.ts, components/code-review/src/presentation.ts
+readReviewSource authorizes and copies the admitted artifact before asynchronous Git work, with no SQLite read transaction held across that work. File inventory and file-line pages use the same explicit paging rules; binary/pointer-only representations have no invented line count. Availability in captured source does not imply independent inspection, whole materialized-copy integrity, or live applicability.
+
+Coupled: components/code-review/src/capture.ts, components/session-state/src/review-jobs.ts, components/session-state/src/review-attempt.ts, components/code-review/src/results.ts, components/code-review/src/tools.ts, components/code-review/src/presentation.ts
 Verify: components/session-state/tests/review-queue.test.ts

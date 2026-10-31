@@ -18,7 +18,7 @@ import { captureReview } from "../../code-review/src/capture.js";
 import type { FindingResponse } from "../../code-review/src/decisions.js";
 import { loadRoles } from "../../organization/src/roles.js";
 import { sendCommand } from "../src/client.js";
-import { readReview, reviewAssessment, reviewQueue, reviewSummary } from "../src/review-read.js";
+import { readReview, readReviewSource, reviewAssessment, reviewQueue, reviewSummary } from "../src/review-read.js";
 import { fakeBridge, query, runtimePid, standInProcess, startRuntime, stopRuntime, tempStateDir } from "./helpers.js";
 
 let state: ReturnType<typeof tempStateDir>;
@@ -371,6 +371,8 @@ test("native tools admit, read, cancel, recover exact requests and explicitly ca
 			review: { owner: "owner", intent: "captured" },
 		});
 		const id = (admission.review as { id: string }).id;
+		await expect(readReviewSource("missing-person", id)).rejects.toThrow("current person");
+		await expect(readReviewSource("owner", id, { offset: 1 })).rejects.toThrow("requires a limit");
 		await vi.waitFor(
 			() =>
 				expect(
@@ -397,6 +399,27 @@ test("native tools admit, read, cancel, recover exact requests and explicitly ca
 			review: { id, state: "cancelled" },
 		});
 		expect(query(state.dbPath, "select id from program_scopes")).toEqual([]);
+		expect(await callTool("read_review", { review: handle, part: "source" })).toMatchObject({
+			review: id,
+			kind: "files",
+			side: "after",
+			total: 1,
+			page: null,
+		});
+		expect(await callTool("read_review", { review: id, part: "source", limit: 1 })).toMatchObject({
+			page: { rows: [{ path: "value.ts" }], nextOffset: null },
+		});
+		expect(await callTool("read_review", { review: id, part: "source", path: "value.ts" })).toMatchObject({
+			kind: "file",
+			file: { path: "value.ts", content: "text" },
+			total: 1,
+			page: null,
+		});
+		expect(
+			await callTool("read_review", { review: id, part: "source", path: "value.ts", side: "before", limit: 1 }),
+		).toMatchObject({
+			page: { offset: 0, rows: ["export const value = 1;"], nextOffset: null },
+		});
 		const current = await callTool("read_review", { review: id });
 		const allegations = await callTool("read_review", { review: id, part: "findings", limit: 1 });
 		const allegation = (allegations.page as { rows: { id: string }[] }).rows[0]!.id;
@@ -414,6 +437,9 @@ test("native tools admit, read, cancel, recover exact requests and explicitly ca
 			page: { rows: [{ kind: "finding", actor: "owner", data: { disposition: "acknowledged" } }] },
 		});
 		writeFileSync(join(repository, "value.ts"), "export const value = 3;\n");
+		expect(await callTool("read_review", { review: id, part: "source", path: "value.ts", limit: 1 })).toMatchObject({
+			page: { rows: ["export const value = 2;"] },
+		});
 		expect(await callTool("review_code", { ...request, request: handle })).toMatchObject({
 			stage: "applied",
 			review: { id, state: "cancelled" },
@@ -667,6 +693,18 @@ test("finding responses retain allegations and approval binds a stable artifact 
 }, 30000);
 
 test("the loaded reviews command shows the queue, keeps selection and sends a confirmed fresh rerun", async () => {
+	const pointers = Array.from({ length: 40 }, (_, index) => `pointer-${String(index).padStart(2, "0")}.dat`);
+	for (const path of pointers)
+		writeFileSync(
+			join(repository, path),
+			`version https://git-lfs.github.com/spec/v1\noid sha256:${"a".repeat(64)}\nsize 1234\n`,
+		);
+	execFileSync("git", ["add", "--", ...pointers], { cwd: repository, stdio: "pipe" });
+	execFileSync(
+		"git",
+		["-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "-qm", "pointer context"],
+		{ cwd: repository, stdio: "pipe" },
+	);
 	writeFileSync(join(state.agentDir, "peer-control.json"), JSON.stringify({ review: { finding: true } }));
 	const first = await enqueue();
 	await settled(first.id, "completed");
@@ -688,7 +726,11 @@ test("the loaded reviews command shows the queue, keeps selection and sends a co
 		hasUI: true,
 		mode: "tui",
 		sessionManager: SessionManager.inMemory(repository, { id: "owner" }),
-		ui: { custom: fakeCustom(screen).custom, select: vi.fn(async () => "Capture a fresh rerun") },
+		ui: {
+			custom: fakeCustom(screen).custom,
+			select: vi.fn(async () => "Capture a fresh rerun"),
+			input: vi.fn(async () => "value.ts"),
+		},
 	} as unknown as ExtensionCommandContext;
 	try {
 		await command.handler("", ctx);
@@ -708,6 +750,48 @@ test("the loaded reviews command shows the queue, keeps selection and sends a co
 		panel.handleInput("\t");
 		panel.handleInput("\x1b[6~");
 		expect(screen.layout(screen.stack[0]!).lines.join("\n")).toContain("The value disagrees with its consumer");
+		screen.tui.terminal.columns = 160;
+		screen.tui.terminal.rows = 40;
+		vi.mocked(ctx.ui.select).mockResolvedValueOnce("source").mockResolvedValueOnce("before");
+		panel.handleInput("v");
+		await vi.waitFor(
+			() => {
+				const rendered = screen.layout(screen.stack[0]!).lines.join("\n");
+				expect(rendered).toContain('before: "value.ts"');
+				expect(rendered).toContain("Source lines: 1-1 / 1");
+				expect(rendered).toContain("1 | export const value = 1;");
+			},
+			{ timeout: 5000 },
+		);
+		expect(readFileSync(join(repository, "value.ts"), "utf8")).toBe("export const value = 3;\n");
+		vi.mocked(ctx.ui.select).mockResolvedValueOnce("source").mockResolvedValueOnce("after");
+		vi.mocked(ctx.ui.input).mockResolvedValueOnce("");
+		panel.handleInput("v");
+		await vi.waitFor(
+			() => {
+				const rendered = screen.layout(screen.stack[0]!).lines.join("\n");
+				expect(rendered).toContain("after: 41 captured files.");
+				expect(rendered).toContain('"pointer-00.dat"');
+			},
+			{ timeout: 5000 },
+		);
+		panel.handleInput("]");
+		await vi.waitFor(() => expect(screen.layout(screen.stack[0]!).lines.join("\n")).toContain('"value.ts"'), {
+			timeout: 5000,
+		});
+		vi.mocked(ctx.ui.select).mockResolvedValueOnce("target");
+		panel.handleInput("v");
+		await vi.waitFor(() => expect(screen.layout(screen.stack[0]!).lines.join("\n")).toContain("Target"));
+		panel.handleInput("]");
+		let limits = "";
+		for (const _path of pointers) {
+			panel.handleInput("\x1b[6~");
+			limits = screen.layout(screen.stack[0]!).lines.join("\n");
+			if (limits.includes(pointers.at(-1)!)) break;
+		}
+		expect(limits).toContain(pointers.at(-1)!);
+		screen.tui.terminal.columns = 100;
+		screen.tui.terminal.rows = 15;
 		panel.handleInput("a");
 		const preview = await captureConfirmation(screen);
 		expect(preview.text.replace(/\s+/g, " ")).toContain("coverage and approval are not inherited");

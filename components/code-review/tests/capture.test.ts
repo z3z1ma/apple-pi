@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, expect, test } from "vitest";
 import { git } from "../../shared/src/git.js";
-import { captureReview, verifyArtifact } from "../src/capture.js";
+import { captureReview, readCapturedSource, verifyArtifact } from "../src/capture.js";
 
 const directories: string[] = [];
 afterEach(async () => {
@@ -23,6 +23,70 @@ async function repository() {
 	await git(root, ["commit", "-qm", "base"]);
 	return root;
 }
+
+test("source browsing reads retained before and after objects, not either working copy", async () => {
+	const cwd = await repository();
+	await writeFile(join(cwd, "value.ts"), "captured change\n");
+	await rm(join(cwd, "caller.ts"));
+	const capture = await captureReview(
+		{ cwd, target: { kind: "working-tree", base: "HEAD" }, paths: ["value.ts"] },
+		await destination(),
+	);
+	await writeFile(join(capture.source, "value.ts"), "materialized copy changed\n");
+	await writeFile(join(capture.source, "not-captured.ts"), "new file\n");
+	await rm(cwd, { recursive: true });
+	expect(await readCapturedSource(capture, { path: "value.ts" })).toMatchObject({
+		artifact: capture.digest,
+		side: "after",
+		tree: capture.headTree,
+		kind: "file",
+		file: { path: "value.ts", content: "text" },
+		text: "captured change\n",
+	});
+	expect(await readCapturedSource(capture, { path: "value.ts", side: "before" })).toMatchObject({
+		side: "before",
+		tree: capture.baseTree,
+		text: "export const value = 1;\n",
+	});
+	expect(await readCapturedSource(capture, { side: "before" })).toMatchObject({
+		kind: "files",
+		files: expect.arrayContaining([expect.objectContaining({ path: "caller.ts" })]),
+	});
+	expect(await readCapturedSource(capture, { path: "caller.ts", side: "before" })).toMatchObject({
+		text: 'import { value } from "./value.js";\nconsole.log(value);\n',
+	});
+	for (const path of ["caller.ts", "not-captured.ts", "../outside", ".git/config"])
+		await expect(readCapturedSource(capture, { path })).rejects.toThrow();
+	await expect(verifyArtifact(capture)).rejects.toThrow("Captured source changed");
+	await expect(readCapturedSource({ ...capture, digest: "changed" }, {})).rejects.toThrow("manifest identity");
+});
+
+test("source browsing preserves unusual names and reports pointers without following them", async () => {
+	const cwd = await repository();
+	const name = 'tab\tline\n" spaced.txt';
+	await writeFile(join(cwd, name), "exact\r\n");
+	await writeFile(join(cwd, "binary"), Buffer.from([0, 255, 128, 10]));
+	await symlink("/outside/not-captured", join(cwd, "link"));
+	await writeFile(
+		join(cwd, "large.dat"),
+		`version https://git-lfs.github.com/spec/v1\noid sha256:${"a".repeat(64)}\nsize 1234\n`,
+	);
+	const capture = await captureReview({ cwd, target: { kind: "working-tree", base: "HEAD" } }, await destination());
+	expect(await readCapturedSource(capture, { path: name })).toMatchObject({ text: "exact\r\n" });
+	expect(await readCapturedSource(capture, { path: "binary" })).toMatchObject({
+		file: { content: "binary" },
+		bytes: 4,
+		text: null,
+	});
+	expect(await readCapturedSource(capture, { path: "link" })).toMatchObject({
+		file: { content: "symlink" },
+		text: "/outside/not-captured",
+	});
+	expect(await readCapturedSource(capture, { path: "large.dat" })).toMatchObject({
+		file: { content: "lfs" },
+		text: expect.stringContaining("oid sha256:"),
+	});
+});
 
 test("a staged review contains the index, not unstaged edits or untracked files", async () => {
 	const cwd = await repository();
@@ -259,6 +323,11 @@ test("an uninitialized submodule keeps its recorded pointer rather than borrowin
 	await mkdir(join(cwd, "module"));
 	const capture = await captureReview({ cwd, target: { kind: "working-tree", base: "HEAD" } }, await destination());
 	expect(capture.files.find((entry) => entry.path === "module")?.blob).toBe(pointer);
+	expect(await readCapturedSource(capture, { path: "module" })).toMatchObject({
+		file: { content: "submodule", blob: pointer },
+		bytes: null,
+		text: null,
+	});
 	expect(capture.omissions).toContainEqual({
 		path: "module",
 		reason: "submodule pointer only; referenced content is not captured",

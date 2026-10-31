@@ -3,17 +3,24 @@ import type { DatabaseSync } from "node:sqlite";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { OverlayHandle, TUI } from "@earendil-works/pi-tui";
 import { sendCommand } from "../../session-state/src/client.js";
-import { readReview, readReviewPart, reviewQueue, withReviews } from "../../session-state/src/review-read.js";
+import {
+	readReview,
+	readReviewPart,
+	readReviewSource,
+	reviewQueue,
+	withReviews,
+} from "../../session-state/src/review-read.js";
 import { resolveToolPath } from "../../shared/src/tool-path.js";
 import type { ReviewOperation } from "./operations.js";
 import { CaptureConfirmation, ReviewPanel } from "./panel.js";
-import { evidenceLines, findingLines, previewLines, summaryLines } from "./presentation.js";
+import { evidenceLines, findingLines, previewLines, sourceLines, summaryLines } from "./presentation.js";
 import { previewReview } from "./preview.js";
 import type { ReviewAssessment, ReviewSummary } from "./results.js";
 import type { ReviewTarget } from "./types.js";
 
-const views = ["summary", "target", "plan", "findings", "coverage", "attempts", "decisions"] as const;
+const views = ["summary", "target", "source", "plan", "findings", "coverage", "attempts", "decisions"] as const;
 type EvidenceView = (typeof views)[number];
+type EvidenceDetail = { lines: string[]; nextOffset: number | null };
 type Mounted = {
 	panel: ReviewPanel;
 	handle: OverlayHandle;
@@ -28,6 +35,14 @@ export class ReviewManager {
 	private view: EvidenceView = "summary";
 	private action: AbortController | undefined;
 	private readonly pending = new Map<string, ReviewOperation>();
+	private sourceSelection: { review: string; path?: string; side: "before" | "after" } | undefined;
+	private sourcePage:
+		| {
+				key: string;
+				stop: AbortController;
+				detail: EvidenceDetail;
+		  }
+		| undefined;
 
 	constructor(pi: ExtensionAPI) {
 		pi.registerCommand("reviews", {
@@ -54,6 +69,7 @@ export class ReviewManager {
 		const reset = () => {
 			this.close();
 			this.selected = undefined;
+			this.sourceSelection = undefined;
 			this.pending.clear();
 		};
 		pi.on("session_start", reset);
@@ -98,13 +114,8 @@ export class ReviewManager {
 					menu: (review) => {
 						void this.runAction((stop) => this.menu(ctx, review, stop));
 					},
-					view: () => {
-						void this.runAction(async (stop) => {
-							const choice = await ctx.ui.select("Review evidence", [...views], { signal: stop });
-							if (!choice || stop.aborted) return;
-							this.view = choice as EvidenceView;
-							this.mounted?.panel.resetDetail();
-						});
+					view: (review) => {
+						void this.runAction((stop) => this.chooseView(ctx, review, stop));
 					},
 				},
 				this.selected,
@@ -130,6 +141,7 @@ export class ReviewManager {
 	}
 
 	close(): void {
+		this.stopSource();
 		this.action?.abort();
 		this.action = undefined;
 		const current = this.mounted;
@@ -146,8 +158,9 @@ export class ReviewManager {
 		review: ReviewSummary,
 		limit: number,
 		offset: number,
-	): { lines: string[]; nextOffset: number | null } {
+	): EvidenceDetail {
 		if (this.view === "summary") return { lines: summaryLines(review), nextOffset: null };
+		if (this.view === "source") return this.sourceDetail(actor, review, limit, offset);
 		const data = readReviewPart(db, actor, review.id, { part: this.view, limit, offset });
 		if (this.view === "findings") {
 			const findings = data as {
@@ -167,7 +180,7 @@ export class ReviewManager {
 		}
 		const paged = (
 			this.view === "target"
-				? (data as { omissions?: unknown }).omissions
+				? (data as { target?: { omissions?: unknown } | null }).target?.omissions
 				: this.view === "plan"
 					? (data as { chunks?: unknown }).chunks
 					: data
@@ -176,6 +189,60 @@ export class ReviewManager {
 			lines: [`${this.view} | ${review.id} | revision ${review.revision}`, "", ...evidenceLines(data)],
 			nextOffset: paged?.page?.nextOffset ?? null,
 		};
+	}
+
+	private stopSource(): void {
+		this.sourcePage?.stop.abort();
+		this.sourcePage = undefined;
+	}
+
+	private sourceDetail(actor: string, review: ReviewSummary, limit: number, offset: number) {
+		const selected = this.sourceSelection?.review === review.id ? this.sourceSelection : undefined;
+		const options = { path: selected?.path, side: selected?.side ?? "after", limit, offset } as const;
+		const key = JSON.stringify([review.id, review.digest, options]);
+		if (this.sourcePage?.key === key) return this.sourcePage.detail;
+		this.stopSource();
+		const mounted = this.mounted;
+		const pending: EvidenceDetail = { lines: ["Loading retained source..."], nextOffset: null };
+		if (!mounted) return pending;
+		const page = { key, stop: new AbortController(), detail: pending };
+		this.sourcePage = page;
+		void readReviewSource(actor, review.id, options, page.stop.signal)
+			.then((data) => {
+				if (this.sourcePage !== page || page.stop.signal.aborted || this.mounted !== mounted) return;
+				page.detail = { lines: sourceLines(data), nextOffset: data.page?.nextOffset ?? null };
+				mounted.panel.refresh();
+			})
+			.catch((error) => {
+				if (this.sourcePage !== page || page.stop.signal.aborted || this.mounted !== mounted) return;
+				page.detail = {
+					lines: [`Source read failed: ${error instanceof Error ? error.message : String(error)}`],
+					nextOffset: null,
+				};
+				mounted.panel.refresh();
+			});
+		return page.detail;
+	}
+
+	private async chooseView(ctx: ExtensionContext, review: ReviewSummary | undefined, stop: AbortSignal) {
+		const choice = await ctx.ui.select("Review evidence", [...views], { signal: stop });
+		if (!choice || stop.aborted) return;
+		if (choice === "source") {
+			if (!review) {
+				this.mounted?.panel.setNote("Select a review before browsing its source.");
+				return;
+			}
+			const side = await ctx.ui.select("Captured comparison side", ["after", "before"], { signal: stop });
+			if (!side || stop.aborted) return;
+			const path = await ctx.ui.input("Captured file path (blank lists files)", "Repository-relative path", {
+				signal: stop,
+			});
+			if (path === undefined || stop.aborted) return;
+			this.sourceSelection = { review: review.id, path: path || undefined, side: side as "before" | "after" };
+		}
+		this.stopSource();
+		this.view = choice as EvidenceView;
+		this.mounted?.panel.resetDetail();
 	}
 
 	private async runAction(run: (stop: AbortSignal) => Promise<void>): Promise<void> {

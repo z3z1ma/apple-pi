@@ -8,5 +8,7 @@ Git treats the empty tree as a virtual object in some commands: `write-tree` can
 
 Non-UTF8 blobs are binary obligations. The private info attributes keep Git from turning them into lossy Unicode text. The first text region retains the file header, including modes; rename records are separate from the deterministic no-renames region inventory. Requested paths narrow coverage, not the surrounding source available to reviewers.
 
-Coupled: components/code-review/src/types.ts, components/code-review/src/git-objects.ts, components/shared/src/git.ts
+Source browsing verifies the retained manifest/Git comparison and reads the recorded before/after tree objects, not the materialized files or original checkout. It can therefore show captured code after a file copy changes or the author repository disappears. Full verifyArtifact still checks materialized bytes before recovery/decisions; browsing is not that check and is not live freshness. The same tree-reference parser and Git safeguards serve both capture and reads. Symlinks expose link text only; submodule and LFS pointers stay visibly separate from their referenced content.
+
+Coupled: components/session-state/src/review-read.ts, components/code-review/src/types.ts, components/code-review/src/git-objects.ts, components/shared/src/git.ts
 Verify: components/code-review/tests/capture.test.ts

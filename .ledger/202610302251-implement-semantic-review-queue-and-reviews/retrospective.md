@@ -50,6 +50,8 @@ The actual terminal check also found a stale progress claim after preview cancel
 
 The cost projection follows retained attempts rather than selected coverage, so failed and cancelled work remains visible without charging reused evidence twice. Missing usage is not zero, and primary-turn cost is not total internal activity or an invoice. Two fixture/representation failures sharpened the check: stopRuntime deletes its state directory, so altered stored-data tests now use an online copy; and SQLite numeric extraction rejected 2**53 at Node's safe-integer binding, so the projection reads JSON text before validating numbers. Both lessons are placed with the reader/tests.
 
+Source browsing needed a narrower claim than recovery verification: retained Git objects can still show the captured code when the materialized copy changes, while recovery/sign-off must continue refusing that changed copy. The shared owner now separates those checks rather than falling back to live files. The real terminal also showed why source line ranges and wrapped display-line ranges need separate labels. A loaded-entry case with more limits than fit in one viewport caught an older target paging defect: the common page shape was nested under target, unlike other views. Reading the actual envelope restored access to the last limit; the regression exercises ordinary controls rather than internal page state.
+
 ## Improvements
 
 Pending completion of the undertaking.

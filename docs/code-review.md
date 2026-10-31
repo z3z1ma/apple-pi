@@ -2,7 +2,7 @@
 
 The native review queue captures exact source and intent, divides changed behavior into focused scopes, assigns independent risk questions, checks cross-scope interactions and retains findings and coverage. It uses ordinary advisory-role peers and the existing session-state runtime, not another model engine or a custom sandbox.
 
-The queue and `/reviews`, including the TUI's pre-queue target preview, are implemented. The wider integration is still in progress: live-target/policy freshness, captured-source drill-down, additional-work decisions, captured-artifact browser sign-off and Workplace Code remain pending. Existing ad hoc `sign_off_code` is not yet connected to a recorded review ID. Registering the extension does not restart an already-running runtime; an older store reports that it is unavailable instead of showing an empty queue.
+The queue and `/reviews`, including the TUI's pre-queue target preview, are implemented. The wider integration is still in progress: live-target/policy freshness, additional-work decisions, captured-artifact browser sign-off and Workplace Code remain pending. Existing ad hoc `sign_off_code` is not yet connected to a recorded review ID. Registering the extension does not restart an already-running runtime; an older store reports that it is unavailable instead of showing an empty queue.
 
 ## Native tools
 
@@ -10,7 +10,7 @@ The queue and `/reviews`, including the TUI's pre-queue target preview, are impl
 | --- | --- |
 | `review_code` | Capture a commit, range, branch, staged tree or working tree and admit it to the durable queue, with optional approved intent, scope and risk lenses. |
 | `review_queue` | Read accessible queue counts; request an explicit limit for a detail page. |
-| `read_review` | Read summaries, retained targets, plans, findings, coverage, attempts, changes and decisions progressively. |
+| `read_review` | Read summaries, retained targets and source, plans, findings, coverage, attempts, changes and decisions progressively. |
 | `manage_review` | Cancel, resume the same captured target, capture a fresh linked rerun, reprioritize or reassign. |
 | `resolve_finding` | Record an accountable finding response against an exact digest and assessment revision. |
 
@@ -34,7 +34,7 @@ An applied enqueue confirms admission, not review completion. Retain the returne
 
 Open `/reviews` or press `Ctrl+W`. The single master-detail interface replaces the combined `/work` and `/tasks` panel. Tasks and Pi Exec keep their tools, transcript results and shared passive activity independently.
 
-The framed master list shows execution state with a status icon, the current pass, owner, completed/required passes, findings, reported cost and approval. The active pane is highlighted; fixed key hints remain visible while evidence scrolls, and its heading reports the visible line range. The detail view exposes summary, retained target, plan, findings, question coverage, attempts and decision history. Findings lead with their allegation and location, followed by validation, owner response, cause and evidence. Completed execution uses a neutral accent rather than a clean-approval color. Live freshness is currently labeled **not checked**; approval matching an assessment is not a claim that the checkout still matches.
+The framed master list shows execution state with a status icon, the current pass, owner, completed/required passes, findings, reported cost and approval. The active pane is highlighted; fixed key hints remain visible while evidence scrolls, and its heading reports the visible line range. The detail view exposes summary, retained target and source, plan, findings, question coverage, attempts and decision history. Findings lead with their allegation and location, followed by validation, owner response, cause and evidence. Completed execution uses a neutral accent rather than a clean-approval color. Live freshness is currently labeled **not checked**; approval matching an assessment is not a claim that the checkout still matches.
 
 | Key | Action |
 | --- | --- |
@@ -54,6 +54,27 @@ Capture asks for the repository/worktree directory and comparison. Before queuei
 Preview uses temporary capture storage and removes it on success, failure or cancellation. Durable admission captures again and must match the displayed digest before any reviewer starts. This costs a second capture but avoids another draft-job store or transferring ownership of UI scratch. If source or intent changed, inspect a fresh preview rather than silently queueing different code.
 
 Wide terminals show the queue beside evidence; narrow terminals stack them. Selection follows the review ID through live reordering, resizing and hide/reopen. Confirmations identify the affected review or capture request. The uncertain-request menu retains exact arguments in memory while this session context remains alive; context changes and reload clear that menu, not the runtime journal or admitted jobs.
+
+## Browse captured source
+
+Choose `v`, then `source`, then the `before` or `after` side. Enter a repository-relative file path, or leave it blank to list captured files. Source lines are numbered separately from the panel's wrapped display lines. With the evidence pane focused, use `[` and `]` for file/line pages and Page Up/Page Down to scroll the current page. Source loading is asynchronous and cancelled when its selection or session is replaced.
+
+The native equivalent is:
+
+```json
+{
+  "review": "review-...",
+  "part": "source",
+  "side": "before",
+  "path": "src/handler.ts",
+  "offset": 0,
+  "limit": 20
+}
+```
+
+Omit `path` for file inventory, and omit `limit` for counts. File offsets are zero-based line offsets. These reads use the retained Git objects, including deleted files on the before side and unchanged surrounding files. They do not substitute the live checkout or a changed materialized file copy. Symlinks return their link text without following it; binary data is identified rather than decoded into lossy text, and submodule/LFS pointers remain distinct from their referenced contents.
+
+This view returns the requested code, not the automatic `.context` append used by the ordinary `read` tool. Inspect relevant captured context files and documentation separately. Source availability is not completed review coverage. Browsing does not establish current-checkout applicability or replace the full captured-artifact verification used by recovery and decisions.
 
 ## Evidence, decisions and recovery
 

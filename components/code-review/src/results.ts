@@ -1,7 +1,30 @@
 import type { FindingValidation, PlannedPass, ReviewPlan, ReviewReport } from "./contracts.js";
 import type { FindingDecision, ReviewApproval, ReviewDecision } from "./decisions.js";
 import type { ReviewJob, ReviewState } from "./operations.js";
-import type { ReviewTarget } from "./types.js";
+import type { ReviewTarget, SourceEntry } from "./types.js";
+
+export type ReviewSource = {
+	review: string;
+	revision: number;
+	artifact: string;
+	side: "before" | "after";
+	tree: string;
+	note: string;
+} & (
+	| {
+			kind: "files";
+			total: number;
+			page: { offset: number; nextOffset: number | null; rows: Pick<SourceEntry, "path" | "mode" | "blob">[] } | null;
+	  }
+	| {
+			kind: "file";
+			file: SourceEntry;
+			bytes: number | null;
+			representation: string;
+			total: number | null;
+			page: { offset: number; nextOffset: number | null; rows: string[] } | null;
+	  }
+);
 
 export interface ReviewSummary {
 	id: string;

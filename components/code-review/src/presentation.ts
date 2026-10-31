@@ -1,5 +1,5 @@
 import type { ReviewPreview } from "./preview.js";
-import type { ReviewAssessment, ReviewSummary } from "./results.js";
+import type { ReviewAssessment, ReviewSource, ReviewSummary } from "./results.js";
 import type { ReviewTarget } from "./types.js";
 
 export function targetLabel(target: ReviewTarget): string {
@@ -15,6 +15,29 @@ export function targetLabel(target: ReviewTarget): string {
 		case "branch":
 			return `${target.head} since ${target.base}`;
 	}
+}
+
+export function sourceLines(source: ReviewSource): string[] {
+	if (source.kind === "files")
+		return [
+			`${source.side}: ${source.total} captured ${source.total === 1 ? "file" : "files"}.`,
+			"Use v > source to open a path.",
+			"",
+			...(source.page?.rows.map((file) => JSON.stringify(file.path)) ?? []),
+		];
+	return [
+		`${source.side}: ${JSON.stringify(source.file.path)}`,
+		source.page?.rows.length
+			? `Source lines: ${source.page.offset + 1}-${source.page.offset + source.page.rows.length} / ${source.total}`
+			: `Source lines: ${source.total ?? "not text"}`,
+		source.representation,
+		"Retained Git; live checkout is not checked.",
+		"",
+		...(source.page?.rows.map((line, index) => `${source.page!.offset + index + 1} | ${line}`) ?? []),
+		"",
+		`Blob: ${source.file.blob}`,
+		`Bytes: ${source.bytes ?? "pointer only"}`,
+	];
 }
 
 export function previewLines(preview: ReviewPreview): string[] {

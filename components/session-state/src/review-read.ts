@@ -1,8 +1,15 @@
 import type { DatabaseSync, SQLInputValue } from "node:sqlite";
+import { readCapturedSource } from "../../code-review/src/capture.js";
 import { type FindingValidation, findingKey, planPasses, type ReviewReport } from "../../code-review/src/contracts.js";
 import type { FindingDecision, ReviewApproval, ReviewDecision } from "../../code-review/src/decisions.js";
 import type { ReviewJob, ReviewState } from "../../code-review/src/operations.js";
-import type { ReviewAssessment, ReviewAttempt, ReviewQueue, ReviewSummary } from "../../code-review/src/results.js";
+import type {
+	ReviewAssessment,
+	ReviewAttempt,
+	ReviewQueue,
+	ReviewSource,
+	ReviewSummary,
+} from "../../code-review/src/results.js";
 import { nameOf, withThreads } from "./threads.js";
 import { rootOf } from "./tree.js";
 
@@ -291,6 +298,44 @@ export interface ReviewReadOptions {
 	attempt?: string;
 	limit?: number;
 	offset?: number;
+}
+
+export async function readReviewSource(
+	actor: string,
+	id: string,
+	options: { path?: string; side?: "before" | "after"; limit?: number; offset?: number } = {},
+	signal?: AbortSignal,
+): Promise<ReviewSource> {
+	const job = withReviews((db) => readReview(db, actor, id));
+	if (!job.artifact) throw new Error("The review has no captured source");
+	page([], options);
+	const source = await readCapturedSource(job.artifact, options, signal);
+	const identity = {
+		review: job.id,
+		revision: job.revision,
+		artifact: source.artifact,
+		side: source.side,
+		tree: source.tree,
+		note: "Retained Git objects; this does not verify the materialized file copy or the live checkout.",
+	};
+	if (source.kind === "files") return { ...identity, kind: source.kind, ...page(source.files, options) };
+	const lines = source.text === null ? null : source.text === "" ? [] : source.text.split("\n");
+	if (source.text?.endsWith("\n")) lines!.pop();
+	const representations = {
+		text: "Text from the captured blob.",
+		binary: "Binary bytes; text is not shown.",
+		symlink: "Link target text only; the link is not followed.",
+		submodule: "Commit pointer only; submodule contents are not captured.",
+		lfs: "LFS pointer text only; the referenced contents are not captured.",
+	};
+	return {
+		...identity,
+		kind: source.kind,
+		file: source.file,
+		bytes: source.bytes,
+		representation: representations[source.file.content],
+		...(lines === null ? { total: null, page: null } : page(lines, options)),
+	};
 }
 
 export function readReviewPart(db: DatabaseSync, actor: string, id: string, options: ReviewReadOptions = {}): unknown {

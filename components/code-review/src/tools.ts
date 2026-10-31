@@ -6,6 +6,7 @@ import {
 	withReviews as database,
 	readReview,
 	readReviewPart,
+	readReviewSource,
 	reviewQueue,
 	reviewSummary,
 } from "../../session-state/src/review-read.js";
@@ -52,6 +53,7 @@ const states = Type.Union([
 const parts = Type.Union([
 	Type.Literal("summary"),
 	Type.Literal("target"),
+	Type.Literal("source"),
 	Type.Literal("plan"),
 	Type.Literal("pass"),
 	Type.Literal("findings"),
@@ -231,12 +233,18 @@ export function installReviewTools(pi: ExtensionAPI): void {
 			name: "read_review",
 			label: "Read review",
 			description:
-				"Read one captured review progressively. Summary separates execution, missing intent, question coverage, findings and reported primary-turn cost across all attempts. Cost excludes unobserved internal activity; missing observations and unavailable totals stay explicit. Target gives captured source and Git revisions; use ordinary source tools there. Plan, changes, regions, findings, coverage and attempts return counts until limit is supplied. Pass requires its pass ID; attempt requires its attempt ID and exposes that retained input policy, raw result, observed turn usage and validated output. Original allegations and validation remain distinct. These reads establish neither freshness nor approval.",
+				"Read one captured review progressively. Summary separates execution, missing intent, question coverage, findings and reported primary-turn cost across all attempts. Cost excludes unobserved internal activity; missing observations and unavailable totals stay explicit. Target gives captured source and Git revisions; ordinary tools remain available there. Source browses retained Git objects on the before or after side: omit path to list files, or name a captured file to read lines. It never follows symlinks or automatically appends .context sidecars; inspect captured context files and applicable docs separately. Source and the other collections return counts until limit is supplied; source file offsets are zero-based line offsets. Plan, changes, regions, findings, coverage and attempts also page explicitly. Pass requires its pass ID; attempt requires its attempt ID and exposes that retained input policy, raw result, observed turn usage and validated output. Original allegations and validation remain distinct. These reads establish neither freshness nor approval.",
 			promptSnippet: "Inspect review scope, evidence and retained attempts without treating partial work as clean.",
 			parameters: Type.Object(
 				{
 					review,
 					part: Type.Optional(parts),
+					path: Type.Optional(text("Captured repository-relative file path for part: source. Omit to list files.")),
+					side: Type.Optional(
+						Type.Union([Type.Literal("before"), Type.Literal("after")], {
+							description: "Captured comparison side for part: source; defaults to after.",
+						}),
+					),
 					pass: Type.Optional(text("Pass ID from the plan; required for part: pass.")),
 					attempt: Type.Optional(
 						text("Attempt ID from the attempts page or selected pass; required for part: attempt."),
@@ -245,8 +253,11 @@ export function installReviewTools(pi: ExtensionAPI): void {
 				},
 				{ additionalProperties: false },
 			),
-			async execute(_callId, params, _signal, _update, ctx) {
-				return result(database((db) => readReviewPart(db, ctx.sessionManager.getSessionId(), params.review, params)));
+			async execute(_callId, params, signal, _update, ctx) {
+				const actor = ctx.sessionManager.getSessionId();
+				const { part } = params;
+				if (part === "source") return result(await readReviewSource(actor, params.review, params, signal));
+				return result(database((db) => readReviewPart(db, actor, params.review, { ...params, part })));
 			},
 		}),
 	);
