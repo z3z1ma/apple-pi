@@ -58,8 +58,9 @@ function open(path: string, signal?: AbortSignal): Promise<Socket> {
 	});
 }
 
-/** Connect to the runtime, starting one when none answers. */
-export async function connectRuntime(signal?: AbortSignal): Promise<Socket> {
+/** Connect to the runtime, starting one when none answers. An explicit socket connects without starting a daemon. */
+export async function connectRuntime(signal?: AbortSignal, socketPath?: string): Promise<Socket> {
+	if (socketPath !== undefined) return open(socketPath, signal);
 	let started = false;
 	let failure: string | undefined;
 	for (;;) {
@@ -91,10 +92,7 @@ export async function sendCommand(
 ): Promise<Receipt> {
 	const commandId = options.commandId ?? randomUUID();
 	options.signal?.throwIfAborted();
-	const socket =
-		options.socketPath === undefined
-			? await connectRuntime(options.signal)
-			: await open(options.socketPath, options.signal);
+	const socket = await connectRuntime(options.signal, options.socketPath);
 	const { signal } = options;
 	let abort = () => {};
 	try {

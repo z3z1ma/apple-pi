@@ -5,6 +5,12 @@ Why: moving the source before recording the new path can leave an assignment poi
 Coupled: components/session-state/src/runtime.ts, components/shared/src/ledger-files.ts, components/session-state/src/work-tools.ts
 Verify: components/session-state/tests/work.test.ts, components/session-state/tests/work-recovery.test.ts
 
+## symbol:cleanMovedBundles
+
+Temporary-peer disposal records explicit `discard` receipts only after process-death proof. Those receipts use this same recovery owner as promotion moves. Leaving them pending strands program scopes even after every person and process is gone; clearing them without deleting the owned bundle falsely acknowledges cleanup. Historical `finish` receipts still preserve their original files.
+Verify: components/session-state/tests/program-peers.test.ts, components/session-state/tests/work-recovery.test.ts
+Coupled: components/session-state/src/program-peers.ts
+
 ## symbol:closeLedgerTask
 
 The close is recorded once (`coalesce`), and `archived_at` means "closed" for ledger tasks too, not only "moved to the state history". A ledger task the runtime never recorded opens and closes in the same call, for the sender's organization, so a never-assigned task still leaves its record.

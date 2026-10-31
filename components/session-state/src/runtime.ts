@@ -73,6 +73,7 @@ import {
 } from "./departures.js";
 import { recordLink, resolveLink } from "./links.js";
 import { discardProgramPeople, programDescendants, temporaryCallers } from "./program-peers.js";
+import { ReviewJobs } from "./review-jobs.js";
 import { migrate } from "./schema.js";
 import { HARNESS, markRead, nameOf, OPERATOR, participateIn, postToThread, type ThreadPost } from "./threads.js";
 import {
@@ -229,6 +230,7 @@ function processStart(pid: number): number | "gone" | "unknown" {
  */
 export class Runtime {
 	private db?: DatabaseSync;
+	private reviews?: ReviewJobs;
 	private lock?: DatabaseSync;
 	private server?: Server;
 	private timer?: NodeJS.Timeout;
@@ -275,6 +277,9 @@ export class Runtime {
 		this.db = new DatabaseSync(this.paths.db);
 		this.db.exec("pragma journal_mode = wal");
 		migrate(this.db);
+		this.reviews = new ReviewJobs(this.db, this.paths);
+		this.reviews.recover();
+		this.recoverReviews();
 		for (const row of this.db
 			.prepare(
 				"select command_id from commands where kind in ('run_turn', 'discard_peer') and stage in ('accepted', 'delivered')",
@@ -313,6 +318,7 @@ export class Runtime {
 	}
 
 	stop(): void {
+		this.reviews?.stop();
 		clearInterval(this.timer);
 		clearInterval(this.tmuxTimer);
 		clearTimeout(this.programTimer);
@@ -703,13 +709,7 @@ export class Runtime {
 		}
 		if (command.kind === "mark_seen") {
 			receipt("accepted");
-			if (!current) this.setCommandStage(commandId, "failed", "unknown session");
-			else if (generation !== undefined && generation !== current.generation)
-				this.setCommandStage(commandId, "failed", "not running");
-			else {
-				this.seen(sessionId, "command");
-				this.setCommandStage(commandId, "applied");
-			}
+			this.markSeenCommand(commandId, sessionId, current?.generation, generation);
 			return;
 		}
 		if (command.kind === "transfer") {
@@ -767,6 +767,11 @@ export class Runtime {
 		if (command.kind === "work") {
 			receipt("accepted");
 			this.workCommand(commandId, sessionId, command, now);
+			return;
+		}
+		if (command.kind === "review") {
+			receipt("accepted");
+			this.reviewCommand(commandId, sessionId, command);
 			return;
 		}
 		if (command.kind === "communication") {
@@ -993,6 +998,10 @@ export class Runtime {
 			throw new Error("Only the operator can let an organization root go.");
 		if (temporaryCallers(db).has(sessionId))
 			throw new Error("Temporary program peers belong to their program's discard lifecycle, not let_go.");
+		if (
+			db.prepare("select 1 from review_jobs where owner = ? and state not in ('completed', 'cancelled')").get(sessionId)
+		)
+			throw new Error("Finish, reassign or cancel this person's unfinished reviews before letting it go.");
 		if (db.prepare("select 1 from assignments where person = ? and ended_at is null").get(sessionId))
 			throw new Error("Finish or explicitly reassign this person's unfinished assignments before letting it go.");
 		if (
@@ -1610,10 +1619,11 @@ export class Runtime {
 		};
 		const open = db
 			.prepare(
-				`select a.person, a.task_id, t.organization from assignments a
-				join work_tasks t on t.id = a.task_id where a.ended_at is null`,
+				`select a.person, a.task_id as work_id, t.organization from assignments a
+				join work_tasks t on t.id = a.task_id where a.ended_at is null
+				union all select owner as person, id as work_id, organization from review_jobs where state not in ('completed', 'cancelled')`,
 			)
-			.all() as { person: string; task_id: string; organization: string }[];
+			.all() as { person: string; work_id: string; organization: string }[];
 		const stranded = [
 			...new Set(
 				open
@@ -1622,7 +1632,7 @@ export class Runtime {
 						const after = rootIn(row.person, next) === rootIn(row.organization, next);
 						return before && !after;
 					})
-					.map((row) => row.task_id),
+					.map((row) => row.work_id),
 			),
 		];
 		if (stranded.length) return `unfinished work would leave its organization: ${stranded.join(", ")}`;
@@ -1657,6 +1667,54 @@ export class Runtime {
 		}
 		this.discardRequests.set(commandId, this.markDiscarded([sessionId]));
 		void this.cleanPrograms();
+	}
+
+	private markSeenCommand(
+		commandId: string,
+		sessionId: string,
+		current: number | undefined,
+		requested: number | undefined,
+	): void {
+		if (current === undefined) this.setCommandStage(commandId, "failed", "unknown session");
+		else if (requested !== undefined && requested !== current) this.setCommandStage(commandId, "failed", "not running");
+		else {
+			this.seen(sessionId, "command");
+			this.setCommandStage(commandId, "applied");
+		}
+	}
+
+	private reviewCommand(commandId: string, actor: string, command: Extract<Command, { kind: "review" }>): void {
+		if (command.version !== 1) {
+			this.setCommandStage(commandId, "failed", "Unsupported review command version");
+			return;
+		}
+		void this.reviews!.execute(commandId, actor, command.operation).then(
+			() => {
+				if (this.db) this.setCommandStage(commandId, "applied");
+			},
+			(error) => {
+				if (this.db) this.setCommandStage(commandId, "failed", error instanceof Error ? error.message : String(error));
+			},
+		);
+	}
+
+	private recoverReviews(): void {
+		const db = this.db!;
+		for (const row of db
+			.prepare(
+				`select c.command_id, c.command, c.result, r.artifact from commands c left join review_jobs r on r.command_id = c.command_id where c.kind = 'review' and c.stage in ('accepted', 'delivered')`,
+			)
+			.all() as { command_id: string; command: string; result: string | null; artifact: string | null }[]) {
+			const command = JSON.parse(row.command) as Extract<Command, { kind: "review" }>;
+			const applied = row.result && (command.operation.action !== "enqueue" || row.artifact);
+			this.setCommandStage(
+				row.command_id,
+				applied ? "applied" : "failed",
+				applied
+					? undefined
+					: "The runtime restarted before this review operation completed. Inspect retained work before a new request.",
+			);
+		}
 	}
 
 	private openProgram(connection: Connection, request: Extract<BridgeMessage, { type: "program_open" }>): void {

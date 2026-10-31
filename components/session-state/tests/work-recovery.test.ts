@@ -135,10 +135,17 @@ test("an accepted task change recovers once with its assignment, goal and outgoi
 	const repeat = await sendCommand(
 		state.socketPath,
 		"person",
-		{ kind: "work", action: "take", goal: "Duplicate ignored", cwd: project },
+		{ kind: "work", action: "take", goal: "An accepted goal survives a restart.", cwd: project },
 		{ commandId: "recover" },
 	);
 	expect(repeat.at(-1)?.stage).toBe("applied");
+	const conflict = await sendCommand(
+		state.socketPath,
+		"person",
+		{ kind: "work", action: "take", goal: "A different request", cwd: project },
+		{ commandId: "recover" },
+	);
+	expect(conflict.at(-1)?.stage).toBe("failed");
 	expect(query(state.dbPath, "select count(*) as count from assignments where task_id = 'work-recover'")).toEqual([
 		{ count: 1 },
 	]);

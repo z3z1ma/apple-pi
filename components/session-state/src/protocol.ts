@@ -1,5 +1,6 @@
 // The runtime's socket protocol: bridges send one JSON object per line.
 
+import type { ReviewCommand } from "../../code-review/src/operations.js";
 import type { QuestionnaireReply } from "../../shared/src/questionnaire-events.js";
 import type { TurnProgress, TurnResult } from "../../shared/src/turn-observer.js";
 import type { CommunicationCommand, MessageReference } from "./communication-types.js";
@@ -146,6 +147,7 @@ export type Command =
 			taskGoal?: boolean;
 	  }
 	| WorkCommand
+	| ReviewCommand
 	| CommunicationCommand
 	/** Record a link from the sending session; its id is the command id. */
 	| ({ kind: "link_record" } & LinkRecord)

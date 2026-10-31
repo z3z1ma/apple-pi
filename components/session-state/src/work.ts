@@ -105,7 +105,7 @@ function member(db: DatabaseSync, person: string) {
 	return row;
 }
 
-function mayManage(db: DatabaseSync, actor: string, person: string): void {
+export function mayManage(db: DatabaseSync, actor: string, person: string): void {
 	if (actor === OPERATOR) return;
 	const manager = member(db, actor);
 	const helper = db.prepare("select 1 from program_peers where session_id = ? and created_by = ?").get(person, actor);
@@ -407,14 +407,14 @@ export function closeLedgerTask(
 	);
 }
 
-/** Finish explicit promotion moves after a crash; historical finish receipts preserve their source bundles. */
+/** Finish explicit promotion/discard cleanup after a crash; historical finishes preserve their source bundles. */
 export function cleanMovedBundles(db: DatabaseSync): void {
 	db.prepare(
 		"update work_changes set previous_bundle = null where action = 'finish' and previous_bundle is not null",
 	).run();
 	const moves = db
 		.prepare(
-			"select command_id, previous_bundle from work_changes where action = 'promote' and previous_bundle is not null",
+			"select command_id, previous_bundle from work_changes where action in ('promote', 'discard') and previous_bundle is not null",
 		)
 		.all() as { command_id: string; previous_bundle: string }[];
 	for (const move of moves) {

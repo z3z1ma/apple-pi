@@ -11,7 +11,9 @@ Implement the approved semantic risk-based review proposal from .ledger/history/
 
 Capture foundation implemented and checked; see [evidence](evidence.md). It retains source and intent, preserves the author's index, detects observed mutation, and supports ordinary Git inspection from a self-contained artifact. A measured per-blob subprocess bottleneck was replaced with Git batch acquisition. This is not yet a usable native review or the completed first delivery slice.
 
-Next: runtime-owned jobs and attempts using the existing peer lifecycle, then semantic/risk/integration execution and the shared native/TUI/Workplace result surfaces. `/work` has not yet been removed, and `/reviews` is not yet available. No live activation or paid review turn has occurred.
+Runtime-owned capture admission and interruption/resume are now implemented, with owner-departure and reporting-move guards. Semantic coverage/result contracts and explicit-runtime peer connection support are checked. The latest focused cohort passed 128 tests in 13 files, plus Node/web types and package inventory checks. An existing temporary-task cleanup defect was reproduced at the committed baseline and fixed at its shared owner.
+
+Next: durable attempt claims and ordinary peer execution, then semantic/risk/integration execution and the shared native/TUI/Workplace result surfaces. Jobs currently stop at queued admission; no review worker or native enqueue tool is wired yet. `/work` has not yet been removed, and `/reviews` is not yet available. No live activation or paid review turn has occurred.
 
 ## Acceptance
 

@@ -8,6 +8,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { ROLE_ENTRY } from "../../organization/src/session-role.js";
 import { createPeerCalls } from "../../pi-exec/src/peer-calls.js";
 import { sendCommand } from "../src/client.js";
+import { statePaths } from "../src/paths.js";
 import { openPeerProgram, type PeerProgram } from "../src/program-client.js";
 import { fakeBridge, query, runtimePid, standInProcess, startRuntime, stopRuntime, tempStateDir } from "./helpers.js";
 
@@ -52,6 +53,28 @@ afterEach(async () => {
 	}
 	await stopRuntime(state);
 	vi.unstubAllEnvs();
+});
+
+test("an explicit runtime keeps program ownership and command identities independent of ambient state", async () => {
+	const paths = statePaths();
+	const elsewhere = tempStateDir();
+	try {
+		const program = await openPeerProgram("caller", undefined, { paths, id: "durable-attempt-scope" });
+		programs.push(program);
+		expect(program.id).toBe("durable-attempt-scope");
+		const person = await createPeer(program);
+		const receipt = await program.command(
+			person,
+			{ kind: "run_turn", task: "Inspect the source." },
+			{ commandId: "durable-attempt-turn" },
+		);
+		expect(receipt).toMatchObject({ commandId: "durable-attempt-turn", stage: "applied" });
+		await program.close();
+		cleanOwnership();
+		expect(existsSync(elsewhere.dbPath)).toBe(false);
+	} finally {
+		await stopRuntime(elsewhere);
+	}
 });
 
 async function programFor(person = "caller") {

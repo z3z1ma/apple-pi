@@ -2,11 +2,11 @@ import { randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import type { TurnProgress, TurnResult } from "../../shared/src/turn-observer.js";
 import { connectRuntime, RETRY_MS } from "./client.js";
-import { statePaths } from "./paths.js";
+import { type StatePaths, statePaths } from "./paths.js";
 import { type Command, lineReader, type Receipt } from "./protocol.js";
 
-function withDatabase<T>(read: (db: DatabaseSync) => T): T {
-	const db = new DatabaseSync(statePaths().db, { readOnly: true });
+function withDatabase<T>(paths: StatePaths, read: (db: DatabaseSync) => T): T {
+	const db = new DatabaseSync(paths.db, { readOnly: true });
 	try {
 		return read(db);
 	} finally {
@@ -20,6 +20,7 @@ export interface PeerProgram {
 		sessionId: string,
 		command: Command,
 		options?: {
+			commandId?: string;
 			signal?: AbortSignal;
 			progress?: (value: TurnProgress) => void;
 			/** Observe final usage and changes even when cancellation rejects the command. */
@@ -30,12 +31,17 @@ export interface PeerProgram {
 }
 
 /** One connection owns a program's temporary people. Existing people are only the targets of run commands. */
-export async function openPeerProgram(caller: string, signal?: AbortSignal): Promise<PeerProgram> {
-	const socket = await connectRuntime(signal);
+export async function openPeerProgram(
+	caller: string,
+	signal?: AbortSignal,
+	options: { paths?: StatePaths; id?: string } = {},
+): Promise<PeerProgram> {
+	const paths = options.paths ?? statePaths();
+	const socket = await connectRuntime(signal, options.paths?.socket);
 	socket.on("error", () => {});
 	try {
 		if (
-			!withDatabase((db) =>
+			!withDatabase(paths, (db) =>
 				db.prepare("select 1 from sqlite_master where type = 'table' and name = 'program_scopes'").get(),
 			)
 		)
@@ -44,7 +50,7 @@ export async function openPeerProgram(caller: string, signal?: AbortSignal): Pro
 		socket.destroy();
 		throw error;
 	}
-	const id = randomUUID();
+	const id = options.id ?? randomUUID();
 	const pending = new Map<
 		string,
 		{ finish(receipt: Receipt): void; fail(error: unknown): void; progress?: (value: TurnProgress) => void }
@@ -123,11 +129,11 @@ export async function openPeerProgram(caller: string, signal?: AbortSignal): Pro
 			} catch (error) {
 				if (remoteError || !lost) throw error;
 				// Losing a connection closes the scope, and a restarted daemon closes every abandoned scope.
-				const connection = await connectRuntime();
+				const connection = await connectRuntime(undefined, options.paths?.socket);
 				connection.on("error", () => {});
 				connection.destroy();
 				for (;;) {
-					const scope = withDatabase((db) =>
+					const scope = withDatabase(paths, (db) =>
 						db.prepare("select last_error from program_scopes where id = ?").get(id),
 					) as { last_error: string | null } | undefined;
 					if (!scope) break;
@@ -158,7 +164,8 @@ export async function openPeerProgram(caller: string, signal?: AbortSignal): Pro
 			if (ending || acknowledgedClose || remoteError || lost)
 				throw remoteError ?? lost ?? new Error("The program is closed");
 			options.signal?.throwIfAborted();
-			const commandId = randomUUID();
+			const commandId = options.commandId ?? randomUUID();
+			if (pending.has(commandId)) throw new Error("This command is already waiting for a result");
 			return new Promise<Receipt>((resolve, reject) => {
 				const finish = (receipt?: Receipt, error?: unknown) => {
 					options.signal?.removeEventListener("abort", abort);

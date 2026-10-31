@@ -310,6 +310,28 @@ const MIGRATIONS = [
 	 update threads set channel_type = case when id like 'organization:%' then 'organization' else 'team' end
 	 where kind = 'channel';
 	 update threads set scope_head = case when id like 'organization:%' then substr(id, 14) when id like 'team:%' then substr(id, 6) else created_by end where kind = 'channel';`,
+	`create table review_jobs (
+		id text primary key,
+		command_id text not null unique,
+		requester text not null,
+		owner text not null,
+		organization text not null,
+		origin_task text,
+		parent text,
+		state text not null,
+		priority real not null default 0,
+		generation integer not null default 0,
+		revision integer not null default 0,
+		plan_revision integer not null default 0,
+		request text not null,
+		artifact_directory text not null,
+		artifact text,
+		plan text,
+		reason text,
+		created_at integer not null,
+		updated_at integer not null
+	) strict;
+	create index review_jobs_by_state on review_jobs(state, priority desc, created_at);`,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;
