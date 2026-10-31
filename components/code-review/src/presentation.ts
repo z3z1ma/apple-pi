@@ -21,7 +21,7 @@ export function sourceLines(source: ReviewSource): string[] {
 	if (source.kind === "files")
 		return [
 			`${source.side}: ${source.total} captured ${source.total === 1 ? "file" : "files"}.`,
-			"Use v > source to open a path.",
+			"Use a > Choose captured source to open a path.",
 			"",
 			...(source.page?.rows.map((file) => JSON.stringify(file.path)) ?? []),
 		];

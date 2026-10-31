@@ -42,12 +42,14 @@ The framed master list shows execution state with a status icon, the current pas
 | `q` | Close the focused queue |
 | `Alt+G` | Move focus between editor and queue |
 | `Esc` | Return focus to the editor |
-| `Tab` / `Enter` | Switch between queue selection and evidence scrolling |
+| `Tab` / `Shift+Tab` | Cycle detail views forward/backward without changing pane focus |
+| `Enter` | Toggle focus between the master list and detail scrolling |
 | Arrow keys | Select a review or scroll evidence |
 | Page Up / Page Down | Page the queue or scroll evidence by a viewport |
 | `[` / `]` | Read the previous/next queue or evidence page |
-| `v` | Choose the evidence view |
-| `a` | Capture, cancel, resume, rerun, change priority, reassign, authorize more work, open captured sign-off or recover an uncertain request |
+| `a` | Choose a captured source file/side, capture, cancel, resume, rerun, change priority, reassign, authorize more work, open captured sign-off or recover an uncertain request |
+
+The list includes historical assessments, not only waiting work; its count is the number of recorded reviews. The owner is accountable for the review. After admission, the runtime automatically runs temporary role-based peers for planning, focused inspections, integration and validation; an owner does not have to pick up each queued pass manually. The Attempts view identifies the actual peers and their recorded roles/models.
 
 Capture asks for the repository/worktree directory and comparison. Before queueing it shows resolved commits and tree identities, the target digest, scope counts, approved-intent hash and omissions. The confirmation scrolls independently of its fixed controls: `y` queues, `Esc` cancels. A too-small terminal cannot confirm. Empty comparisons stop without queueing.
 

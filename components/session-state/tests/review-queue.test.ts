@@ -956,23 +956,25 @@ test("the loaded reviews command shows the queue, keeps selection and sends a co
 		expect(screen.stack).toHaveLength(1);
 		const panel = screen.stack[0]!.component;
 		expect(screen.focused()).toBe(panel);
-		expect(screen.layout(screen.stack[0]!).lines.join("\n")).toContain("Review queue (2)");
+		expect(screen.layout(screen.stack[0]!).lines.join("\n")).toContain("Reviews (2)");
 		panel.handleInput("\x1b");
 		expect(screen.focused()).toBe(screen.editor);
 		await extension.shortcuts.get("alt+g")!.handler(ctx);
 		expect(screen.focused()).toBe(panel);
 		panel.handleInput("\x1b[B");
 		expect(screen.layout(screen.stack[0]!).lines.join("\n")).toContain(first.id.slice(-8));
-		vi.mocked(ctx.ui.select).mockResolvedValueOnce("findings");
-		panel.handleInput("v");
-		await vi.waitFor(() => expect(screen.layout(screen.stack[0]!).lines.join("\n")).toContain("Findings"));
-		panel.handleInput("\t");
+		for (let index = 0; index < 10; index++) panel.handleInput("\t");
+		expect(screen.layout(screen.stack[0]!).lines.join("\n")).toContain("Summary");
+		expect(ctx.ui.select).not.toHaveBeenCalled();
+		for (let index = 0; index < 4; index++) panel.handleInput("\t");
+		expect(screen.layout(screen.stack[0]!).lines.join("\n")).toContain("Findings");
+		panel.handleInput("\r");
 		panel.handleInput("\x1b[6~");
 		expect(screen.layout(screen.stack[0]!).lines.join("\n")).toContain("The value disagrees with its consumer");
 		screen.tui.terminal.columns = 160;
 		screen.tui.terminal.rows = 40;
-		vi.mocked(ctx.ui.select).mockResolvedValueOnce("source").mockResolvedValueOnce("before");
-		panel.handleInput("v");
+		vi.mocked(ctx.ui.select).mockResolvedValueOnce("Choose captured source").mockResolvedValueOnce("before");
+		panel.handleInput("a");
 		await vi.waitFor(
 			() => {
 				const rendered = screen.layout(screen.stack[0]!).lines.join("\n");
@@ -983,9 +985,9 @@ test("the loaded reviews command shows the queue, keeps selection and sends a co
 			{ timeout: 5000 },
 		);
 		expect(readFileSync(join(repository, "value.ts"), "utf8")).toBe("export const value = 3;\n");
-		vi.mocked(ctx.ui.select).mockResolvedValueOnce("source").mockResolvedValueOnce("after");
+		vi.mocked(ctx.ui.select).mockResolvedValueOnce("Choose captured source").mockResolvedValueOnce("after");
 		vi.mocked(ctx.ui.input).mockResolvedValueOnce("");
-		panel.handleInput("v");
+		panel.handleInput("a");
 		await vi.waitFor(
 			() => {
 				const rendered = screen.layout(screen.stack[0]!).lines.join("\n");
@@ -998,8 +1000,7 @@ test("the loaded reviews command shows the queue, keeps selection and sends a co
 		await vi.waitFor(() => expect(screen.layout(screen.stack[0]!).lines.join("\n")).toContain('"value.ts"'), {
 			timeout: 5000,
 		});
-		vi.mocked(ctx.ui.select).mockResolvedValueOnce("target");
-		panel.handleInput("v");
+		panel.handleInput("\x1b[Z");
 		await vi.waitFor(() => expect(screen.layout(screen.stack[0]!).lines.join("\n")).toContain("Target"));
 		panel.handleInput("]");
 		let limits = "";

@@ -34,7 +34,7 @@ export interface ReviewPanelActions {
 	close(): void;
 	unfocus(): void;
 	menu(review: ReviewSummary | undefined): void;
-	view(review: ReviewSummary | undefined): void;
+	view(direction: number): void;
 }
 const terminalText = (text: string) =>
 	stripVTControlCharacters(text).replace(/[\u0000-\u0009\u000b-\u001f\u007f-\u009f]/g, " ");
@@ -210,11 +210,11 @@ export class ReviewPanel implements Component {
 			this.actions.menu(this.current());
 			return;
 		}
-		if (matchesKey(data, "v")) {
-			this.actions.view(this.current());
+		if (matchesKey(data, Key.tab) || matchesKey(data, "shift+tab")) {
+			this.actions.view(matchesKey(data, "shift+tab") ? -1 : 1);
 			return;
 		}
-		if (matchesKey(data, Key.tab) || matchesKey(data, Key.enter)) this.focusDetail = !this.focusDetail;
+		if (matchesKey(data, Key.enter)) this.focusDetail = !this.focusDetail;
 		else if (matchesKey(data, "]") || matchesKey(data, "[")) this.page(matchesKey(data, "]") ? 1 : -1);
 		else if (matchesKey(data, Key.pageDown) || matchesKey(data, Key.pageUp)) {
 			const direction = matchesKey(data, Key.pageDown) ? 1 : -1;
@@ -242,9 +242,9 @@ export class ReviewPanel implements Component {
 
 	render(width: number): string[] {
 		const height = Math.max(1, Math.floor(this.tui.terminal.rows * 0.8));
-		const fullKeys = "a actions  v evidence  Tab pane  arrows move  [ ] page  Esc editor  q close";
+		const fullKeys = "Tab/Shift+Tab view  Enter pane  a actions  arrows move  [ ] page  Esc editor  q close";
 		const keys =
-			width >= fullKeys.length + 4 ? [fullKeys] : ["a actions  v view  Tab pane", "arrows move  [ ] page  q close"];
+			width >= fullKeys.length + 4 ? [fullKeys] : ["Tab/Shift+Tab view  Enter pane", "a actions  [ ] page  q close"];
 		const chrome = 5 + keys.length;
 		if (width < Math.max(...keys.map((line) => line.length)) + 4 || height < chrome + 5)
 			return [truncateToWidth("Reviews: enlarge terminal; q closes", Math.max(0, width), "")];
@@ -265,8 +265,8 @@ export class ReviewPanel implements Component {
 		const total = this.data.total;
 		const rows = this.data.page?.rows.length ?? 0;
 		const range = rows ? `${this.offset + 1}-${this.offset + rows} of ${total}` : `0 of ${total}`;
-		const queueLabel = `${!this.focusDetail && this.focused ? "> " : ""}Queue  ${range}`;
-		const title = `Review queue${this.error ? " - unavailable" : ` (${total})`}${this.focused ? "" : " - Alt+G to focus"}`;
+		const queueLabel = `${!this.focusDetail && this.focused ? "> " : ""}Reviews  ${range}`;
+		const title = `Reviews${this.error ? " - unavailable" : ` (${total})`}${this.focused ? "" : " - Alt+G to focus"}`;
 		const top = edge("\u256d") + rule(this.theme, width - 2, title, this.focused) + edge("\u256e");
 		const bottom = [
 			edge("\u251c") + rule(this.theme, width - 2) + edge("\u2524"),

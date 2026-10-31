@@ -128,8 +128,10 @@ export class ReviewManager {
 					menu: (review) => {
 						void this.runAction((stop) => this.menu(ctx, review, stop));
 					},
-					view: (review) => {
-						void this.runAction((stop) => this.chooseView(ctx, review, stop));
+					view: (direction) => {
+						this.stopSource();
+						this.view = views[(views.indexOf(this.view) + direction + views.length) % views.length]!;
+						this.mounted?.panel.resetDetail();
 					},
 				},
 				this.selected,
@@ -252,24 +254,20 @@ export class ReviewManager {
 		return page.detail;
 	}
 
-	private async chooseView(ctx: ExtensionContext, review: ReviewSummary | undefined, stop: AbortSignal) {
-		const choice = await ctx.ui.select("Review evidence", [...views], { signal: stop });
-		if (!choice || stop.aborted) return;
-		if (choice === "source") {
-			if (!review) {
-				this.mounted?.panel.setNote("Select a review before browsing its source.");
-				return;
-			}
-			const side = await ctx.ui.select("Captured comparison side", ["after", "before"], { signal: stop });
-			if (!side || stop.aborted) return;
-			const path = await ctx.ui.input("Captured file path (blank lists files)", "Repository-relative path", {
-				signal: stop,
-			});
-			if (path === undefined || stop.aborted) return;
-			this.sourceSelection = { review: review.id, path: path || undefined, side: side as "before" | "after" };
+	private async chooseSource(ctx: ExtensionContext, review: ReviewSummary | undefined, stop: AbortSignal) {
+		if (!review) {
+			this.mounted?.panel.setNote("Select a review before browsing its source.");
+			return;
 		}
+		const side = await ctx.ui.select("Captured comparison side", ["after", "before"], { signal: stop });
+		if (!side || stop.aborted) return;
+		const path = await ctx.ui.input("Captured file path (blank lists files)", "Repository-relative path", {
+			signal: stop,
+		});
+		if (path === undefined || stop.aborted) return;
+		this.sourceSelection = { review: review.id, path: path || undefined, side: side as "before" | "after" };
 		this.stopSource();
-		this.view = choice as EvidenceView;
+		this.view = "source";
 		this.mounted?.panel.resetDetail();
 	}
 
@@ -299,6 +297,7 @@ export class ReviewManager {
 		withReviews(() => true);
 		const actions = ["Capture a review", ...(this.pending.size ? ["Recover an uncertain request"] : [])];
 		if (review) {
+			actions.push("Choose captured source");
 			if (!["completed", "cancelled", "no-changes"].includes(review.state)) actions.push("Cancel", "Set priority");
 			if (["interrupted", "failed", "incomplete"].includes(review.state)) actions.push("Resume same target");
 			if (["completed", "incomplete", "failed", "interrupted", "cancelled"].includes(review.state))
@@ -307,6 +306,7 @@ export class ReviewManager {
 		}
 		const choice = await ctx.ui.select("Review actions", actions, { signal: stop });
 		if (!choice || stop.aborted) return;
+		if (choice === "Choose captured source") return this.chooseSource(ctx, review, stop);
 		if (choice === "Authorize additional work" && review) return this.authorizeWork(ctx, review, stop);
 		if (choice === "Open captured sign-off" && review) {
 			const page = await openCapturedSignOff(ctx.sessionManager.getSessionId(), review.id, stop);

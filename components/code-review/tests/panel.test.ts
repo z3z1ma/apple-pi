@@ -184,11 +184,11 @@ describe("review queue master-detail", () => {
 		);
 		panel.focused = true;
 		let lines = panel.render(160);
-		expect(lines.map(stripVTControlCharacters).join("\n")).toContain("> Queue");
+		expect(lines.map(stripVTControlCharacters).join("\n")).toContain("> Reviews");
 		expect(theme.fg).toHaveBeenCalledWith("error", expect.stringContaining("failed"));
 		expect(theme.fg).toHaveBeenCalledWith("warning", expect.stringContaining("1 confirmed"));
 		expect(theme.fg).not.toHaveBeenCalledWith("success", expect.stringContaining("completed"));
-		panel.handleInput("\t");
+		panel.handleInput("\r");
 		expect(panel.render(160).map(stripVTControlCharacters).join("\n")).toContain("> Summary");
 		const click = (y: number) =>
 			panel.handleMouse({
@@ -206,9 +206,9 @@ describe("review queue master-detail", () => {
 			});
 		click(7);
 		expect(panel.getSelectedId()).toBe("failed-review");
-		panel.handleInput("\t");
+		panel.handleInput("\r");
 		click(2);
-		expect(panel.render(160).map(stripVTControlCharacters).join("\n")).toContain("> Queue");
+		expect(panel.render(160).map(stripVTControlCharacters).join("\n")).toContain("> Reviews");
 		expect(panel.getSelectedId()).toBe("failed-review");
 		for (const width of [160, 100, 90, 35]) {
 			lines = panel.render(width);
@@ -267,13 +267,23 @@ describe("review queue master-detail", () => {
 		const pageSize = read.mock.lastCall![0].limit;
 		panel.handleInput("]");
 		expect(panel.getSelectedId()).toBe(rows[pageSize]!.id);
-		panel.handleInput("\t");
+		panel.handleInput("\r");
 		panel.handleInput("\x1b[B");
 		expect(panel.getSelectedId()).toBe(rows[pageSize]!.id);
 		panel.handleInput("v");
-		expect(events.view).toHaveBeenCalledWith(rows[pageSize]);
+		expect(events.view).not.toHaveBeenCalled();
+		panel.handleInput("\t");
+		expect(events.view).toHaveBeenLastCalledWith(1);
+		panel.handleInput("\x1b[Z");
+		expect(events.view).toHaveBeenLastCalledWith(-1);
+		panel.handleInput("\x1b[B");
+		expect(panel.getSelectedId()).toBe(rows[pageSize]!.id);
+		panel.handleInput("\r");
+		panel.handleInput("\t");
+		panel.handleInput("\x1b[B");
+		expect(panel.getSelectedId()).toBe(rows[pageSize + 1]!.id);
 		panel.handleInput("a");
-		expect(events.menu).toHaveBeenCalledWith(rows[pageSize]);
+		expect(events.menu).toHaveBeenCalledWith(rows[pageSize + 1]);
 		panel.handleInput("\x1b");
 		expect(events.unfocus).toHaveBeenCalledOnce();
 		panel.handleInput("q");
@@ -303,7 +313,7 @@ describe("review queue master-detail", () => {
 		);
 		panel.render(160);
 		const detailSize = page.mock.lastCall![0].detailLimit;
-		panel.handleInput("\t");
+		panel.handleInput("\r");
 		panel.handleInput("\x1b[6~");
 		expect(panel.render(160).join("\n")).toContain(`Evidence 0: line ${detailSize}`);
 		panel.setNote("Request handle: outcome unknown");

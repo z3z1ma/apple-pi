@@ -10,6 +10,8 @@ In progress. The capture foundation was exercised before any paid reviewer turn.
 
 ## Learnings
 
+The operator rejected a modal evidence selector even after earlier terminal rendering checks passed. Keep ordinary view navigation independent of pane focus; reserve prompts for explicit actions such as selecting a captured path. The queue count includes settled history, and its owner identifies accountability rather than the person executing every pass. Read-only checks of both the scoped reader and whole store found only settled records; this does not establish what the operator's earlier screen showed. Keyboard correction checks include the loaded command and isolated installed Pi, not operator acceptance.
+
 Git's virtual empty-tree handling hid a missing stored object until full artifact verification ran. A root-commit capture needs a materialized empty tree, not only a resolvable ID. The capture context file owns that invariant.
 
 A checkout-scale measurement exposed process-per-blob acquisition as the dominant cost: 353.7 seconds for 4,930 files. Git batch acquisition retained identical source and patch identities in 21.4 seconds, including verification. These single observations justify the changed I/O boundary, not a general latency or review-quality claim.
@@ -65,5 +67,7 @@ An uncertain capture must disable the fresh enqueue action while retaining exact
 Production activation preserved the immediate non-retired-person list, settled review evidence and retained pending mail. Pending accepted/delivered mail was not an active control operation: inspecting the actual command kind allowed a safe restart without resending mail or weakening checks on controls. Runtime/schema activation and app relaunch are now complete, while extension reload and operator acceptance remain distinct.
 
 The first full live freshness probe timed out at60s; a signal-bounded retry completed in57.8s. Automatically doing that work before showing sign-off was unnecessary and obstructed the user journey. Opening the page now verifies the retained assessment and labels live freshness explicitly unchecked, while the separate freshness action remains available. A production captured-page probe still took16.8s for retained verification; the correction removes the extra live capture, not all I/O cost or the verification guarantee.
+
+The timed-out freshness probe also left its temporary preview behind because the shell killed it before its cleanup could finish. For allocating subprocess probes, pass an internal cancellation signal with a cleanup margin before the outer shell timeout. After a hard timeout, inspect and remove only scratch confidently attributable to that invocation. The later signal-bounded probe completed and cleaned normally; an outer timeout alone does not establish cleanup.
 
 Pending operator acceptance of the assembled experience. The operator's repeated request to continue is evidence that serial component checkpoints took too long; completing the integration, not adding another design stage, is the corrective work.
