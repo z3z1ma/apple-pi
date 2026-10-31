@@ -30,3 +30,7 @@ My draft had made a helpful reproducibility mechanism into a new capability-rest
 - Evaluate semantic/risk-directed review against the simple baseline with confirmed defects, false positives, triage effort and actual cost. Agree resource allowance and decision tolerances before comparative execution.
 
 These are acceptance checks for later authorized implementation, not completed experiments or new unrelated tasks.
+
+## Closeout
+
+Archive-link checks passed. The ledger archiver left an extra blank line at the live index's end; the staged whitespace check caught it before commit. Trim the index tail and rerun the scoped check rather than treat successful archival as a commit-ready diff.

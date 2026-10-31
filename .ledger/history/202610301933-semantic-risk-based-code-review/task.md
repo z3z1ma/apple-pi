@@ -1,4 +1,4 @@
-Status: in-progress
+Status: done
 Created: 2026-10-31
 
 # Plan semantic risk-based review
