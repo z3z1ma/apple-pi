@@ -24,6 +24,8 @@ The ordinary-onboarding positive control initially failed because it still expec
 
 The reader checkpoint exposed two different failures that a completed report did not settle: a validator challenge still counted as completed coverage, and resume reused the challenged report because its inputs matched. The corrected test forces a new inspection while preserving unaffected work. An intervening failed retry exposed that the challenge also needed to persist independently of current selections; it now blocks reuse on the exact challenged attempt, atomically with the validator output. Identity also mattered in the fixtures: selecting the first review row concealed the wrong request/result association until several jobs were queued. Shared organizational tree rules remained useful, but the work-task anchor inventory was not a review inventory; a merge without surviving work tasks reproduced the difference. These lessons now live with the reader, worker and tests.
 
+The decision checkpoint keeps a fix in later code separate from the original snapshot. Even a selected verification question on a different artifact cannot make the old code repaired or silently approved. The old finding remains a sign-off limitation, and substantive owner judgments remain visible even when they disagree with model rejection. Scripted tests establish those recording and consent boundaries, not whether the evidence actually proves a real fix.
+
 ## Improvements
 
 Pending completion of the undertaking.

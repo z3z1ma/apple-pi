@@ -16,7 +16,7 @@ import {
 	validatePlan,
 	validateReport,
 } from "../../code-review/src/contracts.js";
-import { type ReviewJob, ReviewOperationSchema } from "../../code-review/src/operations.js";
+import { type ReviewJob, type ReviewOperation, ReviewOperationSchema } from "../../code-review/src/operations.js";
 import { INSPECT_REVIEW, PLAN_REVIEW, VALIDATE_REVIEW } from "../../code-review/src/prompts.js";
 import type { ReviewArtifact } from "../../code-review/src/types.js";
 import { loadRoles } from "../../organization/src/roles.js";
@@ -24,6 +24,7 @@ import { RETRY_MS } from "./client.js";
 import type { StatePaths } from "./paths.js";
 import { temporaryCallers } from "./program-peers.js";
 import { runReviewAttempt } from "./review-attempt.js";
+import { recordReviewDecision, reviewSettled } from "./review-decisions.js";
 import { readReview } from "./review-read.js";
 import { rootOf } from "./tree.js";
 import { focusedTask, mayManage } from "./work.js";
@@ -125,6 +126,10 @@ export class ReviewJobs {
 		}
 		const job = readReview(this.db, actor, operation.review);
 		if (actor !== job.owner) mayManage(this.db, actor, job.owner);
+		if (operation.action === "finding" || operation.action === "approve") {
+			await this.decide(commandId, actor, job, operation);
+			return job.id;
+		}
 		if (operation.action === "cancel") {
 			if (job.state !== "completed" && job.state !== "cancelled") {
 				this.db
@@ -183,6 +188,27 @@ export class ReviewJobs {
 		}
 		this.wake();
 		return job.id;
+	}
+
+	private async decide(
+		commandId: string,
+		actor: string,
+		job: ReviewJob,
+		operation: Extract<ReviewOperation, { action: "finding" | "approve" }>,
+	): Promise<void> {
+		if (!reviewSettled(job.state) || !job.artifact) throw new Error("Decisions require a settled captured review");
+		if (operation.action === "approve") {
+			if (actor !== "operator") throw new Error("Only the operator can sign off on a captured review");
+			await this.waitCleanup(job.id);
+		}
+		await verifyArtifact(job.artifact);
+		if (operation.action === "finding" && operation.response.verification) {
+			const verification = readReview(this.db, actor, operation.response.verification.review);
+			if (!verification.artifact) throw new Error("The verification target was not captured");
+			await verifyArtifact(verification.artifact);
+		}
+		this.live();
+		this.commit(commandId, job.id, () => recordReviewDecision(this.db, commandId, actor, job, operation));
 	}
 
 	wake(): void {

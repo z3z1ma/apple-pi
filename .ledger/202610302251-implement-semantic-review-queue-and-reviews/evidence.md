@@ -85,6 +85,21 @@ The SDK fixture calls the real extension's review_code, review_queue, read_revie
 
 A stronger recovery case then reproduced loss of that coverage challenge after an intervening failed retry: `/tmp/review-challenge-recovery-red.log`. Current selections had been cleared, so a second resume reused the old challenged report. Migration37 now retains a reuse block on that exact attempt, atomically with the validator's output, before cleanup. The validator input names the attempts it challenges. Final recheck after this correction: **88 tests in eight files passed**, Node/web types and scoped Biome; `/tmp/review-checkpoint-tests2.log`, `/tmp/review-checkpoint-types2.log`. The earlier passing cohort did not cover this extra transition.
 
+## Finding responses and assessment-bound approval checkpoint
+
+Migration38 adds append-only review_decisions under the existing runtime command journal. Each decision uses its command ID. Finding responses retain original allegations and model validation, require counterevidence for rejection and scope/evidence for accepted risk, and distinguish unverified claims from a selected, completed, unchallenged verification question on another captured target. That verification retains the exact attempt, validator, digest, assessment revision and reported evidence. It records the responder's judgment, not automatic semantic proof.
+
+Operator approval requires a settled assessment, verified retained source and an exact digest/revision match. Known limitations need explicit acknowledgment. A later fix does not repair the old snapshot, and a substantive owner response is not hidden by earlier model rejection. Later finding responses stale the old approval while preserving its record. The runtime rechecks authority and assessment identity after asynchronous verification, inside the command transaction.
+
+- The real SDK fixture now calls resolve_finding and reads its decision history after guarded cancellation.
+- A real-socket test covers unsupported rejection/risk decisions, stale response refusal, original allegation retention, claimed versus selected new-target fix verification, operator-only approval, required limit acknowledgment, later assessment invalidation and retained-source tampering.
+- Focused cohort: **84 tests in seven files passed**, one worker, 74.37 seconds. `/tmp/review-decisions-final-tests.log` covers queue/native/decision behavior and historical-schema consumers. Node/web types and scoped Biome passed: `/tmp/review-decisions-final-types.log`, `/tmp/review-decisions-final-format.log`.
+- TypeBox's mapped literal unions inferred never in actual typed callers despite runtime validation working. Explicit literal tuples passed typecheck and behavior checks; the durable context owns this constraint.
+- Final post-authority-recheck: **17 queue/native tests passed**, one worker, 53.19 seconds; Node/web types, scoped Biome and whitespace checks passed. `/tmp/review-decisions-close-tests.log`, `/tmp/review-decisions-close-types.log`, `/tmp/review-decisions-close-format.log`.
+- Context lint passed for **342 files**. Package dry run contains **2,754 files**, including both new decision modules: `/tmp/review-decisions-pack.json`. Inventory only.
+
+No approval page, live operator sign-off, public extension activation, paid model-quality check or production migration has occurred.
+
 ## Remaining delivery
 
-Durable finding/coverage decisions, freshness readers, the extra-work decision path, remaining native integration, single master-detail `/reviews` with visible list status and retirement of the old work panel, Workplace Code and artifact-bound sign-off, focused native/IPC/UI integration, applicable builds and real-host validation. No part of that remaining scope has been waived. No paid reviewer or live daemon/app activation has occurred.
+Coverage/extra-work decisions, freshness readers, the extra-work decision path, remaining native integration, single master-detail `/reviews` with visible list status and retirement of the old work panel, Workplace Code and artifact-bound sign-off, focused native/IPC/UI integration, applicable builds and real-host validation. No part of that remaining scope has been waived. No paid reviewer or live daemon/app activation has occurred.

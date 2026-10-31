@@ -1,5 +1,6 @@
 import { type Static, Type } from "typebox";
 import type { ReviewPlan } from "./contracts.js";
+import { FindingResponseSchema } from "./decisions.js";
 import type { ReviewArtifact, ReviewRequest } from "./types.js";
 
 const text = Type.String({ minLength: 1, pattern: "\\S" });
@@ -37,6 +38,29 @@ export const ReviewOperationSchema = Type.Union([
 	Type.Object({ action: Type.Literal("resume"), review: text }, object),
 	Type.Object({ action: Type.Literal("priority"), review: text, priority: Type.Number() }, object),
 	Type.Object({ action: Type.Literal("reassign"), review: text, owner: text }, object),
+	Type.Object(
+		{
+			action: Type.Literal("finding"),
+			review: text,
+			revision: Type.Integer({ minimum: 0 }),
+			digest: text,
+			finding: text,
+			response: FindingResponseSchema,
+		},
+		object,
+	),
+	Type.Object(
+		{
+			action: Type.Literal("approve"),
+			review: text,
+			revision: Type.Integer({ minimum: 0 }),
+			digest: text,
+			verdict: Type.Union([Type.Literal("approved"), Type.Literal("changes-requested"), Type.Literal("withdrawn")]),
+			note: Type.String(),
+			acceptLimits: Type.Boolean(),
+		},
+		object,
+	),
 ]);
 export type ReviewOperation = Static<typeof ReviewOperationSchema>;
 export interface ReviewCommand {

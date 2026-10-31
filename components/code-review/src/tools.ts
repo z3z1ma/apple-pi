@@ -5,6 +5,7 @@ import { Type } from "typebox";
 import { sendCommand } from "../../session-state/src/client.js";
 import { readReview, readReviewPart, reviewQueue, reviewSummary } from "../../session-state/src/review-read.js";
 import { withThreads } from "../../session-state/src/threads.js";
+import { FindingResponseSchema } from "./decisions.js";
 import { type ReviewOperation, ReviewRequestSchema, ReviewTargetSchema } from "./operations.js";
 
 const text = (description: string) => Type.String({ minLength: 1, description });
@@ -32,33 +33,34 @@ const request = Type.Optional(
 const review = text(
 	"A returned review ID, or the request handle of its admission. Access follows the recorded organization.",
 );
-const states = [
-	"capturing",
-	"queued",
-	"running",
-	"cancelling",
-	"cancelled",
-	"interrupted",
-	"failed",
-	"incomplete",
-	"completed",
-] as const;
-const parts = [
-	"summary",
-	"target",
-	"plan",
-	"pass",
-	"findings",
-	"coverage",
-	"attempts",
-	"attempt",
-	"changes",
-	"regions",
-] as const;
+const states = Type.Union([
+	Type.Literal("capturing"),
+	Type.Literal("queued"),
+	Type.Literal("running"),
+	Type.Literal("cancelling"),
+	Type.Literal("cancelled"),
+	Type.Literal("interrupted"),
+	Type.Literal("failed"),
+	Type.Literal("incomplete"),
+	Type.Literal("completed"),
+]);
+const parts = Type.Union([
+	Type.Literal("summary"),
+	Type.Literal("target"),
+	Type.Literal("plan"),
+	Type.Literal("pass"),
+	Type.Literal("findings"),
+	Type.Literal("coverage"),
+	Type.Literal("attempts"),
+	Type.Literal("attempt"),
+	Type.Literal("changes"),
+	Type.Literal("regions"),
+	Type.Literal("decisions"),
+]);
 
 function database<T>(read: (db: DatabaseSync) => T): T {
 	const value = withThreads((db) => {
-		if (!db.prepare("select 1 from pragma_table_info('review_attempts') where name = 'reuse_blocked_by'").get())
+		if (!db.prepare("select 1 from sqlite_master where type = 'table' and name = 'review_decisions'").get())
 			throw new Error(
 				"The review store is unavailable. Ask the operator to update the session-state runtime before using review tools.",
 			);
@@ -115,6 +117,42 @@ async function mutate(self: string, id: string, operation: ReviewOperation, sign
 }
 
 export function installReviewTools(pi: ExtensionAPI): void {
+	pi.registerTool(
+		defineTool({
+			name: "resolve_finding",
+			label: "Respond to finding",
+			description:
+				"Append an accountable finding response to a settled captured assessment. Supply its current revision and digest from read_review. Rejection needs counterevidence; accepted risk needs evidence and explicit scope. A claimed fix remains unverified. Fixed requires a specific completed, unchallenged question on a different captured target and supporting evidence; this records your judgment, not a correctness certificate. A fix in later code never changes the original snapshot. Responses retain the original allegation and invalidate older assessment approval. Only the operator can approve code through sign-off.",
+			promptSnippet: "Record finding responses with evidence, scope and explicit new-target fix verification.",
+			parameters: Type.Object(
+				{
+					review,
+					revision: Type.Integer({ minimum: 0 }),
+					digest: text("Exact artifact digest from the current summary."),
+					finding: text("Attempt-scoped finding ID from read_review."),
+					response: FindingResponseSchema,
+					request,
+				},
+				{ additionalProperties: false },
+			),
+			async execute(callId, params, signal, _update, ctx) {
+				const self = ctx.sessionManager.getSessionId();
+				return mutate(
+					self,
+					requestId(self, callId, params.request),
+					{
+						action: "finding",
+						review: params.review,
+						revision: params.revision,
+						digest: params.digest,
+						finding: params.finding,
+						response: params.response,
+					},
+					signal,
+				);
+			},
+		}),
+	);
 	pi.registerTool(
 		defineTool({
 			name: "review_code",
@@ -177,7 +215,7 @@ export function installReviewTools(pi: ExtensionAPI): void {
 			parameters: Type.Object(
 				{
 					...page,
-					state: Type.Optional(Type.Union(states.map((state) => Type.Literal(state)))),
+					state: Type.Optional(states),
 					cwd: Type.Optional(text("Filter a recorded repository or requested worktree directory.")),
 				},
 				{ additionalProperties: false },
@@ -204,7 +242,7 @@ export function installReviewTools(pi: ExtensionAPI): void {
 			parameters: Type.Object(
 				{
 					review,
-					part: Type.Optional(Type.Union(parts.map((part) => Type.Literal(part)))),
+					part: Type.Optional(parts),
 					pass: Type.Optional(text("Pass ID from the plan; required for part: pass.")),
 					attempt: Type.Optional(
 						text("Attempt ID from the attempts page or selected pass; required for part: attempt."),

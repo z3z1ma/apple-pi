@@ -8,8 +8,9 @@ import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import codeReview from "../../../extensions/code-review.js";
 import { fauxSession } from "../../../tests/helpers/faux-session.js";
+import type { FindingResponse } from "../../code-review/src/decisions.js";
 import { sendCommand } from "../src/client.js";
-import { readReview, reviewAssessment, reviewQueue } from "../src/review-read.js";
+import { readReview, reviewAssessment, reviewQueue, reviewSummary } from "../src/review-read.js";
 import { fakeBridge, query, runtimePid, standInProcess, startRuntime, stopRuntime, tempStateDir } from "./helpers.js";
 
 let state: ReturnType<typeof tempStateDir>;
@@ -293,7 +294,7 @@ test("native tools admit, read, cancel, recover exact requests and explicitly ca
 	const run = await fauxSession(
 		[codeReview],
 		replies,
-		["review_code", "review_queue", "read_review", "manage_review"],
+		["review_code", "review_queue", "read_review", "manage_review", "resolve_finding"],
 		{ cwd: repository, sessionManager: SessionManager.inMemory(repository, { id: "owner" }) },
 	);
 	async function callTool(name: string, args: Parameters<typeof fauxToolCall>[1]): Promise<Record<string, unknown>> {
@@ -348,6 +349,22 @@ test("native tools admit, read, cancel, recover exact requests and explicitly ca
 			review: { id, state: "cancelled" },
 		});
 		expect(query(state.dbPath, "select id from program_scopes")).toEqual([]);
+		const current = await callTool("read_review", { review: id });
+		const allegations = await callTool("read_review", { review: id, part: "findings", limit: 1 });
+		const allegation = (allegations.page as { rows: { id: string }[] }).rows[0]!.id;
+		expect(
+			await callTool("resolve_finding", {
+				review: id,
+				revision: current.revision as number,
+				digest: current.digest as string,
+				finding: allegation,
+				response: { disposition: "acknowledged", reason: "Retained for investigation", evidence: [] },
+			}),
+		).toMatchObject({ stage: "applied", review: { state: "cancelled" } });
+		expect(await callTool("read_review", { review: id, part: "decisions", limit: 1 })).toMatchObject({
+			total: 1,
+			page: { rows: [{ kind: "finding", actor: "owner", data: { disposition: "acknowledged" } }] },
+		});
 		writeFileSync(join(repository, "value.ts"), "export const value = 3;\n");
 		expect(await callTool("review_code", { ...request, request: handle })).toMatchObject({
 			stage: "applied",
@@ -374,6 +391,145 @@ test("native tools admit, read, cancel, recover exact requests and explicitly ca
 		run.dispose();
 	}
 }, 40000);
+
+test("finding responses retain allegations and approval binds a stable artifact and assessment", async () => {
+	writeFileSync(
+		join(state.agentDir, "peer-control.json"),
+		JSON.stringify({ review: { finding: true, rejectFinding: true } }),
+	);
+	const job = await enqueue();
+	await settled(job.id, "completed");
+	const db = new DatabaseSync(state.dbPath, { readOnly: true });
+	try {
+		const assessment = reviewAssessment(db, "owner", job.id);
+		const finding = assessment.findings[0]!.id;
+		const digest = assessment.job.artifact!.digest;
+		const decision = (response: FindingResponse, revision = readReview(db, "owner", job.id).revision) =>
+			sendCommand("owner", {
+				kind: "review",
+				version: 1,
+				operation: { action: "finding", review: job.id, digest, revision, finding, response },
+			});
+		expect((await decision({ disposition: "rejected", reason: "Unsupported rejection", evidence: [] })).stage).toBe(
+			"failed",
+		);
+		expect(
+			(await decision({ disposition: "accepted-risk", reason: "Accept", evidence: ["Known consequence"] })).stage,
+		).toBe("failed");
+		expect(reviewAssessment(db, "owner", job.id).decisions).toEqual([]);
+		expect(
+			(await decision({ disposition: "fixed-claimed", reason: "A fix is claimed but not verified", evidence: [] }))
+				.stage,
+		).toBe("applied");
+		expect(
+			(
+				await decision(
+					{ disposition: "rejected", reason: "Stale response", evidence: ["Old observation"] },
+					assessment.job.revision,
+				)
+			).stage,
+		).toBe("failed");
+		expect(reviewAssessment(db, "owner", job.id).findings[0]).toMatchObject({
+			finding: assessment.findings[0]!.finding,
+			validation: { disposition: "rejected" },
+			decision: { data: { disposition: "fixed-claimed", verifiedAgainst: null } },
+		});
+		expect(
+			(
+				await decision({
+					disposition: "fixed",
+					reason: "Same target is not a new verification",
+					evidence: ["Existing report"],
+					verification: { review: job.id, pass: "value-correctness", question: "value" },
+				})
+			).stage,
+		).toBe("failed");
+		writeFileSync(join(repository, "value.ts"), "export const value = 3;\n");
+		writeFileSync(join(state.agentDir, "peer-control.json"), JSON.stringify({ review: true }));
+		const next = await enqueue();
+		await settled(next.id, "completed");
+		expect(
+			(
+				await decision({
+					disposition: "fixed",
+					reason: "Scripted verification decision on the new target",
+					evidence: ["Selected question evidence below; this fixture is not a real defect"],
+					verification: { review: next.id, pass: "value-correctness", question: "value" },
+				})
+			).stage,
+		).toBe("applied");
+		const response = reviewAssessment(db, "owner", job.id).findings[0]!.decision!;
+		expect(response.data).toMatchObject({
+			disposition: "fixed",
+			verifiedAgainst: {
+				review: next.id,
+				digest: readReview(db, "owner", next.id).artifact!.digest,
+				attempt: reviewAssessment(db, "owner", next.id).passes[0]!.attempt!.id,
+			},
+		});
+		const revision = readReview(db, "owner", job.id).revision;
+		const approval = {
+			action: "approve" as const,
+			review: job.id,
+			digest,
+			revision,
+			verdict: "approved" as const,
+			note: "The operator accepts the displayed limits",
+			acceptLimits: false,
+		};
+		expect(
+			(await sendCommand("owner", { kind: "review", version: 1, operation: { ...approval, acceptLimits: true } }))
+				.stage,
+		).toBe("failed");
+		expect((await sendCommand("operator", { kind: "review", version: 1, operation: approval })).stage).toBe("failed");
+		expect(
+			(await sendCommand("operator", { kind: "review", version: 1, operation: { ...approval, acceptLimits: true } }))
+				.stage,
+		).toBe("applied");
+		expect(reviewSummary(db, "owner", job.id).approval).toMatchObject({
+			matchesAssessment: true,
+			record: {
+				digest,
+				revision,
+				actor: "operator",
+				data: { verdict: "approved", limits: expect.arrayContaining([expect.stringContaining("later fix")]) },
+			},
+		});
+		expect(
+			(
+				await decision({
+					disposition: "rejected",
+					reason: "Explicit counterevidence changes the assessment",
+					evidence: ["The alleged consumer is not present in this fixture"],
+				})
+			).stage,
+		).toBe("applied");
+		expect(reviewSummary(db, "owner", job.id).approval).toMatchObject({
+			matchesAssessment: false,
+			record: { revision },
+		});
+		expect(
+			(await sendCommand("operator", { kind: "review", version: 1, operation: { ...approval, acceptLimits: true } }))
+				.stage,
+		).toBe("failed");
+		const history = reviewAssessment(db, "owner", job.id).decisions;
+		expect(history).toHaveLength(4);
+		expect(history.map((entry) => entry.kind)).toEqual(["finding", "finding", "approval", "finding"]);
+		writeFileSync(join(assessment.job.artifact!.source, "value.ts"), "export const value = 99;\n");
+		expect(
+			(
+				await sendCommand("operator", {
+					kind: "review",
+					version: 1,
+					operation: { ...approval, revision: readReview(db, "owner", job.id).revision, acceptLimits: true },
+				})
+			).stage,
+		).toBe("failed");
+		expect(reviewAssessment(db, "owner", job.id).decisions).toHaveLength(4);
+	} finally {
+		db.close();
+	}
+}, 30000);
 
 async function settled(id: string, expected: string) {
 	await vi.waitFor(

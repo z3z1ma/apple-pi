@@ -1,5 +1,6 @@
 import type { DatabaseSync, SQLInputValue } from "node:sqlite";
 import { type FindingValidation, findingKey, planPasses, type ReviewReport } from "../../code-review/src/contracts.js";
+import type { FindingDecision, ReviewApproval, ReviewDecision } from "../../code-review/src/decisions.js";
 import type { ReviewJob, ReviewState } from "../../code-review/src/operations.js";
 import type { ReviewAssessment, ReviewAttempt, ReviewQueue, ReviewSummary } from "../../code-review/src/results.js";
 import { rootOf } from "./tree.js";
@@ -94,23 +95,37 @@ export function reviewAssessment(db: DatabaseSync, actor: string, id: string): R
 		});
 		const validator = selected("validator", "validation");
 		const validation = validator ? { attempt: validator, report: validator.output as FindingValidation } : null;
+		const decisions = db
+			.prepare(
+				"select id, review_id as review, digest, revision, actor, kind, finding, data, created_at as createdAt from review_decisions where review_id = ? order by created_at, rowid",
+			)
+			.all(job.id)
+			.map((row) => ({ ...row, data: JSON.parse(row.data as string) })) as unknown as ReviewDecision[];
 		const findings = passes.flatMap(({ pass, attempt, report }) =>
 			(report?.findings ?? []).map((finding) => ({
 				id: findingKey(attempt!.id, finding.id),
 				attempt: attempt!.id,
 				pass: pass.id,
 				finding,
+				decision:
+					decisions.findLast(
+						(decision): decision is FindingDecision =>
+							decision.kind === "finding" &&
+							decision.finding === findingKey(attempt!.id, finding.id) &&
+							decision.digest === job.artifact?.digest,
+					) ?? null,
 				validation:
 					validation?.report.findings.find((entry) => entry.finding === findingKey(pass.id, finding.id)) ?? null,
 			})),
 		);
-		return { job, passes, validation, findings };
+		return { job, passes, validation, findings, decisions };
 	});
 }
 
 export function reviewSummary(db: DatabaseSync, actor: string, id: string): ReviewSummary {
 	return snapshot(db, () => {
-		const { job, passes, findings, validation } = reviewAssessment(db, actor, id);
+		const { job, passes, findings, validation, decisions } = reviewAssessment(db, actor, id);
+		const approval = decisions.findLast((decision): decision is ReviewApproval => decision.kind === "approval");
 		const coverage = passes.map(({ pass, report }) => ({
 			required: pass.questions.length,
 			completed: pass.questions.filter(
@@ -152,6 +167,12 @@ export function reviewSummary(db: DatabaseSync, actor: string, id: string): Revi
 				confirmed: findings.filter(({ validation }) => validation?.disposition === "confirmed").length,
 				unresolved: findings.filter(({ validation }) => !validation || validation.disposition === "unresolved").length,
 			},
+			approval: approval
+				? {
+						record: approval,
+						matchesAssessment: approval.revision === job.revision && approval.digest === job.artifact?.digest,
+					}
+				: null,
 			reason: job.reason,
 			createdAt: job.createdAt,
 			updatedAt: job.updatedAt,
@@ -224,7 +245,8 @@ export interface ReviewReadOptions {
 		| "attempts"
 		| "attempt"
 		| "changes"
-		| "regions";
+		| "regions"
+		| "decisions";
 	pass?: string;
 	attempt?: string;
 	limit?: number;
@@ -316,6 +338,8 @@ export function readReviewPart(db: DatabaseSync, actor: string, id: string, opti
 			}
 			case "findings":
 				return page(reviewAssessment(db, actor, id).findings, options);
+			case "decisions":
+				return page(reviewAssessment(db, actor, id).decisions, options);
 			case "coverage": {
 				const assessment = reviewAssessment(db, actor, id);
 				return page(

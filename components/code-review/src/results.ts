@@ -1,4 +1,5 @@
 import type { FindingValidation, PlannedPass, ReviewPlan, ReviewReport } from "./contracts.js";
+import type { FindingDecision, ReviewApproval, ReviewDecision } from "./decisions.js";
 import type { ReviewJob, ReviewState } from "./operations.js";
 import type { ReviewTarget } from "./types.js";
 
@@ -22,6 +23,7 @@ export interface ReviewSummary {
 		additionalRequests: number;
 	} | null;
 	findings: { reported: number; confirmed: number; unresolved: number };
+	approval: { record: ReviewApproval; matchesAssessment: boolean } | null;
 	reason: string | null;
 	createdAt: number;
 	updatedAt: number;
@@ -60,11 +62,13 @@ export interface ReviewAssessment {
 	job: ReviewJob;
 	passes: { pass: PlannedPass; attempt: ReviewAttempt | null; report: ReviewReport | null }[];
 	validation: { attempt: ReviewAttempt; report: FindingValidation } | null;
+	decisions: ReviewDecision[];
 	findings: {
 		id: string;
 		attempt: string;
 		pass: string;
 		finding: ReviewReport["findings"][number];
 		validation: FindingValidation["findings"][number] | null;
+		decision: FindingDecision | null;
 	}[];
 }

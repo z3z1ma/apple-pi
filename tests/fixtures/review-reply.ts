@@ -19,6 +19,7 @@ export interface ReviewSettings {
 	passId?: string;
 	challenged?: boolean;
 	finding?: boolean;
+	rejectFinding?: boolean;
 }
 
 export function reviewReply(
@@ -123,8 +124,10 @@ export function reviewReply(
 		findings: input.reports.flatMap((report) =>
 			report.findings.map((finding) => ({
 				finding: `${encodeURIComponent(report.pass)}:${encodeURIComponent(finding.id)}`,
-				disposition: "confirmed" as const,
-				reason: "The scripted challenge retains this allegation.",
+				disposition: settings.rejectFinding ? ("rejected" as const) : ("confirmed" as const),
+				reason: settings.rejectFinding
+					? "Scripted counterevidence rejects this allegation."
+					: "The scripted challenge retains this allegation.",
 				evidence: [summary],
 				duplicateOf: null,
 			})),

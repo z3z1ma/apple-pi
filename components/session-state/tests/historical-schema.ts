@@ -16,6 +16,7 @@ export function rewindRecentSchema(db: DatabaseSync, version: number): void {
 	] as const;
 	for (const [introduced, table, column] of columns)
 		if (introduced > version) db.exec(`alter table ${table} drop column ${column}`);
+	if (version < 38) db.exec("drop table review_decisions");
 	if (version < 30) db.exec("drop index events_by_type");
 	if (version < 35) db.exec("drop table review_attempts");
 	if (version < 34) db.exec("drop table review_jobs");

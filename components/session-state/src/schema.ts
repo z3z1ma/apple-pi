@@ -358,6 +358,18 @@ const MIGRATIONS = [
 	create index review_attempts_by_review on review_attempts(review_id, plan_revision, pass_id, created_at);`,
 	`alter table review_jobs add column selected_attempts text not null default '{}';`,
 	`alter table review_attempts add column reuse_blocked_by text;`,
+	`create table review_decisions (
+		id text primary key,
+		review_id text not null,
+		digest text not null,
+		revision integer not null,
+		actor text not null,
+		kind text not null,
+		finding text,
+		data text not null,
+		created_at integer not null
+	) strict;
+	create index review_decisions_by_review on review_decisions(review_id, created_at);`,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;
