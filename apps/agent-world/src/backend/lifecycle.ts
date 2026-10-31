@@ -39,7 +39,7 @@ export interface Lifecycle extends Mailbox {
 	recruit(request: RecruitRequest): Promise<RecruitReceipt>;
 	rename(characterId: string, name: string): Promise<CommandReceipt>;
 	roles(): RoleChoice[];
-	retire(characterId: string, reason: string): Promise<CommandReceipt>;
+	retire(characterId: string, reason: string, handoff?: boolean): Promise<CommandReceipt>;
 }
 
 /** A directory as the operator typed it: `~` is his home. */
@@ -264,7 +264,7 @@ export function openLifecycle(
 
 		roles: () => loadRoleChoices(paths.agentDir),
 
-		async retire(characterId, given) {
+		async retire(characterId, given, handoff = true) {
 			const reason = given.trim();
 			if (!reason) return { ok: false, reason: "Say why it leaves." };
 			const world = snapshot();
@@ -275,13 +275,18 @@ export function openLifecycle(
 			const receipt = await follow(
 				commands,
 				characterId,
-				{ kind: "retire", reason, by: "operator" },
+				{ kind: "retire", reason, by: "operator", handoff },
 				CLOSE_MS,
 				(stage) => stage === "accepted",
-				() => "The departure request is accepted; handoff and cleanup continue in the runtime.",
+				() => "The departure request is accepted; the runtime will report progress.",
 			);
 			return receipt.ok
-				? { ...receipt, note: "Departure accepted; the runtime will report handoff and cleanup progress." }
+				? {
+						...receipt,
+						note: handoff
+							? "Departure accepted; the runtime will report handoff and cleanup progress."
+							: "Departure accepted without a handoff; the runtime will report cleanup progress.",
+					}
 				: receipt;
 		},
 

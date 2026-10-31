@@ -251,11 +251,18 @@ export function installCoordinator(pi: ExtensionAPI): void {
 			name: "let_go",
 			label: "let_go",
 			description:
-				"Request permanent departure after finishing or explicitly reassigning the person's assignments, moving its reports and settling its program delegations. Returns an accepted request ID, not completion. The runtime asks its own session for a final handoff, saves a private durable Markdown file, then commits departure and retries safe process/file/private-record cleanup. You and its manager receive progress and a handoff pointer. Caller disconnection leaves accepted work running; handoff failure preserves the person and transcript. Shared organizational evidence remains. Hire a new person for later work.",
+				"Request permanent departure after finishing or explicitly reassigning the person's assignments, moving its reports and settling its program delegations. Returns an accepted request ID, not completion. By default the runtime asks its own session for a final handoff and saves a private durable Markdown file. Set handoff:false to skip that model turn and file, without waking a sleeping person. Both paths commit departure and retry safe process/file/private-record cleanup. You and its manager receive progress and any handoff pointer. Caller disconnection leaves accepted work running; handoff failure preserves the person and transcript. Shared organizational evidence remains. Hire a new person for later work.",
 			parameters: Type.Object(
 				{
 					person: personParameter,
 					reason: Type.String({ minLength: 1, description: "Why it leaves, in one sentence." }),
+					handoff: Type.Optional(
+						Type.Boolean({
+							default: true,
+							description:
+								"Ask the departing person to write a final handoff. False skips the model turn and handoff file and can stop an active turn; responsibility and cleanup checks still apply.",
+						}),
+					),
 				},
 				{ additionalProperties: false },
 			),
@@ -263,12 +270,17 @@ export function installCoordinator(pi: ExtensionAPI): void {
 				const id = resolvePerson(ctx.sessionManager.getSessionId(), params.person);
 				const receipt = await run(
 					id,
-					{ kind: "retire", reason: params.reason, by: ctx.sessionManager.getSessionId() },
+					{
+						kind: "retire",
+						reason: params.reason,
+						by: ctx.sessionManager.getSessionId(),
+						handoff: params.handoff ?? true,
+					},
 					signal,
 					"accepted",
 				);
 				return reply(
-					`Departure request accepted for ${params.person}; handoff and cleanup run asynchronously. Request: ${receipt.commandId}`,
+					`Departure request accepted for ${params.person}; ${params.handoff === false ? "no handoff requested; cleanup runs" : "handoff and cleanup run"} asynchronously. Request: ${receipt.commandId}`,
 					{
 						sessionId: id,
 						commandId: receipt.commandId,

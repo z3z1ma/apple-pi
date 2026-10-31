@@ -154,7 +154,8 @@ const api: AgentWorldApi = {
 		ipcRenderer.on("world:org-progress", forward);
 		return () => ipcRenderer.removeListener("world:org-progress", forward);
 	},
-	retire: (characterId, reason) => ipcRenderer.invoke("world:retire", characterId, reason) as Promise<CommandReceipt>,
+	retire: (characterId, reason, handoff) =>
+		ipcRenderer.invoke("world:retire", characterId, reason, handoff) as Promise<CommandReceipt>,
 	openNotepad: (coordinatorId) => ipcRenderer.invoke("world:open-notepad", coordinatorId) as Promise<NotepadRead>,
 	saveNotepad: (coordinatorId, text, base) =>
 		ipcRenderer.invoke("world:save-notepad", coordinatorId, text, base) as Promise<NotepadSave>,

@@ -200,7 +200,7 @@ export type Command =
 	 */
 	| { kind: "organization_move"; person: string; manager: string | null; branch: string[] }
 	/** Record that the person left (when and why) and close it when it runs. Applied by the runtime. */
-	| { kind: "retire"; reason: string; by?: string }
+	| { kind: "retire"; reason: string; by?: string; handoff?: boolean }
 	/** The operator saw the session: it no longer needs them unless a prompt is open. Applied by the runtime. */
 	| { kind: "mark_seen" }
 	/**

@@ -12,7 +12,7 @@ export interface Departure {
 	role: string | null;
 	title: string | null;
 	reportsTo: string | null;
-	handoffFile: string;
+	handoffFile: string | null;
 	sessionFile: string | null;
 }
 

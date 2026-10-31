@@ -20,6 +20,7 @@ function RetireForm({ opened, world }: { opened: { id: string; name: string }; w
 	const theme = useTheme();
 	const character = world?.characters.find((c) => c.id === opened.id);
 	const [reason, setReason] = useState("");
+	const [handoff, setHandoff] = useState(true);
 	const [progress, setProgress] = useState<Progress>();
 	const ready = reason.trim() !== "" && progress?.state !== "sending";
 	const title = say(theme, "retire-title", { name: opened.name });
@@ -29,7 +30,7 @@ function RetireForm({ opened, world }: { opened: { id: string; name: string }; w
 	const send = async () => {
 		if (!ready) return;
 		setProgress({ state: "sending", text: `${opened.name}\u2026` });
-		setProgress(await retiring.send(opened, reason));
+		setProgress(await retiring.send(opened, reason, handoff));
 	};
 
 	return (
@@ -41,8 +42,8 @@ function RetireForm({ opened, world }: { opened: { id: string; name: string }; w
 				<div className="aw-place-heading">
 					<h2>{title}</h2>
 					<p className="aw-place-says">
-						A handoff is saved before its session and private resources are permanently removed. Acceptance starts the
-						work; later mail reports the outcome.
+						Its session and private resources are permanently removed. Choose whether to request a final handoff first.
+						Acceptance starts the work; later mail reports the outcome.
 					</p>
 				</div>
 			</header>
@@ -89,6 +90,15 @@ function RetireForm({ opened, world }: { opened: { id: string; name: string }; w
 								if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) void send();
 							}}
 						/>
+					</label>
+					<label>
+						<input
+							type="checkbox"
+							checked={handoff}
+							disabled={progress?.state === "sending"}
+							onChange={(event) => setHandoff(event.target.checked)}
+						/>
+						Request a final handoff
 					</label>
 					<div className="aw-letter-actions">
 						<button type="button" className="aw-button" onClick={() => retiring.close()}>

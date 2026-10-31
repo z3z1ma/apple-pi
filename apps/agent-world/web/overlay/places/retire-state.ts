@@ -1,6 +1,6 @@
 // Retiring a person: the small form opened from a character's actions, in the theme's words (leaving the guild,
 // resigning, graduating), and what it sends (the runtime's `retire` with a reason; the person leaves the organization
-// after its durable own-context handoff; cleanup may still be pending). `main.tsx` connects the backend API and the view store. Each change replaces the
+// with an optional own-context handoff; cleanup may still be pending). `main.tsx` connects the backend API and the view store. Each change replaces the
 // state object, as useSyncExternalStore needs.
 import type { AgentWorldApi, Character } from "../../../src/world.js";
 import { say } from "../../theme.js";
@@ -41,13 +41,13 @@ export const retiring = {
 		if (state.open) update({ open: undefined });
 	},
 	/** Send `retire` for the person; resolves with what the form shows, and says it in the chatbox. */
-	async send(character: Pick<Character, "id" | "name">, given: string): Promise<Progress> {
+	async send(character: Pick<Character, "id" | "name">, given: string, handoff = true): Promise<Progress> {
 		const reason = given.trim();
 		if (!reason) return { state: "failed", text: "Say why it leaves." };
 		const { api, view } = state;
 		if (!api) return { state: "failed", text: "Agent World is not connected." };
 		try {
-			const receipt = await api.retire(character.id, reason);
+			const receipt = await api.retire(character.id, reason, handoff);
 			if (!receipt.ok) {
 				view?.notify(receipt.reason);
 				return { state: "failed", text: receipt.reason };

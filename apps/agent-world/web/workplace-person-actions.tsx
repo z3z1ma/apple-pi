@@ -161,6 +161,7 @@ function PersonActionDialog({
 	const [pending, setPending] = useState(false);
 	const [reason, setReason] = useState("");
 	const [permanent, setPermanent] = useState(false);
+	const [handoff, setHandoff] = useState(true);
 	const [busyWarning, setBusyWarning] = useState(operation.person.busy);
 	const [receipt, setReceipt] = useState<CommandReceipt>();
 	const [callResult, setCallResult] = useState<CallResult>();
@@ -194,7 +195,7 @@ function PersonActionDialog({
 				const result =
 					action === "home"
 						? await window.agentWorld.endSession(person.id, automatic ? false : busy)
-						: await window.agentWorld.retire(person.id, reason.trim());
+						: await window.agentWorld.retire(person.id, reason.trim(), handoff);
 				setReceipt(result);
 				if (!result.ok && result.confirm) setBusyWarning(true);
 			}
@@ -259,8 +260,8 @@ function PersonActionDialog({
 			)}
 			{action === "retire" && (
 				<p>
-					A handoff is saved before this person and their private resources are permanently removed. Acceptance starts
-					that work; later runtime mail reports the outcome. Reports are not included.
+					This person and their private resources are permanently removed. Choose whether to request a final handoff
+					first. Acceptance starts that work; later runtime mail reports the outcome. Reports are not included.
 				</p>
 			)}
 			{action === "call" && (
@@ -292,6 +293,21 @@ function PersonActionDialog({
 							onChange={(event) => setReason(event.target.value)}
 						/>
 					</label>
+					<label className="wp-person-permanent">
+						<input
+							type="checkbox"
+							checked={handoff}
+							disabled={pending || !!uncertain}
+							onChange={(event) => setHandoff(event.target.checked)}
+						/>
+						Request a final handoff
+					</label>
+					{!handoff && (
+						<p>
+							No final model turn or handoff file. A sleeping person stays asleep until removal.{" "}
+							{busy && "Their current turn will be stopped."}
+						</p>
+					)}
 					<label className="wp-person-permanent">
 						<input
 							type="checkbox"

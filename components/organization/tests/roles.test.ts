@@ -333,7 +333,8 @@ test.each([
 			expect(parameters.properties.code.description.includes("async def agent_run(")).toBe(allowed);
 			expect(run.session.agent.state.systemPrompt.includes("Attach awake colleagues")).toBe(allowed);
 			const prompt = run.session.agent.state.systemPrompt;
-			expect(prompt.includes("own-context handoff precedes permanent deletion")).toBe(allowed);
+			expect(prompt.includes("handoff:false")).toBe(allowed);
+			expect(prompt.includes("Responsibility and cleanup checks apply either way")).toBe(allowed);
 			expect(prompt.includes("The tool returns acceptance")).toBe(allowed);
 			expect(prompt).not.toContain("`rehire`");
 			if (!role && allowed) {

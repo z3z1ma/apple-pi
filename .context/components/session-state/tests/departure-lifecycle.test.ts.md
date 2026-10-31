@@ -15,6 +15,10 @@ Why: a miscalled producer can resolve with a failed receipt; a later missing-ass
 
 Expected sidecar files are spelled independently using the existing agent-directory `.ndjson` layout and rotation. Read the producer's complete path composition before changing those expectations; using a guessed suffix/root exercises unrelated files, not cleanup.
 
+Exact-command replay retains every original payload field, including caller and an explicit handoff choice. A changed reason or caller is a conflicting request, not a retry. A detached unchanged-baseline run exposed older assertions expecting those conflicts to replay successfully; tests now distinguish refusal from exact-input recovery.
+
+No-handoff cases cover both native/operator callers and awake/asleep people, with no final-turn command, file/link or wake. Header cleanup recovery also covers null handoff pointers across daemon restart. Responsibility refusals exercise both handoff choices. A real failed tmux launch leaves a provisional generation-0 person; no-handoff refusal must preserve it without a person_departed event, since cleanup cannot prove writer identity.
+
 The fake pi executable used for the asleep control runs this same SDK host in its own process and opens the recorded transcript. The first model observation is the correlated handoff, not a positional startup prompt. This is scripted SDK/process integration, not native CLI parsing, installed-package behavior, paid-model judgment or a general OS sandbox.
 
 Coupled: components/session-state/src/client.ts, components/session-state/tests/helpers.ts, components/session-state/tests/fixtures/departure-person.ts, tests/helpers/faux-session.ts, components/session-state/src/runtime.ts, components/session-state/src/departures.ts, components/shared/src/sidecar-usage-path.ts

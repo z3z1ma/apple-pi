@@ -155,10 +155,16 @@ async function openWorld(theme: string, size: readonly [number, number] = [1280,
 				sendMail: async () => ({ ok: true, stage: "applied" }),
 				recruit: async () => ({ ok: true, stage: "applied", sessionId: "new-1" }),
 				roles: async () => [],
-				async retire(characterId: string, reason: string) {
-					w.retirements.push({ characterId, reason });
+				async retire(characterId: string, reason: string, handoff?: boolean) {
+					w.retirements.push({ characterId, reason, handoff });
 					await new Promise((resolve) => setTimeout(resolve, 200));
-					return { ok: true, stage: "accepted", note: "Handoff and cleanup are still pending." };
+					return {
+						ok: true,
+						stage: "accepted",
+						note: handoff
+							? "Handoff and cleanup are still pending."
+							: "Cleanup is still pending. No handoff was requested.",
+					};
 				},
 				async rename(characterId: string, name: string) {
 					w.renames.push({ characterId, name });
@@ -317,12 +323,15 @@ describe.each(PACKS)("%s", (id) => {
 			const send = form.getByRole("button", { name: say("retire-send"), exact: true });
 			expect(await send.isDisabled()).toBe(true);
 			await form.getByLabel("Reason").fill("The survey is written.");
+			const handoff = form.getByRole("checkbox", { name: "Request a final handoff", exact: true });
+			expect(await handoff.isChecked()).toBe(true);
+			await handoff.uncheck();
 			await shot(page, `aw-12-${id}-retire-form`);
 			await send.click();
-			await form.getByText("Handoff and cleanup are still pending.").waitFor({ timeout: 5000 });
+			await form.getByText("Cleanup is still pending. No handoff was requested.").waitFor({ timeout: 5000 });
 			expect(await form.getByText(say("retire-done", { name: "wanderer" })).count()).toBe(0);
 			expect(await page.evaluate(() => (window as any).retirements)).toEqual([
-				{ characterId: "wanderer", reason: "The survey is written." },
+				{ characterId: "wanderer", reason: "The survey is written.", handoff: false },
 			]);
 			await form.getByRole("button", { name: "Close", exact: true }).last().click();
 			await page

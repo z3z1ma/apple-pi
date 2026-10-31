@@ -75,15 +75,25 @@ afterAll(() => stopRuntime(state));
 
 async function organization() {
 	let target = "";
+	let handoff: boolean | undefined;
 	const errors: unknown[] = [];
 	const manager = await fauxSession(
 		[bridge],
 		(context) => {
 			const last = context.messages.at(-1);
 			return last?.role === "user" && JSON.stringify(last.content).includes("REQUEST_LET_GO_ONLY")
-				? fauxAssistantMessage([fauxToolCall("let_go", { person: target, reason: "The verified work is complete." })], {
-						stopReason: "toolUse",
-					})
+				? fauxAssistantMessage(
+						[
+							fauxToolCall("let_go", {
+								person: target,
+								reason: "The verified work is complete.",
+								...(handoff === undefined ? {} : { handoff }),
+							}),
+						],
+						{
+							stopReason: "toolUse",
+						},
+					)
 				: fauxAssistantMessage("Noted.");
 		},
 		[],
@@ -96,8 +106,9 @@ async function organization() {
 		...manager,
 		id,
 		errors,
-		target: (person: string) => {
+		target: (person: string, requestedHandoff?: boolean) => {
 			target = person;
+			handoff = requestedHandoff;
 		},
 	};
 }
@@ -164,8 +175,8 @@ async function person(
 	return { id, cwd, child, events, file };
 }
 
-async function request(manager: Awaited<ReturnType<typeof organization>>, id: string) {
-	manager.target(id);
+async function request(manager: Awaited<ReturnType<typeof organization>>, id: string, handoff?: boolean) {
+	manager.target(id, handoff);
 	await manager.session.prompt("REQUEST_LET_GO_ONLY", { streamingBehavior: "followUp" });
 	const result = manager.session.messages.findLast(
 		(message) => message.role === "toolResult" && message.toolName === "let_go",
@@ -176,10 +187,15 @@ async function request(manager: Awaited<ReturnType<typeof organization>>, id: st
 	expect(result.details).toMatchObject({ sessionId: id, stage: "accepted" });
 	return (result.details as { commandId: string }).commandId;
 }
-async function operatorDeparture(id: string) {
+async function operatorDeparture(id: string, handoff?: boolean) {
 	const receipt = await sendCommand(
 		id,
-		{ kind: "retire", reason: "The verified work is complete.", by: "operator" },
+		{
+			kind: "retire",
+			reason: "The verified work is complete.",
+			by: "operator",
+			...(handoff === undefined ? {} : { handoff }),
+		},
 		{ socketPath: state.socketPath, until: "accepted" },
 	);
 	expect(receipt.stage, receipt.reason).toBe("accepted");
@@ -196,9 +212,11 @@ test.each([undefined, "implementation-engineer"])(
 	"operator lets an independent %s person leave through handoff and private cleanup",
 	async (role) => {
 		const worker = await person(null, { role, holdHandoff: true });
-		expect(query(state.dbPath, "select role, reports_to from sessions where id = ?", worker.id)).toEqual([
-			{ role: role ?? null, reports_to: null },
-		]);
+		await vi.waitFor(() =>
+			expect(query(state.dbPath, "select role, reports_to from sessions where id = ?", worker.id)).toEqual([
+				{ role: role ?? null, reports_to: null },
+			]),
+		);
 		const commandId = await operatorDeparture(worker.id);
 		await vi.waitFor(() => expect(worker.events.some((event) => event.type === "handoff")).toBe(true));
 		expect(existsSync(worker.file)).toBe(true);
@@ -229,10 +247,82 @@ test.each([undefined, "implementation-engineer"])(
 			{ kind: "retire", reason: "Duplicate", by: "operator" },
 			{ socketPath: state.socketPath, commandId },
 		);
-		expect(repeated.stage).toBe("applied");
+		expect(repeated.stage).toBe("failed");
+		const replayed = await sendCommand(
+			worker.id,
+			{ kind: "retire", reason: "The verified work is complete.", by: "operator" },
+			{ socketPath: state.socketPath, commandId },
+		);
+		expect(replayed.stage, replayed.reason).toBe("applied");
 	},
 	30000,
 );
+
+test.each([
+	{ native: true, asleep: false },
+	{ native: true, asleep: true },
+	{ native: false, asleep: false },
+	{ native: false, asleep: true },
+])(
+	"departure without handoff skips the model and wake but completes private cleanup (%j)",
+	async ({ native, asleep }) => {
+		const manager = native ? await organization() : undefined;
+		const worker = await person(manager?.id ?? null);
+		if (asleep) {
+			await command(worker.id, { kind: "close" });
+			await vi.waitFor(() => expect(worker.child.exitCode).toBe(0));
+		}
+		const commandId = manager ? await request(manager, worker.id, false) : await operatorDeparture(worker.id, false);
+		await vi.waitFor(() => expect(stage(commandId)).toBe("applied"), { timeout: 10000 });
+		expect(query(state.dbPath, "select 1 from sessions where id = ?", worker.id)).toEqual([]);
+		expect(existsSync(worker.file)).toBe(false);
+		expect(worker.events.some((event) => event.type === "handoff")).toBe(false);
+		expect(existsSync(join(state.agentDir, `launch-${worker.id}.ndjson`))).toBe(false);
+		expect(query(state.dbPath, "select 1 from commands where command_id = ?", `${commandId}:handoff`)).toEqual([]);
+		expect(query(state.dbPath, "select 1 from links where id = ?", `${commandId}:handoff-file`)).toEqual([]);
+		expect(existsSync(join(state.stateDir, "handoffs", `${worker.id}.md`))).toBe(false);
+		const departure = JSON.parse(
+			query<{ data: string }>(
+				state.dbPath,
+				"select data from events where session_id = ? and type = 'person_departed'",
+				worker.id,
+			)[0]!.data,
+		);
+		expect(departure.handoffFile).toBeNull();
+	},
+	30000,
+);
+
+test("no-handoff departure preserves a failed first launch without observed process identity", async () => {
+	const id = randomUUID();
+	const start = await sendCommand(
+		id,
+		{
+			kind: "start",
+			role: "implementation-engineer",
+			cwd: state.agentDir,
+			prompt: "",
+			tmux: { socket: join(state.agentDir, "absent-tmux.socket"), pane: "%0" },
+		},
+		{ socketPath: state.socketPath },
+	);
+	expect(start.stage, start.reason).toBe("failed");
+	expect(query(state.dbPath, "select generation, retired_at from sessions where id = ?", id)).toEqual([
+		{ generation: 0, retired_at: null },
+	]);
+	const receipt = await sendCommand(
+		id,
+		{ kind: "retire", reason: "Failed to start.", by: "operator", handoff: false },
+		{ socketPath: state.socketPath, until: "accepted" },
+	);
+	await vi.waitFor(() => expect(stage(receipt.commandId)).toBe("failed"));
+	expect(
+		query<{ reason: string }>(state.dbPath, "select reason from commands where command_id = ?", receipt.commandId)[0]
+			?.reason,
+	).toContain("process identity");
+	expect(query(state.dbPath, "select retired_at from sessions where id = ?", id)).toEqual([{ retired_at: null }]);
+	expect(query(state.dbPath, "select 1 from events where session_id = ? and type = 'person_departed'", id)).toEqual([]);
+}, 15000);
 
 test("ordinary agents and self cannot request independent departure", async () => {
 	const manager = await organization();
@@ -252,13 +342,15 @@ test("ordinary agents and self cannot request independent departure", async () =
 
 test("operator independent departure still refuses unfinished work, reports and owned program scopes", async () => {
 	const refuse = async (id: string, reason: string) => {
-		const receipt = await sendCommand(
-			id,
-			{ kind: "retire", reason: "Not ready.", by: "operator" },
-			{ socketPath: state.socketPath },
-		);
-		expect(receipt.stage).toBe("failed");
-		expect(receipt.reason).toContain(reason);
+		for (const handoff of [true, false]) {
+			const receipt = await sendCommand(
+				id,
+				{ kind: "retire", reason: "Not ready.", by: "operator", handoff },
+				{ socketPath: state.socketPath },
+			);
+			expect(receipt.stage).toBe("failed");
+			expect(receipt.reason).toContain(reason);
+		}
 	};
 	const assigned = await person(null);
 	await command("operator", {
@@ -502,12 +594,19 @@ test.each([false, true])(
 	30000,
 );
 
-test.each([false, true])(
-	"header failure recovers cleanup across restart without replaying handoff (independent=%s)",
-	async (independent) => {
+test.each([
+	{ independent: false, handoff: true },
+	{ independent: true, handoff: true },
+	{ independent: false, handoff: false },
+	{ independent: true, handoff: false },
+])(
+	"header failure recovers cleanup across restart without replaying handoff (%j)",
+	async ({ independent, handoff }) => {
 		const manager = await organization();
 		const worker = await person(independent ? null : manager.id, { afterClose: "hold" });
-		const commandId = independent ? await operatorDeparture(worker.id) : await request(manager, worker.id);
+		const commandId = independent
+			? await operatorDeparture(worker.id, handoff)
+			: await request(manager, worker.id, handoff);
 		await vi.waitFor(() => expect(worker.events.some((event) => event.type === "closed")).toBe(true));
 		const contents = readFileSync(worker.file, "utf8");
 		writeFileSync(
@@ -538,7 +637,7 @@ test.each([false, true])(
 		await vi.waitFor(() => expect(stage(commandId)).toBe("applied"), { timeout: 10000 });
 		expect(existsSync(worker.file)).toBe(false);
 		expect(existsSync(join(state.agentDir, `launch-${worker.id}.ndjson`))).toBe(false);
-		expect(worker.events.filter((event) => event.type === "handoff")).toHaveLength(1);
+		expect(worker.events.filter((event) => event.type === "handoff")).toHaveLength(handoff ? 1 : 0);
 		expect(
 			query(state.dbPath, "select 1 from events where type = 'person_departed' and session_id = ?", worker.id),
 		).toHaveLength(1);
@@ -546,7 +645,12 @@ test.each([false, true])(
 			(
 				await sendCommand(
 					worker.id,
-					{ kind: "retire", reason: "The verified work is complete.", by: manager.id },
+					{
+						kind: "retire",
+						reason: "The verified work is complete.",
+						by: independent ? "operator" : manager.id,
+						handoff,
+					},
 					{ socketPath: state.socketPath, commandId },
 				)
 			).stage,

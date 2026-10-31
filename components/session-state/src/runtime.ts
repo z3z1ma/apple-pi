@@ -968,6 +968,8 @@ export class Runtime {
 	private departureCandidate(commandId: string, sessionId: string, command: Extract<Command, { kind: "retire" }>) {
 		const db = this.db!;
 		if (typeof command.reason !== "string" || !command.reason.trim()) throw new Error("retire needs a reason");
+		if (command.handoff !== undefined && typeof command.handoff !== "boolean")
+			throw new Error("handoff must be a boolean");
 		if (command.by === sessionId) throw new Error("Ask your manager or the operator to let you go.");
 		if ([...this.retiring].some(([id, job]) => id !== commandId && job.person === sessionId))
 			throw new Error("This person's handover is already in progress.");
@@ -1005,6 +1007,10 @@ export class Runtime {
 			db.prepare("select 1 from program_peers where created_by = ?").get(sessionId)
 		)
 			throw new Error("This person's program delegations must finish cleanup before departure.");
+		if (command.handoff === false && !db.prepare("select 1 from incarnations where session_id = ?").get(sessionId))
+			throw new Error(
+				"No observed process identity proves cleanup possible. Inspect the failed or pending first launch before letting this person go without a handoff.",
+			);
 		return { ...person, reports_to: person.reports_to };
 	}
 
@@ -1024,33 +1030,37 @@ export class Runtime {
 				commandId: id,
 			});
 		try {
-			if (![...this.connections].some((connection) => !connection.shutdown && connection.sessionId === sessionId)) {
-				const wake = await send({ kind: "start", prompt: "" });
-				if (wake.stage === "failed")
-					throw new Error(`The person has not left: inspect failed wake request ${wake.commandId}.`);
-			}
-			signal.throwIfAborted();
-			const turnId = `${commandId}:handoff`;
-			const answer = await send(
-				{
-					kind: "run_turn",
-					task: [
-						`Prepare your final handoff before permanently leaving the organization. Reason: ${command.reason}`,
-						"Your final prose will be saved verbatim in a private durable Markdown file. Your manager and the requestor will receive its location, not a full-team post.",
-						"Use your retained context to explain completed and open work, useful decisions and reasoning, important file/task/thread references, risks and next steps. Distinguish verified facts from beliefs and uncertainties.",
-					].join("\n\n"),
-				},
-				turnId,
-			);
-			signal.throwIfAborted();
-			if (this.db !== db) throw new Error("The runtime stopped during the handoff.");
-			if (answer.stage !== "applied" || answer.result?.status !== "completed" || !answer.result.text.trim())
-				throw new Error(
-					`The person has not left: handoff request ${turnId} did not complete with nonempty prose; inspect that command.`,
+			let handoff: { text: string; generation: number } | undefined;
+			if (command.handoff !== false) {
+				if (![...this.connections].some((connection) => !connection.shutdown && connection.sessionId === sessionId)) {
+					const wake = await send({ kind: "start", prompt: "" });
+					if (wake.stage === "failed")
+						throw new Error(`The person has not left: inspect failed wake request ${wake.commandId}.`);
+				}
+				signal.throwIfAborted();
+				const turnId = `${commandId}:handoff`;
+				const answer = await send(
+					{
+						kind: "run_turn",
+						task: [
+							`Prepare your final handoff before permanently leaving the organization. Reason: ${command.reason}`,
+							"Your final prose will be saved verbatim in a private durable Markdown file. Your manager and the requestor will receive its location, not a full-team post.",
+							"Use your retained context to explain completed and open work, useful decisions and reasoning, important file/task/thread references, risks and next steps. Distinguish verified facts from beliefs and uncertainties.",
+						].join("\n\n"),
+					},
+					turnId,
 				);
-			const turn = db.prepare("select generation from commands where command_id = ?").get(turnId) as {
-				generation: number;
-			};
+				signal.throwIfAborted();
+				if (this.db !== db) throw new Error("The runtime stopped during the handoff.");
+				if (answer.stage !== "applied" || answer.result?.status !== "completed" || !answer.result.text.trim())
+					throw new Error(
+						`The person has not left: handoff request ${turnId} did not complete with nonempty prose; inspect that command.`,
+					);
+				const turn = db.prepare("select generation from commands where command_id = ?").get(turnId) as {
+					generation: number;
+				};
+				handoff = { text: answer.result.text, generation: turn.generation };
+			}
 			const now = Date.now();
 			let pending: ReturnType<Runtime["preparePost"]>;
 			let close: Connection | undefined;
@@ -1060,21 +1070,23 @@ export class Runtime {
 			try {
 				const current = this.departureCandidate(commandId, sessionId, command);
 				if (
-					current.generation !== turn.generation ||
+					current.generation !== (handoff?.generation ?? person.generation) ||
 					current.reports_to !== person.reports_to ||
 					current.role !== person.role ||
 					(person.session_file !== null && current.session_file !== person.session_file)
 				)
-					throw new Error("The person changed session, transcript, role or team during the handoff; it has not left.");
-				const handoffFile = saveHandoff(
-					this.paths.dir,
-					sessionId,
-					[
-						`# Final handoff: ${current.name ?? sessionId}`,
-						`Person: ${sessionId}\nRole: ${current.role ?? "unroled"}\nReason: ${command.reason}\nRequest: ${commandId}`,
-						answer.result.text,
-					].join("\n\n"),
-				);
+					throw new Error("The person changed session, transcript, role or team during departure; it has not left.");
+				const handoffFile = handoff
+					? saveHandoff(
+							this.paths.dir,
+							sessionId,
+							[
+								`# Final handoff: ${current.name ?? sessionId}`,
+								`Person: ${sessionId}\nRole: ${current.role ?? "unroled"}\nReason: ${command.reason}\nRequest: ${commandId}`,
+								handoff.text,
+							].join("\n\n"),
+						)
+					: null;
 				departure = {
 					commandId,
 					reason: command.reason,
@@ -1092,18 +1104,19 @@ export class Runtime {
 					now,
 					sessionId,
 				);
-				recordLink(
-					db,
-					`${commandId}:handoff-file`,
-					sessionId,
-					{
-						from: { kind: "person", id: sessionId },
-						to: { kind: "file", id: handoffFile },
-						relation: "produced",
-						reason: "Final handoff before permanent departure",
-					},
-					now,
-				);
+				if (handoffFile)
+					recordLink(
+						db,
+						`${commandId}:handoff-file`,
+						sessionId,
+						{
+							from: { kind: "person", id: sessionId },
+							to: { kind: "file", id: handoffFile },
+							relation: "produced",
+							reason: "Final handoff before permanent departure",
+						},
+						now,
+					);
 				syncChannels(db, now);
 				close = this.queueDelivery(closeId, sessionId, { kind: "close" }, current.generation);
 				pending = this.prepareDepartureNotice(
@@ -1111,7 +1124,7 @@ export class Runtime {
 					sessionId,
 					command,
 					"committed",
-					`Permanent departure committed for ${current.name ?? sessionId} (${sessionId}). Cleanup is pending. Handoff: ${handoffFile}`,
+					`Permanent departure committed for ${current.name ?? sessionId} (${sessionId}). Cleanup is pending. Handoff: ${handoffFile ?? "not requested"}`,
 					current.reports_to,
 				);
 				db.exec("commit");
@@ -1123,7 +1136,7 @@ export class Runtime {
 			this.setCommandStage(
 				commandId,
 				"delivered",
-				`Permanent departure committed; cleanup pending. Handoff: ${departure.handoffFile}`,
+				`Permanent departure committed; cleanup pending. Handoff: ${departure.handoffFile ?? "not requested"}`,
 			);
 			if (close) this.dispatch(close, closeId, { kind: "close" });
 			for (const { target, id, mail } of pending.deliveries) this.dispatch(target, id, mail);
@@ -2036,7 +2049,7 @@ export class Runtime {
 						person,
 						command,
 						`${phase}-complete`,
-						`${removed ? "Rejected late attempt's owned resources cleaned" : "Permanent departure cleanup completed"} for ${person}. Handoff retained: ${departure.handoffFile}`,
+						`${removed ? "Rejected late attempt's owned resources cleaned" : "Permanent departure cleanup completed"} for ${person}. Handoff: ${departure.handoffFile ?? "not requested"}`,
 						departure.reportsTo,
 					);
 			});
@@ -2044,7 +2057,7 @@ export class Runtime {
 			this.setCommandStage(
 				departure.commandId,
 				"applied",
-				`Permanent departure cleanup completed. Handoff: ${departure.handoffFile}`,
+				`Permanent departure cleanup completed. Handoff: ${departure.handoffFile ?? "not requested"}`,
 			);
 			this.departing.delete(person);
 			this.signalled.delete(person);
@@ -2075,7 +2088,7 @@ export class Runtime {
 								person,
 								command,
 								`${phase}-blocked`,
-								`Departure resource cleanup is pending for ${person}: ${reason} Handoff retained: ${departure.handoffFile}`,
+								`Departure resource cleanup is pending for ${person}: ${reason} Handoff: ${departure.handoffFile ?? "not requested"}`,
 								departure.reportsTo,
 							);
 					});

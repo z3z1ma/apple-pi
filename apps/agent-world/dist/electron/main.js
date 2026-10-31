@@ -2201,7 +2201,7 @@ function openLifecycle(paths, commands, snapshot) {
 			}, RENAME_MS, (stage) => stage === "applied", () => "Sent; it has not taken the name yet.");
 		},
 		roles: () => loadRoleChoices(paths.agentDir),
-		async retire(characterId, given) {
+		async retire(characterId, given, handoff = true) {
 			const reason = given.trim();
 			if (!reason) return {
 				ok: false,
@@ -2215,11 +2215,12 @@ function openLifecycle(paths, commands, snapshot) {
 			const receipt = await follow(commands, characterId, {
 				kind: "retire",
 				reason,
-				by: "operator"
-			}, CLOSE_MS, (stage) => stage === "accepted", () => "The departure request is accepted; handoff and cleanup continue in the runtime.");
+				by: "operator",
+				handoff
+			}, CLOSE_MS, (stage) => stage === "accepted", () => "The departure request is accepted; the runtime will report progress.");
 			return receipt.ok ? {
 				...receipt,
-				note: "Departure accepted; the runtime will report handoff and cleanup progress."
+				note: handoff ? "Departure accepted; the runtime will report handoff and cleanup progress." : "Departure accepted without a handoff; the runtime will report cleanup progress."
 			} : receipt;
 		},
 		...openMailbox(paths.db, commands)
@@ -8142,7 +8143,7 @@ function start() {
 		});
 	});
 	ipcMain.handle("world:roles", () => lifecycle.roles());
-	ipcMain.handle("world:retire", (_event, characterId, reason) => typeof characterId === "string" && typeof reason === "string" ? lifecycle.retire(characterId, reason) : unnamed);
+	ipcMain.handle("world:retire", (_event, characterId, reason, handoff) => typeof characterId === "string" && typeof reason === "string" && (handoff === void 0 || typeof handoff === "boolean") ? lifecycle.retire(characterId, reason, handoff) : unnamed);
 	ipcMain.handle("world:rename", (_event, characterId, name) => typeof characterId === "string" && typeof name === "string" ? lifecycle.rename(characterId, name) : unnamed);
 	const notepads = openNotepads(() => world.snapshot(), (change) => toWindow("world:notepad", change));
 	const noCoordinator = {

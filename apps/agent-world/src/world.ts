@@ -558,7 +558,7 @@ export interface AgentWorldApi extends IntegrationsApi {
 	orgStart(request: OrgStartRequest): Promise<OrgStartProgress>;
 	onOrgStart(listener: (progress: OrgStartProgress) => void): () => void;
 	/** Retire a character (`retire`): it leaves the organization with a reason, and sleeps at the inn marked so. */
-	retire(characterId: string, reason: string): Promise<CommandReceipt>;
+	retire(characterId: string, reason: string, handoff?: boolean): Promise<CommandReceipt>;
 	/** Read a running coordinator's notepad (`NOTES.md` in its directory) and watch it for changes. */
 	openNotepad(coordinatorId: string): Promise<NotepadRead>;
 	/** Write the notepad; refused, with the file's text, when it changed on disk since `base`. */

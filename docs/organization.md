@@ -17,7 +17,7 @@ This page is the product contract. The runtime mechanics (the database, the comm
 | Soul | Three fragments of the world (random encyclopedia articles) drawn at hire, outside any model, and left unexplained. Never edited. |
 | Self | The person's account of itself in four parts (story, practice, commitments, colleagues), rewritten only in reflection. Never distilled, never capped. |
 | Record | What the harness knows a person did: assignments and their outcomes, manager history, hire and leave dates. |
-| Hire, send home, call in, let go, move | Start a new person with a role and optional initial goal; stop a person's process while retaining its membership and context; reopen that dormant person; request irreversible departure after a durable handoff; move a person under another manager. Dormancy preserves context; permanent departure deletes the owned raw session. |
+| Hire, send home, call in, let go, move | Start a new person with a role and optional initial goal; stop a person's process while retaining its membership and context; reopen that dormant person; request irreversible departure with an optional durable handoff; move a person under another manager. Dormancy preserves context; permanent departure deletes the owned raw session. |
 | Thread | One conversation: a subject, its participants, and its messages in order. Mail, team channels, meetings, and task discussions are all threads. |
 | Push, pull | How a participant gets a thread's messages. A pushed message arrives as mail (a turn). A pulled message waits until the participant reads the thread. |
 | Task | A bundle with a `task.md` goal: a ledger task in a project's `.ledger/`, or an ephemeral task in the state directory. A person works only on tasks assigned to it or taken by it. |
@@ -150,7 +150,7 @@ A person whose role manages, or an unroled organization root, also has eight man
 | `send_home` (`person`) | Quits the person's process. The person sleeps and stays in the organization. |
 | `rename` (`person`, `name`) | Renames a running person. Its id and history stay. |
 | `move` (`person`, `manager`) | Puts a person, with everyone under it, under another manager of the same organization. |
-| `let_go` (`person`, `reason`) | Accepts an asynchronous permanent departure after explicit responsibility handoff. Saves an own-context handoff file before irreversible removal; later mail reports the outcome. |
+| `let_go` (`person`, `reason`, `handoff?`) | Accepts asynchronous permanent departure after responsibilities are settled. By default saves an own-context handoff; `handoff:false` skips that turn and file. Later mail reports the outcome. |
 | `assign` (`person`, `goal` and `title`, or `task`; `value?`, `cost_of_delay?`) | Gives a person a task or a written goal. It becomes the person's focus. |
 | `unassign` (`person`, `task`) | Takes an assignment back without finishing it. |
 
@@ -160,8 +160,8 @@ A person whose role manages, or an unroled organization root, also has eight man
 
 Use `send_home` and `call_in` when you want to retain someone's accumulated context. `let_go` is irreversible; a handoff is a summary, not a transcript backup.
 
-1. Finish or reassign every unfinished assignment and move direct reports first. Outstanding owned program resources must finish cleanup. Requests also refuse self-departure, a duplicate departure, or a program-owned temporary peer (its program owns disposal). Agents cannot let an organization root go. The operator can explicitly let an independent person go, with or without a role; the same work, reports, program-resource, handoff and cleanup checks apply. With no manager, departure notices go to the operator alone.
-2. Acceptance returns an operation id, not a claim that the person or its resources are gone. The runtime obtains a final Markdown handoff in the person's own session, waking it with its retained context when needed, and saves the document privately under `~/.pi/agent/state/handoffs/`.
+1. Finish or reassign every unfinished assignment and move direct reports first. Outstanding owned program resources must finish cleanup. Requests also refuse self-departure, a duplicate departure, or a program-owned temporary peer (its program owns disposal). Agents cannot let an organization root go. The operator can explicitly let an independent person go, with or without a role; the same work, reports, program-resource and cleanup checks apply, with a handoff only when requested. With no manager, departure notices go to the operator alone.
+2. Acceptance returns an operation id, not a claim that the person or its resources are gone. By default, the runtime obtains a final Markdown handoff in the person's own session, waking it with its retained context when needed, and saves the document privately under `~/.pi/agent/state/handoffs/`. Set `handoff:false`, or clear **Request a final handoff** in either UI, to skip the model turn and file. A sleeping person is not woken; a running person's current turn can be stopped. Responsibility and safe-cleanup checks still apply. Skipping also refuses a never-connected first launch whose cleanup lacks an observed process identity; the person remains available for inspection rather than becoming stuck after permanent departure.
 3. The runtime rechecks responsibilities before committing permanent departure. It then closes admission and new obligations, proves that known writing processes have stopped, removes checked owned transcript/usage files, and deletes the live person and private session records. Cleanup retries after errors and restart; read the later outcome before treating it as complete.
 
 A handoff or pre-commit failure retains membership and the raw session. After the permanent commit, a cleanup failure leaves removal pending, not a reusable person. Restart does not replay an interrupted paid handoff automatically. The permanent identity fact blocks both explicit restart and ordinary transcript re-admission, including after the live row is gone.
@@ -355,7 +355,7 @@ Develop roles and processes in both directions. A missing recurring responsibili
 ## Rules of the organization
 
 - Roles never change. A person who needs another role is a new hire; the old one sleeps or retires.
-- `send_home` retains the person's id, transcript, self and membership. A successful `let_go` permanently removes its live identity and owned raw session after a durable own-context handoff, while retaining shared organizational evidence. A `pi_exec` temporary peer remains its program's disposal responsibility ([exec](exec.md#peers-and-schemas)).
+- `send_home` retains the person's id, transcript, self and membership. A successful `let_go` permanently removes its live identity and owned raw session with a durable own-context handoff when requested, while retaining shared organizational evidence. A `pi_exec` temporary peer remains its program's disposal responsibility ([exec](exec.md#peers-and-schemas)).
 - The tree carries assignment, reporting, and escalation; it does not gate mail. A manager that only forwards mail is a relay, which the charter forbids.
 - There is no handoff schema. People give each other goals and say what they verified and what they believe.
 - There are no caps: not on team size, self length, or the catalog. Managers size teams with judgment, and the charter names the one signal to watch (fan-in).

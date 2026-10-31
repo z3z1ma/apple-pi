@@ -66,32 +66,35 @@ test("Rename on an awake agent sends rename with the new name, resolves with its
 	await soon(() => expect(lines.map((line) => line.text)).toContain("Rename for Ada the builder: Ada the builder"));
 }, 40000);
 
-test("departure returns accepted while the runtime's handoff and cleanup are still pending", async () => {
-	const { id } = await awake();
-	let release = (_value: CommandResult) => {};
-	const handover = new Promise<CommandResult>((resolve) => {
-		release = resolve;
-	});
-	const controlled: Commands = {
-		...commands,
-		send: vi.fn<Commands["send"]>((_id, _command, options) => {
-			options?.onReceipt?.("accepted", undefined);
-			return handover;
-		}),
-	};
-	const people = openLifecycle({ db: state.dbPath, agentDir: state.agentDir }, controlled, () => world.snapshot());
-	try {
-		const receipt = await people.retire(id, "The work ended.");
-		expect(receipt).toMatchObject({ ok: true, stage: "accepted" });
-		expect(receipt.ok && receipt.note).toContain("handoff and cleanup progress");
-		expect(vi.mocked(controlled.send).mock.calls[0]?.slice(0, 2)).toEqual([
-			id,
-			{ kind: "retire", reason: "The work ended.", by: "operator" },
-		]);
-	} finally {
-		release({ ok: false, reason: "Test finished" });
-	}
-});
+test.each([true, false])(
+	"departure accepts the handoff choice while cleanup remains pending (handoff=%s)",
+	async (handoff) => {
+		const { id } = await awake();
+		let release = (_value: CommandResult) => {};
+		const handover = new Promise<CommandResult>((resolve) => {
+			release = resolve;
+		});
+		const controlled: Commands = {
+			...commands,
+			send: vi.fn<Commands["send"]>((_id, _command, options) => {
+				options?.onReceipt?.("accepted", undefined);
+				return handover;
+			}),
+		};
+		const people = openLifecycle({ db: state.dbPath, agentDir: state.agentDir }, controlled, () => world.snapshot());
+		try {
+			const receipt = await people.retire(id, "The work ended.", handoff);
+			expect(receipt).toMatchObject({ ok: true, stage: "accepted" });
+			expect(receipt.ok && receipt.note).toContain(handoff ? "handoff and cleanup progress" : "without a handoff");
+			expect(vi.mocked(controlled.send).mock.calls[0]?.slice(0, 2)).toEqual([
+				id,
+				{ kind: "retire", reason: "The work ended.", by: "operator", handoff },
+			]);
+		} finally {
+			release({ ok: false, reason: "Test finished" });
+		}
+	},
+);
 
 test("legacy former records are not wake targets", async () => {
 	const send = vi.fn<Commands["send"]>();

@@ -167,7 +167,7 @@ async function openLifecycle(appearance: "light" | "dark" = "light", width = 144
 				},
 			],
 			endSession: (person: string, confirmed?: boolean) => held("home", { person, confirmed }),
-			retire: (person: string, reason: string) => held("retire", { person, reason }),
+			retire: (person: string, reason: string, handoff?: boolean) => held("retire", { person, reason, handoff }),
 			callIn: (request: unknown) => held("callIn", request),
 			wake: (person: string) => held("wake", person),
 		};
@@ -435,14 +435,25 @@ test("Org card context actions do not read, and profile Let go requires reason a
 		await page.keyboard.press("Enter");
 		await page.keyboard.press("Escape");
 		expect(await dialog.isVisible()).toBe(true);
-		expect((await calls(page)).retire).toEqual([{ person: "ben", reason: "Work handed over to Ada." }]);
+		expect((await calls(page)).retire).toEqual([{ person: "ben", reason: "Work handed over to Ada.", handoff: true }]);
+		expect(await dialog.getByRole("checkbox", { name: "Request a final handoff", exact: true }).isDisabled()).toBe(
+			true,
+		);
 		await release(page, { ok: false, stage: "failed", reason: "Runtime refused departure." });
 		await dialog.getByText("Runtime refused departure.", { exact: true }).waitFor();
 		expect(await dialog.getByRole("textbox", { name: "Reason for leaving", exact: true }).inputValue()).toContain(
 			"Work handed over to Ada.",
 		);
+		await dialog.getByRole("checkbox", { name: "Request a final handoff", exact: true }).uncheck();
+		await bounded(page, dialog);
+		await shot(page, "dark-let-go-without-handoff");
 		await submit.click();
-		await vi.waitFor(async () => expect((await calls(page)).retire).toHaveLength(2));
+		await vi.waitFor(async () =>
+			expect((await calls(page)).retire).toEqual([
+				{ person: "ben", reason: "Work handed over to Ada.", handoff: true },
+				{ person: "ben", reason: "Work handed over to Ada.", handoff: false },
+			]),
+		);
 		await release(page, { ok: true, stage: "accepted", commandId: "retire-ben" });
 		await vi.waitFor(async () => expect(await dialog.innerText()).toMatch(/accepted/i));
 		expect(await dialog.innerText()).toMatch(/Completion is not yet confirmed/i);
