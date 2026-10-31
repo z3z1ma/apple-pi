@@ -1,0 +1,8 @@
+## file
+
+This observes declared role/model policy; the ordinary role resolver still selects a mind. Metadata inspection leaves pool counters untouched and makes no authentication, quota or live-provider claim. A concrete-model role does not consult unrelated profile settings; a referenced profile uses the shared loader's whole-catalog validation and absence-only fallback.
+
+The planner's catalog fingerprints intentionally include advisory role source and resolved candidate/selection policy. A change makes the old plan ineligible on explicit resume, even if its role names or reported output would be identical. Selected attempts retain full role policy; planner context retains the descriptors, configured references and fingerprints it received. This is conservative identity, not semantic equivalence between differently written instructions.
+
+Coupled: components/session-state/src/review-attempt.ts, components/session-state/src/review-jobs.ts, components/organization/src/roles.ts, components/shared/src/model-profiles.ts
+Verify: components/code-review/tests/policy.test.ts, components/session-state/tests/review-queue.test.ts

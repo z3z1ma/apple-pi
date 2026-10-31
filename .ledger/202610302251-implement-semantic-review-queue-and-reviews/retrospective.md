@@ -32,6 +32,8 @@ The retirement increment moved runtime assertions out of the deleted Pi Exec pan
 
 Capture preview deliberately uses the existing acquisition twice rather than introducing draft jobs or adopting UI-owned source. Exact digest comparison then makes an ordinary edit between preview and confirmation a refusal before reviewer dispatch. Source inspection also exposed two UI constraints before relying on the native confirm dialog: its title is not scrollable, and editor-container dialogs can sit beneath a floating panel. The bounded confirmation has fixed controls and its own overlay handle, with tests for long/narrow content, hidden-panel focus and abort beside an unrelated dialog. These remain fake-terminal checks. A non-configurable Node ESM export prevented a cleanup spy; a test-owned TMPDIR and real empty-directory assertions gave stronger cleanup evidence instead.
 
+Policy recovery needed more than adding policy to the attempt key. The existing planner bypassed the attempt path entirely on resume. Four isolated cases reproduced retained planning after role text, candidate, selection or catalog changes. Every resume now checks planner eligibility too; its selected identity is the narrow exception to the plan-revision increment it produced. Changed planning invalidates old inspection credit. Startup and real-SDK mid-turn gates verify policy races independently from model membership, while preserving the original raw result. These checks do not establish capture-time policy identity, live applicability or review quality.
+
 ## Improvements
 
 Pending completion of the undertaking.

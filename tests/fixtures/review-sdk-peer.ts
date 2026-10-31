@@ -1,4 +1,4 @@
-import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai/compat";
@@ -56,7 +56,7 @@ try {
 				bridge(pi);
 			},
 		],
-		(context) => {
+		async (context, signal) => {
 			appendFileSync(join(records, `${id}.jsonl`), `${JSON.stringify(context)}\n`);
 			step++;
 			if (step === 1)
@@ -74,6 +74,15 @@ try {
 				);
 			if (step === 4) {
 				const input = JSON.parse(readFileSync(contextFile, "utf8")) as ReviewInput;
+				const gatePath = join(directory, "review-sdk-gate.json");
+				if (existsSync(gatePath)) {
+					const gate = JSON.parse(readFileSync(gatePath, "utf8")) as { phase: string; release: string };
+					if (gate.phase === input.phase) {
+						writeFileSync(join(records, `${id}.waiting`), input.phase);
+						while (!existsSync(gate.release) && !signal?.aborted)
+							await new Promise((resolve) => setTimeout(resolve, 20));
+					}
+				}
 				return fauxAssistantMessage(
 					[fauxToolCall("pi_exec_return", reviewReply(input, { otherReport: "OTHER_FIRST_REPORT_SENTINEL" }))],
 					{ stopReason: "toolUse" },

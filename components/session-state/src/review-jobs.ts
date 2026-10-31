@@ -17,9 +17,9 @@ import {
 	validateReport,
 } from "../../code-review/src/contracts.js";
 import { type ReviewJob, type ReviewOperation, ReviewOperationSchema } from "../../code-review/src/operations.js";
+import { reviewRoleCatalog } from "../../code-review/src/policy.js";
 import { INSPECT_REVIEW, PLAN_REVIEW, VALIDATE_REVIEW } from "../../code-review/src/prompts.js";
 import type { ReviewArtifact } from "../../code-review/src/types.js";
-import { loadRoles } from "../../organization/src/roles.js";
 import { RETRY_MS } from "./client.js";
 import type { StatePaths } from "./paths.js";
 import { temporaryCallers } from "./program-peers.js";
@@ -250,35 +250,35 @@ export class ReviewJobs {
 			this.storeSelection(job);
 			const artifact = job.artifact!;
 			const source = reviewSource(artifact);
-			const roles = [...loadRoles(artifact.source).roles.values()].filter((role) => !role.writes && !role.manages);
-			if (!job.plan) {
-				const planned = await runReviewAttempt(
-					this.db,
-					this.paths,
-					job,
-					{
-						id: "planner",
-						role: "code-review-specialist",
-						kind: "planner",
-						goal: `${PLAN_REVIEW}\nCaptured source: ${artifact.source}`,
-						schema: ReviewPlanSchema,
-						context: {
-							phase: "planning",
-							artifact: source,
-							regions: artifact.regions,
-							roles: roles.map(({ name, title, mandate }) => ({ name, title, mandate })),
-						},
-						validate: (value) =>
-							validatePlan(
-								value,
-								artifact.digest,
-								artifact.regions,
-								new Set(roles.map((role) => role.name)),
-								artifact.request.lenses,
-							),
+			const roles = reviewRoleCatalog(artifact.source);
+			const planned = await runReviewAttempt(
+				this.db,
+				this.paths,
+				job,
+				{
+					id: "planner",
+					role: "code-review-specialist",
+					kind: "planner",
+					goal: `${PLAN_REVIEW}\nCaptured source: ${artifact.source}`,
+					schema: ReviewPlanSchema,
+					context: {
+						phase: "planning",
+						artifact: source,
+						regions: artifact.regions,
+						roles,
 					},
-					signal,
-				);
+					validate: (value) =>
+						validatePlan(
+							value,
+							artifact.digest,
+							artifact.regions,
+							new Set(roles.map((role) => role.name)),
+							artifact.request.lenses,
+						),
+				},
+				signal,
+			);
+			if (!job.plan || planned.attempt !== job.selectedAttempts.planner) {
 				const plan = planned.output as ReviewPlan;
 				job.selectedAttempts.planner = planned.attempt;
 				this.live();
@@ -350,6 +350,8 @@ export class ReviewJobs {
 			const validation = validated.output as FindingValidation;
 			this.live();
 			signal.throwIfAborted();
+			if (JSON.stringify(reviewRoleCatalog(artifact.source)) !== JSON.stringify(roles))
+				throw new Error("The review policy changed during execution; resume to obtain a current-policy plan");
 			const incomplete =
 				plan.gaps.length ||
 				reports.some(

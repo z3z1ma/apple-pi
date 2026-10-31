@@ -12,6 +12,8 @@ The loaded /reviews command uses the real extension loader, SessionManager and i
 
 The capture preview uses the actual capture helper and viewport-scrolled confirmation. Tests verify selected-directory resolution, cancel/no-change without enqueue, changed source between preview and confirmation without reviewer dispatch, and matching displayed/admitted digests. Context reset closes the preview by its own handle while a different dialog stays mounted. The fake TUI models hidden handles so Alt+G cannot steal focus back to a hidden queue.
 
+Policy recovery cases alter role instructions, configured candidates, pool selection and the advisory catalog while keeping captured source unchanged. They require new planning and selected inspection identities; unchanged-policy controls retain eligible planning/integration. A startup gate keeps the model eligible while changing its profile, proving refusal is about policy rather than model membership. The SDK provider gate changes policy during an actual AgentSession turn and verifies retained raw output with no accepted current-policy report. Metadata inspection itself must not advance profile-pool counters.
+
 The ordinary-hire first-input positive control lives in workplace.test.ts: it retains the team context pointer and assigned goal. Its previous full-backscroll assertions failed unchanged at ecae1117 and contradicted the current pointer contract.
 
 Coupled: tests/fixtures/peer-pi.mjs, tests/fixtures/review-reply.ts, tests/fixtures/review-sdk-peer.ts, components/session-state/src/review-jobs.ts, components/session-state/src/review-attempt.ts, components/session-state/tests/workplace.test.ts

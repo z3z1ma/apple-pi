@@ -254,7 +254,7 @@ export function installReviewTools(pi: ExtensionAPI): void {
 			name: "manage_review",
 			label: "Manage review",
 			description:
-				"Cancel unfinished review work and wait for guarded cleanup, explicitly resume interrupted/failed/incomplete work on the same verified artifact, reprioritize queued work, reassign responsibility, or rerun the original capture request as a new review linked to this one (owned by you unless owner is supplied). Resume can reuse completed exact-input inspections but reruns challenged or incomplete work. Rerun resolves mutable targets again and grants no old coverage credit. Extra questions still need a plan-owner decision; a resume is not a waiver.",
+				"Cancel unfinished review work and wait for guarded cleanup, explicitly resume interrupted/failed/incomplete work on the same verified artifact, reprioritize queued work, reassign responsibility, or rerun the original capture request as a new review linked to this one (owned by you unless owner is supplied). Resume checks current role/profile policy before reusing exact-input work. A changed policy or advisory catalog requires a new plan and fresh inspections; challenged or incomplete work also reruns. Rerun resolves mutable targets again and grants no old coverage credit. Extra questions still need a plan-owner decision; a resume is not a waiver.",
 			promptSnippet: "Manage review responsibility, recovery and fresh reruns without recapturing silently.",
 			parameters: Type.Object(
 				{

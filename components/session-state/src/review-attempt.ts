@@ -1,12 +1,11 @@
 import { createHash, randomUUID } from "node:crypto";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import { verifyArtifact } from "../../code-review/src/capture.js";
 import type { FindingValidation } from "../../code-review/src/contracts.js";
 import type { ReviewJob } from "../../code-review/src/operations.js";
-import { loadRoles, parseRoleModel } from "../../organization/src/roles.js";
-import { isInferenceProfileName, loadModelProfiles } from "../../shared/src/model-profiles.js";
+import { reviewRolePolicy } from "../../code-review/src/policy.js";
 import { normalizeOutputSchema } from "../../shared/src/structured-output.js";
 import type { TurnResult } from "../../shared/src/turn-observer.js";
 import type { StatePaths } from "./paths.js";
@@ -53,32 +52,22 @@ export async function runReviewAttempt(
 	if (!artifact) throw new Error("Review execution requires an admitted artifact");
 	await verifyArtifact(artifact, signal);
 	signal.throwIfAborted();
+	const policy = reviewRolePolicy(artifact.source, pass.role);
 	const inputKey = createHash("sha256")
-		.update(JSON.stringify({ role: pass.role, goal: pass.goal, context: pass.context, schema: pass.schema }))
+		.update(JSON.stringify({ role: pass.role, policy, goal: pass.goal, context: pass.context, schema: pass.schema }))
 		.digest("hex");
 	const previous = db
 		.prepare(
-			"select id, output from review_attempts where review_id = ? and plan_revision = ? and pass_id = ? and input_key = ? and state = 'completed' and reuse_blocked_by is null order by created_at desc, rowid desc limit 1",
+			"select id, output from review_attempts where review_id = ? and (plan_revision = ? or (kind = 'planner' and id = ?)) and pass_id = ? and input_key = ? and state = 'completed' and reuse_blocked_by is null order by created_at desc, rowid desc limit 1",
 		)
-		.get(job.id, job.planRevision, pass.id, inputKey) as { id: string; output: string } | undefined;
+		.get(job.id, job.planRevision, job.selectedAttempts.planner ?? null, pass.id, inputKey) as
+		| { id: string; output: string }
+		| undefined;
 	if (previous) {
 		const value = pass.validate(JSON.parse(previous.output));
 		if (!pass.reuse || pass.reuse(value)) return { attempt: previous.id, output: value };
 	}
-	const role = loadRoles(artifact.source).roles.get(pass.role);
-	if (!role || role.writes || role.manages) throw new Error(`Unavailable advisory review role: ${pass.role}`);
-	const roleSource = readFileSync(role.path, "utf8");
-	const roleHash = createHash("sha256").update(roleSource).digest("hex");
-	const profileName = isInferenceProfileName(role.models[0]!) ? role.models[0]! : undefined;
-	const profile = profileName ? loadModelProfiles({ optional: true })[profileName] : undefined;
-	const candidates =
-		profile?.models ?? (profileName ? role.models.slice(1) : role.models).map((entry) => parseRoleModel(entry)!);
-	const policy = {
-		role: { path: role.path, hash: roleHash, text: roleSource },
-		profile: profileName ?? null,
-		selection: profile?.selection ?? "ordered",
-		candidates,
-	};
+	const candidates = policy.candidates;
 	const id = randomUUID();
 	const person = randomUUID();
 	const programId = randomUUID();
@@ -142,8 +131,8 @@ export async function runReviewAttempt(
 		).run(observed.model, observed.thinking, observed.file, id);
 		if (observed.role !== pass.role || !candidates.some((candidate) => candidate.model === observed.model))
 			throw new Error("The reviewer did not select its recorded role/model policy; no review turn was sent");
-		if (createHash("sha256").update(readFileSync(role.path)).digest("hex") !== roleHash)
-			throw new Error("The review role changed during startup; no review turn was sent");
+		if (JSON.stringify(reviewRolePolicy(artifact.source, pass.role)) !== JSON.stringify(policy))
+			throw new Error("The review policy changed during startup; no review turn was sent");
 		const receipt = await program.command(
 			person,
 			{ kind: "run_turn", ...input },
@@ -152,6 +141,8 @@ export async function runReviewAttempt(
 		if (receipt.stage !== "applied" || receipt.result?.status !== "completed")
 			throw new Error(receipt.reason ?? receipt.result?.error ?? "The review turn did not complete");
 		await verifyArtifact(artifact, signal);
+		if (JSON.stringify(reviewRolePolicy(artifact.source, pass.role)) !== JSON.stringify(policy))
+			throw new Error("The review policy changed during the turn; resume to obtain current-policy evidence");
 		output = pass.validate(receipt.result.value);
 		storeOutput(db, job, id, pass, output);
 	} catch (error) {

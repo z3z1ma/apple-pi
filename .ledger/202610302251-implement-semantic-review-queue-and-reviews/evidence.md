@@ -136,6 +136,16 @@ The TUI chooses a repository/worktree directory and shows resolved comparison en
 
 The deliberate cost is two captures rather than a draft-job store or adoption of UI-owned source. No paid reviewer, actual terminal paint, browser approval or production restart was performed.
 
+## Policy-sensitive recovery
+
+- Four regressions reproduced stale planning after role instructions, profile candidates, selection mode or advisory-catalog changes. Each completed with plan revision 1 rather than the required new revision: `/tmp/review-policy-red.log`.
+- Current role/profile policy is now part of the exact attempt key before reuse lookup. Resume routes the planner through that same path, retaining its revision only when its selected result remains eligible. A new plan revision requires fresh inspections. Existing unchanged-policy and persistent-challenge recovery controls remain green.
+- Startup and real-SDK turn gates verify that a policy change can invalidate work while leaving the observed model itself eligible. Startup sends no review turn. A change during an actual scripted AgentSession turn retains the completed raw result but accepts no current-policy report. Metadata-only reads do not select a model or advance profile-pool counters.
+- **73 tests in five files passed**, one worker, 101.45 seconds: `/tmp/review-policy-final-tests.log`. Node/web types, scoped Biome and package loading passed: `/tmp/review-policy-final-types.log`, `/tmp/review-policy-final-format.log`, `/tmp/review-policy-loader.log`.
+- Package dry-run includes policy.ts among **2,755 files**: `/tmp/review-policy-pack.json`. Context lint passed for **347 files**. Scoped Biome, package loading and whitespace were checked again after native recovery guidance changed: `/tmp/review-policy-close-format.log`, `/tmp/review-policy-close-loader.log`. No live provider, production migration/restart or comparative quality claim.
+
+This checkpoint covers execution and recovery policy. Capture-time instruction/configured-reference identity in the artifact and current-target applicability remain unfinished.
+
 ## Remaining delivery
 
 Complete observed cost and captured-source drill-down, coverage/extra-work decisions, source/policy freshness and native no-change outcomes, remaining native integration, Workplace Code and artifact-bound sign-off, focused native/IPC/UI integration, applicable builds and real-host validation. No part of that remaining scope has been waived. No paid reviewer or live daemon/app activation has occurred.

@@ -777,6 +777,149 @@ test("incomplete evidence stays incomplete with zero findings and can resume wit
 	).toHaveLength(2);
 }, 30000);
 
+test.each(["role", "profile", "selection", "catalog"])(
+	"resume replans under changed %s policy instead of reusing the earlier assessment",
+	async (change) => {
+		const rolePath = join(state.agentDir, "roles", "code-review-specialist.md");
+		writeFileSync(
+			rolePath,
+			readFileSync(rolePath, "utf8").replace('models: ["fixture/', 'models: ["balanced", "fixture/'),
+		);
+		const profilePath = join(state.agentDir, "model-profiles.json");
+		const profile = { selection: "ordered", models: [{ model: "fixture/code-review-specialist", thinking: "high" }] };
+		writeFileSync(profilePath, JSON.stringify({ profiles: { balanced: profile } }));
+		writeFileSync(join(state.agentDir, "peer-control.json"), JSON.stringify({ review: { challenged: true } }));
+		const job = await enqueue();
+		await settled(job.id, "incomplete");
+		const before = query<{ digest: string; revision: number; selected: string }>(
+			state.dbPath,
+			"select json_extract(artifact, '$.digest') as digest, plan_revision as revision, selected_attempts as selected from review_jobs where id = ?",
+			job.id,
+		)[0]!;
+		if (change === "role")
+			writeFileSync(rolePath, `${readFileSync(rolePath, "utf8")}\nTrace recovery as well as the steady state.\n`);
+		else if (change === "catalog")
+			writeFileSync(
+				join(state.agentDir, "roles", "fixture-advisor.md"),
+				readFileSync(rolePath, "utf8").replace("Fixture Reviewer", "Recovery Advisor"),
+			);
+		else {
+			if (change === "selection") profile.selection = "round-robin";
+			else profile.models.push({ model: "fixture/another", thinking: "high" });
+			writeFileSync(profilePath, JSON.stringify({ profiles: { balanced: profile } }));
+		}
+		writeFileSync(
+			join(state.agentDir, "peer-control.json"),
+			JSON.stringify({ review: { passId: "new-policy-question" } }),
+		);
+		const receipt = await sendCommand(
+			"owner",
+			{ kind: "review", version: 1, operation: { action: "resume", review: job.id } },
+			{ socketPath: state.socketPath },
+		);
+		expect(receipt.stage, receipt.reason).toBe("applied");
+		await settled(job.id, "completed");
+		const db = new DatabaseSync(state.dbPath, { readOnly: true });
+		try {
+			const after = readReview(db, "owner", job.id);
+			expect(after.artifact?.digest).toBe(before.digest);
+			expect(after.planRevision).toBe(before.revision + 1);
+			expect(after.selectedAttempts).toHaveProperty("new-policy-question");
+			for (const id of Object.values(after.selectedAttempts))
+				expect(Object.values(JSON.parse(before.selected))).not.toContain(id);
+			expect(query(state.dbPath, "select id from program_scopes")).toEqual([]);
+			expect(existsSync(join(state.stateDir, "model-profile-selection.sqlite"))).toBe(false);
+		} finally {
+			db.close();
+		}
+	},
+	40000,
+);
+
+test("a profile change during startup prevents dispatch even when the model remains eligible", async () => {
+	const rolePath = join(state.agentDir, "roles", "code-review-specialist.md");
+	writeFileSync(
+		rolePath,
+		readFileSync(rolePath, "utf8").replace('models: ["fixture/', 'models: ["balanced", "fixture/'),
+	);
+	const profilePath = join(state.agentDir, "model-profiles.json");
+	const profile = { selection: "ordered", models: [{ model: "fixture/code-review-specialist", thinking: "high" }] };
+	writeFileSync(profilePath, JSON.stringify({ profiles: { balanced: profile } }));
+	const gate = join(state.agentDir, "release-startup");
+	writeFileSync(join(state.agentDir, "peer-control.json"), JSON.stringify({ review: true, helloGate: gate }));
+	const job = await enqueue();
+	await vi.waitFor(
+		() => {
+			const attempt = query<{ person: string }>(
+				state.dbPath,
+				"select person from review_attempts where review_id = ?",
+				job.id,
+			)[0];
+			expect(attempt && existsSync(join(state.agentDir, "peer-records", `${attempt.person}.launch.json`))).toBe(true);
+		},
+		{ timeout: 10000 },
+	);
+	profile.selection = "round-robin";
+	writeFileSync(profilePath, JSON.stringify({ profiles: { balanced: profile } }));
+	writeFileSync(gate, "continue");
+	await settled(job.id, "failed");
+	expect(query(state.dbPath, "select reason, result from review_attempts where review_id = ?", job.id)).toEqual([
+		{ reason: expect.stringContaining("policy changed during startup"), result: null },
+	]);
+	expect(query(state.dbPath, "select command_id from commands where kind = 'run_turn'")).toEqual([]);
+	expect(query(state.dbPath, "select id from program_scopes")).toEqual([]);
+}, 20000);
+
+test("a policy change during a real SDK turn retains raw results without accepting current-policy coverage", async () => {
+	const fixture = new URL("../../../tests/fixtures/review-sdk-peer.ts", import.meta.url).pathname;
+	const register = new URL("../src/register.mjs", import.meta.url).pathname;
+	writeFileSync(
+		join(state.agentDir, "bin", "pi"),
+		`#!/bin/sh\nexec '${process.execPath}' --import '${register}' '${fixture}' "$@"\n`,
+		{ mode: 0o700 },
+	);
+	writeFileSync(
+		join(state.agentDir, "roles", "code-review-specialist.md"),
+		'---\ntitle: Fixture Reviewer\nmandate: Inspect captured code.\nmodels: ["balanced", "faux-session-provider/faux-session-model:off"]\nwrites: false\nmanages: false\n---\nRead the source and report evidence.\n',
+	);
+	const profilePath = join(state.agentDir, "model-profiles.json");
+	const profile = {
+		selection: "ordered",
+		models: [{ model: "faux-session-provider/faux-session-model", thinking: "off" }],
+	};
+	writeFileSync(profilePath, JSON.stringify({ profiles: { balanced: profile } }));
+	const gate = join(state.agentDir, "release-inspection");
+	writeFileSync(join(state.agentDir, "review-sdk-gate.json"), JSON.stringify({ phase: "inspection", release: gate }));
+	const job = await enqueue();
+	await vi.waitFor(
+		() => {
+			const attempt = query<{ person: string }>(
+				state.dbPath,
+				"select person from review_attempts where review_id = ? and kind = 'focused'",
+				job.id,
+			)[0];
+			expect(attempt && existsSync(join(state.agentDir, "provider-inputs", `${attempt.person}.waiting`))).toBe(true);
+		},
+		{ timeout: 15000 },
+	);
+	profile.selection = "round-robin";
+	writeFileSync(profilePath, JSON.stringify({ profiles: { balanced: profile } }));
+	writeFileSync(gate, "continue");
+	await settled(job.id, "failed");
+	const attempt = query<{ state: string; reason: string; result: string; output: null }>(
+		state.dbPath,
+		"select state, reason, result, output from review_attempts where review_id = ? and kind = 'focused'",
+		job.id,
+	)[0]!;
+	expect(attempt).toMatchObject({
+		state: "failed",
+		reason: expect.stringContaining("policy changed during the turn"),
+		output: null,
+	});
+	expect(JSON.parse(attempt.result)).toMatchObject({ status: "completed", value: { pass: "value-correctness" } });
+	expect(query(state.dbPath, "select id from program_scopes")).toEqual([]);
+}, 30000);
+
 test("a malformed planner result retains its observed usage without turning zero findings into a clean review", async () => {
 	const job = await enqueue();
 	await settled(job.id, "failed");
