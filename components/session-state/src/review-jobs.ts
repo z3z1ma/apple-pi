@@ -258,6 +258,7 @@ export class ReviewJobs {
 				{
 					id: "planner",
 					role: "code-review-specialist",
+					policyFingerprint: roles.find((role) => role.name === "code-review-specialist")?.policy,
 					kind: "planner",
 					goal: `${PLAN_REVIEW}\nCaptured source: ${artifact.source}`,
 					schema: ReviewPlanSchema,
@@ -302,6 +303,7 @@ export class ReviewJobs {
 					{
 						id: pass.id,
 						role: pass.role,
+						policyFingerprint: roles.find((role) => role.name === pass.role)?.policy,
 						kind: pass.kind,
 						goal: `${INSPECT_REVIEW}\nCaptured source: ${artifact.source}`,
 						schema: ReviewReportSchema,
@@ -335,6 +337,7 @@ export class ReviewJobs {
 				{
 					id: "validator",
 					role: "code-review-specialist",
+					policyFingerprint: roles.find((role) => role.name === "code-review-specialist")?.policy,
 					kind: "validation",
 					goal: `${VALIDATE_REVIEW}\nCaptured source: ${artifact.source}`,
 					schema: FindingValidationSchema,

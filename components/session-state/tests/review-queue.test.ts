@@ -1008,6 +1008,81 @@ test("a policy change during a real SDK turn retains raw results without accepti
 	expect(query(state.dbPath, "select id from program_scopes")).toEqual([]);
 }, 30000);
 
+test("a policy change between completed turns cannot enter the planned assessment even when the catalog is restored", async () => {
+	const rolePath = join(state.agentDir, "roles", "code-review-specialist.md");
+	const original = readFileSync(rolePath, "utf8");
+	const gate = join(state.agentDir, "cleanup-gates");
+	mkdirSync(gate);
+	writeFileSync(
+		join(state.agentDir, "peer-control.json"),
+		JSON.stringify({ review: true, cleanupGate: gate, cleanupPasses: ["planner", "value-correctness"] }),
+	);
+	const job = await enqueue();
+	const attempt = (pass: string) =>
+		query<{ person: string; output: string | null }>(
+			state.dbPath,
+			"select person, output from review_attempts where review_id = ? and pass_id = ? order by rowid desc limit 1",
+			job.id,
+			pass,
+		)[0];
+	const waiting = (pass: string) => {
+		const row = attempt(pass);
+		return !!row?.output && existsSync(join(gate, `${row.person}.waiting`));
+	};
+	try {
+		await vi.waitFor(() => expect(waiting("planner")).toBe(true), { timeout: 15000 });
+		writeFileSync(rolePath, `${original}\nInspect with different policy B.\n`);
+		writeFileSync(join(gate, `${attempt("planner")!.person}.release`), "continue");
+		await vi.waitFor(
+			() =>
+				expect(
+					waiting("value-correctness") ||
+						query<{ state: string }>(state.dbPath, "select state from review_jobs where id = ?", job.id)[0]?.state ===
+							"failed",
+				).toBe(true),
+			{ timeout: 15000 },
+		);
+		writeFileSync(rolePath, original);
+		const focused = attempt("value-correctness");
+		if (focused) writeFileSync(join(gate, `${focused.person}.release`), "continue");
+		await vi.waitFor(
+			() =>
+				expect(["failed", "completed"]).toContain(
+					query<{ state: string }>(state.dbPath, "select state from review_jobs where id = ?", job.id)[0]?.state,
+				),
+			{ timeout: 15000 },
+		);
+		expect(query(state.dbPath, "select state, reason from review_jobs where id = ?", job.id)).toEqual([
+			{ state: "failed", reason: expect.stringContaining("planned catalog") },
+		]);
+		expect(focused).toBeUndefined();
+		expect(query(state.dbPath, "select id from program_scopes")).toEqual([]);
+		writeFileSync(join(state.agentDir, "peer-control.json"), JSON.stringify({ review: true }));
+		const resumed = await sendCommand(
+			"owner",
+			{ kind: "review", version: 1, operation: { action: "resume", review: job.id } },
+			{ socketPath: state.socketPath },
+		);
+		expect(resumed.stage, resumed.reason).toBe("applied");
+		await settled(job.id, "completed");
+		for (const row of query<{ policy: string }>(
+			state.dbPath,
+			"select policy from review_attempts where review_id = ?",
+			job.id,
+		))
+			expect(JSON.parse(row.policy).role.text).toBe(original);
+		expect(query(state.dbPath, "select id from program_scopes")).toEqual([]);
+	} finally {
+		writeFileSync(rolePath, original);
+		for (const row of query<{ person: string }>(
+			state.dbPath,
+			"select person from review_attempts where review_id = ?",
+			job.id,
+		))
+			writeFileSync(join(gate, `${row.person}.release`), "continue");
+	}
+}, 40000);
+
 test("an all-concrete review completes without consulting an unrelated malformed profile file", async () => {
 	for (const role of loadRoles(repository).roles.values()) {
 		if (role.writes || role.manages) continue;

@@ -22,6 +22,10 @@ export function reviewRolePolicy(source: string, name: string) {
 	return rolePolicy(role);
 }
 
+export function reviewPolicyFingerprint(policy: ReturnType<typeof reviewRolePolicy>): string {
+	return createHash("sha256").update(JSON.stringify(policy)).digest("hex");
+}
+
 export function reviewRoleCatalog(source: string) {
 	const roles = [...loadRoles(source).roles.values()].filter((role) => !role.writes && !role.manages);
 	const profiles = roles.some((role) => isInferenceProfileName(role.models[0]!))
@@ -32,8 +36,6 @@ export function reviewRoleCatalog(source: string) {
 		title: role.title,
 		mandate: role.mandate,
 		models: role.models,
-		policy: createHash("sha256")
-			.update(JSON.stringify(rolePolicy(role, profiles)))
-			.digest("hex"),
+		policy: reviewPolicyFingerprint(rolePolicy(role, profiles)),
 	}));
 }

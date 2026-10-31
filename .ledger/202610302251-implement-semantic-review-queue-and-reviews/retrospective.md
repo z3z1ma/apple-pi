@@ -40,6 +40,8 @@ Native no-change testing also crossed a fixture boundary: a restarted runtime ha
 
 The first real policy-correctness pass found a dependency the selected-role regression had missed: the all-advisory catalog still loaded malformed profile configuration even when no role referenced it. The helper's local lazy read was not sufficient for its aggregate consumer. A local regression reproduced this, and the catalog now applies the same dependency rule before loading shared configuration. That is one independently found, reproduced defect; it does not establish comparative review effectiveness.
 
+The reliability pass found a second, cross-phase defect: individually valid checks accepted a focused B-policy report between planner A and final catalog A. The conflicting identity was already recorded; a new watcher was unnecessary. Comparing each attempted policy with the planner catalog before reuse or launch closes the acceptance gap. A local cleanup-gated reproducer failed at the actual completed outcome before the fix, then proved refusal before B launch and consistent resume. The validator independently confirmed both original allegations. This live case supplied useful defects, but seven turns,46.6 minutes and $13.88 observed primary-turn cost are observations, not a comparative quality or economic claim.
+
 ## Improvements
 
 Pending completion of the undertaking.

@@ -30,7 +30,15 @@ const controlledRuns = new Map();
 const send = (message) => {
 	if (socket?.writable) socket.write(`${JSON.stringify(message)}\n`);
 };
+let lastReviewPass;
 const finishStop = () => {
+	if (control.cleanupGate && control.cleanupPasses?.includes(lastReviewPass)) {
+		if (!existsSync(join(control.cleanupGate, `${id}.release`))) {
+			writeFileSync(join(control.cleanupGate, `${id}.waiting`), lastReviewPass);
+			setTimeout(finishStop, 20);
+			return;
+		}
+	}
 	writeFileSync(join(records, `${id}.stopped`), "graceful shutdown");
 	send({ type: "shutdown", reason: "quit" });
 	setTimeout(() => process.exit(0), control.exitDelay ?? 0);
@@ -206,6 +214,7 @@ if (!stopping) {
 					? JSON.parse(readFileSync(command.contextFile, "utf8"))
 					: { value: command.task };
 				if (control.review && command.outputSchema) {
+					lastReviewPass = { planning: "planner", validation: "validator" }[value.phase] ?? value.pass?.id;
 					if (control.replayReviewTurn) {
 						result(control.replayReviewTurn, {
 							status: "completed",

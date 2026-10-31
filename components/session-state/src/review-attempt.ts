@@ -5,7 +5,7 @@ import type { DatabaseSync } from "node:sqlite";
 import { verifyArtifact } from "../../code-review/src/capture.js";
 import type { FindingValidation } from "../../code-review/src/contracts.js";
 import type { ReviewJob } from "../../code-review/src/operations.js";
-import { reviewRolePolicy } from "../../code-review/src/policy.js";
+import { reviewPolicyFingerprint, reviewRolePolicy } from "../../code-review/src/policy.js";
 import { normalizeOutputSchema } from "../../shared/src/structured-output.js";
 import type { TurnResult } from "../../shared/src/turn-observer.js";
 import type { StatePaths } from "./paths.js";
@@ -14,6 +14,7 @@ import { openPeerProgram, type PeerProgram } from "./program-client.js";
 export interface ReviewPassRequest {
 	id: string;
 	role: string;
+	policyFingerprint: string | undefined;
 	kind: "planner" | "focused" | "integration" | "validation";
 	goal: string;
 	context: unknown;
@@ -53,6 +54,10 @@ export async function runReviewAttempt(
 	await verifyArtifact(artifact, signal);
 	signal.throwIfAborted();
 	const policy = reviewRolePolicy(artifact.source, pass.role);
+	if (reviewPolicyFingerprint(policy) !== pass.policyFingerprint)
+		throw new Error(
+			`The review policy for ${pass.role} differs from the planned catalog; resume to plan under current policy`,
+		);
 	const inputKey = createHash("sha256")
 		.update(JSON.stringify({ role: pass.role, policy, goal: pass.goal, context: pass.context, schema: pass.schema }))
 		.digest("hex");
