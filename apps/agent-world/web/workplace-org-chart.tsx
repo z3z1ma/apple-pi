@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import type { Character, WorldSnapshot } from "../src/world.js";
+import { DepartureDialog, type DepartureSelection } from "./workplace-departures.js";
 import { Icon } from "./workplace-icon.js";
 import { organizationName, useWorkplaceNames } from "./workplace-names.js";
 import { OrgNameEditor } from "./workplace-org-name.js";
@@ -53,6 +54,7 @@ export function OrgChart({
 	propose,
 	addPerson,
 	openDM,
+	onDepartureChange,
 }: {
 	world: WorldSnapshot;
 	people: OrgPerson[];
@@ -65,9 +67,14 @@ export function OrgChart({
 	propose: (id: string, manager: string | null) => void;
 	addPerson: (manager: string) => void;
 	openDM: (id: string) => void;
+	onDepartureChange: (unsettled: boolean) => void;
 }) {
 	useWorkplaceNames();
 	const personMenu = usePersonMenu();
+	const [checked, setChecked] = useState(new Set<string>());
+	const [departure, setDeparture] = useState<DepartureSelection>();
+	const [departureOpen, setDepartureOpen] = useState(false);
+	const chosen = people.filter((person) => checked.has(person.character.id));
 	const [collapsed, setCollapsed] = useState(new Set<string>());
 	const [dragged, setDragged] = useState<string>();
 	const [zoom, setZoom] = useState(1);
@@ -439,13 +446,53 @@ export function OrgChart({
 								</section>
 							)}
 							<section className="wp-org-directory" aria-label="People directory">
-								<h2>
-									People <span>{people.length}</span>
-								</h2>
+								<div className="wp-org-directory-toolbar">
+									<h2>
+										People <span>{people.length}</span>
+									</h2>
+									<span>{chosen.length ? `${chosen.length} selected` : "Select people for a batch action"}</span>
+									<button
+										type="button"
+										disabled={
+											!departure && (!chosen.length || !world.connected || busy || !window.agentWorld.retirePeople)
+										}
+										onClick={(event) => {
+											if (!departure)
+												setDeparture({
+													id: crypto.randomUUID(),
+													trigger: event.currentTarget,
+													people: chosen.map((person) => ({
+														person: person.character.id,
+														name: person.character.name,
+														manager: person.character.role === "coordinator",
+													})),
+												});
+											setDepartureOpen(true);
+										}}
+									>
+										{departure ? "Departure progress" : "Let go"}
+									</button>
+								</div>
 								<div className="wp-org-directory-scroll">
 									<table aria-label="People">
 										<thead>
 											<tr>
+												<th scope="col">
+													<input
+														type="checkbox"
+														aria-label="Select all people"
+														disabled={!!departure || !people.length}
+														checked={people.length > 0 && chosen.length === people.length}
+														ref={(input) => {
+															if (input) input.indeterminate = chosen.length > 0 && chosen.length < people.length;
+														}}
+														onChange={(event) =>
+															setChecked(
+																new Set(event.target.checked ? people.map((person) => person.character.id) : []),
+															)
+														}
+													/>
+												</th>
 												<th scope="col">Name</th>
 												<th scope="col">Role</th>
 												<th scope="col">Status</th>
@@ -461,7 +508,23 @@ export function OrgChart({
 													? organizationName(team.root.character.id, team.root.character.name)
 													: "Independent";
 												return (
-													<tr key={id} data-selected={selected === id} {...dragProps(person)}>
+													<tr key={id} data-selected={selected === id || checked.has(id)} {...dragProps(person)}>
+														<td>
+															<input
+																type="checkbox"
+																aria-label={`Select ${person.character.name}`}
+																checked={checked.has(id)}
+																disabled={!!departure}
+																onChange={(event) =>
+																	setChecked((previous) => {
+																		const next = new Set(previous);
+																		if (event.target.checked) next.add(id);
+																		else next.delete(id);
+																		return next;
+																	})
+																}
+															/>
+														</td>
 														<td>
 															<button
 																type="button"
@@ -522,6 +585,21 @@ export function OrgChart({
 					)}
 				</div>
 			</div>
+			{departure && (
+				<DepartureDialog
+					key={departure.id}
+					selection={departure}
+					open={departureOpen}
+					connected={world.connected}
+					onUnsettled={onDepartureChange}
+					onHide={() => setDepartureOpen(false)}
+					onClose={() => {
+						setDeparture(undefined);
+						setDepartureOpen(false);
+						setChecked(new Set());
+					}}
+				/>
+			)}
 		</div>
 	);
 }

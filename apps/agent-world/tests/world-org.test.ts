@@ -1827,7 +1827,11 @@ test("Org search crosses teams using snapshot metadata and reads work only on re
 		await profile.getByText(/Asleep/).waitFor();
 		await profile.getByRole("button", { name: "Close profile", exact: true }).click();
 		await search.fill("Daria");
-		await results.getByRole("button", { name: "Open team: Daria", exact: true }).click();
+		await results
+			.getByRole("listitem")
+			.filter({ has: page.getByRole("button", { name: "View person: Daria", exact: true }) })
+			.getByRole("button", { name: "Open team: Daria", exact: true })
+			.click();
 		await page.getByRole("button", { name: "View profile: Daria", exact: true }).waitFor();
 		await search.fill("invoice");
 		await results.getByText("Recorded organization: Daria", { exact: true }).waitFor();

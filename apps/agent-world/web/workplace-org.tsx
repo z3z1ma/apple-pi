@@ -67,6 +67,7 @@ export function Org({
 	const [team, setTeam] = useState<string>();
 	const [addingTo, setAddingTo] = useState<string>();
 	const [recruiting, setRecruiting] = useState(false);
+	const [departing, setDeparting] = useState(false);
 	const [draft, setDraft] = useState<Draft>();
 	const [planHidden, setPlanHidden] = useState(false);
 	const [position, setPosition] = useState<string>();
@@ -116,8 +117,8 @@ export function Org({
 	const draftId = draft?.id;
 	const hasPlan = draft !== undefined;
 	useEffect(() => {
-		onPlanChange?.({ dirty: hasPlan, started });
-	}, [hasPlan, started, onPlanChange]);
+		onPlanChange?.({ dirty: hasPlan || departing, started: started || departing });
+	}, [hasPlan, started, departing, onPlanChange]);
 	useEffect(() => {
 		if (!api.onOrgStart || !draftId) return;
 		return api.onOrgStart((progress) => {
@@ -452,6 +453,7 @@ export function Org({
 						selected={selected}
 						busy={busy || recruiting}
 						manages={manages}
+						onDepartureChange={setDeparting}
 						select={select}
 						propose={propose}
 						openDM={openDM}

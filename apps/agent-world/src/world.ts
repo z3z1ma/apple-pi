@@ -1,6 +1,7 @@
 // The world as the backend reports it to the world UI. Shared by the backend, the preload bridge, and the renderer.
 import type { CallInRequest, CallInResult } from "./call-in.js";
 import type { CommunicationsApi } from "./communications.js";
+import type { RetirePeopleProgress, RetirePeopleRequest } from "./departures.js";
 import type { IntegrationsApi } from "./integrations.js";
 
 export type { CallInPerson, CallInRequest, CallInResult } from "./call-in.js";
@@ -557,7 +558,9 @@ export interface AgentWorldApi extends IntegrationsApi {
 	orgMove(request: OrgMoveRequest): Promise<OrgMoveResult>;
 	orgStart(request: OrgStartRequest): Promise<OrgStartProgress>;
 	onOrgStart(listener: (progress: OrgStartProgress) => void): () => void;
-	/** Retire a character (`retire`): it leaves the organization with a reason, and sleeps at the inn marked so. */
+	retirePeople(request: RetirePeopleRequest): Promise<RetirePeopleProgress>;
+	onRetirePeople(listener: (progress: RetirePeopleProgress) => void): () => void;
+	/** Request permanent departure; acceptance is not completed cleanup. */
 	retire(characterId: string, reason: string, handoff?: boolean): Promise<CommandReceipt>;
 	/** Read a running coordinator's notepad (`NOTES.md` in its directory) and watch it for changes. */
 	openNotepad(coordinatorId: string): Promise<NotepadRead>;

@@ -54,6 +54,20 @@ The result lists each affected person's observed state. A failed or uncertain ma
 
 **Let go** is permanent departure, not reversible Send home. The operator can also let independent or unroled people go; an agent still cannot let an organization head go. The action requires a reason and an explicit permanent-removal acknowledgment. First finish or reassign unfinished work, move reports and settle active delegations. **Request a final handoff** is checked by default. Clear it to skip the final model turn and file, without waking a sleeping person; a running person's current turn can be stopped. The runtime checks responsibilities again before committing departure in either case. Acceptance means the departure request was received, not that cleanup finished; later runtime updates report the outcome. The UI does not remove the person optimistically or let go of their reports.
 
+### Let several people go
+
+In Org's full **People** directory, select individual checkboxes or **Select all people**, then choose **Let go**. Selection includes only the people currently listed; later arrivals are not automatically selected. The confirmation freezes the named people and shows a handoff choice for each:
+
+- **All selected people** (default): each person writes a final handoff.
+- **Managers only**: people with a managing role or current reports when the preview opens write handoffs. This uses the same recorded manager classification as the World, not a guess from a title.
+- **None**: skip final model turns and handoff files; sleeping people are not awakened.
+
+Enter one reason and confirm permanent removal. Current turns may be stopped. The app sends ordinary operator departure commands, with selected reports first, and waits for each report's completed cleanup before its selected manager. Unfinished work, unselected reports and active delegations still block removal. The batch never adds people, moves reports, reassigns work or rolls back completed departures.
+
+The result retains every selected name, even after the person disappears from the roster. **Accepted** and **cleanup pending** are not **Removed**. Refusals, blocked managers and uncertain outcomes stay visible per person; independent departures can still proceed after another branch fails. **Check and continue** after uncertainty reconciles the same command identities and continues the same confirmed selection, rather than making a fresh removal request. A definite refusal needs its blocker resolved and a newly confirmed batch.
+
+**Hide** retains the batch; **Departure progress** reopens it. Keep the app open while it runs. Switching views preserves it. Reloading loses the memory-only display while the main process can continue the confirmed batch; quitting stops unsent requests. Already accepted departures continue in the runtime in either case. Pending or uncertain batches participate in the existing reload/quit warning. No separate batch daemon or durable batch queue is created.
+
 ### Add one person immediately
 
 Use **Add person** on a team card or in a focused team. Choose the catalog **Role** and **Repository**, with optional **Name**, **Specialization** and **Goal**. Role details show its mandate and whether it manages, writes or advises. Submitting starts an ordinary Pi session immediately under the selected running manager; a blank name uses native automatic naming. A supplied goal assigns initial work. An omitted or blank goal creates no task and withholds the automatic opening turn: the person is ready for later instructions. It is not a position waiting for Start team.

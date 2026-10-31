@@ -1,0 +1,65 @@
+.wp-person-dialog.wp-departures {
+	width: min(760px, calc(100vw - 40px));
+	max-height: calc(100vh - 40px);
+	overflow: hidden;
+}
+.wp-person-dialog.wp-departures[open] {
+	display: flex;
+	flex-direction: column;
+}
+.wp-person-dialog.wp-departures > h2,
+.wp-person-dialog.wp-departures > footer {
+	flex: none;
+}
+.wp-departure-body {
+	min-height: 0;
+	overflow-y: auto;
+}
+.wp-person-dialog.wp-departures .wp-person-permanent {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	gap: 8px;
+	margin: 6px 0;
+	color: var(--wp-text);
+}
+.wp-departures fieldset {
+	margin: 12px 0;
+	padding: 10px 12px;
+	border: 1px solid var(--wp-border);
+	border-radius: 6px;
+}
+.wp-departures legend {
+	font-weight: 600;
+}
+.wp-departures input[type="radio"] {
+	width: auto;
+	accent-color: var(--wp-accent);
+}
+.wp-departure-list {
+	max-height: 35vh;
+	overflow: auto;
+	margin: 12px 0;
+}
+.wp-departure-list table {
+	width: 100%;
+	border-collapse: collapse;
+	text-align: left;
+	font-size: 12px;
+}
+.wp-departure-list th,
+.wp-departure-list td {
+	padding: 8px;
+	border-bottom: 1px solid var(--wp-border);
+	vertical-align: top;
+	overflow-wrap: anywhere;
+}
+.wp-departure-list thead {
+	position: sticky;
+	top: 0;
+	background: var(--wp-panel);
+}
+.wp-departure-list td p {
+	margin: 4px 0 0;
+	color: var(--wp-muted);
+}

@@ -35,6 +35,9 @@ Whole-team startup explicitly discloses operator pull membership before submissi
 The overview's People directory and team cards use this existing select/profile/DM owner. A directory click never creates a second person-detail store, and the directory itself does not fetch profiles or transcripts. Team counts describe roots with more than one current lasting member (including home), while the People directory includes every current lasting person. Independent identities still reach existing reporting/recruitment controls through their normal profile.
 Why: changing how a person is listed must not lose retained plans, make observing metadata count as reading a conversation, or invent a separate lifecycle policy.
 
+The chart reports pending/uncertain batch departures through onDepartureChange. Org includes this in the existing shell leave guard alongside team plans; it does not turn a departure batch into a team-creation draft. Normal view switches retain both owners.
+Coupled: apps/agent-world/web/workplace-departures.tsx
+
 The shared Org details width handle sizes one stable geometry slot for existing Add person, retained plan and embedded profile branches. Presence follows an actual rendered panel, including a still-present selected person, so a removed identity leaves no empty reserved rail. Plan/recruitment/profile state and existing keys remain in their original owners.
 Coupled: apps/agent-world/web/workplace-resize.tsx
 

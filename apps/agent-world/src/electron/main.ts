@@ -13,6 +13,7 @@ import { appFile } from "../app-files.js";
 import { openCommands } from "../backend/commands.js";
 import { openCommunications } from "../backend/communications.js";
 import { openConversations } from "../backend/conversations.js";
+import { openDepartures } from "../backend/departures.js";
 import { openEmbeddedTerminals } from "../backend/embedded-terminal.js";
 import { instruct } from "../backend/instructions.js";
 import { openLifecycle } from "../backend/lifecycle.js";
@@ -24,6 +25,7 @@ import { openWorkplace } from "../backend/workplace.js";
 import { openWorkspace } from "../backend/workspace.js";
 import { leaveOutUnchanged, openWorldBackend } from "../backend/world-backend.js";
 import { isCallInRequest } from "../call-in.js";
+import { isRetirePeopleRequest } from "../departures.js";
 import { isOrgMoveRequest, isOrgStartRequest } from "../org.js";
 import {
 	isWorkspaceDiff,
@@ -164,6 +166,12 @@ function start() {
 	const lifecycle = openLifecycle({ ...statePaths(), agentDir: agentDir() }, commands, () => world.snapshot());
 	const org = openOrg({ ...statePaths(), agentDir: agentDir() }, commands, () => world.snapshot());
 	org.onOrgStart((progress) => toWindow("world:org-progress", progress));
+	const departures = openDepartures(statePaths().db, commands);
+	departures.onRetirePeople((progress) => toWindow("world:departures", progress));
+	ipcMain.handle("world:retire-people", (_event, request: unknown) => {
+		if (!isRetirePeopleRequest(request)) throw new Error("A confirmed selection and reason are required.");
+		return departures.retirePeople(request);
+	});
 	ipcMain.handle("world:org-move", (_event, request: unknown) =>
 		isOrgMoveRequest(request)
 			? org.orgMove(request)
@@ -290,6 +298,7 @@ function start() {
 	});
 	app.on("window-all-closed", () => app.quit());
 	app.on("will-quit", () => {
+		departures.close();
 		terminals.dispose();
 		world.close();
 		notepads.close();

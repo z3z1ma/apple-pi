@@ -1,6 +1,7 @@
 // The only way the world UI reaches the backend: a narrow typed API on `window.agentWorld`. Sandboxed preloads run
 // as CommonJS with only a few Electron modules, so this is built to dist/electron/preload.cjs.
 import { contextBridge, ipcRenderer } from "electron";
+import type { RetirePeopleProgress } from "../departures.js";
 import type { IntegrationsApi, OutsideWriteEntry } from "../integrations.js";
 import type { OrgMoveResult, OrgStartProgress } from "../org.js";
 import type { TerminalEvent } from "../terminal.js";
@@ -153,6 +154,13 @@ const api: AgentWorldApi = {
 		const forward = (_event: unknown, progress: OrgStartProgress) => listener(progress);
 		ipcRenderer.on("world:org-progress", forward);
 		return () => ipcRenderer.removeListener("world:org-progress", forward);
+	},
+	retirePeople: (request) =>
+		ipcRenderer.invoke("world:retire-people", request) as ReturnType<AgentWorldApi["retirePeople"]>,
+	onRetirePeople(listener) {
+		const forward = (_event: unknown, progress: RetirePeopleProgress) => listener(progress);
+		ipcRenderer.on("world:departures", forward);
+		return () => ipcRenderer.removeListener("world:departures", forward);
 	},
 	retire: (characterId, reason, handoff) =>
 		ipcRenderer.invoke("world:retire", characterId, reason, handoff) as Promise<CommandReceipt>,

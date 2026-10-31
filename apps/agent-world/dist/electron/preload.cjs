@@ -90,6 +90,12 @@ var api = {
 		electron.ipcRenderer.on("world:org-progress", forward);
 		return () => electron.ipcRenderer.removeListener("world:org-progress", forward);
 	},
+	retirePeople: (request) => electron.ipcRenderer.invoke("world:retire-people", request),
+	onRetirePeople(listener) {
+		const forward = (_event, progress) => listener(progress);
+		electron.ipcRenderer.on("world:departures", forward);
+		return () => electron.ipcRenderer.removeListener("world:departures", forward);
+	},
 	retire: (characterId, reason, handoff) => electron.ipcRenderer.invoke("world:retire", characterId, reason, handoff),
 	openNotepad: (coordinatorId) => electron.ipcRenderer.invoke("world:open-notepad", coordinatorId),
 	saveNotepad: (coordinatorId, text, base) => electron.ipcRenderer.invoke("world:save-notepad", coordinatorId, text, base),

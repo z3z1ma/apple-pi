@@ -110,6 +110,7 @@ async function openLifecycle(appearance: "light" | "dark" = "light", width = 144
 		w.lifecycleCalls = {
 			home: [],
 			retire: [],
+			retirePeople: [],
 			callIn: [],
 			wake: [],
 			profiles: [],
@@ -120,6 +121,10 @@ async function openLifecycle(appearance: "light" | "dark" = "light", width = 144
 		w.pushLifecycle = (snapshot: WorldSnapshot) => {
 			current = structuredClone(snapshot);
 			for (const listener of listeners) listener(current);
+		};
+		const departures = new Set<(progress: any) => void>();
+		w.pushDepartures = (progress: any) => {
+			for (const listener of departures) listener(progress);
 		};
 		const held = (kind: string, value: unknown) => {
 			w.lifecycleCalls[kind].push(structuredClone(value));
@@ -168,6 +173,11 @@ async function openLifecycle(appearance: "light" | "dark" = "light", width = 144
 			],
 			endSession: (person: string, confirmed?: boolean) => held("home", { person, confirmed }),
 			retire: (person: string, reason: string, handoff?: boolean) => held("retire", { person, reason, handoff }),
+			retirePeople: (request: unknown) => held("retirePeople", request),
+			onRetirePeople: (listener: (progress: any) => void) => {
+				departures.add(listener);
+				return () => departures.delete(listener);
+			},
 			callIn: (request: unknown) => held("callIn", request),
 			wake: (person: string) => held("wake", person),
 		};
@@ -397,6 +407,148 @@ for (const appearance of ["light", "dark"] as const) {
 		}
 	});
 }
+
+test.each([
+	["All selected people", [true, true, true]],
+	["Managers only", [true, false, true]],
+	["None", [false, false, false]],
+] as const)("Org batch Let go previews and sends %s without adding other people", async (mode, handoffs) => {
+	const initial = world();
+	initial.characters.find((person) => person.id === "ben")!.facts!.title = "Implementation Engineer";
+	initial.characters.find((person) => person.id === "ben")!.role = "worker";
+	const { page, errors } = await openLifecycle(
+		mode === "None" ? "dark" : "light",
+		mode === "None" ? 900 : 1440,
+		initial,
+	);
+	try {
+		await page.getByRole("button", { name: "Org", exact: true }).click();
+		const directory = page.getByRole("table", { name: "People", exact: true });
+		for (const name of ["Ada", "Ben", "Mina"])
+			await directory.getByRole("checkbox", { name: `Select ${name}`, exact: true }).check();
+		expect(
+			await directory
+				.getByRole("checkbox", { name: "Select all people" })
+				.evaluate((element: HTMLInputElement) => element.indeterminate),
+		).toBe(true);
+		await page.getByRole("button", { name: "Let go", exact: true }).click();
+		const dialog = page.getByRole("dialog");
+		await dialog.getByRole("radio", { name: mode, exact: true }).check();
+		const rows = dialog.getByRole("table", { name: "Selected departures" });
+		for (const [index, name] of ["Ada", "Ben", "Mina"].entries()) {
+			const row = rows.getByRole("row").filter({ has: page.getByRole("rowheader", { name, exact: true }) });
+			expect(await row.getByRole("cell").first().innerText()).toBe(handoffs[index] ? "Requested" : "None");
+		}
+		const send = dialog.getByRole("button", { name: "Let go", exact: true });
+		expect(await send.isDisabled()).toBe(true);
+		await dialog.getByRole("textbox", { name: "Reason for leaving" }).fill("  Finished project  ");
+		expect(await send.isDisabled()).toBe(true);
+		await dialog.getByRole("checkbox", { name: "Permanently remove these 3 people" }).check();
+		await bounded(page, dialog);
+		await bounded(page, dialog.getByRole("heading", { name: "Let 3 people go", exact: true }));
+		await bounded(page, send);
+		const alignment = await dialog.getByRole("radio", { name: mode, exact: true }).evaluate((input) => {
+			const range = document.createRange();
+			range.selectNode(input.parentElement!.lastChild!);
+			const label = range.getBoundingClientRect(),
+				control = input.getBoundingClientRect();
+			return { overlap: Math.min(label.bottom, control.bottom) - Math.max(label.top, control.top) };
+		});
+		expect(alignment.overlap).toBeGreaterThan(0);
+		await shot(page, `batch-${mode.split(" ")[0].toLowerCase()}`);
+		await send.click();
+		await vi.waitFor(async () => expect((await calls(page)).retirePeople).toHaveLength(1));
+		const sent = (await calls(page)).retirePeople[0];
+		expect(sent).toMatchObject({
+			reason: "Finished project",
+			people: [
+				{ person: "ada", handoff: handoffs[0] },
+				{ person: "ben", handoff: handoffs[1] },
+				{ person: "mina", handoff: handoffs[2] },
+			],
+		});
+		expect((await calls(page)).retire).toEqual([]);
+		expect((await calls(page)).profiles).toEqual([]);
+		const partial = {
+			id: sent.id,
+			finished: false,
+			people: [
+				{ person: "ada", state: "pending" },
+				{ person: "ben", state: "accepted" },
+				{ person: "mina", state: "pending" },
+			],
+		};
+		await page.evaluate((progress) => (window as any).pushDepartures(progress), partial);
+		await dialog.getByText("Accepted; handoff or cleanup pending", { exact: true }).waitFor();
+		expect(await dialog.getByRole("radio", { name: "None", exact: true }).isDisabled()).toBe(true);
+		const next = structuredClone(initial);
+		next.characters.push(awake("new", "New arrival", "ada"));
+		await publish(page, next);
+		expect(await rows.getByRole("rowheader", { name: "New arrival", exact: true }).count()).toBe(0);
+		await dialog.getByRole("button", { name: "Hide", exact: true }).click();
+		await page.getByRole("button", { name: "Chat", exact: true }).click();
+		await page.getByRole("button", { name: "Org", exact: true }).click();
+		await page.getByRole("button", { name: "Departure progress", exact: true }).click();
+		await dialog.getByText("Accepted; handoff or cleanup pending", { exact: true }).waitFor();
+		await release(page, {
+			id: sent.id,
+			finished: true,
+			people: [
+				{ person: "ada", state: "blocked", reason: "Selected report has not finished" },
+				{ person: "ben", state: "failed", reason: "Unfinished assignment" },
+				{ person: "mina", state: "applied" },
+			],
+		});
+		await dialog.getByText("1 of 3 removed. Each result is shown above.", { exact: true }).waitFor();
+		expect(await rows.getByText("Unfinished assignment", { exact: true }).count()).toBe(1);
+		await bounded(page, dialog.getByRole("heading", { name: "Let 3 people go", exact: true }));
+		await bounded(page, dialog.getByRole("button", { name: "Close", exact: true }));
+		await shot(page, `batch-${mode.split(" ")[0].toLowerCase()}-outcomes`);
+		await dialog.getByRole("button", { name: "Close", exact: true }).click();
+		expect((await calls(page)).retirePeople).toHaveLength(1);
+		expect(errors).toEqual([]);
+	} finally {
+		await page.close();
+	}
+});
+
+test("Org select-all is explicit and uncertain batch progress retains the same request", async () => {
+	const { page, errors } = await openLifecycle();
+	try {
+		await page.getByRole("button", { name: "Org", exact: true }).click();
+		const directory = page.getByRole("table", { name: "People", exact: true });
+		await directory.getByRole("checkbox", { name: "Select all people" }).check();
+		expect(await directory.getByRole("checkbox", { checked: true }).count()).toBe(8);
+		const next = world();
+		next.characters.push(awake("new", "New arrival", null));
+		await publish(page, next);
+		expect(await directory.getByRole("checkbox", { name: "Select New arrival", exact: true }).isChecked()).toBe(false);
+		await page.getByRole("button", { name: "Let go", exact: true }).click();
+		const dialog = page.getByRole("dialog");
+		expect(await dialog.getByRole("rowheader").count()).toBe(7);
+		await dialog.getByRole("radio", { name: "None", exact: true }).check();
+		await dialog.getByRole("textbox", { name: "Reason for leaving" }).fill("Cleanup");
+		await dialog.getByRole("checkbox", { name: "Permanently remove these 7 people" }).check();
+		await dialog.getByRole("button", { name: "Let go", exact: true }).click();
+		await vi.waitFor(async () => expect((await calls(page)).retirePeople).toHaveLength(1));
+		const sent = (await calls(page)).retirePeople[0];
+		await page.evaluate(() => (window as any).rejectLifecycle(new Error("Connection lost")));
+		await dialog.getByRole("button", { name: "Check and continue", exact: true }).waitFor();
+		expect(await dialog.getByRole("textbox", { name: "Reason for leaving" }).isDisabled()).toBe(true);
+		await dialog.getByRole("button", { name: "Check and continue", exact: true }).click();
+		await vi.waitFor(async () => expect((await calls(page)).retirePeople).toHaveLength(2));
+		expect((await calls(page)).retirePeople[1]).toEqual(sent);
+		await release(page, {
+			id: sent.id,
+			finished: true,
+			people: sent.people.map((person: { person: string }) => ({ person: person.person, state: "applied" })),
+		});
+		await dialog.getByRole("button", { name: "Close", exact: true }).click();
+		expect(errors).toEqual([]);
+	} finally {
+		await page.close();
+	}
+});
 
 test("Org card context actions do not read, and profile Let go requires reason and permanence without claiming accepted cleanup completed", async () => {
 	const { page, errors } = await openLifecycle("dark", 900);
