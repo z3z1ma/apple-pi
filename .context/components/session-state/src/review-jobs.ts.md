@@ -4,6 +4,8 @@ The runtime owns this writer and its capture promises. A requesting socket closi
 
 An enqueue can bind expectedDigest from a UI preview. Compare it only after a full verified capture and before making the job queued. A mismatch remains a failed, unadmitted request with no reviewer attempt; replay preserves that original binding. Preview scratch is never adopted as runtime-owned source.
 
+Empty in-scope changes settle as no-changes during admission, before the worker can claim them. This includes a path-filtered comparison whose surrounding source changed. Retain the artifact but create no attempts or unfinished review responsibility; cancellation and exact replay preserve the distinction from completed inspection. Runtime departure/move guards and the queue action menu share this terminal meaning.
+
 SQLite and source acquisition have no shared transaction. After restart, an interrupted capture without a recorded artifact requires a new capture; resume never substitutes current live source. A verified artifact survives restart and must pass integrity checks again before resume. The resume update also binds the observed generation, owner and assessment revision so concurrent cancellation or reassignment cannot silently acquire an old request.
 
 Organization scope follows the recorded root using the existing work-task tree semantics. Lasting people own durable reviews; temporary program peers cannot own one. Pending reviews block irreversible departure and reporting moves that would strand their owner outside the recorded organization. These checks belong with the shared runtime responsibility guards, not with each UI.

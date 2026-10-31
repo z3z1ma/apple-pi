@@ -187,7 +187,7 @@ export class ReviewManager {
 		withReviews(() => true);
 		const actions = ["Capture a review", ...(this.pending.size ? ["Recover an uncertain request"] : [])];
 		if (review) {
-			if (!["completed", "cancelled"].includes(review.state)) actions.push("Cancel", "Set priority");
+			if (!["completed", "cancelled", "no-changes"].includes(review.state)) actions.push("Cancel", "Set priority");
 			if (["interrupted", "failed", "incomplete"].includes(review.state)) actions.push("Resume same target");
 			actions.push("Capture a fresh rerun", "Reassign");
 		}
@@ -246,7 +246,7 @@ export class ReviewManager {
 			const preview = await previewReview(operation.request, stop);
 			if (stop.aborted) return;
 			if (!preview.changes.length) {
-				this.mounted?.panel.setNote("No changed paths in the selected comparison; nothing was queued.");
+				this.mounted?.panel.setNote("No changed paths in the selected comparison and scope; nothing was queued.");
 				return;
 			}
 			operation = { ...operation, expectedDigest: preview.digest };

@@ -131,7 +131,7 @@ export class ReviewJobs {
 			return job.id;
 		}
 		if (operation.action === "cancel") {
-			if (job.state !== "completed" && job.state !== "cancelled") {
+			if (!["completed", "cancelled", "no-changes"].includes(job.state)) {
 				this.db
 					.prepare("update review_jobs set state = 'cancelling', updated_at = ? where id = ?")
 					.run(Date.now(), job.id);
@@ -418,11 +418,18 @@ export class ReviewJobs {
 			controller.signal.throwIfAborted();
 			if (expectedDigest && artifact.digest !== expectedDigest)
 				throw new Error("Target changed after preview; inspect a fresh preview before queueing review");
+			const empty = artifact.changes.length === 0;
 			const changed = this.db
 				.prepare(
-					"update review_jobs set artifact = ?, state = 'queued', revision = revision + 1, updated_at = ? where id = ? and state = 'capturing'",
+					"update review_jobs set artifact = ?, state = ?, reason = ?, revision = revision + 1, updated_at = ? where id = ? and state = 'capturing'",
 				)
-				.run(JSON.stringify(artifact), Date.now(), id);
+				.run(
+					JSON.stringify(artifact),
+					empty ? "no-changes" : "queued",
+					empty ? "No changed paths in the requested comparison and scope; no reviewers ran." : null,
+					Date.now(),
+					id,
+				);
 			if (!changed.changes) throw new Error("Review capture no longer owns admission");
 			this.wake();
 		} catch (error) {

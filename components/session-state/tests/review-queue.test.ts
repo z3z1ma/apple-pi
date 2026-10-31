@@ -327,11 +327,7 @@ test("partial allegations stay unvalidated while queue pages follow priority and
 	}
 }, 30000);
 
-test("native tools admit, read, cancel, recover exact requests and explicitly capture a fresh rerun", async () => {
-	writeFileSync(
-		join(state.agentDir, "peer-control.json"),
-		JSON.stringify({ review: { finding: true, hold: "validation" } }),
-	);
+async function nativeReviewTools() {
 	const replies: ReturnType<typeof fauxAssistantMessage>[] = [];
 	const run = await fauxSession(
 		[codeReview],
@@ -352,6 +348,15 @@ test("native tools admit, read, cancel, recover exact requests and explicitly ca
 		if (text?.type !== "text") throw new Error("No serialized review result");
 		return JSON.parse(text.text);
 	}
+	return { run, callTool };
+}
+
+test("native tools admit, read, cancel, recover exact requests and explicitly capture a fresh rerun", async () => {
+	writeFileSync(
+		join(state.agentDir, "peer-control.json"),
+		JSON.stringify({ review: { finding: true, hold: "validation" } }),
+	);
+	const { run, callTool } = await nativeReviewTools();
 	try {
 		const request = {
 			target: { kind: "working-tree", base: "HEAD" },
@@ -433,6 +438,88 @@ test("native tools admit, read, cancel, recover exact requests and explicitly ca
 		run.dispose();
 	}
 }, 40000);
+
+test.each(["empty", "scoped"])(
+	"native %s comparisons retain a no-change outcome without reviewers or unfinished responsibility",
+	async (kind) => {
+		if (kind === "scoped") {
+			writeFileSync(join(repository, "unchanged.ts"), "export const stable = true;\n");
+			execFileSync("git", ["add", "unchanged.ts"], { cwd: repository });
+			execFileSync(
+				"git",
+				["-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "-qm", "stable context"],
+				{ cwd: repository },
+			);
+		}
+		const managerProcess = standInProcess();
+		const manager = await fakeBridge(state.socketPath, "manager", managerProcess.pid, managerProcess.startedAt, {
+			session: { cwd: repository },
+		});
+		owner.send({ type: "facts", facts: { reportsTo: "manager" } });
+		await vi.waitFor(() =>
+			expect(query(state.dbPath, "select reports_to from sessions where id = 'owner'")).toEqual([
+				{ reports_to: "manager" },
+			]),
+		);
+		const { run, callTool } = await nativeReviewTools();
+		try {
+			const request: Parameters<typeof fauxToolCall>[1] =
+				kind === "empty"
+					? { target: { kind: "range", base: "HEAD", head: "HEAD" } }
+					: { target: { kind: "working-tree", base: "HEAD" }, paths: ["unchanged.ts"] };
+			const result = await callTool("review_code", request);
+			expect(result).toMatchObject({
+				stage: "applied",
+				review: { state: "no-changes", passes: null, reason: expect.stringContaining("no reviewers ran") },
+			});
+			const id = (result.review as { id: string }).id;
+			expect(await callTool("review_queue", { state: "no-changes" })).toMatchObject({
+				total: 1,
+				states: { "no-changes": 1 },
+			});
+			expect(await callTool("read_review", { review: id, part: "attempts" })).toEqual({ total: 0, page: null });
+			expect(await callTool("manage_review", { review: id, action: "cancel" })).toMatchObject({
+				review: { id, state: "no-changes" },
+			});
+			expect(await callTool("review_code", { ...request, request: result.request as string })).toMatchObject({
+				review: { id, state: "no-changes" },
+			});
+			expect(query(state.dbPath, "select id from review_attempts")).toEqual([]);
+			expect(query(state.dbPath, "select id from program_scopes")).toEqual([]);
+			expect(query(state.dbPath, "select command_id from commands where kind = 'run_turn'")).toEqual([]);
+			const move = await sendCommand(
+				"operator",
+				{ kind: "organization_move", person: "owner", manager: null, branch: ["owner"] },
+				{ socketPath: state.socketPath },
+			);
+			expect(move.stage, move.reason).toBe("applied");
+			await restart();
+			expect(query(state.dbPath, "select state from review_jobs where id = ?", id)).toEqual([{ state: "no-changes" }]);
+			expect(query(state.dbPath, "select id from review_attempts")).toEqual([]);
+			parent.child.kill();
+			await vi.waitFor(() => expect(parent.child.signalCode).toBe("SIGTERM"));
+			const departure = await sendCommand(
+				"owner",
+				{
+					kind: "retire",
+					by: "operator",
+					reason: "The empty comparison created no review responsibility",
+					handoff: false,
+				},
+				{ socketPath: state.socketPath },
+			);
+			expect(departure.stage, departure.reason).toBe("applied");
+			expect(query(state.dbPath, "select id from sessions where id = 'owner'")).toEqual([]);
+		} finally {
+			manager.socket.destroy();
+			managerProcess.child.kill();
+			await run.session.abort();
+			await run.session.extensionRunner.emit({ type: "session_shutdown", reason: "quit" });
+			run.dispose();
+		}
+	},
+	20000,
+);
 
 test("finding responses retain allegations and approval binds a stable artifact and assessment", async () => {
 	writeFileSync(

@@ -47,6 +47,7 @@ const states = Type.Union([
 	Type.Literal("failed"),
 	Type.Literal("incomplete"),
 	Type.Literal("completed"),
+	Type.Literal("no-changes"),
 ]);
 const parts = Type.Union([
 	Type.Literal("summary"),
@@ -155,7 +156,7 @@ export function installReviewTools(pi: ExtensionAPI): void {
 			promptGuidelines: [
 				"For an already assigned review pass, inspect its captured source and return the requested report. Route additional questions to the plan owner through that report; the requester initiates new reviews.",
 				"Use captured review evidence for its named artifact. Distinguish reported findings, coverage, incomplete work, current-checkout applicability and operator approval.",
-				"Use the returned review ID for progress and the request handle for exact mutation recovery. A failed or incomplete review is not clean because it has no findings.",
+				"Use the returned review ID for progress and the request handle for exact mutation recovery. An empty comparison/scope records no-changes without running reviewers. A failed, incomplete or no-changes review is not a clean-review claim.",
 			],
 			parameters: Type.Object(
 				{

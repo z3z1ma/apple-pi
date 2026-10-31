@@ -34,6 +34,10 @@ Capture preview deliberately uses the existing acquisition twice rather than int
 
 Policy recovery needed more than adding policy to the attempt key. The existing planner bypassed the attempt path entirely on resume. Four isolated cases reproduced retained planning after role text, candidate, selection or catalog changes. Every resume now checks planner eligibility too; its selected identity is the narrow exception to the plan-revision increment it produced. Changed planning invalidates old inspection credit. Startup and real-SDK mid-turn gates verify policy races independently from model membership, while preserving the original raw result. These checks do not establish capture-time policy identity, live applicability or review quality.
 
+The first live terminal feedback rejected the visual result despite passing functional and geometry tests. Activation made that gap visible; the operator asked for substantial chrome, colors, iconography and hierarchy. This is acceptance work in the current delivery, not a cosmetic follow-up. Real terminal inspection must accompany the functional checks.
+
+Native no-change testing also crossed a fixture boundary: a restarted runtime had lost fakeBridge's connection but the stand-in writer was still alive. The dormant-departure assertion timed out behind the correct exclusive-binding guard. Explicit test-owned process exit, rather than weaker cleanup or a longer wait, supplies the state the test intended.
+
 ## Improvements
 
 Pending completion of the undertaking.

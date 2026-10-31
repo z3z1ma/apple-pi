@@ -146,6 +146,20 @@ The deliberate cost is two captures rather than a draft-job store or adoption of
 
 This checkpoint covers execution and recovery policy. Capture-time instruction/configured-reference identity in the artifact and current-target applicability remain unfinished.
 
+## Native no-change admission
+
+Two native-SDK regressions reproduced empty endpoint and unchanged path-scope comparisons starting review work rather than retaining a no-change outcome: `/tmp/review-no-changes-red.log`. Admission now retains the captured artifact as no-changes before any worker claim. Exact replay, cancellation, restart and responsibility guards preserve that distinction from completed review.
+
+The initial two-case check passed, with Node/web types. Expanded dormant-departure checks then timed out because fakeBridge does not reconnect after restart while its stand-in remains alive. The production guard correctly refused to signal an unbound writer. Ending the test-owned stand-in and awaiting its exit made the two cases pass in `/tmp/review-no-changes-departure.log`; the final cohort passed **39 tests in four files**, one worker, 107.58 seconds (`/tmp/review-no-changes-final-tests.log`). Node/web types, scoped Biome, loader and whitespace passed; context lint passed for347 files. Package dry-run retained2,755 files including the review entrypoint (`/tmp/review-no-changes-pack.json`). Earlier typecheck failures were test JSON typing and an incorrect retire command shape, corrected without changing production protocol.
+
+## Authorized runtime activation and live QA
+
+The operator explicitly requested restart, then reloaded this session and authorized use of the new tools for live QA. At 2026-10-31T16:29:19Z, PID28278 was replaced by PID28293 through normal SIGTERM and the standard runtime connector. Fresh process identity, no active program scopes and no daemon-owned children were checked before stopping it. An online SQLite backup was saved privately as `/Users/alexanderbut/.pi/agent/state/apple-pi.db.pre-reviews-1793464158590` (0600). Schema advanced from33 to38; all63 lasting people in the immediate pre-restart snapshot were retained. Earlier preflight saw62; that older count was not used as the restart baseline. Evidence: `/tmp/review-runtime-activation.json` and `/tmp/review-runtime-activation.log`.
+
+The reloaded native review_queue returned an empty queue. review_code for43448e2e..43448e2e created review-063883d2-486b-4ff1-8160-a98ee8ac40ea in no-changes, and read_review reported zero attempts. A real review of committed policy fix43448e2e was then admitted as review-e42e236c-a98e-4518-8dd3-a7bf994589e8, digest c9f8f27031c7a0b0c9fa7f237f204253bdad787bf48d294f69a9ed4b011f3092. It uses the approved proposal as captured intent and a recovery-policy lens. Its planner completed under openai/gpt-6.1-sol/high and focused inspection began. This is paid live QA, not a comparative effectiveness result or completed review claim. No app restart or browser approval occurred.
+
+The operator's first live assessment explicitly rejected the /reviews visual quality. A substantial visual pass is now explicit acceptance work: hierarchy, chrome/borders, colors, status iconography, visible actions/focus and readable evidence, checked in a real rendered terminal. Fake-terminal success did not establish that quality.
+
 ## Remaining delivery
 
-Complete observed cost and captured-source drill-down, coverage/extra-work decisions, source/policy freshness and native no-change outcomes, remaining native integration, Workplace Code and artifact-bound sign-off, focused native/IPC/UI integration, applicable builds and real-host validation. No part of that remaining scope has been waived. No paid reviewer or live daemon/app activation has occurred.
+Complete observed cost and captured-source drill-down, coverage/extra-work decisions, source/policy freshness, remaining native integration, Workplace Code and artifact-bound sign-off, the substantial terminal visual pass, focused native/IPC/UI integration and applicable builds. Close the live review evidence above; the no-change cohort is verified. No part of that remaining scope has been waived.

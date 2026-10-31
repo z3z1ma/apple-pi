@@ -2,7 +2,7 @@
 
 The native review queue captures exact source and intent, divides changed behavior into focused scopes, assigns independent risk questions, checks cross-scope interactions and retains findings and coverage. It uses ordinary advisory-role peers and the existing session-state runtime, not another model engine or a custom sandbox.
 
-The queue and `/reviews`, including the TUI's pre-queue target preview, are implemented. The wider integration is still in progress: live-target/policy freshness, native no-change outcomes, additional-work decisions, captured-artifact browser sign-off and Workplace Code remain pending. Existing ad hoc `sign_off_code` is not yet connected to a recorded review ID. Registering the extension does not restart an already-running runtime; an older store reports that it is unavailable instead of showing an empty queue.
+The queue and `/reviews`, including the TUI's pre-queue target preview, are implemented. The wider integration is still in progress: live-target/policy freshness, cost/source drill-down, additional-work decisions, captured-artifact browser sign-off, Workplace Code and a substantial terminal visual pass remain pending. Existing ad hoc `sign_off_code` is not yet connected to a recorded review ID. Registering the extension does not restart an already-running runtime; an older store reports that it is unavailable instead of showing an empty queue.
 
 ## Native tools
 
@@ -25,6 +25,8 @@ For example:
 ```
 
 A branch comparison uses its merge base; a range uses exact endpoints. A working-tree capture includes tracked changes and nonignored untracked files. A staged capture uses the index. Merge commits need an explicit parent comparison. A path filter narrows review accounting and is a visible limit, while the surrounding captured source remains available as context.
+
+An empty captured comparison or unchanged requested path scope records `no-changes`, with its exact artifact retained and no reviewer attempts. This is neither completed inspection nor a clean-review claim, and it creates no unfinished review responsibility. Cancellation and exact replay preserve that outcome; use a fresh capture to review later changes.
 
 An applied enqueue confirms admission, not review completion. Retain the returned request handle to recover an uncertain mutation with the same arguments. A fresh rerun captures again and receives new review work; it is not a retry of an uncertain request. Admitted jobs outlive the requesting connection.
 

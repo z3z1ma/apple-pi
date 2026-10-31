@@ -12,7 +12,7 @@ import { mayManage } from "./work.js";
 
 type DecisionOperation = Extract<ReviewOperation, { action: "finding" | "approve" }>;
 export function reviewSettled(state: ReviewState): boolean {
-	return ["completed", "incomplete", "failed", "interrupted", "cancelled"].includes(state);
+	return ["completed", "incomplete", "failed", "interrupted", "cancelled", "no-changes"].includes(state);
 }
 
 export function reviewLimits(assessment: ReviewAssessment): string[] {

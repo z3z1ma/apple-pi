@@ -78,7 +78,8 @@ export type ReviewState =
 	| "interrupted"
 	| "failed"
 	| "incomplete"
-	| "completed";
+	| "completed"
+	| "no-changes";
 export interface ReviewJob {
 	id: string;
 	commandId: string;

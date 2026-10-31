@@ -1007,7 +1007,9 @@ export class Runtime {
 		if (temporaryCallers(db).has(sessionId))
 			throw new Error("Temporary program peers belong to their program's discard lifecycle, not let_go.");
 		if (
-			db.prepare("select 1 from review_jobs where owner = ? and state not in ('completed', 'cancelled')").get(sessionId)
+			db
+				.prepare("select 1 from review_jobs where owner = ? and state not in ('completed', 'cancelled', 'no-changes')")
+				.get(sessionId)
 		)
 			throw new Error("Finish, reassign or cancel this person's unfinished reviews before letting it go.");
 		if (db.prepare("select 1 from assignments where person = ? and ended_at is null").get(sessionId))
@@ -1629,7 +1631,7 @@ export class Runtime {
 			.prepare(
 				`select a.person, a.task_id as work_id, t.organization from assignments a
 				join work_tasks t on t.id = a.task_id where a.ended_at is null
-				union all select owner as person, id as work_id, organization from review_jobs where state not in ('completed', 'cancelled')`,
+				union all select owner as person, id as work_id, organization from review_jobs where state not in ('completed', 'cancelled', 'no-changes')`,
 			)
 			.all() as { person: string; work_id: string; organization: string }[];
 		const stranded = [
