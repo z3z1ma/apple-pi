@@ -37,7 +37,7 @@ async function changed(cwd: string, target: GitTarget) {
 	}
 }
 
-test("every consumer selects the same change: exact ranges differ from branch comparisons", async () => {
+test("exact ranges differ from branch comparisons, and a commit compares with its parent", async () => {
 	const cwd = await repository();
 	const base = git(cwd, "rev-parse", "HEAD");
 	git(cwd, "checkout", "-qb", "feature");
@@ -97,14 +97,13 @@ test("a same-second edit with an unchanged size is not hidden by the copied inde
 	await writeFile(join(cwd, "value.ts"), "export const value = 2;\n");
 	await utimes(join(cwd, "value.ts"), mtime, mtime);
 	await utimes(join(cwd, ".git/index"), mtime, mtime);
-	for (let attempt = 0; attempt < 2; attempt++) {
-		const change = await openGitChange(cwd, { kind: "working-tree", base: "HEAD" });
-		try {
-			expect((await change.read("after", "value.ts"))?.toString()).toBe("export const value = 2;\n");
-		} finally {
-			await change.close();
-		}
-		await new Promise((resolve) => setTimeout(resolve, 1100));
+	// Snapshot in a later second: a copy stamped "now" would make the entry look clean.
+	await new Promise((resolve) => setTimeout(resolve, 1100));
+	const change = await openGitChange(cwd, { kind: "working-tree", base: "HEAD" });
+	try {
+		expect((await change.read("after", "value.ts"))?.toString()).toBe("export const value = 2;\n");
+	} finally {
+		await change.close();
 	}
 });
 

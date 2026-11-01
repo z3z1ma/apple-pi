@@ -106,7 +106,7 @@ function start(timers: WatchdogTimers): Service {
 			};
 		}
 		requests.set(request, { write, dispose });
-		arm(45_000);
+		arm(300_000);
 	};
 	const body = (message: unknown) => {
 		const { request, chunk } = message as BodyEvent;

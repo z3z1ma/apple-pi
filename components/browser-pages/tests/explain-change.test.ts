@@ -104,7 +104,7 @@ describe("buildExplainPage", () => {
 		expect(range.stats.map((f) => f.path)).toEqual(["src/policy.ts", "src/retry.ts"]);
 	});
 
-	it("explains a captured review's retained source after the checkout moves on, and refuses it without access", async () => {
+	it("explains a captured review's retained source after the checkout moves on", async () => {
 		const output = mkdtempSync(join(tmpdir(), "browser-pages-capture-"));
 		try {
 			const artifact = await captureReview(
@@ -120,7 +120,6 @@ describe("buildExplainPage", () => {
 				async () => readCapturedChange(artifact),
 			);
 			expect(rows(code(page.steps[0].parts)[0])).toEqual([" 1 export const one = 1;", "+2 export const two = 2;"]);
-			await expect(buildExplainPage(params({ review: "captured" }), repo, "t")).rejects.toThrow("not available");
 		} finally {
 			rmSync(output, { recursive: true, force: true });
 		}

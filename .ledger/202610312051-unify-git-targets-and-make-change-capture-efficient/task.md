@@ -9,8 +9,12 @@ Implement all agreed Git consistency and efficiency changes: one explicit target
 
 ## Current state
 
-Implemented; see [checklist](checklist.md) and [evidence](evidence.md). One shared target model and Git snapshot module now serve review capture, freshness, code sign-off, Explain Change and Pi Exec evidence. Review capture fell from 23-32 s to about 2.7 s on this checkout, freshness from about a minute to well under a second. Activation (Pi /reload, runtime and app restart) follows the commit.
+Implemented; see [checklist](checklist.md) and [evidence](evidence.md). One shared target model and Git snapshot module now serve review capture, freshness, code sign-off, Explain Change and Pi Exec evidence. Review capture fell from 23-32 s to about 2.7 s on this checkout, freshness from about a minute to well under a second. Committed as 4a0d52ab and activated: runtime 70285 and app 70795 run it; Pi sessions need /reload. Operator QA pending.
 
 ## Outcome
 
 Pending completion.
+
+### Assignment 585: Tadhg Marinescu
+
+Implemented and activated (4a0d52ab, 04fdf939). One shared Git-native change module (components/shared/src/git-change.ts) gives review_code, freshness, sign_off_code, explain_change (new `target` and `review` params) and Pi Exec git_change/git_patch/neighborhood/test helpers (new `target` dict) identical target semantics. Capture: 22.8–31.8 s → ~2.7 s on this checkout; freshness 57.8 s → 284 ms live; page diffs read exact tree bytes. Verified: final focused cohort 21 files/207 tests, Agent World backend/build, loader, typecheck, Biome, context lint, isolated Electron check, benchmark across four repo shapes. Reproduced/fixed racy-index copy and clean-filter hazards. Limits: preview still full capture; first full verify re-hashes racy files; materialization scales with tree; full suite and paid review not run. Operator QA pending; Pi sessions need /reload.
