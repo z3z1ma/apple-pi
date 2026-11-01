@@ -445,7 +445,13 @@ test("a challenged question is not completed coverage and resume obtains a new i
 		expect(reviewQueue(db, "owner", { limit: 1 }).page!.rows[0]).toMatchObject({
 			state: "incomplete",
 			passes: { completed: 1, required: 2 },
-			coverage: { completedQuestions: 1, requiredQuestions: 2, unassignedRegions: 0, additionalRequests: 0 },
+			coverage: {
+				completedQuestions: 1,
+				requiredQuestions: 2,
+				unassignedRegions: 0,
+				integrationOnlyRegions: 0,
+				additionalRequests: 0,
+			},
 			findings: { reported: 1, confirmed: 1, unresolved: 0 },
 		});
 		writeFileSync(join(state.agentDir, "peer-control.json"), JSON.stringify({ review: false }));
@@ -490,7 +496,7 @@ test("partial allegations stay unvalidated while queue pages follow priority and
 					"select id from review_attempts where review_id = ? and kind = 'validation' and state = 'running'",
 					active.id,
 				),
-			).toHaveLength(1),
+			).toHaveLength(2),
 		{ timeout: 15000 },
 	);
 	const first = await enqueue();
@@ -588,7 +594,7 @@ test("native tools admit, read, cancel, recover exact requests and explicitly ca
 						"select id from review_attempts where review_id = ? and kind = 'validation' and state = 'running'",
 						id,
 					),
-				).toHaveLength(1),
+				).toHaveLength(2),
 			{ timeout: 15000 },
 		);
 		expect(await callTool("review_queue", {})).toMatchObject({ total: 1, states: { running: 1 }, page: null });
@@ -679,7 +685,7 @@ test("native tools admit, read, cancel, recover exact requests and explicitly ca
 		await settled(next, "completed");
 		expect(query(state.dbPath, "select parent from review_jobs where id = ?", next)).toEqual([{ parent: id }]);
 		expect(await callTool("read_review", { review: next, part: "attempts", limit: 1 })).toMatchObject({
-			total: 4,
+			total: 6,
 			page: { nextOffset: 1, rows: [{ kind: "planner", state: "completed", selected: true }] },
 		});
 		const fresh = await callTool("read_review", { review: next, part: "target" });
@@ -1350,11 +1356,20 @@ test("a policy change during a real SDK turn retains raw results without accepti
 		"select state, reason, result, output from review_attempts where review_id = ? and kind = 'focused'",
 		job.id,
 	)[0]!;
+	// The focused and integration turns run in parallel and both observe the change. Whichever settles first fails the
+	// review and stops the other, which may then be recorded as cancelled; neither may become accepted coverage.
 	expect(attempt).toMatchObject({
-		state: "failed",
+		state: expect.stringMatching(/^(failed|cancelled)$/),
 		reason: expect.stringContaining("policy changed during the turn"),
 		output: null,
 	});
+	expect(
+		query(
+			state.dbPath,
+			"select state from review_attempts where review_id = ? and kind in ('focused', 'integration') and state = 'failed'",
+			job.id,
+		).length,
+	).toBeGreaterThan(0);
 	expect(JSON.parse(attempt.result)).toMatchObject({ status: "completed", value: { pass: "value-correctness" } });
 	expect(query(state.dbPath, "select id from program_scopes")).toEqual([]);
 }, 30000);
@@ -1447,7 +1462,7 @@ test("an all-concrete review completes without consulting an unrelated malformed
 	const job = await enqueue();
 	await settled(job.id, "completed");
 	expect(query(state.dbPath, "select state from review_attempts where review_id = ?", job.id)).toEqual(
-		Array.from({ length: 4 }, () => ({ state: "completed" })),
+		Array.from({ length: 6 }, () => ({ state: "completed" })),
 	);
 	expect(query(state.dbPath, "select id from program_scopes")).toEqual([]);
 	expect(existsSync(join(state.agentDir, "state", "model-profile-selection.sqlite"))).toBe(false);
@@ -1534,7 +1549,7 @@ test("a malformed planner result retains its observed usage without turning zero
 		expect(resumed.stage, resumed.reason).toBe("applied");
 		await settled(job.id, "completed");
 		expect(reviewSummary(db, "owner", job.id)).toMatchObject({
-			cost: { reportedDollars: 1.5, reportedAttempts: 5, totalAttempts: 5 },
+			cost: { reportedDollars: expect.closeTo(2.1, 10), reportedAttempts: 7, totalAttempts: 7 },
 		});
 	} finally {
 		db.close();
@@ -1576,9 +1591,9 @@ test("a model outside the recorded role policy fails before a review turn is dis
 	const completed = new DatabaseSync(state.dbPath, { readOnly: true });
 	try {
 		expect(reviewSummary(completed, "owner", job.id).cost).toEqual({
-			reportedDollars: 1.2,
-			reportedAttempts: 4,
-			totalAttempts: 5,
+			reportedDollars: expect.closeTo(1.8, 10),
+			reportedAttempts: 6,
+			totalAttempts: 7,
 		});
 	} finally {
 		completed.close();
@@ -1709,12 +1724,14 @@ test("actual first provider inputs keep author narrative and other first reports
 		"select kind, person from review_attempts where review_id = ? order by created_at",
 		job.id,
 	);
+	let validatorSawFirstReports = false;
 	for (const attempt of attempts) {
 		const inputs = readFileSync(join(state.agentDir, "provider-inputs", `${attempt.person}.jsonl`), "utf8");
 		expect(inputs).not.toContain("AUTHOR_NARRATIVE_SENTINEL");
 		expect(inputs).not.toContain("Team context at your arrival");
 		expect(inputs).toContain("export const value = 2;");
-		if (attempt.kind === "validation") expect(inputs).toContain("OTHER_FIRST_REPORT_SENTINEL");
+		// Each validator shard sees its own sealed report; the one for the focused pass carries the sentinel.
+		if (attempt.kind === "validation") validatorSawFirstReports ||= inputs.includes("OTHER_FIRST_REPORT_SENTINEL");
 		else expect(inputs.split("\n").slice(0, 4).join("\n")).not.toContain("OTHER_FIRST_REPORT_SENTINEL");
 		const requests = inputs
 			.trim()
@@ -1732,6 +1749,7 @@ test("actual first provider inputs keep author narrative and other first reports
 		}
 	}
 	expect(attempts.some((attempt) => attempt.kind === "validation")).toBe(true);
+	expect(validatorSawFirstReports).toBe(true);
 	expect(query(state.dbPath, "select id from program_scopes")).toEqual([]);
 }, 30000);
 

@@ -8,6 +8,8 @@ Resolve current role/profile policy and compare its fingerprint with the planner
 
 Role policy is recorded before launch and rechecked before dispatch and after the turn; a configuration change stops the attempt without erasing its raw result. The actual model/thinking observed at turn start is recorded separately. The normal role resolver chooses the mind and pool member. This client checks that the selected model belongs to the recorded policy instead of silently accepting a fallback; it does not select another model or advance profile-pool counters. Usage covers the observed correlated turn, not an invented total for every internal model the ordinary peer environment might run. The peer's native transcript remains its transcript owner.
 
+Around each turn the attempt checks only the retained manifest and comparison (verifyCapturedSource); full verifyArtifact runs at recovery, additional work and decisions. With eight passes in parallel, a full fsck plus file hashing before and after every turn cost seconds each and contended for the same files.
+
 An attempt is cancelled only when the stop caused its failure (the abort reason or an AbortError). Passes run in parallel, and one pass failing stops its siblings; a sibling that had already failed on its own (for example a policy change after its turn) stays failed rather than being relabelled cancelled.
 
 Coupled: components/code-review/src/policy.ts, components/session-state/src/review-jobs.ts, components/session-state/src/runtime.ts, components/session-state/src/program-client.ts, components/session-state/src/schema.ts, components/organization/src/session-role.ts

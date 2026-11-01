@@ -3,6 +3,7 @@ import { mkdtemp, readdir, readFile, realpath, rm, stat, symlink, utimes, writeF
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test } from "vitest";
+import { gitBytes } from "../src/git.js";
 import { GIT_DIFF, type GitTarget, openGitChange } from "../src/git-change.js";
 
 const directories: string[] = [];
@@ -189,4 +190,21 @@ test("intent-to-add entries are part of the index identity, large blobs read int
 	await change.close();
 	await expect(change.read("after", "value.ts")).rejects.toThrow("closed");
 	await expect(change.git(["rev-parse", "HEAD"])).rejects.toThrow("closed");
+});
+
+test("a lone skip-worktree edit is captured, and a Git process ignoring TERM still settles its deadline", async () => {
+	const cwd = await repository();
+	git(cwd, "update-index", "--skip-worktree", "caller.ts");
+	await writeFile(join(cwd, "caller.ts"), "only skip-worktree\n");
+	const change = await openGitChange(cwd, { kind: "working-tree", base: "HEAD" });
+	try {
+		expect((await change.read("after", "caller.ts"))?.toString()).toBe("only skip-worktree\n");
+	} finally {
+		await change.close();
+	}
+	git(cwd, "config", "alias.stubborn", "!trap '' TERM; sleep 30");
+	const started = Date.now();
+	await expect(gitBytes(cwd, ["stubborn"], { timeoutMs: 200 })).rejects.toThrow("timed out");
+	expect(Date.now() - started).toBeLessThan(10_000);
+	await expect(gitBytes(cwd, ["log", "--no-such-option"], { maxBytes: 4 })).rejects.toThrow("error output exceeded");
 });

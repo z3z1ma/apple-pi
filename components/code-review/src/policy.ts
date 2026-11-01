@@ -3,13 +3,18 @@ import { readFileSync } from "node:fs";
 import { loadRoles, parseRoleModel, type Role } from "../../organization/src/roles.js";
 import { isInferenceProfileName, loadModelProfiles, type ModelProfile } from "../../shared/src/model-profiles.js";
 
-import { INSPECT_REVIEW, PLAN_REVIEW, VALIDATE_REVIEW } from "./prompts.js";
+import { INSPECT_REVIEW, LINK_DUPLICATES, PLAN_REVIEW, VALIDATE_REVIEW } from "./prompts.js";
 import type { ReviewConfiguration } from "./types.js";
 
 export function reviewConfiguration(source: string): ReviewConfiguration {
 	const { roles, problems } = loadRoles(source);
 	return {
-		instructions: { planning: PLAN_REVIEW, inspection: INSPECT_REVIEW, validation: VALIDATE_REVIEW },
+		instructions: {
+			planning: PLAN_REVIEW,
+			inspection: INSPECT_REVIEW,
+			validation: VALIDATE_REVIEW,
+			duplicates: LINK_DUPLICATES,
+		},
 		roleReferences: [...roles.keys()].sort().flatMap((name) => {
 			const role = roles.get(name)!;
 			return role.writes || role.manages ? [] : [{ role: name, models: [...role.models] }];

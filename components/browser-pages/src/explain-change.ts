@@ -106,7 +106,9 @@ function excerpts(diff: RepoDiff) {
 		const [, path, a, b] = match;
 		const from = Number(a);
 		const to = Number(b ?? a);
-		const file = diff.files.find((f) => f.path === path);
+		// A type change is two sections for one path (deletion, then addition); cite the side that exists after.
+		const matches = diff.files.filter((f) => f.path === path);
+		const file = matches.find((f) => f.status !== "D") ?? matches[0];
 		// A file the change deletes has only its old lines, so its references count lines before the change.
 		const gone = file?.status === "D" ? await before(path) : undefined;
 		const now = gone ?? (await after(path));

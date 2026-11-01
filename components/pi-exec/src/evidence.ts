@@ -202,6 +202,7 @@ function gitChange(options: RecordValue, env: EvidenceEnvironment): Promise<Reco
 		const namesParsed = nameStatus(names);
 		return {
 			target: change.target,
+			repository: change.repository,
 			baseCommit: change.baseCommit,
 			headCommit: change.headCommit,
 			baseTree: change.baseTree,
@@ -506,6 +507,8 @@ async function neighborhood(args: RecordValue, env: EvidenceEnvironment): Promis
 	const change = await gitChange(args, env);
 	const changed: string[] = change.changedFiles;
 	const result: RecordValue = { change };
+	// Changed paths are repository-relative, so discovery reads from the repository root whatever the session cwd.
+	env = { ...env, cwd: change.repository };
 	const allFiles =
 		include.has("tests") || include.has("definitions") || include.has("references") ? await repositoryFiles(env) : [];
 	if (include.has("tests")) result.tests = await neighboringTests(changed, allFiles, env);
@@ -534,9 +537,10 @@ async function testCommands(env: EvidenceEnvironment): Promise<RecordValue> {
 async function findTests(args: RecordValue, env: EvidenceEnvironment): Promise<RecordValue> {
 	const nearby = await neighborhood({ ...args, include: ["tests"] }, env);
 	return {
+		repository: nearby.change.repository,
 		files: nearby.change.changedFiles,
 		tests: nearby.tests,
-		commands: await testCommands(env),
+		commands: await testCommands({ ...env, cwd: nearby.change.repository }),
 	};
 }
 async function runTests(args: RecordValue, env: EvidenceEnvironment): Promise<RecordValue> {
@@ -567,10 +571,11 @@ async function runTests(args: RecordValue, env: EvidenceEnvironment): Promise<Re
 	// Reuse Pi's Bash discovery (including Git Bash on Windows and WSL stdin transport).
 	const shell = getShellConfig();
 	const stdin = shell.commandTransport === "stdin";
+	// Selected test paths are repository-relative, so the command runs at the repository root.
 	const result = await command(
 		shell.shell,
 		stdin ? shell.args : [...shell.args, cmd],
-		env,
+		{ ...env, cwd: tests.repository },
 		args.timeout ?? 60,
 		stdin ? cmd : undefined,
 	);

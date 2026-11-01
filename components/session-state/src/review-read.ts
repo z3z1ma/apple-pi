@@ -1,6 +1,6 @@
-import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, posix } from "node:path";
 import type { DatabaseSync, SQLInputValue } from "node:sqlite";
 import { captureIntent, readCapturedSource } from "../../code-review/src/capture.js";
 import {
@@ -211,6 +211,7 @@ export function reviewSummary(db: DatabaseSync, actor: string, id: string): Revi
 						completedQuestions: coverage.reduce((sum, entry) => sum + entry.completed, 0),
 						requiredQuestions: coverage.reduce((sum, entry) => sum + entry.required, 0),
 						unassignedRegions: job.plan.gaps?.length ?? 0,
+						integrationOnlyRegions: job.plan.gaps ? 0 : unscopedRegions(job.plan, job.artifact?.regions ?? []).length,
 						additionalRequests: passes.reduce((sum, { report }) => sum + (report?.extraPasses.length ?? 0), 0),
 					}
 				: null,
@@ -321,15 +322,32 @@ export type ReviewStore = <T>(read: (db: DatabaseSync) => T) => T;
 async function targetConfiguration(change: GitChange) {
 	const directory = await mkdtemp(join(tmpdir(), "review-roles-"));
 	try {
-		const listing = (await change.git(["ls-tree", "-r", "-z", "--name-only", change.headTree, "--", ".pi/roles"]))
+		const listing = (await change.git(["ls-tree", "-r", "-z", change.headTree, "--", ".pi/roles"]))
 			.toString("utf8")
 			.split("\0")
-			.filter(Boolean);
-		for (const path of listing) {
-			const data = await change.read("after", path);
-			if (!data) continue;
-			await mkdir(dirname(join(directory, path)), { recursive: true });
-			await writeFile(join(directory, path), data);
+			.filter(Boolean)
+			.map((record) => ({ mode: record.split(" ")[0]!, path: record.slice(record.indexOf("\t") + 1) }));
+		const modes = new Map(listing.map((entry) => [entry.path, entry.mode]));
+		for (const { path, mode } of listing) {
+			const target = join(directory, path);
+			await mkdir(dirname(target), { recursive: true });
+			if (mode !== "120000") {
+				const data = await change.read("after", path);
+				if (data) await writeFile(target, data);
+				continue;
+			}
+			// A role symlink stays a symlink. Capture materializes the whole tree, so a link to another file in the
+			// tree reads that file there; give the link the same target here by materializing what it points to.
+			const text = (await change.read("after", path))?.toString("utf8") ?? "";
+			await symlink(text, target);
+			const resolved = posix.normalize(posix.join(posix.dirname(path), text));
+			if (!posix.isAbsolute(text) && !resolved.startsWith("../") && !modes.has(resolved)) {
+				const data = await change.read("after", resolved);
+				if (data) {
+					await mkdir(dirname(join(directory, resolved)), { recursive: true });
+					await writeFile(join(directory, resolved), data);
+				}
+			}
 		}
 		return reviewConfiguration(directory);
 	} finally {

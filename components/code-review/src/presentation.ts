@@ -98,7 +98,8 @@ export function summaryLines(review: ReviewSummary): string[] {
 		...(review.coverage
 			? [
 					`Questions: ${review.coverage.completedQuestions}/${review.coverage.requiredQuestions}`,
-					`Unassigned regions: ${review.coverage.unassignedRegions}`,
+					...(review.coverage.unassignedRegions ? [`Unassigned regions: ${review.coverage.unassignedRegions}`] : []),
+					`Regions reviewed only by integration: ${review.coverage.integrationOnlyRegions}`,
 					`Additional requests: ${review.coverage.additionalRequests}`,
 				]
 			: []),

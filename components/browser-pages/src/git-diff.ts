@@ -1,3 +1,4 @@
+import { isUtf8 } from "node:buffer";
 import { verifyCapturedSource } from "../../code-review/src/capture.js";
 import type { ReviewArtifact } from "../../code-review/src/types.js";
 import { GIT_DIFF, type GitTarget, openGitChange, openTrees } from "../../shared/src/git-change.js";
@@ -143,6 +144,25 @@ function assignPaths(files: RawFile[], status: Buffer): void {
 	}
 }
 
+/**
+ * Git diffs non-UTF8 text line by line, and decoding it would silently replace bytes. Such a file is shown as binary,
+ * as a capture records it, rather than as altered text.
+ */
+function markUndecodable(files: RawFile[], patch: Buffer): void {
+	const starts: number[] = [];
+	for (let at = 0; at < patch.length; ) {
+		if (patch.subarray(at, at + 11).toString("latin1") === "diff --git ") starts.push(at);
+		const end = patch.indexOf(10, at);
+		if (end < 0) break;
+		at = end + 1;
+	}
+	for (const [i, file] of files.entries()) {
+		if (file.binary || isUtf8(patch.subarray(starts[i], starts[i + 1]))) continue;
+		file.binary = true;
+		file.hunks = [{ lines: [], note: "Binary file" }];
+	}
+}
+
 /** Parse one tree-to-tree patch and serve exact bytes from either side; the caller closes it. */
 async function readTrees(
 	trees: Omit<RepoDiff, "files" | "labels">,
@@ -164,6 +184,7 @@ async function readTrees(
 		const [patch, status] = await Promise.all([diff("-U3"), diff("--name-status", "-z")]);
 		const files = parseUnifiedDiff(patch.toString("utf8"));
 		assignPaths(files, status);
+		markUndecodable(files, patch);
 		for (const file of files)
 			for (const hunk of file.hunks) for (const l of hunk.lines) l.text = l.text.replace(/\r$/, "");
 		return { ...trees, labels, files, scope: paths.length ? paths : undefined };

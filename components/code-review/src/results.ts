@@ -44,7 +44,10 @@ export interface ReviewSummary {
 	coverage: {
 		completedQuestions: number;
 		requiredQuestions: number;
+		/** Regions a legacy plan declared as gaps; current plans never leave regions unassigned. */
 		unassignedRegions: number;
+		/** Regions outside every focused scope, reviewed only by the whole-change integration pass. */
+		integrationOnlyRegions: number;
 		additionalRequests: number;
 	} | null;
 	findings: { reported: number; confirmed: number; unresolved: number };

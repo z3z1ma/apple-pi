@@ -96,6 +96,16 @@ describe("public evidence library", () => {
 		expect(nested.changedFiles).toEqual(["sub/feature.ts"]);
 		const here: any = await runEvidenceFunction("git_change", { paths: ["."] }, { cwd: join(cwd, "sub") });
 		expect(here.changedFiles).toEqual(["sub/feature.ts"]);
+		put("package.json", JSON.stringify({ scripts: { test: "vitest" } }));
+		put("sub/feature.test.ts", "test\n");
+		git("add", "sub/feature.test.ts");
+		const tests: any = await runEvidenceFunction(
+			"dev_find_relevant_tests",
+			{ paths: ["feature.ts"] },
+			{ cwd: join(cwd, "sub") },
+		);
+		expect(tests.commands).toEqual({ test: "vitest" });
+		expect(Object.values(tests.tests).flat()).toContain("sub/feature.test.ts");
 		put("large.txt", "line\n".repeat(2 * 1024 * 1024));
 		await expect(call("git_patch")).rejects.toThrow("exceeded");
 	});

@@ -97,9 +97,14 @@ export async function verifyArtifact(artifact: ReviewArtifact, signal?: AbortSig
 	};
 	const entries = await treeReferences(artifact.source, artifact.headTree, signal);
 	let next = 0;
+	let failure: { error: unknown } | undefined;
 	const check = async () => {
-		while (next < entries.length) {
-			await checkEntry(entries[next++]!);
+		while (!failure && next < entries.length) {
+			try {
+				await checkEntry(entries[next++]!);
+			} catch (error) {
+				failure ??= { error };
+			}
 		}
 	};
 	const checkEntry = async (entry: (typeof entries)[number]) => {
@@ -122,10 +127,14 @@ export async function verifyArtifact(artifact: ReviewArtifact, signal?: AbortSig
 		if (mode !== entry.mode) throw new Error(`Captured source changed: ${entry.path}`);
 		if (mode === "160000") return;
 		const id =
-			mode === "120000" ? blobId(format, await readlink(path, { encoding: "buffer" })) : await fileBlobId(format, path);
+			mode === "120000"
+				? blobId(format, await readlink(path, { encoding: "buffer" }))
+				: await fileBlobId(format, path, signal);
 		if (id !== entry.blob) throw new Error(`Captured source changed: ${entry.path}`);
 	};
+	// Every reader stops at the first failure and has finished before verification settles.
 	await Promise.all(Array.from({ length: VERIFY_READERS }, check));
+	if (failure) throw failure.error;
 }
 
 export async function readCapturedSource(
@@ -311,12 +320,13 @@ export async function captureReview(
 	const intent = await captureIntent(request, signal);
 	await mkdir(destination, { mode: 0o700 });
 	const source = join(destination, "source");
+	let change: GitChange | undefined;
 	try {
 		await mkdir(source);
 		const format = await text(repository, ["rev-parse", "--show-object-format"], { signal });
 		await text(source, ["init", "-q", "--template=", `--object-format=${format}`], { signal });
 		const objects = join(source, ".git", "objects");
-		const change = await openGitChange(repository, request.target, { signal, objects });
+		change = await openGitChange(repository, request.target, { signal, objects });
 		const { baseTree, headTree, baseCommit, headCommit } = change;
 		await transferObjects(change, source, signal);
 		await text(source, ["mktree"], { input: "", signal });
@@ -454,6 +464,8 @@ export async function captureReview(
 			throw new Error("Review configuration changed during capture; capture the review again");
 		return artifact;
 	} catch (error) {
+		// Close first: it stops and waits for the change's Git work before its storage disappears.
+		await change?.close();
 		await rm(destination, { recursive: true, force: true });
 		throw error;
 	}

@@ -5,6 +5,7 @@ import { dirname, join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { captureReview } from "../../code-review/src/capture.js";
+import { buildCodeReviewPage } from "../src/code-review.js";
 import {
 	buildExplainPage,
 	type ExplainChangeParams,
@@ -127,6 +128,37 @@ describe("buildExplainPage", () => {
 		} finally {
 			rmSync(output, { recursive: true, force: true });
 		}
+	});
+
+	it("cites the existing side of a type change and shows undecodable text as binary", async () => {
+		rmSync(join(repo, "src/util.ts"));
+		execFileSync("ln", ["-s", "retry.ts", join(repo, "src/util.ts")]);
+		writeFileSync(join(repo, "src/legacy.txt"), Buffer.from([0x63, 0x61, 0x66, 0xe9, 0x0a]));
+		git("add", "src/legacy.txt");
+		git("commit", "-q", "-m", "legacy");
+		writeFileSync(join(repo, "src/legacy.txt"), Buffer.from([0x63, 0x61, 0x66, 0xe8, 0x0a]));
+		const body = "```code src/util.ts:1\n```";
+		const { page } = await buildExplainPage(params({ steps: [{ title: "S", body }] }), repo, "t");
+		expect(code(page.steps[0].parts)[0]).toMatchObject({ status: "new" });
+		expect(rows(code(page.steps[0].parts)[0])).toEqual(["+1 retry.ts"]);
+		const { page: review } = await buildCodeReviewPage(
+			{
+				title: "t",
+				intent: "i",
+				chapters: [
+					{
+						title: "c",
+						kind: "core",
+						attention: "low",
+						brief: "b",
+						changes: [{ summary: "s", file: "src/legacy.txt" }],
+					},
+				],
+			},
+			repo,
+			"t",
+		);
+		expect(review.files.find((file) => file.path === "src/legacy.txt")?.binary).toBe(true);
 	});
 
 	it("marks new and unchanged files, and turns a bad reference into a warning the agent sees", async () => {

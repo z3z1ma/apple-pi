@@ -77,16 +77,16 @@ export async function gitLine(cwd: string, args: string[], options?: GitOptions)
 	return (await gitRun(cwd, args, options)).toString("utf8").replace(/\n$/, "");
 }
 
-const MINIMUM_GIT = [2, 42];
-let gitVersion: Promise<void> | undefined;
-/** The flags used here (attribute source, NUL-delimited batches) need Git 2.42 or newer. */
-function requireGit(): Promise<void> {
-	gitVersion ??= gitLine(tmpdir(), ["version"]).then((output) => {
-		const [major = 0, minor = 0] = (/(\d+)\.(\d+)/.exec(output) ?? []).slice(1).map(Number);
-		if (major < MINIMUM_GIT[0]! || (major === MINIMUM_GIT[0] && minor < MINIMUM_GIT[1]!))
-			throw new Error(`Git ${MINIMUM_GIT.join(".")} or newer is required; found: ${output}`);
-	});
-	return gitVersion;
+/** 2.45 is the first release honouring GIT_NO_LAZY_FETCH; older Git can run a promisor remote's command. */
+const MINIMUM_GIT = [2, 45];
+let gitChecked = false;
+async function requireGit(signal?: AbortSignal): Promise<void> {
+	if (gitChecked) return;
+	const output = await gitLine(tmpdir(), ["version"], { signal });
+	const [major = 0, minor = 0] = (/(\d+)\.(\d+)/.exec(output) ?? []).slice(1).map(Number);
+	if (major < MINIMUM_GIT[0]! || (major === MINIMUM_GIT[0] && minor < MINIMUM_GIT[1]!))
+		throw new Error(`Git ${MINIMUM_GIT.join(".")} or newer is required; found: ${output}`);
+	gitChecked = true;
 }
 
 /** Git's quoted path-list entry, so a colon or quote inside the path is not read as a separator. */
@@ -99,10 +99,10 @@ function quotedListEntry(path: string): string {
 export function blobId(objectFormat: string, data: Buffer): string {
 	return createHash(objectFormat).update(`blob ${data.length}\0`).update(data).digest("hex");
 }
-export async function fileBlobId(objectFormat: string, path: string): Promise<string> {
+export async function fileBlobId(objectFormat: string, path: string, signal?: AbortSignal): Promise<string> {
 	const { size } = await stat(path);
 	const hash = createHash(objectFormat).update(`blob ${size}\0`);
-	for await (const chunk of createReadStream(path)) hash.update(chunk as Buffer);
+	for await (const chunk of createReadStream(path, { signal })) hash.update(chunk as Buffer);
 	return hash.digest("hex");
 }
 
@@ -206,14 +206,14 @@ export function objectReader(cwd: string, env: NodeJS.ProcessEnv = {}, signal?: 
 			queue = next.catch(() => {});
 			return next;
 		},
-		/** Stops new requests, lets queued ones settle, and resolves once Git has exited. */
+		/** Stops new requests, ends Git (failing any read still waiting) and resolves once it has exited. */
 		async close(): Promise<void> {
 			closing = true;
 			signal?.removeEventListener("abort", abort);
-			await queue;
 			child.stdin.end();
 			if (child.exitCode === null && child.signalCode === null) child.kill();
 			await exited;
+			await queue;
 		},
 	};
 }
@@ -244,6 +244,14 @@ export interface IndexEntry {
 
 const OBJECT_ID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
 
+/** Like Promise.all, but every command has exited before the first failure propagates. */
+async function settledAll<T extends readonly unknown[]>(work: { [K in keyof T]: Promise<T[K]> }): Promise<T> {
+	const results = await Promise.allSettled(work);
+	const failed = results.find((result) => result.status === "rejected");
+	if (failed) throw (failed as PromiseRejectedResult).reason;
+	return results.map((result) => (result as PromiseFulfilledResult<unknown>).value) as unknown as T;
+}
+
 /** Paths come from separate queries (they may contain newlines); revisions are one batch of validated object IDs. */
 async function locate(cwd: string, target: GitTarget, signal?: AbortSignal) {
 	const head =
@@ -265,7 +273,7 @@ async function locate(cwd: string, target: GitTarget, signal?: AbortSignal) {
 	const path = (args: string[], from = cwd) =>
 		gitLine(from, ["rev-parse", "--path-format=absolute", ...args], { signal });
 	const repository = await path(["--show-toplevel"]);
-	const [commonDirectory, gitDirectory, ids] = await Promise.all([
+	const [commonDirectory, gitDirectory, ids] = await settledAll([
 		path(["--git-common-dir"], repository),
 		path(["--absolute-git-dir"], repository),
 		gitLine(
@@ -431,15 +439,17 @@ async function snapshot(located: Located, env: NodeJS.ProcessEnv, working: boole
 	const indexEntries = parseEntries(await run(["ls-files", "--stage", "-z"]));
 	const indexTree = (await run(["write-tree"])).toString("utf8").trim();
 	if (!working) return { indexTree, indexEntries, headTree: indexTree };
-	const flagged = (await run(["ls-files", "-v", "-z"]))
-		.toString("utf8")
-		.split("\0")
-		.filter((record) => record && (record[0] === "S" || /^[a-z]/.test(record)))
-		.map((record) => record.slice(2));
-	if (flagged.length)
-		await run(["update-index", "-z", "--no-assume-unchanged", "--no-skip-worktree", "--stdin"], {
-			input: flagged.map((path) => `${path}\0`).join(""),
-		});
+	// `ls-files -v` tags: lowercase = assume-unchanged, S/s = skip-worktree. update-index applies only one of
+	// these options to paths read from stdin, so each flag is cleared by its own command.
+	const tagged = (await run(["ls-files", "-v", "-z"])).toString("utf8").split("\0").filter(Boolean);
+	for (const [option, flagged] of [
+		["--no-assume-unchanged", tagged.filter((record) => /^[a-z]/.test(record))],
+		["--no-skip-worktree", tagged.filter((record) => record[0] === "S" || record[0] === "s")],
+	] as const)
+		if (flagged.length)
+			await run(["update-index", "-z", option, "--stdin"], {
+				input: flagged.map((record) => `${record.slice(2)}\0`).join(""),
+			});
 	const stale: IndexEntry[] = [];
 	const byPath = new Map(indexEntries.map((entry) => [entry.path, entry]));
 	for (const path of await convertedPaths(root, indexEntries, signal)) {
@@ -481,18 +491,18 @@ export async function openGitChange(
 	options: { signal?: AbortSignal; objects?: string } = {},
 ): Promise<GitChange> {
 	const { signal } = options;
-	await requireGit();
+	await requireGit(signal);
 	const located = await locate(cwd, target, signal).catch((error: Error) => {
 		throw new Error(`Cannot resolve the Git target: ${error.message}`);
 	});
 	const mutable = target.kind === "staged" || target.kind === "working-tree";
 	const context = await isolatedContext(located, options.objects);
 	try {
-		const [base, trees] = await Promise.all([
+		const [base, trees] = await settledAll([
 			resolveBase(located.repository, target, located, signal),
 			mutable
 				? snapshot(located, context.env, target.kind === "working-tree", signal)
-				: { headTree: located.head.tree, indexTree: null, indexEntries: null },
+				: Promise.resolve({ headTree: located.head.tree, indexTree: null, indexEntries: null as IndexEntry[] | null }),
 		]);
 		return {
 			repository: located.repository,

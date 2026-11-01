@@ -290,6 +290,52 @@ export function validateFindings(value: unknown, artifact: string, reports: Revi
 	return result;
 }
 
+export const DuplicateLinksSchema = Type.Object(
+	{
+		artifact: text,
+		summary: text,
+		duplicates: Type.Array(Type.Object({ finding: text, duplicateOf: text, reason: text }, object)),
+	},
+	object,
+);
+
+/**
+ * Parallel validators each settle one report; a short merge then links duplicates across them. The merged result is
+ * one validation, checked against every report as a single validator's would be.
+ */
+export function combineValidation(
+	value: unknown,
+	artifact: string,
+	reports: ReviewReport[],
+	shards: FindingValidation[],
+): FindingValidation {
+	// A reused merge attempt stores its combined result; check it again as the single validation it is.
+	if (value && typeof value === "object" && "findings" in value) return validateFindings(value, artifact, reports);
+	const links = checkShape(DuplicateLinksSchema, value);
+	if (links.artifact !== artifact) throw new Error("Duplicate links name a different artifact");
+	const findings = shards.flatMap((shard) => shard.findings.map((entry) => ({ ...entry })));
+	const byKey = new Map(findings.map((entry) => [entry.finding, entry]));
+	for (const link of links.duplicates) {
+		const entry = byKey.get(link.finding);
+		if (!entry) throw new Error(`Duplicate link names an unknown finding: ${link.finding}`);
+		if (!byKey.has(link.duplicateOf)) throw new Error(`Duplicate link targets an unknown finding: ${link.duplicateOf}`);
+		entry.disposition = "duplicate";
+		entry.duplicateOf = link.duplicateOf;
+		entry.reason = link.reason;
+	}
+	return validateFindings(
+		{
+			artifact,
+			summary: [links.summary, ...shards.map((shard) => shard.summary)].join("\n\n"),
+			coverageGaps: shards.flatMap((shard) => shard.coverageGaps),
+			findings,
+			limitations: shards.flatMap((shard) => shard.limitations),
+		},
+		artifact,
+		reports,
+	);
+}
+
 function unique(ids: string[], kind: string): void {
 	if (new Set(ids).size !== ids.length) throw new Error(`Duplicate ${kind} identity`);
 }

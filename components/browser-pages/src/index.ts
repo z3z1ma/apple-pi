@@ -263,7 +263,10 @@ export default function browserPages(pi: ExtensionAPI): void {
 				(review) => capturedChange(ctx.sessionManager.getSessionId(), review, signal),
 				signal,
 			);
+			// A call cancelled while the page was being built neither saves nor opens it.
+			signal?.throwIfAborted();
 			const template = await explainTemplate(page);
+			signal?.throwIfAborted();
 			// The saved copy is for sharing: no session, no reader state, so it reads as a plain page anywhere.
 			const saved = await savePage(
 				embedPage(template, { ...page, session: { token: "", live: false, ask: false } }),

@@ -5,6 +5,8 @@ import type { DatabaseSync } from "node:sqlite";
 import { captureReview, verifyArtifact } from "../../code-review/src/capture.js";
 import {
 	checkShape,
+	combineValidation,
+	DuplicateLinksSchema,
 	type FindingValidation,
 	FindingValidationSchema,
 	findingKey,
@@ -20,7 +22,7 @@ import {
 } from "../../code-review/src/contracts.js";
 import { type ReviewJob, type ReviewOperation, ReviewOperationSchema } from "../../code-review/src/operations.js";
 import { reviewRoleCatalog } from "../../code-review/src/policy.js";
-import { INSPECT_REVIEW, PLAN_REVIEW, VALIDATE_REVIEW } from "../../code-review/src/prompts.js";
+import { INSPECT_REVIEW, LINK_DUPLICATES, PLAN_REVIEW, VALIDATE_REVIEW } from "../../code-review/src/prompts.js";
 import type { ReviewArtifact } from "../../code-review/src/types.js";
 import { RETRY_MS } from "./client.js";
 import type { StatePaths } from "./paths.js";
@@ -481,6 +483,32 @@ export class ReviewJobs {
 				},
 			);
 			const reviewedAttempts = { ...job.selectedAttempts };
+			const validatorPolicy = roles.find((role) => role.name === "code-review-specialist")?.policy;
+			// Each report is validated by its own validator in parallel; a short merge then links duplicates.
+			const shards = await inParallel(reports, REVIEW_PASS_CONCURRENCY, signal, async (report, shardSignal) => {
+				const inspected = { [report.pass]: reviewedAttempts[report.pass]! };
+				const shard = await runReviewAttempt(
+					this.db,
+					this.paths,
+					job,
+					{
+						id: `validator:${report.pass}`,
+						role: "code-review-specialist",
+						policyFingerprint: validatorPolicy,
+						kind: "validation",
+						goal: `${artifact.configuration?.instructions.validation ?? VALIDATE_REVIEW}\nCaptured source: ${artifact.source}`,
+						schema: FindingValidationSchema,
+						context: { phase: "validation", artifact: source, plan, reports: [report], reviewedAttempts: inspected },
+						reviewedAttempts: inspected,
+						validate: (value) => validateFindings(value, artifact.digest, [report]),
+						reuse: (value) => !(value as FindingValidation).coverageGaps.length,
+					},
+					shardSignal,
+				);
+				job.selectedAttempts = { ...job.selectedAttempts, [`validator:${report.pass}`]: shard.attempt };
+				this.storeSelection(job);
+				return shard.output as FindingValidation;
+			});
 			const validated = await runReviewAttempt(
 				this.db,
 				this.paths,
@@ -488,13 +516,29 @@ export class ReviewJobs {
 				{
 					id: "validator",
 					role: "code-review-specialist",
-					policyFingerprint: roles.find((role) => role.name === "code-review-specialist")?.policy,
+					policyFingerprint: validatorPolicy,
 					kind: "validation",
-					goal: `${artifact.configuration?.instructions.validation ?? VALIDATE_REVIEW}\nCaptured source: ${artifact.source}`,
-					schema: FindingValidationSchema,
-					context: { phase: "validation", artifact: source, plan, reports, reviewedAttempts },
+					goal: artifact.configuration?.instructions.duplicates ?? LINK_DUPLICATES,
+					schema: DuplicateLinksSchema,
+					context: {
+						phase: "validation",
+						artifact: source,
+						findings: reports.flatMap((report) =>
+							report.findings.map((finding) => ({
+								key: findingKey(report.pass, finding.id),
+								title: finding.title,
+								location: `${finding.path}:${finding.line}`,
+								trigger: finding.trigger,
+								invariant: finding.invariant,
+								cause: finding.cause,
+								validation: shards
+									.flatMap((shard) => shard.findings)
+									.find((entry) => entry.finding === findingKey(report.pass, finding.id)),
+							})),
+						),
+					},
 					reviewedAttempts,
-					validate: (value) => validateFindings(value, artifact.digest, reports),
+					validate: (value) => combineValidation(value, artifact.digest, reports, shards),
 					reuse: (value) => !(value as FindingValidation).coverageGaps.length,
 				},
 				signal,

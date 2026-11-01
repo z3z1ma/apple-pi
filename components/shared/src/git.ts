@@ -17,6 +17,9 @@ export interface GitOptions {
 	maxBytes?: number;
 }
 
+/** Time between asking a stopped Git process group to exit and killing it. */
+const KILL_GRACE_MS = 2000;
+
 export async function git(cwd: string, args: string[], options: GitOptions = {}): Promise<string> {
 	return (await gitBytes(cwd, args, options)).toString("utf8").trim();
 }
@@ -43,12 +46,19 @@ export function gitBytes(cwd: string, args: string[], options: GitOptions = {}):
 		let size = 0;
 		let stderr = "";
 		let failure: Error | undefined;
-		const stop = (reason: Error) => {
-			failure ??= reason;
+		let escalation: ReturnType<typeof setTimeout> | undefined;
+		const signalGroup = (name: NodeJS.Signals) => {
 			try {
-				if (child.pid && process.platform !== "win32") process.kill(-child.pid, "SIGTERM");
-				else child.kill("SIGTERM");
+				if (child.pid && process.platform !== "win32") process.kill(-child.pid, name);
+				else child.kill(name);
 			} catch {}
+		};
+		const stop = (reason: Error) => {
+			if (failure) return;
+			failure = reason;
+			signalGroup("SIGTERM");
+			// A process that ignores TERM must not keep a deadline or cancellation pending forever.
+			escalation = setTimeout(() => signalGroup("SIGKILL"), KILL_GRACE_MS);
 		};
 		const abort = () =>
 			stop(
@@ -70,11 +80,14 @@ export function gitBytes(cwd: string, args: string[], options: GitOptions = {}):
 			else if (!failure) chunks.push(chunk);
 		});
 		child.stderr!.setEncoding("utf8").on("data", (chunk: string) => {
-			stderr += chunk;
+			if (options.maxBytes !== undefined && stderr.length + chunk.length > options.maxBytes)
+				stop(new Error(`git ${args.join(" ")} error output exceeded ${options.maxBytes} bytes`));
+			else if (!failure) stderr += chunk;
 		});
 		child.once("error", (error) => stop(error));
 		child.once("close", (code) => {
 			if (timer) clearTimeout(timer);
+			if (escalation) clearTimeout(escalation);
 			options.signal?.removeEventListener("abort", abort);
 			if (failure) reject(failure);
 			else if (code !== 0) reject(new Error(`git ${args.join(" ")} failed: ${stderr.trim() || `exit ${code}`}`));

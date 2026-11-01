@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
-import { verifyArtifact } from "../../code-review/src/capture.js";
+import { verifyCapturedSource } from "../../code-review/src/capture.js";
 import type { FindingValidation } from "../../code-review/src/contracts.js";
 import type { ReviewJob } from "../../code-review/src/operations.js";
 import { reviewPolicyFingerprint, reviewRolePolicy } from "../../code-review/src/policy.js";
@@ -51,7 +51,7 @@ export async function runReviewAttempt(
 ): Promise<{ attempt: string; output: unknown }> {
 	const artifact = job.artifact;
 	if (!artifact) throw new Error("Review execution requires an admitted artifact");
-	await verifyArtifact(artifact, signal);
+	await verifyCapturedSource(artifact, signal);
 	signal.throwIfAborted();
 	const policy = reviewRolePolicy(artifact.source, pass.role);
 	if (reviewPolicyFingerprint(policy) !== pass.policyFingerprint)
@@ -146,7 +146,7 @@ export async function runReviewAttempt(
 		);
 		if (receipt.stage !== "applied" || receipt.result?.status !== "completed")
 			throw new Error(receipt.reason ?? receipt.result?.error ?? "The review turn did not complete");
-		await verifyArtifact(artifact, signal);
+		await verifyCapturedSource(artifact, signal);
 		if (JSON.stringify(reviewRolePolicy(artifact.source, pass.role)) !== JSON.stringify(policy))
 			throw new Error("The review policy changed during the turn; resume to obtain current-policy evidence");
 		output = pass.validate(receipt.result.value);

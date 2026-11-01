@@ -1,11 +1,15 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import type { Static } from "typebox";
 import type {
+	DuplicateLinksSchema,
 	FindingValidation,
 	PlannedPass,
 	ReviewPlan,
 	ReviewReport,
 } from "../../components/code-review/src/contracts.js";
+
+type DuplicateLinks = Static<typeof DuplicateLinksSchema>;
 
 export type ReviewInput = { artifact: { digest: string } } & (
 	| {
@@ -15,6 +19,7 @@ export type ReviewInput = { artifact: { digest: string } } & (
 	  }
 	| { phase: "inspection"; pass: PlannedPass }
 	| { phase: "validation"; reports: ReviewReport[] }
+	| { phase: "validation"; findings: { key: string }[] }
 );
 export interface ReviewSettings {
 	authority?: boolean;
@@ -29,7 +34,7 @@ export interface ReviewSettings {
 export function reviewReply(
 	input: ReviewInput,
 	settings: ReviewSettings = {},
-): ReviewPlan | ReviewReport | FindingValidation {
+): ReviewPlan | ReviewReport | FindingValidation | DuplicateLinks {
 	const summary = readFileSync(join(process.cwd(), "value.ts"), "utf8").trim();
 	if (input.phase === "planning") {
 		const plan: ReviewPlan = {
@@ -129,6 +134,7 @@ export function reviewReply(
 			limitations: [],
 			extraPasses: [],
 		};
+	if ("findings" in input) return { artifact: input.artifact.digest, summary, duplicates: [] };
 	return {
 		artifact: input.artifact.digest,
 		summary,
@@ -143,15 +149,16 @@ export function reviewReply(
 				duplicateOf: null,
 			})),
 		),
-		coverageGaps: settings.challenged
-			? [
-					{
-						pass: input.reports[0]!.pass,
-						question: input.reports[0]!.coverage[0]!.question,
-						reason: "The claimed consumer check has no supporting trace.",
-					},
-				]
-			: [],
+		coverageGaps:
+			settings.challenged && input.reports[0]!.pass === (settings.passId ?? "value-correctness")
+				? [
+						{
+							pass: input.reports[0]!.pass,
+							question: input.reports[0]!.coverage[0]!.question,
+							reason: "The claimed consumer check has no supporting trace.",
+						},
+					]
+				: [],
 		limitations: [],
 	};
 }

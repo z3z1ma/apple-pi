@@ -1,5 +1,5 @@
 import { appendFileSync, chmodSync, closeSync, createReadStream, existsSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, readlinkSync, realpathSync, renameSync, rmSync, statSync, unlinkSync, watch, writeFileSync, writeSync } from "node:fs";
-import { basename, dirname, isAbsolute, join, normalize, parse, relative, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, normalize, parse, posix, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { BrowserWindow, app, dialog, ipcMain, net, protocol, shell } from "electron";
 import { homedir, tmpdir } from "node:os";
@@ -11,7 +11,7 @@ import { getAgentDir, parseFrontmatter } from "@earendil-works/pi-coding-agent";
 import { spawn } from "@lydell/node-pty";
 import { execFile, spawn as spawn$1 } from "node:child_process";
 import { isUtf8 } from "node:buffer";
-import { copyFile, lstat, mkdir, mkdtemp, readFile, readdir, readlink, realpath, rm, stat, utimes, writeFile } from "node:fs/promises";
+import { copyFile, lstat, mkdir, mkdtemp, readFile, readdir, readlink, realpath, rm, stat, symlink, utimes, writeFile } from "node:fs/promises";
 import { Type } from "typebox";
 import { Value } from "typebox/value";
 import { bundledLanguages, createHighlighter } from "shiki";
@@ -3029,6 +3029,8 @@ function openOrg(paths, commands, snapshot) {
 }
 //#endregion
 //#region components/shared/src/git.ts
+/** Time between asking a stopped Git process group to exit and killing it. */
+var KILL_GRACE_MS = 2e3;
 /**
 * Exact bytes for blobs, patches and NUL-delimited paths; the text helper intentionally trims. The command runs in
 * its own process group, and every failure path (exit, abort, deadline, output limit) settles only after the
@@ -3058,12 +3060,18 @@ function gitBytes(cwd, args, options = {}) {
 		let size = 0;
 		let stderr = "";
 		let failure;
-		const stop = (reason) => {
-			failure ??= reason;
+		let escalation;
+		const signalGroup = (name) => {
 			try {
-				if (child.pid && process.platform !== "win32") process.kill(-child.pid, "SIGTERM");
-				else child.kill("SIGTERM");
+				if (child.pid && process.platform !== "win32") process.kill(-child.pid, name);
+				else child.kill(name);
 			} catch {}
+		};
+		const stop = (reason) => {
+			if (failure) return;
+			failure = reason;
+			signalGroup("SIGTERM");
+			escalation = setTimeout(() => signalGroup("SIGKILL"), KILL_GRACE_MS);
 		};
 		const abort = () => stop(options.signal?.reason instanceof Error ? options.signal.reason : /* @__PURE__ */ new Error(`git ${args.join(" ")} was aborted`));
 		const timer = options.timeoutMs ? setTimeout(() => stop(/* @__PURE__ */ new Error(`git ${args.join(" ")} timed out after ${options.timeoutMs} ms`)), options.timeoutMs) : void 0;
@@ -3074,11 +3082,13 @@ function gitBytes(cwd, args, options = {}) {
 			else if (!failure) chunks.push(chunk);
 		});
 		child.stderr.setEncoding("utf8").on("data", (chunk) => {
-			stderr += chunk;
+			if (options.maxBytes !== void 0 && stderr.length + chunk.length > options.maxBytes) stop(/* @__PURE__ */ new Error(`git ${args.join(" ")} error output exceeded ${options.maxBytes} bytes`));
+			else if (!failure) stderr += chunk;
 		});
 		child.once("error", (error) => stop(error));
 		child.once("close", (code) => {
 			if (timer) clearTimeout(timer);
+			if (escalation) clearTimeout(escalation);
 			options.signal?.removeEventListener("abort", abort);
 			if (failure) reject(failure);
 			else if (code !== 0) reject(/* @__PURE__ */ new Error(`git ${args.join(" ")} failed: ${stderr.trim() || `exit ${code}`}`));
@@ -3185,15 +3195,15 @@ function gitRun(cwd, args, options = {}) {
 async function gitLine(cwd, args, options) {
 	return (await gitRun(cwd, args, options)).toString("utf8").replace(/\n$/, "");
 }
-var MINIMUM_GIT = [2, 42];
-var gitVersion;
-/** The flags used here (attribute source, NUL-delimited batches) need Git 2.42 or newer. */
-function requireGit() {
-	gitVersion ??= gitLine(tmpdir(), ["version"]).then((output) => {
-		const [major = 0, minor = 0] = (/(\d+)\.(\d+)/.exec(output) ?? []).slice(1).map(Number);
-		if (major < MINIMUM_GIT[0] || major === MINIMUM_GIT[0] && minor < MINIMUM_GIT[1]) throw new Error(`Git ${MINIMUM_GIT.join(".")} or newer is required; found: ${output}`);
-	});
-	return gitVersion;
+/** 2.45 is the first release honouring GIT_NO_LAZY_FETCH; older Git can run a promisor remote's command. */
+var MINIMUM_GIT = [2, 45];
+var gitChecked = false;
+async function requireGit(signal) {
+	if (gitChecked) return;
+	const output = await gitLine(tmpdir(), ["version"], { signal });
+	const [major = 0, minor = 0] = (/(\d+)\.(\d+)/.exec(output) ?? []).slice(1).map(Number);
+	if (major < MINIMUM_GIT[0] || major === MINIMUM_GIT[0] && minor < MINIMUM_GIT[1]) throw new Error(`Git ${MINIMUM_GIT.join(".")} or newer is required; found: ${output}`);
+	gitChecked = true;
 }
 /** Git's quoted path-list entry, so a colon or quote inside the path is not read as a separator. */
 function quotedListEntry(path) {
@@ -3204,10 +3214,10 @@ function quotedListEntry(path) {
 function blobId(objectFormat, data) {
 	return createHash(objectFormat).update(`blob ${data.length}\0`).update(data).digest("hex");
 }
-async function fileBlobId(objectFormat, path) {
+async function fileBlobId(objectFormat, path, signal) {
 	const { size } = await stat(path);
 	const hash = createHash(objectFormat).update(`blob ${size}\0`);
-	for await (const chunk of createReadStream(path)) hash.update(chunk);
+	for await (const chunk of createReadStream(path, { signal })) hash.update(chunk);
 	return hash.digest("hex");
 }
 /** Length-delimited `cat-file --batch -Z`: blob bytes may contain newlines, NULs and invalid UTF-8. */
@@ -3318,18 +3328,25 @@ function objectReader(cwd, env = {}, signal) {
 			queue = next.catch(() => {});
 			return next;
 		},
-		/** Stops new requests, lets queued ones settle, and resolves once Git has exited. */
+		/** Stops new requests, ends Git (failing any read still waiting) and resolves once it has exited. */
 		async close() {
 			closing = true;
 			signal?.removeEventListener("abort", abort);
-			await queue;
 			child.stdin.end();
 			if (child.exitCode === null && child.signalCode === null) child.kill();
 			await exited;
+			await queue;
 		}
 	};
 }
 var OBJECT_ID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
+/** Like Promise.all, but every command has exited before the first failure propagates. */
+async function settledAll(work) {
+	const results = await Promise.allSettled(work);
+	const failed = results.find((result) => result.status === "rejected");
+	if (failed) throw failed.reason;
+	return results.map((result) => result.value);
+}
 /** Paths come from separate queries (they may contain newlines); revisions are one batch of validated object IDs. */
 async function locate$1(cwd, target, signal) {
 	const names = [target.kind === "commit" ? target.commit : target.kind === "range" || target.kind === "branch" ? target.head : "HEAD", ...target.kind === "commit" ? target.parent ? [target.parent] : [] : target.kind === "staged" ? [] : [target.base]];
@@ -3339,7 +3356,7 @@ async function locate$1(cwd, target, signal) {
 		...args
 	], { signal });
 	const repository = await path(["--show-toplevel"]);
-	const [commonDirectory, gitDirectory, ids] = await Promise.all([
+	const [commonDirectory, gitDirectory, ids] = await settledAll([
 		path(["--git-common-dir"], repository),
 		path(["--absolute-git-dir"], repository),
 		gitLine(repository, [
@@ -3539,18 +3556,17 @@ async function snapshot$1(located, env, working, signal) {
 		indexEntries,
 		headTree: indexTree
 	};
-	const flagged = (await run([
+	const tagged = (await run([
 		"ls-files",
 		"-v",
 		"-z"
-	])).toString("utf8").split("\0").filter((record) => record && (record[0] === "S" || /^[a-z]/.test(record))).map((record) => record.slice(2));
-	if (flagged.length) await run([
+	])).toString("utf8").split("\0").filter(Boolean);
+	for (const [option, flagged] of [["--no-assume-unchanged", tagged.filter((record) => /^[a-z]/.test(record))], ["--no-skip-worktree", tagged.filter((record) => record[0] === "S" || record[0] === "s")]]) if (flagged.length) await run([
 		"update-index",
 		"-z",
-		"--no-assume-unchanged",
-		"--no-skip-worktree",
+		option,
 		"--stdin"
-	], { input: flagged.map((path) => `${path}\0`).join("") });
+	], { input: flagged.map((record) => `${record.slice(2)}\0`).join("") });
 	const stale = [];
 	const byPath = new Map(indexEntries.map((entry) => [entry.path, entry]));
 	for (const path of await convertedPaths(root, indexEntries, signal)) {
@@ -3588,18 +3604,18 @@ async function snapshot$1(located, env, working, signal) {
 */
 async function openGitChange(cwd, target, options = {}) {
 	const { signal } = options;
-	await requireGit();
+	await requireGit(signal);
 	const located = await locate$1(cwd, target, signal).catch((error) => {
 		throw new Error(`Cannot resolve the Git target: ${error.message}`);
 	});
 	const mutable = target.kind === "staged" || target.kind === "working-tree";
 	const context = await isolatedContext(located, options.objects);
 	try {
-		const [base, trees] = await Promise.all([resolveBase(located.repository, target, located, signal), mutable ? snapshot$1(located, context.env, target.kind === "working-tree", signal) : {
+		const [base, trees] = await settledAll([resolveBase(located.repository, target, located, signal), mutable ? snapshot$1(located, context.env, target.kind === "working-tree", signal) : Promise.resolve({
 			headTree: located.head.tree,
 			indexTree: null,
 			indexEntries: null
-		}]);
+		})]);
 		return {
 			repository: located.repository,
 			commonDirectory: located.commonDirectory,
@@ -3930,9 +3946,12 @@ var INSPECT_REVIEW = `Perform your assigned first inspection independently. ${so
 Start from the assigned questions and form your own causal trace before consulting other review reports or opinions. Your brief contains source, intent, scope and questions rather than the author's narrative or colleagues' conclusions. Record any outside conclusions you encounter as a limitation on that independence.
 Account for every question. Cover the applicable repository standards and captured intent; when intent is absent, state that it was not assessed in limitations. A completed question names evidence; unavailable checks or unresolved dependencies remain incomplete with a reason. Report defects with a triggering case, violated invariant, causal trace, user impact, captured location and counterevidence considered. Distinguish a source inference from an executed reproduction or a hypothesis. A severity is a judgment, not calibrated probability. Follow guards, callers and reconciliation before alleging a local omission.
 An additional pass request must name a concrete uncertainty, why more work is justified and what would settle it. Known unavailable evidence belongs in incomplete coverage rather than repeated broad review. Preserve limitations even when no defects are found. Return the report through the structured result tool.`;
-var VALIDATE_REVIEW = `Challenge the sealed first-inspection reports against the captured source. ${source}
-Evaluate every reported finding by its underlying trigger, invariant and causal path. Confirm with evidence, reject with counterevidence, leave unresolved when proof is missing, or identify an actual duplicate by the supplied finding key. Preserve every original allegation in the returned dispositions. Similar titles or identical file sets alone do not establish a duplicate.
-Check whether the supplied coverage claims answer their actual questions. Record required missing evidence as a coverage gap naming that pass and question. Keep optional unrun checks and other limits visible without pretending they establish a defect. Report what you verified separately from what the first reviewers claim. Return the validation through the structured result tool.`;
+var VALIDATE_REVIEW = `Challenge one sealed first-inspection report against the captured source. ${source}
+Settle every finding in this report by its trigger, invariant and causal path: confirm, reject with counterevidence, leave unresolved when proof is missing, or mark a duplicate of another finding in the same report. Preserve every allegation in the returned dispositions.
+Start from the inspector's recorded evidence. When it is a specific, checkable reproduction or trace, verify that it shows what it claims and confirm without repeating the whole experiment. Re-run or trace yourself only when the evidence is a bare inference, missing, or doubtful, and say which you did.
+Check whether the coverage claims answer their actual questions. Record required missing evidence as a coverage gap naming the pass and question. Duplicates across other reports are linked afterwards; do not look for them. Return the validation through the structured result tool.`;
+var LINK_DUPLICATES = `Link duplicate findings across independently validated reports. The bound context lists every finding with its validation; do not re-investigate the source.
+Two findings are duplicates only when they share the same trigger, violated invariant and cause; similar titles or the same file do not make a duplicate. For each duplicate, name the finding it duplicates (prefer the one with the clearest evidence) and why. Never link a finding to itself or in a cycle. Summarize the combined outcome in a few sentences. Return the links through the structured result tool.`;
 //#endregion
 //#region components/code-review/src/policy.ts
 function reviewConfiguration(source) {
@@ -3941,7 +3960,8 @@ function reviewConfiguration(source) {
 		instructions: {
 			planning: PLAN_REVIEW,
 			inspection: INSPECT_REVIEW,
-			validation: VALIDATE_REVIEW
+			validation: VALIDATE_REVIEW,
+			duplicates: LINK_DUPLICATES
 		},
 		roleReferences: [...roles.keys()].sort().flatMap((name) => {
 			const role = roles.get(name);
@@ -4055,8 +4075,13 @@ async function verifyArtifact(artifact, signal) {
 	};
 	const entries = await treeReferences(artifact.source, artifact.headTree, signal);
 	let next = 0;
+	let failure;
 	const check = async () => {
-		while (next < entries.length) await checkEntry(entries[next++]);
+		while (!failure && next < entries.length) try {
+			await checkEntry(entries[next++]);
+		} catch (error) {
+			failure ??= { error };
+		}
 	};
 	const checkEntry = async (entry) => {
 		signal?.throwIfAborted();
@@ -4067,9 +4092,10 @@ async function verifyArtifact(artifact, signal) {
 		const mode = stat?.isSymbolicLink() ? "120000" : stat?.isDirectory() ? "160000" : stat?.isFile() ? stat.mode & 73 ? "100755" : "100644" : void 0;
 		if (mode !== entry.mode) throw new Error(`Captured source changed: ${entry.path}`);
 		if (mode === "160000") return;
-		if ((mode === "120000" ? blobId(format, await readlink(path, { encoding: "buffer" })) : await fileBlobId(format, path)) !== entry.blob) throw new Error(`Captured source changed: ${entry.path}`);
+		if ((mode === "120000" ? blobId(format, await readlink(path, { encoding: "buffer" })) : await fileBlobId(format, path, signal)) !== entry.blob) throw new Error(`Captured source changed: ${entry.path}`);
 	};
 	await Promise.all(Array.from({ length: VERIFY_READERS }, check));
+	if (failure) throw failure.error;
 }
 async function readCapturedSource(artifact, options = {}, signal) {
 	const path = options.path === void 0 ? void 0 : safePath(options.path);
@@ -4275,6 +4301,7 @@ async function captureReview(request, destination, signal) {
 	const intent = await captureIntent(request, signal);
 	await mkdir(destination, { mode: 448 });
 	const source = join(destination, "source");
+	let change;
 	try {
 		await mkdir(source);
 		const format = await text$4(repository, ["rev-parse", "--show-object-format"], { signal });
@@ -4285,7 +4312,7 @@ async function captureReview(request, destination, signal) {
 			`--object-format=${format}`
 		], { signal });
 		const objects = join(source, ".git", "objects");
-		const change = await openGitChange(repository, request.target, {
+		change = await openGitChange(repository, request.target, {
 			signal,
 			objects
 		});
@@ -4453,6 +4480,7 @@ async function captureReview(request, destination, signal) {
 		if (JSON.stringify(artifact.configuration) !== JSON.stringify(reviewConfiguration(source))) throw new Error("Review configuration changed during capture; capture the review again");
 		return artifact;
 	} catch (error) {
+		await change?.close();
 		await rm(destination, {
 			recursive: true,
 			force: true
@@ -4744,6 +4772,15 @@ function planPasses(plan, regions) {
 function findingKey(pass, finding) {
 	return `${encodeURIComponent(pass)}:${encodeURIComponent(finding)}`;
 }
+Type.Object({
+	artifact: text$3,
+	summary: text$3,
+	duplicates: Type.Array(Type.Object({
+		finding: text$3,
+		duplicateOf: text$3,
+		reason: text$3
+	}, object$4))
+}, object$4);
 function checkShape(schema, value) {
 	if (!Value.Check(schema, value)) {
 		const errors = [...Value.Errors(schema, value)].map((error) => `${error.instancePath || "/"}: ${error.message}`);
@@ -4887,6 +4924,7 @@ function reviewSummary(db, actor, id) {
 				completedQuestions: coverage.reduce((sum, entry) => sum + entry.completed, 0),
 				requiredQuestions: coverage.reduce((sum, entry) => sum + entry.required, 0),
 				unassignedRegions: job.plan.gaps?.length ?? 0,
+				integrationOnlyRegions: job.plan.gaps ? 0 : unscopedRegions(job.plan, job.artifact?.regions ?? []).length,
 				additionalRequests: passes.reduce((sum, { report }) => sum + (report?.extraPasses.length ?? 0), 0)
 			} : null,
 			cost: reviewCost(db, job.id),
@@ -4961,16 +4999,32 @@ async function targetConfiguration(change) {
 			"ls-tree",
 			"-r",
 			"-z",
-			"--name-only",
 			change.headTree,
 			"--",
 			".pi/roles"
-		])).toString("utf8").split("\0").filter(Boolean);
-		for (const path of listing) {
-			const data = await change.read("after", path);
-			if (!data) continue;
-			await mkdir(dirname(join(directory, path)), { recursive: true });
-			await writeFile(join(directory, path), data);
+		])).toString("utf8").split("\0").filter(Boolean).map((record) => ({
+			mode: record.split(" ")[0],
+			path: record.slice(record.indexOf("	") + 1)
+		}));
+		const modes = new Map(listing.map((entry) => [entry.path, entry.mode]));
+		for (const { path, mode } of listing) {
+			const target = join(directory, path);
+			await mkdir(dirname(target), { recursive: true });
+			if (mode !== "120000") {
+				const data = await change.read("after", path);
+				if (data) await writeFile(target, data);
+				continue;
+			}
+			const text = (await change.read("after", path))?.toString("utf8") ?? "";
+			await symlink(text, target);
+			const resolved = posix.normalize(posix.join(posix.dirname(path), text));
+			if (!posix.isAbsolute(text) && !resolved.startsWith("../") && !modes.has(resolved)) {
+				const data = await change.read("after", resolved);
+				if (data) {
+					await mkdir(dirname(join(directory, resolved)), { recursive: true });
+					await writeFile(join(directory, resolved), data);
+				}
+			}
 		}
 		return reviewConfiguration(directory);
 	} finally {
@@ -5363,6 +5417,27 @@ function assignPaths(files, status) {
 		file.oldPath = identities[i].oldPath;
 	}
 }
+/**
+* Git diffs non-UTF8 text line by line, and decoding it would silently replace bytes. Such a file is shown as binary,
+* as a capture records it, rather than as altered text.
+*/
+function markUndecodable(files, patch) {
+	const starts = [];
+	for (let at = 0; at < patch.length;) {
+		if (patch.subarray(at, at + 11).toString("latin1") === "diff --git ") starts.push(at);
+		const end = patch.indexOf(10, at);
+		if (end < 0) break;
+		at = end + 1;
+	}
+	for (const [i, file] of files.entries()) {
+		if (file.binary || isUtf8(patch.subarray(starts[i], starts[i + 1]))) continue;
+		file.binary = true;
+		file.hunks = [{
+			lines: [],
+			note: "Binary file"
+		}];
+	}
+}
 /** Parse one tree-to-tree patch and serve exact bytes from either side; the caller closes it. */
 async function readTrees(trees, labels, paths = []) {
 	try {
@@ -5379,6 +5454,7 @@ async function readTrees(trees, labels, paths = []) {
 		const [patch, status] = await Promise.all([diff("-U3"), diff("--name-status", "-z")]);
 		const files = parseUnifiedDiff(patch.toString("utf8"));
 		assignPaths(files, status);
+		markUndecodable(files, patch);
 		for (const file of files) for (const hunk of file.hunks) for (const l of hunk.lines) l.text = l.text.replace(/\r$/, "");
 		return {
 			...trees,

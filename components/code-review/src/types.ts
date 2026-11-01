@@ -29,7 +29,8 @@ export interface ChangeRegion {
 }
 
 export interface ReviewConfiguration {
-	instructions: { planning: string; inspection: string; validation: string };
+	/** Captures before parallel validation have no duplicate-linking instruction. */
+	instructions: { planning: string; inspection: string; validation: string; duplicates?: string };
 	roleReferences: { role: string; models: string[] }[];
 	catalogIssues: number;
 }
