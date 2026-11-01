@@ -127,7 +127,13 @@ export async function runReviewAttempt(
 		program = await openPeerProgram(job.owner, signal, { paths, id: programId });
 		const started = await program.command(
 			person,
-			{ kind: "start", role: pass.role, goal: { by: job.owner, text: pass.goal } },
+			{
+				kind: "start",
+				role: pass.role,
+				// The pass's depth chose this profile; the peer must select its mind from it, not the role's own.
+				...(policy.profile ? { profile: policy.profile } : {}),
+				goal: { by: job.owner, text: pass.goal },
+			},
 			{ signal, commandId: `${id}:start` },
 		);
 		if (started.stage !== "applied") throw new Error(started.reason ?? "The reviewer did not start");

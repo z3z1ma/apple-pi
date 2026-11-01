@@ -486,6 +486,10 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 		type: "string",
 		description: "Role from the role catalog this session takes for life at its first start",
 	});
+	pi.registerFlag("role-profile", {
+		type: "string",
+		description: "Inference profile that selects the role's mind at its first start, in place of the role's own",
+	});
 	if (process.env.PI_SESSION_STATE_DISABLED === "1") return;
 	installMail(pi);
 	// The role resolves at session start before the hello below reads it and the manager tools reconcile on it.

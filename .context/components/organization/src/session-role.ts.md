@@ -17,6 +17,11 @@ The actual model and effective thinking level are retained in the same entry aft
 Why: a person that already worked on the default has a mind too; leaving it unrecorded would let a later profile addition change that person. Throwing alone cannot enforce failed selection because Pi catches lifecycle-handler errors and would otherwise continue on the previous model.
 Coupled: components/shared/src/model-profiles.ts
 
+A launcher can pass `--role-profile` to select a new person's first mind from another inference profile; captured review uses it for deep passes. It applies only to a role whose models start with a profile and only before a mind is stored, so it changes no existing person and never makes a concrete-only role read the profile file.
+Why: the review runtime records each pass's policy (deep or balanced profile) and refuses a reviewer whose selected model is not in it. Without the override the resolver always chose from the role's own profile, so every deep pass failed before its turn; the first paid review after depth tiers failed that way.
+Coupled: components/session-state/src/review-attempt.ts, components/session-state/src/runtime.ts, components/code-review/src/policy.ts
+Verify: components/organization/tests/roles.test.ts, components/session-state/tests/review-queue.test.ts
+
 Posture (`writes: false` dropping `edit` and `write`) is applied at `session_start` and again at every `before_agent_start`.
 Why: Pi restores the active tool set from the saved transcript after extensions load, so a session created before the role existed, or one whose user re-enabled a tool, would otherwise start a run with `edit` back.
 Coupled: components/session-state/src/bridge.ts, components/session-state/src/coordinator.ts

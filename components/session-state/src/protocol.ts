@@ -184,6 +184,8 @@ export type Command =
 			role?: string;
 			/** Immutable creator-supplied focus within the role; existing identities keep their recorded value. */
 			specialization?: string;
+			/** Inference profile that selects a new person's first mind instead of the role's own (review depth). */
+			profile?: string;
 			/** Written work, assigned before the new process starts so its first turn receives the goal. */
 			goal?: { text: string; by: string; title?: string } & Worth;
 			prompt?: string;

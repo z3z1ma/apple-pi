@@ -6,11 +6,18 @@ import { reviewReply } from "./review-reply.ts";
 const argument = (name) => process.argv[process.argv.indexOf(name) + 1];
 const id = argument("--session-id");
 const role = argument("--role");
+const roleProfile = process.argv.includes("--role-profile") ? argument("--role-profile") : undefined;
 const parent = argument("--reports-to");
 const agentDir = process.env.PI_CODING_AGENT_DIR;
 const stateDir = join(agentDir, "state");
 const controlPath = join(agentDir, "peer-control.json");
 const control = existsSync(controlPath) ? JSON.parse(readFileSync(controlPath, "utf8")) : {};
+// Like the real role resolver, a launch profile picks the first model of that profile from the profile file.
+const profilesPath = join(agentDir, "model-profiles.json");
+const profileModel =
+	roleProfile && existsSync(profilesPath)
+		? JSON.parse(readFileSync(profilesPath, "utf8")).profiles?.[roleProfile]?.models?.[0]?.model
+		: undefined;
 const records = join(agentDir, "peer-records");
 mkdirSync(records, { recursive: true });
 const file = join(records, `${id}.jsonl`);
@@ -83,7 +90,7 @@ if (!stopping) {
 				reportsTo: parent,
 				role,
 				manages: role === "team-lead",
-				model: control.model ?? `fixture/${role}`,
+				model: control.model ?? profileModel ?? `fixture/${role}`,
 				thinkingLevel: "high",
 			},
 		}),

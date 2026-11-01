@@ -172,6 +172,8 @@ interface SessionLaunch {
 	name?: string;
 	reportsTo?: string;
 	role?: string;
+	/** Inference profile for a new person's first mind, in place of the role's own. */
+	profile?: string;
 	prompt?: string;
 	tmux?: Hello["tmux"];
 	program?: { id: string; parent: string };
@@ -2462,6 +2464,7 @@ export class Runtime {
 			name,
 			reportsTo: reportsTo ?? undefined,
 			role: row?.role ?? command.role,
+			...(!row && command.profile ? { profile: command.profile } : {}),
 			prompt:
 				command.prompt ??
 				(focusedTask(db, sessionId) ? "You have assigned work. Begin with your focused task." : undefined),
@@ -2533,6 +2536,7 @@ export class Runtime {
 			...(name ? ["--name", name] : []),
 			...(reportsTo ? ["--reports-to", reportsTo] : []),
 			...(role ? ["--role", role] : []),
+			...(launch.profile ? ["--role-profile", launch.profile] : []),
 		];
 		const env = { [PROGRAM_ID_ENV]: programId ?? "", [PROGRAM_PARENT_ENV]: programParent ?? "" };
 		const start: SessionStart = {

@@ -26,6 +26,7 @@ You are the test role.
 const organization = (pi: ExtensionAPI) => {
 	pi.registerFlag("role", { type: "string", description: "role" });
 	pi.registerFlag("reports-to", { type: "string", description: "manager" });
+	pi.registerFlag("role-profile", { type: "string", description: "profile" });
 	installOrganization(pi);
 };
 
@@ -521,6 +522,37 @@ test.each(["absent", "unmapped"])(
 		}
 	},
 );
+
+test("a launch profile picks a profiled role's first mind from that profile instead of the role's own", async () => {
+	const cwd = tempDir();
+	profileRole(cwd);
+	writeFileSync(
+		modelProfilesPath(),
+		JSON.stringify({
+			profiles: {
+				coding: { model: "faux-session-provider/profile-choice", thinking: "high" },
+				deep: { model: "faux-session-provider/deep-choice", thinking: "high" },
+			},
+		}),
+	);
+	const installer = (pi: ExtensionAPI) => {
+		pi.on("session_start", (_event, ctx) => {
+			const models = ["profile-choice", "deep-choice"].map((id) => ({ ...ctx.model!, id, reasoning: true }));
+			vi.spyOn(ctx.modelRegistry, "find").mockImplementation((provider, id) =>
+				models.find((model) => model.provider === provider && model.id === id),
+			);
+		});
+		organization(pi);
+	};
+	const run = await fauxSession([installer], [], ["read"], { cwd });
+	try {
+		run.session.extensionRunner.setFlagValue("role-profile", "deep");
+		await restartWithRole(run, "profiled");
+		expect(run.session.model?.id).toBe("deep-choice");
+	} finally {
+		run.dispose();
+	}
+});
 
 test("a profile selects once, retains its effective thinking across resume, and ignores edited configuration", async () => {
 	const cwd = tempDir();

@@ -105,10 +105,16 @@ async function applyMind(
 	role: Role,
 	warn: (text: string) => void,
 	stored?: Mind,
+	override?: string,
 ): Promise<Mind | undefined> {
 	if (stored) return applySelectedMind(pi, ctx, stored);
 	const first = role.models[0]!;
-	const profileName = isInferenceProfileName(first) ? first : undefined;
+	// A launcher may choose the tier (review depth) of a role that names a profile; concrete-only roles keep theirs.
+	const profileName = isInferenceProfileName(first)
+		? override && isInferenceProfileName(override)
+			? override
+			: first
+		: undefined;
 	const profile = profileName ? loadModelProfiles({ optional: true })[profileName] : undefined;
 	if (profile && profileName) {
 		const selected = selectModelProfile(
@@ -158,7 +164,8 @@ export function installSessionRole(pi: ExtensionAPI): void {
 		}
 		let mind: Mind | undefined;
 		try {
-			mind = await applyMind(pi, ctx, role, warn, stored?.mind);
+			const profile = pi.getFlag("role-profile");
+			mind = await applyMind(pi, ctx, role, warn, stored?.mind, typeof profile === "string" ? profile : undefined);
 		} catch (error) {
 			const message = `Role ${role.title}: ${error instanceof Error ? error.message : String(error)}`;
 			mindFailures.set(sessionId, message);

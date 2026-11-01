@@ -1721,6 +1721,35 @@ test("the owner is mailed when the plan is ready, as each pass's findings are co
 	).toEqual([{ participant: "owner" }]);
 }, 30000);
 
+test("a deep pass launches its reviewer on the deep profile, a standard pass on the role's own", async () => {
+	writeFileSync(join(state.agentDir, "peer-control.json"), JSON.stringify({ review: true }));
+	writeFileSync(
+		join(state.agentDir, "model-profiles.json"),
+		JSON.stringify({
+			profiles: {
+				balanced: { selection: "ordered", models: [{ model: "fixture/code-review-specialist", thinking: "high" }] },
+				deep: { selection: "ordered", models: [{ model: "fixture/deep-reviewer", thinking: "high" }] },
+			},
+		}),
+	);
+	writeFileSync(
+		join(state.agentDir, "roles", "code-review-specialist.md"),
+		'---\ntitle: Fixture Reviewer\nmandate: Inspect the captured source.\nmodels: ["balanced", "fixture/code-review-specialist:high"]\nwrites: false\nmanages: false\n---\nRead the source and report evidence.\n',
+	);
+	const job = await enqueue();
+	await settled(job.id, "completed");
+	expect(
+		query<{ kind: string; model: string }>(
+			state.dbPath,
+			"select kind, model from review_attempts where review_id = ? and kind in ('focused', 'integration') order by kind",
+			job.id,
+		).map((row) => [row.kind, row.model]),
+	).toEqual([
+		["focused", "fixture/code-review-specialist"],
+		["integration", "fixture/deep-reviewer"],
+	]);
+}, 30000);
+
 test("readers name the change, take comments, show pass logs and analytics, and hide answered reviews", async () => {
 	writeFileSync(join(state.agentDir, "peer-control.json"), JSON.stringify({ review: { finding: true } }));
 	const committed = await enqueue({ kind: "commit", commit: "HEAD" });
