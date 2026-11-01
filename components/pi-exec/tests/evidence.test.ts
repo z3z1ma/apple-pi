@@ -88,7 +88,7 @@ describe("public evidence library", () => {
 		expect(renamed.changedFiles).toEqual(expect.arrayContaining(["feature.ts", "renamed feature.ts", "binary"]));
 	});
 
-	it("resolves path scopes from the session directory and stops output past its limit while streaming", async () => {
+	it("resolves path scopes from the session directory, discovers tests from the repository root and stops output past its limit while streaming", async () => {
 		mkdirSync(join(cwd, "sub"));
 		put("sub/feature.ts", "nested\n");
 		put("feature.ts", "export const value = 2;\n");

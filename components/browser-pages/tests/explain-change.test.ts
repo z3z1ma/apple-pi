@@ -130,7 +130,7 @@ describe("buildExplainPage", () => {
 		}
 	});
 
-	it("cites the existing side of a type change and shows undecodable text as binary", async () => {
+	it("cites and counts a type change once, and refuses to cite undecodable text as code", async () => {
 		rmSync(join(repo, "src/util.ts"));
 		execFileSync("ln", ["-s", "retry.ts", join(repo, "src/util.ts")]);
 		writeFileSync(join(repo, "src/legacy.txt"), Buffer.from([0x63, 0x61, 0x66, 0xe9, 0x0a]));
