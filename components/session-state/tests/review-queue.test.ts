@@ -1177,14 +1177,15 @@ test("a declared authority risk dispatches a distinct inspection over the same r
 	await settled(job.id, "completed");
 	const focused = query<{ pass_id: string; person: string; input: string }>(
 		state.dbPath,
-		"select pass_id, person, input from review_attempts where review_id = ? and kind = 'focused' order by pass_id desc",
+		"select pass_id, person, input from review_attempts where review_id = ? and kind = 'focused'",
 		job.id,
 	);
-	expect(focused.map((entry) => entry.pass_id)).toEqual(["value-correctness", "deletion-authority"]);
+	expect(focused.map((entry) => entry.pass_id).sort()).toEqual(["deletion-authority", "value-correctness"]);
 	expect(new Set(focused.map((entry) => entry.person)).size).toBe(2);
-	const inputs = focused.map((entry) => JSON.parse(readFileSync(JSON.parse(entry.input).contextFile, "utf8")));
-	expect(inputs[1].pass.regions).toEqual(inputs[0].pass.regions);
-	expect(inputs[1].pass.questions[0].question).toBe("Who may remove these records?");
+	const input = (pass: string) =>
+		JSON.parse(readFileSync(JSON.parse(focused.find((entry) => entry.pass_id === pass)!.input).contextFile, "utf8"));
+	expect(input("deletion-authority").pass.regions).toEqual(input("value-correctness").pass.regions);
+	expect(input("deletion-authority").pass.questions[0].question).toBe("Who may remove these records?");
 }, 30000);
 
 test("incomplete evidence stays incomplete with zero findings and can resume without repeating finished planning", async () => {
