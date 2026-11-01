@@ -5,7 +5,7 @@ import { sendCommand } from "../../session-state/src/client.js";
 import { reviewLimits, reviewSettled } from "../../session-state/src/review-decisions.js";
 import { type ReviewStore, reviewAssessment, withReviews } from "../../session-state/src/review-read.js";
 import { buildCodeReviewPage, codeReviewTemplate, parseReviewResult, type ReviewCodeParams } from "./code-review.js";
-import { parseUnifiedDiff, type RawFile } from "./git-diff.js";
+import { readCapturedChange } from "./git-diff.js";
 import type { CodeReviewPage, ReviewResult } from "./page-data.js";
 import { openPageSession } from "./page-server.js";
 import { embedPage, savePage } from "./saved-page.js";
@@ -22,22 +22,12 @@ export async function buildCapturedReview(
 	if (!job.artifact || !reviewSettled(job.state)) throw new Error("Sign-off requires a settled captured review");
 	const artifact = job.artifact;
 	await verifyArtifact(artifact, signal);
-	const files: RawFile[] = [];
-	for (const path of new Set(artifact.regions.map((region) => region.path))) {
-		const regions = artifact.regions.filter((region) => region.path === path);
-		const parsed = parseUnifiedDiff(regions.map((region) => region.patch).join(""));
-		for (const file of parsed) {
-			file.path = path;
-			file.oldPath = undefined;
-			files.push(file);
-		}
-	}
-	const { page } = await buildCodeReviewPage({ ...params, cwd: undefined }, artifact.source, token, {
-		root: artifact.source,
-		baseCommit: artifact.baseRevision,
-		head: artifact.headRevision,
-		files,
-	});
+	const { page } = await buildCodeReviewPage(
+		{ ...params, cwd: undefined, target: undefined },
+		artifact.source,
+		token,
+		await readCapturedChange(artifact),
+	);
 	page.capture = {
 		review: job.id,
 		digest: artifact.digest,
@@ -54,9 +44,14 @@ export async function buildCapturedReview(
 			],
 		},
 	};
-	page.base = artifact.baseCommit ?? artifact.baseTree;
-	page.head = artifact.headCommit ?? artifact.headTree;
 	return { page, root: artifact.repository };
+}
+
+/** A captured review's retained change, for pages that explain rather than decide. */
+export function capturedChange(actor: string, review: string, signal?: AbortSignal, store: ReviewStore = withReviews) {
+	const job = store((db) => reviewAssessment(db, actor, review)).job;
+	if (!job.artifact) throw new Error("The review has no captured target");
+	return readCapturedChange(job.artifact, signal);
 }
 
 export type ApprovalCommit = (id: string, operation: Extract<ReviewOperation, { action: "approve" }>) => Promise<void>;

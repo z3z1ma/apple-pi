@@ -1,9 +1,9 @@
-import { readFile } from "node:fs/promises";
-import { isAbsolute, join, relative, resolve } from "node:path";
+import { isAbsolute, relative, resolve } from "node:path";
 
 import { type Static, Type } from "typebox";
 
-import { generatedPaths, type RawLine, type RepoDiff, readBaseFile, readRepoDiff } from "./git-diff.js";
+import { GIT_TARGET_HELP, GitTargetSchema, WORKING_TREE } from "../../shared/src/git-change.js";
+import { generatedPaths, type RawLine, type RepoDiff, readChange } from "./git-diff.js";
 import { highlightLines, markRange } from "./highlight.js";
 import { blocksOf, withDiagrams } from "./markdown-review.js";
 import type {
@@ -38,7 +38,7 @@ export const ReviewCodeParamsSchema = Type.Object({
 		Type.String({
 			minLength: 1,
 			description:
-				"Captured review ID or request handle. Uses its retained source and assessment for exact-artifact operator sign-off; cwd/base cannot replace that target.",
+				"Captured review ID or request handle. Uses its retained source and assessment for exact-artifact operator sign-off; cwd and target cannot replace it.",
 		}),
 	),
 	cwd: Type.Optional(
@@ -51,12 +51,10 @@ export const ReviewCodeParamsSchema = Type.Object({
 	intent: Type.String({
 		description: "The judgment you need and why the change exists, in two to four sentences (Markdown)",
 	}),
-	base: Type.Optional(
-		Type.String({
-			description:
-				'Git ref to compare with. The page shows the working tree against the merge base of this ref and HEAD. Default "HEAD" (uncommitted changes); use the target branch, such as "main", for a whole branch.',
-		}),
-	),
+	target: Type.Optional({
+		...GitTargetSchema,
+		description: `${GIT_TARGET_HELP} Default: the working tree against HEAD. Ignored with review.`,
+	}),
 	focus: Type.Optional(
 		Type.Object(
 			{
@@ -366,7 +364,10 @@ function cutHunks(islands: Island[], hunks: Record<string, Hunk>, order: string[
 	}
 }
 
-/** Builds the page from the agent's structure and the repository's real diff. Code always comes from git. */
+/**
+ * Builds the page from the agent's structure and the selected change. Code always comes from Git objects:
+ * the live target's snapshot, or a supplied retained diff. The page owns and closes the diff.
+ */
 export async function buildCodeReviewPage(
 	params: ReviewCodeParams,
 	cwd: string,
@@ -374,13 +375,19 @@ export async function buildCodeReviewPage(
 	captured?: RepoDiff,
 ): Promise<{ page: CodeReviewPage; root: string }> {
 	cwd = resolve(cwd, params.cwd ?? ".");
-	const diff = captured ?? (await readRepoDiff(cwd, params.base ?? "HEAD"));
-	const generated = captured
-		? new Set<string>()
-		: await generatedPaths(
-				diff.root,
-				diff.files.map((f) => f.path),
-			);
+	const diff = captured ?? (await readChange(cwd, params.target ?? WORKING_TREE));
+	try {
+		return await pageOf(params, cwd, token, diff);
+	} finally {
+		await diff.close();
+	}
+}
+
+async function pageOf(params: ReviewCodeParams, cwd: string, token: string, diff: RepoDiff) {
+	const generated = await generatedPaths(
+		diff,
+		diff.files.map((f) => f.path),
+	);
 	const files: DiffFile[] = [];
 	const runs: Island[] = [];
 	let block = 0;
@@ -395,14 +402,14 @@ export async function buildCodeReviewPage(
 		});
 		const textual = !isGenerated && !raw.binary && raw.hunks.some((h) => h.lines.length > 0);
 		const newSegs =
-			textual && !captured && raw.status !== "D"
-				? await highlighted(raw.path, await readFile(join(diff.root, raw.path), "utf8").catch(() => undefined))
+			textual && raw.status !== "D"
+				? await highlighted(raw.path, (await diff.read("after", raw.path))?.toString("utf8"))
 				: undefined;
 		const oldSegs =
-			textual && !captured && raw.status !== "A"
+			textual && raw.status !== "A"
 				? await highlighted(
 						raw.oldPath ?? raw.path,
-						await readBaseFile(diff.root, diff.baseCommit, raw.oldPath ?? raw.path),
+						(await diff.read("before", raw.oldPath ?? raw.path))?.toString("utf8"),
 					)
 				: undefined;
 		for (const rawHunk of raw.hunks) {
@@ -558,8 +565,8 @@ export async function buildCodeReviewPage(
 		kind: "code-review",
 		title: params.title,
 		intent: await blocksOf(params.intent),
-		base: params.base ?? "HEAD",
-		head: diff.head,
+		base: diff.labels.base,
+		head: diff.labels.head,
 		createdAt: new Date().toISOString(),
 		focus: params.focus ? { blocks: await blocksOf(params.focus.text), hunks: focusHunks } : undefined,
 		verification: params.verification ?? [],

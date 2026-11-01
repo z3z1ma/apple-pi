@@ -1,21 +1,15 @@
 import { type Static, Type } from "typebox";
+import { GitTargetSchema } from "../../shared/src/git-change.js";
 import type { ReviewPlan } from "./contracts.js";
 import { FindingResponseSchema } from "./decisions.js";
 import type { ReviewArtifact, ReviewRequest } from "./types.js";
 
 const text = Type.String({ minLength: 1, pattern: "\\S" });
 const object = { additionalProperties: false } as const;
-export const ReviewTargetSchema = Type.Union([
-	Type.Object({ kind: Type.Literal("working-tree"), base: text }, object),
-	Type.Object({ kind: Type.Literal("staged") }, object),
-	Type.Object({ kind: Type.Literal("commit"), commit: text, parent: Type.Optional(text) }, object),
-	Type.Object({ kind: Type.Literal("range"), base: text, head: text }, object),
-	Type.Object({ kind: Type.Literal("branch"), base: text, head: text }, object),
-]);
 export const ReviewRequestSchema = Type.Object(
 	{
 		cwd: text,
-		target: ReviewTargetSchema,
+		target: GitTargetSchema,
 		paths: Type.Optional(Type.Array(Type.String({ minLength: 1 }))),
 		intent: Type.Optional(
 			Type.Union([Type.Object({ text }, object), Type.Object({ path: Type.String({ minLength: 1 }) }, object)]),

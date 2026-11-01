@@ -1,4 +1,3 @@
-import asyncio
 import re
 from typing import Any
 
@@ -8,20 +7,10 @@ RALPH += " Implement one coherent increment. Never commit, push, merge, deploy, 
 LOW_MUTATION_SCORE = 3
 MAX_CONSECUTIVE_LOW_MUTATION = 2
 
-def shellQuote(value: str) -> str:
-    return "'" + value.replace("'", "'\"'\"'") + "'"
-
-async def fingerprint(path: str) -> list[str]:
-    quoted = shellQuote(path)
-    result = await bash(command=f"if [ -f {quoted} ]; then git hash-object -- {quoted}; else printf MISSING; fi")
-    if not result["ok"]:
-        raise ValueError("could not fingerprint untracked path " + path)
-    return [path, result["output"].strip()]
-
-async def mutationSnapshot() -> dict[str, Any]:
+async def mutationSnapshot() -> str:
+    # The working-tree target includes untracked files, so one patch covers every edit.
     change = await git_change(paths=["."])
-    fingerprints = await asyncio.gather(*[fingerprint(path) for path in change["untrackedFiles"]])
-    return {"patch": change["patch"], "untracked": {pair[0]: pair[1] for pair in fingerprints}}
+    return change["patch"]
 
 def changedLines(before: str, after: str) -> int:
     if before == after:
@@ -35,11 +24,6 @@ def changedLines(before: str, after: str) -> int:
     beforeMiddle = before[prefix:len(before) - suffix]
     afterMiddle = after[prefix:len(after) - suffix]
     return max(len([line for line in beforeMiddle.splitlines() if line]), len([line for line in afterMiddle.splitlines() if line]))
-
-def mutationScore(before: Any, after: Any) -> int:
-    paths = set(before["untracked"]) | set(after["untracked"])
-    untrackedChanges = sum(1 for path in paths if before["untracked"].get(path) != after["untracked"].get(path))
-    return changedLines(before["patch"], after["patch"]) + untrackedChanges * LOW_MUTATION_SCORE
 
 async def main() -> dict[str, Any]:
     goal = inputs.get("goal", "").strip()
@@ -65,7 +49,7 @@ async def main() -> dict[str, Any]:
             return {"status": "failed", "requestedIterations": iterations, "completedIterations": iteration - 1,
                     "failedAt": iteration, "failures": failures}
         # Low mutation is an escape hatch, not a completion judgment.
-        score = mutationScore(before, await mutationSnapshot())
+        score = changedLines(before, await mutationSnapshot())
         lowMutationStreak = lowMutationStreak + 1 if score < LOW_MUTATION_SCORE else 0
         if lowMutationStreak >= MAX_CONSECUTIVE_LOW_MUTATION:
             return {"status": "stopped", "stopReason": "low-mutation", "requestedIterations": iterations,

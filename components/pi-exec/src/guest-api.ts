@@ -143,7 +143,7 @@ export function piExecGuestApiContract(includePeers = true): string {
 		"Host functions are async; pass keyword arguments. schema(shape) is pure local Python. Type-checking stubs:",
 		guestPromptStubs(".", includePeers),
 		"tools_search/tools_call support dynamic discovery. fetch handles HTTP; skills_list/skills_body expose model-invocable skills.",
-		"git_change/git_patch and repo_change_neighborhood collect scoped evidence; context_* fits structured evidence; dev_find_relevant_tests/dev_run_relevant_tests locate and run focused checks.",
+		'git_change/git_patch and repo_change_neighborhood collect scoped evidence for target={"kind": "working-tree", "base": "HEAD"} by default, the same target shapes as review_code (staged, commit, range, branch); context_* fits structured evidence; dev_find_relevant_tests/dev_run_relevant_tests locate and run focused checks.',
 		...(includePeers
 			? [
 					'agent_run returns a status record (including errors, and per-file edit/write changes); agent returns text or the output_schema value and raises on failure. Both create a fresh catalog-role peer, assign the goal, and discard the peer when the call ends. Context is bound as a file beside that goal, not copied into its text. Use schema({"id": "int"}) for strict object schemas.',

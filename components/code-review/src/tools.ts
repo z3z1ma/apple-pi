@@ -11,8 +11,9 @@ import {
 	reviewQueue,
 	reviewSummary,
 } from "../../session-state/src/review-read.js";
+import { GitTargetSchema } from "../../shared/src/git-change.js";
 import { FindingResponseSchema } from "./decisions.js";
-import { type ReviewOperation, ReviewRequestSchema, ReviewTargetSchema } from "./operations.js";
+import { type ReviewOperation, ReviewRequestSchema } from "./operations.js";
 
 const text = (description: string) => Type.String({ minLength: 1, description });
 const page = {
@@ -165,7 +166,7 @@ export function installReviewTools(pi: ExtensionAPI): void {
 			],
 			parameters: Type.Object(
 				{
-					target: ReviewTargetSchema,
+					target: GitTargetSchema,
 					cwd: Type.Optional(text("Repository or worktree directory; defaults to the current session directory.")),
 					paths: ReviewRequestSchema.properties.paths,
 					intent: ReviewRequestSchema.properties.intent,

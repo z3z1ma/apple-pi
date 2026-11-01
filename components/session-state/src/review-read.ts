@@ -1,10 +1,9 @@
 import type { DatabaseSync, SQLInputValue } from "node:sqlite";
-import { readCapturedSource } from "../../code-review/src/capture.js";
+import { captureIntent, readCapturedSource } from "../../code-review/src/capture.js";
 import { type FindingValidation, findingKey, planPasses, type ReviewReport } from "../../code-review/src/contracts.js";
 import type { FindingDecision, ReviewApproval, ReviewDecision } from "../../code-review/src/decisions.js";
 import type { ReviewJob, ReviewState } from "../../code-review/src/operations.js";
 import { configurationSummary, reviewConfiguration, reviewRolePolicy } from "../../code-review/src/policy.js";
-import { previewReview } from "../../code-review/src/preview.js";
 import type {
 	ReviewAssessment,
 	ReviewAttempt,
@@ -12,6 +11,7 @@ import type {
 	ReviewSource,
 	ReviewSummary,
 } from "../../code-review/src/results.js";
+import { type GitTarget, openGitChange } from "../../shared/src/git-change.js";
 import { nameOf, withThreads } from "./threads.js";
 import { rootOf } from "./tree.js";
 
@@ -331,19 +331,29 @@ export async function readReviewFreshness(
 	let checkout: Match = "unavailable";
 	let policy: Match = "unavailable";
 	try {
-		const current = await previewReview(job.request, signal);
-		if (artifact.configuration) requestedTarget = current.digest === artifact.digest ? "matches" : "changed";
+		// Every captured comparison, region and file list derives from these Git identities and the intent bytes.
+		const identity = async (target: GitTarget) => {
+			const change = await openGitChange(job.request.cwd, target, { signal });
+			await change.close();
+			return change;
+		};
+		const current = await identity(job.request.target);
+		const intent = job.request.intent ? (await captureIntent(job.request))?.hash : undefined;
+		if (artifact.configuration)
+			requestedTarget =
+				current.baseCommit === artifact.baseCommit &&
+				current.headCommit === artifact.headCommit &&
+				current.baseTree === artifact.baseTree &&
+				current.headTree === artifact.headTree &&
+				(typeof artifact.index !== "string" || current.indexTree === artifact.index) &&
+				intent === artifact.intent?.hash &&
+				// Captured configuration reads project roles from the live checkout here, not from the target tree.
+				JSON.stringify(reviewConfiguration(current.repository)) === JSON.stringify(artifact.configuration)
+					? "matches"
+					: "changed";
 		else errors.push("Capture-time configuration is absent; complete target identity cannot be compared.");
 		const working =
-			job.request.target.kind === "working-tree"
-				? current
-				: await previewReview(
-						{
-							cwd: job.request.cwd,
-							target: { kind: "working-tree", base: "HEAD" },
-						},
-						signal,
-					);
+			job.request.target.kind === "working-tree" ? current : await identity({ kind: "working-tree", base: "HEAD" });
 		checkout =
 			working.headTree === artifact.headTree && working.headCommit === artifact.headCommit ? "matches" : "changed";
 	} catch (error) {

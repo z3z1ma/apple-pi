@@ -1,11 +1,7 @@
-import { execFile } from "node:child_process";
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
-import { promisify } from "node:util";
-
+import { verifyCapturedSource } from "../../code-review/src/capture.js";
+import type { ReviewArtifact } from "../../code-review/src/types.js";
+import { GIT_DIFF, type GitTarget, openGitChange, openTrees } from "../../shared/src/git-change.js";
 import type { LineType } from "./page-data.js";
-
-const run = promisify(execFile);
 
 export interface RawLine {
 	t: LineType;
@@ -29,19 +25,17 @@ export interface RawFile {
 }
 
 export interface RepoDiff {
+	/** The repository the paths belong to: the author's, or a retained capture. */
 	root: string;
-	/** The commit the change is compared against. */
-	baseCommit: string;
-	head: string;
+	baseTree: string;
+	headTree: string;
+	labels: { base: string; head: string };
+	/** The head commit's subject when the change is one commit. */
+	subject?: string;
 	files: RawFile[];
-}
-
-async function git(cwd: string, args: string[]): Promise<string> {
-	const { stdout } = await run("git", ["-c", "core.quotePath=false", ...args], {
-		cwd,
-		maxBuffer: Number.POSITIVE_INFINITY,
-	});
-	return stdout;
+	git(args: string[]): Promise<Buffer>;
+	read(side: "before" | "after", path: string): Promise<Buffer | undefined>;
+	close(): Promise<void>;
 }
 
 const HUNK_HEADER = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/;
@@ -109,45 +103,71 @@ export function parseUnifiedDiff(text: string): RawFile[] {
 	return files;
 }
 
-function isBinary(buffer: Buffer): boolean {
-	return buffer.subarray(0, 8000).includes(0);
+function label(target: GitTarget, change: { baseCommit: string | null; headCommit: string }) {
+	const short = (id: string | null) => (id ? id.slice(0, 7) : "empty tree");
+	switch (target.kind) {
+		case "working-tree":
+			return { base: target.base, head: "working tree" };
+		case "staged":
+			return { base: "HEAD", head: "staged changes" };
+		case "commit":
+			return { base: short(change.baseCommit), head: short(change.headCommit) };
+		default:
+			return { base: target.kind === "branch" ? `merge base of ${target.base}` : target.base, head: target.head };
+	}
 }
 
-async function untrackedFiles(root: string): Promise<RawFile[]> {
-	const listed = await git(root, ["ls-files", "--others", "--exclude-standard", "-z"]);
-	const paths = listed.split("\0").filter(Boolean);
-	return Promise.all(
-		paths.map(async (path): Promise<RawFile> => {
-			const buffer = await readFile(join(root, path));
-			if (isBinary(buffer)) return { path, status: "A", binary: true, hunks: [{ lines: [], note: "Binary file" }] };
-			const text = buffer.toString("utf8");
-			if (!text) return { path, status: "A", binary: false, hunks: [{ lines: [], note: "Empty file" }] };
-			const lines = text.replace(/\n$/, "").split("\n");
-			return {
-				path,
-				status: "A",
-				binary: false,
-				hunks: [{ lines: lines.map((line, i) => ({ t: "+", text: line.replace(/\r$/, ""), n: i + 1 })) }],
-			};
-		}),
+/** Parse one tree-to-tree patch and serve exact bytes from either side; the caller closes it. */
+async function readTrees(
+	trees: Omit<RepoDiff, "files" | "labels">,
+	labels: RepoDiff["labels"],
+	paths: string[] = [],
+): Promise<RepoDiff> {
+	try {
+		const patch = await trees.git([
+			"--literal-pathspecs",
+			...GIT_DIFF,
+			"--find-renames",
+			"-U3",
+			trees.baseTree,
+			trees.headTree,
+			"--",
+			...paths,
+		]);
+		const files = parseUnifiedDiff(patch.toString("utf8"));
+		for (const file of files)
+			for (const hunk of file.hunks) for (const l of hunk.lines) l.text = l.text.replace(/\r$/, "");
+		return { ...trees, labels, files };
+	} catch (error) {
+		await trees.close();
+		throw error;
+	}
+}
+
+/** The selected change, from the same Git snapshot every change-selection tool uses. */
+export async function readChange(cwd: string, target: GitTarget, signal?: AbortSignal): Promise<RepoDiff> {
+	const change = await openGitChange(cwd, target, { signal });
+	const subject =
+		target.kind === "commit"
+			? (await change.git(["log", "-1", "--format=%s", change.headCommit]).catch(() => Buffer.from("")))
+					.toString()
+					.trim()
+			: undefined;
+	return readTrees({ ...change, root: change.repository, subject }, label(target, change));
+}
+
+/** A retained review capture: its own repository and trees, limited to the reviewed paths. */
+export async function readCapturedChange(artifact: ReviewArtifact, signal?: AbortSignal): Promise<RepoDiff> {
+	await verifyCapturedSource(artifact, signal);
+	const trees = openTrees(artifact.source, artifact.baseTree, artifact.headTree);
+	return readTrees(
+		{ ...trees, root: artifact.source, baseTree: artifact.baseTree, headTree: artifact.headTree },
+		{
+			base: (artifact.baseCommit ?? artifact.baseTree).slice(0, 7),
+			head: (artifact.headCommit ?? artifact.headTree).slice(0, 7),
+		},
+		artifact.request.paths,
 	);
-}
-
-/**
- * The change under review: the working tree (staged, unstaged, and untracked files) compared with
- * the merge base of `base` and HEAD, the way a pull request compares a branch with its target. With
- * `until`, the change from the merge base of `base` and `until` to the commit `until` instead.
- */
-export async function readRepoDiff(cwd: string, base: string, until?: string): Promise<RepoDiff> {
-	const root = (await git(cwd, ["rev-parse", "--show-toplevel"])).trim();
-	const baseCommit = (await git(root, ["merge-base", base, until ?? "HEAD"])).trim();
-	const head = until ?? (await git(root, ["rev-parse", "--abbrev-ref", "HEAD"])).trim();
-	const range = until ? [baseCommit, until] : [baseCommit];
-	const diff = await git(root, ["diff", "--no-color", "--no-ext-diff", "--find-renames", "-U3", ...range, "--"]);
-	const files = [...parseUnifiedDiff(diff), ...(until ? [] : await untrackedFiles(root))];
-	for (const file of files)
-		for (const hunk of file.hunks) for (const l of hunk.lines) l.text = l.text.replace(/\r$/, "");
-	return { root, baseCommit, head, files };
 }
 
 const LOCKFILES = new Set([
@@ -163,33 +183,16 @@ const LOCKFILES = new Set([
 	"composer.lock",
 ]);
 
-/** Lockfiles and paths marked `linguist-generated` in `.gitattributes`. */
-export async function generatedPaths(root: string, paths: string[]): Promise<Set<string>> {
+/** Lockfiles and paths marked `linguist-generated` by the head tree's `.gitattributes`. */
+export async function generatedPaths(diff: RepoDiff, paths: string[]): Promise<Set<string>> {
 	const generated = new Set(paths.filter((path) => LOCKFILES.has(path.slice(path.lastIndexOf("/") + 1))));
 	if (paths.length === 0) return generated;
-	const fields = (await git(root, ["check-attr", "-z", "linguist-generated", "--", ...paths])).split("\0");
+	const fields = (
+		await diff.git(["check-attr", "-z", `--source=${diff.headTree}`, "linguist-generated", "--", ...paths])
+	)
+		.toString("utf8")
+		.split("\0");
 	for (let i = 0; i + 2 < fields.length; i += 3)
-		if (fields[i + 2] === "set" || fields[i + 2] === "true") generated.add(fields[i]);
+		if (fields[i + 2] === "set" || fields[i + 2] === "true") generated.add(fields[i]!);
 	return generated;
-}
-
-/** File content at a commit, or undefined when the file did not exist there. */
-export async function readBaseFile(root: string, baseCommit: string, path: string): Promise<string | undefined> {
-	try {
-		return await git(root, ["show", `${baseCommit}:${path}`]);
-	} catch {
-		return undefined;
-	}
-}
-
-/** The full hash and subject of a commit-ish, or undefined when it names no commit. */
-export async function commitOf(root: string, ref: string): Promise<{ hash: string; subject: string } | undefined> {
-	try {
-		const [hash, ...subject] = (await git(root, ["show", "-s", "--format=%H%n%s", `${ref}^{commit}`]))
-			.trim()
-			.split("\n");
-		return { hash, subject: subject.join(" ") };
-	} catch {
-		return undefined;
-	}
 }

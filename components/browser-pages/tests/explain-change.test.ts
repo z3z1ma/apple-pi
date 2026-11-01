@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-
+import { captureReview } from "../../code-review/src/capture.js";
 import {
 	buildExplainPage,
 	type ExplainChangeParams,
@@ -12,6 +12,7 @@ import {
 	readerNote,
 	tutorPrompt,
 } from "../src/explain-change.js";
+import { readCapturedChange } from "../src/git-diff.js";
 import browserPages from "../src/index.js";
 import type { CodeExcerpt, ExplainPart } from "../src/page-data.js";
 
@@ -60,7 +61,11 @@ const rows = (c: CodeExcerpt) => c.rows.map((r) => `${r.t}${r.n ?? ""} ${r.s.map
 
 describe("buildExplainPage", () => {
 	it("explains one past commit, with removed lines back in place", async () => {
-		const { page, warnings } = await buildExplainPage(params({ base: "HEAD^", head: "HEAD" }), repo, "t");
+		const { page, warnings } = await buildExplainPage(
+			params({ target: { kind: "commit", commit: "HEAD" } }),
+			repo,
+			"t",
+		);
 		expect(page.ref).toBe(git("rev-parse", "--short=7", "HEAD"));
 		expect(page.subject).toBe("Cap retries at four");
 		expect(page.stats).toEqual([
@@ -93,15 +98,39 @@ describe("buildExplainPage", () => {
 		git("add", "src/other.ts");
 		git("commit", "-q", "-m", "Other work");
 		git("checkout", "-q", "main");
-		const range = (await buildExplainPage(params({ base: "other", head: "main" }), repo, "t")).page;
+		const range = (
+			await buildExplainPage(params({ target: { kind: "branch", base: "other", head: "main" } }), repo, "t")
+		).page;
 		expect(range.stats.map((f) => f.path)).toEqual(["src/policy.ts", "src/retry.ts"]);
+	});
+
+	it("explains a captured review's retained source after the checkout moves on, and refuses it without access", async () => {
+		const output = mkdtempSync(join(tmpdir(), "browser-pages-capture-"));
+		try {
+			const artifact = await captureReview(
+				{ cwd: repo, target: { kind: "working-tree", base: "HEAD" } },
+				join(output, "capture"),
+			);
+			write("src/util.ts", "export const one = 1;\nexport const later = 3;\n");
+			const body = "```code src/util.ts:1-2\n```";
+			const { page } = await buildExplainPage(
+				params({ review: "captured", steps: [{ title: "S", body }] }),
+				repo,
+				"t",
+				async () => readCapturedChange(artifact),
+			);
+			expect(rows(code(page.steps[0].parts)[0])).toEqual([" 1 export const one = 1;", "+2 export const two = 2;"]);
+			await expect(buildExplainPage(params({ review: "captured" }), repo, "t")).rejects.toThrow("not available");
+		} finally {
+			rmSync(output, { recursive: true, force: true });
+		}
 	});
 
 	it("marks new and unchanged files, and turns a bad reference into a warning the agent sees", async () => {
 		const body =
 			"```code src/policy.ts:1-1\n```\n\n```code src/util.ts:1\n```\n\n```code src/retry.ts:3-9\n```\n\n```code src/nope.ts:1-2\n```";
 		const { page, warnings } = await buildExplainPage(
-			params({ base: "HEAD^", head: "HEAD", steps: [{ title: "S", body }] }),
+			params({ target: { kind: "commit", commit: "HEAD" }, steps: [{ title: "S", body }] }),
 			repo,
 			"t",
 		);
@@ -109,7 +138,7 @@ describe("buildExplainPage", () => {
 		expect(page.steps[0].parts.filter((p) => "missing" in p)).toHaveLength(2);
 		expect(warnings).toEqual([
 			"`src/retry.ts:3-9`: `src/retry.ts` has 4 lines.",
-			expect.stringContaining("`src/nope.ts` does not exist at"),
+			"`src/nope.ts` does not exist after the change.",
 		]);
 		expect(page.covered).toEqual(["src/policy.ts"]);
 	});
@@ -119,7 +148,7 @@ describe("buildExplainPage", () => {
 		git("commit", "-q", "-m", "Drop the policy");
 		const step = { title: "S", body: "```code src/policy.ts:1-1\n```" };
 		const { page, warnings } = await buildExplainPage(
-			params({ base: "HEAD^", head: "HEAD", steps: [step] }),
+			params({ target: { kind: "commit", commit: "HEAD" }, steps: [step] }),
 			repo,
 			"t",
 		);
@@ -138,7 +167,7 @@ describe("buildExplainPage", () => {
 		expect(page.intuition.some((p) => "block" in p && p.block.mermaid)).toBe(true);
 		const bad = quiz.map((q, i) => (i === 2 ? { ...q, answer: 3 } : q));
 		await expect(buildExplainPage(params({ quiz: bad }), repo, "t")).rejects.toThrow("Quiz question 3");
-		await expect(buildExplainPage(params({ head: "nope" }), repo, "t")).rejects.toThrow();
+		await expect(buildExplainPage(params({ target: { kind: "commit", commit: "nope" } }), repo, "t")).rejects.toThrow();
 	});
 });
 
@@ -229,7 +258,7 @@ describe("explain_change tool", () => {
 			} as any);
 			const result = await tool.execute(
 				"call",
-				params({ cwd: repo, base: "HEAD^", head: "HEAD" }),
+				params({ cwd: repo, target: { kind: "commit", commit: "HEAD" } }),
 				undefined,
 				undefined,
 				{

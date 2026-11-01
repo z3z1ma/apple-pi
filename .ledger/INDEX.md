@@ -17,3 +17,5 @@
 - `.ledger/202610241552-run-bash-through-a-pty-by-default/task.md` — in-progress — Run Bash through a PTY by default — Bash stdout/stderr on PTY slaves (no controlling terminal) so programs emit terminal colors; plain text to the model, styled view in the UI, pipe fallback.
 
 - `.ledger/202610302251-implement-semantic-review-queue-and-reviews/task.md` — in-progress — Implement semantic review queue and /reviews — Implement approved exact-target semantic/risk-based reviews with durable peer execution, replace /work with a single master-detail review queue, and wire native tools, Workplace and sign-off.
+
+- `.ledger/202610312051-unify-git-targets-and-make-change-capture-efficient/task.md` — in-progress — Unify Git targets and make change capture efficient — Use one exact change-target model across review, explanation, sign-off and evidence helpers; share demand-driven Git plumbing and prove performance against native Git without losing fidelity.

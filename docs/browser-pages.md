@@ -14,9 +14,25 @@ Root sessions only; a run without an attached user gets a message instead of a p
 
 All four tools accept optional `cwd`: an absolute directory or a directory relative to the session's working directory. It defaults to the session's working directory. Use it to open a page for another repository or Git worktree directly from the session. [Interns](interns.md) and the [`/btw`](btw.md) session do not have browser tools.
 
-For example, a session in `work` can explain a commit in a nested worktree with `cwd: "worktrees/DATA-16966"`, `base: "<commit>^"`, and `head: "<commit>"`. `sign_off_code` accepts the same `cwd` to review that worktree's changes. Git refs are resolved in the selected repository, and code references use paths relative to its root, even when `cwd` selects a subdirectory. An invalid target fails rather than falling back to the session's repository.
+For example, a session in `work` can explain a commit in a nested worktree with `cwd: "worktrees/DATA-16966"` and `target: {"kind": "commit", "commit": "<commit>"}`. `sign_off_code` accepts the same `cwd` and `target` to review that worktree's changes. Git refs are resolved in the selected repository, and code references use paths relative to its root, even when `cwd` selects a subdirectory. An invalid target fails rather than falling back to the session's repository.
 
 For `sign_off_document`, a relative `path` is resolved against `cwd`; an absolute `path` works independently of the session directory. For `sign_off_task`, `cwd` selects the project whose `.ledger` holds the task. Returned file anchors use the target repository's paths. Page questions and the explanation tutor receive the page's absolute source directory and instructions to use absolute file paths, while retaining the parent session's conversation and working directory.
+
+## Selecting the change
+
+`sign_off_code`, `explain_change`, `review_code` and Pi Exec's `git_change` family take the same `target`, resolved by one shared module (`components/shared/src/git-change.ts`):
+
+| `target` | Compares |
+| --- | --- |
+| `{"kind": "working-tree", "base": "HEAD"}` (the default) | The exact `base` commit with the working tree: tracked, staged and nonignored untracked files |
+| `{"kind": "staged"}` | `HEAD` with the index |
+| `{"kind": "commit", "commit": "X"}` | `X` with its parent; a merge commit needs `"parent"` |
+| `{"kind": "range", "base": "A", "head": "B"}` | The exact endpoints `A` and `B` |
+| `{"kind": "branch", "base": "main", "head": "feature"}` | `feature` with its merge base with `main`, as a pull request shows it |
+
+Every target becomes two immutable Git trees before anything is read. Staged and working-tree targets are snapshotted the way `git stash create` does: a copy of the index absorbs the working tree with `git add -A`, so Git's stat cache hashes only changed files. Worktree attributes and `core.autocrlf` are switched off, so blobs hold the exact bytes on disk and no clean filter, diff driver or hook runs. New blobs go to a private object directory that borrows the repository's objects as an alternate; the author's index and object store are not modified. Code shown on a page is read from those trees through one `git cat-file --batch` process, so a page cannot mix two states of a file that changes while it is being built.
+
+`sign_off_code` with `review`, and `explain_change` with `review`, read a captured review's retained trees instead of a live target. Neither tool starts model review; selecting a change and reviewing it stay separate.
 
 ## Activation skills
 
@@ -31,7 +47,7 @@ The tools' own guidance owns invocation mechanics; the skills own what the tools
 
 The tool call carries structure and prose, never code:
 
-- `title`, `intent`, and optional `base`: the git ref to compare with (default `HEAD`).
+- `title`, `intent`, and an optional `target` (see [Selecting the change](#selecting-the-change)), or `review` for a captured review.
 - `focus`: the two-minute path, with references to the changes to read first.
 - `verification`: what was run or checked, and what was not verified.
 - `chapters`: the change in reasoning order. Each chapter has a `kind` (`core`, `consequence`, `support`), an `attention` level (`high`, `medium`, `low`), a Markdown `brief` (lists, tables, code fences, and `mermaid` diagrams render; the page inlines Mermaid only when the agent's prose has a diagram), optional `callouts`, and `changes`.
@@ -41,13 +57,13 @@ The tool call carries structure and prose, never code:
 
 ## How the page is built
 
-- **The diff:** the working tree (staged, unstaged, and untracked files) against the merge base of `base` and `HEAD`, which is how a pull request compares a branch with its target.
-- **Code comes from git:** the server reads it, highlights it with Shiki (light and dark themes), and marks the changed words in each edited line.
+- **The diff:** the selected target's two trees, compared with rename detection.
+- **Code comes from git:** the server reads both sides from Git objects, highlights it with Shiki (light and dark themes), and marks the changed words in each edited line.
 - **Hunks follow the story:** each git hunk is split into runs of changed lines, and a run of added lines (a new file, for example) is also cut at every entry's range boundaries. A run belongs to the first chapter entry whose range overlaps it, and a hunk is cut wherever the owning entry changes, so one git hunk or one new file can span several chapters.
 - **Nothing is hidden:** a run that no entry claims goes to "Not in the story".
 - **Bad references are reported:** a reference that names no change, overlaps no changed lines, or repeats lines already placed becomes a warning. The page shows the warnings on its overview, and the tool result returns them to the agent.
 - **Repeated changes:** the first place is shown in full as the example, and the other places are listed under it. A place is open and flagged when it is more than a consistent rename of the example (for example `invoice` → `tax`, taken from the file names). A changed keyword, value, number, or operator always counts as a difference. The check compares tokens; it is a hint, not proof that the code behaves the same.
-- **Generated files:** lockfiles and paths marked `linguist-generated` in `.gitattributes` start collapsed and are not highlighted. Long hunks are folded.
+- **Generated files:** lockfiles and paths that the head tree's `.gitattributes` mark `linguist-generated` start collapsed and are not highlighted. Long hunks are folded.
 
 ## The page
 
@@ -130,7 +146,7 @@ The agent receives the verdict, the overall comment, each annotation with its re
 
 `explain_change` helps the user understand a change well enough to build on it, after Geoffrey Litt's ["Understanding is the new bottleneck"](https://www.geoffreylitt.com/2026/07/02/understanding-is-the-new-bottleneck). The agent writes the explanation; the page supplies the real code.
 
-- **The change.** Without `head`, the working tree compared with `base` (default `HEAD`: the uncommitted changes), as `sign_off_code` does. With `head`, the change from where `head` meets `base` up to `head`, as a pull request shows it: `base: "X^"` with `head: "X"` explains the single commit `X`.
+- **The change.** The same `target` as `sign_off_code` (see [Selecting the change](#selecting-the-change)); the default explains uncommitted work. `review` explains a captured review's retained source instead.
 - **How the agent prepares.** The tool's guidance has the agent find why the change exists before it writes: the ledger task that governs it, the discussion that led to it when that happened in the same session as the explanation, the context files and docs for the rules it must keep, the wiki for its terms, and the tests for its behavior. The agent then plans backward: it chooses the few ideas the reader must leave with, writes the quiz to test them, and writes the explanation that teaches them.
 - **What the agent writes**, each part as Markdown: `title`, `summary` (the change in one minute), an optional `primer` for a reader new to the area (shown closed), `background` (what was there before), `intuition` (the idea before the code), `steps` (a walkthrough, each a `title` and a `body`), and `quiz`: exactly five questions, three or four options each, one right answer by index, and a `why`. The server rejects an answer that is not one of its options.
 - **Three fences** add what Markdown cannot:

@@ -1,9 +1,6 @@
-export type ReviewTarget =
-	| { kind: "working-tree"; base: string }
-	| { kind: "staged" }
-	| { kind: "commit"; commit: string; parent?: string }
-	| { kind: "range"; base: string; head: string }
-	| { kind: "branch"; base: string; head: string };
+import type { GitTarget } from "../../shared/src/git-change.js";
+
+export type ReviewTarget = GitTarget;
 
 export interface ReviewRequest {
 	cwd: string;
@@ -50,8 +47,9 @@ export interface ReviewArtifact {
 	headTree: string;
 	baseRevision: string;
 	headRevision: string;
-	files: SourceEntry[];
-	index: { path: string; mode: string; blob: string }[] | null;
+	files: Pick<SourceEntry, "path" | "mode" | "blob">[];
+	/** The captured index tree; manifests before Git-native capture retain their entry list. */
+	index: string | { path: string; mode: string; blob: string }[] | null;
 	intent: { origin: string; text: string; hash: string } | null;
 	configuration?: ReviewConfiguration;
 	regions: ChangeRegion[];

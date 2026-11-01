@@ -2,7 +2,6 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { getShellConfig } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it } from "vitest";
 import { runEvidenceFunction } from "../components/pi-exec/src/evidence.js";
 import { guestPythonStubs } from "../components/pi-exec/src/guest-api.js";
@@ -45,15 +44,6 @@ async function run(
 	} finally {
 		await live.close();
 	}
-}
-function fixtureBash(command: string, cwd: string): string {
-	const shell = getShellConfig();
-	const stdin = shell.commandTransport === "stdin";
-	return execFileSync(shell.shell, stdin ? shell.args : [...shell.args, command], {
-		cwd,
-		encoding: "utf8",
-		...(stdin ? { input: command } : {}),
-	});
 }
 function checkout(): string {
 	const cwd = mkdtempSync(join(tmpdir(), "pi-review-python-"));
@@ -116,10 +106,9 @@ describe("Ralph Python programs", () => {
 			const result = await run(
 				"ralph-simple.py",
 				{ goal: "increment", iterations: "3" },
-				async (name, args) => {
-					if (name === "pi.bash") return { ok: true, output: fixtureBash(args.command, cwd) };
+				async () => {
 					calls++;
-					writeFileSync(path, `increment ${calls}`);
+					writeFileSync(path, `increment ${calls}\n`.repeat(4));
 					return { status: "completed", text: "increment done" };
 				},
 				cwd,

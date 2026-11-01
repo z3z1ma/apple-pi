@@ -4,7 +4,7 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 
 import { liveSession, trackLiveSessions } from "../../shared/src/forked-continuation.js";
 import { askAgent, askFork, type Passage } from "./ask-agent.js";
-import { buildCapturedReview, submitCapturedReview } from "./captured-review.js";
+import { buildCapturedReview, capturedChange, submitCapturedReview } from "./captured-review.js";
 import {
 	buildCodeReviewPage,
 	codeReviewTemplate,
@@ -118,6 +118,7 @@ export default function browserPages(pi: ExtensionAPI): void {
 		promptGuidelines: [
 			"Use sign_off_code when the user asks to review your work or when a finished change deserves their review before you continue. It blocks until they submit, so call it at a natural stopping point.",
 			"Pass `cwd` to review another repository or worktree directly from this root session. It may be absolute or relative to the session directory. File references are relative to the target repository root; browser tools run in the root session only.",
+			"Pass `target` to choose the change exactly as `review_code` does; omit it for uncommitted work (tracked, staged and untracked) against HEAD. Pass `review` instead to sign off on a captured review's retained source and assessment.",
 			"Tell the change as a story: core chapters first, consequences next, tests and docs last. Give every change a one-sentence summary and set attention to where a mistake would hurt.",
 			"Put a picture where prose would make the reviewer build one in their head: a `mermaid` fence in a chapter brief for a flow, a sequence, or a state before and after, and a table for cases with their results.",
 			"When one change repeats across many places, list them under one change with `places`; the page shows one example and flags any place that is more than a rename.",
@@ -241,7 +242,7 @@ export default function browserPages(pi: ExtensionAPI): void {
 		promptSnippet:
 			"Open a rich explanation of a code change (background, intuition, walkthrough over real code, quiz) in the user's browser",
 		promptGuidelines: [
-			"Use explain_change when the user asks to understand a change, a commit, a branch, or a pull request, or when you finish a substantial change they need to build on. Without `head` it explains the working tree against `base` (default HEAD: the uncommitted changes); pass `head` (with `base`, such as `<commit>^`) to explain any commit or range in history.",
+			'Use explain_change when the user asks to understand a change, a commit, a branch, or a pull request, or when you finish a substantial change they need to build on. Pass `target` to choose the change exactly as `review_code` does: omit it for uncommitted work, use `{"kind":"commit","commit":"X"}` for one commit, `branch` for a pull-request view and `range` for exact endpoints. Pass `review` to explain a captured review\'s retained source.',
 			"Pass `cwd` to explain another repository or worktree directly from this root session. It may be absolute or relative to the session directory. Code fences use paths relative to the target repository root; browser tools run in the root session only.",
 			"Before you write, find why the change exists, not only what it does: read the surrounding code, the ledger task that governs it (intent, decisions, retrospective), its discussion if it happened in this session (`search_session`), the context files and docs for the rules it must keep, the wiki for its terms, and the tests for its behavior. Teach the reasons, the options it rejected, and the rules the next change must respect.",
 			"Plan backward: choose the two or three ideas the reader must leave with, write the quiz to test them, then write the explanation that teaches them.",
@@ -251,11 +252,13 @@ export default function browserPages(pi: ExtensionAPI): void {
 		],
 		parameters: ExplainChangeParamsSchema,
 		executionMode: "sequential",
-		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+		async execute(_toolCallId, params, signal, _onUpdate, ctx) {
 			if (!ctx.hasUI)
 				return { content: text("No user is attached to this run, so no explanation was opened."), details: undefined };
 			const token = randomBytes(24).toString("hex");
-			const { page, root, warnings } = await buildExplainPage(params as ExplainChangeParams, ctx.cwd, token);
+			const { page, root, warnings } = await buildExplainPage(params as ExplainChangeParams, ctx.cwd, token, (review) =>
+				capturedChange(ctx.sessionManager.getSessionId(), review, signal),
+			);
 			const template = await explainTemplate(page);
 			// The saved copy is for sharing: no session, no reader state, so it reads as a plain page anywhere.
 			const saved = await savePage(

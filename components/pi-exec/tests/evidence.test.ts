@@ -1,11 +1,11 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as pi from "@earendil-works/pi-coding-agent";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import runtime from "../src/index.js";
 import { containsContextMarks, fitContext, runEvidenceFunction } from "../src/evidence.js";
+import runtime from "../src/index.js";
 
 vi.mock("@earendil-works/pi-coding-agent", async (importOriginal) => {
 	const actual = await importOriginal<typeof pi>();
@@ -68,12 +68,15 @@ describe("public evidence library", () => {
 		put("feature.ts", "export const value = 3;\nconst stage = true;\nconst dirty = true;\n");
 		put("new ' file.ts", "untracked\n");
 		const change = await call("git_change");
-		expect(change.patch).toBe(git("diff", "--no-ext-diff", "--unified=3", "HEAD"));
-		expect(change.changedFiles).toEqual(["feature.ts"]);
-		expect(change.untrackedFiles).toEqual(["new ' file.ts"]);
-		expect(change).toMatchObject({ additions: 3, deletions: 1, status: { dirty: true } });
-		expect(change.statusText).toContain("MM feature.ts");
-		expect(await call("git_patch", { paths: ["feature.ts"] })).toBe(change.patch);
+		expect(change.patch).toContain(git("diff", "--no-ext-diff", "--unified=3", "HEAD"));
+		expect(change.patch).toContain("+untracked");
+		expect(change.changedFiles).toEqual(["feature.ts", "new ' file.ts"]);
+		expect(change).toMatchObject({ additions: 4, deletions: 1, target: { kind: "working-tree", base: "HEAD" } });
+		expect(await call("git_patch", { paths: ["feature.ts"] })).toBe(
+			git("diff", "--no-ext-diff", "--unified=3", "HEAD", "--", "feature.ts"),
+		);
+		expect((await call("git_change", { target: { kind: "staged" } })).changedFiles).toEqual(["feature.ts"]);
+		expect((await call("git_change")).headTree).toBe(change.headTree);
 		git("add", ".");
 		git("commit", "-qm", "second");
 		git("mv", "feature.ts", "renamed feature.ts");
@@ -85,15 +88,18 @@ describe("public evidence library", () => {
 		expect(renamed.changedFiles).toEqual(expect.arrayContaining(["feature.ts", "renamed feature.ts", "binary"]));
 	});
 
-	it("resolves committed boundaries without including unrelated untracked files and rejects bad revisions", async () => {
+	it("resolves committed targets without unrelated untracked files and rejects bad targets", async () => {
 		put("feature.ts", "changed\n");
 		git("commit", "-am", "change");
 		put("untracked", "local");
-		const change = await call("git_change", { compare: "HEAD~1...HEAD" });
+		const change = await call("git_change", { target: { kind: "range", base: "HEAD~1", head: "HEAD" } });
 		expect(change.changedFiles).toEqual(["feature.ts"]);
-		expect(change.untrackedFiles).toEqual([]);
-		await expect(call("git_change", { compare: "does-not-exist" })).rejects.toThrow();
-		await expect(call("git_change", { compare: "--output=oops" })).rejects.toThrow("not an option");
+		expect((await call("git_change", { target: { kind: "commit", commit: "HEAD" } })).patch).toBe(change.patch);
+		await expect(call("git_change", { target: { kind: "commit", commit: "does-not-exist" } })).rejects.toThrow();
+		await expect(
+			call("git_change", { target: { kind: "range", base: "--output=oops", head: "HEAD" } }),
+		).rejects.toThrow("Cannot resolve");
+		await expect(call("git_change", { target: "HEAD~1..HEAD" })).rejects.toThrow("target must be a Git target");
 	});
 
 	it("fits JSON-roundtripped marks, preserves required data, and reports every clipped/dropped path", async () => {

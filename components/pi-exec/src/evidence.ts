@@ -3,6 +3,16 @@ import { readFile, stat } from "node:fs/promises";
 import { basename, join, posix } from "node:path";
 import { setImmediate } from "node:timers/promises";
 import { getShellConfig } from "@earendil-works/pi-coding-agent";
+import { Value } from "typebox/value";
+import {
+	GIT_DIFF,
+	GIT_TARGET_HELP,
+	type GitChange,
+	type GitTarget,
+	GitTargetSchema,
+	openGitChange,
+	WORKING_TREE,
+} from "../../shared/src/git-change.js";
 import { killProcessTree } from "../../tasks/src/process-killer.js";
 
 type RecordValue = Record<string, any>;
@@ -27,16 +37,16 @@ export const EVIDENCE_FUNCTION_NAMES = [
 export type EvidenceFunctionName = (typeof EVIDENCE_FUNCTION_NAMES)[number];
 export function evidencePythonStubs(): string {
 	return [
-		"async def git_change(*, compare: str = ..., paths: list[str] = ...) -> dict[str, Any]: ...",
-		"async def git_patch(*, compare: str = ..., paths: list[str] = ...) -> str: ...",
-		"async def repo_change_neighborhood(*, compare: str = ..., paths: list[str] = ..., include: list[str] = ...) -> dict[str, Any]: ...",
+		"async def git_change(*, target: dict[str, str] = ..., paths: list[str] = ...) -> dict[str, Any]: ...",
+		"async def git_patch(*, target: dict[str, str] = ..., paths: list[str] = ...) -> str: ...",
+		"async def repo_change_neighborhood(*, target: dict[str, str] = ..., paths: list[str] = ..., include: list[str] = ...) -> dict[str, Any]: ...",
 		"async def context_required(*, value: Any) -> dict[str, Any]: ...",
 		"async def context_clippable(*, value: str, max_chars: int = ..., strategy: str = ..., marker: str = ..., priority: float = ...) -> dict[str, Any]: ...",
 		"async def context_droppable(*, value: Any, priority: float = ...) -> dict[str, Any]: ...",
 		"async def context_fit(*, value: Any, max_serialized_chars: int = ..., flags: dict[str, str] = ...) -> dict[str, Any]: ...",
 		"async def context_pack(*, items: list[Any], id: str = ..., priority: str = ..., fields: dict[str, int] = ..., max_serialized_chars: int = ...) -> dict[str, Any]: ...",
-		"async def dev_find_relevant_tests(*, compare: str = ..., paths: list[str] = ...) -> dict[str, Any]: ...",
-		"async def dev_run_relevant_tests(*, compare: str = ..., paths: list[str] = ..., command: str = ..., max_tests: int = ..., timeout: float = ...) -> dict[str, Any]: ...",
+		"async def dev_find_relevant_tests(*, target: dict[str, str] = ..., paths: list[str] = ...) -> dict[str, Any]: ...",
+		"async def dev_run_relevant_tests(*, target: dict[str, str] = ..., paths: list[str] = ..., command: str = ..., max_tests: int = ..., timeout: float = ...) -> dict[str, Any]: ...",
 	].join("\n");
 }
 
@@ -122,11 +132,33 @@ function pathArgs(options: RecordValue): string[] {
 	const paths = options.paths === undefined ? [] : strings(options.paths, "paths");
 	return paths.length ? ["--", ...paths] : [];
 }
-function comparison(options: RecordValue): string {
-	const compare = options.compare ?? "HEAD";
-	if (typeof compare !== "string" || !compare || compare.startsWith("-") || /[\s\0]/.test(compare))
-		throw new TypeError("compare must be a git revision or range, not an option");
-	return compare;
+function target(options: RecordValue): GitTarget {
+	const value = options.target ?? WORKING_TREE;
+	if (!Value.Check(GitTargetSchema, value)) throw new TypeError(`target must be a Git target. ${GIT_TARGET_HELP}`);
+	return value;
+}
+const EVIDENCE_OUTPUT_LIMIT = 8 * 1024 * 1024;
+/** The same snapshot review_code, sign_off_code and explain_change select; trees make repeat calls comparable. */
+async function withChange<T>(
+	options: RecordValue,
+	env: EvidenceEnvironment,
+	use: (change: GitChange, diff: (...args: string[]) => Promise<string>) => Promise<T>,
+): Promise<T> {
+	const change = await openGitChange(env.cwd, target(options), { signal: env.signal });
+	try {
+		const scope = pathArgs(options);
+		const diff = async (...args: string[]) => {
+			const output = await change.git([...GIT_DIFF, ...args, change.baseTree, change.headTree, ...scope], {
+				signal: env.signal,
+			});
+			if (output.length > EVIDENCE_OUTPUT_LIMIT)
+				throw new Error("Evidence command output exceeded 8 MiB; narrow the paths");
+			return output.toString("utf8");
+		};
+		return await use(change, diff);
+	} finally {
+		await change.close();
+	}
 }
 function nameStatus(output: string): RecordValue[] {
 	const fields = output.split("\0").filter(Boolean);
@@ -139,63 +171,39 @@ function nameStatus(output: string): RecordValue[] {
 	}
 	return result;
 }
-async function gitPatch(options: RecordValue, env: EvidenceEnvironment): Promise<string> {
-	return git(["diff", "--no-ext-diff", "--no-textconv", "--unified=3", comparison(options), ...pathArgs(options)], env);
+function gitPatch(options: RecordValue, env: EvidenceEnvironment): Promise<string> {
+	return withChange(options, env, (_change, diff) => diff("--unified=3"));
 }
-async function gitChange(options: RecordValue, env: EvidenceEnvironment): Promise<RecordValue> {
-	const compare = comparison(options);
-	const paths = pathArgs(options);
-	const diff = ["diff", "--no-ext-diff", "--no-textconv"];
-	const [porcelain, statText, patch, names, untracked, numstat] = await Promise.all([
-		git(["status", "--porcelain=v1", "-z", "--untracked-files=all", ...paths], env),
-		git([...diff, "--stat", compare, ...paths], env),
-		gitPatch(options, env),
-		git([...diff, "--name-status", "-z", compare, ...paths], env),
-		// Committed comparisons do not acquire unrelated working-tree files.
-		compare.includes("..")
-			? Promise.resolve("")
-			: git(["ls-files", "--others", "--exclude-standard", "-z", ...paths], env),
-		git([...diff, "--numstat", compare, ...paths], env),
-	]);
-	const entries: RecordValue[] = [];
-	const fields = porcelain.split("\0").filter(Boolean);
-	for (let i = 0; i < fields.length; i++) {
-		const field = fields[i];
-		const entry: RecordValue = {
-			index: field[0],
-			worktree: field[1],
-			path: field.slice(3),
-			untracked: field.startsWith("??"),
+function gitChange(options: RecordValue, env: EvidenceEnvironment): Promise<RecordValue> {
+	return withChange(options, env, async (change, diff) => {
+		const [stat, patch, names, numstat] = await Promise.all([
+			diff("--stat"),
+			diff("--unified=3"),
+			diff("--find-renames", "--name-status", "-z"),
+			diff("--numstat"),
+		]);
+		const totals = { additions: 0, deletions: 0 };
+		for (const line of numstat.split("\n")) {
+			const [add, del] = line.split("\t");
+			totals.additions += Number(add) || 0;
+			totals.deletions += Number(del) || 0;
+		}
+		const namesParsed = nameStatus(names);
+		return {
+			target: change.target,
+			baseCommit: change.baseCommit,
+			headCommit: change.headCommit,
+			baseTree: change.baseTree,
+			headTree: change.headTree,
+			...(options.paths ? { paths: options.paths } : {}),
+			stat,
+			patch,
+			changedFiles: unique(namesParsed.flatMap((entry) => (entry.from ? [entry.from, entry.path] : [entry.path]))),
+			renames: namesParsed.filter((entry) => entry.code === "R"),
+			...totals,
+			nameStatus: namesParsed,
 		};
-		if (/[RC]/.test(field.slice(0, 2))) entry.from = fields[++i];
-		entries.push(entry);
-	}
-	const totals = { additions: 0, deletions: 0 };
-	for (const line of numstat.split("\n")) {
-		const [add, del] = line.split("\t");
-		totals.additions += Number(add) || 0;
-		totals.deletions += Number(del) || 0;
-	}
-	const namesParsed = nameStatus(names);
-	return {
-		compare,
-		...(options.paths ? { paths: options.paths } : {}),
-		status: {
-			entries,
-			dirty: entries.length > 0,
-			untrackedFiles: entries.filter((entry) => entry.untracked).map((entry) => entry.path),
-		},
-		statusText: entries
-			.map((entry) => `${entry.index}${entry.worktree} ${entry.path}${entry.from ? ` <- ${entry.from}` : ""}`)
-			.join("\n"),
-		stat: statText,
-		patch,
-		changedFiles: unique(namesParsed.flatMap((entry) => (entry.from ? [entry.from, entry.path] : [entry.path]))),
-		untrackedFiles: untracked.split("\0").filter(Boolean),
-		renames: namesParsed.filter((entry) => entry.code === "R"),
-		...totals,
-		nameStatus: namesParsed,
-	};
+	});
 }
 
 // Marks cross Monty's JSON boundary, so they are explicit records, not WeakMap identities.
@@ -485,7 +493,7 @@ async function neighborhood(args: RecordValue, env: EvidenceEnvironment): Promis
 		if (!["definitions", "references", "tests", "config", "owners"].includes(item))
 			throw new TypeError(`Unsupported neighborhood include: ${item}`);
 	const change = await gitChange(args, env);
-	const changed = unique<string>([...change.changedFiles, ...change.untrackedFiles]);
+	const changed: string[] = change.changedFiles;
 	const result: RecordValue = { change };
 	const allFiles =
 		include.has("tests") || include.has("definitions") || include.has("references") ? await repositoryFiles(env) : [];
@@ -515,7 +523,7 @@ async function testCommands(env: EvidenceEnvironment): Promise<RecordValue> {
 async function findTests(args: RecordValue, env: EvidenceEnvironment): Promise<RecordValue> {
 	const nearby = await neighborhood({ ...args, include: ["tests"] }, env);
 	return {
-		files: unique([...nearby.change.changedFiles, ...nearby.change.untrackedFiles]),
+		files: nearby.change.changedFiles,
 		tests: nearby.tests,
 		commands: await testCommands(env),
 	};

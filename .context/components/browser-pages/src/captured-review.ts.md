@@ -1,6 +1,6 @@
 ## file
 
-Captured sign-off builds from retained region patches, not the author checkout or source-file highlighting. The page binds the review, digest, assessment revision, plan revision and displayed limits. A human result is successful only after the sole runtime writer applies its revision-bound approval; parse/commit is asynchronous, and uncertain delivery retains a deterministic command identity for the same page/verdict. A later assessment must refuse an old page instead of silently approving new evidence.
+Captured sign-off reads the retained capture's own trees (readCapturedChange), limited to the reviewed paths, never the author checkout. It highlights both sides from those objects. The page binds the review, digest, assessment revision, plan revision and displayed limits. A human result is successful only after the sole runtime writer applies its revision-bound approval; parse/commit is asynchronous, and uncertain delivery retains a deterministic command identity for the same page/verdict. A later assessment must refuse an old page instead of silently approving new evidence.
 
 Opening sign-off verifies captured source and explicitly labels live freshness unchecked. Full freshness is a separate requested observation: a live repository probe took about58 seconds, so opening a retained assessment must not automatically perform two fresh captures before displaying the page. Null checkedAt is distinct from an observation timestamp.
 

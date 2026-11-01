@@ -1,9 +1,9 @@
-import { readFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { resolve } from "node:path";
 
 import { type Static, Type } from "typebox";
 
-import { commitOf, type RawLine, type RepoDiff, readBaseFile, readRepoDiff } from "./git-diff.js";
+import { GIT_TARGET_HELP, type GitTarget, GitTargetSchema, WORKING_TREE } from "../../shared/src/git-change.js";
+import { type RawLine, type RepoDiff, readChange } from "./git-diff.js";
 import { highlightLines } from "./highlight.js";
 import { blocksOf, isObject, withDiagrams } from "./markdown-review.js";
 import type { CodeExcerpt, ExplainChangePage, ExplainPart, Segment, TutorTurn } from "./page-data.js";
@@ -21,13 +21,14 @@ export const ExplainChangeParamsSchema = Type.Object({
 		}),
 	),
 	title: Type.String({ description: "What the change does, as a headline" }),
-	base: Type.Optional(
-		Type.String({ description: "Git ref to compare with. Default HEAD: without `head`, the uncommitted changes" }),
-	),
-	head: Type.Optional(
+	target: Type.Optional({
+		...GitTargetSchema,
+		description: `${GIT_TARGET_HELP} Default: the working tree against HEAD.`,
+	}),
+	review: Type.Optional(
 		Type.String({
-			description:
-				"Commit to explain up to, for a past commit or range. The change runs from where `head` meets `base`, as a pull request shows it: `base` `X^` with `head` `X` is the single commit X. Omit to explain the working tree against `base`",
+			minLength: 1,
+			description: "Captured review ID or request handle: explain its retained source instead of a live target.",
 		}),
 	),
 	summary: markdown("The change in one minute: one short paragraph"),
@@ -81,7 +82,7 @@ function marksOf(lines: RawLine[]) {
 }
 
 /** Reads `code path:FROM-TO` references against the change, with every file read and highlighted once. */
-function excerpts(diff: RepoDiff, until: string | undefined) {
+function excerpts(diff: RepoDiff) {
 	const highlighted = new Map<string, Promise<Segment[][] | undefined>>();
 	const lines = (key: string, path: string, read: () => Promise<string | undefined>) => {
 		if (!highlighted.has(key))
@@ -91,11 +92,9 @@ function excerpts(diff: RepoDiff, until: string | undefined) {
 			);
 		return highlighted.get(key)!;
 	};
-	const after = (path: string) =>
-		lines(`new:${path}`, path, () =>
-			until ? readBaseFile(diff.root, until, path) : readFile(join(diff.root, path), "utf8").catch(() => undefined),
-		);
-	const before = (path: string) => lines(`old:${path}`, path, () => readBaseFile(diff.root, diff.baseCommit, path));
+	const text = (side: "before" | "after", path: string) => async () => (await diff.read(side, path))?.toString("utf8");
+	const after = (path: string) => lines(`new:${path}`, path, text("after", path));
+	const before = (path: string) => lines(`old:${path}`, path, text("before", path));
 
 	return async (reference: string): Promise<CodeExcerpt | string> => {
 		const match = REFERENCE.exec(reference);
@@ -107,7 +106,7 @@ function excerpts(diff: RepoDiff, until: string | undefined) {
 		// A file the change deletes has only its old lines, so its references count lines before the change.
 		const gone = file?.status === "D" ? await before(path) : undefined;
 		const now = gone ?? (await after(path));
-		if (!now) return `\`${path}\` does not exist ${until ? `at ${until}` : "in the working tree"}.`;
+		if (!now) return `\`${path}\` does not exist after the change.`;
 		if (from < 1 || to < from || to > now.length) return `\`${reference}\`: \`${path}\` has ${now.length} lines.`;
 		if (gone)
 			return {
@@ -153,27 +152,38 @@ export async function buildExplainPage(
 	params: ExplainChangeParams,
 	cwd: string,
 	token: string,
+	captured?: (review: string) => Promise<RepoDiff>,
 ): Promise<{ page: ExplainChangePage; root: string; warnings: string[] }> {
 	for (const [i, q] of params.quiz.entries())
 		if (q.answer >= q.options.length)
 			throw new Error(`Quiz question ${i + 1}: \`answer\` ${q.answer} is not one of its ${q.options.length} options.`);
-	const base = params.base?.trim() || "HEAD";
-	const until = params.head?.trim() || undefined;
-	const diff = await readRepoDiff(resolve(cwd, params.cwd ?? "."), base, until);
-	const head = until ? await commitOf(diff.root, until) : undefined;
-	if (until && !head) throw new Error(`\`${until}\` names no commit.`);
-	const single = head && (await commitOf(diff.root, `${until}^`))?.hash === diff.baseCommit;
-	const short = (hash: string) => hash.slice(0, 7);
-	const ref = head
-		? single
-			? short(head.hash)
-			: `${short(diff.baseCommit)}..${short(head.hash)}`
-		: base === "HEAD"
-			? "uncommitted changes"
-			: `${base}…working tree`;
+	if (params.review && !captured) throw new Error("Captured reviews are not available here");
+	const target = params.target ?? WORKING_TREE;
+	const diff = params.review
+		? await captured!(params.review)
+		: await readChange(resolve(cwd, params.cwd ?? "."), target);
+	try {
+		return await explanation(params, token, diff, params.review ? undefined : target);
+	} finally {
+		await diff.close();
+	}
+}
+
+async function explanation(
+	params: ExplainChangeParams,
+	token: string,
+	diff: RepoDiff,
+	target?: GitTarget,
+): Promise<{ page: ExplainChangePage; root: string; warnings: string[] }> {
+	const ref =
+		target?.kind === "commit"
+			? diff.labels.head
+			: target?.kind === "working-tree" && target.base === "HEAD"
+				? "uncommitted changes"
+				: `${diff.labels.base}..${diff.labels.head}`;
 
 	const warnings: string[] = [];
-	const excerpt = excerpts(diff, head?.hash);
+	const excerpt = excerpts(diff);
 	const parts = (source: string) => partsOf(source, excerpt, warnings);
 	const steps = await Promise.all(params.steps.map(async (s) => ({ title: s.title, parts: await parts(s.body) })));
 	const sections = {
@@ -194,7 +204,7 @@ export async function buildExplainPage(
 			kind: "explain-change",
 			title: params.title.trim(),
 			ref,
-			subject: single ? head.subject : undefined,
+			subject: diff.subject,
 			stats,
 			covered: [...new Set(cited)],
 			...sections,

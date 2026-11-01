@@ -1,33 +1,24 @@
 import { isUtf8 } from "node:buffer";
 import { createHash } from "node:crypto";
-import { chmod, lstat, mkdir, readFile, readlink, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { type GitOptions, gitBytes } from "../../shared/src/git.js";
+import type { GitOptions } from "../../shared/src/git.js";
+import {
+	copyIndex,
+	GIT_DIFF,
+	type GitChange,
+	gitLine,
+	gitRun,
+	objectReader,
+	openGitChange,
+	rawFlags,
+} from "../../shared/src/git-change.js";
 import { canonical, within } from "../../shared/src/real-path.js";
-import { blobStore, gitObjects } from "./git-objects.js";
 import { reviewConfiguration } from "./policy.js";
-import type { ChangeRegion, ReviewArtifact, ReviewRequest, ReviewTarget, SourceEntry } from "./types.js";
+import type { ChangeRegion, ReviewArtifact, ReviewRequest, SourceEntry } from "./types.js";
 
-type BlobStore = Awaited<ReturnType<typeof blobStore>>;
-type EntryReference = Pick<SourceEntry, "path" | "mode" | "blob">;
-
-const ENV: NodeJS.ProcessEnv = {
-	GIT_DIR: undefined,
-	GIT_WORK_TREE: undefined,
-	GIT_INDEX_FILE: undefined,
-	GIT_COMMON_DIR: undefined,
-	GIT_OBJECT_DIRECTORY: undefined,
-	GIT_ALTERNATE_OBJECT_DIRECTORIES: undefined,
-	GIT_CONFIG_COUNT: undefined,
-	GIT_CONFIG_PARAMETERS: undefined,
-	GIT_NO_REPLACE_OBJECTS: "1",
-	GIT_CONFIG_GLOBAL: "/dev/null",
-	GIT_CONFIG_NOSYSTEM: "1",
-	GIT_NO_LAZY_FETCH: "1",
-	GIT_TERMINAL_PROMPT: "0",
-};
-const FLAGS = ["--no-pager", "-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null"];
-const DIFF = ["diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--no-color"];
+const DIFF = [...GIT_DIFF, "--no-renames"];
 const hash = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
 
 function artifactDigest(artifact: ReviewArtifact): string {
@@ -55,54 +46,64 @@ function artifactDigest(artifact: ReviewArtifact): string {
 	);
 }
 
-async function verifyCapturedGit(artifact: ReviewArtifact, signal?: AbortSignal): Promise<void> {
+const bytes = (cwd: string, args: string[], options?: GitOptions) => gitRun(cwd, args, options);
+const text = (cwd: string, args: string[], options?: GitOptions) => gitLine(cwd, args, options);
+
+function scopedPatch(artifact: ReviewArtifact, signal?: AbortSignal) {
+	return bytes(
+		artifact.source,
+		[
+			"--literal-pathspecs",
+			...DIFF,
+			"--binary",
+			artifact.baseTree,
+			artifact.headTree,
+			"--",
+			...(artifact.request.paths ?? []),
+		],
+		{ signal },
+	);
+}
+
+/** Manifest, refs and comparison identity: enough to browse retained objects without the materialized copy. */
+export async function verifyCapturedSource(artifact: ReviewArtifact, signal?: AbortSignal): Promise<void> {
 	if (artifactDigest(artifact) !== artifact.digest) throw new Error("Review manifest identity changed");
 	if (hash(await readFile(join(dirname(artifact.source), "change.patch"))) !== artifact.patchHash)
 		throw new Error("Captured patch changed");
-	if (
-		(await text(artifact.source, ["rev-parse", "HEAD"], { signal })) !== artifact.headRevision ||
-		(await text(artifact.source, ["rev-parse", "base"], { signal })) !== artifact.baseRevision
-	)
+	const [head, base] = (await text(artifact.source, ["rev-parse", "HEAD", "base"], { signal })).split("\n");
+	if (head !== artifact.headRevision || base !== artifact.baseRevision)
 		throw new Error("Captured Git revisions changed");
-	await text(artifact.source, ["fsck", "--no-reflogs"], { signal });
-	if (
-		hash(
-			await bytes(
-				artifact.source,
-				[
-					"--literal-pathspecs",
-					...DIFF,
-					"--binary",
-					artifact.baseTree,
-					artifact.headTree,
-					"--",
-					...(artifact.request.paths ?? []),
-				],
-				{ signal },
-			),
-		) !== artifact.patchHash
-	)
-		throw new Error("Captured comparison changed");
+	if (hash(await scopedPatch(artifact, signal)) !== artifact.patchHash) throw new Error("Captured comparison changed");
 }
 
+/** Full integrity before recovery and decisions: every retained object, and the materialized checkout's bytes. */
 export async function verifyArtifact(artifact: ReviewArtifact, signal?: AbortSignal): Promise<void> {
-	await verifyCapturedGit(artifact, signal);
-	for await (const { entry, data: expected } of entryContents(artifact.source, artifact.files, signal)) {
-		const path = join(artifact.source, safePath(entry.path));
-		const stat = await lstat(path).catch(absent);
-		const mode = stat?.isSymbolicLink()
-			? "120000"
-			: stat?.isDirectory()
-				? "160000"
-				: stat?.isFile()
-					? stat.mode & 0o111
-						? "100755"
-						: "100644"
-					: undefined;
-		if (mode !== entry.mode) throw new Error(`Captured source changed: ${entry.path}`);
-		if (mode === "160000") continue;
-		const data = mode === "120000" ? await readlink(path, { encoding: "buffer" }) : await readFile(path);
-		if (!data.equals(expected)) throw new Error(`Captured source changed: ${entry.path}`);
+	await verifyCapturedSource(artifact, signal);
+	await text(artifact.source, ["fsck", "--no-reflogs", "--no-dangling"], { signal });
+	const raw = rawFlags(await text(artifact.source, ["rev-parse", "--show-object-format"], { signal }));
+	// Git's stat cache makes repeat checks cheap; refreshing the checkout's own index keeps it warm. When a
+	// reviewer holds the index lock, a private copy gives the same answer without waiting.
+	const check = async (env?: NodeJS.ProcessEnv) => {
+		await bytes(artifact.source, [...raw, "update-index", "-q", "--refresh"], { signal, env }).catch((error: Error) => {
+			if (/index\.lock/.test(error.message)) throw error;
+		});
+		const changed = paths(await bytes(artifact.source, [...raw, "diff-files", "--name-only", "-z"], { signal, env }));
+		if (changed.length) throw new Error(`Captured source changed: ${changed[0]}`);
+		if ((await text(artifact.source, ["write-tree"], { signal, env })) !== artifact.headTree)
+			throw new Error("Captured source changed: the checkout index no longer matches the captured tree");
+	};
+	try {
+		await check();
+	} catch (error) {
+		if (!/index\.lock/.test((error as Error).message)) throw error;
+		const scratch = await mkdtemp(join(tmpdir(), "review-verify-"));
+		try {
+			const index = join(scratch, "index");
+			await copyIndex(join(artifact.source, ".git", "index"), index);
+			await check({ GIT_INDEX_FILE: index });
+		} finally {
+			await rm(scratch, { recursive: true, force: true });
+		}
 	}
 }
 
@@ -112,13 +113,13 @@ export async function readCapturedSource(
 	signal?: AbortSignal,
 ) {
 	const path = options.path === undefined ? undefined : safePath(options.path);
-	await verifyCapturedGit(artifact, signal);
+	await verifyCapturedSource(artifact, signal);
 	const side = options.side ?? "after";
 	const tree = side === "before" ? artifact.baseTree : artifact.headTree;
 	const identity = { artifact: artifact.digest, side, tree };
-	const entries = await treeReferences(artifact.source, tree, signal);
-	if (path === undefined) return { ...identity, kind: "files" as const, files: entries };
-	const entry = entries.find((entry) => entry.path === path);
+	if (path === undefined)
+		return { ...identity, kind: "files" as const, files: await treeReferences(artifact.source, tree, signal) };
+	const entry = (await treeReferences(artifact.source, tree, signal, path)).find((entry) => entry.path === path);
 	if (!entry) throw new Error(`No captured file on the ${side} side: ${JSON.stringify(path)}`);
 	const data =
 		entry.mode === "160000" ? null : await bytes(artifact.source, ["cat-file", "blob", entry.blob], { signal });
@@ -131,12 +132,6 @@ export async function readCapturedSource(
 	};
 }
 
-function bytes(cwd: string, args: string[], options: GitOptions = {}) {
-	return gitBytes(cwd, [...FLAGS, ...args], { ...options, env: { ...ENV, ...options.env } });
-}
-async function text(cwd: string, args: string[], options?: GitOptions) {
-	return (await bytes(cwd, args, options)).toString("utf8").replace(/\n$/, "");
-}
 function paths(value: Buffer): string[] {
 	if (!isUtf8(value)) throw new Error("Review capture requires UTF-8 Git paths");
 	return value.toString("utf8").split("\0").filter(Boolean);
@@ -150,10 +145,11 @@ function safePath(path: string) {
 		throw new Error(`Cannot materialize Git path: ${JSON.stringify(path)}`);
 	return path;
 }
+const LFS = "version https://git-lfs.github.com/spec/v1\n";
 function classify(mode: string, data: Buffer): SourceEntry["content"] {
 	if (mode === "120000") return "symlink";
 	if (mode === "160000") return "submodule";
-	if (data.subarray(0, 43).toString() === "version https://git-lfs.github.com/spec/v1\n") return "lfs";
+	if (data.subarray(0, LFS.length).toString() === LFS) return "lfs";
 	return data.includes(0) || !isUtf8(data) ? "binary" : "text";
 }
 async function absent(error: unknown): Promise<undefined> {
@@ -162,166 +158,69 @@ async function absent(error: unknown): Promise<undefined> {
 	return undefined;
 }
 
-async function store(blobs: BlobStore, path: string, mode: string, data: Buffer): Promise<SourceEntry> {
-	const blob = mode === "160000" ? data.toString() : await blobs.put(data);
-	return { path: safePath(path), mode, blob, content: classify(mode, data) };
+async function treeReferences(root: string, tree: string, signal?: AbortSignal, path?: string) {
+	return (await treeListing(root, tree, signal, path)).map(({ size: _, ...entry }) => entry);
+}
+/** `ls-tree -l` reports blob sizes, so pointer detection reads only small blobs. */
+async function treeListing(root: string, tree: string, signal?: AbortSignal, path?: string) {
+	const args = ["--literal-pathspecs", "ls-tree", "-rlz", "--full-tree", tree, ...(path ? ["--", path] : [])];
+	return paths(await bytes(root, args, { signal })).map((record) => {
+		const tab = record.indexOf("\t");
+		const [mode, , blob, size] = record.slice(0, tab).split(/ +/);
+		return { path: safePath(record.slice(tab + 1)), mode: mode!, blob: blob!, size: Number(size) };
+	});
 }
 
-async function* entryContents(root: string, entries: EntryReference[], signal?: AbortSignal) {
-	const reader = gitObjects(
-		root,
-		entries.filter((entry) => entry.mode !== "160000").map((entry) => entry.blob),
-		ENV,
-		signal,
+/**
+ * Copy exactly the objects both trees reach into one pack in the capture, so it does not depend on the author's
+ * repository. pack-objects reuses stored deltas without searching for new ones (--window=0 halved this step here) and writes
+ * the index itself; fsck checks the result later.
+ */
+async function transferObjects(change: GitChange, source: string, signal?: AbortSignal) {
+	await gitRun(
+		change.repository,
+		["pack-objects", "--revs", "--window=0", "-q", join(source, ".git", "objects", "pack", "pack")],
+		{
+			env: change.env,
+			input: `${change.baseTree}\n${change.headTree}\n`,
+			signal,
+		},
 	);
-	try {
-		for (const entry of entries) {
-			if (entry.mode === "160000") yield { entry, data: Buffer.from(entry.blob) };
-			else {
-				const next = await reader.next();
-				if (next.done) throw new Error(`Missing captured blob: ${entry.path}`);
-				yield { entry, data: next.value };
-			}
-		}
-		await reader.next();
-	} finally {
-		await reader.return(undefined);
-	}
+	await text(source, ["prune-packed"], { signal });
 }
 
-async function copyEntries(root: string, entries: EntryReference[], blobs: BlobStore, signal?: AbortSignal) {
-	const result: SourceEntry[] = [];
-	for await (const { entry, data } of entryContents(root, entries, signal))
-		result.push(await store(blobs, entry.path, entry.mode, data));
-	return result;
-}
-
-async function treeReferences(root: string, tree: string, signal?: AbortSignal): Promise<EntryReference[]> {
-	return paths(await bytes(root, ["ls-tree", "-rz", "--full-tree", tree], { signal })).map((record) => {
-		const tab = record.indexOf("\t");
-		const [mode, , blob] = record.slice(0, tab).split(" ");
-		return { path: safePath(record.slice(tab + 1)), mode: mode!, blob: blob! };
-	});
-}
-
-async function treeEntries(root: string, tree: string, blobs: BlobStore, signal?: AbortSignal): Promise<SourceEntry[]> {
-	return copyEntries(root, await treeReferences(root, tree, signal), blobs, signal);
-}
-
-async function indexEntries(root: string, signal?: AbortSignal) {
-	return paths(await bytes(root, ["ls-files", "--stage", "-z"], { signal })).map((record) => {
-		const tab = record.indexOf("\t");
-		const [mode, blob, stage] = record.slice(0, tab).split(" ");
-		if (stage !== "0") throw new Error("Resolve index conflicts before capturing a review");
-		return { path: safePath(record.slice(tab + 1)), mode: mode!, blob: blob! };
-	});
-}
-
-async function stagedEntries(root: string, blobs: BlobStore, signal?: AbortSignal): Promise<SourceEntry[]> {
-	return copyEntries(root, await indexEntries(root, signal), blobs, signal);
-}
-
-async function workingEntries(root: string, blobs: BlobStore, signal?: AbortSignal): Promise<SourceEntry[]> {
-	const tracked = new Map((await indexEntries(root, signal)).map((entry) => [entry.path, entry]));
-	const names = new Set([
-		...tracked.keys(),
-		...paths(await bytes(root, ["ls-files", "--others", "--exclude-standard", "-z"], { signal })),
-	]);
-	const entries: SourceEntry[] = [];
-	for (const path of [...names].sort()) {
-		signal?.throwIfAborted();
-		safePath(path);
-		// A tracked directory replaced by a link deletes its old children; reading through it would capture unrelated bytes.
-		const parts = path.split("/");
-		let parentPresent = true;
-		for (let i = 1; i < parts.length; i++) {
-			const parent = await lstat(join(root, ...parts.slice(0, i))).catch(absent);
-			if (!parent?.isDirectory()) {
-				parentPresent = false;
-				break;
-			}
-		}
-		if (!parentPresent) continue;
-		const full = join(root, path);
-		const stat = await lstat(full).catch(absent);
-		if (!stat) continue;
-		if (stat.isDirectory()) {
-			if (tracked.get(path)?.mode === "160000") {
-				const top = await realpath(await text(full, ["rev-parse", "--show-toplevel"], { signal }));
-				const commit =
-					top === (await realpath(full))
-						? await text(full, ["rev-parse", "--verify", "HEAD^{commit}"], { signal })
-						: tracked.get(path)!.blob;
-				entries.push(await store(blobs, path, "160000", Buffer.from(commit)));
-			}
-			continue;
-		}
-		if (!stat.isFile() && !stat.isSymbolicLink()) throw new Error(`Unsupported source file: ${JSON.stringify(path)}`);
-		const mode = stat.isSymbolicLink() ? "120000" : stat.mode & 0o111 ? "100755" : "100644";
-		const data = stat.isSymbolicLink() ? await readlink(full, { encoding: "buffer" }) : await readFile(full);
-		entries.push(await store(blobs, path, mode, data));
-	}
-	return entries;
-}
-
-async function writeTree(source: string, entries: SourceEntry[], signal?: AbortSignal): Promise<string> {
-	await text(source, ["read-tree", "--empty"], { signal });
-	await text(source, ["update-index", "-z", "--index-info"], {
-		input: entries.map((entry) => `${entry.mode} ${entry.blob}\t${entry.path}\0`).join(""),
-		signal,
-	});
-	return entries.length ? text(source, ["write-tree"], { signal }) : text(source, ["mktree"], { input: "", signal });
-}
-
-async function materialize(source: string, entries: SourceEntry[], signal?: AbortSignal) {
-	for await (const { entry, data } of entryContents(source, entries, signal)) {
-		signal?.throwIfAborted();
-		const path = join(source, safePath(entry.path));
-		let parent = source;
-		for (const part of entry.path.split("/").slice(0, -1)) {
-			parent = join(parent, part);
-			const existing = await lstat(parent).catch(absent);
-			if (existing && !existing.isDirectory()) throw new Error(`Conflicting source paths: ${entry.path}`);
-			if (!existing) await mkdir(parent);
-		}
-		if (entry.mode === "160000") {
-			await mkdir(path, { recursive: true });
-			continue;
-		}
-		if (entry.mode === "120000") await symlink(data.toString(), path);
-		else {
-			await writeFile(path, data, { flag: "wx" });
-			await chmod(path, entry.mode === "100755" ? 0o755 : 0o644);
-		}
-	}
-}
-
+/** One diff process; `--name-only` and patch output share Git's path order. */
 async function changedRegions(
 	source: string,
 	base: string,
 	head: string,
 	signal?: AbortSignal,
 ): Promise<ChangeRegion[]> {
-	const changed = paths(await bytes(source, [...DIFF, "--name-only", "-z", base, head], { signal }));
+	const [names, output] = await Promise.all([
+		bytes(source, [...DIFF, "--name-only", "-z", base, head], { signal }),
+		bytes(source, [...DIFF, "--unified=0", base, head], { signal }),
+	]);
+	const changed = paths(names);
+	const patch = output.toString("utf8");
+	const starts = [...patch.matchAll(/^diff --git /gm)].map((match) => match.index);
+	if (starts.length !== changed.length) throw new Error("Git patch and path inventory disagree");
 	const regions: ChangeRegion[] = [];
-	for (const path of changed) {
-		const patch = (
-			await bytes(source, ["--literal-pathspecs", ...DIFF, "--unified=0", base, head, "--", path], { signal })
-		).toString("utf8");
-		const hunks = [...patch.matchAll(/^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@.*$/gm)];
+	for (const [n, path] of changed.entries()) {
+		const file = patch.slice(starts[n], starts[n + 1]);
+		const hunks = [...file.matchAll(/^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@.*$/gm)];
 		if (!hunks.length)
 			regions.push({
-				id: hash(`${path}\0${patch}`),
+				id: hash(`${path}\0${file}`),
 				path,
 				kind: "non-text",
 				oldStart: 0,
 				oldCount: 0,
 				newStart: 0,
 				newCount: 0,
-				patch,
+				patch: file,
 			});
 		for (const [i, hunk] of hunks.entries()) {
-			const body = patch.slice(i === 0 ? 0 : hunk.index, hunks[i + 1]?.index);
+			const body = file.slice(i === 0 ? 0 : hunk.index, hunks[i + 1]?.index);
 			regions.push({
 				id: hash(`${path}\0${body}`),
 				path,
@@ -352,34 +251,7 @@ async function changedPaths(source: string, base: string, head: string, signal?:
 	return changes;
 }
 
-async function resolveTarget(root: string, target: ReviewTarget, signal?: AbortSignal) {
-	const commit = (ref: string) =>
-		text(root, ["rev-parse", "--verify", "--end-of-options", `${ref}^{commit}`], { signal });
-	if (target.kind === "commit") {
-		const headCommit = await commit(target.commit);
-		const parents = (await text(root, ["rev-list", "--parents", "-n", "1", headCommit], { signal }))
-			.split(" ")
-			.slice(1);
-		if (parents.length > 1 && !target.parent) throw new Error("A merge commit needs an explicit parent comparison");
-		const baseCommit = target.parent ? await commit(target.parent) : (parents[0] ?? null);
-		if (baseCommit && !parents.includes(baseCommit))
-			throw new Error("The selected comparison is not a parent of this commit; use a range for another base");
-		return { baseCommit, headCommit };
-	}
-	const headCommit = await commit(target.kind === "range" || target.kind === "branch" ? target.head : "HEAD");
-	let baseCommit = target.kind === "staged" ? headCommit : await commit(target.base);
-	if (target.kind === "branch") {
-		const bases = (await text(root, ["merge-base", "--all", baseCommit, headCommit], { signal }))
-			.split("\n")
-			.filter(Boolean);
-		if (bases.length !== 1)
-			throw new Error("A branch review requires one unambiguous merge base; choose an explicit range");
-		baseCommit = bases[0]!;
-	}
-	return { baseCommit, headCommit };
-}
-
-async function captureIntent(request: ReviewRequest): Promise<ReviewArtifact["intent"]> {
+export async function captureIntent(request: ReviewRequest): Promise<ReviewArtifact["intent"]> {
 	if (!request.intent) return null;
 	const origin = "path" in request.intent ? await realpath(resolve(request.cwd, request.intent.path)) : "request";
 	const data = "text" in request.intent ? Buffer.from(request.intent.text) : await readFile(origin);
@@ -387,7 +259,13 @@ async function captureIntent(request: ReviewRequest): Promise<ReviewArtifact["in
 	return { origin, text: data.toString("utf8"), hash: hash(data) };
 }
 
-/** Build a self-contained review repository; only its private index and objects are written. */
+const identity = (change: GitChange) =>
+	JSON.stringify([change.baseCommit, change.headCommit, change.baseTree, change.headTree, change.indexTree]);
+
+/**
+ * Build a self-contained review repository. Git snapshots the target into the capture's own object store,
+ * a pack copies the reachable objects, and checkout-index materializes the head tree for reviewers.
+ */
 export async function captureReview(
 	request: ReviewRequest,
 	destination: string,
@@ -400,42 +278,52 @@ export async function captureReview(
 	const startedAt = Date.now();
 	const repository = await realpath(await text(request.cwd, ["rev-parse", "--show-toplevel"], { signal }));
 	if (within(destination, repository)) throw new Error("Review artifacts must be outside the author's worktree");
-	const commonDirectory = await realpath(
-		resolve(repository, await text(repository, ["rev-parse", "--git-common-dir"], { signal })),
-	);
-	const { baseCommit, headCommit } = await resolveTarget(repository, request.target, signal);
 	const intent = await captureIntent(request);
-	const mutable = request.target.kind === "staged" || request.target.kind === "working-tree";
-	const index = mutable ? await indexEntries(repository, signal) : null;
 	await mkdir(destination, { mode: 0o700 });
 	const source = join(destination, "source");
 	try {
 		await mkdir(source);
 		const format = await text(repository, ["rev-parse", "--show-object-format"], { signal });
 		await text(source, ["init", "-q", "--template=", `--object-format=${format}`], { signal });
-		const blobs = await blobStore(source, format, ENV, signal);
-		const before = baseCommit ? await treeEntries(repository, baseCommit, blobs, signal) : [];
-		const captureEntries =
-			request.target.kind === "staged"
-				? stagedEntries
-				: request.target.kind === "working-tree"
-					? workingEntries
-					: undefined;
-		const files = captureEntries
-			? await captureEntries(repository, blobs, signal)
-			: await treeEntries(repository, headCommit, blobs, signal);
-		await blobs.flush();
-		const binaryPaths = [
-			...new Set([...before, ...files].filter((entry) => entry.content === "binary").map((entry) => entry.path)),
-		];
+		const objects = join(source, ".git", "objects");
+		const change = await openGitChange(repository, request.target, { signal, objects });
+		const { baseTree, headTree, baseCommit, headCommit } = change;
+		await transferObjects(change, source, signal);
+		await text(source, ["mktree"], { input: "", signal });
+		const [before, after] = await Promise.all([
+			treeListing(source, baseTree, signal),
+			treeListing(source, headTree, signal),
+		]);
+		const changedPathsList = paths(await bytes(source, [...DIFF, "--name-only", "-z", baseTree, headTree], { signal }));
+		const reader = objectReader(source, {}, signal);
+		const binaryPaths: string[] = [];
+		const omissions: ReviewArtifact["omissions"] = [];
+		try {
+			for (const path of changedPathsList)
+				for (const tree of [baseTree, headTree]) {
+					const data = await reader.read(`${tree}:${path}`);
+					if (data && classify("100644", data) === "binary" && !binaryPaths.includes(path)) binaryPaths.push(path);
+				}
+			for (const entry of after) {
+				if (entry.mode === "160000")
+					omissions.push({ path: entry.path, reason: "submodule pointer only; referenced content is not captured" });
+				else if (entry.mode !== "120000" && entry.size < 1024) {
+					const data = await reader.read(entry.blob);
+					if (data && classify(entry.mode, data) === "lfs")
+						omissions.push({ path: entry.path, reason: "lfs pointer only; referenced content is not captured" });
+				}
+			}
+		} finally {
+			reader.close();
+		}
 		await mkdir(join(source, ".git", "info"), { recursive: true });
 		await writeFile(
 			join(source, ".git", "info", "attributes"),
 			binaryPaths.map((path) => `${JSON.stringify(`/${path.replace(/[\\*?[\]]/g, "\\$&")}`)} -diff\n`).join(""),
 		);
-		const baseTree = await writeTree(source, before, signal);
-		const headTree = await writeTree(source, files, signal);
-		await materialize(source, files, signal);
+		await text(source, ["read-tree", headTree], { signal });
+		await text(source, [...rawFlags(format), "checkout-index", "--all", "--force", "--index", "-q"], { signal });
+		for (const entry of after) if (entry.mode === "160000") await mkdir(join(source, entry.path), { recursive: true });
 		const commitOptions = {
 			signal,
 			env: {
@@ -458,24 +346,16 @@ export async function captureReview(
 		await text(source, ["update-ref", "refs/heads/base", baseRevision], { signal });
 		await text(source, ["update-ref", "refs/heads/review", headRevision], { signal });
 		await text(source, ["symbolic-ref", "HEAD", "refs/heads/review"], { signal });
-		if (
-			captureEntries &&
-			(JSON.stringify(files) !== JSON.stringify(await captureEntries(repository, blobs, signal)) ||
-				JSON.stringify({ baseCommit, headCommit }) !==
-					JSON.stringify(await resolveTarget(repository, request.target, signal)))
-		)
+		// Mutable sources are snapshotted again after materialization; an observed change refuses the capture.
+		const again = await openGitChange(repository, request.target, { signal, objects });
+		await again.close();
+		if (identity(again) !== identity(change) || JSON.stringify(intent) !== JSON.stringify(await captureIntent(request)))
 			throw new Error("Source changed during capture; capture the review again");
-		if (
-			JSON.stringify(intent) !== JSON.stringify(await captureIntent(request)) ||
-			(mutable && JSON.stringify(index) !== JSON.stringify(await indexEntries(repository, signal)))
-		)
-			throw new Error("Source changed during capture; capture the review again");
-		await blobs.close();
-		const scope = request.paths?.map((path) => safePath(path.replace(/\/$/, ""))) ?? [];
+		const scope = request.paths ?? [];
 		const includes = (path: string) =>
 			scope.length === 0 || scope.some((prefix) => path === prefix || path.startsWith(`${prefix}/`));
 		for (const prefix of scope)
-			if (![...before, ...files].some((entry) => entry.path === prefix || entry.path.startsWith(`${prefix}/`)))
+			if (![...before, ...after].some((entry) => entry.path === prefix || entry.path.startsWith(`${prefix}/`)))
 				throw new Error(`Requested review path does not exist in either snapshot: ${JSON.stringify(prefix)}`);
 		const patch = await bytes(
 			source,
@@ -487,13 +367,7 @@ export async function captureReview(
 		const changes = (await changedPaths(source, baseTree, headTree, signal)).filter(
 			(change) => includes(change.path) || (change.previousPath !== undefined && includes(change.previousPath)),
 		);
-		const omissions = files
-			.filter((entry) => entry.content === "submodule" || entry.content === "lfs")
-			.map((entry) => ({
-				path: entry.path,
-				reason: `${entry.content} pointer only; referenced content is not captured`,
-			}));
-		for (const entry of files.filter((file) => file.content === "symlink")) {
+		for (const entry of after.filter((file) => file.mode === "120000")) {
 			try {
 				const target = canonical(join(source, entry.path));
 				if (!within(target, source))
@@ -513,26 +387,23 @@ export async function captureReview(
 		}
 		for (const path of new Set(allRegions.filter((region) => !includes(region.path)).map((region) => region.path)))
 			omissions.push({ path, reason: "Outside the requested review paths; retained as context" });
-		const identity = {
-			version: 1 as const,
+		const artifact: ReviewArtifact = {
+			version: 1,
 			request,
 			repository,
-			commonDirectory,
+			commonDirectory: await realpath(change.commonDirectory),
 			baseCommit,
 			headCommit,
 			baseTree,
 			headTree,
-			files,
-			index,
+			files: after.map(({ size: _, ...entry }) => entry),
+			index: change.indexTree,
 			intent,
 			configuration: reviewConfiguration(source),
 			regions,
 			changes,
 			omissions,
 			patchHash: hash(patch),
-		};
-		const artifact: ReviewArtifact = {
-			...identity,
 			digest: "",
 			source,
 			baseRevision,
@@ -543,7 +414,9 @@ export async function captureReview(
 		artifact.digest = artifactDigest(artifact);
 		await writeFile(join(destination, "change.patch"), patch);
 		await writeFile(join(destination, "manifest.json"), `${JSON.stringify(artifact, null, 2)}\n`);
-		await verifyArtifact(artifact, signal);
+		await change.close();
+		// fsck runs with full verification before recovery and decisions.
+		await verifyCapturedSource(artifact, signal);
 		if (JSON.stringify(artifact.configuration) !== JSON.stringify(reviewConfiguration(source)))
 			throw new Error("Review configuration changed during capture; capture the review again");
 		return artifact;

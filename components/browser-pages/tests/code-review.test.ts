@@ -102,6 +102,22 @@ describe("buildCodeReviewPage", () => {
 		expect(page.chapters[0].brief.map((b) => b.raw.trim())).toEqual(["First paragraph.", "Second paragraph."]);
 	});
 
+	it("selects staged and committed changes exactly as review_code does, with code read from Git objects", async () => {
+		git("add", "src/retry.ts");
+		const staged = await buildCodeReviewPage(params({ target: { kind: "staged" } }), repo, "token");
+		expect(staged.page.files.map((f) => f.path).sort()).toEqual(["src/old.ts", "src/retry.ts"]);
+		expect(staged.page.head).toBe("staged changes");
+		git("commit", "-q", "-m", "Retry policy");
+		write("src/retry.ts", "live edit after the commit\n");
+		const commit = await buildCodeReviewPage(params({ target: { kind: "commit", commit: "HEAD" } }), repo, "token");
+		expect(commit.page.files.map((f) => f.path).sort()).toEqual(["src/old.ts", "src/retry.ts"]);
+		const text = Object.values(commit.page.hunks)
+			.flatMap((h) => h.lines.map((l) => l.s.map((s) => s.t).join("")))
+			.join("\n");
+		expect(text).toContain("retryPolicy");
+		expect(text).not.toContain("live edit");
+	});
+
 	it("renders the agent's Markdown, and inlines Mermaid only when a brief draws a diagram", async () => {
 		const plain = await buildCodeReviewPage(params(), repo, "token");
 		const drawn = params();

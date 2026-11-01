@@ -7,7 +7,7 @@ description: "Explain a code change through a browser walkthrough with real code
 
 `explain_change` turns your understanding into a page the user can learn from. The tool supplies the real code and the quiz machinery; the explanation is only as good as the model you built first. A page that restates the diff in prose is harder to read than the diff.
 
-**Goal:** the user can reason about the change and continue from it without you. The tool's guidance owns the mechanics (sections, `code` fences, quiz shape, `cwd`, `base`, `head`); this skill owns the quality of what goes in them.
+**Goal:** the user can reason about the change and continue from it without you. The tool's guidance owns the mechanics (sections, `code` fences, quiz shape, `cwd`, `target`, `review`); this skill owns the quality of what goes in them.
 
 ## Build the model
 

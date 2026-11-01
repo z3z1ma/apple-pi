@@ -153,7 +153,7 @@ describe("buildExplainPage with cwd", () => {
 		git(wt, "commit", "-q", "-m", "worktree change");
 		write(wt, "src/b.ts", "export const b = 99;\n");
 		const { page, warnings } = await buildExplainPage(
-			explain("src/b.ts:1-2", { cwd: "wt", base: "HEAD^", head: "HEAD" }),
+			explain("src/b.ts:1-2", { cwd: "wt", target: { kind: "commit", commit: "HEAD" } }),
 			outer,
 			"t",
 		);
