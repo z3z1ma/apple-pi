@@ -206,5 +206,34 @@ test("a lone skip-worktree edit is captured, and a Git process ignoring TERM sti
 	const started = Date.now();
 	await expect(gitBytes(cwd, ["stubborn"], { timeoutMs: 200 })).rejects.toThrow("timed out");
 	expect(Date.now() - started).toBeLessThan(10_000);
-	await expect(gitBytes(cwd, ["log", "--no-such-option"], { maxBytes: 4 })).rejects.toThrow("error output exceeded");
+	await expect(gitBytes(cwd, ["log", "--no-such-option"], { maxBytes: 4 })).rejects.toThrow("output exceeded");
+	const marker = join(cwd, "descendant.pid");
+	git(cwd, "config", "alias.orphan", `!(trap '' TERM; exec sleep 30) >/dev/null 2>&1 & echo $! > ${marker}; sleep 30`);
+	await expect(gitBytes(cwd, ["orphan"], { timeoutMs: 300 })).rejects.toThrow("timed out");
+	const descendant = Number(await readFile(marker, "utf8"));
+	expect(() => process.kill(descendant, 0)).toThrow();
+});
+
+test("an active user-level autocrlf is honoured when snapshotting stat-clean files", async () => {
+	const cwd = await repository();
+	const home = await mkdtemp(join(tmpdir(), "git-home-"));
+	const saved = process.env.HOME;
+	await writeFile(join(home, ".gitconfig"), "[core]\n\tautocrlf = true\n");
+	process.env.HOME = home;
+	try {
+		await writeFile(join(cwd, "crlf.txt"), "one\r\ntwo\r\n");
+		git(cwd, "add", "crlf.txt");
+		git(cwd, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "crlf");
+		await new Promise((resolve) => setTimeout(resolve, 1100));
+		git(cwd, "status", "--porcelain");
+		const change = await openGitChange(cwd, { kind: "working-tree", base: "HEAD" });
+		try {
+			expect((await change.read("after", "crlf.txt"))?.toString()).toBe("one\r\ntwo\r\n");
+		} finally {
+			await change.close();
+		}
+	} finally {
+		process.env.HOME = saved;
+		await rm(home, { recursive: true, force: true });
+	}
 });

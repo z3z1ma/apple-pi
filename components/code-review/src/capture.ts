@@ -13,6 +13,7 @@ import {
 	objectReader,
 	openGitChange,
 	rawFlags,
+	settledAll,
 } from "../../shared/src/git-change.js";
 import { canonical, within } from "../../shared/src/real-path.js";
 import { reviewConfiguration } from "./policy.js";
@@ -224,7 +225,7 @@ async function changedRegions(
 	head: string,
 	signal?: AbortSignal,
 ): Promise<ChangeRegion[]> {
-	const [names, output] = await Promise.all([
+	const [names, output] = await settledAll([
 		bytes(source, [...DIFF, "--name-status", "-z", base, head], { signal }),
 		bytes(source, [...DIFF, "--unified=0", base, head], { signal }),
 	]);
@@ -330,7 +331,7 @@ export async function captureReview(
 		const { baseTree, headTree, baseCommit, headCommit } = change;
 		await transferObjects(change, source, signal);
 		await text(source, ["mktree"], { input: "", signal });
-		const [before, after] = await Promise.all([
+		const [before, after] = await settledAll([
 			treeListing(source, baseTree, signal),
 			treeListing(source, headTree, signal),
 		]);

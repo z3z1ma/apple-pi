@@ -137,10 +137,14 @@ describe("buildExplainPage", () => {
 		git("add", "src/legacy.txt");
 		git("commit", "-q", "-m", "legacy");
 		writeFileSync(join(repo, "src/legacy.txt"), Buffer.from([0x63, 0x61, 0x66, 0xe8, 0x0a]));
-		const body = "```code src/util.ts:1\n```";
-		const { page } = await buildExplainPage(params({ steps: [{ title: "S", body }] }), repo, "t");
+		const body = "```code src/util.ts:1\n```\n\n```code src/legacy.txt:1\n```";
+		const { page, warnings } = await buildExplainPage(params({ steps: [{ title: "S", body }] }), repo, "t");
+		expect(code(page.steps[0].parts)).toHaveLength(1);
 		expect(code(page.steps[0].parts)[0]).toMatchObject({ status: "new" });
 		expect(rows(code(page.steps[0].parts)[0])).toEqual(["+1 retry.ts"]);
+		expect(warnings).toEqual([expect.stringContaining("src/legacy.txt` is binary or not UTF-8")]);
+		expect(page.stats.filter((entry) => entry.path === "src/util.ts")).toHaveLength(1);
+		expect(page.covered).not.toContain("src/legacy.txt");
 		const { page: review } = await buildCodeReviewPage(
 			{
 				title: "t",

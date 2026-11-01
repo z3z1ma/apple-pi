@@ -3057,8 +3057,7 @@ function gitBytes(cwd, args, options = {}) {
 			]
 		});
 		const chunks = [];
-		let size = 0;
-		let stderr = "";
+		const errors = [];
 		let failure;
 		let escalation;
 		const signalGroup = (name) => {
@@ -3076,29 +3075,41 @@ function gitBytes(cwd, args, options = {}) {
 		const abort = () => stop(options.signal?.reason instanceof Error ? options.signal.reason : /* @__PURE__ */ new Error(`git ${args.join(" ")} was aborted`));
 		const timer = options.timeoutMs ? setTimeout(() => stop(/* @__PURE__ */ new Error(`git ${args.join(" ")} timed out after ${options.timeoutMs} ms`)), options.timeoutMs) : void 0;
 		options.signal?.addEventListener("abort", abort, { once: true });
-		child.stdout.on("data", (chunk) => {
-			size += chunk.length;
-			if (options.maxBytes !== void 0 && size > options.maxBytes) stop(/* @__PURE__ */ new Error(`git ${args.join(" ")} output exceeded ${options.maxBytes} bytes; narrow the paths`));
-			else if (!failure) chunks.push(chunk);
-		});
-		child.stderr.setEncoding("utf8").on("data", (chunk) => {
-			if (options.maxBytes !== void 0 && stderr.length + chunk.length > options.maxBytes) stop(/* @__PURE__ */ new Error(`git ${args.join(" ")} error output exceeded ${options.maxBytes} bytes`));
-			else if (!failure) stderr += chunk;
-		});
+		let output = 0;
+		const collect = (target, chunk) => {
+			output += chunk.length;
+			if (options.maxBytes !== void 0 && output > options.maxBytes) stop(/* @__PURE__ */ new Error(`git ${args.join(" ")} output exceeded ${options.maxBytes} bytes; narrow the paths`));
+			else if (!failure) target.push(chunk);
+		};
+		child.stdout.on("data", (chunk) => collect(chunks, chunk));
+		child.stderr.on("data", (chunk) => collect(errors, chunk));
 		child.once("error", (error) => stop(error));
 		child.once("close", (code) => {
 			if (timer) clearTimeout(timer);
 			if (escalation) clearTimeout(escalation);
 			options.signal?.removeEventListener("abort", abort);
-			if (failure) reject(failure);
+			const stderr = Buffer.concat(errors).toString("utf8");
+			if (failure) groupGone(child.pid).then(() => reject(failure));
 			else if (code !== 0) reject(/* @__PURE__ */ new Error(`git ${args.join(" ")} failed: ${stderr.trim() || `exit ${code}`}`));
-			else resolvePromise(Buffer.concat(chunks, size));
+			else resolvePromise(Buffer.concat(chunks));
 		});
 		if (options.input !== void 0) {
 			child.stdin.on("error", () => {});
 			child.stdin.end(options.input);
 		}
 	});
+}
+/** Kill what remains of a stopped command's process group and wait until none of it is left. */
+async function groupGone(pid) {
+	if (!pid || process.platform === "win32") return;
+	for (;;) {
+		try {
+			process.kill(-pid, "SIGKILL");
+		} catch {
+			return;
+		}
+		await new Promise((resolveWait) => setTimeout(resolveWait, 20));
+	}
 }
 //#endregion
 //#region components/shared/src/git-change.ts
@@ -3149,6 +3160,11 @@ var ENV = {
 	GIT_CONFIG_NOSYSTEM: "1",
 	GIT_NO_LAZY_FETCH: "1",
 	GIT_TERMINAL_PROMPT: "0"
+};
+/** For reading the author's effective settings (config and attributes only, never filters or hooks): user and system config count. */
+var AUTHOR_SETTINGS = {
+	GIT_CONFIG_GLOBAL: process.env.GIT_CONFIG_GLOBAL,
+	GIT_CONFIG_NOSYSTEM: process.env.GIT_CONFIG_NOSYSTEM
 };
 var FLAGS = [
 	"--no-pager",
@@ -3264,7 +3280,7 @@ function objectReader(cwd, env = {}, signal) {
 	child.once("close", (code) => fail(/* @__PURE__ */ new Error(`git cat-file ended: ${stderr.trim() || `exit ${code}`}`)));
 	const abort = () => {
 		fail(/* @__PURE__ */ new Error("Git object reading was cancelled"));
-		child.kill();
+		child.kill("SIGKILL");
 	};
 	signal?.addEventListener("abort", abort, { once: true });
 	if (signal?.aborted) abort();
@@ -3337,7 +3353,7 @@ function objectReader(cwd, env = {}, signal) {
 			closing = true;
 			signal?.removeEventListener("abort", abort);
 			child.stdin.end();
-			if (child.exitCode === null && child.signalCode === null) child.kill();
+			if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
 			await exited;
 			await queue;
 		}
@@ -3475,7 +3491,10 @@ async function pathSettings(root, signal) {
 		"-z",
 		"--get-regexp",
 		"^core\\.(ignorecase|precomposeunicode|excludesfile|protecthfs|protectntfs)$"
-	], { signal }).catch(() => Buffer.alloc(0))).toString("utf8").split("\0").filter(Boolean).flatMap((record) => {
+	], {
+		signal,
+		env: AUTHOR_SETTINGS
+	}).catch(() => Buffer.alloc(0))).toString("utf8").split("\0").filter(Boolean).flatMap((record) => {
 		const split = record.indexOf("\n");
 		return ["-c", `${record.slice(0, split)}=${record.slice(split + 1)}`];
 	});
@@ -3491,7 +3510,10 @@ async function convertedPaths(root, entries, signal) {
 		"config",
 		"--get",
 		"core.autocrlf"
-	], { signal }).catch(() => "false");
+	], {
+		signal,
+		env: AUTHOR_SETTINGS
+	}).catch(() => "false");
 	if (autocrlf === "true" || autocrlf === "input") return files.map((entry) => entry.path);
 	const fields = (await gitRun(root, [
 		"check-attr",
@@ -3505,6 +3527,7 @@ async function convertedPaths(root, entries, signal) {
 		"working-tree-encoding"
 	], {
 		signal,
+		env: AUTHOR_SETTINGS,
 		input: files.map((entry) => `${entry.path}\0`).join("")
 	})).toString("utf8").split("\0");
 	const converted = /* @__PURE__ */ new Set();
@@ -4198,7 +4221,7 @@ async function transferObjects(change, source, signal) {
 * status Git writes as two sections (deletion, then addition) for the same path.
 */
 async function changedRegions(source, base, head, signal) {
-	const [names, output] = await Promise.all([bytes(source, [
+	const [names, output] = await settledAll([bytes(source, [
 		...DIFF,
 		"--name-status",
 		"-z",
@@ -4326,7 +4349,7 @@ async function captureReview(request, destination, signal) {
 			input: "",
 			signal
 		});
-		const [before, after] = await Promise.all([treeListing(source, baseTree, signal), treeListing(source, headTree, signal)]);
+		const [before, after] = await settledAll([treeListing(source, baseTree, signal), treeListing(source, headTree, signal)]);
 		const changedPathsList = paths(await bytes(source, [
 			...DIFF,
 			"--name-only",
@@ -4996,39 +5019,70 @@ function reviewQueue(db, actor, options = {}) {
 	});
 }
 /** Capture reads project roles from the selected head tree; materialize just those files to compare without capturing. */
+/**
+* The selected head's project roles laid out as capture's full checkout has them: every tree entry that role loading
+* passes through (ancestors, linked directories, link chains) keeps its mode, and links keep their own text, so a link
+* that leaves the tree stays as unfrozen here as it is in the capture.
+*/
 async function targetConfiguration(change) {
 	const directory = await mkdtemp(join(tmpdir(), "review-roles-"));
+	const entries = /* @__PURE__ */ new Map();
+	const entry = async (path) => {
+		if (!entries.has(path)) {
+			const record = (await change.git([
+				"ls-tree",
+				"-z",
+				change.headTree,
+				"--",
+				path
+			])).toString("utf8").split("\0")[0];
+			const [mode = "", type = ""] = record ? record.slice(0, record.indexOf("	")).split(" ") : [];
+			entries.set(path, record ? {
+				mode,
+				type
+			} : void 0);
+		}
+		return entries.get(path);
+	};
+	const place = async (path) => mkdir(dirname(join(directory, path)), { recursive: true });
+	/** Materializes the path and returns the in-tree path it resolves to, or undefined outside or absent from the tree. */
+	const realize = async (path, seen = /* @__PURE__ */ new Set()) => {
+		const parts = path.split("/");
+		for (let index = 0, real = ""; index < parts.length; index++) {
+			const next = real ? `${real}/${parts[index]}` : parts[index];
+			const item = await entry(next);
+			if (!item) return void 0;
+			if (item.mode === "120000") {
+				const text = (await change.read("after", next))?.toString("utf8") ?? "";
+				await place(next);
+				await symlink(text, join(directory, next)).catch(() => {});
+				const resolved = posix.normalize(posix.join(posix.dirname(next), text, ...parts.slice(index + 1)));
+				if (posix.isAbsolute(text) || resolved === ".." || resolved.startsWith("../") || seen.has(next)) return void 0;
+				return realize(resolved, new Set(seen).add(next));
+			}
+			if (item.type === "tree") await mkdir(join(directory, next), { recursive: true });
+			else if (index < parts.length - 1) return void 0;
+			else {
+				const data = await change.read("after", next);
+				await place(next);
+				if (data) await writeFile(join(directory, next), data);
+			}
+			real = next;
+		}
+		return path;
+	};
 	try {
-		const listing = (await change.git([
-			"ls-tree",
-			"-r",
-			"-z",
-			change.headTree,
-			"--",
-			".pi/roles"
-		])).toString("utf8").split("\0").filter(Boolean).map((record) => ({
-			mode: record.split(" ")[0],
-			path: record.slice(record.indexOf("	") + 1)
-		}));
-		const modes = new Map(listing.map((entry) => [entry.path, entry.mode]));
-		for (const { path, mode } of listing) {
-			const target = join(directory, path);
-			await mkdir(dirname(target), { recursive: true });
-			if (mode !== "120000") {
-				const data = await change.read("after", path);
-				if (data) await writeFile(target, data);
-				continue;
-			}
-			const text = (await change.read("after", path))?.toString("utf8") ?? "";
-			await symlink(text, target);
-			const resolved = posix.normalize(posix.join(posix.dirname(path), text));
-			if (!posix.isAbsolute(text) && !resolved.startsWith("../") && !modes.has(resolved)) {
-				const data = await change.read("after", resolved);
-				if (data) {
-					await mkdir(dirname(join(directory, resolved)), { recursive: true });
-					await writeFile(join(directory, resolved), data);
-				}
-			}
+		const roles = await realize(".pi/roles");
+		if (roles && (await entry(roles))?.type === "tree") {
+			const names = (await change.git([
+				"ls-tree",
+				"-z",
+				"--name-only",
+				change.headTree,
+				"--",
+				`${roles}/`
+			])).toString("utf8").split("\0").filter(Boolean);
+			for (const name of names) await realize(name);
 		}
 		return reviewConfiguration(directory);
 	} finally {

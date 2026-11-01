@@ -1,3 +1,4 @@
+import { isUtf8 } from "node:buffer";
 import { resolve } from "node:path";
 
 import { type Static, Type } from "typebox";
@@ -109,6 +110,9 @@ function excerpts(diff: RepoDiff) {
 		// A type change is two sections for one path (deletion, then addition); cite the side that exists after.
 		const matches = diff.files.filter((f) => f.path === path);
 		const file = matches.find((f) => f.status !== "D") ?? matches[0];
+		const bytes = await diff.read(file?.status === "D" ? "before" : "after", path);
+		if (file?.binary || (bytes && !isUtf8(bytes)))
+			return `\`${path}\` is binary or not UTF-8 text, so it cannot be cited as code; describe it in prose.`;
 		// A file the change deletes has only its old lines, so its references count lines before the change.
 		const gone = file?.status === "D" ? await before(path) : undefined;
 		const now = gone ?? (await after(path));
@@ -208,10 +212,16 @@ async function explanation(
 		background: await parts(params.background),
 		intuition: await parts(params.intuition),
 	};
-	const stats = diff.files.map((f) => {
+	// A type change is two sections for one path; count it as one file.
+	const counts = new Map<string, { path: string; add: number; del: number }>();
+	for (const f of diff.files) {
 		const lines = f.hunks.flatMap((h) => h.lines);
-		return { path: f.path, add: lines.filter((l) => l.t === "+").length, del: lines.filter((l) => l.t === "-").length };
-	});
+		const entry = counts.get(f.path) ?? { path: f.path, add: 0, del: 0 };
+		entry.add += lines.filter((l) => l.t === "+").length;
+		entry.del += lines.filter((l) => l.t === "-").length;
+		counts.set(f.path, entry);
+	}
+	const stats = [...counts.values()];
 	const cited = [sections.intuition, ...steps.map((s) => s.parts)]
 		.flat()
 		.flatMap((p) => ("code" in p && p.code.status !== "unchanged" ? [p.code.path] : []));

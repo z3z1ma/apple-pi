@@ -11,5 +11,7 @@ Verify: components/browser-pages/tests/explain-change.test.ts
 `code path:FROM-TO` counts lines of the file after the change, except for a file the change deletes, which has only its old lines. The tool's guideline in `index.ts` and `docs/browser-pages.md` state the same rule.
 Why: a changeset can delete files, and the agent needs a way to show what left; without the base side, those references could only fail.
 
+A type change is two sections for one path: excerpts cite the side that exists after, and stats count the path once. Bytes that are not UTF-8 are checked on the whole blob, not only the patch context, and become a warning rather than a lossy excerpt.
+
 Coupled: components/browser-pages/src/index.ts, docs/browser-pages.md
 Verify: components/browser-pages/tests/explain-change.test.ts

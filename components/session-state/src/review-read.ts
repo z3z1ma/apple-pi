@@ -319,35 +319,58 @@ export interface ReviewReadOptions {
 export type ReviewStore = <T>(read: (db: DatabaseSync) => T) => T;
 
 /** Capture reads project roles from the selected head tree; materialize just those files to compare without capturing. */
+/**
+ * The selected head's project roles laid out as capture's full checkout has them: every tree entry that role loading
+ * passes through (ancestors, linked directories, link chains) keeps its mode, and links keep their own text, so a link
+ * that leaves the tree stays as unfrozen here as it is in the capture.
+ */
 async function targetConfiguration(change: GitChange) {
 	const directory = await mkdtemp(join(tmpdir(), "review-roles-"));
+	const entries = new Map<string, { mode: string; type: string } | undefined>();
+	const entry = async (path: string) => {
+		if (!entries.has(path)) {
+			const record = (await change.git(["ls-tree", "-z", change.headTree, "--", path])).toString("utf8").split("\0")[0];
+			const [mode = "", type = ""] = record ? record.slice(0, record.indexOf("\t")).split(" ") : [];
+			entries.set(path, record ? { mode, type } : undefined);
+		}
+		return entries.get(path);
+	};
+	const place = async (path: string) => mkdir(dirname(join(directory, path)), { recursive: true });
+	/** Materializes the path and returns the in-tree path it resolves to, or undefined outside or absent from the tree. */
+	const realize = async (path: string, seen = new Set<string>()): Promise<string | undefined> => {
+		const parts = path.split("/");
+		for (let index = 0, real = ""; index < parts.length; index++) {
+			const next = real ? `${real}/${parts[index]}` : parts[index]!;
+			const item = await entry(next);
+			if (!item) return undefined;
+			if (item.mode === "120000") {
+				const text = (await change.read("after", next))?.toString("utf8") ?? "";
+				await place(next);
+				await symlink(text, join(directory, next)).catch(() => {});
+				const resolved = posix.normalize(posix.join(posix.dirname(next), text, ...parts.slice(index + 1)));
+				if (posix.isAbsolute(text) || resolved === ".." || resolved.startsWith("../") || seen.has(next))
+					return undefined;
+				return realize(resolved, new Set(seen).add(next));
+			}
+			if (item.type === "tree") await mkdir(join(directory, next), { recursive: true });
+			else if (index < parts.length - 1) return undefined;
+			else {
+				const data = await change.read("after", next);
+				await place(next);
+				if (data) await writeFile(join(directory, next), data);
+			}
+			real = next;
+		}
+		return path;
+	};
 	try {
-		const listing = (await change.git(["ls-tree", "-r", "-z", change.headTree, "--", ".pi/roles"]))
-			.toString("utf8")
-			.split("\0")
-			.filter(Boolean)
-			.map((record) => ({ mode: record.split(" ")[0]!, path: record.slice(record.indexOf("\t") + 1) }));
-		const modes = new Map(listing.map((entry) => [entry.path, entry.mode]));
-		for (const { path, mode } of listing) {
-			const target = join(directory, path);
-			await mkdir(dirname(target), { recursive: true });
-			if (mode !== "120000") {
-				const data = await change.read("after", path);
-				if (data) await writeFile(target, data);
-				continue;
-			}
-			// A role symlink stays a symlink. Capture materializes the whole tree, so a link to another file in the
-			// tree reads that file there; give the link the same target here by materializing what it points to.
-			const text = (await change.read("after", path))?.toString("utf8") ?? "";
-			await symlink(text, target);
-			const resolved = posix.normalize(posix.join(posix.dirname(path), text));
-			if (!posix.isAbsolute(text) && !resolved.startsWith("../") && !modes.has(resolved)) {
-				const data = await change.read("after", resolved);
-				if (data) {
-					await mkdir(dirname(join(directory, resolved)), { recursive: true });
-					await writeFile(join(directory, resolved), data);
-				}
-			}
+		const roles = await realize(".pi/roles");
+		if (roles && (await entry(roles))?.type === "tree") {
+			const names = (await change.git(["ls-tree", "-z", "--name-only", change.headTree, "--", `${roles}/`]))
+				.toString("utf8")
+				.split("\0")
+				.filter(Boolean);
+			for (const name of names) await realize(name);
 		}
 		return reviewConfiguration(directory);
 	} finally {

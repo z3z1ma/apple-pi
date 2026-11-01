@@ -523,7 +523,8 @@ export class ReviewJobs {
 					context: {
 						phase: "validation",
 						artifact: source,
-						coverageGaps: shards.flatMap((shard) => shard.coverageGaps),
+						// The combined result carries these too, so a reused merge must have seen the same shard results.
+						shards: shards.map(({ summary, coverageGaps, limitations }) => ({ summary, coverageGaps, limitations })),
 						findings: reports.flatMap((report) =>
 							report.findings.map((finding) => ({
 								key: findingKey(report.pass, finding.id),

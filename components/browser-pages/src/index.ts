@@ -92,6 +92,11 @@ export default function browserPages(pi: ExtensionAPI): void {
 			file: run.file,
 			health: () => ({ ask: !!liveSession(ctx) }),
 		});
+		// Rendering may have outlasted a cancellation; a cancelled call publishes nothing.
+		if (signal?.aborted) {
+			session.close();
+			throw signal.reason ?? new Error("The review was cancelled");
+		}
 		sessions.add(session.close);
 		onUpdate?.({ content: text(`Waiting for the review at ${session.url}`), details: undefined });
 		openInBrowser(session.url);

@@ -40,6 +40,11 @@ const ENV: NodeJS.ProcessEnv = {
 	GIT_NO_LAZY_FETCH: "1",
 	GIT_TERMINAL_PROMPT: "0",
 };
+/** For reading the author's effective settings (config and attributes only, never filters or hooks): user and system config count. */
+const AUTHOR_SETTINGS: NodeJS.ProcessEnv = {
+	GIT_CONFIG_GLOBAL: process.env.GIT_CONFIG_GLOBAL,
+	GIT_CONFIG_NOSYSTEM: process.env.GIT_CONFIG_NOSYSTEM,
+};
 const FLAGS = [
 	"--no-pager",
 	"-c",
@@ -134,7 +139,7 @@ export function objectReader(cwd: string, env: NodeJS.ProcessEnv = {}, signal?: 
 	child.once("close", (code) => fail(new Error(`git cat-file ended: ${stderr.trim() || `exit ${code}`}`)));
 	const abort = () => {
 		fail(new Error("Git object reading was cancelled"));
-		child.kill();
+		child.kill("SIGKILL");
 	};
 	signal?.addEventListener("abort", abort, { once: true });
 	if (signal?.aborted) abort();
@@ -212,7 +217,8 @@ export function objectReader(cwd: string, env: NodeJS.ProcessEnv = {}, signal?: 
 			closing = true;
 			signal?.removeEventListener("abort", abort);
 			child.stdin.end();
-			if (child.exitCode === null && child.signalCode === null) child.kill();
+			// cat-file holds no state worth a graceful exit, and one that ignores TERM must not hold cleanup pending.
+			if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
 			await exited;
 			await queue;
 		},
@@ -246,7 +252,7 @@ export interface IndexEntry {
 const OBJECT_ID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
 
 /** Like Promise.all, but every command has exited before the first failure propagates. */
-async function settledAll<T extends readonly unknown[]>(work: { [K in keyof T]: Promise<T[K]> }): Promise<T> {
+export async function settledAll<T extends readonly unknown[]>(work: { [K in keyof T]: Promise<T[K]> }): Promise<T> {
 	const results = await Promise.allSettled(work);
 	const failed = results.find((result) => result.status === "rejected");
 	if (failed) throw (failed as PromiseRejectedResult).reason;
@@ -378,7 +384,7 @@ async function pathSettings(root: string, signal?: AbortSignal): Promise<string[
 	const output = await gitRun(
 		root,
 		["config", "-z", "--get-regexp", "^core\\.(ignorecase|precomposeunicode|excludesfile|protecthfs|protectntfs)$"],
-		{ signal },
+		{ signal, env: AUTHOR_SETTINGS },
 	).catch(() => Buffer.alloc(0));
 	return output
 		.toString("utf8")
@@ -397,12 +403,14 @@ async function pathSettings(root: string, signal?: AbortSignal): Promise<string[
 async function convertedPaths(root: string, entries: IndexEntry[], signal?: AbortSignal): Promise<string[]> {
 	const files = entries.filter((entry) => entry.mode.startsWith("100"));
 	if (!files.length) return [];
-	const autocrlf = await gitLine(root, ["config", "--get", "core.autocrlf"], { signal }).catch(() => "false");
+	const autocrlf = await gitLine(root, ["config", "--get", "core.autocrlf"], { signal, env: AUTHOR_SETTINGS }).catch(
+		() => "false",
+	);
 	if (autocrlf === "true" || autocrlf === "input") return files.map((entry) => entry.path);
 	const output = await gitRun(
 		root,
 		["check-attr", "-z", "--stdin", "text", "eol", "crlf", "filter", "ident", "working-tree-encoding"],
-		{ signal, input: files.map((entry) => `${entry.path}\0`).join("") },
+		{ signal, env: AUTHOR_SETTINGS, input: files.map((entry) => `${entry.path}\0`).join("") },
 	);
 	const fields = output.toString("utf8").split("\0");
 	const converted = new Set<string>();

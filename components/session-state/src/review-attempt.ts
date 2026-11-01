@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
-import { verifyCapturedSource } from "../../code-review/src/capture.js";
+import { verifyArtifact, verifyCapturedSource } from "../../code-review/src/capture.js";
 import type { FindingValidation } from "../../code-review/src/contracts.js";
 import type { ReviewJob } from "../../code-review/src/operations.js";
 import { reviewPolicyFingerprint, reviewRolePolicy } from "../../code-review/src/policy.js";
@@ -51,7 +51,8 @@ export async function runReviewAttempt(
 ): Promise<{ attempt: string; output: unknown }> {
 	const artifact = job.artifact;
 	if (!artifact) throw new Error("Review execution requires an admitted artifact");
-	await verifyCapturedSource(artifact, signal);
+	// The planner starts every review and resume, so full integrity is proven once before any reviewer reads the source.
+	await (pass.kind === "planner" ? verifyArtifact : verifyCapturedSource)(artifact, signal);
 	signal.throwIfAborted();
 	const policy = reviewRolePolicy(artifact.source, pass.role);
 	if (reviewPolicyFingerprint(policy) !== pass.policyFingerprint)

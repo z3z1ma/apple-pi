@@ -13,7 +13,7 @@ export interface GitOptions {
 	cwd?: string;
 	/** Fail and stop the command once it has run this long. */
 	timeoutMs?: number;
-	/** Fail and stop the command as soon as stdout exceeds this many bytes. */
+	/** Fail and stop the command as soon as stdout and stderr together exceed this many bytes. */
 	maxBytes?: number;
 }
 
@@ -43,8 +43,7 @@ export function gitBytes(cwd: string, args: string[], options: GitOptions = {}):
 			stdio: [options.input === undefined ? "ignore" : "pipe", "pipe", "pipe"],
 		});
 		const chunks: Buffer[] = [];
-		let size = 0;
-		let stderr = "";
+		const errors: Buffer[] = [];
 		let failure: Error | undefined;
 		let escalation: ReturnType<typeof setTimeout> | undefined;
 		const signalGroup = (name: NodeJS.Signals) => {
@@ -73,31 +72,44 @@ export function gitBytes(cwd: string, args: string[], options: GitOptions = {}):
 				)
 			: undefined;
 		options.signal?.addEventListener("abort", abort, { once: true });
-		child.stdout!.on("data", (chunk: Buffer) => {
-			size += chunk.length;
-			if (options.maxBytes !== undefined && size > options.maxBytes)
+		let output = 0;
+		const collect = (target: Buffer[], chunk: Buffer) => {
+			output += chunk.length;
+			if (options.maxBytes !== undefined && output > options.maxBytes)
 				stop(new Error(`git ${args.join(" ")} output exceeded ${options.maxBytes} bytes; narrow the paths`));
-			else if (!failure) chunks.push(chunk);
-		});
-		child.stderr!.setEncoding("utf8").on("data", (chunk: string) => {
-			if (options.maxBytes !== undefined && stderr.length + chunk.length > options.maxBytes)
-				stop(new Error(`git ${args.join(" ")} error output exceeded ${options.maxBytes} bytes`));
-			else if (!failure) stderr += chunk;
-		});
+			else if (!failure) target.push(chunk);
+		};
+		child.stdout!.on("data", (chunk: Buffer) => collect(chunks, chunk));
+		child.stderr!.on("data", (chunk: Buffer) => collect(errors, chunk));
 		child.once("error", (error) => stop(error));
 		child.once("close", (code) => {
 			if (timer) clearTimeout(timer);
 			if (escalation) clearTimeout(escalation);
 			options.signal?.removeEventListener("abort", abort);
-			if (failure) reject(failure);
+			const stderr = Buffer.concat(errors).toString("utf8");
+			// The leader can exit while a descendant that ignored TERM keeps running; a stopped command owns its whole group.
+			if (failure) void groupGone(child.pid).then(() => reject(failure));
 			else if (code !== 0) reject(new Error(`git ${args.join(" ")} failed: ${stderr.trim() || `exit ${code}`}`));
-			else resolvePromise(Buffer.concat(chunks, size));
+			else resolvePromise(Buffer.concat(chunks));
 		});
 		if (options.input !== undefined) {
 			child.stdin!.on("error", () => {});
 			child.stdin!.end(options.input);
 		}
 	});
+}
+
+/** Kill what remains of a stopped command's process group and wait until none of it is left. */
+async function groupGone(pid: number | undefined): Promise<void> {
+	if (!pid || process.platform === "win32") return;
+	for (;;) {
+		try {
+			process.kill(-pid, "SIGKILL");
+		} catch {
+			return;
+		}
+		await new Promise((resolveWait) => setTimeout(resolveWait, 20));
+	}
 }
 
 /** The repository root in the session's spelling of the path, which is the one the model sees. */

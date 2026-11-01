@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { backup, DatabaseSync } from "node:sqlite";
 import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai/compat";
@@ -328,6 +328,29 @@ test("authorized additional work replans the retained target and exact replay do
 	} finally {
 		db.close();
 	}
+}, 30000);
+
+test("freshness reads a committed project role through a link chain and a linked directory as capture does", async () => {
+	writeFileSync(join(state.agentDir, "peer-control.json"), JSON.stringify({ review: true }));
+	const role = readFileSync(join(state.agentDir, "roles", "code-review-specialist.md"), "utf8");
+	mkdirSync(join(repository, "config", "roles"), { recursive: true });
+	mkdirSync(join(repository, "definitions"), { recursive: true });
+	writeFileSync(join(repository, "definitions", "final.md"), role);
+	symlinkSync("final.md", join(repository, "definitions", "hop.md"));
+	symlinkSync("../../definitions/hop.md", join(repository, "config", "roles", "linked-advisor.md"));
+	symlinkSync("config", join(repository, ".pi"));
+	execFileSync("git", ["add", "."], { cwd: repository });
+	execFileSync(
+		"git",
+		["-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "-qm", "linked role"],
+		{ cwd: repository },
+	);
+	const job = await enqueue({ kind: "commit", commit: "HEAD" });
+	await settled(job.id, "completed");
+	expect(JSON.parse(job.artifact).configuration.roleReferences.map((entry: { role: string }) => entry.role)).toContain(
+		"linked-advisor",
+	);
+	expect(await readReviewFreshness("owner", job.id)).toMatchObject({ requestedTarget: "matches", policy: "matches" });
 }, 30000);
 
 test("freshness separates a stable committed target from checkout changes, policy changes and unavailable source", async () => {
