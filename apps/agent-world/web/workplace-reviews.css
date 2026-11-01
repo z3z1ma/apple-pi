@@ -112,7 +112,7 @@ section.wp-reviews button:disabled {
 }
 .wp-reviews-panes {
 	display: grid;
-	grid-template-rows: minmax(120px, 42%) minmax(0, 1fr);
+	grid-template-rows: auto minmax(0, 1fr);
 	flex: 1;
 	min-height: 0;
 }
@@ -123,6 +123,7 @@ section.wp-reviews button:disabled {
 	display: flex;
 	flex-direction: column;
 	min-height: 0;
+	max-height: 40vh;
 	border-bottom: 1px solid var(--wp-border);
 }
 .wp-review-head,
@@ -145,7 +146,6 @@ section.wp-reviews button:disabled {
 	text-align: right;
 }
 .wp-review-rows {
-	flex: 1;
 	min-height: 0;
 	overflow: auto;
 	margin: 0;
@@ -252,6 +252,11 @@ section.wp-reviews button:disabled {
 	border-bottom-color: var(--wp-accent);
 	color: var(--wp-text);
 }
+.wp-review-body > details {
+	margin-top: 24px;
+	padding-top: 12px;
+	border-top: 1px solid var(--wp-border);
+}
 .wp-review-body summary {
 	font-size: 13px;
 	cursor: pointer;
@@ -319,12 +324,363 @@ section.wp-reviews button:disabled {
 	margin: 0;
 }
 .wp-review-thread {
+	margin: 0 0 16px;
+	padding: 0;
+	list-style: none;
+}
+.wp-review-thread > li {
+	display: grid;
+	grid-template-columns: 30px minmax(0, 1fr);
+	gap: 12px;
+	padding: 12px 0;
+	border-bottom: 1px solid var(--wp-border);
+}
+.wp-review-thread .wp-review-meta {
+	margin-bottom: 4px;
+}
+.wp-review-avatar {
+	display: grid;
+	place-items: center;
+	width: 30px;
+	height: 30px;
+	border-radius: 50%;
+	font-size: 12px;
+	font-weight: 600;
+	color: var(--wp-accent);
+	background: var(--wp-selected);
+}
+.wp-review-thread > li.is-milestone .wp-review-avatar {
+	color: var(--wp-muted);
+	background: var(--wp-hover);
+}
+
+/* Shared building blocks for the evidence views. */
+.wp-review-body h4,
+.wp-review-body h5 {
+	color: var(--wp-text);
+}
+.wp-review-section {
+	margin: 0 0 20px;
+}
+.wp-review-section > h4 {
+	display: flex;
+	justify-content: space-between;
+	margin: 0 0 8px;
+	font-size: 12px;
+	font-weight: 600;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: var(--wp-muted);
+}
+.wp-review-section > h4 span {
+	font-weight: 400;
+	text-transform: none;
+	letter-spacing: 0;
+}
+.wp-review-facts {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+	gap: 0 32px;
+	margin: 0;
+}
+.wp-review-body .wp-review-facts > div {
+	display: grid;
+	grid-template-columns: 120px minmax(0, 1fr);
+	gap: 10px;
+	padding: 7px 0;
+	font-size: 13px;
+	line-height: 1.45;
+	border-bottom: 1px solid var(--wp-border);
+}
+.wp-review-facts dt {
+	color: var(--wp-muted);
+}
+.wp-review-facts dd {
+	margin: 0;
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+.wp-review-mono {
+	padding: 1px 5px;
+	border-radius: 4px;
+	font:
+		12px ui-monospace,
+		monospace;
+	background: var(--wp-code);
+	color: var(--wp-text);
+	overflow-wrap: anywhere;
+}
+.wp-review-prose {
+	font-size: 13px;
+	line-height: 1.6;
+}
+.wp-review-prose p {
+	margin: 0 0 8px;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+.wp-review-prose ul {
+	margin: 0 0 8px;
+	padding-left: 18px;
+}
+.wp-review-callout {
+	padding: 10px 12px;
+	border-left: 3px solid var(--wp-warning);
+	border-radius: 4px;
+	background: var(--wp-panel);
+	font-size: 13px;
+}
+.wp-review-tiles {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+	gap: 10px;
+	margin-bottom: 20px;
+}
+.wp-review-tiles.is-three {
+	grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+.wp-review-body .wp-review-tiles > div {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding: 12px 14px;
+	border: 1px solid var(--wp-border);
+	border-radius: 8px;
+	background: var(--wp-panel);
+	min-width: 0;
+}
+.wp-review-tiles span {
+	font-size: 11px;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: var(--wp-muted);
+}
+.wp-review-tiles b {
+	font-size: 17px;
+	font-weight: 600;
+}
+.wp-review-tiles b .wp-review-pill {
+	font-size: 13px;
+	padding: 2px 10px;
+}
+.wp-review-tiles small {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-size: 11px;
+	color: var(--wp-muted);
+	overflow-wrap: anywhere;
+}
+.wp-review-meter {
+	flex: 1;
+	max-width: 80px;
+	height: 5px;
+	border-radius: 3px;
+	background: var(--wp-hover);
+	overflow: hidden;
+}
+.wp-review-meter span {
+	display: block;
+	height: 100%;
+	background: var(--wp-positive);
+}
+.wp-review-card {
+	margin: 0 0 14px;
+	padding: 12px 14px;
+	border: 1px solid var(--wp-border);
+	border-radius: 8px;
+}
+.wp-review-card > header,
+.wp-review-pass > header,
+.wp-review-coverage header {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 8px;
+	font-size: 13px;
+}
+.wp-review-chips {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin: 0 0 10px;
+}
+.wp-review-risks,
+.wp-review-evidence {
+	margin: 0 0 10px;
+	padding: 0;
+	list-style: none;
+	font-size: 13px;
+	line-height: 1.5;
+}
+.wp-review-risks li,
+.wp-review-evidence li {
+	padding: 4px 0;
+}
+.wp-review-evidence small {
+	display: block;
+	color: var(--wp-muted);
+	font-size: 11px;
+	overflow-wrap: anywhere;
+}
+.wp-review-passes {
 	margin: 0;
 	padding: 0;
 	list-style: none;
 }
-.wp-review-thread li {
-	margin-bottom: 12px;
+.wp-review-pass {
+	padding: 10px 0 4px;
+	border-top: 1px solid var(--wp-border);
+}
+.wp-review-pass ul {
+	margin: 0;
+	padding-left: 18px;
+	font-size: 13px;
+	line-height: 1.5;
+}
+.wp-review-coverage {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+.wp-review-coverage > li {
+	padding: 12px 0;
+	border-bottom: 1px solid var(--wp-border);
+	font-size: 13px;
+}
+.wp-review-coverage header {
+	margin-bottom: 4px;
+}
+.wp-review-log {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+.wp-review-log li {
+	display: grid;
+	grid-template-columns: 52px minmax(0, 1fr) auto;
+	gap: 10px;
+	align-items: baseline;
+	padding: 5px 0;
+	font-size: 12px;
+	border-bottom: 1px dashed var(--wp-border);
+}
+.wp-review-log li > span {
+	font-size: 10px;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: var(--wp-muted);
+}
+.wp-review-log li.is-error > span {
+	color: var(--wp-danger);
+}
+.wp-review-log li p {
+	margin: 0;
+	white-space: pre-wrap;
+	line-height: 1.5;
+	font-size: 13px;
+}
+.wp-review-log .wp-review-mono {
+	background: transparent;
+	padding: 0;
+	color: var(--wp-muted);
+}
+.wp-review-log time {
+	font-size: 11px;
+	color: var(--wp-muted);
+}
+.wp-review-table-view {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 13px;
+}
+.wp-review-table-view th,
+.wp-review-table-view td {
+	padding: 8px 10px;
+	text-align: left;
+	vertical-align: top;
+	border-bottom: 1px solid var(--wp-border);
+}
+.wp-review-table-view th {
+	font-size: 11px;
+	font-weight: 500;
+	color: var(--wp-muted);
+}
+.wp-review-table-view .num {
+	text-align: right;
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+.wp-review-table-view small {
+	display: block;
+	color: var(--wp-muted);
+	font-size: 11px;
+}
+.wp-review-table-view .wp-review-chips {
+	margin: 0;
+}
+.wp-review-instruction {
+	padding: 8px 0;
+	border-bottom: 1px solid var(--wp-border);
+}
+.wp-review-instruction summary {
+	text-transform: capitalize;
+}
+.wp-review-instruction .wp-review-prose {
+	margin-top: 8px;
+}
+.wp-review-files {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+	columns: 2 320px;
+}
+.wp-review-files li {
+	display: flex;
+	gap: 8px;
+	align-items: baseline;
+	break-inside: avoid;
+}
+section.wp-reviews .wp-review-files button {
+	border: 0;
+	background: transparent;
+	padding: 4px 0;
+	color: var(--wp-link);
+	font-family: ui-monospace, monospace;
+	text-align: left;
+}
+.wp-review-files small {
+	color: var(--wp-muted);
+	font-size: 11px;
+}
+.wp-review-code {
+	width: 100%;
+	border-collapse: collapse;
+	margin-bottom: 8px;
+	font:
+		12px / 1.6 ui-monospace,
+		monospace;
+}
+.wp-review-code td:first-child {
+	width: 1%;
+	padding: 0 12px 0 4px;
+	text-align: right;
+	color: var(--wp-muted);
+	user-select: none;
+	border-right: 1px solid var(--wp-border);
+}
+.wp-review-code td:last-child {
+	padding: 0 12px;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+.wp-review-finding-evidence {
+	padding: 8px 0 0 16px;
+}
+.wp-review-finding-evidence h5 {
+	margin: 12px 0 4px;
+	font-size: 12px;
 }
 .wp-review-comment {
 	display: flex;

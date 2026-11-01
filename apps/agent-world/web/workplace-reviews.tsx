@@ -4,25 +4,21 @@ import {
 	changeLabel,
 	dollarsLabel,
 	elapsedLabel,
-	logLines,
 	refLabel,
 	resultLabel,
-	summaryLines,
 	tokensLabel,
 	whenLabel,
 } from "../../../components/code-review/src/presentation.js";
 import type {
 	ReviewAnalytics,
-	ReviewAssessment,
-	ReviewAttemptLog,
 	ReviewQueue,
 	ReviewSource,
 	ReviewSummary,
-	ReviewThreadMessage,
 } from "../../../components/code-review/src/results.js";
 import type { ReviewRequest, ReviewTarget } from "../../../components/code-review/src/types.js";
 import type { ReviewManagement, ReviewsApi } from "../src/reviews.js";
 import type { WorldSnapshot } from "../src/world.js";
+import { EvidenceView, SourceView } from "./workplace-review-views.js";
 import "./workplace-reviews.css";
 
 const parts = [
@@ -45,6 +41,8 @@ const LIVE = ["capturing", "queued", "running", "cancelling"];
 /** Live reviews, their log and their mail refresh on this period; settled evidence loads once. */
 const POLL_MS = 2000;
 const ROW_PX = 34;
+/** The queue may take this share of the panes; it shrinks to its rows so a short queue leaves room for evidence. */
+const QUEUE_SHARE = 0.4;
 
 function stateTone(state: ReviewSummary["state"]): string {
 	if (state === "failed" || state === "interrupted") return "bad";
@@ -60,7 +58,7 @@ export function WorkplaceReviews({ root, active, world }: { root: string; active
 	const [selected, select] = useState<string>();
 	const [offset, setOffset] = useState(0);
 	const [limit, setLimit] = useState(1);
-	const list = useRef<HTMLUListElement>(null);
+	const list = useRef<HTMLDivElement>(null);
 	const [part, setPart] = useState<Part>("summary");
 	const [detailState, setDetail] = useState<{ key: string; value: unknown }>();
 	const [detailOffset, setDetailOffset] = useState(0);
@@ -86,7 +84,9 @@ export function WorkplaceReviews({ root, active, world }: { root: string; active
 	useEffect(() => {
 		const element = list.current;
 		if (!element) return;
-		const observer = new ResizeObserver(() => setLimit(Math.max(1, Math.floor(element.clientHeight / ROW_PX))));
+		const observer = new ResizeObserver(() =>
+			setLimit(Math.max(1, Math.floor((element.clientHeight * QUEUE_SHARE) / ROW_PX) - 2)),
+		);
 		observer.observe(element);
 		return () => observer.disconnect();
 	}, []);
@@ -266,7 +266,7 @@ export function WorkplaceReviews({ root, active, world }: { root: string; active
 				/>
 			)}
 			{analytics && <ReviewAnalyticsView api={api} root={root} version={version} />}
-			<div className="wp-reviews-panes" hidden={analytics}>
+			<div className="wp-reviews-panes" ref={list} hidden={analytics}>
 				<div className="wp-review-table">
 					<div className="wp-review-head" aria-hidden="true">
 						<span>Change</span>
@@ -276,7 +276,7 @@ export function WorkplaceReviews({ root, active, world }: { root: string; active
 						<span>Cost</span>
 						<span>Queued</span>
 					</div>
-					<ul className="wp-review-rows" ref={list} aria-label="Review queue">
+					<ul className="wp-review-rows" aria-label="Review queue">
 						{queue?.page?.rows.map((review) => (
 							<li key={review.id}>
 								<button
@@ -313,19 +313,23 @@ export function WorkplaceReviews({ root, active, world }: { root: string; active
 							<li>{hideAddressed ? "Every review here is addressed." : "No captured reviews in this directory."}</li>
 						)}
 					</ul>
-					<nav>
-						<button type="button" disabled={!offset} onClick={() => setOffset(Math.max(0, offset - limit))}>
-							Previous
-						</button>
-						<span>{queue?.total ?? "-"} reviews</span>
-						<button
-							type="button"
-							disabled={queue?.page?.nextOffset == null}
-							onClick={() => setOffset(queue!.page!.nextOffset!)}
-						>
-							Next
-						</button>
-					</nav>
+					{(offset > 0 || queue?.page?.nextOffset != null) && (
+						<nav>
+							<button type="button" disabled={!offset} onClick={() => setOffset(Math.max(0, offset - limit))}>
+								Previous
+							</button>
+							<span>
+								{offset + 1}-{offset + (queue?.page?.rows.length ?? 0)} of {queue?.total ?? "-"}
+							</span>
+							<button
+								type="button"
+								disabled={queue?.page?.nextOffset == null}
+								onClick={() => setOffset(queue!.page!.nextOffset!)}
+							>
+								Next
+							</button>
+						</nav>
+					)}
 				</div>
 				<main aria-label="Review evidence">
 					{current ? (
@@ -537,83 +541,6 @@ export function WorkplaceReviews({ root, active, world }: { root: string; active
 	);
 }
 
-function FindingView({ entry }: { entry: ReviewAssessment["findings"][number] }) {
-	const { finding } = entry;
-	const field = (label: string, text: string) => (
-		<div>
-			<dt>{label}</dt>
-			<dd>{text}</dd>
-		</div>
-	);
-	return (
-		<article className="wp-review-finding">
-			<h4>
-				<i className={`wp-review-severity is-${finding.severity}`}>{finding.severity}</i> {finding.title}
-			</h4>
-			<p className="wp-review-meta">
-				{finding.path}:{finding.line} · validation {entry.validation?.disposition ?? "pending"} · response{" "}
-				{entry.decision?.data.disposition ?? "none"} · {entry.id}
-			</p>
-			<dl>
-				{field("Problem", finding.impact)}
-				{field("Trigger", finding.trigger)}
-				{field("Cause", finding.cause)}
-				{field("Correction", finding.correction)}
-			</dl>
-			<details>
-				<summary>Evidence and validation</summary>
-				<pre>
-					{JSON.stringify(
-						{
-							invariant: finding.invariant,
-							evidence: finding.evidence,
-							counterevidence: finding.counterevidence,
-							validation: entry.validation,
-							response: entry.decision?.data ?? null,
-						},
-						null,
-						2,
-					)}
-				</pre>
-			</details>
-		</article>
-	);
-}
-
-function EvidenceView({ part, data }: { part: Part; data: unknown }) {
-	if (data === undefined) return <p>Loading evidence...</p>;
-	if (part === "summary") return <pre>{summaryLines(data as ReviewSummary).join("\n")}</pre>;
-	if (part === "findings") {
-		const findings = data as { total: number; page: { rows: ReviewAssessment["findings"] } | null };
-		return (
-			<>
-				{findings.page?.rows.map((entry) => (
-					<FindingView key={`${entry.attempt}:${entry.id}`} entry={entry} />
-				))}
-				{findings.total === 0 && <p>No reported findings. This does not establish correctness.</p>}
-			</>
-		);
-	}
-	if (part === "mail") {
-		const thread = data as { total: number; page: { rows: ReviewThreadMessage[] } | null };
-		return (
-			<ol className="wp-review-thread">
-				{thread.page?.rows.map((message) => (
-					<li key={message.seq}>
-						<p className="wp-review-meta">
-							<b>{message.senderName}</b> · {new Date(message.at).toLocaleString()}
-						</p>
-						<pre>{message.body}</pre>
-					</li>
-				))}
-				{thread.total === 0 && <li>No mail yet. Milestones and comments appear here.</li>}
-			</ol>
-		);
-	}
-	if (part === "log") return <pre className="wp-review-log">{logLines(data as ReviewAttemptLog[]).join("\n")}</pre>;
-	return <pre>{JSON.stringify(data, null, 2)}</pre>;
-}
-
 function ReviewAnalyticsView({ api, root, version }: { api: ReviewsApi; root: string; version: number }) {
 	const [data, setData] = useState<{ key: string; value: ReviewAnalytics }>();
 	const [error, setError] = useState("");
@@ -733,33 +660,6 @@ function ReviewAnalyticsView({ api, root, version }: { api: ReviewsApi; root: st
 			</table>
 			<p className="wp-review-meta">{analyticsLines(value).at(-1)}</p>
 		</section>
-	);
-}
-
-function SourceView({ source, onOpen }: { source: ReviewSource; onOpen(path: string): void }) {
-	if (source.kind === "files")
-		return (
-			<ul>
-				{source.page?.rows.map((file) => (
-					<li key={file.path}>
-						<button type="button" onClick={() => onOpen(file.path)}>
-							{file.path}
-						</button>
-					</li>
-				))}
-			</ul>
-		);
-	return (
-		<>
-			<p>
-				{source.side}: {source.file.path} · {source.representation}
-			</p>
-			<p>{source.note}</p>
-			<pre>
-				{source.page?.rows.map((line, index) => `${source.page!.offset + index + 1} | ${line}`).join("\n") ??
-					"No text lines"}
-			</pre>
-		</>
 	);
 }
 

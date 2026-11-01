@@ -269,63 +269,202 @@ test("Code reviews show retained evidence and explicit capture consent without l
 					w.reviewCalls.manage.push(request);
 					return review;
 				},
-				read: async (request: { part: string }) =>
-					request.part === "summary"
-						? review
-						: request.part === "thread"
-							? {
-									total: 1,
-									page: {
-										offset: 0,
-										nextOffset: null,
-										rows: [{ seq: 1, sender: "harness", senderName: "the harness", body: "Review planned", at: 1 }],
-									},
-								}
-							: request.part === "findings"
-								? {
-										total: 1,
-										page: {
-											offset: 0,
-											nextOffset: null,
-											rows: [
-												{
-													id: "attempt:stale-value",
-													attempt: "attempt",
-													pass: "value-correctness",
-													finding: {
-														id: "stale-value",
-														title: "The value disagrees with its consumer",
-														path: "value.ts",
-														line: 1,
-														side: "after",
-														severity: "high",
-														certainty: "confirmed",
-														trigger: "Import the value from the consumer",
-														invariant: "Producer and consumer agree",
-														impact: "The consumer shows a stale total.",
-														cause: "The export changed without its consumer.",
-														correction: "Update the consumer.",
-														evidence: [],
-														counterevidence: "None",
-													},
-													validation: { disposition: "confirmed" },
-													decision: null,
-												},
-											],
+				read: async (request: { part: string }) => {
+					const page = (rows: unknown[]) => ({ total: rows.length, page: { offset: 0, nextOffset: null, rows } });
+					const at = Date.now() - 200_000;
+					const question = {
+						id: "value",
+						question: "Does the exported value match its consumers?",
+						verification: "Trace every import of value.",
+					};
+					const parts: Record<string, unknown> = {
+						summary: {
+							...review,
+							summary:
+								"Two scopes carry the risk.\n\n- The exported value changes for every consumer.\n- The rendering path reads it twice.",
+							intent: "captured",
+							priority: 0,
+							coverage: {
+								completedQuestions: 3,
+								requiredQuestions: 4,
+								unassignedRegions: 0,
+								integrationOnlyRegions: 2,
+								additionalRequests: 0,
+							},
+							reason: null,
+						},
+						thread: page([
+							{
+								seq: 1,
+								sender: "harness",
+								senderName: "the harness",
+								body: "Review planned: 2 scopes, 3 passes.\n\n- value-correctness\n- rendering",
+								at,
+							},
+							{
+								seq: 2,
+								sender: "operator",
+								senderName: "Operator",
+								body: "Please check the consumer too.",
+								at: at + 60_000,
+							},
+						]),
+						findings: page([
+							{
+								id: "attempt:stale-value",
+								attempt: "attempt",
+								pass: "value-correctness",
+								finding: {
+									id: "stale-value",
+									title: "The value disagrees with its consumer",
+									path: "value.ts",
+									line: 1,
+									side: "after",
+									severity: "high",
+									certainty: "confirmed",
+									trigger: "Import the value from the consumer",
+									invariant: "Producer and consumer agree",
+									impact: "The consumer shows a stale total.",
+									cause: "The export changed without its consumer.",
+									correction: "Update the consumer.",
+									evidence: [{ kind: "reproduced", detail: "The consumer test fails", provenance: "npm test" }],
+									counterevidence: "None",
+								},
+								validation: {
+									finding: "value-correctness:stale-value",
+									disposition: "confirmed",
+									reason: "Reproduced from the recorded test.",
+									evidence: ["The recorded run fails on the stale total."],
+									duplicateOf: null,
+								},
+								decision: null,
+							},
+						]),
+						log: [
+							{
+								attempt: "a",
+								pass: "value-correctness",
+								kind: "focused",
+								state: "running",
+								model: "provider/strong",
+								entries: [
+									{ at, kind: "text", text: "Tracing every import of value." },
+									{ at, kind: "tool", text: 'bash({"command":"npm test"})' },
+									{ at, kind: "error", text: "bash: 1 test failed" },
+								],
+							},
+						],
+						target: {
+							target: {
+								digest: "d".repeat(64),
+								repository: "/fixture/project",
+								source: "/state/reviews/review-fixture/artifact/source",
+								requested: { cwd: "/fixture/project", target: { kind: "commit", commit: "abc" } },
+								base: "b".repeat(40),
+								head: "abcdef0123".padEnd(40, "0"),
+								baseTree: "c".repeat(40),
+								headTree: "e".repeat(40),
+								baseRevision: "base",
+								headRevision: "review",
+								intent: { origin: "task.md", text: "Export the value two.", hash: "f".repeat(64) },
+								configuration: { hash: "a".repeat(64), roleReferences: 2, catalogIssues: 0 },
+								files: 12,
+								regions: 3,
+								omissions: page([{ path: "assets/logo.png", reason: "Binary; text is not shown" }]),
+							},
+							reason: null,
+						},
+						plan: {
+							summary: "Two scopes carry the risk.",
+							integration: { role: "code-review-specialist", depth: "deep", questions: [question] },
+							unscopedRegions: ["r1", "r2"],
+							additionalWork: [],
+							chunks: page([
+								{
+									id: "value",
+									title: "Exported value",
+									paths: ["value.ts", "src/consumers"],
+									context: [],
+									risks: [{ kind: "contract", reason: "Every consumer reads this value." }],
+									passes: [
+										{
+											id: "value-correctness",
+											role: "code-review-specialist",
+											depth: "standard",
+											lenses: ["correctness"],
+											questions: [question],
 										},
-									}
-								: request.part === "log"
-									? [
-											{
-												attempt: "a",
-												pass: "value-correctness",
-												kind: "focused",
-												state: "running",
-												model: "provider/strong",
-												entries: [{ at: 1, kind: "tool", text: 'bash({"command":"npm test"})' }],
-											},
-										]
-									: { retained: "Captured assessment", request },
+									],
+									regions: ["r0"],
+								},
+							]),
+						},
+						coverage: page([
+							{
+								pass: "value-correctness",
+								question,
+								state: "completed",
+								reported: {
+									question: "value",
+									state: "completed",
+									evidence: ["Traced the two imports."],
+									reason: "",
+								},
+								challenge: null,
+							},
+							{
+								pass: "integration",
+								question: { ...question, id: "journey", question: "Does the whole change agree end to end?" },
+								state: "challenged",
+								reported: null,
+								challenge: { reason: "The trace skipped the renderer." },
+							},
+						]),
+						attempts: page([
+							{
+								id: "attempt",
+								pass: "value-correctness",
+								kind: "focused",
+								role: "code-review-specialist",
+								state: "completed",
+								model: "provider/strong",
+								thinking: "high",
+								reason: null,
+								usage: { cost: { total: 0.62 } },
+								createdAt: at,
+								finishedAt: at + 272_000,
+								selected: true,
+							},
+						]),
+						decisions: page([
+							{
+								id: "decision",
+								kind: "finding",
+								finding: "attempt:stale-value",
+								review: "review-fixture",
+								digest: "captured-digest",
+								revision: 7,
+								actor: "owner",
+								createdAt: at,
+								data: {
+									disposition: "fixed-claimed",
+									reason: "Updated the consumer.",
+									evidence: ["commit abc"],
+									verifiedAgainst: null,
+								},
+							},
+						]),
+						configuration: {
+							configuration: {
+								instructions: { planning: "Plan a risk-driven review.", inspection: "Inspect independently." },
+								roleReferences: [{ role: "code-review-specialist", models: ["balanced", "provider/strong:high"] }],
+								catalogIssues: 0,
+							},
+							note: "Captured review prompts and configured model references.",
+						},
+					};
+					return parts[request.part];
+				},
 				source: async (request: { path?: string; side: string }) => {
 					w.reviewCalls.sources.push(request);
 					if (!request.path)
@@ -392,7 +531,7 @@ test("Code reviews show retained evidence and explicit capture consent without l
 			]),
 		);
 		await reviews.getByRole("tab", { name: "Log" }).click();
-		await reviews.getByText(/value-correctness \(focused\).*provider\/strong/).waitFor();
+		await reviews.getByText("Tracing every import of value.").waitFor();
 		await shot(page, "reviews-log");
 		await reviews.getByRole("button", { name: "Analytics", exact: true }).click();
 		const analytics = page.getByRole("region", { name: "Review analytics" });
@@ -406,7 +545,42 @@ test("Code reviews show retained evidence and explicit capture consent without l
 		await reviews.getByRole("tab", { name: "Source" }).click();
 		await reviews.getByRole("button", { name: "value.ts", exact: true }).click();
 		await reviews.getByLabel("Captured side").selectOption("before");
-		await reviews.getByText("1 | original captured source", { exact: true }).waitFor();
+		await reviews.getByText("original captured source", { exact: true }).waitFor();
+		const tabs = {
+			Summary: "Two scopes carry the risk.",
+			Findings: "The consumer shows a stale total.",
+			Mail: "Please check the consumer too.",
+			Log: "Tracing every import of value.",
+			Target: "assets/logo.png",
+			Source: "original captured source",
+			Plan: "Every consumer reads this value.",
+			Coverage: "Challenged: The trace skipped the renderer.",
+			Attempts: "provider/strong \u00b7 high",
+			Decisions: "Updated the consumer.",
+			Configuration: "provider/strong:high",
+			Freshness: "Current checkout",
+		};
+		for (const theme of ["light", "dark"]) {
+			for (const [tab, text] of Object.entries(tabs)) {
+				await reviews.getByRole("tab", { name: tab, exact: true }).click();
+				await reviews.getByText(text).first().waitFor();
+				// Evidence is designed for reading: no view falls back to raw text or JSON in a code block.
+				expect(await reviews.locator(".wp-review-body pre").count()).toBe(0);
+				await shot(page, `reviews-tab-${tab.toLowerCase()}-${theme}`);
+			}
+			if (theme === "light") await page.getByRole("button", { name: "Theme: dark mode", exact: true }).click();
+		}
+		await page.setViewportSize({ width: 900, height: 700 });
+		for (const tab of ["Summary", "Plan", "Attempts"]) {
+			await reviews.getByRole("tab", { name: tab, exact: true }).click();
+			await reviews
+				.getByText(tabs[tab as keyof typeof tabs])
+				.first()
+				.waitFor();
+			await shot(page, `reviews-tab-${tab.toLowerCase()}-narrow`);
+		}
+		await page.setViewportSize({ width: 1440, height: 900 });
+		await page.getByRole("button", { name: "Theme: dark mode", exact: true }).click();
 		await reviews.getByRole("button", { name: "Open captured sign-off" }).click();
 		expect(await page.evaluate(() => (window as any).reviewCalls.signOffs)).toEqual([{ review: "review-fixture" }]);
 		await reviews.getByRole("button", { name: "Capture review", exact: true }).click();
