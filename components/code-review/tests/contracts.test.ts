@@ -7,6 +7,7 @@ import {
 	validateFindings,
 	validatePlan,
 	validateReport,
+	validateShard,
 } from "../src/contracts.js";
 import type { ChangeRegion } from "../src/types.js";
 
@@ -205,6 +206,44 @@ test("finding validation retains every allegation and rejects circular or invent
 	expect(() => validateFindings(valid, "captured-target", [findings])).toThrow("cycle");
 });
 
+test("a single-report validator may name findings by their bare IDs", () => {
+	const findings = report();
+	findings.findings = ["first", "second"].map((id) => ({
+		id,
+		title: "Consent changes after selection",
+		path: "api.ts",
+		line: 10,
+		side: "after",
+		severity: "high",
+		certainty: "probable",
+		trigger: "The roster changes while a request waits.",
+		invariant: "Selection must stay fixed.",
+		impact: "An unintended person can be selected.",
+		cause: "The backend expands the roster again.",
+		correction: "Retain the selected identifiers.",
+		evidence: [{ kind: "source", detail: "api.ts:10 expands the current roster.", provenance: "captured source" }],
+		counterevidence: "No caller guard was found.",
+	}));
+	const shard = validateShard(
+		{
+			artifact: "captured-target",
+			summary: "Challenge findings",
+			coverageGaps: [],
+			limitations: [],
+			findings: [
+				{ finding: "first", disposition: "confirmed", reason: "Traced.", evidence: ["caller"], duplicateOf: null },
+				{ finding: "second", disposition: "duplicate", reason: "Same.", evidence: ["caller"], duplicateOf: "first" },
+			],
+		},
+		"captured-target",
+		findings,
+	);
+	expect(shard.findings.map((entry) => [entry.finding, entry.duplicateOf])).toEqual([
+		["request-correctness:first", null],
+		["request-correctness:second", "request-correctness:first"],
+	]);
+});
+
 test("the runtime maps scope paths to regions, keeps unscoped regions for integration and refuses empty scopes", () => {
 	const narrow = plan();
 	narrow.chunks[0]!.paths = ["api.ts"];
@@ -221,6 +260,8 @@ test("a plan cannot substitute another artifact, collapse pass identities or sel
 	const duplicate = plan();
 	duplicate.chunks[1]!.passes[0]!.id = "request-correctness";
 	expect(() => validatePlan(duplicate, "captured-target", regions, roles)).toThrow("pass");
+	duplicate.chunks[1]!.passes[0]!.id = "validator:request-correctness";
+	expect(() => validatePlan(duplicate, "captured-target", regions, roles)).toThrow("Reserved pass identity");
 	const unavailable = plan();
 	unavailable.integration.role = "implementation-engineer";
 	expect(() => validatePlan(unavailable, "captured-target", regions, roles)).toThrow("role");

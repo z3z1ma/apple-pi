@@ -204,7 +204,8 @@ export function validatePlan(
 		"pass",
 	);
 	for (const entry of passes) {
-		if (entry.id === "planner" || entry.id === "validator") throw new Error(`Reserved pass identity: ${entry.id}`);
+		if (entry.id === "planner" || entry.id === "validator" || entry.id.startsWith("validator:"))
+			throw new Error(`Reserved pass identity: ${entry.id}`);
 		if (!roles.has(entry.role)) throw new Error(`Unavailable advisory review role: ${entry.role}`);
 		unique(
 			entry.questions.map((question) => question.id),
@@ -288,6 +289,25 @@ export function validateFindings(value: unknown, artifact: string, reports: Revi
 		}
 	}
 	return result;
+}
+
+/** One report's validation. A validator that sees a single report may name its findings by their bare IDs. */
+export function validateShard(value: unknown, artifact: string, report: ReviewReport): FindingValidation {
+	const result = checkShape(FindingValidationSchema, value);
+	const keys = new Map(report.findings.map((finding) => [finding.id, findingKey(report.pass, finding.id)]));
+	const key = (name: string) => keys.get(name) ?? name;
+	return validateFindings(
+		{
+			...result,
+			findings: result.findings.map((entry) => ({
+				...entry,
+				finding: key(entry.finding),
+				duplicateOf: entry.duplicateOf === null ? null : key(entry.duplicateOf),
+			})),
+		},
+		artifact,
+		[report],
+	);
 }
 
 export const DuplicateLinksSchema = Type.Object(

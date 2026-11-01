@@ -16,9 +16,9 @@ import {
 	type ReviewReport,
 	ReviewReportSchema,
 	unscopedRegions,
-	validateFindings,
 	validatePlan,
 	validateReport,
+	validateShard,
 } from "../../code-review/src/contracts.js";
 import { type ReviewJob, type ReviewOperation, ReviewOperationSchema } from "../../code-review/src/operations.js";
 import { reviewRoleCatalog } from "../../code-review/src/policy.js";
@@ -500,7 +500,7 @@ export class ReviewJobs {
 						schema: FindingValidationSchema,
 						context: { phase: "validation", artifact: source, plan, reports: [report], reviewedAttempts: inspected },
 						reviewedAttempts: inspected,
-						validate: (value) => validateFindings(value, artifact.digest, [report]),
+						validate: (value) => validateShard(value, artifact.digest, report),
 						reuse: (value) => !(value as FindingValidation).coverageGaps.length,
 					},
 					shardSignal,
@@ -523,6 +523,7 @@ export class ReviewJobs {
 					context: {
 						phase: "validation",
 						artifact: source,
+						coverageGaps: shards.flatMap((shard) => shard.coverageGaps),
 						findings: reports.flatMap((report) =>
 							report.findings.map((finding) => ({
 								key: findingKey(report.pass, finding.id),
