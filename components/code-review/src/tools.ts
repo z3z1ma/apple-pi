@@ -157,7 +157,7 @@ export function installReviewTools(pi: ExtensionAPI): void {
 			name: "review_code",
 			label: "Review code",
 			description:
-				"Capture an exact commit, range, branch, staged index or working tree and enqueue independent semantic/risk-based review through ordinary role peers. This starts model work under the configured role profiles. Return after target capture and admission, not after review. The author's index and checkout stay unchanged. Supply approved intent when available; absent intent stays unassessed. Use review_queue/read_review for progress and evidence. Exact request replay retains the original captured target even if the checkout changes.",
+				"Capture an exact commit, range, branch, staged index or working tree and enqueue independent semantic/risk-based review through ordinary role peers. This starts model work under the configured role profiles. Return after target capture and admission, not after review. The author's index and checkout stay unchanged. Supply approved intent when available; absent intent stays unassessed. The owner (you, by default) receives mail when the plan is ready and when the review settles, with confirmed findings; keep working meanwhile and use review_queue/read_review for detail. Exact request replay retains the original captured target even if the checkout changes.",
 			promptSnippet: "Capture exact code and enqueue independent review; inspect its durable result separately.",
 			promptGuidelines: [
 				"For an already assigned review pass, inspect its captured source and return the requested report. Route additional questions to the plan owner through that report; the requester initiates new reviews.",

@@ -74,7 +74,7 @@ import {
 import { recordLink, resolveLink } from "./links.js";
 import { discardProgramPeople, programDescendants, temporaryCallers } from "./program-peers.js";
 import { reviewScope } from "./review-attempt.js";
-import { ReviewJobs } from "./review-jobs.js";
+import { ReviewJobs, type ReviewNotify } from "./review-jobs.js";
 import { migrate } from "./schema.js";
 import { HARNESS, markRead, nameOf, OPERATOR, participateIn, postToThread, type ThreadPost } from "./threads.js";
 import {
@@ -285,7 +285,7 @@ export class Runtime {
 		this.db = new DatabaseSync(this.paths.db);
 		this.db.exec("pragma journal_mode = wal");
 		migrate(this.db);
-		this.reviews = new ReviewJobs(this.db, this.paths);
+		this.reviews = new ReviewJobs(this.db, this.paths, (notice) => this.reviewNotice(notice));
 		this.reviews.recover();
 		this.recoverReviews();
 		for (const row of this.db
@@ -1186,6 +1186,30 @@ export class Runtime {
 			{ thread: `departure:${commandId}`, threadKind: "mail", subject: `Departure: ${person}`, to, body },
 			Date.now(),
 		);
+	}
+
+	/** Review milestones go to the owner as ordinary mail on one thread per review; replays add nothing. */
+	private reviewNotice(notice: Parameters<ReviewNotify>[0]): void {
+		const db = this.db;
+		if (!db) return;
+		const id = `review:${notice.review}:${notice.key}`;
+		if (db.prepare("select 1 from thread_messages where id = ?").get(id)) return;
+		let pending: ReturnType<Runtime["preparePost"]> | undefined;
+		this.atomically(() => {
+			pending = this.preparePost(
+				id,
+				HARNESS,
+				{
+					thread: `review:${notice.review}`,
+					threadKind: "mail",
+					subject: notice.subject,
+					to: [notice.owner],
+					body: notice.body,
+				},
+				Date.now(),
+			);
+		});
+		for (const { target, id: delivery, mail } of pending?.deliveries ?? []) this.dispatch(target, delivery, mail);
 	}
 
 	private failDeparture(

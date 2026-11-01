@@ -1177,7 +1177,7 @@ test("a declared authority risk dispatches a distinct inspection over the same r
 	await settled(job.id, "completed");
 	const focused = query<{ pass_id: string; person: string; input: string }>(
 		state.dbPath,
-		"select pass_id, person, input from review_attempts where review_id = ? and kind = 'focused' order by created_at",
+		"select pass_id, person, input from review_attempts where review_id = ? and kind = 'focused' order by pass_id desc",
 		job.id,
 	);
 	expect(focused.map((entry) => entry.pass_id)).toEqual(["value-correctness", "deletion-authority"]);
@@ -1577,6 +1577,57 @@ test("a model outside the recorded role policy fails before a review turn is dis
 	expect(query(state.dbPath, "select id from program_scopes")).toEqual([]);
 }, 30000);
 
+test("planned passes run concurrently instead of one after another", async () => {
+	writeFileSync(
+		join(state.agentDir, "peer-control.json"),
+		JSON.stringify({ review: { hold: "inspection", authority: true } }),
+	);
+	const job = await enqueue();
+	await vi.waitFor(
+		() =>
+			expect(
+				query(
+					state.dbPath,
+					"select pass_id from review_attempts where review_id = ? and kind in ('focused', 'integration') and state = 'running' order by pass_id",
+					job.id,
+				),
+			).toEqual([{ pass_id: "deletion-authority" }, { pass_id: "integration" }, { pass_id: "value-correctness" }]),
+		{ timeout: 15000 },
+	);
+	const cancelled = await sendCommand(
+		"owner",
+		{ kind: "review", version: 1, operation: { action: "cancel", review: job.id } },
+		{ socketPath: state.socketPath },
+	);
+	expect(cancelled.stage, cancelled.reason).toBe("applied");
+	await settled(job.id, "cancelled");
+	expect(query(state.dbPath, "select id from program_scopes")).toEqual([]);
+}, 30000);
+
+test("the owner is mailed when the plan is ready and when the review settles, once each", async () => {
+	writeFileSync(join(state.agentDir, "peer-control.json"), JSON.stringify({ review: { finding: true } }));
+	const job = await enqueue();
+	await settled(job.id, "completed");
+	const messages = () =>
+		query<{ body: string; sender: string }>(
+			state.dbPath,
+			"select body, sender from thread_messages where thread_id = ? order by at, rowid",
+			`review:${job.id}`,
+		);
+	await vi.waitFor(() => expect(messages()).toHaveLength(2));
+	const [plan, outcome] = messages();
+	expect(plan!.body).toContain("is planned: 1 scope, 2 passes, 2 questions");
+	expect(outcome!.body).toContain("completed: 1 confirmed finding");
+	expect(outcome!.body).toContain("[high] The value disagrees with its consumer (value.ts:1)");
+	expect(
+		query(
+			state.dbPath,
+			"select participant from thread_participants where thread_id = ? and delivery = 'push'",
+			`review:${job.id}`,
+		),
+	).toEqual([{ participant: "owner" }]);
+}, 30000);
+
 test("cancellation retains observed turn usage and waits for reviewer cleanup", async () => {
 	writeFileSync(join(state.agentDir, "peer-control.json"), JSON.stringify({ review: { hold: "inspection" } }));
 	const job = await enqueue();
@@ -1585,10 +1636,10 @@ test("cancellation retains observed turn usage and waits for reviewer cleanup", 
 			expect(
 				query(
 					state.dbPath,
-					"select id from review_attempts where review_id = ? and kind = 'focused' and state = 'running'",
+					"select id from review_attempts where review_id = ? and kind in ('focused', 'integration') and state = 'running'",
 					job.id,
 				),
-			).toHaveLength(1),
+			).toHaveLength(2),
 		{ timeout: 10000 },
 	);
 	const cancelled = await sendCommand(
@@ -1598,17 +1649,20 @@ test("cancellation retains observed turn usage and waits for reviewer cleanup", 
 	);
 	expect(cancelled.stage, cancelled.reason).toBe("applied");
 	await settled(job.id, "cancelled");
-	const [attempt] = query<{ state: string; result: string }>(
+	const inspections = query<{ state: string; result: string }>(
 		state.dbPath,
-		"select state, result from review_attempts where review_id = ? and kind = 'focused'",
+		"select state, result from review_attempts where review_id = ? and kind in ('focused', 'integration')",
 		job.id,
 	);
-	expect(attempt!.state).toBe("cancelled");
-	expect(JSON.parse(attempt!.result)).toMatchObject({ status: "failed", usage: { cost: { total: 0.3 } } });
+	expect(inspections).toHaveLength(2);
+	for (const attempt of inspections) {
+		expect(attempt.state).toBe("cancelled");
+		expect(JSON.parse(attempt.result)).toMatchObject({ status: "failed", usage: { cost: { total: 0.3 } } });
+	}
 	const db = new DatabaseSync(state.dbPath, { readOnly: true });
 	try {
 		expect(reviewSummary(db, "owner", job.id)).toMatchObject({
-			cost: { reportedDollars: 0.6, reportedAttempts: 2, totalAttempts: 2 },
+			cost: { reportedDollars: expect.closeTo(0.9, 10), reportedAttempts: 3, totalAttempts: 3 },
 		});
 	} finally {
 		db.close();
@@ -1786,8 +1840,10 @@ test("after interruption an obsolete receipt cannot complete the replacement att
 	await vi.waitFor(
 		() =>
 			expect(
-				query(state.dbPath, "select id from sessions where last_error = ?", `Observed obsolete receipt ${old.id}:turn`),
-			).toHaveLength(1),
+				// Every concurrent replacement inspection replays the obsolete receipt through its own socket.
+				query(state.dbPath, "select id from sessions where last_error = ?", `Observed obsolete receipt ${old.id}:turn`)
+					.length,
+			).toBeGreaterThan(0),
 		{ timeout: 10000 },
 	);
 	const replacement = query<{ id: string; person: string; generation: number; state: string; result: string | null }>(

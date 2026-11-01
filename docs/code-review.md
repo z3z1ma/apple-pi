@@ -28,7 +28,7 @@ For example:
 
 An empty captured comparison or unchanged requested path scope records `no-changes`, with its exact artifact retained and no reviewer attempts. This is neither completed inspection nor a clean-review claim, and it creates no unfinished review responsibility. Cancellation and exact replay preserve that outcome; use a fresh capture to review later changes.
 
-An applied enqueue confirms admission, not review completion. Retain the returned request handle to recover an uncertain mutation with the same arguments. A fresh rerun captures again and receives new review work; it is not a retry of an uncertain request. Admitted jobs outlive the requesting connection.
+An applied enqueue confirms admission, not review completion. The owner receives ordinary mail on one thread per review: when the plan is ready (scopes, passes, questions) and when the review completes, is incomplete or fails, listing confirmed findings. The mail wakes an idle owner, so the requester does not need to poll. Planned passes run in parallel, at most eight at a time; reviews themselves run one after another, and validation waits for every pass. Retain the returned request handle to recover an uncertain mutation with the same arguments. A fresh rerun captures again and receives new review work; it is not a retry of an uncertain request. Admitted jobs outlive the requesting connection.
 
 ## Review queue TUI
 

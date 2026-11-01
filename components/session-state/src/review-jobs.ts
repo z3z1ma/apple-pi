@@ -7,6 +7,7 @@ import {
 	checkShape,
 	type FindingValidation,
 	FindingValidationSchema,
+	findingKey,
 	planPasses,
 	type ReviewPlan,
 	ReviewPlanSchema,
@@ -46,6 +47,84 @@ function reviewSource(artifact: ReviewArtifact) {
 	};
 }
 
+const count = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
+export type ReviewNotify = (notice: {
+	review: string;
+	owner: string;
+	key: string;
+	subject: string;
+	body: string;
+}) => void;
+
+function outcomeNotice(
+	id: string,
+	state: "completed" | "incomplete",
+	reports: ReviewReport[],
+	validation: FindingValidation,
+): string {
+	const findings = new Map(
+		reports.flatMap((report) =>
+			report.findings.map((finding) => [findingKey(report.pass, finding.id), finding] as const),
+		),
+	);
+	const confirmed = validation.findings.filter((entry) => entry.disposition === "confirmed");
+	const unresolved = validation.findings.filter((entry) => entry.disposition === "unresolved").length;
+	return [
+		`Review ${id} ${state === "completed" ? "completed" : "is incomplete"}: ${count(confirmed.length, "confirmed finding")}, ${unresolved} unresolved, ${count(validation.coverageGaps.length, "coverage gap")}.`,
+		...confirmed.map((entry) => {
+			const finding = findings.get(entry.finding);
+			return finding
+				? `- [${finding.severity}] ${finding.title} (${finding.path}:${finding.line})`
+				: `- ${entry.finding}`;
+		}),
+		"",
+		validation.summary,
+		"",
+		`Completion is not approval. Read the evidence with read_review (review "${id}", part "findings"); respond with resolve_finding.`,
+	].join("\n");
+}
+
+/** The operator's chosen bound on concurrent reviewer passes; reviews themselves run one at a time. */
+const REVIEW_PASS_CONCURRENCY = 8;
+
+/**
+ * Run independent passes with a bounded pool, keeping plan order in the results. The first failure aborts the
+ * remaining passes, and every started pass settles (including reviewer cleanup) before the failure propagates.
+ */
+async function inParallel<T, R>(
+	items: T[],
+	limit: number,
+	signal: AbortSignal,
+	run: (item: T, signal: AbortSignal) => Promise<R>,
+): Promise<R[]> {
+	const stop = new AbortController();
+	const abort = () => stop.abort(signal.reason);
+	signal.addEventListener("abort", abort, { once: true });
+	const results: R[] = new Array(items.length);
+	let next = 0;
+	let failure: { error: unknown } | undefined;
+	const worker = async () => {
+		while (!failure && !stop.signal.aborted && next < items.length) {
+			const index = next++;
+			try {
+				results[index] = await run(items[index]!, stop.signal);
+			} catch (error) {
+				failure ??= { error };
+				stop.abort(error);
+			}
+		}
+	};
+	try {
+		await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+	} finally {
+		signal.removeEventListener("abort", abort);
+	}
+	if (failure) throw failure.error;
+	signal.throwIfAborted();
+	return results;
+}
+
 /** Runtime-owned capture and admission. Request sockets never own this work. */
 export class ReviewJobs {
 	private stopped = false;
@@ -54,9 +133,26 @@ export class ReviewJobs {
 	private readonly captures = new Map<string, { controller: AbortController; done: Promise<void> }>();
 	private readonly db: DatabaseSync;
 	private readonly paths: StatePaths;
-	constructor(db: DatabaseSync, paths: StatePaths) {
+	private readonly notify: ReviewNotify;
+	constructor(db: DatabaseSync, paths: StatePaths, notify: ReviewNotify = () => {}) {
 		this.db = db;
 		this.paths = paths;
+		this.notify = notify;
+	}
+
+	/** Mail the owner one milestone; a failed notice never changes the review. */
+	private notice(job: ReviewJob, key: string, body: string): void {
+		try {
+			this.notify({
+				review: job.id,
+				owner: job.owner,
+				key: `${job.generation}:${key}`,
+				subject: `Review ${job.id.slice(-8)}`,
+				body,
+			});
+		} catch (error) {
+			console.error(`Review notice failed: ${error instanceof Error ? error.message : error}`);
+		}
 	}
 
 	recover(): void {
@@ -325,11 +421,25 @@ export class ReviewJobs {
 					.run(JSON.stringify(plan), JSON.stringify(job.selectedAttempts), Date.now(), id, job.generation);
 				if (!changed.changes) throw new Error("The planner no longer owns this review");
 				job = readReview(this.db, "operator", id);
+				const passes = planPasses(plan);
+				this.notice(
+					job,
+					`plan:${job.planRevision}`,
+					[
+						`Review ${job.id} is planned: ${count(plan.chunks.length, "scope")}, ${count(passes.length, "pass", "passes")}, ${count(
+							passes.reduce((n, pass) => n + pass.questions.length, 0),
+							"question",
+						)}${plan.gaps.length ? `, ${count(plan.gaps.length, "declared gap")}` : ""}. Up to ${REVIEW_PASS_CONCURRENCY} passes run at once.`,
+						"",
+						plan.summary,
+						"",
+						`Follow it with read_review (review "${job.id}") or /reviews. You will get mail when it settles.`,
+					].join("\n"),
+				);
 			}
 			const plan = job.plan!;
-			const reports: ReviewReport[] = [];
 			const paths = new Set([...artifact.files, ...artifact.regions, ...artifact.omissions].map((entry) => entry.path));
-			for (const pass of planPasses(plan)) {
+			const reports = await inParallel(planPasses(plan), REVIEW_PASS_CONCURRENCY, signal, async (pass, passSignal) => {
 				const inspected = await runReviewAttempt(
 					this.db,
 					this.paths,
@@ -357,12 +467,12 @@ export class ReviewJobs {
 						validate: (value) => validateReport(value, artifact.digest, pass, paths),
 						reuse: (value) => (value as ReviewReport).coverage.every((entry) => entry.state === "completed"),
 					},
-					signal,
+					passSignal,
 				);
 				job.selectedAttempts = { ...job.selectedAttempts, [pass.id]: inspected.attempt };
 				this.storeSelection(job);
-				reports.push(inspected.output as ReviewReport);
-			}
+				return inspected.output as ReviewReport;
+			});
 			const reviewedAttempts = { ...job.selectedAttempts };
 			const validated = await runReviewAttempt(
 				this.db,
@@ -406,13 +516,21 @@ export class ReviewJobs {
 					id,
 					job.generation,
 				);
+			this.notice(job, "outcome", outcomeNotice(job.id, incomplete ? "incomplete" : "completed", reports, validation));
 		} catch (error) {
-			if (!this.stopped)
-				this.db
-					.prepare(
-						"update review_jobs set state = 'failed', reason = ?, revision = revision + 1, updated_at = ? where id = ? and generation = ? and state = 'running'",
-					)
-					.run(error instanceof Error ? error.message : String(error), Date.now(), id, job.generation);
+			if (this.stopped) return;
+			const reason = error instanceof Error ? error.message : String(error);
+			const failed = this.db
+				.prepare(
+					"update review_jobs set state = 'failed', reason = ?, revision = revision + 1, updated_at = ? where id = ? and generation = ? and state = 'running'",
+				)
+				.run(reason, Date.now(), id, job.generation);
+			if (failed.changes)
+				this.notice(
+					job,
+					"outcome",
+					`Review ${job.id} failed: ${reason}\n\nRetained work stays inspectable with read_review; resume or rerun with manage_review.`,
+				);
 		}
 	}
 
