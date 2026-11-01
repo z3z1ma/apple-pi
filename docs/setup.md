@@ -14,7 +14,7 @@ Then install the terminal, multiplexer, runtime, and helpers:
 
 ```bash
 brew install --cask ghostty
-brew install tmux fzf jq git node terminal-notifier rtk  # Git 2.45 or newer
+brew install tmux fzf jq git node terminal-notifier rtk  # Git 2.45.1 or newer
 ```
 
 | Tool | Why |

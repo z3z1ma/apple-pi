@@ -77,15 +77,16 @@ export async function gitLine(cwd: string, args: string[], options?: GitOptions)
 	return (await gitRun(cwd, args, options)).toString("utf8").replace(/\n$/, "");
 }
 
-/** 2.45 is the first release honouring GIT_NO_LAZY_FETCH; older Git can run a promisor remote's command. */
-const MINIMUM_GIT = [2, 45];
+/** 2.45.1 is the first release whose promisor fetch honours GIT_NO_LAZY_FETCH; older Git can run a promisor remote's command. */
+const MINIMUM_GIT = [2, 45, 1];
 let gitChecked = false;
 async function requireGit(signal?: AbortSignal): Promise<void> {
 	if (gitChecked) return;
 	const output = await gitLine(tmpdir(), ["version"], { signal });
-	const [major = 0, minor = 0] = (/(\d+)\.(\d+)/.exec(output) ?? []).slice(1).map(Number);
-	if (major < MINIMUM_GIT[0]! || (major === MINIMUM_GIT[0] && minor < MINIMUM_GIT[1]!))
-		throw new Error(`Git ${MINIMUM_GIT.join(".")} or newer is required; found: ${output}`);
+	const found = (/(\d+)\.(\d+)(?:\.(\d+))?/.exec(output) ?? []).slice(1, 4).map((part) => Number(part ?? 0));
+	const order =
+		MINIMUM_GIT.map((part, index) => (found[index] ?? 0) - part).find((difference) => difference !== 0) ?? 0;
+	if (order < 0) throw new Error(`Git ${MINIMUM_GIT.join(".")} or newer is required; found: ${output}`);
 	gitChecked = true;
 }
 
