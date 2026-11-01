@@ -19,7 +19,7 @@ export const ReviewPlanSchema = Type.Object(
 				{
 					id: text,
 					title: text,
-					regions: Type.Array(text, { minItems: 1 }),
+					paths: Type.Array(text, { minItems: 1 }),
 					context: Type.Array(text),
 					risks: Type.Array(
 						Type.Object(
@@ -42,12 +42,13 @@ export const ReviewPlanSchema = Type.Object(
 				object,
 			),
 		),
-		gaps: Type.Array(Type.Object({ region: text, reason: text }, object)),
 		integration: Type.Object({ role: text, questions: Type.Array(question, { minItems: 1 }) }, object),
 	},
 	object,
 );
-export type ReviewPlan = Static<typeof ReviewPlanSchema>;
+/** Plans recorded before scopes were paths name region IDs per chunk and list unowned regions as gaps. */
+type LegacyPlan = { chunks: { regions?: string[] }[]; gaps?: { region: string; reason: string }[] };
+export type ReviewPlan = Static<typeof ReviewPlanSchema> & LegacyPlan;
 export type PlannedPass = Static<typeof pass> & {
 	chunk: string | null;
 	regions: string[];
@@ -141,22 +142,46 @@ export const FindingValidationSchema = Type.Object(
 );
 export type FindingValidation = Static<typeof FindingValidationSchema>;
 
-export function planPasses(plan: ReviewPlan): PlannedPass[] {
+/** A scope path names a file or a directory prefix; "." names the whole change. */
+function inScope(paths: readonly string[], file: string): boolean {
+	return paths.some((path) => {
+		const prefix = path.replace(/\/+$/, "");
+		return prefix === "." || prefix === "" || file === prefix || file.startsWith(`${prefix}/`);
+	});
+}
+
+/** The runtime, not the planner, maps changed regions to scopes. */
+export function chunkRegions(chunk: ReviewPlan["chunks"][number], regions: readonly ChangeRegion[]): string[] {
+	return chunk.regions ?? regions.filter((region) => inScope(chunk.paths, region.path)).map((region) => region.id);
+}
+
+/** Regions no focused scope covers; the integration pass, which reads the whole change, still covers them. */
+export function unscopedRegions(plan: ReviewPlan, regions: readonly ChangeRegion[]): string[] {
+	const scoped = new Set(plan.chunks.flatMap((chunk) => chunkRegions(chunk, regions)));
+	return regions.filter((region) => !scoped.has(region.id)).map((region) => region.id);
+}
+
+export function planPasses(plan: ReviewPlan, regions: readonly ChangeRegion[]): PlannedPass[] {
 	return [
-		...plan.chunks.flatMap((chunk) =>
-			chunk.passes.map((entry) => ({ ...entry, chunk: chunk.id, regions: chunk.regions, kind: "focused" as const })),
-		),
+		...plan.chunks.flatMap((chunk) => {
+			const owned = chunkRegions(chunk, regions);
+			return chunk.passes.map((entry) => ({ ...entry, chunk: chunk.id, regions: owned, kind: "focused" as const }));
+		}),
 		{
 			id: "integration",
 			...plan.integration,
 			lenses: ["integration"],
 			chunk: null,
-			regions: [...plan.chunks.flatMap((chunk) => chunk.regions), ...plan.gaps.map((gap) => gap.region)],
+			regions: regions.map((region) => region.id),
 			kind: "integration",
 		},
 	];
 }
 
+/**
+ * Structural checks only: identities, roles and the operator's requested lenses. How many passes a scope needs is
+ * the planner's judgment of risk, not a rule the runtime enforces.
+ */
 export function validatePlan(
 	value: unknown,
 	artifact: string,
@@ -164,43 +189,16 @@ export function validatePlan(
 	roles: ReadonlySet<string>,
 	lenses: readonly string[] = [],
 ): ReviewPlan {
-	const plan = checkShape(ReviewPlanSchema, value);
+	const plan = checkShape(ReviewPlanSchema, value) as ReviewPlan;
 	if (plan.artifact !== artifact) throw new Error("The plan names a different artifact");
-	const owners = new Map(regions.map((region) => [region.id, 0]));
-	const claim = (id: string) => {
-		const count = owners.get(id);
-		if (count === undefined) throw new Error(`Unknown region: ${id}`);
-		if (count) throw new Error(`Region has more than one primary owner: ${id}`);
-		owners.set(id, count + 1);
-	};
 	unique(
 		plan.chunks.map((chunk) => chunk.id),
 		"chunk",
 	);
-	for (const chunk of plan.chunks) {
-		for (const region of chunk.regions) claim(region);
-		const baseline = chunk.passes.filter((entry) => entry.lenses.includes("correctness"));
-		if (!baseline.length) throw new Error(`Chunk ${chunk.id} needs a correctness pass`);
-		for (const risk of chunk.risks) {
-			if (risk.kind === "reliability" || risk.kind === "authority") {
-				if (
-					!chunk.passes.some(
-						(entry) => entry.lenses.includes(risk.kind) && baseline.some((other) => other.id !== entry.id),
-					)
-				)
-					throw new Error(`Chunk ${chunk.id} needs an independent ${risk.kind} pass`);
-			} else if (
-				(risk.kind === "compatibility" || risk.kind === "usability") &&
-				!chunk.passes.some((entry) => entry.lenses.includes(risk.kind))
-			) {
-				throw new Error(`Chunk ${chunk.id} needs ${risk.kind} evidence obligations`);
-			}
-		}
-	}
-	for (const gap of plan.gaps) claim(gap.region);
-	const missing = [...owners].filter(([, count]) => count === 0).map(([id]) => id);
-	if (missing.length) throw new Error(`Unassigned review regions: ${missing.join(", ")}`);
-	const passes = planPasses(plan);
+	for (const chunk of plan.chunks)
+		if (!chunkRegions(chunk, regions).length)
+			throw new Error(`Scope ${chunk.id} matches no changed path: ${chunk.paths.join(", ")}`);
+	const passes = planPasses(plan, regions);
 	unique(
 		passes.map((entry) => entry.id),
 		"pass",

@@ -1,6 +1,16 @@
+import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 import type { DatabaseSync, SQLInputValue } from "node:sqlite";
 import { captureIntent, readCapturedSource } from "../../code-review/src/capture.js";
-import { type FindingValidation, findingKey, planPasses, type ReviewReport } from "../../code-review/src/contracts.js";
+import {
+	chunkRegions,
+	type FindingValidation,
+	findingKey,
+	planPasses,
+	type ReviewReport,
+	unscopedRegions,
+} from "../../code-review/src/contracts.js";
 import type { FindingDecision, ReviewApproval, ReviewDecision } from "../../code-review/src/decisions.js";
 import type { ReviewJob, ReviewState } from "../../code-review/src/operations.js";
 import { configurationSummary, reviewConfiguration, reviewRolePolicy } from "../../code-review/src/policy.js";
@@ -11,7 +21,7 @@ import type {
 	ReviewSource,
 	ReviewSummary,
 } from "../../code-review/src/results.js";
-import { type GitTarget, openGitChange } from "../../shared/src/git-change.js";
+import { type GitChange, openGitChange } from "../../shared/src/git-change.js";
 import { nameOf, withThreads } from "./threads.js";
 import { rootOf } from "./tree.js";
 
@@ -101,7 +111,7 @@ export function reviewAssessment(db: DatabaseSync, actor: string, id: string): R
 				throw new Error(`Selected attempt is not a completed result for ${pass}`);
 			return attempt;
 		};
-		const passes = (job.plan ? planPasses(job.plan) : []).map((pass) => {
+		const passes = (job.plan ? planPasses(job.plan, job.artifact?.regions ?? []) : []).map((pass) => {
 			const attempt = selected(pass.id, pass.kind);
 			return { pass, attempt, report: (attempt?.output as ReviewReport | null) ?? null };
 		});
@@ -200,7 +210,7 @@ export function reviewSummary(db: DatabaseSync, actor: string, id: string): Revi
 				? {
 						completedQuestions: coverage.reduce((sum, entry) => sum + entry.completed, 0),
 						requiredQuestions: coverage.reduce((sum, entry) => sum + entry.required, 0),
-						unassignedRegions: job.plan.gaps.length,
+						unassignedRegions: job.plan.gaps?.length ?? 0,
 						additionalRequests: passes.reduce((sum, { report }) => sum + (report?.extraPasses.length ?? 0), 0),
 					}
 				: null,
@@ -307,6 +317,26 @@ export interface ReviewReadOptions {
 
 export type ReviewStore = <T>(read: (db: DatabaseSync) => T) => T;
 
+/** Capture reads project roles from the selected head tree; materialize just those files to compare without capturing. */
+async function targetConfiguration(change: GitChange) {
+	const directory = await mkdtemp(join(tmpdir(), "review-roles-"));
+	try {
+		const listing = (await change.git(["ls-tree", "-r", "-z", "--name-only", change.headTree, "--", ".pi/roles"]))
+			.toString("utf8")
+			.split("\0")
+			.filter(Boolean);
+		for (const path of listing) {
+			const data = await change.read("after", path);
+			if (!data) continue;
+			await mkdir(dirname(join(directory, path)), { recursive: true });
+			await writeFile(join(directory, path), data);
+		}
+		return reviewConfiguration(directory);
+	} finally {
+		await rm(directory, { recursive: true, force: true });
+	}
+}
+
 export async function readReviewFreshness(
 	actor: string,
 	id: string,
@@ -331,29 +361,40 @@ export async function readReviewFreshness(
 	let checkout: Match = "unavailable";
 	let policy: Match = "unavailable";
 	try {
-		// Every captured comparison, region and file list derives from these Git identities and the intent bytes.
-		const identity = async (target: GitTarget) => {
-			const change = await openGitChange(job.request.cwd, target, { signal });
-			await change.close();
-			return change;
-		};
-		const current = await identity(job.request.target);
-		const intent = job.request.intent ? (await captureIntent(job.request))?.hash : undefined;
-		if (artifact.configuration)
-			requestedTarget =
+		// Every captured region and file list derives from these Git identities; configuration and intent complete it.
+		const current = await openGitChange(job.request.cwd, job.request.target, { signal });
+		let same: boolean;
+		try {
+			const intent = await captureIntent(job.request, signal);
+			const index = current.indexEntries?.map(({ path, mode, blob }) => ({ path, mode, blob })) ?? null;
+			same =
 				current.baseCommit === artifact.baseCommit &&
 				current.headCommit === artifact.headCommit &&
 				current.baseTree === artifact.baseTree &&
 				current.headTree === artifact.headTree &&
-				(typeof artifact.index !== "string" || current.indexTree === artifact.index) &&
-				intent === artifact.intent?.hash &&
-				// Captured configuration reads project roles from the live checkout here, not from the target tree.
-				JSON.stringify(reviewConfiguration(current.repository)) === JSON.stringify(artifact.configuration)
-					? "matches"
-					: "changed";
+				(typeof artifact.index === "string"
+					? current.indexTree === artifact.index
+					: JSON.stringify(index) === JSON.stringify(artifact.index)) &&
+				JSON.stringify(intent) === JSON.stringify(artifact.intent) &&
+				(await realpath(current.repository)) === artifact.repository &&
+				(await realpath(current.commonDirectory)) === artifact.commonDirectory &&
+				JSON.stringify(await targetConfiguration(current)) === JSON.stringify(artifact.configuration);
+		} finally {
+			await current.close();
+		}
+		signal?.throwIfAborted();
+		if (artifact.configuration) requestedTarget = same ? "matches" : "changed";
 		else errors.push("Capture-time configuration is absent; complete target identity cannot be compared.");
 		const working =
-			job.request.target.kind === "working-tree" ? current : await identity({ kind: "working-tree", base: "HEAD" });
+			job.request.target.kind === "working-tree"
+				? current
+				: await openGitChange(job.request.cwd, { kind: "working-tree", base: "HEAD" }, { signal }).then(
+						async (change) => {
+							await change.close();
+							return change;
+						},
+					);
+		signal?.throwIfAborted();
 		checkout =
 			working.headTree === artifact.headTree && working.headCommit === artifact.headCommit ? "matches" : "changed";
 	} catch (error) {
@@ -471,8 +512,15 @@ export function readReviewPart(db: DatabaseSync, actor: string, id: string, opti
 					planner: job.selectedAttempts.planner ?? null,
 					integration: job.plan?.integration ?? null,
 					gaps: job.plan?.gaps ?? [],
+					unscopedRegions: job.plan ? unscopedRegions(job.plan, job.artifact?.regions ?? []) : [],
 					additionalWork: job.additionalWork,
-					chunks: page(job.plan?.chunks ?? [], options),
+					chunks: page(
+						(job.plan?.chunks ?? []).map((chunk) => ({
+							...chunk,
+							regions: chunkRegions(chunk, job.artifact?.regions ?? []),
+						})),
+						options,
+					),
 				};
 			case "changes":
 				return page(job.artifact?.changes ?? [], options);

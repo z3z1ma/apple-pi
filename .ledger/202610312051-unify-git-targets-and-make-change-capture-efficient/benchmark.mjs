@@ -86,11 +86,33 @@ try {
 		});
 		row["page diff (sign-off/explain)"] = await time(async () => (await readChange(cwd, target)).close());
 		row["open commit"] = await time(async () => (await openGitChange(cwd, { kind: "commit", commit: "HEAD" })).close());
-		row["review capture"] = await time(async (i) => {
-			await captureReview({ cwd, target }, join(scratch, `${results.length}-${i}`), AbortSignal.timeout(300_000));
-		});
-		const artifact = await captureReview({ cwd, target }, join(scratch, `${results.length}-verify`));
-		row["verify (median; the first run re-hashes racy files)"] = await time(() => verifyArtifact(artifact));
+		// The old capture ended with a full verification; compare against capture plus the first full verification
+		// of a fresh artifact, which the review runtime performs before any reviewer starts.
+		const captureOnly = [];
+		const firstVerify = [];
+		const repeatVerify = [];
+		for (let i = 0; i < repetitions; i++) {
+			let start = performance.now();
+			const artifact = await captureReview(
+				{ cwd, target },
+				join(scratch, `${results.length}-${i}`),
+				AbortSignal.timeout(300_000),
+			);
+			captureOnly.push(performance.now() - start);
+			start = performance.now();
+			await verifyArtifact(artifact);
+			firstVerify.push(performance.now() - start);
+			start = performance.now();
+			await verifyArtifact(artifact);
+			repeatVerify.push(performance.now() - start);
+		}
+		const median = (values) => Math.round([...values].sort((a, b) => a - b)[Math.floor(values.length / 2)]);
+		row["capture only"] = median(captureOnly);
+		row["first full verify"] = median(firstVerify);
+		row["capture + first verify (old capture's boundary)"] = median(
+			captureOnly.map((value, i) => value + firstVerify[i]),
+		);
+		row["repeat full verify"] = median(repeatVerify);
 		results.push(row);
 		console.log(JSON.stringify(row));
 	}

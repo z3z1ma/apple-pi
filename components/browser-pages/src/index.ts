@@ -132,7 +132,7 @@ export default function browserPages(pi: ExtensionAPI): void {
 			const token = randomBytes(24).toString("hex");
 			const { page, root } = typed.review
 				? await buildCapturedReview(typed, ctx.sessionManager.getSessionId(), token, signal)
-				: await buildCodeReviewPage(typed, ctx.cwd, token);
+				: await buildCodeReviewPage(typed, ctx.cwd, token, undefined, signal);
 			return review(
 				{
 					page,
@@ -256,8 +256,12 @@ export default function browserPages(pi: ExtensionAPI): void {
 			if (!ctx.hasUI)
 				return { content: text("No user is attached to this run, so no explanation was opened."), details: undefined };
 			const token = randomBytes(24).toString("hex");
-			const { page, root, warnings } = await buildExplainPage(params as ExplainChangeParams, ctx.cwd, token, (review) =>
-				capturedChange(ctx.sessionManager.getSessionId(), review, signal),
+			const { page, root, warnings } = await buildExplainPage(
+				params as ExplainChangeParams,
+				ctx.cwd,
+				token,
+				(review) => capturedChange(ctx.sessionManager.getSessionId(), review, signal),
+				signal,
 			);
 			const template = await explainTemplate(page);
 			// The saved copy is for sharing: no session, no reader state, so it reads as a plain page anywhere.

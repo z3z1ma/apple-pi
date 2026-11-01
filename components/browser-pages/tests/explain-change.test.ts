@@ -120,6 +120,10 @@ describe("buildExplainPage", () => {
 				async () => readCapturedChange(artifact),
 			);
 			expect(rows(code(page.steps[0].parts)[0])).toEqual([" 1 export const one = 1;", "+2 export const two = 2;"]);
+			expect(page.ref).toMatch(/\.\.captured working tree [0-9a-f]{7}$/);
+			await expect(
+				buildExplainPage({ ...params(), head: "HEAD" } as unknown as ExplainChangeParams, repo, "t"),
+			).rejects.toThrow("replaced by target");
 		} finally {
 			rmSync(output, { recursive: true, force: true });
 		}

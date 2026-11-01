@@ -32,6 +32,8 @@ export interface RepoDiff {
 	labels: { base: string; head: string };
 	/** The head commit's subject when the change is one commit. */
 	subject?: string;
+	/** Paths the diff is limited to; files outside them can still be read as surrounding context. */
+	scope?: string[];
 	files: RawFile[];
 	git(args: string[]): Promise<Buffer>;
 	read(side: "before" | "after", path: string): Promise<Buffer | undefined>;
@@ -117,6 +119,30 @@ function label(target: GitTarget, change: { baseCommit: string | null; headCommi
 	}
 }
 
+/**
+ * Patch headers C-quote unusual filenames, so file identities come from the NUL-delimited status listing, which
+ * shares the patch's order. A type change (T) is the one status Git writes as two sections for the same path.
+ */
+function assignPaths(files: RawFile[], status: Buffer): void {
+	const records = status.toString("utf8").split("\0").filter(Boolean);
+	const identities: { path: string; oldPath?: string }[] = [];
+	for (let i = 0; i < records.length; ) {
+		const code = records[i++]!;
+		if (code.startsWith("R") || code.startsWith("C")) {
+			const oldPath = records[i++]!;
+			identities.push({ path: records[i++]!, oldPath });
+		} else {
+			const path = records[i++]!;
+			identities.push(...(code === "T" ? [{ path }, { path }] : [{ path }]));
+		}
+	}
+	if (identities.length !== files.length) throw new Error("Git patch and path inventory disagree");
+	for (const [i, file] of files.entries()) {
+		file.path = identities[i]!.path;
+		file.oldPath = identities[i]!.oldPath;
+	}
+}
+
 /** Parse one tree-to-tree patch and serve exact bytes from either side; the caller closes it. */
 async function readTrees(
 	trees: Omit<RepoDiff, "files" | "labels">,
@@ -124,20 +150,23 @@ async function readTrees(
 	paths: string[] = [],
 ): Promise<RepoDiff> {
 	try {
-		const patch = await trees.git([
-			"--literal-pathspecs",
-			...GIT_DIFF,
-			"--find-renames",
-			"-U3",
-			trees.baseTree,
-			trees.headTree,
-			"--",
-			...paths,
-		]);
+		const diff = (...args: string[]) =>
+			trees.git([
+				"--literal-pathspecs",
+				...GIT_DIFF,
+				"--find-renames",
+				...args,
+				trees.baseTree,
+				trees.headTree,
+				"--",
+				...paths,
+			]);
+		const [patch, status] = await Promise.all([diff("-U3"), diff("--name-status", "-z")]);
 		const files = parseUnifiedDiff(patch.toString("utf8"));
+		assignPaths(files, status);
 		for (const file of files)
 			for (const hunk of file.hunks) for (const l of hunk.lines) l.text = l.text.replace(/\r$/, "");
-		return { ...trees, labels, files };
+		return { ...trees, labels, files, scope: paths.length ? paths : undefined };
 	} catch (error) {
 		await trees.close();
 		throw error;
@@ -156,17 +185,27 @@ export async function readChange(cwd: string, target: GitTarget, signal?: AbortS
 	return readTrees({ ...change, root: change.repository, subject }, label(target, change));
 }
 
-/** A retained review capture: its own repository and trees, limited to the reviewed paths. */
-export async function readCapturedChange(artifact: ReviewArtifact, signal?: AbortSignal): Promise<RepoDiff> {
-	await verifyCapturedSource(artifact, signal);
-	const trees = openTrees(artifact.source, artifact.baseTree, artifact.headTree);
+/**
+ * A retained review capture: its own repository and trees. Sign-off limits the diff to the reviewed paths;
+ * explanations show the whole capture, so changed context is never labelled unchanged.
+ */
+export async function readCapturedChange(
+	artifact: ReviewArtifact,
+	options: { scoped?: boolean; signal?: AbortSignal } = {},
+): Promise<RepoDiff> {
+	await verifyCapturedSource(artifact, options.signal);
+	const trees = openTrees(artifact.source, artifact.baseTree, artifact.headTree, { signal: options.signal });
+	const short = (id: string) => id.slice(0, 7);
+	const kind = artifact.request.target.kind;
+	// A mutable capture's head is a snapshot, not the commit its checkout was on.
+	const head =
+		kind === "working-tree" || kind === "staged"
+			? `${kind === "staged" ? "captured index" : "captured working tree"} ${short(artifact.headTree)}`
+			: short(artifact.headCommit ?? artifact.headTree);
 	return readTrees(
 		{ ...trees, root: artifact.source, baseTree: artifact.baseTree, headTree: artifact.headTree },
-		{
-			base: (artifact.baseCommit ?? artifact.baseTree).slice(0, 7),
-			head: (artifact.headCommit ?? artifact.headTree).slice(0, 7),
-		},
-		artifact.request.paths,
+		{ base: short(artifact.baseCommit ?? artifact.baseTree), head },
+		options.scoped ? artifact.request.paths : undefined,
 	);
 }
 

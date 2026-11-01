@@ -33,7 +33,7 @@ export function reviewLimits(assessment: ReviewAssessment): string[] {
 			`${job.artifact.omissions.length} captured source/scope omissions remain; inspect the target's omission list.`,
 		);
 	if (!job.plan) limits.push("There is no completed review plan.");
-	if (job.plan?.gaps.length) limits.push(`${job.plan.gaps.length} changed regions have no primary inspection owner.`);
+	if (job.plan?.gaps?.length) limits.push(`${job.plan.gaps.length} changed regions have no primary inspection owner.`);
 	if (!validation) limits.push("Finding and coverage validation has not completed.");
 	for (const { pass, report } of passes) {
 		for (const question of pass.questions) {

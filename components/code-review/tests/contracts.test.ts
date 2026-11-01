@@ -3,6 +3,7 @@ import {
 	planPasses,
 	type ReviewPlan,
 	type ReviewReport,
+	unscopedRegions,
 	validateFindings,
 	validatePlan,
 	validateReport,
@@ -50,7 +51,7 @@ function plan(): ReviewPlan {
 			{
 				id: "request",
 				title: "Preserve consent across the request",
-				regions: ["api-request", "ui-request"],
+				paths: ["api.ts", "web"],
 				context: ["protocol.ts"],
 				risks: [{ kind: "contract", reason: "The renderer and backend must agree." }],
 				passes: [
@@ -71,7 +72,7 @@ function plan(): ReviewPlan {
 			{
 				id: "lifetime",
 				title: "Release the resource",
-				regions: ["api-lifetime"],
+				paths: ["api.ts"],
 				context: [],
 				risks: [],
 				passes: [
@@ -90,7 +91,6 @@ function plan(): ReviewPlan {
 				],
 			},
 		],
-		gaps: [],
 		integration: {
 			role: "code-review-specialist",
 			questions: [
@@ -124,7 +124,7 @@ function report(): ReviewReport {
 }
 
 test("a report accounts for every question and cannot claim completed coverage without evidence", () => {
-	const pass = planPasses(plan())[0]!;
+	const pass = planPasses(plan(), regions)[0]!;
 	const paths = new Set(["api.ts", "web/form.tsx"]);
 	expect(validateReport(report(), "captured-target", pass, paths).coverage[0]!.state).toBe("completed");
 	const missing = report();
@@ -205,18 +205,15 @@ test("finding validation retains every allegation and rejects circular or invent
 	expect(() => validateFindings(valid, "captured-target", [findings])).toThrow("cycle");
 });
 
-test("every region has exactly one primary owner or an explicit gap", () => {
-	const missing = plan();
-	missing.chunks[0]!.regions.pop();
-	expect(() => validatePlan(missing, "captured-target", regions, roles)).toThrow("ui-request");
-	missing.gaps.push({ region: "ui-request", reason: "The renderer contract is not understood yet." });
-	expect(validatePlan(missing, "captured-target", regions, roles).gaps).toEqual(missing.gaps);
-	const duplicate = plan();
-	duplicate.chunks[1]!.regions.push("api-request");
-	expect(() => validatePlan(duplicate, "captured-target", regions, roles)).toThrow("api-request");
-	const invented = plan();
-	invented.chunks[1]!.regions.push("not-a-region");
-	expect(() => validatePlan(invented, "captured-target", regions, roles)).toThrow("not-a-region");
+test("the runtime maps scope paths to regions, keeps unscoped regions for integration and refuses empty scopes", () => {
+	const narrow = plan();
+	narrow.chunks[0]!.paths = ["api.ts"];
+	const accepted = validatePlan(narrow, "captured-target", regions, roles);
+	expect(unscopedRegions(accepted, regions)).toEqual(["ui-request"]);
+	expect(planPasses(accepted, regions).at(-1)!.regions).toEqual(["api-request", "api-lifetime", "ui-request"]);
+	const empty = plan();
+	empty.chunks[1]!.paths = ["missing/"];
+	expect(() => validatePlan(empty, "captured-target", regions, roles)).toThrow("matches no changed path");
 });
 
 test("a plan cannot substitute another artifact, collapse pass identities or select an unavailable role", () => {
@@ -229,28 +226,11 @@ test("a plan cannot substitute another artifact, collapse pass identities or sel
 	expect(() => validatePlan(unavailable, "captured-target", regions, roles)).toThrow("role");
 });
 
-test("a reliability risk changes required work instead of becoming only a label", () => {
+test("declared risks inform the planner's depth without forcing a grid of passes", () => {
 	const risky = plan();
 	risky.chunks[1]!.risks.push({ kind: "reliability", reason: "Cancellation may race resource release." });
-	expect(() => validatePlan(risky, "captured-target", regions, roles)).toThrow("independent reliability");
-	risky.chunks[1]!.passes.push({
-		id: "cancel-reliability",
-		role: "distributed-systems-researcher",
-		lenses: ["reliability"],
-		questions: [
-			{
-				id: "cancel",
-				question: "Can cancellation release the resource twice?",
-				verification: "Trace startup, interrupted and terminal states.",
-			},
-		],
-	});
-	const accepted = validatePlan(risky, "captured-target", regions, roles);
-	expect(
-		planPasses(accepted)
-			.filter((pass) => pass.chunk === "lifetime")
-			.map((pass) => pass.id),
-	).toEqual(["lifetime-correctness", "cancel-reliability"]);
+	risky.chunks[1]!.passes[0]!.lenses.push("reliability");
+	expect(planPasses(validatePlan(risky, "captured-target", regions, roles), regions)).toHaveLength(3);
 });
 
 test("requested lenses are actual passes even when they inspect the same files", () => {
@@ -271,17 +251,17 @@ test("requested lenses are actual passes even when they inspect the same files",
 		],
 	});
 	expect(
-		planPasses(validatePlan(requested, "captured-target", regions, roles, ["tenant isolation"])).filter(
+		planPasses(validatePlan(requested, "captured-target", regions, roles, ["tenant isolation"]), regions).filter(
 			(pass) => pass.chunk === "request",
 		),
 	).toHaveLength(2);
 });
 
-test("a plan can split one file by behavior and unite a contract across directories", () => {
+test("scopes can overlap on one file and unite a contract across directories", () => {
 	const accepted = validatePlan(plan(), "captured-target", regions, roles);
-	expect(planPasses(accepted).map((pass) => ({ id: pass.id, regions: pass.regions }))).toEqual([
-		{ id: "request-correctness", regions: ["api-request", "ui-request"] },
-		{ id: "lifetime-correctness", regions: ["api-lifetime"] },
-		{ id: "integration", regions: ["api-request", "ui-request", "api-lifetime"] },
+	expect(planPasses(accepted, regions).map((pass) => ({ id: pass.id, regions: pass.regions }))).toEqual([
+		{ id: "request-correctness", regions: ["api-request", "api-lifetime", "ui-request"] },
+		{ id: "lifetime-correctness", regions: ["api-request", "api-lifetime"] },
+		{ id: "integration", regions: ["api-request", "api-lifetime", "ui-request"] },
 	]);
 });

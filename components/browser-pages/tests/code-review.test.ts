@@ -118,6 +118,22 @@ describe("buildCodeReviewPage", () => {
 		expect(text).not.toContain("live edit");
 	});
 
+	it("keeps real filenames Git quotes, ignores live attributes outside the selected trees, and rejects base", async () => {
+		write("src/tab\tname.ts", "export const tab = 1;\n");
+		git("add", "src/retry.ts");
+		write(".gitattributes", "*.ts -diff\n");
+		const staged = await buildCodeReviewPage(params({ target: { kind: "staged" } }), repo, "token");
+		const retry = Object.values(staged.page.hunks).find((h) => h.file === "src/retry.ts")!;
+		expect(retry.lines.length).toBeGreaterThan(0);
+		const working = await buildCodeReviewPage(params(), repo, "token");
+		expect(working.page.files.map((f) => f.path)).toContain("src/tab\tname.ts");
+		await expect(
+			buildCodeReviewPage({ ...params(), base: "main" } as unknown as ReviewCodeParams, repo, "token"),
+		).rejects.toThrow("replaced by target");
+		const aborted = AbortSignal.abort();
+		await expect(buildCodeReviewPage(params(), repo, "token", undefined, aborted)).rejects.toThrow();
+	});
+
 	it("renders the agent's Markdown, and inlines Mermaid only when a brief draws a diagram", async () => {
 		const plain = await buildCodeReviewPage(params(), repo, "token");
 		const drawn = params();

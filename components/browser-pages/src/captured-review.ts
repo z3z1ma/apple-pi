@@ -26,7 +26,7 @@ export async function buildCapturedReview(
 		{ ...params, cwd: undefined, target: undefined },
 		artifact.source,
 		token,
-		await readCapturedChange(artifact),
+		await readCapturedChange(artifact, { scoped: true, signal }),
 	);
 	page.capture = {
 		review: job.id,
@@ -51,7 +51,7 @@ export async function buildCapturedReview(
 export function capturedChange(actor: string, review: string, signal?: AbortSignal, store: ReviewStore = withReviews) {
 	const job = store((db) => reviewAssessment(db, actor, review)).job;
 	if (!job.artifact) throw new Error("The review has no captured target");
-	return readCapturedChange(job.artifact, signal);
+	return readCapturedChange(job.artifact, { signal });
 }
 
 export type ApprovalCommit = (id: string, operation: Extract<ReviewOperation, { action: "approve" }>) => Promise<void>;

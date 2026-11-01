@@ -88,6 +88,18 @@ describe("public evidence library", () => {
 		expect(renamed.changedFiles).toEqual(expect.arrayContaining(["feature.ts", "renamed feature.ts", "binary"]));
 	});
 
+	it("resolves path scopes from the session directory and stops output past its limit while streaming", async () => {
+		mkdirSync(join(cwd, "sub"));
+		put("sub/feature.ts", "nested\n");
+		put("feature.ts", "export const value = 2;\n");
+		const nested: any = await runEvidenceFunction("git_change", { paths: ["feature.ts"] }, { cwd: join(cwd, "sub") });
+		expect(nested.changedFiles).toEqual(["sub/feature.ts"]);
+		const here: any = await runEvidenceFunction("git_change", { paths: ["."] }, { cwd: join(cwd, "sub") });
+		expect(here.changedFiles).toEqual(["sub/feature.ts"]);
+		put("large.txt", "line\n".repeat(2 * 1024 * 1024));
+		await expect(call("git_patch")).rejects.toThrow("exceeded");
+	});
+
 	it("resolves committed targets without unrelated untracked files and rejects bad targets", async () => {
 		put("feature.ts", "changed\n");
 		git("commit", "-am", "change");

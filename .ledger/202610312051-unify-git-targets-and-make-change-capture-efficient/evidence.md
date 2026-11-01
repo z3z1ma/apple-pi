@@ -40,3 +40,16 @@ Focused, one worker:
 - `apps/agent-world/scripts/workplace-electron-check.mjs`: actual preload/IPC/runtime preview, admission, queue, captured source and freshness passed; no reviewers started.
 
 Not run: the full test suite (operator policy), a paid review, a live operator sign-off.
+
+## Corrections after review review-22a05b6c
+
+The review confirmed 29 findings (16 more were duplicates). Its performance pass showed the comparison above was unequal: the old capture ended with a full verification, the new one does not, and the verify median hid the first run. The fix commit isolates every Git command in a private Git directory, verifies by hashing files in-process, and ties Git processes to the change's lifetime. Measurements after the fixes, medians of three, milliseconds:
+
+| Case | git status | open working tree | page diff | open commit | capture only | first full verify | capture + first verify | repeat verify |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| this checkout | 135 | 469 | 408 | 61 | 3,008 | 4,130 | 7,138 | 1,159 |
+| 20k files, 2k modified | 227 | 703 | 831 | 51 | 6,223 | 6,418 | 12,635 | 3,771 |
+| 5k untracked | 24 | 1,097 | 1,131 | 50 | 3,685 | 1,186 | 4,871 | 449 |
+| linked worktree | 47 | 255 | 270 | 53 | 5,429 | 6,513 | 11,895 | 3,703 |
+
+The comparable boundary for this checkout is about 7.1 s against the old 22.8-31.8 s: roughly three to four times faster, not the earlier headline. The first verification is slower than repeats because newly written files are read for the first time on this machine; eight concurrent readers took it from 8.6 s to 3.8 s here, and 32 or 128 were no faster. Opening a working-tree change rose from about 300 ms to 430 ms with the isolation (a config read and an attribute query); `git status` here is about 140 ms.

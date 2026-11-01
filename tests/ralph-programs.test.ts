@@ -119,6 +119,30 @@ describe("Ralph Python programs", () => {
 		}
 	});
 
+	for (const program of ["ralph-simple.py", "ralph-ledger.py"])
+		it(`${program} counts repeated edits to the same untracked binary file as progress`, async () => {
+			const cwd = checkout();
+			let calls = 0;
+			try {
+				const path = join(cwd, "asset.bin");
+				writeFileSync(path, Buffer.from([0, 1, 2]));
+				const result = await run(
+					program,
+					{ goal: "increment", iterations: "3", task: ".ledger/task/task.md", stack: ".ledger/task/task.md" },
+					async (name) => {
+						if (name === "pi.read") return "Status: open\n";
+						calls++;
+						writeFileSync(path, Buffer.from([0, 1, 2, calls]));
+						return { status: "completed", text: "increment done" };
+					},
+					cwd,
+				);
+				expect(result).toMatchObject({ status: "completed", completedIterations: 3 });
+			} finally {
+				rmSync(cwd, { recursive: true, force: true });
+			}
+		});
+
 	it("rejects noncanonical iteration bounds, preserves failure counts, and observes terminal ledger status", async () => {
 		const cwd = checkout();
 		const inputs = { goal: "increment", iterations: "4", stack: "README.md", task: ".ledger/task/task.md" };

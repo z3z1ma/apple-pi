@@ -138,24 +138,35 @@ function target(options: RecordValue): GitTarget {
 	return value;
 }
 const EVIDENCE_OUTPUT_LIMIT = 8 * 1024 * 1024;
-/** The same snapshot review_code, sign_off_code and explain_change select; trees make repeat calls comparable. */
+const EVIDENCE_DEADLINE_MS = 60_000;
+/**
+ * The same snapshot review_code, sign_off_code and explain_change select; trees make repeat calls comparable.
+ * Evidence keeps its execution policy: one deadline for the call, an output limit enforced while Git streams,
+ * and pathspecs resolved from the session's directory as plain `git diff` would. Closing the change cancels and
+ * waits for any diff still running.
+ */
 async function withChange<T>(
 	options: RecordValue,
 	env: EvidenceEnvironment,
 	use: (change: GitChange, diff: (...args: string[]) => Promise<string>) => Promise<T>,
 ): Promise<T> {
-	const change = await openGitChange(env.cwd, target(options), { signal: env.signal });
+	const deadline = AbortSignal.timeout(EVIDENCE_DEADLINE_MS);
+	const signal = env.signal ? AbortSignal.any([env.signal, deadline]) : deadline;
+	const scope = pathArgs(options);
+	const change = await openGitChange(env.cwd, target(options), { signal });
 	try {
-		const scope = pathArgs(options);
-		const diff = async (...args: string[]) => {
-			const output = await change.git([...GIT_DIFF, ...args, change.baseTree, change.headTree, ...scope], {
-				signal: env.signal,
-			});
-			if (output.length > EVIDENCE_OUTPUT_LIMIT)
-				throw new Error("Evidence command output exceeded 8 MiB; narrow the paths");
-			return output.toString("utf8");
-		};
+		const diff = async (...args: string[]) =>
+			(
+				await change.git([...GIT_DIFF, ...args, change.baseTree, change.headTree, ...scope], {
+					cwd: env.cwd,
+					maxBytes: EVIDENCE_OUTPUT_LIMIT,
+				})
+			).toString("utf8");
 		return await use(change, diff);
+	} catch (error) {
+		if (deadline.aborted && !env.signal?.aborted)
+			throw new Error(`Evidence Git work exceeded ${EVIDENCE_DEADLINE_MS / 1000}s; narrow the paths`);
+		throw error;
 	} finally {
 		await change.close();
 	}

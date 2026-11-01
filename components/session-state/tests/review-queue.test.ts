@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { backup, DatabaseSync } from "node:sqlite";
 import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai/compat";
@@ -344,6 +344,14 @@ test("freshness separates a stable committed target from checkout changes, polic
 	writeFileSync(rolePath, role.replace("fixture/code-review-specialist:high", "fixture/replacement:high"));
 	expect(await readReviewFreshness("owner", job.id)).toMatchObject({ requestedTarget: "changed", policy: "changed" });
 	writeFileSync(rolePath, role);
+	// A project role in the live checkout only is not part of the committed target capture reads.
+	mkdirSync(join(repository, ".pi", "roles"), { recursive: true });
+	writeFileSync(
+		join(repository, ".pi", "roles", "code-review-specialist.md"),
+		role.replace("fixture/code-review-specialist:high", "fixture/live-only:high"),
+	);
+	expect(await readReviewFreshness("owner", job.id)).toMatchObject({ requestedTarget: "matches" });
+	rmSync(join(repository, ".pi"), { recursive: true });
 	execFileSync("git", ["branch", "-m", "renamed"], { cwd: repository });
 	expect(await readReviewFreshness("owner", job.id)).toMatchObject({
 		requestedTarget: "matches",

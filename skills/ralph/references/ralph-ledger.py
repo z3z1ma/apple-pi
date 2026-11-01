@@ -12,6 +12,21 @@ async def mutationSnapshot() -> str:
     change = await git_change(paths=[".", ":(exclude).ledger/**"])
     return change["patch"]
 
+def binarySections(patch: str) -> dict[str, str]:
+    # A binary edit is one unchanged "Binary files ... differ" line plus a new object ID, so line counts miss it.
+    sections: dict[str, str] = {}
+    for section in ("\n" + patch).split("\ndiff --git ")[1:]:
+        if "\nBinary files " in section:
+            sections[section.split("\n")[0]] = section
+    return sections
+
+def mutationScore(before: str, after: str) -> int:
+    beforeBinary = binarySections(before)
+    afterBinary = binarySections(after)
+    headers = set(beforeBinary) | set(afterBinary)
+    binaryChanges = len([header for header in headers if beforeBinary.get(header) != afterBinary.get(header)])
+    return changedLines(before, after) + binaryChanges * LOW_MUTATION_SCORE
+
 def changedLines(before: str, after: str) -> int:
     if before == after:
         return 0
@@ -58,7 +73,7 @@ async def main() -> dict[str, Any]:
         if status:
             return {"status": "stopped", "stopReason": "task-" + status.group(1), "requestedIterations": iterations,
                     "completedIterations": iteration, "failures": failures}
-        score = changedLines(before, await mutationSnapshot())
+        score = mutationScore(before, await mutationSnapshot())
         lowMutationStreak = lowMutationStreak + 1 if score < LOW_MUTATION_SCORE else 0
         if lowMutationStreak >= MAX_CONSECUTIVE_LOW_MUTATION:
             return {"status": "stopped", "stopReason": "low-mutation", "requestedIterations": iterations,

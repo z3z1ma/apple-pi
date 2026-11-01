@@ -33,115 +33,120 @@ const RefSchema = Type.Object({
 	),
 });
 
-export const ReviewCodeParamsSchema = Type.Object({
-	review: Type.Optional(
-		Type.String({
-			minLength: 1,
-			description:
-				"Captured review ID or request handle. Uses its retained source and assessment for exact-artifact operator sign-off; cwd and target cannot replace it.",
-		}),
-	),
-	cwd: Type.Optional(
-		Type.String({
-			description:
-				"Target working directory (repository or worktree for git pages). Absolute or relative to the session working directory; defaults to the session working directory.",
-		}),
-	),
-	title: Type.String({ description: "What the change does, as a short headline" }),
-	intent: Type.String({
-		description: "The judgment you need and why the change exists, in two to four sentences (Markdown)",
-	}),
-	target: Type.Optional({
-		...GitTargetSchema,
-		description: `${GIT_TARGET_HELP} Default: the working tree against HEAD. Ignored with review.`,
-	}),
-	focus: Type.Optional(
-		Type.Object(
-			{
-				text: Type.String({
-					description: "Where to look first if the reviewer only has two minutes, and why (Markdown)",
-				}),
-				refs: Type.Optional(Type.Array(RefSchema, { description: "The changes to read first" })),
-			},
-			{ description: "The two-minute path through the change" },
-		),
-	),
-	verification: Type.Optional(
-		Type.Array(
-			Type.Object({
-				status: Type.Union([Type.Literal("pass"), Type.Literal("fail"), Type.Literal("unverified")]),
-				label: Type.String({ description: "What was checked, such as `npm test`" }),
-				detail: Type.Optional(Type.String({ description: "Outcome, such as 52 passed" })),
-			}),
-			{ description: "What you ran or checked, and what you did not verify" },
-		),
-	),
-	chapters: Type.Array(
-		Type.Object({
-			title: Type.String({ description: "The idea this chapter carries, as a headline" }),
-			kind: Type.Union([Type.Literal("core"), Type.Literal("consequence"), Type.Literal("support")], {
-				description: "core = the heart of the change; consequence = follows from it; support = tests, docs, wiring",
-			}),
-			attention: AttentionSchema,
-			brief: Type.String({
+export const ReviewCodeParamsSchema = Type.Object(
+	{
+		review: Type.Optional(
+			Type.String({
+				minLength: 1,
 				description:
-					"Your explanation of this chapter for the reviewer: why, how, and what to watch. Markdown: lists, tables, code fences, and `mermaid` diagrams render",
+					"Captured review ID or request handle. Uses its retained source and assessment for exact-artifact operator sign-off; cwd and target cannot replace it.",
 			}),
-			callouts: Type.Optional(
-				Type.Array(
-					Type.Object({
-						title: Type.String({ description: "Short label, such as Behaviour change" }),
-						text: Type.String({ description: "The caveat or risk (Markdown)" }),
+		),
+		cwd: Type.Optional(
+			Type.String({
+				description:
+					"Target working directory (repository or worktree for git pages). Absolute or relative to the session working directory; defaults to the session working directory.",
+			}),
+		),
+		title: Type.String({ description: "What the change does, as a short headline" }),
+		intent: Type.String({
+			description: "The judgment you need and why the change exists, in two to four sentences (Markdown)",
+		}),
+		target: Type.Optional({
+			...GitTargetSchema,
+			description: `${GIT_TARGET_HELP} Default: the working tree against HEAD. Ignored with review.`,
+		}),
+		focus: Type.Optional(
+			Type.Object(
+				{
+					text: Type.String({
+						description: "Where to look first if the reviewer only has two minutes, and why (Markdown)",
 					}),
-				),
+					refs: Type.Optional(Type.Array(RefSchema, { description: "The changes to read first" })),
+				},
+				{ description: "The two-minute path through the change" },
 			),
-			changes: Type.Array(
+		),
+		verification: Type.Optional(
+			Type.Array(
 				Type.Object({
-					summary: Type.String({ description: "One sentence: what this change does" }),
-					file: Type.Optional(Type.String({ description: "Path of one change; omit when you give places" })),
-					lines: Type.Optional(Type.String({ description: 'New-side line range in that file, such as "41-53"' })),
-					places: Type.Optional(
-						Type.Array(RefSchema, {
-							minItems: 2,
-							description:
-								"The same change repeated in several places. The page shows the first place in full and lists the rest.",
+					status: Type.Union([Type.Literal("pass"), Type.Literal("fail"), Type.Literal("unverified")]),
+					label: Type.String({ description: "What was checked, such as `npm test`" }),
+					detail: Type.Optional(Type.String({ description: "Outcome, such as 52 passed" })),
+				}),
+				{ description: "What you ran or checked, and what you did not verify" },
+			),
+		),
+		chapters: Type.Array(
+			Type.Object({
+				title: Type.String({ description: "The idea this chapter carries, as a headline" }),
+				kind: Type.Union([Type.Literal("core"), Type.Literal("consequence"), Type.Literal("support")], {
+					description: "core = the heart of the change; consequence = follows from it; support = tests, docs, wiring",
+				}),
+				attention: AttentionSchema,
+				brief: Type.String({
+					description:
+						"Your explanation of this chapter for the reviewer: why, how, and what to watch. Markdown: lists, tables, code fences, and `mermaid` diagrams render",
+				}),
+				callouts: Type.Optional(
+					Type.Array(
+						Type.Object({
+							title: Type.String({ description: "Short label, such as Behaviour change" }),
+							text: Type.String({ description: "The caveat or risk (Markdown)" }),
 						}),
 					),
-					attention: Type.Optional(AttentionSchema),
-				}),
-				{ minItems: 1, description: "The diff pieces in this chapter, in reading order" },
-			),
-		}),
-		{ minItems: 1, description: "The change told in the order you reasoned about it: core first, support last" },
-	),
-	notes: Type.Optional(
-		Type.Array(
-			Type.Object({
-				file: Type.String(),
-				line: Type.Integer({ description: "New-side line number the note is about" }),
-				text: Type.String({ description: "Something the code cannot show: a reason, a hazard, a subtlety" }),
-			}),
-			{ description: "Short notes pinned to lines" },
-		),
-	),
-	decisions: Type.Optional(
-		Type.Array(
-			Type.Object({
-				file: Type.String(),
-				line: Type.Optional(Type.Integer({ description: "New-side line; default: the first added line in the file" })),
-				question: Type.String(),
-				context: Type.Optional(Type.String({ description: "What the choice affects" })),
-				options: Type.Array(Type.Object({ label: Type.String(), detail: Type.Optional(Type.String()) }), {
-					minItems: 2,
-				}),
-				chosen: Type.Optional(
-					Type.Integer({ description: "Index of the option you chose; omit to ask the reviewer to choose" }),
+				),
+				changes: Type.Array(
+					Type.Object({
+						summary: Type.String({ description: "One sentence: what this change does" }),
+						file: Type.Optional(Type.String({ description: "Path of one change; omit when you give places" })),
+						lines: Type.Optional(Type.String({ description: 'New-side line range in that file, such as "41-53"' })),
+						places: Type.Optional(
+							Type.Array(RefSchema, {
+								minItems: 2,
+								description:
+									"The same change repeated in several places. The page shows the first place in full and lists the rest.",
+							}),
+						),
+						attention: Type.Optional(AttentionSchema),
+					}),
+					{ minItems: 1, description: "The diff pieces in this chapter, in reading order" },
 				),
 			}),
-			{ description: "Real judgment calls the reviewer may want to override. Use sparingly." },
+			{ minItems: 1, description: "The change told in the order you reasoned about it: core first, support last" },
 		),
-	),
-});
+		notes: Type.Optional(
+			Type.Array(
+				Type.Object({
+					file: Type.String(),
+					line: Type.Integer({ description: "New-side line number the note is about" }),
+					text: Type.String({ description: "Something the code cannot show: a reason, a hazard, a subtlety" }),
+				}),
+				{ description: "Short notes pinned to lines" },
+			),
+		),
+		decisions: Type.Optional(
+			Type.Array(
+				Type.Object({
+					file: Type.String(),
+					line: Type.Optional(
+						Type.Integer({ description: "New-side line; default: the first added line in the file" }),
+					),
+					question: Type.String(),
+					context: Type.Optional(Type.String({ description: "What the choice affects" })),
+					options: Type.Array(Type.Object({ label: Type.String(), detail: Type.Optional(Type.String()) }), {
+						minItems: 2,
+					}),
+					chosen: Type.Optional(
+						Type.Integer({ description: "Index of the option you chose; omit to ask the reviewer to choose" }),
+					),
+				}),
+				{ description: "Real judgment calls the reviewer may want to override. Use sparingly." },
+			),
+		),
+	},
+	{ additionalProperties: false },
+);
 
 export type ReviewCodeParams = Static<typeof ReviewCodeParamsSchema>;
 type Ref = { file: string; lines?: string };
@@ -364,6 +369,15 @@ function cutHunks(islands: Island[], hunks: Record<string, Hunk>, order: string[
 	}
 }
 
+/** The former base/head arguments must fail loudly rather than silently review the default target. */
+export function rejectRemovedSelection(params: object): void {
+	const removed = ["base", "head"].filter((key) => key in params);
+	if (removed.length)
+		throw new Error(
+			`${removed.join(" and ")} ${removed.length === 1 ? "was" : "were"} replaced by target, for example {"kind": "branch", "base": "main", "head": "feature"} or {"kind": "commit", "commit": "abc123"}.`,
+		);
+}
+
 /**
  * Builds the page from the agent's structure and the selected change. Code always comes from Git objects:
  * the live target's snapshot, or a supplied retained diff. The page owns and closes the diff.
@@ -373,9 +387,11 @@ export async function buildCodeReviewPage(
 	cwd: string,
 	token: string,
 	captured?: RepoDiff,
+	signal?: AbortSignal,
 ): Promise<{ page: CodeReviewPage; root: string }> {
+	rejectRemovedSelection(params);
 	cwd = resolve(cwd, params.cwd ?? ".");
-	const diff = captured ?? (await readChange(cwd, params.target ?? WORKING_TREE));
+	const diff = captured ?? (await readChange(cwd, params.target ?? WORKING_TREE, signal));
 	try {
 		return await pageOf(params, cwd, token, diff);
 	} finally {

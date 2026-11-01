@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { type Static, Type } from "typebox";
 
 import { GIT_TARGET_HELP, type GitTarget, GitTargetSchema, WORKING_TREE } from "../../shared/src/git-change.js";
+import { rejectRemovedSelection } from "./code-review.js";
 import { type RawLine, type RepoDiff, readChange } from "./git-diff.js";
 import { highlightLines } from "./highlight.js";
 import { blocksOf, isObject, withDiagrams } from "./markdown-review.js";
@@ -13,45 +14,48 @@ export const EXPLAIN_CHANGE_TOOL_NAME = "explain_change";
 
 const markdown = (description: string) => Type.String({ description });
 
-export const ExplainChangeParamsSchema = Type.Object({
-	cwd: Type.Optional(
-		Type.String({
-			description:
-				"Target working directory (repository or worktree for git pages). Absolute or relative to the session working directory; defaults to the session working directory.",
+export const ExplainChangeParamsSchema = Type.Object(
+	{
+		cwd: Type.Optional(
+			Type.String({
+				description:
+					"Target working directory (repository or worktree for git pages). Absolute or relative to the session working directory; defaults to the session working directory.",
+			}),
+		),
+		title: Type.String({ description: "What the change does, as a headline" }),
+		target: Type.Optional({
+			...GitTargetSchema,
+			description: `${GIT_TARGET_HELP} Default: the working tree against HEAD.`,
 		}),
-	),
-	title: Type.String({ description: "What the change does, as a headline" }),
-	target: Type.Optional({
-		...GitTargetSchema,
-		description: `${GIT_TARGET_HELP} Default: the working tree against HEAD.`,
-	}),
-	review: Type.Optional(
-		Type.String({
-			minLength: 1,
-			description: "Captured review ID or request handle: explain its retained source instead of a live target.",
-		}),
-	),
-	summary: markdown("The change in one minute: one short paragraph"),
-	primer: Type.Optional(markdown("Deep background a reader new to this area needs; shown collapsed")),
-	background: markdown("The existing system the change touches, as it was before"),
-	intuition: markdown("The idea before the code: a concrete example with toy data, figures, and diagrams"),
-	steps: Type.Array(
-		Type.Object({
-			title: Type.String(),
-			body: markdown("Prose around the code it cites with `code path:FROM-TO` fences"),
-		}),
-		{ minItems: 1 },
-	),
-	quiz: Type.Array(
-		Type.Object({
-			question: Type.String(),
-			options: Type.Array(Type.String(), { minItems: 3, maxItems: 4 }),
-			answer: Type.Integer({ minimum: 0, description: "Index of the right option" }),
-			why: Type.String({ description: "Why the right answer is right, naming the step that teaches it" }),
-		}),
-		{ minItems: 5, maxItems: 5 },
-	),
-});
+		review: Type.Optional(
+			Type.String({
+				minLength: 1,
+				description: "Captured review ID or request handle: explain its retained source instead of a live target.",
+			}),
+		),
+		summary: markdown("The change in one minute: one short paragraph"),
+		primer: Type.Optional(markdown("Deep background a reader new to this area needs; shown collapsed")),
+		background: markdown("The existing system the change touches, as it was before"),
+		intuition: markdown("The idea before the code: a concrete example with toy data, figures, and diagrams"),
+		steps: Type.Array(
+			Type.Object({
+				title: Type.String(),
+				body: markdown("Prose around the code it cites with `code path:FROM-TO` fences"),
+			}),
+			{ minItems: 1 },
+		),
+		quiz: Type.Array(
+			Type.Object({
+				question: Type.String(),
+				options: Type.Array(Type.String(), { minItems: 3, maxItems: 4 }),
+				answer: Type.Integer({ minimum: 0, description: "Index of the right option" }),
+				why: Type.String({ description: "Why the right answer is right, naming the step that teaches it" }),
+			}),
+			{ minItems: 5, maxItems: 5 },
+		),
+	},
+	{ additionalProperties: false },
+);
 
 export type ExplainChangeParams = Static<typeof ExplainChangeParamsSchema>;
 
@@ -153,7 +157,9 @@ export async function buildExplainPage(
 	cwd: string,
 	token: string,
 	captured?: (review: string) => Promise<RepoDiff>,
+	signal?: AbortSignal,
 ): Promise<{ page: ExplainChangePage; root: string; warnings: string[] }> {
+	rejectRemovedSelection(params);
 	for (const [i, q] of params.quiz.entries())
 		if (q.answer >= q.options.length)
 			throw new Error(`Quiz question ${i + 1}: \`answer\` ${q.answer} is not one of its ${q.options.length} options.`);
@@ -161,7 +167,7 @@ export async function buildExplainPage(
 	const target = params.target ?? WORKING_TREE;
 	const diff = params.review
 		? await captured!(params.review)
-		: await readChange(resolve(cwd, params.cwd ?? "."), target);
+		: await readChange(resolve(cwd, params.cwd ?? "."), target, signal);
 	try {
 		return await explanation(params, token, diff, params.review ? undefined : target);
 	} finally {
@@ -185,7 +191,15 @@ async function explanation(
 	const warnings: string[] = [];
 	const excerpt = excerpts(diff);
 	const parts = (source: string) => partsOf(source, excerpt, warnings);
-	const steps = await Promise.all(params.steps.map(async (s) => ({ title: s.title, parts: await parts(s.body) })));
+	// Every step settles before the caller closes the change, even when one of them fails.
+	const settled = await Promise.allSettled(
+		params.steps.map(async (s) => ({ title: s.title, parts: await parts(s.body) })),
+	);
+	const failed = settled.find((result) => result.status === "rejected");
+	if (failed) throw failed.reason;
+	const steps = settled.map(
+		(result) => (result as PromiseFulfilledResult<{ title: string; parts: ExplainPart[] }>).value,
+	);
 	const sections = {
 		summary: await parts(params.summary),
 		primer: params.primer?.trim() ? await parts(params.primer) : undefined,

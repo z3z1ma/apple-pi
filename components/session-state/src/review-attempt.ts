@@ -103,6 +103,7 @@ export async function runReviewAttempt(
 	let output: unknown;
 	let failure: unknown;
 	let cleaned = false;
+	let cancelled = false;
 	const saveResult = (result: TurnResult) => {
 		if (!db.isOpen) return;
 		const record = {
@@ -152,6 +153,7 @@ export async function runReviewAttempt(
 		storeOutput(db, job, id, pass, output);
 	} catch (error) {
 		failure = error;
+		cancelled = signal.aborted && (error === signal.reason || (error as Error)?.name === "AbortError");
 	} finally {
 		try {
 			if (program) await program.close();
@@ -164,8 +166,11 @@ export async function runReviewAttempt(
 	cleaned = cleaned && !db.prepare("select 1 from program_scopes where id = ?").get(programId);
 	if (!cleaned && !failure) failure = new Error("The attempt still owns resources; inspect its pending cleanup");
 	const eligible = current(db, job) && !signal.aborted;
+	if (!failure && signal.aborted) cancelled = true;
 	if (!eligible && !failure) failure = new Error("The attempt was interrupted or superseded");
-	const state = !cleaned ? "interrupted" : failure ? (signal.aborted ? "cancelled" : "failed") : "completed";
+	// Cancelled only when the stop caused the failure; an attempt that failed on its own stays failed even when a
+	// sibling pass's failure has since stopped the rest of the review.
+	const state = !cleaned ? "interrupted" : failure ? (cancelled ? "cancelled" : "failed") : "completed";
 	db.prepare("update review_attempts set state = ?, reason = ?, finished_at = ? where id = ?").run(
 		state,
 		failure ? message(failure) : null,

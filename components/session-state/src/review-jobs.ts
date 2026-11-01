@@ -13,6 +13,7 @@ import {
 	ReviewPlanSchema,
 	type ReviewReport,
 	ReviewReportSchema,
+	unscopedRegions,
 	validateFindings,
 	validatePlan,
 	validateReport,
@@ -421,7 +422,8 @@ export class ReviewJobs {
 					.run(JSON.stringify(plan), JSON.stringify(job.selectedAttempts), Date.now(), id, job.generation);
 				if (!changed.changes) throw new Error("The planner no longer owns this review");
 				job = readReview(this.db, "operator", id);
-				const passes = planPasses(plan);
+				const passes = planPasses(plan, artifact.regions);
+				const unscoped = unscopedRegions(plan, artifact.regions).length;
 				this.notice(
 					job,
 					`plan:${job.planRevision}`,
@@ -429,7 +431,7 @@ export class ReviewJobs {
 						`Review ${job.id} is planned: ${count(plan.chunks.length, "scope")}, ${count(passes.length, "pass", "passes")}, ${count(
 							passes.reduce((n, pass) => n + pass.questions.length, 0),
 							"question",
-						)}${plan.gaps.length ? `, ${count(plan.gaps.length, "declared gap")}` : ""}. Up to ${REVIEW_PASS_CONCURRENCY} passes run at once.`,
+						)}${unscoped ? ` (${count(unscoped, "changed region")} outside every scope, covered by the integration pass)` : ""}. Up to ${REVIEW_PASS_CONCURRENCY} passes run at once.`,
 						"",
 						plan.summary,
 						"",
@@ -439,40 +441,45 @@ export class ReviewJobs {
 			}
 			const plan = job.plan!;
 			const paths = new Set([...artifact.files, ...artifact.regions, ...artifact.omissions].map((entry) => entry.path));
-			const reports = await inParallel(planPasses(plan), REVIEW_PASS_CONCURRENCY, signal, async (pass, passSignal) => {
-				const inspected = await runReviewAttempt(
-					this.db,
-					this.paths,
-					job,
-					{
-						id: pass.id,
-						role: pass.role,
-						policyFingerprint: roles.find((role) => role.name === pass.role)?.policy,
-						kind: pass.kind,
-						goal: `${artifact.configuration?.instructions.inspection ?? INSPECT_REVIEW}\nCaptured source: ${artifact.source}`,
-						schema: ReviewReportSchema,
-						context: {
-							phase: "inspection",
-							artifact: source,
-							pass,
-							regions: artifact.regions.filter((region) => pass.regions.includes(region.id)),
-							chunks: plan.chunks.map(({ id, title, regions, context, risks }) => ({
-								id,
-								title,
-								regions,
-								context,
-								risks,
-							})),
+			const reports = await inParallel(
+				planPasses(plan, artifact.regions),
+				REVIEW_PASS_CONCURRENCY,
+				signal,
+				async (pass, passSignal) => {
+					const inspected = await runReviewAttempt(
+						this.db,
+						this.paths,
+						job,
+						{
+							id: pass.id,
+							role: pass.role,
+							policyFingerprint: roles.find((role) => role.name === pass.role)?.policy,
+							kind: pass.kind,
+							goal: `${artifact.configuration?.instructions.inspection ?? INSPECT_REVIEW}\nCaptured source: ${artifact.source}`,
+							schema: ReviewReportSchema,
+							context: {
+								phase: "inspection",
+								artifact: source,
+								pass,
+								regions: artifact.regions.filter((region) => pass.regions.includes(region.id)),
+								chunks: plan.chunks.map(({ id, title, paths, context, risks }) => ({
+									id,
+									title,
+									paths,
+									context,
+									risks,
+								})),
+							},
+							validate: (value) => validateReport(value, artifact.digest, pass, paths),
+							reuse: (value) => (value as ReviewReport).coverage.every((entry) => entry.state === "completed"),
 						},
-						validate: (value) => validateReport(value, artifact.digest, pass, paths),
-						reuse: (value) => (value as ReviewReport).coverage.every((entry) => entry.state === "completed"),
-					},
-					passSignal,
-				);
-				job.selectedAttempts = { ...job.selectedAttempts, [pass.id]: inspected.attempt };
-				this.storeSelection(job);
-				return inspected.output as ReviewReport;
-			});
+						passSignal,
+					);
+					job.selectedAttempts = { ...job.selectedAttempts, [pass.id]: inspected.attempt };
+					this.storeSelection(job);
+					return inspected.output as ReviewReport;
+				},
+			);
 			const reviewedAttempts = { ...job.selectedAttempts };
 			const validated = await runReviewAttempt(
 				this.db,
@@ -500,7 +507,7 @@ export class ReviewJobs {
 			if (JSON.stringify(reviewRoleCatalog(artifact.source)) !== JSON.stringify(roles))
 				throw new Error("The review policy changed during execution; resume to obtain a current-policy plan");
 			const incomplete =
-				plan.gaps.length ||
+				plan.gaps?.length ||
 				reports.some(
 					(report) => report.coverage.some((entry) => entry.state === "incomplete") || report.extraPasses.length,
 				) ||

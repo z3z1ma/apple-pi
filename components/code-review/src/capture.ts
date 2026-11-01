@@ -1,11 +1,11 @@
 import { isUtf8 } from "node:buffer";
 import { createHash } from "node:crypto";
-import { lstat, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { lstat, mkdir, readFile, readlink, realpath, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import type { GitOptions } from "../../shared/src/git.js";
 import {
-	copyIndex,
+	blobId,
+	fileBlobId,
 	GIT_DIFF,
 	type GitChange,
 	gitLine,
@@ -76,35 +76,56 @@ export async function verifyCapturedSource(artifact: ReviewArtifact, signal?: Ab
 	if (hash(await scopedPatch(artifact, signal)) !== artifact.patchHash) throw new Error("Captured comparison changed");
 }
 
-/** Full integrity before recovery and decisions: every retained object, and the materialized checkout's bytes. */
+/** Measured on this checkout's first verification after capture: 1 reader 8.6 s, 8 readers 3.8 s, 32 and 128 no faster. */
+const VERIFY_READERS = 8;
+
+/**
+ * Full integrity before recovery and decisions: every retained object, and every materialized path's mode and bytes
+ * hashed against the retained head tree. This reads the files themselves rather than the checkout's index or
+ * config, which reviewers' ordinary Git use can change (index flags, stat data, core.worktree).
+ */
 export async function verifyArtifact(artifact: ReviewArtifact, signal?: AbortSignal): Promise<void> {
 	await verifyCapturedSource(artifact, signal);
 	await text(artifact.source, ["fsck", "--no-reflogs", "--no-dangling"], { signal });
-	const raw = rawFlags(await text(artifact.source, ["rev-parse", "--show-object-format"], { signal }));
-	// Git's stat cache makes repeat checks cheap; refreshing the checkout's own index keeps it warm. When a
-	// reviewer holds the index lock, a private copy gives the same answer without waiting.
-	const check = async (env?: NodeJS.ProcessEnv) => {
-		await bytes(artifact.source, [...raw, "update-index", "-q", "--refresh"], { signal, env }).catch((error: Error) => {
-			if (/index\.lock/.test(error.message)) throw error;
-		});
-		const changed = paths(await bytes(artifact.source, [...raw, "diff-files", "--name-only", "-z"], { signal, env }));
-		if (changed.length) throw new Error(`Captured source changed: ${changed[0]}`);
-		if ((await text(artifact.source, ["write-tree"], { signal, env })) !== artifact.headTree)
-			throw new Error("Captured source changed: the checkout index no longer matches the captured tree");
+	const format = await text(artifact.source, ["rev-parse", "--show-object-format"], { signal });
+	const directories = new Set<string>();
+	const directory = async (path: string) => {
+		if (directories.has(path)) return true;
+		const found = (await lstat(path).catch(absent))?.isDirectory() ?? false;
+		if (found) directories.add(path);
+		return found;
 	};
-	try {
-		await check();
-	} catch (error) {
-		if (!/index\.lock/.test((error as Error).message)) throw error;
-		const scratch = await mkdtemp(join(tmpdir(), "review-verify-"));
-		try {
-			const index = join(scratch, "index");
-			await copyIndex(join(artifact.source, ".git", "index"), index);
-			await check({ GIT_INDEX_FILE: index });
-		} finally {
-			await rm(scratch, { recursive: true, force: true });
+	const entries = await treeReferences(artifact.source, artifact.headTree, signal);
+	let next = 0;
+	const check = async () => {
+		while (next < entries.length) {
+			await checkEntry(entries[next++]!);
 		}
-	}
+	};
+	const checkEntry = async (entry: (typeof entries)[number]) => {
+		signal?.throwIfAborted();
+		const parts = safePath(entry.path).split("/");
+		for (let i = 1; i < parts.length; i++)
+			if (!(await directory(join(artifact.source, ...parts.slice(0, i)))))
+				throw new Error(`Captured source changed: ${entry.path}`);
+		const path = join(artifact.source, ...parts);
+		const stat = await lstat(path).catch(absent);
+		const mode = stat?.isSymbolicLink()
+			? "120000"
+			: stat?.isDirectory()
+				? "160000"
+				: stat?.isFile()
+					? stat.mode & 0o111
+						? "100755"
+						: "100644"
+					: undefined;
+		if (mode !== entry.mode) throw new Error(`Captured source changed: ${entry.path}`);
+		if (mode === "160000") return;
+		const id =
+			mode === "120000" ? blobId(format, await readlink(path, { encoding: "buffer" })) : await fileBlobId(format, path);
+		if (id !== entry.blob) throw new Error(`Captured source changed: ${entry.path}`);
+	};
+	await Promise.all(Array.from({ length: VERIFY_READERS }, check));
 }
 
 export async function readCapturedSource(
@@ -177,19 +198,17 @@ async function treeListing(root: string, tree: string, signal?: AbortSignal, pat
  * the index itself; fsck checks the result later.
  */
 async function transferObjects(change: GitChange, source: string, signal?: AbortSignal) {
-	await gitRun(
-		change.repository,
-		["pack-objects", "--revs", "--window=0", "-q", join(source, ".git", "objects", "pack", "pack")],
-		{
-			env: change.env,
-			input: `${change.baseTree}\n${change.headTree}\n`,
-			signal,
-		},
-	);
+	await change.git(["pack-objects", "--revs", "--window=0", "-q", join(source, ".git", "objects", "pack", "pack")], {
+		input: `${change.baseTree}\n${change.headTree}\n`,
+		signal,
+	});
 	await text(source, ["prune-packed"], { signal });
 }
 
-/** One diff process; `--name-only` and patch output share Git's path order. */
+/**
+ * One patch for all regions. `--name-status` and the patch share Git's path order; a type change (T) is the one
+ * status Git writes as two sections (deletion, then addition) for the same path.
+ */
 async function changedRegions(
 	source: string,
 	base: string,
@@ -197,10 +216,13 @@ async function changedRegions(
 	signal?: AbortSignal,
 ): Promise<ChangeRegion[]> {
 	const [names, output] = await Promise.all([
-		bytes(source, [...DIFF, "--name-only", "-z", base, head], { signal }),
+		bytes(source, [...DIFF, "--name-status", "-z", base, head], { signal }),
 		bytes(source, [...DIFF, "--unified=0", base, head], { signal }),
 	]);
-	const changed = paths(names);
+	const records = paths(names);
+	const changed: string[] = [];
+	for (let i = 0; i + 1 < records.length; i += 2)
+		changed.push(...(records[i] === "T" ? [records[i + 1]!, records[i + 1]!] : [records[i + 1]!]));
 	const patch = output.toString("utf8");
 	const starts = [...patch.matchAll(/^diff --git /gm)].map((match) => match.index);
 	if (starts.length !== changed.length) throw new Error("Git patch and path inventory disagree");
@@ -251,16 +273,24 @@ async function changedPaths(source: string, base: string, head: string, signal?:
 	return changes;
 }
 
-export async function captureIntent(request: ReviewRequest): Promise<ReviewArtifact["intent"]> {
+export async function captureIntent(request: ReviewRequest, signal?: AbortSignal): Promise<ReviewArtifact["intent"]> {
 	if (!request.intent) return null;
 	const origin = "path" in request.intent ? await realpath(resolve(request.cwd, request.intent.path)) : "request";
-	const data = "text" in request.intent ? Buffer.from(request.intent.text) : await readFile(origin);
+	const data = "text" in request.intent ? Buffer.from(request.intent.text) : await readFile(origin, { signal });
+	signal?.throwIfAborted();
 	if (!isUtf8(data)) throw new Error("Review intent must be UTF-8 text");
 	return { origin, text: data.toString("utf8"), hash: hash(data) };
 }
 
 const identity = (change: GitChange) =>
-	JSON.stringify([change.baseCommit, change.headCommit, change.baseTree, change.headTree, change.indexTree]);
+	JSON.stringify([
+		change.baseCommit,
+		change.headCommit,
+		change.baseTree,
+		change.headTree,
+		change.indexTree,
+		change.indexEntries,
+	]);
 
 /**
  * Build a self-contained review repository. Git snapshots the target into the capture's own object store,
@@ -278,7 +308,7 @@ export async function captureReview(
 	const startedAt = Date.now();
 	const repository = await realpath(await text(request.cwd, ["rev-parse", "--show-toplevel"], { signal }));
 	if (within(destination, repository)) throw new Error("Review artifacts must be outside the author's worktree");
-	const intent = await captureIntent(request);
+	const intent = await captureIntent(request, signal);
 	await mkdir(destination, { mode: 0o700 });
 	const source = join(destination, "source");
 	try {
@@ -314,7 +344,7 @@ export async function captureReview(
 				}
 			}
 		} finally {
-			reader.close();
+			await reader.close();
 		}
 		await mkdir(join(source, ".git", "info"), { recursive: true });
 		await writeFile(
@@ -349,7 +379,10 @@ export async function captureReview(
 		// Mutable sources are snapshotted again after materialization; an observed change refuses the capture.
 		const again = await openGitChange(repository, request.target, { signal, objects });
 		await again.close();
-		if (identity(again) !== identity(change) || JSON.stringify(intent) !== JSON.stringify(await captureIntent(request)))
+		if (
+			identity(again) !== identity(change) ||
+			JSON.stringify(intent) !== JSON.stringify(await captureIntent(request, signal))
+		)
 			throw new Error("Source changed during capture; capture the review again");
 		const scope = request.paths ?? [];
 		const includes = (path: string) =>

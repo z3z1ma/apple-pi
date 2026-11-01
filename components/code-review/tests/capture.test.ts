@@ -1,5 +1,17 @@
 import { watch, writeFileSync } from "node:fs";
-import { chmod, lstat, mkdir, mkdtemp, readFile, readlink, rename, rm, symlink, writeFile } from "node:fs/promises";
+import {
+	chmod,
+	lstat,
+	mkdir,
+	mkdtemp,
+	readFile,
+	readlink,
+	rename,
+	rm,
+	symlink,
+	utimes,
+	writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
@@ -422,4 +434,40 @@ test("a working-tree review retains changed, unchanged and untracked bytes witho
 	expect(capture.regions.map((region) => region.path).sort()).toEqual(["new file.txt", "value.ts"]);
 	expect(await readFile(join(cwd, ".git/index"))).toEqual(index);
 	expect(await git(cwd, ["status", "--porcelain=v1"])).toBe(status);
+});
+
+test("a path that changes type keeps both patch sections and its regions", async () => {
+	const cwd = await repository();
+	await rm(join(cwd, "value.ts"));
+	await symlink("caller.ts", join(cwd, "value.ts"));
+	const capture = await captureReview({ cwd, target: { kind: "working-tree", base: "HEAD" } }, await destination());
+	expect(capture.changes).toContainEqual({ status: "T", path: "value.ts" });
+	expect(capture.regions.filter((region) => region.path === "value.ts").length).toBeGreaterThan(1);
+	expect(await readlink(join(capture.source, "value.ts"))).toBe("caller.ts");
+});
+
+test("full verification hashes materialized files instead of trusting the checkout's index or config", async () => {
+	const cwd = await repository();
+	const capture = await captureReview({ cwd, target: { kind: "staged" } }, await destination());
+	await verifyArtifact(capture);
+	const value = join(capture.source, "value.ts");
+	const tamper = async (setup: () => Promise<void>) => {
+		await setup();
+		await writeFile(value, "export const value = 9;\n");
+		await expect(verifyArtifact(capture)).rejects.toThrow("Captured source changed: value.ts");
+		await writeFile(value, "export const value = 1;\n");
+	};
+	await tamper(() => git(capture.source, ["update-index", "--assume-unchanged", "value.ts"]).then(() => {}));
+	await tamper(() => git(capture.source, ["update-index", "--skip-worktree", "value.ts"]).then(() => {}));
+	await tamper(async () => {
+		await writeFile(join(capture.source, ".git", "index.lock"), "");
+	});
+	await rm(join(capture.source, ".git", "index.lock"));
+	const decoy = await mkdtemp(join(tmpdir(), "review-decoy-"));
+	directories.push(decoy);
+	await tamper(() => git(capture.source, ["config", "core.worktree", decoy]).then(() => {}));
+	const { mtime } = await lstat(value);
+	await writeFile(value, "export const value = 8;\n");
+	await utimes(value, mtime, mtime);
+	await expect(verifyArtifact(capture)).rejects.toThrow("Captured source changed: value.ts");
 });

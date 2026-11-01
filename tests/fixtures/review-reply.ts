@@ -10,7 +10,7 @@ import type {
 export type ReviewInput = { artifact: { digest: string } } & (
 	| {
 			phase: "planning";
-			regions: { id: string }[];
+			regions: { id: string; path: string }[];
 			additionalWork?: { id: string; question: string; doneWhen: string }[];
 	  }
 	| { phase: "inspection"; pass: PlannedPass }
@@ -39,7 +39,7 @@ export function reviewReply(
 				{
 					id: "value",
 					title: "Export the requested value",
-					regions: input.regions.map((region) => region.id),
+					paths: [...new Set(input.regions.map((region) => region.path))],
 					context: [],
 					risks: [],
 					passes: [
@@ -58,7 +58,6 @@ export function reviewReply(
 					],
 				},
 			],
-			gaps: [],
 			integration: {
 				role: "code-review-specialist",
 				questions: [
