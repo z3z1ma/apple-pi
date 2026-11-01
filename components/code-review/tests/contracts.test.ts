@@ -59,6 +59,7 @@ function plan(): ReviewPlan {
 					{
 						id: "request-correctness",
 						role: "code-review-specialist",
+						depth: "standard",
 						lenses: ["correctness"],
 						questions: [
 							{
@@ -80,6 +81,7 @@ function plan(): ReviewPlan {
 					{
 						id: "lifetime-correctness",
 						role: "code-review-specialist",
+						depth: "standard",
 						lenses: ["correctness"],
 						questions: [
 							{
@@ -94,6 +96,7 @@ function plan(): ReviewPlan {
 		],
 		integration: {
 			role: "code-review-specialist",
+			depth: "standard",
 			questions: [
 				{
 					id: "journey",
@@ -282,6 +285,7 @@ test("requested lenses are actual passes even when they inspect the same files",
 	requested.chunks[0]!.passes.push({
 		id: "tenant-check",
 		role: "code-review-specialist",
+		depth: "standard",
 		lenses: ["tenant isolation"],
 		questions: [
 			{

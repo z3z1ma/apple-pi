@@ -5,8 +5,16 @@ import type { ChangeRegion } from "./types.js";
 const text = Type.String({ minLength: 1, pattern: "\\S" });
 const object = { additionalProperties: false } as const;
 const question = Type.Object({ id: text, question: text, verification: text }, object);
+/** Standard runs the role on the balanced inference profile; deep runs it on the deep profile at several times the cost. */
+const depth = Type.Union([Type.Literal("standard"), Type.Literal("deep")]);
 const pass = Type.Object(
-	{ id: text, role: text, lenses: Type.Array(text, { minItems: 1 }), questions: Type.Array(question, { minItems: 1 }) },
+	{
+		id: text,
+		role: text,
+		depth,
+		lenses: Type.Array(text, { minItems: 1 }),
+		questions: Type.Array(question, { minItems: 1 }),
+	},
 	object,
 );
 
@@ -42,7 +50,7 @@ export const ReviewPlanSchema = Type.Object(
 				object,
 			),
 		),
-		integration: Type.Object({ role: text, questions: Type.Array(question, { minItems: 1 }) }, object),
+		integration: Type.Object({ role: text, depth, questions: Type.Array(question, { minItems: 1 }) }, object),
 	},
 	object,
 );

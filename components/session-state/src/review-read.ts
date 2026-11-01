@@ -13,7 +13,12 @@ import {
 } from "../../code-review/src/contracts.js";
 import type { FindingDecision, ReviewApproval, ReviewDecision } from "../../code-review/src/decisions.js";
 import type { ReviewJob, ReviewState } from "../../code-review/src/operations.js";
-import { configurationSummary, reviewConfiguration, reviewRolePolicy } from "../../code-review/src/policy.js";
+import {
+	configurationSummary,
+	type ReviewDepth,
+	reviewConfiguration,
+	reviewRolePolicy,
+} from "../../code-review/src/policy.js";
 import type {
 	ReviewAssessment,
 	ReviewAttempt,
@@ -446,7 +451,13 @@ export async function readReviewFreshness(
 		if (artifact.configuration) {
 			policy =
 				JSON.stringify(reviewConfiguration(artifact.source)) === JSON.stringify(artifact.configuration) &&
-				policies.every((row) => row && JSON.stringify(reviewRolePolicy(artifact.source, row.role)) === row.policy)
+				policies.every(
+					(row) =>
+						row &&
+						JSON.stringify(
+							reviewRolePolicy(artifact.source, row.role, (JSON.parse(row.policy) as { depth?: ReviewDepth }).depth),
+						) === row.policy,
+				)
 					? "matches"
 					: "changed";
 		} else errors.push("Capture-time review policy was not recorded.");

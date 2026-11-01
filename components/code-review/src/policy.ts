@@ -33,23 +33,32 @@ export function configurationSummary(configuration: ReviewConfiguration | undefi
 		: null;
 }
 
-function rolePolicy(role: Role, profiles?: Record<string, ModelProfile>) {
+export type ReviewDepth = "standard" | "deep";
+
+/**
+ * A pass's depth, not its role, chooses the model tier of a role that names a profile: deep uses the deep profile,
+ * standard keeps the role's own profile unless that is deep, which steps down to balanced. Profiles map tiers to any
+ * provider. A role with only concrete models keeps them at either depth, and the role's recommendations stay the
+ * fallback when the profile file lacks a profile.
+ */
+function rolePolicy(role: Role, depth: ReviewDepth, profiles?: Record<string, ModelProfile>) {
 	const text = readFileSync(role.path, "utf8");
-	const profile = isInferenceProfileName(role.models[0]!) ? role.models[0]! : undefined;
+	const own = isInferenceProfileName(role.models[0]!) ? role.models[0]! : undefined;
+	const profile = !own ? undefined : depth === "deep" ? "deep" : own === "deep" ? "balanced" : own;
 	const configured = profile ? (profiles ?? loadModelProfiles({ optional: true }))[profile] : undefined;
 	return {
 		role: { path: role.path, hash: createHash("sha256").update(text).digest("hex"), text },
+		depth,
 		profile: profile ?? null,
 		selection: configured?.selection ?? "ordered",
-		candidates:
-			configured?.models ?? (profile ? role.models.slice(1) : role.models).map((entry) => parseRoleModel(entry)!),
+		candidates: configured?.models ?? (own ? role.models.slice(1) : role.models).map((entry) => parseRoleModel(entry)!),
 	};
 }
 
-export function reviewRolePolicy(source: string, name: string) {
+export function reviewRolePolicy(source: string, name: string, depth: ReviewDepth = "standard") {
 	const role = loadRoles(source).roles.get(name);
 	if (!role || role.writes || role.manages) throw new Error(`Unavailable advisory review role: ${name}`);
-	return rolePolicy(role);
+	return rolePolicy(role, depth);
 }
 
 export function reviewPolicyFingerprint(policy: ReturnType<typeof reviewRolePolicy>): string {
@@ -66,6 +75,7 @@ export function reviewRoleCatalog(source: string) {
 		title: role.title,
 		mandate: role.mandate,
 		models: role.models,
-		policy: reviewPolicyFingerprint(rolePolicy(role, profiles)),
+		policy: reviewPolicyFingerprint(rolePolicy(role, "standard", profiles)),
+		deepPolicy: reviewPolicyFingerprint(rolePolicy(role, "deep", profiles)),
 	}));
 }

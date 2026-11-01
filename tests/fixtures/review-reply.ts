@@ -51,6 +51,7 @@ export function reviewReply(
 						{
 							id: settings.passId ?? "value-correctness",
 							role: "code-review-specialist",
+							depth: "standard",
 							lenses: ["correctness"],
 							questions: [
 								{
@@ -65,6 +66,7 @@ export function reviewReply(
 			],
 			integration: {
 				role: "code-review-specialist",
+				depth: "deep",
 				questions: [
 					{
 						id: "integration",
@@ -78,6 +80,7 @@ export function reviewReply(
 			plan.chunks[0]!.passes.push({
 				id: request.id,
 				role: "code-review-specialist",
+				depth: "standard",
 				lenses: [request.id],
 				questions: [{ id: "additional", question: request.question, verification: request.doneWhen }],
 			});
@@ -87,6 +90,7 @@ export function reviewReply(
 			plan.chunks[0]!.passes.push({
 				id: "deletion-authority",
 				role: "code-review-specialist",
+				depth: "standard",
 				lenses: ["authority"],
 				questions: [
 					{

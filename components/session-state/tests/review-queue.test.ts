@@ -1686,6 +1686,17 @@ test("the owner is mailed when the plan is ready, as each pass's findings are co
 	const [plan, streamed, outcome] = messages();
 	expect(plan!.body).toContain("is planned: 1 scope, 2 passes, 2 questions");
 	expect(streamed!.body).toContain("1 confirmed finding from pass value-correctness");
+	// The plan's depth, not the role, sets each attempt's model tier.
+	expect(
+		query<{ kind: string; policy: string }>(
+			state.dbPath,
+			"select kind, policy from review_attempts where review_id = ? and kind in ('focused', 'integration') order by kind",
+			job.id,
+		).map((row) => [row.kind, JSON.parse(row.policy).depth]),
+	).toEqual([
+		["focused", "standard"],
+		["integration", "deep"],
+	]);
 	expect(streamed!.body).toMatch(
 		/\[high\] The value disagrees with its consumer \(value\.ts:1\), finding "[0-9a-f-]+:/,
 	);

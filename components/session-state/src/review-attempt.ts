@@ -5,7 +5,7 @@ import type { DatabaseSync } from "node:sqlite";
 import { verifyArtifact, verifyCapturedSource } from "../../code-review/src/capture.js";
 import type { FindingValidation } from "../../code-review/src/contracts.js";
 import type { ReviewJob } from "../../code-review/src/operations.js";
-import { reviewPolicyFingerprint, reviewRolePolicy } from "../../code-review/src/policy.js";
+import { type ReviewDepth, reviewPolicyFingerprint, reviewRolePolicy } from "../../code-review/src/policy.js";
 import { normalizeOutputSchema } from "../../shared/src/structured-output.js";
 import type { TurnResult } from "../../shared/src/turn-observer.js";
 import type { StatePaths } from "./paths.js";
@@ -15,6 +15,8 @@ export interface ReviewPassRequest {
 	id: string;
 	role: string;
 	policyFingerprint: string | undefined;
+	/** Model tier for the role; planner and validators run standard. */
+	depth?: ReviewDepth;
 	kind: "planner" | "focused" | "integration" | "validation";
 	goal: string;
 	context: unknown;
@@ -54,7 +56,7 @@ export async function runReviewAttempt(
 	// The planner starts every review and resume, so full integrity is proven once before any reviewer reads the source.
 	await (pass.kind === "planner" ? verifyArtifact : verifyCapturedSource)(artifact, signal);
 	signal.throwIfAborted();
-	const policy = reviewRolePolicy(artifact.source, pass.role);
+	const policy = reviewRolePolicy(artifact.source, pass.role, pass.depth);
 	if (reviewPolicyFingerprint(policy) !== pass.policyFingerprint)
 		throw new Error(
 			`The review policy for ${pass.role} differs from the planned catalog; resume to plan under current policy`,
@@ -138,7 +140,7 @@ export async function runReviewAttempt(
 		).run(observed.model, observed.thinking, observed.file, id);
 		if (observed.role !== pass.role || !candidates.some((candidate) => candidate.model === observed.model))
 			throw new Error("The reviewer did not select its recorded role/model policy; no review turn was sent");
-		if (JSON.stringify(reviewRolePolicy(artifact.source, pass.role)) !== JSON.stringify(policy))
+		if (JSON.stringify(reviewRolePolicy(artifact.source, pass.role, pass.depth)) !== JSON.stringify(policy))
 			throw new Error("The review policy changed during startup; no review turn was sent");
 		const receipt = await program.command(
 			person,
@@ -148,7 +150,7 @@ export async function runReviewAttempt(
 		if (receipt.stage !== "applied" || receipt.result?.status !== "completed")
 			throw new Error(receipt.reason ?? receipt.result?.error ?? "The review turn did not complete");
 		await verifyCapturedSource(artifact, signal);
-		if (JSON.stringify(reviewRolePolicy(artifact.source, pass.role)) !== JSON.stringify(policy))
+		if (JSON.stringify(reviewRolePolicy(artifact.source, pass.role, pass.depth)) !== JSON.stringify(policy))
 			throw new Error("The review policy changed during the turn; resume to obtain current-policy evidence");
 		output = pass.validate(receipt.result.value);
 		storeOutput(db, job, id, pass, output);

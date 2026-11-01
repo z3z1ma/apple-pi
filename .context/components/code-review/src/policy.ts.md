@@ -6,5 +6,7 @@ The planner's catalog fingerprints intentionally include advisory role source an
 
 Capture-time configuration records shipped review prompts and declared advisory model/profile references without resolving profiles or advancing pool counters. Actual resolved role/model/thinking policy remains per attempt. Ambient guidance and external resources are not frozen; legacy artifacts disclose absent capture-time configuration rather than changing their digest.
 
-Coupled: components/session-state/src/review-attempt.ts, components/session-state/src/review-jobs.ts, components/organization/src/roles.ts, components/shared/src/model-profiles.ts
+Depth substitutes only the profile of a role that names one (deep -> deep; standard -> the role's own, with deep stepping down to balanced). Concrete-only roles ignore depth so an all-concrete setup still never reads the profile file, preserving the fix above. Depth is part of the recorded policy and its fingerprint; the catalog carries both fingerprints, and freshness re-resolves each attempt at its recorded depth.
+
+Coupled: components/session-state/src/review-read.ts, components/session-state/src/review-attempt.ts, components/session-state/src/review-jobs.ts, components/organization/src/roles.ts, components/shared/src/model-profiles.ts
 Verify: components/code-review/tests/policy.test.ts, components/session-state/tests/review-queue.test.ts

@@ -3968,6 +3968,7 @@ var PLAN_REVIEW = `Plan a risk-driven review: decide where this change can hurt 
 This is triage, not the review itself. Read the change at a high level and enough surrounding code to recognise its kind and its real risks: data and schema changes, injection, authorization, concurrency and resource lifetime, breaking contracts, compatibility, correctness of logic against the captured intent, usability. Different kinds of change carry different risks; leave verification to the inspections.
 Group the change into a few scopes by the behavior or contract they affect, naming each scope's files or directories in paths (repository-relative; a directory covers everything under it). The runtime maps changed regions to scopes and gives the integration pass the whole change, so never list regions and never enumerate files that a directory already covers.
 Spend depth where risk concentrates. Prefer a few deep passes over a grid of lenses: one pass may combine several lenses, a low-risk scope (docs, tests, wiring) may need one light pass or none of its own, and a high-risk scope may deserve several independent passes with different roles. Every pass needs concrete questions and the evidence that would settle them. When intent is absent, keep that axis unassessed rather than inventing a goal.
+Give every pass, including integration, a depth. A role chooses the perspective; depth chooses the model tier: standard runs the balanced profile, deep the strongest profile at several times the cost per pass. Use deep only where a miss would hurt most (the highest-risk scope, usually one or two passes), and standard everywhere else.
 Use only supplied advisory role names. Preserve requested lens labels as actual assigned work. The integration pass owns cross-scope interactions and challenges to this decomposition. Return the plan through the structured result tool.`;
 var INSPECT_REVIEW = `Perform your assigned first inspection independently. ${source}
 Start from the assigned questions and form your own causal trace before consulting other review reports or opinions. Your brief contains source, intent, scope and questions rather than the author's narrative or colleagues' conclusions. Record any outside conclusions you encounter as a limitation on that independence.
@@ -4007,9 +4008,16 @@ function configurationSummary(configuration) {
 		catalogIssues: configuration.catalogIssues
 	} : null;
 }
-function rolePolicy(role, profiles) {
+/**
+* A pass's depth, not its role, chooses the model tier of a role that names a profile: deep uses the deep profile,
+* standard keeps the role's own profile unless that is deep, which steps down to balanced. Profiles map tiers to any
+* provider. A role with only concrete models keeps them at either depth, and the role's recommendations stay the
+* fallback when the profile file lacks a profile.
+*/
+function rolePolicy(role, depth, profiles) {
 	const text = readFileSync(role.path, "utf8");
-	const profile = isInferenceProfileName(role.models[0]) ? role.models[0] : void 0;
+	const own = isInferenceProfileName(role.models[0]) ? role.models[0] : void 0;
+	const profile = !own ? void 0 : depth === "deep" ? "deep" : own === "deep" ? "balanced" : own;
 	const configured = profile ? (profiles ?? loadModelProfiles({ optional: true }))[profile] : void 0;
 	return {
 		role: {
@@ -4017,15 +4025,16 @@ function rolePolicy(role, profiles) {
 			hash: createHash("sha256").update(text).digest("hex"),
 			text
 		},
+		depth,
 		profile: profile ?? null,
 		selection: configured?.selection ?? "ordered",
-		candidates: configured?.models ?? (profile ? role.models.slice(1) : role.models).map((entry) => parseRoleModel(entry))
+		candidates: configured?.models ?? (own ? role.models.slice(1) : role.models).map((entry) => parseRoleModel(entry))
 	};
 }
-function reviewRolePolicy(source, name) {
+function reviewRolePolicy(source, name, depth = "standard") {
 	const role = loadRoles(source).roles.get(name);
 	if (!role || role.writes || role.manages) throw new Error(`Unavailable advisory review role: ${name}`);
-	return rolePolicy(role);
+	return rolePolicy(role, depth);
 }
 //#endregion
 //#region components/code-review/src/capture.ts
@@ -4658,9 +4667,12 @@ var question = Type.Object({
 	question: text$3,
 	verification: text$3
 }, object$4);
+/** Standard runs the role on the balanced inference profile; deep runs it on the deep profile at several times the cost. */
+var depth = Type.Union([Type.Literal("standard"), Type.Literal("deep")]);
 var pass = Type.Object({
 	id: text$3,
 	role: text$3,
+	depth,
 	lenses: Type.Array(text$3, { minItems: 1 }),
 	questions: Type.Array(question, { minItems: 1 })
 }, object$4);
@@ -4687,6 +4699,7 @@ Type.Object({
 	}, object$4)),
 	integration: Type.Object({
 		role: text$3,
+		depth,
 		questions: Type.Array(question, { minItems: 1 })
 	}, object$4)
 }, object$4);
@@ -5139,7 +5152,7 @@ async function readReviewFreshness(actor, id, signal, store = withReviews) {
 		errors.push(`Live source: ${error instanceof Error ? error.message : String(error)}`);
 	}
 	try {
-		if (artifact.configuration) policy = JSON.stringify(reviewConfiguration(artifact.source)) === JSON.stringify(artifact.configuration) && policies.every((row) => row && JSON.stringify(reviewRolePolicy(artifact.source, row.role)) === row.policy) ? "matches" : "changed";
+		if (artifact.configuration) policy = JSON.stringify(reviewConfiguration(artifact.source)) === JSON.stringify(artifact.configuration) && policies.every((row) => row && JSON.stringify(reviewRolePolicy(artifact.source, row.role, JSON.parse(row.policy).depth)) === row.policy) ? "matches" : "changed";
 		else errors.push("Capture-time review policy was not recorded.");
 	} catch (error) {
 		errors.push(`Review policy: ${error instanceof Error ? error.message : String(error)}`);

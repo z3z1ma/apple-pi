@@ -476,7 +476,10 @@ export class ReviewJobs {
 						{
 							id: pass.id,
 							role: pass.role,
-							policyFingerprint: roles.find((role) => role.name === pass.role)?.policy,
+							depth: pass.depth ?? "standard",
+							policyFingerprint: roles.find((role) => role.name === pass.role)?.[
+								pass.depth === "deep" ? "deepPolicy" : "policy"
+							],
 							kind: pass.kind,
 							goal: `${artifact.configuration?.instructions.inspection ?? INSPECT_REVIEW}\nCaptured source: ${artifact.source}`,
 							schema: ReviewReportSchema,

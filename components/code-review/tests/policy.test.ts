@@ -63,3 +63,36 @@ test("policy inspection follows role profile authority without selecting a model
 	expect(reviewRoleCatalog(directory)).toEqual(first);
 	expect(existsSync(join(directory, "state", "model-profile-selection.sqlite"))).toBe(false);
 });
+
+test("pass depth picks the model tier from any provider's profiles, while concrete-only roles keep their models", () => {
+	directory = mkdtempSync(join(tmpdir(), "review-depth-"));
+	vi.stubEnv("PI_CODING_AGENT_DIR", directory);
+	mkdirSync(join(directory, "roles"));
+	const role = (name: string, models: string) =>
+		writeFileSync(
+			join(directory, "roles", `${name}.md`),
+			`---\ntitle: ${name}\nmandate: Inspect the contract.\nmodels: ${models}\nwrites: false\nmanages: false\n---\nRead the source.\n`,
+		);
+	role("prosecutor", '["deep", "anthropic/claude-opus-5-5:high"]');
+	role("reviewer", '["balanced", "anthropic/claude-opus-5-5:medium"]');
+	role("concrete", '["fixture/concrete:high"]');
+	writeFileSync(
+		join(directory, "model-profiles.json"),
+		JSON.stringify({
+			profiles: {
+				balanced: { selection: "ordered", models: [{ model: "anthropic/claude-sonnet-5-5", thinking: "high" }] },
+				deep: { selection: "ordered", models: [{ model: "anthropic/claude-opus-5-5", thinking: "high" }] },
+			},
+		}),
+	);
+	const tier = (name: string, depth: "standard" | "deep") => {
+		const policy = reviewRolePolicy(directory, name, depth);
+		return [policy.profile, policy.candidates.map((candidate) => candidate.model)];
+	};
+	expect(tier("prosecutor", "standard")).toEqual(["balanced", ["anthropic/claude-sonnet-5-5"]]);
+	expect(tier("prosecutor", "deep")).toEqual(["deep", ["anthropic/claude-opus-5-5"]]);
+	expect(tier("reviewer", "deep")).toEqual(["deep", ["anthropic/claude-opus-5-5"]]);
+	expect(tier("concrete", "deep")).toEqual([null, ["fixture/concrete"]]);
+	const catalog = reviewRoleCatalog(directory).find((entry) => entry.name === "prosecutor")!;
+	expect(catalog.policy).not.toBe(catalog.deepPolicy);
+});
