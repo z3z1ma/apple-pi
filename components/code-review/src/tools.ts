@@ -11,6 +11,7 @@ import {
 	reviewQueue,
 	reviewSummary,
 } from "../../session-state/src/review-read.js";
+import { reviewWaitReturned, startReviewWait } from "../../session-state/src/review-waits.js";
 import { GitTargetSchema } from "../../shared/src/git-change.js";
 import { FindingResponseSchema } from "./decisions.js";
 import { type ReviewOperation, ReviewRequestSchema } from "./operations.js";
@@ -68,6 +69,88 @@ const parts = Type.Union([
 	Type.Literal("regions"),
 	Type.Literal("decisions"),
 ]);
+
+const wait = Type.Optional(
+	Type.Boolean({
+		description:
+			"Block until the review settles, then return its summary and confirmed findings. Its milestone mail then arrives only as a pointer. Omit to keep working; mail reports each validated pass's findings and the outcome as they happen.",
+	}),
+);
+const SETTLED = new Set(["completed", "incomplete", "failed", "cancelled", "no-changes", "interrupted"]);
+const POLL_MS = 1000;
+
+type Update = ((update: { content: { type: "text"; text: string }[]; details: undefined }) => void) | undefined;
+
+/** Waits by reading recorded state, so a reader who is not the owner (and gets no mail) can wait too. */
+async function settledReview(actor: string, review: string, signal: AbortSignal | undefined, update: Update) {
+	const id = database((db) => readReview(db, actor, review)).id;
+	const stop = startReviewWait(id);
+	let shown = "";
+	try {
+		for (;;) {
+			signal?.throwIfAborted();
+			const job = database((db) => readReview(db, actor, id));
+			if (SETTLED.has(job.state)) {
+				reviewWaitReturned(id, job.generation);
+				return database((db) => {
+					const findings = readReviewPart(db, actor, id, { part: "findings", limit: Number.MAX_SAFE_INTEGER }) as {
+						page: {
+							rows: {
+								id: string;
+								finding: { severity: string; title: string; path: string; line: number };
+								validation: { disposition: string } | null;
+							}[];
+						};
+					};
+					return {
+						review: reviewSummary(db, actor, id),
+						confirmed: findings.page.rows
+							.filter((row) => row.validation?.disposition === "confirmed")
+							.map((row) => ({
+								finding: row.id,
+								severity: row.finding.severity,
+								title: row.finding.title,
+								location: `${row.finding.path}:${row.finding.line}`,
+							})),
+						note: "Read evidence with read_review part findings; respond with resolve_finding. Completion is not approval.",
+					};
+				});
+			}
+			const summary = database((db) => reviewSummary(db, actor, id));
+			const line = `Waiting for ${id}: ${summary.state}${summary.passes ? `, ${summary.passes.completed}/${summary.passes.required} passes` : ""}${summary.findings.confirmed ? `, ${summary.findings.confirmed} confirmed so far` : ""}`;
+			if (line !== shown) {
+				shown = line;
+				update?.({ content: [{ type: "text", text: line }], details: undefined });
+			}
+			await new Promise<void>((done, fail) => {
+				const timer = setTimeout(done, POLL_MS);
+				signal?.addEventListener(
+					"abort",
+					() => {
+						clearTimeout(timer);
+						fail(signal.reason);
+					},
+					{ once: true },
+				);
+			});
+		}
+	} finally {
+		stop();
+	}
+}
+
+/** A mutation that admitted or resumed a review, followed by its settled outcome when the caller asked to wait. */
+async function andWait(
+	admitted: ReturnType<typeof result>,
+	shouldWait: boolean | undefined,
+	actor: string,
+	signal: AbortSignal | undefined,
+	update: Update,
+) {
+	const review = (admitted.details as { review: { id: string } | null }).review;
+	if (!shouldWait || !review) return admitted;
+	return result({ ...(admitted.details as object), settled: await settledReview(actor, review.id, signal, update) });
+}
 
 function result(details: unknown) {
 	return { content: [{ type: "text" as const, text: JSON.stringify(details, null, 2) }], details };
@@ -157,11 +240,12 @@ export function installReviewTools(pi: ExtensionAPI): void {
 			name: "review_code",
 			label: "Review code",
 			description:
-				"Capture an exact commit, range, branch, staged index or working tree and enqueue independent semantic/risk-based review through ordinary role peers. This starts model work under the configured role profiles. Return after target capture and admission, not after review. The author's index and checkout stay unchanged. Supply approved intent when available; absent intent stays unassessed. The owner (you, by default) receives mail when the plan is ready and when the review settles, with confirmed findings; keep working meanwhile and use review_queue/read_review for detail. Exact request replay retains the original captured target even if the checkout changes.",
+				"Capture an exact commit, range, branch, staged index or working tree and enqueue independent semantic/risk-based review through ordinary role peers. This starts model work under the configured role profiles. Return after target capture and admission, not after review. The author's index and checkout stay unchanged. Supply approved intent when available; absent intent stays unassessed. The owner (you, by default) receives mail when the plan is ready, as each pass's findings are confirmed, and when the review settles; keep working and course-correct as findings arrive, or pass wait to block until it settles and get the outcome in the result instead of the mail. Exact request replay retains the original captured target even if the checkout changes.",
 			promptSnippet: "Capture exact code and enqueue independent review; inspect its durable result separately.",
 			promptGuidelines: [
 				"For an already assigned review pass, inspect its captured source and return the requested report. Route additional questions to the plan owner through that report; the requester initiates new reviews.",
 				"Use captured review evidence for its named artifact. Distinguish reported findings, coverage, incomplete work, current-checkout applicability and operator approval.",
+				"Choose by what you do next: keep working and fold in findings as their mail arrives when other work remains; pass wait when the review gates your next step. Rerun or resume with wait after fixing to loop until the review comes back clean or you judge the remaining findings acceptable.",
 				"Use the returned review ID for progress and the request handle for exact mutation recovery. An empty comparison/scope records no-changes without running reviewers. A failed, incomplete or no-changes review is not a clean-review claim.",
 			],
 			parameters: Type.Object(
@@ -180,12 +264,13 @@ export function installReviewTools(pi: ExtensionAPI): void {
 						text("Earlier review ID whose evidence this new capture follows; it grants no coverage credit."),
 					),
 					request,
+					wait,
 				},
 				{ additionalProperties: false },
 			),
-			async execute(callId, params, signal, _update, ctx) {
+			async execute(callId, params, signal, update, ctx) {
 				const self = ctx.sessionManager.getSessionId();
-				return mutate(
+				const admitted = await mutate(
 					self,
 					requestId(self, callId, params.request),
 					{
@@ -202,6 +287,7 @@ export function installReviewTools(pi: ExtensionAPI): void {
 					},
 					signal,
 				);
+				return andWait(admitted, params.wait, self, signal, update);
 			},
 		}),
 	);
@@ -254,12 +340,17 @@ export function installReviewTools(pi: ExtensionAPI): void {
 						text("Attempt ID from the attempts page or selected pass; required for part: attempt."),
 					),
 					...page,
+					wait,
 				},
 				{ additionalProperties: false },
 			),
-			async execute(_callId, params, signal, _update, ctx) {
+			async execute(_callId, params, signal, update, ctx) {
 				const actor = ctx.sessionManager.getSessionId();
 				const { part } = params;
+				if (params.wait) {
+					const settled = await settledReview(actor, params.review, signal, update);
+					if (!part || part === "summary") return result(settled);
+				}
 				if (part === "source") return result(await readReviewSource(actor, params.review, params, signal));
 				if (part === "freshness") return result(await readReviewFreshness(actor, params.review, signal));
 				return result(database((db) => readReviewPart(db, actor, params.review, { ...params, part })));
@@ -296,10 +387,11 @@ export function installReviewTools(pi: ExtensionAPI): void {
 					reason: Type.Optional(text("Why additional work is justified; required for extend.")),
 					doneWhen: Type.Optional(text("Evidence that settles this question; required for extend.")),
 					request,
+					wait,
 				},
 				{ additionalProperties: false },
 			),
-			async execute(callId, params, signal, _update, ctx) {
+			async execute(callId, params, signal, update, ctx) {
 				const self = ctx.sessionManager.getSessionId();
 				const job = database((db) => readReview(db, self, params.review));
 				let operation: ReviewOperation;
@@ -337,7 +429,8 @@ export function installReviewTools(pi: ExtensionAPI): void {
 					default:
 						operation = { action: params.action, review: job.id };
 				}
-				return mutate(self, requestId(self, callId, params.request), operation, signal);
+				const applied = await mutate(self, requestId(self, callId, params.request), operation, signal);
+				return andWait(applied, params.wait, self, signal, update);
 			},
 		}),
 	);

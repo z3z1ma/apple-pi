@@ -88,6 +88,27 @@ function outcomeNotice(
 	].join("\n");
 }
 
+/** Confirmed findings from one validated report, sent as soon as its validator settles. */
+function findingsNotice(
+	id: string,
+	report: ReviewReport,
+	attempt: string,
+	validation: FindingValidation,
+): string | undefined {
+	const confirmed = new Set(
+		validation.findings.filter((entry) => entry.disposition === "confirmed").map((entry) => entry.finding),
+	);
+	const findings = report.findings.filter((finding) => confirmed.has(findingKey(report.pass, finding.id)));
+	if (!findings.length) return undefined;
+	return [
+		`Review ${id}: ${count(findings.length, "confirmed finding")} from pass ${report.pass}. Other passes are still settling; duplicates across passes are linked when validation finishes.`,
+		...findings.map(
+			(finding) =>
+				`- [${finding.severity}] ${finding.title} (${finding.path}:${finding.line}), finding "${attempt}:${finding.id}"`,
+		),
+	].join("\n");
+}
+
 /** The operator's chosen bound on concurrent reviewer passes; reviews themselves run one at a time. */
 const REVIEW_PASS_CONCURRENCY = 8;
 
@@ -507,6 +528,8 @@ export class ReviewJobs {
 				);
 				job.selectedAttempts = { ...job.selectedAttempts, [`validator:${report.pass}`]: shard.attempt };
 				this.storeSelection(job);
+				const streamed = findingsNotice(job.id, report, inspected[report.pass], shard.output as FindingValidation);
+				if (streamed) this.notice(job, `findings:${report.pass}`, streamed);
 				return shard.output as FindingValidation;
 			});
 			const validated = await runReviewAttempt(

@@ -43,11 +43,11 @@ export function mailText(mail: Mail): string {
 	return `<mail${thread}${kind}${reference} from="${attribute(from)}" ts="${mail.ts}">\n${mail.body}\n</mail>`;
 }
 
-/** Startup delivery rides the first host turn; live delivery can start a turn itself. */
-export function deliverMail(pi: ExtensionAPI, mail: Mail, startingUp: boolean): void {
+/** Startup delivery rides the first host turn; live delivery can start a turn itself, unless it is only a record. */
+export function deliverMail(pi: ExtensionAPI, mail: Mail, startingUp: boolean, quiet = false): void {
 	pi.sendMessage<Mail>(
 		{ customType: MAIL_CUSTOM_TYPE, content: mailText(mail), display: true, details: mail },
-		startingUp ? { deliverAs: "nextTurn" } : { deliverAs: "steer", triggerTurn: true },
+		startingUp ? { deliverAs: "nextTurn" } : quiet ? { deliverAs: "steer" } : { deliverAs: "steer", triggerTurn: true },
 	);
 }
 

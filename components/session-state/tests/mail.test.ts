@@ -7,8 +7,10 @@ import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai/compat
 import { type AgentSession, SessionManager } from "@earendil-works/pi-coding-agent";
 import { afterAll, expect, test, vi } from "vitest";
 import { fauxSession, type Reply } from "../../../tests/helpers/faux-session.js";
+import { sendCommand as postAs } from "../src/client.js";
 import bridge from "../src/index.js";
 import { MAIL_CUSTOM_TYPE } from "../src/mail.js";
+import { startReviewWait } from "../src/review-waits.js";
 import { close, query, runtimePid, sendCommand, stopRuntime, tempStateDir } from "./helpers.js";
 
 const state = tempStateDir();
@@ -291,3 +293,25 @@ test("mail counts as delivered only once the session's file holds it", async () 
 test("no mailbox file is written or read", () => {
 	expect(readdirSync(join(state.agentDir, "state"))).not.toContain("mailbox");
 });
+
+test("a review milestone that a running wait covers is recorded as a pointer and starts no turn", async () => {
+	const receiver = await fauxSession([bridge], [fauxAssistantMessage("noted")], []);
+	const to = receiver.session.sessionManager.getSessionId();
+	const stop = startReviewWait("review-waited");
+	try {
+		await seen(to);
+		const sent = await postAs(
+			"review-harness",
+			{ kind: "thread_post", thread: "review:review-waited", subject: "Review", body: "FULL OUTCOME", to: [to] },
+			{ commandId: "review:review-waited:1:outcome" },
+		);
+		expect(sent.stage, sent.reason).toBe("applied");
+		await vi.waitFor(() => expect(mailIn(receiver.session)).toHaveLength(1), { timeout: 10000 });
+		expect(JSON.stringify(mailIn(receiver.session))).toContain("Delivered in your review wait result.");
+		expect(JSON.stringify(mailIn(receiver.session))).not.toContain("FULL OUTCOME");
+		expect(receiver.requests).toHaveLength(0);
+	} finally {
+		stop();
+		await close(receiver);
+	}
+}, 40000);

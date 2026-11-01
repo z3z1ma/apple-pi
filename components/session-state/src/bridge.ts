@@ -33,8 +33,17 @@ import {
 	type RunState,
 	type Tool,
 } from "./protocol.js";
+import { coveredByReviewWait } from "./review-waits.js";
 import { type RunObservation, RunObserver, type RunSnapshot } from "./run-observation.js";
 import { goalText } from "./work.js";
+
+/** A review milestone this session waited out is already in its wait result, so its record is only a pointer. */
+function mailBody(command: Extract<Command, { kind: "mail" }>, covered: boolean, session: string): string {
+	if (covered) return "Delivered in your review wait result.";
+	if (!command.taskGoal) return command.body;
+	return `${command.body}\n\n${goalText(session) ?? "You no longer have a focused task."}`;
+}
+
 import { installWork } from "./work-tools.js";
 
 /**
@@ -629,19 +638,18 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 					if (!pending.has(commandId)) {
 						pending.add(commandId);
 						// Only mail that waited for this process rides the next turn while it starts up.
+						const covered = coveredByReviewWait(command.reference?.id);
 						const mail = {
 							id: commandId,
 							from: command.from,
 							ts: command.sentAt,
-							body: command.taskGoal
-								? `${command.body}\n\n${goalText(ctx.sessionManager.getSessionId()) ?? "You no longer have a focused task."}`
-								: command.body,
+							body: mailBody(command, covered, ctx.sessionManager.getSessionId()),
 							...(command.thread ? { thread: command.thread, subject: command.subject } : {}),
 							...(command.fromName ? { fromName: command.fromName } : {}),
 							threadKind: command.threadKind,
 							reference: command.reference,
 						};
-						deliverMail(pi, mail, startingUp && replay);
+						deliverMail(pi, mail, startingUp && replay, covered);
 					}
 					return; // applied once the transcript records it
 				}

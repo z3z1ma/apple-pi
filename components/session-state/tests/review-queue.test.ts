@@ -588,6 +588,27 @@ async function nativeReviewTools() {
 	return { run, callTool };
 }
 
+test("review_code can wait for the settled outcome and return its confirmed findings", async () => {
+	writeFileSync(join(state.agentDir, "peer-control.json"), JSON.stringify({ review: { finding: true } }));
+	const { run, callTool } = await nativeReviewTools();
+	try {
+		const result = (await callTool("review_code", { target: { kind: "working-tree", base: "HEAD" }, wait: true })) as {
+			review: { id: string };
+			settled: { review: { state: string }; confirmed: { finding: string; severity: string; location: string }[] };
+		};
+		expect(result.settled.review.state).toBe("completed");
+		expect(result.settled.confirmed).toEqual([
+			expect.objectContaining({ severity: "high", location: "value.ts:1", finding: expect.stringContaining(":") }),
+		]);
+		const reread = (await callTool("read_review", { review: result.review.id, wait: true })) as typeof result.settled;
+		expect(reread.confirmed).toEqual(result.settled.confirmed);
+	} finally {
+		await run.session.abort();
+		await run.session.extensionRunner.emit({ type: "session_shutdown", reason: "quit" });
+		run.dispose();
+	}
+}, 30000);
+
 test("native tools admit, read, cancel, recover exact requests and explicitly capture a fresh rerun", async () => {
 	writeFileSync(
 		join(state.agentDir, "peer-control.json"),
@@ -1651,7 +1672,7 @@ test("planned passes run concurrently instead of one after another", async () =>
 	expect(query(state.dbPath, "select id from program_scopes")).toEqual([]);
 }, 30000);
 
-test("the owner is mailed when the plan is ready and when the review settles, once each", async () => {
+test("the owner is mailed when the plan is ready, as each pass's findings are confirmed, and when the review settles", async () => {
 	writeFileSync(join(state.agentDir, "peer-control.json"), JSON.stringify({ review: { finding: true } }));
 	const job = await enqueue();
 	await settled(job.id, "completed");
@@ -1661,9 +1682,13 @@ test("the owner is mailed when the plan is ready and when the review settles, on
 			"select body, sender from thread_messages where thread_id = ? order by at, rowid",
 			`review:${job.id}`,
 		);
-	await vi.waitFor(() => expect(messages()).toHaveLength(2));
-	const [plan, outcome] = messages();
+	await vi.waitFor(() => expect(messages()).toHaveLength(3));
+	const [plan, streamed, outcome] = messages();
 	expect(plan!.body).toContain("is planned: 1 scope, 2 passes, 2 questions");
+	expect(streamed!.body).toContain("1 confirmed finding from pass value-correctness");
+	expect(streamed!.body).toMatch(
+		/\[high\] The value disagrees with its consumer \(value\.ts:1\), finding "[0-9a-f-]+:/,
+	);
 	expect(outcome!.body).toContain("completed: 1 confirmed finding");
 	expect(outcome!.body).toContain("[high] The value disagrees with its consumer (value.ts:1)");
 	expect(

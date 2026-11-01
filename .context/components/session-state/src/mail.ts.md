@@ -34,3 +34,7 @@ Verify: components/session-state/tests/mail-render.test.ts
 
 While the process is starting up (a `startup` session start, before its first run), mail the runtime replays (mail that waited for this process) rides the next turn; live mail still starts a turn instead of a steer with `triggerTurn`.
 Why: the host submits its own prompt (`pi -p "..."`, `pi "brief"`) right after `session_start`, and Pi rejects that prompt with "Agent is already processing" when an extension has already started a turn. The operator chose this over delivering at once.
+
+A quiet delivery (a review milestone the session waited out) is a steer without `triggerTurn`: Pi appends it at once when idle, or at the next boundary while running, so the delivery record exists without starting a turn.
+Coupled: components/session-state/src/bridge.ts, components/session-state/src/review-waits.ts
+Verify: components/session-state/tests/mail.test.ts
