@@ -397,6 +397,21 @@ test("Code reviews show retained evidence and explicit capture consent without l
 									],
 									regions: ["r0"],
 								},
+								// A plan recorded before scopes were paths: regions only, no paths or risks.
+								{
+									id: "legacy",
+									title: "Legacy scope",
+									context: [],
+									passes: [
+										{
+											id: "legacy-pass",
+											role: "code-review-specialist",
+											lenses: ["correctness"],
+											questions: [question],
+										},
+									],
+									regions: ["r9"],
+								},
 							]),
 						},
 						coverage: page([
@@ -553,7 +568,7 @@ test("Code reviews show retained evidence and explicit capture consent without l
 			Log: "Tracing every import of value.",
 			Target: "assets/logo.png",
 			Source: "original captured source",
-			Plan: "Every consumer reads this value.",
+			Plan: "Legacy scope",
 			Coverage: "Challenged: The trace skipped the renderer.",
 			Attempts: "provider/strong \u00b7 high",
 			Decisions: "Updated the consumer.",

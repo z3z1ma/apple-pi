@@ -4042,25 +4042,27 @@ var DIFF = [...GIT_DIFF, "--no-renames"];
 var hash$1 = (value) => createHash("sha256").update(value).digest("hex");
 async function reviewLabel(change, repository, target, signal) {
 	const committed = target.kind !== "working-tree" && target.kind !== "staged";
+	const optional = (query) => query.catch(() => null);
 	const [branch, subject, commits] = await settledAll([
-		text$4(repository, [
+		optional(text$4(repository, [
 			"symbolic-ref",
 			"--short",
 			"-q",
 			"HEAD"
-		], { signal }).catch(() => ""),
-		committed ? change.git([
+		], { signal })),
+		committed ? optional(change.git([
 			"log",
 			"-1",
 			"--format=%s",
 			change.headCommit
-		], { signal }) : Promise.resolve(null),
-		committed && change.baseCommit ? change.git([
+		], { signal })) : Promise.resolve(null),
+		committed && change.baseCommit ? optional(change.git([
 			"rev-list",
 			"--count",
 			`${change.baseCommit}..${change.headCommit}`
-		], { signal }) : Promise.resolve(null)
+		], { signal })) : Promise.resolve(null)
 	]);
+	signal?.throwIfAborted();
 	return {
 		branch: branch || null,
 		subject: subject?.toString("utf8").trim() || null,
@@ -5088,6 +5090,7 @@ function reviewQueue(db, actor, options = {}) {
 			page: null
 		};
 		let offset = options.offset ?? 0;
+		if (offset >= total && total > 0) offset = Math.floor((total - 1) / options.limit) * options.limit;
 		if (visible) {
 			if (options.around) {
 				const position = visible.findIndex((summary) => summary.id === options.around);
@@ -5427,8 +5430,9 @@ function transcriptTail(file) {
 			} catch {
 				return [];
 			}
+			if (!entry || typeof entry !== "object") return [];
 			const message = entry.message;
-			if (entry.type !== "message" || !message) return [];
+			if (entry.type !== "message" || !message || typeof message !== "object") return [];
 			const at = entry.timestamp ? Date.parse(entry.timestamp) : null;
 			const content = Array.isArray(message.content) ? message.content : [];
 			if (message.role === "assistant") return content.flatMap((part) => {
@@ -5493,31 +5497,36 @@ function reviewAnalytics(db, actor, options = {}) {
 		for (const summary of summaries) {
 			const attempts = db.prepare("select id, kind, model, result -> '$.usage.cost.total' as cost, created_at as createdAt, finished_at as finishedAt from review_attempts where review_id = ?").all(summary.id);
 			for (const attempt of attempts) {
-				const dollars = count(attempt.cost === null ? 0 : JSON.parse(attempt.cost));
+				const observed = attempt.cost === null ? void 0 : JSON.parse(attempt.cost);
+				const reported = typeof observed === "number" && Number.isFinite(observed) && observed >= 0;
 				const minutes = attempt.finishedAt ? (attempt.finishedAt - attempt.createdAt) / 6e4 : 0;
 				const model = attempt.model ?? "unknown";
 				attemptModel.set(attempt.id, model);
 				const forModel = byModel.get(model) ?? {
 					model,
 					attempts: 0,
+					reported: 0,
 					dollars: 0,
 					minutes: 0,
 					confirmed: 0,
 					severities: {}
 				};
-				forModel.attempts++;
-				forModel.dollars += dollars;
-				forModel.minutes += minutes;
-				byModel.set(model, forModel);
 				const phase = byPhase.get(attempt.kind) ?? {
 					kind: attempt.kind,
 					attempts: 0,
+					reported: 0,
 					dollars: 0,
 					minutes: 0
 				};
-				phase.attempts++;
-				phase.dollars += dollars;
-				phase.minutes += minutes;
+				for (const row of [forModel, phase]) {
+					row.attempts++;
+					row.minutes += minutes;
+					if (reported) {
+						row.reported++;
+						row.dollars = finiteSum(row.dollars, observed);
+					}
+				}
+				byModel.set(model, forModel);
 				byPhase.set(attempt.kind, phase);
 			}
 			for (const finding of reviewAssessment(db, actor, summary.id).findings) {
@@ -5532,10 +5541,11 @@ function reviewAnalytics(db, actor, options = {}) {
 		return {
 			reviews: summaries.length,
 			settled: durations.length,
-			dollars: summaries.reduce((sum, summary) => sum + (summary.cost.reportedDollars ?? 0), 0),
+			dollars: summaries.reduce((sum, summary) => summary.cost.reportedDollars === null ? sum : finiteSum(sum, summary.cost.reportedDollars), 0),
+			unreported: summaries.reduce((sum, summary) => sum + (summary.cost.reportedDollars === null ? summary.cost.totalAttempts : summary.cost.totalAttempts - summary.cost.reportedAttempts), 0),
 			confirmed: summaries.reduce((sum, summary) => sum + summary.findings.confirmed, 0),
-			medianMinutes: durations.length ? durations[Math.floor((durations.length - 1) / 2)] : null,
-			byModel: [...byModel.values()].sort((a, b) => b.dollars - a.dollars),
+			medianMinutes: median(durations),
+			byModel: [...byModel.values()].sort((a, b) => (b.dollars ?? 0) - (a.dollars ?? 0)),
 			byPhase: [...byPhase.values()],
 			recent: summaries.slice().sort((a, b) => b.createdAt - a.createdAt).map((summary) => ({
 				id: summary.id,
@@ -5548,6 +5558,17 @@ function reviewAnalytics(db, actor, options = {}) {
 			}))
 		};
 	});
+}
+/** A sum that becomes unavailable (null) rather than infinite, as review cost does. */
+function finiteSum(sum, value) {
+	if (sum === null) return null;
+	const total = sum + value;
+	return Number.isFinite(total) ? total : null;
+}
+function median(sorted) {
+	if (!sorted.length) return null;
+	const middle = Math.floor(sorted.length / 2);
+	return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
 }
 function page(rows, options) {
 	if (options.offset !== void 0 && options.limit === void 0) throw new Error("A page offset requires a limit");

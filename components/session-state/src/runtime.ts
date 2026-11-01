@@ -1200,9 +1200,19 @@ export class Runtime {
 		const sender = notice.sender ?? HARNESS;
 		const thread = `review:${notice.review}`;
 		this.atomically(() => {
-			// A commenter joins the thread to post; reading the review already authorized them.
-			if (sender !== HARNESS && db.prepare("select 1 from threads where id = ?").get(thread))
-				participateIn(db, thread, sender, Date.now(), "pull");
+			const now = Date.now();
+			if (sender !== HARNESS) {
+				// The review's thread belongs to the harness and the owner even when a comment arrives first, so later
+				// milestones can still post; a commenter joins it, since reading the review already authorized them.
+				if (!db.prepare("select 1 from threads where id = ?").get(thread)) {
+					db.prepare(
+						"insert into threads (id, kind, subject, created_by, created_at, closed_at) values (?, 'mail', ?, ?, ?, null)",
+					).run(thread, notice.subject, HARNESS, now);
+					participateIn(db, thread, HARNESS, now, "pull");
+					participateIn(db, thread, notice.owner, now, "push");
+				}
+				participateIn(db, thread, sender, now, "pull");
+			}
 			pending = this.preparePost(
 				id,
 				sender,
@@ -1747,7 +1757,13 @@ export class Runtime {
 			)
 			.all() as { command_id: string; command: string; result: string | null; artifact: string | null }[]) {
 			const command = JSON.parse(row.command) as Extract<Command, { kind: "review" }>;
-			const applied = row.result && (command.operation.action !== "enqueue" || row.artifact);
+			// A comment's post commits before its result pointer; a stored message means it was published.
+			const commented =
+				command.operation.action === "comment" &&
+				(
+					db.prepare("select id from thread_messages where id like 'review:%:comment:%'").all() as { id: string }[]
+				).some(({ id }) => id.endsWith(`:comment:${row.command_id}`));
+			const applied = commented || (row.result && (command.operation.action !== "enqueue" || row.artifact));
 			this.setCommandStage(
 				row.command_id,
 				applied ? "applied" : "failed",

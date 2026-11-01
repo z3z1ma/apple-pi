@@ -496,9 +496,10 @@ function TargetView({ data }: { data: TargetData }) {
 type Chunk = {
 	id: string;
 	title: string;
-	paths: string[];
+	/** Absent on plans recorded before scopes were paths. */
+	paths?: string[];
 	context: string[];
-	risks: { kind: string; reason: string }[];
+	risks?: { kind: string; reason: string }[];
 	passes: {
 		id: string;
 		role: string;
@@ -559,12 +560,15 @@ function PlanView({ data }: { data: PlanData }) {
 							{chunk.id} · {chunk.regions.length} {chunk.regions.length === 1 ? "region" : "regions"}
 						</span>
 					</header>
-					<p className="wp-review-chips">
-						{chunk.paths.map((path) => (
-							<Mono key={path}>{path}</Mono>
-						))}
-					</p>
-					{chunk.risks.length > 0 && (
+					{/* Plans recorded before scopes were paths name regions instead; they have no paths to show. */}
+					{chunk.paths?.length ? (
+						<p className="wp-review-chips">
+							{chunk.paths.map((path) => (
+								<Mono key={path}>{path}</Mono>
+							))}
+						</p>
+					) : null}
+					{chunk.risks?.length ? (
 						<ul className="wp-review-risks">
 							{chunk.risks.map((risk) => (
 								<li key={`${risk.kind}:${risk.reason.slice(0, 20)}`}>
@@ -572,7 +576,7 @@ function PlanView({ data }: { data: PlanData }) {
 								</li>
 							))}
 						</ul>
-					)}
+					) : null}
 					<ul className="wp-review-passes">
 						{chunk.passes.map((pass) => (
 							<PassRow key={pass.id} pass={pass} />

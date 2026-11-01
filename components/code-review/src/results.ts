@@ -139,19 +139,29 @@ export interface ReviewAttemptLog {
 export interface ReviewAnalytics {
 	reviews: number;
 	settled: number;
-	dollars: number;
+	/** Reported cost; null when the sum is not finite. Attempts without a cost observation are counted, not priced. */
+	dollars: number | null;
+	unreported: number;
 	confirmed: number;
 	/** Review wall time from admission to the last attempt, over settled reviews. */
 	medianMinutes: number | null;
 	byModel: {
 		model: string;
 		attempts: number;
-		dollars: number;
+		/** Attempts with a cost observation; averages divide by this, not by every attempt. */
+		reported: number;
+		dollars: number | null;
 		minutes: number;
 		confirmed: number;
 		severities: Record<string, number>;
 	}[];
-	byPhase: { kind: ReviewAttempt["kind"]; attempts: number; dollars: number; minutes: number }[];
+	byPhase: {
+		kind: ReviewAttempt["kind"];
+		attempts: number;
+		reported: number;
+		dollars: number | null;
+		minutes: number;
+	}[];
 	recent: {
 		id: string;
 		label: ReviewSummary["label"];

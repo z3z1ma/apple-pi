@@ -339,6 +339,8 @@ export function reviewQueue(
 		const total = visible?.length ?? groups.reduce((sum, row) => sum + row.count, 0);
 		if (options.limit === undefined) return { total, states, passes, page: null };
 		let offset = options.offset ?? 0;
+		// A filter or a shrinking queue can leave a requested page past the end; show the last page instead of nothing.
+		if (offset >= total && total > 0) offset = Math.floor((total - 1) / options.limit) * options.limit;
 		if (visible) {
 			if (options.around) {
 				const position = visible.findIndex((summary) => summary.id === options.around);
@@ -755,14 +757,16 @@ function transcriptTail(file: string): ReviewLogEntry[] {
 		if (start > 0) lines.shift();
 		const clip = (text: string) => (text.length > 400 ? `${text.slice(0, 400)}\u2026` : text);
 		return lines.flatMap((line): ReviewLogEntry[] => {
-			let entry: { type?: string; timestamp?: string; message?: Record<string, unknown> };
+			let entry: { type?: string; timestamp?: string; message?: Record<string, unknown> } | null;
 			try {
 				entry = JSON.parse(line);
 			} catch {
 				return [];
 			}
+			// A record that is not an object is skipped like a malformed line; it must not hide the rest of the log.
+			if (!entry || typeof entry !== "object") return [];
 			const message = entry.message;
-			if (entry.type !== "message" || !message) return [];
+			if (entry.type !== "message" || !message || typeof message !== "object") return [];
 			const at = entry.timestamp ? Date.parse(entry.timestamp) : null;
 			const content = Array.isArray(message.content) ? (message.content as Record<string, unknown>[]) : [];
 			if (message.role === "assistant")
@@ -847,26 +851,37 @@ export function reviewAnalytics(db: DatabaseSync, actor: string, options: { cwd?
 				finishedAt: number | null;
 			}[];
 			for (const attempt of attempts) {
-				const dollars = count(attempt.cost === null ? 0 : JSON.parse(attempt.cost));
+				// Missing or invalid observations stay unreported rather than counting as free.
+				const observed: unknown = attempt.cost === null ? undefined : JSON.parse(attempt.cost);
+				const reported = typeof observed === "number" && Number.isFinite(observed) && observed >= 0;
 				const minutes = attempt.finishedAt ? (attempt.finishedAt - attempt.createdAt) / 60000 : 0;
 				const model = attempt.model ?? "unknown";
 				attemptModel.set(attempt.id, model);
 				const forModel = byModel.get(model) ?? {
 					model,
 					attempts: 0,
+					reported: 0,
 					dollars: 0,
 					minutes: 0,
 					confirmed: 0,
 					severities: {},
 				};
-				forModel.attempts++;
-				forModel.dollars += dollars;
-				forModel.minutes += minutes;
+				const phase = byPhase.get(attempt.kind) ?? {
+					kind: attempt.kind,
+					attempts: 0,
+					reported: 0,
+					dollars: 0,
+					minutes: 0,
+				};
+				for (const row of [forModel, phase]) {
+					row.attempts++;
+					row.minutes += minutes;
+					if (reported) {
+						row.reported++;
+						row.dollars = finiteSum(row.dollars, observed);
+					}
+				}
 				byModel.set(model, forModel);
-				const phase = byPhase.get(attempt.kind) ?? { kind: attempt.kind, attempts: 0, dollars: 0, minutes: 0 };
-				phase.attempts++;
-				phase.dollars += dollars;
-				phase.minutes += minutes;
 				byPhase.set(attempt.kind, phase);
 			}
 			for (const finding of reviewAssessment(db, actor, summary.id).findings) {
@@ -883,10 +898,21 @@ export function reviewAnalytics(db: DatabaseSync, actor: string, options: { cwd?
 		return {
 			reviews: summaries.length,
 			settled: durations.length,
-			dollars: summaries.reduce((sum, summary) => sum + (summary.cost.reportedDollars ?? 0), 0),
+			dollars: summaries.reduce<number | null>(
+				(sum, summary) => (summary.cost.reportedDollars === null ? sum : finiteSum(sum, summary.cost.reportedDollars)),
+				0,
+			),
+			unreported: summaries.reduce(
+				(sum, summary) =>
+					sum +
+					(summary.cost.reportedDollars === null
+						? summary.cost.totalAttempts
+						: summary.cost.totalAttempts - summary.cost.reportedAttempts),
+				0,
+			),
 			confirmed: summaries.reduce((sum, summary) => sum + summary.findings.confirmed, 0),
-			medianMinutes: durations.length ? durations[Math.floor((durations.length - 1) / 2)]! : null,
-			byModel: [...byModel.values()].sort((a, b) => b.dollars - a.dollars),
+			medianMinutes: median(durations),
+			byModel: [...byModel.values()].sort((a, b) => (b.dollars ?? 0) - (a.dollars ?? 0)),
 			byPhase: [...byPhase.values()],
 			recent: summaries
 				.slice()
@@ -902,6 +928,19 @@ export function reviewAnalytics(db: DatabaseSync, actor: string, options: { cwd?
 				})),
 		};
 	});
+}
+
+/** A sum that becomes unavailable (null) rather than infinite, as review cost does. */
+function finiteSum(sum: number | null, value: number): number | null {
+	if (sum === null) return null;
+	const total = sum + value;
+	return Number.isFinite(total) ? total : null;
+}
+
+function median(sorted: number[]): number | null {
+	if (!sorted.length) return null;
+	const middle = Math.floor(sorted.length / 2);
+	return sorted.length % 2 ? sorted[middle]! : (sorted[middle - 1]! + sorted[middle]!) / 2;
 }
 
 function page<T>(rows: T[], options: { limit?: number; offset?: number }) {

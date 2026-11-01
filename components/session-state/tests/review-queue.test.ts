@@ -1551,6 +1551,10 @@ test("reported cost keeps invalid observations and nonfinite totals unavailable"
 				reportedAttempts: 0,
 				totalAttempts: 2,
 			});
+			// Analytics counts unreported attempts instead of pricing them at zero.
+			const analytics = reviewAnalytics(db, "owner");
+			expect(analytics).toMatchObject({ dollars: 0, unreported: 2 });
+			expect(analytics.byPhase.every((row) => row.reported === 0 && row.dollars === 0)).toBe(true);
 		}
 		setCost.run("0", job.id);
 		expect(reviewSummary(db, "owner", job.id).cost).toMatchObject({
@@ -1721,6 +1725,34 @@ test("the owner is mailed when the plan is ready, as each pass's findings are co
 	).toEqual([{ participant: "owner" }]);
 }, 30000);
 
+test("an owner's comment before any milestone opens the review thread for the harness and the owner", async () => {
+	writeFileSync(join(state.agentDir, "peer-control.json"), JSON.stringify({ review: { hold: "planning" } }));
+	const job = await enqueue();
+	const commented = await sendCommand(
+		"owner",
+		{ kind: "review", version: 1, operation: { action: "comment", review: job.id, body: "Watch the consumer." } },
+		{ socketPath: state.socketPath },
+	);
+	expect(commented.stage, commented.reason).toBe("applied");
+	expect(
+		query(
+			state.dbPath,
+			"select participant, delivery from thread_participants where thread_id = ? order by participant",
+			`review:${job.id}`,
+		),
+	).toEqual([
+		{ participant: "harness", delivery: "pull" },
+		{ participant: "owner", delivery: "push" },
+	]);
+	const cancelled = await sendCommand(
+		"owner",
+		{ kind: "review", version: 1, operation: { action: "cancel", review: job.id } },
+		{ socketPath: state.socketPath },
+	);
+	expect(cancelled.stage, cancelled.reason).toBe("applied");
+	await settled(job.id, "cancelled");
+}, 30000);
+
 test("a deep pass launches its reviewer on the deep profile, a standard pass on the role's own", async () => {
 	writeFileSync(join(state.agentDir, "peer-control.json"), JSON.stringify({ review: true }));
 	writeFileSync(
@@ -1772,9 +1804,23 @@ test("readers name the change, take comments, show pass logs and analytics, and 
 			page: { rows: { sender: string; body: string }[] };
 		};
 		expect(thread.page.rows.at(-1)).toMatchObject({ sender: "operator", body: "Please check the consumer too." });
-		const logs = readReviewPart(db, "owner", committed.id, { part: "log" }) as { kind: string; entries: unknown[] }[];
+		const transcript = query<{ file: string | null }>(
+			state.dbPath,
+			"select session_file as file from review_attempts where review_id = ? order by created_at desc limit 1",
+			committed.id,
+		)[0]!.file!;
+		// A record that is not an object is skipped; the entries after it still show.
+		writeFileSync(
+			transcript,
+			`${readFileSync(transcript, "utf8")}null\n${JSON.stringify({ type: "message", message: { role: "assistant", content: [{ type: "text", text: "after null" }] } })}\n`,
+		);
+		const logs = readReviewPart(db, "owner", committed.id, { part: "log" }) as {
+			kind: string;
+			entries: { text: string }[];
+		}[];
 		expect(logs).toHaveLength(1);
-		expect(logs[0]!.entries).toBeInstanceOf(Array);
+		expect(logs[0]!.entries.at(-1)).toMatchObject({ text: "after null" });
+		expect(reviewQueue(db, "owner", { limit: 1, offset: 5 }).page).toMatchObject({ offset: 0, rows: [{}] });
 		const analytics = reviewAnalytics(db, "owner");
 		expect(analytics).toMatchObject({ reviews: 1, settled: 1, confirmed: 1 });
 		expect(analytics.byModel.reduce((sum, row) => sum + row.confirmed, 0)).toBe(1);

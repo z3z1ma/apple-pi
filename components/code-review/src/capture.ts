@@ -29,13 +29,18 @@ async function reviewLabel(
 	signal?: AbortSignal,
 ): Promise<ReviewLabel> {
 	const committed = target.kind !== "working-tree" && target.kind !== "staged";
+	// The label is display only: a query that fails (detached HEAD, a shallow history) leaves its field empty.
+	const optional = <T>(query: Promise<T>) => query.catch(() => null);
 	const [branch, subject, commits] = await settledAll([
-		text(repository, ["symbolic-ref", "--short", "-q", "HEAD"], { signal }).catch(() => ""),
-		committed ? change.git(["log", "-1", "--format=%s", change.headCommit], { signal }) : Promise.resolve(null),
+		optional(text(repository, ["symbolic-ref", "--short", "-q", "HEAD"], { signal })),
+		committed
+			? optional(change.git(["log", "-1", "--format=%s", change.headCommit], { signal }))
+			: Promise.resolve(null),
 		committed && change.baseCommit
-			? change.git(["rev-list", "--count", `${change.baseCommit}..${change.headCommit}`], { signal })
+			? optional(change.git(["rev-list", "--count", `${change.baseCommit}..${change.headCommit}`], { signal }))
 			: Promise.resolve(null),
 	] as const);
+	signal?.throwIfAborted();
 	return {
 		branch: branch || null,
 		subject: subject?.toString("utf8").trim() || null,

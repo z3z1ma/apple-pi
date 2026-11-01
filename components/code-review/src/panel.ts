@@ -219,6 +219,7 @@ export class ReviewPanel implements Component {
 		}
 		if (matchesKey(data, "h")) {
 			this.hideAddressed = !this.hideAddressed;
+			// The selection may vanish with the filter; the reader then shows the last page that still has reviews.
 			this.refresh();
 		} else if (matchesKey(data, Key.enter)) this.focusDetail = !this.focusDetail;
 		else if (matchesKey(data, "]") || matchesKey(data, "[")) this.page(matchesKey(data, "]") ? 1 : -1);

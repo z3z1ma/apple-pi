@@ -18,6 +18,8 @@ export interface ReviewsApi {
 		limit: number;
 		offset?: number;
 		hideAddressed?: boolean;
+		/** Return the page holding this review, so a live reorder does not change the selection. */
+		around?: string;
 	}): Promise<ReviewQueue>;
 	analytics(request: { cwd?: string }): Promise<ReviewAnalytics>;
 	read(request: {

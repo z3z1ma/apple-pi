@@ -4,9 +4,11 @@ import {
 	changeLabel,
 	dollarsLabel,
 	elapsedLabel,
+	perLabel,
 	refLabel,
 	resultLabel,
 	tokensLabel,
+	unreportedLabel,
 	whenLabel,
 } from "../../../components/code-review/src/presentation.js";
 import type {
@@ -70,16 +72,18 @@ export function WorkplaceReviews({ root, active, world }: { root: string; active
 	const [tick, setTick] = useState(0);
 	const [hideAddressed, setHideAddressed] = useState(false);
 	const [analytics, showAnalytics] = useState(false);
-	const detailKey = JSON.stringify([selected, part, path, side, detailOffset, version]);
+	const [comment, setComment] = useState("");
+	const current = queue?.page?.rows.find((review) => review.id === selected);
+	// Log and mail change without a new assessment revision, so only they follow the live tick.
+	const liveTick = part === "log" || part === "mail" ? tick : 0;
+	// Everything a payload depends on: an assessment change or a new page size invalidates the shown evidence.
+	const detailKey = JSON.stringify([selected, current?.revision, part, path, side, detailOffset, limit, version]);
 	const detail = detailState?.key === detailKey ? detailState.value : undefined;
-	const loaded = useRef("");
 	const [capture, showCapture] = useState(false);
 	const [question, setQuestion] = useState("");
 	const [reason, setReason] = useState("");
 	const [doneWhen, setDoneWhen] = useState("");
-	const [comment, setComment] = useState("");
 	const [pending, setPending] = useState<{ attempt: string; operation: ReviewManagement }>();
-	const current = queue?.page?.rows.find((review) => review.id === selected);
 	const live = queue?.page?.rows.some((review) => LIVE.includes(review.state)) ?? false;
 	useEffect(() => {
 		const element = list.current;
@@ -106,10 +110,18 @@ export function WorkplaceReviews({ root, active, world }: { root: string; active
 		if (!active) return;
 		let current = true;
 		void api
-			.queue({ ...(root ? { cwd: root } : {}), limit, offset, hideAddressed })
+			// The page follows the selected review through live reordering, as the TUI queue does.
+			.queue({
+				...(root ? { cwd: root } : {}),
+				limit,
+				offset,
+				hideAddressed,
+				...(selected ? { around: selected } : {}),
+			})
 			.then((value) => {
 				if (!current) return;
 				setQueue({ root, value });
+				if (value.page && value.page.offset !== offset) setOffset(value.page.offset);
 				select((id) => (value.page?.rows.some((row) => row.id === id) ? id : value.page?.rows[0]?.id));
 			})
 			.catch((error) => {
@@ -118,12 +130,10 @@ export function WorkplaceReviews({ root, active, world }: { root: string; active
 		return () => {
 			current = false;
 		};
-	}, [api, active, root, offset, limit, hideAddressed, version, tick]);
-	// biome-ignore lint/correctness/useExhaustiveDependencies: A tick reloads only live evidence, keeping the shown page meanwhile.
+	}, [api, active, root, offset, limit, hideAddressed, selected, version, tick]);
+	// biome-ignore lint/correctness/useExhaustiveDependencies: The key holds every input; a live tick reloads log and mail under the same key.
 	useEffect(() => {
 		if (!active || !selected) return;
-		if (loaded.current === detailKey && !(part === "log" || part === "mail" || part === "summary")) return;
-		loaded.current = detailKey;
 		let current = true;
 		const request = { review: selected, limit, offset: detailOffset };
 		const load =
@@ -146,7 +156,7 @@ export function WorkplaceReviews({ root, active, world }: { root: string; active
 		return () => {
 			current = false;
 		};
-	}, [api, active, selected, part, path, side, detailOffset, limit, detailKey, tick]);
+	}, [api, active, detailKey, liveTick]);
 	const manage = useCallback(
 		async (request: NonNullable<typeof pending>) => {
 			setBusy(true);
@@ -209,6 +219,7 @@ export function WorkplaceReviews({ root, active, world }: { root: string; active
 						checked={hideAddressed}
 						onChange={(event) => {
 							setHideAddressed(event.target.checked);
+							select(undefined);
 							setOffset(0);
 						}}
 					/>
@@ -315,7 +326,14 @@ export function WorkplaceReviews({ root, active, world }: { root: string; active
 					</ul>
 					{(offset > 0 || queue?.page?.nextOffset != null) && (
 						<nav>
-							<button type="button" disabled={!offset} onClick={() => setOffset(Math.max(0, offset - limit))}>
+							<button
+								type="button"
+								disabled={!offset}
+								onClick={() => {
+									select(undefined);
+									setOffset(Math.max(0, offset - limit));
+								}}
+							>
 								Previous
 							</button>
 							<span>
@@ -324,7 +342,10 @@ export function WorkplaceReviews({ root, active, world }: { root: string; active
 							<button
 								type="button"
 								disabled={queue?.page?.nextOffset == null}
-								onClick={() => setOffset(queue!.page!.nextOffset!)}
+								onClick={() => {
+									select(undefined);
+									setOffset(queue!.page!.nextOffset!);
+								}}
 							>
 								Next
 							</button>
@@ -433,11 +454,13 @@ export function WorkplaceReviews({ root, active, world }: { root: string; active
 										onSubmit={(event) => {
 											event.preventDefault();
 											if (!comment.trim() || pending) return;
+											const draft = comment;
 											void manage({
 												attempt: crypto.randomUUID(),
-												operation: { action: "comment", review: current.id, body: comment.trim() },
+												operation: { action: "comment", review: current.id, body: draft.trim() },
 											}).then((sent) => {
-												if (sent) setComment("");
+												// Text typed while the comment was sending is a new draft, not the sent one.
+												if (sent) setComment((now) => (now === draft ? "" : now));
 											});
 										}}
 									>
@@ -550,7 +573,9 @@ function ReviewAnalyticsView({ api, root, version }: { api: ReviewsApi; root: st
 		void api
 			.analytics(root ? { cwd: root } : {})
 			.then((value) => {
-				if (current) setData({ key, value });
+				if (!current) return;
+				setError("");
+				setData({ key, value });
 			})
 			.catch((error) => {
 				if (current) setError(errorText(error));
@@ -562,7 +587,7 @@ function ReviewAnalyticsView({ api, root, version }: { api: ReviewsApi; root: st
 	if (error) return <p role="alert">{error}</p>;
 	const value = data?.key === key ? data.value : undefined;
 	if (!value) return <p className="wp-review-empty">Loading analytics...</p>;
-	const per = (dollars: number, count: number) => (count ? dollarsLabel(dollars / count) : "--");
+	const per = perLabel;
 	return (
 		<section className="wp-review-analytics" aria-label="Review analytics">
 			<div className="wp-review-stats">
@@ -571,6 +596,7 @@ function ReviewAnalyticsView({ api, root, version }: { api: ReviewsApi; root: st
 				</div>
 				<div>
 					<b>{dollarsLabel(value.dollars)}</b> total, {per(value.dollars, value.reviews)} each
+					{value.unreported ? `; ${value.unreported} attempts without cost` : ""}
 				</div>
 				<div>
 					<b>{value.confirmed}</b> confirmed, {per(value.dollars, value.confirmed)} each
@@ -596,9 +622,12 @@ function ReviewAnalyticsView({ api, root, version }: { api: ReviewsApi; root: st
 					{value.byModel.map((row) => (
 						<tr key={row.model}>
 							<td>{row.model}</td>
-							<td>{row.attempts}</td>
+							<td>
+								{row.attempts}
+								{unreportedLabel(row.attempts, row.reported)}
+							</td>
 							<td>{dollarsLabel(row.dollars)}</td>
-							<td>{per(row.dollars, row.attempts)}</td>
+							<td>{per(row.dollars, row.reported)}</td>
 							<td>{row.confirmed}</td>
 							<td>{per(row.dollars, row.confirmed)}</td>
 							<td>
@@ -625,9 +654,12 @@ function ReviewAnalyticsView({ api, root, version }: { api: ReviewsApi; root: st
 					{value.byPhase.map((row) => (
 						<tr key={row.kind}>
 							<td>{row.kind}</td>
-							<td>{row.attempts}</td>
+							<td>
+								{row.attempts}
+								{unreportedLabel(row.attempts, row.reported)}
+							</td>
 							<td>{dollarsLabel(row.dollars)}</td>
-							<td>{per(row.dollars, row.attempts)}</td>
+							<td>{per(row.dollars, row.reported)}</td>
 							<td>{row.attempts ? (row.minutes / row.attempts).toFixed(1) : "--"}</td>
 						</tr>
 					))}

@@ -121,19 +121,30 @@ export function logLines(logs: ReviewAttemptLog[]): string[] {
 	]);
 }
 
+/** An average over the observations that exist; unknown when the total or every observation is unknown. */
+export function perLabel(dollars: number | null, count: number): string {
+	return dollars === null || !count ? "--" : dollarsLabel(dollars / count);
+}
+
+/** Says how many attempts have no cost observation, so a total is read as a lower bound. */
+export function unreportedLabel(attempts: number, reported: number): string {
+	return attempts > reported ? ` (${attempts - reported} without cost)` : "";
+}
+
 export function analyticsLines(data: ReviewAnalytics): string[] {
-	const per = (dollars: number, count: number) => (count ? dollarsLabel(dollars / count) : "--");
+	const per = perLabel;
+	const lowerBound = data.unreported ? `at least ` : "";
 	return [
 		"Assessment",
 		`Reviews: ${data.reviews} (${data.settled} settled)`,
-		`Total cost: ${dollarsLabel(data.dollars)}, ${per(data.dollars, data.reviews)} per review`,
+		`Total cost: ${lowerBound}${dollarsLabel(data.dollars)}, ${per(data.dollars, data.reviews)} per review${data.unreported ? ` (${data.unreported} attempts without cost)` : ""}`,
 		`Confirmed findings: ${data.confirmed}, ${per(data.dollars, data.confirmed)} each`,
 		`Median review time: ${data.medianMinutes === null ? "--" : `${data.medianMinutes.toFixed(1)} min`}`,
 		"",
 		"By model",
 		...data.byModel.map(
 			(row) =>
-				`${row.model}: ${row.attempts} attempts, ${dollarsLabel(row.dollars)} (${per(row.dollars, row.attempts)} each), ${row.confirmed} confirmed (${per(row.dollars, row.confirmed)} each)${
+				`${row.model}: ${row.attempts} attempts${unreportedLabel(row.attempts, row.reported)}, ${dollarsLabel(row.dollars)} (${per(row.dollars, row.reported)} each), ${row.confirmed} confirmed (${per(row.dollars, row.confirmed)} each)${
 					Object.keys(row.severities).length
 						? `, ${Object.entries(row.severities)
 								.map(([severity, n]) => `${n} ${severity}`)
@@ -145,7 +156,7 @@ export function analyticsLines(data: ReviewAnalytics): string[] {
 		"By phase",
 		...data.byPhase.map(
 			(row) =>
-				`${row.kind}: ${row.attempts} attempts, ${dollarsLabel(row.dollars)} (${per(row.dollars, row.attempts)} each), ${row.attempts ? (row.minutes / row.attempts).toFixed(1) : "--"} min each`,
+				`${row.kind}: ${row.attempts} attempts${unreportedLabel(row.attempts, row.reported)}, ${dollarsLabel(row.dollars)} (${per(row.dollars, row.reported)} each), ${row.attempts ? (row.minutes / row.attempts).toFixed(1) : "--"} min each`,
 		),
 		"",
 		"Recent reviews",
