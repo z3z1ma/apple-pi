@@ -435,10 +435,10 @@ test.each([
 		const dialog = page.getByRole("dialog");
 		await dialog.getByRole("radio", { name: mode, exact: true }).check();
 		const rows = dialog.getByRole("table", { name: "Selected departures" });
-		for (const [index, name] of ["Ada", "Ben", "Mina"].entries()) {
-			const row = rows.getByRole("row").filter({ has: page.getByRole("rowheader", { name, exact: true }) });
-			expect(await row.getByRole("cell").first().innerText()).toBe(handoffs[index] ? "Requested" : "None");
-		}
+		const rowFor = (name: string) =>
+			rows.getByRole("row").filter({ has: page.getByRole("rowheader", { name, exact: true }) });
+		for (const [index, name] of ["Ada", "Ben", "Mina"].entries())
+			expect(await rowFor(name).getByRole("cell").first().innerText()).toBe(handoffs[index] ? "Requested" : "None");
 		const send = dialog.getByRole("button", { name: "Let go", exact: true });
 		expect(await send.isDisabled()).toBe(true);
 		await dialog.getByRole("textbox", { name: "Reason for leaving" }).fill("  Finished project  ");
@@ -447,26 +447,30 @@ test.each([
 		await bounded(page, dialog);
 		await bounded(page, dialog.getByRole("heading", { name: "Let 3 people go", exact: true }));
 		await bounded(page, send);
-		const alignment = await dialog.getByRole("radio", { name: mode, exact: true }).evaluate((input) => {
-			const range = document.createRange();
-			range.selectNode(input.parentElement!.lastChild!);
-			const label = range.getBoundingClientRect(),
-				control = input.getBoundingClientRect();
-			return { overlap: Math.min(label.bottom, control.bottom) - Math.max(label.top, control.top) };
-		});
+		const alignment = await dialog
+			.getByRole("radio", { name: mode, exact: true })
+			.evaluate((input: HTMLInputElement) => {
+				const text = document.createTreeWalker(input.labels![0], NodeFilter.SHOW_TEXT);
+				let node = text.nextNode();
+				while (node && !node.textContent?.trim()) node = text.nextNode();
+				const range = document.createRange();
+				range.selectNodeContents(node!);
+				const label = range.getBoundingClientRect(),
+					control = input.getBoundingClientRect();
+				return { overlap: Math.min(label.bottom, control.bottom) - Math.max(label.top, control.top) };
+			});
 		expect(alignment.overlap).toBeGreaterThan(0);
 		await shot(page, `batch-${mode.split(" ")[0].toLowerCase()}`);
 		await send.click();
 		await vi.waitFor(async () => expect((await calls(page)).retirePeople).toHaveLength(1));
 		const sent = (await calls(page)).retirePeople[0];
-		expect(sent).toMatchObject({
-			reason: "Finished project",
-			people: [
-				{ person: "ada", handoff: handoffs[0] },
-				{ person: "ben", handoff: handoffs[1] },
-				{ person: "mina", handoff: handoffs[2] },
-			],
-		});
+		expect(sent.id).toMatch(/\S/);
+		expect(sent.reason).toBe("Finished project");
+		expect([...sent.people].sort((a, b) => a.person.localeCompare(b.person))).toEqual([
+			{ person: "ada", handoff: handoffs[0] },
+			{ person: "ben", handoff: handoffs[1] },
+			{ person: "mina", handoff: handoffs[2] },
+		]);
 		expect((await calls(page)).retire).toEqual([]);
 		expect((await calls(page)).profiles).toEqual([]);
 		const partial = {
@@ -479,12 +483,19 @@ test.each([
 			],
 		};
 		await page.evaluate((progress) => (window as any).pushDepartures(progress), partial);
-		await dialog.getByText("Accepted; handoff or cleanup pending", { exact: true }).waitFor();
+		await rowFor("Ben").getByText("Accepted; handoff or cleanup pending", { exact: true }).waitFor();
+		expect(await rowFor("Ada").getByRole("cell").last().innerText()).toBe("Not started");
+		expect(await rowFor("Mina").getByRole("cell").last().innerText()).toBe("Not started");
 		expect(await dialog.getByRole("radio", { name: "None", exact: true }).isDisabled()).toBe(true);
 		const next = structuredClone(initial);
-		next.characters.push(awake("new", "New arrival", "ada"));
+		next.characters.find((person) => person.id === "ada")!.name = "Ada renamed";
+		next.characters.find((person) => person.id === "ben")!.role = "coordinator";
+		next.characters.push(awake("new", "New arrival", "ben"));
+		next.dormant = next.dormant!.filter((person) => person.id !== "mina");
 		await publish(page, next);
-		expect(await rows.getByRole("rowheader", { name: "New arrival", exact: true }).count()).toBe(0);
+		expect((await rows.getByRole("rowheader").allTextContents()).sort()).toEqual(["Ada", "Ben", "Mina"]);
+		for (const [index, name] of ["Ada", "Ben", "Mina"].entries())
+			expect(await rowFor(name).getByRole("cell").first().innerText()).toBe(handoffs[index] ? "Requested" : "None");
 		await dialog.getByRole("button", { name: "Hide", exact: true }).click();
 		await page.getByRole("button", { name: "Chat", exact: true }).click();
 		await page.getByRole("button", { name: "Org", exact: true }).click();
@@ -500,7 +511,13 @@ test.each([
 			],
 		});
 		await dialog.getByText("1 of 3 removed. Each result is shown above.", { exact: true }).waitFor();
-		expect(await rows.getByText("Unfinished assignment", { exact: true }).count()).toBe(1);
+		expect(await rowFor("Ada").getByRole("cell").last().innerText()).toMatch(
+			/Not sent.*Selected report has not finished/s,
+		);
+		expect(await rowFor("Ben").getByRole("cell").last().innerText()).toMatch(
+			/Refused or failed.*Unfinished assignment/s,
+		);
+		expect(await rowFor("Mina").getByRole("cell").last().innerText()).toBe("Removed");
 		await bounded(page, dialog.getByRole("heading", { name: "Let 3 people go", exact: true }));
 		await bounded(page, dialog.getByRole("button", { name: "Close", exact: true }));
 		await shot(page, `batch-${mode.split(" ")[0].toLowerCase()}-outcomes`);
@@ -518,20 +535,25 @@ test("Org select-all is explicit and uncertain batch progress retains the same r
 		await page.getByRole("button", { name: "Org", exact: true }).click();
 		const directory = page.getByRole("table", { name: "People", exact: true });
 		await directory.getByRole("checkbox", { name: "Select all people" }).check();
-		expect(await directory.getByRole("checkbox", { checked: true }).count()).toBe(8);
+		const selectedNames = ["Ada", "Bea", "Ben", "Cleo", "Daria", "Erin", "Mina"];
+		for (const name of selectedNames)
+			expect(await directory.getByRole("checkbox", { name: `Select ${name}`, exact: true }).isChecked()).toBe(true);
 		const next = world();
 		next.characters.push(awake("new", "New arrival", null));
 		await publish(page, next);
 		expect(await directory.getByRole("checkbox", { name: "Select New arrival", exact: true }).isChecked()).toBe(false);
 		await page.getByRole("button", { name: "Let go", exact: true }).click();
 		const dialog = page.getByRole("dialog");
-		expect(await dialog.getByRole("rowheader").count()).toBe(7);
+		expect((await dialog.getByRole("rowheader").allTextContents()).sort()).toEqual(selectedNames);
 		await dialog.getByRole("radio", { name: "None", exact: true }).check();
 		await dialog.getByRole("textbox", { name: "Reason for leaving" }).fill("Cleanup");
 		await dialog.getByRole("checkbox", { name: "Permanently remove these 7 people" }).check();
 		await dialog.getByRole("button", { name: "Let go", exact: true }).click();
 		await vi.waitFor(async () => expect((await calls(page)).retirePeople).toHaveLength(1));
 		const sent = (await calls(page)).retirePeople[0];
+		expect([...sent.people].sort((a, b) => a.person.localeCompare(b.person))).toEqual(
+			["ada", "bea", "ben", "cleo", "daria", "erin", "mina"].map((person) => ({ person, handoff: false })),
+		);
 		await page.evaluate(() => (window as any).rejectLifecycle(new Error("Connection lost")));
 		await dialog.getByRole("button", { name: "Check and continue", exact: true }).waitFor();
 		expect(await dialog.getByRole("textbox", { name: "Reason for leaving" }).isDisabled()).toBe(true);

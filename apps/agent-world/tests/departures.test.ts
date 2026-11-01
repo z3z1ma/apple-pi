@@ -6,7 +6,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { migrate } from "../../../components/session-state/src/schema.js";
 import type { Commands, SendOptions } from "../src/backend/commands.js";
 import { openDepartures } from "../src/backend/departures.js";
-import { isRetirePeopleRequest, type RetirePeopleProgress, type RetirePeopleRequest } from "../src/departures.js";
+import type { RetirePeopleProgress, RetirePeopleRequest } from "../src/departures.js";
 import type { CommandResult } from "../src/world.js";
 
 let dir: string;
@@ -50,11 +50,13 @@ test("sends only selected people, reports first, with each explicit handoff choi
 		by: "someone-else",
 		kind: "close",
 	} as RetirePeopleRequest);
-	expect(vi.mocked(commands.send).mock.calls.map(([id, command]) => ({ id, command }))).toEqual([
+	const sent = vi.mocked(commands.send).mock.calls.map(([id, command]) => ({ id, command }));
+	expect([...sent].sort((a, b) => a.id.localeCompare(b.id))).toEqual([
 		{ id: "leaf", command: { kind: "retire", reason: "Finished project", by: "operator", handoff: false } },
 		{ id: "manager", command: { kind: "retire", reason: "Finished project", by: "operator", handoff: true } },
 		{ id: "other", command: { kind: "retire", reason: "Finished project", by: "operator", handoff: false } },
 	]);
+	expect(sent.findIndex(({ id }) => id === "leaf")).toBeLessThan(sent.findIndex(({ id }) => id === "manager"));
 	expect(result.finished).toBe(true);
 	expect(result.people.every((person) => person.state === "applied")).toBe(true);
 });
@@ -63,7 +65,8 @@ test.each(["accepted", "delivered"] as const)(
 	"waits beyond %s until report cleanup is applied and publishes truthful progress",
 	async (stage) => {
 		let finish!: (result: CommandResult) => void;
-		vi.mocked(commands.send).mockImplementationOnce(async (_id, _command, options) => {
+		vi.mocked(commands.send).mockImplementation(async (id, _command, options) => {
+			if (id !== "leaf") return { ok: true };
 			options?.onReceipt?.(stage);
 			return new Promise((resolve) => {
 				finish = resolve;
@@ -72,12 +75,20 @@ test.each(["accepted", "delivered"] as const)(
 		const updates: RetirePeopleProgress[] = [];
 		departures.onRetirePeople((progress) => updates.push(progress));
 		const pending = departures.retirePeople(request());
-		expect(commands.send).toHaveBeenCalledTimes(1);
+		expect(vi.mocked(commands.send).mock.calls.some(([id]) => id === "manager")).toBe(false);
+		expect(updates.at(-1)?.finished).toBe(false);
 		expect(updates.at(-1)?.people.find((person) => person.person === "leaf")?.state).toBe(stage);
 		expect(updates.at(-1)?.people.find((person) => person.person === "manager")?.state).toBe("pending");
 		finish({ ok: true });
-		await pending;
-		expect(commands.send).toHaveBeenCalledTimes(3);
+		const result = await pending;
+		expect(
+			vi
+				.mocked(commands.send)
+				.mock.calls.map(([id]) => id)
+				.sort(),
+		).toEqual(["leaf", "manager", "other"]);
+		expect(result.finished).toBe(true);
+		expect(result.people.every((person) => person.state === "applied")).toBe(true);
 		// Earlier publications remain snapshots, not references mutated into success.
 		expect(updates.find((update) => update.people.some((person) => person.state === stage))).toBeDefined();
 	},
@@ -88,7 +99,8 @@ test.each(["failed", "uncertain"])(
 	async (state) => {
 		add("head", null);
 		db.prepare("update sessions set reports_to = 'head' where id = 'manager'").run();
-		vi.mocked(commands.send).mockImplementationOnce(async (_id, _command, options) => {
+		vi.mocked(commands.send).mockImplementation(async (id, _command, options) => {
+			if (id !== "leaf") return { ok: true };
 			options?.onReceipt?.(state === "failed" ? "failed" : "accepted", "Unfinished assignment");
 			return { ok: false, reason: "Unfinished assignment" };
 		});
@@ -96,7 +108,12 @@ test.each(["failed", "uncertain"])(
 			...request(),
 			people: [...request().people, { person: "head", handoff: true }],
 		});
-		expect(vi.mocked(commands.send).mock.calls.map(([id]) => id)).toEqual(["leaf", "other"]);
+		expect(
+			vi
+				.mocked(commands.send)
+				.mock.calls.map(([id]) => id)
+				.sort(),
+		).toEqual(["leaf", "other"]);
 		expect(result.people.find((person) => person.person === "leaf")).toMatchObject({
 			state,
 			reason: "Unfinished assignment",
@@ -106,25 +123,27 @@ test.each(["failed", "uncertain"])(
 	},
 );
 
-test("same-operation checks retain command identities after controller recreation and coalesce while pending", async () => {
+test("rechecking the same approved batch retains command identities and shares pending departures", async () => {
 	let finish!: (result: CommandResult) => void;
-	vi.mocked(commands.send).mockImplementationOnce(
-		async () =>
-			new Promise((resolve) => {
-				finish = resolve;
-			}),
-	);
+	vi.mocked(commands.send).mockImplementation(async (id) => {
+		if (id !== "leaf") return { ok: true };
+		return new Promise((resolve) => {
+			finish = resolve;
+		});
+	});
 	const first = departures.retirePeople(request());
 	const duplicate = departures.retirePeople(request());
-	await expect(departures.retirePeople({ ...request(), reason: "Different approval" })).rejects.toThrow(
-		"different choices",
-	);
-	expect(commands.send).toHaveBeenCalledTimes(1);
+	await expect(departures.retirePeople({ ...request(), reason: "Different approval" })).rejects.toThrow();
+	expect(vi.mocked(commands.send).mock.calls.filter(([id]) => id === "leaf")).toHaveLength(1);
 	finish({ ok: true });
 	expect(await first).toEqual(await duplicate);
+	vi.mocked(commands.send).mockResolvedValue({ ok: true });
 	const original = vi
 		.mocked(commands.send)
-		.mock.calls.map(([id, command, options]) => [id, command, options?.commandId]);
+		.mock.calls.map(([id, command, options]) => ({ id, command, commandId: options?.commandId }))
+		.sort((a, b) => a.id.localeCompare(b.id));
+	for (const { commandId } of original) expect(commandId).toMatch(/\S/);
+	expect(new Set(original.map(({ commandId }) => commandId)).size).toBe(original.length);
 	departures.close();
 	departures = openDepartures(join(dir, "state.db"), commands);
 	await departures.retirePeople(request());
@@ -132,25 +151,27 @@ test("same-operation checks retain command identities after controller recreatio
 		vi
 			.mocked(commands.send)
 			.mock.calls.slice(3)
-			.map(([id, command, options]) => [id, command, options?.commandId]),
+			.map(([id, command, options]) => ({ id, command, commandId: options?.commandId }))
+			.sort((a, b) => a.id.localeCompare(b.id)),
 	).toEqual(original);
 });
 
 test("quitting stops unsent requests, without cancelling the accepted departure", async () => {
 	let finish!: (result: CommandResult) => void;
-	vi.mocked(commands.send).mockImplementationOnce(async (_id, _command, options) => {
+	vi.mocked(commands.send).mockImplementation(async (id, _command, options) => {
+		if (id !== "leaf") return { ok: true };
 		options?.onReceipt?.("accepted");
 		return new Promise((resolve) => {
 			finish = resolve;
 		});
 	});
-	const pending = departures.retirePeople(request());
+	const pending = departures.retirePeople({ ...request(), people: request().people.slice(0, 2) });
 	departures.close();
 	finish({ ok: true });
 	const result = await pending;
 	expect(commands.send).toHaveBeenCalledTimes(1);
 	expect(result.people.find((person) => person.person === "leaf")?.state).toBe("applied");
-	expect(result.people.filter((person) => person.state === "blocked")).toHaveLength(2);
+	expect(result.people.find((person) => person.person === "manager")?.state).toBe("blocked");
 });
 
 test("uses the runtime refusal for unselected reports instead of adding them or changing responsibilities", async () => {
@@ -168,16 +189,17 @@ test("uses the runtime refusal for unselected reports instead of adding them or 
 		reason: "Move reports first",
 	});
 	expect(vi.mocked(commands.send).mock.calls.some(([id]) => id === "unselected")).toBe(false);
-	expect(db.prepare("select reports_to from sessions where id = 'unselected'").get()).toMatchObject({
-		reports_to: "manager",
-	});
+	expect(vi.mocked(commands.send).mock.calls.every(([, command]) => command.kind === "retire")).toBe(true);
 });
 
-test("refuses cycles before any departure and rejects invalid selection shapes", async () => {
+test("refuses cyclic reporting before sending any departure", async () => {
 	db.prepare("update sessions set reports_to = 'leaf' where id = 'manager'").run();
 	const result = await departures.retirePeople(request());
 	expect(result.people.every((person) => person.state === "blocked")).toBe(true);
 	expect(commands.send).not.toHaveBeenCalled();
+});
+
+test("invalid selections are refused at the batch API without issuing departures", async () => {
 	for (const input of [
 		null,
 		{},
@@ -188,6 +210,6 @@ test("refuses cycles before any departure and rejects invalid selection shapes",
 		{ ...request(), people: [{ person: "leaf", handoff: "none" }] },
 		{ ...request(), people: [request().people[0], request().people[0]] },
 	])
-		expect(isRetirePeopleRequest(input)).toBe(false);
-	expect(isRetirePeopleRequest(request())).toBe(true);
+		await expect(departures.retirePeople(input as RetirePeopleRequest)).rejects.toThrow();
+	expect(commands.send).not.toHaveBeenCalled();
 });

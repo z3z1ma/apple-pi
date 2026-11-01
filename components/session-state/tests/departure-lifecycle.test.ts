@@ -276,10 +276,15 @@ test.each([
 		await vi.waitFor(() => expect(stage(commandId)).toBe("applied"), { timeout: 10000 });
 		expect(query(state.dbPath, "select 1 from sessions where id = ?", worker.id)).toEqual([]);
 		expect(existsSync(worker.file)).toBe(false);
-		expect(worker.events.some((event) => event.type === "handoff")).toBe(false);
+		expect(worker.events.filter((event) => event.type === "model")).toEqual([]);
 		expect(existsSync(join(state.agentDir, `launch-${worker.id}.ndjson`))).toBe(false);
-		expect(query(state.dbPath, "select 1 from commands where command_id = ?", `${commandId}:handoff`)).toEqual([]);
-		expect(query(state.dbPath, "select 1 from links where id = ?", `${commandId}:handoff-file`)).toEqual([]);
+		expect(
+			query(
+				state.dbPath,
+				"select 1 from links where from_kind = 'person' and from_id = ? and relation = 'produced' and to_kind = 'file'",
+				worker.id,
+			),
+		).toEqual([]);
 		expect(existsSync(join(state.stateDir, "handoffs", `${worker.id}.md`))).toBe(false);
 		const departure = JSON.parse(
 			query<{ data: string }>(

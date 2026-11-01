@@ -270,12 +270,10 @@ describe("review queue master-detail", () => {
 		panel.handleInput("\r");
 		panel.handleInput("\x1b[B");
 		expect(panel.getSelectedId()).toBe(rows[pageSize]!.id);
-		panel.handleInput("v");
-		expect(events.view).not.toHaveBeenCalled();
 		panel.handleInput("\t");
-		expect(events.view).toHaveBeenLastCalledWith(1);
+		panel.handleInput("\x1b[B");
+		expect(panel.getSelectedId()).toBe(rows[pageSize]!.id);
 		panel.handleInput("\x1b[Z");
-		expect(events.view).toHaveBeenLastCalledWith(-1);
 		panel.handleInput("\x1b[B");
 		expect(panel.getSelectedId()).toBe(rows[pageSize]!.id);
 		panel.handleInput("\r");

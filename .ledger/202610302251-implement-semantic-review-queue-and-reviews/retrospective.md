@@ -6,7 +6,7 @@ Updated: 2026-10-31
 
 ## What Mattered
 
-In progress. The capture foundation was exercised before any paid reviewer turn. Preserve the distinction between this checked component and the still-pending runtime and operator-facing experience.
+The implementation is assembled and activated; operator acceptance remains pending. Capture, runtime orchestration, rendered interfaces and live activation were checked at separate boundaries. The operator's keyboard feedback shows why those checks do not substitute for acceptance of the actual interaction.
 
 ## Learnings
 

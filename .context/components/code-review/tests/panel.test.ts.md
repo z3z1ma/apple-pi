@@ -6,5 +6,9 @@ truncateToWidth can append an ANSI reset even with plainTheme. Strip generated V
 
 Capture confirmation tests keep the heading and consent row visible at each supported width and scroll through long evidence. A terminal too small to show the consent controls cannot accept y. Prose wraps: normalize whitespace for meaning assertions in the loaded-command test, while physical width/row/control assertions keep the actual rendered strings.
 
+Keyboard assertions here check which review the arrows select after Enter and view navigation. Actual view rotation is checked through the loaded command's rendered headings rather than callback argument values.
+
+Why: a correct callback payload alone cannot prove that the operator can reach a view, and pressing Tab then Shift+Tab before checking focus can hide two incorrect focus toggles. Check arrow behavior after each key separately.
+
 Coupled: components/code-review/src/panel.ts, components/code-review/src/review-manager.ts
 Verify: components/code-review/tests/panel.test.ts, components/session-state/tests/review-queue.test.ts

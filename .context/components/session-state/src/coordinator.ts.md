@@ -15,7 +15,7 @@ Why: a role is a standing job, not a placeholder task. Empty goals must not crea
 Coupled: components/session-state/src/runtime.ts, components/session-state/src/bridge.ts
 Verify: components/session-state/tests/idle-hire.test.ts, components/session-state/tests/coordinator.test.ts
 
-`let_go` returns an accepted request reference; the daemon owns the subsequent handoff and retryable cleanup. The native caller's command connection closes at that receipt and is not the job's cancellation owner. Permanent departure and reversible dormancy remain different operations, so `call_in` remains available and `rehire` has no public registration.
+`let_go` returns an accepted request reference; the daemon owns any requested handoff and the retryable cleanup. The caller's explicit handoff:false skips the writing, not responsibility or cleanup checks. The native caller's command connection closes at that receipt and is not the job's cancellation owner. Permanent departure and reversible dormancy remain different operations, so `call_in` remains available and `rehire` has no public registration.
 Why: waiting for complete cleanup would block the manager on a model run or a failed filesystem/process proof, while cancelling on caller disconnection could undo already-accepted organizational work.
 Coupled: components/session-state/src/peers.ts, components/session-title/src/index.ts, components/session-state/src/runtime.ts, components/organization/src/session-role.ts
 Verify: components/session-state/tests/coordinator.test.ts, components/session-state/tests/departure-lifecycle.test.ts

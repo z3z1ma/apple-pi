@@ -963,12 +963,34 @@ test("the loaded reviews command shows the queue, keeps selection and sends a co
 		expect(screen.focused()).toBe(panel);
 		panel.handleInput("\x1b[B");
 		expect(screen.layout(screen.stack[0]!).lines.join("\n")).toContain(first.id.slice(-8));
-		for (let index = 0; index < 10; index++) panel.handleInput("\t");
-		expect(screen.layout(screen.stack[0]!).lines.join("\n")).toContain("Summary");
+		for (const title of [
+			"Target",
+			"Source",
+			"Plan",
+			"Findings",
+			"Coverage",
+			"Attempts",
+			"Decisions",
+			"Configuration",
+			"Freshness",
+			"Summary",
+		]) {
+			panel.handleInput("\t");
+			const rendered = screen.layout(screen.stack[0]!).lines.join("\n");
+			expect(rendered).toContain(`${title} ${first.id.slice(-8)} |`);
+			expect(rendered).toContain("> Reviews");
+			expect(screen.focused()).toBe(panel);
+		}
 		expect(ctx.ui.select).not.toHaveBeenCalled();
-		for (let index = 0; index < 4; index++) panel.handleInput("\t");
-		expect(screen.layout(screen.stack[0]!).lines.join("\n")).toContain("Findings");
+		panel.handleInput("\x1b[Z");
+		expect(screen.layout(screen.stack[0]!).lines.join("\n")).toContain(`Freshness ${first.id.slice(-8)} |`);
+		panel.handleInput("\t");
+		for (const title of ["Target", "Source", "Plan", "Findings"]) {
+			panel.handleInput("\t");
+			expect(screen.layout(screen.stack[0]!).lines.join("\n")).toContain(`${title} ${first.id.slice(-8)} |`);
+		}
 		panel.handleInput("\r");
+		expect(screen.layout(screen.stack[0]!).lines.join("\n")).toContain(`> Findings ${first.id.slice(-8)} |`);
 		panel.handleInput("\x1b[6~");
 		expect(screen.layout(screen.stack[0]!).lines.join("\n")).toContain("The value disagrees with its consumer");
 		screen.tui.terminal.columns = 160;

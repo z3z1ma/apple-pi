@@ -12,6 +12,8 @@ Pi's ordinary select/confirm dialogs replace the editor; a floating queue can co
 
 Only the active source page is cached, keyed by review/digest, before/after side, path, offset and viewport limit. Changing selection, page or viewport aborts the previous read; closing or changing session context also cancels it, and late results cannot update a different mounted panel. Refresh polling reuses that page instead of repeatedly inspecting Git. Source line ranges are distinct from the panel's wrapped display-line range.
 
+Why: Source and Freshness reads can outlive a Tab view change. View cycling must cancel the old page before resetting detail pagination, while retaining the mounted panel and its focus; otherwise a late result can replace the newly selected evidence.
+
 The target response nests its paged omissions under target. Reading data.omissions made the last limits unreachable even though other views paged normally; the loaded-entry regression uses more LFS limits than fit in one viewport and reaches the final path through the ordinary controls.
 
 Explicit freshness uses the same async page ownership but reports requested comparison, checkout and policy independently at its observation time. Additional work requires a settled revision/digest plus a concrete question, reason and stopping condition; it authorizes model cost on retained source rather than capturing live edits. Captured browser sign-off shares the approval writer and waits for its receipt before success. Closing interaction cannot undo an already committed human verdict.

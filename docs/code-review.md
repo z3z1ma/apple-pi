@@ -59,7 +59,7 @@ Wide terminals show the queue beside evidence; narrow terminals stack them. Sele
 
 ## Browse captured source
 
-Choose `v`, then `source`, then the `before` or `after` side. Enter a repository-relative file path, or leave it blank to list captured files. Source lines are numbered separately from the panel's wrapped display lines. With the evidence pane focused, use `[` and `]` for file/line pages and Page Up/Page Down to scroll the current page. Source loading is asynchronous and cancelled when its selection or session is replaced.
+Use `Tab` or `Shift+Tab` to reach **Source**, which initially lists captured files. To open a file or change the comparison side, press `a`, choose **Choose captured source**, then choose `before` or `after`. Enter a repository-relative file path, or leave it blank to list captured files. Source lines are numbered separately from the panel's wrapped display lines. With the evidence pane focused, use `[` and `]` for file/line pages and Page Up/Page Down to scroll the current page. Source loading is asynchronous and cancelled when its selection or session is replaced.
 
 The native equivalent is:
 

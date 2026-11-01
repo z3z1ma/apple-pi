@@ -2,7 +2,9 @@
 
 The frame, queue entries, scrolling evidence and mouse hit regions share the viewport. Each queue entry occupies four physical rows; its producer, page sizing and mouse selection must change together. Clicking a pane heading changes focus without selecting a content row. Selection follows review identity through paging, reordering and resize. Wrapped-line position is local to the current evidence page, not aggregate review coverage.
 
-Evidence navigation stays independent of pane focus and review selection. Cycling a view resets its detail page without hiding the overlay; choosing a captured file/side is a separate action, so merely passing through Source opens no modal prompt. The operator rejected the previous modal view selector and Tab-as-pane-toggle interaction.
+Evidence navigation stays independent of pane focus and review selection. Cycling a view resets its detail page without hiding the overlay; choosing a captured file/side is a separate action, so merely passing through Source opens no modal prompt.
+
+Why: the operator needs to inspect another aspect without changing which review or pane the arrow keys control. View rotation belongs to the manager, while focus belongs to the panel; the loaded-command test must check their combined rendered behavior.
 
 Terminal data is untrusted display text. Strip terminal controls before applying theme styles, then wrap the styled evidence so long finding headings retain their visual hierarchy across lines. Measure cell widths with the TUI helpers rather than string length. Completed execution uses the neutral accent, not the approval/success color: findings, coverage, missing intent, freshness and operator approval remain separate claims.
 
