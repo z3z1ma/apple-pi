@@ -27,7 +27,9 @@ import { sendCommand } from "../src/client.js";
 import {
 	readReview,
 	readReviewFreshness,
+	readReviewPart,
 	readReviewSource,
+	reviewAnalytics,
 	reviewAssessment,
 	reviewQueue,
 	reviewSummary,
@@ -409,7 +411,12 @@ test("the queue reader separates required coverage, absent intent and findings w
 		await vi.waitFor(() =>
 			expect(query(state.dbPath, "select id from sessions where id = 'outsider'")).toHaveLength(1),
 		);
-		expect(reviewQueue(db, "owner")).toEqual({ total: 1, states: { completed: 1 }, page: null });
+		expect(reviewQueue(db, "owner")).toEqual({
+			total: 1,
+			states: { completed: 1 },
+			passes: { running: 0, limit: 8 },
+			page: null,
+		});
 		const page = reviewQueue(db, "owner", { limit: 1 });
 		expect(page.page).toMatchObject({
 			offset: 0,
@@ -1022,15 +1029,18 @@ test("the loaded reviews command shows the queue, keeps selection and sends a co
 		panel.handleInput("\x1b[B");
 		expect(screen.layout(screen.stack[0]!).lines.join("\n")).toContain(first.id.slice(-8));
 		for (const title of [
+			"Findings",
+			"Mail",
+			"Log",
 			"Target",
 			"Source",
 			"Plan",
-			"Findings",
 			"Coverage",
 			"Attempts",
 			"Decisions",
 			"Configuration",
 			"Freshness",
+			"Analytics",
 			"Summary",
 		]) {
 			panel.handleInput("\t");
@@ -1041,9 +1051,9 @@ test("the loaded reviews command shows the queue, keeps selection and sends a co
 		}
 		expect(ctx.ui.select).not.toHaveBeenCalled();
 		panel.handleInput("\x1b[Z");
-		expect(screen.layout(screen.stack[0]!).lines.join("\n")).toContain(`Freshness ${first.id.slice(-8)} |`);
+		expect(screen.layout(screen.stack[0]!).lines.join("\n")).toContain(`Analytics ${first.id.slice(-8)} |`);
 		panel.handleInput("\t");
-		for (const title of ["Target", "Source", "Plan", "Findings"]) {
+		for (const title of ["Findings"]) {
 			panel.handleInput("\t");
 			expect(screen.layout(screen.stack[0]!).lines.join("\n")).toContain(`${title} ${first.id.slice(-8)} |`);
 		}
@@ -1536,26 +1546,26 @@ test("reported cost keeps invalid observations and nonfinite totals unavailable"
 		);
 		for (const cost of ["null", '"0.3"', "-1", "1e999"]) {
 			setCost.run(cost, job.id);
-			expect(reviewSummary(db, "owner", job.id).cost).toEqual({
+			expect(reviewSummary(db, "owner", job.id).cost).toMatchObject({
 				reportedDollars: null,
 				reportedAttempts: 0,
 				totalAttempts: 2,
 			});
 		}
 		setCost.run("0", job.id);
-		expect(reviewSummary(db, "owner", job.id).cost).toEqual({
+		expect(reviewSummary(db, "owner", job.id).cost).toMatchObject({
 			reportedDollars: 0,
 			reportedAttempts: 2,
 			totalAttempts: 2,
 		});
 		setCost.run(String(2 ** 53), job.id);
-		expect(reviewSummary(db, "owner", job.id).cost).toEqual({
+		expect(reviewSummary(db, "owner", job.id).cost).toMatchObject({
 			reportedDollars: 2 ** 54,
 			reportedAttempts: 2,
 			totalAttempts: 2,
 		});
 		setCost.run(String(Number.MAX_VALUE), job.id);
-		expect(reviewSummary(db, "owner", job.id).cost).toEqual({
+		expect(reviewSummary(db, "owner", job.id).cost).toMatchObject({
 			reportedDollars: null,
 			reportedAttempts: 2,
 			totalAttempts: 2,
@@ -1634,7 +1644,7 @@ test("a model outside the recorded role policy fails before a review turn is dis
 	await settled(job.id, "completed");
 	const completed = new DatabaseSync(state.dbPath, { readOnly: true });
 	try {
-		expect(reviewSummary(completed, "owner", job.id).cost).toEqual({
+		expect(reviewSummary(completed, "owner", job.id).cost).toMatchObject({
 			reportedDollars: expect.closeTo(1.8, 10),
 			reportedAttempts: 6,
 			totalAttempts: 7,
@@ -1709,6 +1719,71 @@ test("the owner is mailed when the plan is ready, as each pass's findings are co
 			`review:${job.id}`,
 		),
 	).toEqual([{ participant: "owner" }]);
+}, 30000);
+
+test("readers name the change, take comments, show pass logs and analytics, and hide answered reviews", async () => {
+	writeFileSync(join(state.agentDir, "peer-control.json"), JSON.stringify({ review: { finding: true } }));
+	const committed = await enqueue({ kind: "commit", commit: "HEAD" });
+	await settled(committed.id, "completed");
+	const db = new DatabaseSync(state.dbPath, { readOnly: true });
+	try {
+		const head = execFileSync("git", ["rev-parse", "HEAD"], { cwd: repository, encoding: "utf8" }).trim();
+		const summary = reviewSummary(db, "owner", committed.id);
+		expect(summary.label).toMatchObject({ repository: "checkout", head, subject: "base", commits: null });
+		expect(summary.settledAt).toBeGreaterThanOrEqual(summary.createdAt);
+		expect(summary.cost.tokens.input).toBeGreaterThanOrEqual(0);
+		expect(summary.addressed).toBe(false);
+		const commented = await sendCommand("operator", {
+			kind: "review",
+			version: 1,
+			operation: { action: "comment", review: committed.id, body: "Please check the consumer too." },
+		});
+		expect(commented.stage, commented.reason).toBe("applied");
+		const thread = readReviewPart(db, "owner", committed.id, { part: "thread", limit: 10 }) as {
+			page: { rows: { sender: string; body: string }[] };
+		};
+		expect(thread.page.rows.at(-1)).toMatchObject({ sender: "operator", body: "Please check the consumer too." });
+		const logs = readReviewPart(db, "owner", committed.id, { part: "log" }) as { kind: string; entries: unknown[] }[];
+		expect(logs).toHaveLength(1);
+		expect(logs[0]!.entries).toBeInstanceOf(Array);
+		const analytics = reviewAnalytics(db, "owner");
+		expect(analytics).toMatchObject({ reviews: 1, settled: 1, confirmed: 1 });
+		expect(analytics.byModel.reduce((sum, row) => sum + row.confirmed, 0)).toBe(1);
+		expect(analytics.byPhase.map((row) => row.kind).sort()).toEqual([
+			"focused",
+			"integration",
+			"planner",
+			"validation",
+		]);
+		expect(reviewQueue(db, "owner", { limit: 5, hideAddressed: true }).total).toBe(1);
+		const [finding] = (
+			readReviewPart(db, "owner", committed.id, { part: "findings", limit: 5 }) as { page: { rows: { id: string }[] } }
+		).page.rows;
+		const answered = await sendCommand("owner", {
+			kind: "review",
+			version: 1,
+			operation: {
+				action: "finding",
+				review: committed.id,
+				digest: summary.digest!,
+				revision: reviewSummary(db, "owner", committed.id).revision,
+				finding: finding!.id,
+				response: { disposition: "acknowledged", reason: "Will fix", evidence: ["Seen"] },
+			},
+		});
+		expect(answered.stage, answered.reason).toBe("applied");
+		expect(reviewSummary(db, "owner", committed.id)).toMatchObject({
+			addressed: true,
+			findings: { confirmed: 1, responded: 1 },
+		});
+		expect(reviewQueue(db, "owner", { limit: 5, hideAddressed: true })).toMatchObject({
+			total: 0,
+			states: { completed: 1 },
+			page: { rows: [] },
+		});
+	} finally {
+		db.close();
+	}
 }, 30000);
 
 test("cancellation retains observed turn usage and waits for reviewer cleanup", async () => {

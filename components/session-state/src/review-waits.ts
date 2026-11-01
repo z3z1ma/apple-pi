@@ -18,9 +18,11 @@ export function reviewWaitReturned(review: string, generation: number): void {
 	returned.set(review, Math.max(returned.get(review) ?? 0, generation));
 }
 
-/** Milestone message IDs are `review:<review>:<generation>:<milestone>`. */
+const MILESTONES = new Set(["plan", "findings", "outcome"]);
+
+/** Milestone message IDs are `review:<review>:<generation>:<milestone>`; comments from people are never covered. */
 export function coveredByReviewWait(messageId: string | undefined): boolean {
-	const [prefix, review, generation] = messageId?.split(":") ?? [];
-	if (prefix !== "review" || !review) return false;
+	const [prefix, review, generation, milestone] = messageId?.split(":") ?? [];
+	if (prefix !== "review" || !review || !MILESTONES.has(milestone ?? "")) return false;
 	return waiting.has(review) || (returned.get(review) ?? -1) >= Number(generation);
 }

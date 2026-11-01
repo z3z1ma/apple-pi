@@ -17,10 +17,31 @@ import {
 } from "../../shared/src/git-change.js";
 import { canonical, within } from "../../shared/src/real-path.js";
 import { reviewConfiguration } from "./policy.js";
-import type { ChangeRegion, ReviewArtifact, ReviewRequest, SourceEntry } from "./types.js";
+import type { ChangeRegion, ReviewArtifact, ReviewLabel, ReviewRequest, SourceEntry } from "./types.js";
 
 const DIFF = [...GIT_DIFF, "--no-renames"];
 const hash = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
+
+async function reviewLabel(
+	change: GitChange,
+	repository: string,
+	target: ReviewRequest["target"],
+	signal?: AbortSignal,
+): Promise<ReviewLabel> {
+	const committed = target.kind !== "working-tree" && target.kind !== "staged";
+	const [branch, subject, commits] = await settledAll([
+		text(repository, ["symbolic-ref", "--short", "-q", "HEAD"], { signal }).catch(() => ""),
+		committed ? change.git(["log", "-1", "--format=%s", change.headCommit], { signal }) : Promise.resolve(null),
+		committed && change.baseCommit
+			? change.git(["rev-list", "--count", `${change.baseCommit}..${change.headCommit}`], { signal })
+			: Promise.resolve(null),
+	] as const);
+	return {
+		branch: branch || null,
+		subject: subject?.toString("utf8").trim() || null,
+		commits: commits ? Number(commits.toString("utf8").trim()) : null,
+	};
+}
 
 function artifactDigest(artifact: ReviewArtifact): string {
 	return hash(
@@ -456,6 +477,7 @@ export async function captureReview(
 			capturedAt: Date.now(),
 		};
 		artifact.digest = artifactDigest(artifact);
+		artifact.label = await reviewLabel(change, repository, request.target, signal);
 		await writeFile(join(destination, "change.patch"), patch);
 		await writeFile(join(destination, "manifest.json"), `${JSON.stringify(artifact, null, 2)}\n`);
 		await change.close();

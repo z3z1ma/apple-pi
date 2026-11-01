@@ -1,6 +1,6 @@
 ## file
 
-The frame, queue entries, scrolling evidence and mouse hit regions share the viewport. Each queue entry occupies four physical rows; its producer, page sizing and mouse selection must change together. Clicking a pane heading changes focus without selecting a content row. Selection follows review identity through paging, reordering and resize. Wrapped-line position is local to the current evidence page, not aggregate review coverage.
+The frame, queue entries, scrolling evidence and mouse hit regions share the viewport. Each queue entry occupies one physical row under the status strip (rows start at y = 3 in both layouts); its producer, page sizing and mouse selection must change together. The right-hand columns (elapsed, cost, result) are fixed width and collapse to the result alone below 70 cells, so the change label is what truncates. Clicking a pane heading changes focus without selecting a content row. Selection follows review identity through paging, reordering and resize. Wrapped-line position is local to the current evidence page, not aggregate review coverage.
 
 Evidence navigation stays independent of pane focus and review selection. Cycling a view resets its detail page without hiding the overlay; choosing a captured file/side is a separate action, so merely passing through Source opens no modal prompt.
 

@@ -11,6 +11,7 @@ import {
 	FindingValidationSchema,
 	findingKey,
 	planPasses,
+	REVIEW_PASS_CONCURRENCY,
 	type ReviewPlan,
 	ReviewPlanSchema,
 	type ReviewReport,
@@ -58,6 +59,8 @@ export type ReviewNotify = (notice: {
 	key: string;
 	subject: string;
 	body: string;
+	/** A person commenting; milestones come from the harness. */
+	sender?: string;
 }) => void;
 
 function outcomeNotice(
@@ -108,9 +111,6 @@ function findingsNotice(
 		),
 	].join("\n");
 }
-
-/** The operator's chosen bound on concurrent reviewer passes; reviews themselves run one at a time. */
-const REVIEW_PASS_CONCURRENCY = 8;
 
 /**
  * Run independent passes with a bounded pool, keeping plan order in the results. The first failure aborts the
@@ -245,6 +245,19 @@ export class ReviewJobs {
 			return id;
 		}
 		const job = readReview(this.db, actor, operation.review);
+		// Anyone who can read a review may comment on its thread; the owner hears it like any reply.
+		if (operation.action === "comment") {
+			this.notify({
+				review: job.id,
+				owner: job.owner,
+				key: `comment:${commandId}`,
+				subject: `Review ${job.id.slice(-8)}`,
+				body: operation.body,
+				sender: actor,
+			});
+			this.commit(commandId, job.id, () => {});
+			return job.id;
+		}
 		if (actor !== job.owner) mayManage(this.db, actor, job.owner);
 		if (operation.action === "finding" || operation.action === "approve") {
 			await this.decide(commandId, actor, job, operation);

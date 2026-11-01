@@ -10,28 +10,41 @@ import {
 	readReviewFreshness,
 	readReviewPart,
 	readReviewSource,
+	reviewAnalytics,
 	reviewQueue,
 	withReviews,
 } from "../../session-state/src/review-read.js";
 import { resolveToolPath } from "../../shared/src/tool-path.js";
 import type { ReviewOperation } from "./operations.js";
 import { CaptureConfirmation, ReviewPanel } from "./panel.js";
-import { evidenceLines, findingLines, previewLines, sourceLines, summaryLines } from "./presentation.js";
+import {
+	analyticsLines,
+	evidenceLines,
+	findingLines,
+	logLines,
+	previewLines,
+	sourceLines,
+	summaryLines,
+	threadLines,
+} from "./presentation.js";
 import { previewReview } from "./preview.js";
-import type { ReviewAssessment, ReviewSummary } from "./results.js";
+import type { ReviewAssessment, ReviewAttemptLog, ReviewSummary, ReviewThreadMessage } from "./results.js";
 import type { ReviewTarget } from "./types.js";
 
 const views = [
 	"summary",
+	"findings",
+	"mail",
+	"log",
 	"target",
 	"source",
 	"plan",
-	"findings",
 	"coverage",
 	"attempts",
 	"decisions",
 	"configuration",
 	"freshness",
+	"analytics",
 ] as const;
 type EvidenceView = (typeof views)[number];
 type EvidenceDetail = { lines: string[]; nextOffset: number | null };
@@ -176,6 +189,22 @@ export class ReviewManager {
 		offset: number,
 	): EvidenceDetail {
 		if (this.view === "summary") return { lines: summaryLines(review), nextOffset: null };
+		if (this.view === "analytics") return { lines: analyticsLines(reviewAnalytics(db, actor)), nextOffset: null };
+		if (this.view === "log")
+			return {
+				lines: logLines(readReviewPart(db, actor, review.id, { part: "log" }) as ReviewAttemptLog[]),
+				nextOffset: null,
+			};
+		if (this.view === "mail") {
+			const thread = readReviewPart(db, actor, review.id, { part: "thread", limit, offset }) as {
+				total: number;
+				page: { rows: ReviewThreadMessage[]; nextOffset: number | null };
+			};
+			return {
+				lines: [`${thread.total} messages. Comment with a > Comment.`, "", ...threadLines(thread.page.rows)],
+				nextOffset: thread.page.nextOffset,
+			};
+		}
 		if (this.view === "source" || this.view === "freshness") return this.sourceDetail(actor, review, limit, offset);
 		const data = readReviewPart(db, actor, review.id, { part: this.view, limit, offset });
 		if (this.view === "findings") {
@@ -297,7 +326,7 @@ export class ReviewManager {
 		withReviews(() => true);
 		const actions = ["Capture a review", ...(this.pending.size ? ["Recover an uncertain request"] : [])];
 		if (review) {
-			actions.push("Choose captured source");
+			actions.push("Comment", "Choose captured source");
 			if (!["completed", "cancelled", "no-changes"].includes(review.state)) actions.push("Cancel", "Set priority");
 			if (["interrupted", "failed", "incomplete"].includes(review.state)) actions.push("Resume same target");
 			if (["completed", "incomplete", "failed", "interrupted", "cancelled"].includes(review.state))
@@ -307,6 +336,7 @@ export class ReviewManager {
 		const choice = await ctx.ui.select("Review actions", actions, { signal: stop });
 		if (!choice || stop.aborted) return;
 		if (choice === "Choose captured source") return this.chooseSource(ctx, review, stop);
+		if (choice === "Comment" && review) return this.comment(ctx, review, stop);
 		if (choice === "Authorize additional work" && review) return this.authorizeWork(ctx, review, stop);
 		if (choice === "Open captured sign-off" && review) {
 			const page = await openCapturedSignOff(ctx.sessionManager.getSessionId(), review.id, stop);
@@ -357,6 +387,14 @@ export class ReviewManager {
 		if (!operation || stop.aborted) return;
 		const confirmed = await this.confirmOperation(ctx, choice, operation, stop);
 		if (confirmed && !stop.aborted) await this.send(`review-ui:${randomUUID()}`, confirmed, stop);
+	}
+
+	private async comment(ctx: ExtensionContext, review: ReviewSummary, stop: AbortSignal): Promise<void> {
+		const body = await ctx.ui.input("Comment on this review (the owner is mailed)", "", { signal: stop });
+		if (!body?.trim() || stop.aborted) return;
+		await this.send(`review-ui:${randomUUID()}`, { action: "comment", review: review.id, body: body.trim() }, stop);
+		this.view = "mail";
+		this.mounted?.panel.resetDetail();
 	}
 
 	private async authorizeWork(ctx: ExtensionContext, review: ReviewSummary, stop: AbortSignal): Promise<void> {

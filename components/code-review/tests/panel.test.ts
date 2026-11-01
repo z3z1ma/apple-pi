@@ -6,6 +6,8 @@ import { CaptureConfirmation, ReviewPanel, type ReviewPanelSource } from "../src
 import { costLabel, findingLines, summaryLines } from "../src/presentation.js";
 import type { ReviewSummary } from "../src/results.js";
 
+const started = Date.now() - 600_000;
+
 function review(id: string, state: ReviewSummary["state"]): ReviewSummary {
 	return {
 		id,
@@ -29,12 +31,27 @@ function review(id: string, state: ReviewSummary["state"]): ReviewSummary {
 			integrationOnlyRegions: 0,
 			additionalRequests: 1,
 		},
-		findings: { reported: 2, confirmed: 1, unresolved: 1 },
-		cost: { reportedDollars: 1.2, reportedAttempts: 4, totalAttempts: 5 },
+		label: {
+			repository: "example",
+			branch: "main",
+			head: "abcdef0123",
+			subject: "Export the value",
+			commits: 1,
+			files: 2,
+		},
+		findings: { reported: 2, confirmed: 1, unresolved: 1, responded: 0 },
+		addressed: false,
+		cost: {
+			reportedDollars: 1.2,
+			reportedAttempts: 4,
+			totalAttempts: 5,
+			tokens: { input: 576_000, output: 2_800, cacheRead: 1_200_000 },
+		},
+		settledAt: state === "running" ? null : started + 272_000,
 		approval: null,
 		reason: "A consumer check remains unverified",
-		createdAt: 1,
-		updatedAt: 2,
+		createdAt: started,
+		updatedAt: started + 1,
 	};
 }
 
@@ -48,7 +65,8 @@ function source(rows: () => ReviewSummary[]): ReviewPanelSource {
 		return {
 			queue: {
 				total: all.length,
-				states: {},
+				states: { completed: 2, running: 1 },
+				passes: { running: 3, limit: 8 },
 				page: { offset, nextOffset: offset + page.length < all.length ? offset + page.length : null, rows: page },
 			},
 			selected: selected?.id,
@@ -65,11 +83,14 @@ function source(rows: () => ReviewSummary[]): ReviewPanelSource {
 const actions = () => ({ close: vi.fn(), unfocus: vi.fn(), menu: vi.fn(), view: vi.fn() });
 
 it("labels reported cost without hiding missing attempts or rounding small positive cost to zero", () => {
-	expect(costLabel({ reportedDollars: 0, reportedAttempts: 0, totalAttempts: 0 })).toBe("no attempts");
-	expect(costLabel({ reportedDollars: null, reportedAttempts: 0, totalAttempts: 2 })).toBe(
+	const tokens = { input: 0, output: 0, cacheRead: 0 };
+	expect(costLabel({ reportedDollars: 0, reportedAttempts: 0, totalAttempts: 0, tokens })).toBe("no attempts");
+	expect(costLabel({ reportedDollars: null, reportedAttempts: 0, totalAttempts: 2, tokens })).toBe(
 		"unavailable (0/2 reported)",
 	);
-	expect(costLabel({ reportedDollars: 0.001, reportedAttempts: 1, totalAttempts: 2 })).toBe("<$0.01 (1/2 reported)");
+	expect(costLabel({ reportedDollars: 0.001, reportedAttempts: 1, totalAttempts: 2, tokens })).toBe(
+		"<$0.01 (1/2 reported)",
+	);
 	const item = review("cost-review", "completed");
 	expect(summaryLines(item)).toContain("Primary-turn cost: $1.20 (4/5 reported)");
 	const panel = new ReviewPanel(
@@ -170,6 +191,28 @@ it("keeps capture consent visible while long evidence scrolls, and refuses unrea
 });
 
 describe("review queue master-detail", () => {
+	it("lists one line per review named by its change, with elapsed, cost and result, under a queue strip", () => {
+		const screen = fakeTui(180, 40);
+		const rows = [review("first-review", "completed"), review("second-review", "running")];
+		rows[0]!.target = { kind: "commit", commit: "HEAD" };
+		rows[0]!.label.commits = null;
+		rows[1]!.addressed = true;
+		const read = vi.fn(source(() => rows));
+		const panel = new ReviewPanel(screen.tui, plainTheme, read, actions());
+		const text = panel.render(160).map(stripVTControlCharacters);
+		const first = text.find((line) => line.includes("example / main abcdef0 Export the value"))!;
+		expect(first).toMatch(/4m 32s\s+\$1\.20\s+1 confirmed/);
+		expect(text.findIndex((line) => line.includes("example / main uncommitted change"))).toBe(text.indexOf(first) + 1);
+		expect(text.join("\n")).toContain(
+			"0 queued  \u00b7  1 running  \u00b7  2 done  \u00b7  0 failed  \u00b7  passes 3/8",
+		);
+		expect(text.join("\n")).toContain("Tokens: in 576.0k \u00b7 out 2.8k \u00b7 cached 1.2M");
+		expect(read.mock.lastCall![0].hideAddressed).toBe(false);
+		panel.handleInput("h");
+		expect(read.mock.lastCall![0].hideAddressed).toBe(true);
+		expect(panel.render(160).map(stripVTControlCharacters).join("\n")).toContain("addressed hidden");
+	});
+
 	it("frames both panes, exposes focus and actions, and colors status without treating completion as approval", () => {
 		const screen = fakeTui(180, 40);
 		const rows = [
@@ -210,7 +253,7 @@ describe("review queue master-detail", () => {
 				alt: false,
 				ctrl: false,
 			});
-		click(7);
+		click(4);
 		expect(panel.getSelectedId()).toBe("failed-review");
 		panel.handleInput("\r");
 		click(2);
@@ -223,7 +266,7 @@ describe("review queue master-detail", () => {
 			const text = lines.map(stripVTControlCharacters).join("\n");
 			expect(text).toContain("a actions");
 			expect(text).toContain("q close");
-			expect(text).toContain("not signed off");
+			expect(text).toContain("1 confirmed");
 		}
 		rows.length = 0;
 		panel.refresh();

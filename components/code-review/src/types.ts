@@ -59,4 +59,15 @@ export interface ReviewArtifact {
 	patchHash: string;
 	startedAt: number;
 	capturedAt: number;
+	/** What a person recognizes the change by; display only, outside the digest. Absent on older captures. */
+	label?: ReviewLabel;
+}
+
+export interface ReviewLabel {
+	/** The checkout's branch at capture, null when detached. */
+	branch: string | null;
+	/** Subject of the head commit for commit, range and branch targets. */
+	subject: string | null;
+	/** Commits between base and head for range and branch targets. */
+	commits: number | null;
 }

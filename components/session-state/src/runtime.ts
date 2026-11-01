@@ -1195,12 +1195,17 @@ export class Runtime {
 		const id = `review:${notice.review}:${notice.key}`;
 		if (db.prepare("select 1 from thread_messages where id = ?").get(id)) return;
 		let pending: ReturnType<Runtime["preparePost"]> | undefined;
+		const sender = notice.sender ?? HARNESS;
+		const thread = `review:${notice.review}`;
 		this.atomically(() => {
+			// A commenter joins the thread to post; reading the review already authorized them.
+			if (sender !== HARNESS && db.prepare("select 1 from threads where id = ?").get(thread))
+				participateIn(db, thread, sender, Date.now(), "pull");
 			pending = this.preparePost(
 				id,
-				HARNESS,
+				sender,
 				{
-					thread: `review:${notice.review}`,
+					thread,
 					threadKind: "mail",
 					subject: notice.subject,
 					to: [notice.owner],

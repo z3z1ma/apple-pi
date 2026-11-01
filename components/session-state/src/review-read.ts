@@ -1,3 +1,4 @@
+import { closeSync, fstatSync, openSync, readSync } from "node:fs";
 import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, posix } from "node:path";
@@ -8,6 +9,7 @@ import {
 	type FindingValidation,
 	findingKey,
 	planPasses,
+	REVIEW_PASS_CONCURRENCY,
 	type ReviewReport,
 	unscopedRegions,
 } from "../../code-review/src/contracts.js";
@@ -20,11 +22,15 @@ import {
 	reviewRolePolicy,
 } from "../../code-review/src/policy.js";
 import type {
+	ReviewAnalytics,
 	ReviewAssessment,
 	ReviewAttempt,
+	ReviewAttemptLog,
+	ReviewLogEntry,
 	ReviewQueue,
 	ReviewSource,
 	ReviewSummary,
+	ReviewThreadMessage,
 } from "../../code-review/src/results.js";
 import { type GitChange, openGitChange } from "../../shared/src/git-change.js";
 import { nameOf, withThreads } from "./threads.js";
@@ -161,10 +167,22 @@ export function withReviews<T>(read: (db: DatabaseSync) => T): T {
 	return value;
 }
 
+const SETTLED: readonly ReviewState[] = ["completed", "incomplete", "failed", "cancelled", "no-changes", "interrupted"];
+const count = (value: unknown) => (typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : 0);
+
 function reviewCost(db: DatabaseSync, review: string): ReviewSummary["cost"] {
 	const attempts = db
-		.prepare("select result -> '$.usage.cost.total' as cost from review_attempts where review_id = ?")
+		.prepare(
+			"select result -> '$.usage.cost.total' as cost, result -> '$.usage' as usage from review_attempts where review_id = ?",
+		)
 		.all(review);
+	const tokens = { input: 0, output: 0, cacheRead: 0 };
+	for (const row of attempts) {
+		const usage = row.usage === null ? undefined : (JSON.parse(row.usage as string) as Record<string, unknown> | null);
+		tokens.input += count(usage?.input);
+		tokens.output += count(usage?.output);
+		tokens.cacheRead += count(usage?.cacheRead);
+	}
 	const reported = attempts.flatMap((row) => {
 		const cost: unknown = row.cost === null ? undefined : JSON.parse(row.cost as string);
 		return typeof cost === "number" && Number.isFinite(cost) && cost >= 0 ? [cost] : [];
@@ -174,6 +192,7 @@ function reviewCost(db: DatabaseSync, review: string): ReviewSummary["cost"] {
 		reportedDollars: Number.isFinite(total) && (reported.length || !attempts.length) ? total : null,
 		reportedAttempts: reported.length,
 		totalAttempts: attempts.length,
+		tokens,
 	};
 }
 
@@ -194,10 +213,29 @@ export function reviewSummary(db: DatabaseSync, actor: string, id: string): Revi
 				"select kind, state, pass_id as pass from review_attempts where review_id = ? and generation = ? and state in ('starting', 'running', 'cleaning') order by created_at desc, rowid desc limit 1",
 			)
 			.get(job.id, job.generation) as ReviewSummary["phase"] | undefined;
+		const confirmed = findings.filter(({ validation }) => validation?.disposition === "confirmed");
+		const responded = confirmed.filter(({ decision }) => decision).length;
+		const settledAt = SETTLED.includes(job.state)
+			? ((
+					db.prepare("select max(finished_at) as at from review_attempts where review_id = ?").get(job.id) as {
+						at: number | null;
+					}
+				).at ?? job.updatedAt)
+			: null;
 		return {
 			id: job.id,
 			owner: job.owner,
 			ownerName: nameOf(db, job.owner),
+			label: {
+				repository: (job.artifact?.repository ?? job.request.cwd).split(/[\\/]/).at(-1) ?? "",
+				branch: job.artifact?.label?.branch ?? null,
+				head: job.artifact?.headCommit ?? null,
+				subject: job.artifact?.label?.subject ?? null,
+				commits: job.artifact?.label?.commits ?? null,
+				files: job.artifact?.changes.length ?? null,
+			},
+			addressed: ["completed", "no-changes", "cancelled"].includes(job.state) && responded === confirmed.length,
+			settledAt,
 			summary: job.plan?.summary ?? null,
 			state: job.state,
 			phase: phase ?? null,
@@ -223,8 +261,9 @@ export function reviewSummary(db: DatabaseSync, actor: string, id: string): Revi
 			cost: reviewCost(db, job.id),
 			findings: {
 				reported: findings.length,
-				confirmed: findings.filter(({ validation }) => validation?.disposition === "confirmed").length,
+				confirmed: confirmed.length,
 				unresolved: findings.filter(({ validation }) => !validation || validation.disposition === "unresolved").length,
+				responded,
 			},
 			approval: approval
 				? {
@@ -242,7 +281,15 @@ export function reviewSummary(db: DatabaseSync, actor: string, id: string): Revi
 export function reviewQueue(
 	db: DatabaseSync,
 	actor: string,
-	options: { limit?: number; offset?: number; state?: ReviewState; cwd?: string; around?: string } = {},
+	options: {
+		limit?: number;
+		offset?: number;
+		state?: ReviewState;
+		cwd?: string;
+		around?: string;
+		/** Leave out reviews with nothing left to act on (see ReviewSummary.addressed). */
+		hideAddressed?: boolean;
+	} = {},
 ): ReviewQueue {
 	if (options.offset !== undefined && options.limit === undefined) throw new Error("A page offset requires a limit");
 	if (options.limit !== undefined && (!Number.isSafeInteger(options.limit) || options.limit < 1))
@@ -272,12 +319,39 @@ export function reviewQueue(
 		const groups = db
 			.prepare(`select state, count(*) as count from review_jobs ${filter} group by state`)
 			.all(...args) as { state: ReviewState; count: number }[];
-		const total = groups.reduce((sum, row) => sum + row.count, 0);
 		const states = Object.fromEntries(groups.map((row) => [row.state, row.count]));
-		if (options.limit === undefined) return { total, states, page: null };
+		const running = (
+			db
+				.prepare(
+					`select count(*) as count from review_attempts where state in ('starting', 'running', 'cleaning') and review_id in (select id from review_jobs ${filter})`,
+				)
+				.get(...args) as { count: number }
+		).count;
+		const passes = { running, limit: REVIEW_PASS_CONCURRENCY };
 		const order =
 			"case when state in ('capturing', 'running', 'cancelling') then 0 when state = 'queued' then 1 else 2 end, case when state = 'queued' then priority end desc, case when state = 'queued' then created_at end asc, case when state = 'queued' then rowid end asc, updated_at desc, rowid desc";
+		// Addressed is derived from each assessment, so the filter applies after ordering rather than in SQL.
+		const visible = options.hideAddressed
+			? (db.prepare(`select id from review_jobs ${filter} order by ${order}`).all(...args) as { id: string }[])
+					.map(({ id }) => reviewSummary(db, actor, id))
+					.filter((summary) => !summary.addressed)
+			: undefined;
+		const total = visible?.length ?? groups.reduce((sum, row) => sum + row.count, 0);
+		if (options.limit === undefined) return { total, states, passes, page: null };
 		let offset = options.offset ?? 0;
+		if (visible) {
+			if (options.around) {
+				const position = visible.findIndex((summary) => summary.id === options.around);
+				if (position >= 0) offset = Math.floor(position / options.limit) * options.limit;
+			}
+			const rows = visible.slice(offset, offset + options.limit);
+			return {
+				total,
+				states,
+				passes,
+				page: { offset, nextOffset: offset + rows.length < total ? offset + rows.length : null, rows },
+			};
+		}
 		if (options.around) {
 			const position = db
 				.prepare(
@@ -292,6 +366,7 @@ export function reviewQueue(
 		return {
 			total,
 			states,
+			passes,
 			page: {
 				offset,
 				nextOffset: offset + rows.length < total ? offset + rows.length : null,
@@ -314,7 +389,9 @@ export interface ReviewReadOptions {
 		| "attempt"
 		| "changes"
 		| "regions"
-		| "decisions";
+		| "decisions"
+		| "thread"
+		| "log";
 	pass?: string;
 	attempt?: string;
 	limit?: number;
@@ -323,7 +400,6 @@ export interface ReviewReadOptions {
 
 export type ReviewStore = <T>(read: (db: DatabaseSync) => T) => T;
 
-/** Capture reads project roles from the selected head tree; materialize just those files to compare without capturing. */
 /**
  * The selected head's project roles laid out as capture's full checkout has them: every tree entry that role loading
  * passes through (ancestors, linked directories, link chains) keeps its mode, and links keep their own text, so a link
@@ -617,6 +693,10 @@ export function readReviewPart(db: DatabaseSync, actor: string, id: string, opti
 			}
 			case "findings":
 				return page(reviewAssessment(db, actor, id).findings, options);
+			case "thread":
+				return page(reviewThread(db, job.id), options);
+			case "log":
+				return reviewLogs(db, job.id, options);
 			case "decisions":
 				return page(reviewAssessment(db, actor, id).decisions, options);
 			case "coverage": {
@@ -644,6 +724,183 @@ export function readReviewPart(db: DatabaseSync, actor: string, id: string, opti
 			default:
 				throw new Error("Unknown review part");
 		}
+	});
+}
+
+/** The review's mail thread: milestones the runtime posted and comments people added. */
+function reviewThread(db: DatabaseSync, review: string): ReviewThreadMessage[] {
+	return (
+		db
+			.prepare("select seq, sender, body, at from thread_messages where thread_id = ? order by seq")
+			.all(`review:${review}`) as Omit<ReviewThreadMessage, "senderName">[]
+	).map((message) => ({ ...message, senderName: nameOf(db, message.sender) }));
+}
+
+/** Enough of a transcript's end to show what a pass is doing now; older entries stay in the full session file. */
+const LOG_TAIL_BYTES = 512 * 1024;
+
+function transcriptTail(file: string): ReviewLogEntry[] {
+	let descriptor: number;
+	try {
+		descriptor = openSync(file, "r");
+	} catch {
+		return [];
+	}
+	try {
+		const size = fstatSync(descriptor).size;
+		const start = Math.max(0, size - LOG_TAIL_BYTES);
+		const buffer = Buffer.alloc(size - start);
+		readSync(descriptor, buffer, 0, buffer.length, start);
+		const lines = buffer.toString("utf8").split("\n");
+		if (start > 0) lines.shift();
+		const clip = (text: string) => (text.length > 400 ? `${text.slice(0, 400)}\u2026` : text);
+		return lines.flatMap((line): ReviewLogEntry[] => {
+			let entry: { type?: string; timestamp?: string; message?: Record<string, unknown> };
+			try {
+				entry = JSON.parse(line);
+			} catch {
+				return [];
+			}
+			const message = entry.message;
+			if (entry.type !== "message" || !message) return [];
+			const at = entry.timestamp ? Date.parse(entry.timestamp) : null;
+			const content = Array.isArray(message.content) ? (message.content as Record<string, unknown>[]) : [];
+			if (message.role === "assistant")
+				return content.flatMap((part): ReviewLogEntry[] => {
+					if (part.type === "text" && typeof part.text === "string" && part.text.trim())
+						return [{ at, kind: "text", text: clip(part.text.trim()) }];
+					if (part.type === "toolCall")
+						return [{ at, kind: "tool", text: clip(`${part.name}(${JSON.stringify(part.arguments ?? {})})`) }];
+					return [];
+				});
+			if (message.role === "toolResult") {
+				const text = content.find((part) => part.type === "text")?.text;
+				return [
+					{
+						at,
+						kind: message.isError ? "error" : "result",
+						text: clip(`${message.toolName}: ${typeof text === "string" ? (text.trim().split("\n")[0] ?? "") : ""}`),
+					},
+				];
+			}
+			return [];
+		});
+	} finally {
+		closeSync(descriptor);
+	}
+}
+
+/** Recent transcript of one attempt, or by default of every running attempt (the latest attempt when none runs). */
+function reviewLogs(db: DatabaseSync, review: string, options: ReviewReadOptions): ReviewAttemptLog[] {
+	const columns = "id, pass_id as pass, kind, state, model, session_file as sessionFile";
+	type Row = Omit<ReviewAttemptLog, "attempt" | "entries"> & { id: string; sessionFile: string | null };
+	let rows: Row[];
+	if (options.attempt) {
+		const row = db
+			.prepare(`select ${columns} from review_attempts where review_id = ? and id = ?`)
+			.get(review, options.attempt) as Row | undefined;
+		if (!row) throw new Error(`Unknown review attempt: ${options.attempt}`);
+		rows = [row];
+	} else {
+		rows = db
+			.prepare(
+				`select ${columns} from review_attempts where review_id = ? and state in ('starting', 'running', 'cleaning') order by created_at, rowid`,
+			)
+			.all(review) as Row[];
+		if (!rows.length)
+			rows = db
+				.prepare(
+					`select ${columns} from review_attempts where review_id = ? order by created_at desc, rowid desc limit 1`,
+				)
+				.all(review) as Row[];
+	}
+	const limit = options.limit ?? 20;
+	return rows.map(({ id, sessionFile, ...row }) => ({
+		attempt: id,
+		...row,
+		entries: sessionFile ? transcriptTail(sessionFile).slice(-limit) : [],
+	}));
+}
+
+/**
+ * Cost and yield across the reviews an actor can see: by model, by phase and per review. Recorded primary-turn usage,
+ * not provider invoices; confirmed findings are attributed to the model of the inspection that reported them.
+ */
+export function reviewAnalytics(db: DatabaseSync, actor: string, options: { cwd?: string } = {}): ReviewAnalytics {
+	return snapshot(db, () => {
+		const queue = reviewQueue(db, actor, { cwd: options.cwd, limit: Number.MAX_SAFE_INTEGER });
+		const summaries = queue.page?.rows ?? [];
+		const byModel = new Map<string, ReviewAnalytics["byModel"][number]>();
+		const byPhase = new Map<ReviewAttempt["kind"], ReviewAnalytics["byPhase"][number]>();
+		const attemptModel = new Map<string, string>();
+		for (const summary of summaries) {
+			const attempts = db
+				.prepare(
+					"select id, kind, model, result -> '$.usage.cost.total' as cost, created_at as createdAt, finished_at as finishedAt from review_attempts where review_id = ?",
+				)
+				.all(summary.id) as {
+				id: string;
+				kind: ReviewAttempt["kind"];
+				model: string | null;
+				cost: string | null;
+				createdAt: number;
+				finishedAt: number | null;
+			}[];
+			for (const attempt of attempts) {
+				const dollars = count(attempt.cost === null ? 0 : JSON.parse(attempt.cost));
+				const minutes = attempt.finishedAt ? (attempt.finishedAt - attempt.createdAt) / 60000 : 0;
+				const model = attempt.model ?? "unknown";
+				attemptModel.set(attempt.id, model);
+				const forModel = byModel.get(model) ?? {
+					model,
+					attempts: 0,
+					dollars: 0,
+					minutes: 0,
+					confirmed: 0,
+					severities: {},
+				};
+				forModel.attempts++;
+				forModel.dollars += dollars;
+				forModel.minutes += minutes;
+				byModel.set(model, forModel);
+				const phase = byPhase.get(attempt.kind) ?? { kind: attempt.kind, attempts: 0, dollars: 0, minutes: 0 };
+				phase.attempts++;
+				phase.dollars += dollars;
+				phase.minutes += minutes;
+				byPhase.set(attempt.kind, phase);
+			}
+			for (const finding of reviewAssessment(db, actor, summary.id).findings) {
+				if (finding.validation?.disposition !== "confirmed") continue;
+				const forModel = byModel.get(attemptModel.get(finding.attempt) ?? "unknown");
+				if (!forModel) continue;
+				forModel.confirmed++;
+				forModel.severities[finding.finding.severity] = (forModel.severities[finding.finding.severity] ?? 0) + 1;
+			}
+		}
+		const durations = summaries
+			.flatMap((summary) => (summary.settledAt === null ? [] : [(summary.settledAt - summary.createdAt) / 60000]))
+			.sort((a, b) => a - b);
+		return {
+			reviews: summaries.length,
+			settled: durations.length,
+			dollars: summaries.reduce((sum, summary) => sum + (summary.cost.reportedDollars ?? 0), 0),
+			confirmed: summaries.reduce((sum, summary) => sum + summary.findings.confirmed, 0),
+			medianMinutes: durations.length ? durations[Math.floor((durations.length - 1) / 2)]! : null,
+			byModel: [...byModel.values()].sort((a, b) => b.dollars - a.dollars),
+			byPhase: [...byPhase.values()],
+			recent: summaries
+				.slice()
+				.sort((a, b) => b.createdAt - a.createdAt)
+				.map((summary) => ({
+					id: summary.id,
+					label: summary.label,
+					state: summary.state,
+					createdAt: summary.createdAt,
+					minutes: summary.settledAt === null ? null : (summary.settledAt - summary.createdAt) / 60000,
+					dollars: summary.cost.reportedDollars,
+					confirmed: summary.findings.confirmed,
+				})),
+		};
 	});
 }
 

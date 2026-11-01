@@ -1,10 +1,24 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { findingLines, summaryLines } from "../../../components/code-review/src/presentation.js";
+import {
+	analyticsLines,
+	changeLabel,
+	dollarsLabel,
+	elapsedLabel,
+	logLines,
+	refLabel,
+	resultLabel,
+	summaryLines,
+	tokensLabel,
+	whenLabel,
+} from "../../../components/code-review/src/presentation.js";
 import type {
+	ReviewAnalytics,
 	ReviewAssessment,
+	ReviewAttemptLog,
 	ReviewQueue,
 	ReviewSource,
 	ReviewSummary,
+	ReviewThreadMessage,
 } from "../../../components/code-review/src/results.js";
 import type { ReviewRequest, ReviewTarget } from "../../../components/code-review/src/types.js";
 import type { ReviewManagement, ReviewsApi } from "../src/reviews.js";
@@ -13,18 +27,31 @@ import "./workplace-reviews.css";
 
 const parts = [
 	"summary",
+	"findings",
+	"mail",
+	"log",
 	"target",
 	"source",
-	"configuration",
-	"freshness",
 	"plan",
-	"findings",
 	"coverage",
 	"attempts",
 	"decisions",
+	"configuration",
+	"freshness",
 ] as const;
 type Part = (typeof parts)[number];
 const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error));
+const LIVE = ["capturing", "queued", "running", "cancelling"];
+/** Live reviews, their log and their mail refresh on this period; settled evidence loads once. */
+const POLL_MS = 2000;
+const ROW_PX = 34;
+
+function stateTone(state: ReviewSummary["state"]): string {
+	if (state === "failed" || state === "interrupted") return "bad";
+	if (state === "incomplete" || state === "cancelling") return "warn";
+	if (LIVE.includes(state)) return "live";
+	return "done";
+}
 
 export function WorkplaceReviews({ root, active, world }: { root: string; active: boolean; world: WorldSnapshot }) {
 	const api = window.agentWorld.reviews;
@@ -33,7 +60,7 @@ export function WorkplaceReviews({ root, active, world }: { root: string; active
 	const [selected, select] = useState<string>();
 	const [offset, setOffset] = useState(0);
 	const [limit, setLimit] = useState(1);
-	const list = useRef<HTMLElement>(null);
+	const list = useRef<HTMLUListElement>(null);
 	const [part, setPart] = useState<Part>("summary");
 	const [detailState, setDetail] = useState<{ key: string; value: unknown }>();
 	const [detailOffset, setDetailOffset] = useState(0);
@@ -42,68 +69,84 @@ export function WorkplaceReviews({ root, active, world }: { root: string; active
 	const [error, setError] = useState("");
 	const [busy, setBusy] = useState(false);
 	const [version, refresh] = useState(0);
-	const detailKey = JSON.stringify([selected, part, path, side, detailOffset, limit, version]);
+	const [tick, setTick] = useState(0);
+	const [hideAddressed, setHideAddressed] = useState(false);
+	const [analytics, showAnalytics] = useState(false);
+	const detailKey = JSON.stringify([selected, part, path, side, detailOffset, version]);
 	const detail = detailState?.key === detailKey ? detailState.value : undefined;
+	const loaded = useRef("");
 	const [capture, showCapture] = useState(false);
 	const [question, setQuestion] = useState("");
 	const [reason, setReason] = useState("");
 	const [doneWhen, setDoneWhen] = useState("");
+	const [comment, setComment] = useState("");
 	const [pending, setPending] = useState<{ attempt: string; operation: ReviewManagement }>();
 	const current = queue?.page?.rows.find((review) => review.id === selected);
+	const live = queue?.page?.rows.some((review) => LIVE.includes(review.state)) ?? false;
 	useEffect(() => {
 		const element = list.current;
 		if (!element) return;
-		const observer = new ResizeObserver(() => setLimit(Math.max(1, Math.floor(element.clientHeight / 112))));
+		const observer = new ResizeObserver(() => setLimit(Math.max(1, Math.floor(element.clientHeight / ROW_PX))));
 		observer.observe(element);
 		return () => observer.disconnect();
 	}, []);
+	useEffect(() => {
+		if (!active || !(live || part === "log" || part === "mail")) return;
+		const timer = setInterval(() => setTick((n) => n + 1), POLL_MS);
+		return () => clearInterval(timer);
+	}, [active, live, part]);
 	// biome-ignore lint/correctness/useExhaustiveDependencies: Repository changes reset only local selection and paging.
 	useEffect(() => {
 		setOffset(0);
 		select(undefined);
 		setDetail(undefined);
 	}, [root]);
-	// biome-ignore lint/correctness/useExhaustiveDependencies: Explicit refresh invalidates this on-demand query.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: Explicit refresh and live ticks invalidate this on-demand query.
 	useEffect(() => {
 		if (!active) return;
-		let live = true;
-		setError("");
+		let current = true;
 		void api
-			.queue({ ...(root ? { cwd: root } : {}), limit, offset })
+			.queue({ ...(root ? { cwd: root } : {}), limit, offset, hideAddressed })
 			.then((value) => {
-				if (!live) return;
+				if (!current) return;
 				setQueue({ root, value });
 				select((id) => (value.page?.rows.some((row) => row.id === id) ? id : value.page?.rows[0]?.id));
 			})
 			.catch((error) => {
-				if (live) setError(errorText(error));
+				if (current) setError(errorText(error));
 			});
 		return () => {
-			live = false;
+			current = false;
 		};
-	}, [api, active, root, offset, limit, version]);
+	}, [api, active, root, offset, limit, hideAddressed, version, tick]);
+	// biome-ignore lint/correctness/useExhaustiveDependencies: A tick reloads only live evidence, keeping the shown page meanwhile.
 	useEffect(() => {
 		if (!active || !selected) return;
-		let live = true;
-		setDetail(undefined);
+		if (loaded.current === detailKey && !(part === "log" || part === "mail" || part === "summary")) return;
+		loaded.current = detailKey;
+		let current = true;
 		const request = { review: selected, limit, offset: detailOffset };
 		const load =
 			part === "source"
 				? api.source({ ...request, side, ...(path ? { path } : {}) })
 				: part === "freshness"
 					? api.freshness({ review: selected })
-					: api.read({ ...request, part });
+					: part === "mail"
+						? api.read({ ...request, part: "thread" })
+						: part === "log"
+							? api.read({ review: selected, part: "log", limit: 40 })
+							: api.read({ ...request, part });
 		void load
 			.then((value) => {
-				if (live) setDetail({ key: detailKey, value });
+				if (current) setDetail({ key: detailKey, value });
 			})
 			.catch((error) => {
-				if (live) setError(errorText(error));
+				if (current) setError(errorText(error));
 			});
 		return () => {
-			live = false;
+			current = false;
 		};
-	}, [api, active, selected, part, path, side, detailOffset, limit, detailKey]);
+	}, [api, active, selected, part, path, side, detailOffset, limit, detailKey, tick]);
 	const manage = useCallback(
 		async (request: NonNullable<typeof pending>) => {
 			setBusy(true);
@@ -113,8 +156,10 @@ export function WorkplaceReviews({ root, active, world }: { root: string; active
 				await api.manage(request);
 				setPending(undefined);
 				refresh((n) => n + 1);
+				return true;
 			} catch (error) {
 				setError(`${errorText(error)} The request may have applied; retry this exact request before creating another.`);
+				return false;
 			} finally {
 				setBusy(false);
 			}
@@ -138,15 +183,40 @@ export function WorkplaceReviews({ root, active, world }: { root: string; active
 				chunks?: { page?: { nextOffset: number | null } };
 		  }
 		| undefined;
-	const next = (part === "target" ? data?.target?.omissions?.page : part === "plan" ? data?.chunks?.page : data?.page)
-		?.nextOffset;
+	const next =
+		part === "log"
+			? null
+			: (part === "target" ? data?.target?.omissions?.page : part === "plan" ? data?.chunks?.page : data?.page)
+					?.nextOffset;
+	const states = queue?.states ?? {};
+	const done = (states.completed ?? 0) + (states.incomplete ?? 0) + (states["no-changes"] ?? 0);
 	return (
 		<section className="wp-reviews" aria-label="Code reviews" hidden={!active}>
 			<header>
-				<div>
-					<h2>Reviews</h2>
-					<p>Captured code. Independent inspections. Exact-artifact sign-off.</p>
-				</div>
+				<h2>Reviews</h2>
+				<p className="wp-reviews-strip" title="Review queue status">
+					<span className="tone-wait">{states.queued ?? 0} queued</span>
+					<span className="tone-live">{(states.running ?? 0) + (states.capturing ?? 0)} running</span>
+					<span className="tone-done">{done} done</span>
+					<span className="tone-bad">{(states.failed ?? 0) + (states.interrupted ?? 0)} failed</span>
+					<span>
+						passes {queue?.passes?.running ?? 0}/{queue?.passes?.limit ?? 0}
+					</span>
+				</p>
+				<label className="wp-reviews-toggle">
+					<input
+						type="checkbox"
+						checked={hideAddressed}
+						onChange={(event) => {
+							setHideAddressed(event.target.checked);
+							setOffset(0);
+						}}
+					/>
+					Hide addressed
+				</label>
+				<button type="button" aria-pressed={analytics} onClick={() => showAnalytics(!analytics)}>
+					Analytics
+				</button>
 				<button type="button" onClick={() => refresh((n) => n + 1)}>
 					Refresh
 				</button>
@@ -195,41 +265,54 @@ export function WorkplaceReviews({ root, active, world }: { root: string; active
 					}}
 				/>
 			)}
-			<div className="wp-reviews-panes">
-				<aside ref={list} aria-label="Review queue">
-					{queue?.page?.rows.map((review) => (
-						<button
-							type="button"
-							className={`wp-review-card ${selected === review.id ? "is-selected" : ""}`}
-							key={review.id}
-							onClick={() => {
-								select(review.id);
-								setDetailOffset(0);
-							}}
-						>
-							<strong>
-								{review.state} <small>{review.phase?.pass ?? ""}</small>
-							</strong>
-							<span>
-								{review.target.kind} ·{" "}
-								{review.passes ? `${review.passes.completed}/${review.passes.required} passes` : "not planned"} ·{" "}
-								{review.findings.confirmed} confirmed
-							</span>
-							<span>
-								{review.approval?.matchesAssessment ? review.approval.record.data.verdict : "not signed off"} ·{" "}
-								{review.cost.reportedDollars === null
-									? "cost unavailable"
-									: review.cost.reportedDollars > 0 && review.cost.reportedDollars < 0.01
-										? "<$0.01"
-										: `$${review.cost.reportedDollars.toFixed(2)}`}{" "}
-								({review.cost.reportedAttempts}/{review.cost.totalAttempts} reported)
-							</span>
-							<small>
-								{review.ownerName} · {review.id}
-							</small>
-						</button>
-					))}
-					{queue?.total === 0 && <p>No captured reviews in this directory.</p>}
+			{analytics && <ReviewAnalyticsView api={api} root={root} version={version} />}
+			<div className="wp-reviews-panes" hidden={analytics}>
+				<div className="wp-review-table">
+					<div className="wp-review-head" aria-hidden="true">
+						<span>Change</span>
+						<span>Status</span>
+						<span>Result</span>
+						<span>Elapsed</span>
+						<span>Cost</span>
+						<span>Queued</span>
+					</div>
+					<ul className="wp-review-rows" ref={list} aria-label="Review queue">
+						{queue?.page?.rows.map((review) => (
+							<li key={review.id}>
+								<button
+									type="button"
+									aria-current={selected === review.id}
+									className={`wp-review-row ${selected === review.id ? "is-selected" : ""} ${review.addressed ? "is-addressed" : ""}`}
+									onClick={() => {
+										select(review.id);
+										setDetailOffset(0);
+									}}
+								>
+									<span className="wp-review-change">
+										<b>
+											{review.label.repository} / {refLabel(review)}
+										</b>{" "}
+										{changeLabel(review)}
+									</span>
+									<span>
+										<i className={`wp-review-pill tone-${stateTone(review.state)}`}>
+											{review.state}
+											{review.phase ? ` · ${review.phase.pass}` : ""}
+										</i>
+									</span>
+									<span className={review.findings.confirmed > review.findings.responded ? "tone-warn" : ""}>
+										{resultLabel(review)}
+									</span>
+									<span>{elapsedLabel(review)}</span>
+									<span>{dollarsLabel(review.cost.reportedDollars)}</span>
+									<span>{whenLabel(review.createdAt)}</span>
+								</button>
+							</li>
+						))}
+						{queue?.total === 0 && (
+							<li>{hideAddressed ? "Every review here is addressed." : "No captured reviews in this directory."}</li>
+						)}
+					</ul>
 					<nav>
 						<button type="button" disabled={!offset} onClick={() => setOffset(Math.max(0, offset - limit))}>
 							Previous
@@ -243,161 +326,257 @@ export function WorkplaceReviews({ root, active, world }: { root: string; active
 							Next
 						</button>
 					</nav>
-				</aside>
+				</div>
 				<main aria-label="Review evidence">
 					{current ? (
 						<>
-							<header>
-								<select
-									aria-label="Review evidence view"
-									value={part}
-									onChange={(event) => {
-										setPart(event.target.value as Part);
-										setDetailOffset(0);
-									}}
-								>
-									{parts.map((part) => (
-										<option key={part}>{part}</option>
-									))}
-								</select>
-								<button
-									type="button"
-									disabled={busy}
-									onClick={() => {
-										void api
-											.signOff({ review: current.id })
-											.then(() => setError(""))
-											.catch((error) => setError(errorText(error)));
-									}}
-								>
-									Open captured sign-off
-								</button>
-								{["failed", "incomplete", "interrupted"].includes(current.state) && (
-									<button type="button" disabled={busy || !!pending} onClick={() => action("resume", current)}>
-										Resume
+							<header className="wp-review-detail-head">
+								<strong>{current.id.slice(-8)}</strong>
+								<i className={`wp-review-pill tone-${stateTone(current.state)}`}>{current.state}</i>
+								<span>{resultLabel(current)}</span>
+								<span className="wp-review-change">
+									<b>
+										{current.label.repository} / {refLabel(current)}
+									</b>{" "}
+									{changeLabel(current)}
+								</span>
+								<span className="wp-review-owner">{current.ownerName}</span>
+								<span className="wp-review-actions">
+									<button
+										type="button"
+										disabled={busy}
+										onClick={() => {
+											void api
+												.signOff({ review: current.id })
+												.then(() => setError(""))
+												.catch((error) => setError(errorText(error)));
+										}}
+									>
+										Open captured sign-off
 									</button>
-								)}
-								{["running", "queued", "capturing", "interrupted", "failed", "incomplete"].includes(current.state) && (
-									<button type="button" disabled={busy || !!pending} onClick={() => action("cancel", current)}>
-										Cancel
-									</button>
-								)}
+									{["failed", "incomplete", "interrupted"].includes(current.state) && (
+										<button type="button" disabled={busy || !!pending} onClick={() => action("resume", current)}>
+											Resume
+										</button>
+									)}
+									{["running", "queued", "capturing", "interrupted", "failed", "incomplete"].includes(
+										current.state,
+									) && (
+										<button type="button" disabled={busy || !!pending} onClick={() => action("cancel", current)}>
+											Cancel
+										</button>
+									)}
+								</span>
 							</header>
-							<p className="wp-reviews-identity">
-								{current.id} · assessment {current.revision} · {current.digest}
-							</p>
-							{part === "source" && (
-								<form onSubmit={(event) => event.preventDefault()}>
-									<select
-										aria-label="Captured side"
-										value={side}
-										onChange={(event) => {
-											setSide(event.target.value as typeof side);
+							<div className="wp-review-tabs" role="tablist" aria-label="Review evidence view">
+								{parts.map((entry) => (
+									<button
+										type="button"
+										role="tab"
+										key={entry}
+										aria-selected={part === entry}
+										onClick={() => {
+											setPart(entry);
 											setDetailOffset(0);
 										}}
 									>
-										<option>after</option>
-										<option>before</option>
-									</select>
-									<input
-										aria-label="Captured file path"
-										placeholder="Blank lists captured files"
-										value={path}
-										onChange={(event) => {
-											setPath(event.target.value);
+										{entry[0]!.toUpperCase() + entry.slice(1)}
+									</button>
+								))}
+							</div>
+							<div className="wp-review-body">
+								{part === "source" && (
+									<form onSubmit={(event) => event.preventDefault()}>
+										<select
+											aria-label="Captured side"
+											value={side}
+											onChange={(event) => {
+												setSide(event.target.value as typeof side);
+												setDetailOffset(0);
+											}}
+										>
+											<option>after</option>
+											<option>before</option>
+										</select>
+										<input
+											aria-label="Captured file path"
+											placeholder="Blank lists captured files"
+											value={path}
+											onChange={(event) => {
+												setPath(event.target.value);
+												setDetailOffset(0);
+											}}
+										/>
+										<button type="button" onClick={() => refresh((n) => n + 1)}>
+											Read
+										</button>
+									</form>
+								)}
+								{part === "source" && detail ? (
+									<SourceView
+										source={detail as ReviewSource}
+										onOpen={(path) => {
+											setPath(path);
 											setDetailOffset(0);
 										}}
 									/>
-									<button type="button" onClick={() => refresh((n) => n + 1)}>
-										Read
-									</button>
-								</form>
-							)}
-							{part === "source" && detail ? (
-								<SourceView
-									source={detail as ReviewSource}
-									onOpen={(path) => {
-										setPath(path);
-										setDetailOffset(0);
-									}}
-								/>
-							) : (
-								<EvidenceView part={part} data={detail} />
-							)}
-							<nav>
-								<button
-									type="button"
-									disabled={!detailOffset}
-									onClick={() => setDetailOffset(Math.max(0, detailOffset - limit))}
-								>
-									Previous evidence page
-								</button>
-								<button type="button" disabled={next == null} onClick={() => setDetailOffset(next!)}>
-									Next evidence page
-								</button>
-							</nav>
-							{["completed", "incomplete", "failed", "interrupted", "cancelled"].includes(current.state) && (
-								<details>
-									<summary>Authorize additional work</summary>
+								) : (
+									<EvidenceView part={part} data={detail} />
+								)}
+								{part === "mail" && (
 									<form
+										className="wp-review-comment"
 										onSubmit={(event) => {
 											event.preventDefault();
-											if (
-												!current.digest ||
-												pending ||
-												!window.confirm(
-													"Replan this retained target with this question? Required inspections run again and can incur model cost. Live edits are not captured.",
-												)
-											)
-												return;
+											if (!comment.trim() || pending) return;
 											void manage({
 												attempt: crypto.randomUUID(),
-												operation: {
-													action: "extend",
-													review: current.id,
-													digest: current.digest,
-													revision: current.revision,
-													question,
-													reason,
-													doneWhen,
-												},
+												operation: { action: "comment", review: current.id, body: comment.trim() },
+											}).then((sent) => {
+												if (sent) setComment("");
 											});
 										}}
 									>
-										<input
-											required
-											aria-label="Additional review question"
-											placeholder="Concrete question"
-											value={question}
-											onChange={(event) => setQuestion(event.target.value)}
+										<textarea
+											aria-label="Comment on this review"
+											placeholder="Comment; the owner is mailed"
+											value={comment}
+											onChange={(event) => setComment(event.target.value)}
 										/>
-										<input
-											required
-											aria-label="Reason for additional work"
-											placeholder="Why more work is justified"
-											value={reason}
-											onChange={(event) => setReason(event.target.value)}
-										/>
-										<input
-											required
-											aria-label="Evidence that settles the question"
-											placeholder="Stopping condition"
-											value={doneWhen}
-											onChange={(event) => setDoneWhen(event.target.value)}
-										/>
-										<button type="submit" disabled={busy || !!pending}>
-											Authorize reviewer work
+										<button type="submit" disabled={busy || !!pending || !comment.trim()}>
+											Comment
 										</button>
 									</form>
-								</details>
-							)}
+								)}
+								{next != null || detailOffset ? (
+									<nav>
+										<button
+											type="button"
+											disabled={!detailOffset}
+											onClick={() => setDetailOffset(Math.max(0, detailOffset - limit))}
+										>
+											Previous evidence page
+										</button>
+										<button type="button" disabled={next == null} onClick={() => setDetailOffset(next!)}>
+											Next evidence page
+										</button>
+									</nav>
+								) : null}
+								{["completed", "incomplete", "failed", "interrupted", "cancelled"].includes(current.state) && (
+									<details>
+										<summary>Authorize additional work</summary>
+										<form
+											onSubmit={(event) => {
+												event.preventDefault();
+												if (
+													!current.digest ||
+													pending ||
+													!window.confirm(
+														"Replan this retained target with this question? Required inspections run again and can incur model cost. Live edits are not captured.",
+													)
+												)
+													return;
+												void manage({
+													attempt: crypto.randomUUID(),
+													operation: {
+														action: "extend",
+														review: current.id,
+														digest: current.digest,
+														revision: current.revision,
+														question,
+														reason,
+														doneWhen,
+													},
+												});
+											}}
+										>
+											<input
+												required
+												aria-label="Additional review question"
+												placeholder="Concrete question"
+												value={question}
+												onChange={(event) => setQuestion(event.target.value)}
+											/>
+											<input
+												required
+												aria-label="Reason for additional work"
+												placeholder="Why more work is justified"
+												value={reason}
+												onChange={(event) => setReason(event.target.value)}
+											/>
+											<input
+												required
+												aria-label="Evidence that settles the question"
+												placeholder="Stopping condition"
+												value={doneWhen}
+												onChange={(event) => setDoneWhen(event.target.value)}
+											/>
+											<button type="submit" disabled={busy || !!pending}>
+												Authorize reviewer work
+											</button>
+										</form>
+									</details>
+								)}
+							</div>
+							<footer className="wp-review-foot">
+								<span>{current.id}</span>
+								<span>assessment {current.revision}</span>
+								<span>
+									cost {dollarsLabel(current.cost.reportedDollars)} ({current.cost.reportedAttempts}/
+									{current.cost.totalAttempts} reported)
+								</span>
+								<span>{tokensLabel(current.cost)}</span>
+							</footer>
 						</>
 					) : (
-						<p>Select a review to inspect its evidence.</p>
+						<p className="wp-review-empty">Select a review to inspect its evidence.</p>
 					)}
 				</main>
 			</div>
 		</section>
+	);
+}
+
+function FindingView({ entry }: { entry: ReviewAssessment["findings"][number] }) {
+	const { finding } = entry;
+	const field = (label: string, text: string) => (
+		<div>
+			<dt>{label}</dt>
+			<dd>{text}</dd>
+		</div>
+	);
+	return (
+		<article className="wp-review-finding">
+			<h4>
+				<i className={`wp-review-severity is-${finding.severity}`}>{finding.severity}</i> {finding.title}
+			</h4>
+			<p className="wp-review-meta">
+				{finding.path}:{finding.line} · validation {entry.validation?.disposition ?? "pending"} · response{" "}
+				{entry.decision?.data.disposition ?? "none"} · {entry.id}
+			</p>
+			<dl>
+				{field("Problem", finding.impact)}
+				{field("Trigger", finding.trigger)}
+				{field("Cause", finding.cause)}
+				{field("Correction", finding.correction)}
+			</dl>
+			<details>
+				<summary>Evidence and validation</summary>
+				<pre>
+					{JSON.stringify(
+						{
+							invariant: finding.invariant,
+							evidence: finding.evidence,
+							counterevidence: finding.counterevidence,
+							validation: entry.validation,
+							response: entry.decision?.data ?? null,
+						},
+						null,
+						2,
+					)}
+				</pre>
+			</details>
+		</article>
 	);
 }
 
@@ -409,15 +588,152 @@ function EvidenceView({ part, data }: { part: Part; data: unknown }) {
 		return (
 			<>
 				{findings.page?.rows.map((entry) => (
-					<article key={`${entry.attempt}:${entry.id}`}>
-						<pre>{findingLines(entry).join("\n")}</pre>
-					</article>
+					<FindingView key={`${entry.attempt}:${entry.id}`} entry={entry} />
 				))}
 				{findings.total === 0 && <p>No reported findings. This does not establish correctness.</p>}
 			</>
 		);
 	}
+	if (part === "mail") {
+		const thread = data as { total: number; page: { rows: ReviewThreadMessage[] } | null };
+		return (
+			<ol className="wp-review-thread">
+				{thread.page?.rows.map((message) => (
+					<li key={message.seq}>
+						<p className="wp-review-meta">
+							<b>{message.senderName}</b> · {new Date(message.at).toLocaleString()}
+						</p>
+						<pre>{message.body}</pre>
+					</li>
+				))}
+				{thread.total === 0 && <li>No mail yet. Milestones and comments appear here.</li>}
+			</ol>
+		);
+	}
+	if (part === "log") return <pre className="wp-review-log">{logLines(data as ReviewAttemptLog[]).join("\n")}</pre>;
 	return <pre>{JSON.stringify(data, null, 2)}</pre>;
+}
+
+function ReviewAnalyticsView({ api, root, version }: { api: ReviewsApi; root: string; version: number }) {
+	const [data, setData] = useState<{ key: string; value: ReviewAnalytics }>();
+	const [error, setError] = useState("");
+	const key = JSON.stringify([root, version]);
+	useEffect(() => {
+		let current = true;
+		void api
+			.analytics(root ? { cwd: root } : {})
+			.then((value) => {
+				if (current) setData({ key, value });
+			})
+			.catch((error) => {
+				if (current) setError(errorText(error));
+			});
+		return () => {
+			current = false;
+		};
+	}, [api, root, key]);
+	if (error) return <p role="alert">{error}</p>;
+	const value = data?.key === key ? data.value : undefined;
+	if (!value) return <p className="wp-review-empty">Loading analytics...</p>;
+	const per = (dollars: number, count: number) => (count ? dollarsLabel(dollars / count) : "--");
+	return (
+		<section className="wp-review-analytics" aria-label="Review analytics">
+			<div className="wp-review-stats">
+				<div>
+					<b>{value.reviews}</b> reviews
+				</div>
+				<div>
+					<b>{dollarsLabel(value.dollars)}</b> total, {per(value.dollars, value.reviews)} each
+				</div>
+				<div>
+					<b>{value.confirmed}</b> confirmed, {per(value.dollars, value.confirmed)} each
+				</div>
+				<div>
+					<b>{value.medianMinutes === null ? "--" : `${value.medianMinutes.toFixed(1)} min`}</b> median review
+				</div>
+			</div>
+			<h3>By model</h3>
+			<table>
+				<thead>
+					<tr>
+						<th>Model</th>
+						<th>Attempts</th>
+						<th>Cost</th>
+						<th>Per attempt</th>
+						<th>Confirmed</th>
+						<th>Per finding</th>
+						<th>Severity</th>
+					</tr>
+				</thead>
+				<tbody>
+					{value.byModel.map((row) => (
+						<tr key={row.model}>
+							<td>{row.model}</td>
+							<td>{row.attempts}</td>
+							<td>{dollarsLabel(row.dollars)}</td>
+							<td>{per(row.dollars, row.attempts)}</td>
+							<td>{row.confirmed}</td>
+							<td>{per(row.dollars, row.confirmed)}</td>
+							<td>
+								{Object.entries(row.severities)
+									.map(([severity, n]) => `${n} ${severity}`)
+									.join(" · ")}
+							</td>
+						</tr>
+					))}
+				</tbody>
+			</table>
+			<h3>By phase</h3>
+			<table>
+				<thead>
+					<tr>
+						<th>Phase</th>
+						<th>Attempts</th>
+						<th>Cost</th>
+						<th>Per attempt</th>
+						<th>Minutes each</th>
+					</tr>
+				</thead>
+				<tbody>
+					{value.byPhase.map((row) => (
+						<tr key={row.kind}>
+							<td>{row.kind}</td>
+							<td>{row.attempts}</td>
+							<td>{dollarsLabel(row.dollars)}</td>
+							<td>{per(row.dollars, row.attempts)}</td>
+							<td>{row.attempts ? (row.minutes / row.attempts).toFixed(1) : "--"}</td>
+						</tr>
+					))}
+				</tbody>
+			</table>
+			<h3>Reviews</h3>
+			<table>
+				<thead>
+					<tr>
+						<th>When</th>
+						<th>Repository</th>
+						<th>State</th>
+						<th>Minutes</th>
+						<th>Cost</th>
+						<th>Confirmed</th>
+					</tr>
+				</thead>
+				<tbody>
+					{value.recent.map((row) => (
+						<tr key={row.id}>
+							<td>{whenLabel(row.createdAt)}</td>
+							<td>{row.label.repository}</td>
+							<td>{row.state}</td>
+							<td>{row.minutes === null ? "--" : row.minutes.toFixed(0)}</td>
+							<td>{dollarsLabel(row.dollars)}</td>
+							<td>{row.confirmed}</td>
+						</tr>
+					))}
+				</tbody>
+			</table>
+			<p className="wp-review-meta">{analyticsLines(value).at(-1)}</p>
+		</section>
+	);
 }
 
 function SourceView({ source, onOpen }: { source: ReviewSource; onOpen(path: string): void }) {

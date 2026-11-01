@@ -14,5 +14,8 @@ test("milestone mail is covered while its review is waited on and after the wait
 	expect(coveredByReviewWait("review:review-a:2:outcome")).toBe(false);
 	expect(coveredByReviewWait("review:review-b:1:outcome")).toBe(false);
 	expect(coveredByReviewWait("thread-message-id")).toBe(false);
+	const again = startReviewWait("review-a");
+	expect(coveredByReviewWait("review:review-a:comment:command-1")).toBe(false);
+	again();
 	expect(coveredByReviewWait(undefined)).toBe(false);
 });

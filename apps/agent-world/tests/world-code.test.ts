@@ -215,15 +215,31 @@ test("Code reviews show retained evidence and explicit capture consent without l
 		await replaceText(page, 'export const message = "keep draft";\n');
 		await page.evaluate(() => {
 			const w = window as any;
-			w.reviewCalls = { captures: [], signOffs: [], sources: [] };
+			w.reviewCalls = { captures: [], signOffs: [], sources: [], manage: [] };
 			const review = {
 				id: "review-fixture",
 				state: "completed",
 				phase: null,
 				target: { kind: "commit", commit: "abc" },
+				label: {
+					repository: "project",
+					branch: "main",
+					head: "abcdef0123",
+					subject: "Export the value",
+					commits: null,
+					files: 1,
+				},
 				passes: { required: 2, completed: 2 },
-				findings: { reported: 1, confirmed: 1, unresolved: 0 },
-				cost: { reportedDollars: 1.23, reportedAttempts: 4, totalAttempts: 4 },
+				findings: { reported: 1, confirmed: 1, unresolved: 0, responded: 0 },
+				addressed: false,
+				cost: {
+					reportedDollars: 1.23,
+					reportedAttempts: 4,
+					totalAttempts: 4,
+					tokens: { input: 576000, output: 2800, cacheRead: 1200000 },
+				},
+				createdAt: Date.now() - 300_000,
+				settledAt: Date.now() - 28_000,
 				ownerName: "Reviewer",
 				owner: "owner",
 				revision: 7,
@@ -231,13 +247,85 @@ test("Code reviews show retained evidence and explicit capture consent without l
 				approval: null,
 			};
 			w.agentWorld.reviews = {
-				queue: async () => ({
-					total: 1,
-					states: { completed: 1 },
-					page: { offset: 0, nextOffset: null, rows: [review] },
+				queue: async (request: { hideAddressed?: boolean }) => ({
+					total: request.hideAddressed ? 0 : 1,
+					states: { completed: 1, queued: 2 },
+					passes: { running: 3, limit: 8 },
+					page: { offset: 0, nextOffset: null, rows: request.hideAddressed ? [] : [review] },
 				}),
+				analytics: async () => ({
+					reviews: 1,
+					settled: 1,
+					dollars: 1.23,
+					confirmed: 1,
+					medianMinutes: 4.5,
+					byModel: [
+						{ model: "provider/strong", attempts: 2, dollars: 1, minutes: 9, confirmed: 1, severities: { high: 1 } },
+					],
+					byPhase: [{ kind: "focused", attempts: 2, dollars: 1, minutes: 9 }],
+					recent: [],
+				}),
+				manage: async (request: unknown) => {
+					w.reviewCalls.manage.push(request);
+					return review;
+				},
 				read: async (request: { part: string }) =>
-					request.part === "summary" ? review : { retained: "Captured assessment", request },
+					request.part === "summary"
+						? review
+						: request.part === "thread"
+							? {
+									total: 1,
+									page: {
+										offset: 0,
+										nextOffset: null,
+										rows: [{ seq: 1, sender: "harness", senderName: "the harness", body: "Review planned", at: 1 }],
+									},
+								}
+							: request.part === "findings"
+								? {
+										total: 1,
+										page: {
+											offset: 0,
+											nextOffset: null,
+											rows: [
+												{
+													id: "attempt:stale-value",
+													attempt: "attempt",
+													pass: "value-correctness",
+													finding: {
+														id: "stale-value",
+														title: "The value disagrees with its consumer",
+														path: "value.ts",
+														line: 1,
+														side: "after",
+														severity: "high",
+														certainty: "confirmed",
+														trigger: "Import the value from the consumer",
+														invariant: "Producer and consumer agree",
+														impact: "The consumer shows a stale total.",
+														cause: "The export changed without its consumer.",
+														correction: "Update the consumer.",
+														evidence: [],
+														counterevidence: "None",
+													},
+													validation: { disposition: "confirmed" },
+													decision: null,
+												},
+											],
+										},
+									}
+								: request.part === "log"
+									? [
+											{
+												attempt: "a",
+												pass: "value-correctness",
+												kind: "focused",
+												state: "running",
+												model: "provider/strong",
+												entries: [{ at: 1, kind: "tool", text: 'bash({"command":"npm test"})' }],
+											},
+										]
+									: { retained: "Captured assessment", request },
 				source: async (request: { path?: string; side: string }) => {
 					w.reviewCalls.sources.push(request);
 					if (!request.path)
@@ -283,10 +371,39 @@ test("Code reviews show retained evidence and explicit capture consent without l
 		});
 		await page.getByRole("button", { name: "Reviews", exact: true }).click();
 		const reviews = page.getByRole("region", { name: "Code reviews", exact: true });
-		await reviews.getByRole("button", { name: /completed.*2\/2 passes/ }).waitFor();
-		expect(await reviews.innerText()).toContain("1 confirmed");
+		await reviews.getByRole("button", { name: /project \/ main.*abcdef0 Export the value/ }).waitFor();
+		const row = await reviews.getByRole("button", { name: /abcdef0 Export the value/ }).innerText();
+		for (const text of ["completed", "1 confirmed", "4m 32s", "$1.23"]) expect(row).toContain(text);
+		expect(await reviews.getByTitle("Review queue status").innerText()).toMatch(/2 queued.*1 done.*passes 3\/8/s);
 		expect(await reviews.innerText()).toContain("$1.23 (4/4 reported)");
-		await reviews.getByLabel("Review evidence view").selectOption("source");
+		expect(await reviews.innerText()).toContain("in 576.0k \u00b7 out 2.8k \u00b7 cached 1.2M");
+		await reviews.getByRole("tab", { name: "Findings" }).click();
+		await reviews.getByText("The consumer shows a stale total.").waitFor();
+		await shot(page, "reviews-findings");
+		await reviews.getByRole("tab", { name: "Mail" }).click();
+		await reviews.getByText("Review planned").waitFor();
+		await reviews.getByLabel("Comment on this review").fill("Check the consumer");
+		await reviews.getByRole("button", { name: "Comment", exact: true }).click();
+		await vi.waitFor(async () =>
+			expect(await page.evaluate(() => (window as any).reviewCalls.manage)).toEqual([
+				expect.objectContaining({
+					operation: { action: "comment", review: "review-fixture", body: "Check the consumer" },
+				}),
+			]),
+		);
+		await reviews.getByRole("tab", { name: "Log" }).click();
+		await reviews.getByText(/value-correctness \(focused\).*provider\/strong/).waitFor();
+		await shot(page, "reviews-log");
+		await reviews.getByRole("button", { name: "Analytics", exact: true }).click();
+		const analytics = page.getByRole("region", { name: "Review analytics" });
+		await analytics.getByText("provider/strong").waitFor();
+		await shot(page, "reviews-analytics");
+		await reviews.getByRole("button", { name: "Analytics", exact: true }).click();
+		await reviews.getByLabel("Hide addressed").check();
+		await reviews.getByText("Every review here is addressed.").waitFor();
+		await reviews.getByLabel("Hide addressed").uncheck();
+		await reviews.getByRole("button", { name: /abcdef0 Export the value/ }).waitFor();
+		await reviews.getByRole("tab", { name: "Source" }).click();
 		await reviews.getByRole("button", { name: "value.ts", exact: true }).click();
 		await reviews.getByLabel("Captured side").selectOption("before");
 		await reviews.getByText("1 | original captured source", { exact: true }).waitFor();

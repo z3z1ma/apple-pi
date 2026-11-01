@@ -50,8 +50,32 @@ export interface ReviewSummary {
 		integrationOnlyRegions: number;
 		additionalRequests: number;
 	} | null;
-	findings: { reported: number; confirmed: number; unresolved: number };
-	cost: { reportedDollars: number | null; reportedAttempts: number; totalAttempts: number };
+	/** What was reviewed, as a person names it; label fields are null on captures made before labels. */
+	label: {
+		repository: string;
+		branch: string | null;
+		head: string | null;
+		subject: string | null;
+		commits: number | null;
+		files: number | null;
+	};
+	findings: {
+		reported: number;
+		confirmed: number;
+		unresolved: number;
+		/** Confirmed findings with an owner response. */
+		responded: number;
+	};
+	/** Settled with nothing left to act on: completed, no-changes or cancelled, every confirmed finding answered. */
+	addressed: boolean;
+	cost: {
+		reportedDollars: number | null;
+		reportedAttempts: number;
+		totalAttempts: number;
+		tokens: { input: number; output: number; cacheRead: number };
+	};
+	/** When the last attempt of a settled review finished; null while work remains. */
+	settledAt: number | null;
 	approval: { record: ReviewApproval; matchesAssessment: boolean } | null;
 	reason: string | null;
 	createdAt: number;
@@ -61,6 +85,8 @@ export interface ReviewSummary {
 export interface ReviewQueue {
 	total: number;
 	states: Partial<Record<ReviewState, number>>;
+	/** Reviewer passes running now across the queue, against the concurrency bound. */
+	passes: { running: number; limit: number };
 	page: { offset: number; nextOffset: number | null; rows: ReviewSummary[] } | null;
 }
 
@@ -85,6 +111,56 @@ export interface ReviewAttempt {
 	reason: string | null;
 	createdAt: number;
 	finishedAt: number | null;
+}
+
+export interface ReviewThreadMessage {
+	seq: number;
+	sender: string;
+	senderName: string;
+	body: string;
+	at: number;
+}
+
+export interface ReviewLogEntry {
+	at: number | null;
+	kind: "text" | "tool" | "result" | "error";
+	text: string;
+}
+
+export interface ReviewAttemptLog {
+	attempt: string;
+	pass: string;
+	kind: ReviewAttempt["kind"];
+	state: ReviewAttempt["state"];
+	model: string | null;
+	entries: ReviewLogEntry[];
+}
+
+export interface ReviewAnalytics {
+	reviews: number;
+	settled: number;
+	dollars: number;
+	confirmed: number;
+	/** Review wall time from admission to the last attempt, over settled reviews. */
+	medianMinutes: number | null;
+	byModel: {
+		model: string;
+		attempts: number;
+		dollars: number;
+		minutes: number;
+		confirmed: number;
+		severities: Record<string, number>;
+	}[];
+	byPhase: { kind: ReviewAttempt["kind"]; attempts: number; dollars: number; minutes: number }[];
+	recent: {
+		id: string;
+		label: ReviewSummary["label"];
+		state: ReviewState;
+		createdAt: number;
+		minutes: number | null;
+		dollars: number | null;
+		confirmed: number;
+	}[];
 }
 
 export interface ReviewAssessment {

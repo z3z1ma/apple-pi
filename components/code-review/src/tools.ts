@@ -8,6 +8,7 @@ import {
 	readReviewFreshness,
 	readReviewPart,
 	readReviewSource,
+	reviewAnalytics,
 	reviewQueue,
 	reviewSummary,
 } from "../../session-state/src/review-read.js";
@@ -68,6 +69,8 @@ const parts = Type.Union([
 	Type.Literal("changes"),
 	Type.Literal("regions"),
 	Type.Literal("decisions"),
+	Type.Literal("thread"),
+	Type.Literal("log"),
 ]);
 
 const wait = Type.Optional(
@@ -303,16 +306,27 @@ export function installReviewTools(pi: ExtensionAPI): void {
 					...page,
 					state: Type.Optional(states),
 					cwd: Type.Optional(text("Filter a recorded repository or requested worktree directory.")),
+					hideAddressed: Type.Optional(
+						Type.Boolean({
+							description:
+								"Leave out settled reviews whose confirmed findings all have a response; they need nothing more from anyone.",
+						}),
+					),
+					analytics: Type.Optional(
+						Type.Boolean({
+							description:
+								"Return cost and yield instead of the queue: totals, by model, by phase and per review, from recorded usage.",
+						}),
+					),
 				},
 				{ additionalProperties: false },
 			),
-			async execute(_callId, params, _signal, _update, ctx) {
+			async execute(_callId, { analytics, ...params }, _signal, _update, ctx) {
+				const actor = ctx.sessionManager.getSessionId();
+				const cwd = params.cwd ? resolve(ctx.cwd, params.cwd) : undefined;
 				return result(
 					database((db) =>
-						reviewQueue(db, ctx.sessionManager.getSessionId(), {
-							...params,
-							cwd: params.cwd ? resolve(ctx.cwd, params.cwd) : undefined,
-						}),
+						analytics ? reviewAnalytics(db, actor, { cwd }) : reviewQueue(db, actor, { ...params, cwd }),
 					),
 				);
 			},
@@ -323,7 +337,7 @@ export function installReviewTools(pi: ExtensionAPI): void {
 			name: "read_review",
 			label: "Read review",
 			description:
-				"Read one captured review progressively. Summary separates execution, missing intent, question coverage, findings and reported primary-turn cost across all attempts. Cost excludes unobserved internal activity; missing observations and unavailable totals stay explicit. Freshness explicitly rechecks the requested target, current checkout and recorded review policy at a stated time; changed or unavailable is not current, and this read never transfers coverage/approval. Configuration shows captured review instructions and declared model/profile references, not a frozen ambient environment; actual role/model policy belongs to each attempt. Target gives captured source and Git revisions; ordinary tools remain available there. Source browses retained Git objects on the before or after side: omit path to list files, or name a captured file to read lines. It never follows symlinks or automatically appends .context sidecars; inspect captured context files and applicable docs separately. Source and the other collections return counts until limit is supplied; source file offsets are zero-based line offsets. Plan, changes, regions, findings, coverage and attempts also page explicitly. Pass requires its pass ID; attempt requires its attempt ID and exposes that retained input policy, raw result, observed turn usage and validated output. Original allegations and validation remain distinct. These reads establish neither freshness nor approval.",
+				"Read one captured review progressively. Summary separates execution, missing intent, question coverage, findings and reported primary-turn cost across all attempts. Cost excludes unobserved internal activity; missing observations and unavailable totals stay explicit. Freshness explicitly rechecks the requested target, current checkout and recorded review policy at a stated time; changed or unavailable is not current, and this read never transfers coverage/approval. Configuration shows captured review instructions and declared model/profile references, not a frozen ambient environment; actual role/model policy belongs to each attempt. Target gives captured source and Git revisions; ordinary tools remain available there. Source browses retained Git objects on the before or after side: omit path to list files, or name a captured file to read lines. It never follows symlinks or automatically appends .context sidecars; inspect captured context files and applicable docs separately. Source and the other collections return counts until limit is supplied; source file offsets are zero-based line offsets. Plan, changes, regions, findings, coverage and attempts also page explicitly. Pass requires its pass ID; attempt requires its attempt ID and exposes that retained input policy, raw result, observed turn usage and validated output. Thread pages the review's mail (milestones and comments). Log shows the recent transcript of the running passes, or of one attempt. Original allegations and validation remain distinct. These reads establish neither freshness nor approval.",
 			promptSnippet: "Inspect review scope, evidence and retained attempts without treating partial work as clean.",
 			parameters: Type.Object(
 				{

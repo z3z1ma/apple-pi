@@ -12,6 +12,7 @@ import {
 	readReviewFreshness,
 	readReviewPart,
 	readReviewSource,
+	reviewAnalytics,
 	reviewQueue,
 	reviewSummary,
 } from "../../../../components/session-state/src/review-read.js";
@@ -44,6 +45,9 @@ export function openReviews(path: string, commands: Commands) {
 		async queue(options) {
 			return store((db) => reviewQueue(db, OPERATOR, options));
 		},
+		async analytics(request) {
+			return store((db) => reviewAnalytics(db, OPERATOR, request));
+		},
 		async read(request) {
 			return store((db) => readReviewPart(db, OPERATOR, request.review, request));
 		},
@@ -70,7 +74,7 @@ export function openReviews(path: string, commands: Commands) {
 		},
 		async manage(input) {
 			const operation = checkShape(ReviewOperationSchema, input.operation);
-			if (!["cancel", "resume", "priority", "reassign", "extend", "finding"].includes(operation.action))
+			if (!["cancel", "resume", "priority", "reassign", "extend", "finding", "comment"].includes(operation.action))
 				throw new Error("Use the capture preview to enqueue, or the browser to sign off");
 			return mutate(input.attempt, operation);
 		},

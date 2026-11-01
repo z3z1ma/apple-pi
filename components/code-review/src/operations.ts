@@ -46,6 +46,10 @@ export const ReviewOperationSchema = Type.Union([
 	Type.Object({ action: Type.Literal("priority"), review: text, priority: Type.Number() }, object),
 	Type.Object({ action: Type.Literal("reassign"), review: text, owner: text }, object),
 	Type.Object(
+		{ action: Type.Literal("comment"), review: text, body: Type.String({ minLength: 1, pattern: "\\S" }) },
+		object,
+	),
+	Type.Object(
 		{
 			action: Type.Literal("finding"),
 			review: text,

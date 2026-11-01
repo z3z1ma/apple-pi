@@ -1,16 +1,38 @@
 import type { ReviewOperation, ReviewState } from "../../../components/code-review/src/operations.js";
-import type { ReviewQueue, ReviewSource, ReviewSummary } from "../../../components/code-review/src/results.js";
+import type {
+	ReviewAnalytics,
+	ReviewQueue,
+	ReviewSource,
+	ReviewSummary,
+} from "../../../components/code-review/src/results.js";
 import type { ReviewRequest } from "../../../components/code-review/src/types.js";
 
 export type ReviewManagement = Extract<
 	ReviewOperation,
-	{ action: "cancel" | "resume" | "priority" | "reassign" | "extend" | "finding" }
+	{ action: "cancel" | "resume" | "priority" | "reassign" | "extend" | "finding" | "comment" }
 >;
 export interface ReviewsApi {
-	queue(options: { cwd?: string; state?: ReviewState; limit: number; offset?: number }): Promise<ReviewQueue>;
+	queue(options: {
+		cwd?: string;
+		state?: ReviewState;
+		limit: number;
+		offset?: number;
+		hideAddressed?: boolean;
+	}): Promise<ReviewQueue>;
+	analytics(request: { cwd?: string }): Promise<ReviewAnalytics>;
 	read(request: {
 		review: string;
-		part: "summary" | "target" | "configuration" | "plan" | "findings" | "coverage" | "attempts" | "decisions";
+		part:
+			| "summary"
+			| "target"
+			| "configuration"
+			| "plan"
+			| "findings"
+			| "coverage"
+			| "attempts"
+			| "decisions"
+			| "thread"
+			| "log";
 		limit: number;
 		offset?: number;
 	}): Promise<unknown>;

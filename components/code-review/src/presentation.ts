@@ -1,5 +1,13 @@
 import type { ReviewPreview } from "./preview.js";
-import type { ReviewAssessment, ReviewSource, ReviewSummary } from "./results.js";
+import type {
+	ReviewAnalytics,
+	ReviewAssessment,
+	ReviewAttemptLog,
+	ReviewQueue,
+	ReviewSource,
+	ReviewSummary,
+	ReviewThreadMessage,
+} from "./results.js";
 import type { ReviewTarget } from "./types.js";
 
 export function targetLabel(target: ReviewTarget): string {
@@ -15,6 +23,139 @@ export function targetLabel(target: ReviewTarget): string {
 		case "branch":
 			return `${target.head} since ${target.base}`;
 	}
+}
+
+/** The ref a person knows the change by: the branch or requested comparison. */
+export function refLabel(review: Pick<ReviewSummary, "target" | "label">): string {
+	const { target, label } = review;
+	if (target.kind === "branch") return target.head;
+	if (target.kind === "range") return `${target.base}..${target.head}`;
+	return label.branch ?? (target.kind === "commit" ? target.commit : "detached");
+}
+
+/** What was reviewed, in one line: head commit and subject, or the uncommitted change. */
+export function changeLabel(review: Pick<ReviewSummary, "target" | "label">): string {
+	const { target, label } = review;
+	const files = label.files === null ? "" : ` (${label.files} ${label.files === 1 ? "file" : "files"})`;
+	if (target.kind === "working-tree") return `uncommitted changes${files}`;
+	if (target.kind === "staged") return `staged changes${files}`;
+	// Captures from before labels carry only their ref, which the row already shows.
+	if (!label.subject) return "";
+	const more = label.commits && label.commits > 1 ? ` (+${label.commits - 1} more)` : "";
+	return `${label.head?.slice(0, 7) ?? ""} ${label.subject}${more}`.trim();
+}
+
+export function elapsedLabel(review: Pick<ReviewSummary, "createdAt" | "settledAt">, now = Date.now()): string {
+	const seconds = Math.max(0, Math.round(((review.settledAt ?? now) - review.createdAt) / 1000));
+	if (seconds < 60) return `${seconds}s`;
+	const minutes = Math.floor(seconds / 60);
+	if (minutes < 60) return `${minutes}m ${String(seconds % 60).padStart(2, "0")}s`;
+	return `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, "0")}m`;
+}
+
+export function dollarsLabel(dollars: number | null): string {
+	if (dollars === null) return "--";
+	return dollars > 0 && dollars < 0.01 ? "<$0.01" : `$${dollars.toFixed(2)}`;
+}
+
+const compact = (value: number) =>
+	value >= 1e6 ? `${(value / 1e6).toFixed(1)}M` : value >= 1e3 ? `${(value / 1e3).toFixed(1)}k` : String(value);
+
+export function tokensLabel(cost: ReviewSummary["cost"]): string {
+	return `in ${compact(cost.tokens.input)} \u00b7 out ${compact(cost.tokens.output)} \u00b7 cached ${compact(cost.tokens.cacheRead)}`;
+}
+
+/** Glanceable outcome: confirmed findings, never a pass/fail verdict, which stays the operator's sign-off. */
+export function resultLabel(review: ReviewSummary): string {
+	if (["queued", "capturing"].includes(review.state)) return "waiting";
+	if (review.state === "running")
+		return review.findings.confirmed ? `${review.findings.confirmed} so far` : "reviewing";
+	if (review.state === "no-changes") return "no changes";
+	const { confirmed, responded } = review.findings;
+	if (!confirmed) return review.state === "completed" ? "none confirmed" : "--";
+	if (!responded) return `${confirmed} confirmed`;
+	if (responded === confirmed) return `${confirmed} answered`;
+	return `${confirmed - responded} of ${confirmed} open`;
+}
+
+export function whenLabel(at: number, now = Date.now()): string {
+	const minutes = Math.round((now - at) / 60000);
+	if (minutes < 1) return "now";
+	if (minutes < 60) return `${minutes}m ago`;
+	if (minutes < 24 * 60) return `${Math.round(minutes / 60)}h ago`;
+	return new Date(at).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+/** The queue at a glance: work by state and reviewer passes in use. */
+export function queueStrip(queue: Pick<ReviewQueue, "states" | "passes">): string {
+	const states = queue.states;
+	const done = (states.completed ?? 0) + (states.incomplete ?? 0) + (states["no-changes"] ?? 0);
+	return [
+		`${states.queued ?? 0} queued`,
+		`${(states.running ?? 0) + (states.capturing ?? 0)} running`,
+		`${done} done`,
+		`${(states.failed ?? 0) + (states.interrupted ?? 0)} failed`,
+		`passes ${queue.passes.running}/${queue.passes.limit}`,
+	].join("  \u00b7  ");
+}
+
+export function threadLines(messages: ReviewThreadMessage[]): string[] {
+	if (!messages.length) return ["No mail on this review yet. Milestones and comments appear here."];
+	return messages.flatMap((message) => [
+		`${message.senderName} \u00b7 ${new Date(message.at).toLocaleString()}`,
+		...message.body.split("\n"),
+		"",
+	]);
+}
+
+export function logLines(logs: ReviewAttemptLog[]): string[] {
+	if (!logs.length) return ["No reviewer has started yet."];
+	return logs.flatMap((log) => [
+		`${log.pass} (${log.kind}) \u00b7 ${log.state}${log.model ? ` \u00b7 ${log.model}` : ""}`,
+		...(log.entries.length
+			? log.entries.map(
+					(entry) => `  ${{ text: "say", tool: "run", result: "got", error: "err" }[entry.kind]} ${entry.text}`,
+				)
+			: ["  No transcript yet."]),
+		"",
+	]);
+}
+
+export function analyticsLines(data: ReviewAnalytics): string[] {
+	const per = (dollars: number, count: number) => (count ? dollarsLabel(dollars / count) : "--");
+	return [
+		"Assessment",
+		`Reviews: ${data.reviews} (${data.settled} settled)`,
+		`Total cost: ${dollarsLabel(data.dollars)}, ${per(data.dollars, data.reviews)} per review`,
+		`Confirmed findings: ${data.confirmed}, ${per(data.dollars, data.confirmed)} each`,
+		`Median review time: ${data.medianMinutes === null ? "--" : `${data.medianMinutes.toFixed(1)} min`}`,
+		"",
+		"By model",
+		...data.byModel.map(
+			(row) =>
+				`${row.model}: ${row.attempts} attempts, ${dollarsLabel(row.dollars)} (${per(row.dollars, row.attempts)} each), ${row.confirmed} confirmed (${per(row.dollars, row.confirmed)} each)${
+					Object.keys(row.severities).length
+						? `, ${Object.entries(row.severities)
+								.map(([severity, n]) => `${n} ${severity}`)
+								.join(" ")}`
+						: ""
+				}`,
+		),
+		"",
+		"By phase",
+		...data.byPhase.map(
+			(row) =>
+				`${row.kind}: ${row.attempts} attempts, ${dollarsLabel(row.dollars)} (${per(row.dollars, row.attempts)} each), ${row.attempts ? (row.minutes / row.attempts).toFixed(1) : "--"} min each`,
+		),
+		"",
+		"Recent reviews",
+		...data.recent.map(
+			(row) =>
+				`${new Date(row.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}  ${row.label.repository}  ${dollarsLabel(row.dollars)}  ${row.minutes === null ? row.state : `${row.minutes.toFixed(0)} min`}  ${row.confirmed} confirmed`,
+		),
+		"",
+		"Recorded primary-turn usage, not provider invoices. Findings count toward the model of the pass that reported them.",
+	];
 }
 
 export function sourceLines(source: ReviewSource): string[] {
@@ -84,10 +225,13 @@ export function costLabel(cost: ReviewSummary["cost"]): string {
 export function summaryLines(review: ReviewSummary): string[] {
 	return [
 		"Assessment",
+		`Change: ${review.label.repository} / ${refLabel(review)} ${changeLabel(review)}`.trimEnd(),
 		`Execution: ${review.state}${review.phase ? ` - ${review.phase.pass}` : ""}`,
+		`Elapsed: ${elapsedLabel(review)}${review.settledAt === null ? " so far" : ""}`,
 		`Coverage: ${review.passes ? `${review.passes.completed}/${review.passes.required} passes` : "not planned"}`,
-		`Findings: ${review.findings.confirmed} confirmed / ${review.findings.unresolved} unresolved`,
+		`Findings: ${review.findings.confirmed} confirmed / ${review.findings.unresolved} unresolved / ${review.findings.responded} answered`,
 		`Primary-turn cost: ${costLabel(review.cost)}`,
+		`Tokens: ${tokensLabel(review.cost)}`,
 		`Target: ${targetLabel(review.target)}`,
 		`Owner: ${review.ownerName}`,
 		`Priority: ${review.priority}`,

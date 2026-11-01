@@ -1,4 +1,4 @@
-import { appendFileSync, chmodSync, closeSync, createReadStream, existsSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, readlinkSync, realpathSync, renameSync, rmSync, statSync, unlinkSync, watch, writeFileSync, writeSync } from "node:fs";
+import { appendFileSync, chmodSync, closeSync, createReadStream, existsSync, fstatSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, readSync, readdirSync, readlinkSync, realpathSync, renameSync, rmSync, statSync, unlinkSync, watch, writeFileSync, writeSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, normalize, parse, posix, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { BrowserWindow, app, dialog, ipcMain, net, protocol, shell } from "electron";
@@ -4040,6 +4040,33 @@ function reviewRolePolicy(source, name, depth = "standard") {
 //#region components/code-review/src/capture.ts
 var DIFF = [...GIT_DIFF, "--no-renames"];
 var hash$1 = (value) => createHash("sha256").update(value).digest("hex");
+async function reviewLabel(change, repository, target, signal) {
+	const committed = target.kind !== "working-tree" && target.kind !== "staged";
+	const [branch, subject, commits] = await settledAll([
+		text$4(repository, [
+			"symbolic-ref",
+			"--short",
+			"-q",
+			"HEAD"
+		], { signal }).catch(() => ""),
+		committed ? change.git([
+			"log",
+			"-1",
+			"--format=%s",
+			change.headCommit
+		], { signal }) : Promise.resolve(null),
+		committed && change.baseCommit ? change.git([
+			"rev-list",
+			"--count",
+			`${change.baseCommit}..${change.headCommit}`
+		], { signal }) : Promise.resolve(null)
+	]);
+	return {
+		branch: branch || null,
+		subject: subject?.toString("utf8").trim() || null,
+		commits: commits ? Number(commits.toString("utf8").trim()) : null
+	};
+}
 function artifactDigest(artifact) {
 	return hash$1(JSON.stringify({
 		version: artifact.version,
@@ -4509,6 +4536,7 @@ async function captureReview(request, destination, signal) {
 			capturedAt: Date.now()
 		};
 		artifact.digest = artifactDigest(artifact);
+		artifact.label = await reviewLabel(change, repository, request.target, signal);
 		await writeFile(join(destination, "change.patch"), patch);
 		await writeFile(join(destination, "manifest.json"), `${JSON.stringify(artifact, null, 2)}\n`);
 		await change.close();
@@ -4920,8 +4948,28 @@ function withReviews(read) {
 	if (value === void 0) throw new Error("The session-state review store is unavailable.");
 	return value;
 }
+var SETTLED = [
+	"completed",
+	"incomplete",
+	"failed",
+	"cancelled",
+	"no-changes",
+	"interrupted"
+];
+var count = (value) => typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : 0;
 function reviewCost(db, review) {
-	const attempts = db.prepare("select result -> '$.usage.cost.total' as cost from review_attempts where review_id = ?").all(review);
+	const attempts = db.prepare("select result -> '$.usage.cost.total' as cost, result -> '$.usage' as usage from review_attempts where review_id = ?").all(review);
+	const tokens = {
+		input: 0,
+		output: 0,
+		cacheRead: 0
+	};
+	for (const row of attempts) {
+		const usage = row.usage === null ? void 0 : JSON.parse(row.usage);
+		tokens.input += count(usage?.input);
+		tokens.output += count(usage?.output);
+		tokens.cacheRead += count(usage?.cacheRead);
+	}
 	const reported = attempts.flatMap((row) => {
 		const cost = row.cost === null ? void 0 : JSON.parse(row.cost);
 		return typeof cost === "number" && Number.isFinite(cost) && cost >= 0 ? [cost] : [];
@@ -4930,7 +4978,8 @@ function reviewCost(db, review) {
 	return {
 		reportedDollars: Number.isFinite(total) && (reported.length || !attempts.length) ? total : null,
 		reportedAttempts: reported.length,
-		totalAttempts: attempts.length
+		totalAttempts: attempts.length,
+		tokens
 	};
 }
 function reviewSummary(db, actor, id) {
@@ -4942,10 +4991,27 @@ function reviewSummary(db, actor, id) {
 			completed: pass.questions.filter((question) => report?.coverage.some((entry) => entry.question === question.id && entry.state === "completed") && !validation?.report.coverageGaps.some((gap) => gap.pass === pass.id && gap.question === question.id)).length
 		}));
 		const phase = db.prepare("select kind, state, pass_id as pass from review_attempts where review_id = ? and generation = ? and state in ('starting', 'running', 'cleaning') order by created_at desc, rowid desc limit 1").get(job.id, job.generation);
+		const confirmed = findings.filter(({ validation }) => validation?.disposition === "confirmed");
+		const responded = confirmed.filter(({ decision }) => decision).length;
+		const settledAt = SETTLED.includes(job.state) ? db.prepare("select max(finished_at) as at from review_attempts where review_id = ?").get(job.id).at ?? job.updatedAt : null;
 		return {
 			id: job.id,
 			owner: job.owner,
 			ownerName: nameOf$1(db, job.owner),
+			label: {
+				repository: (job.artifact?.repository ?? job.request.cwd).split(/[\\/]/).at(-1) ?? "",
+				branch: job.artifact?.label?.branch ?? null,
+				head: job.artifact?.headCommit ?? null,
+				subject: job.artifact?.label?.subject ?? null,
+				commits: job.artifact?.label?.commits ?? null,
+				files: job.artifact?.changes.length ?? null
+			},
+			addressed: [
+				"completed",
+				"no-changes",
+				"cancelled"
+			].includes(job.state) && responded === confirmed.length,
+			settledAt,
 			summary: job.plan?.summary ?? null,
 			state: job.state,
 			phase: phase ?? null,
@@ -4970,8 +5036,9 @@ function reviewSummary(db, actor, id) {
 			cost: reviewCost(db, job.id),
 			findings: {
 				reported: findings.length,
-				confirmed: findings.filter(({ validation }) => validation?.disposition === "confirmed").length,
-				unresolved: findings.filter(({ validation }) => !validation || validation.disposition === "unresolved").length
+				confirmed: confirmed.length,
+				unresolved: findings.filter(({ validation }) => !validation || validation.disposition === "unresolved").length,
+				responded
 			},
 			approval: approval ? {
 				record: approval,
@@ -5006,15 +5073,38 @@ function reviewQueue(db, actor, options = {}) {
 		}
 		const filter = where.length ? `where ${where.join(" and ")}` : "";
 		const groups = db.prepare(`select state, count(*) as count from review_jobs ${filter} group by state`).all(...args);
-		const total = groups.reduce((sum, row) => sum + row.count, 0);
 		const states = Object.fromEntries(groups.map((row) => [row.state, row.count]));
+		const passes = {
+			running: db.prepare(`select count(*) as count from review_attempts where state in ('starting', 'running', 'cleaning') and review_id in (select id from review_jobs ${filter})`).get(...args).count,
+			limit: 8
+		};
+		const order = "case when state in ('capturing', 'running', 'cancelling') then 0 when state = 'queued' then 1 else 2 end, case when state = 'queued' then priority end desc, case when state = 'queued' then created_at end asc, case when state = 'queued' then rowid end asc, updated_at desc, rowid desc";
+		const visible = options.hideAddressed ? db.prepare(`select id from review_jobs ${filter} order by ${order}`).all(...args).map(({ id }) => reviewSummary(db, actor, id)).filter((summary) => !summary.addressed) : void 0;
+		const total = visible?.length ?? groups.reduce((sum, row) => sum + row.count, 0);
 		if (options.limit === void 0) return {
 			total,
 			states,
+			passes,
 			page: null
 		};
-		const order = "case when state in ('capturing', 'running', 'cancelling') then 0 when state = 'queued' then 1 else 2 end, case when state = 'queued' then priority end desc, case when state = 'queued' then created_at end asc, case when state = 'queued' then rowid end asc, updated_at desc, rowid desc";
 		let offset = options.offset ?? 0;
+		if (visible) {
+			if (options.around) {
+				const position = visible.findIndex((summary) => summary.id === options.around);
+				if (position >= 0) offset = Math.floor(position / options.limit) * options.limit;
+			}
+			const rows = visible.slice(offset, offset + options.limit);
+			return {
+				total,
+				states,
+				passes,
+				page: {
+					offset,
+					nextOffset: offset + rows.length < total ? offset + rows.length : null,
+					rows
+				}
+			};
+		}
 		if (options.around) {
 			const position = db.prepare(`select position from (select id, row_number() over (order by ${order}) - 1 as position from review_jobs ${filter}) where id = ?`).get(...args, options.around);
 			if (position) offset = Math.floor(position.position / options.limit) * options.limit;
@@ -5023,6 +5113,7 @@ function reviewQueue(db, actor, options = {}) {
 		return {
 			total,
 			states,
+			passes,
 			page: {
 				offset,
 				nextOffset: offset + rows.length < total ? offset + rows.length : null,
@@ -5031,7 +5122,6 @@ function reviewQueue(db, actor, options = {}) {
 		};
 	});
 }
-/** Capture reads project roles from the selected head tree; materialize just those files to compare without capturing. */
 /**
 * The selected head's project roles laid out as capture's full checkout has them: every tree entry that role loading
 * passes through (ancestors, linked directories, link chains) keeps its mode, and links keep their own text, so a link
@@ -5285,6 +5375,8 @@ function readReviewPart(db, actor, id, options = {}) {
 				};
 			}
 			case "findings": return page(reviewAssessment(db, actor, id).findings, options);
+			case "thread": return page(reviewThread(db, job.id), options);
+			case "log": return reviewLogs(db, job.id, options);
 			case "decisions": return page(reviewAssessment(db, actor, id).decisions, options);
 			case "coverage": {
 				const assessment = reviewAssessment(db, actor, id);
@@ -5302,6 +5394,159 @@ function readReviewPart(db, actor, id, options = {}) {
 			}
 			default: throw new Error("Unknown review part");
 		}
+	});
+}
+/** The review's mail thread: milestones the runtime posted and comments people added. */
+function reviewThread(db, review) {
+	return db.prepare("select seq, sender, body, at from thread_messages where thread_id = ? order by seq").all(`review:${review}`).map((message) => ({
+		...message,
+		senderName: nameOf$1(db, message.sender)
+	}));
+}
+/** Enough of a transcript's end to show what a pass is doing now; older entries stay in the full session file. */
+var LOG_TAIL_BYTES = 524288;
+function transcriptTail(file) {
+	let descriptor;
+	try {
+		descriptor = openSync(file, "r");
+	} catch {
+		return [];
+	}
+	try {
+		const size = fstatSync(descriptor).size;
+		const start = Math.max(0, size - LOG_TAIL_BYTES);
+		const buffer = Buffer.alloc(size - start);
+		readSync(descriptor, buffer, 0, buffer.length, start);
+		const lines = buffer.toString("utf8").split("\n");
+		if (start > 0) lines.shift();
+		const clip = (text) => text.length > 400 ? `${text.slice(0, 400)}\u2026` : text;
+		return lines.flatMap((line) => {
+			let entry;
+			try {
+				entry = JSON.parse(line);
+			} catch {
+				return [];
+			}
+			const message = entry.message;
+			if (entry.type !== "message" || !message) return [];
+			const at = entry.timestamp ? Date.parse(entry.timestamp) : null;
+			const content = Array.isArray(message.content) ? message.content : [];
+			if (message.role === "assistant") return content.flatMap((part) => {
+				if (part.type === "text" && typeof part.text === "string" && part.text.trim()) return [{
+					at,
+					kind: "text",
+					text: clip(part.text.trim())
+				}];
+				if (part.type === "toolCall") return [{
+					at,
+					kind: "tool",
+					text: clip(`${part.name}(${JSON.stringify(part.arguments ?? {})})`)
+				}];
+				return [];
+			});
+			if (message.role === "toolResult") {
+				const text = content.find((part) => part.type === "text")?.text;
+				return [{
+					at,
+					kind: message.isError ? "error" : "result",
+					text: clip(`${message.toolName}: ${typeof text === "string" ? text.trim().split("\n")[0] ?? "" : ""}`)
+				}];
+			}
+			return [];
+		});
+	} finally {
+		closeSync(descriptor);
+	}
+}
+/** Recent transcript of one attempt, or by default of every running attempt (the latest attempt when none runs). */
+function reviewLogs(db, review, options) {
+	const columns = "id, pass_id as pass, kind, state, model, session_file as sessionFile";
+	let rows;
+	if (options.attempt) {
+		const row = db.prepare(`select ${columns} from review_attempts where review_id = ? and id = ?`).get(review, options.attempt);
+		if (!row) throw new Error(`Unknown review attempt: ${options.attempt}`);
+		rows = [row];
+	} else {
+		rows = db.prepare(`select ${columns} from review_attempts where review_id = ? and state in ('starting', 'running', 'cleaning') order by created_at, rowid`).all(review);
+		if (!rows.length) rows = db.prepare(`select ${columns} from review_attempts where review_id = ? order by created_at desc, rowid desc limit 1`).all(review);
+	}
+	const limit = options.limit ?? 20;
+	return rows.map(({ id, sessionFile, ...row }) => ({
+		attempt: id,
+		...row,
+		entries: sessionFile ? transcriptTail(sessionFile).slice(-limit) : []
+	}));
+}
+/**
+* Cost and yield across the reviews an actor can see: by model, by phase and per review. Recorded primary-turn usage,
+* not provider invoices; confirmed findings are attributed to the model of the inspection that reported them.
+*/
+function reviewAnalytics(db, actor, options = {}) {
+	return snapshot(db, () => {
+		const summaries = reviewQueue(db, actor, {
+			cwd: options.cwd,
+			limit: Number.MAX_SAFE_INTEGER
+		}).page?.rows ?? [];
+		const byModel = /* @__PURE__ */ new Map();
+		const byPhase = /* @__PURE__ */ new Map();
+		const attemptModel = /* @__PURE__ */ new Map();
+		for (const summary of summaries) {
+			const attempts = db.prepare("select id, kind, model, result -> '$.usage.cost.total' as cost, created_at as createdAt, finished_at as finishedAt from review_attempts where review_id = ?").all(summary.id);
+			for (const attempt of attempts) {
+				const dollars = count(attempt.cost === null ? 0 : JSON.parse(attempt.cost));
+				const minutes = attempt.finishedAt ? (attempt.finishedAt - attempt.createdAt) / 6e4 : 0;
+				const model = attempt.model ?? "unknown";
+				attemptModel.set(attempt.id, model);
+				const forModel = byModel.get(model) ?? {
+					model,
+					attempts: 0,
+					dollars: 0,
+					minutes: 0,
+					confirmed: 0,
+					severities: {}
+				};
+				forModel.attempts++;
+				forModel.dollars += dollars;
+				forModel.minutes += minutes;
+				byModel.set(model, forModel);
+				const phase = byPhase.get(attempt.kind) ?? {
+					kind: attempt.kind,
+					attempts: 0,
+					dollars: 0,
+					minutes: 0
+				};
+				phase.attempts++;
+				phase.dollars += dollars;
+				phase.minutes += minutes;
+				byPhase.set(attempt.kind, phase);
+			}
+			for (const finding of reviewAssessment(db, actor, summary.id).findings) {
+				if (finding.validation?.disposition !== "confirmed") continue;
+				const forModel = byModel.get(attemptModel.get(finding.attempt) ?? "unknown");
+				if (!forModel) continue;
+				forModel.confirmed++;
+				forModel.severities[finding.finding.severity] = (forModel.severities[finding.finding.severity] ?? 0) + 1;
+			}
+		}
+		const durations = summaries.flatMap((summary) => summary.settledAt === null ? [] : [(summary.settledAt - summary.createdAt) / 6e4]).sort((a, b) => a - b);
+		return {
+			reviews: summaries.length,
+			settled: durations.length,
+			dollars: summaries.reduce((sum, summary) => sum + (summary.cost.reportedDollars ?? 0), 0),
+			confirmed: summaries.reduce((sum, summary) => sum + summary.findings.confirmed, 0),
+			medianMinutes: durations.length ? durations[Math.floor((durations.length - 1) / 2)] : null,
+			byModel: [...byModel.values()].sort((a, b) => b.dollars - a.dollars),
+			byPhase: [...byPhase.values()],
+			recent: summaries.slice().sort((a, b) => b.createdAt - a.createdAt).map((summary) => ({
+				id: summary.id,
+				label: summary.label,
+				state: summary.state,
+				createdAt: summary.createdAt,
+				minutes: summary.settledAt === null ? null : (summary.settledAt - summary.createdAt) / 6e4,
+				dollars: summary.cost.reportedDollars,
+				confirmed: summary.findings.confirmed
+			}))
+		};
 	});
 }
 function page(rows, options) {
@@ -6716,6 +6961,14 @@ var ReviewOperationSchema = Type.Union([
 		owner: text$1
 	}, object$2),
 	Type.Object({
+		action: Type.Literal("comment"),
+		review: text$1,
+		body: Type.String({
+			minLength: 1,
+			pattern: "\\S"
+		})
+	}, object$2),
+	Type.Object({
 		action: Type.Literal("finding"),
 		review: text$1,
 		revision: Type.Integer({ minimum: 0 }),
@@ -6835,6 +7088,9 @@ function openReviews(path, commands) {
 			async queue(options) {
 				return store((db) => reviewQueue(db, OPERATOR, options));
 			},
+			async analytics(request) {
+				return store((db) => reviewAnalytics(db, OPERATOR, request));
+			},
 			async read(request) {
 				return store((db) => readReviewPart(db, OPERATOR, request.review, request));
 			},
@@ -6871,7 +7127,8 @@ function openReviews(path, commands) {
 					"priority",
 					"reassign",
 					"extend",
-					"finding"
+					"finding",
+					"comment"
 				].includes(operation.action)) throw new Error("Use the capture preview to enqueue, or the browser to sign off");
 				return mutate(input.attempt, operation);
 			},
@@ -11987,6 +12244,7 @@ function wireIntegrations(options) {
 function wireReviews(api) {
 	for (const method of [
 		"queue",
+		"analytics",
 		"read",
 		"source",
 		"freshness",

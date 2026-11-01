@@ -2,6 +2,9 @@ import { type Static, type TSchema, Type } from "typebox";
 import { Value } from "typebox/value";
 import type { ChangeRegion } from "./types.js";
 
+/** The operator's chosen bound on concurrent reviewer passes; reviews themselves run one at a time. */
+export const REVIEW_PASS_CONCURRENCY = 8;
+
 const text = Type.String({ minLength: 1, pattern: "\\S" });
 const object = { additionalProperties: false } as const;
 const question = Type.Object({ id: text, question: text, verification: text }, object);

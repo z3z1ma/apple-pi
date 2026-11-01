@@ -3,6 +3,7 @@ let electron = require("electron");
 var api = {
 	reviews: {
 		queue: (request) => electron.ipcRenderer.invoke("reviews:queue", request),
+		analytics: (request) => electron.ipcRenderer.invoke("reviews:analytics", request),
 		read: (request) => electron.ipcRenderer.invoke("reviews:read", request),
 		source: (request) => electron.ipcRenderer.invoke("reviews:source", request),
 		freshness: (request) => electron.ipcRenderer.invoke("reviews:freshness", request),

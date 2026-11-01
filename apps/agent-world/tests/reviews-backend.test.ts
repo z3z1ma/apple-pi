@@ -75,6 +75,11 @@ test("Workplace previews, queues, reads retained source and commits browser appr
 	});
 	expect(await api.freshness({ review: job.id })).toMatchObject({ requestedTarget: "changed", checkout: "changed" });
 	await expect(api.manage({ attempt: "forged", operation: { action: "approve" } as never })).rejects.toThrow();
+	await api.manage({ attempt: "comment", operation: { action: "comment", review: job.id, body: "From the operator" } });
+	expect(await api.read({ review: job.id, part: "thread", limit: 10 })).toMatchObject({
+		page: { rows: expect.arrayContaining([expect.objectContaining({ body: "From the operator" })]) },
+	});
+	expect(await api.analytics({ cwd })).toMatchObject({ reviews: 1, settled: 1 });
 	const pageSession = await api.signOff({ review: job.id });
 	const html = await (await fetch(pageSession.url)).text();
 	const page = JSON.parse(

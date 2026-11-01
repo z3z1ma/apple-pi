@@ -30,6 +30,8 @@ import type {
 const api: AgentWorldApi = {
 	reviews: {
 		queue: (request) => ipcRenderer.invoke("reviews:queue", request) as ReturnType<AgentWorldApi["reviews"]["queue"]>,
+		analytics: (request) =>
+			ipcRenderer.invoke("reviews:analytics", request) as ReturnType<AgentWorldApi["reviews"]["analytics"]>,
 		read: (request) => ipcRenderer.invoke("reviews:read", request) as ReturnType<AgentWorldApi["reviews"]["read"]>,
 		source: (request) =>
 			ipcRenderer.invoke("reviews:source", request) as ReturnType<AgentWorldApi["reviews"]["source"]>,

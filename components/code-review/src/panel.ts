@@ -11,7 +11,7 @@ import {
 	wrapTextWithAnsi,
 } from "@earendil-works/pi-tui";
 import { createViewerKeys, type ViewerKeybindings, type ViewerKeys } from "../../shared/src/viewer-keys.js";
-import { approvalLabel, costLabel, targetLabel } from "./presentation.js";
+import { changeLabel, dollarsLabel, elapsedLabel, queueStrip, refLabel, resultLabel } from "./presentation.js";
 import type { ReviewQueue, ReviewSummary } from "./results.js";
 
 export interface ReviewTheme {
@@ -25,6 +25,7 @@ export type ReviewPanelSource = (options: {
 	around?: string;
 	detailLimit: number;
 	detailOffset: number;
+	hideAddressed: boolean;
 }) => {
 	queue: ReviewQueue;
 	selected?: string;
@@ -124,7 +125,8 @@ export class CaptureConfirmation implements Component {
 
 export class ReviewPanel implements Component {
 	focused = false;
-	private data: ReviewQueue = { total: 0, states: {}, page: null };
+	private data: ReviewQueue = { total: 0, states: {}, passes: { running: 0, limit: 0 }, page: null };
+	private hideAddressed = false;
 	private error: string | undefined;
 	private selected: string | undefined;
 	private pageSize = 0;
@@ -179,6 +181,7 @@ export class ReviewPanel implements Component {
 				offset: this.offset,
 				detailLimit: this.detailRows,
 				detailOffset: keepSelection ? this.detailOffset : 0,
+				hideAddressed: this.hideAddressed,
 				...(keepSelection && this.selected ? { around: this.selected } : {}),
 			});
 			this.data = view.queue;
@@ -214,7 +217,10 @@ export class ReviewPanel implements Component {
 			this.actions.view(matchesKey(data, "shift+tab") ? -1 : 1);
 			return;
 		}
-		if (matchesKey(data, Key.enter)) this.focusDetail = !this.focusDetail;
+		if (matchesKey(data, "h")) {
+			this.hideAddressed = !this.hideAddressed;
+			this.refresh();
+		} else if (matchesKey(data, Key.enter)) this.focusDetail = !this.focusDetail;
 		else if (matchesKey(data, "]") || matchesKey(data, "[")) this.page(matchesKey(data, "]") ? 1 : -1);
 		else if (matchesKey(data, Key.pageDown) || matchesKey(data, Key.pageUp)) {
 			const direction = matchesKey(data, Key.pageDown) ? 1 : -1;
@@ -233,7 +239,7 @@ export class ReviewPanel implements Component {
 		if (event.type === "press" && event.button === "left") {
 			this.focusDetail = !inMaster;
 			if (inMaster && event.y >= this.masterTop && event.y < this.masterTop + this.masterRows)
-				this.select(Math.floor((event.y - this.masterTop) / 4));
+				this.select(event.y - this.masterTop);
 			this.tui.requestRender();
 			return { focus: true };
 		}
@@ -242,20 +248,21 @@ export class ReviewPanel implements Component {
 
 	render(width: number): string[] {
 		const height = Math.max(1, Math.floor(this.tui.terminal.rows * 0.8));
-		const fullKeys = "Tab/Shift+Tab view  Enter pane  a actions  arrows move  [ ] page  Esc editor  q close";
-		const keys =
-			width >= fullKeys.length + 4 ? [fullKeys] : ["Tab/Shift+Tab view  Enter pane", "a actions  [ ] page  q close"];
-		const chrome = 5 + keys.length;
+		const hide = this.hideAddressed ? "h show addressed" : "h hide addressed";
+		const fullKeys = `Tab view  Enter pane  a actions  ${hide}  [ ] page  Esc editor  q close`;
+		const keys = width >= fullKeys.length + 4 ? [fullKeys] : ["Tab view  Enter pane  a actions", `${hide}  q close`];
+		// Frame, strip and rules; the narrow layout adds a rule between queue and evidence.
+		const chrome = (width >= 100 ? 5 : 6) + keys.length;
 		if (width < Math.max(...keys.map((line) => line.length)) + 4 || height < chrome + 5)
 			return [truncateToWidth("Reviews: enlarge terminal; q closes", Math.max(0, width), "")];
 		const previousDetailRows = this.detailRows;
 		this.wide = width >= 100;
 		this.bodyRows = height - chrome;
-		this.masterRows = this.wide ? this.bodyRows : Math.max(4, Math.floor(this.bodyRows / 3 / 4) * 4);
+		this.masterRows = this.wide ? this.bodyRows : Math.max(3, Math.floor(this.bodyRows / 3));
 		this.detailRows = this.wide ? this.bodyRows : this.bodyRows - this.masterRows;
-		this.masterWidth = this.wide ? Math.floor((width - 3) * 0.4) : width - 2;
-		this.masterTop = this.wide ? 3 : 2;
-		const size = Math.max(1, Math.floor(this.masterRows / 4));
+		this.masterWidth = this.wide ? Math.floor((width - 3) * 0.55) : width - 2;
+		this.masterTop = 3;
+		const size = this.masterRows;
 		if (size !== this.pageSize || this.detailRows !== previousDetailRows) {
 			this.pageSize = size;
 			this.refresh();
@@ -295,22 +302,22 @@ export class ReviewPanel implements Component {
 			: "no evidence";
 		const detailLabel = `${this.focusDetail && this.focused ? "> " : ""}${this.detailTitle}  ${this.selected?.slice(-8) ?? ""} | ${position}`;
 		const detailRule = rule(this.theme, detailWidth, detailLabel, this.focused && this.focusDetail);
+		const strip = frame(
+			this.theme.fg("muted", ` ${queueStrip(this.data)}${this.hideAddressed ? "  \u00b7  addressed hidden" : ""}`),
+		);
 		if (!this.wide)
 			return [
 				top,
+				strip,
 				edge("\u251c") + queueRule + edge("\u2524"),
 				...master.map(frame),
 				edge("\u251c") + detailRule + edge("\u2524"),
 				...detail.map(frame),
 				...bottom,
 			];
-		const states = Object.entries(this.data.states)
-			.filter(([, count]) => count)
-			.map(([state, count]) => `${count} ${state}`)
-			.join("  \u00b7  ");
 		return [
 			top,
-			frame(this.theme.fg("muted", ` ${states || "Captured assessments and their evidence"}`)),
+			strip,
 			edge("\u251c") + queueRule + edge("\u252c") + detailRule + edge("\u2524"),
 			...master.map((line, index) => edge("\u2502") + line + edge("\u2502") + detail[index] + edge("\u2502")),
 			...bottom,
@@ -359,34 +366,37 @@ export class ReviewPanel implements Component {
 		return this.theme.fg("muted", label[1]!) + this.theme.fg(color, label[2]!);
 	}
 
+	/** One line per review: what changed on the left, elapsed, cost and outcome in fixed columns on the right. */
 	private master(width: number): string[] {
 		const lines: string[] = [];
+		const now = Date.now();
 		for (const review of this.data.page?.rows ?? []) {
 			const selected = review.id === this.selected;
 			const style = stateStyle(review.state);
-			const row = (text: string, color: string, bold = false) => {
-				const clipped = pad(` ${oneLine(text)}`, width);
-				const painted = this.theme.fg(color, bold ? this.theme.bold(clipped) : clipped);
-				return selected ? this.theme.bg("selectedBg", painted) : painted;
-			};
+			const right =
+				width >= 70
+					? ` ${elapsedLabel(review, now).padStart(7)}  ${dollarsLabel(review.cost.reportedDollars).padStart(6)}  ${pad(resultLabel(review), 17)}`
+					: ` ${pad(resultLabel(review), Math.min(17, Math.floor(width / 2)))}`;
+			const room = Math.max(0, width - visibleWidth(right));
+			const state = ["completed", "no-changes"].includes(review.state) ? "" : `${review.state}  `;
+			const left = pad(
+				`${selected ? ">" : " "} ${style.icon} ${state}${oneLine(`${review.label.repository} / ${refLabel(review)}  ${changeLabel(review)}`)}`,
+				room,
+			);
+			const painted =
+				this.theme.fg(review.addressed ? "muted" : style.color, selected ? this.theme.bold(left) : left) +
+				this.theme.fg(review.findings.confirmed > review.findings.responded ? "warning" : "muted", right);
+			lines.push(selected ? this.theme.bg("selectedBg", painted) : painted);
+		}
+		if (!lines.length)
 			lines.push(
-				row(
-					`${selected ? ">" : " "} ${style.icon} ${review.state}${review.phase ? `: ${review.phase.pass}` : ""}`,
-					style.color,
-					true,
-				),
-				row(`  ${review.cwd.split(/[\\/]/).at(-1)}: ${targetLabel(review.target)} | ${review.ownerName}`, "text"),
-				row(
-					`  ${review.passes ? `${review.passes.completed}/${review.passes.required} passes` : review.state === "no-changes" ? "no reviewers" : "not planned"} | ${review.findings.confirmed} confirmed | ${costLabel(review.cost)}`,
-					review.findings.confirmed ? "warning" : "muted",
-				),
-				row(
-					`  ${review.findings.unresolved} unresolved | ${approvalLabel(review)}`,
-					review.findings.unresolved ? "warning" : "muted",
+				...wrapTextWithAnsi(
+					this.hideAddressed
+						? " Every review is addressed. Press h to show them."
+						: " No recorded reviews. Press a to capture one.",
+					width,
 				),
 			);
-		}
-		if (!lines.length) lines.push(...wrapTextWithAnsi(" No recorded reviews. Press a to capture one.", width));
 		return Array.from({ length: this.masterRows }, (_, index) => pad(lines[index] ?? "", width));
 	}
 
