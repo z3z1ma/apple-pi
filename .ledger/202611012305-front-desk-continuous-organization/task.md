@@ -30,8 +30,8 @@ Each increment is committed, activated (runtime restart, app relaunch) and usabl
 ## Current State
 
 - Done: 1 dispatch posture (5445637e), 2 on call (5445637e), 3 durable schedules (7a8e15f5), 4 desk + 5 Threads/Activity/side panel (196f64d5), 6 watchdog role (da8f6225), Command-K switcher (ed6344a7).
-- In progress: 7 external threads (Fiona Andreou, brief `external-threads.md`). Runtime restart waits for her commit: the live runtime runs the working tree.
-- Next: 8 channel charters (runtime listener + charter on channels), activation.
+- Done: 7 external threads (Fiona Andreou, 75d1ac4e; fake-source proof; live real-PR check blocked: no open PR, gh account cannot push), 8 channel charters (0a72964c).
+- Activated: runtime restarted on 0a72964c (schema 43), Agent World relaunched. Existing sessions pick up posture/on-call after a reload.
 - Dropped: 9 Inline & Spill. It saves tokens at the cost of extra reads; the operator ranked outcomes over cost, so full bodies stay.
 
 ## Outcome
