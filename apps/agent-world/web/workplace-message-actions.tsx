@@ -15,6 +15,7 @@ import { type QuotedMessage, quote } from "./overlay/conversation/quote.js";
 import { Markdown } from "./overlay/conversation/transcript.js";
 import { useWorkplaceMenu } from "./workplace-context-menu.js";
 import { Icon } from "./workplace-icon.js";
+import { later, savedKey, useLater } from "./workplace-later.js";
 import { destinations, type Item, Picker, type SwitchTarget } from "./workplace-switcher.js";
 import "./workplace-message-actions.css";
 
@@ -43,12 +44,15 @@ export function ActionableMessage({
 	message,
 	onReply,
 	extra = [],
+	origin,
 	className,
 	children,
 	...rest
 }: {
 	message: QuotedMessage;
 	onReply?: (message: QuotedMessage) => void;
+	/** Where the message lives, so it can be saved for later and opened again. */
+	origin?: SwitchTarget;
 	extra?: MessageAction[];
 	className: string;
 	children: ReactNode;
@@ -58,6 +62,13 @@ export function ActionableMessage({
 	const forward = sending?.forward;
 	const handOff = sending?.handOff;
 	const element = useRef<HTMLElement>(null);
+	const savedList = useLater();
+	const saved = origin ? savedList.some((item) => item.key === savedKey(origin, message)) : false;
+	const toggleSaved = () => {
+		if (!origin) return;
+		if (saved) later.remove(savedKey(origin, message));
+		else later.save(origin, message);
+	};
 	const chosen = () => {
 		const part = selectionIn(element.current);
 		return part ? { ...message, text: part } : message;
@@ -68,6 +79,7 @@ export function ActionableMessage({
 			...(onReply ? [{ label: "Reply", onSelect: () => onReply(target) }] : []),
 			...(forward ? [{ label: "Forward\u2026", onSelect: () => forward(target) }] : []),
 			...(handOff ? [{ label: "Ask the front desk to handle", onSelect: () => handOff(target) }] : []),
+			...(origin ? [{ label: saved ? "Remove from Later" : "Save for later", onSelect: toggleSaved }] : []),
 			{
 				label: target === message ? "Copy text" : "Copy selection",
 				onSelect: () => void navigator.clipboard.writeText(target.text),
@@ -96,6 +108,17 @@ export function ActionableMessage({
 				{forward && (
 					<button type="button" aria-label="Forward" title="Forward" onClick={() => forward(chosen())}>
 						<Icon name="forward" />
+					</button>
+				)}
+				{origin && (
+					<button
+						type="button"
+						aria-label={saved ? "Remove from Later" : "Save for later"}
+						aria-pressed={saved}
+						title={saved ? "Remove from Later" : "Save for later"}
+						onClick={toggleSaved}
+					>
+						<Icon name="bookmark" />
 					</button>
 				)}
 				<button

@@ -234,3 +234,9 @@
 	width: 14px;
 	height: 14px;
 }
+.wp-app .wp-message-actions button[aria-pressed="true"] {
+	color: var(--wp-accent);
+}
+.wp-message-actions button[aria-pressed="true"] .wp-icon {
+	fill: currentColor;
+}

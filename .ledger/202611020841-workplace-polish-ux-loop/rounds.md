@@ -69,3 +69,7 @@ Open: the desk keeps a separate row for search / Catch up / Read latest / Action
 
 - U10 Forwarding reached one destination at a time; sending the same context to several agents took repeated dialogs. **Fixed:** Forward collects destinations as chips (Enter adds, Enter on an empty field or the Forward button sends, Backspace removes the last), as Slack's forward does; a toast reports one line for all.
 - V12 A quoted desk message read "#desk". **Fixed:** "the front desk".
+
+## Round 10: coming back to things
+
+- U11 Nothing let the operator park a message to act on later; with many agents reporting, important lines scroll away. **Fixed:** Save for later (bookmark on hover or the message menu) on every DM, channel and thread message; a Later view in the sidebar (and in the switcher) lists them newest first, opens each where it was, and Done removes it. Kept on the device.

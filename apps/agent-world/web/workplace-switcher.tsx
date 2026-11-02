@@ -5,7 +5,7 @@ import { channelName } from "./workplace-names.js";
 import { PersonAvatar } from "./workplace-people.js";
 
 export type SwitchTarget =
-	| { kind: "view"; view: "desk" | "threads" | "activity" }
+	| { kind: "view"; view: "desk" | "threads" | "activity" | "later" }
 	| { kind: "dm"; id: string }
 	| { kind: "channel"; id: string }
 	| { kind: "thread"; id: string; title: string };
@@ -16,7 +16,7 @@ export type Item = {
 	detail: string;
 	target: SwitchTarget;
 	person?: string;
-	icon?: "desk" | "threads" | "bell";
+	icon?: "desk" | "threads" | "bell" | "bookmark";
 };
 
 function items(world: WorldSnapshot): Item[] {
@@ -41,6 +41,13 @@ function items(world: WorldSnapshot): Item[] {
 			detail: "What needs you",
 			target: { kind: "view", view: "activity" },
 			icon: "bell",
+		},
+		{
+			key: "v:later",
+			label: "Later",
+			detail: "Messages you saved",
+			target: { kind: "view", view: "later" },
+			icon: "bookmark",
 		},
 	];
 	const people: Item[] = [

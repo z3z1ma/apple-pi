@@ -19,6 +19,7 @@ import { Icon } from "./workplace-icon.js";
 import { useMentions } from "./workplace-mentions.js";
 import { ActionableMessage } from "./workplace-message-actions.js";
 import { PersonAvatar, PersonName } from "./workplace-people.js";
+import type { SwitchTarget } from "./workplace-switcher.js";
 
 const api = window.agentWorld;
 const attempts = new Map<string, { id: string; label: string; body?: string; result?: CommunicationResult }>();
@@ -583,6 +584,9 @@ export function ThreadPane({
 						unreadAfter={channel ? unreadAfter : undefined}
 						followLink={(author, href, file) => void followLink(author, href, file)}
 						where={channel ? place : (page.thread.name ?? undefined)}
+						origin={
+							channel ? { kind: "channel", id } : { kind: "thread", id, title: page.thread.name ?? "Conversation" }
+						}
 						reply={
 							!locked && page.thread.permissions.post && !page.thread.archived
 								? (message) => {
@@ -859,11 +863,13 @@ function ThreadMessages({
 	followLink,
 	where,
 	reply,
+	origin,
 }: {
 	world: WorldSnapshot;
 	thread: ConversationInfo;
 	messages: ConversationMessage[];
 	channel: boolean;
+	origin: SwitchTarget;
 	where?: string;
 	reply?: (message: QuotedMessage) => void;
 	canPin: boolean;
@@ -903,6 +909,7 @@ function ThreadMessages({
 						where,
 					}}
 					onReply={reply}
+					origin={origin}
 					extra={[
 						{
 							label: "Copy reference",

@@ -32,6 +32,7 @@ const paths = {
 	copy: "M9 9h11v11H9V9Z M15 9V4H4v11h5",
 	more: "M7 12a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z M13 12a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z M19 12a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z",
 	thread: "M4 5h16v10H9l-5 4V5Z",
+	bookmark: "M6 3h12v18l-6-4-6 4V3Z",
 };
 
 export function Icon({ name }: { name: keyof typeof paths }) {

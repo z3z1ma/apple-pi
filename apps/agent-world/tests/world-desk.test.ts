@@ -544,6 +544,29 @@ test("a DM draft survives a reload with a pencil in the sidebar; Alt + arrows mo
 	}
 });
 
+test("a message saved for later waits in Later and opens where it was", { timeout: 60_000 }, async () => {
+	const { page, errors } = await openDesk("light");
+	try {
+		const message = page.locator(".wp-message").filter({ hasText: "Recorded as" }).first();
+		await message.waitFor();
+		await message.hover();
+		await message.getByRole("button", { name: "Save for later" }).click();
+		await page.getByRole("button", { name: /^Later/ }).click();
+		const saved = page.getByRole("region", { name: "Later" });
+		await saved.getByText(/Recorded as Add GitHub PR threads/).waitFor();
+		await shot(page, "later-light");
+		await saved.getByText(/Recorded as Add GitHub PR threads/).click();
+		await page.getByRole("heading", { name: "Front desk", exact: true }).waitFor();
+		await page.reload();
+		await page.getByRole("button", { name: /^Later/ }).click();
+		await saved.getByRole("button", { name: "Done" }).click();
+		await saved.getByText("Nothing saved").waitFor();
+		expect(errors).toEqual([]);
+	} finally {
+		await page.close();
+	}
+});
+
 test("Without a desk, Chat offers to open one with the root coordinator", { timeout: 60_000 }, async () => {
 	const { page, errors } = await openDesk("light", 1100, false);
 	try {

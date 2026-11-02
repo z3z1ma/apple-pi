@@ -76,6 +76,7 @@ function dmMessageFor(id: string, where: string, canReply: boolean) {
 				className={className}
 				data-entry={entry}
 				message={{ author: message.author, at: message.at, text: message.text, where }}
+				origin={{ kind: "dm", id }}
 				onReply={canReply && message.text.trim() ? (quoted) => conversationPanel.setReplyTo(id, quoted) : undefined}
 			>
 				{children}
@@ -420,7 +421,7 @@ function Chat({
 	const sectionStore = useSections();
 	const [naming, setNaming] = useState<(name: string) => void>();
 	const [selection, setSelection] = useState<{
-		kind: "dm" | "channel" | "desk" | "threads" | "activity";
+		kind: "dm" | "channel" | "desk" | "threads" | "activity" | "later";
 		id: string;
 	}>();
 	const view = selection?.kind ?? "desk";
@@ -896,6 +897,7 @@ function Chat({
 									openThread={showThread}
 									openDM={openDM}
 									markAllRead={() => void markAllRead()}
+									go={go}
 								/>
 							)
 						)}

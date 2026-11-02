@@ -7,8 +7,11 @@ import type {
 	WorkplaceTaskHistory,
 	WorldSnapshot,
 } from "../src/world.js";
+import { plainLine } from "./overlay/conversation/quote.js";
 import { Icon } from "./workplace-icon.js";
+import { later, useLater } from "./workplace-later.js";
 import { PersonAvatar, PersonName, presenceOf, sessionStatus } from "./workplace-people.js";
+import type { SwitchTarget } from "./workplace-switcher.js";
 import { ThreadPane } from "./workplace-thread.js";
 import "./workplace-desk.css";
 
@@ -979,7 +982,7 @@ export function ChannelHeader({
 	);
 }
 
-export type OrganizationKind = "desk" | "threads" | "activity";
+export type OrganizationKind = "desk" | "threads" | "activity" | "later";
 
 /** The organization views at the top of the Chat sidebar. */
 export function ChatNav({
@@ -996,17 +999,24 @@ export function ChatNav({
 	needsYou: number;
 }) {
 	const live = (world.workplace?.tasks ?? []).filter((task) => task.thread && task.assignees.length).length;
-	const item = (kind: OrganizationKind, label: string, icon: "desk" | "threads" | "bell", count: number) => (
+	const saved = useLater().length;
+	const quiet = (kind: OrganizationKind) => kind === "threads" || kind === "later";
+	const item = (
+		kind: OrganizationKind,
+		label: string,
+		icon: "desk" | "threads" | "bell" | "bookmark",
+		count: number,
+	) => (
 		<button
 			type="button"
 			className="wp-nav-item"
 			aria-pressed={view === kind}
-			data-unread={count > 0 && kind !== "threads"}
+			data-unread={count > 0 && !quiet(kind)}
 			onClick={() => select(kind)}
 		>
 			<Icon name={icon} />
 			<span>{label}</span>
-			{count > 0 && <b className={kind === "threads" ? "wp-nav-count" : "wp-unread-count"}>{count}</b>}
+			{count > 0 && <b className={quiet(kind) ? "wp-nav-count" : "wp-unread-count"}>{count}</b>}
 		</button>
 	);
 	return (
@@ -1014,6 +1024,7 @@ export function ChatNav({
 			{item("desk", "Front desk", "desk", deskUnread)}
 			{item("threads", "Threads", "threads", live)}
 			{item("activity", "Activity", "bell", needsYou)}
+			{item("later", "Later", "bookmark", saved)}
 		</nav>
 	);
 }
@@ -1029,6 +1040,7 @@ export function OrganizationView({
 	openThread,
 	openDM,
 	markAllRead,
+	go,
 }: {
 	view: string;
 	world: WorldSnapshot;
@@ -1036,6 +1048,7 @@ export function OrganizationView({
 	needsYou: ActivityItem[];
 	unseen: Set<string>;
 	markAllRead: () => void;
+	go: (target: SwitchTarget) => void;
 	selectedThread?: string;
 	openThread: (thread: OpenThread) => void;
 	openDM: (id: string) => void;
@@ -1053,6 +1066,7 @@ export function OrganizationView({
 		);
 	if (view === "threads") return <ThreadsView world={world} selectedThread={selectedThread} openThread={openThread} />;
 	if (view === "activity") return <ActivityView items={needsYou} unseen={unseen} markAllRead={markAllRead} />;
+	if (view === "later") return <LaterView go={go} />;
 	return (
 		<div className="wp-empty">
 			<span className="wp-empty-icon">
@@ -1061,6 +1075,53 @@ export function OrganizationView({
 			<h1>A direct line to your organization</h1>
 			<p>The selected person or channel is no longer available.</p>
 		</div>
+	);
+}
+
+/** Messages the operator saved to come back to, newest first, each opening where it was. */
+function LaterView({ go }: { go: (target: SwitchTarget) => void }) {
+	const saved = useLater();
+	return (
+		<section className="wp-activity-view wp-later-view" aria-label="Later">
+			<header className="wp-conversation-header">
+				<div>
+					<h1>Later</h1>
+					<p>Messages you saved to come back to. Save one from its menu or the bookmark on hover.</p>
+				</div>
+			</header>
+			{saved.length ? (
+				<ul className="wp-later-list">
+					{saved.map((item) => (
+						<li key={item.key}>
+							<button type="button" className="wp-later-open" onClick={() => go(item.origin)}>
+								<span className="wp-later-meta">
+									<strong>{item.author}</strong>
+									{item.where ? ` \u00b7 ${item.where}` : ""}
+									<time dateTime={new Date(item.at).toISOString()}>{ago(item.at)}</time>
+								</span>
+								<span className="wp-later-text">{plainLine(item.text)}</span>
+							</button>
+							<button
+								type="button"
+								className="wp-later-done"
+								title="Done: remove from Later"
+								onClick={() => later.remove(item.key)}
+							>
+								Done
+							</button>
+						</li>
+					))}
+				</ul>
+			) : (
+				<div className="wp-empty">
+					<span className="wp-empty-icon">
+						<Icon name="bookmark" />
+					</span>
+					<h1>Nothing saved</h1>
+					<p>Save a message for later from its hover bar, and it waits here until you mark it done.</p>
+				</div>
+			)}
+		</section>
 	);
 }
 
