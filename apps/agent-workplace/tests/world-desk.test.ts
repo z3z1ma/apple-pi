@@ -314,7 +314,18 @@ async function openDesk(appearance: "light" | "dark", width = 1440, desk = true)
 							polledAt: source === "jira" ? null : now - 40_000,
 							error: null,
 						})),
+						rules: (w.rules ?? []).map((rule: any, index: number) => ({
+							id: `rule-${index}`,
+							person: null,
+							by: "operator",
+							createdAt: now,
+							...rule,
+						})),
 					};
+				},
+				setOutsideRule: async (request: any) => {
+					w.rules = [...(w.rules ?? []), structuredClone(request)];
+					return { ok: true, stage: "applied" };
 				},
 				setOutsideModes: async (modes: any) => {
 					w.modes = { ...(w.modes ?? {}), ...modes };
@@ -598,7 +609,15 @@ test("Activity lists outside work by conversation with the desk's decision, and 
 		await vi.waitFor(async () =>
 			expect(await page.evaluate(() => (window as any).opened)).toBe("https://github.com/acme/api/pull/12"),
 		);
+		await rows.first().locator("button").click({ button: "right" });
+		await page.getByRole("menuitem", { name: "Hide acme/api" }).click();
+		await vi.waitFor(async () =>
+			expect(await page.evaluate(() => (window as any).rules)).toEqual([
+				{ match: { place: "github:acme/api" }, effect: "hide", note: "You hid acme/api" },
+			]),
+		);
 		await outside.getByRole("button", { name: "Sources" }).click();
+		await outside.getByRole("list", { name: "Rules" }).getByText("You hid acme/api").waitFor();
 		await outside.getByRole("combobox", { name: "jira mode" }).selectOption("direct");
 		await vi.waitFor(async () => expect(await page.evaluate(() => (window as any).modes)).toEqual({ jira: "direct" }));
 		await shot(page, "outside-sources-light");

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import type { OutsideItem, OutsideMode, OutsideRead, OutsideSource, WorldSnapshot } from "../src/world.js";
+import type { OutsideItem, OutsideMode, OutsideRead, OutsideRule, OutsideSource, WorldSnapshot } from "../src/world.js";
+import { useWorkplaceMenu } from "./workplace-context-menu.js";
 import { Icon } from "./workplace-icon.js";
 import "./workplace-outside.css";
 
@@ -53,6 +54,41 @@ const ago = (at: number) => {
 };
 
 const api = window.agentWorkplace;
+
+const EFFECTS: Record<OutsideRule["effect"], string> = {
+	hide: "Hidden",
+	quiet: "Not triaged",
+	triage: "Always triaged",
+	route: "Sent to",
+};
+
+/** Where a conversation lives, as the runtime's rules name it (`activity.ts` `placeOf`). */
+function placeOf(conversation: string): string {
+	const github = /^github:([^#:]+)/.exec(conversation);
+	if (github) return `github:${github[1]}`;
+	const jira = /^jira:([A-Z][A-Z0-9_]*)-/.exec(conversation);
+	if (jira) return `jira:${jira[1]}`;
+	const slack = /^slack:([^:]+)/.exec(conversation);
+	return slack ? `slack:${slack[1]}` : conversation;
+}
+
+const placeLabel = (item: OutsideItem) => {
+	const place = placeOf(item.conversation);
+	if (place.startsWith("github:")) return place.slice(7);
+	if (place.startsWith("jira:")) return `Jira ${place.slice(5)}`;
+	return item.title.split(":")[0]!;
+};
+
+const ruleText = (rule: OutsideRule) =>
+	[
+		rule.match.source && SOURCES.find((source) => source.id === rule.match.source)?.label,
+		rule.match.kind && (KINDS[rule.match.kind] ?? rule.match.kind),
+		rule.match.place,
+		rule.match.actor && `from ${rule.match.actor}`,
+		rule.match.words && `"${rule.match.words}"`,
+	]
+		.filter(Boolean)
+		.join(" \u00b7 ");
 
 /** Items about the same PR, issue or Slack thread, newest first, shown once with how many more there are. */
 function conversations(items: OutsideItem[]) {
@@ -140,6 +176,31 @@ export function OutsideActivity({ world }: { world: WorldSnapshot }) {
 							</span>
 						</label>
 					))}
+					{read.rules.length > 0 && (
+						<ul className="wp-outside-rules" aria-label="Rules">
+							{read.rules.map((rule) => (
+								<li key={rule.id}>
+									<strong>
+										{EFFECTS[rule.effect]}
+										{rule.effect === "route" && rule.person ? ` ${nameOf(world, rule.person)}` : ""}
+									</strong>
+									<span>{ruleText(rule)}</span>
+									<small>
+										{rule.note} &middot; {rule.by === "operator" ? "you" : nameOf(world, rule.by)}
+									</small>
+									<button
+										type="button"
+										aria-label={`Remove rule: ${rule.note}`}
+										onClick={() =>
+											void api.setOutsideRule({ remove: rule.id }).then(() => setChanged((count) => count + 1))
+										}
+									>
+										Remove
+									</button>
+								</li>
+							))}
+						</ul>
+					)}
 				</fieldset>
 			)}
 			{read?.ok && !followed.length && !choosing ? (
@@ -152,7 +213,12 @@ export function OutsideActivity({ world }: { world: WorldSnapshot }) {
 			) : (
 				<ul className="wp-outside-list">
 					{groups.map(([item, ...more]) => (
-						<OutsideRow key={item!.conversation} item={item!} more={more.length} />
+						<OutsideRow
+							key={item!.conversation}
+							item={item!}
+							more={more.length}
+							changed={() => setChanged((count) => count + 1)}
+						/>
 					))}
 				</ul>
 			)}
@@ -168,10 +234,58 @@ export function OutsideActivity({ world }: { world: WorldSnapshot }) {
 	);
 }
 
-function OutsideRow({ item, more }: { item: OutsideItem; more: number }) {
+function nameOf(world: WorldSnapshot, id: string) {
+	return (
+		world.characters.find((person) => person.id === id)?.name ??
+		world.dormant?.find((person) => person.id === id)?.name ??
+		id
+	);
+}
+
+function OutsideRow({ item, more, changed }: { item: OutsideItem; more: number; changed: () => void }) {
+	const openMenu = useWorkplaceMenu();
+	const place = placeOf(item.conversation);
+	const rule = (match: OutsideRule["match"], effect: OutsideRule["effect"], note: string) => () =>
+		void api.setOutsideRule({ match, effect, note }).then(changed);
+	const menu = (event: React.MouseEvent<HTMLElement> | React.KeyboardEvent<HTMLElement>) =>
+		openMenu(event, [
+			...(item.url ? [{ label: "Open", onSelect: () => void api.openLink(item.url!) }] : []),
+			...(item.actor
+				? [
+						{
+							label: `Hide everything from ${item.actor}`,
+							onSelect: rule({ source: item.source, actor: item.actor }, "hide", `You hid ${item.actor}`),
+						},
+					]
+				: []),
+			{ label: `Hide ${placeLabel(item)}`, onSelect: rule({ place }, "hide", `You hid ${placeLabel(item)}`) },
+			{
+				label: `Stop triaging ${(KINDS[item.kind] ?? item.kind).toLowerCase()} in ${placeLabel(item)}`,
+				onSelect: rule({ place, kind: item.kind }, "quiet", "You keep these listed only"),
+			},
+			{
+				label: `Always triage ${placeLabel(item)}`,
+				onSelect: rule({ place }, "triage", `You want the desk on ${placeLabel(item)}`),
+			},
+			...(item.rule
+				? [
+						{
+							label: `Remove rule: ${item.rule.note}`,
+							onSelect: () => void api.setOutsideRule({ remove: item.rule!.id }).then(changed),
+						},
+					]
+				: []),
+		]);
 	return (
 		<li data-direct={item.direct} data-source={item.source}>
-			<button type="button" disabled={!item.url} onClick={() => item.url && void api.openLink(item.url)}>
+			<button
+				type="button"
+				aria-haspopup="menu"
+				disabled={!item.url}
+				onClick={() => item.url && void api.openLink(item.url)}
+				onContextMenu={menu}
+				onKeyDown={menu}
+			>
 				<span className="wp-outside-tile" aria-hidden="true">
 					{item.source === "slack" ? "S" : item.source === "github" ? "G" : "J"}
 				</span>
@@ -186,6 +300,11 @@ function OutsideRow({ item, more }: { item: OutsideItem; more: number }) {
 							{item.actor && <b>{item.actor}</b>}
 							{item.actor && item.excerpt ? ": " : ""}
 							{item.excerpt}
+						</span>
+					)}
+					{item.rule && item.rule.effect !== "route" && (
+						<span className="wp-outside-triage" data-action="rule">
+							<b>{EFFECTS[item.rule.effect as OutsideRule["effect"]] ?? item.rule.effect}</b> {item.rule.note}
 						</span>
 					)}
 					{item.triage ? (

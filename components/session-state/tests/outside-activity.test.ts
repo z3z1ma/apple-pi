@@ -1,6 +1,15 @@
 import { DatabaseSync } from "node:sqlite";
 import { expect, test } from "vitest";
-import { type ActivityItem, activityCursor, activityHealth, activityPage, triageActivity } from "../src/activity.js";
+import {
+	type ActivityItem,
+	activityCursor,
+	activityHealth,
+	activityPage,
+	activityRules,
+	addActivityRule,
+	removeActivityRule,
+	triageActivity,
+} from "../src/activity.js";
 import { ActivityPoller } from "../src/activity-poller.js";
 import { migrate } from "../src/schema.js";
 import type { ThreadPost } from "../src/threads.js";
@@ -92,6 +101,58 @@ test("new items reach the desk's coordinator under each source's mode, and its d
 		"No activity item",
 	);
 	expect(() => triageActivity(db, "cora", ["github:review"], { action: "pass", note: " " }, 9)).toThrow("one line");
+});
+
+test("the newest matching rule hides, quiets, always triages or routes a new item, and is shown beside it", async () => {
+	const { db, posts, prefer, next, poller } = setup();
+	prefer("desk", { thread: "topic:desk", person: "cora" });
+	prefer("activity-triage", { github: "direct" });
+	addActivityRule(db, "r1", "cora", { match: { actor: "Ana" }, effect: "hide", note: "Bot" }, 1);
+	addActivityRule(
+		db,
+		"r2",
+		"cora",
+		{ match: { words: "deploy" }, effect: "route", person: "iris", note: "Iris runs deploys" },
+		2,
+	);
+	addActivityRule(db, "r3", "cora", { match: { place: "github:acme/api" }, effect: "triage", note: "Release repo" }, 3);
+	expect(() => addActivityRule(db, "r4", "cora", { match: {}, effect: "hide", note: "x" }, 4)).toThrow(
+		"something to match",
+	);
+	const at = (id: string, title: string, conversation: string, actor = "bo"): ActivityItem => ({
+		...item(id, 5, false),
+		title,
+		conversation,
+		actor,
+	});
+	next.github = [
+		at("noise", "repo#1 chatter", "github:other/x#1", "ana"),
+		at("deploy", "repo#2 deploy failed", "github:other/x#2"),
+		at("release", "api#3 comment", "github:acme/api#3"),
+		at("plain", "x#4 comment", "github:other/x#4"),
+	];
+	await poller.poll();
+	expect(
+		posts.map((posted) => [
+			posted.post.thread,
+			posted.post.body.includes("github:deploy"),
+			posted.post.body.includes("github:release"),
+		]),
+	).toEqual([
+		["activity:iris", true, false],
+		["activity:cora", false, true],
+	]);
+	const listed = activityPage(db, { limit: 10 });
+	expect(listed.map((stored) => stored.id).sort()).toEqual(["github:deploy", "github:plain", "github:release"]);
+	expect(listed.find((stored) => stored.id === "github:deploy")?.rule).toEqual({
+		id: "r2",
+		effect: "route",
+		note: "Iris runs deploys",
+	});
+	expect(activityPage(db, { limit: 10, hidden: true })).toHaveLength(4);
+	removeActivityRule(db, "r1");
+	expect(activityPage(db, { limit: 10 })).toHaveLength(4);
+	expect(activityRules(db).map((rule) => rule.id)).toEqual(["r3", "r2"]);
 });
 
 test("a failed read is reported on its source and keeps the cursor for the next read", async () => {

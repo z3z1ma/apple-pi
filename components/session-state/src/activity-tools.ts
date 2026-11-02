@@ -3,11 +3,19 @@ import { defineTool, type ExtensionAPI, type ExtensionContext } from "@earendil-
 import { Type } from "typebox";
 import { managesPeople } from "../../organization/src/install.js";
 import { sessionRole } from "../../organization/src/session-role.js";
-import { ACTIVITY_SOURCES, activityAvailable, activityHealth, activityPage, TRIAGE_ACTIONS } from "./activity.js";
+import {
+	ACTIVITY_SOURCES,
+	activityAvailable,
+	activityHealth,
+	activityPage,
+	activityRules,
+	RULE_EFFECTS,
+	TRIAGE_ACTIONS,
+} from "./activity.js";
 import { sendCommand } from "./client.js";
 import { withThreads } from "./threads.js";
 
-export const ACTIVITY_TOOLS = ["activity", "triage"];
+export const ACTIVITY_TOOLS = ["activity", "triage", "activity_rule"];
 
 /** The desk's coordinator and other managers triage; the scout reads what the desk sees. */
 export const mayUseActivity = (ctx: ExtensionContext) => managesPeople(ctx) || sessionRole(ctx)?.name === "scout";
@@ -38,7 +46,9 @@ export function installActivityTools(pi: ExtensionAPI): void {
 			async execute(_id, args, _signal, _update, ctx) {
 				if (!mayUseActivity(ctx)) throw new Error("Only the desk's managers and its scout read outside activity.");
 				const read = withThreads((db) =>
-					activityAvailable(db) ? { items: activityPage(db, args), sources: activityHealth(db) } : undefined,
+					activityAvailable(db)
+						? { items: activityPage(db, args), sources: activityHealth(db), rules: activityRules(db) }
+						: undefined,
 				);
 				if (!read) throw new Error("Restart the runtime before reading outside activity.");
 				return text(read);
@@ -73,6 +83,58 @@ export function installActivityTools(pi: ExtensionAPI): void {
 				);
 				if (receipt.stage === "failed") throw new Error(receipt.reason);
 				return text({ triaged: args.items.length, action: args.action });
+			},
+		}),
+	);
+	pi.registerTool(
+		defineTool({
+			name: "activity_rule",
+			label: "activity_rule",
+			executionMode: "sequential",
+			description:
+				"Make a rule about new outside activity, or remove one by id (activity lists the rules). A rule matches every field you give: source, kind, place (github:owner/repo, jira:PROJECT or slack:<channel id>), actor, or words in the title or text. Its effect: hide (not shown), quiet (shown, not triaged), triage (always triaged, even when the source sends only what is addressed to him), or route (sent to person instead of the desk). The newest matching rule wins. Make one when the same noise keeps arriving or when a stream belongs with someone; the note says why, and the operator sees it.",
+			promptSnippet: "Hide, quiet, always triage or route outside activity that matches a rule.",
+			parameters: Type.Object(
+				{
+					remove: Type.Optional(
+						Type.String({ minLength: 1, description: "A rule id to remove; nothing else is needed." }),
+					),
+					match: Type.Optional(
+						Type.Object(
+							{
+								source: Type.Optional(Type.Union(ACTIVITY_SOURCES.map((source) => Type.Literal(source)))),
+								kind: Type.Optional(Type.String({ minLength: 1 })),
+								place: Type.Optional(Type.String({ minLength: 1 })),
+								actor: Type.Optional(Type.String({ minLength: 1 })),
+								words: Type.Optional(Type.String({ minLength: 1 })),
+							},
+							{ additionalProperties: false },
+						),
+					),
+					effect: Type.Optional(Type.Union(RULE_EFFECTS.map((effect) => Type.Literal(effect)))),
+					person: Type.Optional(Type.String({ minLength: 1, description: "For route: the person's id." })),
+					note: Type.Optional(Type.String({ minLength: 1, description: "One line: why this rule exists." })),
+				},
+				{ additionalProperties: false },
+			),
+			async execute(_id, args, signal, _update, ctx) {
+				if (!managesPeople(ctx)) throw new Error("Only managers make activity rules.");
+				if (!args.remove && (!args.match || !args.effect || !args.note))
+					throw new Error("Give match, effect and note to make a rule, or remove to drop one.");
+				const receipt = await sendCommand(
+					ctx.sessionManager.getSessionId(),
+					{
+						kind: "activity_rule",
+						match: args.match ?? {},
+						effect: args.effect ?? "quiet",
+						note: args.note ?? "",
+						...(args.person ? { person: args.person } : {}),
+						...(args.remove ? { remove: args.remove } : {}),
+					},
+					{ signal },
+				);
+				if (receipt.stage === "failed") throw new Error(receipt.reason);
+				return text(args.remove ? { removed: args.remove } : { added: true, effect: args.effect });
 			},
 		}),
 	);

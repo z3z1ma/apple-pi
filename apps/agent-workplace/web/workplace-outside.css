@@ -104,6 +104,38 @@
 	color: var(--wp-danger);
 }
 
+.wp-outside-rules {
+	display: grid;
+	gap: 6px;
+	margin: 6px 0 0;
+	padding: 10px 0 0;
+	border-top: 1px solid var(--wp-border);
+	list-style: none;
+}
+.wp-outside-rules li {
+	display: grid;
+	grid-template-columns: 120px minmax(0, 1fr) minmax(0, 1fr) auto;
+	align-items: center;
+	gap: 10px;
+	font-size: 12px;
+}
+.wp-outside-rules span,
+.wp-outside-rules small {
+	overflow: hidden;
+	color: var(--wp-muted);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.wp-app .wp-outside-rules button {
+	height: 24px;
+	padding: 0 8px;
+	border: 1px solid var(--wp-border);
+	border-radius: 6px;
+	background: var(--wp-bg);
+	color: var(--wp-text);
+	font-size: 12px;
+}
+
 .wp-outside-note {
 	margin: 6px 26px;
 	color: var(--wp-muted);

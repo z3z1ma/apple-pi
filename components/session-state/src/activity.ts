@@ -44,6 +44,42 @@ export interface StoredItem extends ActivityItem {
 	observedAt: number;
 	deliveredAt: number | null;
 	triage: Triage | null;
+	/** The rule that decided the item on arrival, while that rule exists. */
+	rule: { id: string; effect: RuleEffect; note: string } | null;
+}
+
+/**
+ * What a rule does to matching new items: hide them, keep them listed without triage, always send them for triage,
+ * or send them to one person instead of the desk.
+ */
+export type RuleEffect = "hide" | "quiet" | "triage" | "route";
+export const RULE_EFFECTS = ["hide", "quiet", "triage", "route"] as const;
+/** Every given field must match: a place is a repository, Jira project or Slack channel; words match title or text. */
+export interface RuleMatch {
+	source?: ActivitySource;
+	kind?: string;
+	place?: string;
+	actor?: string;
+	words?: string;
+}
+export interface ActivityRule {
+	id: string;
+	match: RuleMatch;
+	effect: RuleEffect;
+	person: string | null;
+	note: string;
+	by: string;
+	createdAt: number;
+}
+
+/** Where a conversation lives: `github:owner/repo`, `jira:PROJECT`, `slack:<channel>`. */
+export function placeOf(conversation: string): string {
+	const github = /^github:([^#:]+)/.exec(conversation);
+	if (github) return `github:${github[1]}`;
+	const jira = /^jira:([A-Z][A-Z0-9_]*)-/.exec(conversation);
+	if (jira) return `jira:${jira[1]}`;
+	const slack = /^slack:([^:]+)/.exec(conversation);
+	return slack ? `slack:${slack[1]}` : conversation;
 }
 
 interface Row {
@@ -60,6 +96,9 @@ interface Row {
 	direct: number;
 	delivered_at: number | null;
 	triage: string | null;
+	rule_id: string | null;
+	rule_effect: RuleEffect | null;
+	rule_note: string | null;
 }
 
 const stored = (row: Row): StoredItem => ({
@@ -76,7 +115,81 @@ const stored = (row: Row): StoredItem => ({
 	observedAt: row.observed_at,
 	deliveredAt: row.delivered_at,
 	triage: row.triage ? (JSON.parse(row.triage) as Triage) : null,
+	rule: row.rule_id ? { id: row.rule_id, effect: row.rule_effect!, note: row.rule_note ?? "" } : null,
 });
+
+const rulesAvailable = (db: DatabaseSync) =>
+	Boolean(db.prepare("select 1 from sqlite_master where name = 'activity_rules'").get());
+
+export function activityRules(db: DatabaseSync): ActivityRule[] {
+	if (!rulesAvailable(db)) return [];
+	return (
+		db.prepare("select * from activity_rules order by created_at desc, id").all() as {
+			id: string;
+			match: string;
+			effect: RuleEffect;
+			person: string | null;
+			note: string;
+			by: string;
+			created_at: number;
+		}[]
+	).map(({ created_at, match, ...row }) => ({ ...row, match: JSON.parse(match) as RuleMatch, createdAt: created_at }));
+}
+
+export function addActivityRule(
+	db: DatabaseSync,
+	id: string,
+	by: string,
+	rule: { match: RuleMatch; effect: RuleEffect; person?: string; note: string },
+	now: number,
+): void {
+	const match = Object.fromEntries(
+		Object.entries(rule.match).filter(([, value]) => typeof value === "string" && value.trim()),
+	) as RuleMatch;
+	if (!Object.keys(match).length)
+		throw new Error("A rule needs something to match: source, kind, place, actor or words.");
+	if (!RULE_EFFECTS.includes(rule.effect)) throw new Error(`Unknown rule effect ${rule.effect}.`);
+	if (rule.effect === "route" && !rule.person) throw new Error("A route rule names the person to send items to.");
+	if (!rule.note.trim()) throw new Error("Say in one line why the rule exists.");
+	db.prepare(
+		"insert into activity_rules (id, match, effect, person, note, by, created_at) values (?, ?, ?, ?, ?, ?, ?) on conflict (id) do nothing",
+	).run(
+		id,
+		JSON.stringify(match),
+		rule.effect,
+		rule.effect === "route" ? rule.person! : null,
+		rule.note.trim(),
+		by,
+		now,
+	);
+}
+
+export function removeActivityRule(db: DatabaseSync, id: string): void {
+	if (db.prepare("delete from activity_rules where id = ?").run(id).changes === 0) throw new Error(`No rule ${id}.`);
+}
+
+const lower = (value: string | null | undefined) => (value ?? "").toLowerCase();
+
+export function ruleMatches(match: RuleMatch, item: ActivityItem): boolean {
+	return (
+		(!match.source || match.source === item.source) &&
+		(!match.kind || match.kind === item.kind) &&
+		(!match.place || placeOf(item.conversation) === match.place) &&
+		(!match.actor || lower(item.actor) === lower(match.actor)) &&
+		(!match.words || `${lower(item.title)} ${lower(item.excerpt)}`.includes(lower(match.words)))
+	);
+}
+
+/** Record on each new item the newest rule that matches it, and return the rule beside each item. */
+export function applyRules(db: DatabaseSync, items: ActivityItem[]): { item: ActivityItem; rule?: ActivityRule }[] {
+	const rules = activityRules(db);
+	const update = db.prepare("update activity_items set rule = ? where id = ?");
+	return items.map((item) => {
+		const rule = rules.find((candidate) => ruleMatches(candidate.match, item));
+		if (rule) update.run(rule.id, item.id);
+		return rule ? { item, rule } : { item };
+	});
+}
 
 export const activityAvailable = (db: DatabaseSync) =>
 	Boolean(db.prepare("select 1 from sqlite_master where name = 'activity_items'").get());
@@ -136,17 +249,30 @@ export function activityHealth(db: DatabaseSync): { source: ActivitySource; poll
 
 export function activityPage(
 	db: DatabaseSync,
-	filter: { source?: ActivitySource; before?: number; limit: number; untriaged?: boolean; conversation?: string },
+	filter: {
+		source?: ActivitySource;
+		before?: number;
+		limit: number;
+		untriaged?: boolean;
+		conversation?: string;
+		/** Include items a hide rule decided; left out by default. */
+		hidden?: boolean;
+	},
 ): StoredItem[] {
 	const where = ["1 = 1"];
 	const args: (string | number)[] = [];
-	if (filter.source) where.push("source = ?") && args.push(filter.source);
-	if (filter.before !== undefined) where.push("at < ?") && args.push(filter.before);
-	if (filter.untriaged) where.push("triage is null");
-	if (filter.conversation) where.push("conversation = ?") && args.push(filter.conversation);
+	if (filter.source) where.push("i.source = ?") && args.push(filter.source);
+	if (filter.before !== undefined) where.push("i.at < ?") && args.push(filter.before);
+	if (filter.untriaged) where.push("i.triage is null");
+	if (filter.conversation) where.push("i.conversation = ?") && args.push(filter.conversation);
+	const rules = rulesAvailable(db);
+	if (rules && !filter.hidden) where.push("(r.effect is null or r.effect != 'hide')");
+	const select = rules
+		? "select i.*, r.id as rule_id, r.effect as rule_effect, r.note as rule_note from activity_items i left join activity_rules r on r.id = i.rule"
+		: "select i.*, null as rule_id, null as rule_effect, null as rule_note from activity_items i";
 	return (
 		db
-			.prepare(`select * from activity_items where ${where.join(" and ")} order by at desc, id limit ?`)
+			.prepare(`${select} where ${where.join(" and ")} order by i.at desc, i.id limit ?`)
 			.all(...args, filter.limit) as unknown as Row[]
 	).map(stored);
 }
@@ -167,10 +293,31 @@ export function triageModes(db: DatabaseSync): Record<ActivitySource, TriageMode
 	) as Record<ActivitySource, TriageMode>;
 }
 
-/** The new items the desk should look at under each source's triage mode. */
-export function forTriage(db: DatabaseSync, items: ActivityItem[]): ActivityItem[] {
+/**
+ * Who should look at each new item: the desk under its source's mode, unless a rule hides it, quiets it, always
+ * sends it for triage, or routes it to another person. Rules are applied and recorded here.
+ */
+export function forTriage(
+	db: DatabaseSync,
+	items: ActivityItem[],
+	desk: string | undefined,
+): Map<string, ActivityItem[]> {
 	const modes = triageModes(db);
-	return items.filter((item) => modes[item.source] === "all" || (modes[item.source] === "direct" && item.direct));
+	const due = new Map<string, ActivityItem[]>();
+	const send = (person: string | undefined, item: ActivityItem) => {
+		if (person) due.set(person, [...(due.get(person) ?? []), item]);
+	};
+	for (const { item, rule } of applyRules(db, items)) {
+		if (rule?.effect === "hide" || rule?.effect === "quiet") continue;
+		if (rule?.effect === "route") send(rule.person!, item);
+		else if (
+			rule?.effect === "triage" ||
+			modes[item.source] === "all" ||
+			(modes[item.source] === "direct" && item.direct)
+		)
+			send(desk, item);
+	}
+	return due;
 }
 
 export function markDelivered(db: DatabaseSync, ids: string[], now: number): void {

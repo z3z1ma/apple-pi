@@ -436,6 +436,17 @@ const MIGRATIONS = [
 	) strict;
 	create index activity_items_at on activity_items (at);
 	create table activity_cursors (source text primary key, cursor text not null, polled_at integer not null, error text) strict;`,
+	// Rules people and agents make about outside activity; an item keeps the rule that decided it on arrival.
+	`create table activity_rules (
+		id text primary key,
+		match text not null,
+		effect text not null,
+		person text,
+		note text not null,
+		by text not null,
+		created_at integer not null
+	) strict;
+	alter table activity_items add column rule text;`,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

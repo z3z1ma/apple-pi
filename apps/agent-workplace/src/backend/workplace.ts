@@ -6,6 +6,7 @@ import {
 	activityAvailable,
 	activityHealth,
 	activityPage,
+	activityRules,
 	triageModes,
 } from "../../../../components/session-state/src/activity.js";
 import type {
@@ -20,7 +21,7 @@ import type {
 	WorkplaceThread,
 	WorldSnapshot,
 } from "../world.js";
-import { OPERATOR, type OutsideMode, type OutsideRead, type OutsideSource } from "../world.js";
+import { type AgentWorkplaceApi, OPERATOR, type OutsideMode, type OutsideRead, type OutsideSource } from "../world.js";
 import type { Commands } from "./commands.js";
 import type { taskReader } from "./facts.js";
 import { operatorPane } from "./inn.js";
@@ -280,6 +281,7 @@ export interface WorkplaceActions {
 	closeTask(task: string, status: "done" | "cancelled"): Promise<CommandReceipt>;
 	readOutside(request: { source?: OutsideSource; untriaged?: boolean; limit: number }): Promise<OutsideRead>;
 	setOutsideModes(modes: Partial<Record<OutsideSource, OutsideMode>>): Promise<CommandReceipt>;
+	setOutsideRule(request: Parameters<AgentWorkplaceApi["setOutsideRule"]>[0]): Promise<CommandReceipt>;
 	readWorkplaceThread(thread: string): Promise<ThreadRead>;
 	setChannelMembership(thread: string, joined: boolean): Promise<CommandReceipt>;
 }
@@ -330,6 +332,7 @@ export function openWorkplace(path: string, commands: Commands, snapshot: () => 
 						polledAt: health.get(source)?.polledAt ?? null,
 						error: health.get(source)?.error ?? null,
 					})),
+					rules: activityRules(db),
 				};
 			} finally {
 				db.close();
@@ -349,6 +352,20 @@ export function openWorkplace(path: string, commands: Commands, snapshot: () => 
 				kind: "set_preference",
 				key: "activity-triage",
 				value: { ...current, ...changes },
+			});
+			return result.ok ? { ok: true, stage: "applied" } : result;
+		},
+		async setOutsideRule(request) {
+			const result = await commands.send(OPERATOR, {
+				kind: "activity_rule",
+				...("remove" in request
+					? { remove: request.remove, match: {}, effect: "quiet", note: "" }
+					: {
+							match: request.match,
+							effect: request.effect,
+							note: request.note,
+							...(request.person ? { person: request.person } : {}),
+						}),
 			});
 			return result.ok ? { ok: true, stage: "applied" } : result;
 		},

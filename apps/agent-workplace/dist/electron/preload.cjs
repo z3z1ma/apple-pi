@@ -96,6 +96,7 @@ var api = {
 	closeTask: (task, status) => electron.ipcRenderer.invoke("world:close-task", task, status),
 	readOutside: (request) => electron.ipcRenderer.invoke("world:read-outside", request),
 	setOutsideModes: (modes) => electron.ipcRenderer.invoke("world:outside-modes", modes),
+	setOutsideRule: (request) => electron.ipcRenderer.invoke("world:outside-rule", request),
 	readWorkplaceThread: (thread) => electron.ipcRenderer.invoke("world:workplace-thread", thread),
 	setChannelMembership: (thread, joined) => electron.ipcRenderer.invoke("world:channel-membership", thread, joined),
 	recruit: (request) => electron.ipcRenderer.invoke("world:recruit", request),

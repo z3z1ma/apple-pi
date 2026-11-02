@@ -460,6 +460,17 @@ export interface OutsideItem {
 	direct: boolean;
 	deliveredAt: number | null;
 	triage: { by: string; action: string; note: string; ref?: string; at: number } | null;
+	rule: { id: string; effect: string; note: string } | null;
+}
+/** A standing decision about new outside items: hide, quiet, always triage, or route to a person. */
+export interface OutsideRule {
+	id: string;
+	match: { source?: OutsideSource; kind?: string; place?: string; actor?: string; words?: string };
+	effect: "hide" | "quiet" | "triage" | "route";
+	person: string | null;
+	note: string;
+	by: string;
+	createdAt: number;
 }
 export type OutsideSource = "github" | "jira" | "slack";
 /** How a source is followed: all items to the desk, only those addressed to him, listed only, or not read. */
@@ -469,6 +480,7 @@ export type OutsideRead =
 			ok: true;
 			items: OutsideItem[];
 			sources: { source: OutsideSource; mode: OutsideMode; polledAt: number | null; error: string | null }[];
+			rules: OutsideRule[];
 	  }
 	| { ok: false; reason: string };
 
@@ -620,6 +632,12 @@ export interface AgentWorkplaceApi extends IntegrationsApi {
 	readOutside(request: { source?: OutsideSource; untriaged?: boolean; limit: number }): Promise<OutsideRead>;
 	/** Choose how each source is followed; a source turned on is read at once. */
 	setOutsideModes(modes: Partial<Record<OutsideSource, OutsideMode>>): Promise<CommandReceipt>;
+	/** Add a rule as the operator, or remove one by id. */
+	setOutsideRule(
+		request:
+			| { remove: string }
+			| { match: OutsideRule["match"]; effect: OutsideRule["effect"]; person?: string; note: string },
+	): Promise<CommandReceipt>;
 	/** Observe a shared channel, meeting, or task thread; only an operator participant marks it read. */
 	readWorkplaceThread(thread: string): Promise<ThreadRead>;
 	/**

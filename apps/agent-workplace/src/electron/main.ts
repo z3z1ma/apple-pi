@@ -261,6 +261,22 @@ function start() {
 			? workplace.setOutsideModes(chosen)
 			: { ok: false, reason: "Choose a mode for a source." };
 	});
+	ipcMain.handle("world:outside-rule", (_event, request: unknown) => {
+		const value = (request ?? {}) as Record<string, unknown>;
+		if (typeof value.remove === "string") return workplace.setOutsideRule({ remove: value.remove });
+		const raw = (value.match ?? {}) as Record<string, unknown>;
+		const match: Record<string, string> = {};
+		for (const key of ["source", "kind", "place", "actor", "words"])
+			if (typeof raw[key] === "string" && raw[key]) match[key] = raw[key] as string;
+		if (!["hide", "quiet", "triage", "route"].includes(value.effect as string) || typeof value.note !== "string")
+			return { ok: false, reason: "A rule needs an effect and a note." };
+		return workplace.setOutsideRule({
+			match,
+			effect: value.effect as "hide",
+			note: value.note,
+			...(typeof value.person === "string" ? { person: value.person } : {}),
+		});
+	});
 	ipcMain.handle("world:close-task", (_event, task: unknown, status: unknown) =>
 		typeof task === "string" && (status === "done" || status === "cancelled")
 			? workplace.closeTask(task, status)

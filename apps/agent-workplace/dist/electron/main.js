@@ -3935,6 +3935,7 @@ var INFERENCE_PROFILE_NAMES = [
 	"coding",
 	"visual-engineering",
 	"coordination",
+	"desk",
 	"routine",
 	"writing"
 ];
@@ -8894,8 +8895,22 @@ var stored = (row) => ({
 	direct: row.direct === 1,
 	observedAt: row.observed_at,
 	deliveredAt: row.delivered_at,
-	triage: row.triage ? JSON.parse(row.triage) : null
+	triage: row.triage ? JSON.parse(row.triage) : null,
+	rule: row.rule_id ? {
+		id: row.rule_id,
+		effect: row.rule_effect,
+		note: row.rule_note ?? ""
+	} : null
 });
+var rulesAvailable = (db) => Boolean(db.prepare("select 1 from sqlite_master where name = 'activity_rules'").get());
+function activityRules(db) {
+	if (!rulesAvailable(db)) return [];
+	return db.prepare("select * from activity_rules order by created_at desc, id").all().map(({ created_at, match, ...row }) => ({
+		...row,
+		match: JSON.parse(match),
+		createdAt: created_at
+	}));
+}
 var activityAvailable = (db) => Boolean(db.prepare("select 1 from sqlite_master where name = 'activity_items'").get());
 function activityHealth(db) {
 	return db.prepare("select source, polled_at, error from activity_cursors order by source").all().map((row) => ({
@@ -8907,11 +8922,14 @@ function activityHealth(db) {
 function activityPage(db, filter) {
 	const where = ["1 = 1"];
 	const args = [];
-	if (filter.source) where.push("source = ?") && args.push(filter.source);
-	if (filter.before !== void 0) where.push("at < ?") && args.push(filter.before);
-	if (filter.untriaged) where.push("triage is null");
-	if (filter.conversation) where.push("conversation = ?") && args.push(filter.conversation);
-	return db.prepare(`select * from activity_items where ${where.join(" and ")} order by at desc, id limit ?`).all(...args, filter.limit).map(stored);
+	if (filter.source) where.push("i.source = ?") && args.push(filter.source);
+	if (filter.before !== void 0) where.push("i.at < ?") && args.push(filter.before);
+	if (filter.untriaged) where.push("i.triage is null");
+	if (filter.conversation) where.push("i.conversation = ?") && args.push(filter.conversation);
+	const rules = rulesAvailable(db);
+	if (rules && !filter.hidden) where.push("(r.effect is null or r.effect != 'hide')");
+	const select = rules ? "select i.*, r.id as rule_id, r.effect as rule_effect, r.note as rule_note from activity_items i left join activity_rules r on r.id = i.rule" : "select i.*, null as rule_id, null as rule_effect, null as rule_note from activity_items i";
+	return db.prepare(`${select} where ${where.join(" and ")} order by i.at desc, i.id limit ?`).all(...args, filter.limit).map(stored);
 }
 function triageModes(db) {
 	const row = db.prepare("select value from preferences where key = 'activity-triage'").get();
@@ -9351,7 +9369,8 @@ function openWorkplace(path, commands, snapshot) {
 						mode: modes[source],
 						polledAt: health.get(source)?.polledAt ?? null,
 						error: health.get(source)?.error ?? null
-					}))
+					})),
+					rules: activityRules(db)
 				};
 			} finally {
 				db.close();
@@ -9373,6 +9392,26 @@ function openWorkplace(path, commands, snapshot) {
 				value: {
 					...current,
 					...changes
+				}
+			});
+			return result.ok ? {
+				ok: true,
+				stage: "applied"
+			} : result;
+		},
+		async setOutsideRule(request) {
+			const result = await commands.send(OPERATOR, {
+				kind: "activity_rule",
+				..."remove" in request ? {
+					remove: request.remove,
+					match: {},
+					effect: "quiet",
+					note: ""
+				} : {
+					match: request.match,
+					effect: request.effect,
+					note: request.note,
+					...request.person ? { person: request.person } : {}
 				}
 			});
 			return result.ok ? {
@@ -12891,6 +12930,34 @@ function start() {
 			ok: false,
 			reason: "Choose a mode for a source."
 		};
+	});
+	ipcMain.handle("world:outside-rule", (_event, request) => {
+		const value = request ?? {};
+		if (typeof value.remove === "string") return workplace.setOutsideRule({ remove: value.remove });
+		const raw = value.match ?? {};
+		const match = {};
+		for (const key of [
+			"source",
+			"kind",
+			"place",
+			"actor",
+			"words"
+		]) if (typeof raw[key] === "string" && raw[key]) match[key] = raw[key];
+		if (![
+			"hide",
+			"quiet",
+			"triage",
+			"route"
+		].includes(value.effect) || typeof value.note !== "string") return {
+			ok: false,
+			reason: "A rule needs an effect and a note."
+		};
+		return workplace.setOutsideRule({
+			match,
+			effect: value.effect,
+			note: value.note,
+			...typeof value.person === "string" ? { person: value.person } : {}
+		});
 	});
 	ipcMain.handle("world:close-task", (_event, task, status) => typeof task === "string" && (status === "done" || status === "cancelled") ? workplace.closeTask(task, status) : {
 		ok: false,

@@ -56,7 +56,7 @@ const FACT_COLUMNS: Record<keyof Facts, string> = {
 };
 const JSON_FACTS = new Set<string>(["prompt", "queue", "config", "previousSession", "git"]);
 
-import { triageActivity } from "./activity.js";
+import { addActivityRule, removeActivityRule, triageActivity } from "./activity.js";
 import { ACTIVITY_POLL_MS, ActivityPoller, readSource } from "./activity-poller.js";
 import { type AttentionRow, jumpTarget, statusSummary } from "./attention.js";
 import { chartered, charterOf, setCharter } from "./channel-charters.js";
@@ -803,7 +803,8 @@ export class Runtime {
 			command.kind === "unschedule" ||
 			command.kind === "channel_charter" ||
 			command.kind === "react" ||
-			command.kind === "activity_triage"
+			command.kind === "activity_triage" ||
+			command.kind === "activity_rule"
 		) {
 			receipt("accepted");
 			this.standingCommand(commandId, sessionId, command, now);
@@ -1276,11 +1277,18 @@ export class Runtime {
 	private standingCommand(
 		commandId: string,
 		sender: string,
-		command: Extract<Command, { kind: "schedule" | "unschedule" | "channel_charter" | "react" | "activity_triage" }>,
+		command: Extract<
+			Command,
+			{ kind: "schedule" | "unschedule" | "channel_charter" | "react" | "activity_triage" | "activity_rule" }
+		>,
 		now: number,
 	): void {
 		try {
 			if (command.kind === "activity_triage") triageActivity(this.db!, sender, command.items, command, now);
+			else if (command.kind === "activity_rule")
+				command.remove
+					? removeActivityRule(this.db!, command.remove)
+					: addActivityRule(this.db!, `rule-${commandId}`, sender, command, now);
 			else if (command.kind === "react") {
 				react(this.db!, sender, OPERATOR, command, now);
 				if (command.on) void this.reactionNotice(command.message, command.emoji);

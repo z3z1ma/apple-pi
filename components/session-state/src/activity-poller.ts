@@ -90,25 +90,24 @@ export class ActivityPoller {
 				this.commit((publish) => {
 					const fresh = recordActivity(this.db, read.items, now);
 					setActivityCursor(this.db, source, read.cursor, now);
-					const person = deskPerson(this.db);
-					const due = person ? forTriage(this.db, fresh) : [];
-					if (!person || !due.length) return;
-					publish(
-						`activity:${source}:${now}`,
-						{
-							thread: `activity:${person}`,
-							subject: "Outside activity to triage",
-							to: [person],
-							notify: [person],
-							body: triageBatch(due),
-						},
-						now,
-					);
-					markDelivered(
-						this.db,
-						due.map((item) => item.id),
-						now,
-					);
+					for (const [person, due] of forTriage(this.db, fresh, deskPerson(this.db))) {
+						publish(
+							`activity:${source}:${person}:${now}`,
+							{
+								thread: `activity:${person}`,
+								subject: "Outside activity to triage",
+								to: [person],
+								notify: [person],
+								body: triageBatch(due),
+							},
+							now,
+						);
+						markDelivered(
+							this.db,
+							due.map((item) => item.id),
+							now,
+						);
+					}
 				});
 			}
 		} finally {
