@@ -737,6 +737,57 @@ test("Jira sign-in changes during a poll discard its batch and same-key site col
 	expect(collision.at(-1)).toEqual({ stage: "failed", reason: expect.stringContaining("another site") });
 });
 
+test("a late failure includes its known newer recovery without regressing current CI state", async () => {
+	await person();
+	await follow();
+	const success = check(3, "success", new Date(Date.parse(stamp) + 3000).toISOString());
+	routes[`${repo}/commits/abc/check-runs`] = { check_runs: [success] };
+	syncRoutes();
+	await poll();
+	expect(messages()).toHaveLength(0);
+	routes[`${repo}/commits/abc/check-runs`].check_runs.unshift(check(1, "failure"));
+	syncRoutes();
+	await poll();
+	expect(messages()).toHaveLength(1);
+	expect(bodies()).toContain("unit: failure");
+	expect(bodies()).toContain(`Already recovered (success) at ${success.completed_at}`);
+	expect(bodies()).toContain(success.html_url);
+	const current = JSON.parse(
+		query<{ state: string }>(state.dbPath, "select state from external_sources where id = ?", thread)[0]!.state,
+	);
+	expect(current.ci.unit).toMatchObject({ conclusion: "success", id: 3 });
+	runtime.stop();
+	runtime = new Runtime(statePaths());
+	expect(await runtime.start()).toBe(true);
+	await poll();
+	expect(messages()).toHaveLength(1);
+});
+
+test("a newly discovered earlier success stays quiet after a known recovery", async () => {
+	await person();
+	await follow();
+	routes[`${repo}/commits/abc/check-runs`] = { check_runs: [check(1, "failure")] };
+	syncRoutes();
+	await poll();
+	routes[`${repo}/commits/abc/check-runs`].check_runs.push(
+		check(3, "success", new Date(Date.parse(stamp) + 3000).toISOString()),
+	);
+	syncRoutes();
+	await poll();
+	expect(messages()).toHaveLength(2);
+	expect(messages().at(-1)!.body).toContain("checks/3");
+	routes[`${repo}/commits/abc/check-runs`].check_runs.push(
+		check(2, "success", new Date(Date.parse(stamp) + 1000).toISOString()),
+	);
+	syncRoutes();
+	await poll();
+	expect(messages()).toHaveLength(2);
+	const current = JSON.parse(
+		query<{ state: string }>(state.dbPath, "select state from external_sources where id = ?", thread)[0]!.state,
+	);
+	expect(current.ci.unit).toMatchObject({ conclusion: "success", id: 3 });
+});
+
 test.each(["failure", "success"])("retained %s CI state advances across upgrade and restart", async (conclusion) => {
 	await person();
 	await follow();

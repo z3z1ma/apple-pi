@@ -32,7 +32,7 @@ interface State {
 	branch?: string;
 	head?: string;
 	pendingRefs?: string[];
-	ci: Record<string, { conclusion: string; at: number; id: number }>;
+	ci: Record<string, { conclusion: string; at: number; id: number; url?: string }>;
 }
 interface Event {
 	key: string;
@@ -533,8 +533,11 @@ export class ExternalThreads {
 		for (const check of checks.sort((a, b) => time(a.completed_at) - time(b.completed_at) || a.id - b.id)) {
 			if (check.status !== "completed" || !check.conclusion) continue;
 			const key = `check:${check.id}:${check.conclusion}:${check.completed_at}`;
-			if (this.db.prepare("select 1 from external_seen where source = ? and event = ?").get(source.id, key)) continue;
 			const name = check.name ?? "CI";
+			if (this.db.prepare("select 1 from external_seen where source = ? and event = ?").get(source.id, key)) {
+				if (state.ci[name]?.id === check.id) state.ci[name].url = check.html_url ?? source.url;
+				continue;
+			}
 			const failed = ["failure", "timed_out", "cancelled", "action_required", "startup_failure"].includes(
 				check.conclusion,
 			);
@@ -542,19 +545,25 @@ export class ExternalThreads {
 			const at = time(check.completed_at);
 			const newer = !previous || at > previous.at || (at === previous.at && check.id > previous.id);
 			const recovery = newer && check.conclusion === "success" && previous?.conclusion === "failure";
-			events.push({
-				...this.event(
-					source,
-					check,
-					`${name}: ${failed ? check.conclusion : "recovered (success)"}`,
-					key,
-					check.completed_at,
-				),
-				ci: true,
-				silent: !failed && !recovery,
-			});
+			const event = this.event(
+				source,
+				check,
+				`${name}: ${failed ? check.conclusion : "recovered (success)"}`,
+				key,
+				check.completed_at,
+			);
+			if (failed && !newer && previous?.conclusion === "success") {
+				const recoveryUrl = previous.url ?? checks.find((run) => run.id === previous.id)?.html_url ?? source.url;
+				event.body += `\nAlready recovered (success) at ${new Date(previous.at).toISOString()}\n${recoveryUrl}`;
+			}
+			events.push({ ...event, ci: true, silent: !failed && !recovery });
 			if (newer && (failed || check.conclusion === "success"))
-				state.ci[name] = { conclusion: failed ? "failure" : "success", at, id: check.id };
+				state.ci[name] = {
+					conclusion: failed ? "failure" : "success",
+					at,
+					id: check.id,
+					url: check.html_url ?? source.url,
+				};
 		}
 		return events;
 	}
