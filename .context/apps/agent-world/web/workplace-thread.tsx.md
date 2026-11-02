@@ -14,5 +14,6 @@ Search and page size sit behind the header's search toggle; Catch up stays a vis
 Why: the operator asked for a Slack-plain conversation; hiding Catch up would make acknowledgment undiscoverable, and a successful send has nothing to recover.
 
 With `toolbarHost`, those controls are portalled into the host pane's header slot (channel header, desk header, thread panel), so every conversation keeps one header row; the reader still owns their state. Channel posts notify the union of the listener, the Notify picks and the people still @mentioned in the text; other names stay prose. Message actions (reply with quote, forward, hand to the desk, pin, copy reference) live on each message, not in its header.
-Coupled: apps/agent-world/web/workplace-desk.tsx, apps/agent-world/web/workplace-mentions.tsx, apps/agent-world/web/workplace-message-actions.tsx
+In a channel composer, text starting with `/` and naming a known command (`workplace-commands.tsx`) runs that command and posts nothing; unknown `/words` post as ordinary text. Commands deliver through the same path as Forward, so `/dm` to a busy agent queues rather than interrupts.
+Coupled: apps/agent-world/web/workplace-desk.tsx, apps/agent-world/web/workplace-mentions.tsx, apps/agent-world/web/workplace-message-actions.tsx, apps/agent-world/web/workplace-commands.tsx
 Verify: apps/agent-world/tests/world-desk.test.ts

@@ -369,6 +369,12 @@ test("Threads lists live work before closed work, and Activity puts questions fi
 		await page.getByRole("button", { name: /^Threads/ }).click();
 		const titles = await page.locator(".wp-threads-list strong").allTextContents();
 		expect(titles).toEqual(["Add GitHub PR threads", "Review the schedules change", "Presence dots"]);
+		const list = page.getByRole("region", { name: "Threads", exact: true });
+		await list.getByRole("button", { name: /Add GitHub PR threads Working/ }).waitFor();
+		await list.getByRole("button", { name: /Review the schedules change Waiting/ }).waitFor();
+		await page.getByRole("button", { name: /^Waiting/ }).click();
+		expect(await page.locator(".wp-threads-list strong").allTextContents()).toEqual(["Review the schedules change"]);
+		await page.getByRole("button", { name: /^All/ }).click();
 		await shot(page, "threads-dark");
 		await page.getByRole("button", { name: /^Activity/ }).click();
 		const activity = page.getByRole("region", { name: "Activity" });
@@ -646,15 +652,16 @@ test("a muted conversation stays listed but never counts as unread", { timeout: 
 	try {
 		await page.getByRole("heading", { name: "Front desk", exact: true }).waitFor();
 		const direct = page.getByRole("region", { name: "Direct messages", exact: true });
-		await direct.getByRole("group", { name: "Iris", exact: true }).click({ button: "right" });
-		await page.getByRole("menuitem", { name: "Mute", exact: true }).click();
+		const iris = direct.getByRole("group", { name: "Iris", exact: true });
 		await page.evaluate(() => (window as any).unsee("iris"));
-		await page.locator('.wp-dm[data-muted="true"]').waitFor();
-		expect(await page.locator('.wp-dm[data-unread="true"]').count()).toBe(0);
-		expect(await direct.locator(".wp-unread-dot").count()).toBe(0);
-		await direct.getByRole("group", { name: "Iris", exact: true }).click({ button: "right" });
+		await iris.locator(".wp-unread-dot").waitFor();
+		await iris.click({ button: "right" });
+		await page.getByRole("menuitem", { name: "Mute", exact: true }).click();
+		await iris.locator(".wp-unread-dot").waitFor({ state: "detached" });
+		await iris.waitFor();
+		await iris.click({ button: "right" });
 		await page.getByRole("menuitem", { name: "Unmute", exact: true }).click();
-		await page.locator('.wp-dm[data-unread="true"]').waitFor();
+		await iris.locator(".wp-unread-dot").waitFor();
 		expect(errors).toEqual([]);
 	} finally {
 		await page.close();
