@@ -120,6 +120,10 @@
 	color: var(--wp-muted);
 	font-size: inherit;
 }
+.wp-git-file-name .wp-git-dir {
+	margin-left: 6px;
+	font-size: 11px;
+}
 .wp-git .wp-git-view {
 	display: flex;
 	align-items: center;

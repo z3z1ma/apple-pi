@@ -25,7 +25,6 @@ body.workplace {
 	--wp-muted: #746c7e;
 	--wp-border: #e5e0e9;
 	--wp-accent: #77548f;
-	--wp-accent-strong: #5f3f7d;
 	--wp-link: #4e63a8;
 	--wp-green: #18765a;
 	--wp-positive: #237c5d;
@@ -55,7 +54,6 @@ body.workplace {
 	--wp-muted: #b0a7bb;
 	--wp-border: #3b3842;
 	--wp-accent: #c5a4df;
-	--wp-accent-strong: #7b56a0;
 	--wp-link: #a7b8f4;
 	--wp-green: #247e62;
 	--wp-positive: #77c7a4;
@@ -830,7 +828,7 @@ body.workplace {
 	font-size: 14px;
 }
 .wp-app button.wp-primary {
-	border-radius: 5px;
+	border-radius: 6px;
 	background: var(--wp-green);
 	color: white;
 	font-size: 12px;

@@ -15,6 +15,7 @@ import { openConversations } from "../../apps/agent-world/src/backend/conversati
 import { openLifecycle } from "../../apps/agent-world/src/backend/lifecycle.js";
 import { openReviews } from "../../apps/agent-world/src/backend/reviews.js";
 import { openWorkplace } from "../../apps/agent-world/src/backend/workplace.js";
+import { openWorkspace } from "../../apps/agent-world/src/backend/workspace.js";
 import { openWorldBackend } from "../../apps/agent-world/src/backend/world-backend.js";
 
 let root = dirname(fileURLToPath(import.meta.url));
@@ -31,6 +32,7 @@ const conversations = openConversations(paths.socket);
 const workplace = openWorkplace(paths.db, commands, () => world.snapshot());
 const lifecycle = openLifecycle({ ...paths, agentDir: agentDir() }, commands, () => world.snapshot());
 const reviews = openReviews(paths.db, commands).api;
+const workspace = openWorkspace(() => world.snapshot());
 
 const READS: Record<string, (...args: never[]) => unknown> = {
 	snapshot: () => world.snapshot(),
@@ -53,6 +55,13 @@ const READS: Record<string, (...args: never[]) => unknown> = {
 	"reviews.read": (request: unknown) => reviews.read(request as never),
 	"reviews.analytics": (request: unknown) => reviews.analytics(request as never),
 	"workspace.resolvePaths": () => ({ ok: true, files: [] }),
+	"workspace.repositories": () => workspace.repositories(),
+	"workspace.files": (request: unknown) => workspace.files(request as never),
+	"workspace.worktrees": (request: unknown) => workspace.worktrees(request as never),
+	"workspace.tree": (request: unknown) => workspace.tree(request as never),
+	"workspace.readFile": (request: unknown) => workspace.readFile(request as never),
+	"workspace.gitStatus": (request: unknown) => workspace.gitStatus(request as never),
+	"workspace.gitDiff": (request: unknown) => workspace.gitDiff(request as never),
 };
 
 const browser = await chromium.launch({
@@ -177,6 +186,22 @@ if (scenario === "rest") {
 			await page.getByRole("button", { name: tab, exact: true }).click();
 			await page.waitForTimeout(1500);
 			await shot(page, `${appearance}-${width}-${tab.toLowerCase()}`);
+			if (tab === "Code") {
+				const repo = page.getByRole("combobox").first();
+				const options = await repo.locator("option").allTextContents();
+				const target = options.find((option) => option.includes("apple-pi"));
+				if (target) {
+					await repo.selectOption({ label: target });
+					await page.waitForTimeout(2500);
+					await shot(page, `${appearance}-${width}-code-repo`);
+					const file = page.getByRole("treeitem").filter({ hasText: "README.md" }).first();
+					if (await file.count()) {
+						await file.click();
+						await page.waitForTimeout(2500);
+						await shot(page, `${appearance}-${width}-code-file`);
+					}
+				}
+			}
 		}
 		await page.close();
 	}

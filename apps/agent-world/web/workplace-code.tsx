@@ -26,7 +26,16 @@ type Buffer = {
 const api = window.agentWorld;
 const fileKey = (root: string, path: string) => JSON.stringify([root, path]);
 
-function worktreeLabel(tree: WorkspaceWorktree) {
+/** A repository's folder name, with its parent folder when another listed repository has the same name. */
+function repositoryName(path: string, all: string[]) {
+	const parts = path.split("/").filter(Boolean);
+	const name = parts.at(-1) ?? path;
+	const clash = all.some((other) => other !== path && other.split("/").filter(Boolean).at(-1) === name);
+	return clash ? `${name} (${parts.at(-2) ?? "/"})` : name;
+}
+
+/** The worktree's branch and flags; with `path`, also where it lives (the option's tooltip). */
+function worktreeLabel(tree: WorkspaceWorktree, path = true) {
 	return [
 		tree.branch ?? "",
 		tree.detached ? "Detached HEAD" : "",
@@ -34,7 +43,7 @@ function worktreeLabel(tree: WorkspaceWorktree) {
 		tree.current ? "Current" : "",
 		tree.locked !== undefined ? `Locked${tree.locked ? `: ${tree.locked}` : ""}` : "",
 		tree.prunable !== undefined ? `Prunable${tree.prunable ? `: ${tree.prunable}` : ""}` : "",
-		tree.path,
+		path || !(tree.branch || tree.detached || tree.bare) ? tree.path : "",
 	]
 		.filter(Boolean)
 		.join(" - ");
@@ -648,8 +657,8 @@ export function WorkplaceCode({
 					<select aria-label="Code repository" value={root} onChange={(event) => switchRoot(event.target.value)}>
 						<option value="">Choose a repository</option>
 						{repositoryList.map((repository) => (
-							<option key={repository} value={repository}>
-								{repository}
+							<option key={repository} value={repository} title={repository}>
+								{repositoryName(repository, repositoryList)}
 							</option>
 						))}
 					</select>
@@ -683,7 +692,7 @@ export function WorkplaceCode({
 							disabled={tree.bare || tree.prunable !== undefined}
 							title={worktreeLabel(tree)}
 						>
-							{worktreeLabel(tree)}
+							{worktreeLabel(tree, false)}
 						</option>
 					))}
 				</select>

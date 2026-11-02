@@ -152,7 +152,10 @@ function RepositoryGit({ root, onOpenFile, onDiff }: GitPaneProps) {
 												{badge(entry, group.staged)}
 											</span>
 											<span className="wp-git-file-name">
-												{entry.path}
+												{entry.path.split("/").at(-1)}
+												{entry.path.includes("/") && (
+													<small className="wp-git-dir">{entry.path.slice(0, entry.path.lastIndexOf("/"))}</small>
+												)}
 												{entry.previousPath && <small> (from {entry.previousPath})</small>}
 											</span>
 										</button>
