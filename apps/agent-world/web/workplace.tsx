@@ -469,7 +469,7 @@ function Chat({
 							</span>
 						)}
 					</span>
-					<small>{home ? "Away \u00b7 history only" : (agent.facts?.title ?? activity(agent))}</small>
+					<small>{home ? "Away" : (agent.facts?.title ?? activity(agent))}</small>
 				</span>
 				{agent.facts?.unseen && <span className="wp-unread-dot" aria-hidden="true" />}
 				{agent.facts?.asking && <b className="wp-needs">?</b>}
@@ -580,7 +580,7 @@ function Chat({
 										onClick={() => setSelection({ kind: "dm", id: agent.id })}
 									>
 										{agent.name}
-										<small>{"Away \u00b7 history only"}</small>
+										<small>Away</small>
 									</button>
 								))}
 						</details>
@@ -606,7 +606,7 @@ function Chat({
 										{sleeper?.retiredAt
 											? "Former member \u00b7 history only"
 											: sleeper
-												? "Away \u00b7 history only"
+												? "Away"
 												: sessionStatus(person)}
 										{person.facts?.title ? ` · ${person.facts.title}` : ""}
 									</p>

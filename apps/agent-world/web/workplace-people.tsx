@@ -255,7 +255,7 @@ export function PersonProfile({
 						: dormant?.retiredAt
 							? "Former member · History only"
 							: dormant
-								? "Away · History only"
+								? "Away"
 								: person
 									? sessionStatus(person)
 									: "Unavailable"}

@@ -686,7 +686,7 @@ test("People directory and sidebar actions preserve selection, drafts and resiza
 		expect(await page.evaluate(() => (window as any).orgCalls.conversations)).toEqual(beforeChatMenu);
 		await page.getByText(/^Away \(/).click();
 		const homeMenu = sidebar.getByRole("button", { name: /^Home alone/ });
-		expect(await homeMenu.textContent()).toContain("Away \u00b7 history only");
+		expect(await homeMenu.textContent()).toContain("Away");
 		expect(await sidebar.getByRole("button", { name: /^Person actions:/ }).count()).toBe(0);
 		expect(await page.locator(".wp-sleepers").getByRole("img", { name: "Working", exact: true }).count()).toBe(0);
 		await homeMenu.click({ button: "right" });

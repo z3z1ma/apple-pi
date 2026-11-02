@@ -415,7 +415,7 @@ body.workplace {
 	border: 2px solid var(--wp-presence-ring);
 	border-radius: 50%;
 	background: var(--wp-muted);
-	color: #fff;
+	color: var(--wp-bg);
 	font:
 		800 8px / 1 system-ui,
 		sans-serif;
