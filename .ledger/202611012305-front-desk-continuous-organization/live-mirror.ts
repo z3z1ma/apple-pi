@@ -41,6 +41,8 @@ const READS: Record<string, (...args: never[]) => unknown> = {
 	conversation: (id: string, before?: string) => conversations.page(id, before),
 	readThread: (thread: string) => lifecycle.readThread(thread),
 	readTask: (task: string) => workplace.readTask(task),
+	readOutside: (request: { limit: number }) => workplace.readOutside(request),
+	searchConversations: () => ({ ok: true, hits: [] }),
 	readWorkplaceThread: (thread: string) => workplace.readWorkplaceThread(thread),
 	roles: () => [],
 	themes: () => [],

@@ -194,7 +194,7 @@ export async function readJira(
 // Slack
 
 const SLACK_TYPES =
-	"thread_v2,message_reaction,at_user,at_user_group,at_channel,at_everyone,keyword,list_record_assigned,list_user_mentioned,external_channel_invite,bot_dm_bundle";
+	"thread_v2,message_reaction,at_user,at_user_group,at_channel,at_everyone,keyword,list_record_assigned,list_user_mentioned,external_channel_invite";
 const SLACK_KINDS: Record<string, { kind: string; direct: boolean }> = {
 	at_user: { kind: "mention", direct: true },
 	at_user_group: { kind: "group_mention", direct: true },
@@ -203,7 +203,6 @@ const SLACK_KINDS: Record<string, { kind: string; direct: boolean }> = {
 	keyword: { kind: "keyword", direct: true },
 	thread_v2: { kind: "reply", direct: true },
 	message_reaction: { kind: "reaction", direct: false },
-	bot_dm_bundle: { kind: "bot_dm", direct: false },
 	list_record_assigned: { kind: "assigned", direct: true },
 	list_user_mentioned: { kind: "mention", direct: true },
 	external_channel_invite: { kind: "invite", direct: true },
@@ -297,6 +296,23 @@ export async function readSlack(
 			| { ts: string; user?: string; text?: string; thread_ts?: string }
 			| undefined;
 	};
+	/** Slack's markup as a person reads it: names for user and channel ids, link text for links. */
+	const readable = async (text: string | undefined) => {
+		if (!text) return text;
+		let out = text;
+		for (const [whole, id] of text.matchAll(/<@([UW][A-Z0-9]+)(?:\|[^>]*)?>/g))
+			out = out.replace(whole, `@${await person(id)}`);
+		for (const [whole, id, name] of text.matchAll(/<#(C[A-Z0-9]+)(?:\|([^>]*))?>/g))
+			out = out.replace(whole, name ? `#${name}` : await place(id!));
+		return out
+			.replace(/<!subteam\^[A-Z0-9]+(?:\|([^>]*))?>/g, (_whole, name) => name || "@group")
+			.replace(/<!(here|channel|everyone)(?:\|[^>]*)?>/g, "@$1")
+			.replace(/<(https?:[^|>]+)\|([^>]+)>/g, "$2")
+			.replace(/<(https?:[^>]+)>/g, "$1")
+			.replace(/&lt;/g, "<")
+			.replace(/&gt;/g, ">")
+			.replace(/&amp;/g, "&");
+	};
 	const link = (channel: string, ts: string, thread?: string) =>
 		`${base}archives/${channel}/p${ts.replace(".", "")}${thread && thread !== ts ? `?thread_ts=${thread}&cid=${channel}` : ""}`;
 
@@ -335,7 +351,7 @@ export async function readSlack(
 				entry.item.type === "message_reaction" ? `${where}: :${entry.item.reaction?.name}: on your message` : where,
 			actor,
 			url: link(target.channel, target.ts, target.thread),
-			excerpt: excerpt(said?.text),
+			excerpt: excerpt(await readable(said?.text)),
 			at: tsMs(entry.feed_ts),
 			direct: shape.direct,
 		});
@@ -352,20 +368,27 @@ export async function readSlack(
 		const oldest = String(Math.max(Number(dmSince), Number(conversation.last_read)));
 		const history = await call("conversations.history", { channel: conversation.id, oldest, limit: "20" });
 		const where = await place(conversation.id);
-		for (const said of (history.messages ?? []) as { ts: string; user?: string; text?: string; subtype?: string }[]) {
+		for (const said of (history.messages ?? []) as {
+			ts: string;
+			user?: string;
+			text?: string;
+			subtype?: string;
+			bot_id?: string;
+		}[]) {
 			if (Number(said.ts) > Number(dmNewest)) dmNewest = said.ts;
-			if (said.user === me || said.subtype) continue;
+			if (said.user === me || (said.subtype && said.subtype !== "bot_message")) continue;
+			const app = Boolean(said.bot_id);
 			items.push({
 				id: `slack:dm:${conversation.id}:${said.ts}`,
 				source: "slack",
-				kind: "dm",
+				kind: app ? "bot_dm" : "dm",
 				conversation: `slack:${conversation.id}`,
 				title: where,
 				actor: await person(said.user),
 				url: link(conversation.id, said.ts),
-				excerpt: excerpt(said.text),
+				excerpt: excerpt(await readable(said.text)),
 				at: tsMs(said.ts),
-				direct: true,
+				direct: !app,
 			});
 		}
 	}
