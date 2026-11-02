@@ -37,16 +37,18 @@ export function NotesView({ world }: { world: WorldSnapshot }) {
 					<h1>Notes</h1>
 					<p>What the organization learned, and the threads it found to be about the same thing.</p>
 				</div>
+			</header>
+			<div className="wp-threads-tools">
 				<label className="wp-find wp-threads-find">
 					<Icon name="search" />
 					<input
 						aria-label="Search notes"
-						placeholder="Search notes"
+						placeholder="Search titles, notes and topics"
 						value={words}
 						onChange={(event) => setWords(event.target.value)}
 					/>
 				</label>
-			</header>
+			</div>
 			<div className="wp-activity-scroll">
 				{read && !read.ok && <p className="wp-activity-calm">{read.reason}</p>}
 				{read?.ok && !read.notes.length && (

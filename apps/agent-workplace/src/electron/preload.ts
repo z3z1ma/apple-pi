@@ -7,6 +7,9 @@ import type { OrgMoveResult, OrgStartProgress } from "../org.js";
 import type { TerminalEvent } from "../terminal.js";
 import type {
 	AgentWorkplaceApi,
+	CanvasList,
+	CanvasRead,
+	CanvasSaved,
 	CommandReceipt,
 	CommandResult,
 	ConversationPage,
@@ -184,6 +187,9 @@ const api: AgentWorkplaceApi = {
 	setOutsideModes: (modes) => ipcRenderer.invoke("world:outside-modes", modes) as Promise<CommandReceipt>,
 	setOutsideRule: (request) => ipcRenderer.invoke("world:outside-rule", request) as Promise<CommandReceipt>,
 	readNotes: (request) => ipcRenderer.invoke("world:read-notes", request) as Promise<NotesRead>,
+	listCanvases: (request) => ipcRenderer.invoke("world:list-canvases", request) as Promise<CanvasList>,
+	readCanvas: (id) => ipcRenderer.invoke("world:read-canvas", id) as Promise<CanvasRead>,
+	writeCanvas: (write) => ipcRenderer.invoke("world:write-canvas", write) as Promise<CanvasSaved>,
 	readWorkplaceThread: (thread) => ipcRenderer.invoke("world:workplace-thread", thread) as Promise<ThreadRead>,
 	setChannelMembership: (thread, joined) =>
 		ipcRenderer.invoke("world:channel-membership", thread, joined) as Promise<CommandReceipt>,

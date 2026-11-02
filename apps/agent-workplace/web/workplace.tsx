@@ -452,7 +452,7 @@ function Chat({
 	const sectionStore = useSections();
 	const [naming, setNaming] = useState<(name: string) => void>();
 	const [selection, setSelection] = useState<{
-		kind: "dm" | "channel" | "desk" | "threads" | "activity" | "later" | "notes";
+		kind: "dm" | "channel" | "desk" | "threads" | "activity" | "later" | "notes" | "canvases";
 		id: string;
 	}>();
 	const view = selection?.kind ?? "desk";

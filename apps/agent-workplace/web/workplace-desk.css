@@ -325,6 +325,8 @@
 	flex: 1;
 	width: auto;
 	height: 30px;
+	/* The sidebar's find field keeps space below it; a tools row does not. */
+	margin: 0;
 }
 .wp-segmented {
 	display: inline-flex;

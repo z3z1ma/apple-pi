@@ -59,6 +59,7 @@ const JSON_FACTS = new Set<string>(["prompt", "queue", "config", "previousSessio
 import { addActivityRule, removeActivityRule, triageActivity } from "./activity.js";
 import { ACTIVITY_POLL_MS, ActivityPoller, readSource } from "./activity-poller.js";
 import { type AttentionRow, jumpTarget, statusSummary } from "./attention.js";
+import { writeCanvas } from "./canvases.js";
 import { chartered, charterOf, setCharter } from "./channel-charters.js";
 import { syncChannels } from "./channels.js";
 import { RETRY_MS, sendCommand } from "./client.js";
@@ -806,7 +807,8 @@ export class Runtime {
 			command.kind === "react" ||
 			command.kind === "activity_triage" ||
 			command.kind === "activity_rule" ||
-			command.kind === "note"
+			command.kind === "note" ||
+			command.kind === "canvas"
 		) {
 			receipt("accepted");
 			this.standingCommand(commandId, sessionId, command, now);
@@ -1282,13 +1284,22 @@ export class Runtime {
 		command: Extract<
 			Command,
 			{
-				kind: "schedule" | "unschedule" | "channel_charter" | "react" | "activity_triage" | "activity_rule" | "note";
+				kind:
+					| "schedule"
+					| "unschedule"
+					| "channel_charter"
+					| "react"
+					| "activity_triage"
+					| "activity_rule"
+					| "note"
+					| "canvas";
 			}
 		>,
 		now: number,
 	): void {
 		try {
 			if (command.kind === "activity_triage") triageActivity(this.db!, sender, command.items, command, now);
+			else if (command.kind === "canvas") writeCanvas(this.db!, `canvas-${commandId}`, sender, command.write, now);
 			else if (command.kind === "note")
 				command.remove
 					? removeNote(this.db!, command.remove)

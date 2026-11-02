@@ -4,6 +4,7 @@ import type { ReviewCommand } from "../../code-review/src/operations.js";
 import type { QuestionnaireReply } from "../../shared/src/questionnaire-events.js";
 import type { TurnProgress, TurnResult } from "../../shared/src/turn-observer.js";
 import type { RuleEffect, RuleMatch, TriageAction } from "./activity.js";
+import type { CanvasWrite } from "./canvases.js";
 import type { CommunicationCommand, MessageReference } from "./communication-types.js";
 import type { ExternalCommand } from "./external-threads.js";
 import type { LinkRecord } from "./links.js";
@@ -198,6 +199,8 @@ export type Command =
 			note: string;
 			remove?: string;
 	  }
+	/** Create a canvas (its id is `canvas-<command id>`), update one against the version it started from, or remove one. */
+	| { kind: "canvas"; write: CanvasWrite }
 	/** Write a new note (its id is `note-<command id>`), change the note `update`, or remove the note `remove`. */
 	| {
 			kind: "note";

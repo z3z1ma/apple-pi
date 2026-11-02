@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { existsSync, lstatSync, readdirSync, readFileSync, realpathSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -9,6 +10,7 @@ import {
 	activityRules,
 	triageModes,
 } from "../../../../components/session-state/src/activity.js";
+import { canvasesAvailable, listCanvases, readCanvas } from "../../../../components/session-state/src/canvases.js";
 import { notesAvailable, readNotes } from "../../../../components/session-state/src/notes.js";
 import type {
 	CharacterFacts,
@@ -24,6 +26,9 @@ import type {
 } from "../world.js";
 import {
 	type AgentWorkplaceApi,
+	type CanvasList,
+	type CanvasRead,
+	type CanvasSaved,
 	type NotesRead,
 	OPERATOR,
 	type OutsideMode,
@@ -291,6 +296,9 @@ export interface WorkplaceActions {
 	setOutsideModes(modes: Partial<Record<OutsideSource, OutsideMode>>): Promise<CommandReceipt>;
 	setOutsideRule(request: Parameters<AgentWorkplaceApi["setOutsideRule"]>[0]): Promise<CommandReceipt>;
 	readNotes(request: { words?: string; limit: number }): Promise<NotesRead>;
+	listCanvases(request: { words?: string; limit: number }): Promise<CanvasList>;
+	readCanvas(id: string): Promise<CanvasRead>;
+	writeCanvas(write: Parameters<AgentWorkplaceApi["writeCanvas"]>[0]): Promise<CanvasSaved>;
 	readWorkplaceThread(thread: string): Promise<ThreadRead>;
 	setChannelMembership(thread: string, joined: boolean): Promise<CommandReceipt>;
 }
@@ -371,6 +379,35 @@ export function openWorkplace(path: string, commands: Commands, snapshot: () => 
 				value: { ...current, ...changes },
 			});
 			return result.ok ? { ok: true, stage: "applied" } : result;
+		},
+		async listCanvases(request) {
+			if (!existsSync(path)) return { ok: false, reason: "The session database is not available." };
+			const db = new DatabaseSync(path, { readOnly: true });
+			try {
+				return canvasesAvailable(db)
+					? { ok: true, canvases: listCanvases(db, request) }
+					: { ok: false, reason: "Restart the session runtime to keep canvases." };
+			} finally {
+				db.close();
+			}
+		},
+		async readCanvas(id) {
+			if (!existsSync(path)) return { ok: false, reason: "The session database is not available." };
+			const db = new DatabaseSync(path, { readOnly: true });
+			try {
+				const canvas = canvasesAvailable(db) ? readCanvas(db, id) : undefined;
+				return canvas ? { ok: true, canvas } : { ok: false, reason: "That canvas is gone." };
+			} finally {
+				db.close();
+			}
+		},
+		async writeCanvas(write) {
+			const commandId = `agent-workplace-${randomUUID()}`;
+			const result = await commands.send(OPERATOR, { kind: "canvas", write }, { commandId });
+			if (!result.ok) return { ok: false, reason: result.reason, changed: /changed since version/.test(result.reason) };
+			if ("create" in write) return { ok: true, id: `canvas-${commandId}`, version: 1 };
+			if ("remove" in write) return { ok: true, id: write.remove, version: 0 };
+			return { ok: true, id: write.update, version: write.base + 1 };
 		},
 		async readNotes(request) {
 			if (!existsSync(path)) return { ok: false, reason: "The session database is not available." };

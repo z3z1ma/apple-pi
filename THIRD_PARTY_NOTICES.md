@@ -186,6 +186,14 @@ The organizational process skills are original prose for apple-pi's people, auth
 
 These are design references, not evidence that the resulting agent processes are effective.
 
+## Tiptap and the Workplace canvas editor
+
+- Tiptap (<https://github.com/ueberdosis/tiptap>), verified installed version `3.32.2` of `@tiptap/react`, `@tiptap/pm`, `@tiptap/starter-kit`, `@tiptap/markdown`, `@tiptap/extension-list`, `@tiptap/extensions` and their `@tiptap` extension packages, MIT, Copyright (c) 2025 Tiptap GmbH. Development dependencies bundled into `apps/agent-workplace/dist/web/assets/` for the Canvases editor.
+- ProseMirror (<https://prosemirror.net>), the `prosemirror-*` packages Tiptap uses (for example `prosemirror-model` `1.25.12`), with `orderedmap` `2.1.1`, `rope-sequence` `1.3.4` and `w3c-keyname` `2.2.8`, MIT, Copyright (C) 2015-2017 Marijn Haverbeke and others.
+- linkifyjs `4.4.0` (<https://github.com/nfrasser/linkifyjs>), MIT, Copyright (c) 2024 Nick Frasser, through Tiptap's link extension; and Tiptap Markdown's own marked `17.0.6`, MIT, as described above for marked.
+
+The MIT permission text above applies to each.
+
 ## Monaco Editor and bundled Workplace Code dependencies
 
 - Monaco Editor (<https://github.com/microsoft/monaco-editor>), verified installed version `0.57.0`, MIT, Copyright (c) 2016 - present Microsoft Corporation. It is a development dependency bundled into `apps/agent-workplace/dist/web/assets/`, including editor/language workers and Codicons; the installed app does not download the editor.

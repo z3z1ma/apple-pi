@@ -324,6 +324,43 @@ async function openDesk(appearance: "light" | "dark", width = 1440, desk = true)
 						})),
 					};
 				},
+				listCanvases: async () => ({
+					ok: true,
+					canvases: Object.values(w.canvases ?? {}).map((canvas: any) => ({
+						...canvas,
+						preview: canvas.body.slice(0, 80),
+					})),
+				}),
+				readCanvas: async (id: string) =>
+					w.canvases?.[id] ? { ok: true, canvas: structuredClone(w.canvases[id]) } : { ok: false, reason: "gone" },
+				writeCanvas: async (write: any) => {
+					w.canvasWrites = [...(w.canvasWrites ?? []), structuredClone(write)];
+					w.canvases ??= {};
+					if (write.create) {
+						const id = `canvas-${Object.keys(w.canvases).length + 1}`;
+						w.canvases[id] = {
+							id,
+							title: write.create.title,
+							body: "",
+							by: "operator",
+							createdAt: now,
+							updatedAt: now,
+							updatedBy: "operator",
+							version: 1,
+							pinned: false,
+						};
+						return { ok: true, id, version: 1 };
+					}
+					const canvas = w.canvases[write.update];
+					if (canvas.version !== write.base) return { ok: false, reason: "changed since version", changed: true };
+					Object.assign(canvas, {
+						...(write.title !== undefined ? { title: write.title } : {}),
+						...(write.body !== undefined ? { body: write.body } : {}),
+						...(write.pinned !== undefined ? { pinned: write.pinned } : {}),
+						version: canvas.version + 1,
+					});
+					return { ok: true, id: write.update, version: canvas.version };
+				},
 				readNotes: async (request: any) => ({
 					ok: true,
 					notes: [
@@ -646,6 +683,56 @@ test("Activity lists outside work by conversation with the desk's decision, and 
 		await shot(page, "notes-light");
 		await notes.getByRole("textbox", { name: "Search notes" }).fill("deploy");
 		await notes.getByText("No note mentions that.").waitFor();
+		expect(errors).toEqual([]);
+	} finally {
+		await page.close();
+	}
+});
+
+test("a canvas is a page he writes in: blocks from /, saved as Markdown, and never overwritten by another writer", {
+	timeout: 60_000,
+}, async () => {
+	const { page, errors } = await openDesk("light");
+	try {
+		await page.getByRole("button", { name: /^Canvases/ }).click();
+		await page.getByRole("button", { name: "New", exact: true }).click();
+		const title = page.getByRole("textbox", { name: "Canvas title" });
+		await title.waitFor();
+		await title.fill("Launch plan");
+		await title.press("Enter");
+		await page.keyboard.type("/to");
+		await page
+			.getByRole("list", { name: "Blocks" })
+			.getByRole("button", { name: /To-do list/ })
+			.waitFor();
+		await page.keyboard.press("Enter");
+		await page.keyboard.type("Book the venue");
+		await vi.waitFor(
+			async () =>
+				expect(await page.evaluate(() => (window as any).canvases["canvas-1"])).toMatchObject({
+					title: "Launch plan",
+					body: expect.stringContaining("- [ ] Book the venue"),
+				}),
+			{ timeout: 5000 },
+		);
+		await page
+			.getByRole("status")
+			.filter({ hasText: /^Saved/ })
+			.waitFor();
+		await page.getByRole("region", { name: "Canvases" }).getByText("Launch plan").waitFor();
+		await shot(page, "canvas-light");
+
+		// Someone else writes in the canvas; the next save is refused and he chooses.
+		await page.evaluate(() => {
+			const canvas = (window as any).canvases["canvas-1"];
+			canvas.version += 1;
+			canvas.body = "Written by the desk";
+		});
+		await page.keyboard.type(" today");
+		const conflict = page.getByRole("alert").filter({ hasText: "Someone wrote in this canvas" });
+		await conflict.waitFor({ timeout: 5000 });
+		await conflict.getByRole("button", { name: "Load theirs" }).click();
+		await page.locator(".wp-canvas-doc").getByText("Written by the desk").waitFor();
 		expect(errors).toEqual([]);
 	} finally {
 		await page.close();

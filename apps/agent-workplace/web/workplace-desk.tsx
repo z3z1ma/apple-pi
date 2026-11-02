@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, lazy, Suspense, useEffect, useMemo, useState } from "react";
 import type {
 	Character,
 	Desk,
@@ -24,6 +24,8 @@ import "./workplace-desk.css";
 const api = window.agentWorkplace;
 
 const FLIGHT_OPEN = "workplace-desk-flight-open";
+// The page editor (Tiptap and ProseMirror) loads when Canvases first opens, not with the window.
+const CanvasesView = lazy(() => import("./workplace-canvases.js").then((module) => ({ default: module.CanvasesView })));
 
 /** A task conversation open beside the main view, like a Slack thread. */
 export type OpenThread = { id: string; title: string };
@@ -1033,7 +1035,7 @@ export function ChannelHeader({
 	);
 }
 
-export type OrganizationKind = "desk" | "threads" | "activity" | "later" | "notes";
+export type OrganizationKind = "desk" | "threads" | "activity" | "later" | "notes" | "canvases";
 
 /** The organization views at the top of the Chat sidebar. */
 export function ChatNav({
@@ -1055,7 +1057,7 @@ export function ChatNav({
 	const item = (
 		kind: OrganizationKind,
 		label: string,
-		icon: "desk" | "threads" | "bell" | "bookmark" | "file",
+		icon: "desk" | "threads" | "bell" | "bookmark" | "file" | "compose",
 		count: number,
 	) => (
 		<button
@@ -1076,6 +1078,7 @@ export function ChatNav({
 			{item("threads", "Threads", "threads", live)}
 			{item("activity", "Activity", "bell", needsYou)}
 			{item("later", "Later", "bookmark", saved)}
+			{item("canvases", "Canvases", "compose", 0)}
 			{item("notes", "Notes", "file", 0)}
 		</nav>
 	);
@@ -1127,6 +1130,12 @@ export function OrganizationView({
 		return <ActivityView world={world} items={needsYou} unseen={unseen} markAllRead={markAllRead} />;
 	if (view === "later") return <LaterView go={go} />;
 	if (view === "notes") return <NotesView world={world} />;
+	if (view === "canvases")
+		return (
+			<Suspense fallback={null}>
+				<CanvasesView world={world} />
+			</Suspense>
+		);
 	return (
 		<div className="wp-empty">
 			<span className="wp-empty-icon">

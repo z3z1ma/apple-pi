@@ -8949,6 +8949,42 @@ function triageModes(db) {
 	return Object.fromEntries(ACTIVITY_SOURCES.map((source) => [source, TRIAGE_MODES.includes(chosen[source]) ? chosen[source] : "off"]));
 }
 //#endregion
+//#region components/session-state/src/canvases.ts
+var summary = (row) => ({
+	id: row.id,
+	title: row.title,
+	preview: row.preview.replace(/[#>*_`[\]-]+/g, " ").replace(/\s+/g, " ").trim(),
+	by: row.by,
+	createdAt: row.created_at,
+	updatedAt: row.updated_at,
+	updatedBy: row.updated_by,
+	version: row.version,
+	pinned: row.pinned === 1
+});
+var canvasesAvailable = (db) => Boolean(db.prepare("select 1 from sqlite_master where name = 'canvases'").get());
+/** Canvases newest first, pinned ones before the rest; bodies stay unread except for a short preview. */
+function listCanvases(db, filter) {
+	const where = ["1 = 1"];
+	const args = [];
+	for (const word of (filter.words ?? "").toLowerCase().split(/\s+/).filter(Boolean)) {
+		where.push("lower(title || ' ' || body) like ?");
+		args.push(`%${word}%`);
+	}
+	if (filter.before !== void 0) where.push("updated_at < ?") && args.push(filter.before);
+	return db.prepare(`select id, title, substr(body, 1, 200) as preview, by, created_at, updated_at, updated_by, version, pinned
+				from canvases where ${where.join(" and ")} order by pinned desc, updated_at desc, id limit ?`).all(...args, filter.limit).map(summary);
+}
+function readCanvas(db, id) {
+	const row = db.prepare("select * from canvases where id = ?").get(id);
+	return row ? {
+		...summary({
+			...row,
+			preview: row.body.slice(0, 200)
+		}),
+		body: row.body
+	} : void 0;
+}
+//#endregion
 //#region components/session-state/src/notes.ts
 var note = (row) => ({
 	id: row.id,
@@ -9447,6 +9483,70 @@ function openWorkplace(path, commands, snapshot) {
 				ok: true,
 				stage: "applied"
 			} : result;
+		},
+		async listCanvases(request) {
+			if (!existsSync(path)) return {
+				ok: false,
+				reason: "The session database is not available."
+			};
+			const db = new DatabaseSync(path, { readOnly: true });
+			try {
+				return canvasesAvailable(db) ? {
+					ok: true,
+					canvases: listCanvases(db, request)
+				} : {
+					ok: false,
+					reason: "Restart the session runtime to keep canvases."
+				};
+			} finally {
+				db.close();
+			}
+		},
+		async readCanvas(id) {
+			if (!existsSync(path)) return {
+				ok: false,
+				reason: "The session database is not available."
+			};
+			const db = new DatabaseSync(path, { readOnly: true });
+			try {
+				const canvas = canvasesAvailable(db) ? readCanvas(db, id) : void 0;
+				return canvas ? {
+					ok: true,
+					canvas
+				} : {
+					ok: false,
+					reason: "That canvas is gone."
+				};
+			} finally {
+				db.close();
+			}
+		},
+		async writeCanvas(write) {
+			const commandId = `agent-workplace-${randomUUID()}`;
+			const result = await commands.send(OPERATOR, {
+				kind: "canvas",
+				write
+			}, { commandId });
+			if (!result.ok) return {
+				ok: false,
+				reason: result.reason,
+				changed: /changed since version/.test(result.reason)
+			};
+			if ("create" in write) return {
+				ok: true,
+				id: `canvas-${commandId}`,
+				version: 1
+			};
+			if ("remove" in write) return {
+				ok: true,
+				id: write.remove,
+				version: 0
+			};
+			return {
+				ok: true,
+				id: write.update,
+				version: write.base + 1
+			};
 		},
 		async readNotes(request) {
 			if (!existsSync(path)) return {
@@ -12988,6 +13088,41 @@ function start() {
 		return Object.keys(chosen).length ? workplace.setOutsideModes(chosen) : {
 			ok: false,
 			reason: "Choose a mode for a source."
+		};
+	});
+	ipcMain.handle("world:list-canvases", (_event, request) => {
+		const value = request ?? {};
+		return Number.isSafeInteger(value.limit) && value.limit > 0 ? workplace.listCanvases({
+			limit: value.limit,
+			...typeof value.words === "string" && value.words.trim() ? { words: value.words } : {}
+		}) : {
+			ok: false,
+			reason: "A page size is required."
+		};
+	});
+	ipcMain.handle("world:read-canvas", (_event, id) => typeof id === "string" ? workplace.readCanvas(id) : {
+		ok: false,
+		reason: "No canvas was named."
+	});
+	ipcMain.handle("world:write-canvas", (_event, request) => {
+		const value = request ?? {};
+		const text = (key) => typeof value[key] === "string" ? value[key] : void 0;
+		if (typeof value.remove === "string") return workplace.writeCanvas({ remove: value.remove });
+		const create = value.create;
+		if (create && typeof create.title === "string") return workplace.writeCanvas({ create: {
+			title: create.title,
+			...typeof create.body === "string" ? { body: create.body } : {}
+		} });
+		if (typeof value.update === "string" && Number.isSafeInteger(value.base)) return workplace.writeCanvas({
+			update: value.update,
+			base: value.base,
+			...text("title") !== void 0 ? { title: text("title") } : {},
+			...text("body") !== void 0 ? { body: text("body") } : {},
+			...typeof value.pinned === "boolean" ? { pinned: value.pinned } : {}
+		});
+		return {
+			ok: false,
+			reason: "Create, update against a version, or remove a canvas."
 		};
 	});
 	ipcMain.handle("world:read-notes", (_event, request) => {

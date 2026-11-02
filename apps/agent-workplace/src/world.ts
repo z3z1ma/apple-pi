@@ -462,6 +462,23 @@ export interface OutsideItem {
 	triage: { by: string; action: string; note: string; ref?: string; at: number } | null;
 	rule: { id: string; effect: string; note: string } | null;
 }
+/** One of the operator's canvases, as listed: no body, only a preview. */
+export interface CanvasSummary {
+	id: string;
+	title: string;
+	preview: string;
+	by: string;
+	createdAt: number;
+	updatedAt: number;
+	updatedBy: string;
+	version: number;
+	pinned: boolean;
+}
+export type CanvasList = { ok: true; canvases: CanvasSummary[] } | { ok: false; reason: string };
+export type CanvasRead = { ok: true; canvas: CanvasSummary & { body: string } } | { ok: false; reason: string };
+/** A canvas write: created (with its id), saved as `version`, or refused, for example because it changed elsewhere. */
+export type CanvasSaved = { ok: true; id: string; version: number } | { ok: false; reason: string; changed?: boolean };
+
 /** Something the organization learned, or a connection between threads, kept as a note. */
 export interface OrgNote {
 	id: string;
@@ -648,6 +665,16 @@ export interface AgentWorkplaceApi extends IntegrationsApi {
 	readOutside(request: { source?: OutsideSource; untriaged?: boolean; limit: number }): Promise<OutsideRead>;
 	/** Choose how each source is followed; a source turned on is read at once. */
 	setOutsideModes(modes: Partial<Record<OutsideSource, OutsideMode>>): Promise<CommandReceipt>;
+	/** The operator's canvases, pinned first, then newest; words must all appear in a canvas. */
+	listCanvases(request: { words?: string; limit: number }): Promise<CanvasList>;
+	readCanvas(id: string): Promise<CanvasRead>;
+	/** Create a canvas, change one against the version it was read at, pin it, or remove it. */
+	writeCanvas(
+		write:
+			| { create: { title: string; body?: string } }
+			| { update: string; base: number; title?: string; body?: string; pinned?: boolean }
+			| { remove: string },
+	): Promise<CanvasSaved>;
 	/** The organization's notes, newest first; words must all appear in a note. */
 	readNotes(request: { words?: string; limit: number }): Promise<NotesRead>;
 	/** Add a rule as the operator, or remove one by id. */

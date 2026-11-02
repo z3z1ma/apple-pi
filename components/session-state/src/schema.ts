@@ -458,6 +458,19 @@ const MIGRATIONS = [
 		created_at integer not null,
 		updated_at integer not null
 	) strict;`,
+	// The operator's canvases: his own Markdown documents, versioned so no write overwrites another (canvases.ts).
+	`create table canvases (
+		id text primary key,
+		title text not null,
+		body text not null,
+		by text not null,
+		created_at integer not null,
+		updated_at integer not null,
+		updated_by text not null,
+		version integer not null,
+		pinned integer not null
+	) strict;
+	create index canvases_updated on canvases (updated_at);`,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

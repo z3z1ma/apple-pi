@@ -261,6 +261,37 @@ function start() {
 			? workplace.setOutsideModes(chosen)
 			: { ok: false, reason: "Choose a mode for a source." };
 	});
+	ipcMain.handle("world:list-canvases", (_event, request: unknown) => {
+		const value = (request ?? {}) as { words?: unknown; limit?: unknown };
+		return Number.isSafeInteger(value.limit) && (value.limit as number) > 0
+			? workplace.listCanvases({
+					limit: value.limit as number,
+					...(typeof value.words === "string" && value.words.trim() ? { words: value.words } : {}),
+				})
+			: { ok: false, reason: "A page size is required." };
+	});
+	ipcMain.handle("world:read-canvas", (_event, id: unknown) =>
+		typeof id === "string" ? workplace.readCanvas(id) : { ok: false, reason: "No canvas was named." },
+	);
+	ipcMain.handle("world:write-canvas", (_event, request: unknown) => {
+		const value = (request ?? {}) as Record<string, unknown>;
+		const text = (key: string) => (typeof value[key] === "string" ? (value[key] as string) : undefined);
+		if (typeof value.remove === "string") return workplace.writeCanvas({ remove: value.remove });
+		const create = value.create as { title?: unknown; body?: unknown } | undefined;
+		if (create && typeof create.title === "string")
+			return workplace.writeCanvas({
+				create: { title: create.title, ...(typeof create.body === "string" ? { body: create.body } : {}) },
+			});
+		if (typeof value.update === "string" && Number.isSafeInteger(value.base))
+			return workplace.writeCanvas({
+				update: value.update,
+				base: value.base as number,
+				...(text("title") !== undefined ? { title: text("title") } : {}),
+				...(text("body") !== undefined ? { body: text("body") } : {}),
+				...(typeof value.pinned === "boolean" ? { pinned: value.pinned } : {}),
+			});
+		return { ok: false, reason: "Create, update against a version, or remove a canvas." };
+	});
 	ipcMain.handle("world:read-notes", (_event, request: unknown) => {
 		const value = (request ?? {}) as { words?: unknown; limit?: unknown };
 		return Number.isSafeInteger(value.limit) && (value.limit as number) > 0
