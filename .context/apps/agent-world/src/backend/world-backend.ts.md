@@ -12,7 +12,8 @@ Why: a strictly read-only connection reads no rows from a WAL database whose -sh
 Coupled: components/tmux-sessions/sidebar/model.py
 Verify: apps/agent-world/tests/backend.test.ts
 
-"Connected" is an open connection to the runtime socket plus a readable database; it sends only `set_preference` commands that remember wings and the chosen avatar look.
+"Connected" is an open connection to the runtime socket plus a readable database; it sends `set_preference` commands that remember wings, the chosen avatar look and the front desk, and with the desk a `channel_charter` command (as the operator) that makes the desk's coordinator the desk channel's listener.
+Why: the `desk` preference alone only tells Workplace and the external-thread router where the desk is; the listener is what makes the runtime push every desk post to the coordinator and wake it when away. Changing the listener without re-sending the charter would leave the old coordinator on duty.
 Why: the runtime destroys every connection on stop and the OS closes it on any exit, so its close is the prompt signal that the runtime is gone; database rows alone stay "alive" after the runtime dies. Later command and streaming traffic can share this connection.
 Verify: apps/agent-world/tests/backend.test.ts
 

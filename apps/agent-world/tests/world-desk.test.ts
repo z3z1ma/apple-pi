@@ -72,6 +72,18 @@ async function openDesk(appearance: "light" | "dark", width = 1440, desk = true)
 				],
 				dormant: [],
 				operatorMail: [],
+				mail: ["iris", "milo"].map((to) => ({
+					id: `post-1:${to}`,
+					from: "operator",
+					fromName: "You",
+					to,
+					toName: to === "iris" ? "Iris" : "Milo",
+					body: "Both of you: pair on the schedules review.",
+					sentAt: now - 60_000,
+					deliveredAt: to === "iris" ? now - 50_000 : null,
+					state: to === "iris" ? "delivered" : "waiting",
+					reason: null,
+				})),
 				desk: desk ? { thread: "topic:desk", person: "cora" } : null,
 				workplace: {
 					threads: [
@@ -315,6 +327,25 @@ test("Command K jumps to a person, a thread or a view", { timeout: 60_000 }, asy
 		await page.keyboard.press("Control+k");
 		await jump.press("Escape");
 		expect(await jump.count()).toBe(0);
+		expect(errors).toEqual([]);
+	} finally {
+		await page.close();
+	}
+});
+
+test("Mail shows a message to several people once, with each recipient's delivery", { timeout: 60_000 }, async () => {
+	const { page, errors } = await openDesk("light");
+	try {
+		await page.getByRole("button", { name: "Mail", exact: true }).click();
+		await page.getByRole("button", { name: /^Sent/ }).click();
+		const rows = page.getByRole("region", { name: "Delivery log" }).locator(".wp-mail-row");
+		await rows.first().waitFor();
+		expect(await rows.count()).toBe(1);
+		await rows.first().click();
+		const recipients = page.getByRole("list", { name: "Recipients" });
+		await recipients.getByText("Iris", { exact: true }).waitFor();
+		expect(await recipients.getByText(/^Delivered /).count()).toBe(1);
+		expect(await recipients.getByText("Waiting for them to open", { exact: true }).count()).toBe(1);
 		expect(errors).toEqual([]);
 	} finally {
 		await page.close();
