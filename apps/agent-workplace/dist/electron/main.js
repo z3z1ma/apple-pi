@@ -8,8 +8,8 @@ import { createConnection } from "node:net";
 import { isDeepStrictEqual, promisify } from "node:util";
 import { DatabaseSync } from "node:sqlite";
 import { getAgentDir, parseFrontmatter } from "@earendil-works/pi-coding-agent";
-import { spawn } from "@lydell/node-pty";
-import { execFile, spawn as spawn$1 } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
+import { spawn as spawn$1 } from "@lydell/node-pty";
 import { isUtf8 } from "node:buffer";
 import { copyFile, lstat, mkdir, mkdtemp, readFile, readdir, readlink, realpath, rm, stat, symlink, utimes, writeFile } from "node:fs/promises";
 import { Type } from "typebox";
@@ -932,6 +932,91 @@ function transcriptEntry(raw) {
 		};
 	}
 }
+//#endregion
+//#region apps/agent-workplace/src/backend/conversation-search.ts
+/** Matches kept per transcript before parsing; a person's DM rarely needs more to show the newest. */
+var PER_FILE = 50;
+function sessionFiles(db) {
+	const reader = new DatabaseSync(db, { readOnly: true });
+	try {
+		const rows = reader.prepare("select id, session_file from sessions where session_file is not null and retired_at is null").all();
+		return new Map(rows.filter((row) => existsSync(row.session_file)).map((row) => [row.session_file, row.id]));
+	} finally {
+		reader.close();
+	}
+}
+function ripgrep(query, files) {
+	return new Promise((resolve, reject) => {
+		execFile("rg", [
+			"--fixed-strings",
+			"--ignore-case",
+			"--no-messages",
+			"--null",
+			"--with-filename",
+			"-m",
+			String(PER_FILE),
+			"--",
+			query,
+			...files
+		], { maxBuffer: 268435456 }, (error, stdout) => {
+			if (error && error.code !== 1) reject(error);
+			else resolve(stdout);
+		});
+	});
+}
+function snippet(text, query) {
+	const flat = text.replace(/\s+/g, " ").trim();
+	const at = flat.toLowerCase().indexOf(query.toLowerCase());
+	const start = Math.max(0, at - 60);
+	return `${start > 0 ? "…" : ""}${flat.slice(start, start + 200)}${start + 200 < flat.length ? "…" : ""}`;
+}
+async function searchConversations(db, query, limit) {
+	const words = query.trim();
+	if (words.length < 3) return {
+		ok: true,
+		hits: []
+	};
+	const files = sessionFiles(db);
+	if (!files.size) return {
+		ok: true,
+		hits: []
+	};
+	let output;
+	try {
+		output = await ripgrep(words, [...files.keys()]);
+	} catch (error) {
+		return {
+			ok: false,
+			reason: error.code === "ENOENT" ? "DM search needs ripgrep (rg) on the PATH." : String(error)
+		};
+	}
+	const hits = [];
+	for (const line of output.split("\n")) {
+		const split = line.indexOf("\0");
+		if (split < 0) continue;
+		const session = files.get(line.slice(0, split));
+		if (!session) continue;
+		let entry;
+		try {
+			entry = transcriptEntry(JSON.parse(line.slice(split + 1)));
+		} catch {
+			continue;
+		}
+		const text = entry?.kind === "user" ? entry.text : entry?.kind === "assistant" ? entry.parts.flatMap((part) => part.kind === "text" ? [part.text] : []).join("\n") : "";
+		if (!entry || !text.toLowerCase().includes(words.toLowerCase())) continue;
+		hits.push({
+			session,
+			entry: entry.id,
+			at: entry.at,
+			speaker: entry.kind === "user" ? "operator" : session,
+			text: snippet(text, words)
+		});
+	}
+	return {
+		ok: true,
+		hits: hits.sort((a, b) => b.at - a.at).slice(0, limit)
+	};
+}
 /** A page of a long transcript can take a while to read; a command is answered at once. */
 var PAGE_TIMEOUT_MS = 2e4;
 var COMMAND_TIMEOUT_MS = 5e3;
@@ -1387,7 +1472,7 @@ function openEmbeddedTerminals() {
 					"TERM_SESSION_ID",
 					"TERM_PROGRAM_VERSION"
 				]) delete env[key];
-				const pty = spawn(shell, ["-l", "-i"], {
+				const pty = spawn$1(shell, ["-l", "-i"], {
 					cwd,
 					cols: request.cols,
 					rows: request.rows,
@@ -3100,7 +3185,7 @@ function gitBytes(cwd, args, options = {}) {
 			reject(options.signal.reason ?? /* @__PURE__ */ new Error("git was cancelled before it started"));
 			return;
 		}
-		const child = spawn$1("git", args, {
+		const child = spawn("git", args, {
 			cwd: options.cwd ?? cwd,
 			env: {
 				...process.env,
@@ -3300,7 +3385,7 @@ async function fileBlobId(objectFormat, path, signal) {
 }
 /** Length-delimited `cat-file --batch -Z`: blob bytes may contain newlines, NULs and invalid UTF-8. */
 function objectReader(cwd, env = {}, signal) {
-	const child = spawn$1("git", [
+	const child = spawn("git", [
 		...FLAGS,
 		"cat-file",
 		"--batch",
@@ -4650,7 +4735,7 @@ function spawnRuntime(warn) {
 		warn(`Session state: cannot use ${paths.dir}: ${error.message}`);
 		return;
 	}
-	const child = spawn$1(process.execPath, [
+	const child = spawn(process.execPath, [
 		"--import",
 		REGISTER,
 		RUNTIME_MAIN
@@ -9370,7 +9455,7 @@ function git(root, args, allowDetached = false) {
 			GIT_TERMINAL_PROMPT: "0"
 		};
 		for (const key of Object.keys(env)) if (key.startsWith("GIT_") && !["GIT_OPTIONAL_LOCKS", "GIT_TERMINAL_PROMPT"].includes(key)) delete env[key];
-		const child = spawn$1("git", [
+		const child = spawn("git", [
 			"--no-pager",
 			"-c",
 			"core.fsmonitor=false",
@@ -12561,6 +12646,10 @@ function start() {
 	ipcMain.handle("world:conversation", (_event, characterId, before) => typeof characterId === "string" ? conversations.page(characterId, typeof before === "string" ? before : void 0) : {
 		ok: false,
 		reason: "No character was named."
+	});
+	ipcMain.handle("world:search-conversations", (_event, query) => typeof query === "string" ? searchConversations(statePaths().db, query, 30) : {
+		ok: false,
+		reason: "No words to search for."
 	});
 	ipcMain.handle("world:mark-seen", (_event, characterId) => typeof characterId === "string" ? conversations.markSeen(characterId) : {
 		ok: false,

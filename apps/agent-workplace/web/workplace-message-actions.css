@@ -7,6 +7,10 @@
 .wp-actionable:focus-within {
 	background: var(--wp-panel);
 }
+.wp-actionable[data-flash="true"] {
+	background: var(--wp-you-bg);
+	transition: background 0.6s;
+}
 .wp-thread-messages > .wp-actionable {
 	margin-inline: -12px;
 	padding-inline: 12px;

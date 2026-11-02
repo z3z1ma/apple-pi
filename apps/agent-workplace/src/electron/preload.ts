@@ -10,6 +10,7 @@ import type {
 	CommandReceipt,
 	CommandResult,
 	ConversationPage,
+	ConversationSearch,
 	FeedLine,
 	NotepadChange,
 	NotepadRead,
@@ -146,6 +147,8 @@ const api: AgentWorkplaceApi = {
 	profile: (characterId) => ipcRenderer.invoke("world:profile", characterId) as Promise<ProfileRead>,
 	conversation: (characterId, before) =>
 		ipcRenderer.invoke("world:conversation", characterId, before) as Promise<ConversationPage>,
+	searchConversations: (query) =>
+		ipcRenderer.invoke("world:search-conversations", query) as Promise<ConversationSearch>,
 	markSeen: (characterId) => ipcRenderer.invoke("world:mark-seen", characterId) as Promise<CommandResult>,
 	setAvatarLook: (look) => ipcRenderer.invoke("world:avatar-look", look) as Promise<CommandResult>,
 	themes: () => ipcRenderer.invoke("world:themes") as Promise<ThemeChoice[]>,

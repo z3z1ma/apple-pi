@@ -12,6 +12,7 @@ import { agentDir, statePaths } from "../../../../components/session-state/src/p
 import { appFile } from "../app-files.js";
 import { openCommands } from "../backend/commands.js";
 import { openCommunications } from "../backend/communications.js";
+import { searchConversations } from "../backend/conversation-search.js";
 import { openConversations } from "../backend/conversations.js";
 import { openDepartures } from "../backend/departures.js";
 import { openEmbeddedTerminals } from "../backend/embedded-terminal.js";
@@ -138,6 +139,11 @@ function start() {
 		typeof characterId === "string"
 			? conversations.page(characterId, typeof before === "string" ? before : undefined)
 			: { ok: false, reason: "No character was named." },
+	);
+	ipcMain.handle("world:search-conversations", (_event, query: unknown) =>
+		typeof query === "string"
+			? searchConversations(statePaths().db, query, 30)
+			: { ok: false, reason: "No words to search for." },
 	);
 	ipcMain.handle("world:mark-seen", (_event, characterId: unknown) =>
 		typeof characterId === "string"

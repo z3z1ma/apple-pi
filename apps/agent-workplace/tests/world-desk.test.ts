@@ -294,6 +294,20 @@ async function openDesk(appearance: "light" | "dark", width = 1440, desk = true)
 				},
 				feed: async () => [],
 				onFeed: () => () => {},
+				searchConversations: async (query: string) => ({
+					ok: true,
+					hits: "the schedules review is assigned.".includes(query.toLowerCase())
+						? [
+								{
+									session: "cora",
+									entry: "cora-1",
+									at: now - 90_000,
+									speaker: "cora",
+									text: "The schedules review is assigned.",
+								},
+							]
+						: [],
+				}),
 				conversation: async (id: string) => ({
 					ok: true,
 					missing: 0,
@@ -524,6 +538,16 @@ test("Command K jumps to a person, a thread or a view", { timeout: 60_000 }, asy
 			.waitFor();
 		await jump.press("Enter");
 		await page.getByRole("region", { name: "Thread: Add GitHub PR threads" }).waitFor();
+		await page.keyboard.press("Control+k");
+		await jump.fill("review is assigned");
+		const said = page.getByRole("list", { name: "Destinations" }).getByText(/^Cora: The schedules review is assigned/);
+		await said.waitFor();
+		await page
+			.getByRole("list", { name: "Destinations" })
+			.getByText(/DM with Cora/)
+			.waitFor();
+		await jump.press("Enter");
+		await page.locator('.wp-session [data-entry="cora-1"][data-flash="true"]').waitFor();
 		await page.keyboard.press("Control+k");
 		await jump.press("Escape");
 		expect(await jump.count()).toBe(0);

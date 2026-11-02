@@ -103,6 +103,18 @@ function dmMessageFor(id: string, where: string, canReply: boolean) {
 	};
 }
 
+/** Scroll a DM to one of its loaded messages and mark it briefly, once the conversation has drawn it. */
+function revealEntry(entry: string, tries = 50) {
+	const found = document.querySelector<HTMLElement>(`.wp-session [data-entry="${CSS.escape(entry)}"]`);
+	if (!found) {
+		if (tries > 0) setTimeout(() => revealEntry(entry, tries - 1), 100);
+		return;
+	}
+	found.scrollIntoView({ block: "center" });
+	found.dataset.flash = "true";
+	setTimeout(() => delete found.dataset.flash, 2000);
+}
+
 function channelUnreads(world: WorldSnapshot) {
 	const counts = new Map((world.operatorMail ?? []).map((thread) => [thread.id, thread.unread]));
 	return new Map(
@@ -609,8 +621,10 @@ function Chat({
 	}, [active, markAllRead]);
 	const go = (target: SwitchTarget) => {
 		if (target.kind === "view") setSelection({ kind: target.view, id: target.view });
-		else if (target.kind === "dm") openDM(target.id);
-		else if (target.kind === "channel")
+		else if (target.kind === "dm") {
+			openDM(target.id);
+			if (target.entry) revealEntry(target.entry);
+		} else if (target.kind === "channel")
 			setSelection(
 				target.id === world.desk?.thread ? { kind: "desk", id: "desk" } : { kind: "channel", id: target.id },
 			);

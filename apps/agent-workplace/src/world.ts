@@ -446,6 +446,17 @@ export const TRANSCRIPT_TEXT_MAX = 20_000;
  * One page of a conversation, oldest entry first. `before` is the cursor for the page before it, or null at the start
  * of the history. `missing` counts indexed entries the transcript no longer holds.
  */
+/** A DM message that matched a search: whose conversation, which entry, who said it, and the words around the match. */
+export interface ConversationHit {
+	session: string;
+	entry: string;
+	at: number;
+	/** "operator", or the session itself for what its agent said. */
+	speaker: string;
+	text: string;
+}
+export type ConversationSearch = { ok: true; hits: ConversationHit[] } | { ok: false; reason: string };
+
 export type ConversationPage =
 	| { ok: true; entries: TranscriptEntry[]; before: string | null; missing: number }
 	| { ok: false; reason: string };
@@ -537,6 +548,8 @@ export interface AgentWorkplaceApi extends IntegrationsApi {
 	profile(characterId: string): Promise<ProfileRead>;
 	/** A page of the character's conversation: the newest, or the one just before the cursor `before`. */
 	conversation(characterId: string, before?: string): Promise<ConversationPage>;
+	/** Find words the operator or an agent said in any DM, newest first. */
+	searchConversations(query: string): Promise<ConversationSearch>;
 	/** Tell the runtime the operator saw the character (`mark_seen`); resolves with the command's last receipt. */
 	markSeen(characterId: string): Promise<CommandResult>;
 	/** Choose the avatar's look (Settings); kept as a session-state preference across app restarts. */

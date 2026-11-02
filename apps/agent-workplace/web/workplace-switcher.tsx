@@ -1,13 +1,14 @@
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import type { ConversationMessage } from "../src/communications.js";
-import type { WorldSnapshot } from "../src/world.js";
+import type { ConversationHit, WorldSnapshot } from "../src/world.js";
 import { Icon } from "./workplace-icon.js";
 import { channelName } from "./workplace-names.js";
 import { PersonAvatar } from "./workplace-people.js";
 
 export type SwitchTarget =
 	| { kind: "view"; view: "desk" | "threads" | "activity" | "later" }
-	| { kind: "dm"; id: string }
+	/** `entry`: a message in the DM to scroll to. */
+	| { kind: "dm"; id: string; entry?: string }
 	| { kind: "channel"; id: string }
 	| { kind: "thread"; id: string; title: string };
 
@@ -181,19 +182,23 @@ function JumpPicker({
 		}
 		let current = true;
 		const timer = setTimeout(() => {
-			void window.agentWorkplace.communications
-				.searchMessages({ query: words, limit: 20 })
-				.then((result) => {
-					if (current)
-						setFound(
-							result.ok
-								? [...result.value.messages].sort((a, b) => b.at - a.at).map((message) => messageItem(world, message))
-								: [],
-						);
-				})
-				.catch(() => {
-					if (current) setFound([]);
-				});
+			const api = window.agentWorkplace;
+			void Promise.all([
+				api.communications
+					.searchMessages({ query: words, limit: 20 })
+					.then((result) =>
+						result.ok
+							? result.value.messages.map((message) => ({ at: message.at, item: messageItem(world, message) }))
+							: [],
+					)
+					.catch(() => []),
+				api
+					.searchConversations(words)
+					.then((result) => (result.ok ? result.hits.map((hit) => ({ at: hit.at, item: dmItem(world, hit) })) : []))
+					.catch(() => []),
+			]).then(([messages, dms]) => {
+				if (current) setFound([...messages, ...dms].sort((a, b) => b.at - a.at).map((hit) => hit.item));
+			});
 		}, 250);
 		return () => {
 			current = false;
@@ -213,6 +218,24 @@ function JumpPicker({
 }
 
 /** A message found by search, opening its conversation. */
+const when = (at: number) =>
+	new Date(at).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+
+function dmItem(world: WorldSnapshot, hit: ConversationHit): Item {
+	const nameOf = (id: string) =>
+		world.characters.find((person) => person.id === id)?.name ??
+		world.dormant?.find((person) => person.id === id)?.name ??
+		id;
+	return {
+		key: `d:${hit.session}:${hit.entry}`,
+		label: `${hit.speaker === "operator" ? "You" : nameOf(hit.speaker)}: ${hit.text}`,
+		detail: `Message \u00b7 DM with ${nameOf(hit.session)} \u00b7 ${when(hit.at)}`,
+		target: { kind: "dm", id: hit.session, entry: hit.entry },
+		person: hit.speaker === "operator" ? undefined : hit.speaker,
+		found: true,
+	};
+}
+
 function messageItem(world: WorldSnapshot, message: ConversationMessage): Item {
 	const thread = world.workplace?.threads.find((item) => item.id === message.thread);
 	const task =
@@ -227,7 +250,7 @@ function messageItem(world: WorldSnapshot, message: ConversationMessage): Item {
 	return {
 		key: `m:${message.id}`,
 		label: `${message.fromName}: ${message.body.replace(/\s+/g, " ").trim()}`,
-		detail: `Message \u00b7 ${place} \u00b7 ${new Date(message.at).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}`,
+		detail: `Message \u00b7 ${place} \u00b7 ${when(message.at)}`,
 		target: thread
 			? { kind: "channel", id: thread.id }
 			: { kind: "thread", id: message.thread, title: task?.title ?? "Conversation" },
