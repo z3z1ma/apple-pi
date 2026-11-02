@@ -5,4 +5,4 @@ Why: after an approved search fix, a failed assertion can mean the defect was re
 
 Keep fixtures synthetic and pass a manager facade to the tool rather than opening a real session.
 Why: the inquiry authorizes observation, not transcript migration or repair, and these probes need no private history.
-Coupled: components/session-search/src/tool.ts, components/session-search/src/search-entries.ts, .ledger/202611020022-long-lived-agent-recall-and-retention/evidence.md
+Coupled: components/session-search/src/tool.ts, components/session-search/src/search-entries.ts, .ledger/history/202611020022-long-lived-agent-recall-and-retention/evidence.md

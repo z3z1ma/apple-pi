@@ -155,3 +155,5 @@
 - `.ledger/history/202610301933-semantic-risk-based-code-review/task.md` — done — Semantic risk-based code review — Plan harness-native semantic review chunks, risk-based depth, independent lenses, exact-artifact sign-off and a visible review queue, grounded in Open Code Review, PR-AF and roboRev.
 
 - `.ledger/history/202611012244-super-agent-extrapolation-the-org-as-one-continuous-agent-behind-slack-style-cha/task.md` — done — Super-agent extrapolation: the org as one continuous agent behind Slack-style Chat — Proposal mapping DeepSeek's Super-agent architecture onto apple-pi's organization, threads and Workplace Chat, with ranked drastic moves and first experiments.
+
+- `.ledger/history/202611020022-long-lived-agent-recall-and-retention/task.md` — done — Measure long-lived agent recall and design transcript retention — Evaluate real-history recall across session search, notebook, compaction and mail; propose ranked search improvements and safe hot/archive retention before implementation.

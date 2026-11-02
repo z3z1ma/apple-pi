@@ -121,19 +121,19 @@ Run from repository root with the installed Node and dependencies. Scripts locat
 ```bash
 umask 077
 mkdir -p /tmp/recall-study
-node .ledger/202611020022-long-lived-agent-recall-and-retention/inventory.mjs \
+node .ledger/history/202611020022-long-lived-agent-recall-and-retention/inventory.mjs \
   "$HOME/.pi/agent/sessions" /tmp/recall-study
 node --import ./components/session-state/src/register.mjs \
-  .ledger/202611020022-long-lived-agent-recall-and-retention/replay.mjs /tmp/recall-study
-node .ledger/202611020022-long-lived-agent-recall-and-retention/storage.mjs /tmp/recall-study
-node .ledger/202611020022-long-lived-agent-recall-and-retention/state-inventory.mjs \
+  .ledger/history/202611020022-long-lived-agent-recall-and-retention/replay.mjs /tmp/recall-study
+node .ledger/history/202611020022-long-lived-agent-recall-and-retention/storage.mjs /tmp/recall-study
+node .ledger/history/202611020022-long-lived-agent-recall-and-retention/state-inventory.mjs \
   "$HOME/.pi/agent/state/apple-pi.db"
 node --import ./components/session-state/src/register.mjs \
-  .ledger/202611020022-long-lived-agent-recall-and-retention/contracts.mjs
-node .ledger/202611020022-long-lived-agent-recall-and-retention/retention-probe.mjs \
+  .ledger/history/202611020022-long-lived-agent-recall-and-retention/contracts.mjs
+node .ledger/history/202611020022-long-lived-agent-recall-and-retention/retention-probe.mjs \
   /path/to/pi-coding-agent/dist/core/session-manager.js
 node --import ./components/session-state/src/register.mjs \
-  .ledger/202611020022-long-lived-agent-recall-and-retention/gold-replay.mjs \
+  .ledger/history/202611020022-long-lived-agent-recall-and-retention/gold-replay.mjs \
   /tmp/ciaran-recall-audit/private-gold.json /tmp/recall-study
 ./node_modules/.bin/vitest run components/session-search/tests --maxWorkers=1
 ```

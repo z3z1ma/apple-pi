@@ -7,4 +7,4 @@ Prefer production details.hits or details.sources to parsed display headers. The
 
 Private snapshots, questions, text, IDs and full-entry evidence remain outside Git; remove each temporary prefix after the call. Public numeric output keeps novel hits unjudged until independent review. Label explicit-regex migration separately from unchanged query inputs.
 Why: new outside-episode hits require new relevance judgments, and changing query syntax is not an unchanged-input improvement. Episode-relative recall does not measure complete-transcript recall or the agent's use of evidence.
-Coupled: .ledger/202611020022-long-lived-agent-recall-and-retention/implementation.md, .ledger/202611020022-long-lived-agent-recall-and-retention/independent-evaluation.md
+Coupled: .ledger/history/202611020022-long-lived-agent-recall-and-retention/implementation.md, .ledger/history/202611020022-long-lived-agent-recall-and-retention/independent-evaluation.md

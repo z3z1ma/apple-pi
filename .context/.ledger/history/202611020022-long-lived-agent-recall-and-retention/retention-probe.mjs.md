@@ -5,4 +5,4 @@ Why: it must disprove naive truncation without changing private originals throug
 
 The three counterexamples establish lost kept context/settings and the native unwritten-cursor rule, not archive correctness or power-loss recovery.
 Why: no segment publication, concurrent writer, real restart or fault injection is exercised here.
-Coupled: .ledger/202611020022-long-lived-agent-recall-and-retention/retention-investigation.md, .ledger/202611020022-long-lived-agent-recall-and-retention/evidence.md
+Coupled: .ledger/history/202611020022-long-lived-agent-recall-and-retention/retention-investigation.md, .ledger/history/202611020022-long-lived-agent-recall-and-retention/evidence.md

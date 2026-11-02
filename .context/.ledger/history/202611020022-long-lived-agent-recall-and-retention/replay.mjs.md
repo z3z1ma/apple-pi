@@ -5,4 +5,4 @@ Why: the issuing entry contains the query itself and can rank highly without sup
 
 Subsequent navigation is only a behavioral proxy, not relevance gold. Full-tool timing follows parsing of the same file and is warm-filesystem timing.
 Why: an agent can expand the wrong index, and a first timed invocation after a read is not a cold-start trial. These distinctions determine which claims the report can support.
-Coupled: .ledger/202611020022-long-lived-agent-recall-and-retention/inventory.mjs, .ledger/202611020022-long-lived-agent-recall-and-retention/gold-replay.mjs, .ledger/202611020022-long-lived-agent-recall-and-retention/evidence.md, components/session-search/src/search-entries.ts
+Coupled: .ledger/history/202611020022-long-lived-agent-recall-and-retention/inventory.mjs, .ledger/history/202611020022-long-lived-agent-recall-and-retention/gold-replay.mjs, .ledger/history/202611020022-long-lived-agent-recall-and-retention/evidence.md, components/session-search/src/search-entries.ts

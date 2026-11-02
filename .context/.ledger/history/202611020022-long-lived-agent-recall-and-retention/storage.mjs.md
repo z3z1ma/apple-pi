@@ -5,4 +5,4 @@ Why: the latest compaction's kept range can still depend on older settings, cust
 
 This experiment discards compressed output and leaves original files intact. Lossless compression measures a smaller growth rate, not finite lifetime retention.
 Why: the approved work is measurement and a proposal, not storage migration or a deletion policy.
-Coupled: .ledger/202611020022-long-lived-agent-recall-and-retention/inventory.mjs, .ledger/202611020022-long-lived-agent-recall-and-retention/retention-probe.mjs, .ledger/202611020022-long-lived-agent-recall-and-retention/evidence.md
+Coupled: .ledger/history/202611020022-long-lived-agent-recall-and-retention/inventory.mjs, .ledger/history/202611020022-long-lived-agent-recall-and-retention/retention-probe.mjs, .ledger/history/202611020022-long-lived-agent-recall-and-retention/evidence.md

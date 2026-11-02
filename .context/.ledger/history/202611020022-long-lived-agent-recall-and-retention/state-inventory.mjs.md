@@ -5,4 +5,4 @@ Why: the runtime is the workplace database's only writer, and payload sums omit 
 
 The live main-file/WAL sizes and separate queries are point-in-time observations, not an atomic database-plus-filesystem snapshot.
 Why: the runtime can append while the probe runs, and the report must not attribute small differences between observations to archival effects.
-Coupled: components/session-state/src/schema.ts, .ledger/202611020022-long-lived-agent-recall-and-retention/evidence.md
+Coupled: components/session-state/src/schema.ts, .ledger/history/202611020022-long-lived-agent-recall-and-retention/evidence.md
