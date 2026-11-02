@@ -121,3 +121,13 @@ Open: the desk keeps a separate row for search / Catch up / Read latest / Action
 
 - Reactions work in DMs too: a DM message is a transcript entry, so its reaction is keyed `entry:<session>:<entry>`, operator only, and transcript pages carry them.
 - "Ask the desk to handle" is now "Send to desk".
+
+## Round 21: the seven follow-ups
+
+- Stalled threads: a live thread's header has Nudge (while Waiting) and a Task menu (Reassign, Mark done, Cancel task, Add to sidebar). The runtime gained `work` action `close` for ephemeral tasks (`33ea6e39`). Ledger tasks keep `ledger_status`.
+- Command K finds DM text: ripgrep over transcripts, kept only when a user or assistant message's visible text matches; 0.1-0.6 s over 2.5 GB (`596ed011`).
+- Agents react with a native `react` tool; the operator's DM reaction reaches a running agent as a quiet `notice` (`d56ce8be`).
+- Scale, measured on live data before building anything: Threads draws 601 rows in 65-72 ms and the 1 s snapshot causes no long task while it is open. No windowing added; `live-mirror.ts scale` repeats the measurement.
+- Tests: the central-dock terminal failure was a real defect. Ghostty's FitAddon ignores `fit()` for 50 ms after a resize, so a window resize landing then left the terminal at its old size; the terminal now refits after that window (`d9206d6a`). The `/org experience` test passed 3 of 3 alone and in its file; not reproduced, so unchanged.
+- Offline composing: deferred by the operator.
+- Coordinator proven live: superseded by the desk-intelligence direction.
