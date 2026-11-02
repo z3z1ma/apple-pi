@@ -3,7 +3,7 @@ import { defineTool, type ExtensionAPI, type ExtensionContext } from "@earendil-
 import { Type } from "typebox";
 import { organizationOf } from "../../organization/src/directory.js";
 import { managesPeople } from "../../organization/src/install.js";
-import { ACTIVITY_TOOLS, installActivityTools, mayUseActivity } from "./activity-tools.js";
+import { ACTIVITY_TOOLS, installActivityTools, mayUseActivity, SCOUT_TOOLS } from "./activity-tools.js";
 import { resolvePerson } from "./addresses.js";
 import { sendCommand } from "./client.js";
 import { coordinationIn } from "./coordination-inspection.js";
@@ -840,7 +840,7 @@ export function installWork(pi: ExtensionAPI): void {
 	const activate = (_event: unknown, ctx: ExtensionContext) => {
 		const active = pi.getActiveTools();
 		const allowed = managesPeople(ctx);
-		const activity = allowed ? ACTIVITY_TOOLS : mayUseActivity(ctx) ? ["activity"] : [];
+		const activity = allowed ? ACTIVITY_TOOLS : mayUseActivity(ctx) ? SCOUT_TOOLS : [];
 		const gated = [...INSIGHT_TOOLS, ...EXTERNAL_MANAGER_TOOLS, ...ACTIVITY_TOOLS];
 		const next = [
 			...new Set([

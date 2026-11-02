@@ -198,6 +198,16 @@ export type Command =
 			note: string;
 			remove?: string;
 	  }
+	/** Write a new note (its id is `note-<command id>`), change the note `update`, or remove the note `remove`. */
+	| {
+			kind: "note";
+			update?: string;
+			remove?: string;
+			title?: string;
+			body?: string;
+			topics?: string[];
+			refs?: string[];
+	  }
 	/**
 	 * Start the session (a new id, or a stopped session by its id) with `pi` in a new tmux window after `tmux.pane`'s
 	 * window. The runtime opens the window itself; `cwd` and `name` default to the stopped session's. Applied when the

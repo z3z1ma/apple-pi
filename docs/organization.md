@@ -290,7 +290,7 @@ The package's roles are listed below; their files own the current model recommen
 | `chaos-engineering-specialist` | Chaos Engineering Specialist | Design failure injection, partial outage, retry, degradation | `openai/gpt-6.1-sol`, `anthropic/claude-sonnet-5-5` | medium | advises |
 | `chief-architect` | Chief Architect | Judge boundaries, invariants, evolution, coherence | `anthropic/claude-opus-5-5`, `openai/gpt-6-astra` | high | advises |
 | `code-review-specialist` | Code Review Specialist | Find real defects, regressions, maintainability problems in diffs | `openai/gpt-6.1-sol`, `anthropic/claude-sonnet-5-5` | medium | advises |
-| `coordinator` | Coordinator | Keeps the operator's desk; routes everything he brings to the right people and keeps him on top of it | `openai/gpt-6.1-sol`, `anthropic/claude-opus-5-5` | high | manages, dispatches |
+| `coordinator` | Coordinator | Keeps the operator's desk; routes everything he brings to the right people and keeps him on top of it | `desk` profile, then `openai/gpt-6.1-terra`, `anthropic/claude-sonnet-5-5` | profile or recommendation | manages, dispatches |
 | `database-reliability-architect` | Database Reliability Architect | Attack migrations, locking, isolation, corruption, rollback | `anthropic/claude-opus-5-5`, `openai/gpt-6.1-sol` | high | advises |
 | `developer-experience-lead` | Developer Experience Lead | Judge APIs, naming, errors, docs, integration friction | `antigravity/gemini-3.8-flash`, `openai/gpt-6.1-sol` | medium | advises |
 | `director-of-engineering` | Director of Engineering | Route work, set decision gates, resolve conflicts, own delivery | `openai/gpt-6.1-sol`, `anthropic/claude-opus-5-5` | high | manages, writes |
@@ -312,6 +312,7 @@ The package's roles are listed below; their files own the current model recommen
 | `release-engineering-lead` | Release Engineering Lead | Plan rollouts, rollback, flags, compatibility | `openai/gpt-6.1-sol`, `anthropic/claude-sonnet-5-5` | medium | writes |
 | `repository-archaeologist` | Repository Archaeologist | Dig out hidden assumptions, prior art, conventions | `anthropic/claude-haiku-5-5`, `openai/gpt-6-luna` | low | advises |
 | `research-lead` | Research Lead | Own consequential inquiries, discriminating experiments and evidence-led decisions | `coordination` profile, then the role's concrete recommendations | profile or recommendation | manages, writes |
+| `scout` | Scout | Explore the operator's Slack, GitHub and Jira to connect threads and build the organization's knowledge | `balanced` profile, then `openai/gpt-6.1-sol`, `xai/grok-4.7` | profile or recommendation | explores, keeps notes |
 | `scientific-skeptic` | Scientific Skeptic | Separate fact from assumption; design the cheapest falsifying test | `openai/gpt-6-astra`, `anthropic/claude-fable-5-1` | high | advises |
 | `service-owner` | Service Owner | Own operational health across releases, incidents and corrective work | `coordination` profile, then the role's concrete recommendations | profile or recommendation | manages, writes |
 | `skeptical-first-time-user` | Skeptical First-Time User | Use the product with no knowledge of its internals | `xai/grok-4.7`, `openai/gpt-6-luna` | low | advises |

@@ -6,7 +6,7 @@ import { channelName } from "./workplace-names.js";
 import { PersonAvatar } from "./workplace-people.js";
 
 export type SwitchTarget =
-	| { kind: "view"; view: "desk" | "threads" | "activity" | "later" }
+	| { kind: "view"; view: "desk" | "threads" | "activity" | "later" | "notes" }
 	/** `entry`: a message in the DM to scroll to. */
 	| { kind: "dm"; id: string; entry?: string }
 	| { kind: "channel"; id: string }
@@ -18,7 +18,7 @@ export type Item = {
 	detail: string;
 	target: SwitchTarget;
 	person?: string;
-	icon?: "desk" | "threads" | "bell" | "bookmark";
+	icon?: "desk" | "threads" | "bell" | "bookmark" | "file";
 	/** Already matched by a search, so the typed words need not appear in its label. */
 	found?: boolean;
 };
@@ -52,6 +52,13 @@ function items(world: WorldSnapshot): Item[] {
 			detail: "Messages you saved",
 			target: { kind: "view", view: "later" },
 			icon: "bookmark",
+		},
+		{
+			key: "v:notes",
+			label: "Notes",
+			detail: "What the organization learned",
+			target: { kind: "view", view: "notes" },
+			icon: "file",
 		},
 	];
 	const people: Item[] = [

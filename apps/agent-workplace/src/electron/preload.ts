@@ -15,6 +15,7 @@ import type {
 	NotepadChange,
 	NotepadRead,
 	NotepadSave,
+	NotesRead,
 	OutsideRead,
 	ProfileRead,
 	Receipt,
@@ -182,6 +183,7 @@ const api: AgentWorkplaceApi = {
 	readOutside: (request) => ipcRenderer.invoke("world:read-outside", request) as Promise<OutsideRead>,
 	setOutsideModes: (modes) => ipcRenderer.invoke("world:outside-modes", modes) as Promise<CommandReceipt>,
 	setOutsideRule: (request) => ipcRenderer.invoke("world:outside-rule", request) as Promise<CommandReceipt>,
+	readNotes: (request) => ipcRenderer.invoke("world:read-notes", request) as Promise<NotesRead>,
 	readWorkplaceThread: (thread) => ipcRenderer.invoke("world:workplace-thread", thread) as Promise<ThreadRead>,
 	setChannelMembership: (thread, joined) =>
 		ipcRenderer.invoke("world:channel-membership", thread, joined) as Promise<CommandReceipt>,

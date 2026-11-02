@@ -261,6 +261,15 @@ function start() {
 			? workplace.setOutsideModes(chosen)
 			: { ok: false, reason: "Choose a mode for a source." };
 	});
+	ipcMain.handle("world:read-notes", (_event, request: unknown) => {
+		const value = (request ?? {}) as { words?: unknown; limit?: unknown };
+		return Number.isSafeInteger(value.limit) && (value.limit as number) > 0
+			? workplace.readNotes({
+					limit: value.limit as number,
+					...(typeof value.words === "string" && value.words.trim() ? { words: value.words } : {}),
+				})
+			: { ok: false, reason: "A page size is required." };
+	});
 	ipcMain.handle("world:outside-rule", (_event, request: unknown) => {
 		const value = (request ?? {}) as Record<string, unknown>;
 		if (typeof value.remove === "string") return workplace.setOutsideRule({ remove: value.remove });

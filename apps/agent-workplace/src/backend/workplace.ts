@@ -9,6 +9,7 @@ import {
 	activityRules,
 	triageModes,
 } from "../../../../components/session-state/src/activity.js";
+import { notesAvailable, readNotes } from "../../../../components/session-state/src/notes.js";
 import type {
 	CharacterFacts,
 	CommandReceipt,
@@ -21,7 +22,14 @@ import type {
 	WorkplaceThread,
 	WorldSnapshot,
 } from "../world.js";
-import { type AgentWorkplaceApi, OPERATOR, type OutsideMode, type OutsideRead, type OutsideSource } from "../world.js";
+import {
+	type AgentWorkplaceApi,
+	type NotesRead,
+	OPERATOR,
+	type OutsideMode,
+	type OutsideRead,
+	type OutsideSource,
+} from "../world.js";
 import type { Commands } from "./commands.js";
 import type { taskReader } from "./facts.js";
 import { operatorPane } from "./inn.js";
@@ -282,6 +290,7 @@ export interface WorkplaceActions {
 	readOutside(request: { source?: OutsideSource; untriaged?: boolean; limit: number }): Promise<OutsideRead>;
 	setOutsideModes(modes: Partial<Record<OutsideSource, OutsideMode>>): Promise<CommandReceipt>;
 	setOutsideRule(request: Parameters<AgentWorkplaceApi["setOutsideRule"]>[0]): Promise<CommandReceipt>;
+	readNotes(request: { words?: string; limit: number }): Promise<NotesRead>;
 	readWorkplaceThread(thread: string): Promise<ThreadRead>;
 	setChannelMembership(thread: string, joined: boolean): Promise<CommandReceipt>;
 }
@@ -323,9 +332,17 @@ export function openWorkplace(path: string, commands: Commands, snapshot: () => 
 					return { ok: false, reason: "Restart the session runtime to follow outside activity." };
 				const modes = triageModes(db);
 				const health = new Map(activityHealth(db).map((row) => [row.source, row]));
+				const items = activityPage(db, request);
+				const connections: Record<string, { id: string; title: string }[]> = {};
+				if (notesAvailable(db))
+					for (const item of items) {
+						const found = readNotes(db, { ref: item.id, limit: 5 });
+						if (found.length) connections[item.id] = found.map((note) => ({ id: note.id, title: note.title }));
+					}
 				return {
 					ok: true,
-					items: activityPage(db, request),
+					connections,
+					items,
 					sources: ACTIVITY_SOURCES.map((source) => ({
 						source,
 						mode: modes[source],
@@ -354,6 +371,17 @@ export function openWorkplace(path: string, commands: Commands, snapshot: () => 
 				value: { ...current, ...changes },
 			});
 			return result.ok ? { ok: true, stage: "applied" } : result;
+		},
+		async readNotes(request) {
+			if (!existsSync(path)) return { ok: false, reason: "The session database is not available." };
+			const db = new DatabaseSync(path, { readOnly: true });
+			try {
+				return notesAvailable(db)
+					? { ok: true, notes: readNotes(db, request) }
+					: { ok: false, reason: "Restart the session runtime to keep notes." };
+			} finally {
+				db.close();
+			}
 		},
 		async setOutsideRule(request) {
 			const result = await commands.send(OPERATOR, {

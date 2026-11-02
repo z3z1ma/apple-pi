@@ -13,9 +13,12 @@ import {
 	TRIAGE_ACTIONS,
 } from "./activity.js";
 import { sendCommand } from "./client.js";
+import { notesAvailable, readNotes } from "./notes.js";
 import { withThreads } from "./threads.js";
 
-export const ACTIVITY_TOOLS = ["activity", "triage", "activity_rule"];
+export const ACTIVITY_TOOLS = ["activity", "triage", "activity_rule", "notes", "note"];
+/** What the scout holds: it reads the stream and keeps notes, and leaves decisions to the desk. */
+export const SCOUT_TOOLS = ["activity", "notes", "note"];
 
 /** The desk's coordinator and other managers triage; the scout reads what the desk sees. */
 export const mayUseActivity = (ctx: ExtensionContext) => managesPeople(ctx) || sessionRole(ctx)?.name === "scout";
@@ -83,6 +86,58 @@ export function installActivityTools(pi: ExtensionAPI): void {
 				);
 				if (receipt.stage === "failed") throw new Error(receipt.reason);
 				return text({ triaged: args.items.length, action: args.action });
+			},
+		}),
+	);
+	pi.registerTool(
+		defineTool({
+			name: "notes",
+			label: "notes",
+			description:
+				"Read the organization's notes: knowledge that outlives one task (who owns what, how a system works, recurring problems) and connections between threads in Slack, GitHub, Jira and the organization. Give words to search titles, bodies and topics, or ref to find notes about one activity item, URL, task or thread. Read before exploring or triaging, so you start from what is known.",
+			promptSnippet: "Search the organization's knowledge and the connections it has found.",
+			parameters: Type.Object(
+				{
+					words: Type.Optional(Type.String({ minLength: 1 })),
+					ref: Type.Optional(
+						Type.String({ minLength: 1, description: "An activity item id, URL, task or thread id." }),
+					),
+					limit: Type.Integer({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER }),
+				},
+				{ additionalProperties: false },
+			),
+			async execute(_id, args, _signal, _update, ctx) {
+				if (!mayUseActivity(ctx)) throw new Error("Only the desk's managers and its scout read the notes.");
+				const read = withThreads((db) => (notesAvailable(db) ? readNotes(db, args) : undefined));
+				if (!read) throw new Error("Restart the runtime before reading notes.");
+				return text(read);
+			},
+		}),
+	);
+	pi.registerTool(
+		defineTool({
+			name: "note",
+			label: "note",
+			executionMode: "sequential",
+			description:
+				"Write a note the whole organization can read later: title and body (Markdown) for something learned that will matter again, with topics to find it by and refs to what it is about (activity item ids, URLs, task or thread ids). A connection is a note whose refs are the threads it connects and whose body says how they relate and why it matters. Give update with a note id to change it (only the fields you give), or remove to delete one that is wrong. Prefer updating a note over writing a second about the same thing.",
+			promptSnippet: "Record durable knowledge or a connection between threads as an organization note.",
+			parameters: Type.Object(
+				{
+					update: Type.Optional(Type.String({ minLength: 1 })),
+					remove: Type.Optional(Type.String({ minLength: 1 })),
+					title: Type.Optional(Type.String({ minLength: 1 })),
+					body: Type.Optional(Type.String({ minLength: 1 })),
+					topics: Type.Optional(Type.Array(Type.String({ minLength: 1 }))),
+					refs: Type.Optional(Type.Array(Type.String({ minLength: 1 }))),
+				},
+				{ additionalProperties: false },
+			),
+			async execute(_id, args, signal, _update, ctx) {
+				if (!mayUseActivity(ctx)) throw new Error("Only the desk's managers and its scout write notes.");
+				const receipt = await sendCommand(ctx.sessionManager.getSessionId(), { kind: "note", ...args }, { signal });
+				if (receipt.stage === "failed") throw new Error(receipt.reason);
+				return text(args.remove ? { removed: args.remove } : { written: args.update ?? "new note" });
 			},
 		}),
 	);

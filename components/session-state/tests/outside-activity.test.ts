@@ -11,6 +11,7 @@ import {
 	triageActivity,
 } from "../src/activity.js";
 import { ActivityPoller } from "../src/activity-poller.js";
+import { readNotes, removeNote, writeNote } from "../src/notes.js";
 import { migrate } from "../src/schema.js";
 import type { ThreadPost } from "../src/threads.js";
 
@@ -153,6 +154,34 @@ test("the newest matching rule hides, quiets, always triages or routes a new ite
 	removeActivityRule(db, "r1");
 	expect(activityPage(db, { limit: 10 })).toHaveLength(4);
 	expect(activityRules(db).map((rule) => rule.id)).toEqual(["r3", "r2"]);
+});
+
+test("notes keep what the organization learned and what they connect, found by words or by a ref", () => {
+	const { db } = setup();
+	const id = writeNote(
+		db,
+		"note-1",
+		"scout",
+		{
+			title: "Webhook retries",
+			body: "The Slack thread and PR #12 are the same bug.",
+			topics: ["webhooks", " webhooks "],
+			refs: ["github:1:2", "slack:dm:D1:1"],
+		},
+		1,
+	);
+	expect(readNotes(db, { words: "WEBHOOK bug", limit: 5 }).map((found) => found.id)).toEqual([id]);
+	expect(readNotes(db, { ref: "slack:dm:D1:1", limit: 5 })[0]).toMatchObject({ topics: ["webhooks"], by: "scout" });
+	expect(readNotes(db, { words: "deploy", limit: 5 })).toEqual([]);
+	writeNote(db, "ignored", "cora", { update: id, body: "Same bug; Iris owns the fix." }, 2);
+	expect(readNotes(db, { limit: 5 })[0]).toMatchObject({
+		title: "Webhook retries",
+		body: "Same bug; Iris owns the fix.",
+		updatedAt: 2,
+	});
+	expect(() => writeNote(db, "note-2", "cora", { title: "Only a title" }, 3)).toThrow("title and a body");
+	removeNote(db, id);
+	expect(readNotes(db, { limit: 5 })).toEqual([]);
 });
 
 test("a failed read is reported on its source and keeps the cursor for the next read", async () => {

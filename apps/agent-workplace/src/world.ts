@@ -462,6 +462,19 @@ export interface OutsideItem {
 	triage: { by: string; action: string; note: string; ref?: string; at: number } | null;
 	rule: { id: string; effect: string; note: string } | null;
 }
+/** Something the organization learned, or a connection between threads, kept as a note. */
+export interface OrgNote {
+	id: string;
+	title: string;
+	body: string;
+	topics: string[];
+	refs: string[];
+	by: string;
+	createdAt: number;
+	updatedAt: number;
+}
+export type NotesRead = { ok: true; notes: OrgNote[] } | { ok: false; reason: string };
+
 /** A standing decision about new outside items: hide, quiet, always triage, or route to a person. */
 export interface OutsideRule {
 	id: string;
@@ -481,6 +494,8 @@ export type OutsideRead =
 			items: OutsideItem[];
 			sources: { source: OutsideSource; mode: OutsideMode; polledAt: number | null; error: string | null }[];
 			rules: OutsideRule[];
+			/** Notes that name a listed item among their refs, by item id. */
+			connections: Record<string, { id: string; title: string }[]>;
 	  }
 	| { ok: false; reason: string };
 
@@ -632,6 +647,8 @@ export interface AgentWorkplaceApi extends IntegrationsApi {
 	readOutside(request: { source?: OutsideSource; untriaged?: boolean; limit: number }): Promise<OutsideRead>;
 	/** Choose how each source is followed; a source turned on is read at once. */
 	setOutsideModes(modes: Partial<Record<OutsideSource, OutsideMode>>): Promise<CommandReceipt>;
+	/** The organization's notes, newest first; words must all appear in a note. */
+	readNotes(request: { words?: string; limit: number }): Promise<NotesRead>;
 	/** Add a rule as the operator, or remove one by id. */
 	setOutsideRule(
 		request:

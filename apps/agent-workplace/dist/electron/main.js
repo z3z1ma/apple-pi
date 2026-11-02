@@ -8940,6 +8940,33 @@ function triageModes(db) {
 	return Object.fromEntries(ACTIVITY_SOURCES.map((source) => [source, TRIAGE_MODES.includes(chosen[source]) ? chosen[source] : "off"]));
 }
 //#endregion
+//#region components/session-state/src/notes.ts
+var note = (row) => ({
+	id: row.id,
+	title: row.title,
+	body: row.body,
+	topics: JSON.parse(row.topics),
+	refs: JSON.parse(row.refs),
+	by: row.by,
+	createdAt: row.created_at,
+	updatedAt: row.updated_at
+});
+var notesAvailable = (db) => Boolean(db.prepare("select 1 from sqlite_master where name = 'notes'").get());
+/** Notes newest first; `words` must all appear in the title, body or topics, `ref` among its refs. */
+function readNotes(db, filter) {
+	const where = ["1 = 1"];
+	const args = [];
+	for (const word of (filter.words ?? "").toLowerCase().split(/\s+/).filter(Boolean)) {
+		where.push("lower(title || ' ' || body || ' ' || topics) like ?");
+		args.push(`%${word}%`);
+	}
+	if (filter.ref) {
+		where.push("exists (select 1 from json_each(notes.refs) where value = ?)");
+		args.push(filter.ref);
+	}
+	return db.prepare(`select * from notes where ${where.join(" and ")} order by updated_at desc, id limit ?`).all(...args, filter.limit).map(note);
+}
+//#endregion
 //#region apps/agent-workplace/src/backend/projection.ts
 /** The key of a manager's team room among a headquarters' wings. */
 var teamRoom = (manager) => `team:${manager}`;
@@ -9361,9 +9388,22 @@ function openWorkplace(path, commands, snapshot) {
 				};
 				const modes = triageModes(db);
 				const health = new Map(activityHealth(db).map((row) => [row.source, row]));
+				const items = activityPage(db, request);
+				const connections = {};
+				if (notesAvailable(db)) for (const item of items) {
+					const found = readNotes(db, {
+						ref: item.id,
+						limit: 5
+					});
+					if (found.length) connections[item.id] = found.map((note) => ({
+						id: note.id,
+						title: note.title
+					}));
+				}
 				return {
 					ok: true,
-					items: activityPage(db, request),
+					connections,
+					items,
 					sources: ACTIVITY_SOURCES.map((source) => ({
 						source,
 						mode: modes[source],
@@ -9398,6 +9438,24 @@ function openWorkplace(path, commands, snapshot) {
 				ok: true,
 				stage: "applied"
 			} : result;
+		},
+		async readNotes(request) {
+			if (!existsSync(path)) return {
+				ok: false,
+				reason: "The session database is not available."
+			};
+			const db = new DatabaseSync(path, { readOnly: true });
+			try {
+				return notesAvailable(db) ? {
+					ok: true,
+					notes: readNotes(db, request)
+				} : {
+					ok: false,
+					reason: "Restart the session runtime to keep notes."
+				};
+			} finally {
+				db.close();
+			}
 		},
 		async setOutsideRule(request) {
 			const result = await commands.send(OPERATOR, {
@@ -12929,6 +12987,16 @@ function start() {
 		return Object.keys(chosen).length ? workplace.setOutsideModes(chosen) : {
 			ok: false,
 			reason: "Choose a mode for a source."
+		};
+	});
+	ipcMain.handle("world:read-notes", (_event, request) => {
+		const value = request ?? {};
+		return Number.isSafeInteger(value.limit) && value.limit > 0 ? workplace.readNotes({
+			limit: value.limit,
+			...typeof value.words === "string" && value.words.trim() ? { words: value.words } : {}
+		}) : {
+			ok: false,
+			reason: "A page size is required."
 		};
 	});
 	ipcMain.handle("world:outside-rule", (_event, request) => {

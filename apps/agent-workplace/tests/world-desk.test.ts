@@ -314,6 +314,7 @@ async function openDesk(appearance: "light" | "dark", width = 1440, desk = true)
 							polledAt: source === "jira" ? null : now - 40_000,
 							error: null,
 						})),
+						connections: { "slack:dm:D1:1": [{ id: "note-1", title: "Webhook retries are one bug" }] },
 						rules: (w.rules ?? []).map((rule: any, index: number) => ({
 							id: `rule-${index}`,
 							person: null,
@@ -323,6 +324,21 @@ async function openDesk(appearance: "light" | "dark", width = 1440, desk = true)
 						})),
 					};
 				},
+				readNotes: async (request: any) => ({
+					ok: true,
+					notes: [
+						{
+							id: "note-1",
+							title: "Webhook retries are one bug",
+							body: "Priya's DM and acme/api#12 describe **the same** retry bug.",
+							topics: ["webhooks"],
+							refs: ["github:1:2", "slack:dm:D1:1", "https://github.com/acme/api/pull/12"],
+							by: "cora",
+							createdAt: now - 50_000,
+							updatedAt: now - 50_000,
+						},
+					].filter((note) => !request.words || note.body.toLowerCase().includes(request.words.toLowerCase())),
+				}),
 				setOutsideRule: async (request: any) => {
 					w.rules = [...(w.rules ?? []), structuredClone(request)];
 					return { ok: true, stage: "applied" };
@@ -602,6 +618,7 @@ test("Activity lists outside work by conversation with the desk's decision, and 
 		await outside.getByText("1 more").waitFor();
 		await outside.getByText("Milo reviews it today").waitFor();
 		await outside.getByText("With the desk").waitFor();
+		await outside.getByText("Webhook retries are one bug").waitFor();
 		await shot(page, "outside-light");
 		await outside.getByRole("button", { name: "GitHub", exact: true }).click();
 		await vi.waitFor(async () => expect(await rows.count()).toBe(1));
@@ -621,6 +638,14 @@ test("Activity lists outside work by conversation with the desk's decision, and 
 		await outside.getByRole("combobox", { name: "jira mode" }).selectOption("direct");
 		await vi.waitFor(async () => expect(await page.evaluate(() => (window as any).modes)).toEqual({ jira: "direct" }));
 		await shot(page, "outside-sources-light");
+		await page.getByRole("button", { name: /^Notes/ }).click();
+		const notes = page.getByRole("region", { name: "Notes" });
+		await notes.getByRole("button", { name: /Webhook retries are one bug/ }).click();
+		await notes.locator(".wp-note-body strong").filter({ hasText: "the same" }).waitFor();
+		await notes.getByRole("button", { name: "https://github.com/acme/api/pull/12" }).waitFor();
+		await shot(page, "notes-light");
+		await notes.getByRole("textbox", { name: "Search notes" }).fill("deploy");
+		await notes.getByText("No note mentions that.").waitFor();
 		expect(errors).toEqual([]);
 	} finally {
 		await page.close();

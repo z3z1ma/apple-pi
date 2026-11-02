@@ -77,6 +77,7 @@ import {
 } from "./departures.js";
 import { type ExternalCommand, type ExternalCommit, ExternalThreads } from "./external-threads.js";
 import { recordLink, resolveLink } from "./links.js";
+import { removeNote, writeNote } from "./notes.js";
 import { discardProgramPeople, programDescendants, temporaryCallers } from "./program-peers.js";
 import { entryReaction, react, reactionsOf } from "./reactions.js";
 import { reviewScope } from "./review-attempt.js";
@@ -804,7 +805,8 @@ export class Runtime {
 			command.kind === "channel_charter" ||
 			command.kind === "react" ||
 			command.kind === "activity_triage" ||
-			command.kind === "activity_rule"
+			command.kind === "activity_rule" ||
+			command.kind === "note"
 		) {
 			receipt("accepted");
 			this.standingCommand(commandId, sessionId, command, now);
@@ -1279,12 +1281,18 @@ export class Runtime {
 		sender: string,
 		command: Extract<
 			Command,
-			{ kind: "schedule" | "unschedule" | "channel_charter" | "react" | "activity_triage" | "activity_rule" }
+			{
+				kind: "schedule" | "unschedule" | "channel_charter" | "react" | "activity_triage" | "activity_rule" | "note";
+			}
 		>,
 		now: number,
 	): void {
 		try {
 			if (command.kind === "activity_triage") triageActivity(this.db!, sender, command.items, command, now);
+			else if (command.kind === "note")
+				command.remove
+					? removeNote(this.db!, command.remove)
+					: writeNote(this.db!, `note-${commandId}`, sender, command, now);
 			else if (command.kind === "activity_rule")
 				command.remove
 					? removeActivityRule(this.db!, command.remove)

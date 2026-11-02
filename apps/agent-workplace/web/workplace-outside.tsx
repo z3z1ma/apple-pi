@@ -217,6 +217,7 @@ export function OutsideActivity({ world }: { world: WorldSnapshot }) {
 							key={item!.conversation}
 							item={item!}
 							more={more.length}
+							connections={[item!, ...more].flatMap((entry) => (read?.ok ? (read.connections[entry.id] ?? []) : []))}
 							changed={() => setChanged((count) => count + 1)}
 						/>
 					))}
@@ -242,7 +243,17 @@ function nameOf(world: WorldSnapshot, id: string) {
 	);
 }
 
-function OutsideRow({ item, more, changed }: { item: OutsideItem; more: number; changed: () => void }) {
+function OutsideRow({
+	item,
+	more,
+	changed,
+	connections,
+}: {
+	item: OutsideItem;
+	more: number;
+	changed: () => void;
+	connections: { id: string; title: string }[];
+}) {
 	const openMenu = useWorkplaceMenu();
 	const place = placeOf(item.conversation);
 	const rule = (match: OutsideRule["match"], effect: OutsideRule["effect"], note: string) => () =>
@@ -305,6 +316,12 @@ function OutsideRow({ item, more, changed }: { item: OutsideItem; more: number; 
 					{item.rule && item.rule.effect !== "route" && (
 						<span className="wp-outside-triage" data-action="rule">
 							<b>{EFFECTS[item.rule.effect as OutsideRule["effect"]] ?? item.rule.effect}</b> {item.rule.note}
+						</span>
+					)}
+					{connections.length > 0 && (
+						<span className="wp-outside-triage" data-action="connection">
+							<Icon name="threads" />
+							<b>Connected</b> {[...new Set(connections.map((connection) => connection.title))].join("; ")}
 						</span>
 					)}
 					{item.triage ? (

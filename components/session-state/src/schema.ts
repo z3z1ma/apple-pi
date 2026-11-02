@@ -447,6 +447,17 @@ const MIGRATIONS = [
 		created_at integer not null
 	) strict;
 	alter table activity_items add column rule text;`,
+	// The organization's notes: knowledge and connections that outlive one task (components/session-state/src/notes.ts).
+	`create table notes (
+		id text primary key,
+		title text not null,
+		body text not null,
+		topics text not null,
+		refs text not null,
+		by text not null,
+		created_at integer not null,
+		updated_at integer not null
+	) strict;`,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

@@ -239,3 +239,65 @@
 .wp-outside-triage[data-action="pending"] {
 	font-style: italic;
 }
+
+.wp-outside-triage[data-action="connection"] b {
+	color: var(--wp-accent);
+}
+.wp-notes-list {
+	list-style: none;
+	margin: 0;
+	padding: 10px 14px 24px;
+}
+.wp-notes-list > li + li {
+	border-top: 1px solid var(--wp-border);
+}
+.wp-app .wp-notes-list > li > button {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	width: 100%;
+	padding: 11px 12px;
+	border: 0;
+	border-radius: 8px;
+	background: transparent;
+	color: var(--wp-text);
+	text-align: left;
+	font-size: 13px;
+}
+.wp-app .wp-notes-list > li > button:hover {
+	background: var(--wp-hover);
+}
+.wp-notes-list time {
+	flex: none;
+	color: var(--wp-muted);
+	font-size: 11px;
+}
+.wp-notes-list strong {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.wp-outside-tile svg {
+	width: 16px;
+	height: 16px;
+}
+.wp-note-body {
+	margin: 0 12px 12px 58px;
+	font-size: 13px;
+	line-height: 1.5;
+}
+.wp-note-refs {
+	display: grid;
+	gap: 2px;
+	margin: 8px 0 0;
+	padding: 0;
+	list-style: none;
+}
+.wp-app .wp-note-refs button {
+	padding: 0;
+	border: 0;
+	background: none;
+	color: var(--wp-link);
+	font-size: 12px;
+	text-align: left;
+}

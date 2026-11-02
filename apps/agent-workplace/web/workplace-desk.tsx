@@ -14,6 +14,7 @@ import { useWorkplaceMenu } from "./workplace-context-menu.js";
 import { Icon } from "./workplace-icon.js";
 import { later, pinnedThreads, useLater } from "./workplace-later.js";
 import { deliver } from "./workplace-message-actions.js";
+import { NotesView } from "./workplace-notes.js";
 import { OutsideActivity } from "./workplace-outside.js";
 import { PersonAvatar, PersonName, presenceOf, sessionStatus } from "./workplace-people.js";
 import { destinations, Picker, type SwitchTarget } from "./workplace-switcher.js";
@@ -1032,7 +1033,7 @@ export function ChannelHeader({
 	);
 }
 
-export type OrganizationKind = "desk" | "threads" | "activity" | "later";
+export type OrganizationKind = "desk" | "threads" | "activity" | "later" | "notes";
 
 /** The organization views at the top of the Chat sidebar. */
 export function ChatNav({
@@ -1054,7 +1055,7 @@ export function ChatNav({
 	const item = (
 		kind: OrganizationKind,
 		label: string,
-		icon: "desk" | "threads" | "bell" | "bookmark",
+		icon: "desk" | "threads" | "bell" | "bookmark" | "file",
 		count: number,
 	) => (
 		<button
@@ -1075,6 +1076,7 @@ export function ChatNav({
 			{item("threads", "Threads", "threads", live)}
 			{item("activity", "Activity", "bell", needsYou)}
 			{item("later", "Later", "bookmark", saved)}
+			{item("notes", "Notes", "file", 0)}
 		</nav>
 	);
 }
@@ -1124,6 +1126,7 @@ export function OrganizationView({
 	if (view === "activity")
 		return <ActivityView world={world} items={needsYou} unseen={unseen} markAllRead={markAllRead} />;
 	if (view === "later") return <LaterView go={go} />;
+	if (view === "notes") return <NotesView world={world} />;
 	return (
 		<div className="wp-empty">
 			<span className="wp-empty-icon">
