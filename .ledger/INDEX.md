@@ -22,4 +22,4 @@
 
 - `.ledger/202611012305-front-desk-continuous-organization/task.md` — planning — Build the front desk: the organization as one continuous agent — Implement the approved super-agent proposal: dispatch posture, on-call coordinator, desk channel as default composer, Threads and Activity views, durable schedules, watchdog, external GitHub/CI/Jira threads, channel charters, inline/spill delivery, and drastic Chat polish.
 
-- `.ledger/202611020022-long-lived-agent-recall-and-retention/task.md` — planning — Measure long-lived agent recall and design transcript retention — Evaluate real-history recall across session search, notebook, compaction and mail; propose ranked search improvements and safe hot/archive retention before implementation.
+- `.ledger/202611020022-long-lived-agent-recall-and-retention/task.md` — in-progress — Measure long-lived agent recall and design transcript retention — Evaluate real-history recall across session search, notebook, compaction and mail; propose ranked search improvements and safe hot/archive retention before implementation.

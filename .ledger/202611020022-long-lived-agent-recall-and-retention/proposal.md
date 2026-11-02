@@ -61,7 +61,7 @@ The runtime separately had a 329 MB main DB and 13 MB WAL, including 176,407 pre
 
 ## Ranked `search_session` improvements
 
-These ranks are engineering judgment from the diagnosed mechanisms, **not measured effect sizes**. Implement one coherent change at a time against frozen queries and labels; retain failed/negative cases and judge novel hits before scoring them.
+These ranks are engineering judgment from the diagnosed mechanisms, **not measured effect sizes**. The gold set is the fixed set of questions and independently assigned relevance labels described in the evaluation. Implement one coherent change at a time against frozen queries and labels; retain failed/negative cases and judge novel hits before scoring them.
 
 ### 1. Close evidence holes and repair exact addressing
 
