@@ -4,6 +4,7 @@ import type { ReviewCommand } from "../../code-review/src/operations.js";
 import type { QuestionnaireReply } from "../../shared/src/questionnaire-events.js";
 import type { TurnProgress, TurnResult } from "../../shared/src/turn-observer.js";
 import type { CommunicationCommand, MessageReference } from "./communication-types.js";
+import type { ExternalCommand } from "./external-threads.js";
 import type { LinkRecord } from "./links.js";
 import type { PeerTurn } from "./peer-turns.js";
 import type { RunObservation, RunSnapshot } from "./run-observation.js";
@@ -151,6 +152,7 @@ export type Command =
 	| WorkCommand
 	| ReviewCommand
 	| CommunicationCommand
+	| ExternalCommand
 	/** Send `body` to `to` at `firstAt` and, with `everyMs`, repeatedly after; the schedule's id is the command id. */
 	| { kind: "schedule"; to: string; body: string; firstAt: number; everyMs?: number }
 	/** Stop a schedule the sender owns or receives (the operator can stop any). */

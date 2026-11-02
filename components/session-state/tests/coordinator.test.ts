@@ -487,7 +487,7 @@ test.each([undefined, "implementation-engineer", "coordinator"])(
 		const run = await fauxSession(
 			[bridge],
 			[call("directory", {}), fauxAssistantMessage("done")],
-			["read", "hire", "progress"],
+			["read", "hire", "progress", "watch_repository"],
 		);
 		await withRole(run, role);
 		await vi.waitFor(
@@ -515,6 +515,7 @@ test.each([undefined, "implementation-engineer", "coordinator"])(
 				"let_go",
 				"assign",
 				"unassign",
+				"watch_repository",
 				"economics",
 				"predictions",
 				"experience",
@@ -526,6 +527,8 @@ test.each([undefined, "implementation-engineer", "coordinator"])(
 			expect(active).toEqual(
 				expect.arrayContaining([
 					"read",
+					"follow_external",
+					"unfollow_external",
 					"directory",
 					"send_mail",
 					"reply",

@@ -14,8 +14,9 @@ import {
 import { applyCommunication, type PublishCommunication } from "../src/communication-actions.js";
 import type { CommunicationOperation } from "../src/communication-types.js";
 import { discardProgramPeople } from "../src/program-peers.js";
-import { migrate, SCHEMA_VERSION } from "../src/schema.js";
+import { migrate } from "../src/schema.js";
 import { nameOf, postToThread } from "../src/threads.js";
+import { rewindRecentSchema } from "./historical-schema.js";
 
 let db: DatabaseSync;
 let sequence = 0;
@@ -291,10 +292,7 @@ test("upgrade preserves legacy kinds and cursors while adding query and attempt 
 	db.prepare(
 		"insert into threads(id,kind,subject,created_by,created_at,closed_at) values ('old-meeting','meeting','Review','a',1,2)",
 	).run();
-	for (const column of ["channel_type", "purpose", "scope_head", "pinned_seq"])
-		db.exec(`alter table threads drop column ${column}`);
-	db.exec("alter table thread_participants drop column following; alter table commands drop column result");
-	db.exec(`pragma user_version = ${SCHEMA_VERSION - 1}`);
+	rewindRecentSchema(db, 32);
 	expect(communicationAvailable(db)).toBe(false);
 	expect(() => findChannels(db, "a", { limit: 1 })).toThrow(/Restart the session runtime/);
 	migrate(db);

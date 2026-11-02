@@ -6,6 +6,7 @@ import { managesPeople } from "../../organization/src/install.js";
 import { resolvePerson } from "./addresses.js";
 import { sendCommand } from "./client.js";
 import { coordinationIn } from "./coordination-inspection.js";
+import { installExternalTools } from "./external-tools.js";
 import { membership, realizedFitness, taskOwnership } from "./fitness.js";
 import { areasOf, communicationIn, expertsOn, type Scope, type Window, waitsIn, workIn } from "./inspect.js";
 import { ENTITY_KINDS, type Entity, type Link, relations } from "./links.js";
@@ -15,7 +16,17 @@ import { activeSchedules } from "./schedules.js";
 import { goalText, rootOf, taskIdOf, type WorkAction, type WorkTask, withWork } from "./work.js";
 import { bottlenecksIn, progressIn } from "./work-inspection.js";
 
-const PERSON_TASK_TOOLS = ["take_task", "focus", "finish_task", "promote_task", "link", "schedule_mail"];
+const PERSON_TASK_TOOLS = [
+	"take_task",
+	"focus",
+	"finish_task",
+	"promote_task",
+	"link",
+	"schedule_mail",
+	"follow_external",
+	"unfollow_external",
+];
+const EXTERNAL_MANAGER_TOOLS = ["watch_repository"];
 const INSIGHT_TOOLS = ["economics", "predictions", "experience", "bottlenecks", "progress", "coordination"];
 const UNITS: Record<string, number> = { m: 60_000, h: 3_600_000, d: 86_400_000 };
 
@@ -457,6 +468,7 @@ function organizationOverview(ctx: ExtensionContext): string {
 }
 
 export function installWork(pi: ExtensionAPI): void {
+	installExternalTools(pi);
 	pi.registerCommand("org", {
 		description: "Inspect organization waits, work and requests; economics or experience for detail",
 		handler: async (args, ctx) => {
@@ -793,9 +805,9 @@ export function installWork(pi: ExtensionAPI): void {
 		const allowed = managesPeople(ctx);
 		const next = [
 			...new Set([
-				...active.filter((name) => allowed || !INSIGHT_TOOLS.includes(name)),
+				...active.filter((name) => allowed || ![...INSIGHT_TOOLS, ...EXTERNAL_MANAGER_TOOLS].includes(name)),
 				...PERSON_TASK_TOOLS,
-				...(allowed ? INSIGHT_TOOLS : []),
+				...(allowed ? [...INSIGHT_TOOLS, ...EXTERNAL_MANAGER_TOOLS] : []),
 			]),
 		];
 		if (next.length !== active.length || next.some((name, index) => name !== active[index])) pi.setActiveTools(next);

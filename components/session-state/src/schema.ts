@@ -386,6 +386,19 @@ const MIGRATIONS = [
 		last_fired_at integer
 	) strict;
 	create index schedules_due on schedules(cancelled_at, next_at);`,
+	`create table external_sources (
+		id text primary key,
+		provider text not null,
+		url text not null,
+		repo text,
+		number text,
+		since integer not null,
+		state text not null,
+		events text
+	) strict;
+	create table external_seen (source text not null, event text not null, primary key (source, event)) strict;
+	create table external_policies (provider text primary key, policy text not null, ignore_bots integer not null, last_error text) strict;
+	insert into external_policies (provider, policy, ignore_bots) values ('github', 'candidate', 1), ('jira', 'explicit', 1);`,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

@@ -1,5 +1,7 @@
 ## file
 
 Synthetic in-memory workplace rows exercise the shared access/read/mutation owners under a real SQLite transaction. Publication uses the actual postToThread but no bridge/outbox/model; runtime/native suites establish those separate boundaries. Page continuations test original window retention, effective resumed view and gap refusal, not token secrecy. A trigger-induced acknowledgment failure proves fetched bodies remain visible without claiming catch-up succeeded. The actual temporary-disposal case has no task files or live process; it proves shared-topic/name retention and access removal through the real database cleanup, not process or bundle cleanup.
-Coupled: components/session-state/src/communication.ts, components/session-state/src/communication-actions.ts, components/session-state/src/channels.ts, components/session-state/src/schema.ts
+The legacy communication upgrade fixture uses `rewindRecentSchema(db, 32)` so its declared version matches the columns it removes. Later migrations replay from that fixed physical version; subtracting one from the current version would rerun an unrelated latest migration over tables that already exist.
+Why: adding external-source tables exposed the old moving-version setup as `table external_sources already exists`; removing communication columns never made the database a version41 schema.
+Coupled: components/session-state/tests/historical-schema.ts, components/session-state/src/communication.ts, components/session-state/src/communication-actions.ts, components/session-state/src/channels.ts, components/session-state/src/schema.ts
 Verify: components/session-state/tests/communication-core.test.ts

@@ -72,6 +72,7 @@ import {
 	removeDepartureRecords,
 	saveHandoff,
 } from "./departures.js";
+import { type ExternalCommand, type ExternalCommit, ExternalThreads } from "./external-threads.js";
 import { recordLink, resolveLink } from "./links.js";
 import { discardProgramPeople, programDescendants, temporaryCallers } from "./program-peers.js";
 import { reviewScope } from "./review-attempt.js";
@@ -243,6 +244,9 @@ function processStart(pid: number): number | "gone" | "unknown" {
 export class Runtime {
 	private db?: DatabaseSync;
 	private reviews?: ReviewJobs;
+	private external?: ExternalThreads;
+	private externalTimer?: NodeJS.Timeout;
+	private externalCommands: Promise<void> = Promise.resolve();
 	private lock?: DatabaseSync;
 	private server?: Server;
 	private timer?: NodeJS.Timeout;
@@ -291,6 +295,8 @@ export class Runtime {
 		this.db = new DatabaseSync(this.paths.db);
 		this.db.exec("pragma journal_mode = wal");
 		migrate(this.db);
+		this.external = new ExternalThreads(this.db, this.paths.dir, (write) => this.commitExternal(write));
+		this.recoverExternal();
 		this.reviews = new ReviewJobs(this.db, this.paths, (notice) => this.reviewNotice(notice));
 		this.reviews.recover();
 		this.recoverReviews();
@@ -325,6 +331,8 @@ export class Runtime {
 			this.fireSchedules();
 		}, 1000);
 		this.tmuxTimer = setInterval(() => void this.pollTmux(), TMUX_POLL_MS);
+		this.externalTimer = setInterval(() => void this.external?.poll(), 60_000);
+		void this.external.poll();
 		this.checkLiveness();
 		this.checkFriction();
 		void this.pollTmux();
@@ -334,6 +342,8 @@ export class Runtime {
 
 	stop(): void {
 		this.reviews?.stop();
+		this.external?.stop();
+		clearInterval(this.externalTimer);
 		clearInterval(this.timer);
 		clearInterval(this.tmuxTimer);
 		clearTimeout(this.programTimer);
@@ -769,6 +779,11 @@ export class Runtime {
 			}
 			return;
 		}
+		if (command.kind === "external") {
+			receipt("accepted");
+			this.externalCommand(commandId, sessionId, command, now);
+			return;
+		}
 		if (command.kind === "schedule" || command.kind === "unschedule") {
 			receipt("accepted");
 			this.scheduleCommand(commandId, sessionId, command, now);
@@ -1201,6 +1216,38 @@ export class Runtime {
 		return this.wakeOnCall(sessionId)
 			? "on call; waking it for this mail"
 			: "not running; the mail waits until it opens";
+	}
+
+	private commitExternal(write: Parameters<ExternalCommit>[0]): void {
+		if (!this.db) return;
+		const pending: ReturnType<Runtime["preparePost"]>[] = [];
+		this.atomically(() => write((id, post, now) => pending.push(this.preparePost(id, HARNESS, post, now))));
+		for (const item of pending) for (const { target, id, mail } of item.deliveries) this.dispatch(target, id, mail);
+	}
+
+	private recoverExternal(): void {
+		for (const row of this.db!.prepare(
+			"select command_id, session_id, command, created_at from commands where kind = 'external' and stage = 'accepted' order by created_at",
+		).all() as { command_id: string; session_id: string; command: string; created_at: number }[])
+			this.externalCommand(row.command_id, row.session_id, JSON.parse(row.command), row.created_at);
+	}
+
+	private externalCommand(id: string, person: string, command: ExternalCommand, now: number): void {
+		this.externalCommands = this.externalCommands.then(async () => {
+			if (!this.db || this.stopping.signal.aborted) return;
+			try {
+				const row = this.db.prepare("select result from commands where command_id = ?").get(id) as {
+					result: string | null;
+				};
+				if (row.result === null)
+					await this.external!.command(person, command, now, () =>
+						this.db!.prepare("update commands set result = '{}' where command_id = ?").run(id),
+					);
+				if (this.db) this.setCommandStage(id, "applied");
+			} catch (error) {
+				if (this.db) this.setCommandStage(id, "failed", (error as Error).message);
+			}
+		});
 	}
 
 	private scheduleCommand(
