@@ -133,7 +133,11 @@ const formatEntry = (e: SearchHit, matched: boolean): string => {
 		.join(" | ");
 	return (
 		`${prefix} ${entryAddress(e)} [${e.role}]${fileSuffix} ${body}` +
-		(provenance ? `\n  Source: ${provenance}` : "") +
+		(provenance ? `\n  Source: ${provenance}${e.recallEcho ? " | repeated recall output" : ""}` : "") +
+		(e.context?.length
+			? `\n${e.context.map((context) => `  ${context.role} ${context.address}: ${context.summary}`).join("\n")}`
+			: "") +
+		(e.entryId && matched ? `\n  Read source: entry:${e.entryId}` : "") +
 		(indicators ? `\n${indicators}` : "") +
 		(omitted > 0 ? `\n  ...(${omitted} more file matches)` : "")
 	);

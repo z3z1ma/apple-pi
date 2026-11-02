@@ -73,7 +73,7 @@ export const sessionSearchTool = defineTool({
 		),
 	}),
 	// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: recall resolution owns the complete request-validation and scope-selection flow.
-	async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+	async execute(toolCallId, params, _signal, _onUpdate, ctx) {
 		if (params.page !== undefined && invalidPositiveInteger(params.page)) {
 			return {
 				content: [{ type: "text", text: "Invalid page: page must be a positive integer." }],
@@ -166,13 +166,16 @@ export const sessionSearchTool = defineTool({
 			};
 		}
 
-		const { rendered: msgs, rawMessages } = loadAllMessages(
-			sessionFile,
-			false,
-			lineageEntryIds,
-			undefined,
-			activeEntryIds,
-		);
+		const loaded = loadAllMessages(sessionFile, false, lineageEntryIds, undefined, activeEntryIds);
+		const eligible = loaded.rendered
+			.map((entry, offset) => ({ entry, message: loaded.rawMessages[offset]! }))
+			.filter(
+				({ message }) =>
+					!Array.isArray(message.content) ||
+					!message.content.some((part) => part.type === "toolCall" && part.id === toolCallId),
+			);
+		const msgs = eligible.map(({ entry }) => entry);
+		const rawMessages = eligible.map(({ message }) => message);
 		let allResults: SearchHit[];
 		try {
 			allResults = params.query?.trim()
@@ -249,7 +252,15 @@ export const sessionSearchTool = defineTool({
 			const footer = footerParts.length ? `\n${footerParts.join("\n")}` : "";
 			return {
 				content: [{ type: "text", text: formatRecallOutput(pageResults, params.query, header) + footer }],
-				details: undefined,
+				details: {
+					sources: pageResults.map(({ entryId, index, timestamp, sourceKind, lineage }) => ({
+						entryId,
+						index,
+						timestamp,
+						sourceKind,
+						lineage,
+					})),
+				},
 			};
 		}
 

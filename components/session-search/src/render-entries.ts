@@ -11,16 +11,21 @@ export interface RenderedEntry {
 	sourceKind?: string;
 	customType?: string;
 	lineage?: "active" | "off-lineage";
+	context?: Array<{ address: string; role: string; summary: string }>;
 	role: string;
 	summary: string;
 	files?: string[];
 }
 
-const toolCalls = (content: Message["content"]): string => {
+const toolCalls = (content: Message["content"], full: boolean): string => {
 	if (!content || typeof content === "string") return "";
 	return content
 		.filter((c) => c.type === "toolCall")
-		.map((c) => `${c.name}(${summarizeToolArgs(c.arguments)})`)
+		.map((c) =>
+			full
+				? `[attempted ${c.name} call:${c.id}]\n${JSON.stringify(c.arguments, null, 2)}`
+				: `${c.name}(${summarizeToolArgs(c.arguments)})`,
+		)
 		.join(", ");
 };
 
@@ -41,10 +46,11 @@ export const renderMessage = (msg: Message, index: number, full = false): Render
 		const text = full ? textOf(msg.content) : clip(textOf(msg.content), 200);
 		const nested =
 			msg.toolName === "fabric_exec" || msg.toolName === "pi_exec" ? executionOperationsOf((msg as any).details) : [];
-		const nestedSummary = nested
-			.slice(-20)
-			.map((operation) => `${operation.name}(${summarizeToolArgs(operation.args)})`)
-			.join(", ");
+		const nestedSummary = (full ? nested : nested.slice(-20))
+			.map((operation) =>
+				full ? JSON.stringify(operation, null, 2) : `${operation.name}(${summarizeToolArgs(operation.args)})`,
+			)
+			.join("\n");
 		const files = [
 			...new Set(
 				nested.map((operation) => extractPath(operation.args)).filter((path): path is string => path !== null),
@@ -67,7 +73,7 @@ export const renderMessage = (msg: Message, index: number, full = false): Render
 	const text = full ? textOf(msg.content) : clip(textOf(msg.content), 300);
 	const thinking = thinkingOf(msg.content);
 	const thinkDisplay = thinking ? (full ? thinking : clip(thinking, 150)) : "";
-	const tools = toolCalls(msg.content);
+	const tools = toolCalls(msg.content, full);
 	const files = extractFilesFromContent(msg.content);
 	const displayText = thinkDisplay ? `[thinking] ${thinkDisplay}\n${text}` : text;
 	const summary = tools ? `${tools}\n${displayText}` : displayText;

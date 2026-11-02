@@ -18,6 +18,7 @@ export interface TouchedFile {
 }
 
 export interface SearchHit extends RenderedEntry {
+	recallEcho?: boolean;
 	/** Original transcript turn, captured before relevance ranking reorders hits. */
 	turnId?: number | string;
 	/** Context snippet around the first matched term (only when query provided) */
@@ -382,25 +383,37 @@ const bm25Score = (doc: string, termCache: Map<string, RegExp>, ctx: BM25Context
 	return score;
 };
 
-/** Line-based snippet: ±contextLines around first regex match. */
-const lineSnippet = (text: string, regex: RegExp, contextLines = 2): string | undefined => {
+/** Prefer the local window covering the most query terms; retain evidence-section labels. */
+const lineSnippet = (
+	text: string,
+	regex: RegExp,
+	contextLines = 2,
+	terms?: Map<string, RegExp>,
+): string | undefined => {
 	const lines = text.split("\n");
 	let matchIdx = -1;
+	let bestCoverage = -1;
 	for (let i = 0; i < lines.length; i++) {
-		if (regex.test(lines[i])) {
+		if (!reTest(regex, lines[i]!)) continue;
+		const window = lines.slice(Math.max(0, i - contextLines), i + contextLines + 1).join("\n");
+		const coverage = terms ? countMatches(window, terms) : 1;
+		if (coverage > bestCoverage) {
 			matchIdx = i;
-			break;
+			bestCoverage = coverage;
 		}
 	}
 	if (matchIdx === -1) return undefined;
-
 	const start = Math.max(0, matchIdx - contextLines);
 	const end = Math.min(lines.length, matchIdx + contextLines + 1);
-	const slice = lines.slice(start, end);
-
 	const parts: string[] = [];
-	if (start > 0) parts.push(`...(${start} lines above)`);
-	parts.push(...slice);
+	if (start > 0) {
+		parts.push(`...(${start} lines above)`);
+		const section = lines
+			.slice(0, start)
+			.findLast((line) => /^\[(thinking|assistant text|attempted |failed |returned |nested )/.test(line));
+		if (section) parts.push(section);
+	}
+	parts.push(...lines.slice(start, end));
 	if (end < lines.length) parts.push(`...(${lines.length - end} lines below)`);
 	return parts.join("\n");
 };
@@ -486,16 +499,28 @@ const fullText = (msg: Message, mode: RecallMode): string => {
 	// Include thinking + tool-call arguments so recall can match model reasoning
 	// and invocations. Nested execution results remain searchable too.
 	let text = textOf(msg.content);
+	if (msg.role === "toolResult")
+		text = `[${msg.isError ? "failed" : "returned"} ${msg.toolName} call:${msg.toolCallId}]\n${text}`;
+	else if (msg.role === "assistant" && text) text = `[assistant text]\n${text}`;
 	if (msg.role === "toolResult") {
 		const nested = executionOperationsOf((msg as any).details)
-			.flatMap((operation) => [operation.ref, executionArgsText(operation), executionResultText(operation)])
+			.flatMap((operation) => [
+				`[nested ${operation.ref} ${operation.outcome}]`,
+				executionArgsText(operation),
+				executionResultText(operation),
+			])
 			.filter(Boolean)
 			.join("\n");
 		if (nested) text += `\n${nested}`;
 	}
 	const thinking = thinkingOf(msg.content);
-	if (thinking) text = `${thinking}\n${text}`;
-	const toolArgs = toolCallsOf(msg.content);
+	if (thinking) text = `[thinking]\n${thinking}\n${text}`;
+	const toolArgs = Array.isArray(msg.content)
+		? msg.content
+				.filter((part) => part.type === "toolCall")
+				.map((part) => `[attempted ${part.name} call:${part.id}]\n${toolCallsOf([part])}`)
+				.join("\n")
+		: "";
 	if (toolArgs) text = `${toolArgs}\n${text}`;
 	return text;
 };
@@ -520,6 +545,9 @@ export const searchEntries = (
 	const withTurn = (entry: SearchHit, offset: number): SearchHit => {
 		// Turn identity is formatter metadata, not a public search-result field.
 		Object.defineProperty(entry, "turnId", { value: turnIds[offset], enumerable: false });
+		const message = messages[offset];
+		if (message?.role === "toolResult" && ["search_session", "revisit_note"].includes(message.toolName))
+			entry.recallEcho = true;
 		return entry;
 	};
 
@@ -585,7 +613,7 @@ export const searchEntries = (
 		const score = bm25Score(hay, termCache, ctx);
 		const msg = messages[i];
 		const text = msg ? fullText(msg, mode) : e.summary;
-		const snip = lineSnippet(text, snipRe);
+		const snip = lineSnippet(text, snipRe, 2, termCache);
 		const fileMatches = matchingFiles(msg, snipRe);
 		scored.push({
 			hit: withTurn({ ...e, snippet: snip, matchCount: mc, ...(fileMatches.length > 0 ? { fileMatches } : {}) }, i),
@@ -593,7 +621,6 @@ export const searchEntries = (
 		});
 	}
 
-	// Sort by BM25 score desc
 	scored.sort((a, b) => b.score - a.score);
 
 	// Apply score ratio threshold: drop entries scoring below a fraction
@@ -609,6 +636,9 @@ export const searchEntries = (
 			if (cutIdx > 0) scored.length = cutIdx;
 		}
 	}
+
+	// Recall output repeats other evidence; keep it addressable behind original sources.
+	scored.sort((a, b) => Number(Boolean(a.hit.recallEcho)) - Number(Boolean(b.hit.recallEcho)) || b.score - a.score);
 
 	// Hard cap on total results
 	if (scored.length > MAX_SEARCH_RESULTS) {
