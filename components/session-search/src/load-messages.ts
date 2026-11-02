@@ -37,7 +37,7 @@ const sourceContext = (
 	if (question && (!allowedEntryIds || allowedEntryIds.has(question.id)))
 		context.push({
 			address: `entry:${question.id}`,
-			role: "question",
+			role: "preceding input",
 			summary: clip(
 				renderMessage(question.message ?? { role: "user", content: question.content }, 0, true).summary,
 				300,
@@ -130,7 +130,7 @@ export const loadAllMessages = (
 		if (entry.parentId === undefined && previousQuestion && display.role !== "user")
 			context.push({
 				address: `entry:${previousQuestion.entryId}`,
-				role: "question",
+				role: "preceding input",
 				summary: clip(previousQuestion.summary, 300),
 			});
 		rendered.push({
