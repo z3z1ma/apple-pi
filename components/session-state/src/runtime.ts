@@ -640,7 +640,7 @@ export class Runtime {
 		if (hello.execution)
 			this.event("bridge", session.id, generation, "execution", { ...hello.execution, phase: "resume" });
 		// A bridge started with a stale flag learns its manager from the record, including none.
-		if (!seedManager && reportsTo !== undefined && (stored.reports_to ?? "") !== reportsTo)
+		if (!seedManager && reportsTo !== undefined && (stored.reports_to ?? null) !== (reportsTo || null))
 			this.issue(connection, { kind: "transfer", manager: stored.reports_to ?? "", by: "runtime" });
 		syncChannels(db, now);
 		this.resolveParents();
