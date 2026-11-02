@@ -6,5 +6,5 @@ Opening sign-off verifies captured source and explicitly labels live freshness u
 
 Explicit store/commit seams let the Electron adapter use its configured database/socket while native tools use their ordinary runtime. Saved pages are historical and have no live submission token. Closing an app-owned page cancels its HTTP session, not a mutation already committed.
 
-Coupled: components/browser-pages/src/page-server.ts, components/session-state/src/review-decisions.ts, apps/agent-world/src/backend/reviews.ts
-Verify: components/session-state/tests/review-queue.test.ts, components/browser-pages/tests/page-server.test.ts, apps/agent-world/tests/reviews-backend.test.ts
+Coupled: components/browser-pages/src/page-server.ts, components/session-state/src/review-decisions.ts, apps/agent-workplace/src/backend/reviews.ts
+Verify: components/session-state/tests/review-queue.test.ts, components/browser-pages/tests/page-server.test.ts, apps/agent-workplace/tests/reviews-backend.test.ts

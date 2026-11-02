@@ -4,7 +4,7 @@ Written after rounds 1-11 (`rounds.md`). The bar is not Slack itself but Slack's
 
 ## Where Chat stands now
 
-Closed in this loop (all live in Agent World):
+Closed in this loop (all live in Agent Workplace):
 
 | Area | Now |
 |---|---|

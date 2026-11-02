@@ -1,10 +1,10 @@
 # Workplace
 
-Workplace is Agent World's interface for people, conversations, team setup, local code and Jira issues. It uses the same real people, sessions, tasks, threads and runtime as the World view; it is not a separate messaging service or organization store.
+Workplace is Agent Workplace's interface for people, conversations, team setup, local code and Jira issues. It uses the same real people, sessions, tasks, threads and runtime as the World view; it is not a separate messaging service or organization store.
 
 ## Open Workplace
 
-Run `/world` in a root Pi session. The app opens in Workplace's **Chat** view. Use the persistent left rail to switch views, including **World** for the visual world and **Chat** to return to conversations. Opening the app while it is already running brings its window forward.
+Run `/workplace` in a root Pi session. The app opens in Workplace's **Chat** view. Use the persistent left rail to switch views, including **World** for the visual world and **Chat** to return to conversations. Opening the app while it is already running brings its window forward.
 
 The **Theme** switch selects light or dark appearance. It starts with your OS preference and remembers an explicit choice. This appearance choice is separate from the World view's art theme. Compact toolbar and tab icon buttons retain tooltips and accessible action names.
 
@@ -12,7 +12,7 @@ Drag the visible dividers to resize content sidebars, profiles, Org details, Cod
 
 Closing the app leaves Pi sessions running. Switching views, including World, retains team plans, message drafts, open Code buffers, embedded terminals and per-issue delegation drafts. World stays loaded after its first visit, even while another tab is selected. Reloading or quitting discards this memory. Unsaved Code edits, retained team plans and live embedded terminals share one native leave confirmation; choosing to leave discards the drafts and hangs up those terminals. Cancelling preserves them. Already prepared people and their work remain real. Display-name and appearance preferences persist separately.
 
-A page reload updates the renderer, not the main process or backend. After main-process/backend changes, fully quit and relaunch Agent World to load the new APIs, including work history. Relaunching Agent World leaves Pi sessions running but loses the same memory-only drafts. This is separate from restarting the shared session-state daemon, which requires explicit approval and may stop headless people. See [Agent World](agent-world.md) for installation, credentials, external integrations and removal.
+A page reload updates the renderer, not the main process or backend. After main-process/backend changes, fully quit and relaunch Agent Workplace to load the new APIs, including work history. Relaunching Agent Workplace leaves Pi sessions running but loses the same memory-only drafts. This is separate from restarting the shared session-state daemon, which requires explicit approval and may stop headless people. See [Agent Workplace](agent-workplace.md) for installation, credentials, external integrations and removal.
 
 ## Org plans teams and changes reporting
 
@@ -195,7 +195,7 @@ The close/trash action hangs up that terminal. Switching to World retains termin
 
 ## Issues reads Jira and delegates work
 
-Choose **Issues** for **Assigned to you**, or explicitly switch to **Search all** and submit a title or key to search accessible Jira issues regardless of assignee. It reuses Agent World's existing Atlassian sign-in; missing credentials open **Connect Jira**. Selecting an issue loads its details and comments, with an external **Open in Jira** link.
+Choose **Issues** for **Assigned to you**, or explicitly switch to **Search all** and submit a title or key to search accessible Jira issues regardless of assignee. It reuses Agent Workplace's existing Atlassian sign-in; missing credentials open **Connect Jira**. Selecting an issue loads its details and comments, with an external **Open in Jira** link.
 
 To delegate, choose an actual **Person or team head**, enter **Goal and context**, then **Send instruction**. This sends that Pi person an instruction containing the issue context; it does not assign the Jira issue or automatically choose a coordinator. Accepted, delivered and applied receipts describe instruction delivery, not completion of the requested work. **Open conversation** takes you to that person's existing Chat.
 
@@ -203,10 +203,10 @@ Recipient/goal drafts and in-flight receipt tracking remain when switching issue
 
 ## Ownership and development
 
-The session-state runtime remains the database's only writer. Agent World's backend reads it query-only and sends commands over the existing socket. Pi transcripts own session history; runtime threads own mail/channel history and cursors; assignments and task files own work. Workplace adds no mirror database or parallel delivery engine.
+The session-state runtime remains the database's only writer. Agent Workplace's backend reads it query-only and sends commands over the existing socket. Pi transcripts own session history; runtime threads own mail/channel history and cursors; assignments and task files own work. Workplace adds no mirror database or parallel delivery engine.
 
 Code uses `web/workplace-code.tsx`, `web/workplace-monaco.ts` and the query/file boundary in `src/backend/workspace.ts`; its editor and language workers ship in the built assets, without a CDN download. Git inspection lives in `web/workplace-git.tsx`. Quick Open uses `web/workplace-quick-open.tsx`; the embedded terminal uses `web/workplace-terminal.tsx` and `src/backend/embedded-terminal.ts`. Ghostty's JavaScript and WASM ship in built renderer assets; `@lydell/node-pty` remains an external runtime npm dependency so its native platform addon resolves normally. Issues lives in `web/workplace-issues.tsx` and reuses existing Jira/sign-in/delegation APIs. Local display names live in `web/workplace-names.ts`.
 
-The React entry is `apps/agent-world/web/entry.ts`; Workplace lives in `web/workplace.tsx` and `web/workplace.css`. Org's view lives in `web/workplace-org.tsx`, its team overview/hierarchy in `web/workplace-org-chart.tsx`, reporting confirmation in `web/workplace-org-confirm.tsx`, and immediate recruitment in `web/workplace-add-person.tsx`. `web/workplace-work-history.tsx` presents recorded work, while `web/workplace-org-search.tsx` searches snapshot metadata. Its query-only command controller is `src/backend/org.ts`, with public DTOs in `src/org.ts`. Profiles live in `web/workplace-people.tsx`; session rendering remains shared with World. All pages use the narrow typed preload API. Electron allows only the exact internal World/Workplace routes and delegates explicit external link opening through the existing policy.
+The React entry is `apps/agent-workplace/web/entry.ts`; Workplace lives in `web/workplace.tsx` and `web/workplace.css`. Org's view lives in `web/workplace-org.tsx`, its team overview/hierarchy in `web/workplace-org-chart.tsx`, reporting confirmation in `web/workplace-org-confirm.tsx`, and immediate recruitment in `web/workplace-add-person.tsx`. `web/workplace-work-history.tsx` presents recorded work, while `web/workplace-org-search.tsx` searches snapshot metadata. Its query-only command controller is `src/backend/org.ts`, with public DTOs in `src/org.ts`. Profiles live in `web/workplace-people.tsx`; session rendering remains shared with World. All pages use the narrow typed preload API. Electron allows only the exact internal World/Workplace routes and delegates explicit external link opening through the existing policy.
 
-Build with `npm run build:world`; committed `dist/` must match source. See [development](development.md#agent-world) for focused browser/backend checks. Historical design and evaluation evidence remains in the ledger; this page owns current product behavior.
+Build with `npm run build:workplace`; committed `dist/` must match source. See [development](development.md#agent-workplace) for focused browser/backend checks. Historical design and evaluation evidence remains in the ledger; this page owns current product behavior.

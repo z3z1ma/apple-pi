@@ -188,7 +188,7 @@ These are design references, not evidence that the resulting agent processes are
 
 ## Monaco Editor and bundled Workplace Code dependencies
 
-- Monaco Editor (<https://github.com/microsoft/monaco-editor>), verified installed version `0.57.0`, MIT, Copyright (c) 2016 - present Microsoft Corporation. It is a development dependency bundled into `apps/agent-world/dist/web/assets/`, including editor/language workers and Codicons; the installed app does not download the editor.
+- Monaco Editor (<https://github.com/microsoft/monaco-editor>), verified installed version `0.57.0`, MIT, Copyright (c) 2016 - present Microsoft Corporation. It is a development dependency bundled into `apps/agent-workplace/dist/web/assets/`, including editor/language workers and Codicons; the installed app does not download the editor.
 - Monaco's nested runtime dependencies are DOMPurify `3.4.15` (<https://github.com/cure53/DOMPurify>), Copyright (c) Cure53 and other contributors, offered under `MPL-2.0 OR Apache-2.0` (Apache-2.0 terms reproduced below), and Marked `14.0.0` (<https://github.com/markedjs/marked>), MIT with its original Markdown notice. These are distinct from the root package's Marked dependency.
 - Monaco's CSS language service contains js-beautify `1.15.1`, MIT, Copyright (c) 2007-2018 Einar Lielmanis, Liam Newman, and contributors, as identified by its bundled source header. The MIT permission text above applies.
 - The bundled TypeScript worker identifies TypeScript `5.9.3` (<https://github.com/microsoft/TypeScript>), Apache-2.0. Its matching installed license and third-party notices are reproduced below.
@@ -1221,7 +1221,7 @@ This software is provided by the copyright holders and contributors “as is” 
 
 ## Ghostty renderer for Workplace terminals
 
-- `ghostty-web@0.4.0`, MIT, Copyright (c) 2025 Coder: its JavaScript and Ghostty VT WebAssembly are bundled into Agent World renderer assets. The npm package is a build-time dependency; the shipped renderer uses no CDN.
+- `ghostty-web@0.4.0`, MIT, Copyright (c) 2025 Coder: its JavaScript and Ghostty VT WebAssembly are bundled into Agent Workplace renderer assets. The npm package is a build-time dependency; the shipped renderer uses no CDN.
 - Published npm metadata identifies source commit [`9e4e126d89ac3537d2b2ebec075849851566de9f`](https://github.com/coder/ghostty-web/tree/9e4e126d89ac3537d2b2ebec075849851566de9f). Its `ghostty` gitlink pins [`5714ed07a1012573261b7b7e3ed2add9c1504496`](https://github.com/ghostty-org/ghostty/tree/5714ed07a1012573261b7b7e3ed2add9c1504496); its build script applies the project's WASM API patch to that source before building `lib-vt`. Embedded Ghostty is MIT, Copyright (c) 2024 Mitchell Hashimoto, Ghostty contributors.
 - The existing `@lydell/node-pty` runtime dependency supplies the local PTY. It stays external to the Electron bundle; its platform-native addon is installed through npm, not copied into renderer assets.
 

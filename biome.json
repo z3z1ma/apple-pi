@@ -5,7 +5,7 @@
     "includes": [
       "**",
       "!components/browser-pages/dist",
-      "!apps/agent-world/dist",
+      "!apps/agent-workplace/dist",
       "!components/tmux-sessions/notch/web/assets"
     ]
   },

@@ -1,6 +1,6 @@
 /**
  * Curated human names for sessions: first names and family names from many cultures, playful but believable. A
- * session's name is one of each, so it reads like a person in the tmux sidebar and Agent World.
+ * session's name is one of each, so it reads like a person in the tmux sidebar and Agent Workplace.
  */
 
 export const FIRST_NAMES: readonly string[] = [

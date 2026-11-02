@@ -1,13 +1,13 @@
 import { execFile } from "node:child_process";
 import type { DatabaseSync } from "node:sqlite";
 import { promisify } from "node:util";
-import { atlassianRequest } from "../../../apps/agent-world/src/backend/integrations/atlassian.js";
+import { atlassianRequest } from "../../../apps/agent-workplace/src/backend/integrations/atlassian.js";
 import {
 	type AtlassianCredentials,
 	integrationFiles,
 	openCredentials,
-} from "../../../apps/agent-world/src/backend/integrations/credentials.js";
-import { adfText } from "../../../apps/agent-world/src/backend/integrations/jira.js";
+} from "../../../apps/agent-workplace/src/backend/integrations/credentials.js";
+import { adfText } from "../../../apps/agent-workplace/src/backend/integrations/jira.js";
 import { HARNESS, OPERATOR, participateIn, type ThreadPost } from "./threads.js";
 
 export type ExternalCommand =

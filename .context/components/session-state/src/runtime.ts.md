@@ -140,8 +140,8 @@ Verify: components/session-state/tests/on-call.test.ts
 ## symbol:Runtime.finishWorkCommand
 
 An awake assignee needs no launch. A sleeping assignee wakes beside the assigning session's pane; an operator assignment instead uses the terminal supplied by the UI, because `operator` has no session row or incarnation. The wake target stays in the persisted command for recovery. A wake failure reports that the assignment was already saved rather than claiming it rolled back.
-Coupled: components/session-state/src/work.ts, apps/agent-world/src/backend/workplace.ts, apps/agent-world/src/backend/inn.ts
-Verify: apps/agent-world/tests/inn.test.ts, components/session-state/tests/work.test.ts
+Coupled: components/session-state/src/work.ts, apps/agent-workplace/src/backend/workplace.ts, apps/agent-workplace/src/backend/inn.ts
+Verify: apps/agent-workplace/tests/inn.test.ts, components/session-state/tests/work.test.ts
 
 ## symbol:Runtime.startSession
 
@@ -152,7 +152,7 @@ Verify: components/session-state/tests/peer-history.test.ts
 A new hire's provisional person and team-history snapshot commit before opening its process; when a goal is supplied, its bundle, assignment, task thread and outbox join that transaction. A lasting role can be hired without work, while program peers still require a role and goal. The history uses the existing channel reader, with no separate summary or invented message-count cap. When work is assigned, Pi starts with a pointer to its focused task; startup mail carries the file itself. Reopening keeps the stored role and work, while a supplied new goal adds an assignment.
 Why: when initial work is requested, its assignment must exist before the first turn. An idle hire retains its standing role without a placeholder task; an ordinary wake preserves the existing person's role and work.
 Coupled: components/session-state/src/work.ts, components/session-state/src/bridge.ts
-Verify: components/session-state/tests/coordinator.test.ts, components/session-state/tests/workplace.test.ts, apps/agent-world/tests/recruit.test.ts
+Verify: components/session-state/tests/coordinator.test.ts, components/session-state/tests/workplace.test.ts, apps/agent-workplace/tests/recruit.test.ts
 
 ## symbol:Runtime.closeProgram
 
@@ -190,7 +190,7 @@ Acceptance starts a runtime-owned departure job; caller disconnection does not c
 Any requested durable handoff precedes the atomic person_departed marker, retired snapshot, notices and incarnation-bound close. From that commit the identity cannot return. File/private-record removal is a separate retryable phase gated by observed writer/process/pane proof; applied means cleanup completed, not merely that the model replied. Startup resumes committed cleanup without another paid turn, while an interrupted precommit job fails for inspection. Final-turn cost arrives through the existing bridge observation convention before departure rather than being synthesized from reply.usage.
 
 Internal turn commands use this runtime's explicit socket, so isolated tests cannot contact the operator's daemon. A failed handoff can leave a newly awakened person available for inspection. Shared receipts/outcomes/history and retained name/accounting seeds survive private cleanup.
-Coupled: components/session-state/src/departures.ts, components/session-state/src/client.ts, components/session-state/src/peer-turns.ts, apps/agent-world/src/backend/lifecycle.ts
+Coupled: components/session-state/src/departures.ts, components/session-state/src/client.ts, components/session-state/src/peer-turns.ts, apps/agent-workplace/src/backend/lifecycle.ts
 Verify: components/session-state/tests/departure-lifecycle.test.ts, components/session-state/tests/departures.test.ts, components/session-state/tests/workplace.test.ts, components/session-state/tests/workplace-wake.test.ts, components/session-state/tests/workplace-recovery.test.ts
 
 ## symbol:Runtime.rejectDepartureHello
@@ -212,8 +212,8 @@ Only the operator may join or leave, and only an existing team channel. Mail, es
 Why: the operator is never in the reporting tree, so a join without `invited` is undone by the next hello or startup, with a `thread_left` that the operator did not ask for. Resetting the cursor on a repeat join would acknowledge messages the operator had not read. A person using this command would bypass the tree.
 The membership row and its `thread_joined` or `thread_left` event commit together. Startup replays an accepted command after `syncChannels`, in `created_at` order. A committed join already has `invited`, so reconciliation does not drop it before replay; replay then changes nothing. A committed leave is a no-op. The same `commandId` still returns the stored stage and applies nothing, so a retry cannot undo a later leave.
 Why: the command is stored as accepted before it is applied, the same as other runtime commands. Membership is not commutative, so a later accepted leave must replay after an earlier accepted join.
-Coupled: components/session-state/src/threads.ts, components/session-state/src/channels.ts, apps/agent-world/src/backend/workplace.ts
-Verify: components/session-state/tests/channel-membership.test.ts, components/session-state/tests/channel-membership-recovery.test.ts, apps/agent-world/tests/channel-membership.test.ts
+Coupled: components/session-state/src/threads.ts, components/session-state/src/channels.ts, apps/agent-workplace/src/backend/workplace.ts
+Verify: components/session-state/tests/channel-membership.test.ts, components/session-state/tests/channel-membership-recovery.test.ts, apps/agent-workplace/tests/channel-membership.test.ts
 
 ## symbol:Runtime.stampHire
 

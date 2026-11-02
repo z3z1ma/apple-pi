@@ -1,10 +1,10 @@
 # Agent World development
 
-Hazards found while building Agent World (`apps/agent-world/`, ledger task `202610171741-guildworld`) that its code and tests do not show. The user contract is `docs/agent-world.md`; build, test, and art commands are in `docs/development.md`. Vocabulary is in [[agent-world-language]].
+Hazards found while building Agent World (`apps/agent-workplace/`, ledger task `202610171741-guildworld`) that its code and tests do not show. The user contract is `docs/agent-workplace.md`; build, test, and art commands are in `docs/development.md`. Vocabulary is in [[agent-world-language]].
 
 ## Headless UI tests
 
-- The headless-Chrome tests load the committed `dist/`, not the sources: run `npm run build:world` first. With several lanes editing sources, a stale-dist failure in `build.test.ts` is a race, not a bug. `AGENT_WORLD_SHOTS=<dir>` saves screenshots.
+- The headless-Chrome tests load the committed `dist/`, not the sources: run `npm run build:workplace` first. With several lanes editing sources, a stale-dist failure in `build.test.ts` is a race, not a bug. `AGENT_WORLD_SHOTS=<dir>` saves screenshots.
 - CSS animations never advance in this headless Chrome; take screenshots with `animations: "disabled"`. Playwright's web-first matchers (`expect(locator).toBeVisible()`) fail under Vitest's `expect`; use `locator.waitFor` and `vi.waitFor` (see `tests/world-square.test.ts`).
 - The interface panels cover parts of the world. A test that clicks world points injects `.aw-interface, .aw-interface * { pointer-events: none !important; }`. After a place panel has opened and closed, `locator.click()` on side-panel buttons can hang; `dispatchEvent("click")` works.
 - Talk to opens the conversation panel's veil: fixtures need `conversation` and `markSeen` stubs, and a test presses Escape before clicking on. Clicking the side-panel tab that is already open folds the panel. Places rows are found by the exact title `Travel to <name>`.
@@ -61,4 +61,4 @@ Sources: Workplace relaunch investigations, session learnings `87f3b9a0245f` and
 - **Biome complexity:** `checkPlace` in `src/theme-pack.ts` and the gate's `describe` switch are near the limit; add a helper instead of another inline branch.
 - **Hover text** counts Walk here among the options ("Talk to X / 2 more options").
 - **Dark band at a painting's edge** in walkthrough shots is `followMid` sliding the painting out from under the interface, not a missing clamp.
-- **Cost:** atmosphere effects cost about 0.01 to 0.02 ms per frame; with 120 characters in the square frames average about 20 ms with or without effects, so frame time there comes from characters. `test:world` runs with a 30 s hook timeout because Chrome start-up under heavy load passed 10 s.
+- **Cost:** atmosphere effects cost about 0.01 to 0.02 ms per frame; with 120 characters in the square frames average about 20 ms with or without effects, so frame time there comes from characters. `test:workplace` runs with a 30 s hook timeout because Chrome start-up under heavy load passed 10 s.

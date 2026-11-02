@@ -1,0 +1,8 @@
+## file
+
+The separators are native focusable hr elements, so reset their browser margins/borders while preserving the 6px layout track used by caller grids and measured bounds. The shield is a top-document portal rather than a Workplace child; it needs only transparent geometry/cursor styling, not inherited palette variables.
+Why: pointer capture must stay usable across retained iframe boundaries, and ordinary hr defaults would otherwise add invisible spacing to a pane's size.
+The track is transparent and its line shows only on hover or focus; the panes on either side draw their own borders.
+Why: a visible track beside a pane border drew a thick double bar. A pane that relies on the separator for its edge must add a border.
+Coupled: apps/agent-workplace/web/workplace-resize.tsx, apps/agent-workplace/web/workplace-code.css, apps/agent-workplace/web/workplace-org.css, apps/agent-workplace/web/workplace-org-chart.css, apps/agent-workplace/web/workplace.css
+Verify: apps/agent-workplace/tests/world-org.test.ts, apps/agent-workplace/tests/world-terminal.test.ts

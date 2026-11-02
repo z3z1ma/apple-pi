@@ -95,9 +95,9 @@ Calls without a usable session ID go to `sidecar-usage/unscoped.ndjson`. Records
 
 ## Session titles
 
-[`extensions/session-title.ts`](../extensions/session-title.ts) names sessions like people, so sessions are easy to tell apart in `/resume`, the tmux sidebar, and Agent World, where each is a character.
+[`extensions/session-title.ts`](../extensions/session-title.ts) names sessions like people, so sessions are easy to tell apart in `/resume`, the tmux sidebar, and Agent Workplace, where each is a character.
 
-- **Names.** As an unnamed TUI or RPC session starts, it gets a first name and a family name drawn at random from curated local lists (about three hundred of each, from many cultures, playful but believable, in `components/session-title/src/names.ts`), such as "Ottoline Marchetti". No model is asked. The name differs from every other live session's name in the session-state database; when that cannot be read, the name is just picked. It is recorded as a `session-title` custom entry, so a resumed session keeps it. A session that still carries a topic title from the earlier title stages gets a human name the same way on its next start. The extension replaces only names it set itself: any other rename, from `/name`, Agent World, `pi --name`, or elsewhere, stops it for that session for good, also after a resume.
+- **Names.** As an unnamed TUI or RPC session starts, it gets a first name and a family name drawn at random from curated local lists (about three hundred of each, from many cultures, playful but believable, in `components/session-title/src/names.ts`), such as "Ottoline Marchetti". No model is asked. The name differs from every other live session's name in the session-state database; when that cannot be read, the name is just picked. It is recorded as a `session-title` custom entry, so a resumed session keeps it. A session that still carries a topic title from the earlier title stages gets a human name the same way on its next start. The extension replaces only names it set itself: any other rename, from `/name`, Agent Workplace, `pi --name`, or elsewhere, stops it for that session for good, also after a resume.
 
 Work is named by an [explicit assignment and focus](organization.md#tasks-and-assignments), not by a model guessing intent after a turn or by the last ledger file edited. Session naming makes no model requests.
 

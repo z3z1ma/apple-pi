@@ -11,4 +11,4 @@ Task audience/lifecycle stays work-owned; structural channels cannot be generica
 
 Acknowledgment uses the page's resolved view, including on an omitted-view continuation. Failed acknowledgment keeps the fetched bodies and last confirmed cursor in the persisted effect. Recent/range inspection never acknowledges history.
 Coupled: components/session-state/src/runtime.ts, components/session-state/src/threads.ts, components/session-state/src/channels.ts, components/session-state/src/communication.ts
-Verify: components/session-state/tests/communication-core.test.ts, components/session-state/tests/communication-tools.test.ts, apps/agent-world/tests/communications-backend.test.ts
+Verify: components/session-state/tests/communication-core.test.ts, components/session-state/tests/communication-tools.test.ts, apps/agent-workplace/tests/communications-backend.test.ts

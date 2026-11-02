@@ -35,9 +35,9 @@ Trace2 per-command breakdowns: /tmp/git-unification-baseline-trace.json (before)
 Focused, one worker:
 
 - Final cohort after every change: code-review, shared git-change, Pi Exec evidence and guidance, Ralph programs, browser-pages and session-state review-queue: 21 files, 207 tests passed. An earlier run caught the freshness expectation fixed above.
-- Agent World reviews backend, world build consistency, browser page builds: 7 passed after `npm run build:world`.
+- Agent Workplace reviews backend, world build consistency, browser page builds: 7 passed after `npm run build:workplace`.
 - `npm run test:loader`, `npm run typecheck`, scoped Biome on changed files, `context_lint` (351 files).
-- `apps/agent-world/scripts/workplace-electron-check.mjs`: actual preload/IPC/runtime preview, admission, queue, captured source and freshness passed; no reviewers started.
+- `apps/agent-workplace/scripts/workplace-electron-check.mjs`: actual preload/IPC/runtime preview, admission, queue, captured source and freshness passed; no reviewers started.
 
 Not run: the full test suite (operator policy), a paid review, a live operator sign-off.
 

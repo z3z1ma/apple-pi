@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai/compat";
 import { afterAll, afterEach, beforeAll, expect, test, vi } from "vitest";
-import { readStoredThread } from "../../../apps/agent-world/src/backend/mail.js";
+import { readStoredThread } from "../../../apps/agent-workplace/src/backend/mail.js";
 import { fauxSession } from "../../../tests/helpers/faux-session.js";
 import { sendCommand } from "../src/client.js";
 import { realizedFitness } from "../src/fitness.js";

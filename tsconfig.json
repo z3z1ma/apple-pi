@@ -13,5 +13,5 @@
     "types": ["node"]
   },
   "include": ["apps/**/*.ts", "extensions/**/*.ts", "components/**/*.ts", "tests/**/*.ts"],
-  "exclude": ["components/browser-pages/web", "apps/agent-world/web", "apps/agent-world/dist"]
+  "exclude": ["components/browser-pages/web", "apps/agent-workplace/web", "apps/agent-workplace/dist"]
 }

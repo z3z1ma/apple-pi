@@ -159,12 +159,13 @@ try {
 		"stash",
 		"edit-prompt",
 		"inspect-tool",
-		"world",
+		"workplace",
 	]) {
 		assert(commands.has(command), `missing /${command}`);
 	}
 	assert(!commands.has("branch-search"), "branch search is the model's tool; there is no /branch-search command");
 	assert(!commands.has("work") && !commands.has("tasks"), "the combined work panel is retired");
+	assert(!commands.has("world"), "/workplace opens the app; World is its tab, not a command");
 	const reviewCommandCount = result.extensions.reduce(
 		(count, extension) => count + Number(extension.commands.has("reviews")),
 		0,
@@ -436,13 +437,13 @@ try {
 		manifest.files.includes("components/change-reflection/src/"),
 		"package manifest omits change reflection source",
 	);
-	for (const path of ["apps/agent-world/src/", "apps/agent-world/dist/", "apps/agent-world/themes/"])
+	for (const path of ["apps/agent-workplace/src/", "apps/agent-workplace/dist/", "apps/agent-workplace/themes/"])
 		assert(manifest.files.includes(path), `package manifest omits ${path}`);
 	assert(
 		!manifest.files.some(
-			(path) => path.startsWith("apps/agent-world/art") || path === "apps/" || path === "apps/agent-world/",
+			(path) => path.startsWith("apps/agent-workplace/art") || path === "apps/" || path === "apps/agent-workplace/",
 		),
-		"Agent World's raw art and generation inputs stay in the repository",
+		"Agent Workplace's raw art and generation inputs stay in the repository",
 	);
 	assert(manifest.files.includes("skills/"), "package manifest omits skills");
 	assert(manifest.files.includes("prompts/"), "package manifest omits prompt templates");

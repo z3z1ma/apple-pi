@@ -14,7 +14,7 @@ Next step: move target resolution and object reading out of `components/code-rev
 - [x] Direct code sign-off supports every explicit target without enqueueing a model review. — `target` parameter; staged/commit test in code-review.test.ts; no queue call.
 - [x] Explain supports every explicit target and cites the correct frozen before/after bytes. — Excerpts read both sides from the snapshot trees; commit/branch/review tests.
 - [x] Pi Exec Git change/patch, neighborhood and test-selection helpers share target semantics, with actual guest stubs/guidance/examples updated. — `target` dict in evidence.ts, stubs, guest guidance, docs/exec.md, Ralph references and tests.
-- [x] Document/task sign-off remains path-based; all actual Git-consuming input surfaces are accounted for. — Unchanged; inventory: review_code, read_review freshness, sign_off_code, explain_change, git_change family, Agent World preview (uses captureReview).
+- [x] Document/task sign-off remains path-based; all actual Git-consuming input surfaces are accounted for. — Unchanged; inventory: review_code, read_review freshness, sign_off_code, explain_change, git_change family, Agent Workplace preview (uses captureReview).
 
 ## Efficiency and fidelity
 
@@ -31,7 +31,7 @@ Next step: move target resolution and object reading out of `components/code-rev
 - [x] Focused behavioral and cross-consumer target tests, including diverged ranges, root/merge commits, dirty index/worktree, filenames, binary/link/pointer handling, source loss and cancellation. — Shared, capture, browser-pages, evidence and Ralph tests; cancellation covered by existing capture/queue tests, not new ones.
 - [x] Native/guest/browser/IPC consumer checks, bounded concurrency, types, scoped static checks/context lint. — See evidence.md.
 - [x] Update runtime tool descriptions, skills/examples and product docs; retire contradictory old comparison semantics. — GIT_TARGET_HELP schema text, sign-off/explain guidelines, pi_exec guidance, docs/browser-pages.md, docs/code-review.md, docs/exec.md, explain-change skill, README.
-- [x] Rebuild affected packaged browser/Electron outputs and verify source/package inclusion. — build:world rebuilt main.js; browser web unchanged (page-build test passes).
+- [x] Rebuild affected packaged browser/Electron outputs and verify source/package inclusion. — build:workplace rebuilt main.js; browser web unchanged (page-build test passes).
 - [x] Commit verified increments and activate changed owners with fresh process/state observations; explain /reload where needed. — Commit 4a0d52ab. Runtime 27893 → 70285 (no active review, scope or control; 68 people, 2 settled reviews and 99 pending mail retained). App 70156 → 70795 by normal Quit, connected to 70285. Live freshness on the retained review: 284 ms (was 57.8 s). Pi sessions need /reload for the new tool schemas.
 - [x] Final inventory maps every item to its verification or an explicit unresolved limitation; no missing item is silently waived. — Limits: capture preview still performs a full capture (about 3 s here) because admission binds its digest; first full verification re-hashes racy files once; materialization grows with tree size; no new cancellation test; full suite not run.
 

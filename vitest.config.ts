@@ -40,7 +40,7 @@ export default defineConfig({
 			"components/pi-exec/tests/**/*.test.ts",
 			"components/branch-search/tests/**/*.test.ts",
 			"components/browser-pages/tests/**/*.test.ts",
-			"apps/agent-world/tests/**/*.test.ts",
+			"apps/agent-workplace/tests/**/*.test.ts",
 			"tests/**/*.test.ts",
 		],
 	},

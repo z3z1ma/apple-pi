@@ -6,7 +6,7 @@ Why: the fake accepts unchecked fields in `hello.session`. Putting `reportsTo` t
 Treat this fake as a socket peer, not a Pi session: receiving a runtime `close` command (including one issued by `retire`) does not make it shut down. To simulate a normal exit, send `link.send({ type: "shutdown", reason: "quit" })` before waiting for the incarnation to end. Read the local wrapper before using a `.stop()` method; this helper exposes only `socket` and `send`.
 Why: other test fakes expose `.stop()`, and applying that interface here caused a test failure; waiting for automatic shutdown instead can leave the incarnation alive while its stand-in process still runs.
 Coupled: components/session-state/src/protocol.ts, components/session-state/src/runtime.ts
-Verify: components/session-state/tests/peers.test.ts, apps/agent-world/tests/workplace.test.ts
+Verify: components/session-state/tests/peers.test.ts, apps/agent-workplace/tests/workplace.test.ts
 
 ## symbol:sendCommand
 

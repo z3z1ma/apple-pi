@@ -3,7 +3,7 @@ import { chmodSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { integrationFiles, openCredentials } from "../../../apps/agent-world/src/backend/integrations/credentials.js";
+import { integrationFiles, openCredentials } from "../../../apps/agent-workplace/src/backend/integrations/credentials.js";
 import { type ExternalThreads, externalAddress } from "../src/external-threads.js";
 import { statePaths } from "../src/paths.js";
 import { Runtime } from "../src/runtime.js";

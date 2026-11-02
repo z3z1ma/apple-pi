@@ -12,5 +12,5 @@ Verify: components/session-state/tests/program-peers.test.ts, components/session
 
 The disposal transaction emits standard `transferred {from,to,by}` history for each surviving person's manager change, alongside the snapshot and manager journal, and an event for each deleted person. Historical readers ignore the old generic facts event; this transfer is required to preserve past ancestry while changing the post-disposal chain. The deletion event survives the person row. Incremental readers evict an event-named id with no remaining root row, rather than waiting for a full reread.
 Why: updating only rows returned by a changed-row query retained deleted temporary peers at the inn, and a sleeping lasting report kept its old manager until the full refresh.
-Coupled: apps/agent-world/src/backend/world-backend.ts
-Verify: apps/agent-world/tests/workplace-disposal.test.ts
+Coupled: apps/agent-workplace/src/backend/world-backend.ts
+Verify: apps/agent-workplace/tests/workplace-disposal.test.ts

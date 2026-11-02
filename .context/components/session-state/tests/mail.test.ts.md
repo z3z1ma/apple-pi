@@ -5,5 +5,5 @@ Why: the runtime owns reporting after first admission and correctly ignores a la
 
 The stopped-session replay case scopes command receipts to kind='mail' and checks zero model requests before the explicit resume prompt. Startup may include other legitimate harness commands, including authored team context; replayed mail belongs to nextTurn rather than an unsolicited model turn. These are separate from the model's eventual understanding of the mail.
 Why: asserting that every command for the reopened session was the one queued mail rejected legitimate startup traffic. Receipt delivery alone also failed to establish that startup stayed quiet. The Org runtime suite separately verifies goal-free team context, identity and absence of invented work.
-Coupled: components/session-state/src/mail.ts, components/session-state/src/bridge.ts, components/session-state/src/runtime.ts, apps/agent-world/tests/org-runtime.test.ts
-Verify: components/session-state/tests/mail.test.ts, apps/agent-world/tests/org-runtime.test.ts
+Coupled: components/session-state/src/mail.ts, components/session-state/src/bridge.ts, components/session-state/src/runtime.ts, apps/agent-workplace/tests/org-runtime.test.ts
+Verify: components/session-state/tests/mail.test.ts, apps/agent-workplace/tests/org-runtime.test.ts

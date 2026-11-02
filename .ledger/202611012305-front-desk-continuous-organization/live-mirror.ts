@@ -9,17 +9,17 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium, type Page } from "playwright-core";
 import { agentDir, statePaths } from "../../components/session-state/src/paths.js";
-import { openCommands } from "../../apps/agent-world/src/backend/commands.js";
-import { openCommunications } from "../../apps/agent-world/src/backend/communications.js";
-import { openConversations } from "../../apps/agent-world/src/backend/conversations.js";
-import { openLifecycle } from "../../apps/agent-world/src/backend/lifecycle.js";
-import { openReviews } from "../../apps/agent-world/src/backend/reviews.js";
-import { openWorkplace } from "../../apps/agent-world/src/backend/workplace.js";
-import { openWorkspace } from "../../apps/agent-world/src/backend/workspace.js";
-import { openWorldBackend } from "../../apps/agent-world/src/backend/world-backend.js";
+import { openCommands } from "../../apps/agent-workplace/src/backend/commands.js";
+import { openCommunications } from "../../apps/agent-workplace/src/backend/communications.js";
+import { openConversations } from "../../apps/agent-workplace/src/backend/conversations.js";
+import { openLifecycle } from "../../apps/agent-workplace/src/backend/lifecycle.js";
+import { openReviews } from "../../apps/agent-workplace/src/backend/reviews.js";
+import { openWorkplace } from "../../apps/agent-workplace/src/backend/workplace.js";
+import { openWorkspace } from "../../apps/agent-workplace/src/backend/workspace.js";
+import { openWorldBackend } from "../../apps/agent-workplace/src/backend/world-backend.js";
 
 let root = dirname(fileURLToPath(import.meta.url));
-while (!existsSync(join(root, "apps/agent-world"))) root = dirname(root);
+while (!existsSync(join(root, "apps/agent-workplace"))) root = dirname(root);
 const out = process.argv[2] ?? "/tmp/aw-live";
 const scenario = process.argv[3] ?? "tour";
 mkdirSync(out, { recursive: true });
@@ -74,7 +74,7 @@ async function open(width: number, height: number, appearance: "light" | "dark")
 	page.on("pageerror", (error) => console.error(`pageerror: ${error.message}`));
 	await page.route("http://localhost/**", (route) => {
 		const path = new URL(route.request().url()).pathname;
-		const file = join(root, "apps/agent-world/dist/web", path === "/" ? "index.html" : path);
+		const file = join(root, "apps/agent-workplace/dist/web", path === "/" ? "index.html" : path);
 		if (!existsSync(file)) return route.fulfill({ status: 404 });
 		return route.fulfill({
 			body: readFileSync(file),
@@ -106,7 +106,7 @@ async function open(width: number, height: number, appearance: "light" | "dark")
 					},
 				},
 			);
-		(window as any).agentWorld = proxy("");
+		(window as any).agentWorkplace = proxy("");
 	}, appearance);
 	await page.goto("http://localhost/");
 	await page.waitForTimeout(1500);
