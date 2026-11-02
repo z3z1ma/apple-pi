@@ -1,6 +1,6 @@
 # Isolated recall experiment
 
-Status: held-out artifact and one-line candidate frozen; private comparisons not yet run.
+Status: complete; candidate rejected under the predeclared gate. No experimental production change landed.
 
 ## Decision and authority
 
@@ -50,4 +50,23 @@ The initial passage-local prototype is preserved on the isolated branch as `ca3f
 
 The passage algorithm and its proposed contract test were withdrawn before private evaluation. The single frozen private-evaluation candidate is `98ec44fa`: production code equals reviewed `0843bfd3` except resetting pattern.lastIndex before termFreq counts matches. A new public first-page test of concise single-occurrence evidence failed on the unchanged scorer, then passed with the reset; 102 focused tests in 15 files and Node/web typecheck pass. No new weights, query syntax, windows or source types are introduced; regex discovery, echo priority, page/recovery interfaces remain unchanged.
 
-Prediction: correct independent frequency counting may recover one-off evidence previously lost behind repetition. Rival result: lexical ambiguity or display limitations dominate and the candidate fails the quality gates. This comparison cannot attribute an effect to passage-local ranking: none remains in the candidate. No private comparison has run yet; freeze this candidate before evaluating both sets, and retain the same success/stop rule.
+Prediction: correct independent frequency counting may recover one-off evidence previously lost behind repetition. Rival result: lexical ambiguity or display limitations dominate and the candidate fails the quality gates. This comparison cannot attribute an effect to passage-local ranking: none remains in the candidate. The candidate was frozen before evaluating either set; the same success/stop rule applies.
+
+## Observed comparison
+
+These are exact source-ID counts against the fully labeled bounded episodes, not complete precision or displayed-answer judgments:
+
+| Set | Corrected baseline | Candidate98ec44fa | Change |
+| --- | --- | --- | --- |
+| Frozen six | 7/19 | 6/19 | Q4's sole episode source displaced |
+| Held-out six | 6/20 | 7/20 | One additional H4 episode source |
+
+All original frozen call parameters match. Q2/Q5/Q6 source sets and displayed bytes are unchanged; Q1/Q3/Q4 change. Rechecked the held-out artifact hash and every prefix hash after execution; all match. Previous baseline returned records also still match the originals. The replay uses production provenance metadata, including stable IDs for non-message sources, and leaves no temporary prefix snapshots.
+
+The frozen-set episode loss already makes landing ineligible under the predeclared gate, regardless of unjudged novel-hit relevance or display sufficiency. Those remaining outcomes are explicitly unjudged, not reported as failures or improvements. Ciaran independently recomputed 7/19 to 6/19, reread Q4's complete lost source against its frozen criterion and confirmed its absence from the five public sources. He reran all six questions on both version-checked worktrees: all 12 displayed outputs and details exactly reproduced, with no malformed prefixes, duplicate IDs, ancestry errors or source mismatches. Page source membership agrees across printed addresses, provenance metadata and captured hits; formatting order is not rank order. A separate JS probe confirmed the arithmetic defect. He did not inspect held-out output bodies; their 6/20 to 7/20 count is Kofi's observation, not independently repeated by Ciaran.
+
+## Outcome
+
+Stop: no landing, no second candidate and no further tuning against these questions. Any unjudged source outside the fully labeled episode can alter precision or displayed sufficiency, but cannot repair the fixed episode-source numerator that already fails the conjunctive gate. Stopping further labels is justified for this decision only; it is not a claim that those outcomes passed/failed or that the mathematical correction is generally harmful.
+
+Main production stays at reviewed `0843bfd3`. The failed public passage prototype and one-line candidate remain reproducible in the isolated branch history (`ca3f1388`, `98ec44fa`); their tests are not current main contracts. Private frozen questions/results stay outside Git. The legacy frequency-state bug remains on main and is documented as a separate future decision. A later confirmation experiment needs fresh held-out questions and explicit scope; this result grants no further authority.
