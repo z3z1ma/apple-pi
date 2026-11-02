@@ -384,6 +384,11 @@
 	border-color: color-mix(in srgb, var(--wp-positive) 35%, transparent);
 	background: color-mix(in srgb, var(--wp-positive) 8%, transparent);
 }
+.wp-threads-state[data-state="waiting"] {
+	color: var(--wp-warning);
+	border-color: color-mix(in srgb, var(--wp-warning) 35%, transparent);
+	background: color-mix(in srgb, var(--wp-warning) 8%, transparent);
+}
 .wp-threads-meta {
 	display: grid;
 	justify-items: end;

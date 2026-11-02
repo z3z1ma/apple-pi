@@ -24,6 +24,13 @@ const FLIGHT_OPEN = "workplace-desk-flight-open";
 /** A task conversation open beside the main view, like a Slack thread. */
 export type OpenThread = { id: string; title: string };
 
+/** Someone holding the task has it in focus and is working right now; otherwise the task waits. */
+const workingOn = (world: WorldSnapshot, task: WorkplaceTask) =>
+	task.assignees.some(
+		(assignee) =>
+			assignee.focused && world.characters.find((person) => person.id === assignee.person)?.facts?.status === "working",
+	);
+
 const ago = (at: number | null | undefined) => {
 	if (!at) return "";
 	const minutes = Math.round((Date.now() - at) / 60_000);
@@ -210,9 +217,7 @@ function TaskChip({
 	selected: boolean;
 	onOpen: () => void;
 }) {
-	const working = task.assignees.some(
-		(assignee) => world.characters.find((person) => person.id === assignee.person)?.facts?.status === "working",
-	);
+	const working = workingOn(world, task);
 	return (
 		<button type="button" className="wp-task-chip" aria-pressed={selected} data-working={working} onClick={onOpen}>
 			<span className="wp-task-chip-avatars" aria-hidden="true">
@@ -319,7 +324,7 @@ export function DeskView({
 	);
 }
 
-type ThreadFilter = "all" | "live" | "closed";
+type ThreadFilter = "all" | "live" | "waiting" | "closed";
 
 /** "Name: text", without repeating the name when the text already starts with it ("Ada assigned ..."). */
 function preview(world: WorldSnapshot, from: string | null, text: string): string {
@@ -384,10 +389,13 @@ export function ThreadsView({
 		return [...extra, ...history]
 			.map((row) => {
 				const last = activity[row.thread];
-				return { ...row, last, latest: Math.max(row.updatedAt, last?.lastAt ?? 0) };
+				// In flight, but none of its current owners is working now: the work waits on someone.
+				const task = live.get(row.thread);
+				const waiting = row.live && !(task && workingOn(world, task));
+				return { ...row, last, waiting, latest: Math.max(row.updatedAt, last?.lastAt ?? 0) };
 			})
 			.sort((a, b) => Number(b.live) - Number(a.live) || Number(a.closed) - Number(b.closed) || b.latest - a.latest);
-	}, [world.workplace, world.characters, world.dormant]);
+	}, [world]);
 	const needle = filter.trim().toLowerCase();
 	useEffect(() => {
 		if (needle.length < 3) {
@@ -407,7 +415,7 @@ export function ThreadsView({
 	}, [needle]);
 	const shown = rows.filter(
 		(row) =>
-			(scope === "all" || (scope === "live" ? row.live : row.closed)) &&
+			(scope === "all" || (scope === "live" ? row.live : scope === "waiting" ? row.waiting : row.closed)) &&
 			(!needle ||
 				`${row.title} ${row.last?.preview ?? ""} ${row.people.map((id) => personIn(world, id)?.person.name ?? "").join(" ")}`
 					.toLowerCase()
@@ -417,6 +425,7 @@ export function ThreadsView({
 	const counts = {
 		all: rows.length,
 		live: rows.filter((row) => row.live).length,
+		waiting: rows.filter((row) => row.waiting).length,
 		closed: rows.filter((row) => row.closed).length,
 	};
 	return (
@@ -434,6 +443,7 @@ export function ThreadsView({
 							[
 								["all", "All"],
 								["live", "In flight"],
+								["waiting", "Waiting"],
 								["closed", "Closed"],
 							] as const
 						).map(([key, label]) => (
@@ -482,8 +492,12 @@ export function ThreadsView({
 								<span className="wp-threads-title">
 									<span className="wp-threads-top">
 										<strong>{row.title}</strong>
-										<span className="wp-threads-state" data-state={row.live ? "live" : row.closed ? "closed" : "open"}>
-											{row.live ? "In flight" : row.closed ? "Closed" : "Open"}
+										<span
+											className="wp-threads-state"
+											data-state={row.waiting ? "waiting" : row.live ? "live" : row.closed ? "closed" : "open"}
+											title={row.waiting ? "In flight, but nobody on it is working right now" : undefined}
+										>
+											{row.waiting ? "Waiting" : row.live ? "Working" : row.closed ? "Closed" : "Open"}
 										</span>
 									</span>
 									<small>
@@ -1182,7 +1196,7 @@ function ThreadConversation({
 	const people = live
 		? live.assignees.map((assignee) => assignee.person)
 		: [...new Set((past?.participants ?? []).map((participant) => participant.person))];
-	const state = live ? "live" : past?.closedAt ? "closed" : "open";
+	const state = live ? (workingOn(world, live) ? "live" : "waiting") : past?.closedAt ? "closed" : "open";
 	const [tools, setTools] = useState<HTMLElement | null>(null);
 	const pins = pinnedThreads.use();
 	const pinned = pins.some((item) => item.key === thread.id);
@@ -1196,7 +1210,7 @@ function ThreadConversation({
 					<h1 title={thread.title}>{thread.title}</h1>
 					<p>
 						<span className="wp-threads-state" data-state={state}>
-							{state === "live" ? "In flight" : state === "closed" ? "Closed" : "Open"}
+							{state === "live" ? "Working" : state === "waiting" ? "Waiting" : state === "closed" ? "Closed" : "Open"}
 						</span>
 						{people.map((id, index) => (
 							<span key={id}>

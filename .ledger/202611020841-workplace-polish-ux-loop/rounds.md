@@ -100,3 +100,7 @@ Open: the desk keeps a separate row for search / Catch up / Read latest / Action
 ## Round 16: the desk as a command line
 
 - U17 Telling one agent something while at the desk meant leaving it for the agent's DM; waking or stopping someone meant a right-click menu. **Added:** slash commands in channel and desk composers: `/dm @person message` (delivered like a forward: after the current step when busy), `/wake @person`, `/stop @person`. Typing `/` lists them, Tab completes and opens the @ list; the result shows under the composer and nothing is posted. The composer hint now names `@` and `/`.
+
+## Round 17: which work is actually moving
+
+- U18 Every in-flight thread read "In flight", whether or not anyone was on it. **Changed:** a thread is "Working" only while one of its owners has it in focus and is working now, and "Waiting" otherwise (the desk strip, the Threads list and the thread header share one rule); a Waiting filter lists them. On the live data 33 of 35 in-flight threads wait: held assignments nobody is working, the stall the watchdog role exists to catch.
