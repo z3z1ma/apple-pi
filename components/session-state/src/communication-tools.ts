@@ -30,6 +30,7 @@ export const COMMUNICATION_TOOLS = [
 	"remove_thread_invitation",
 	"search_messages",
 	"pin_message",
+	"react",
 	"archive_thread",
 	"reopen_thread",
 	"communication_status",
@@ -317,6 +318,35 @@ export function installCommunicationTools(pi: ExtensionAPI): void {
 		"Point current context to one existing authored message.",
 		{ thread, seq },
 		(_self, params) => ({ action: "pin", thread: params.thread, seq: params.seq }),
+	);
+	pi.registerTool(
+		defineTool({
+			name: "react",
+			label: "react",
+			description:
+				"Acknowledge a message with one emoji instead of replying: \u2705 done, \u{1F440} looking, \u{1F44D} agreed, \u{1F64F} thanks. Name the message by the `message` id its mail envelope or read_thread result gives. A reaction wakes nobody and asks nothing; reply when words are needed. on:false takes your reaction back.",
+			promptSnippet: "Acknowledge a message with an emoji without waking anyone.",
+			parameters: Type.Object(
+				{
+					message: text("The message id from its mail envelope or read_thread result."),
+					emoji: text("One emoji."),
+					on: Type.Optional(Type.Boolean({ description: "false takes your reaction back; default true." })),
+				},
+				{ additionalProperties: false },
+			),
+			async execute(_toolCallId, params, signal, _onUpdate, ctx) {
+				const receipt = await sendCommand(
+					ctx.sessionManager.getSessionId(),
+					{ kind: "react", message: params.message, emoji: params.emoji, on: params.on !== false },
+					{ signal },
+				);
+				const ok = receipt.stage === "applied";
+				return {
+					...result({ outcome: ok ? "applied" : "refused", reason: receipt.reason }),
+					isError: !ok,
+				};
+			},
+		}),
 	);
 	action(
 		"archive_thread",

@@ -128,6 +128,8 @@ export type Command =
 	/** Discard only a temporary peer owned by this program connection. */
 	| { kind: "discard_peer" }
 	| { kind: "abort" }
+	/** A line the session keeps in its transcript without starting a turn, such as the operator's reaction to it. */
+	| { kind: "notice"; text: string }
 	| { kind: "rename"; name: string }
 	| { kind: "set_model"; provider: string; id: string }
 	| { kind: "set_thinking"; level: string }

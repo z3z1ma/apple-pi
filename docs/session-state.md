@@ -52,7 +52,8 @@ Any client can ask a session to do something by sending `{"type": "command", "co
 | `talk` | `text` | A new user turn; fails with `busy` while a run is active |
 | `steer` | `text` | Redirects the active run at its next boundary (starts a turn when idle) |
 | `follow_up` | `text` | Held by the session's bridge until the active run ends, then sent as the next turn (applied then); if the run is stopped it fails as not sent. Starts a turn at once when idle |
-| `react` | `message`, `emoji`, `on` | Adds or removes the sender's emoji reaction on a thread message; readers see it in the message's `reactions`, and nobody is notified. The operator may react anywhere it can read, a person only where it takes part. A DM message is named `entry:<session>:<entry id>`; only the operator reacts there, and transcript pages carry those reactions |
+| `react` | `message`, `emoji`, `on` | Adds or removes the sender's emoji reaction on a thread message; readers see it in the message's `reactions`, and nobody is notified. The operator may react anywhere it can read, a person only where it takes part. A DM message is named `entry:<session>:<entry id>`; only the operator reacts there, transcript pages carry those reactions, and a running agent gets a `notice` saying what was acknowledged, without a turn. People react with the native `react` tool |
+| `notice` | `text` | A line the session keeps in its transcript without starting a turn (Pi appends it when idle and steers it into a running turn) |
 | `withdraw` | `command` | Takes back a follow-up (by its command id) the bridge still holds; that follow-up fails as `withdrawn`. Fails once the agent has it |
 | `abort` | | Stops the active run; applied once the run has stopped |
 | `rename` | `name` | Renames the session |

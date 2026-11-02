@@ -7,6 +7,13 @@ Shared notice, complete outgoing mail and raised marker commit together, followe
 Coupled: components/session-state/src/friction.ts, components/session-state/src/threads.ts
 Verify: components/session-state/tests/friction-delivery.test.ts
 
+## symbol:Runtime.reactionNotice
+
+The operator's DM reaction is told to the agent as a `notice` command after the reaction commits: the reacted text comes from the transcript entry (scanned like a page read), falling back to the indexed preview. Only a running session is told; a person at home is not woken and gets nothing later, since the reaction itself stays on the record. The notice never starts a turn.
+Why: the operator wanted reactions to replace typed "ok" messages; waking an agent to read an acknowledgment would cost the turn the reaction exists to save.
+Coupled: components/session-state/src/bridge.ts, components/session-state/src/reactions.ts
+Verify: components/session-state/tests/commands.test.ts
+
 ## symbol:Runtime.takeLock
 
 The single-runtime guarantee is an exclusive SQLite lock held for the runtime's whole life, not a pid file. The pid file only tells tests and people which process to stop.

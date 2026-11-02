@@ -1268,8 +1268,10 @@ export class Runtime {
 		now: number,
 	): void {
 		try {
-			if (command.kind === "react") react(this.db!, sender, OPERATOR, command, now);
-			else if (command.kind === "schedule") createSchedule(this.db!, commandId, sender, command, now);
+			if (command.kind === "react") {
+				react(this.db!, sender, OPERATOR, command, now);
+				if (command.on) void this.reactionNotice(command.message, command.emoji);
+			} else if (command.kind === "schedule") createSchedule(this.db!, commandId, sender, command, now);
 			else if (command.kind === "unschedule") cancelSchedule(this.db!, command.id, sender, OPERATOR, now);
 			else
 				this.atomically(() => {
@@ -1285,6 +1287,51 @@ export class Runtime {
 		} catch (error) {
 			this.setCommandStage(commandId, "failed", (error as Error).message);
 		}
+	}
+
+	/**
+	 * Tell an agent, without starting a turn, that the operator reacted to something it said in its DM. A person at home
+	 * is not told; the reaction stays on the record either way.
+	 */
+	private async reactionNotice(message: string, emoji: string): Promise<void> {
+		const entry = /^entry:([^:]+):(.+)$/.exec(message);
+		const db = this.db;
+		if (!entry || !db) return;
+		const [, session, id] = entry as unknown as [string, string, string];
+		const row = db.prepare("select session_file from sessions where id = ?").get(session) as
+			| { session_file: string | null }
+			| undefined;
+		if (!row) return;
+		let said = "";
+		try {
+			const raw = (row.session_file ? await scanTranscript(row.session_file, new Set([id])) : new Map()).get(id) as
+				| { message?: { content?: unknown } }
+				| undefined;
+			const content = raw?.message?.content;
+			said = (
+				typeof content === "string"
+					? content
+					: Array.isArray(content)
+						? content.flatMap((part) => (part?.type === "text" ? [String(part.text)] : [])).join(" ")
+						: ""
+			)
+				.replace(/\s+/g, " ")
+				.trim();
+		} catch {}
+		if (this.db !== db) return;
+		said ||= (
+			(
+				db
+					.prepare("select preview from messages where session_id = ? and entry_id = ? and part = ''")
+					.get(session, id) as { preview: string } | undefined
+			)?.preview ?? ""
+		).trim();
+		const quoted = said.length > 160 ? `${said.slice(0, 160)}\u2026` : said;
+		const text = `The operator reacted ${emoji} to ${quoted ? `"${quoted}"` : "one of your messages"}. A reaction is an acknowledgment; it asks nothing.`;
+		const commandId = `notice:${message}:${emoji}:${Date.now()}`;
+		const target = this.queueDelivery(commandId, session, { kind: "notice", text });
+		if (target) this.dispatch(target, commandId, { kind: "notice", text });
+		else this.setCommandStage(commandId, "failed", "not running");
 	}
 
 	/**
@@ -1643,7 +1690,7 @@ export class Runtime {
 	private queueDelivery(
 		commandId: string,
 		recipient: string,
-		command: Extract<Command, { kind: "mail" | "close" }>,
+		command: Extract<Command, { kind: "mail" | "close" | "notice" }>,
 		generation?: number,
 		/** A channel's listener is on duty for it, so its mail wakes the listener even when it is not on call. */
 		onDuty = false,

@@ -46,6 +46,49 @@ test("talking to an idle session starts a turn, with accepted, delivered, and ap
 	}
 }, 20000);
 
+test("the operator's reaction to an agent's DM message reaches its transcript without starting a turn", async () => {
+	const run = await fauxSession([bridge], [fauxAssistantMessage("The cache is fixed.")], []);
+	try {
+		const id = run.session.sessionManager.getSessionId();
+		await seen(id);
+		await sendCommand(state.socketPath, id, { kind: "talk", text: "status?" });
+		const said = await vi.waitFor(() => {
+			const [entry] = query<{ entry_id: string }>(
+				state.dbPath,
+				"select entry_id from messages where session_id = ? and role = 'assistant' and part = ''",
+				id,
+			);
+			expect(entry).toBeDefined();
+			return entry!.entry_id;
+		});
+		const turns = run.session.messages.filter((message) => message.role === "assistant").length;
+		const receipts = await sendCommand(state.socketPath, "operator", {
+			kind: "react",
+			message: `entry:${id}:${said}`,
+			emoji: "\u{1F44D}",
+			on: true,
+		});
+		expect(receipts.at(-1)).toEqual({ stage: "applied" });
+		await vi.waitFor(
+			() =>
+				expect(
+					run.session.sessionManager
+						.getEntries()
+						.some(
+							(entry) =>
+								entry.type === "custom_message" &&
+								entry.customType === "apple-pi.notice" &&
+								JSON.stringify(entry.content).includes('reacted \u{1F44D} to \\"The cache is fixed.\\"'),
+						),
+				).toBe(true),
+			{ timeout: 10000 },
+		);
+		expect(run.session.messages.filter((message) => message.role === "assistant").length).toBe(turns);
+	} finally {
+		await close(run);
+	}
+}, 20000);
+
 test("a follow-up waits for the run to settle and is then sent as the next turn", async () => {
 	const holds: ((reply: Reply) => void)[] = [];
 	const run = await fauxSession(

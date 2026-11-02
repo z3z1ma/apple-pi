@@ -195,6 +195,7 @@ try {
 		"remove_thread_invitation",
 		"search_messages",
 		"pin_message",
+		"react",
 		"archive_thread",
 		"reopen_thread",
 		"communication_status",

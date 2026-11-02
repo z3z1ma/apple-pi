@@ -121,6 +121,24 @@ test("channel prose is quiet, explicit notify is validated, and catch-up SDK rep
 	expect(next.effect?.page?.messages.map((message) => message.body)).toEqual(["Inspect the newer trace."]);
 }, 30000);
 
+test("a participant acknowledges a message with a reaction; an outsider cannot", async () => {
+	const root = await person("native-react-root");
+	const ben = await person("native-react-ben", root);
+	const outsider = await person("native-react-outsider");
+	const channel = (await applied(root, "create_channel", { name: "Acks", purpose: "Acknowledge", invite: [ben] }))
+		.effect!.thread.id;
+	const message = (await applied(root, "post", { channel, body: "The migration is merged." })).effect!.message!.id;
+	const done = await invoke(ben, "react", { message, emoji: "\u2705" });
+	expect(done).toMatchObject({ isError: false, details: { outcome: "applied" } });
+	expect(query(state.dbPath, "select person, emoji from message_reactions where message_id = ?", message)).toEqual([
+		{ person: ben, emoji: "\u2705" },
+	]);
+	const refused = await invoke(outsider, "react", { message, emoji: "\u2705" });
+	expect(refused).toMatchObject({ isError: true, details: { outcome: "refused" } });
+	await invoke(ben, "react", { message, emoji: "\u2705", on: false });
+	expect(query(state.dbPath, "select 1 from message_reactions where message_id = ?", message)).toEqual([]);
+}, 30000);
+
 test("grant removal reports remaining organization access and preserves following; leaving is separate", async () => {
 	const root = await person("native-rights-root");
 	const ben = await person("native-rights-ben", root);

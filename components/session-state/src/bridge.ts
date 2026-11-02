@@ -374,6 +374,9 @@ function tmuxPane(): Hello["tmux"] {
 }
 
 const PREVIEW_CHARS = 120;
+
+/** A runtime notice kept in the transcript, such as the operator's reaction to an agent's DM message. */
+export const NOTICE_CUSTOM_TYPE = "apple-pi.notice";
 function preview(text: string): string {
 	return text.trim().split("\n")[0].slice(0, PREVIEW_CHARS);
 }
@@ -672,6 +675,13 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 					break;
 				case "rename":
 					pi.setSessionName(command.name);
+					break;
+				case "notice":
+					// A record for the agent's next look, never a turn of its own.
+					pi.sendMessage(
+						{ customType: NOTICE_CUSTOM_TYPE, content: command.text, display: true },
+						{ deliverAs: "steer" },
+					);
 					break;
 				case "transfer":
 					target.hello.facts.reportsTo = command.manager;
