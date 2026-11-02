@@ -20,6 +20,7 @@ import { OrganizationNameForm, OrgNameEditor } from "./workplace-org-name.js";
 import { ChatPeople, PersonAvatar, PersonName, PersonProfile, presenceOf, sessionStatus } from "./workplace-people.js";
 import { PersonActionsButton, usePersonMenu, WorkplacePersonActions } from "./workplace-person-actions.js";
 import { usePaneResize } from "./workplace-resize.js";
+import { QuickSwitcher } from "./workplace-switcher.js";
 import { ThreadPane } from "./workplace-thread.js";
 import { WorkplaceWorld } from "./workplace-world.js";
 import { worldStore } from "./world-store.js";
@@ -486,7 +487,7 @@ function Chat({
 							</span>
 						)}
 					</span>
-					<small>{home ? "Away" : (agent.facts?.title ?? activity(agent))}</small>
+					<small>{home ? "Away" : (agent.facts?.task?.title ?? agent.facts?.title ?? activity(agent))}</small>
 				</span>
 				{agent.facts?.unseen && <span className="wp-unread-dot" aria-hidden="true" />}
 				{agent.facts?.asking && <b className="wp-needs">?</b>}
@@ -731,6 +732,16 @@ function Chat({
 						)
 					)}
 				</main>
+				<QuickSwitcher
+					world={world}
+					active={active}
+					go={(target) => {
+						if (target.kind === "view") setSelection({ kind: target.view, id: target.view });
+						else if (target.kind === "dm") openDM(target.id);
+						else if (target.kind === "channel") setSelection({ kind: "channel", id: target.id });
+						else showThread({ id: target.id, title: target.title });
+					}}
+				/>
 				{active && discovering && (
 					<ChannelBrowser
 						world={world}

@@ -299,6 +299,29 @@ test("Threads lists live work before closed work, and Activity puts questions fi
 	}
 });
 
+test("Command K jumps to a person, a thread or a view", { timeout: 60_000 }, async () => {
+	const { page, errors } = await openDesk("light");
+	try {
+		await page.getByRole("heading", { name: "Front desk", exact: true }).waitFor();
+		await page.keyboard.press("Control+k");
+		const jump = page.getByRole("textbox", { name: "Jump to a person, channel, thread or view" });
+		await jump.fill("schedules");
+		await shot(page, "switcher-light");
+		await jump.press("Enter");
+		await page.getByRole("complementary", { name: "Thread: Review the schedules change" }).waitFor();
+		await page.keyboard.press("Control+k");
+		await jump.fill("iris");
+		await jump.press("Enter");
+		await page.locator(".wp-conversation-header h1").filter({ hasText: "Iris" }).waitFor();
+		await page.keyboard.press("Control+k");
+		await jump.press("Escape");
+		expect(await jump.count()).toBe(0);
+		expect(errors).toEqual([]);
+	} finally {
+		await page.close();
+	}
+});
+
 test("Without a desk, Chat offers to open one with the root coordinator", { timeout: 60_000 }, async () => {
 	const { page, errors } = await openDesk("light", 1100, false);
 	try {

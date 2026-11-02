@@ -1,4 +1,107 @@
-/* Front desk, Threads, Activity and the thread side panel (workplace-desk.tsx). */
+/* Front desk, Threads, Activity, the thread side panel (workplace-desk.tsx) and the quick switcher. */
+
+.wp-switcher::backdrop {
+	background: #0005;
+}
+.wp-switcher {
+	margin: 12vh auto auto;
+	padding: 0;
+	color: var(--wp-text);
+	width: min(620px, calc(100vw - 32px));
+	border: 1px solid var(--wp-border);
+	border-radius: 12px;
+	background: var(--wp-bg);
+	box-shadow: var(--wp-shadow);
+	overflow: hidden;
+}
+.wp-switcher-input {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 14px 16px;
+	border-bottom: 1px solid var(--wp-border);
+	color: var(--wp-muted);
+}
+.wp-app .wp-switcher-input input,
+.wp-app .wp-switcher-input input:focus {
+	flex: 1;
+	min-width: 0;
+	border: 0;
+	padding: 0;
+	box-shadow: none;
+	background: transparent;
+	color: var(--wp-text);
+	font-size: 16px;
+	outline: none;
+}
+.wp-switcher-input kbd {
+	padding: 1px 6px;
+	border: 1px solid var(--wp-border);
+	border-radius: 4px;
+	font-size: 10px;
+}
+.wp-switcher ul {
+	list-style: none;
+	margin: 0;
+	padding: 6px;
+	max-height: 60vh;
+	overflow-y: auto;
+}
+.wp-app .wp-switcher li button {
+	display: flex;
+	align-items: center;
+	gap: 11px;
+	width: 100%;
+	padding: 7px 10px;
+	border: 0;
+	border-radius: 7px;
+	background: transparent;
+	color: var(--wp-text);
+	text-align: left;
+}
+.wp-app .wp-switcher li[data-active="true"] button {
+	background: var(--wp-selected);
+}
+.wp-switcher li button > span:last-child {
+	display: grid;
+	min-width: 0;
+}
+.wp-switcher li strong {
+	font-size: 13px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.wp-switcher li small {
+	font-size: 11px;
+	color: var(--wp-muted);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.wp-switcher .wp-avatar-tile,
+.wp-switcher-glyph {
+	width: 26px;
+	height: 26px;
+	font-size: 12px;
+}
+.wp-switcher-glyph {
+	display: grid;
+	place-items: center;
+	flex: none;
+	border-radius: 7px;
+	background: var(--wp-panel);
+	color: var(--wp-muted);
+}
+.wp-switcher-glyph .wp-icon {
+	width: 15px;
+	height: 15px;
+}
+.wp-switcher-empty {
+	padding: 14px;
+	font-size: 12px;
+	color: var(--wp-muted);
+}
 
 .wp-chat-sidebar .wp-chat-nav {
 	display: grid;
