@@ -191,7 +191,12 @@ async function openDesk(appearance: "light" | "dark", width = 1440, desk = true)
 				},
 			});
 			w.posts = [];
+			w.instructions = [];
 			w.agentWorld = {
+				instruct: async (id: string, _command: string, instruction: any) => {
+					w.instructions.push({ id, ...instruction });
+					return { ok: true };
+				},
 				workspace: { resolvePaths: async () => ({ ok: true, files: [] }) },
 				snapshot: async () => world,
 				onUpdate: (listener: (snapshot: unknown) => void) => {
@@ -372,6 +377,50 @@ test("a conversation moves into the operator's own sidebar section and back", { 
 			.getByRole("region", { name: "Direct messages", exact: true })
 			.getByRole("group", { name: "Iris", exact: true })
 			.waitFor();
+		expect(errors).toEqual([]);
+	} finally {
+		await page.close();
+	}
+});
+
+test("a message is answered with its quote, and forwarded to a thread or a person", { timeout: 60_000 }, async () => {
+	const { page, errors } = await openDesk("light");
+	try {
+		const reply = page.locator(".wp-message").filter({ hasText: "Recorded as" }).first();
+		await reply.waitFor();
+		await reply.hover();
+		await reply.getByRole("button", { name: "Reply", exact: true }).click();
+		await page.getByText("Replying to").waitFor();
+		await shot(page, "reply-light");
+		const composer = page.getByRole("textbox", { name: "Post to channel", exact: true });
+		await composer.fill("Have Iris start with the webhook.");
+		await composer.press("Enter");
+		await vi.waitFor(async () => expect(await page.evaluate(() => (window as any).posts)).toHaveLength(1));
+		const [answer] = await page.evaluate(() => (window as any).posts);
+		expect(answer.body).toMatch(/^> \*\*Cora\*\*.*\n> Recorded as \*\*Add GitHub PR threads\*\*/);
+		expect(answer.body.endsWith("\n\nHave Iris start with the webhook.")).toBe(true);
+		expect(await page.getByText("Replying to").count()).toBe(0);
+
+		await reply.click({ button: "right" });
+		await page.getByRole("menuitem", { name: "Forward\u2026" }).click();
+		const destination = page.getByRole("textbox", { name: "Forward to a person, channel or thread" });
+		await page.getByRole("textbox", { name: "Add a note" }).fill("For your brief.");
+		await destination.fill("github");
+		await shot(page, "forward-light");
+		await destination.press("Enter");
+		await page.getByText("Forwarded to Add GitHub PR threads").waitFor();
+		const forwarded = (await page.evaluate(() => (window as any).posts)).at(-1);
+		expect(forwarded.thread).toBe("task:t1");
+		expect(forwarded.body).toMatch(/^For your brief\.\n\n> \*\*Cora\*\*/);
+
+		await reply.click({ button: "right" });
+		await page.getByRole("menuitem", { name: "Forward\u2026" }).click();
+		await destination.fill("iris");
+		await destination.press("Enter");
+		await page.getByText("Forwarded to Iris").waitFor();
+		const [told] = await page.evaluate(() => (window as any).instructions);
+		expect(told).toMatchObject({ id: "iris", kind: "follow_up" });
+		expect(told.text).toMatch(/^> \*\*Cora\*\*/);
 		expect(errors).toEqual([]);
 	} finally {
 		await page.close();

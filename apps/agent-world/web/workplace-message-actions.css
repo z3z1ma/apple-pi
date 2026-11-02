@@ -1,0 +1,187 @@
+/* Message actions, the forward dialog and its toast (workplace-message-actions.tsx). */
+
+.wp-actionable {
+	position: relative;
+}
+.wp-actionable:hover,
+.wp-actionable:focus-within {
+	background: var(--wp-panel);
+}
+.wp-message-actions {
+	position: absolute;
+	top: -14px;
+	right: 12px;
+	z-index: 2;
+	display: none;
+	gap: 2px;
+	padding: 2px;
+	border: 1px solid var(--wp-border);
+	border-radius: 8px;
+	background: var(--wp-bg);
+	box-shadow: 0 2px 6px #2113291a;
+}
+.wp-actionable:hover > .wp-message-actions,
+.wp-actionable:focus-within > .wp-message-actions {
+	display: flex;
+}
+.wp-app .wp-message-actions button {
+	display: grid;
+	place-items: center;
+	width: 28px;
+	height: 28px;
+	padding: 0;
+	border: 0;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--wp-muted);
+}
+.wp-app .wp-message-actions button:hover,
+.wp-app .wp-message-actions button:focus-visible {
+	background: var(--wp-hover);
+	color: var(--wp-text);
+}
+.wp-message-actions .wp-icon {
+	width: 16px;
+	height: 16px;
+}
+
+.wp-forward-head {
+	display: grid;
+	gap: 10px;
+	padding: 16px 16px 12px;
+	border-bottom: 1px solid var(--wp-border);
+}
+.wp-forward-head > * {
+	min-width: 0;
+}
+.wp-forward-head > strong {
+	font-size: 15px;
+}
+.wp-forward-head blockquote {
+	margin: 0;
+	padding: 6px 12px;
+	border-left: 3px solid var(--wp-border);
+	color: var(--wp-text);
+}
+.wp-forward-head blockquote span {
+	font-size: 12px;
+	font-weight: 650;
+}
+.wp-forward-text {
+	margin-top: 2px;
+	max-height: 8em;
+	overflow: hidden;
+	font-size: 13px;
+	line-height: 1.45;
+	overflow-wrap: anywhere;
+	mask-image: linear-gradient(#000 70%, transparent);
+}
+.wp-forward-text p,
+.wp-forward-text ul,
+.wp-forward-text ol {
+	margin: 0 0 4px;
+}
+.wp-forward-text ul,
+.wp-forward-text ol {
+	padding-left: 18px;
+}
+.wp-app .wp-forward-head textarea {
+	box-sizing: border-box;
+	width: 100%;
+	resize: none;
+	padding: 8px 10px;
+	border: 1px solid var(--wp-border);
+	border-radius: 8px;
+	background: var(--wp-bg);
+	color: var(--wp-text);
+	font: inherit;
+	font-size: 13px;
+}
+.wp-app .wp-forward-head textarea:focus {
+	outline: 2px solid var(--wp-accent);
+	outline-offset: -1px;
+}
+
+.wp-replying-to {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+	margin-bottom: 6px;
+	padding: 6px 6px 6px 10px;
+	border-left: 3px solid var(--wp-accent);
+	border-radius: 4px;
+	background: var(--wp-panel);
+	font-size: 12px;
+	color: var(--wp-muted);
+}
+.wp-replying-to > span {
+	flex: none;
+}
+.wp-replying-to strong {
+	color: var(--wp-text);
+}
+.wp-replying-to q {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	quotes: none;
+}
+.wp-app .wp-replying-to button {
+	flex: none;
+	width: 22px;
+	height: 22px;
+	padding: 0;
+	border: 0;
+	border-radius: 4px;
+	background: transparent;
+	color: var(--wp-muted);
+	font-size: 15px;
+	line-height: 1;
+}
+.wp-app .wp-replying-to button:hover {
+	background: var(--wp-hover);
+	color: var(--wp-text);
+}
+
+.wp-toast {
+	position: fixed;
+	left: 50%;
+	bottom: 24px;
+	z-index: 50;
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	max-width: min(560px, calc(100vw - 32px));
+	padding: 8px 8px 8px 16px;
+	border-radius: 10px;
+	background: var(--wp-plum);
+	color: #fff;
+	font-size: 13px;
+	box-shadow: var(--wp-shadow);
+	transform: translateX(-50%);
+}
+.wp-toast.is-failed {
+	background: var(--wp-danger);
+}
+.wp-app .wp-toast button {
+	padding: 4px 10px;
+	border: 0;
+	border-radius: 6px;
+	background: #ffffff1f;
+	color: #fff;
+	font-size: 12px;
+	font-weight: 600;
+}
+.wp-app .wp-toast button[aria-label="Dismiss"] {
+	display: grid;
+	place-items: center;
+	padding: 4px;
+	background: transparent;
+}
+.wp-toast .wp-icon {
+	width: 14px;
+	height: 14px;
+}

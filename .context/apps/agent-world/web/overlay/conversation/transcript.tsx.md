@@ -13,6 +13,12 @@ The optional author renderer belongs to the embedding surface: workplace supplie
 Coupled: apps/agent-world/web/workplace.tsx, apps/agent-world/web/workplace-people.tsx
 Verify: apps/agent-world/tests/world-conversation.test.ts
 
+## symbol:TranscriptMessage
+
+Workplace supplies the message element for user, agent and mail blocks so DMs get the same reply, forward and copy actions as channels; World supplies none and keeps plain articles. The agent block's words are its visible text parts only, never thoughts or tool output.
+Coupled: apps/agent-world/web/workplace.tsx, apps/agent-world/web/workplace-message-actions.tsx
+Verify: apps/agent-world/tests/world-desk.test.ts
+
 ## symbol:blocksOf
 
 A tool result is drawn inside its call's folded line, found by `callId` across every loaded page; a result whose call is on a page not loaded yet stands alone as a folded "result" line until that page arrives.

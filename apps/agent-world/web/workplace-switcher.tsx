@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import type { WorldSnapshot } from "../src/world.js";
 import { Icon } from "./workplace-icon.js";
 import { channelName } from "./workplace-names.js";
@@ -10,7 +10,7 @@ export type SwitchTarget =
 	| { kind: "channel"; id: string }
 	| { kind: "thread"; id: string; title: string };
 
-type Item = {
+export type Item = {
 	key: string;
 	label: string;
 	detail: string;
@@ -83,6 +83,25 @@ function items(world: WorldSnapshot): Item[] {
 	return [...views, ...people, ...channels, ...threads];
 }
 
+/** Where a message can be sent: people, the front desk, channels and task threads. */
+export function destinations(world: WorldSnapshot): Item[] {
+	const desk = world.desk?.thread;
+	return [
+		...(desk
+			? [
+					{
+						key: `c:${desk}`,
+						label: "Front desk",
+						detail: "The organization",
+						target: { kind: "channel" as const, id: desk },
+						icon: "desk" as const,
+					},
+				]
+			: []),
+		...items(world).filter((item) => item.target.kind !== "view"),
+	];
+}
+
 /** Slack's quick switcher: Command or Control + K jumps to any person, channel, thread or view. */
 export function QuickSwitcher({
 	world,
@@ -94,9 +113,6 @@ export function QuickSwitcher({
 	go: (target: SwitchTarget) => void;
 }) {
 	const [open, setOpen] = useState(false);
-	const [query, setQuery] = useState("");
-	const [index, setIndex] = useState(0);
-	const input = useRef<HTMLInputElement>(null);
 	const returnFocus = useRef<HTMLElement | null>(null);
 	useEffect(() => {
 		if (!active) return;
@@ -104,49 +120,85 @@ export function QuickSwitcher({
 			if ((event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === "k") {
 				event.preventDefault();
 				returnFocus.current = document.activeElement as HTMLElement | null;
-				setQuery("");
-				setIndex(0);
 				setOpen(true);
 			}
 		};
 		window.addEventListener("keydown", onKey);
 		return () => window.removeEventListener("keydown", onKey);
 	}, [active]);
-	const dialog = useRef<HTMLDialogElement>(null);
 	useEffect(() => {
-		if (!open) return;
-		if (!dialog.current?.open) dialog.current?.showModal();
-		input.current?.focus();
-	}, [open]);
+		const onOpen = () => {
+			returnFocus.current = document.activeElement as HTMLElement | null;
+			setOpen(true);
+		};
+		window.addEventListener("workplace-switcher", onOpen);
+		return () => window.removeEventListener("workplace-switcher", onOpen);
+	}, []);
 	const all = useMemo(() => items(world), [world]);
 	if (!open || !active) return null;
+	return (
+		<Picker
+			label="Jump to"
+			placeholder="Jump to a person, channel, thread or view"
+			items={all}
+			close={() => {
+				setOpen(false);
+				if (returnFocus.current?.isConnected) returnFocus.current.focus();
+			}}
+			choose={(item) => {
+				setOpen(false);
+				go(item.target);
+			}}
+		/>
+	);
+}
+
+/** A modal list filtered as the operator types; arrows move, Enter chooses, Escape closes. */
+export function Picker({
+	label,
+	placeholder,
+	items: all,
+	close,
+	choose,
+	children,
+}: {
+	label: string;
+	placeholder: string;
+	items: Item[];
+	close: () => void;
+	choose: (item: Item) => void;
+	children?: ReactNode;
+}) {
+	const [query, setQuery] = useState("");
+	const [index, setIndex] = useState(0);
+	const input = useRef<HTMLInputElement>(null);
+	const dialog = useRef<HTMLDialogElement>(null);
+	useEffect(() => {
+		if (!dialog.current?.open) dialog.current?.showModal();
+		input.current?.focus();
+	}, []);
 	const needle = query.trim().toLowerCase();
 	const shown = needle ? all.filter((item) => `${item.label} ${item.detail}`.toLowerCase().includes(needle)) : all;
-	const close = () => {
-		setOpen(false);
-		if (returnFocus.current?.isConnected) returnFocus.current.focus();
-	};
-	const choose = (item: Item | undefined) => {
-		if (!item) return;
-		setOpen(false);
-		go(item.target);
+	const pick = (item: Item | undefined) => {
+		if (item) choose(item);
 	};
 	return (
 		<dialog
 			ref={dialog}
 			className="wp-switcher"
-			aria-label="Jump to"
+			aria-label={label}
 			onCancel={(event) => {
 				event.preventDefault();
 				close();
 			}}
 		>
+			{children}
 			<label className="wp-switcher-input">
 				<Icon name="search" />
 				<input
 					ref={input}
-					aria-label="Jump to a person, channel, thread or view"
-					placeholder="Jump to a person, channel, thread or view"
+					aria-label={placeholder}
+					placeholder={placeholder}
 					value={query}
 					onChange={(event) => {
 						setQuery(event.target.value);
@@ -159,9 +211,9 @@ export function QuickSwitcher({
 						} else if (event.key === "ArrowUp") {
 							event.preventDefault();
 							setIndex((current) => Math.max(current - 1, 0));
-						} else if (event.key === "Enter") {
+						} else if (event.key === "Enter" && !event.nativeEvent.isComposing) {
 							event.preventDefault();
-							choose(shown[index]);
+							pick(shown[index]);
 						}
 					}}
 				/>
@@ -178,7 +230,7 @@ export function QuickSwitcher({
 								if (position === index) node?.scrollIntoView({ block: "nearest" });
 							}}
 							onMouseEnter={() => setIndex(position)}
-							onClick={() => choose(item)}
+							onClick={() => pick(item)}
 						>
 							{item.person ? (
 								<PersonAvatar id={item.person} name={item.label} interactive={false} />

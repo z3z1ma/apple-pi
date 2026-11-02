@@ -9,10 +9,13 @@ import type {
 } from "../src/communications.js";
 import type { WorkplaceThread, WorldSnapshot } from "../src/world.js";
 import { FileReferenceCwd, FileReferenceText } from "./file-references.js";
+import { ReplyingTo } from "./overlay/conversation/actions.js";
+import { type QuotedMessage, withQuote } from "./overlay/conversation/quote.js";
 import { Markdown } from "./overlay/conversation/transcript.js";
 import { useWindowFocus } from "./use-window-focus.js";
 import { CommunicationDialog, CommunicationRecipients } from "./workplace-communications.js";
 import { Icon } from "./workplace-icon.js";
+import { ActionableMessage } from "./workplace-message-actions.js";
 import { PersonAvatar, PersonName } from "./workplace-people.js";
 
 const api = window.agentWorld;
@@ -43,6 +46,7 @@ export function ThreadPane({
 	const [page, setPage] = useState<ConversationPage>();
 	const [unreadAfter, setUnreadAfter] = useState<number>();
 	const [draft, setDraft] = useState(drafts.get(id) ?? "");
+	const [replyTo, setReplyTo] = useState<QuotedMessage>();
 	const [notify, changeNotify] = useState<string[]>(notificationDrafts.get(id) ?? []);
 	const setNotify = (people: string[]) => {
 		changeNotify(people);
@@ -63,6 +67,7 @@ export function ThreadPane({
 	const mounted = useRef(true);
 	const messages = useRef<HTMLDivElement>(null);
 	const actionsMenu = useRef<HTMLDetailsElement>(null);
+	const composer = useRef<HTMLTextAreaElement>(null);
 	const followLatest = useRef(!!channel);
 	const attemptedSeq = useRef(0);
 	const focused = useWindowFocus();
@@ -304,16 +309,18 @@ export function ThreadPane({
 	};
 	const send = () => {
 		if (locked || !thread?.permissions.post || !draft.trim()) return;
+		const body = withQuote(draft, replyTo);
+		setReplyTo(undefined);
 		void run(
 			channel ? "Post" : "Reply",
 			(attempt) =>
 				api.communications.post({
 					attempt,
 					thread: id,
-					body: draft,
+					body,
 					...(channel ? { notify: listener ? [...new Set([listener, ...notify])] : notify } : {}),
 				}),
-			draft,
+			body,
 		);
 	};
 	const submitDialog = () => {
@@ -549,6 +556,15 @@ export function ThreadPane({
 						channel={!!channel}
 						unreadAfter={channel ? unreadAfter : undefined}
 						followLink={(author, href, file) => void followLink(author, href, file)}
+						where={channel ? `#${channelLabel ?? page.thread.name}` : (page.thread.name ?? undefined)}
+						reply={
+							!locked && page.thread.permissions.post && !page.thread.archived
+								? (message) => {
+										setReplyTo(message);
+										composer.current?.focus();
+									}
+								: undefined
+						}
 						canPin={!locked && page.thread.permissions.pin}
 						pin={(seq) =>
 							void run("Pin current context", (attempt) => api.communications.pin({ attempt, thread: id, seq }))
@@ -625,6 +641,7 @@ export function ThreadPane({
 							send();
 						}}
 					>
+						{replyTo && <ReplyingTo message={replyTo} clear={() => setReplyTo(undefined)} />}
 						{channel && !listener && (
 							<details className="wp-thread-notify">
 								<summary>
@@ -648,6 +665,7 @@ export function ThreadPane({
 								{channel ? "Post to channel as operator" : "Reply to everyone"}
 							</span>
 							<textarea
+								ref={composer}
 								aria-label={channel ? "Post to channel" : "Reply to everyone"}
 								placeholder={
 									listener
@@ -810,11 +828,15 @@ function ThreadMessages({
 	pin,
 	unreadAfter,
 	followLink,
+	where,
+	reply,
 }: {
 	world: WorldSnapshot;
 	thread: ConversationInfo;
 	messages: ConversationMessage[];
 	channel: boolean;
+	where?: string;
+	reply?: (message: QuotedMessage) => void;
 	canPin: boolean;
 	pin: (seq: number) => void;
 	unreadAfter?: number;
@@ -842,7 +864,24 @@ function ThreadMessages({
 						<hr aria-label="New messages" />
 					</div>
 				)}
-				<article className={`wp-message${continued ? " is-continued" : ""}`} id={`message-${message.seq}`}>
+				<ActionableMessage
+					className={`wp-message${continued ? " is-continued" : ""}`}
+					id={`message-${message.seq}`}
+					message={{
+						author: displayName(message.from, message.fromName),
+						at: message.at,
+						text: message.body,
+						where,
+					}}
+					onReply={reply}
+					extra={[
+						{
+							label: "Copy reference",
+							onSelect: () => void navigator.clipboard.writeText(`${thread.id}#${message.seq}`),
+						},
+						...(canPin ? [{ label: "Pin as current context", onSelect: () => pin(message.seq) }] : []),
+					]}
+				>
 					{message.from === "harness" ? (
 						<span className="wp-avatar-tile wp-message-avatar wp-system-avatar" aria-hidden="true">
 							pi
@@ -859,22 +898,12 @@ function ThreadMessages({
 							<strong>
 								<PersonName id={message.from} name={displayName(message.from, message.fromName)} />
 							</strong>
-							<time dateTime={new Date(message.at).toISOString()} title={new Date(message.at).toLocaleString()}>
+							<time
+								dateTime={new Date(message.at).toISOString()}
+								title={`${new Date(message.at).toLocaleString()} \u00b7 #${message.seq}`}
+							>
 								{new Date(message.at).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}
 							</time>
-							<span className="wp-message-reference" title={`${thread.id}#${message.seq}`}>
-								#{message.seq}
-							</span>
-							{canPin && (
-								<button
-									className="wp-message-pin"
-									type="button"
-									aria-label={`Pin message ${message.seq}`}
-									onClick={() => pin(message.seq)}
-								>
-									Pin
-								</button>
-							)}
 						</header>
 						<div className="wp-message-body">
 							<FileReferenceCwd.Provider
@@ -893,7 +922,7 @@ function ThreadMessages({
 							</FileReferenceCwd.Provider>
 						</div>
 					</div>
-				</article>
+				</ActionableMessage>
 			</Fragment>
 		);
 	});

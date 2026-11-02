@@ -1,7 +1,7 @@
 // The transcript on the book's right page: the operator's turns and the agent's replies as Markdown, consecutive
 // replies of one turn under one heading, each tool call folded to one line (its tool and main argument) that opens to
 // its input and result, mail as a sealed letter, and other extensions' messages folded like tool calls.
-import { createContext, memo, type ReactNode, useContext, useState } from "react";
+import { type ComponentType, createContext, memo, type ReactNode, useContext, useState } from "react";
 import type { TranscriptEntry, TranscriptToolCall } from "../../../src/world.js";
 import { FileReferenceCwd, useFileReferenceHtml } from "../../file-references.js";
 import { shortArg } from "../tool-line.js";
@@ -146,6 +146,43 @@ const STATE_TITLE = { ok: "Done", error: "Failed", waiting: "No result yet" };
 
 /** The character's working directory, which tool lines leave out of the paths and commands they show. */
 export const WorkingDirectory = createContext<string | undefined>(undefined);
+
+/** A message's words and origin, for an embedding surface that offers actions on it (quote, forward, copy). */
+export interface TranscriptMessageInfo {
+	speaker: "assistant" | "user" | "mail";
+	author: string;
+	at: number;
+	text: string;
+}
+/** The embedding surface's message element; without one, messages are plain articles. */
+export const TranscriptMessage = createContext<
+	ComponentType<{ message: TranscriptMessageInfo; className: string; entry: string; children: ReactNode }> | undefined
+>(undefined);
+
+function MessageArticle({
+	message,
+	className,
+	entry,
+	children,
+}: {
+	message: TranscriptMessageInfo;
+	className: string;
+	entry: string;
+	children: ReactNode;
+}) {
+	const Wrap = useContext(TranscriptMessage);
+	if (Wrap)
+		return (
+			<Wrap message={message} className={className} entry={entry}>
+				{children}
+			</Wrap>
+		);
+	return (
+		<article className={className} data-entry={entry}>
+			{children}
+		</article>
+	);
+}
 export const TranscriptAuthor = createContext<((speaker: "assistant" | "user", name: string) => ReactNode) | undefined>(
 	undefined,
 );
@@ -252,8 +289,15 @@ function AgentBlock({
 	const visibleEntries = entries.filter(
 		(entry) => showTools || items.get(entry.id)!.some((item) => item.kind === "text"),
 	);
+	const words = visibleEntries
+		.flatMap((entry) => items.get(entry.id)!.flatMap((item) => (item.kind === "text" ? [item.text] : [])))
+		.join("\n\n");
 	return (
-		<article className="aw-conv-entry aw-conv-assistant" data-entry={entries[0].id}>
+		<MessageArticle
+			className="aw-conv-entry aw-conv-assistant"
+			entry={entries[0].id}
+			message={{ speaker: "assistant", author: name, at: entries[0].at, text: words }}
+		>
 			<header className="aw-conv-who">
 				<Author speaker="assistant" name={name} />
 				<time>{clock(entries[0].at)}</time>
@@ -284,7 +328,7 @@ function AgentBlock({
 					{showTools && entry.aborted && <p className="aw-conv-failed">Stopped before it finished.</p>}
 				</div>
 			))}
-		</article>
+		</MessageArticle>
 	);
 }
 
@@ -304,7 +348,11 @@ export const BlockView = memo(function BlockView({
 		return <AgentBlock name={name} entries={block.entries} results={results} showTools={showTools} />;
 	if (block.kind === "user")
 		return (
-			<article className="aw-conv-entry aw-conv-user" data-entry={block.entry.id}>
+			<MessageArticle
+				className="aw-conv-entry aw-conv-user"
+				entry={block.entry.id}
+				message={{ speaker: "user", author: "You", at: block.entry.at, text: block.entry.text }}
+			>
 				<header className="aw-conv-who">
 					<Author speaker="user" name="You" />
 					<time>{clock(block.entry.at)}</time>
@@ -315,11 +363,15 @@ export const BlockView = memo(function BlockView({
 						{block.entry.images === 1 ? "With an image" : `With ${block.entry.images} images`} (see its terminal).
 					</p>
 				)}
-			</article>
+			</MessageArticle>
 		);
 	if (block.kind === "mail")
 		return (
-			<article className="aw-conv-entry aw-conv-mail" data-entry={block.entry.id}>
+			<MessageArticle
+				className="aw-conv-entry aw-conv-mail"
+				entry={block.entry.id}
+				message={{ speaker: "mail", author: block.entry.from, at: block.entry.at, text: block.entry.text }}
+			>
 				<span className="aw-conv-mail-mark" aria-hidden="true" />
 				<header className="aw-conv-who">
 					<span className="aw-conv-name">Mail from {block.entry.from}</span>
@@ -328,7 +380,7 @@ export const BlockView = memo(function BlockView({
 				<FileReferenceCwd.Provider value={undefined}>
 					<Markdown text={block.entry.text} />
 				</FileReferenceCwd.Provider>
-			</article>
+			</MessageArticle>
 		);
 	if (block.kind === "note")
 		return (

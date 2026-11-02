@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createRoot } from "react-dom/client";
 import type { CommunicationResult, ConversationInfo } from "../src/communications.js";
 import type { Character, WorkplaceThread, WorldSnapshot } from "../src/world.js";
@@ -6,7 +6,7 @@ import { FileReferenceCwd, FileReferenceNavigation, type FileReferenceTarget } f
 import { sleeperCharacter } from "./game/layout.js";
 import { EmbeddedConversation } from "./overlay/conversation/conversation-panel.js";
 import { conversationPanel } from "./overlay/conversation/panel-state.js";
-import { TranscriptAuthor } from "./overlay/conversation/transcript.js";
+import { TranscriptAuthor, TranscriptMessage, type TranscriptMessageInfo } from "./overlay/conversation/transcript.js";
 import { activity } from "./overlay/interface/model.js";
 import { ChannelBrowser } from "./workplace-channels.js";
 import { WorkplaceCode } from "./workplace-code.js";
@@ -28,13 +28,14 @@ import {
 import { Icon } from "./workplace-icon.js";
 import { WorkplaceIssues } from "./workplace-issues.js";
 import { Mail } from "./workplace-mail.js";
+import { ActionableMessage, ForwardProvider } from "./workplace-message-actions.js";
 import { channelName, useWorkplaceNames } from "./workplace-names.js";
 import { descendants, Org, orgPeople } from "./workplace-org.js";
 import { OrganizationNameForm, OrgNameEditor } from "./workplace-org-name.js";
 import { ChatPeople, PersonAvatar, PersonName, PersonProfile, presenceOf, sessionStatus } from "./workplace-people.js";
 import { PersonActionsButton, usePersonMenu, WorkplacePersonActions } from "./workplace-person-actions.js";
 import { usePaneResize } from "./workplace-resize.js";
-import { QuickSwitcher } from "./workplace-switcher.js";
+import { QuickSwitcher, type SwitchTarget } from "./workplace-switcher.js";
 import { ThreadPane } from "./workplace-thread.js";
 import { WorkplaceWorld } from "./workplace-world.js";
 import { worldStore } from "./world-store.js";
@@ -46,6 +47,32 @@ conversationPanel.connect(api);
 document.body.classList.add("workplace");
 document.title = "Workplace";
 const drafts = new Map<string, string>();
+
+/** A DM's messages with actions; replying quotes into this person's reply box while it can take one. */
+function dmMessageFor(id: string, where: string, canReply: boolean) {
+	return function DMMessage({
+		message,
+		className,
+		entry,
+		children,
+	}: {
+		message: TranscriptMessageInfo;
+		className: string;
+		entry: string;
+		children: ReactNode;
+	}) {
+		return (
+			<ActionableMessage
+				className={className}
+				data-entry={entry}
+				message={{ author: message.author, at: message.at, text: message.text, where }}
+				onReply={canReply && message.text.trim() ? (quoted) => conversationPanel.setReplyTo(id, quoted) : undefined}
+			>
+				{children}
+			</ActionableMessage>
+		);
+	};
+}
 
 function channelUnreads(world: WorldSnapshot) {
 	const counts = new Map((world.operatorMail ?? []).map((thread) => [thread.id, thread.unread]));
@@ -478,6 +505,22 @@ function Chat({
 	const person =
 		world.characters.find((agent) => selection?.kind === "dm" && agent.id === selection.id) ??
 		(sleeper ? sleeperCharacter(sleeper) : undefined);
+	const dmId = person?.id;
+	const dmName = person?.name;
+	const dmAwake = !sleeper;
+	const dmMessage = useMemo(
+		() => (dmId ? dmMessageFor(dmId, `DM with ${dmName}`, dmAwake) : undefined),
+		[dmId, dmName, dmAwake],
+	);
+	const go = (target: SwitchTarget) => {
+		if (target.kind === "view") setSelection({ kind: target.view, id: target.view });
+		else if (target.kind === "dm") openDM(target.id);
+		else if (target.kind === "channel")
+			setSelection(
+				target.id === world.desk?.thread ? { kind: "desk", id: "desk" } : { kind: "channel", id: target.id },
+			);
+		else showThread({ id: target.id, title: target.title });
+	};
 	const matches = (name: string) => name.toLowerCase().includes(filter.toLowerCase());
 	const channelRow = (thread: (typeof channels)[number]) => (
 		<button
@@ -549,267 +592,264 @@ function Chat({
 				},
 			}}
 		>
-			<div className="wp-chat-layout" ref={layout} style={sidebar.style}>
-				<aside className="wp-chat-sidebar" ref={sidebar.ref}>
-					<div className="wp-sidebar-heading">
-						<span className="wp-eyebrow">WORKSPACE</span>
-						<OrgNameEditor id="workspace" name="Your organization" defaultName="Your organization" heading="h1" />
-						<p>{world.characters.length} active sessions</p>
-					</div>
-					<label className="wp-find">
-						<Icon name="search" />
-						<input
-							aria-label="Find a channel or agent"
-							placeholder="Find a channel or agent"
-							value={filter}
-							onChange={(e) => setFilter(e.target.value)}
+			<ForwardProvider world={world} go={go}>
+				<div className="wp-chat-layout" ref={layout} style={sidebar.style}>
+					<aside className="wp-chat-sidebar" ref={sidebar.ref}>
+						<div className="wp-sidebar-heading">
+							<span className="wp-eyebrow">WORKSPACE</span>
+							<OrgNameEditor id="workspace" name="Your organization" defaultName="Your organization" heading="h1" />
+							<p>{world.characters.length} active sessions</p>
+						</div>
+						<label className="wp-find">
+							<Icon name="search" />
+							<input
+								aria-label="Find a channel or agent"
+								placeholder="Find a channel or agent"
+								value={filter}
+								onChange={(e) => setFilter(e.target.value)}
+							/>
+						</label>
+						<ChatNav
+							world={world}
+							view={view}
+							select={(kind) => setSelection({ kind, id: kind })}
+							deskUnread={desk ? (unreads.get(desk.thread) ?? 0) : 0}
+							needsYou={view === "activity" ? 0 : unseenActivity.size}
 						/>
-					</label>
-					<ChatNav
-						world={world}
-						view={view}
-						select={(kind) => setSelection({ kind, id: kind })}
-						deskUnread={desk ? (unreads.get(desk.thread) ?? 0) : 0}
-						needsYou={view === "activity" ? 0 : unseenActivity.size}
-					/>
-					{naming && (
-						<SectionNamer
-							onDone={(name) => {
-								if (name) naming(name);
-								setNaming(undefined);
+						{naming && (
+							<SectionNamer
+								onDone={(name) => {
+									if (name) naming(name);
+									setNaming(undefined);
+								}}
+							/>
+						)}
+						<CustomSections
+							store={sectionStore}
+							render={(key) => {
+								if (key.startsWith("channel:")) {
+									const thread = channels.find((item) => item.id === key.slice("channel:".length));
+									return thread && matches(channelName(thread.id, thread.subject, world)) ? channelRow(thread) : null;
+								}
+								const id = key.slice("dm:".length);
+								const awake = world.characters.find((agent) => agent.id === id);
+								const away = world.dormant?.find((agent) => agent.id === id && !agent.retiredAt);
+								const agent = awake ?? (away ? sleeperCharacter(away) : undefined);
+								return agent && matches(agent.name) ? personRow(agent, !awake) : null;
+							}}
+						/>
+						<SidebarSection
+							id="channels"
+							title="Channels"
+							count={channels.filter((thread) => thread.id !== desk?.thread && !thread.id.startsWith("team:")).length}
+							tools={
+								<span className="wp-channel-tools">
+									<button
+										type="button"
+										aria-label="Discover or create channels"
+										title="Discover or create channels"
+										onClick={() => setDiscovering(true)}
+									>
+										+
+									</button>
+								</span>
+							}
+						>
+							{renameChannel && (
+								<div className="wp-channel-rename">
+									<OrganizationNameForm
+										key={renameChannel.id}
+										id={renameChannel.id}
+										name={renameChannel.name}
+										onClose={closeChannelRename}
+									/>
+								</div>
+							)}
+							{channels
+								.filter(
+									(thread) =>
+										thread.id !== desk?.thread &&
+										!thread.id.startsWith("team:") &&
+										!placed(`channel:${thread.id}`) &&
+										matches(channelName(thread.id, thread.subject, world)),
+								)
+								.map(channelRow)}
+							{!channels.length && (
+								<p className="wp-sidebar-note">Discover shared context or create a topic channel.</p>
+							)}
+						</SidebarSection>
+						<GroupList
+							world={world}
+							groups={channels.filter((thread) => thread.id.startsWith("team:") && !placed(`channel:${thread.id}`))}
+							filter={filter}
+							unreads={unreads}
+							selected={selectedChannel?.id}
+							open={(id) => setSelection({ kind: "channel", id })}
+							menu={channelMenu}
+						/>
+						{heads.length > 0 && (
+							<SidebarSection id="vips" title="VIPs" count={heads.length}>
+								{heads
+									.filter((head) => matches(head.character.name) && !placed(`dm:${head.character.id}`))
+									.map((head) => personRow(head.character, head.home))}
+							</SidebarSection>
+						)}
+						<SidebarSection id="direct" title="Direct messages" count={direct.length}>
+							{direct.filter((agent) => matches(agent.name)).map((agent) => personRow(agent))}
+						</SidebarSection>
+						{sleeping.length > 0 && (
+							<details className="wp-sleepers">
+								<summary>Away ({sleeping.length})</summary>
+								{sleeping
+									.filter((agent) => matches(agent.name))
+									.map((agent) => (
+										<button
+											key={agent.id}
+											type="button"
+											aria-haspopup="menu"
+											aria-pressed={person?.id === agent.id}
+											onContextMenu={(event) => personMenu(event, agent.id)}
+											onKeyDown={(event) => personMenu(event, agent.id)}
+											onClick={() => setSelection({ kind: "dm", id: agent.id })}
+										>
+											{agent.name}
+											<small>Away</small>
+										</button>
+									))}
+							</details>
+						)}
+					</aside>
+					{sidebar.separator}
+					<main className="wp-chat-main">
+						{person ? (
+							<>
+								<header className="wp-conversation-header">
+									<PersonAvatar
+										id={person.id}
+										name={person.name}
+										className="wp-header-avatar"
+										presence={presenceOf(person, !!sleeper)}
+									/>
+									<div className="wp-header-person">
+										<h1>
+											<PersonName id={person.id} name={person.name} />
+										</h1>
+										<p>
+											<span className={`wp-dot is-${presenceOf(person, !!sleeper)}`} />
+											{sleeper?.retiredAt
+												? "Former member \u00b7 history only"
+												: sleeper
+													? "Away"
+													: sessionStatus(person)}
+											{person.facts?.title ? ` · ${person.facts.title}` : ""}
+										</p>
+									</div>
+									<button
+										type="button"
+										className="wp-tool-toggle"
+										aria-label="Show tool calls"
+										aria-pressed={showTools}
+										onClick={() => setShowTools(!showTools)}
+										title={showTools ? "Hide tool calls" : "Show tool calls"}
+									>
+										<Icon name="tools" />
+										<span>Tool calls</span>
+										<span className="wp-switch" aria-hidden="true" />
+									</button>
+									<PersonActionsButton id={person.id} />
+								</header>
+								{person.facts?.task && (
+									<div className="wp-session-context">
+										<span className="wp-task-dot" />
+										<span>
+											Focused on <strong>{person.facts.task.title}</strong>
+										</span>
+										<span className="wp-context-label">{sleeper ? "Session history" : "Live session"}</span>
+									</div>
+								)}
+								<div className="wp-session">
+									<TranscriptAuthor.Provider
+										value={(speaker, name) => (
+											<>
+												<PersonAvatar
+													id={speaker === "user" ? "operator" : person.id}
+													name={name}
+													className="wp-transcript-avatar"
+												/>
+												<PersonName
+													id={speaker === "user" ? "operator" : person.id}
+													name={name}
+													className="aw-conv-name"
+												/>
+											</>
+										)}
+									>
+										{active && (
+											<FileReferenceCwd.Provider value={person.facts?.cwd}>
+												<TranscriptMessage.Provider value={dmMessage}>
+													<EmbeddedConversation character={person} store={store} showTools={showTools} />
+												</TranscriptMessage.Provider>
+											</FileReferenceCwd.Provider>
+										)}
+									</TranscriptAuthor.Provider>
+								</div>
+							</>
+						) : selectedChannel ? (
+							<>
+								<ChannelHeader
+									world={world}
+									channel={selectedChannel}
+									label={channelName(selectedChannel.id, selectedChannel.subject, world)}
+									menu={channelMenu}
+								/>
+								{active && (
+									<ThreadPane
+										key={selectedChannel.id}
+										id={selectedChannel.id}
+										channel={selectedChannel}
+										channelLabel={channelName(selectedChannel.id, selectedChannel.subject, world)}
+										world={world}
+										drafts={drafts}
+										embedded
+									/>
+								)}
+							</>
+						) : (
+							active && (
+								<OrganizationView
+									view={view}
+									world={world}
+									drafts={drafts}
+									needsYou={needsYou}
+									unseen={unseenActivity}
+									selectedThread={openThread?.id}
+									openThread={showThread}
+									openDM={openDM}
+								/>
+							)
+						)}
+					</main>
+					<QuickSwitcher world={world} active={active} go={go} />
+					{active && discovering && (
+						<ChannelBrowser
+							world={world}
+							close={() => setDiscovering(false)}
+							open={(thread) => {
+								setOpenedChannels((previous) => [...previous.filter((item) => item.id !== thread.id), thread]);
+								setSelection({ kind: "channel", id: thread.id });
+								setProfile(undefined);
+								setDiscovering(false);
 							}}
 						/>
 					)}
-					<CustomSections
-						store={sectionStore}
-						render={(key) => {
-							if (key.startsWith("channel:")) {
-								const thread = channels.find((item) => item.id === key.slice("channel:".length));
-								return thread && matches(channelName(thread.id, thread.subject, world)) ? channelRow(thread) : null;
-							}
-							const id = key.slice("dm:".length);
-							const awake = world.characters.find((agent) => agent.id === id);
-							const away = world.dormant?.find((agent) => agent.id === id && !agent.retiredAt);
-							const agent = awake ?? (away ? sleeperCharacter(away) : undefined);
-							return agent && matches(agent.name) ? personRow(agent, !awake) : null;
-						}}
-					/>
-					<SidebarSection
-						id="channels"
-						title="Channels"
-						count={channels.filter((thread) => thread.id !== desk?.thread && !thread.id.startsWith("team:")).length}
-						tools={
-							<span className="wp-channel-tools">
-								<button
-									type="button"
-									aria-label="Discover or create channels"
-									title="Discover or create channels"
-									onClick={() => setDiscovering(true)}
-								>
-									+
-								</button>
-							</span>
-						}
-					>
-						{renameChannel && (
-							<div className="wp-channel-rename">
-								<OrganizationNameForm
-									key={renameChannel.id}
-									id={renameChannel.id}
-									name={renameChannel.name}
-									onClose={closeChannelRename}
-								/>
-							</div>
-						)}
-						{channels
-							.filter(
-								(thread) =>
-									thread.id !== desk?.thread &&
-									!thread.id.startsWith("team:") &&
-									!placed(`channel:${thread.id}`) &&
-									matches(channelName(thread.id, thread.subject, world)),
-							)
-							.map(channelRow)}
-						{!channels.length && <p className="wp-sidebar-note">Discover shared context or create a topic channel.</p>}
-					</SidebarSection>
-					<GroupList
-						world={world}
-						groups={channels.filter((thread) => thread.id.startsWith("team:") && !placed(`channel:${thread.id}`))}
-						filter={filter}
-						unreads={unreads}
-						selected={selectedChannel?.id}
-						open={(id) => setSelection({ kind: "channel", id })}
-						menu={channelMenu}
-					/>
-					{heads.length > 0 && (
-						<SidebarSection id="vips" title="VIPs" count={heads.length}>
-							{heads
-								.filter((head) => matches(head.character.name) && !placed(`dm:${head.character.id}`))
-								.map((head) => personRow(head.character, head.home))}
-						</SidebarSection>
+					{active && openThread && !profile && (
+						<ThreadPanel world={world} thread={openThread} drafts={drafts} onClose={() => setOpenThread(undefined)} />
 					)}
-					<SidebarSection id="direct" title="Direct messages" count={direct.length}>
-						{direct.filter((agent) => matches(agent.name)).map((agent) => personRow(agent))}
-					</SidebarSection>
-					{sleeping.length > 0 && (
-						<details className="wp-sleepers">
-							<summary>Away ({sleeping.length})</summary>
-							{sleeping
-								.filter((agent) => matches(agent.name))
-								.map((agent) => (
-									<button
-										key={agent.id}
-										type="button"
-										aria-haspopup="menu"
-										aria-pressed={person?.id === agent.id}
-										onContextMenu={(event) => personMenu(event, agent.id)}
-										onKeyDown={(event) => personMenu(event, agent.id)}
-										onClick={() => setSelection({ kind: "dm", id: agent.id })}
-									>
-										{agent.name}
-										<small>Away</small>
-									</button>
-								))}
-						</details>
+					{active && profile && (
+						<PersonProfile key={profile.id} {...profile} onClose={closeProfile} resize={profileSize} />
 					)}
-				</aside>
-				{sidebar.separator}
-				<main className="wp-chat-main">
-					{person ? (
-						<>
-							<header className="wp-conversation-header">
-								<PersonAvatar
-									id={person.id}
-									name={person.name}
-									className="wp-header-avatar"
-									presence={presenceOf(person, !!sleeper)}
-								/>
-								<div className="wp-header-person">
-									<h1>
-										<PersonName id={person.id} name={person.name} />
-									</h1>
-									<p>
-										<span className={`wp-dot is-${presenceOf(person, !!sleeper)}`} />
-										{sleeper?.retiredAt
-											? "Former member \u00b7 history only"
-											: sleeper
-												? "Away"
-												: sessionStatus(person)}
-										{person.facts?.title ? ` · ${person.facts.title}` : ""}
-									</p>
-								</div>
-								<button
-									type="button"
-									className="wp-tool-toggle"
-									aria-label="Show tool calls"
-									aria-pressed={showTools}
-									onClick={() => setShowTools(!showTools)}
-									title={showTools ? "Hide tool calls" : "Show tool calls"}
-								>
-									<Icon name="tools" />
-									<span>Tool calls</span>
-									<span className="wp-switch" aria-hidden="true" />
-								</button>
-								<PersonActionsButton id={person.id} />
-							</header>
-							{person.facts?.task && (
-								<div className="wp-session-context">
-									<span className="wp-task-dot" />
-									<span>
-										Focused on <strong>{person.facts.task.title}</strong>
-									</span>
-									<span className="wp-context-label">{sleeper ? "Session history" : "Live session"}</span>
-								</div>
-							)}
-							<div className="wp-session">
-								<TranscriptAuthor.Provider
-									value={(speaker, name) => (
-										<>
-											<PersonAvatar
-												id={speaker === "user" ? "operator" : person.id}
-												name={name}
-												className="wp-transcript-avatar"
-											/>
-											<PersonName
-												id={speaker === "user" ? "operator" : person.id}
-												name={name}
-												className="aw-conv-name"
-											/>
-										</>
-									)}
-								>
-									{active && (
-										<FileReferenceCwd.Provider value={person.facts?.cwd}>
-											<EmbeddedConversation character={person} store={store} showTools={showTools} />
-										</FileReferenceCwd.Provider>
-									)}
-								</TranscriptAuthor.Provider>
-							</div>
-						</>
-					) : selectedChannel ? (
-						<>
-							<ChannelHeader
-								world={world}
-								channel={selectedChannel}
-								label={channelName(selectedChannel.id, selectedChannel.subject, world)}
-								menu={channelMenu}
-							/>
-							{active && (
-								<ThreadPane
-									key={selectedChannel.id}
-									id={selectedChannel.id}
-									channel={selectedChannel}
-									channelLabel={channelName(selectedChannel.id, selectedChannel.subject, world)}
-									world={world}
-									drafts={drafts}
-									embedded
-								/>
-							)}
-						</>
-					) : (
-						active && (
-							<OrganizationView
-								view={view}
-								world={world}
-								drafts={drafts}
-								needsYou={needsYou}
-								unseen={unseenActivity}
-								selectedThread={openThread?.id}
-								openThread={showThread}
-								openDM={openDM}
-							/>
-						)
-					)}
-				</main>
-				<QuickSwitcher
-					world={world}
-					active={active}
-					go={(target) => {
-						if (target.kind === "view") setSelection({ kind: target.view, id: target.view });
-						else if (target.kind === "dm") openDM(target.id);
-						else if (target.kind === "channel") setSelection({ kind: "channel", id: target.id });
-						else showThread({ id: target.id, title: target.title });
-					}}
-				/>
-				{active && discovering && (
-					<ChannelBrowser
-						world={world}
-						close={() => setDiscovering(false)}
-						open={(thread) => {
-							setOpenedChannels((previous) => [...previous.filter((item) => item.id !== thread.id), thread]);
-							setSelection({ kind: "channel", id: thread.id });
-							setProfile(undefined);
-							setDiscovering(false);
-						}}
-					/>
-				)}
-				{active && openThread && !profile && (
-					<ThreadPanel world={world} thread={openThread} drafts={drafts} onClose={() => setOpenThread(undefined)} />
-				)}
-				{active && profile && (
-					<PersonProfile key={profile.id} {...profile} onClose={closeProfile} resize={profileSize} />
-				)}
-			</div>
+				</div>
+			</ForwardProvider>
 		</ChatPeople.Provider>
 	);
 }

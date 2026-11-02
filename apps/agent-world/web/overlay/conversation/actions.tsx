@@ -8,6 +8,22 @@ import type { Character, Instruction, ReceiptStage } from "../../../src/world.js
 import { activity } from "../interface/model.js";
 import { conversationPanel, type Sent } from "./panel-state.js";
 import { QuestionForm, TerminalOnly } from "./question-form.js";
+import { plainLine, type QuotedMessage, withQuote } from "./quote.js";
+
+/** The message a reply answers, above the box; its quote goes out with the reply. */
+export function ReplyingTo({ message, clear }: { message: QuotedMessage; clear: () => void }) {
+	return (
+		<div className="wp-replying-to">
+			<span>
+				Replying to <strong>{message.author}</strong>
+			</span>
+			<q>{plainLine(message.text)}</q>
+			<button type="button" aria-label="Cancel reply" title="Cancel reply" onMouseDown={keepFocus} onClick={clear}>
+				{"\u00d7"}
+			</button>
+		</div>
+	);
+}
 
 /** The box grows with its text up to this many lines, then scrolls. */
 const MAX_ROWS = 7;
@@ -98,6 +114,16 @@ export function Actions({ character, note, onSend }: { character: Character; not
 		el.focus({ preventScroll: true });
 		el.setSelectionRange(el.value.length, el.value.length);
 	}, []);
+	const [replyTo, setReplyTo] = useState(() => conversationPanel.replyTo(character.id));
+	useEffect(
+		() =>
+			conversationPanel.onQuote((id) => {
+				if (id !== character.id) return;
+				setReplyTo(conversationPanel.replyTo(id));
+				box.current?.focus();
+			}),
+		[character.id],
+	);
 	// Stopping is offered only while it works; a confirmation left open closes when it settles by itself.
 	useEffect(() => {
 		if (!busy) setConfirming(false);
@@ -109,8 +135,9 @@ export function Actions({ character, note, onSend }: { character: Character; not
 	};
 
 	const send = (kind: "talk" | "steer" | "follow_up") => {
-		const words = text;
-		if (!words.trim()) return;
+		if (!text.trim()) return;
+		const words = withQuote(text, replyTo);
+		conversationPanel.setReplyTo(character.id, undefined);
 		change("");
 		onSend();
 		box.current?.focus();
@@ -140,6 +167,7 @@ export function Actions({ character, note, onSend }: { character: Character; not
 				</p>
 			)}
 			<Receipts characterId={character.id} />
+			{replyTo && <ReplyingTo message={replyTo} clear={() => conversationPanel.setReplyTo(character.id, undefined)} />}
 			<div className="aw-conv-box">
 				<span className="aw-conv-pen" aria-hidden="true" />
 				<textarea

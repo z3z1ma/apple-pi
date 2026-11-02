@@ -463,7 +463,10 @@ test("channel history pages and searches without catch-up and posts only explici
 			),
 		);
 		await page.getByText("Evidence 28: Ben is named in ordinary prose.", { exact: true }).waitFor();
-		expect(await page.locator(".wp-message-reference").allTextContents()).toEqual(["#28", "#49"]);
+		expect(await page.locator("article.wp-message").evaluateAll((nodes) => nodes.map((node) => node.id))).toEqual([
+			"message-28",
+			"message-49",
+		]);
 		await page.getByRole("textbox", { name: "Search conversation" }).fill("Evidence 11");
 		await page.getByRole("button", { name: "Search", exact: true }).click();
 		await page.getByText("Search results are inspection only; catch-up is unchanged.", { exact: true }).waitFor();
@@ -492,8 +495,9 @@ test("channel history pages and searches without catch-up and posts only explici
 		await page.getByText(/Queued for a later opening: Ben/).waitFor();
 		await page.getByRole("button", { name: "Join channel", exact: true }).last().click();
 		await vi.waitFor(async () => expect(await calls(page, "join")).toHaveLength(1));
-		await page.getByRole("button", { name: "Pin message 63", exact: true }).waitFor();
-		await page.getByRole("button", { name: "Pin message 63", exact: true }).click();
+		await page.locator("#message-63 .wp-message-body").waitFor();
+		await page.locator("#message-63 .wp-message-body").click({ button: "right" });
+		await page.getByRole("menuitem", { name: "Pin as current context" }).click();
 		await page.getByRole("button", { name: "Message #63", exact: true }).waitFor();
 		await page.getByRole("button", { name: "Message #63", exact: true }).click();
 		await vi.waitFor(async () =>

@@ -6,6 +6,7 @@
 import type { AgentWorldApi, Character, Instruction, ReceiptStage } from "../../../src/world.js";
 import { setWorldDraftDirty } from "../../world-drafts.js";
 import { onePanel } from "../one-panel.js";
+import type { QuotedMessage } from "./quote.js";
 
 /** Reading the conversation is required; acting and live replies are there once the backend offers them. */
 export type ConversationApi = Pick<AgentWorldApi, "conversation" | "markSeen"> &
@@ -44,6 +45,8 @@ const update = (change: Partial<PanelState>) => {
 };
 
 const drafts = new Map<string, string>();
+const replies = new Map<string, QuotedMessage>();
+const quoteListeners = new Set<(characterId: string) => void>();
 /** A questionnaire form's choices so far, per question, by the questionnaire's id. */
 export interface FormAnswer {
 	chosen: string[];
@@ -111,6 +114,17 @@ export const conversationPanel = {
 		if (text) drafts.set(characterId, text);
 		else drafts.delete(characterId);
 		setWorldDraftDirty(drafts, drafts.size > 0);
+	},
+	/** The message the next reply to a character answers, quoted above it when sent; an open reply box shows it. */
+	replyTo: (characterId: string) => replies.get(characterId),
+	setReplyTo(characterId: string, message: QuotedMessage | undefined) {
+		if (message) replies.set(characterId, message);
+		else replies.delete(characterId);
+		for (const listener of quoteListeners) listener(characterId);
+	},
+	onQuote(listener: (characterId: string) => void): () => void {
+		quoteListeners.add(listener);
+		return () => quoteListeners.delete(listener);
 	},
 	/** The choices made so far in a questionnaire's form; kept while the app runs, like a draft. */
 	formDraft: (questionnaire: string) => formDrafts.get(questionnaire),

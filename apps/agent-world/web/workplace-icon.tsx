@@ -27,6 +27,11 @@ const paths = {
 	desk: "M3 11 12 4l9 7 M5 10v10h14V10 M10 20v-6h4v6",
 	threads: "M4 4h12v9H8l-4 3V4Z M8 16v1h8l4 3V8h-4",
 	bell: "M6 16V11a6 6 0 0 1 12 0v5l2 2H4l2-2Z M10 21h4",
+	reply: "M9 15 4 10l5-5 M4 10h10a6 6 0 0 1 6 6v3",
+	forward: "m15 15 5-5-5-5 M20 10H10a6 6 0 0 0-6 6v3",
+	copy: "M9 9h11v11H9V9Z M15 9V4H4v11h5",
+	more: "M7 12a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z M13 12a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z M19 12a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z",
+	thread: "M4 5h16v10H9l-5 4V5Z",
 };
 
 export function Icon({ name }: { name: keyof typeof paths }) {

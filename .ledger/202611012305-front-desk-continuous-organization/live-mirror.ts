@@ -176,6 +176,46 @@ if (scenario === "chat") {
 		await page.close();
 	}
 }
+if (scenario === "actions") {
+	for (const [appearance, width] of [
+		["light", 1440],
+		["dark", 1100],
+	] as const) {
+		const page = await open(width, 900, appearance);
+		const name = `${appearance}-${width}`;
+		await page.locator(".wp-dm .wp-dm-link").first().click();
+		await page.waitForTimeout(1500);
+		const message = page.locator(".wp-session .wp-actionable").last();
+		await message.hover();
+		await shot(page, `${name}-dm-hover`);
+		await message.locator(".aw-conv-who").click({ button: "right" });
+		await page.waitForTimeout(200);
+		await shot(page, `${name}-dm-menu`);
+		await page.keyboard.press("Escape");
+		await message.hover();
+		await message.getByRole("button", { name: "Forward" }).click();
+		await page.waitForTimeout(300);
+		await page.keyboard.type("sv");
+		await shot(page, `${name}-forward`);
+		await page.keyboard.press("Escape");
+		await message.hover();
+		await message.getByRole("button", { name: "Reply", exact: true }).click();
+		await page.waitForTimeout(300);
+		await shot(page, `${name}-quote`);
+		await page.locator(".wp-channel").first().click();
+		await page.waitForTimeout(1200);
+		await page.getByRole("button", { name: /^Threads/ }).click();
+		await page.waitForTimeout(500);
+		await page.locator(".wp-threads-list button").nth(1).click();
+		await page.waitForTimeout(1200);
+		const post = page.locator(".wp-thread-panel .wp-actionable").first();
+		if (await post.count()) {
+			await post.hover();
+			await shot(page, `${name}-thread-hover`);
+		}
+		await page.close();
+	}
+}
 if (scenario === "rest") {
 	for (const [appearance, width] of [
 		["light", 1440],
