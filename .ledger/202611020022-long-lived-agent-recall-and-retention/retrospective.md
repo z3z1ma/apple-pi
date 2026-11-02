@@ -1,4 +1,4 @@
-Status: retained implementation independently reviewed; isolated experiment complete with no landing
+Status: accepted for closure by Tadhg7733; retained implementation reviewed, isolated experiment rejected
 Created: 2026-11-02
 Updated: 2026-11-02
 
@@ -36,4 +36,4 @@ The original research made no production change or archival operation. Authorize
 
 Use concrete Git SHAs across worktrees: HEAD@{0} resolves the target worktree's reflog, so it can select its own base instead of the caller's new commit. An empty cherry-pick was aborted and retried with the verified source SHA. Pair issuer-negative tests with historical positive recovery controls; source membership is stable even when display grouping changes order.
 
-Private gold and mappings remain outside the repository in documented temporary directories; those can disappear, so exact manual-label reproduction depends on retaining them privately or relabeling originals. Operator acceptance of completed review/experiment results, native-storage integration, fault testing, actual long-horizon behavior and finite total-state retention remain separate open obligations. Storage/archive implementation remains unapproved.
+Private gold and mappings remain outside the repository in documented temporary directories; those can disappear, so exact manual-label reproduction depends on retaining them privately or relabeling originals. Tadhg accepted the report/no-landing decision and directed closure in mail7733. Human code sign-off, native-storage integration, fault testing, actual long-horizon behavior and finite total-state retention remain outside this completed scope. Storage/archive implementation remains unapproved.
