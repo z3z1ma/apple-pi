@@ -4,7 +4,13 @@ import { executionOperationsOf } from "./execution-trace.js";
 import { extractPath, summarizeToolArgs } from "./tool-args.js";
 
 export interface RenderedEntry {
-	index: number;
+	index?: number;
+	entryId?: string;
+	parentId?: string | null;
+	timestamp?: string;
+	sourceKind?: string;
+	customType?: string;
+	lineage?: "active" | "off-lineage";
 	role: string;
 	summary: string;
 	files?: string[];

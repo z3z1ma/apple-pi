@@ -15,6 +15,27 @@ const DRILL_DOWN = /^#(\d+):(.+?)(?::(full|\d+(?::\d+)?))?$/;
 const CALL_QUERY = /^call:\s*(\S+)\s*$/i;
 const CALL_BODY_CAP = 50 * 1024;
 
+export const parseEntryQuery = (query: string): { id: string; offset: number; limit: number } | undefined => {
+	const match = /^entry:([^:\s]+)(?::(\d+)(?::(\d+))?)?$/.exec(query.trim());
+	return match
+		? { id: match[1]!, offset: Number(match[2] ?? 0), limit: Math.max(1, Math.min(2000, Number(match[3] ?? 30))) }
+		: undefined;
+};
+
+export const expandSourceEntry = (
+	entries: RenderedEntry[],
+	request: { id: string; offset: number; limit: number },
+): string => {
+	const entry = entries.find((candidate) => candidate.entryId === request.id);
+	if (!entry) return `Entry entry:${request.id} is not available in the requested scope.`;
+	const lines = entry.summary.split("\n");
+	if (request.offset >= lines.length)
+		return `Offset ${request.offset} is beyond entry:${request.id}'s ${lines.length} lines.`;
+	const end = Math.min(lines.length, request.offset + request.limit);
+	const next = end < lines.length ? `\n\n--- Continue with entry:${request.id}:${end}:${request.limit} ---` : "";
+	return `entry:${request.id} [${entry.sourceKind}] ${entry.timestamp ?? ""}\nLines ${request.offset + 1}-${end} of ${lines.length}\n\n${lines.slice(request.offset, end).join("\n")}${next}`;
+};
+
 /** Parse `call:<toolCallId>` from an pair receipt address. */
 export const parseCallQuery = (query: string): string | undefined => {
 	const match = CALL_QUERY.exec(query.trim());

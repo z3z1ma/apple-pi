@@ -6,6 +6,9 @@ import type { FileMatch, SearchHit, TouchedFile } from "./search-entries.js";
 // until the next user/bash boundary.
 const SEGMENT_START_ROLES = new Set(["user", "bash"]);
 
+export const entryAddress = (entry: SearchHit): string =>
+	entry.index !== undefined ? `#${entry.index}` : `entry:${entry.entryId}`;
+
 /**
  * A segment is a contiguous group of entries forming one conversational turn:
  * a user/assistant message followed by its associated tool calls, tool results,
@@ -38,15 +41,15 @@ const groupSegments = (entries: SearchHit[], hasQuery: boolean): RecallSegment[]
 	// ids, group by those stable identities rather than treating ranked neighbors
 	// as chronological neighbors.
 	if (entries.some((entry) => entry.turnId !== undefined)) {
-		const byTurn = new Map<number, SearchHit[]>();
+		const byTurn = new Map<number | string, SearchHit[]>();
 		for (const entry of entries) {
-			const turn = entry.turnId ?? entry.index;
+			const turn = entry.turnId ?? entry.entryId ?? entry.index ?? 0;
 			const group = byTurn.get(turn) ?? [];
 			group.push(entry);
 			byTurn.set(turn, group);
 		}
 		return [...byTurn.values()].map((group) => {
-			group.sort((a, b) => a.index - b.index);
+			group.sort((a, b) => (a.index ?? 0) - (b.index ?? 0));
 			const matched = new Set<number>();
 			const assumeAllMatched =
 				hasQuery && group.every((entry) => entry.snippet === undefined && entry.matchCount === undefined);
@@ -54,7 +57,7 @@ const groupSegments = (entries: SearchHit[], hasQuery: boolean): RecallSegment[]
 				if (assumeAllMatched || group[i].snippet !== undefined || group[i].matchCount !== undefined) matched.add(i);
 			}
 			return {
-				range: `#${group[0]!.index}${group.length > 1 ? `-#${group[group.length - 1]!.index}` : ""}`,
+				range: `${entryAddress(group[0]!)}${group.length > 1 ? `-${entryAddress(group[group.length - 1]!)}` : ""}`,
 				entries: group,
 				matchedIndices: matched,
 			};
@@ -78,7 +81,7 @@ const groupSegments = (entries: SearchHit[], hasQuery: boolean): RecallSegment[]
 				if (assumeAllMatched || slice[j].snippet) matched.add(j);
 			}
 			segments.push({
-				range: `#${slice[0].index}${slice.length > 1 ? `-#${slice[slice.length - 1].index}` : ""}`,
+				range: `${entryAddress(slice[0])}${slice.length > 1 ? `-${entryAddress(slice[slice.length - 1])}` : ""}`,
 				entries: slice,
 				matchedIndices: matched,
 			});
@@ -94,7 +97,7 @@ const groupSegments = (entries: SearchHit[], hasQuery: boolean): RecallSegment[]
 			if (assumeAllMatched || slice[j].snippet) matched.add(j);
 		}
 		segments.push({
-			range: `#${slice[0].index}${slice.length > 1 ? `-#${slice[slice.length - 1].index}` : ""}`,
+			range: `${entryAddress(slice[0])}${slice.length > 1 ? `-${entryAddress(slice[slice.length - 1])}` : ""}`,
 			entries: slice,
 			matchedIndices: matched,
 		});
@@ -123,10 +126,14 @@ const formatEntry = (e: SearchHit, matched: boolean): string => {
 	const fileSuffix = e.files?.length ? ` files:[${e.files.join(", ")}]` : "";
 	const body = matched && e.snippet ? e.snippet : e.summary;
 	const fileMatches = e.fileMatches?.slice(0, 3) ?? [];
-	const indicators = fileMatches.map((match) => formatFileMatch(match, e.index, matched)).join("\n");
+	const indicators = fileMatches.map((match) => formatFileMatch(match, e.index!, matched)).join("\n");
 	const omitted = (e.fileMatches?.length ?? 0) - fileMatches.length;
+	const provenance = [e.entryId ? `entry:${e.entryId}` : "", e.timestamp, e.sourceKind, e.customType, e.lineage]
+		.filter(Boolean)
+		.join(" | ");
 	return (
-		`${prefix} #${e.index} [${e.role}]${fileSuffix} ${body}` +
+		`${prefix} ${entryAddress(e)} [${e.role}]${fileSuffix} ${body}` +
+		(provenance ? `\n  Source: ${provenance}` : "") +
 		(indicators ? `\n${indicators}` : "") +
 		(omitted > 0 ? `\n  ...(${omitted} more file matches)` : "")
 	);

@@ -1,7 +1,14 @@
 import type { Message } from "@earendil-works/pi-ai";
 import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { expandEntryFile, expandToolCall, parseCallQuery, parseDrillDown } from "./drill-down.js";
+import {
+	expandEntryFile,
+	expandSourceEntry,
+	expandToolCall,
+	parseCallQuery,
+	parseDrillDown,
+	parseEntryQuery,
+} from "./drill-down.js";
 import { formatRecallOutput, formatTouchedOutput } from "./format-recall.js";
 import { getActiveLineageEntryIds } from "./lineage.js";
 import { loadAllMessages } from "./load-messages.js";
@@ -29,6 +36,7 @@ export const sessionSearchTool = defineTool({
 		"Use it after compaction when you need to remember a prior decision, recover earlier tool output, or revisit a file version written during the session. " +
 		"This looks through session history, not git history or the current repository. " +
 		"Search text or regex, list touched files, inspect only write/edit payloads, expand entries, recover a written file with query:'#N:path', or recover an omitted tool result with query:'call:<id>'. " +
+		"Expand any source by query:'entry:<id>[:offset[:limit]]' (zero-based lines). New custom, summary and notebook records use stable IDs, not message ordinals. " +
 		"It follows the active lineage by default; scope:'all' includes other branches.",
 	promptSnippet: "Recover earlier conversation, tool results, and file operations from this session.",
 	promptGuidelines: [
@@ -72,7 +80,10 @@ export const sessionSearchTool = defineTool({
 				details: undefined,
 			};
 		}
-		if (params.expand !== undefined && (!Array.isArray(params.expand) || params.expand.some(invalidPositiveInteger))) {
+		if (
+			params.expand !== undefined &&
+			(!Array.isArray(params.expand) || params.expand.some((value) => !Number.isSafeInteger(value) || value < 0))
+		) {
 			return {
 				content: [{ type: "text", text: "Invalid expand: every entry index must be a non-negative integer." }],
 				details: undefined,
@@ -90,7 +101,13 @@ export const sessionSearchTool = defineTool({
 		const rawScope = normalizeRecallScope(params.scope);
 		const mode = normalizeRecallMode(params.mode);
 		const scopeLabel = rawScope === "all" ? " (scope: all)" : "";
-		const lineageEntryIds = rawScope === "lineage" ? getActiveLineageEntryIds(ctx.sessionManager) : undefined;
+		const activeEntryIds = getActiveLineageEntryIds(ctx.sessionManager);
+		const lineageEntryIds = rawScope === "lineage" ? activeEntryIds : undefined;
+		const entryRequest = params.query ? parseEntryQuery(params.query) : undefined;
+		if (entryRequest) {
+			const { rendered } = loadAllMessages(sessionFile, true, lineageEntryIds);
+			return { content: [{ type: "text", text: expandSourceEntry(rendered, entryRequest) }], details: undefined };
+		}
 		const expandSet = new Set(params.expand ?? []);
 		const hasExpand = expandSet.size > 0;
 		const callId = params.query ? parseCallQuery(params.query) : undefined;
@@ -127,7 +144,7 @@ export const sessionSearchTool = defineTool({
 		if (hasExpand && !params.query) {
 			const { rendered: fullMsgs } = loadAllMessages(sessionFile, true, lineageEntryIds);
 			const requested = [...expandSet];
-			const byIndex = new Map(fullMsgs.map((m) => [m.index, m]));
+			const byIndex = new Map(fullMsgs.filter((m) => m.index !== undefined).map((m) => [m.index!, m]));
 			const invalid = invalidExpandIndices(requested, new Set(byIndex.keys()));
 			if (invalid.length > 0) {
 				return {
@@ -149,7 +166,13 @@ export const sessionSearchTool = defineTool({
 			};
 		}
 
-		const { rendered: msgs, rawMessages } = loadAllMessages(sessionFile, false, lineageEntryIds);
+		const { rendered: msgs, rawMessages } = loadAllMessages(
+			sessionFile,
+			false,
+			lineageEntryIds,
+			undefined,
+			activeEntryIds,
+		);
 		let allResults: SearchHit[];
 		try {
 			allResults = params.query?.trim()
@@ -189,10 +212,10 @@ export const sessionSearchTool = defineTool({
 			if (hasExpand) {
 				const msgByIndex = new Map<number, Message>();
 				for (let i = 0; i < msgs.length; i++) {
-					msgByIndex.set(msgs[i].index, rawMessages[i]);
+					if (msgs[i].index !== undefined) msgByIndex.set(msgs[i].index!, rawMessages[i]);
 				}
 				for (const r of pageResults) {
-					if (!expandSet.has(r.index)) continue;
+					if (r.index === undefined || !expandSet.has(r.index)) continue;
 					const raw = msgByIndex.get(r.index);
 					if (!raw) continue;
 					const full = renderMessage(raw, r.index, true);

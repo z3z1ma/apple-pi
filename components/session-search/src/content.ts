@@ -63,6 +63,7 @@ const toolCallArgText = (args: Record<string, unknown>): string => {
 	for (const v of Object.values(args ?? {})) {
 		if (typeof v === "string" && v.length > 0) vals.push(v);
 	}
+	if (isContentBearing(args) && Array.isArray(args.edits)) vals.push(contentBearingText(args));
 	return vals.join("\n");
 };
 

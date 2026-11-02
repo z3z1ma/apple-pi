@@ -19,7 +19,7 @@ export interface TouchedFile {
 
 export interface SearchHit extends RenderedEntry {
 	/** Original transcript turn, captured before relevance ranking reorders hits. */
-	turnId?: number;
+	turnId?: number | string;
 	/** Context snippet around the first matched term (only when query provided) */
 	snippet?: string;
 	/** Number of query terms matched (for ranking) */
@@ -444,6 +444,7 @@ export const getTouchedFiles = (messages: Message[], rendered: RenderedEntry[]):
 	const touched = new Map<string, TouchedFile>();
 	for (let offset = 0; offset < messages.length; offset++) {
 		for (const operation of fileOperationsOf(messages[offset]!)) {
+			if (rendered[offset]?.index === undefined) continue;
 			const entry = touched.get(operation.path) ?? { path: operation.path, entries: [] };
 			entry.entries.push({
 				index: rendered[offset]?.index ?? offset,
@@ -510,9 +511,10 @@ export const searchEntries = (
 	// Capture transcript identity while entries are still in chronological order.
 	// BM25 later sorts by relevance, so deriving this after ranking would make
 	// unrelated hits look like a single chronological turn in the formatter.
-	let currentTurnId = entries[0]?.index ?? 0;
+	let currentTurnId: number | string = entries[0]?.entryId ?? entries[0]?.index ?? 0;
 	const turnIds = entries.map((entry) => {
-		if (entry.role === "user" || entry.role === "bash") currentTurnId = entry.index;
+		if (entry.role === "user" || entry.role === "bash" || (entry.sourceKind && entry.sourceKind !== "message"))
+			currentTurnId = entry.entryId ?? entry.index ?? 0;
 		return currentTurnId;
 	});
 	const withTurn = (entry: SearchHit, offset: number): SearchHit => {
