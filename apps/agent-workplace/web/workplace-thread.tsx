@@ -36,6 +36,7 @@ export function ThreadPane({
 	listener,
 	embedded,
 	toolbarHost,
+	openThread,
 }: {
 	id: string;
 	channel?: Pick<WorkplaceThread, "lastSeq">;
@@ -48,6 +49,8 @@ export function ThreadPane({
 	embedded?: boolean;
 	/** The host pane's header slot for the reading controls (search, Catch up, Read latest, Actions). */
 	toolbarHost?: HTMLElement | null;
+	/** Open a task thread a message produced (its recorded `message produced task` link). */
+	openThread?: (thread: { id: string; title: string }) => void;
 }) {
 	const hosted = (tools: ReactNode) => (toolbarHost ? createPortal(tools, toolbarHost) : tools);
 	const head = id.startsWith("team:") ? id.slice("team:".length) : undefined;
@@ -605,6 +608,7 @@ export function ThreadPane({
 						origin={
 							channel ? { kind: "channel", id } : { kind: "thread", id, title: page.thread.name ?? "Conversation" }
 						}
+						openThread={openThread}
 						reply={
 							!locked && page.thread.permissions.post && !page.thread.archived
 								? (message) => {
@@ -912,12 +916,14 @@ function ThreadMessages({
 	where,
 	reply,
 	origin,
+	openThread,
 }: {
 	world: WorldSnapshot;
 	thread: ConversationInfo;
 	messages: ConversationMessage[];
 	channel: boolean;
 	origin: SwitchTarget;
+	openThread?: (thread: { id: string; title: string }) => void;
 	where?: string;
 	reply?: (message: QuotedMessage) => void;
 	canPin: boolean;
@@ -934,6 +940,17 @@ function ThreadMessages({
 		const newDay = !previous || dayOf(previous.at) !== dayOf(message.at);
 		const continued =
 			!newDay && previous?.from === message.from && message.at - previous.at < GROUP_MS && message.seq !== firstUnread;
+		const produced = world.workplace?.messageTasks?.[message.id];
+		const work = produced
+			? {
+					id: produced,
+					title:
+						world.workplace?.tasks.find((task) => task.thread === produced)?.title ??
+						world.workplace?.workHistory?.find((task) => task.thread === produced)?.title ??
+						"Task thread",
+					replies: world.workplace?.taskActivity?.[produced]?.messages ?? 0,
+				}
+			: undefined;
 		return (
 			<Fragment key={message.id}>
 				{newDay && (
@@ -964,6 +981,7 @@ function ThreadMessages({
 							onSelect: () => void navigator.clipboard.writeText(`${thread.id}#${message.seq}`),
 						},
 						...(canPin ? [{ label: "Pin as current context", onSelect: () => pin(message.seq) }] : []),
+						...(work && openThread ? [{ label: "Reply in thread", onSelect: () => openThread(work) }] : []),
 					]}
 				>
 					{message.from === "harness" ? (
@@ -1005,6 +1023,15 @@ function ThreadMessages({
 								)}
 							</FileReferenceCwd.Provider>
 						</div>
+						{work && openThread && (
+							<button type="button" className="wp-message-thread" onClick={() => openThread(work)}>
+								<Icon name="threads" />
+								<strong>{work.title}</strong>
+								<small>
+									{work.replies} {work.replies === 1 ? "reply" : "replies"} &middot; Open thread
+								</small>
+							</button>
+						)}
 					</div>
 				</ActionableMessage>
 			</Fragment>

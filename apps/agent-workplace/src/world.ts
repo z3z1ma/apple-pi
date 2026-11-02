@@ -233,6 +233,8 @@ export interface Workplace {
 		string,
 		{ messages: number; lastAt: number; lastFrom: string | null; preview: string | null; unread: number }
 	>;
+	/** Messages work came from (a `message produced task` link): message id to the task's thread. */
+	messageTasks?: Record<string, string>;
 }
 
 export type TaskRead = { ok: true; text: string } | { ok: false; reason: string };

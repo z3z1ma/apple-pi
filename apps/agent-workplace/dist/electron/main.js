@@ -8937,6 +8937,14 @@ function readTaskActivity(db) {
 		group by m.thread_id`).all();
 	return Object.fromEntries(rows.map(({ thread, ...row }) => [thread, row]));
 }
+/** Messages that work came from: a recorded `message produced task` link, as message id to the task's thread. */
+function readMessageTasks(db) {
+	if (!hasTable(db, "links") || !hasTable(db, "work_tasks")) return {};
+	const rows = db.prepare(`select l.from_id as message, w.thread as thread from links l join work_tasks w on w.id = l.to_id
+		where l.from_kind = 'message' and l.to_kind = 'task' and l.relation = 'produced' and l.resolved_at is null
+		and w.thread is not null order by l.created_at`).all();
+	return Object.fromEntries(rows.map((row) => [row.message, row.thread]));
+}
 function readThreads(db, roots) {
 	if (!hasTable(db, "threads")) return [];
 	const columns = db.prepare("pragma table_info(threads)").all().map((column) => column.name);
@@ -9093,7 +9101,8 @@ function workplaceReader(readTask) {
 			escalations,
 			tasks,
 			workHistory,
-			taskActivity: readTaskActivity(db)
+			taskActivity: readTaskActivity(db),
+			messageTasks: readMessageTasks(db)
 		};
 	};
 }

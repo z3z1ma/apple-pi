@@ -176,6 +176,10 @@ async function openDesk(appearance: "light" | "dark", width = 1440, desk = true)
 						},
 					],
 					escalations: [],
+					messageTasks: { "topic:desk:1": "task:t1" },
+					taskActivity: {
+						"task:t1": { messages: 1, lastAt: now, lastFrom: "cora", preview: "Iris: build", unread: 0 },
+					},
 				},
 			};
 			const message = (thread: string, seq: number, from: string, fromName: string, body: string) => ({
@@ -616,6 +620,28 @@ test("a message saved for later waits in Later and opens where it was", { timeou
 		await page.getByRole("button", { name: /^Later/ }).click();
 		await saved.getByRole("button", { name: "Done" }).click();
 		await saved.getByText("Nothing saved").waitFor();
+		expect(errors).toEqual([]);
+	} finally {
+		await page.close();
+	}
+});
+
+test("a desk message that became work opens its task thread", { timeout: 60_000 }, async () => {
+	const { page, errors } = await openDesk("light");
+	try {
+		const asked = page.locator(".wp-message").filter({ hasText: "Bring GitHub PRs into the organization" });
+		const link = asked.getByRole("button", { name: /Add GitHub PR threads.*1 reply/ });
+		await link.waitFor();
+		await shot(page, "produced-light");
+		await link.click();
+		await page
+			.getByRole("region", { name: "Thread: Add GitHub PR threads" })
+			.getByText("Iris: build GitHub PR threads")
+			.waitFor();
+		await page.getByRole("button", { name: /^Desk/ }).click();
+		await asked.getByText("Bring GitHub PRs into the organization").click({ button: "right" });
+		await page.getByRole("menuitem", { name: "Reply in thread" }).click();
+		await page.getByRole("region", { name: "Thread: Add GitHub PR threads" }).waitFor();
 		expect(errors).toEqual([]);
 	} finally {
 		await page.close();

@@ -70,8 +70,7 @@ function DeskSetup({ world }: { world: WorldSnapshot }) {
 				attempt: crypto.randomUUID(),
 				scopeHead: person,
 				name: "desk",
-				purpose:
-					"The operator's desk: he tells the organization what he needs here, and the coordinator routes it.",
+				purpose: "The operator's desk: he tells the organization what he needs here, and the coordinator routes it.",
 				invite: [person],
 			});
 			if (created.outcome !== "applied" || !created.effect) {
@@ -319,6 +318,7 @@ export function DeskView({
 				listener={desk.person}
 				embedded
 				toolbarHost={tools}
+				openThread={openThread}
 			/>
 		</>
 	);

@@ -50,6 +50,39 @@
 	height: 16px;
 }
 
+.wp-app .wp-message-thread {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	max-width: 100%;
+	margin-top: 6px;
+	padding: 4px 10px 4px 8px;
+	border: 1px solid var(--wp-border);
+	border-radius: 6px;
+	background: var(--wp-bg);
+	color: var(--wp-text);
+	font-size: 12px;
+}
+.wp-app .wp-message-thread:hover {
+	border-color: var(--wp-accent);
+}
+.wp-message-thread .wp-icon {
+	flex: none;
+	width: 14px;
+	height: 14px;
+	color: var(--wp-accent);
+}
+.wp-message-thread strong {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.wp-message-thread small {
+	flex: none;
+	color: var(--wp-link);
+}
+
 .wp-forward-head {
 	display: grid;
 	gap: 10px;

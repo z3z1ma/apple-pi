@@ -55,6 +55,17 @@ function readTaskActivity(db: DatabaseSync): NonNullable<Workplace["taskActivity
 	return Object.fromEntries(rows.map(({ thread, ...row }) => [thread, row]));
 }
 
+/** Messages that work came from: a recorded `message produced task` link, as message id to the task's thread. */
+function readMessageTasks(db: DatabaseSync): NonNullable<Workplace["messageTasks"]> {
+	if (!hasTable(db, "links") || !hasTable(db, "work_tasks")) return {};
+	const rows = db
+		.prepare(`select l.from_id as message, w.thread as thread from links l join work_tasks w on w.id = l.to_id
+		where l.from_kind = 'message' and l.to_kind = 'task' and l.relation = 'produced' and l.resolved_at is null
+		and w.thread is not null order by l.created_at`)
+		.all() as { message: string; thread: string }[];
+	return Object.fromEntries(rows.map((row) => [row.message, row.thread]));
+}
+
 function readThreads(db: DatabaseSync, roots: Map<string, string>): WorkplaceThread[] {
 	if (!hasTable(db, "threads")) return [];
 	const columns = (db.prepare("pragma table_info(threads)").all() as { name: string }[]).map((column) => column.name);
@@ -248,6 +259,7 @@ export function workplaceReader(readTask: ReturnType<typeof taskReader>) {
 			tasks,
 			workHistory,
 			taskActivity: readTaskActivity(db),
+			messageTasks: readMessageTasks(db),
 		};
 	};
 }

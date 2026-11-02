@@ -9,5 +9,7 @@ Task threads open in the Threads view as a full conversation beside the list (an
 An in-flight task is "Working" only while an assignee has it focused and that person's status is working; any other in-flight task is "Waiting". The desk strip, the Threads list and filter, and the thread header all use `workingOn`.
 Why: a person working on a different task made every task they held read as active, hiding stalled assignments.
 
-Coupled: apps/agent-workplace/web/workplace.tsx, apps/agent-workplace/web/workplace-thread.tsx, apps/agent-workplace/src/backend/world-backend.ts, components/session-state/src/communication.ts
+A desk message shows the task it produced (an unresolved `message produced task` link, which the coordinator records when it makes the task) as a Slack-style thread line under it, and "Reply in thread" on its menu; both open that task's thread. Without a recorded link nothing is inferred from titles.
+
+Coupled: apps/agent-workplace/web/workplace.tsx, apps/agent-workplace/web/workplace-thread.tsx, apps/agent-workplace/src/backend/world-backend.ts, apps/agent-workplace/src/backend/workplace.ts, roles/coordinator.md, components/session-state/src/communication.ts
 Verify: apps/agent-workplace/tests/world-desk.test.ts

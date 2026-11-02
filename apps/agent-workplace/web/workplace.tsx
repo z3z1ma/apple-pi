@@ -902,6 +902,7 @@ function Chat({
 										drafts={drafts}
 										embedded
 										toolbarHost={channelTools}
+										openThread={showThread}
 									/>
 								)}
 							</>
