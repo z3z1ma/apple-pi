@@ -145,7 +145,7 @@ export function DepartureDialog({
 					{mode === "managers"
 						? "Managers have a managing role or current reports when this preview opens. The list below shows each choice."
 						: mode === "none"
-							? "No final model turns or handoff files; sleeping people stay asleep until removal."
+							? "No final model turns or handoff files; people who are away stay away until removal."
 							: "Each selected person writes a final handoff, waking first if needed."}
 				</p>
 				<div className="wp-departure-list">

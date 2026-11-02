@@ -395,22 +395,45 @@ body.workplace {
 	height: 30px;
 	font-size: 12px;
 }
-.wp-person-icon::after {
+.wp-app .wp-presence {
+	position: relative;
+	--wp-presence-ring: var(--wp-bg);
+}
+.wp-chat-sidebar .wp-presence {
+	--wp-presence-ring: var(--wp-sidebar);
+}
+.wp-app .wp-presence::after {
 	content: "";
 	position: absolute;
-	bottom: -2px;
-	right: -2px;
+	bottom: -3px;
+	right: -3px;
+	display: grid;
+	place-items: center;
+	box-sizing: content-box;
 	width: 10px;
 	height: 10px;
-	border: 2px solid var(--wp-sidebar);
+	border: 2px solid var(--wp-presence-ring);
 	border-radius: 50%;
 	background: var(--wp-muted);
+	color: #fff;
+	font:
+		800 8px / 1 system-ui,
+		sans-serif;
 }
-.wp-person-icon.wp-status-working::after {
+.wp-app .wp-presence-working::after,
+.wp-app .wp-presence-idle::after {
 	background: var(--wp-positive);
 }
-.wp-person-icon.wp-status-asking::after {
+.wp-app .wp-presence-idle::after {
+	content: "z";
+}
+.wp-app .wp-presence-asking::after {
 	background: var(--wp-warning);
+}
+.wp-app .wp-profile-avatar.wp-presence::after {
+	width: 16px;
+	height: 16px;
+	font-size: 12px;
 }
 .wp-dm {
 	display: flex;
@@ -560,10 +583,11 @@ body.workplace {
 	background: var(--wp-muted);
 	margin-right: 6px;
 }
-.wp-dot.wp-status-working {
+.wp-dot.is-working,
+.wp-dot.is-idle {
 	background: var(--wp-positive);
 }
-.wp-dot.wp-status-asking {
+.wp-dot.is-asking {
 	background: var(--wp-warning);
 }
 .wp-session-label {

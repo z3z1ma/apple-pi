@@ -35,6 +35,23 @@ export function sessionStatus(person: Character): string {
 	}[facts?.run ?? "idle"];
 }
 
+/**
+ * Slack's presence: working and asking show their own colour, idle is present but inactive (green with a z: a live
+ * session that is not running), away is gray (no running session).
+ */
+export type Presence = "working" | "asking" | "idle" | "away";
+export const PRESENCE_LABEL: Record<Presence, string> = {
+	working: "Working",
+	asking: "Needs your input",
+	idle: "Idle",
+	away: "Away",
+};
+
+/** A person in the world snapshot's characters is present; a dormant or missing person is away. */
+export function presenceOf(person: Character | undefined, away = false): Presence {
+	return away || !person ? "away" : (person.facts?.status ?? "idle");
+}
+
 function avatarTone(id: string) {
 	let hash = 2166136261;
 	for (const character of id) hash = Math.imul(hash ^ character.charCodeAt(0), 16777619) >>> 0;
@@ -46,21 +63,25 @@ export function PersonAvatar({
 	name,
 	className = "",
 	interactive = true,
+	presence,
 }: {
 	id: string;
 	name: string;
 	className?: string;
 	interactive?: boolean;
+	/** Draws the presence dot in the avatar's corner. */
+	presence?: Presence;
 }) {
 	const people = useContext(ChatPeople);
 	const content = <span aria-hidden="true">{name.charAt(0).toUpperCase()}</span>;
-	const classes = `wp-avatar-tile ${className}`;
+	const classes = `wp-avatar-tile ${className}${presence ? ` wp-presence wp-presence-${presence}` : ""}`;
 	if (people && interactive)
 		return (
 			<button
 				type="button"
 				className={classes}
 				data-tone={avatarTone(id)}
+				title={presence ? PRESENCE_LABEL[presence] : undefined}
 				aria-label={`View profile: ${name}`}
 				onClick={(event) => people.openProfile(id, name, event.currentTarget)}
 			>
@@ -68,7 +89,12 @@ export function PersonAvatar({
 			</button>
 		);
 	return (
-		<span className={classes} data-tone={avatarTone(id)} aria-hidden="true">
+		<span
+			className={classes}
+			data-tone={avatarTone(id)}
+			title={presence ? PRESENCE_LABEL[presence] : undefined}
+			aria-hidden="true"
+		>
 			{content}
 		</span>
 	);
@@ -215,7 +241,13 @@ export function PersonProfile({
 				</div>
 			</header>
 			<div className="wp-profile-body">
-				<PersonAvatar id={id} name={name} className="wp-profile-avatar" interactive={false} />
+				<PersonAvatar
+					id={id}
+					name={name}
+					className="wp-profile-avatar"
+					interactive={false}
+					presence={id === "operator" ? undefined : presenceOf(person, !!dormant)}
+				/>
 				<h3>{name}</h3>
 				<p className="wp-profile-status">
 					{id === "operator"
@@ -223,7 +255,7 @@ export function PersonProfile({
 						: dormant?.retiredAt
 							? "Former member · History only"
 							: dormant
-								? "Asleep · History only"
+								? "Away · History only"
 								: person
 									? sessionStatus(person)
 									: "Unavailable"}

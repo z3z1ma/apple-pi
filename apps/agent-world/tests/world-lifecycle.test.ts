@@ -222,7 +222,7 @@ async function orgCard(page: Page, name: string) {
 	return page.getByRole("button", { name: `View profile: ${name}`, exact: true });
 }
 async function sleeperDM(page: Page, name: string) {
-	await page.getByText(/^Sleeping agents \(/).click();
+	await page.getByText(/^Away \(/).click();
 	await page.getByRole("button", { name: new RegExp(`^${name}`) }).click();
 }
 

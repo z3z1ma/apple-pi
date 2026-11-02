@@ -324,6 +324,11 @@ async function openOrg(appearance: "light" | "dark" = "light", snapshot: WorldSn
 	return { page, errors };
 }
 
+/** The character drawn over a DM row's presence dot: `"z"` for idle, `""` for a plain dot. */
+function presenceMark(row: ReturnType<Page["locator"]>) {
+	return row.locator(".wp-avatar-tile").evaluate((tile) => getComputedStyle(tile, "::after").content);
+}
+
 async function openTeam(page: Page, name: string) {
 	await page.getByRole("button", { name: `Open team: ${name}`, exact: true }).click();
 }
@@ -440,7 +445,8 @@ test.each(["light", "dark"] as const)(
 			await profile.getByRole("button", { name: "Close profile", exact: true }).click();
 			await page.getByRole("button", { name: "View profile: Ellis", exact: true }).click();
 			const sleepingProfile = page.getByRole("complementary", { name: "Profile: Ellis", exact: true });
-			await sleepingProfile.getByText(/Asleep/).waitFor();
+			await sleepingProfile.getByText(/Away/).waitFor();
+			expect(await sleepingProfile.locator(".wp-avatar-tile").getAttribute("title")).toBe("Away");
 			await sleepingProfile.getByText("I verify changes before delivery. Session: ellis.", { exact: true }).waitFor();
 			await sleepingProfile.getByRole("button", { name: "Close profile", exact: true }).click();
 			await page.getByRole("button", { name: "All teams", exact: true }).click();
@@ -543,7 +549,7 @@ test("People directory and sidebar actions preserve selection, drafts and resiza
 		const home = directory
 			.getByRole("row")
 			.filter({ has: page.getByRole("button", { name: "View profile: Home alone", exact: true }) });
-		expect(await home.getByRole("cell", { name: /asleep|at home/i }).count()).toBe(1);
+		expect(await home.getByRole("cell", { name: "Away", exact: true }).count()).toBe(1);
 		const soloMenu = solo.getByRole("button", { name: "Person actions: Solo", exact: true });
 		await soloMenu.click();
 		const menu = page.getByRole("menu", { name: "Actions", exact: true });
@@ -637,10 +643,14 @@ test("People directory and sidebar actions preserve selection, drafts and resiza
 			expect(iconBox.x).toBeGreaterThanOrEqual(nameBox.x + nameBox.width);
 			expect(iconBox.y).toBeLessThan(nameBox.y + nameBox.height);
 			expect(iconBox.y + iconBox.height).toBeGreaterThan(nameBox.y);
+			expect(await workingRow.locator(".wp-avatar-tile").getAttribute("title")).toBe("Working");
+			expect(await presenceMark(workingRow)).toBe('""');
 		}
 		await shot(page, "directory-chat-working-dark-900");
 		await page.evaluate((next) => (window as any).pushOrg(next), snapshot);
 		await row.getByRole("img", { name: "Working", exact: true }).waitFor({ state: "hidden" });
+		expect(await row.locator(".wp-avatar-tile").getAttribute("title")).toBe("Idle");
+		expect(await presenceMark(row)).toBe('"z"');
 		expect(
 			await page
 				.getByRole("region", { name: "VIPs", exact: true })
@@ -674,9 +684,9 @@ test("People directory and sidebar actions preserve selection, drafts and resiza
 		await departure.getByRole("button", { name: "Cancel", exact: true }).click();
 		expect(await chatMenu.evaluate((node) => document.activeElement === node)).toBe(true);
 		expect(await page.evaluate(() => (window as any).orgCalls.conversations)).toEqual(beforeChatMenu);
-		await page.getByText(/^Sleeping agents \(/).click();
+		await page.getByText(/^Away \(/).click();
 		const homeMenu = sidebar.getByRole("button", { name: /^Home alone/ });
-		expect(await homeMenu.textContent()).toContain("Asleep \u00b7 history only");
+		expect(await homeMenu.textContent()).toContain("Away \u00b7 history only");
 		expect(await sidebar.getByRole("button", { name: /^Person actions:/ }).count()).toBe(0);
 		expect(await page.locator(".wp-sleepers").getByRole("img", { name: "Working", exact: true }).count()).toBe(0);
 		await homeMenu.click({ button: "right" });
@@ -1824,7 +1834,7 @@ test("Org search crosses teams using snapshot metadata and reads work only on re
 		await search.fill("Ellis");
 		await results.getByRole("button", { name: "View person: Ellis", exact: true }).click();
 		const profile = page.getByRole("complementary", { name: "Profile: Ellis", exact: true });
-		await profile.getByText(/Asleep/).waitFor();
+		await profile.getByText(/Away/).waitFor();
 		await profile.getByRole("button", { name: "Close profile", exact: true }).click();
 		await search.fill("Daria");
 		await results

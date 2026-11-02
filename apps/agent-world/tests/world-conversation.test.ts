@@ -1679,7 +1679,7 @@ test("profiles distinguish the operator, unavailable people, and read-only dorma
 			dormant: [sleeping],
 		});
 		const profile = page.getByRole("complementary", { name: "Profile: pi-tests", exact: true });
-		await profile.getByText(/Asleep.*History only/).waitFor();
+		await profile.getByText(/Away.*History only/).waitFor();
 		expect(await profile.getByText("Cost", { exact: true }).count()).toBe(0);
 		await profile.getByText("Implementation Engineer", { exact: true }).waitFor();
 		await profile.getByRole("button", { name: "View conversation pi-tests", exact: true }).click();

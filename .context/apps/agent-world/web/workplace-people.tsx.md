@@ -27,5 +27,9 @@ Record and each Self field independently preview the operator-chosen 200 charact
 Coupled: components/organization/src/self.ts, apps/agent-world/src/backend/world-backend.ts, apps/agent-world/src/electron/main.ts, apps/agent-world/src/electron/preload.ts, apps/agent-world/src/world.ts
 Verify: apps/agent-world/tests/world-conversation.test.ts, apps/agent-world/tests/profile.test.ts
 
+Presence follows Slack, at the operator's request: green for working, green with a z for idle (a live session that is not running), amber when asking, gray for away (no running process; formerly labelled asleep or at home). `presenceOf` is the one mapping; every avatar that shows a dot passes it, and labels say Away rather than Asleep. The dot's ring color is the surface behind the avatar (`--wp-presence-ring`).
+Coupled: apps/agent-world/web/workplace.tsx, apps/agent-world/web/workplace-org-chart.tsx, apps/agent-world/web/workplace.css
+Verify: apps/agent-world/tests/world-org.test.ts
+
 Avatar hues derive only from the stable ID, with separate light/dark lightness. Keep the same mapping in message, sidebar, header, and profile; list order, name edits, and appearance changes must not reassign someone's color. The small deterministic hash follows the existing character-life ID-seeding pattern without importing the Phaser lifecycle.
 Verify: apps/agent-world/tests/world-conversation.test.ts

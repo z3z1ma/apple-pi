@@ -4,7 +4,7 @@ import { DepartureDialog, type DepartureSelection } from "./workplace-departures
 import { Icon } from "./workplace-icon.js";
 import { organizationName, useWorkplaceNames } from "./workplace-names.js";
 import { OrgNameEditor } from "./workplace-org-name.js";
-import { PersonAvatar, sessionStatus } from "./workplace-people.js";
+import { PersonAvatar, presenceOf, sessionStatus } from "./workplace-people.js";
 import { PersonActionsButton, usePersonMenu } from "./workplace-person-actions.js";
 import { usePaneResize } from "./workplace-resize.js";
 import { WorkHistory } from "./workplace-work-history.js";
@@ -190,11 +190,16 @@ export function OrgChart({
 	});
 	const identity = (person: OrgPerson) => (
 		<>
-			<PersonAvatar id={person.character.id} name={person.character.name} interactive={false} />
+			<PersonAvatar
+				id={person.character.id}
+				name={person.character.name}
+				interactive={false}
+				presence={presenceOf(person.character, person.home)}
+			/>
 			<span className="wp-org-identity">
 				<strong>{person.character.name}</strong>
 				<small>{person.character.facts?.title ?? "Pi session"}</small>
-				<span className="wp-org-state">{person.home ? "At home" : sessionStatus(person.character)}</span>
+				<span className="wp-org-state">{person.home ? "Away" : sessionStatus(person.character)}</span>
 			</span>
 		</>
 	);
@@ -416,7 +421,7 @@ export function OrgChart({
 															</div>
 															<div className="wp-org-team-summary">
 																<span>{members.size} people</span>
-																{atHome > 0 && <span>{atHome} at home</span>}
+																{atHome > 0 && <span>{atHome} away</span>}
 															</div>
 															{summary}
 														</>
@@ -533,7 +538,12 @@ export function OrgChart({
 																aria-label={`View profile: ${person.character.name}`}
 																onClick={(event) => select(id, event.currentTarget)}
 															>
-																<PersonAvatar id={id} name={person.character.name} interactive={false} />
+																<PersonAvatar
+																	id={id}
+																	name={person.character.name}
+																	interactive={false}
+																	presence={presenceOf(person.character, person.home)}
+																/>
 																<strong>{person.character.name}</strong>
 															</button>
 														</td>
@@ -542,7 +552,7 @@ export function OrgChart({
 														</td>
 														<td>
 															<span className="wp-org-directory-state" data-home={person.home}>
-																{person.home ? "At home" : sessionStatus(person.character)}
+																{person.home ? "Away" : sessionStatus(person.character)}
 															</span>
 														</td>
 														<td title={teamName}>{teamName}</td>

@@ -16,7 +16,7 @@ import { WorkplaceIssues } from "./workplace-issues.js";
 import { channelName, useWorkplaceNames } from "./workplace-names.js";
 import { descendants, Org, orgPeople } from "./workplace-org.js";
 import { OrganizationNameForm, OrgNameEditor } from "./workplace-org-name.js";
-import { ChatPeople, PersonAvatar, PersonName, PersonProfile, sessionStatus } from "./workplace-people.js";
+import { ChatPeople, PersonAvatar, PersonName, PersonProfile, presenceOf, sessionStatus } from "./workplace-people.js";
 import { PersonActionsButton, usePersonMenu, WorkplacePersonActions } from "./workplace-person-actions.js";
 import { usePaneResize } from "./workplace-resize.js";
 import { ThreadPane } from "./workplace-thread.js";
@@ -450,11 +450,7 @@ function Chat({
 			data-unread={!!agent.facts?.unseen}
 			onContextMenu={(event) => personMenu(event, agent.id)}
 		>
-			<PersonAvatar
-				id={agent.id}
-				name={agent.name}
-				className={`wp-person-icon wp-status-${agent.facts?.status ?? "idle"}`}
-			/>
+			<PersonAvatar id={agent.id} name={agent.name} className="wp-person-icon" presence={presenceOf(agent, home)} />
 			<button
 				type="button"
 				className="wp-dm-link"
@@ -473,7 +469,7 @@ function Chat({
 							</span>
 						)}
 					</span>
-					<small>{home ? "Asleep \u00b7 history only" : (agent.facts?.title ?? activity(agent))}</small>
+					<small>{home ? "Away \u00b7 history only" : (agent.facts?.title ?? activity(agent))}</small>
 				</span>
 				{agent.facts?.unseen && <span className="wp-unread-dot" aria-hidden="true" />}
 				{agent.facts?.asking && <b className="wp-needs">?</b>}
@@ -570,7 +566,7 @@ function Chat({
 					{direct.filter((agent) => matches(agent.name)).map((agent) => personRow(agent))}
 					{sleeping.length > 0 && (
 						<details className="wp-sleepers">
-							<summary>Sleeping agents ({sleeping.length})</summary>
+							<summary>Away ({sleeping.length})</summary>
 							{sleeping
 								.filter((agent) => matches(agent.name))
 								.map((agent) => (
@@ -584,7 +580,7 @@ function Chat({
 										onClick={() => setSelection({ kind: "dm", id: agent.id })}
 									>
 										{agent.name}
-										<small>{"Asleep \u00b7 history only"}</small>
+										<small>{"Away \u00b7 history only"}</small>
 									</button>
 								))}
 						</details>
@@ -598,18 +594,19 @@ function Chat({
 								<PersonAvatar
 									id={person.id}
 									name={person.name}
-									className={`wp-header-avatar wp-status-${person.facts?.status ?? "idle"}`}
+									className="wp-header-avatar"
+									presence={presenceOf(person, !!sleeper)}
 								/>
 								<div className="wp-header-person">
 									<h1>
 										<PersonName id={person.id} name={person.name} />
 									</h1>
 									<p>
-										<span className={`wp-dot wp-status-${person.facts?.status ?? "idle"}`} />
+										<span className={`wp-dot is-${presenceOf(person, !!sleeper)}`} />
 										{sleeper?.retiredAt
 											? "Former member \u00b7 history only"
 											: sleeper
-												? "Asleep \u00b7 history only"
+												? "Away \u00b7 history only"
 												: sessionStatus(person)}
 										{person.facts?.title ? ` · ${person.facts.title}` : ""}
 									</p>
@@ -1060,7 +1057,7 @@ function Compose({
 						drafts.set("compose", e.target.value);
 					}}
 				/>
-				<p className="wp-muted">Durable mail, signed as you. Sleeping agents receive it when they wake.</p>
+				<p className="wp-muted">Durable mail, signed as you. People who are away receive it when they come back.</p>
 				{status && <p role="status">{status}</p>}
 				{attempt && (
 					<p className="wp-thread-attempt">

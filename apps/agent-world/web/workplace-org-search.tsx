@@ -101,7 +101,7 @@ export function OrgSearch({
 									</button>
 									<p>
 										{person.role}
-										{person.home ? " · At home" : ""} · {person.id}
+										{person.home ? " · Away" : ""} · {person.id}
 									</p>
 									{person.task && <p>Current task: {person.task}</p>}
 									<button

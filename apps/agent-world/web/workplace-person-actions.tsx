@@ -304,7 +304,7 @@ function PersonActionDialog({
 					</label>
 					{!handoff && (
 						<p>
-							No final model turn or handoff file. A sleeping person stays asleep until removal.{" "}
+							No final model turn or handoff file. A person who is away stays away until removal.{" "}
 							{busy && "Their current turn will be stopped."}
 						</p>
 					)}
