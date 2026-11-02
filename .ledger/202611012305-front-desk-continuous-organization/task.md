@@ -32,6 +32,10 @@ Each increment is committed, activated (runtime restart, app relaunch) and usabl
 - Done: 1 dispatch posture (5445637e), 2 on call (5445637e), 3 durable schedules (7a8e15f5), 4 desk + 5 Threads/Activity/side panel (196f64d5), 6 watchdog role (da8f6225), Command-K switcher (ed6344a7).
 - Done: 7 external threads (Fiona Andreou, 75d1ac4e; fake-source proof; live real-PR check blocked: no open PR, gh account cannot push), 8 channel charters (0a72964c).
 - Activated: runtime restarted on 0a72964c (schema 43), Agent World relaunched. Existing sessions pick up posture/on-call after a reload.
+- Live external-threads check passed for comment/review/inline (PR #1 on z3z1ma/apple-pi, closed); it exposed an empty-prompt wake bug, fixed in 8a7a7e49. Review follow-ups fixed in 9042d287, f21fea0a, fff5eef2. CI live remains unproven (no workflows).
+- Polish rounds after the operator's "every micrometer" request: Mail rebuilt (c980138d), groups and desk listener binding, Activity new-since badges, collapsible and custom sidebar sections (a9bf0c4e, f426207a), channel/group headers with charter, Threads with previews/unread/search (29209e98), Org/Issues/Code alignment and naming (ccecc462, 6056977a). Live read-only mirror for audits: live-mirror.ts in this bundle.
+- Running on f426207a runtime (schema 44); Agent World on 6056977a.
+- Delegated: session_search fixes (Kofi Bhattacharya, approved); transcript archive deferred by the operator.
 - Dropped: 9 Inline & Spill. It saves tokens at the cost of extra reads; the operator ranked outcomes over cost, so full bodies stay.
 
 ## Outcome
