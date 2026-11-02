@@ -819,6 +819,7 @@ body.workplace {
 	font-size: 10px;
 }
 .wp-thread-header button,
+.wp-header-tools > button,
 .wp-channel-menu summary {
 	border: 1px solid var(--wp-border);
 	border-radius: 5px;
@@ -828,6 +829,7 @@ body.workplace {
 	white-space: nowrap;
 }
 .wp-thread-header button:hover,
+.wp-header-tools > button:hover,
 .wp-channel-menu summary:hover {
 	background: var(--wp-hover);
 }
@@ -979,20 +981,19 @@ body.workplace {
 .wp-thread-channel .wp-thread-compose {
 	margin: 16px 24px 24px;
 }
-/* A channel's reading controls sit in its header row, as Slack keeps one header line. */
-.wp-chat-main > .wp-channel-header {
-	padding-right: 300px;
+/* A conversation's reading controls sit in its host's header row, as Slack keeps one header line. */
+.wp-header-tools {
+	display: flex;
+	flex: none;
+	align-items: center;
+	gap: 8px;
+	margin-left: auto;
 }
-.wp-chat-main > .wp-thread.is-embedded:not(.wp-thread-desk) > .wp-thread-header {
-	position: absolute;
-	top: 0;
-	right: 0;
-	z-index: 1;
-	height: 66px;
-	padding: 0 24px;
-	flex-wrap: nowrap;
-	border: 0;
-	background: none;
+.wp-header-tools:empty {
+	display: none;
+}
+.wp-thread.is-embedded > .wp-thread-header:empty {
+	display: none;
 }
 .wp-channel-preview {
 	padding: 18px 24px;
@@ -1855,11 +1856,7 @@ body.workplace {
 	background: var(--wp-selected);
 	white-space: normal;
 }
-.wp-chat-main > .wp-thread.is-embedded:not(.wp-thread-desk) > .wp-thread-header .wp-new-posts {
-	position: absolute;
-	top: 76px;
-	right: 24px;
-}
+
 .wp-profile dl > div {
 	padding: 12px 0;
 	border-bottom: 1px solid var(--wp-border);

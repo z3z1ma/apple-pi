@@ -1,4 +1,5 @@
-import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Fragment, type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { ConversationReadOptions } from "../../../components/session-state/src/communication-types.js";
 import type {
 	CommunicationResult,
@@ -32,6 +33,7 @@ export function ThreadPane({
 	drafts,
 	listener,
 	embedded,
+	toolbarHost,
 }: {
 	id: string;
 	channel?: Pick<WorkplaceThread, "lastSeq">;
@@ -42,7 +44,10 @@ export function ThreadPane({
 	listener?: string;
 	/** Hosted in a pane that already names the conversation: no title or participant line of its own. */
 	embedded?: boolean;
+	/** The host pane's header slot for the reading controls (search, Catch up, Read latest, Actions). */
+	toolbarHost?: HTMLElement | null;
 }) {
+	const hosted = (tools: ReactNode) => (toolbarHost ? createPortal(tools, toolbarHost) : tools);
 	const head = id.startsWith("team:") ? id.slice("team:".length) : undefined;
 	const headName = head
 		? (world.characters.find((person) => person.id === head)?.name ??
@@ -366,111 +371,117 @@ export function ThreadPane({
 		>
 			<header className="wp-thread-header">
 				{!channel && !embedded && <h1>{thread?.name ?? "Reading conversation..."}</h1>}
-				<p>
-					{!embedded &&
-						thread?.participants.map((person, index) => (
-							<span key={person.id}>
-								<PersonName id={person.id} name={displayName(person.id, person.name)} />
-								{index < thread.participants.length - 1 && ","}
-							</span>
-						))}
-				</p>
-				<button
-					type="button"
-					className="wp-thread-search-toggle"
-					aria-label="Search this conversation"
-					title="Search this conversation, or change the page size"
-					aria-pressed={searching}
-					onClick={() => {
-						setSearching(!searching);
-						if (searching) setSearch(undefined);
-					}}
-				>
-					<Icon name="search" />
-				</button>
-				{thread && (!channel || thread.following) && (
-					<button
-						type="button"
-						disabled={locked || !Number.isSafeInteger(limit) || limit < 1}
-						onClick={() => {
-							followLatest.current = false;
-							void read({ thread: id, view: "catch_up", limit });
-						}}
-					>
-						Catch up
-					</button>
+				{!toolbarHost && (
+					<p>
+						{!embedded &&
+							thread?.participants.map((person, index) => (
+								<span key={person.id}>
+									<PersonName id={person.id} name={displayName(person.id, person.name)} />
+									{index < thread.participants.length - 1 && ","}
+								</span>
+							))}
+					</p>
 				)}
-				<button
-					type="button"
-					disabled={pending}
-					onClick={() => {
-						followLatest.current = !!channel;
-						void read({ thread: id, view: "recent", limit });
-					}}
-				>
-					Read latest
-				</button>
-				{thread && (
-					<details ref={actionsMenu} className="wp-channel-menu">
-						<summary aria-label="Conversation actions">Actions</summary>
-						<div>
-							{channel &&
-								(thread.following ? (
-									<button
-										type="button"
-										disabled={locked}
-										onClick={() =>
-											void run("Leave channel", (attempt) => api.communications.leave({ attempt, thread: id }))
-										}
-									>
-										Leave channel
-									</button>
-								) : (
-									thread.permissions.join && (
+				{hosted(
+					<>
+						<button
+							type="button"
+							className="wp-thread-search-toggle"
+							aria-label="Search this conversation"
+							title="Search this conversation, or change the page size"
+							aria-pressed={searching}
+							onClick={() => {
+								setSearching(!searching);
+								if (searching) setSearch(undefined);
+							}}
+						>
+							<Icon name="search" />
+						</button>
+						{thread && (!channel || thread.following) && (
+							<button
+								type="button"
+								disabled={locked || !Number.isSafeInteger(limit) || limit < 1}
+								onClick={() => {
+									followLatest.current = false;
+									void read({ thread: id, view: "catch_up", limit });
+								}}
+							>
+								Catch up
+							</button>
+						)}
+						<button
+							type="button"
+							disabled={pending}
+							onClick={() => {
+								followLatest.current = !!channel;
+								void read({ thread: id, view: "recent", limit });
+							}}
+						>
+							Read latest
+						</button>
+						{thread && (
+							<details ref={actionsMenu} className="wp-channel-menu">
+								<summary aria-label="Conversation actions">Actions</summary>
+								<div>
+									{channel &&
+										(thread.following ? (
+											<button
+												type="button"
+												disabled={locked}
+												onClick={() =>
+													void run("Leave channel", (attempt) => api.communications.leave({ attempt, thread: id }))
+												}
+											>
+												Leave channel
+											</button>
+										) : (
+											thread.permissions.join && (
+												<button
+													type="button"
+													disabled={locked}
+													onClick={() =>
+														void run("Join channel", (attempt) => api.communications.join({ attempt, thread: id }))
+													}
+												>
+													Join channel
+												</button>
+											)
+										))}
+									{thread.permissions.invite && (
+										<button type="button" disabled={locked} onClick={() => openAction("invite")}>
+											Invite people
+										</button>
+									)}
+									{thread.permissions.remove && (
+										<button type="button" disabled={locked} onClick={() => openAction("remove")}>
+											Remove invitations
+										</button>
+									)}
+									{!channel && thread.kind !== "task" && (
 										<button
 											type="button"
 											disabled={locked}
 											onClick={() =>
-												void run("Join channel", (attempt) => api.communications.join({ attempt, thread: id }))
+												void run("Leave conversation", (attempt) => api.communications.leave({ attempt, thread: id }))
 											}
 										>
-											Join channel
+											Leave conversation
 										</button>
-									)
-								))}
-							{thread.permissions.invite && (
-								<button type="button" disabled={locked} onClick={() => openAction("invite")}>
-									Invite people
-								</button>
-							)}
-							{thread.permissions.remove && (
-								<button type="button" disabled={locked} onClick={() => openAction("remove")}>
-									Remove invitations
-								</button>
-							)}
-							{!channel && thread.kind !== "task" && (
-								<button
-									type="button"
-									disabled={locked}
-									onClick={() =>
-										void run("Leave conversation", (attempt) => api.communications.leave({ attempt, thread: id }))
-									}
-								>
-									Leave conversation
-								</button>
-							)}
-							{thread.permissions.archive && (
-								<button type="button" disabled={locked} onClick={() => openAction("archive")}>
-									Archive conversation
-								</button>
-							)}
-							{thread.permissions.reopen && (
-								<button type="button" disabled={locked} onClick={() => openAction("reopen")}>
-									Reopen conversation
-								</button>
-							)}
-						</div>
-					</details>
+									)}
+									{thread.permissions.archive && (
+										<button type="button" disabled={locked} onClick={() => openAction("archive")}>
+											Archive conversation
+										</button>
+									)}
+									{thread.permissions.reopen && (
+										<button type="button" disabled={locked} onClick={() => openAction("reopen")}>
+											Reopen conversation
+										</button>
+									)}
+								</div>
+							</details>
+						)}
+					</>,
 				)}
 				{hasNew && (
 					<button

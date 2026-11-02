@@ -425,6 +425,7 @@ function Chat({
 	}>();
 	const view = selection?.kind ?? "desk";
 	const [openThread, setOpenThread] = useState<OpenThread>();
+	const [channelTools, setChannelTools] = useState<HTMLElement | null>(null);
 	const showThread = (thread: OpenThread) => {
 		setOpenThread(thread);
 		setProfile(undefined);
@@ -868,6 +869,7 @@ function Chat({
 									channel={selectedChannel}
 									label={channelName(selectedChannel.id, selectedChannel.subject, world)}
 									menu={channelMenu}
+									tools={setChannelTools}
 								/>
 								{active && (
 									<ThreadPane
@@ -878,6 +880,7 @@ function Chat({
 										world={world}
 										drafts={drafts}
 										embedded
+										toolbarHost={channelTools}
 									/>
 								)}
 							</>

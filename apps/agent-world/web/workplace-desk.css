@@ -347,6 +347,7 @@
 	color: var(--wp-muted);
 	font-size: 12px;
 	font-weight: 600;
+	white-space: nowrap;
 }
 .wp-app .wp-segmented button[aria-pressed="true"] {
 	background: var(--wp-bg);
@@ -767,7 +768,11 @@
 	font-size: 12px;
 	color: var(--wp-muted);
 }
-.wp-app .wp-thread-panel > header button {
+.wp-thread-panel > header .wp-header-tools {
+	justify-content: flex-start;
+	margin: 10px 0 0;
+}
+.wp-app .wp-thread-panel > header > button {
 	display: grid;
 	place-items: center;
 	width: 30px;
@@ -778,7 +783,7 @@
 	background: var(--wp-panel);
 	color: var(--wp-text);
 }
-.wp-app .wp-thread-panel > header button:hover {
+.wp-app .wp-thread-panel > header > button:hover {
 	background: var(--wp-hover);
 }
 @media (max-width: 900px) {

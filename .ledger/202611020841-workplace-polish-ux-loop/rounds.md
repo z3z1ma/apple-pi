@@ -47,3 +47,8 @@ Captured live with `live-mirror.ts chat` and `actions`.
 - V8 Quoted messages ran the author line into the first quoted line. **Fixed:** the quote's header is its own paragraph.
 
 Open: the desk keeps a separate row for search / Catch up / Read latest / Actions under the in-flight strip.
+
+## Round 6: one header row everywhere
+
+- V9 The desk and the thread side panel still spent a row on reading controls, and the channel fix positioned them absolutely. **Fixed at the shared cause:** `ThreadPane` takes a `toolbarHost` and portals search / Catch up / Read latest / Actions into its host's header (channel header, desk header beside Listening, thread panel under its title); the absolute-position rule is gone.
+- V10 Threads filter counts wrapped onto a second line when the side panel narrowed the list. **Fixed:** segment labels stay on one line.

@@ -248,6 +248,7 @@ export function DeskView({
 	openThread: (thread: OpenThread) => void;
 	openDM: (id: string) => void;
 }) {
+	const [tools, setTools] = useState<HTMLElement | null>(null);
 	if (!desk) return <DeskSetup world={world} />;
 	const listener = personIn(world, desk.person);
 	const channel = world.workplace?.threads.find((thread) => thread.id === desk.thread) ?? { lastSeq: 0 };
@@ -272,6 +273,7 @@ export function DeskView({
 						)}
 					</p>
 				</div>
+				<div className="wp-header-tools" ref={setTools} />
 				<label className="wp-desk-listener">
 					<span>Listening</span>
 					<select
@@ -306,6 +308,7 @@ export function DeskView({
 				drafts={drafts}
 				listener={desk.person}
 				embedded
+				toolbarHost={tools}
 			/>
 		</>
 	);
@@ -911,8 +914,11 @@ export function ChannelHeader({
 	channel,
 	label,
 	menu,
+	tools,
 }: {
 	world: WorldSnapshot;
+	/** Receives the header's slot for the conversation's reading controls. */
+	tools?: (slot: HTMLElement | null) => void;
 	channel: {
 		id: string;
 		subject: string;
@@ -968,6 +974,7 @@ export function ChannelHeader({
 					{channel.charter ? <small>{channel.charter}</small> : null}
 				</span>
 			)}
+			<div className="wp-header-tools" ref={tools} />
 		</header>
 	);
 }
@@ -1070,6 +1077,7 @@ export function ThreadPanel({
 	onClose: () => void;
 }) {
 	const task = world.workplace?.tasks.find((item) => item.thread === thread.id);
+	const [tools, setTools] = useState<HTMLElement | null>(null);
 	return (
 		<aside className="wp-thread-panel" aria-label={`Thread: ${thread.title}`}>
 			<header>
@@ -1083,12 +1091,13 @@ export function ThreadPanel({
 								.join(", ")}
 						</p>
 					)}
+					<div className="wp-header-tools" ref={setTools} />
 				</div>
 				<button type="button" aria-label="Close thread" title="Close thread" onClick={onClose}>
 					<Icon name="close" />
 				</button>
 			</header>
-			<ThreadPane key={thread.id} id={thread.id} world={world} drafts={drafts} embedded />
+			<ThreadPane key={thread.id} id={thread.id} world={world} drafts={drafts} embedded toolbarHost={tools} />
 		</aside>
 	);
 }
