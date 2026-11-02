@@ -1124,9 +1124,13 @@ function openConversations(socketPath) {
 					ok: false,
 					reason: reply.error
 				};
+				const reactions = reply.reactions ?? {};
 				return {
 					ok: true,
-					entries: (Array.isArray(reply.entries) ? reply.entries : []).map(transcriptEntry).filter((entry) => entry !== void 0),
+					entries: (Array.isArray(reply.entries) ? reply.entries : []).map(transcriptEntry).filter((entry) => entry !== void 0).map((entry) => reactions[entry.id] ? {
+						...entry,
+						reactions: reactions[entry.id]
+					} : entry),
 					before: typeof reply.before === "string" ? reply.before : null,
 					missing: Array.isArray(reply.missing) ? reply.missing.length : 0
 				};

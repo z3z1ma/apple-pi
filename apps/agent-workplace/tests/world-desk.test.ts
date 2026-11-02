@@ -281,7 +281,24 @@ async function openDesk(appearance: "light" | "dark", width = 1440, desk = true)
 				},
 				feed: async () => [],
 				onFeed: () => () => {},
-				conversation: async () => ({ entries: [], before: null }),
+				conversation: async (id: string) => ({
+					ok: true,
+					missing: 0,
+					entries:
+						id === "cora"
+							? [
+									{
+										kind: "assistant",
+										id: "cora-1",
+										at: now - 90_000,
+										parts: [{ kind: "text", text: "The schedules review is assigned." }],
+										error: null,
+										aborted: false,
+									},
+								]
+							: [],
+					before: null,
+				}),
 				setDesk: async (next: any) => {
 					world = { ...world, desk: next };
 					for (const listener of listeners) listener(world);
@@ -321,6 +338,7 @@ async function openDesk(appearance: "light" | "dark", width = 1440, desk = true)
 					},
 					react: async (request: any) => {
 						w.reactions = [...(w.reactions ?? []), structuredClone(request)];
+						if (request.message.startsWith("entry:")) return { ok: true };
 						const found = Object.values(store)
 							.flat()
 							.find((item: any) => item.id === request.message);
@@ -580,7 +598,7 @@ test("a message is answered with its quote, and forwarded to a thread or a perso
 		await flight.getByRole("button", { name: /Add GitHub PR threads/ }).click();
 		const panel = page.getByRole("region", { name: "Thread: Add GitHub PR threads" });
 		await panel.getByText("Iris: build GitHub PR threads").click({ button: "right" });
-		await page.getByRole("menuitem", { name: "Ask the desk to handle" }).click();
+		await page.getByRole("menuitem", { name: "Send to desk" }).click();
 		await page.getByText("Sent to the desk").waitFor();
 		expect((await page.evaluate(() => (window as any).posts)).at(-1)).toMatchObject({
 			thread: "topic:desk",
@@ -723,6 +741,22 @@ test("a reaction acknowledges a message without posting, and toggles off", { tim
 			{ message: "topic:desk:2", emoji: "\u2705", on: false },
 		]);
 		expect(await page.evaluate(() => (window as any).posts)).toEqual([]);
+
+		await page
+			.getByRole("region", { name: "Direct messages", exact: true })
+			.getByRole("button", { name: /^Cora/ })
+			.click();
+		const said = page.locator(".wp-session .wp-actionable").filter({ hasText: "The schedules review is assigned." });
+		await said.waitFor();
+		await said.hover();
+		await said.getByRole("button", { name: "Add reaction" }).click();
+		await said.getByRole("button", { name: "React seen" }).click();
+		await said.locator(".wp-reaction").waitFor();
+		expect((await page.evaluate(() => (window as any).reactions)).at(-1)).toEqual({
+			message: "entry:cora:cora-1",
+			emoji: "\u{1F440}",
+			on: true,
+		});
 		expect(errors).toEqual([]);
 	} finally {
 		await page.close();

@@ -417,7 +417,7 @@ export type TranscriptPart =
  * One entry of a character's conversation, read from its session's transcript and trimmed for the conversation panel.
  * Long text is cut at `TRANSCRIPT_TEXT_MAX` characters (`cut` says so); the whole is in the session's JSONL.
  */
-export type TranscriptEntry =
+export type TranscriptEntry = (
 	| { kind: "user"; id: string; at: number; text: string; images: number }
 	| { kind: "assistant"; id: string; at: number; parts: TranscriptPart[]; error: string | null; aborted: boolean }
 	| {
@@ -433,7 +433,11 @@ export type TranscriptEntry =
 	/** Mail from another session (or the operator), delivered into the transcript. */
 	| { kind: "mail"; id: string; at: number; from: string; text: string }
 	/** Any other extension's message, such as a reminder or injected context. */
-	| { kind: "note"; id: string; at: number; label: string; text: string; shown: boolean };
+	| { kind: "note"; id: string; at: number; label: string; text: string; shown: boolean }
+) & {
+	/** The operator's emoji reactions on this entry; absent when there are none. */
+	reactions?: { emoji: string; people: string[] }[];
+};
 
 /** Longest text of one transcript field sent to the world UI. */
 export const TRANSCRIPT_TEXT_MAX = 20_000;

@@ -22,6 +22,53 @@ import "./workplace-message-actions.css";
 export type { QuotedMessage };
 export type MessageAction = { label: string; onSelect: () => void };
 
+export type Reaction = { emoji: string; people: string[] };
+
+/** `current` with the operator's `emoji` added, or removed when it was already there. */
+export function toggledReaction(current: Reaction[], emoji: string): { next: Reaction[]; on: boolean } {
+	const on = !current.some((item) => item.emoji === emoji && item.people.includes("operator"));
+	const next = on
+		? current.some((item) => item.emoji === emoji)
+			? current.map((item) => (item.emoji === emoji ? { ...item, people: [...item.people, "operator"] } : item))
+			: [...current, { emoji, people: ["operator"] }]
+		: current
+				.map((item) =>
+					item.emoji === emoji ? { ...item, people: item.people.filter((who) => who !== "operator") } : item,
+				)
+				.filter((item) => item.people.length);
+	return { next, on };
+}
+
+/** A message's reactions as pills: each emoji, its count and who chose it; clicking one toggles the operator's. */
+export function ReactionPills({
+	reactions,
+	toggle,
+	nameOf,
+}: {
+	reactions: Reaction[];
+	toggle?: (emoji: string) => void;
+	nameOf: (person: string) => string;
+}) {
+	if (!reactions.length) return null;
+	return (
+		<div className="wp-reactions">
+			{reactions.map((item) => (
+				<button
+					key={item.emoji}
+					type="button"
+					className="wp-reaction"
+					aria-pressed={item.people.includes("operator")}
+					disabled={!toggle}
+					title={item.people.map((who) => (who === "operator" ? "You" : nameOf(who))).join(", ")}
+					onClick={() => toggle?.(item.emoji)}
+				>
+					{item.emoji} <span>{item.people.length}</span>
+				</button>
+			))}
+		</div>
+	);
+}
+
 /** The quick acknowledgments: done, seen, agreed, thanks. */
 export const REACTIONS = [
 	["\u2705", "done"],
@@ -90,7 +137,7 @@ export function ActionableMessage({
 		return [
 			...(onReply ? [{ label: "Reply", onSelect: () => onReply(target) }] : []),
 			...(forward ? [{ label: "Forward\u2026", onSelect: () => forward(target) }] : []),
-			...(handOff ? [{ label: "Ask the desk to handle", onSelect: () => handOff(target) }] : []),
+			...(handOff ? [{ label: "Send to desk", onSelect: () => handOff(target) }] : []),
 			...(origin ? [{ label: saved ? "Remove from Later" : "Save for later", onSelect: toggleSaved }] : []),
 			{
 				label: target === message ? "Copy text" : "Copy selection",

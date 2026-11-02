@@ -153,6 +153,8 @@ export interface TranscriptMessageInfo {
 	author: string;
 	at: number;
 	text: string;
+	/** The operator's reactions on the block's first entry. */
+	reactions?: { emoji: string; people: string[] }[];
 }
 /** The embedding surface's message element; without one, messages are plain articles. */
 export const TranscriptMessage = createContext<
@@ -296,7 +298,7 @@ function AgentBlock({
 		<MessageArticle
 			className="aw-conv-entry aw-conv-assistant"
 			entry={entries[0].id}
-			message={{ speaker: "assistant", author: name, at: entries[0].at, text: words }}
+			message={{ speaker: "assistant", author: name, at: entries[0].at, text: words, reactions: entries[0].reactions }}
 		>
 			<header className="aw-conv-who">
 				<Author speaker="assistant" name={name} />
@@ -351,7 +353,13 @@ export const BlockView = memo(function BlockView({
 			<MessageArticle
 				className="aw-conv-entry aw-conv-user"
 				entry={block.entry.id}
-				message={{ speaker: "user", author: "You", at: block.entry.at, text: block.entry.text }}
+				message={{
+					speaker: "user",
+					author: "You",
+					at: block.entry.at,
+					text: block.entry.text,
+					reactions: block.entry.reactions,
+				}}
 			>
 				<header className="aw-conv-who">
 					<Author speaker="user" name="You" />
@@ -370,7 +378,13 @@ export const BlockView = memo(function BlockView({
 			<MessageArticle
 				className="aw-conv-entry aw-conv-mail"
 				entry={block.entry.id}
-				message={{ speaker: "mail", author: block.entry.from, at: block.entry.at, text: block.entry.text }}
+				message={{
+					speaker: "mail",
+					author: block.entry.from,
+					at: block.entry.at,
+					text: block.entry.text,
+					reactions: block.entry.reactions,
+				}}
 			>
 				<span className="aw-conv-mail-mark" aria-hidden="true" />
 				<header className="aw-conv-who">

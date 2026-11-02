@@ -261,7 +261,15 @@ export type EntryReply =
  * when the page starts at the session's first indexed entry. `missing` lists indexed ids the transcript no longer holds.
  */
 export type EntriesReply =
-	| { type: "entries"; requestId: string; entries: unknown[]; before: string | null; missing?: string[] }
+	| {
+			type: "entries";
+			requestId: string;
+			entries: unknown[];
+			before: string | null;
+			missing?: string[];
+			/** The operator's reactions on entries of this page, by entry id; absent when there are none. */
+			reactions?: Record<string, { emoji: string; people: string[] }[]>;
+	  }
 	| { type: "entries"; requestId: string; error: string };
 
 /**

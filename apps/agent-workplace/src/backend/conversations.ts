@@ -216,9 +216,11 @@ export function openConversations(socketPath: string): Conversations {
 				(reply) => {
 					if (reply.type !== "entries") return undefined;
 					if (typeof reply.error === "string") return { ok: false, reason: reply.error };
+					const reactions = (reply.reactions ?? {}) as Record<string, TranscriptEntry["reactions"]>;
 					const entries = (Array.isArray(reply.entries) ? reply.entries : [])
 						.map(transcriptEntry)
-						.filter((entry): entry is TranscriptEntry => entry !== undefined);
+						.filter((entry): entry is TranscriptEntry => entry !== undefined)
+						.map((entry) => (reactions[entry.id] ? { ...entry, reactions: reactions[entry.id] } : entry));
 					return {
 						ok: true,
 						entries,

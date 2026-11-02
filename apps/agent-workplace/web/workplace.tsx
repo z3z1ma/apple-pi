@@ -30,7 +30,13 @@ import { Icon } from "./workplace-icon.js";
 import { WorkplaceIssues } from "./workplace-issues.js";
 import { muted } from "./workplace-later.js";
 import { Mail } from "./workplace-mail.js";
-import { ActionableMessage, ForwardProvider } from "./workplace-message-actions.js";
+import {
+	ActionableMessage,
+	ForwardProvider,
+	type Reaction,
+	ReactionPills,
+	toggledReaction,
+} from "./workplace-message-actions.js";
 import { channelName, useWorkplaceNames } from "./workplace-names.js";
 import { descendants, Org, orgPeople } from "./workplace-org.js";
 import { OrganizationNameForm, OrgNameEditor } from "./workplace-org-name.js";
@@ -72,6 +78,15 @@ function dmMessageFor(id: string, where: string, canReply: boolean) {
 		entry: string;
 		children: ReactNode;
 	}) {
+		// Reactions changed here show at once; the next page read brings the same from the runtime.
+		const [changed, setChanged] = useState<Reaction[]>();
+		const reactions = changed ?? message.reactions ?? [];
+		const react = (emoji: string) => {
+			const { next, on } = toggledReaction(reactions, emoji);
+			void api.communications.react({ message: `entry:${id}:${entry}`, emoji, on }).then((result) => {
+				if (result.ok) setChanged(next);
+			});
+		};
 		return (
 			<ActionableMessage
 				className={className}
@@ -79,8 +94,10 @@ function dmMessageFor(id: string, where: string, canReply: boolean) {
 				message={{ author: message.author, at: message.at, text: message.text, where }}
 				origin={{ kind: "dm", id }}
 				onReply={canReply && message.text.trim() ? (quoted) => conversationPanel.setReplyTo(id, quoted) : undefined}
+				react={react}
 			>
 				{children}
+				<ReactionPills reactions={reactions} toggle={react} nameOf={(who) => who} />
 			</ActionableMessage>
 		);
 	};

@@ -76,7 +76,7 @@ import {
 import { type ExternalCommand, type ExternalCommit, ExternalThreads } from "./external-threads.js";
 import { recordLink, resolveLink } from "./links.js";
 import { discardProgramPeople, programDescendants, temporaryCallers } from "./program-peers.js";
-import { react } from "./reactions.js";
+import { entryReaction, react, reactionsOf } from "./reactions.js";
 import { reviewScope } from "./review-attempt.js";
 import { ReviewJobs, type ReviewNotify } from "./review-jobs.js";
 import { cancelSchedule, createSchedule, dueSchedules, markFired } from "./schedules.js";
@@ -3187,10 +3187,16 @@ export class Runtime {
 			return void reply({ error: `cannot read transcript: ${(error as Error).message}` });
 		}
 		const missing = page.filter((id) => !found.has(id));
+		const reactions = Object.fromEntries(
+			page
+				.map((id) => [id, reactionsOf(db, entryReaction(request.sessionId, id))] as const)
+				.filter(([, list]) => list.length),
+		);
 		reply({
 			entries: page.filter((id) => found.has(id)).map((id) => found.get(id)),
 			before: start > 0 ? ids[start] : null,
 			...(missing.length ? { missing } : {}),
+			...(Object.keys(reactions).length ? { reactions } : {}),
 		});
 	}
 

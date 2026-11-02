@@ -21,7 +21,7 @@ import { commandHints, runCommand } from "./workplace-commands.js";
 import { CommunicationDialog, CommunicationRecipients } from "./workplace-communications.js";
 import { Icon } from "./workplace-icon.js";
 import { useMentions } from "./workplace-mentions.js";
-import { ActionableMessage } from "./workplace-message-actions.js";
+import { ActionableMessage, ReactionPills, toggledReaction } from "./workplace-message-actions.js";
 import { PersonAvatar, PersonName } from "./workplace-people.js";
 import type { SwitchTarget } from "./workplace-switcher.js";
 
@@ -83,21 +83,11 @@ export function ThreadPane({
 	const [reacted, setReacted] = useState(new Map<string, Reaction[]>());
 	const reactionsOf = (message: ConversationMessage) => reacted.get(message.id) ?? message.reactions ?? [];
 	const toggleReaction = (message: ConversationMessage, emoji: string) => {
-		const current = reactionsOf(message);
-		const mine = current.some((item) => item.emoji === emoji && item.people.includes("operator"));
-		void api.communications.react({ message: message.id, emoji, on: !mine }).then(
+		const { next, on } = toggledReaction(reactionsOf(message), emoji);
+		void api.communications.react({ message: message.id, emoji, on }).then(
 			(result) => {
 				if (!mounted.current) return;
 				if (!result.ok) return setError(result.reason);
-				const next = mine
-					? current
-							.map((item) =>
-								item.emoji === emoji ? { ...item, people: item.people.filter((who) => who !== "operator") } : item,
-							)
-							.filter((item) => item.people.length)
-					: current.some((item) => item.emoji === emoji)
-						? current.map((item) => (item.emoji === emoji ? { ...item, people: [...item.people, "operator"] } : item))
-						: [...current, { emoji, people: ["operator"] }];
 				setReacted((previous) => new Map(previous).set(message.id, next));
 			},
 			(failure: unknown) => mounted.current && setError(String(failure)),
@@ -1066,31 +1056,15 @@ function ThreadMessages({
 								</small>
 							</button>
 						)}
-						{reactions(message).length > 0 && (
-							<div className="wp-reactions">
-								{reactions(message).map((item) => (
-									<button
-										key={item.emoji}
-										type="button"
-										className="wp-reaction"
-										aria-pressed={item.people.includes("operator")}
-										disabled={!toggleReaction}
-										title={item.people
-											.map((who) =>
-												who === "operator"
-													? "You"
-													: (world.characters.find((person) => person.id === who)?.name ??
-														world.dormant?.find((person) => person.id === who)?.name ??
-														who),
-											)
-											.join(", ")}
-										onClick={() => toggleReaction?.(message, item.emoji)}
-									>
-										{item.emoji} <span>{item.people.length}</span>
-									</button>
-								))}
-							</div>
-						)}
+						<ReactionPills
+							reactions={reactions(message)}
+							toggle={toggleReaction ? (emoji) => toggleReaction(message, emoji) : undefined}
+							nameOf={(who) =>
+								world.characters.find((person) => person.id === who)?.name ??
+								world.dormant?.find((person) => person.id === who)?.name ??
+								who
+							}
+						/>
 					</div>
 				</ActionableMessage>
 			</Fragment>
