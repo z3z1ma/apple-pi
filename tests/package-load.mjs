@@ -303,6 +303,7 @@ try {
 				extension.tools.has("promote_task") &&
 				extension.tools.has("link") &&
 				extension.tools.has("schedule_mail") &&
+				extension.tools.has("channel_charter") &&
 				extension.tools.has("follow_external") &&
 				extension.tools.has("unfollow_external") &&
 				extension.tools.has("watch_repository") &&

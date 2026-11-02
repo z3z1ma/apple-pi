@@ -25,6 +25,7 @@ const PERSON_TASK_TOOLS = [
 	"schedule_mail",
 	"follow_external",
 	"unfollow_external",
+	"channel_charter",
 ];
 const EXTERNAL_MANAGER_TOOLS = ["watch_repository"];
 const INSIGHT_TOOLS = ["economics", "predictions", "experience", "bottlenecks", "progress", "coordination"];
@@ -797,6 +798,40 @@ export function installWork(pi: ExtensionAPI): void {
 					],
 					details: { id: commandId },
 				};
+			},
+		}),
+	);
+	pi.registerTool(
+		defineTool({
+			name: "channel_charter",
+			executionMode: "sequential",
+			label: "channel_charter",
+			description:
+				"Give a channel a listener and a standing charter: the listener is pushed every post in the channel, with the charter beside it, and applies it without being asked each time (for example: 'reproduce reported failures in a worktree and post only confirmed fixes; otherwise stay quiet'). Give neither listener nor charter to clear them. The operator, the channel's head and managers can set a charter.",
+			promptSnippet: "Make someone listen to a channel and apply a standing policy to its posts.",
+			parameters: Type.Object(
+				{
+					channel: Type.String({ minLength: 1, description: "The channel id, such as topic:... or team:..." }),
+					listener: Type.Optional(Type.String({ minLength: 1, description: "The person who listens: name or id." })),
+					charter: Type.Optional(
+						Type.String({ minLength: 1, description: "The standing policy the listener applies to each post." }),
+					),
+				},
+				{ additionalProperties: false },
+			),
+			execute: async (_id, args, signal, _update, ctx) => {
+				const self = ctx.sessionManager.getSessionId();
+				const listener = args.listener ? resolvePerson(self, args.listener) : null;
+				const receipt = await sendCommand(
+					self,
+					{ kind: "channel_charter", thread: args.channel, listener, charter: args.charter ?? null },
+					{ signal },
+				);
+				if (receipt.stage === "failed") throw new Error(receipt.reason);
+				const text = listener
+					? `${args.channel}: ${listener} now listens${args.charter ? ` and applies: ${args.charter}` : ""}.`
+					: `${args.channel}: charter cleared.`;
+				return { content: [{ type: "text" as const, text }], details: {} };
 			},
 		}),
 	);

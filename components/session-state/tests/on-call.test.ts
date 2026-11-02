@@ -1,5 +1,6 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
 import { fakeBridge, query, sendCommand, standInProcess, startRuntime, stopRuntime, tempStateDir } from "./helpers.js";
 
@@ -119,6 +120,50 @@ test("a schedule mails its target on time, repeats, survives as a thread, and st
 	expect(query(state.dbPath, "select cancelled_at is not null as done from schedules where id = 'sweep'")).toEqual([
 		{ done: 1 },
 	]);
+});
+
+test("a channel's listener is pushed every post with the charter it applies", { timeout: 20_000 }, async () => {
+	await personAtHome("triage", true);
+	const db = new DatabaseSync(state.dbPath);
+	try {
+		db.prepare(
+			"insert into threads (id, kind, channel_type, subject, created_by, created_at) values ('topic:bugs', 'channel', 'topic', 'bugs', 'operator', 1)",
+		).run();
+		// The operator follows the channel quietly; the listener is not a participant at all.
+		db.prepare(
+			"insert into thread_participants (thread_id, participant, delivery, read_up_to, joined_at, invited) values ('topic:bugs', 'operator', 'pull', 0, 1, 1)",
+		).run();
+	} finally {
+		db.close();
+	}
+	const set = await sendCommand(state.socketPath, "operator", {
+		kind: "channel_charter",
+		thread: "topic:bugs",
+		listener: "triage",
+		charter: "Reproduce reported failures silently; post only confirmed fixes.",
+	});
+	expect(set.at(-1)).toEqual({ stage: "applied" });
+	const refused = await sendCommand(state.socketPath, "sleeper-2", {
+		kind: "channel_charter",
+		thread: "topic:bugs",
+		listener: null,
+		charter: null,
+	});
+	expect(refused.at(-1)?.stage).toBe("failed");
+	const posted = await sendCommand(state.socketPath, "operator", {
+		kind: "thread_post",
+		thread: "topic:bugs",
+		body: "Checkout returns 500 after login.",
+	});
+	expect(posted.at(-1)?.stage).toBe("applied");
+	await vi.waitFor(
+		() => {
+			const commands = readFileSync(`${log}.commands`, "utf8");
+			expect(commands).toContain("Checkout returns 500 after login.");
+			expect(commands).toContain("Channel charter (you listen here): Reproduce reported failures silently");
+		},
+		{ timeout: 10000 },
+	);
 });
 
 test("mail to a person at home who is not on call waits without waking it", async () => {

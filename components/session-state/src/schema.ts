@@ -399,6 +399,9 @@ const MIGRATIONS = [
 	create table external_seen (source text not null, event text not null, primary key (source, event)) strict;
 	create table external_policies (provider text primary key, policy text not null, ignore_bots integer not null, last_error text) strict;
 	insert into external_policies (provider, policy, ignore_bots) values ('github', 'candidate', 1), ('jira', 'explicit', 1);`,
+	// A channel's listener is pushed every post and applies its charter (components/session-state/src/channel-charters.ts).
+	`alter table threads add column listener text;
+	alter table threads add column charter text;`,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

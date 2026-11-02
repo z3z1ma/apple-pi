@@ -108,6 +108,10 @@ For a stable address, start a session with a fixed id: `pi --session-id coordina
 
 Mail bound to one incarnation (`generation`) never waits for a later one. A session started with `--reports-to <id>` mails that session in a new thread when it closes, except on reload, through its own connection to the runtime (dropped, with a line on stderr, when the runtime is unreachable, so shutdown goes on): `Session "<name>" closed (<reason>) while <idle|busy|waiting>. Directory: <cwd>`.
 
+### Channel charters
+
+`channel_charter(channel, listener?, charter?)` names a channel's listener and the standing policy it applies. The runtime pushes every post in that channel to the listener, even one that does not follow it, with the charter appended to the listener's copy only; an on-call listener at home wakes for it. Giving neither clears both. The operator, the channel's scope head and managing people can set a charter; the change is recorded as a `charter_set` event. Use it for proactive work: "in #bugs, reproduce reported failures in a worktree and post only confirmed fixes; otherwise stay quiet."
+
 ### Schedules
 
 `schedule_mail(body, at, every?, to?)` asks the runtime to mail a person (the caller by default) at a later time, once or every interval of at least a minute; `schedule_mail(cancel)` stops one and no arguments list the caller's. Schedules live in the `schedules` table, so they survive restarts, unlike session-scoped `remind_me`. The runtime checks for due schedules every second and posts each firing as harness mail on the thread `schedule:<id>`, subject `Scheduled by <owner>`; the message id carries the due time, so a crash cannot send one firing twice. A repeating schedule skips firings missed while the runtime was down. A firing for an on-call person at home wakes it. Owners, recipients and the operator can cancel.

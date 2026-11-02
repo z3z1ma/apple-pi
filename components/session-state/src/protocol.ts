@@ -157,6 +157,8 @@ export type Command =
 	| { kind: "schedule"; to: string; body: string; firstAt: number; everyMs?: number }
 	/** Stop a schedule the sender owns or receives (the operator can stop any). */
 	| { kind: "unschedule"; id: string }
+	/** Name a channel's listener, pushed every post, and the charter it applies; nulls clear them. */
+	| { kind: "channel_charter"; thread: string; listener: string | null; charter: string | null }
 	/** Record a link from the sending session; its id is the command id. */
 	| ({ kind: "link_record" } & LinkRecord)
 	/** Resolve a link once, optionally with a word such as `accepted` or `rejected`. */

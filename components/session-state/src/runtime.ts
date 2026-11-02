@@ -57,6 +57,7 @@ const FACT_COLUMNS: Record<keyof Facts, string> = {
 const JSON_FACTS = new Set<string>(["prompt", "queue", "config", "previousSession", "git"]);
 
 import { type AttentionRow, jumpTarget, statusSummary } from "./attention.js";
+import { chartered, charterOf, setCharter } from "./channel-charters.js";
 import { syncChannels } from "./channels.js";
 import { RETRY_MS, sendCommand } from "./client.js";
 import { canonicalCommunication } from "./communication.js";
@@ -784,7 +785,7 @@ export class Runtime {
 			this.externalCommand(commandId, sessionId, command, now);
 			return;
 		}
-		if (command.kind === "schedule" || command.kind === "unschedule") {
+		if (command.kind === "schedule" || command.kind === "unschedule" || command.kind === "channel_charter") {
 			receipt("accepted");
 			this.scheduleCommand(commandId, sessionId, command, now);
 			return;
@@ -1253,12 +1254,22 @@ export class Runtime {
 	private scheduleCommand(
 		commandId: string,
 		sender: string,
-		command: Extract<Command, { kind: "schedule" | "unschedule" }>,
+		command: Extract<Command, { kind: "schedule" | "unschedule" | "channel_charter" }>,
 		now: number,
 	): void {
 		try {
 			if (command.kind === "schedule") createSchedule(this.db!, commandId, sender, command, now);
-			else cancelSchedule(this.db!, command.id, sender, OPERATOR, now);
+			else if (command.kind === "unschedule") cancelSchedule(this.db!, command.id, sender, OPERATOR, now);
+			else
+				this.atomically(() => {
+					setCharter(this.db!, sender, OPERATOR, command.thread, command);
+					this.event("runtime", null, null, "charter_set", {
+						thread: command.thread,
+						by: sender,
+						listener: command.listener,
+						charter: command.charter,
+					});
+				});
 			this.setCommandStage(commandId, "applied");
 		} catch (error) {
 			this.setCommandStage(commandId, "failed", (error as Error).message);
@@ -1420,12 +1431,18 @@ export class Runtime {
 		const fromName = sender !== OPERATOR && label !== sender ? label : undefined;
 		const asleep: string[] = [];
 		const deliveries: { target: Connection; id: string; mail: Command }[] = [];
-		for (const participant of new Set([...posted.push, ...(changed ? [changed.person] : [])])) {
+		const charter = charterOf(db, posted.thread);
+		const listener = charter?.listener ?? undefined;
+		for (const participant of new Set([
+			...posted.push,
+			...(changed ? [changed.person] : []),
+			...(listener ? [listener] : []),
+		])) {
 			if (participant === OPERATOR || participant === sender) continue;
 			const mail: Command = {
 				kind: "mail",
 				from: sender,
-				body: post.body,
+				body: participant === listener ? chartered(post.body, charter?.charter ?? null) : post.body,
 				sentAt: new Date(now).toISOString(),
 				thread: posted.thread,
 				subject: posted.subject,
