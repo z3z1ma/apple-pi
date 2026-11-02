@@ -1,6 +1,6 @@
 # Isolated recall experiment
 
-Status: preparing held-out questions; no candidate implementation or results yet.
+Status: held-out artifact frozen; no candidate implementation or held-out results yet.
 
 ## Decision and authority
 
@@ -40,4 +40,8 @@ All experimental code lives on a separate branch/worktree rooted at the reviewed
 
 ## Current state
 
-The baseline and correction-review gate are settled. Held-out preparation is next. Candidate design, code and results are pending.
+The baseline and correction-review gate are settled. Held-out artifact frozen at 2026-11-02 10:26 UTC, SHA256 `005b8fd5a899ff05eeec5a07f3e048329e886fd93d530f183cc1b221e9a3d557` (exact JSON UTF-8, no trailing newline). Private artifact lives outside Git with mode0600. Kofi independently verified every original-call argument set, six normalized prefix hashes, 37 record hashes and relevant-ID/label consistency. A pre-results consistency correction is retained in its provenance; the latest proposal supersedes the first.
+
+Six previously unread, non-overlapping histories supply 37 labeled source records: 20 relevant, 17 negative; six records are non-message sources. Exclusion covers 31 prior physical files plus issuing-call and copied-entry identities. All six cutoffs follow compaction; four episodes cross a subsequent cut, two are within already-compacted sessions. Sampling is chronological/purposive, with one child history and shared project context. Labels are single-rater bounded-episode judgments, not complete-transcript gold. One very large positive source was inspected via parsed source bodies and relevant complete functions rather than every unrelated inventory item. Historical search-result bodies and held-out baseline/candidate outputs were unseen during authoring.
+
+The single candidate will test passage-local natural-language scoring: score the same query-term-selected local source window used for display rather than the entire heterogeneous entry. Keep existing role/file fields, BM25 mechanism, recall-echo priority, regex dispatch/order/caps, entry-level top-five contract and exact recovery. Use the existing window rule, with no new weight, quota or query syntax. Rank on raw source lines rather than formatting/omission markers. Prediction: coherent relevant passages may outrank entries whose query terms occur in unrelated sections. Rival result: lexical ambiguity remains and no eligible gain occurs. Candidate code and all results are pending; do not revise it after held-out inspection.
