@@ -190,6 +190,21 @@ export function installSessionRole(pi: ExtensionAPI): void {
 		resolved.set(sessionId, { role, soul });
 		applyPosture(pi, role);
 	});
+	// A model or thinking level chosen after the role resolved (Pi's selector, or the operator through the runtime) is
+	// the person's mind from now on, so the next start keeps it instead of restoring the stored one.
+	const remember = (ctx: ExtensionContext, model?: string) => {
+		if (!resolved.get(ctx.sessionManager.getSessionId())) return;
+		const stored = storedRole(ctx);
+		const chosen = model ?? (ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : undefined);
+		if (!stored || !chosen) return;
+		const mind: Mind = { model: chosen, thinking: pi.getThinkingLevel() as Mind["thinking"] };
+		if (stored.mind?.model === mind.model && stored.mind.thinking === mind.thinking) return;
+		pi.appendEntry<RoleEntry>(ROLE_ENTRY, { ...stored, mind });
+	};
+	pi.on("model_select", (event, ctx) => {
+		if (event.source !== "restore") remember(ctx, `${event.model.provider}/${event.model.id}`);
+	});
+	pi.on("thinking_level_select", (_event, ctx) => remember(ctx));
 	pi.on("before_agent_start", (event, ctx) => {
 		const failure = mindFailures.get(ctx.sessionManager.getSessionId());
 		if (failure) {

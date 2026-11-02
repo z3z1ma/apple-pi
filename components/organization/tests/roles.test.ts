@@ -246,6 +246,29 @@ test("a role that used the default retains that mind when a profile is later con
 	}
 });
 
+test("a model chosen after the role resolved becomes the person's mind and survives a restart", async () => {
+	const cwd = tempDir();
+	mkdirSync(join(cwd, ".pi", "roles"), { recursive: true });
+	writeFileSync(join(cwd, ".pi", "roles", "desk.md"), ROLE);
+	const run = await fauxSession([organization], [fauxAssistantMessage("ok")], ["read"], { cwd });
+	try {
+		const initial = run.session.model!;
+		const chosen = { ...initial, id: "chosen-model" };
+		vi.spyOn(registryOf(run), "find").mockImplementation((provider, id) =>
+			provider === initial.provider ? (id === chosen.id ? chosen : id === initial.id ? initial : undefined) : undefined,
+		);
+		await restartWithRole(run, "desk");
+		expect(run.session.model).toMatchObject({ id: initial.id });
+		await run.session.setModel(chosen);
+		await restartWithRole(run, "desk");
+		expect(run.session.model).toMatchObject({ provider: initial.provider, id: "chosen-model" });
+		await run.session.prompt("keep working on the chosen model");
+		expect(run.session.agent.state.messages.at(-1)).toMatchObject({ role: "assistant", stopReason: "stop" });
+	} finally {
+		run.dispose();
+	}
+});
+
 test("an unknown role name warns and leaves the session unroled", async () => {
 	const run = await fauxSession([organization], [fauxAssistantMessage("ok")], ["read", "edit"]);
 	const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);

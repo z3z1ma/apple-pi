@@ -17,6 +17,9 @@ The actual model and effective thinking level are retained in the same entry aft
 Why: a person that already worked on the default has a mind too; leaving it unrecorded would let a later profile addition change that person. Throwing alone cannot enforce failed selection because Pi catches lifecycle-handler errors and would otherwise continue on the previous model.
 Coupled: components/shared/src/model-profiles.ts
 
+A model or thinking level chosen after the role resolved (`model_select` other than `restore`, or `thinking_level_select`) is appended as the person's new mind, so a reopen keeps it. Selections made while the role applies its own mind at start happen before `resolved` is set and are not recorded twice.
+Why: the operator moved the live coordinator to Terra through the runtime's `set_model`; a reload restored the stored Sol mind because only first selection was ever recorded.
+
 A launcher can pass `--role-profile` to select a new person's first mind from another inference profile; captured review uses it for deep passes. It applies only to a role whose models start with a profile and only before a mind is stored, so it changes no existing person and never makes a concrete-only role read the profile file.
 Why: the review runtime records each pass's policy (deep or balanced profile) and refuses a reviewer whose selected model is not in it. Without the override the resolver always chose from the role's own profile, so every deep pass failed before its turn; the first paid review after depth tiers failed that way.
 Coupled: components/session-state/src/review-attempt.ts, components/session-state/src/runtime.ts, components/code-review/src/policy.ts
