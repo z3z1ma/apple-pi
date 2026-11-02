@@ -89,7 +89,7 @@ test("calendar keeps what he would notice: one item per real change, never per a
 	expect(again.items.find((item) => item.title === "AI SDLC weekly")?.id).toBe(first.items[0]!.id);
 });
 
-test("email keeps mail from a person to him, lists automated mail, and asks Gmail to leave the rest out", async () => {
+test("email sends mail a person wrote to him to the desk, and only lists automated mail and copies", async () => {
 	answers["gmail users getProfile"] = { emailAddress: "alex@acme.com" };
 	answers["gmail users messages list"] = { messages: [{ id: "m1" }, { id: "m2" }, { id: "m3" }] };
 	const message = (id: string, headers: Record<string, string>, labels: string[] = ["INBOX"]) => ({
