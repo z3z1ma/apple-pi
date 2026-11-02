@@ -796,6 +796,13 @@ function isOutside(place) {
 }
 /** Longest text of one transcript field sent to the world UI. */
 var TRANSCRIPT_TEXT_MAX = 2e4;
+var OUTSIDE_SOURCES = [
+	"slack",
+	"github",
+	"jira",
+	"calendar",
+	"gmail"
+];
 //#endregion
 //#region apps/agent-workplace/src/backend/transcript.ts
 /** The custom message type of delivered mail (`components/session-state/src/mail.ts`). */
@@ -8874,7 +8881,9 @@ async function listThemes(themesDir, options) {
 var ACTIVITY_SOURCES = [
 	"github",
 	"jira",
-	"slack"
+	"slack",
+	"calendar",
+	"gmail"
 ];
 var TRIAGE_MODES = [
 	"all",
@@ -12955,11 +12964,7 @@ function start() {
 	});
 	ipcMain.handle("world:read-outside", (_event, request) => {
 		const value = request ?? {};
-		const source = [
-			"github",
-			"jira",
-			"slack"
-		].includes(value.source) ? value.source : void 0;
+		const source = OUTSIDE_SOURCES.includes(value.source) ? value.source : void 0;
 		return Number.isSafeInteger(value.limit) && value.limit > 0 ? workplace.readOutside({
 			source,
 			untriaged: value.untriaged === true,
@@ -12971,11 +12976,7 @@ function start() {
 	});
 	ipcMain.handle("world:outside-modes", (_event, modes) => {
 		const chosen = {};
-		for (const source of [
-			"github",
-			"jira",
-			"slack"
-		]) {
+		for (const source of OUTSIDE_SOURCES) {
 			const mode = modes?.[source];
 			if ([
 				"all",

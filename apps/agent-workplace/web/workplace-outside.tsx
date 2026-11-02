@@ -8,6 +8,8 @@ const SOURCES: { id: OutsideSource; label: string }[] = [
 	{ id: "slack", label: "Slack" },
 	{ id: "github", label: "GitHub" },
 	{ id: "jira", label: "Jira" },
+	{ id: "calendar", label: "Calendar" },
+	{ id: "gmail", label: "Email" },
 ];
 const MODES: { id: OutsideMode; label: string }[] = [
 	{ id: "all", label: "The desk triages everything" },
@@ -36,7 +38,14 @@ const KINDS: Record<string, string> = {
 	invite: "Invitation",
 	ci_activity: "CI",
 	subscribed: "Watching",
+	invited: "Invitation",
+	cancelled: "Cancelled",
+	starting_soon: "Starting soon",
+	email: "Email to you",
+	cc: "Email, copied",
+	notification: "Automated email",
 };
+const TILES: Record<OutsideSource, string> = { slack: "S", github: "G", jira: "J", calendar: "C", gmail: "E" };
 const ACTIONS: Record<string, string> = {
 	task: "Task",
 	link: "Linked",
@@ -98,7 +107,7 @@ function conversations(items: OutsideItem[]) {
 }
 
 /**
- * The operator's outside activity: Slack, GitHub and Jira as the runtime reads them, each conversation's newest item
+ * The operator's outside activity: Slack, GitHub, Jira, calendar and email as the runtime reads them, each conversation's newest item
  * with the desk's decision, and how each source is followed.
  */
 export function OutsideActivity({ world }: { world: WorldSnapshot }) {
@@ -205,7 +214,7 @@ export function OutsideActivity({ world }: { world: WorldSnapshot }) {
 			)}
 			{read?.ok && !followed.length && !choosing ? (
 				<p className="wp-outside-note">
-					Slack, GitHub and Jira are not followed yet.{" "}
+					No outside source is followed yet.{" "}
 					<button type="button" onClick={() => setChoosing(true)}>
 						Choose sources
 					</button>
@@ -298,7 +307,7 @@ function OutsideRow({
 				onKeyDown={menu}
 			>
 				<span className="wp-outside-tile" aria-hidden="true">
-					{item.source === "slack" ? "S" : item.source === "github" ? "G" : "J"}
+					{TILES[item.source]}
 				</span>
 				<span className="wp-activity-body">
 					<span className="wp-activity-kind">

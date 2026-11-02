@@ -3,6 +3,7 @@
 // watches, Slack's activity feed his notification settings; Jira has no feed, so it reads the issues he is assignee,
 // reporter or watcher of and turns their new comments and changes into items.
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
 import { promisify } from "node:util";
 import { atlassianRequest } from "../../../apps/agent-workplace/src/backend/integrations/atlassian.js";
 import type {
@@ -393,4 +394,274 @@ export async function readSlack(
 		}
 	}
 	return { items, cursor: JSON.stringify({ feed: feedNewest, dm: dmNewest }) };
+}
+
+// Google Workspace, through the operator's signed-in `gws` CLI.
+
+async function gws(args: string[], params: Record<string, unknown>, signal: AbortSignal): Promise<any[]> {
+	try {
+		const { stdout } = await exec("gws", [...args, "--params", JSON.stringify(params)], {
+			signal,
+			timeout: 30_000,
+			maxBuffer: 64 * 1024 * 1024,
+		});
+		// One JSON value, or one per line with --page-all.
+		return stdout.trim().startsWith("{") && !args.includes("--page-all")
+			? [JSON.parse(stdout)]
+			: stdout
+					.split("\n")
+					.filter((line) => line.trim())
+					.map((line) => JSON.parse(line));
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code === "ENOENT")
+			throw new Error("Google needs the gws CLI: install it and sign in with gws auth login.");
+		if (/auth|credential|token|login/i.test(String((error as { stderr?: string }).stderr)))
+			throw new Error("Google is signed out: run gws auth login.");
+		throw new Error(`Google request failed: gws ${args.join(" ")}`);
+	}
+}
+
+interface CalendarEvent {
+	id: string;
+	status: string;
+	summary?: string;
+	description?: string;
+	htmlLink?: string;
+	hangoutLink?: string;
+	updated: string;
+	created?: string;
+	recurringEventId?: string;
+	recurrence?: string[];
+	originalStartTime?: { dateTime?: string; date?: string };
+	start?: { dateTime?: string; date?: string };
+	organizer?: { self?: boolean; displayName?: string; email?: string };
+	creator?: { displayName?: string; email?: string };
+	attendees?: { self?: boolean; responseStatus?: string; email?: string; displayName?: string }[];
+	attachments?: { title?: string }[];
+}
+
+const fingerprint = (event: CalendarEvent, mine: string | undefined) =>
+	createHash("sha256")
+		.update(
+			JSON.stringify([
+				event.status,
+				event.summary,
+				event.start,
+				event.recurrence,
+				event.description,
+				mine,
+				(event.attachments ?? []).map((file) => file.title),
+			]),
+		)
+		.digest("hex")
+		.slice(0, 16);
+const startOf = (event: CalendarEvent) => Date.parse(event.start?.dateTime ?? event.start?.date ?? "");
+const attending = (event: CalendarEvent) =>
+	event.organizer?.self ||
+	["accepted", "tentative"].includes(event.attendees?.find((who) => who.self)?.responseStatus ?? "");
+/** The hour of his morning (local time) from which the day's agenda goes to the desk. */
+const AGENDA_HOUR = 6;
+/** How soon before a meeting the desk hears it is coming, so it can prepare him. */
+const STARTING_SOON_MS = 60 * 60_000;
+
+/**
+ * His primary calendar: invitations, cancellations and changes to meetings still ahead (edits to past occurrences of
+ * a series are left out), and each meeting he attends shortly before it starts.
+ */
+export async function readCalendar(cursor: string | undefined, now: number, signal: AbortSignal): Promise<SourceRead> {
+	const previous = (() => {
+		try {
+			return cursor ? (JSON.parse(cursor) as { updated?: string; agenda?: string }) : {};
+		} catch {
+			return {};
+		}
+	})();
+	let agenda = previous.agenda;
+	const since = previous.updated ?? new Date(now - FIRST_LOOK_MS).toISOString();
+	// Series, not their occurrences: a change to a weekly meeting is one change, not one per week.
+	const pages = await gws(
+		["calendar", "events", "list", "--page-all", "--page-limit", "20"],
+		{ calendarId: "primary", updatedMin: since, singleEvents: false, showDeleted: true, maxResults: 250 },
+		signal,
+	);
+	const sinceMs = Date.parse(since);
+	const items: ActivityItem[] = [];
+	let newest = since;
+	const summary = (event: CalendarEvent) => {
+		const people = (event.attendees ?? []).filter((who) => !who.self).length;
+		const files = (event.attachments ?? []).map((file) => file.title).filter(Boolean);
+		return excerpt(
+			[
+				event.start?.dateTime
+					? new Date(event.start.dateTime).toLocaleString("en-US", {
+							weekday: "short",
+							month: "short",
+							day: "numeric",
+							hour: "numeric",
+							minute: "2-digit",
+						})
+					: event.start?.date,
+				people ? `${people} ${people === 1 ? "other" : "others"}` : "",
+				files.length ? `docs: ${files.join(", ")}` : "",
+				event.description?.replace(/<[^>]+>/g, " "),
+			]
+				.filter(Boolean)
+				.join(" \u00b7 "),
+		);
+	};
+	for (const event of pages.flatMap((page) => (page.items ?? []) as CalendarEvent[])) {
+		if (event.updated > newest) newest = event.updated;
+		const when = Date.parse(event.originalStartTime?.dateTime ?? event.originalStartTime?.date ?? "") || startOf(event);
+		// A series stays current while it repeats; a single meeting or one changed occurrence only while it is ahead.
+		if (!event.recurrence && when < now) continue;
+		const mine = event.attendees?.find((who) => who.self)?.responseStatus;
+		if (mine === "declined") continue;
+		// A deleted event carries no title to show; an invitation to a series arrives once, with the series.
+		if (!event.summary || (event.recurringEventId && mine === "needsAction")) continue;
+		const fresh = Date.parse(event.created ?? "") > sinceMs;
+		// The first read lists what needs him, not every meeting that changed yesterday.
+		if (!cursor && event.status !== "cancelled" && !(mine === "needsAction" && fresh)) continue;
+		const kind =
+			event.status === "cancelled"
+				? "cancelled"
+				: mine === "needsAction" && fresh && !event.organizer?.self
+					? "invited"
+					: "changed";
+		items.push({
+			// Keyed by what he would notice, not by `updated`: every attendee's reply updates an event.
+			id: `calendar:${event.id}:${fingerprint(event, mine)}`,
+			source: "calendar",
+			kind,
+			conversation: `calendar:${event.recurringEventId ?? event.id}`,
+			title: event.summary ?? "(no title)",
+			actor: event.organizer?.self ? null : (event.organizer?.displayName ?? event.organizer?.email ?? null),
+			url: event.htmlLink ?? null,
+			excerpt: summary(event),
+			at: Date.parse(event.updated),
+			direct: kind === "invited" || (kind === "cancelled" && mine === "accepted"),
+		});
+	}
+	const [soon] = await gws(
+		["calendar", "events", "list"],
+		{
+			calendarId: "primary",
+			timeMin: new Date(now).toISOString(),
+			timeMax: new Date(now + STARTING_SOON_MS).toISOString(),
+			singleEvents: true,
+			orderBy: "startTime",
+		},
+		signal,
+	);
+	for (const event of (soon?.items ?? []) as CalendarEvent[]) {
+		if (event.status === "cancelled" || !attending(event) || !event.start?.dateTime) continue;
+		items.push({
+			id: `calendar:soon:${event.id}:${startOf(event)}`,
+			source: "calendar",
+			kind: "starting_soon",
+			conversation: `calendar:${event.recurringEventId ?? event.id}`,
+			title: event.summary ?? "(no title)",
+			actor: event.organizer?.self ? null : (event.organizer?.displayName ?? event.organizer?.email ?? null),
+			url: event.hangoutLink ?? event.htmlLink ?? null,
+			excerpt: summary(event),
+			at: now,
+			direct: true,
+		});
+	}
+	// Once a day, from the start of his morning: the day's meetings, so the desk can plan the day with him.
+	const day = new Date(now);
+	const today = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, "0")}-${String(day.getDate()).padStart(2, "0")}`;
+	if (day.getHours() >= AGENDA_HOUR && previous.agenda !== today) {
+		const end = new Date(day);
+		end.setHours(23, 59, 59, 999);
+		const [list] = await gws(
+			["calendar", "events", "list"],
+			{
+				calendarId: "primary",
+				timeMin: new Date(now).toISOString(),
+				timeMax: end.toISOString(),
+				singleEvents: true,
+				orderBy: "startTime",
+			},
+			signal,
+		);
+		const meetings = ((list?.items ?? []) as CalendarEvent[]).filter(
+			(event) => event.status !== "cancelled" && event.start?.dateTime && attending(event),
+		);
+		const time = (event: CalendarEvent) =>
+			new Date(startOf(event)).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+		items.push({
+			id: `calendar:agenda:${today}`,
+			source: "calendar",
+			kind: "agenda",
+			conversation: `calendar:agenda:${today}`,
+			title: `Today: ${meetings.length} ${meetings.length === 1 ? "meeting" : "meetings"}`,
+			actor: null,
+			url: null,
+			excerpt: excerpt(meetings.map((event) => `${time(event)} ${event.summary}`).join("; ")),
+			at: now,
+			direct: true,
+		});
+		agenda = today;
+	}
+	return { items, cursor: JSON.stringify({ updated: newest, agenda }) };
+}
+
+/**
+ * Mail that slipped past Slack: his inbox without his own mail, promotions and social mail, and the senders whose
+ * news already arrives through another source (GitHub, Jira, Slack, calendar invitations, no-reply robots). A message
+ * from a person to him is addressed to him; mailing lists and automated mail are only listed.
+ */
+const GMAIL_QUERY =
+	"in:inbox -from:me -category:promotions -category:social -category:forums " +
+	"-from:(notifications@github.com OR noreply OR no-reply OR donotreply OR do-not-reply OR calendar-notification@google.com OR atlassian.net OR slack.com) " +
+	'-subject:("Invitation:" OR "Updated invitation" OR "Canceled event" OR "Accepted:" OR "Declined:" OR "Tentatively accepted")';
+
+export async function readGmail(cursor: string | undefined, now: number, signal: AbortSignal): Promise<SourceRead> {
+	const since = cursor ? Number(cursor) : now - FIRST_LOOK_MS;
+	const [profile] = await gws(["gmail", "users", "getProfile"], { userId: "me" }, signal);
+	const me = String(profile?.emailAddress ?? "").toLowerCase();
+	const [listed] = await gws(
+		["gmail", "users", "messages", "list"],
+		{ userId: "me", q: `${GMAIL_QUERY} after:${Math.floor(since / 1000)}`, maxResults: 50 },
+		signal,
+	);
+	const items: ActivityItem[] = [];
+	let newest = since;
+	for (const { id } of (listed?.messages ?? []) as { id: string }[]) {
+		const [message] = await gws(
+			["gmail", "users", "messages", "get"],
+			{ userId: "me", id, format: "metadata", metadataHeaders: ["From", "To", "Cc", "Subject", "List-Id"] },
+			signal,
+		);
+		if (!message) continue;
+		const at = Number(message.internalDate);
+		if (at <= since) continue;
+		newest = Math.max(newest, at);
+		const header = Object.fromEntries(
+			((message.payload?.headers ?? []) as { name: string; value: string }[]).map((entry) => [
+				entry.name.toLowerCase(),
+				entry.value,
+			]),
+		);
+		const automated = Boolean(header["list-id"]) || (message.labelIds ?? []).includes("CATEGORY_UPDATES");
+		const toMe = String(header.to ?? "")
+			.toLowerCase()
+			.includes(me);
+		items.push({
+			id: `gmail:${id}`,
+			source: "gmail",
+			kind: automated ? "notification" : toMe ? "email" : "cc",
+			conversation: `gmail:${message.threadId}`,
+			title: header.subject ?? "(no subject)",
+			actor:
+				String(header.from ?? "")
+					.replace(/\s*<[^>]+>$/, "")
+					.replace(/^"|"$/g, "") || null,
+			url: `https://mail.google.com/mail/u/0/#all/${message.threadId}`,
+			excerpt: excerpt(message.snippet),
+			at,
+			direct: !automated && toMe,
+		});
+	}
+	return { items, cursor: String(newest) };
 }

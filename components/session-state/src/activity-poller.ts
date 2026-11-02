@@ -17,7 +17,7 @@ import {
 	triageBatch,
 	triageModes,
 } from "./activity.js";
-import { readGitHub, readJira, readSlack, type SourceRead } from "./activity-sources.js";
+import { readCalendar, readGitHub, readGmail, readJira, readSlack, type SourceRead } from "./activity-sources.js";
 import type { ExternalCommit } from "./external-threads.js";
 
 export const ACTIVITY_POLL_MS = 60_000;
@@ -43,6 +43,8 @@ export const readSource =
 	(stateDir: string): Read =>
 	(source, cursor, now, signal) => {
 		if (source === "github") return readGitHub(cursor, now, signal);
+		if (source === "calendar") return readCalendar(cursor, now, signal);
+		if (source === "gmail") return readGmail(cursor, now, signal);
 		const credentials = openCredentials(integrationFiles(stateDir).credentials).read();
 		return source === "jira"
 			? readJira(credentials.atlassian, cursor, now, signal)

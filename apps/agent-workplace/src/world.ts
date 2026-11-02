@@ -485,7 +485,8 @@ export interface OutsideRule {
 	by: string;
 	createdAt: number;
 }
-export type OutsideSource = "github" | "jira" | "slack";
+export type OutsideSource = "github" | "jira" | "slack" | "calendar" | "gmail";
+export const OUTSIDE_SOURCES: readonly OutsideSource[] = ["slack", "github", "jira", "calendar", "gmail"];
 /** How a source is followed: all items to the desk, only those addressed to him, listed only, or not read. */
 export type OutsideMode = "all" | "direct" | "list" | "off";
 export type OutsideRead =

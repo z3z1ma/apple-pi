@@ -37,7 +37,7 @@ import {
 	isWorkspaceSave,
 	type WorkspaceApi,
 } from "../workspace.js";
-import type { OutsideMode, OutsideSource } from "../world.js";
+import { OUTSIDE_SOURCES, type OutsideMode, type OutsideSource } from "../world.js";
 import { wireCommunications } from "./communications-ipc.js";
 import { wireIntegrations } from "./integrations-ipc.js";
 import { wireReviews } from "./reviews-ipc.js";
@@ -244,7 +244,7 @@ function start() {
 	);
 	ipcMain.handle("world:read-outside", (_event, request: unknown) => {
 		const value = (request ?? {}) as { source?: unknown; untriaged?: unknown; limit?: unknown };
-		const source = ["github", "jira", "slack"].includes(value.source as string)
+		const source = OUTSIDE_SOURCES.includes(value.source as OutsideSource)
 			? (value.source as OutsideSource)
 			: undefined;
 		return Number.isSafeInteger(value.limit) && (value.limit as number) > 0
@@ -253,7 +253,7 @@ function start() {
 	});
 	ipcMain.handle("world:outside-modes", (_event, modes: unknown) => {
 		const chosen: Partial<Record<OutsideSource, OutsideMode>> = {};
-		for (const source of ["github", "jira", "slack"] as const) {
+		for (const source of OUTSIDE_SOURCES) {
 			const mode = (modes as Record<string, unknown> | null)?.[source];
 			if (["all", "direct", "list", "off"].includes(mode as string)) chosen[source] = mode as OutsideMode;
 		}

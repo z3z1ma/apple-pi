@@ -312,7 +312,7 @@ The package's roles are listed below; their files own the current model recommen
 | `release-engineering-lead` | Release Engineering Lead | Plan rollouts, rollback, flags, compatibility | `openai/gpt-6.1-sol`, `anthropic/claude-sonnet-5-5` | medium | writes |
 | `repository-archaeologist` | Repository Archaeologist | Dig out hidden assumptions, prior art, conventions | `anthropic/claude-haiku-5-5`, `openai/gpt-6-luna` | low | advises |
 | `research-lead` | Research Lead | Own consequential inquiries, discriminating experiments and evidence-led decisions | `coordination` profile, then the role's concrete recommendations | profile or recommendation | manages, writes |
-| `scout` | Scout | Explore the operator's Slack, GitHub and Jira to connect threads and build the organization's knowledge | `balanced` profile, then `openai/gpt-6.1-sol`, `xai/grok-4.7` | profile or recommendation | explores, keeps notes |
+| `scout` | Scout | Explore the operator's Slack, GitHub, Jira, calendar and email to connect threads and build the organization's knowledge | `balanced` profile, then `openai/gpt-6.1-sol`, `xai/grok-4.7` | profile or recommendation | explores, keeps notes |
 | `scientific-skeptic` | Scientific Skeptic | Separate fact from assumption; design the cheapest falsifying test | `openai/gpt-6-astra`, `anthropic/claude-fable-5-1` | high | advises |
 | `service-owner` | Service Owner | Own operational health across releases, incidents and corrective work | `coordination` profile, then the role's concrete recommendations | profile or recommendation | manages, writes |
 | `skeptical-first-time-user` | Skeptical First-Time User | Use the product with no knowledge of its internals | `xai/grok-4.7`, `openai/gpt-6-luna` | low | advises |

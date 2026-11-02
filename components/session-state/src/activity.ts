@@ -1,8 +1,8 @@
-// The operator's outside activity: what Slack, GitHub and Jira say happened that involves him, kept as one stream of
+// The operator's outside activity: what Slack, GitHub, Jira, calendar and email say happened that involves him, kept as one stream of
 // items, and what the desk decided about each. Items are facts observed at a source; the decision is the desk's.
 import type { DatabaseSync } from "node:sqlite";
 
-export const ACTIVITY_SOURCES = ["github", "jira", "slack"] as const;
+export const ACTIVITY_SOURCES = ["github", "jira", "slack", "calendar", "gmail"] as const;
 export type ActivitySource = (typeof ACTIVITY_SOURCES)[number];
 
 /**
