@@ -108,12 +108,14 @@ test("a role without writes loses edit and write, gets the role section, and kee
 });
 
 test("a dispatching role keeps reading and loses the shell, file writing and program tools", async () => {
+	// Production installs pi_exec before organization resolves the role, so the posture must remove an active pi_exec.
 	const run = await fauxSession(
-		[organization],
+		[piExec, organization],
 		[fauxAssistantMessage("ok")],
-		["read", "bash", "edit", "write", "grep"],
+		["read", "bash", "edit", "write", "grep", "pi_exec"],
 	);
 	try {
+		expect(run.session.getActiveToolNames()).toContain("pi_exec");
 		await restartWithRole(run, "coordinator");
 		await run.session.prompt("hi");
 		const tools = run.session.getActiveToolNames();
