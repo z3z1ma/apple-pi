@@ -3,10 +3,12 @@ import type {
 	Character,
 	Desk,
 	DormantAgent,
+	Questionnaire,
 	WorkplaceTask,
 	WorkplaceTaskHistory,
 	WorldSnapshot,
 } from "../src/world.js";
+import { QuestionForm } from "./overlay/conversation/question-form.js";
 import { plainLine } from "./overlay/conversation/quote.js";
 import { Icon } from "./workplace-icon.js";
 import { later, useLater } from "./workplace-later.js";
@@ -509,6 +511,8 @@ export type ActivityItem = {
 	text: string;
 	at: number;
 	open: () => void;
+	/** A question the operator can answer right in Activity. */
+	answer?: { character: Character; questionnaire: Questionnaire };
 };
 
 /** Everything that needs the operator, most blocking first: questions, escalations, unseen results, unread mail. */
@@ -528,6 +532,9 @@ export function activityItems(
 				text: person.facts.asking.text ?? "Is waiting for your answer.",
 				at: person.facts.needsYouSince ?? 0,
 				open: () => go.dm(person.id),
+				...(person.facts.asking.questionnaire
+					? { answer: { character: person, questionnaire: person.facts.asking.questionnaire } }
+					: {}),
 			});
 		else if (person.facts?.unseen)
 			items.push({
@@ -606,6 +613,8 @@ export function ActivityView({
 	unseen: Set<string>;
 	markAllRead: () => void;
 }) {
+	const [chosen, setAnswering] = useState<string>();
+	const answering = chosen ?? items.find((item) => item.answer)?.key;
 	return (
 		<section className="wp-activity-view" aria-label="Activity">
 			<header className="wp-conversation-header">
@@ -628,7 +637,7 @@ export function ActivityView({
 						<li key={item.key} data-kind={item.kind} data-new={unseen.has(activityKey(item))}>
 							<button type="button" onClick={item.open}>
 								<PersonAvatar id={item.who} name={item.name} interactive={false} />
-								<span>
+								<span className="wp-activity-body">
 									<span className="wp-activity-kind">{LABEL[item.kind]}</span>
 									<strong>{item.name}</strong>
 									<span className="wp-activity-text">{item.text}</span>
@@ -636,6 +645,20 @@ export function ActivityView({
 								{unseen.has(activityKey(item)) && <span className="wp-activity-new">New</span>}
 								<time>{ago(item.at)}</time>
 							</button>
+							{item.answer &&
+								(answering === item.key ? (
+									<div className="wp-session wp-activity-answer">
+										<QuestionForm
+											key={item.answer.questionnaire.id}
+											character={item.answer.character}
+											questionnaire={item.answer.questionnaire}
+										/>
+									</div>
+								) : (
+									<button type="button" className="wp-activity-answer-open" onClick={() => setAnswering(item.key)}>
+										Answer here
+									</button>
+								))}
 						</li>
 					))}
 				</ul>

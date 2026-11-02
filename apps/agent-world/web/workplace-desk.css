@@ -668,7 +668,7 @@
 	overflow-y: auto;
 }
 .wp-app .wp-threads-list button,
-.wp-app .wp-activity-list button {
+.wp-app .wp-activity-list > li > :where(button:first-child) {
 	display: flex;
 	align-items: center;
 	gap: 12px;
@@ -682,7 +682,7 @@
 	font-size: 13px;
 }
 .wp-app .wp-threads-list button:hover,
-.wp-app .wp-activity-list button:hover {
+.wp-app .wp-activity-list > li > :where(button:first-child):hover {
 	background: var(--wp-hover);
 }
 .wp-app .wp-threads-list button[aria-pressed="true"] {
@@ -693,7 +693,7 @@
 	border-top: 1px solid var(--wp-border);
 }
 .wp-threads-title,
-.wp-activity-list button > span {
+.wp-activity-body {
 	display: grid;
 	gap: 2px;
 	flex: 1;
@@ -860,4 +860,16 @@
 }
 .wp-app .wp-later-done:hover {
 	background: var(--wp-selected);
+}
+.wp-activity-answer {
+	margin: 0 12px 12px 56px;
+}
+.wp-app .wp-activity-answer-open {
+	margin: -4px 0 10px 56px;
+	padding: 4px 10px;
+	border: 1px solid var(--wp-border);
+	border-radius: 6px;
+	background: var(--wp-bg);
+	color: var(--wp-text);
+	font-size: 12px;
 }

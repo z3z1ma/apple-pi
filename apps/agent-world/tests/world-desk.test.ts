@@ -66,7 +66,24 @@ async function openDesk(appearance: "light" | "dark", width = 1440, desk = true)
 					person("iris", "Iris", "Implementation Engineer", { run: "running_tool", status: "working" }),
 					person("milo", "Milo", "Code Review Specialist", {
 						status: "asking",
-						asking: { kind: "questionnaire", text: "Ship the migration behind a flag?" },
+						asking: {
+							kind: "questionnaire",
+							text: "Ship the migration behind a flag?",
+							questionnaire: {
+								id: "q-flag",
+								questions: [
+									{
+										question: "Ship the migration behind a flag?",
+										header: "Migration",
+										options: [
+											{ label: "Behind a flag", description: "Off by default until tested" },
+											{ label: "Ship it on", description: "Live for everyone at once" },
+										],
+										multiSelect: false,
+									},
+								],
+							},
+						},
 						needsYouSince: now - 120_000,
 					}),
 				],
@@ -348,7 +365,15 @@ test("Threads lists live work before closed work, and Activity puts questions fi
 		await shot(page, "threads-dark");
 		await page.getByRole("button", { name: /^Activity/ }).click();
 		const activity = page.getByRole("region", { name: "Activity" });
-		await activity.getByText("Ship the migration behind a flag?").waitFor();
+		await activity.getByText("Ship the migration behind a flag?").first().waitFor();
+		await activity.getByRole("radio", { name: /Behind a flag/ }).check();
+		await shot(page, "activity-answer-dark");
+		await activity.getByRole("button", { name: "Send answer" }).click();
+		await vi.waitFor(async () =>
+			expect(await page.evaluate(() => (window as any).instructions)).toContainEqual(
+				expect.objectContaining({ id: "milo", kind: "answer", questionnaire: "q-flag" }),
+			),
+		);
 		expect(await activity.locator(".wp-activity-kind").first().textContent()).toBe("Needs your answer");
 		await shot(page, "activity-dark");
 		expect(errors).toEqual([]);
