@@ -77,3 +77,7 @@ Open: the desk keeps a separate row for search / Catch up / Read latest / Action
 ## Round 11: a working agent's DM
 
 - V13 With tool calls shown, "Thought it over" folds were large bold purple pills, and tool lines were as wide as their text, so the column had a ragged edge. **Fixed:** every fold is a full-width line; thoughts read as muted italic lines at tool-line size.
+
+## Round 12: finding what was said
+
+- U12 Cmd-K found people, channels and threads by name only. **Fixed:** from three typed characters it also searches message text across every channel, thread and mail conversation the operator can read, newest first, each opening its conversation (named by its task when known). Agent DMs are session transcripts, not threads, and are not searched yet.

@@ -231,6 +231,14 @@ if (scenario === "working") {
 		await page.close();
 	}
 }
+if (scenario === "search") {
+	const page = await open(1440, 900, "light");
+	await page.keyboard.press("Meta+k");
+	await page.keyboard.type(process.argv[4] ?? "approval");
+	await page.waitForTimeout(1500);
+	await shot(page, "light-1440-search");
+	await page.close();
+}
 if (scenario === "rest") {
 	for (const [appearance, width] of [
 		["light", 1440],

@@ -317,7 +317,7 @@ function Workplace() {
 						}}
 					>
 						<Icon name="search" />
-						<span>Jump to a person, channel or thread</span>
+						<span>Search messages or jump to a person, channel or thread</span>
 						<kbd>{"\u2318K"}</kbd>
 					</button>
 					<span className={world?.connected ? "wp-connected" : "wp-offline"}>

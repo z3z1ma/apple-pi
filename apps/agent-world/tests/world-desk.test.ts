@@ -279,7 +279,14 @@ async function openDesk(appearance: "light" | "dark", width = 1440, desk = true)
 						};
 					},
 					status: async () => ({ ok: true, value: null }),
-					searchMessages: async () => ({ ok: true, value: { messages: [] } }),
+					searchMessages: async (request: any) => ({
+						ok: true,
+						value: {
+							messages: Object.values(store)
+								.flat()
+								.filter((item: any) => item.body.toLowerCase().includes(request.query.toLowerCase())),
+						},
+					}),
 				},
 			};
 		},
@@ -355,7 +362,9 @@ test("Command K jumps to a person, a thread or a view", { timeout: 60_000 }, asy
 	try {
 		await page.getByRole("heading", { name: "Front desk", exact: true }).waitFor();
 		await page.keyboard.press("Control+k");
-		const jump = page.getByRole("textbox", { name: "Jump to a person, channel, thread or view" });
+		const jump = page.getByRole("textbox", {
+			name: "Jump to a person, channel, thread or view, or search messages",
+		});
 		await jump.fill("schedules");
 		await shot(page, "switcher-light");
 		await jump.press("Enter");
@@ -364,6 +373,14 @@ test("Command K jumps to a person, a thread or a view", { timeout: 60_000 }, asy
 		await jump.fill("iris");
 		await jump.press("Enter");
 		await page.locator(".wp-conversation-header h1").filter({ hasText: "Iris" }).waitFor();
+		await page.keyboard.press("Control+k");
+		await jump.fill("see the brief");
+		await page
+			.getByRole("list", { name: "Destinations" })
+			.getByText(/^Cora: Iris: build GitHub PR threads/)
+			.waitFor();
+		await jump.press("Enter");
+		await page.getByRole("complementary", { name: "Thread: Add GitHub PR threads" }).waitFor();
 		await page.keyboard.press("Control+k");
 		await jump.press("Escape");
 		expect(await jump.count()).toBe(0);

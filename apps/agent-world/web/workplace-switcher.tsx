@@ -1,4 +1,5 @@
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import type { ConversationMessage } from "../src/communications.js";
 import type { WorldSnapshot } from "../src/world.js";
 import { Icon } from "./workplace-icon.js";
 import { channelName } from "./workplace-names.js";
@@ -17,6 +18,8 @@ export type Item = {
 	target: SwitchTarget;
 	person?: string;
 	icon?: "desk" | "threads" | "bell" | "bookmark";
+	/** Already matched by a search, so the typed words need not appear in its label. */
+	found?: boolean;
 };
 
 function items(world: WorldSnapshot): Item[] {
@@ -141,23 +144,97 @@ export function QuickSwitcher({
 		window.addEventListener("workplace-switcher", onOpen);
 		return () => window.removeEventListener("workplace-switcher", onOpen);
 	}, []);
-	const all = useMemo(() => items(world), [world]);
 	if (!open || !active) return null;
 	return (
-		<Picker
-			label="Jump to"
-			placeholder="Jump to a person, channel, thread or view"
-			items={all}
+		<JumpPicker
+			world={world}
 			close={() => {
 				setOpen(false);
 				if (returnFocus.current?.isConnected) returnFocus.current.focus();
 			}}
-			choose={(item) => {
+			choose={(target) => {
 				setOpen(false);
-				go(item.target);
+				go(target);
 			}}
 		/>
 	);
+}
+
+/** Names first, then messages that mention the words, from every channel and thread the operator can read. */
+function JumpPicker({
+	world,
+	close,
+	choose,
+}: {
+	world: WorldSnapshot;
+	close: () => void;
+	choose: (target: SwitchTarget) => void;
+}) {
+	const all = useMemo(() => items(world), [world]);
+	const [query, setQuery] = useState("");
+	const [found, setFound] = useState<Item[]>([]);
+	useEffect(() => {
+		const words = query.trim();
+		if (words.length < 3) {
+			setFound([]);
+			return;
+		}
+		let current = true;
+		const timer = setTimeout(() => {
+			void window.agentWorld.communications
+				.searchMessages({ query: words, limit: 20 })
+				.then((result) => {
+					if (current)
+						setFound(
+							result.ok
+								? [...result.value.messages].sort((a, b) => b.at - a.at).map((message) => messageItem(world, message))
+								: [],
+						);
+				})
+				.catch(() => {
+					if (current) setFound([]);
+				});
+		}, 250);
+		return () => {
+			current = false;
+			clearTimeout(timer);
+		};
+	}, [query, world]);
+	return (
+		<Picker
+			label="Jump to"
+			placeholder="Jump to a person, channel, thread or view, or search messages"
+			items={[...all, ...found]}
+			close={close}
+			choose={(item) => choose(item.target)}
+			onQuery={setQuery}
+		/>
+	);
+}
+
+/** A message found by search, opening its conversation. */
+function messageItem(world: WorldSnapshot, message: ConversationMessage): Item {
+	const thread = world.workplace?.threads.find((item) => item.id === message.thread);
+	const task =
+		world.workplace?.tasks.find((item) => item.thread === message.thread) ??
+		world.workplace?.workHistory?.find((item) => item.thread === message.thread);
+	const place =
+		message.thread === world.desk?.thread
+			? "Front desk"
+			: thread
+				? `# ${channelName(thread.id, thread.subject, world)}`
+				: (task?.title ?? "Conversation");
+	return {
+		key: `m:${message.id}`,
+		label: `${message.fromName}: ${message.body.replace(/\s+/g, " ").trim()}`,
+		detail: `Message \u00b7 ${place} \u00b7 ${new Date(message.at).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}`,
+		target: thread
+			? { kind: "channel", id: thread.id }
+			: { kind: "thread", id: message.thread, title: task?.title ?? "Conversation" },
+		person: message.from === "operator" || message.from === "harness" ? undefined : message.from,
+		icon: "threads",
+		found: true,
+	};
 }
 
 /** A modal list filtered as the operator types; arrows move, Enter chooses, Escape closes. */
@@ -172,6 +249,7 @@ export function Picker({
 	finish,
 	unchip,
 	footer,
+	onQuery,
 }: {
 	label: string;
 	placeholder: string;
@@ -186,6 +264,8 @@ export function Picker({
 	/** Backspace with nothing typed. */
 	unchip?: () => void;
 	footer?: ReactNode;
+	/** Told each change of the typed words. */
+	onQuery?: (query: string) => void;
 }) {
 	const [query, setQuery] = useState("");
 	const [index, setIndex] = useState(0);
@@ -196,7 +276,9 @@ export function Picker({
 		input.current?.focus();
 	}, []);
 	const needle = query.trim().toLowerCase();
-	const shown = needle ? all.filter((item) => `${item.label} ${item.detail}`.toLowerCase().includes(needle)) : all;
+	const shown = needle
+		? all.filter((item) => item.found || `${item.label} ${item.detail}`.toLowerCase().includes(needle))
+		: all;
 	const pick = (item: Item | undefined) => {
 		if (item) choose(item);
 	};
@@ -222,6 +304,7 @@ export function Picker({
 					onChange={(event) => {
 						setQuery(event.target.value);
 						setIndex(0);
+						onQuery?.(event.target.value);
 					}}
 					onKeyDown={(event) => {
 						if (event.key === "ArrowDown") {
