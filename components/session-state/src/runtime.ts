@@ -338,6 +338,7 @@ export class Runtime {
 		this.checkFriction();
 		void this.pollTmux();
 		void this.cleanPrograms();
+		this.wakeForWaitingMail();
 		return true;
 	}
 
@@ -1684,6 +1685,8 @@ export class Runtime {
 		this.waking.add(person);
 		setImmediate(() => {
 			if (this.db !== db || this.starting.has(person)) return void this.waking.delete(person);
+			// The mail that asked for this wake may have rolled back with its transaction; wake only for mail that waits.
+			if (!this.hasWaitingMail(person)) return void this.waking.delete(person);
 			const live = db
 				.prepare(`select 1 from sessions s join incarnations i on i.session_id = s.id and i.generation = s.generation
 				where s.id = ? and i.ended_at is null and i.process_state in ('alive', 'alive_bridge_lost')`)
@@ -1714,6 +1717,34 @@ export class Runtime {
 				.finally(() => this.waking.delete(person));
 		});
 		return true;
+	}
+
+	private hasWaitingMail(person: string): boolean {
+		return Boolean(
+			this.db!.prepare(
+				"select 1 from commands where session_id = ? and kind = 'mail' and bound_generation is null and stage in ('accepted', 'delivered')",
+			).get(person),
+		);
+	}
+
+	/**
+	 * After a restart, wake every on-call person, or channel listener, whose mail still waits: the wake that the mail
+	 * scheduled before the restart was in memory and is gone.
+	 */
+	private wakeForWaitingMail(): void {
+		const db = this.db!;
+		const rows = db
+			.prepare(
+				"select session_id, command from commands where kind = 'mail' and bound_generation is null and stage in ('accepted', 'delivered')",
+			)
+			.all() as { session_id: string; command: string }[];
+		const onDuty = new Map<string, boolean>();
+		for (const row of rows) {
+			const thread = (JSON.parse(row.command) as { thread?: string }).thread;
+			const listens = thread ? charterOf(db, thread)?.listener === row.session_id : false;
+			onDuty.set(row.session_id, (onDuty.get(row.session_id) ?? false) || listens);
+		}
+		for (const [person, duty] of onDuty) this.wakeOnCall(person, duty);
 	}
 
 	/**

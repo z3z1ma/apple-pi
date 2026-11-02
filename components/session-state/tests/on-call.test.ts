@@ -2,7 +2,18 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "n
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
-import { fakeBridge, query, sendCommand, standInProcess, startRuntime, stopRuntime, tempStateDir } from "./helpers.js";
+import { migrate } from "../src/schema.js";
+import {
+	fakeBridge,
+	query,
+	runtimePid,
+	sendCommand,
+	standInProcess,
+	startRuntime,
+	stopRuntime,
+	tempStateDir,
+} from "./helpers.js";
+import { rewindRecentSchema } from "./historical-schema.js";
 
 const state = tempStateDir();
 const log = join(state.agentDir, "launch.json");
@@ -187,4 +198,56 @@ test("mail to a person at home who is not on call waits without waking it", asyn
 	expect(query(state.dbPath, "select stage from commands where session_id = ? and kind = 'mail'", "sleeper")).toEqual([
 		{ stage: "accepted" },
 	]);
+});
+
+test("after a restart, a channel listener whose mail still waits is woken; other waiting mail still waits", {
+	timeout: 30_000,
+}, async () => {
+	await personAtHome("listener-late", false);
+	const pid = runtimePid(state.pidPath)!;
+	process.kill(pid, "SIGTERM");
+	await vi.waitFor(() => expect(() => process.kill(pid, 0)).toThrow(), { timeout: 5000 });
+	// Mail committed for a listener whose wake was lost with the stopped runtime.
+	const db = new DatabaseSync(state.dbPath);
+	try {
+		db.exec(
+			"insert into threads (id, kind, channel_type, subject, created_by, created_at, listener) values ('topic:late', 'channel', 'topic', 'late', 'operator', 1, 'listener-late')",
+		);
+		db.prepare(
+			`insert into commands (command_id, session_id, generation, bound_generation, kind, command, stage, created_at, updated_at)
+			values ('late-mail', 'listener-late', null, null, 'mail', ?, 'accepted', 1, 1)`,
+		).run(
+			JSON.stringify({
+				kind: "mail",
+				from: "operator",
+				body: "Waiting since before the restart.",
+				sentAt: new Date().toISOString(),
+				thread: "topic:late",
+			}),
+		);
+	} finally {
+		db.close();
+	}
+	await startRuntime(state.socketPath);
+	await vi.waitFor(
+		() => expect(readFileSync(`${log}.commands`, "utf8")).toContain("Waiting since before the restart."),
+		{
+			timeout: 15000,
+		},
+	);
+	expect(readFileSync(log, "utf8")).not.toContain('"sleeper"');
+});
+
+test("the departure-subject migration renames only departure threads", () => {
+	const db = new DatabaseSync(":memory:");
+	migrate(db);
+	db.exec(`insert into events (at, source, session_id, generation, type, data) values (1, 'runtime', 'gone', null, 'person_departed', '{"name":"Gone Person"}');
+		insert into threads (id, kind, subject, created_by, created_at) values ('departure:x', 'mail', 'Departure: gone', 'harness', 1), ('t-other', 'mail', 'Departure: gone', 'operator', 1);`);
+	rewindRecentSchema(db, 43);
+	migrate(db);
+	expect(db.prepare("select id, subject from threads order by id").all()).toEqual([
+		{ id: "departure:x", subject: "Departure: Gone Person" },
+		{ id: "t-other", subject: "Departure: gone" },
+	]);
+	db.close();
 });

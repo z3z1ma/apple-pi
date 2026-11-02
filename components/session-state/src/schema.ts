@@ -407,7 +407,7 @@ const MIGRATIONS = [
 		select json_extract(e.data, '$.name') from events e
 		where e.type = 'person_departed' and e.session_id = substr(threads.subject, 12)
 			and json_extract(e.data, '$.name') is not null order by e.seq desc limit 1)
-	where subject like 'Departure: %' and exists (
+	where id like 'departure:%' and subject like 'Departure: %' and exists (
 		select 1 from events e where e.type = 'person_departed' and e.session_id = substr(threads.subject, 12)
 			and json_extract(e.data, '$.name') is not null);`,
 ];
