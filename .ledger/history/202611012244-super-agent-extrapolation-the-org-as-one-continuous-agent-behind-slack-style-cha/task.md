@@ -1,4 +1,4 @@
-Status: in-progress
+Status: done
 Created: 2026-11-02
 
 # Super-agent extrapolation for apple-pi
@@ -10,3 +10,7 @@ Study the DeepSeek Harness "Super-agent" article against apple-pi's real archite
 ## Outcome
 
 Proposal approved with decisions (proposal.md, section 7). Next: build order step 1, the front desk.
+
+### Assignment 670: Tadhg Marinescu
+
+Proposal written and approved: .ledger/202611012244-super-agent-extrapolation-…/proposal.md (commit f083ccd4). It maps DeepSeek's Super-agent modules onto apple-pi (we already have batching, full duplex, recursive routers via the org tree; we lack external threads, a structural dispatch posture, durable schedules, a progress watchdog, and a thread-first Chat) and gives a build order. Operator decisions recorded: coordinator channel as default composer, full front-desk authority, outbound autonomy except Slack-on-his-behalf, cost irrelevant until outcomes are maximized, Workplace Chat the only surface, no benchmark phase.

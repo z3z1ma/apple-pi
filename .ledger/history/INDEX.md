@@ -153,3 +153,5 @@
 - `.ledger/history/202610301415-first-class-organizational-process-skills/task.md` — done — First-class organizational process skills — Implement agent-selectable organizational processes and accountable management roles over existing people, tasks and communication, with explicit authority and qualified validation.
 
 - `.ledger/history/202610301933-semantic-risk-based-code-review/task.md` — done — Semantic risk-based code review — Plan harness-native semantic review chunks, risk-based depth, independent lenses, exact-artifact sign-off and a visible review queue, grounded in Open Code Review, PR-AF and roboRev.
+
+- `.ledger/history/202611012244-super-agent-extrapolation-the-org-as-one-continuous-agent-behind-slack-style-cha/task.md` — done — Super-agent extrapolation: the org as one continuous agent behind Slack-style Chat — Proposal mapping DeepSeek's Super-agent architecture onto apple-pi's organization, threads and Workplace Chat, with ranked drastic moves and first experiments.
