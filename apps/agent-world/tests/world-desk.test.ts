@@ -447,6 +447,7 @@ test("a message is answered with its quote, and forwarded to a thread or a perso
 		const destination = page.getByRole("textbox", { name: "Forward to a person, channel or thread" });
 		await page.getByRole("textbox", { name: "Add a note" }).fill("For your brief.");
 		await destination.fill("github");
+		await destination.press("Enter");
 		await shot(page, "forward-light");
 		await destination.press("Enter");
 		await page.getByText("Sent to Add GitHub PR threads").waitFor();
@@ -458,10 +459,16 @@ test("a message is answered with its quote, and forwarded to a thread or a perso
 		await page.getByRole("menuitem", { name: "Forward\u2026" }).click();
 		await destination.fill("iris");
 		await destination.press("Enter");
-		await page.getByText("Sent to Iris").waitFor();
-		const [told] = await page.evaluate(() => (window as any).instructions);
-		expect(told).toMatchObject({ id: "iris", kind: "follow_up" });
-		expect(told.text).toMatch(/^> \*\*Cora\*\*/);
+		await destination.fill("milo");
+		await destination.press("Enter");
+		await page.getByRole("button", { name: "Forward", exact: true }).last().click();
+		await page.getByText("Sent to 2 conversations").waitFor();
+		const told = await page.evaluate(() => (window as any).instructions);
+		expect(told).toEqual([
+			expect.objectContaining({ id: "iris", kind: "follow_up" }),
+			expect.objectContaining({ id: "milo", kind: "talk" }),
+		]);
+		expect(told[0].text).toMatch(/^> \*\*Cora\*\*/);
 
 		await composer.pressSequentially("@ir");
 		const people = page.getByRole("list", { name: "People to mention" });

@@ -107,6 +107,50 @@
 	outline-offset: -1px;
 }
 
+.wp-forward-chip {
+	display: inline-flex;
+	flex: none;
+	align-items: center;
+	gap: 4px;
+	max-width: 220px;
+	padding: 2px 4px 2px 8px;
+	border-radius: 6px;
+	background: var(--wp-selected);
+	color: var(--wp-text);
+	font-size: 12px;
+	font-weight: 600;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.wp-app .wp-forward-chip button {
+	width: 18px;
+	height: 18px;
+	padding: 0;
+	border: 0;
+	border-radius: 4px;
+	background: transparent;
+	color: var(--wp-muted);
+	line-height: 1;
+}
+.wp-forward-foot {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 10px 16px;
+	border-top: 1px solid var(--wp-border);
+	font-size: 11px;
+	color: var(--wp-muted);
+}
+.wp-forward-foot kbd {
+	padding: 0 4px;
+	border: 1px solid var(--wp-border);
+	border-bottom-width: 2px;
+	border-radius: 4px;
+	font-family: inherit;
+	font-size: 10px;
+}
 .wp-replying-to {
 	display: flex;
 	align-items: center;

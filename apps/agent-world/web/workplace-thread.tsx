@@ -53,7 +53,7 @@ export function ThreadPane({
 		? (world.characters.find((person) => person.id === head)?.name ??
 			world.dormant?.find((person) => person.id === head)?.name)
 		: undefined;
-	const place = headName ? `${headName}'s team` : `#${channelLabel ?? id}`;
+	const place = listener ? "the front desk" : headName ? `${headName}'s team` : `#${channelLabel ?? id}`;
 	const [searching, setSearching] = useState(false);
 	const [page, setPage] = useState<ConversationPage>();
 	const [unreadAfter, setUnreadAfter] = useState<number>();

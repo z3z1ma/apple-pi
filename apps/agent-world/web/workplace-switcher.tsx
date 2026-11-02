@@ -161,6 +161,10 @@ export function Picker({
 	close,
 	choose,
 	children,
+	chips,
+	finish,
+	unchip,
+	footer,
 }: {
 	label: string;
 	placeholder: string;
@@ -168,6 +172,13 @@ export function Picker({
 	close: () => void;
 	choose: (item: Item) => void;
 	children?: ReactNode;
+	/** Destinations already chosen, shown in the field before the query. */
+	chips?: ReactNode;
+	/** Enter with nothing typed. */
+	finish?: () => void;
+	/** Backspace with nothing typed. */
+	unchip?: () => void;
+	footer?: ReactNode;
 }) {
 	const [query, setQuery] = useState("");
 	const [index, setIndex] = useState(0);
@@ -195,6 +206,7 @@ export function Picker({
 			{children}
 			<label className="wp-switcher-input">
 				<Icon name="search" />
+				{chips}
 				<input
 					ref={input}
 					aria-label={placeholder}
@@ -213,7 +225,14 @@ export function Picker({
 							setIndex((current) => Math.max(current - 1, 0));
 						} else if (event.key === "Enter" && !event.nativeEvent.isComposing) {
 							event.preventDefault();
-							pick(shown[index]);
+							if (finish && (event.metaKey || event.ctrlKey || !query.trim())) finish();
+							else {
+								pick(shown[index]);
+								if (finish) setQuery("");
+							}
+						} else if (event.key === "Backspace" && !query && unchip) {
+							event.preventDefault();
+							unchip();
 						}
 					}}
 				/>
@@ -230,7 +249,13 @@ export function Picker({
 								if (position === index) node?.scrollIntoView({ block: "nearest" });
 							}}
 							onMouseEnter={() => setIndex(position)}
-							onClick={() => pick(item)}
+							onClick={() => {
+								pick(item);
+								if (finish) {
+									setQuery("");
+									input.current?.focus();
+								}
+							}}
 						>
 							{item.person ? (
 								<PersonAvatar id={item.person} name={item.label} interactive={false} />
@@ -246,6 +271,7 @@ export function Picker({
 				))}
 				{!shown.length && <li className="wp-switcher-empty">Nothing matches.</li>}
 			</ul>
+			{footer}
 		</dialog>
 	);
 }

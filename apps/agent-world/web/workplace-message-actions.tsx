@@ -217,9 +217,19 @@ export function ForwardProvider({
 					world={world}
 					message={message}
 					close={close}
-					send={(item, note) => {
+					send={(chosen, note) => {
 						close();
-						send(item.target, item.label, [note.trim(), quote(message)].filter(Boolean).join("\n\n"));
+						const body = [note.trim(), quote(message)].filter(Boolean).join("\n\n");
+						if (chosen.length === 1) send(chosen[0]!.target, chosen[0]!.label, body);
+						else
+							void Promise.all(chosen.map((item) => deliver(world, item.target, body))).then((results) => {
+								const failed = chosen.filter((_, index) => !results[index]!.ok).map((item) => item.label);
+								setToast(
+									failed.length
+										? { text: `Not sent to ${failed.join(", ")}`, failed: true }
+										: { text: `Sent to ${chosen.length} conversations` },
+								);
+							});
 					}}
 				/>
 			)}
@@ -255,17 +265,45 @@ function ForwardDialog({
 	world: WorldSnapshot;
 	message: QuotedMessage;
 	close: () => void;
-	send: (item: Item, note: string) => void;
+	send: (chosen: Item[], note: string) => void;
 }) {
 	const [note, setNote] = useState("");
+	const [chosen, setChosen] = useState<Item[]>([]);
 	const items = useMemo(() => destinations(world), [world]);
+	const finish = () => {
+		if (chosen.length) send(chosen, note);
+	};
 	return (
 		<Picker
 			label="Forward message"
 			placeholder="Forward to a person, channel or thread"
-			items={items}
+			items={items.filter((item) => !chosen.some((picked) => picked.key === item.key))}
 			close={close}
-			choose={(item) => send(item, note)}
+			choose={(item) => setChosen((previous) => [...previous, item])}
+			finish={finish}
+			unchip={() => setChosen((previous) => previous.slice(0, -1))}
+			chips={chosen.map((item) => (
+				<span key={item.key} className="wp-forward-chip">
+					{item.label}
+					<button
+						type="button"
+						aria-label={`Remove ${item.label}`}
+						onClick={() => setChosen((previous) => previous.filter((picked) => picked.key !== item.key))}
+					>
+						{"\u00d7"}
+					</button>
+				</span>
+			))}
+			footer={
+				<footer className="wp-forward-foot">
+					<span>
+						<kbd>Enter</kbd> adds &middot; <kbd>Enter</kbd> again forwards
+					</span>
+					<button type="button" className="wp-primary" disabled={!chosen.length} onClick={finish}>
+						Forward
+					</button>
+				</footer>
+			}
 		>
 			<div className="wp-forward-head">
 				<strong>Forward message</strong>

@@ -64,3 +64,8 @@ Open: the desk keeps a separate row for search / Catch up / Read latest / Action
 
 - V11 Two primary actions still used the purple accent (Connect Jira, Save in Code) after the one-primary-colour decision. **Fixed:** both use the shared green.
 - Org and Code read clean at 1440 and 1100 in both themes; Issues could only be checked signed out (the mirror holds no Jira credentials).
+
+## Round 9: one message to many agents
+
+- U10 Forwarding reached one destination at a time; sending the same context to several agents took repeated dialogs. **Fixed:** Forward collects destinations as chips (Enter adds, Enter on an empty field or the Forward button sends, Backspace removes the last), as Slack's forward does; a toast reports one line for all.
+- V12 A quoted desk message read "#desk". **Fixed:** "the front desk".
