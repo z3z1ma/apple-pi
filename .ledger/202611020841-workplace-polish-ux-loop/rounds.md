@@ -92,3 +92,7 @@ Open: the desk keeps a separate row for search / Catch up / Read latest / Action
 - U14 A task thread opened in a 440 px side rail. **Changed:** Threads is an inbox split: the list stays on the left with its badges and filters, and the chosen thread opens as a full conversation beside it (channel-like header with state, people, reading controls); below 1250 px the conversation replaces the list with a back button. Every entry point (desk strip, Cmd-K, Activity, Later) opens threads there. The side rail is gone.
 - U15 Threads "feel like channels". **Added:** "Add to sidebar" pins a thread as a sidebar row with its unread count, so the few the operator follows closely sit beside channels while the rest stay in Threads.
 - Decisions recorded: Enter while an agent works keeps interrupting (operator); the coordinator's Slack sweep also reads his channels (operator; role updated).
+
+## Round 15: what may ask for attention
+
+- U16 Every unread counted equally; a noisy agent or channel kept the Chat badge lit. **Fixed:** right-click any DM, channel or group row → Mute. A muted conversation stays listed (dimmed) but never shows unread, never counts in the Chat badge, and is skipped by Alt + Shift + arrows. Unmute from the same menu. Kept on the device.

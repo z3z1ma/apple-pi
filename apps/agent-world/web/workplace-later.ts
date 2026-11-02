@@ -70,3 +70,6 @@ export interface PinnedThread {
 	title: string;
 }
 export const pinnedThreads = storedList<PinnedThread>("workplace-pinned-threads");
+
+/** Conversations the operator muted (`dm:<id>`, `channel:<id>`): they stay listed but never count as unread. */
+export const muted = storedList<{ key: string }>("workplace-muted");

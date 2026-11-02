@@ -527,6 +527,9 @@ body.workplace {
 	width: 13px;
 	height: 13px;
 }
+.wp-chat-sidebar [data-muted="true"] {
+	opacity: 0.55;
+}
 .wp-draft-mark {
 	display: inline-grid;
 	flex: none;

@@ -28,6 +28,7 @@ import {
 } from "./workplace-desk.js";
 import { Icon } from "./workplace-icon.js";
 import { WorkplaceIssues } from "./workplace-issues.js";
+import { muted } from "./workplace-later.js";
 import { Mail } from "./workplace-mail.js";
 import { ActionableMessage, ForwardProvider } from "./workplace-message-actions.js";
 import { channelName, useWorkplaceNames } from "./workplace-names.js";
@@ -166,9 +167,10 @@ function Workplace() {
 		history.replaceState(null, "", "?workplace=chat");
 	};
 	const unread = world ? inboxThreads(world).reduce((sum, thread) => sum + thread.unread, 0) : 0;
+	const silenced = new Set(muted.use().map((item) => item.key));
 	const unreadChat = world
-		? world.characters.filter((person) => person.facts?.unseen).length +
-			[...channelUnreads(world).values()].filter((count) => count > 0).length
+		? world.characters.filter((person) => person.facts?.unseen && !silenced.has(`dm:${person.id}`)).length +
+			[...channelUnreads(world)].filter(([id, count]) => count > 0 && !silenced.has(`channel:${id}`)).length
 		: 0;
 	return (
 		<div
@@ -504,7 +506,11 @@ function Chat({
 				lastSeq: 0,
 			})),
 	];
-	const unreads = channelUnreads(world);
+	const mutedKeys = new Set(muted.use().map((item) => item.key));
+	const unreads = new Map(
+		[...channelUnreads(world)].map(([id, count]) => [id, mutedKeys.has(`channel:${id}`) ? 0 : count]),
+	);
+	const unseen = (agent: Character) => !!agent.facts?.unseen && !mutedKeys.has(`dm:${agent.id}`);
 	const desk = world.desk;
 	const selectedChannel = channels.find((thread) => selection?.kind === "channel" && thread.id === selection.id);
 	const needsYou = activityItems(world, {
@@ -524,7 +530,12 @@ function Chat({
 	const placed = (key: string) =>
 		sectionStore.sections.list.some((item) => item.id === sectionStore.sections.placement[key]);
 	const direct = world.characters.filter((agent) => !headIds.has(agent.id) && !placed(`dm:${agent.id}`));
-	const sectionMenu = (key: string) => sectionStore.menuItems(key, (create) => setNaming(() => create));
+	const sectionMenu = (key: string) => [
+		...sectionStore.menuItems(key, (create) => setNaming(() => create)),
+		mutedKeys.has(key)
+			? { label: "Unmute", onSelect: () => muted.remove(key) }
+			: { label: "Mute", onSelect: () => muted.add({ key }) },
+	];
 	const sleeping = world.dormant?.filter((agent) => !agent.retiredAt && !headIds.has(agent.id)) ?? [];
 	const sleeper = world.dormant?.find((agent) => selection?.kind === "dm" && agent.id === selection.id);
 	const person =
@@ -597,6 +608,7 @@ function Chat({
 			onContextMenu={(event) => channelMenu(event, thread)}
 			onKeyDown={(event) => channelMenu(event, thread)}
 			data-unread={(unreads.get(thread.id) ?? 0) > 0}
+			data-muted={mutedKeys.has(`channel:${thread.id}`)}
 			aria-label={`# ${channelName(thread.id, thread.subject, world)}`}
 			aria-description={`${unreads.get(thread.id) ?? 0} unread messages`}
 			key={thread.id}
@@ -620,7 +632,8 @@ function Chat({
 			tabIndex={-1}
 			aria-label={agent.name}
 			data-selected={person?.id === agent.id}
-			data-unread={!!agent.facts?.unseen}
+			data-unread={unseen(agent)}
+			data-muted={mutedKeys.has(`dm:${agent.id}`)}
 			onContextMenu={(event) => personMenu(event, agent.id, sectionMenu(`dm:${agent.id}`))}
 		>
 			<PersonAvatar id={agent.id} name={agent.name} className="wp-person-icon" presence={presenceOf(agent, home)} />
@@ -629,7 +642,7 @@ function Chat({
 				className="wp-dm-link"
 				aria-haspopup="menu"
 				onKeyDown={(event) => personMenu(event, agent.id, sectionMenu(`dm:${agent.id}`))}
-				aria-description={agent.facts?.unseen ? "Unread update" : undefined}
+				aria-description={unseen(agent) ? "Unread update" : undefined}
 				aria-pressed={person?.id === agent.id}
 				onClick={() => openDM(agent.id)}
 			>
@@ -645,7 +658,7 @@ function Chat({
 					<small>{home ? "Away" : (agent.facts?.task?.title ?? agent.facts?.title ?? activity(agent))}</small>
 				</span>
 				{person?.id !== agent.id && conversationPanel.draft(agent.id) && <DraftMark />}
-				{agent.facts?.unseen && <span className="wp-unread-dot" aria-hidden="true" />}
+				{unseen(agent) && <span className="wp-unread-dot" aria-hidden="true" />}
 				{agent.facts?.asking && <b className="wp-needs">?</b>}
 			</button>
 		</fieldset>

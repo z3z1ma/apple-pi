@@ -616,6 +616,26 @@ test("a message saved for later waits in Later and opens where it was", { timeou
 	}
 });
 
+test("a muted conversation stays listed but never counts as unread", { timeout: 60_000 }, async () => {
+	const { page, errors } = await openDesk("light");
+	try {
+		await page.getByRole("heading", { name: "Front desk", exact: true }).waitFor();
+		const direct = page.getByRole("region", { name: "Direct messages", exact: true });
+		await direct.getByRole("group", { name: "Iris", exact: true }).click({ button: "right" });
+		await page.getByRole("menuitem", { name: "Mute", exact: true }).click();
+		await page.evaluate(() => (window as any).unsee("iris"));
+		await page.locator('.wp-dm[data-muted="true"]').waitFor();
+		expect(await page.locator('.wp-dm[data-unread="true"]').count()).toBe(0);
+		expect(await direct.locator(".wp-unread-dot").count()).toBe(0);
+		await direct.getByRole("group", { name: "Iris", exact: true }).click({ button: "right" });
+		await page.getByRole("menuitem", { name: "Unmute", exact: true }).click();
+		await page.locator('.wp-dm[data-unread="true"]').waitFor();
+		expect(errors).toEqual([]);
+	} finally {
+		await page.close();
+	}
+});
+
 test("Without a desk, Chat offers to open one with the root coordinator", { timeout: 60_000 }, async () => {
 	const { page, errors } = await openDesk("light", 1100, false);
 	try {
