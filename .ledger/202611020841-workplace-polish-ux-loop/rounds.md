@@ -12,13 +12,13 @@ Captured live with `live-mirror.ts chat` and `actions`.
 - V1 Message sequence numbers (`#7450`) and a Pin button sat in every message header. **Fixed:** the sequence moved to the time's tooltip; Pin and Copy reference moved to the message menu.
 - V2 Composer key hints were plain text with uneven spacing. **Fixed** in `35470ac7`: keycaps everywhere.
 
-Open from this round:
+## Round 2: Chat chrome (headers, top bar, sidebar) against Slack
 
-- V3 Channel and thread-panel headers spend a second row on search / Catch up / Read latest / Actions; Slack keeps one header row with icon buttons.
-- V4 The top bar is a breadcrumb; Slack puts a search field there. Make it open the switcher (and later message search).
-- V5 Sidebar header takes three lines (eyebrow, name, "2 active sessions"); Slack uses one line with a compose button.
-- V6 Sidebar section counts (Channels 5, Groups 5) and group member counts read like unread badges. Only unread should be a number.
-- V7 Channel preview bar: "Join channel" is plain text and the explanation is internal wording.
+- V3 Channel headers spent a second row on search / Catch up / Read latest / Actions. **Fixed:** they sit in the header row. The thread side panel keeps its row (its title wraps).
+- V4 The top bar was only a breadcrumb. **Fixed:** a centred "Jump to a person, channel or thread  ⌘K" field opens the switcher from any tab.
+- V5 Sidebar header took three lines. **Fixed:** organization name plus "N working · M awake".
+- V6 Section counts and group member counts read like unread badges. **Fixed:** a section shows its count only when collapsed; member counts moved to the tooltip; only unread is a number.
+- V7 Preview bar wording was internal and Join was plain text. **Fixed:** "You are viewing <place>. Join to see its new posts in your unread counts." with a primary Join button; teams read as "<Name>'s team", not a slug.
 
 ## UX backlog (ranked by attention saved per operator action)
 

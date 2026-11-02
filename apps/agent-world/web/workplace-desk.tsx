@@ -684,8 +684,9 @@ export function GroupList({
 								<PersonAvatar key={id} id={id} name={personIn(world, id)?.person.name ?? id} interactive={false} />
 							))}
 						</span>
-						<span className="wp-group-label">{label}</span>
-						{members.length > 2 && <small>{members.length}</small>}
+						<span className="wp-group-label" title={`${members.length} people`}>
+							{label}
+						</span>
 						{unread > 0 && (
 							<b className="wp-unread-count" aria-hidden="true">
 								{unread}
@@ -877,7 +878,7 @@ export function SidebarSection({
 					<Icon name={collapsed ? "chevron-right" : "chevron-down"} />
 					{title}
 				</button>
-				<span>{count}</span>
+				{collapsed && <span>{count}</span>}
 				{tools}
 			</h2>
 			{!collapsed && children}

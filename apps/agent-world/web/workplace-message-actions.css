@@ -7,6 +7,11 @@
 .wp-actionable:focus-within {
 	background: var(--wp-panel);
 }
+.wp-thread-messages > .wp-actionable {
+	margin-inline: -12px;
+	padding-inline: 12px;
+	border-radius: 8px;
+}
 .wp-message-actions {
 	position: absolute;
 	top: -14px;

@@ -244,6 +244,7 @@ body.workplace {
 	flex-direction: column;
 }
 .wp-topbar {
+	position: relative;
 	height: 45px;
 	flex: none;
 	display: flex;
@@ -280,6 +281,45 @@ body.workplace {
 }
 .wp-offline {
 	color: #ffbcb9;
+}
+.wp-app .wp-topbar-search {
+	position: absolute;
+	left: 50%;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	width: min(520px, 42vw);
+	height: 28px;
+	padding: 0 6px 0 10px;
+	border: 1px solid #ffffff26;
+	border-radius: 7px;
+	background: #ffffff1a;
+	color: #e6dceb;
+	font-size: 12px;
+	transform: translateX(-50%);
+}
+.wp-app .wp-topbar-search:hover {
+	background: #ffffff29;
+}
+.wp-topbar-search .wp-icon {
+	width: 14px;
+	height: 14px;
+}
+.wp-topbar-search > span {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-align: left;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.wp-topbar-search kbd {
+	padding: 0 5px;
+	border: 1px solid #ffffff33;
+	border-radius: 4px;
+	font-family: inherit;
+	font-size: 10px;
+	line-height: 16px;
 }
 .wp-surface {
 	flex: 1;
@@ -536,11 +576,32 @@ body.workplace {
 	padding: 24px 12px 0;
 }
 .wp-chat-main {
+	position: relative;
 	flex: 1;
 	min-width: 0;
 	background: var(--wp-bg);
 	display: flex;
 	flex-direction: column;
+}
+/* A channel's reading controls sit in its header row, as Slack keeps one header line. */
+.wp-chat-main > .wp-channel-header {
+	padding-right: 300px;
+}
+.wp-chat-main > .wp-thread.is-embedded:not(.wp-thread-desk) > .wp-thread-header {
+	position: absolute;
+	top: 0;
+	right: 0;
+	z-index: 1;
+	height: 66px;
+	padding: 0 24px;
+	flex-wrap: nowrap;
+	border: 0;
+	background: none;
+}
+.wp-chat-main > .wp-thread.is-embedded:not(.wp-thread-desk) > .wp-thread-header .wp-new-posts {
+	position: absolute;
+	top: 76px;
+	right: 24px;
 }
 .wp-conversation-header {
 	height: 66px;
@@ -901,22 +962,25 @@ body.workplace {
 	margin: 16px 24px 24px;
 }
 .wp-channel-preview {
-	padding: 22px 24px;
+	padding: 18px 24px;
 	border-top: 1px solid var(--wp-border);
 	background: var(--wp-panel);
 	display: flex;
+	flex-direction: column;
 	align-items: center;
-	justify-content: space-between;
-	gap: 24px;
+	gap: 10px;
 }
 .wp-channel-preview h2 {
 	font-size: 15px;
 	font-weight: 650;
 }
 .wp-channel-preview p {
-	font-size: 12px;
+	font-size: 13px;
 	color: var(--wp-muted);
-	margin-top: 6px;
+	text-align: center;
+}
+.wp-channel-preview p strong {
+	color: var(--wp-text);
 }
 .wp-channel-preview button {
 	flex: none;

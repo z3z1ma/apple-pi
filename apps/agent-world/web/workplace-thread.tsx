@@ -42,6 +42,12 @@ export function ThreadPane({
 	/** Hosted in a pane that already names the conversation: no title or participant line of its own. */
 	embedded?: boolean;
 }) {
+	const head = id.startsWith("team:") ? id.slice("team:".length) : undefined;
+	const headName = head
+		? (world.characters.find((person) => person.id === head)?.name ??
+			world.dormant?.find((person) => person.id === head)?.name)
+		: undefined;
+	const place = headName ? `${headName}'s team` : `#${channelLabel ?? id}`;
 	const [searching, setSearching] = useState(false);
 	const [page, setPage] = useState<ConversationPage>();
 	const [unreadAfter, setUnreadAfter] = useState<number>();
@@ -348,7 +354,9 @@ export function ThreadPane({
 		setError("");
 	};
 	return (
-		<article className={`wp-thread${channel ? " wp-thread-channel" : ""}`}>
+		<article
+			className={`wp-thread${channel ? " wp-thread-channel" : ""}${embedded ? " is-embedded" : ""}${listener ? " wp-thread-desk" : ""}`}
+		>
 			<header className="wp-thread-header">
 				{!channel && !embedded && <h1>{thread?.name ?? "Reading conversation..."}</h1>}
 				<p>
@@ -556,7 +564,7 @@ export function ThreadPane({
 						channel={!!channel}
 						unreadAfter={channel ? unreadAfter : undefined}
 						followLink={(author, href, file) => void followLink(author, href, file)}
-						where={channel ? `#${channelLabel ?? page.thread.name}` : (page.thread.name ?? undefined)}
+						where={channel ? place : (page.thread.name ?? undefined)}
 						reply={
 							!locked && page.thread.permissions.post && !page.thread.archived
 								? (message) => {
@@ -714,12 +722,12 @@ export function ThreadPane({
 			{channel && thread && !thread.following && (
 				<div className="wp-channel-preview">
 					<p>
-						Previewing #{channelLabel ?? thread.name}. Access permits reading and posting; joining adds catch-up
-						activity, not alerts.
+						You are viewing <strong>{place}</strong>. Join to see its new posts in your unread counts.
 					</p>
 					{thread.permissions.join && (
 						<button
 							type="button"
+							className="wp-primary"
 							disabled={locked}
 							onClick={() => void run("Join channel", (attempt) => api.communications.join({ attempt, thread: id }))}
 						>

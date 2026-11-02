@@ -298,6 +298,19 @@ function Workplace() {
 												: "Mail"}
 						</span>
 					</strong>
+					<button
+						type="button"
+						className="wp-topbar-search"
+						onClick={() => {
+							setView("chat");
+							history.replaceState(null, "", "?workplace=chat");
+							requestAnimationFrame(() => window.dispatchEvent(new Event("workplace-switcher")));
+						}}
+					>
+						<Icon name="search" />
+						<span>Jump to a person, channel or thread</span>
+						<kbd>{"\u2318K"}</kbd>
+					</button>
 					<span className={world?.connected ? "wp-connected" : "wp-offline"}>
 						{world ? (world.connected ? "Runtime connected" : "Disconnected · last known state") : "Connecting…"}
 					</span>
@@ -596,9 +609,10 @@ function Chat({
 				<div className="wp-chat-layout" ref={layout} style={sidebar.style}>
 					<aside className="wp-chat-sidebar" ref={sidebar.ref}>
 						<div className="wp-sidebar-heading">
-							<span className="wp-eyebrow">WORKSPACE</span>
 							<OrgNameEditor id="workspace" name="Your organization" defaultName="Your organization" heading="h1" />
-							<p>{world.characters.length} active sessions</p>
+							<p>
+								{`${world.characters.filter((person) => person.facts?.status === "working").length} working \u00b7 ${world.characters.length} awake`}
+							</p>
 						</div>
 						<label className="wp-find">
 							<Icon name="search" />
