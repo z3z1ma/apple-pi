@@ -268,9 +268,6 @@
 	color: var(--wp-muted);
 	font-size: 11px;
 }
-.wp-thread-panel .wp-thread-header {
-	padding: 8px 18px;
-}
 .wp-thread-empty {
 	padding: 40px 0;
 	text-align: center;
@@ -738,61 +735,101 @@
 	color: var(--wp-positive);
 }
 
-.wp-thread-panel {
-	width: min(440px, 42%);
-	flex: none;
-	min-height: 0;
+/* Threads as an inbox: the list, and the chosen thread as a full conversation beside it. */
+.wp-threads-split {
 	display: flex;
-	flex-direction: column;
-	border-left: 1px solid var(--wp-border);
-	background: var(--wp-bg);
-}
-.wp-thread-panel > header {
-	display: flex;
-	align-items: flex-start;
-	gap: 10px;
-	padding: 14px 18px;
-	border-bottom: 1px solid var(--wp-border);
-}
-.wp-thread-panel > header > div {
 	flex: 1;
+	min-height: 0;
 	min-width: 0;
 }
-.wp-thread-panel h2 {
-	margin: 3px 0 0;
-	font-size: 15px;
-	line-height: 1.3;
+.wp-threads-split[data-open="true"] > .wp-threads-view {
+	flex: none;
+	width: clamp(300px, 34%, 420px);
+	border-right: 1px solid var(--wp-border);
 }
-.wp-thread-panel > header p {
-	margin-top: 3px;
+.wp-threads-split[data-open="true"] .wp-threads-view .wp-conversation-header p {
+	display: none;
+}
+.wp-threads-split[data-open="true"] .wp-threads-tools {
+	flex-wrap: wrap;
+}
+.wp-threads-split[data-open="true"] .wp-threads-find {
+	flex: 1 1 100%;
+}
+.wp-thread-conversation {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	min-width: 0;
+	min-height: 0;
+}
+.wp-thread-conversation-header .wp-header-person {
+	min-width: 0;
+}
+.wp-thread-conversation-header h1 {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.wp-thread-conversation-header p {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+	overflow: hidden;
+	white-space: nowrap;
+}
+.wp-app .wp-thread-pin {
+	flex: none;
+	height: 28px;
+	padding: 0 10px;
+	border: 1px solid var(--wp-border);
+	border-radius: 6px;
+	background: var(--wp-bg);
+	color: var(--wp-text);
 	font-size: 12px;
-	color: var(--wp-muted);
+	white-space: nowrap;
 }
-.wp-thread-panel > header .wp-header-tools {
-	justify-content: flex-start;
-	margin: 10px 0 0;
+.wp-app .wp-thread-pin[aria-pressed="true"] {
+	background: var(--wp-selected);
 }
-.wp-app .wp-thread-panel > header > button {
+.wp-app .wp-thread-close,
+.wp-app .wp-thread-back {
 	display: grid;
+	flex: none;
 	place-items: center;
-	width: 30px;
-	height: 30px;
+	width: 28px;
+	height: 28px;
 	padding: 0;
 	border: 1px solid var(--wp-border);
 	border-radius: 6px;
-	background: var(--wp-panel);
+	background: var(--wp-bg);
 	color: var(--wp-text);
 }
-.wp-app .wp-thread-panel > header > button:hover {
-	background: var(--wp-hover);
+.wp-app .wp-thread-back {
+	display: none;
 }
-@media (max-width: 900px) {
-	.wp-thread-panel {
-		position: absolute;
-		inset: 0 0 0 auto;
-		width: min(440px, 100%);
-		box-shadow: var(--wp-shadow);
-		z-index: 3;
+.wp-thread-back .wp-icon {
+	transform: rotate(180deg);
+}
+.wp-thread-close .wp-icon,
+.wp-thread-back .wp-icon {
+	width: 14px;
+	height: 14px;
+}
+.wp-pinned-thread > span:first-child .wp-icon {
+	width: 14px;
+	height: 14px;
+}
+@media (max-width: 1250px) {
+	.wp-threads-split[data-open="true"] > .wp-threads-view {
+		display: none;
+	}
+	.wp-app .wp-thread-back {
+		display: grid;
+	}
+	.wp-app .wp-thread-close {
+		display: none;
 	}
 }
 

@@ -30,6 +30,6 @@ Closed in this loop (all live in Agent World):
 
 ## Decisions only the operator can make
 
-- **What Enter does while an agent is working.** Today Enter redirects it at once (interrupts); "Tell it after this" queues. Slack's instinct is that sending never interrupts. Options: keep Enter = redirect; make Enter = queue and Cmd + Enter = redirect.
-- **Threads as channels.** Task threads stay a list in Threads with a side panel. Making every task thread a sidebar channel is Slack-like but floods the sidebar at 30+ in flight; the alternative is "Threads" as Slack's own Threads view (current) plus item 4.
-- **Coordinator's Slack reach.** The sweep reads DMs, mentions and his threads. Should it also read channels he is in but not mentioned in (more noise, more catches)?
+- **Decided: Enter keeps interrupting a working agent.** ~~What Enter does while an agent is working.~~ Today Enter redirects it at once (interrupts); "Tell it after this" queues. Slack's instinct is that sending never interrupts. Options: keep Enter = redirect; make Enter = queue and Cmd + Enter = redirect.
+- **Decided in round 14: an inbox split plus pinned sidebar threads.** ~~Threads as channels.~~ Task threads stay a list in Threads with a side panel. Making every task thread a sidebar channel is Slack-like but floods the sidebar at 30+ in flight; the alternative is "Threads" as Slack's own Threads view (current) plus item 4.
+- **Decided: the sweep also reads his channels.** ~~Coordinator's Slack reach.~~ The sweep reads DMs, mentions and his threads. Should it also read channels he is in but not mentioned in (more noise, more catches)?

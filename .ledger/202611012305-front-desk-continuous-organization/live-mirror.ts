@@ -167,10 +167,10 @@ if (scenario === "chat") {
 		}
 		await page.getByRole("button", { name: /^Threads/ }).click();
 		await page.waitForTimeout(500);
-		const thread = page.locator(".wp-threads-list button").first();
+		const thread = page.locator(".wp-threads-list button").nth(3);
 		if (await thread.count()) {
 			await thread.click();
-			await page.waitForTimeout(1200);
+			await page.waitForTimeout(1500);
 			await shot(page, `${name}-thread-panel`);
 		}
 		await page.close();
@@ -208,7 +208,7 @@ if (scenario === "actions") {
 		await page.waitForTimeout(500);
 		await page.locator(".wp-threads-list button").nth(1).click();
 		await page.waitForTimeout(1200);
-		const post = page.locator(".wp-thread-panel .wp-actionable").first();
+		const post = page.locator(".wp-thread-conversation .wp-actionable").first();
 		if (await post.count()) {
 			await post.hover();
 			await shot(page, `${name}-thread-hover`);

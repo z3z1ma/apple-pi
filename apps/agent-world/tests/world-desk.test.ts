@@ -345,9 +345,16 @@ test("Chat opens at the front desk, and a post there always notifies its coordin
 		const flight = page.getByRole("region", { name: "Work in flight" });
 		await flight.getByRole("button", { name: /2 in flight/ }).click();
 		await flight.getByRole("button", { name: /Add GitHub PR threads/ }).click();
-		const panel = page.getByRole("complementary", { name: "Thread: Add GitHub PR threads" });
+		const panel = page.getByRole("region", { name: "Thread: Add GitHub PR threads" });
 		await panel.getByText("Iris: build GitHub PR threads").waitFor();
+		await page.getByRole("region", { name: "Threads", exact: true }).waitFor();
+		await panel.getByRole("button", { name: "Add to sidebar" }).click();
+		const pinned = page.getByRole("region", { name: "Pinned threads" });
+		await pinned.getByRole("button", { name: /Add GitHub PR threads/ }).waitFor();
 		await shot(page, "thread-light");
+		await page.getByRole("button", { name: /^Front desk/ }).click();
+		await pinned.getByRole("button", { name: /Add GitHub PR threads/ }).click();
+		await panel.getByText("Iris: build GitHub PR threads").waitFor();
 		expect(errors).toEqual([]);
 	} finally {
 		await page.close();
@@ -393,7 +400,7 @@ test("Command K jumps to a person, a thread or a view", { timeout: 60_000 }, asy
 		await jump.fill("schedules");
 		await shot(page, "switcher-light");
 		await jump.press("Enter");
-		await page.getByRole("complementary", { name: "Thread: Review the schedules change" }).waitFor();
+		await page.getByRole("region", { name: "Thread: Review the schedules change" }).waitFor();
 		await page.keyboard.press("Control+k");
 		await jump.fill("iris");
 		await jump.press("Enter");
@@ -405,7 +412,7 @@ test("Command K jumps to a person, a thread or a view", { timeout: 60_000 }, asy
 			.getByText(/^Cora: Iris: build GitHub PR threads/)
 			.waitFor();
 		await jump.press("Enter");
-		await page.getByRole("complementary", { name: "Thread: Add GitHub PR threads" }).waitFor();
+		await page.getByRole("region", { name: "Thread: Add GitHub PR threads" }).waitFor();
 		await page.keyboard.press("Control+k");
 		await jump.press("Escape");
 		expect(await jump.count()).toBe(0);
@@ -531,7 +538,7 @@ test("a message is answered with its quote, and forwarded to a thread or a perso
 		const flight = page.getByRole("region", { name: "Work in flight" });
 		await flight.getByRole("button", { name: /2 in flight/ }).click();
 		await flight.getByRole("button", { name: /Add GitHub PR threads/ }).click();
-		const panel = page.getByRole("complementary", { name: "Thread: Add GitHub PR threads" });
+		const panel = page.getByRole("region", { name: "Thread: Add GitHub PR threads" });
 		await panel.getByText("Iris: build GitHub PR threads").click({ button: "right" });
 		await page.getByRole("menuitem", { name: "Ask the front desk to handle" }).click();
 		await page.getByText("Sent to the front desk").waitFor();

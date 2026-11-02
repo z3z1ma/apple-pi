@@ -86,3 +86,9 @@ Open: the desk keeps a separate row for search / Catch up / Read latest / Action
 
 - U13 A question in Activity opened the agent's DM to answer it. **Fixed:** the most blocking question shows its form inline in Activity (others offer "Answer here"); Send answer goes to the agent as from its DM.
 - V14 Activity's "New" chip stretched across the row (a broad `button > span` rule). **Fixed:** the rule names the text column only.
+
+## Round 14: threads as channels, without a sidebar flood (operator: "the side rail looks like shit and is squished")
+
+- U14 A task thread opened in a 440 px side rail. **Changed:** Threads is an inbox split: the list stays on the left with its badges and filters, and the chosen thread opens as a full conversation beside it (channel-like header with state, people, reading controls); below 1250 px the conversation replaces the list with a back button. Every entry point (desk strip, Cmd-K, Activity, Later) opens threads there. The side rail is gone.
+- U15 Threads "feel like channels". **Added:** "Add to sidebar" pins a thread as a sidebar row with its unread count, so the few the operator follows closely sit beside channels while the rest stay in Threads.
+- Decisions recorded: Enter while an agent works keeps interrupting (operator); the coordinator's Slack sweep also reads his channels (operator; role updated).

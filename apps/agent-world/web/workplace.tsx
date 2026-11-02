@@ -20,9 +20,9 @@ import {
 	GroupList,
 	type OpenThread,
 	OrganizationView,
+	PinnedThreadList,
 	SectionNamer,
 	SidebarSection,
-	ThreadPanel,
 	useActivitySeen,
 	useSections,
 } from "./workplace-desk.js";
@@ -427,8 +427,10 @@ function Chat({
 	const view = selection?.kind ?? "desk";
 	const [openThread, setOpenThread] = useState<OpenThread>();
 	const [channelTools, setChannelTools] = useState<HTMLElement | null>(null);
+	// A task thread opens as a full conversation beside the Threads list, from wherever it was chosen.
 	const showThread = (thread: OpenThread) => {
 		setOpenThread(thread);
+		setSelection({ kind: "threads", id: "threads" });
 		setProfile(undefined);
 	};
 	const [filter, setFilter] = useState("");
@@ -746,6 +748,11 @@ function Chat({
 								<p className="wp-sidebar-note">Discover shared context or create a topic channel.</p>
 							)}
 						</SidebarSection>
+						<PinnedThreadList
+							world={world}
+							selected={view === "threads" ? openThread?.id : undefined}
+							open={showThread}
+						/>
 						<GroupList
 							world={world}
 							groups={channels.filter((thread) => thread.id.startsWith("team:") && !placed(`channel:${thread.id}`))}
@@ -893,8 +900,9 @@ function Chat({
 									drafts={drafts}
 									needsYou={needsYou}
 									unseen={unseenActivity}
-									selectedThread={openThread?.id}
+									thread={openThread}
 									openThread={showThread}
+									closeThread={() => setOpenThread(undefined)}
 									openDM={openDM}
 									markAllRead={() => void markAllRead()}
 									go={go}
@@ -914,9 +922,6 @@ function Chat({
 								setDiscovering(false);
 							}}
 						/>
-					)}
-					{active && openThread && !profile && (
-						<ThreadPanel world={world} thread={openThread} drafts={drafts} onClose={() => setOpenThread(undefined)} />
 					)}
 					{active && profile && (
 						<PersonProfile key={profile.id} {...profile} onClose={closeProfile} resize={profileSize} />

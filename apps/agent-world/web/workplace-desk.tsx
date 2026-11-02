@@ -11,7 +11,7 @@ import type {
 import { QuestionForm } from "./overlay/conversation/question-form.js";
 import { plainLine } from "./overlay/conversation/quote.js";
 import { Icon } from "./workplace-icon.js";
-import { later, useLater } from "./workplace-later.js";
+import { later, pinnedThreads, useLater } from "./workplace-later.js";
 import { PersonAvatar, PersonName, presenceOf, sessionStatus } from "./workplace-people.js";
 import type { SwitchTarget } from "./workplace-switcher.js";
 import { ThreadPane } from "./workplace-thread.js";
@@ -332,13 +332,19 @@ function preview(world: WorldSnapshot, from: string | null, text: string): strin
 /** Slack's Threads: every task conversation, with its latest message; live work first, then the most recent. */
 export function ThreadsView({
 	world,
-	selectedThread,
+	thread,
 	openThread,
+	closeThread,
+	drafts,
 }: {
 	world: WorldSnapshot;
-	selectedThread?: string;
+	/** The thread open beside the list, as a full conversation. */
+	thread?: OpenThread;
 	openThread: (thread: OpenThread) => void;
+	closeThread: () => void;
+	drafts: Map<string, string>;
 }) {
+	const selectedThread = thread?.id;
 	const [filter, setFilter] = useState("");
 	const [scope, setScope] = useState<ThreadFilter>("all");
 	const [bodyMatches, setBodyMatches] = useState<Set<string>>();
@@ -414,92 +420,97 @@ export function ThreadsView({
 		closed: rows.filter((row) => row.closed).length,
 	};
 	return (
-		<section className="wp-threads-view" aria-label="Threads">
-			<header className="wp-conversation-header">
-				<div>
-					<h1>Threads</h1>
-					<p>Every piece of work has a conversation. Reply in one to reach everyone working on it.</p>
+		<div className="wp-threads-split" data-open={!!thread}>
+			<section className="wp-threads-view" aria-label="Threads">
+				<header className="wp-conversation-header">
+					<div>
+						<h1>Threads</h1>
+						<p>Every piece of work has a conversation. Reply in one to reach everyone working on it.</p>
+					</div>
+				</header>
+				<div className="wp-threads-tools">
+					<fieldset className="wp-segmented" aria-label="Which threads">
+						{(
+							[
+								["all", "All"],
+								["live", "In flight"],
+								["closed", "Closed"],
+							] as const
+						).map(([key, label]) => (
+							<button key={key} type="button" aria-pressed={scope === key} onClick={() => setScope(key)}>
+								{label} <span>{counts[key]}</span>
+							</button>
+						))}
+					</fieldset>
+					<label className="wp-find wp-threads-find">
+						<Icon name="search" />
+						<input
+							aria-label="Find a thread"
+							placeholder="Search titles, people and messages"
+							value={filter}
+							onChange={(e) => setFilter(e.target.value)}
+						/>
+					</label>
 				</div>
-			</header>
-			<div className="wp-threads-tools">
-				<fieldset className="wp-segmented" aria-label="Which threads">
-					{(
-						[
-							["all", "All"],
-							["live", "In flight"],
-							["closed", "Closed"],
-						] as const
-					).map(([key, label]) => (
-						<button key={key} type="button" aria-pressed={scope === key} onClick={() => setScope(key)}>
-							{label} <span>{counts[key]}</span>
-						</button>
-					))}
-				</fieldset>
-				<label className="wp-find wp-threads-find">
-					<Icon name="search" />
-					<input
-						aria-label="Find a thread"
-						placeholder="Search titles, people and messages"
-						value={filter}
-						onChange={(e) => setFilter(e.target.value)}
-					/>
-				</label>
-			</div>
-			<ul className="wp-threads-list">
-				{shown.map((row) => (
-					<li key={row.thread}>
-						<button
-							type="button"
-							aria-pressed={selectedThread === row.thread}
-							data-live={row.live}
-							data-unread={(row.last?.unread ?? 0) > 0}
-							onClick={() => openThread({ id: row.thread, title: row.title })}
-						>
-							<span className="wp-threads-avatars" aria-hidden="true">
-								{row.people.slice(0, 4).map((id) => {
-									const found = personIn(world, id);
-									return (
-										<PersonAvatar
-											key={id}
-											id={id}
-											name={found?.person.name ?? "?"}
-											interactive={false}
-											presence={presenceOf(
-												found && !found.away ? (found.person as Character) : undefined,
-												!found || found.away,
-											)}
-										/>
-									);
-								})}
-							</span>
-							<span className="wp-threads-title">
-								<span className="wp-threads-top">
-									<strong>{row.title}</strong>
-									<span className="wp-threads-state" data-state={row.live ? "live" : row.closed ? "closed" : "open"}>
-										{row.live ? "In flight" : row.closed ? "Closed" : "Open"}
-									</span>
+				<ul className="wp-threads-list">
+					{shown.map((row) => (
+						<li key={row.thread}>
+							<button
+								type="button"
+								aria-pressed={selectedThread === row.thread}
+								data-live={row.live}
+								data-unread={(row.last?.unread ?? 0) > 0}
+								onClick={() => openThread({ id: row.thread, title: row.title })}
+							>
+								<span className="wp-threads-avatars" aria-hidden="true">
+									{row.people.slice(0, 4).map((id) => {
+										const found = personIn(world, id);
+										return (
+											<PersonAvatar
+												key={id}
+												id={id}
+												name={found?.person.name ?? "?"}
+												interactive={false}
+												presence={presenceOf(
+													found && !found.away ? (found.person as Character) : undefined,
+													!found || found.away,
+												)}
+											/>
+										);
+									})}
 								</span>
-								<small>
-									{row.last?.preview ? preview(world, row.last.lastFrom, row.last.preview) : "No messages yet"}
-								</small>
-							</span>
-							<span className="wp-threads-meta">
-								<time>{ago(row.latest || null)}</time>
-								{(row.last?.unread ?? 0) > 0 && <b className="wp-mail-unread">{row.last!.unread}</b>}
-								{!row.last?.unread && (row.last?.messages ?? 0) > 0 && (
+								<span className="wp-threads-title">
+									<span className="wp-threads-top">
+										<strong>{row.title}</strong>
+										<span className="wp-threads-state" data-state={row.live ? "live" : row.closed ? "closed" : "open"}>
+											{row.live ? "In flight" : row.closed ? "Closed" : "Open"}
+										</span>
+									</span>
 									<small>
-										{row.last!.messages} {row.last!.messages === 1 ? "reply" : "replies"}
+										{row.last?.preview ? preview(world, row.last.lastFrom, row.last.preview) : "No messages yet"}
 									</small>
-								)}
-							</span>
-						</button>
-					</li>
-				))}
-				{!shown.length && (
-					<li className="wp-sidebar-note">{needle ? "No thread matches." : "No task conversations yet."}</li>
-				)}
-			</ul>
-		</section>
+								</span>
+								<span className="wp-threads-meta">
+									<time>{ago(row.latest || null)}</time>
+									{(row.last?.unread ?? 0) > 0 && <b className="wp-mail-unread">{row.last!.unread}</b>}
+									{!row.last?.unread && (row.last?.messages ?? 0) > 0 && (
+										<small>
+											{row.last!.messages} {row.last!.messages === 1 ? "reply" : "replies"}
+										</small>
+									)}
+								</span>
+							</button>
+						</li>
+					))}
+					{!shown.length && (
+						<li className="wp-sidebar-note">{needle ? "No thread matches." : "No task conversations yet."}</li>
+					)}
+				</ul>
+			</section>
+			{thread && (
+				<ThreadConversation key={thread.id} world={world} thread={thread} drafts={drafts} onClose={closeThread} />
+			)}
+		</div>
 	);
 }
 
@@ -1059,8 +1070,9 @@ export function OrganizationView({
 	drafts,
 	needsYou,
 	unseen,
-	selectedThread,
+	thread,
 	openThread,
+	closeThread,
 	openDM,
 	markAllRead,
 	go,
@@ -1072,10 +1084,12 @@ export function OrganizationView({
 	unseen: Set<string>;
 	markAllRead: () => void;
 	go: (target: SwitchTarget) => void;
-	selectedThread?: string;
+	thread?: OpenThread;
 	openThread: (thread: OpenThread) => void;
+	closeThread: () => void;
 	openDM: (id: string) => void;
 }) {
+	const selectedThread = thread?.id;
 	if (view === "desk")
 		return (
 			<DeskView
@@ -1087,7 +1101,10 @@ export function OrganizationView({
 				openDM={openDM}
 			/>
 		);
-	if (view === "threads") return <ThreadsView world={world} selectedThread={selectedThread} openThread={openThread} />;
+	if (view === "threads")
+		return (
+			<ThreadsView world={world} thread={thread} openThread={openThread} closeThread={closeThread} drafts={drafts} />
+		);
 	if (view === "activity") return <ActivityView items={needsYou} unseen={unseen} markAllRead={markAllRead} />;
 	if (view === "later") return <LaterView go={go} />;
 	return (
@@ -1149,7 +1166,7 @@ function LaterView({ go }: { go: (target: SwitchTarget) => void }) {
 }
 
 /** A task conversation open beside the main view; replies reach everyone working on it. */
-export function ThreadPanel({
+function ThreadConversation({
 	world,
 	thread,
 	drafts,
@@ -1160,28 +1177,100 @@ export function ThreadPanel({
 	drafts: Map<string, string>;
 	onClose: () => void;
 }) {
-	const task = world.workplace?.tasks.find((item) => item.thread === thread.id);
+	const live = world.workplace?.tasks.find((item) => item.thread === thread.id);
+	const past = world.workplace?.workHistory?.find((item) => item.thread === thread.id);
+	const people = live
+		? live.assignees.map((assignee) => assignee.person)
+		: [...new Set((past?.participants ?? []).map((participant) => participant.person))];
+	const state = live ? "live" : past?.closedAt ? "closed" : "open";
 	const [tools, setTools] = useState<HTMLElement | null>(null);
+	const pins = pinnedThreads.use();
+	const pinned = pins.some((item) => item.key === thread.id);
 	return (
-		<aside className="wp-thread-panel" aria-label={`Thread: ${thread.title}`}>
-			<header>
-				<div>
-					<span className="wp-eyebrow">THREAD</span>
-					<h2>{thread.title}</h2>
-					{task && (
-						<p>
-							{task.assignees
-								.map((assignee) => personIn(world, assignee.person)?.person.name ?? assignee.person)
-								.join(", ")}
-						</p>
-					)}
-					<div className="wp-header-tools" ref={setTools} />
+		<section className="wp-thread-conversation" aria-label={`Thread: ${thread.title}`}>
+			<header className="wp-conversation-header wp-thread-conversation-header">
+				<button type="button" className="wp-thread-back" aria-label="Back to all threads" onClick={onClose}>
+					<Icon name="chevron-right" />
+				</button>
+				<div className="wp-header-person">
+					<h1 title={thread.title}>{thread.title}</h1>
+					<p>
+						<span className="wp-threads-state" data-state={state}>
+							{state === "live" ? "In flight" : state === "closed" ? "Closed" : "Open"}
+						</span>
+						{people.map((id, index) => (
+							<span key={id}>
+								<PersonName id={id} name={personIn(world, id)?.person.name ?? id} />
+								{index < people.length - 1 && ", "}
+							</span>
+						))}
+					</p>
 				</div>
-				<button type="button" aria-label="Close thread" title="Close thread" onClick={onClose}>
+				<div className="wp-header-tools" ref={setTools} />
+				<button
+					type="button"
+					className="wp-thread-pin"
+					aria-pressed={pinned}
+					title={pinned ? "Remove from the sidebar" : "Keep in the sidebar, like a channel"}
+					onClick={() =>
+						pinned ? pinnedThreads.remove(thread.id) : pinnedThreads.add({ key: thread.id, title: thread.title })
+					}
+				>
+					{pinned ? "In sidebar" : "Add to sidebar"}
+				</button>
+				<button
+					type="button"
+					className="wp-thread-close"
+					aria-label="Close thread"
+					title="Close thread"
+					onClick={onClose}
+				>
 					<Icon name="close" />
 				</button>
 			</header>
 			<ThreadPane key={thread.id} id={thread.id} world={world} drafts={drafts} embedded toolbarHost={tools} />
-		</aside>
+		</section>
+	);
+}
+
+/** The pinned task threads in the sidebar: each opens in Threads, with its unread count. */
+export function PinnedThreadList({
+	world,
+	selected,
+	open,
+}: {
+	world: WorldSnapshot;
+	selected?: string;
+	open: (thread: OpenThread) => void;
+}) {
+	const pins = pinnedThreads.use();
+	if (!pins.length) return null;
+	const activity = world.workplace?.taskActivity ?? {};
+	return (
+		<SidebarSection id="pinned-threads" title="Pinned threads" count={pins.length}>
+			{pins.map((pin) => {
+				const unread = activity[pin.key]?.unread ?? 0;
+				return (
+					<button
+						key={pin.key}
+						type="button"
+						className="wp-channel wp-pinned-thread"
+						aria-pressed={selected === pin.key}
+						data-unread={unread > 0}
+						onClick={() => open({ id: pin.key, title: pin.title })}
+					>
+						<span>
+							<Icon name="threads" />
+						</span>
+						<span>{pin.title}</span>
+						{unread > 0 && (
+							<b className="wp-unread-count" aria-hidden="true">
+								{unread}
+							</b>
+						)}
+					</button>
+				);
+			})}
+		</SidebarSection>
 	);
 }
