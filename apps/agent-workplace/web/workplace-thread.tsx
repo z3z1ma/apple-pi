@@ -9,8 +9,6 @@ import type {
 	MessageSearchResult,
 } from "../src/communications.js";
 
-type Reaction = NonNullable<ConversationMessage["reactions"]>[number];
-
 import type { WorkplaceThread, WorldSnapshot } from "../src/world.js";
 import { FileReferenceCwd, FileReferenceText } from "./file-references.js";
 import { ReplyingTo } from "./overlay/conversation/actions.js";
@@ -21,7 +19,7 @@ import { commandHints, runCommand } from "./workplace-commands.js";
 import { CommunicationDialog, CommunicationRecipients } from "./workplace-communications.js";
 import { Icon } from "./workplace-icon.js";
 import { useMentions } from "./workplace-mentions.js";
-import { ActionableMessage, ReactionPills, toggledReaction } from "./workplace-message-actions.js";
+import { ActionableMessage, type Reaction, ReactionPills, toggledReaction } from "./workplace-message-actions.js";
 import { PersonAvatar, PersonName } from "./workplace-people.js";
 import type { SwitchTarget } from "./workplace-switcher.js";
 
