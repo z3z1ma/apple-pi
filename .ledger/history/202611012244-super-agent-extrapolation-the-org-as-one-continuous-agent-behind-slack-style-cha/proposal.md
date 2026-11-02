@@ -1,6 +1,6 @@
 # The organization as one continuous agent
 
-A proposal from reading DeepSeek Harness's "Super-agent" article against what apple-pi actually is. It is deliberately bold. Each move says what exists (with the file that proves it) and what is missing.
+A proposal from reading DeepSeek Harness's "Super-agent" article ("Exploring Super-agent Design: Towards a More Autonomous Agent System", <https://x.com/DeepSeekHarness/status/2116857257245987236>; section numbers below cite it) against what apple-pi actually is. It is deliberately bold. Each move says what exists (with the file that proves it) and what is missing.
 
 ## 1. The thesis in one paragraph
 
