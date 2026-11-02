@@ -40,6 +40,7 @@ test("every package role loads with a mandate, a profile, concrete defaults, and
 		"product-manager",
 		"research-lead",
 		"service-owner",
+		"watchdog",
 	]);
 	for (const role of catalog.roles.values()) {
 		expect(role.mandate, role.name).not.toBe("");
