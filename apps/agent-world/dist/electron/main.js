@@ -8926,6 +8926,17 @@ function visibleBundles(directory) {
 		current = parent;
 	}
 }
+/** Each task thread's size, latest message and the operator's unread count, for the Threads list. */
+function readTaskActivity(db) {
+	const rows = db.prepare(`select m.thread_id as thread, count(*) as messages, max(m.at) as lastAt,
+		(select l.sender from thread_messages l where l.thread_id = m.thread_id order by l.seq desc limit 1) as lastFrom,
+		(select substr(l.body, 1, 200) from thread_messages l where l.thread_id = m.thread_id order by l.seq desc limit 1) as preview,
+		count(case when p.participant is not null and m.seq > p.read_up_to and m.sender != 'operator' then 1 end) as unread
+		from thread_messages m join threads t on t.id = m.thread_id and t.kind = 'task'
+		left join thread_participants p on p.thread_id = m.thread_id and p.participant = 'operator'
+		group by m.thread_id`).all();
+	return Object.fromEntries(rows.map(({ thread, ...row }) => [thread, row]));
+}
 function readThreads(db, roots) {
 	if (!hasTable(db, "threads")) return [];
 	const columns = db.prepare("pragma table_info(threads)").all().map((column) => column.name);
@@ -9081,7 +9092,8 @@ function workplaceReader(readTask) {
 			threads: threads.filter((thread) => thread.kind === "meeting" || active.has(thread.headquarters)),
 			escalations,
 			tasks,
-			workHistory
+			workHistory,
+			taskActivity: readTaskActivity(db)
 		};
 	};
 }

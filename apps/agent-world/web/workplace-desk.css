@@ -317,6 +317,88 @@
 	width: 12px;
 	height: 12px;
 }
+.wp-threads-tools {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 10px 24px;
+	border-bottom: 1px solid var(--wp-border);
+}
+.wp-threads-tools .wp-threads-find {
+	flex: 1;
+	width: auto;
+	height: 30px;
+}
+.wp-segmented {
+	display: inline-flex;
+	margin: 0;
+	min-width: 0;
+	padding: 2px;
+	border: 1px solid var(--wp-border);
+	border-radius: 8px;
+	background: var(--wp-panel);
+}
+.wp-app .wp-segmented button {
+	height: 26px;
+	padding: 0 10px;
+	border: 0;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--wp-muted);
+	font-size: 12px;
+	font-weight: 600;
+}
+.wp-app .wp-segmented button[aria-pressed="true"] {
+	background: var(--wp-bg);
+	color: var(--wp-text);
+	box-shadow: 0 1px 2px #0002;
+}
+.wp-segmented button span {
+	margin-left: 3px;
+	font-weight: 500;
+	color: var(--wp-muted);
+}
+.wp-threads-top {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+}
+.wp-threads-top strong {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.wp-threads-state {
+	flex: none;
+	padding: 0 6px;
+	border-radius: 4px;
+	font-size: 10px;
+	font-weight: 700;
+	line-height: 17px;
+	color: var(--wp-muted);
+	background: var(--wp-panel);
+	border: 1px solid var(--wp-border);
+}
+.wp-threads-state[data-state="live"] {
+	color: var(--wp-positive);
+	border-color: color-mix(in srgb, var(--wp-positive) 35%, transparent);
+	background: color-mix(in srgb, var(--wp-positive) 8%, transparent);
+}
+.wp-threads-meta {
+	display: grid;
+	justify-items: end;
+	gap: 3px;
+	flex: none;
+}
+.wp-threads-meta small {
+	font-size: 11px;
+	color: var(--wp-muted);
+}
+.wp-threads-list button[data-unread="true"] strong {
+	font-weight: 800;
+}
 .wp-nav-count {
 	margin-left: auto;
 	font-size: 10px;
@@ -601,10 +683,6 @@
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
-}
-.wp-threads-list button[data-live="true"] .wp-threads-title small {
-	color: var(--wp-positive);
-	font-weight: 600;
 }
 .wp-threads-list time,
 .wp-activity-list time {

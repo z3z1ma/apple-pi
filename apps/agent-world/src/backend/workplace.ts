@@ -40,6 +40,21 @@ function visibleBundles(directory: string): string[] {
 	}
 }
 
+/** Each task thread's size, latest message and the operator's unread count, for the Threads list. */
+function readTaskActivity(db: DatabaseSync): NonNullable<Workplace["taskActivity"]> {
+	const rows = db
+		.prepare(`select m.thread_id as thread, count(*) as messages, max(m.at) as lastAt,
+		(select l.sender from thread_messages l where l.thread_id = m.thread_id order by l.seq desc limit 1) as lastFrom,
+		(select substr(l.body, 1, 200) from thread_messages l where l.thread_id = m.thread_id order by l.seq desc limit 1) as preview,
+		count(case when p.participant is not null and m.seq > p.read_up_to and m.sender != 'operator' then 1 end) as unread
+		from thread_messages m join threads t on t.id = m.thread_id and t.kind = 'task'
+		left join thread_participants p on p.thread_id = m.thread_id and p.participant = 'operator'
+		group by m.thread_id`)
+		.all() as unknown as (NonNullable<Workplace["taskActivity"]>[string] & { thread: string })[];
+	// The operator counts unread only in task threads it joined; everything else is observation, not mail to it.
+	return Object.fromEntries(rows.map(({ thread, ...row }) => [thread, row]));
+}
+
 function readThreads(db: DatabaseSync, roots: Map<string, string>): WorkplaceThread[] {
 	if (!hasTable(db, "threads")) return [];
 	const columns = (db.prepare("pragma table_info(threads)").all() as { name: string }[]).map((column) => column.name);
@@ -232,6 +247,7 @@ export function workplaceReader(readTask: ReturnType<typeof taskReader>) {
 			escalations,
 			tasks,
 			workHistory,
+			taskActivity: readTaskActivity(db),
 		};
 	};
 }

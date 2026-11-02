@@ -1,5 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import type { Character, Desk, DormantAgent, WorkplaceTask, WorldSnapshot } from "../src/world.js";
+import type {
+	Character,
+	Desk,
+	DormantAgent,
+	WorkplaceTask,
+	WorkplaceTaskHistory,
+	WorldSnapshot,
+} from "../src/world.js";
 import { Icon } from "./workplace-icon.js";
 import { PersonAvatar, PersonName, presenceOf, sessionStatus } from "./workplace-people.js";
 import { ThreadPane } from "./workplace-thread.js";
@@ -304,7 +311,17 @@ export function DeskView({
 	);
 }
 
-/** Slack's Threads: every task conversation, live work first, then by latest change. */
+type ThreadFilter = "all" | "live" | "closed";
+
+/** "Name: text", without repeating the name when the text already starts with it ("Ada assigned ..."). */
+function preview(world: WorldSnapshot, from: string | null, text: string): string {
+	const flat = text.replace(/\s+/g, " ");
+	if (!from) return flat;
+	const name = personIn(world, from)?.person.name ?? (from === "harness" ? "Pi" : from === "operator" ? "You" : from);
+	return flat.startsWith(name) ? flat : `${name}: ${flat}`;
+}
+
+/** Slack's Threads: every task conversation, with its latest message; live work first, then the most recent. */
 export function ThreadsView({
 	world,
 	selectedThread,
@@ -315,17 +332,29 @@ export function ThreadsView({
 	openThread: (thread: OpenThread) => void;
 }) {
 	const [filter, setFilter] = useState("");
+	const [scope, setScope] = useState<ThreadFilter>("all");
+	const [bodyMatches, setBodyMatches] = useState<Set<string>>();
 	const rows = useMemo(() => {
+		const activity = world.workplace?.taskActivity ?? {};
 		const live = new Map((world.workplace?.tasks ?? []).map((task) => [task.thread, task]));
-		const history = (world.workplace?.workHistory ?? []).map((task) => ({
-			thread: task.thread,
-			title: task.title,
-			status: task.status,
-			live: live.has(task.thread),
-			people: [...new Set(task.participants.map((participant) => participant.person))],
-			updatedAt: task.updatedAt ?? task.closedAt ?? task.openedAt ?? 0,
-			closed: task.closedAt !== null,
-		}));
+		const temporary = (id: string) =>
+			world.characters.find((person) => person.id === id)?.facts?.temporary ??
+			world.dormant?.find((person) => person.id === id)?.temporary;
+		// Review and program peers' own tasks are machinery, not conversations the operator follows.
+		const machinery = (task: WorkplaceTaskHistory) =>
+			task.participants.length > 0 &&
+			task.participants.every((participant) => participant.outcome === "discarded" || temporary(participant.person));
+		const history = (world.workplace?.workHistory ?? [])
+			.filter((task) => !machinery(task))
+			.map((task) => ({
+				thread: task.thread,
+				title: task.title,
+				status: task.status,
+				live: live.has(task.thread),
+				people: [...new Set(task.participants.map((participant) => participant.person))],
+				updatedAt: task.updatedAt ?? task.closedAt ?? task.openedAt ?? 0,
+				closed: task.closedAt !== null,
+			}));
 		const known = new Set(history.map((row) => row.thread));
 		const extra = (world.workplace?.tasks ?? [])
 			.filter((task) => task.thread && !known.has(task.thread))
@@ -335,31 +364,79 @@ export function ThreadsView({
 				status: task.status,
 				live: true,
 				people: task.assignees.map((assignee) => assignee.person),
-				updatedAt: Date.now(),
+				updatedAt: 0,
 				closed: false,
 			}));
-		return [...extra, ...history].sort(
-			(a, b) => Number(b.live) - Number(a.live) || Number(a.closed) - Number(b.closed) || b.updatedAt - a.updatedAt,
-		);
-	}, [world.workplace]);
-	const shown = rows.filter((row) => row.title.toLowerCase().includes(filter.toLowerCase()));
+		return [...extra, ...history]
+			.map((row) => {
+				const last = activity[row.thread];
+				return { ...row, last, latest: Math.max(row.updatedAt, last?.lastAt ?? 0) };
+			})
+			.sort((a, b) => Number(b.live) - Number(a.live) || Number(a.closed) - Number(b.closed) || b.latest - a.latest);
+	}, [world.workplace, world.characters, world.dormant]);
+	const needle = filter.trim().toLowerCase();
+	useEffect(() => {
+		if (needle.length < 3) {
+			setBodyMatches(undefined);
+			return;
+		}
+		let current = true;
+		const timer = setTimeout(async () => {
+			const result = await api.communications.searchMessages({ query: needle, limit: 200 }).catch(() => undefined);
+			if (current && result?.ok)
+				setBodyMatches(new Set(result.value.messages.map((message: { thread: string }) => message.thread)));
+		}, 250);
+		return () => {
+			current = false;
+			clearTimeout(timer);
+		};
+	}, [needle]);
+	const shown = rows.filter(
+		(row) =>
+			(scope === "all" || (scope === "live" ? row.live : row.closed)) &&
+			(!needle ||
+				`${row.title} ${row.last?.preview ?? ""} ${row.people.map((id) => personIn(world, id)?.person.name ?? "").join(" ")}`
+					.toLowerCase()
+					.includes(needle) ||
+				bodyMatches?.has(row.thread)),
+	);
+	const counts = {
+		all: rows.length,
+		live: rows.filter((row) => row.live).length,
+		closed: rows.filter((row) => row.closed).length,
+	};
 	return (
 		<section className="wp-threads-view" aria-label="Threads">
 			<header className="wp-conversation-header">
 				<div>
 					<h1>Threads</h1>
-					<p>Every piece of work has a conversation. Open one to read it or reply to everyone working on it.</p>
+					<p>Every piece of work has a conversation. Reply in one to reach everyone working on it.</p>
 				</div>
+			</header>
+			<div className="wp-threads-tools">
+				<fieldset className="wp-segmented" aria-label="Which threads">
+					{(
+						[
+							["all", "All"],
+							["live", "In flight"],
+							["closed", "Closed"],
+						] as const
+					).map(([key, label]) => (
+						<button key={key} type="button" aria-pressed={scope === key} onClick={() => setScope(key)}>
+							{label} <span>{counts[key]}</span>
+						</button>
+					))}
+				</fieldset>
 				<label className="wp-find wp-threads-find">
 					<Icon name="search" />
 					<input
 						aria-label="Find a thread"
-						placeholder="Find a thread"
+						placeholder="Search titles, people and messages"
 						value={filter}
 						onChange={(e) => setFilter(e.target.value)}
 					/>
 				</label>
-			</header>
+			</div>
 			<ul className="wp-threads-list">
 				{shown.map((row) => (
 					<li key={row.thread}>
@@ -367,6 +444,7 @@ export function ThreadsView({
 							type="button"
 							aria-pressed={selectedThread === row.thread}
 							data-live={row.live}
+							data-unread={(row.last?.unread ?? 0) > 0}
 							onClick={() => openThread({ id: row.thread, title: row.title })}
 						>
 							<span className="wp-threads-avatars" aria-hidden="true">
@@ -387,17 +465,31 @@ export function ThreadsView({
 								})}
 							</span>
 							<span className="wp-threads-title">
-								<strong>{row.title}</strong>
+								<span className="wp-threads-top">
+									<strong>{row.title}</strong>
+									<span className="wp-threads-state" data-state={row.live ? "live" : row.closed ? "closed" : "open"}>
+										{row.live ? "In flight" : row.closed ? "Closed" : "Open"}
+									</span>
+								</span>
 								<small>
-									{row.live ? "In flight" : row.closed ? "Closed" : "Open"}
-									{row.status ? ` \u00b7 ${row.status}` : ""}
+									{row.last?.preview ? preview(world, row.last.lastFrom, row.last.preview) : "No messages yet"}
 								</small>
 							</span>
-							<time>{ago(row.updatedAt)}</time>
+							<span className="wp-threads-meta">
+								<time>{ago(row.latest || null)}</time>
+								{(row.last?.unread ?? 0) > 0 && <b className="wp-mail-unread">{row.last!.unread}</b>}
+								{!row.last?.unread && (row.last?.messages ?? 0) > 0 && (
+									<small>
+										{row.last!.messages} {row.last!.messages === 1 ? "reply" : "replies"}
+									</small>
+								)}
+							</span>
 						</button>
 					</li>
 				))}
-				{!shown.length && <li className="wp-sidebar-note">No task conversations yet.</li>}
+				{!shown.length && (
+					<li className="wp-sidebar-note">{needle ? "No thread matches." : "No task conversations yet."}</li>
+				)}
 			</ul>
 		</section>
 	);

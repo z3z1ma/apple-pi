@@ -228,6 +228,11 @@ export interface Workplace {
 	tasks: WorkplaceTask[];
 	workHistory?: WorkplaceTaskHistory[];
 	escalations: { thread: string; person: string; headquarters: string }[];
+	/** Per task thread: its size, latest message and the operator's unread count since joining. */
+	taskActivity?: Record<
+		string,
+		{ messages: number; lastAt: number; lastFrom: string | null; preview: string | null; unread: number }
+	>;
 }
 
 export type TaskRead = { ok: true; text: string } | { ok: false; reason: string };
