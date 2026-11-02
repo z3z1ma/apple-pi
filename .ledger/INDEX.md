@@ -19,3 +19,5 @@
 - `.ledger/202610302251-implement-semantic-review-queue-and-reviews/task.md` — in-progress — Implement semantic review queue and /reviews — Implement approved exact-target semantic/risk-based reviews with durable peer execution, replace /work with a single master-detail review queue, and wire native tools, Workplace and sign-off.
 
 - `.ledger/202610312051-unify-git-targets-and-make-change-capture-efficient/task.md` — in-progress — Unify Git targets and make change capture efficient — Use one exact change-target model across review, explanation, sign-off and evidence helpers; share demand-driven Git plumbing and prove performance against native Git without losing fidelity.
+
+- `.ledger/202611012244-super-agent-extrapolation-the-org-as-one-continuous-agent-behind-slack-style-cha/task.md` — in-progress — Super-agent extrapolation: the org as one continuous agent behind Slack-style Chat — Proposal mapping DeepSeek's Super-agent architecture onto apple-pi's organization, threads and Workplace Chat, with ranked drastic moves and first experiments.
