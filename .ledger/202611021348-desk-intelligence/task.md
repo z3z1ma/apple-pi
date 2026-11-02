@@ -34,10 +34,10 @@ All six steps are built, committed and live (runtime schema 48, app relaunched):
 - Rules (`f494f78c`) and notes plus the scout role (`eb4a818d`): built and tested with fixtures, not yet used live.
 - Model: `desk` profile (`117a553e`); the live coordinator runs Terra xhigh. An explicit model choice now persists across restarts (`a48ad891`).
 
-Open:
+- Calendar and email (`d6f83588`) through `gws`: live; calendar `all`, email `direct`. The coordinator triaged the first calendar and email items within a minute.
+- The live `model-profiles.json` has its `desk` entry (Terra xhigh, then Sol high), added after the operator reloaded every session.
 
-- The live `model-profiles.json` gets its `desk` entry only after every running Pi session has reloaded; older code rejects the unknown profile name.
-- The coordinator needs a reload to load the scout instructions and hire the scout; exploration is unproven live.
+Open: the scout is not hired yet (asked the coordinator by mail); exploration and notes are unproven live.
 
 ## Outcome
 
