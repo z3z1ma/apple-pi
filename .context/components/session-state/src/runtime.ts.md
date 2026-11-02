@@ -134,7 +134,7 @@ Verify: components/session-state/tests/cost-history.test.ts
 ## symbol:Runtime.wakeOnCall
 
 Unbound mail to an on-call person at home (`sessions.on_call = 1`, reported by dispatching roles) schedules one wake after the current transaction; the mail itself stays queued and rides the woken session's first run. The `waking` set plus `starting` make a burst wake once. The pane is a live pane on the tmux server the person last ran in, else any live pane, else a headless launch. Retired, departing and temporary identities never wake.
-Why: the front desk must answer the operator when its process has quit; waking inside `preparePost`'s transaction would launch a process for mail that might roll back.
+Why: the desk must answer the operator when its process has quit; waking inside `preparePost`'s transaction would launch a process for mail that might roll back.
 Verify: components/session-state/tests/on-call.test.ts
 
 ## symbol:Runtime.finishWorkCommand

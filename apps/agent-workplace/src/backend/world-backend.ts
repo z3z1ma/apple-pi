@@ -43,7 +43,7 @@ export interface WorldBackend {
 	setAvatarLook(look: string): Promise<CommandResult>;
 	/** Choose the theme; the snapshot shows it at once, and it resolves once the runtime stored it. */
 	setTheme(id: string): Promise<CommandResult>;
-	/** Make a channel and its coordinator the front desk (the runtime's `desk` preference, which the runtime reads too). */
+	/** Make a channel and its coordinator the desk (the runtime's `desk` preference, which the runtime reads too). */
 	setDesk(desk: Desk): Promise<CommandResult>;
 	close(): void;
 }
@@ -88,7 +88,7 @@ const STORE_TIMEOUT_MS = 5000;
  * `{ wings: { [coordinator id]: repository[] }, avatar: look, theme: id }`.
  */
 export const PREFERENCE_KEY = "agent-world";
-/** The `preferences` key of the front desk, `{ thread, person }`; the runtime routes unfollowed outside activity there. */
+/** The `preferences` key of the desk, `{ thread, person }`; the runtime routes unfollowed outside activity there. */
 export const DESK_KEY = "desk";
 
 function readDesk(database: DatabaseSync): Desk | null {
@@ -566,7 +566,7 @@ export function openWorldBackend(paths: { db: string; socket: string }): WorldBa
 				thread: next.thread,
 				listener: next.person,
 				charter:
-					"This is the operator's front desk. Route what he writes here to the right people, reply in under 100 words, and keep him on top of the work.",
+					"This is the operator's desk. Route what he writes here to the right people, reply in under 100 words, and keep him on top of the work.",
 			});
 			desk = next;
 			lastSeq = -1;

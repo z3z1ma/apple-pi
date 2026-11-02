@@ -57,7 +57,7 @@ export function installExternalTools(pi: ExtensionAPI): void {
 			label: "watch_repository",
 			executionMode: "sequential",
 			description:
-				"Managers: watch a GitHub repository for new PRs/issues and failed/recovered default-branch CI. Unfollowed activity is batched to the front desk; follow_external subscribes the person handling a specific item. Give events: [] to stop watching. Uses the host gh sign-in.",
+				"Managers: watch a GitHub repository for new PRs/issues and failed/recovered default-branch CI. Unfollowed activity is batched to the desk; follow_external subscribes the person handling a specific item. Give events: [] to stop watching. Uses the host gh sign-in.",
 			parameters: Type.Object(
 				{
 					repo: Type.String({ minLength: 1, description: "Repository as owner/repo." }),

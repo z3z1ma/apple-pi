@@ -158,7 +158,7 @@ export interface WorldSnapshot {
 	operatorMail?: MailThreadSummary[];
 	/** Open meetings, team channels, live work, and read-only ledger discovery. Mail stays in the inbox/traffic views. */
 	workplace?: Workplace;
-	/** The front desk: the channel the operator talks to the organization in, and the coordinator who listens there. */
+	/** The desk: the channel the operator talks to the organization in, and the coordinator who listens there. */
 	desk?: Desk | null;
 }
 
@@ -537,7 +537,7 @@ export interface AgentWorkplaceApi extends IntegrationsApi {
 	themes(): Promise<ThemeChoice[]>;
 	/** Choose the theme (Settings); kept as a session-state preference across app restarts. */
 	setTheme(id: string): Promise<CommandResult>;
-	/** Make a channel and its listening coordinator the front desk; kept as the runtime's `desk` preference. */
+	/** Make a channel and its listening coordinator the desk; kept as the runtime's `desk` preference. */
 	setDesk?(desk: Desk): Promise<CommandResult>;
 	/**
 	 * Send an instruction from the conversation panel as its session-state command, under the id the UI chose; each

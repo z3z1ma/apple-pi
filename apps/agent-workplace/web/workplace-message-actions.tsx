@@ -32,7 +32,7 @@ function selectionIn(element: HTMLElement | null): string | undefined {
 
 const ForwardContext = createContext<{
 	forward: (message: QuotedMessage) => void;
-	/** Hand the message to the front desk to deal with, when there is a desk. */
+	/** Hand the message to the desk to deal with, when there is a desk. */
 	handOff?: (message: QuotedMessage) => void;
 } | null>(null);
 
@@ -78,7 +78,7 @@ export function ActionableMessage({
 		return [
 			...(onReply ? [{ label: "Reply", onSelect: () => onReply(target) }] : []),
 			...(forward ? [{ label: "Forward\u2026", onSelect: () => forward(target) }] : []),
-			...(handOff ? [{ label: "Ask the front desk to handle", onSelect: () => handOff(target) }] : []),
+			...(handOff ? [{ label: "Ask the desk to handle", onSelect: () => handOff(target) }] : []),
 			...(origin ? [{ label: saved ? "Remove from Later" : "Save for later", onSelect: toggleSaved }] : []),
 			{
 				label: target === message ? "Copy text" : "Copy selection",
@@ -219,7 +219,7 @@ export function ForwardProvider({
 						handOff: (next: QuotedMessage) =>
 							latestSend.current(
 								{ kind: "channel", id: deskThread },
-								"the front desk",
+								"the desk",
 								`Please handle this.\n\n${quote(next)}`,
 								[deskPerson],
 							),

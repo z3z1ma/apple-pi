@@ -26,7 +26,7 @@ function items(world: WorldSnapshot): Item[] {
 	const views: Item[] = [
 		{
 			key: "v:desk",
-			label: "Front desk",
+			label: "Desk",
 			detail: "Talk to the organization",
 			target: { kind: "view", view: "desk" },
 			icon: "desk",
@@ -93,7 +93,7 @@ function items(world: WorldSnapshot): Item[] {
 	return [...views, ...people, ...channels, ...threads];
 }
 
-/** Where a message can be sent: people, the front desk, channels and task threads. */
+/** Where a message can be sent: people, the desk, channels and task threads. */
 export function destinations(world: WorldSnapshot): Item[] {
 	const desk = world.desk?.thread;
 	return [
@@ -101,7 +101,7 @@ export function destinations(world: WorldSnapshot): Item[] {
 			? [
 					{
 						key: `c:${desk}`,
-						label: "Front desk",
+						label: "Desk",
 						detail: "The organization",
 						target: { kind: "channel" as const, id: desk },
 						icon: "desk" as const,
@@ -220,7 +220,7 @@ function messageItem(world: WorldSnapshot, message: ConversationMessage): Item {
 		world.workplace?.workHistory?.find((item) => item.thread === message.thread);
 	const place =
 		message.thread === world.desk?.thread
-			? "Front desk"
+			? "Desk"
 			: thread
 				? `# ${channelName(thread.id, thread.subject, world)}`
 				: (task?.title ?? "Conversation");

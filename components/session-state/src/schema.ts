@@ -371,7 +371,7 @@ const MIGRATIONS = [
 	) strict;
 	create index review_decisions_by_review on review_decisions(review_id, created_at);`,
 	`alter table review_jobs add column additional_work text not null default '[]';`,
-	// A person on call is woken by mail that arrives while it is at home (the coordinator's front desk).
+	// A person on call is woken by mail that arrives while it is at home (the coordinator's desk).
 	`alter table sessions add column on_call integer;`,
 	// Mail the runtime sends on time, once or repeatedly (components/session-state/src/schedules.ts).
 	`create table schedules (

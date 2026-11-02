@@ -71,7 +71,7 @@ function DeskSetup({ world }: { world: WorldSnapshot }) {
 				scopeHead: person,
 				name: "desk",
 				purpose:
-					"The operator's front desk: he tells the organization what he needs here, and the coordinator routes it.",
+					"The operator's desk: he tells the organization what he needs here, and the coordinator routes it.",
 				invite: [person],
 			});
 			if (created.outcome !== "applied" || !created.effect) {
@@ -112,7 +112,7 @@ function DeskSetup({ world }: { world: WorldSnapshot }) {
 			<span className="wp-empty-icon">
 				<Icon name="desk" />
 			</span>
-			<h1>Open the front desk</h1>
+			<h1>Open the desk</h1>
 			<p>
 				Talk to the whole organization in one place. A coordinator listens at the desk, turns what you write into owned
 				work, and tells you when something needs you.
@@ -270,7 +270,7 @@ export function DeskView({
 					<Icon name="desk" />
 				</span>
 				<div className="wp-header-person">
-					<h1>Front desk</h1>
+					<h1>Desk</h1>
 					<p>
 						{listener ? (
 							<>
@@ -1069,7 +1069,7 @@ export function ChatNav({
 	);
 	return (
 		<nav className="wp-chat-nav" aria-label="Workplace views">
-			{item("desk", "Front desk", "desk", deskUnread)}
+			{item("desk", "Desk", "desk", deskUnread)}
 			{item("threads", "Threads", "threads", live)}
 			{item("activity", "Activity", "bell", needsYou)}
 			{item("later", "Later", "bookmark", saved)}

@@ -42,7 +42,7 @@ export function ThreadPane({
 	channelLabel?: string;
 	world: WorldSnapshot;
 	drafts: Map<string, string>;
-	/** A person every channel post notifies, such as the front desk's coordinator. */
+	/** A person every channel post notifies, such as the desk's coordinator. */
 	listener?: string;
 	/** Hosted in a pane that already names the conversation: no title or participant line of its own. */
 	embedded?: boolean;
@@ -55,7 +55,7 @@ export function ThreadPane({
 		? (world.characters.find((person) => person.id === head)?.name ??
 			world.dormant?.find((person) => person.id === head)?.name)
 		: undefined;
-	const place = listener ? "the front desk" : headName ? `${headName}'s team` : `#${channelLabel ?? id}`;
+	const place = listener ? "the desk" : headName ? `${headName}'s team` : `#${channelLabel ?? id}`;
 	const [searching, setSearching] = useState(false);
 	const [page, setPage] = useState<ConversationPage>();
 	const [unreadAfter, setUnreadAfter] = useState<number>();

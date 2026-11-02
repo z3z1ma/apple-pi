@@ -102,9 +102,9 @@ Progress distinguishes pending, preparing, ready, active, blocked, failed and un
 
 ## Chat works with live sessions
 
-### The front desk, Threads and Activity
+### The desk, Threads and Activity
 
-Chat opens at the **Front desk**: a topic channel where the operator talks to the whole organization and a dispatching coordinator listens. Every post there notifies that coordinator, who is on call, so an away coordinator wakes for it. The desk is the runtime's `desk` preference (`{thread, person}`); without one, Chat offers to open the desk with a root coordinator, or to hire one. The desk's channel is not repeated under Channels. Above the conversation, **In flight** shows each task someone holds now; choosing one opens its task thread beside the desk.
+Chat opens at the **Desk**: a topic channel where the operator talks to the whole organization and a dispatching coordinator listens. Every post there notifies that coordinator, who is on call, so an away coordinator wakes for it. The desk is the runtime's `desk` preference (`{thread, person}`); without one, Chat offers to open the desk with a root coordinator, or to hire one. The desk's channel is not repeated under Channels. Above the conversation, **In flight** shows each task someone holds now; choosing one opens its task thread beside the desk.
 
 **Threads** lists every task conversation, live work first, then open, then closed, by latest change; opening one shows it in the side panel, where the operator's reply reaches everyone working on it. **Activity** collects what needs the operator, most blocking first: open questions, escalations, unseen results and unread mail. Conversations group consecutive messages from one author, separate days, and keep search, page size and catch-up behind compact header controls.
 

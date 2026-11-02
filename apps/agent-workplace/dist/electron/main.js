@@ -9741,7 +9741,7 @@ var STORE_TIMEOUT_MS = 5e3;
 * `{ wings: { [coordinator id]: repository[] }, avatar: look, theme: id }`.
 */
 var PREFERENCE_KEY = "agent-world";
-/** The `preferences` key of the front desk, `{ thread, person }`; the runtime routes unfollowed outside activity there. */
+/** The `preferences` key of the desk, `{ thread, person }`; the runtime routes unfollowed outside activity there. */
 var DESK_KEY = "desk";
 function readDesk(database) {
 	const value = parse$2(database.prepare("select value from preferences where key = ?").get(DESK_KEY)?.value);
@@ -10194,7 +10194,7 @@ function openWorldBackend(paths) {
 				kind: "channel_charter",
 				thread: next.thread,
 				listener: next.person,
-				charter: "This is the operator's front desk. Route what he writes here to the right people, reply in under 100 words, and keep him on top of the work."
+				charter: "This is the operator's desk. Route what he writes here to the right people, reply in under 100 words, and keep him on top of the work."
 			});
 			desk = next;
 			lastSeq = -1;

@@ -17,7 +17,7 @@ beforeAll(async () => {
 });
 afterAll(() => browser?.close());
 
-/** Workplace with a front desk, two tasks in flight, a closed one, a person asking, and a fake conversation store. */
+/** Workplace with a desk, two tasks in flight, a closed one, a person asking, and a fake conversation store. */
 async function openDesk(appearance: "light" | "dark", width = 1440, desk = true) {
 	const page = await browser.newPage({ viewport: { width, height: 900 } });
 	const errors: string[] = [];
@@ -319,13 +319,13 @@ async function shot(page: Page, name: string) {
 	await page.screenshot({ path: join(SHOTS, `aw-desk-${name}.png`), animations: "disabled" });
 }
 
-test("Chat opens at the front desk, and a post there always notifies its coordinator", {
+test("Chat opens at the desk, and a post there always notifies its coordinator", {
 	timeout: 60_000,
 }, async () => {
 	const { page, errors } = await openDesk("light");
 	try {
-		await page.getByRole("heading", { name: "Front desk", exact: true }).waitFor();
-		expect(await page.getByRole("button", { name: /^Front desk/ }).getAttribute("aria-pressed")).toBe("true");
+		await page.getByRole("heading", { name: "Desk", exact: true }).waitFor();
+		expect(await page.getByRole("button", { name: /^Desk/ }).getAttribute("aria-pressed")).toBe("true");
 		await page.getByText("Recorded as", { exact: false }).waitFor();
 		expect(await page.getByRole("button", { name: "# desk" }).count()).toBe(0);
 		const composer = page.getByRole("textbox", { name: "Post to channel", exact: true });
@@ -352,7 +352,7 @@ test("Chat opens at the front desk, and a post there always notifies its coordin
 		const pinned = page.getByRole("region", { name: "Pinned threads" });
 		await pinned.getByRole("button", { name: /Add GitHub PR threads/ }).waitFor();
 		await shot(page, "thread-light");
-		await page.getByRole("button", { name: /^Front desk/ }).click();
+		await page.getByRole("button", { name: /^Desk/ }).click();
 		await pinned.getByRole("button", { name: /Add GitHub PR threads/ }).click();
 		await panel.getByText("Iris: build GitHub PR threads").waitFor();
 		expect(errors).toEqual([]);
@@ -364,7 +364,7 @@ test("Chat opens at the front desk, and a post there always notifies its coordin
 test("Threads lists live work before closed work, and Activity puts questions first", { timeout: 60_000 }, async () => {
 	const { page, errors } = await openDesk("dark");
 	try {
-		await page.getByRole("heading", { name: "Front desk", exact: true }).waitFor();
+		await page.getByRole("heading", { name: "Desk", exact: true }).waitFor();
 		await shot(page, "dark");
 		await page.getByRole("button", { name: /^Threads/ }).click();
 		const titles = await page.locator(".wp-threads-list strong").allTextContents();
@@ -398,7 +398,7 @@ test("Threads lists live work before closed work, and Activity puts questions fi
 test("Command K jumps to a person, a thread or a view", { timeout: 60_000 }, async () => {
 	const { page, errors } = await openDesk("light");
 	try {
-		await page.getByRole("heading", { name: "Front desk", exact: true }).waitFor();
+		await page.getByRole("heading", { name: "Desk", exact: true }).waitFor();
 		await page.keyboard.press("Control+k");
 		const jump = page.getByRole("textbox", {
 			name: "Jump to a person, channel, thread or view, or search messages",
@@ -456,7 +456,7 @@ test("Mail shows a message to several people once, with each recipient's deliver
 test("a conversation moves into the operator's own sidebar section and back", { timeout: 60_000 }, async () => {
 	const { page, errors } = await openDesk("light");
 	try {
-		await page.getByRole("heading", { name: "Front desk", exact: true }).waitFor();
+		await page.getByRole("heading", { name: "Desk", exact: true }).waitFor();
 		const direct = page.getByRole("region", { name: "Direct messages", exact: true });
 		await direct.getByRole("group", { name: "Iris", exact: true }).click({ button: "right" });
 		await page.getByRole("menuitem", { name: "Move to a new section\u2026" }).click();
@@ -546,8 +546,8 @@ test("a message is answered with its quote, and forwarded to a thread or a perso
 		await flight.getByRole("button", { name: /Add GitHub PR threads/ }).click();
 		const panel = page.getByRole("region", { name: "Thread: Add GitHub PR threads" });
 		await panel.getByText("Iris: build GitHub PR threads").click({ button: "right" });
-		await page.getByRole("menuitem", { name: "Ask the front desk to handle" }).click();
-		await page.getByText("Sent to the front desk").waitFor();
+		await page.getByRole("menuitem", { name: "Ask the desk to handle" }).click();
+		await page.getByText("Sent to the desk").waitFor();
 		expect((await page.evaluate(() => (window as any).posts)).at(-1)).toMatchObject({
 			thread: "topic:desk",
 			notify: ["cora"],
@@ -564,25 +564,25 @@ test("a DM draft survives a reload with a pencil in the sidebar; Alt + arrows mo
 }, async () => {
 	const { page, errors } = await openDesk("light");
 	try {
-		await page.getByRole("heading", { name: "Front desk", exact: true }).waitFor();
+		await page.getByRole("heading", { name: "Desk", exact: true }).waitFor();
 		const direct = page.getByRole("region", { name: "Direct messages", exact: true });
 		await direct.getByRole("button", { name: /^Iris/ }).click();
 		await page.getByRole("textbox", { name: "Instruct Iris" }).fill("Half a thought about webhooks");
-		await page.getByRole("button", { name: /^Front desk/ }).click();
+		await page.getByRole("button", { name: /^Desk/ }).click();
 		await direct.getByRole("img", { name: "Draft" }).waitFor();
 		await page.reload();
-		await page.getByRole("heading", { name: "Front desk", exact: true }).waitFor();
+		await page.getByRole("heading", { name: "Desk", exact: true }).waitFor();
 		await direct.getByRole("img", { name: "Draft" }).waitFor();
 		await direct.getByRole("button", { name: /^Iris/ }).click();
 		expect(await page.getByRole("textbox", { name: "Instruct Iris" }).inputValue()).toBe(
 			"Half a thought about webhooks",
 		);
 
-		await page.getByRole("button", { name: /^Front desk/ }).click();
+		await page.getByRole("button", { name: /^Desk/ }).click();
 		await page.keyboard.press("Alt+ArrowDown");
 		await page.getByRole("heading", { name: "Threads", exact: true }).waitFor();
 		await page.keyboard.press("Alt+ArrowUp");
-		await page.getByRole("heading", { name: "Front desk", exact: true }).waitFor();
+		await page.getByRole("heading", { name: "Desk", exact: true }).waitFor();
 
 		await page.evaluate(() => (window as any).unsee("milo"));
 		await page.locator('.wp-dm[data-unread="true"]').waitFor();
@@ -611,7 +611,7 @@ test("a message saved for later waits in Later and opens where it was", { timeou
 		await saved.getByText(/Recorded as Add GitHub PR threads/).waitFor();
 		await shot(page, "later-light");
 		await saved.getByText(/Recorded as Add GitHub PR threads/).click();
-		await page.getByRole("heading", { name: "Front desk", exact: true }).waitFor();
+		await page.getByRole("heading", { name: "Desk", exact: true }).waitFor();
 		await page.reload();
 		await page.getByRole("button", { name: /^Later/ }).click();
 		await saved.getByRole("button", { name: "Done" }).click();
@@ -650,7 +650,7 @@ test("slash commands in the desk tell a person something without posting", { tim
 test("a muted conversation stays listed but never counts as unread", { timeout: 60_000 }, async () => {
 	const { page, errors } = await openDesk("light");
 	try {
-		await page.getByRole("heading", { name: "Front desk", exact: true }).waitFor();
+		await page.getByRole("heading", { name: "Desk", exact: true }).waitFor();
 		const direct = page.getByRole("region", { name: "Direct messages", exact: true });
 		const iris = direct.getByRole("group", { name: "Iris", exact: true });
 		await page.evaluate(() => (window as any).unsee("iris"));
@@ -671,10 +671,10 @@ test("a muted conversation stays listed but never counts as unread", { timeout: 
 test("Without a desk, Chat offers to open one with the root coordinator", { timeout: 60_000 }, async () => {
 	const { page, errors } = await openDesk("light", 1100, false);
 	try {
-		await page.getByRole("heading", { name: "Open the front desk", exact: true }).waitFor();
+		await page.getByRole("heading", { name: "Open the desk", exact: true }).waitFor();
 		await shot(page, "setup-light");
 		await page.getByRole("button", { name: "Open the desk with Cora", exact: true }).click();
-		await page.getByRole("heading", { name: "Front desk", exact: true }).waitFor();
+		await page.getByRole("heading", { name: "Desk", exact: true }).waitFor();
 		expect(await page.evaluate(() => (window as any).created)).toMatchObject({
 			scopeHead: "cora",
 			name: "desk",
