@@ -107,12 +107,16 @@ function TerminalView({
 							})
 							.catch(failed);
 				});
+				let refit: ReturnType<typeof setTimeout> | undefined;
 				const fitVisible = () => {
+					clearTimeout(refit);
 					const bounds = element.getBoundingClientRect();
 					if (!shown.current || bounds.width <= 0 || bounds.height <= 0) return;
 					const size = fit.proposeDimensions();
 					if (!size || size.cols <= 0 || size.rows <= 0) return;
 					fit.fit();
+					// FitAddon ignores a fit within 50 ms of its last resize; a size change landing then would be lost for good.
+					if (term.cols !== size.cols || term.rows !== size.rows) refit = setTimeout(fitVisible, 60);
 					if (started) return;
 					started = true;
 					void api
@@ -142,6 +146,7 @@ function TerminalView({
 				const observer = new ResizeObserver(fitVisible);
 				observer.observe(element);
 				cleanup = () => {
+					clearTimeout(refit);
 					observer.disconnect();
 					off();
 					input.dispose();

@@ -231,6 +231,38 @@ if (scenario === "working") {
 		await page.close();
 	}
 }
+if (scenario === "scale") {
+	// How long the busiest lists take to draw on real data, and how many rows they hold.
+	const page = await open(1440, 900, "light");
+	for (const [view, rows] of [
+		["Threads", ".wp-threads-list > li"],
+		["Activity", ".wp-activity-list > li"],
+	] as const) {
+		const ms = await page.evaluate(async (name) => {
+			const button = [...document.querySelectorAll<HTMLButtonElement>("button")].find((item) =>
+				item.textContent?.trim().startsWith(name),
+			);
+			const start = performance.now();
+			button?.click();
+			await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+			return performance.now() - start;
+		}, view);
+		console.log(`${view}: ${await page.locator(rows).count()} rows, drawn in ${ms.toFixed(0)} ms`);
+	}
+	await page.getByRole("button", { name: /^Threads/ }).click();
+	const longTasks = await page.evaluate(
+		() =>
+			new Promise<number[]>((resolve) => {
+				const seen: number[] = [];
+				new PerformanceObserver((list) => {
+					for (const entry of list.getEntries()) seen.push(Math.round(entry.duration));
+				}).observe({ type: "longtask" });
+				setTimeout(() => resolve(seen), 5000);
+			}),
+	);
+	console.log(`long tasks while idle on Threads for 5 s (snapshot every 1 s): ${JSON.stringify(longTasks)}`);
+	await page.close();
+}
 if (scenario === "search") {
 	const page = await open(1440, 900, "light");
 	await page.keyboard.press("Meta+k");

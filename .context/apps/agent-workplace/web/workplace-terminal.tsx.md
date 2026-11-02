@@ -1,6 +1,7 @@
 ## file
 
-The shared Terminal height handle changes only the retained body's CSS variable. Its maximum measures actual editor, tabs and dock chrome while reserving editor space. The existing terminal-host ResizeObserver remains the sole fit/PTY resize path; resizing creates/closes no terminal. Collapsing retains chosen height and session identity/root.
+The shared Terminal height handle changes only the retained body's CSS variable. Its maximum measures actual editor, tabs and dock chrome while reserving editor space. The existing terminal-host ResizeObserver remains the sole fit/PTY resize path; resizing creates/closes no terminal. Ghostty's FitAddon silently ignores `fit()` for 50 ms after its last resize, so a fit that leaves the terminal short of the proposed size retries once that window passes.
+Why: a window resize whose last observer callback landed in that window left the terminal at its old size for good; the central-dock test failed whenever it ran first in a fresh browser. Collapsing retains chosen height and session identity/root.
 Coupled: apps/agent-workplace/web/workplace-resize.tsx
 
 Mount one retained component inside Code's center editor pane. App-tab, repository and panel-visibility changes retain each terminal and its output. The selected repository seeds only a new session; existing root props are immutable and the returned canonical cwd labels that session's seed directory. Full renderer navigation/reload is a different lifetime: main closes old terminals after navigation commits, and the shell's one beforeunload guard warns while this component reports starting/running sessions. Exit tabs do not count as live.
