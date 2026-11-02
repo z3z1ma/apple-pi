@@ -59,8 +59,9 @@
 }
 .wp-issues .wp-issues-primary,
 .wp-issues-confirm .wp-issues-primary {
-	background: var(--wp-accent);
-	color: var(--wp-bg);
+	border-color: var(--wp-green);
+	background: var(--wp-green);
+	color: #fff;
 	font-weight: 600;
 }
 .wp-issues-toolbar {

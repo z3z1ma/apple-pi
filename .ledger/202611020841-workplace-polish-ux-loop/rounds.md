@@ -59,3 +59,8 @@ Open: the desk keeps a separate row for search / Catch up / Read latest / Action
 - M2 The Activity folder showed a heavy "211" badge for a delivery log nobody clears. **Fixed:** a quiet count.
 - M3 The reader spent a row on reading controls. **Fixed:** they sit beside the subject (the shared header slot).
 - M4 At 1100 px the list overflowed: rows clipped their times and subjects without ellipsis. **Fixed:** the row's text column cannot grow past the pane; subjects ellipsize; the search field no longer collapses.
+
+## Round 8: Org, Code, Issues
+
+- V11 Two primary actions still used the purple accent (Connect Jira, Save in Code) after the one-primary-colour decision. **Fixed:** both use the shared green.
+- Org and Code read clean at 1440 and 1100 in both themes; Issues could only be checked signed out (the mirror holds no Jira credentials).

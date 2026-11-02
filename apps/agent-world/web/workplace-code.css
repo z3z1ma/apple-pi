@@ -273,9 +273,9 @@
 	color: var(--wp-muted);
 }
 .wp-code-editor-toolbar .wp-code-save:not(:disabled) {
-	background: var(--wp-accent);
-	color: var(--wp-bg);
-	border-color: var(--wp-accent);
+	background: var(--wp-green);
+	color: #fff;
+	border-color: var(--wp-green);
 }
 .wp-code-editor-host {
 	position: relative;
