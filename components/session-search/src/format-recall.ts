@@ -178,6 +178,7 @@ export const formatTouchedOutput = (touched: TouchedFile[], page = 1, pageSize =
 	if (touched.length === 0) return "No file operations found in session history.";
 	const currentPage = Math.max(1, page);
 	const totalPages = Math.ceil(touched.length / pageSize);
+	if (currentPage > totalPages) return `Page ${currentPage} is beyond ${totalPages} pages (${touched.length} files).`;
 	const files = touched.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 	const header =
 		totalPages > 1

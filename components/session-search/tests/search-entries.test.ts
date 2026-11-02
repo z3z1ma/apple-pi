@@ -52,18 +52,18 @@ describe("searchEntries", () => {
 	// ── regex support ──
 
 	it("supports regex pattern: alternation", () => {
-		const r = searchEntries(entries, messages, "login|auth");
+		const r = searchEntries(entries, messages, "regex:login|auth");
 		expect(r).toHaveLength(3); // "login bug", "auth.ts", "auth module"
 		expect(r.map((h) => h.index).sort()).toEqual([0, 1, 3]);
 	});
 
 	it("supports regex pattern: wildcard", () => {
-		const r = searchEntries(entries, messages, "Read.*auth");
+		const r = searchEntries(entries, messages, "regex:Read.*auth");
 		expect(r).toHaveLength(1);
 		expect(r[0].index).toBe(1);
 	});
 
-	it("falls back to escaped literal for invalid regex", () => {
+	it("treats malformed pattern text literally without an explicit regex prefix", () => {
 		const extraEntries: RenderedEntry[] = [
 			{ index: 0, role: "user", summary: "test (foo" },
 			{ index: 1, role: "assistant", summary: "no match here" },
@@ -78,16 +78,18 @@ describe("searchEntries", () => {
 	});
 
 	it("regex is case-insensitive", () => {
-		const r = searchEntries(entries, messages, "FIX|ROOT");
+		const r = searchEntries(entries, messages, "regex:FIX|ROOT");
 		expect(r).toHaveLength(2);
 	});
 
 	it("rejects catastrophic regex quantifiers without evaluating them", () => {
-		expect(() => searchEntries(entries, messages, "(a+)+$")).toThrow(/Unsafe regex query/);
+		expect(() => searchEntries(entries, messages, "regex:(a+)+$")).toThrow(/Unsafe regex query/);
 	});
 
 	it("rejects ambiguous grouped alternation before native evaluation", () => {
-		expect(() => searchEntries(entries, messages, "(a|aa)(a|aa)(a|aa)z")).toThrow(/grouped patterns are not supported/);
+		expect(() => searchEntries(entries, messages, "regex:(a|aa)(a|aa)(a|aa)z")).toThrow(
+			/grouped patterns are not supported/,
+		);
 	});
 
 	it("bounds wildcard regex work on an adversarial non-match", () => {
@@ -95,7 +97,7 @@ describe("searchEntries", () => {
 		const r = searchEntries(
 			[{ index: 0, role: "user", summary: "large transcript" }],
 			[{ role: "user", content: haystack } as any],
-			"x.*y",
+			"regex:x.*y",
 		);
 		expect(r).toEqual([]);
 	});
@@ -207,9 +209,6 @@ describe("searchEntries", () => {
 				],
 			} as any,
 		];
-		// Query has no regex metacharacters, so it takes the BM25 term path
-		// (the .dev.vars dots would otherwise make the whole query a single
-		// contiguous regex — a separate query-parsing concern).
 		const r = searchEntries(e, m, "DEV_API_KEY grep curl");
 		expect(r).toHaveLength(1);
 		expect(r[0].index).toBe(1);
@@ -353,7 +352,7 @@ describe("searchEntries", () => {
 		expect(hits.map((hit) => hit.turnId)).toEqual([2, 0]);
 	});
 
-	it("hard caps regex search results", () => {
+	it("retains all regex candidates for reachable pagination", () => {
 		// Build many entries that all match the same regex
 		const manyEntries: RenderedEntry[] = Array.from({ length: 100 }, (_, i) => ({
 			index: i,
@@ -368,7 +367,7 @@ describe("searchEntries", () => {
 					content: `document ${i} review`,
 				}) as any,
 		);
-		const r = searchEntries(manyEntries, manyMsgs, "document.*review");
-		expect(r.length).toBeLessThanOrEqual(50); // MAX_SEARCH_RESULTS
+		const r = searchEntries(manyEntries, manyMsgs, "regex:document.*review");
+		expect(r).toHaveLength(100);
 	});
 });

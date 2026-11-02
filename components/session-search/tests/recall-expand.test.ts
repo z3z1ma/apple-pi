@@ -108,7 +108,7 @@ describe("search_session expand + query composition", () => {
 		const { dir, file } = makeSession();
 		try {
 			const tool = register();
-			expect(await invoke(tool, file, { query: "(a+)+$" })).toContain("Unsafe regex query");
+			expect(await invoke(tool, file, { query: "regex:(a+)+$" })).toContain("Unsafe regex query");
 		} finally {
 			rmSync(dir, { recursive: true, force: true });
 		}

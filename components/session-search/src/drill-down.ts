@@ -25,15 +25,24 @@ export const parseEntryQuery = (query: string): { id: string; offset: number; li
 export const expandSourceEntry = (
 	entries: RenderedEntry[],
 	request: { id: string; offset: number; limit: number },
+	messages?: Message[],
 ): string => {
-	const entry = entries.find((candidate) => candidate.entryId === request.id);
+	const sourceOffset = entries.findIndex((candidate) => candidate.entryId === request.id);
+	const entry = entries[sourceOffset];
 	if (!entry) return `Entry entry:${request.id} is not available in the requested scope.`;
 	const lines = entry.summary.split("\n");
 	if (request.offset >= lines.length)
 		return `Offset ${request.offset} is beyond entry:${request.id}'s ${lines.length} lines.`;
 	const end = Math.min(lines.length, request.offset + request.limit);
 	const next = end < lines.length ? `\n\n--- Continue with entry:${request.id}:${end}:${request.limit} ---` : "";
-	return `entry:${request.id} [${entry.sourceKind}] ${entry.timestamp ?? ""}\nLines ${request.offset + 1}-${end} of ${lines.length}\n\n${lines.slice(request.offset, end).join("\n")}${next}`;
+	const message = messages?.[sourceOffset];
+	const payloads =
+		message && entry.index !== undefined
+			? fileOperationsOf(message)
+					.map((operation) => `#${entry.index}:${operation.path}`)
+					.join(", ")
+			: "";
+	return `entry:${request.id} [${entry.sourceKind}] ${entry.timestamp ?? ""}\nLines ${request.offset + 1}-${end} of ${lines.length}${payloads ? `\nPayload line continuation: ${payloads}` : ""}\n\n${lines.slice(request.offset, end).join("\n")}${next}`;
 };
 
 /** Parse `call:<toolCallId>` from an pair receipt address. */
@@ -43,13 +52,14 @@ export const parseCallQuery = (query: string): string | undefined => {
 };
 
 /** Recover a persisted primary tool-result body by toolCallId. */
-export const expandToolCall = (messages: Message[], callId: string): string => {
-	for (const message of messages) {
+export const expandToolCall = (messages: Message[], callId: string, entries?: RenderedEntry[]): string => {
+	for (const [index, message] of messages.entries()) {
 		if (message.role !== "toolResult") continue;
 		if ((message as { toolCallId?: string }).toolCallId !== callId) continue;
 		const body = textOf(message.content);
 		const name = (message as { toolName?: string }).toolName ?? "tool";
-		const heading = `Tool result: ${name}\ncall: ${callId}`;
+		const source = entries?.[index]?.entryId;
+		const heading = `Tool result: ${name} (${message.isError ? "failed" : "returned"})\ncall: ${callId}${source ? `\nRead source with continuation: entry:${source}` : ""}`;
 		const size = Buffer.byteLength(body, "utf8");
 		if (size <= CALL_BODY_CAP) return `${heading}\n\n${body || "(no text output)"}`;
 		return `${heading}\n\n${bytePrefix(body, CALL_BODY_CAP)}\n\n... (${size - CALL_BODY_CAP} bytes omitted; full recall is capped at 50KB)`;
