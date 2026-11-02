@@ -1,6 +1,6 @@
 # Isolated recall experiment
 
-Status: held-out artifact frozen; no candidate implementation or held-out results yet.
+Status: held-out artifact and one-line candidate frozen; private comparisons not yet run.
 
 ## Decision and authority
 
@@ -44,4 +44,10 @@ The baseline and correction-review gate are settled. Held-out artifact frozen at
 
 Six previously unread, non-overlapping histories supply 37 labeled source records: 20 relevant, 17 negative; six records are non-message sources. Exclusion covers 31 prior physical files plus issuing-call and copied-entry identities. All six cutoffs follow compaction; four episodes cross a subsequent cut, two are within already-compacted sessions. Sampling is chronological/purposive, with one child history and shared project context. Labels are single-rater bounded-episode judgments, not complete-transcript gold. One very large positive source was inspected via parsed source bodies and relevant complete functions rather than every unrelated inventory item. Historical search-result bodies and held-out baseline/candidate outputs were unseen during authoring.
 
-The single candidate will test passage-local natural-language scoring: score the same query-term-selected local source window used for display rather than the entire heterogeneous entry. Keep existing role/file fields, BM25 mechanism, recall-echo priority, regex dispatch/order/caps, entry-level top-five contract and exact recovery. Use the existing window rule, with no new weight, quota or query syntax. Rank on raw source lines rather than formatting/omission markers. Prediction: coherent relevant passages may outrank entries whose query terms occur in unrelated sections. Rival result: lexical ambiguity remains and no eligible gain occurs. Candidate code and all results are pending; do not revise it after held-out inspection.
+### Before-results method amendment
+
+The initial passage-local prototype is preserved on the isolated branch as `ca3f1388`. It failed a public coherent-passage page-selection control (101 other focused tests passed); typecheck and scoped formatting passed. Inspection exposed a pre-existing scorer-state problem: RegExp.matchAll starts from the cached global pattern's lastIndex left by preceding test calls. Single occurrences could count as zero, favoring repeated terms and invalidating the intended frequency calculation. This finding came from public fixtures/code, before any private candidate or held-out baseline result.
+
+The passage algorithm and its proposed contract test were withdrawn before private evaluation. The single frozen private-evaluation candidate is `98ec44fa`: production code equals reviewed `0843bfd3` except resetting pattern.lastIndex before termFreq counts matches. A new public first-page test of concise single-occurrence evidence failed on the unchanged scorer, then passed with the reset; 102 focused tests in 15 files and Node/web typecheck pass. No new weights, query syntax, windows or source types are introduced; regex discovery, echo priority, page/recovery interfaces remain unchanged.
+
+Prediction: correct independent frequency counting may recover one-off evidence previously lost behind repetition. Rival result: lexical ambiguity or display limitations dominate and the candidate fails the quality gates. This comparison cannot attribute an effect to passage-local ranking: none remains in the candidate. No private comparison has run yet; freeze this candidate before evaluating both sets, and retain the same success/stop rule.
