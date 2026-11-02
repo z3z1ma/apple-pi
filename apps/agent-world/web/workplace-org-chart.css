@@ -165,17 +165,29 @@
 	padding: 6px 10px;
 	border-top: 1px solid var(--wp-border);
 }
-.wp-org-team-actions > button {
+.wp-app .wp-org .wp-org-team-actions > button {
 	display: flex;
 	align-items: center;
-	justify-content: space-between;
-	flex: 1;
-	gap: 8px;
-	padding: 8px;
+	gap: 6px;
+	height: 30px;
+	padding: 0 10px;
+	border: 0;
+	border-radius: 6px;
 	color: var(--wp-text);
 	background: transparent;
 	text-align: left;
-	font-size: 12px;
+	font-size: 12.5px;
+	font-weight: 600;
+}
+.wp-app .wp-org .wp-org-team-actions > button:hover:not(:disabled) {
+	background: var(--wp-hover);
+}
+.wp-app .wp-org .wp-org-team-actions > button + button {
+	margin-left: auto;
+}
+.wp-app .wp-org .wp-org-team-actions > button:disabled {
+	color: var(--wp-muted);
+	opacity: 0.7;
 }
 .wp-org .wp-org-chart-viewport {
 	overflow: auto;
@@ -318,7 +330,11 @@
 }
 .wp-org-directory input[type="checkbox"] {
 	width: auto;
+	margin: 0;
 	accent-color: var(--wp-accent);
+}
+.wp-org-directory :is(th, td):first-child {
+	text-overflow: clip;
 }
 .wp-org-directory-toolbar {
 	display: flex;
