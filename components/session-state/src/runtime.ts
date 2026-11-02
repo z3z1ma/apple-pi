@@ -76,6 +76,7 @@ import { recordLink, resolveLink } from "./links.js";
 import { discardProgramPeople, programDescendants, temporaryCallers } from "./program-peers.js";
 import { reviewScope } from "./review-attempt.js";
 import { ReviewJobs, type ReviewNotify } from "./review-jobs.js";
+import { cancelSchedule, createSchedule, dueSchedules, markFired } from "./schedules.js";
 import { migrate } from "./schema.js";
 import { HARNESS, markRead, nameOf, OPERATOR, participateIn, postToThread, type ThreadPost } from "./threads.js";
 import {
@@ -321,6 +322,7 @@ export class Runtime {
 		this.timer = setInterval(() => {
 			this.checkLiveness();
 			this.checkFriction();
+			this.fireSchedules();
 		}, 1000);
 		this.tmuxTimer = setInterval(() => void this.pollTmux(), TMUX_POLL_MS);
 		this.checkLiveness();
@@ -767,6 +769,11 @@ export class Runtime {
 			}
 			return;
 		}
+		if (command.kind === "schedule" || command.kind === "unschedule") {
+			receipt("accepted");
+			this.scheduleCommand(commandId, sessionId, command, now);
+			return;
+		}
 		if (
 			command.kind === "task_opened" ||
 			command.kind === "task_moved" ||
@@ -809,15 +816,7 @@ export class Runtime {
 			return;
 		}
 		if (waits) {
-			const woken = current && this.wakeOnCall(sessionId);
-			receipt(
-				"accepted",
-				woken
-					? "on call; waking it for this mail"
-					: current
-						? "not running; the mail waits until it opens"
-						: "unknown; the mail waits until a session with this id opens",
-			);
+			receipt("accepted", this.waitingMail(sessionId, Boolean(current)));
 			return;
 		}
 		receipt("accepted");
@@ -1194,6 +1193,70 @@ export class Runtime {
 			{ thread: `departure:${commandId}`, threadKind: "mail", subject: `Departure: ${person}`, to, body },
 			Date.now(),
 		);
+	}
+
+	/** Why unbound mail for a session that is not connected waits, waking it first when it is on call. */
+	private waitingMail(sessionId: string, known: boolean): string {
+		if (!known) return "unknown; the mail waits until a session with this id opens";
+		return this.wakeOnCall(sessionId)
+			? "on call; waking it for this mail"
+			: "not running; the mail waits until it opens";
+	}
+
+	private scheduleCommand(
+		commandId: string,
+		sender: string,
+		command: Extract<Command, { kind: "schedule" | "unschedule" }>,
+		now: number,
+	): void {
+		try {
+			if (command.kind === "schedule") createSchedule(this.db!, commandId, sender, command, now);
+			else cancelSchedule(this.db!, command.id, sender, OPERATOR, now);
+			this.setCommandStage(commandId, "applied");
+		} catch (error) {
+			this.setCommandStage(commandId, "failed", (error as Error).message);
+		}
+	}
+
+	/**
+	 * Send every due schedule as a harness post on the schedule's own thread, then move it on. The message id carries
+	 * the due time, so a crash between the post and the move cannot send one firing twice.
+	 */
+	private fireSchedules(): void {
+		const db = this.db;
+		if (!db) return;
+		const now = Date.now();
+		for (const schedule of dueSchedules(db, now)) {
+			let pending: ReturnType<Runtime["preparePost"]> | undefined;
+			try {
+				this.atomically(() => {
+					const id = `schedule:${schedule.id}:${schedule.next_at}`;
+					const live = db
+						.prepare("select 1 from sessions where id = ? and kind = 'root' and retired_at is null")
+						.get(schedule.target);
+					if (live && !db.prepare("select 1 from thread_messages where id = ?").get(id))
+						pending = this.preparePost(
+							id,
+							HARNESS,
+							{
+								thread: `schedule:${schedule.id}`,
+								threadKind: "mail",
+								subject: `Scheduled by ${nameOf(db, schedule.owner)}`,
+								to: [schedule.target],
+								body: schedule.body,
+							},
+							now,
+						);
+					if (live) markFired(db, schedule, now);
+					else db.prepare("update schedules set cancelled_at = ? where id = ?").run(now, schedule.id);
+				});
+			} catch (error) {
+				console.error(`schedule ${schedule.id} failed and stopped: ${(error as Error).message}`);
+				db.prepare("update schedules set cancelled_at = ? where id = ?").run(now, schedule.id);
+				continue;
+			}
+			for (const { target, id, mail } of pending?.deliveries ?? []) this.dispatch(target, id, mail);
+		}
 	}
 
 	/** Review milestones go to the owner as ordinary mail on one thread per review; replays add nothing. */

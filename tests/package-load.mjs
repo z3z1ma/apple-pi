@@ -302,6 +302,7 @@ try {
 				extension.tools.has("finish_task") &&
 				extension.tools.has("promote_task") &&
 				extension.tools.has("link") &&
+				extension.tools.has("schedule_mail") &&
 				extension.tools.has("economics") &&
 				extension.tools.has("predictions") &&
 				!extension.tools.has("fitness") &&

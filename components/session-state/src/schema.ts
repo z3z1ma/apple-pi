@@ -373,6 +373,19 @@ const MIGRATIONS = [
 	`alter table review_jobs add column additional_work text not null default '[]';`,
 	// A person on call is woken by mail that arrives while it is at home (the coordinator's front desk).
 	`alter table sessions add column on_call integer;`,
+	// Mail the runtime sends on time, once or repeatedly (components/session-state/src/schedules.ts).
+	`create table schedules (
+		id text primary key,
+		owner text not null,
+		target text not null,
+		body text not null,
+		next_at integer not null,
+		every_ms integer,
+		created_at integer not null,
+		cancelled_at integer,
+		last_fired_at integer
+	) strict;
+	create index schedules_due on schedules(cancelled_at, next_at);`,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

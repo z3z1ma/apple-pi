@@ -91,6 +91,36 @@ test("mail to an on-call person at home wakes it once and the mail reaches it", 
 	expect(JSON.parse(launches[0]!)).toEqual(expect.arrayContaining(["--session-id", "desk"]));
 });
 
+test("a schedule mails its target on time, repeats, survives as a thread, and stops when cancelled", async () => {
+	await personAtHome("night-desk", true);
+	const created = await sendCommand(
+		state.socketPath,
+		"night-desk",
+		{ kind: "schedule", to: "night-desk", body: "Sweep the board.", firstAt: Date.now(), everyMs: 60_000 },
+		{ commandId: "sweep" },
+	);
+	expect(created.at(-1)).toEqual({ stage: "applied" });
+	await vi.waitFor(
+		() => {
+			expect(readFileSync(`${log}.commands`, "utf8")).toContain("Sweep the board.");
+		},
+		{ timeout: 10000 },
+	);
+	const [row] = query<{ next_at: number; last_fired_at: number }>(
+		state.dbPath,
+		"select next_at, last_fired_at from schedules where id = 'sweep'",
+	);
+	expect(row!.next_at - row!.last_fired_at).toBeGreaterThan(50_000);
+	expect(query(state.dbPath, "select subject from threads where id = 'schedule:sweep'")).toEqual([
+		{ subject: "Scheduled by night-desk" },
+	]);
+	const stopped = await sendCommand(state.socketPath, "operator", { kind: "unschedule", id: "sweep" });
+	expect(stopped.at(-1)).toEqual({ stage: "applied" });
+	expect(query(state.dbPath, "select cancelled_at is not null as done from schedules where id = 'sweep'")).toEqual([
+		{ done: 1 },
+	]);
+});
+
 test("mail to a person at home who is not on call waits without waking it", async () => {
 	await personAtHome("sleeper", false);
 	await sendCommand(state.socketPath, "sleeper", {

@@ -151,6 +151,10 @@ export type Command =
 	| WorkCommand
 	| ReviewCommand
 	| CommunicationCommand
+	/** Send `body` to `to` at `firstAt` and, with `everyMs`, repeatedly after; the schedule's id is the command id. */
+	| { kind: "schedule"; to: string; body: string; firstAt: number; everyMs?: number }
+	/** Stop a schedule the sender owns or receives (the operator can stop any). */
+	| { kind: "unschedule"; id: string }
 	/** Record a link from the sending session; its id is the command id. */
 	| ({ kind: "link_record" } & LinkRecord)
 	/** Resolve a link once, optionally with a word such as `accepted` or `rejected`. */

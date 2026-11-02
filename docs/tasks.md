@@ -60,6 +60,8 @@ Foreground, background, and scheduled commands, and the operator's own `!` comma
 
 ### `remind_me`
 
+Reminders live in the session and end with it; for mail that must survive restarts, repeat, or reach another person, use the runtime's `schedule_mail` ([session state](session-state.md#schedules)).
+
 Arrange exactly one prompt or command:
 
 ```json

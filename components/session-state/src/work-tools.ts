@@ -11,10 +11,11 @@ import { areasOf, communicationIn, expertsOn, type Scope, type Window, waitsIn, 
 import { ENTITY_KINDS, type Entity, type Link, relations } from "./links.js";
 import type { Command } from "./protocol.js";
 import { compareScenarios, predictions, type Scenario, scenarioSchema } from "./scenarios.js";
+import { activeSchedules } from "./schedules.js";
 import { goalText, rootOf, taskIdOf, type WorkAction, type WorkTask, withWork } from "./work.js";
 import { bottlenecksIn, progressIn } from "./work-inspection.js";
 
-const PERSON_TASK_TOOLS = ["take_task", "focus", "finish_task", "promote_task", "link"];
+const PERSON_TASK_TOOLS = ["take_task", "focus", "finish_task", "promote_task", "link", "schedule_mail"];
 const INSIGHT_TOOLS = ["economics", "predictions", "experience", "bottlenecks", "progress", "coordination"];
 const UNITS: Record<string, number> = { m: 60_000, h: 3_600_000, d: 86_400_000 };
 
@@ -713,6 +714,78 @@ export function installWork(pi: ExtensionAPI): void {
 				{ additionalProperties: false },
 			),
 			execute: (_id, args, signal, _update, ctx) => change(ctx, { action: "promote", ...args }, signal),
+		}),
+	);
+	pi.registerTool(
+		defineTool({
+			name: "schedule_mail",
+			executionMode: "sequential",
+			label: "schedule_mail",
+			description:
+				"Have the runtime mail a person (yourself by default) at a later time, once or repeatedly. Unlike remind_me, a schedule survives restarts and wakes an on-call person who is at home; each firing arrives as mail on the schedule's own thread. Give body and at to create; cancel with an id; give neither to list your schedules.",
+			promptSnippet: "Mail someone (or yourself) at a later time, once or repeatedly, durably.",
+			parameters: Type.Object(
+				{
+					body: Type.Optional(Type.String({ minLength: 1, description: "The message to send." })),
+					at: Type.Optional(
+						Type.String({ minLength: 1, description: "When: a delay such as 30m, 2h or 1d, or a date and time." }),
+					),
+					every: Type.Optional(
+						Type.String({ minLength: 2, description: "Repeat at this interval after the first time: 15m, 1h, 1d." }),
+					),
+					to: Type.Optional(Type.String({ minLength: 1, description: "A person's name or id; yourself by default." })),
+					cancel: Type.Optional(Type.String({ minLength: 1, description: "Stop the schedule with this id." })),
+				},
+				{ additionalProperties: false },
+			),
+			execute: async (_id, args, signal, _update, ctx) => {
+				const self = ctx.sessionManager.getSessionId();
+				const now = Date.now();
+				const span = (text: string) => {
+					const match = text.trim().match(/^(\d+(?:\.\d+)?)\s*([mhd])$/);
+					return match ? Number(match[1]) * UNITS[match[2]] : undefined;
+				};
+				if (args.cancel) {
+					const receipt = await sendCommand(self, { kind: "unschedule", id: args.cancel }, { signal });
+					if (receipt.stage === "failed") throw new Error(receipt.reason);
+					return { content: [{ type: "text" as const, text: `Stopped schedule ${args.cancel}.` }], details: {} };
+				}
+				if (!args.body) {
+					const rows = withWork((db) => activeSchedules(db, self)) ?? [];
+					const text = rows.length
+						? rows
+								.map(
+									(row) =>
+										`${row.id}: to ${row.target === self ? "you" : row.target} at ${new Date(row.next_at).toISOString()}${row.every_ms ? `, every ${row.every_ms / 60_000}m` : ""}: ${row.body.slice(0, 80)}`,
+								)
+								.join("\n")
+						: "No schedules.";
+					return { content: [{ type: "text" as const, text }], details: { schedules: rows } };
+				}
+				if (!args.at) throw new Error("Give at: a delay such as 30m, or a date and time.");
+				const delay = span(args.at);
+				const firstAt = delay !== undefined ? now + delay : Date.parse(args.at);
+				if (Number.isNaN(firstAt)) throw new Error(`Give at as 30m, 2h, 1d, or a date (got "${args.at}")`);
+				const everyMs = args.every ? span(args.every) : undefined;
+				if (args.every && everyMs === undefined) throw new Error(`Give every as 15m, 1h or 1d (got "${args.every}")`);
+				const to = args.to ? resolvePerson(self, args.to) : self;
+				const commandId = randomUUID();
+				const receipt = await sendCommand(
+					self,
+					{ kind: "schedule", to, body: args.body, firstAt, ...(everyMs ? { everyMs } : {}) },
+					{ commandId, signal },
+				);
+				if (receipt.stage === "failed") throw new Error(receipt.reason);
+				return {
+					content: [
+						{
+							type: "text" as const,
+							text: `Scheduled ${commandId}: ${to === self ? "you" : to} at ${new Date(firstAt).toISOString()}${everyMs ? `, then every ${args.every}` : ""}.`,
+						},
+					],
+					details: { id: commandId },
+				};
+			},
 		}),
 	);
 	const activate = (_event: unknown, ctx: ExtensionContext) => {
