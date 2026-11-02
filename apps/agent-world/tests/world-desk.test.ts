@@ -616,6 +616,31 @@ test("a message saved for later waits in Later and opens where it was", { timeou
 	}
 });
 
+test("slash commands in the desk tell a person something without posting", { timeout: 60_000 }, async () => {
+	const { page, errors } = await openDesk("light");
+	try {
+		const composer = page.getByRole("textbox", { name: "Post to channel", exact: true });
+		await composer.pressSequentially("/d");
+		await page.getByRole("list", { name: "Commands" }).getByText("/dm @person message").waitFor();
+		await shot(page, "command-light");
+		await composer.press("Tab");
+		expect(await composer.inputValue()).toBe("/dm @");
+		await composer.pressSequentially("ir");
+		await composer.press("Enter");
+		await composer.pressSequentially("start with the webhook");
+		await composer.press("Enter");
+		await page.getByText("Sent to Iris.").waitFor();
+		expect(await page.evaluate(() => (window as any).instructions)).toEqual([
+			expect.objectContaining({ id: "iris", kind: "follow_up", text: "start with the webhook" }),
+		]);
+		expect(await page.evaluate(() => (window as any).posts)).toEqual([]);
+		expect(await composer.inputValue()).toBe("");
+		expect(errors).toEqual([]);
+	} finally {
+		await page.close();
+	}
+});
+
 test("a muted conversation stays listed but never counts as unread", { timeout: 60_000 }, async () => {
 	const { page, errors } = await openDesk("light");
 	try {

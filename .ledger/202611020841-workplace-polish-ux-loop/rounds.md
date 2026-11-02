@@ -96,3 +96,7 @@ Open: the desk keeps a separate row for search / Catch up / Read latest / Action
 ## Round 15: what may ask for attention
 
 - U16 Every unread counted equally; a noisy agent or channel kept the Chat badge lit. **Fixed:** right-click any DM, channel or group row → Mute. A muted conversation stays listed (dimmed) but never shows unread, never counts in the Chat badge, and is skipped by Alt + Shift + arrows. Unmute from the same menu. Kept on the device.
+
+## Round 16: the desk as a command line
+
+- U17 Telling one agent something while at the desk meant leaving it for the agent's DM; waking or stopping someone meant a right-click menu. **Added:** slash commands in channel and desk composers: `/dm @person message` (delivered like a forward: after the current step when busy), `/wake @person`, `/stop @person`. Typing `/` lists them, Tab completes and opens the @ list; the result shows under the composer and nothing is posted. The composer hint now names `@` and `/`.

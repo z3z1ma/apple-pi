@@ -145,7 +145,7 @@ export function ActionableMessage({
 type Delivery = { ok: true } | { ok: false; reason: string };
 
 /** Send words to a destination as the operator: a person's conversation (or mail while away), or a thread. */
-async function deliver(
+export async function deliver(
 	world: WorldSnapshot,
 	target: SwitchTarget,
 	body: string,

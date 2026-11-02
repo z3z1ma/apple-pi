@@ -19,9 +19,9 @@ Closed in this loop (all live in Agent World):
 
 1. **Done in round 13.** ~~Answer without opening the conversation.~~ A question or approval in Activity should be answerable right there (the questionnaire form inline, Enter to send, J/K to move). Today it opens the agent's DM: three steps and a context switch per question.
 2. **Done in round 12 (channels, threads, mail; not agent DMs).** ~~Search messages from Cmd-K.~~ The switcher finds people, channels and threads by name only. "Where did someone say the webhook secret lives?" needs message search across DMs, channels and threads in the same field.
-3. **Slash commands in the composer.** `/assign Iris …`, `/remind 3pm …`, `/status`, `/hire …` turn the desk composer into a command line for the organization, without leaving the keyboard.
+3. **Done in round 16 (/dm, /wake, /stop).** ~~Slash commands in the composer.~~ `/assign Iris …`, `/remind 3pm …`, `/status`, `/hire …` turn the desk composer into a command line for the organization, without leaving the keyboard.
 4. **Reply in thread on the desk.** When the coordinator turns a desk message into a task, replying under that message should continue the task's thread (Slack threads), instead of quoting into the desk. The runtime already links posts and tasks; the UI does not show the link.
-5. **Notification policy.** Per conversation: all, mentions only, mute; plus macOS notifications for "needs you" only. Today every unread counts equally.
+5. **Mute done in round 15; app notifications left to `notify`.** ~~Notification policy.~~ Per conversation: all, mentions only, mute; plus macOS notifications for "needs you" only. Today every unread counts equally.
 6. **Recall a message before it is read.** An instruction queued for a busy agent cannot be edited or withdrawn. Slack lets you edit; for agents, withdrawing before delivery is the useful half.
 7. **Lightweight acknowledgments.** A reaction (approve, seen, done) instead of a typed "ok" that wakes an agent for nothing.
 8. **Status at a glance for many agents.** Stuck, blocked, waiting on you, idle too long, as a sorted list or sidebar state, owned by the watchdog role; today only working / idle / away.

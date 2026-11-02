@@ -14,6 +14,7 @@ import { ReplyingTo } from "./overlay/conversation/actions.js";
 import { type QuotedMessage, withQuote } from "./overlay/conversation/quote.js";
 import { Markdown } from "./overlay/conversation/transcript.js";
 import { useWindowFocus } from "./use-window-focus.js";
+import { commandHints, runCommand } from "./workplace-commands.js";
 import { CommunicationDialog, CommunicationRecipients } from "./workplace-communications.js";
 import { Icon } from "./workplace-icon.js";
 import { useMentions } from "./workplace-mentions.js";
@@ -326,6 +327,23 @@ export function ThreadPane({
 	};
 	const send = () => {
 		if (locked || !thread?.permissions.post || !draft.trim()) return;
+		if (channel && draft.trimStart().startsWith("/")) {
+			const typed = draft;
+			void runCommand(world, typed).then((result) => {
+				if (!result) return post(typed);
+				if (!mounted.current) return;
+				setNote(result.note);
+				if (result.ok && drafts.get(id) === typed) {
+					setDraft("");
+					drafts.set(id, "");
+				}
+			});
+			return;
+		}
+		post(draft);
+	};
+	const post = (words: string) => {
+		const draft = words;
 		const body = withQuote(draft, replyTo);
 		const mentioned = mentions.mentioned(draft);
 		setReplyTo(undefined);
@@ -691,6 +709,27 @@ export function ThreadPane({
 							</details>
 						)}
 						{channel && mentions.list}
+						{channel && commandHints(draft).length > 0 && (
+							<ul className="wp-mentions" aria-label="Commands">
+								{commandHints(draft).map((command) => (
+									<li key={command.name}>
+										<button
+											type="button"
+											tabIndex={-1}
+											onMouseDown={(event) => event.preventDefault()}
+											onClick={() => {
+												setDraft(`/${command.name} @`);
+												drafts.set(id, `/${command.name} @`);
+												composer.current?.focus();
+											}}
+										>
+											<strong>{command.usage}</strong>
+											<small>{command.help}</small>
+										</button>
+									</li>
+								))}
+							</ul>
+						)}
 						<label>
 							<span className="wp-visually-hidden">
 								{channel ? "Post to channel as operator" : "Reply to everyone"}
@@ -714,6 +753,14 @@ export function ThreadPane({
 								}}
 								onKeyDown={(event) => {
 									if (channel && mentions.onKeyDown(event)) return;
+									const hint = channel && event.key === "Tab" ? commandHints(draft)[0] : undefined;
+									if (hint) {
+										event.preventDefault();
+										setDraft(`/${hint.name} @`);
+										drafts.set(id, `/${hint.name} @`);
+										mentions.track(`/${hint.name} @`, hint.name.length + 3);
+										return;
+									}
 									if (
 										event.key === "Enter" &&
 										!event.nativeEvent.isComposing &&
@@ -729,7 +776,8 @@ export function ThreadPane({
 							<span>
 								{channel ? (
 									<>
-										<kbd>Enter</kbd> posts &middot; <kbd>Shift</kbd>+<kbd>Enter</kbd> new line
+										<kbd>Enter</kbd> posts &middot; <kbd>Shift</kbd>+<kbd>Enter</kbd> new line &middot; <kbd>@</kbd>{" "}
+										mentions &middot; <kbd>/</kbd> commands
 									</>
 								) : (
 									<>

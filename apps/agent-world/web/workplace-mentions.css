@@ -16,6 +16,9 @@
 	background: var(--wp-bg);
 	box-shadow: var(--wp-shadow);
 }
+.wp-mentions[aria-label="Commands"] {
+	width: min(520px, 100%);
+}
 .wp-app .wp-mentions button {
 	display: flex;
 	align-items: center;
