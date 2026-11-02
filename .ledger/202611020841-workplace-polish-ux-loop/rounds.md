@@ -35,3 +35,7 @@ Captured live with `live-mirror.ts chat` and `actions`.
 - U4 Drafts were lost on reload and invisible once you left a conversation; quitting with any draft asked to confirm. **Fixed:** DM and channel/thread/mail drafts are stored on the device per conversation; a pencil marks sidebar rows holding one; drafts no longer hold Quit.
 - U5 No way to move between conversations without the mouse. **Fixed:** Alt + Up/Down walks the sidebar; Alt + Shift + Up/Down only stops at unread ones (Slack's keys).
 - U6 No mark-all-read. **Fixed:** Shift + Escape (and a button in Activity) marks every unseen DM seen and catches every unread channel up.
+
+## Round 4: front desk proactiveness
+
+- U7 The coordinator only reacted to what the operator typed into the desk; Slack messages to him and PR activity reached nobody unless he relayed them. **Changed:** `roles/coordinator.md` now keeps standing schedules (a Slack sweep every 15 minutes that triages DMs, mentions and his threads into the desk, tasks or drafted replies, and a daily morning brief) and watches his repositories and in-flight external threads. It never sends Slack messages as him. Takes effect when the coordinator session next starts or reloads; unproven live.
