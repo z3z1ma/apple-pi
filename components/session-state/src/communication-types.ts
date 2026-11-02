@@ -45,6 +45,8 @@ export interface ConversationMessage {
 	body: string;
 	at: number;
 	reference: MessageReference;
+	/** Emoji reactions, each with the people who chose it; absent when there are none. */
+	reactions?: { emoji: string; people: string[] }[];
 }
 
 export interface ConversationParticipant {

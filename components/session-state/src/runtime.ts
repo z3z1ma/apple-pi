@@ -76,6 +76,7 @@ import {
 import { type ExternalCommand, type ExternalCommit, ExternalThreads } from "./external-threads.js";
 import { recordLink, resolveLink } from "./links.js";
 import { discardProgramPeople, programDescendants, temporaryCallers } from "./program-peers.js";
+import { react } from "./reactions.js";
 import { reviewScope } from "./review-attempt.js";
 import { ReviewJobs, type ReviewNotify } from "./review-jobs.js";
 import { cancelSchedule, createSchedule, dueSchedules, markFired } from "./schedules.js";
@@ -786,7 +787,12 @@ export class Runtime {
 			this.externalCommand(commandId, sessionId, command, now);
 			return;
 		}
-		if (command.kind === "schedule" || command.kind === "unschedule" || command.kind === "channel_charter") {
+		if (
+			command.kind === "schedule" ||
+			command.kind === "unschedule" ||
+			command.kind === "channel_charter" ||
+			command.kind === "react"
+		) {
 			receipt("accepted");
 			this.standingCommand(commandId, sessionId, command, now);
 			return;
@@ -1258,11 +1264,12 @@ export class Runtime {
 	private standingCommand(
 		commandId: string,
 		sender: string,
-		command: Extract<Command, { kind: "schedule" | "unschedule" | "channel_charter" }>,
+		command: Extract<Command, { kind: "schedule" | "unschedule" | "channel_charter" | "react" }>,
 		now: number,
 	): void {
 		try {
-			if (command.kind === "schedule") createSchedule(this.db!, commandId, sender, command, now);
+			if (command.kind === "react") react(this.db!, sender, OPERATOR, command, now);
+			else if (command.kind === "schedule") createSchedule(this.db!, commandId, sender, command, now);
 			else if (command.kind === "unschedule") cancelSchedule(this.db!, command.id, sender, OPERATOR, now);
 			else
 				this.atomically(() => {

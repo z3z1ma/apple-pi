@@ -410,6 +410,14 @@ const MIGRATIONS = [
 	where id like 'departure:%' and subject like 'Departure: %' and exists (
 		select 1 from events e where e.type = 'person_departed' and e.session_id = substr(threads.subject, 12)
 			and json_extract(e.data, '$.name') is not null);`,
+	// Reactions on thread messages: acknowledgments that wake nobody (components/session-state/src/reactions.ts).
+	`create table message_reactions (
+		message_id text not null,
+		person text not null,
+		emoji text not null,
+		at integer not null,
+		primary key (message_id, person, emoji)
+	) strict;`,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

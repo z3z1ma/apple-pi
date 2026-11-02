@@ -319,6 +319,16 @@ async function openDesk(appearance: "light" | "dark", width = 1440, desk = true)
 							effect: { action: "create_channel", thread: info("topic:desk") },
 						};
 					},
+					react: async (request: any) => {
+						w.reactions = [...(w.reactions ?? []), structuredClone(request)];
+						const found = Object.values(store)
+							.flat()
+							.find((item: any) => item.id === request.message);
+						if (!found) return { ok: false, reason: "No message" };
+						const others = (found.reactions ?? []).filter((item: any) => item.emoji !== request.emoji);
+						found.reactions = request.on ? [...others, { emoji: request.emoji, people: ["operator"] }] : others;
+						return { ok: true };
+					},
 					status: async () => ({ ok: true, value: null }),
 					searchMessages: async (request: any) => ({
 						ok: true,
@@ -687,6 +697,32 @@ test("a follow-up to a working agent can be withdrawn before it reads it", { tim
 			id: "iris",
 			kind: "withdraw",
 		});
+		expect(errors).toEqual([]);
+	} finally {
+		await page.close();
+	}
+});
+
+test("a reaction acknowledges a message without posting, and toggles off", { timeout: 60_000 }, async () => {
+	const { page, errors } = await openDesk("light");
+	try {
+		const message = page.locator(".wp-message").filter({ hasText: "Recorded as" }).first();
+		await message.waitFor();
+		await message.hover();
+		await message.getByRole("button", { name: "Add reaction" }).click();
+		await message.getByRole("button", { name: "React done" }).click();
+		const pill = message.locator(".wp-reaction");
+		await pill.waitFor();
+		expect(await pill.getAttribute("aria-pressed")).toBe("true");
+		expect(await pill.textContent()).toBe("\u2705 1");
+		await shot(page, "reaction-light");
+		await pill.click();
+		await vi.waitFor(async () => expect(await message.locator(".wp-reaction").count()).toBe(0));
+		expect(await page.evaluate(() => (window as any).reactions)).toEqual([
+			{ message: "topic:desk:2", emoji: "\u2705", on: true },
+			{ message: "topic:desk:2", emoji: "\u2705", on: false },
+		]);
+		expect(await page.evaluate(() => (window as any).posts)).toEqual([]);
 		expect(errors).toEqual([]);
 	} finally {
 		await page.close();

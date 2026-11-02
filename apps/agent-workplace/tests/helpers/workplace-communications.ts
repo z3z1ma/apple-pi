@@ -157,6 +157,9 @@ export function installWorkplaceCommunications() {
 		pin: async () => {
 			throw new Error("Pinning is outside this retained-reader fixture");
 		},
+		react: async () => {
+			throw new Error("Reactions are outside this retained-reader fixture");
+		},
 		archive: async () => {
 			throw new Error("Archive is outside this retained-reader fixture");
 		},

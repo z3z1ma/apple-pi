@@ -17,6 +17,7 @@ import type {
 } from "./communication-types.js";
 import { departureOf } from "./departures.js";
 import { temporaryCallers } from "./program-peers.js";
+import { reactionsOf } from "./reactions.js";
 import { nameOf, OPERATOR, type ThreadKind } from "./threads.js";
 
 export type * from "./communication-types.js";
@@ -246,6 +247,7 @@ function message(
 	thread: string,
 	row: { seq: number; id: string; sender: string; body: string; at: number },
 ): ConversationMessage {
+	const reactions = reactionsOf(db, row.id);
 	return {
 		thread,
 		seq: row.seq,
@@ -255,6 +257,7 @@ function message(
 		body: row.body,
 		at: row.at,
 		reference: { thread, seq: row.seq, id: row.id },
+		...(reactions.length ? { reactions } : {}),
 	};
 }
 

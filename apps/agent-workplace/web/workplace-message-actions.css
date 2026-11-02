@@ -83,6 +83,36 @@
 	color: var(--wp-link);
 }
 
+.wp-reactions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+	margin-top: 6px;
+}
+.wp-app .wp-reaction {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	height: 24px;
+	padding: 0 8px;
+	border: 1px solid var(--wp-border);
+	border-radius: 12px;
+	background: var(--wp-panel);
+	color: var(--wp-text);
+	font-size: 13px;
+}
+.wp-app .wp-reaction[aria-pressed="true"] {
+	border-color: var(--wp-accent);
+	background: var(--wp-selected);
+}
+.wp-reaction span {
+	font-size: 11px;
+	font-weight: 600;
+}
+.wp-app .wp-message-actions .wp-reaction-choice {
+	font-size: 15px;
+}
+
 .wp-forward-head {
 	display: grid;
 	gap: 10px;

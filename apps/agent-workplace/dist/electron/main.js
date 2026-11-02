@@ -267,6 +267,23 @@ function temporaryCallers(db) {
 	return callers;
 }
 //#endregion
+//#region components/session-state/src/reactions.ts
+/** Databases known to have the table; one opened before the migration keeps checking until it appears. */
+var known = /* @__PURE__ */ new WeakSet();
+/** A message's reactions, each emoji with who chose it, in the order first chosen; empty before the table exists. */
+function reactionsOf(db, message) {
+	if (!known.has(db)) {
+		if (!db.prepare("select 1 from sqlite_master where type = 'table' and name = 'message_reactions'").get()) return [];
+		known.add(db);
+	}
+	const reactions = /* @__PURE__ */ new Map();
+	for (const row of db.prepare("select emoji, person from message_reactions where message_id = ? order by at, rowid").all(message)) reactions.set(row.emoji, [...reactions.get(row.emoji) ?? [], row.person]);
+	return [...reactions].map(([emoji, people]) => ({
+		emoji,
+		people
+	}));
+}
+//#endregion
 //#region components/session-state/src/communication.ts
 function communicationAvailable(db) {
 	return db.prepare("pragma table_info(commands)").all().some((row) => row.name === "result");
@@ -385,6 +402,7 @@ function messageReference(db, thread, seq) {
 	};
 }
 function message(db, thread, row) {
+	const reactions = reactionsOf(db, row.id);
 	return {
 		thread,
 		seq: row.seq,
@@ -397,7 +415,8 @@ function message(db, thread, row) {
 			thread,
 			seq: row.seq,
 			id: row.id
-		}
+		},
+		...reactions.length ? { reactions } : {}
 	};
 }
 function positive(value) {
@@ -695,6 +714,20 @@ function openCommunications(path, commands) {
 				thread: text$6(request.thread, "A conversation"),
 				people: people(request.people)
 			}));
+		},
+		async react(request) {
+			const message = typeof request.message === "string" ? request.message : "";
+			const emoji = typeof request.emoji === "string" ? request.emoji : "";
+			if (!message || !emoji) return {
+				ok: false,
+				reason: "A message and an emoji are required."
+			};
+			return commands.send(OPERATOR$1, {
+				kind: "react",
+				message,
+				emoji,
+				on: request.on === true
+			});
 		},
 		pin(request) {
 			return mutate(request, "pin", () => {
@@ -10272,6 +10305,7 @@ function wireCommunications(api) {
 		"invite",
 		"removeInvitations",
 		"pin",
+		"react",
 		"archive",
 		"reopen",
 		"status"

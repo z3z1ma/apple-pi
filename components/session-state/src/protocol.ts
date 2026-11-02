@@ -182,6 +182,8 @@ export type Command =
 	 * a repeat does not move the read cursor.
 	 */
 	| { kind: "channel_membership"; thread: string; joined: boolean }
+	/** Add (`on`) or remove the sender's emoji reaction on a thread message; it notifies nobody. */
+	| { kind: "react"; message: string; emoji: string; on: boolean }
 	/**
 	 * Start the session (a new id, or a stopped session by its id) with `pi` in a new tmux window after `tmux.pane`'s
 	 * window. The runtime opens the window itself; `cwd` and `name` default to the stopped session's. Applied when the

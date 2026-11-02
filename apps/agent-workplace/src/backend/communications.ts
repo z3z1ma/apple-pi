@@ -170,6 +170,13 @@ export function openCommunications(path: string, commands: Commands): Communicat
 				people: people(request.people),
 			}));
 		},
+		async react(request) {
+			const message = typeof request.message === "string" ? request.message : "";
+			const emoji = typeof request.emoji === "string" ? request.emoji : "";
+			if (!message || !emoji) return { ok: false, reason: "A message and an emoji are required." };
+			// Fixed actor and kind; the renderer supplies only the message, the emoji and whether it is on.
+			return commands.send(OPERATOR, { kind: "react", message, emoji, on: request.on === true });
+		},
 		pin(request) {
 			return mutate(request, "pin", () => {
 				if (!Number.isSafeInteger(request.seq) || request.seq < 1) throw new Error("A message sequence is required.");

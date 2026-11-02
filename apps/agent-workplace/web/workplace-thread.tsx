@@ -8,6 +8,9 @@ import type {
 	ConversationPage,
 	MessageSearchResult,
 } from "../src/communications.js";
+
+type Reaction = NonNullable<ConversationMessage["reactions"]>[number];
+
 import type { WorkplaceThread, WorldSnapshot } from "../src/world.js";
 import { FileReferenceCwd, FileReferenceText } from "./file-references.js";
 import { ReplyingTo } from "./overlay/conversation/actions.js";
@@ -76,6 +79,30 @@ export function ThreadPane({
 	};
 	const [pending, setPending] = useState(false);
 	const [error, setError] = useState("");
+	// Reactions this reader changed, shown at once; a later read brings the same from the runtime.
+	const [reacted, setReacted] = useState(new Map<string, Reaction[]>());
+	const reactionsOf = (message: ConversationMessage) => reacted.get(message.id) ?? message.reactions ?? [];
+	const toggleReaction = (message: ConversationMessage, emoji: string) => {
+		const current = reactionsOf(message);
+		const mine = current.some((item) => item.emoji === emoji && item.people.includes("operator"));
+		void api.communications.react({ message: message.id, emoji, on: !mine }).then(
+			(result) => {
+				if (!mounted.current) return;
+				if (!result.ok) return setError(result.reason);
+				const next = mine
+					? current
+							.map((item) =>
+								item.emoji === emoji ? { ...item, people: item.people.filter((who) => who !== "operator") } : item,
+							)
+							.filter((item) => item.people.length)
+					: current.some((item) => item.emoji === emoji)
+						? current.map((item) => (item.emoji === emoji ? { ...item, people: [...item.people, "operator"] } : item))
+						: [...current, { emoji, people: ["operator"] }];
+				setReacted((previous) => new Map(previous).set(message.id, next));
+			},
+			(failure: unknown) => mounted.current && setError(String(failure)),
+		);
+	};
 	const [note, setNote] = useState("");
 	const [acknowledgeDuplicate, setAcknowledgeDuplicate] = useState(false);
 	const [attempt, setAttempt] = useState(attempts.get(id));
@@ -609,6 +636,8 @@ export function ThreadPane({
 							channel ? { kind: "channel", id } : { kind: "thread", id, title: page.thread.name ?? "Conversation" }
 						}
 						openThread={openThread}
+						reactions={reactionsOf}
+						toggleReaction={locked ? undefined : toggleReaction}
 						reply={
 							!locked && page.thread.permissions.post && !page.thread.archived
 								? (message) => {
@@ -917,6 +946,8 @@ function ThreadMessages({
 	reply,
 	origin,
 	openThread,
+	reactions,
+	toggleReaction,
 }: {
 	world: WorldSnapshot;
 	thread: ConversationInfo;
@@ -924,6 +955,8 @@ function ThreadMessages({
 	channel: boolean;
 	origin: SwitchTarget;
 	openThread?: (thread: { id: string; title: string }) => void;
+	reactions: (message: ConversationMessage) => Reaction[];
+	toggleReaction?: (message: ConversationMessage, emoji: string) => void;
 	where?: string;
 	reply?: (message: QuotedMessage) => void;
 	canPin: boolean;
@@ -974,6 +1007,7 @@ function ThreadMessages({
 						where,
 					}}
 					onReply={reply}
+					react={toggleReaction ? (emoji) => toggleReaction(message, emoji) : undefined}
 					origin={origin}
 					extra={[
 						{
@@ -1031,6 +1065,31 @@ function ThreadMessages({
 									{work.replies} {work.replies === 1 ? "reply" : "replies"} &middot; Open thread
 								</small>
 							</button>
+						)}
+						{reactions(message).length > 0 && (
+							<div className="wp-reactions">
+								{reactions(message).map((item) => (
+									<button
+										key={item.emoji}
+										type="button"
+										className="wp-reaction"
+										aria-pressed={item.people.includes("operator")}
+										disabled={!toggleReaction}
+										title={item.people
+											.map((who) =>
+												who === "operator"
+													? "You"
+													: (world.characters.find((person) => person.id === who)?.name ??
+														world.dormant?.find((person) => person.id === who)?.name ??
+														who),
+											)
+											.join(", ")}
+										onClick={() => toggleReaction?.(message, item.emoji)}
+									>
+										{item.emoji} <span>{item.people.length}</span>
+									</button>
+								))}
+							</div>
 						)}
 					</div>
 				</ActionableMessage>

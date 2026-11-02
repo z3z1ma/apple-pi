@@ -22,6 +22,14 @@ import "./workplace-message-actions.css";
 export type { QuotedMessage };
 export type MessageAction = { label: string; onSelect: () => void };
 
+/** The quick acknowledgments: done, seen, agreed, thanks. */
+export const REACTIONS = [
+	["\u2705", "done"],
+	["\u{1F440}", "seen"],
+	["\u{1F44D}", "agreed"],
+	["\u{1F64F}", "thanks"],
+] as const;
+
 /** The text selected inside `element`, when the selection lies wholly within it. */
 function selectionIn(element: HTMLElement | null): string | undefined {
 	const selection = window.getSelection();
@@ -45,12 +53,15 @@ export function ActionableMessage({
 	onReply,
 	extra = [],
 	origin,
+	react,
 	className,
 	children,
 	...rest
 }: {
 	message: QuotedMessage;
 	onReply?: (message: QuotedMessage) => void;
+	/** Add an emoji reaction: an acknowledgment that wakes nobody. */
+	react?: (emoji: string) => void;
 	/** Where the message lives, so it can be saved for later and opened again. */
 	origin?: SwitchTarget;
 	extra?: MessageAction[];
@@ -62,6 +73,7 @@ export function ActionableMessage({
 	const forward = sending?.forward;
 	const handOff = sending?.handOff;
 	const element = useRef<HTMLElement>(null);
+	const [picking, setPicking] = useState(false);
 	const savedList = useLater();
 	const saved = origin ? savedList.some((item) => item.key === savedKey(origin, message)) : false;
 	const toggleSaved = () => {
@@ -99,7 +111,30 @@ export function ActionableMessage({
 				role="toolbar"
 				aria-label="Message actions"
 				onMouseDown={(event) => event.preventDefault()}
+				onMouseLeave={() => setPicking(false)}
 			>
+				{react &&
+					(picking ? (
+						REACTIONS.map(([emoji, name]) => (
+							<button
+								key={emoji}
+								type="button"
+								className="wp-reaction-choice"
+								aria-label={`React ${name}`}
+								title={name}
+								onClick={() => {
+									setPicking(false);
+									react(emoji);
+								}}
+							>
+								{emoji}
+							</button>
+						))
+					) : (
+						<button type="button" aria-label="Add reaction" title="Add reaction" onClick={() => setPicking(true)}>
+							<Icon name="smile" />
+						</button>
+					))}
 				{onReply && (
 					<button type="button" aria-label="Reply" title="Reply" onClick={() => onReply(chosen())}>
 						<Icon name="reply" />

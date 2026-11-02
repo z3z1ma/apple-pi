@@ -82,6 +82,8 @@ const api: AgentWorkplaceApi = {
 			>,
 		pin: (request) =>
 			ipcRenderer.invoke("communications:pin", request) as ReturnType<AgentWorkplaceApi["communications"]["pin"]>,
+		react: (request) =>
+			ipcRenderer.invoke("communications:react", request) as ReturnType<AgentWorkplaceApi["communications"]["react"]>,
 		archive: (request) =>
 			ipcRenderer.invoke("communications:archive", request) as ReturnType<
 				AgentWorkplaceApi["communications"]["archive"]

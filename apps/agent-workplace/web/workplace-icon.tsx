@@ -33,6 +33,7 @@ const paths = {
 	more: "M7 12a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z M13 12a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z M19 12a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z",
 	thread: "M4 5h16v10H9l-5 4V5Z",
 	bookmark: "M6 3h12v18l-6-4-6 4V3Z",
+	smile: "M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z M8 14c1 1.5 2.4 2.2 4 2.2s3-.7 4-2.2 M9 9.5h.01 M15 9.5h.01",
 };
 
 export function Icon({ name }: { name: keyof typeof paths }) {
