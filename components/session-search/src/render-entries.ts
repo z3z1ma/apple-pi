@@ -44,8 +44,7 @@ export const renderMessage = (msg: Message, index: number, full = false): Render
 	if (msg.role === "toolResult") {
 		const prefix = msg.isError ? "ERROR " : "";
 		const text = full ? textOf(msg.content) : clip(textOf(msg.content), 200);
-		const nested =
-			msg.toolName === "fabric_exec" || msg.toolName === "pi_exec" ? executionOperationsOf((msg as any).details) : [];
+		const nested = executionOperationsOf((msg as any).details);
 		const nestedSummary = (full ? nested : nested.slice(-20))
 			.map((operation) =>
 				full ? JSON.stringify(operation, null, 2) : `${operation.name}(${summarizeToolArgs(operation.args)})`,

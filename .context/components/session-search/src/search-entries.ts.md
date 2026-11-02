@@ -4,9 +4,9 @@ Keep the legacy heuristic-regex and BM25 ranking paths until a separate experime
 
 Why: deterministic lexical ranking is not proof of better historical evidence retrieval. A future ranking change must beat the frozen baseline and a held-out question set written before results are inspected.
 
-Retain evidence-section labels in displayed windows and stable source identity through future ranking changes.
+Build evidence-section coordinates alongside searchable text from persisted content structure. Select a window's governing label from those coordinates, while retaining literal payload lines as data. Keep stable source identity through future ranking changes.
 
-Why: an attempted call or thought is not interchangeable with a returned result, and a ranked neighbor need not share chronology or ancestry.
+Why: payloads can quote structural-looking labels. Scanning flattened source lines promotes those quotations into false thinking/operation provenance. An attempted call or thought is not interchangeable with a returned result.
 
 Coupled: components/session-search/src/tool.ts, components/session-search/src/format-recall.ts, components/session-search/src/load-messages.ts
 Verify: components/session-search/tests/evidence-context.test.ts, components/session-search/tests/search-entries.test.ts

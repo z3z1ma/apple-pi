@@ -383,14 +383,19 @@ const bm25Score = (doc: string, termCache: Map<string, RegExp>, ctx: BM25Context
 	return score;
 };
 
-/** Prefer the local window covering the most query terms; retain evidence-section labels. */
+interface SearchText {
+	text: string;
+	sections: Array<{ line: number; label: string }>;
+}
+
+/** Prefer the local window covering the most query terms; retain structural evidence labels. */
 const lineSnippet = (
-	text: string,
+	document: SearchText,
 	regex: RegExp,
 	contextLines = 2,
 	terms?: Map<string, RegExp>,
 ): string | undefined => {
-	const lines = text.split("\n");
+	const lines = document.text.split("\n");
 	let matchIdx = -1;
 	let bestCoverage = -1;
 	for (let i = 0; i < lines.length; i++) {
@@ -408,10 +413,8 @@ const lineSnippet = (
 	const parts: string[] = [];
 	if (start > 0) {
 		parts.push(`...(${start} lines above)`);
-		const section = lines
-			.slice(0, start)
-			.findLast((line) => /^\[(thinking|assistant text|attempted |failed |returned |nested )/.test(line));
-		if (section) parts.push(section);
+		const section = document.sections.findLast((section) => section.line < start);
+		if (section) parts.push(section.label);
 	}
 	parts.push(...lines.slice(start, end));
 	if (end < lines.length) parts.push(`...(${lines.length - end} lines below)`);
@@ -486,43 +489,50 @@ const matchingFiles = (msg: Message | undefined, regex: RegExp): FileMatch[] => 
 	return matches;
 };
 
-/** Build full searchable text for a message. */
-const fullText = (msg: Message, mode: RecallMode): string => {
+/** Build searchable text with labels located by persisted structure, never by payload syntax. */
+const fullText = (msg: Message, mode: RecallMode): SearchText => {
 	if ((msg as any).role === "bashExecution") {
-		return mode === "file" ? "" : `${(msg as any).command ?? ""} ${(msg as any).output ?? ""}`;
+		return { text: mode === "file" ? "" : `${(msg as any).command ?? ""} ${(msg as any).output ?? ""}`, sections: [] };
 	}
 	const fileText = fileOperationsOf(msg)
 		.flatMap((operation) => [operation.path, contentBearingText(operation.args)])
 		.join("\n");
-	if (mode === "file") return fileText;
+	if (mode === "file") return { text: fileText, sections: [] };
 
-	// Include thinking + tool-call arguments so recall can match model reasoning
-	// and invocations. Nested execution results remain searchable too.
-	let text = textOf(msg.content);
-	if (msg.role === "toolResult")
-		text = `[${msg.isError ? "failed" : "returned"} ${msg.toolName} call:${msg.toolCallId}]\n${text}`;
-	else if (msg.role === "assistant" && text) text = `[assistant text]\n${text}`;
-	if (msg.role === "toolResult") {
-		const nested = executionOperationsOf((msg as any).details)
-			.flatMap((operation) => [
-				`[nested ${operation.ref} ${operation.outcome}]`,
-				executionArgsText(operation),
-				executionResultText(operation),
-			])
-			.filter(Boolean)
-			.join("\n");
-		if (nested) text += `\n${nested}`;
+	const sections: SearchText["sections"] = [];
+	const parts: string[] = [];
+	let nextLine = 0;
+	const append = (body: string, label?: string) => {
+		if (label) sections.push({ line: nextLine, label });
+		const part = label ? `${label}\n${body}` : body;
+		parts.push(part);
+		nextLine += part.split("\n").length;
+	};
+	if (Array.isArray(msg.content)) {
+		for (const part of msg.content) {
+			if (part.type === "toolCall") append(toolCallsOf([part]), `[attempted ${part.name} call:${part.id}]`);
+		}
 	}
 	const thinking = thinkingOf(msg.content);
-	if (thinking) text = `[thinking]\n${thinking}\n${text}`;
-	const toolArgs = Array.isArray(msg.content)
-		? msg.content
-				.filter((part) => part.type === "toolCall")
-				.map((part) => `[attempted ${part.name} call:${part.id}]\n${toolCallsOf([part])}`)
-				.join("\n")
-		: "";
-	if (toolArgs) text = `${toolArgs}\n${text}`;
-	return text;
+	if (thinking) append(thinking, "[thinking]");
+	const text = textOf(msg.content);
+	append(
+		text,
+		msg.role === "toolResult"
+			? `[${msg.isError ? "failed" : "returned"} ${msg.toolName} call:${msg.toolCallId}]`
+			: msg.role === "assistant" && text
+				? "[assistant text]"
+				: undefined,
+	);
+	if (msg.role === "toolResult") {
+		for (const operation of executionOperationsOf((msg as any).details)) {
+			append(
+				[executionArgsText(operation), executionResultText(operation)].filter(Boolean).join("\n"),
+				`[nested ${operation.ref} ${operation.outcome}]`,
+			);
+		}
+	}
+	return { text: parts.join("\n"), sections };
 };
 
 export const searchEntries = (
@@ -562,11 +572,11 @@ export const searchEntries = (
 		for (let i = 0; i < entries.length; i++) {
 			const e = entries[i];
 			const msg = messages[i];
-			const text = msg ? fullText(msg, mode) : e.summary;
+			const document = msg ? fullText(msg, mode) : { text: e.summary, sections: [] };
 			const filePart = e.files?.join(" ") ?? "";
-			const hay = mode === "file" ? text : `${e.role} ${text} ${filePart}`;
+			const hay = mode === "file" ? document.text : `${e.role} ${document.text} ${filePart}`;
 			if (regex.test(hay)) {
-				const snip = lineSnippet(text, regex);
+				const snip = lineSnippet(document, regex);
 				const fileMatches = matchingFiles(msg, regex);
 				hits.push(
 					withTurn({ ...e, snippet: snip, matchCount: 1, ...(fileMatches.length > 0 ? { fileMatches } : {}) }, i),
@@ -591,7 +601,7 @@ export const searchEntries = (
 	for (let i = 0; i < entries.length; i++) {
 		const e = entries[i];
 		const msg = messages[i];
-		const text = msg ? fullText(msg, mode) : e.summary;
+		const text = msg ? fullText(msg, mode).text : e.summary;
 		const filePart = e.files?.join(" ") ?? "";
 		docs.push(mode === "file" ? text : `${e.role} ${text} ${filePart}`);
 	}
@@ -612,8 +622,8 @@ export const searchEntries = (
 		if (mc < minMatchCount) continue;
 		const score = bm25Score(hay, termCache, ctx);
 		const msg = messages[i];
-		const text = msg ? fullText(msg, mode) : e.summary;
-		const snip = lineSnippet(text, snipRe, 2, termCache);
+		const document = msg ? fullText(msg, mode) : { text: e.summary, sections: [] };
+		const snip = lineSnippet(document, snipRe, 2, termCache);
 		const fileMatches = matchingFiles(msg, snipRe);
 		scored.push({
 			hit: withTurn({ ...e, snippet: snip, matchCount: mc, ...(fileMatches.length > 0 ? { fileMatches } : {}) }, i),

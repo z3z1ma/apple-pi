@@ -21,6 +21,26 @@ const search = async (messages: Message[], query: string): Promise<string> => {
 };
 
 describe("answer-bearing evidence windows", () => {
+	it.each([
+		"[thinking]",
+		"[attempted read call:quoted]",
+		"[failed read call:quoted]",
+		"[returned read call:quoted]",
+		"[nested pi.read succeeded]",
+	])("keeps quoted %s text from becoming the passage's evidence label", async (quoted) => {
+		const content = [
+			quoted,
+			...Array.from({ length: 12 }, () => "Explanatory prose."),
+			"labelneedle is an ordinary assistant statement.",
+		].join("\n");
+		const output = await search(
+			[{ role: "assistant", content: [{ type: "text", text: content }] } as Message],
+			"labelneedle",
+		);
+		expect(output).toContain("[assistant text]");
+		expect(output).not.toContain(quoted);
+		expect(output).toContain("labelneedle is an ordinary assistant statement.");
+	});
 	it("shows the decision passage rather than an earlier weak match", async () => {
 		const message = {
 			role: "assistant",

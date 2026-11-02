@@ -1,6 +1,6 @@
 ## file
 
-Compact discovery and complete source recovery share this renderer. Full rendering must retain every direct tool argument and nested operation body; a path/command summary is sufficient only for compact discovery.
+Compact discovery and complete source recovery share this renderer. Full rendering must retain every direct tool argument and nested operation body; a path/command summary is sufficient only for compact discovery. The validated trace envelope determines supported nested evidence, including saved program_<name> tools; the enclosing tool name does not.
 
 Why: `entry:<id>` and `expand:[N]` promise evidence recovery, while historical `#N:path` tests alone do not exercise either route. A complete argument record proves an attempted invocation, not a successful mutation.
 

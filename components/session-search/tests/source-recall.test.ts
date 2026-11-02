@@ -67,6 +67,90 @@ const withSession = async (
 };
 
 describe("source-complete personal recall", () => {
+	it("follows discovered saved-program evidence through entry and numeric recovery", async () => {
+		const entries = [
+			{
+				type: "message",
+				id: "saved",
+				message: {
+					role: "toolResult",
+					toolName: "program_publish",
+					toolCallId: "saved-call",
+					isError: false,
+					content: [{ type: "text", text: "Batch finished" }],
+					details: {
+						trace: {
+							kind: "apple-pi.execution",
+							version: 1,
+							operations: [
+								{
+									ref: "pi.send_mail",
+									args: { body: "nestedargumentneedle" },
+									outcome: "failed",
+									error: "Delivery refused",
+								},
+							],
+						},
+					},
+				},
+			},
+		];
+		await withSession(async (_file, invoke) => {
+			expect(await invoke({ query: "nestedargumentneedle" })).toContain("Read source: entry:saved");
+			for (const params of [{ query: "entry:saved" }, { expand: [0] }]) {
+				const recovered = await invoke(params);
+				expect(recovered).toContain("nestedargumentneedle");
+				expect(recovered).toContain("Delivery refused");
+				expect(recovered).toContain('"outcome": "failed"');
+			}
+		}, entries);
+	});
+
+	it("uses issuer exclusion for touched discovery but preserves scoped exact recovery", async () => {
+		const entries = [
+			{
+				type: "message",
+				id: "prior",
+				message: {
+					role: "assistant",
+					content: [
+						{
+							type: "toolCall",
+							id: "prior-write",
+							name: "write",
+							arguments: { path: "prior.ts", content: "historical payload" },
+						},
+					],
+				},
+			},
+			{
+				type: "message",
+				id: "issuer",
+				parentId: "prior",
+				message: {
+					role: "assistant",
+					content: [
+						{ type: "toolCall", id: "search-call", name: "search_session", arguments: { mode: "touched" } },
+						{
+							type: "toolCall",
+							id: "current-write",
+							name: "write",
+							arguments: { path: "current.ts", content: "currentneedle" },
+						},
+					],
+				},
+			},
+		];
+		await withSession(async (_file, invoke) => {
+			const touched = await invoke({ mode: "touched" });
+			expect(touched).toContain("prior.ts");
+			expect(touched).not.toContain("current.ts");
+			expect(await invoke({ query: "currentneedle" })).toContain("No matches");
+			expect(await invoke({ query: "entry:issuer" })).toContain("currentneedle");
+			expect(await invoke({ query: "#1:current.ts:full" })).toContain("currentneedle");
+		}, entries);
+	});
+
 	it("labels notification ancestry as preceding input rather than an originating question", async () => {
 		const entries = [
 			{ type: "custom_message", id: "notice", content: "A prior run has finished.", customType: "notification" },

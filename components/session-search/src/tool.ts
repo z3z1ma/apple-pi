@@ -26,6 +26,32 @@ export const invalidExpandIndices = (requested: number[], available: Set<number>
 const invalidPositiveInteger = (value: unknown): boolean =>
 	typeof value !== "number" || !Number.isSafeInteger(value) || value <= 0;
 
+const loadDiscoveryMessages = (
+	sessionFile: string,
+	lineageEntryIds: Set<string> | undefined,
+	activeEntryIds: Set<string>,
+	toolCallId: string,
+) => {
+	const loaded = loadAllMessages(sessionFile, false, lineageEntryIds, undefined, activeEntryIds);
+	const eligible = loaded.rendered
+		.map((entry, offset) => ({ entry, message: loaded.rawMessages[offset]! }))
+		.filter(
+			({ message }) =>
+				message.role !== "assistant" ||
+				!Array.isArray(message.content) ||
+				!message.content.some(
+					(part) =>
+						part.type === "toolCall" &&
+						// Native nested calls extend the persisted caller ID as caller/n.
+						(part.id === toolCallId || toolCallId.startsWith(`${part.id}/`)),
+				),
+		);
+	return {
+		rendered: eligible.map(({ entry }) => entry),
+		rawMessages: eligible.map(({ message }) => message),
+	};
+};
+
 export const SESSION_SEARCH_TOOL_NAME = "search_session";
 
 export const sessionSearchTool = defineTool({
@@ -129,7 +155,7 @@ export const sessionSearchTool = defineTool({
 		}
 
 		if (mode === "touched") {
-			const { rendered, rawMessages } = loadAllMessages(sessionFile, false, lineageEntryIds);
+			const { rendered, rawMessages } = loadDiscoveryMessages(sessionFile, lineageEntryIds, activeEntryIds, toolCallId);
 			return {
 				content: [
 					{
@@ -166,16 +192,12 @@ export const sessionSearchTool = defineTool({
 			};
 		}
 
-		const loaded = loadAllMessages(sessionFile, false, lineageEntryIds, undefined, activeEntryIds);
-		const eligible = loaded.rendered
-			.map((entry, offset) => ({ entry, message: loaded.rawMessages[offset]! }))
-			.filter(
-				({ message }) =>
-					!Array.isArray(message.content) ||
-					!message.content.some((part) => part.type === "toolCall" && part.id === toolCallId),
-			);
-		const msgs = eligible.map(({ entry }) => entry);
-		const rawMessages = eligible.map(({ message }) => message);
+		const { rendered: msgs, rawMessages } = loadDiscoveryMessages(
+			sessionFile,
+			lineageEntryIds,
+			activeEntryIds,
+			toolCallId,
+		);
 		let allResults: SearchHit[];
 		try {
 			allResults = params.query?.trim()
