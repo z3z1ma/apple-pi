@@ -25,6 +25,7 @@ body.workplace {
 	--wp-muted: #746c7e;
 	--wp-border: #e5e0e9;
 	--wp-accent: #77548f;
+	--wp-accent-strong: #5f3f7d;
 	--wp-link: #4e63a8;
 	--wp-green: #18765a;
 	--wp-positive: #237c5d;
@@ -54,6 +55,7 @@ body.workplace {
 	--wp-muted: #b0a7bb;
 	--wp-border: #3b3842;
 	--wp-accent: #c5a4df;
+	--wp-accent-strong: #7b56a0;
 	--wp-link: #a7b8f4;
 	--wp-green: #247e62;
 	--wp-positive: #77c7a4;
@@ -698,204 +700,6 @@ body.workplace {
 	height: 29px;
 	stroke-width: 1.3;
 }
-/* Mail keeps its folders, list, and open letter, with the same palette as Chat. */
-.wp-mail-layout {
-	background: var(--wp-panel);
-}
-.wp-mail-sidebar {
-	width: var(--wp-mail-sidebar-width, 210px);
-	flex: none;
-	padding: 25px 14px;
-}
-.wp-mail-sidebar h1 {
-	display: flex;
-	align-items: center;
-	gap: 11px;
-	font-size: 21px;
-	font-weight: 550;
-	margin: 0 16px 25px;
-	letter-spacing: -0.5px;
-}
-.wp-mail-sidebar h1 .wp-icon {
-	width: 24px;
-	height: 24px;
-	color: var(--wp-accent);
-}
-.wp-mail-sidebar > button {
-	display: flex;
-	justify-content: space-between;
-	align-items: center;
-	width: 100%;
-	padding: 10px 16px;
-	text-align: left;
-	border-radius: 6px;
-	font-size: 12px;
-	color: var(--wp-muted);
-}
-.wp-mail-sidebar > button > span {
-	display: flex;
-	align-items: center;
-	gap: 10px;
-}
-.wp-mail-sidebar > button > span .wp-icon {
-	width: 16px;
-	height: 16px;
-}
-.wp-mail-sidebar > button[aria-pressed="true"] {
-	background: var(--wp-selected);
-	color: var(--wp-text);
-	font-weight: 650;
-}
-.wp-mail-sidebar > button:hover {
-	background: var(--wp-hover);
-}
-.wp-mail-sidebar > button b {
-	font-size: 10px;
-}
-.wp-mail-sidebar > button.wp-compose {
-	justify-content: center;
-	gap: 10px;
-	background: var(--wp-selected);
-	color: var(--wp-text);
-	border: 1px solid var(--wp-border);
-	border-radius: 11px;
-	width: auto;
-	margin: 0 0 28px 7px;
-	padding: 14px 21px;
-	font-size: 13px;
-	font-weight: 550;
-}
-.wp-mail-sidebar p {
-	font-size: 11px;
-	color: var(--wp-muted);
-	padding: 32px 16px;
-	line-height: 1.9;
-}
-.wp-mail-main {
-	display: flex;
-	flex: 1;
-	min-width: 0;
-	flex-direction: column;
-	padding: 20px 22px 22px 0;
-}
-.wp-mail-toolbar {
-	display: flex;
-	align-items: center;
-	gap: 12px;
-	padding-bottom: 18px;
-}
-.wp-mail-search {
-	display: flex;
-	align-items: center;
-	gap: 10px;
-	background: var(--wp-hover);
-	padding: 10px 15px;
-	width: min(570px, 65%);
-	border: 1px solid transparent;
-	border-radius: 8px;
-}
-.wp-mail-search:focus-within {
-	background: var(--wp-bg);
-	border-color: var(--wp-accent);
-}
-.wp-mail-search .wp-icon {
-	color: var(--wp-muted);
-	width: 17px;
-	height: 17px;
-}
-.wp-mail-search input {
-	width: 100%;
-	min-width: 0;
-	border: 0;
-	background: transparent;
-	font-size: 12px;
-	outline: none;
-}
-.wp-mail-toolbar > span {
-	font-size: 11px;
-	color: var(--wp-muted);
-	margin-left: auto;
-}
-.wp-mail-toolbar .wp-unread-filter {
-	border: 1px solid var(--wp-border);
-	padding: 5px 10px;
-	border-radius: 5px;
-	color: var(--wp-muted);
-	font-size: 11px;
-}
-.wp-mail-toolbar .wp-unread-filter[aria-pressed="true"] {
-	background: var(--wp-selected);
-	color: var(--wp-text);
-	border-color: var(--wp-accent);
-}
-.wp-mail-columns {
-	flex: 1;
-	display: flex;
-	min-height: 0;
-	background: var(--wp-bg);
-	border-radius: 11px;
-	overflow: hidden;
-	border: 1px solid var(--wp-border);
-}
-.wp-mail-list {
-	width: var(--wp-mail-list-width, clamp(255px, 33%, 400px));
-	flex: none;
-	min-width: 0;
-	border-right: 1px solid var(--wp-border);
-	overflow-y: auto;
-	background: var(--wp-panel);
-}
-.wp-list-title {
-	display: flex;
-	justify-content: space-between;
-	align-items: center;
-	padding: 18px 20px;
-	border-bottom: 1px solid var(--wp-border);
-	background: var(--wp-bg);
-	gap: 10px;
-}
-.wp-list-title h2 {
-	font-size: 12px;
-	font-weight: 650;
-}
-.wp-list-title > span {
-	color: var(--wp-muted);
-	font-size: 10px;
-	white-space: nowrap;
-}
-.wp-app .wp-mail-row {
-	display: block;
-	width: 100%;
-	text-align: left;
-	padding: 18px 20px;
-	border-bottom: 1px solid var(--wp-border);
-	background: var(--wp-panel);
-}
-.wp-app .wp-mail-row:hover {
-	background: var(--wp-hover);
-}
-.wp-app .wp-mail-row.wp-unread {
-	background: var(--wp-bg);
-}
-.wp-app .wp-mail-row[aria-pressed="true"] {
-	background: var(--wp-selected);
-	box-shadow: inset 3px 0 var(--wp-accent);
-}
-.wp-mail-row-top {
-	display: flex;
-	align-items: baseline;
-	gap: 12px;
-}
-.wp-mail-row strong {
-	position: relative;
-	font-size: 12px;
-	flex: 1;
-	font-weight: 500;
-	line-height: 1.6;
-}
-.wp-mail-row.wp-unread strong {
-	font-weight: 650;
-}
 .wp-unread-dot {
 	display: inline-block;
 	width: 5px;
@@ -904,35 +708,6 @@ body.workplace {
 	vertical-align: middle;
 	background: var(--wp-accent);
 	border-radius: 50%;
-}
-.wp-mail-row time {
-	font-size: 10px;
-	color: var(--wp-muted);
-	white-space: nowrap;
-}
-.wp-mail-row small {
-	display: block;
-	color: var(--wp-muted);
-	font-size: 10px;
-	margin-top: 7px;
-}
-.wp-mail-row p {
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-	margin-top: 5px;
-	font-size: 11px;
-	color: var(--wp-muted);
-}
-.wp-list-empty {
-	font-size: 12px;
-	color: var(--wp-muted);
-	padding: 22px;
-}
-.wp-mail-reader {
-	flex: 1;
-	min-width: 0;
-	display: flex;
 }
 .wp-thread {
 	display: flex;
@@ -994,8 +769,7 @@ body.workplace {
 .wp-message {
 	display: flex;
 	gap: 12px;
-	padding: 24px 0;
-	border-bottom: 1px solid var(--wp-border);
+	padding: 12px 0;
 }
 .wp-message-avatar {
 	width: 32px;
@@ -1019,7 +793,6 @@ body.workplace {
 .wp-message time {
 	color: var(--wp-muted);
 	font-size: 11px;
-	margin-left: auto;
 	white-space: nowrap;
 }
 .wp-message-to {
@@ -1030,12 +803,12 @@ body.workplace {
 .wp-message-body {
 	white-space: pre-wrap;
 	overflow-wrap: anywhere;
-	margin-top: 14px;
+	margin-top: 3px;
 	font-size: 14px;
-	line-height: 1.75;
+	line-height: 1.6;
 }
 .wp-thread-compose {
-	margin: 20px 30px 24px 76px;
+	margin: 16px 24px 24px;
 	padding: 13px 15px 12px;
 	border: 1px solid var(--wp-border);
 	border-radius: 8px;
@@ -1187,86 +960,9 @@ body.workplace {
 	font-size: 12px;
 	padding: 12px 0;
 }
-.wp-delivery {
-	padding: 32px;
-	overflow-y: auto;
-	width: 100%;
-}
-.wp-delivery h1 {
-	font-size: 21px;
-	margin: 18px 0 8px;
-}
-.wp-delivery > p {
-	font-size: 12px;
-	color: var(--wp-muted);
-}
-.wp-delivery-body {
-	white-space: pre-wrap;
-	overflow-wrap: anywhere;
-	padding: 28px 0;
-	line-height: 1.9;
-	font-size: 13px;
-}
-.wp-compose-window {
-	position: fixed;
-	bottom: 0;
-	right: 30px;
-	width: min(540px, calc(100vw - 100px));
-	max-height: calc(100dvh - 60px);
-	overflow-y: auto;
-	border-radius: 10px 10px 0 0;
-	background: var(--wp-bg);
-	box-shadow: var(--wp-shadow);
-	border: 1px solid var(--wp-border);
-	z-index: 20;
-}
-.wp-compose-window > header {
-	background: var(--wp-selected);
-	display: flex;
-	padding: 13px 20px;
-	justify-content: space-between;
-	font-size: 12px;
-	position: sticky;
-	top: 0;
-	z-index: 1;
-}
-.wp-compose-window > header button {
-	font-size: 18px;
-	line-height: 1;
-}
-.wp-compose-window form {
-	padding: 16px 20px 24px;
-}
-.wp-compose-window label {
-	display: flex;
-	gap: 15px;
-	align-items: center;
-	border-bottom: 1px solid var(--wp-border);
-	padding-bottom: 12px;
-	font-size: 12px;
-	color: var(--wp-muted);
-}
-.wp-compose-window select {
-	flex: 1;
-	min-width: 0;
-	border: 0;
-	padding: 4px;
-	font-size: 12px;
-}
-.wp-compose-window textarea {
-	width: 100%;
-	min-height: 230px;
-	border: 0;
-	padding-top: 18px;
-	font-size: 14px;
-	line-height: 1.7;
-}
 .wp-muted {
 	color: var(--wp-muted);
 	font-size: 11px;
-}
-.wp-compose-window .wp-muted {
-	padding: 10px 0;
 }
 /* The same safe Markdown styles serve session DMs and team channels. */
 .wp-app .aw-md {
@@ -1795,12 +1491,6 @@ body.workplace {
 	.wp-chat-sidebar {
 		width: var(--wp-chat-width, 225px);
 	}
-	.wp-mail-sidebar {
-		width: var(--wp-mail-sidebar-width, 175px);
-	}
-	.wp-mail-list {
-		width: var(--wp-mail-list-width, clamp(225px, 33%, 400px));
-	}
 	.wp-session-label {
 		display: none;
 	}
@@ -2091,21 +1781,6 @@ body.workplace {
 	}
 	.wp-chat-sidebar {
 		width: var(--wp-chat-width, 190px);
-	}
-	.wp-mail-sidebar {
-		width: var(--wp-mail-sidebar-width, 150px);
-		padding-left: 5px;
-		padding-right: 5px;
-	}
-	.wp-mail-layout > .wp-pane-resize,
-	.wp-mail-columns > .wp-pane-resize {
-		display: none;
-	}
-	.wp-mail-columns {
-		overflow-x: auto;
-	}
-	.wp-mail-reader {
-		min-width: 340px;
 	}
 	.wp-topbar {
 		padding: 0 12px;

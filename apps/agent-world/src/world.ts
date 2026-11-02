@@ -299,6 +299,13 @@ export interface MailThreadSummary {
 	subject: string;
 	unread: number;
 	lastAt: number;
+	/** The conversation's kind (mail, escalation, task, channel...), its size, last author and a preview; older backends omit them. */
+	kind?: string;
+	messages?: number;
+	lastFrom?: string | null;
+	lastFromName?: string;
+	preview?: string | null;
+	participants?: string[];
 }
 
 export interface MailThread {

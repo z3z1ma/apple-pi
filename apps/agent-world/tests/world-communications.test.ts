@@ -698,7 +698,7 @@ test("Mail Compose recovers a lost send outcome after closing without creating a
 		);
 		expect(await compose.getByRole("combobox", { name: "Mail recipient", exact: true }).inputValue()).toBe("ben");
 		await compose.getByRole("button", { name: "Check mail outcome", exact: true }).click();
-		await compose.getByRole("status").filter({ hasText: "Mail applied. Addressed: Ben." }).waitFor();
+		await compose.getByRole("status").filter({ hasText: "Sent to Ben." }).waitFor();
 		expect(await calls(page, "sendMail")).toHaveLength(1);
 		expect(await calls(page, "status")).toEqual([{ attempt: sent[0].attempt }]);
 		expect(await calls(page, "legacySendMail")).toEqual([]);

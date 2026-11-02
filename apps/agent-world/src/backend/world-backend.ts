@@ -555,10 +555,19 @@ export function openWorldBackend(paths: { db: string; socket: string }): WorldBa
 		setTheme: (id) => choose("theme", id),
 		async setDesk(next) {
 			if (!socket || !socketOpen) return { ok: false, reason: "The session runtime is not connected." };
-			const command = { kind: "set_preference", key: DESK_KEY, value: next };
-			socket.write(
-				`${JSON.stringify({ type: "command", commandId: `agent-world-${randomUUID()}`, sessionId: "agent-world", command })}\n`,
-			);
+			const send = (sessionId: string, command: unknown) =>
+				socket?.write(
+					`${JSON.stringify({ type: "command", commandId: `agent-world-${randomUUID()}`, sessionId, command })}\n`,
+				);
+			send("agent-world", { kind: "set_preference", key: DESK_KEY, value: next });
+			// The desk's coordinator listens to its channel, so the runtime pushes every post and wakes it when away.
+			send("operator", {
+				kind: "channel_charter",
+				thread: next.thread,
+				listener: next.person,
+				charter:
+					"This is the operator's front desk. Route what he writes here to the right people, reply in under 100 words, and keep him on top of the work.",
+			});
 			desk = next;
 			lastSeq = -1;
 			poll();

@@ -1,0 +1,135 @@
+/**
+ * Read-only live mirror for UX audits: the built Workplace in headless Chrome, fed by the real backends over the
+ * operator's live state. Reads pass through; anything that would change state or acknowledge reading is refused.
+ *
+ *   node --import ./components/session-state/src/register.mjs .ledger/<task>/live-mirror.ts <outDir> [scenario]
+ */
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { chromium, type Page } from "playwright-core";
+import { agentDir, statePaths } from "../../components/session-state/src/paths.js";
+import { openCommands } from "../../apps/agent-world/src/backend/commands.js";
+import { openCommunications } from "../../apps/agent-world/src/backend/communications.js";
+import { openConversations } from "../../apps/agent-world/src/backend/conversations.js";
+import { openLifecycle } from "../../apps/agent-world/src/backend/lifecycle.js";
+import { openReviews } from "../../apps/agent-world/src/backend/reviews.js";
+import { openWorkplace } from "../../apps/agent-world/src/backend/workplace.js";
+import { openWorldBackend } from "../../apps/agent-world/src/backend/world-backend.js";
+
+let root = dirname(fileURLToPath(import.meta.url));
+while (!existsSync(join(root, "apps/agent-world"))) root = dirname(root);
+const out = process.argv[2] ?? "/tmp/aw-live";
+const scenario = process.argv[3] ?? "tour";
+mkdirSync(out, { recursive: true });
+
+const paths = statePaths();
+const world = openWorldBackend(paths);
+const commands = openCommands(paths.socket);
+const communications = openCommunications(paths.db, commands);
+const conversations = openConversations(paths.socket);
+const workplace = openWorkplace(paths.db, commands, () => world.snapshot());
+const lifecycle = openLifecycle({ ...paths, agentDir: agentDir() }, commands, () => world.snapshot());
+const reviews = openReviews(paths.db, commands).api;
+
+const READS: Record<string, (...args: never[]) => unknown> = {
+	snapshot: () => world.snapshot(),
+	feed: () => world.feed(),
+	profile: (id: string) => world.profile(id),
+	conversation: (id: string, before?: string) => conversations.page(id, before),
+	readThread: (thread: string) => lifecycle.readThread(thread),
+	readTask: (task: string) => workplace.readTask(task),
+	readWorkplaceThread: (thread: string) => workplace.readWorkplaceThread(thread),
+	roles: () => [],
+	themes: () => [],
+	"communications.readThread": (request: { view?: string }) => {
+		if ((request.view ?? "catch_up") === "catch_up") return { ok: false, reason: "Mirror: catch-up acknowledges; refused." };
+		return communications.readThread(request as never);
+	},
+	"communications.searchMessages": (request: unknown) => communications.searchMessages(request as never),
+	"communications.findChannels": (request: unknown) => communications.findChannels(request as never),
+	"communications.status": (request: unknown) => communications.status(request as never),
+	"reviews.queue": (request: unknown) => reviews.queue(request as never),
+	"reviews.read": (request: unknown) => reviews.read(request as never),
+	"reviews.analytics": (request: unknown) => reviews.analytics(request as never),
+	"workspace.resolvePaths": () => ({ ok: true, files: [] }),
+};
+
+const browser = await chromium.launch({
+	executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+	headless: true,
+});
+
+async function open(width: number, height: number, appearance: "light" | "dark"): Promise<Page> {
+	const page = await browser.newPage({ viewport: { width, height } });
+	page.on("pageerror", (error) => console.error(`pageerror: ${error.message}`));
+	await page.route("http://localhost/**", (route) => {
+		const path = new URL(route.request().url()).pathname;
+		const file = join(root, "apps/agent-world/dist/web", path === "/" ? "index.html" : path);
+		if (!existsSync(file)) return route.fulfill({ status: 404 });
+		return route.fulfill({
+			body: readFileSync(file),
+			contentType: file.endsWith(".js") ? "text/javascript" : file.endsWith(".css") ? "text/css" : "text/html",
+		});
+	});
+	await page.exposeBinding("__mirror", async (_source, method: string, args: unknown[]) => {
+		const read = READS[method];
+		if (!read) return { ok: false, outcome: "refused", reason: `Mirror is read-only: ${method}` };
+		return JSON.parse(JSON.stringify((await (read as (...a: unknown[]) => unknown)(...args)) ?? null));
+	});
+	await page.addInitScript((mode) => {
+		localStorage.setItem("workplace-appearance", mode);
+		const call = (method: string) => (...args: unknown[]) => (window as any).__mirror(method, args);
+		const listeners = (method: string) => (listener: (value: unknown) => void) => {
+			if (method !== "onUpdate") return () => {};
+			const timer = setInterval(async () => listener(await (window as any).__mirror("snapshot", [])), 1000);
+			return () => clearInterval(timer);
+		};
+		const proxy = (prefix: string): unknown =>
+			new Proxy(
+				{},
+				{
+					get: (_target, key: string) => {
+						const name = prefix ? `${prefix}.${key}` : key;
+						if (!prefix && ["communications", "reviews", "workspace", "terminal"].includes(key)) return proxy(key);
+						if (key.startsWith("on")) return listeners(key);
+						return call(name);
+					},
+				},
+			);
+		(window as any).agentWorld = proxy("");
+	}, appearance);
+	await page.goto("http://localhost/");
+	await page.waitForTimeout(1500);
+	return page;
+}
+
+const shot = (page: Page, name: string) => page.screenshot({ path: join(out, `${name}.png`), animations: "disabled" });
+
+if (scenario === "tour") {
+	for (const [appearance, width] of [
+		["light", 1440],
+		["dark", 1100],
+	] as const) {
+		const page = await open(width, 900, appearance);
+		await shot(page, `${appearance}-${width}-chat`);
+		for (const view of ["Threads", "Activity"]) {
+			await page.getByRole("button", { name: new RegExp(`^${view}`) }).click();
+			await page.waitForTimeout(600);
+			await shot(page, `${appearance}-${width}-${view.toLowerCase()}`);
+		}
+		await page.getByRole("button", { name: "Mail", exact: true }).click();
+		await page.waitForTimeout(800);
+		await shot(page, `${appearance}-${width}-mail`);
+		const first = page.locator(".wp-mail-row").first();
+		if (await first.count()) {
+			await first.click();
+			await page.waitForTimeout(1000);
+			await shot(page, `${appearance}-${width}-mail-thread`);
+		}
+		await page.close();
+	}
+}
+await browser.close();
+world.close();
+process.exit(0);

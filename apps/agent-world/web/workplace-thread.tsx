@@ -348,8 +348,8 @@ export function ThreadPane({
 					{!embedded &&
 						thread?.participants.map((person, index) => (
 							<span key={person.id}>
-								{index > 0 && ", "}
-								<PersonName id={person.id} name={person.id === "operator" ? "You" : person.name} />
+								<PersonName id={person.id} name={displayName(person.id, person.name)} />
+								{index < thread.participants.length - 1 && ","}
 							</span>
 						))}
 				</p>
@@ -464,7 +464,7 @@ export function ThreadPane({
 					</button>
 				)}
 			</header>
-			{thread?.purpose && <p className="wp-thread-note">{thread.purpose}</p>}
+			{thread?.purpose && !listener && <p className="wp-thread-note">{thread.purpose}</p>}
 			{thread?.pinned && (
 				<div className="wp-channel-pin">
 					Current context:{" "}
@@ -525,6 +525,20 @@ export function ThreadPane({
 				}}
 			>
 				{!page && pending && <p role="status">Reading conversation...</p>}
+				{listener && page && !page.messages.length && !search && (
+					<div className="wp-desk-welcome">
+						<h2>Tell the organization what you need</h2>
+						<p>
+							Write here as you would to a chief of staff. The coordinator turns it into owned work, answers in a few
+							lines, and tells you when something needs you.
+						</p>
+						<ul>
+							<li>"Bring GitHub PR review comments into the organization."</li>
+							<li>"What is everyone working on, and what is stuck?"</li>
+							<li>"Have someone reproduce the flaky /org experience test."</li>
+						</ul>
+					</div>
+				)}
 				{search && <p role="status">Search results are inspection only; catch-up is unchanged.</p>}
 				{page && (
 					<ThreadMessages
@@ -820,15 +834,21 @@ function ThreadMessages({
 					</div>
 				)}
 				<article className={`wp-message${continued ? " is-continued" : ""}`} id={`message-${message.seq}`}>
-					<PersonAvatar
-						id={message.from}
-						name={message.from === "operator" ? "You" : message.fromName}
-						className="wp-message-avatar"
-					/>
+					{message.from === "harness" ? (
+						<span className="wp-avatar-tile wp-message-avatar wp-system-avatar" aria-hidden="true">
+							pi
+						</span>
+					) : (
+						<PersonAvatar
+							id={message.from}
+							name={displayName(message.from, message.fromName)}
+							className="wp-message-avatar"
+						/>
+					)}
 					<div className="wp-message-content">
 						<header>
 							<strong>
-								<PersonName id={message.from} name={message.from === "operator" ? "You" : message.fromName} />
+								<PersonName id={message.from} name={displayName(message.from, message.fromName)} />
 							</strong>
 							<time dateTime={new Date(message.at).toISOString()} title={new Date(message.at).toLocaleString()}>
 								{new Date(message.at).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}
@@ -869,6 +889,9 @@ function ThreadMessages({
 		);
 	});
 }
+
+/** The operator reads as You and the runtime as Pi, not by their internal addresses. */
+const displayName = (id: string, name: string) => (id === "operator" ? "You" : id === "harness" ? "Pi" : name);
 
 /** Consecutive messages from one author within this span read as one block, as in Slack. */
 const GROUP_MS = 5 * 60_000;

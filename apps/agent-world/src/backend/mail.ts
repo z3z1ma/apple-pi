@@ -92,6 +92,16 @@ interface MailRow {
 const nameOf = (db: DatabaseSync, id: string, name: string | null, cwd: string | null) =>
 	name || (cwd ? cwd.split("/").filter(Boolean).pop() : undefined) || (id === OPERATOR ? id : retainedName(db, id));
 
+/** A display label for a thread author: the operator, the runtime, a live person or a departed person's retained name. */
+function personName(db: DatabaseSync, id: string): string {
+	if (id === OPERATOR) return "You";
+	if (id === "harness") return "Pi";
+	const row = db.prepare("select name, cwd from sessions where id = ?").get(id) as
+		| { name: string | null; cwd: string | null }
+		| undefined;
+	return nameOf(db, id, row?.name ?? null, row?.cwd ?? null);
+}
+
 const hasThreads = (db: DatabaseSync) =>
 	db.prepare("select 1 from sqlite_master where type = 'table' and name = 'thread_messages'").get() !== undefined;
 
@@ -102,14 +112,25 @@ export function readOperatorMail(db: DatabaseSync): MailThreadSummary[] {
 		.prepare("pragma table_info(thread_participants)")
 		.all()
 		.some((column) => column.name === "following");
-	return db
-		.prepare(`select t.id, t.subject, max(m.at) as lastAt,
-		count(case when m.seq > p.read_up_to and m.sender != ? then 1 end) as unread
+	const rows = db
+		.prepare(`select t.id, t.subject, t.kind, max(m.at) as lastAt,
+		count(case when m.seq > p.read_up_to and m.sender != ? then 1 end) as unread,
+		count(m.seq) as messages,
+		(select l.sender from thread_messages l where l.thread_id = t.id order by l.seq desc limit 1) as lastFrom,
+		(select substr(l.body, 1, 280) from thread_messages l where l.thread_id = t.id order by l.seq desc limit 1) as preview,
+		(select group_concat(q.participant) from thread_participants q where q.thread_id = t.id) as participants
 		from threads t join thread_participants p on p.thread_id = t.id and p.participant = ?
 		join thread_messages m on m.thread_id = t.id
 		${follows ? "where t.kind != 'channel' or p.following = 1" : ""}
 		group by t.id order by lastAt desc`)
-		.all(OPERATOR, OPERATOR) as unknown as MailThreadSummary[];
+		.all(OPERATOR, OPERATOR) as unknown as (Omit<MailThreadSummary, "participants"> & {
+		participants: string | null;
+	})[];
+	return rows.map((row) => ({
+		...row,
+		lastFromName: row.lastFrom ? personName(db, row.lastFrom) : undefined,
+		participants: (row.participants ?? "").split(",").filter(Boolean),
+	}));
 }
 
 /** Read a thread only if the operator participates. The caller marks the returned sequence read through the runtime. */

@@ -1521,7 +1521,7 @@ async function openWorkplaceChannel(conversations: Record<string, TranscriptEntr
 	const { page, errors } = await openWorld(initial, conversations, [thread]);
 	page.setDefaultTimeout(5000);
 	await page.getByRole("link", { name: "Workplace", exact: true }).click();
-	await page.getByRole("button", { name: "# team-orla", exact: true }).click();
+	await page.getByRole("button", { name: /^Group: Orla/ }).click();
 	await page.getByRole("button", { name: "Join channel", exact: true }).waitFor();
 	return { page, errors, id };
 }
@@ -1533,7 +1533,7 @@ test("channel author and participant names open their exact DMs without sending 
 		await log(page).getByText("Raising the timeouts now.").waitFor();
 		expect(await pages(page)).toEqual([["pi-tests", null]]);
 		await page.getByRole("textbox", { name: "Instruct pi-tests", exact: true }).fill("Keep this DM draft.");
-		await page.getByRole("button", { name: "# team-orla", exact: true }).click();
+		await page.getByRole("button", { name: /^Group: Orla/ }).click();
 		await page.locator(".wp-thread-header").getByRole("button", { name: "Orla", exact: true }).click();
 		await page.locator(".wp-conversation-header").getByRole("heading", { name: "Orla", exact: true }).waitFor();
 		await vi.waitFor(async () => expect((await pages(page)).at(-1)).toEqual([HQ, null]));
@@ -2168,7 +2168,7 @@ test("channel inspections preserve the unread cursor; explicit catch-up and sele
 	]);
 	try {
 		await page.getByRole("link", { name: "Workplace", exact: true }).click();
-		const channel = page.getByRole("button", { name: "# Unread team", exact: true });
+		const channel = page.getByRole("button", { name: /^Group: / });
 		expect(await channel.getAttribute("data-unread")).toBe("true");
 		expect(await channel.locator("b").textContent()).toBe("1");
 		await channel.click();

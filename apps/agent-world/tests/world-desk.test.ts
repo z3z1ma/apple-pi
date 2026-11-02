@@ -266,10 +266,9 @@ test("Chat opens at the front desk, and a post there always notifies its coordin
 				}),
 			]),
 		);
-		await page
-			.getByRole("region", { name: "Work in flight" })
-			.getByRole("button", { name: /Add GitHub PR threads/ })
-			.click();
+		const flight = page.getByRole("region", { name: "Work in flight" });
+		await flight.getByRole("button", { name: /2 in flight/ }).click();
+		await flight.getByRole("button", { name: /Add GitHub PR threads/ }).click();
 		const panel = page.getByRole("complementary", { name: "Thread: Add GitHub PR threads" });
 		await panel.getByText("Iris: build GitHub PR threads").waitFor();
 		await shot(page, "thread-light");

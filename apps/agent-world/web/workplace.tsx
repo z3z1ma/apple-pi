@@ -11,9 +11,18 @@ import { activity } from "./overlay/interface/model.js";
 import { ChannelBrowser } from "./workplace-channels.js";
 import { WorkplaceCode } from "./workplace-code.js";
 import { useWorkplaceMenu, WorkplaceMenuProvider } from "./workplace-context-menu.js";
-import { activityItems, ChatNav, type OpenThread, OrganizationView, ThreadPanel } from "./workplace-desk.js";
+import {
+	activityItems,
+	ChatNav,
+	GroupList,
+	type OpenThread,
+	OrganizationView,
+	ThreadPanel,
+	useActivitySeen,
+} from "./workplace-desk.js";
 import { Icon } from "./workplace-icon.js";
 import { WorkplaceIssues } from "./workplace-issues.js";
+import { Mail } from "./workplace-mail.js";
 import { channelName, useWorkplaceNames } from "./workplace-names.js";
 import { descendants, Org, orgPeople } from "./workplace-org.js";
 import { OrganizationNameForm, OrgNameEditor } from "./workplace-org-name.js";
@@ -32,8 +41,6 @@ conversationPanel.connect(api);
 document.body.classList.add("workplace");
 document.title = "Workplace";
 const drafts = new Map<string, string>();
-let composeAttempt: { id: string; to: string; body: string; result?: CommunicationResult } | undefined;
-const date = (at: number) => new Date(at).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 
 function channelUnreads(world: WorldSnapshot) {
 	const counts = new Map((world.operatorMail ?? []).map((thread) => [thread.id, thread.unread]));
@@ -278,7 +285,7 @@ function Workplace() {
 									/>
 								</div>
 								<div hidden={view !== "mail"}>
-									<Mail world={world} active={view === "mail"} />
+									<Mail world={world} active={view === "mail"} drafts={drafts} />
 								</div>
 								{orgVisited && (
 									<div hidden={view !== "org"}>
@@ -444,6 +451,7 @@ function Chat({
 		mail: (id) =>
 			showThread({ id, title: world.operatorMail?.find((thread) => thread.id === id)?.subject ?? "Conversation" }),
 	});
+	const unseenActivity = useActivitySeen(needsYou, active && view === "activity");
 	const lasting = orgPeople(world);
 	const parents = new Map(lasting.map((person) => [person.character.id, person.parent]));
 	const heads = lasting.filter(
@@ -526,10 +534,13 @@ function Chat({
 						view={view}
 						select={(kind) => setSelection({ kind, id: kind })}
 						deskUnread={desk ? (unreads.get(desk.thread) ?? 0) : 0}
-						needsYou={needsYou.length}
+						needsYou={view === "activity" ? 0 : unseenActivity.size}
 					/>
 					<h2 className="wp-channel-heading">
-						Channels <span>{channels.filter((thread) => thread.id !== desk?.thread).length}</span>
+						Channels{" "}
+						<span>
+							{channels.filter((thread) => thread.id !== desk?.thread && !thread.id.startsWith("team:")).length}
+						</span>
 						<span className="wp-channel-tools">
 							<button
 								type="button"
@@ -552,7 +563,12 @@ function Chat({
 						</div>
 					)}
 					{channels
-						.filter((thread) => thread.id !== desk?.thread && matches(channelName(thread.id, thread.subject, world)))
+						.filter(
+							(thread) =>
+								thread.id !== desk?.thread &&
+								!thread.id.startsWith("team:") &&
+								matches(channelName(thread.id, thread.subject, world)),
+						)
 						.map((thread) => (
 							<button
 								type="button"
@@ -577,6 +593,15 @@ function Chat({
 							</button>
 						))}
 					{!channels.length && <p className="wp-sidebar-note">Discover shared context or create a topic channel.</p>}
+					<GroupList
+						world={world}
+						groups={channels.filter((thread) => thread.id.startsWith("team:"))}
+						filter={filter}
+						unreads={unreads}
+						selected={selectedChannel?.id}
+						open={(id) => setSelection({ kind: "channel", id })}
+						menu={channelMenu}
+					/>
 					{heads.length > 0 && (
 						<section aria-label="VIPs">
 							<h2>
@@ -725,6 +750,7 @@ function Chat({
 								world={world}
 								drafts={drafts}
 								needsYou={needsYou}
+								unseen={unseenActivity}
 								selectedThread={openThread?.id}
 								openThread={showThread}
 								openDM={openDM}
@@ -762,381 +788,6 @@ function Chat({
 				)}
 			</div>
 		</ChatPeople.Provider>
-	);
-}
-
-function Mail({ world, active }: { world: WorldSnapshot; active: boolean }) {
-	const [folder, setFolder] = useState("inbox");
-	const [selected, setSelected] = useState<string>();
-	const [query, setQuery] = useState("");
-	const [compose, setCompose] = useState(false);
-	const [recipient, setRecipient] = useState("");
-	const [delivery, setDelivery] = useState<string>();
-	const [unreadOnly, setUnreadOnly] = useState(false);
-	const layout = useRef<HTMLDivElement>(null);
-	const sidebar = usePaneResize({
-		label: "Mail sidebar width",
-		variable: "--wp-mail-sidebar-width",
-		axis: "x",
-		direction: 1,
-		min: 150,
-		max: (): number => {
-			const columns = list.pane.current?.parentElement;
-			const main = columns?.parentElement;
-			const chrome = (main?.clientWidth ?? 0) - (columns?.clientWidth ?? 0);
-			const available = (layout.current?.clientWidth ?? 0) - chrome - 352;
-			return available - Math.min(list.pane.current?.offsetWidth ?? 225, Math.max(0, available - 150));
-		},
-	});
-	const list = usePaneResize({
-		label: "Mail list width",
-		variable: "--wp-mail-list-width",
-		axis: "x",
-		direction: 1,
-		min: 225,
-		max: (): number => (list.pane.current?.parentElement?.clientWidth ?? 0) - 346,
-	});
-	const threads = inboxThreads(world);
-	const deliveries = (world.mail ?? []).filter((item) => folder !== "sent" || item.from === "operator");
-	const item = deliveries.find((mail) => mail.id === delivery);
-	const unread = threads.reduce((sum, thread) => sum + thread.unread, 0);
-	const needle = query.toLowerCase();
-	const matchingThreads = threads.filter(
-		(thread) => thread.subject.toLowerCase().includes(needle) && (!unreadOnly || thread.unread > 0),
-	);
-	const matchingDeliveries = deliveries.filter((mail) =>
-		`${mail.fromName} ${mail.toName} ${mail.body}`.toLowerCase().includes(needle),
-	);
-	return (
-		<div className="wp-mail-layout" ref={layout} style={{ ...sidebar.style, ...list.style }}>
-			<aside className="wp-mail-sidebar" ref={sidebar.ref}>
-				<h1>
-					<Icon name="mail" />
-					Mail
-				</h1>
-				<button type="button" className="wp-compose" onClick={() => setCompose(true)}>
-					<Icon name="compose" />
-					Compose
-				</button>
-				{(
-					[
-						["inbox", "Inbox", "inbox"],
-						["sent", "Sent", "sent"],
-						["traffic", "Activity", "activity"],
-					] as const
-				).map(([key, title, icon]) => (
-					<button
-						type="button"
-						key={key}
-						aria-pressed={folder === key}
-						onClick={() => {
-							setFolder(key);
-							setDelivery(undefined);
-						}}
-					>
-						<span>
-							<Icon name={icon} />
-							{title}
-						</span>
-						{key === "inbox" && unread > 0 && <b>{unread}</b>}
-					</button>
-				))}
-			</aside>
-			{sidebar.separator}
-			<main className="wp-mail-main">
-				<header className="wp-mail-toolbar">
-					<label className="wp-mail-search">
-						<Icon name="search" />
-						<input
-							aria-label="Search mail"
-							placeholder={folder === "inbox" ? "Search conversation subjects" : "Search delivery records"}
-							value={query}
-							onChange={(e) => setQuery(e.target.value)}
-						/>
-					</label>
-					{folder === "inbox" && (
-						<button
-							type="button"
-							className="wp-unread-filter"
-							aria-pressed={unreadOnly}
-							onClick={() => setUnreadOnly(!unreadOnly)}
-						>
-							Unread
-						</button>
-					)}
-					<span>
-						Signed as <strong>you</strong>
-					</span>
-				</header>
-				<div className="wp-mail-columns">
-					<section ref={list.ref} className="wp-mail-list" aria-label={folder === "inbox" ? "Inbox" : "Delivery log"}>
-						<div className="wp-list-title">
-							<h2>{folder === "inbox" ? "Inbox" : folder === "sent" ? "Sent deliveries" : "Activity"}</h2>
-							<span>
-								{folder === "inbox"
-									? `${matchingThreads.length} conversations`
-									: `${matchingDeliveries.length} records`}
-							</span>
-						</div>
-						{folder === "inbox"
-							? matchingThreads.map((thread) => (
-									<button
-										type="button"
-										className={`wp-mail-row ${thread.unread ? "wp-unread" : ""}`}
-										key={thread.id}
-										aria-pressed={selected === thread.id}
-										onClick={() => setSelected(thread.id)}
-									>
-										<span className="wp-mail-row-top">
-											<strong>
-												{thread.unread > 0 && <span className="wp-unread-dot" aria-hidden="true" />}
-												{thread.subject}
-											</strong>
-											<time>{date(thread.lastAt)}</time>
-										</span>
-										<small>{thread.unread ? `${thread.unread} unread messages` : "Read conversation"}</small>
-									</button>
-								))
-							: matchingDeliveries.map((mail) => (
-									<button
-										type="button"
-										className="wp-mail-row"
-										key={mail.id}
-										aria-pressed={delivery === mail.id}
-										onClick={() => setDelivery(mail.id)}
-									>
-										<span className="wp-mail-row-top">
-											<strong>
-												{mail.fromName} → {mail.toName}
-											</strong>
-											<time>{date(mail.sentAt)}</time>
-										</span>
-										<p>{mail.body}</p>
-										<small>{mail.state}</small>
-									</button>
-								))}
-						{(folder === "inbox" ? !matchingThreads.length : !matchingDeliveries.length) && (
-							<p className="wp-list-empty">
-								{query || unreadOnly ? "No matching conversations." : "No mail here yet."}
-							</p>
-						)}
-					</section>
-					{list.separator}
-					<section className="wp-mail-reader" aria-label="Message reader">
-						{folder === "inbox" && selected ? (
-							active && <ThreadPane key={selected} id={selected} world={world} drafts={drafts} />
-						) : item && folder !== "inbox" ? (
-							<article className="wp-delivery">
-								<span className="wp-eyebrow">DELIVERY RECORD · READ ONLY</span>
-								<h1>
-									{item.fromName} → {item.toName}
-								</h1>
-								<p>
-									{new Date(item.sentAt).toLocaleString()} · {item.state}
-								</p>
-								<div className="wp-delivery-body">{item.body}</div>
-								{item.reason && <p role="status">{item.reason}</p>}
-								<p className="wp-muted">
-									This is a delivery record, not a complete thread. Reply from your Inbox when you are a participant.
-								</p>
-							</article>
-						) : (
-							<div className="wp-empty">
-								<span className="wp-empty-icon">
-									<Icon name="mail" />
-								</span>
-								<h1>Room for a longer conversation</h1>
-								<p>
-									Choose a message to read its thread.
-									<br />
-									Replies go to everyone in that conversation.
-								</p>
-							</div>
-						)}
-					</section>
-				</div>
-			</main>
-			{compose && (
-				<Compose world={world} recipient={recipient} setRecipient={setRecipient} close={() => setCompose(false)} />
-			)}
-		</div>
-	);
-}
-
-function Compose({
-	world,
-	close,
-	recipient,
-	setRecipient,
-}: {
-	world: WorldSnapshot;
-	close: () => void;
-	recipient: string;
-	setRecipient: (id: string) => void;
-}) {
-	const people = [...world.characters, ...(world.dormant ?? []).filter((person) => !person.retiredAt)];
-	const [attempt, setAttempt] = useState(composeAttempt);
-	const to = attempt?.to ?? (recipient || people[0]?.id || "");
-	const [body, setBody] = useState(drafts.get("compose") ?? "");
-	const [pending, setPending] = useState(false);
-	const [status, setStatus] = useState(composeAttempt ? "Saved mail attempt; check its original outcome." : "");
-	const [sent, setSent] = useState(composeAttempt?.result?.outcome === "applied");
-	const [acknowledgeDuplicate, setAcknowledgeDuplicate] = useState(false);
-	const mounted = useRef(true);
-	useEffect(() => {
-		mounted.current = true;
-		return () => {
-			mounted.current = false;
-		};
-	}, []);
-	const unresolved = !!attempt && !["applied", "refused"].includes(attempt.result?.outcome ?? "pending");
-	const locked = pending || sent || unresolved;
-	const reflect = (result: CommunicationResult, entry: NonNullable<typeof composeAttempt>) => {
-		entry.result = result;
-		composeAttempt = entry;
-		if (result.outcome === "applied" && drafts.get("compose") === entry.body) drafts.delete("compose");
-		if (!mounted.current) return;
-		setAttempt({ ...entry });
-		if (result.outcome === "applied") {
-			setSent(true);
-			const audience = result.effect?.audience ?? result.effect?.to;
-			const names = (ids: string[]) =>
-				ids.map((id) => people.find((person) => person.id === id)?.name ?? id).join(", ");
-			setStatus(
-				`Mail applied.${audience ? ` Addressed: ${names(audience)}.` : ""}${result.effect?.queued?.length ? ` Queued for a later opening: ${names(result.effect.queued)}.` : ""} Publication is not acknowledgment.`,
-			);
-		} else setStatus(result.reason ?? `Mail ${result.outcome}. Check this attempt before sending again.`);
-	};
-	const send = async () => {
-		if (
-			locked ||
-			!to ||
-			!body.trim() ||
-			(composeAttempt && !["applied", "refused"].includes(composeAttempt.result?.outcome ?? "pending"))
-		)
-			return;
-		const entry = { id: crypto.randomUUID(), to, body };
-		composeAttempt = entry;
-		setAttempt(entry);
-		setPending(true);
-		setStatus("");
-		try {
-			reflect(
-				await api.communications.sendMail({ attempt: entry.id, to: [to], subject: "Message from the operator", body }),
-				entry,
-			);
-		} catch (failure) {
-			reflect({ attempt: entry.id, outcome: "uncertain", reason: `Mail outcome uncertain: ${String(failure)}` }, entry);
-		} finally {
-			if (mounted.current) setPending(false);
-		}
-	};
-	const recover = async () => {
-		if (!attempt || pending) return;
-		setPending(true);
-		try {
-			reflect(await api.communications.status({ attempt: attempt.id }), attempt);
-		} catch (failure) {
-			if (mounted.current) setStatus(String(failure));
-		} finally {
-			if (mounted.current) setPending(false);
-		}
-	};
-	const dismiss = () => {
-		if (!unresolved) composeAttempt = undefined;
-		close();
-	};
-	return (
-		<section className="wp-compose-window" role="dialog" aria-label="New message">
-			<header>
-				<strong>New message</strong>
-				<button type="button" disabled={pending} onClick={dismiss} aria-label="Close new message">
-					×
-				</button>
-			</header>
-			<form
-				onSubmit={(e) => {
-					e.preventDefault();
-					void send();
-				}}
-			>
-				<label>
-					To
-					<select
-						aria-label="Mail recipient"
-						value={to}
-						disabled={locked}
-						onChange={(e) => {
-							setRecipient(e.target.value);
-							setAttempt(undefined);
-							composeAttempt = undefined;
-						}}
-					>
-						{people.map((person) => (
-							<option key={person.id} value={person.id}>
-								{person.name}
-							</option>
-						))}
-					</select>
-				</label>
-				<p className="wp-muted">
-					Subject: Message from the operator
-					<br />
-					Subjects are fixed.
-				</p>
-				<textarea
-					aria-label="Mail body"
-					placeholder="Write a message…"
-					value={body}
-					disabled={locked}
-					onChange={(e) => {
-						setBody(e.target.value);
-						drafts.set("compose", e.target.value);
-					}}
-				/>
-				<p className="wp-muted">Durable mail, signed as you. People who are away receive it when they come back.</p>
-				{status && <p role="status">{status}</p>}
-				{attempt && (
-					<p className="wp-thread-attempt">
-						Mail attempt: {attempt.id} · {attempt.result?.outcome ?? "pending"}{" "}
-						<button type="button" disabled={pending} onClick={() => void recover()}>
-							Check mail outcome
-						</button>
-					</p>
-				)}
-				{attempt?.result?.outcome === "not_recorded" && (
-					<div className="wp-communication-restart">
-						<p>
-							No durable record was found. A disconnected original send could still arrive; a fresh send may duplicate
-							it.
-						</p>
-						<label>
-							<input
-								type="checkbox"
-								checked={acknowledgeDuplicate}
-								onChange={(event) => setAcknowledgeDuplicate(event.target.checked)}
-							/>
-							I understand a fresh attempt may duplicate the original.
-						</label>
-						<button
-							type="button"
-							disabled={pending || !acknowledgeDuplicate}
-							onClick={() => {
-								composeAttempt = undefined;
-								setAttempt(undefined);
-								setAcknowledgeDuplicate(false);
-								setStatus("Draft retained. A new send will use a fresh attempt.");
-							}}
-						>
-							Keep draft and prepare a new mail attempt
-						</button>
-					</div>
-				)}
-				<button type="submit" className="wp-primary" disabled={locked || !to || !body.trim()}>
-					{pending ? "Sending…" : sent ? "Sent" : "Send mail"}
-				</button>
-			</form>
-		</section>
 	);
 }
 

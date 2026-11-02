@@ -6,7 +6,7 @@
 	margin: 0;
 	padding: 0;
 	border: 0;
-	background: var(--wp-panel);
+	background: transparent;
 	touch-action: none;
 	user-select: none;
 }
@@ -24,7 +24,26 @@
 	position: absolute;
 	inset: 0;
 	content: "";
-	background: var(--wp-border);
+	background: transparent;
+	transition: background 120ms;
+}
+.wp-pane-resize-x::after {
+	inset: 0 auto 0 calc(50% - 0.5px);
+	width: 1px;
+}
+.wp-pane-resize-y::after {
+	inset: calc(50% - 0.5px) 0 auto 0;
+	height: 1px;
+}
+.wp-pane-resize-x:hover::after,
+.wp-pane-resize-x:focus-visible::after {
+	inset: 0 auto 0 calc(50% - 1.5px);
+	width: 3px;
+}
+.wp-pane-resize-y:hover::after,
+.wp-pane-resize-y:focus-visible::after {
+	inset: calc(50% - 1.5px) 0 auto 0;
+	height: 3px;
 }
 .wp-pane-resize:hover::after,
 .wp-pane-resize:focus-visible::after {

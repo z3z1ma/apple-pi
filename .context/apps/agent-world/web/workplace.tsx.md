@@ -60,8 +60,4 @@ Why: access, following, attention and catch-up are separate effects. Delivery re
 Coupled: apps/agent-world/web/workplace-thread.tsx, apps/agent-world/src/communications.ts, apps/agent-world/src/backend/communications.ts
 Verify: apps/agent-world/scripts/workplace-smoke.mjs
 
-## symbol:Compose
-
-The existing single-recipient, fixed-subject form submits through communications.sendMail with a renderer-allocated attempt UUID retained before the request. Its canonical recipient/body survive uncertain outcomes and closing/reopening the form. Outcome recovery uses the same UUID; it never constructs another thread. A fresh send after not_recorded requires explicit duplicate-risk acknowledgment and preserves the draft without sending it automatically. Applied results clear only the matching saved body and report actual audience/queued state separately from acknowledgment. Legacy World sendMail remains a separate consumer and is intentionally unchanged here.
-Coupled: apps/agent-world/src/communications.ts, apps/agent-world/src/backend/communications.ts
-Verify: apps/agent-world/tests/world-communications.test.ts
+Mail lives in workplace-mail.tsx; the shell passes it the shared draft map.

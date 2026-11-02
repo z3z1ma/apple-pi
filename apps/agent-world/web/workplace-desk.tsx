@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Character, Desk, DormantAgent, WorkplaceTask, WorldSnapshot } from "../src/world.js";
 import { Icon } from "./workplace-icon.js";
 import { PersonAvatar, PersonName, presenceOf, sessionStatus } from "./workplace-people.js";
@@ -6,6 +6,8 @@ import { ThreadPane } from "./workplace-thread.js";
 import "./workplace-desk.css";
 
 const api = window.agentWorld;
+
+const FLIGHT_OPEN = "workplace-desk-flight-open";
 
 /** A task conversation open beside the main view, like a Slack thread. */
 export type OpenThread = { id: string; title: string };
@@ -131,14 +133,46 @@ function InFlight({
 	selected?: string;
 	openThread: (thread: OpenThread) => void;
 }) {
+	const [open, setOpen] = useState(() => localStorage.getItem(FLIGHT_OPEN) === "true");
 	const tasks = (world.workplace?.tasks ?? []).filter((task) => task.thread && task.assignees.length);
 	if (!tasks.length) return null;
+	const people = [...new Set(tasks.flatMap((task) => task.assignees.map((assignee) => assignee.person)))];
+	const working = people.filter(
+		(id) => world.characters.find((person) => person.id === id)?.facts?.status === "working",
+	).length;
 	return (
-		<section className="wp-desk-flight" aria-label="Work in flight">
-			<h2>
-				In flight <span>{tasks.length}</span>
-			</h2>
-			<div className="wp-desk-flight-list">
+		<section className="wp-desk-flight" aria-label="Work in flight" data-open={open}>
+			<button
+				type="button"
+				className="wp-desk-flight-summary"
+				aria-expanded={open}
+				onClick={() => {
+					localStorage.setItem(FLIGHT_OPEN, String(!open));
+					setOpen(!open);
+				}}
+			>
+				<Icon name={open ? "chevron-down" : "chevron-right"} />
+				<strong>{tasks.length} in flight</strong>
+				<span>{`${people.length} ${people.length === 1 ? "person" : "people"} \u00b7 ${working} working now`}</span>
+				<span className="wp-task-chip-avatars" aria-hidden="true">
+					{people.map((id) => {
+						const found = personIn(world, id);
+						return (
+							<PersonAvatar
+								key={id}
+								id={id}
+								name={found?.person.name ?? "?"}
+								interactive={false}
+								presence={presenceOf(
+									found && !found.away ? (found.person as Character) : undefined,
+									!found || found.away,
+								)}
+							/>
+						);
+					})}
+				</span>
+			</button>
+			<div className="wp-desk-flight-list" hidden={!open}>
 				{tasks.map((task) => (
 					<TaskChip
 						key={task.id}
@@ -231,9 +265,27 @@ export function DeskView({
 						)}
 					</p>
 				</div>
+				<label className="wp-desk-listener">
+					<span>Listening</span>
+					<select
+						aria-label="Who listens at the desk"
+						value={desk.person}
+						onChange={(event) => void api.setDesk?.({ thread: desk.thread, person: event.target.value })}
+					>
+						{!deskCandidates(world).some((candidate) => candidate.id === desk.person) && (
+							<option value={desk.person}>{listener?.person.name ?? "Former coordinator"}</option>
+						)}
+						{deskCandidates(world).map((candidate) => (
+							<option key={candidate.id} value={candidate.id}>
+								{candidate.name}
+								{candidate.away ? " (away)" : ""}
+							</option>
+						))}
+					</select>
+				</label>
 				{listener && (
 					<button type="button" className="wp-desk-dm" onClick={() => openDM(desk.person)}>
-						Open {listener.person.name}'s session
+						Open session
 					</button>
 				)}
 			</header>
@@ -246,6 +298,7 @@ export function DeskView({
 				world={world}
 				drafts={drafts}
 				listener={desk.person}
+				embedded
 			/>
 		</>
 	);
@@ -424,7 +477,30 @@ const LABEL: Record<ActivityItem["kind"], string> = {
 	mail: "Unread mail",
 };
 
-export function ActivityView({ items }: { items: ActivityItem[] }) {
+const ACTIVITY_SEEN = "workplace-activity-seen";
+const activityKey = (item: ActivityItem) => `${item.key}@${item.at}`;
+
+/**
+ * What in Activity is new since the operator last looked: an item stays new until Activity was open while it was
+ * listed. The seen keys are local to this device.
+ */
+export function useActivitySeen(items: ActivityItem[], viewing: boolean): Set<string> {
+	const [seen, setSeen] = useState<Set<string>>(
+		() => new Set(JSON.parse(localStorage.getItem(ACTIVITY_SEEN) ?? "[]") as string[]),
+	);
+	const keys = items.map(activityKey);
+	const current = keys.join("|");
+	// biome-ignore lint/correctness/useExhaustiveDependencies: the joined keys stand for the item list.
+	useEffect(() => {
+		if (!viewing) return;
+		const next = new Set(current ? current.split("|") : []);
+		localStorage.setItem(ACTIVITY_SEEN, JSON.stringify([...next]));
+		return () => setSeen(next);
+	}, [viewing, current]);
+	return new Set(keys.filter((key) => !seen.has(key)));
+}
+
+export function ActivityView({ items, unseen }: { items: ActivityItem[]; unseen: Set<string> }) {
 	return (
 		<section className="wp-activity-view" aria-label="Activity">
 			<header className="wp-conversation-header">
@@ -436,7 +512,7 @@ export function ActivityView({ items }: { items: ActivityItem[] }) {
 			{items.length ? (
 				<ul className="wp-activity-list">
 					{items.map((item) => (
-						<li key={item.key} data-kind={item.kind}>
+						<li key={item.key} data-kind={item.kind} data-new={unseen.has(activityKey(item))}>
 							<button type="button" onClick={item.open}>
 								<PersonAvatar id={item.who} name={item.name} interactive={false} />
 								<span>
@@ -444,6 +520,7 @@ export function ActivityView({ items }: { items: ActivityItem[] }) {
 									<strong>{item.name}</strong>
 									<span className="wp-activity-text">{item.text}</span>
 								</span>
+								{unseen.has(activityKey(item)) && <span className="wp-activity-new">New</span>}
 								<time>{ago(item.at)}</time>
 							</button>
 						</li>
@@ -458,6 +535,76 @@ export function ActivityView({ items }: { items: ActivityItem[] }) {
 					<p>The organization is working. Questions, escalations and results will appear here.</p>
 				</div>
 			)}
+		</section>
+	);
+}
+
+/**
+ * Team channels (a manager and its direct reports) read as group conversations, like a Slack group DM: the people,
+ * not a channel name. Organization and topic channels stay channels.
+ */
+export function GroupList({
+	world,
+	groups,
+	filter,
+	unreads,
+	selected,
+	open,
+	menu,
+}: {
+	world: WorldSnapshot;
+	groups: { id: string; subject: string; participants: string[] }[];
+	filter: string;
+	unreads: Map<string, number>;
+	selected?: string;
+	open: (id: string) => void;
+	menu: (event: React.MouseEvent<HTMLElement> | React.KeyboardEvent<HTMLElement>, thread: { id: string }) => void;
+}) {
+	const rows = groups
+		.map((group) => {
+			const head = group.id.slice("team:".length);
+			const members = [head, ...group.participants.filter((id) => id !== head && id !== "operator")];
+			const names = members.map((id) => personIn(world, id)?.person.name ?? id);
+			return { group, members, label: names.map((name) => name.split(" ")[0]).join(", "), full: names.join(", ") };
+		})
+		.filter((row) => row.full.toLowerCase().includes(filter.toLowerCase()));
+	if (!rows.length) return null;
+	return (
+		<section aria-label="Groups" className="wp-group-list">
+			<h2>
+				Groups <span>{rows.length}</span>
+			</h2>
+			{rows.map(({ group, members, label, full }) => {
+				const unread = unreads.get(group.id) ?? 0;
+				return (
+					<button
+						type="button"
+						key={group.id}
+						className="wp-group"
+						aria-haspopup="menu"
+						aria-label={`Group: ${full}`}
+						title={full}
+						aria-pressed={selected === group.id}
+						data-unread={unread > 0}
+						onContextMenu={(event) => menu(event, group)}
+						onKeyDown={(event) => menu(event, group)}
+						onClick={() => open(group.id)}
+					>
+						<span className="wp-group-avatars" aria-hidden="true">
+							{members.slice(0, 2).map((id) => (
+								<PersonAvatar key={id} id={id} name={personIn(world, id)?.person.name ?? id} interactive={false} />
+							))}
+						</span>
+						<span className="wp-group-label">{label}</span>
+						{members.length > 2 && <small>{members.length}</small>}
+						{unread > 0 && (
+							<b className="wp-unread-count" aria-hidden="true">
+								{unread}
+							</b>
+						)}
+					</button>
+				);
+			})}
 		</section>
 	);
 }
@@ -507,6 +654,7 @@ export function OrganizationView({
 	world,
 	drafts,
 	needsYou,
+	unseen,
 	selectedThread,
 	openThread,
 	openDM,
@@ -515,6 +663,7 @@ export function OrganizationView({
 	world: WorldSnapshot;
 	drafts: Map<string, string>;
 	needsYou: ActivityItem[];
+	unseen: Set<string>;
 	selectedThread?: string;
 	openThread: (thread: OpenThread) => void;
 	openDM: (id: string) => void;
@@ -531,7 +680,7 @@ export function OrganizationView({
 			/>
 		);
 	if (view === "threads") return <ThreadsView world={world} selectedThread={selectedThread} openThread={openThread} />;
-	if (view === "activity") return <ActivityView items={needsYou} />;
+	if (view === "activity") return <ActivityView items={needsYou} unseen={unseen} />;
 	return (
 		<div className="wp-empty">
 			<span className="wp-empty-icon">

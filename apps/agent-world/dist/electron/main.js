@@ -2067,17 +2067,32 @@ where m.id in (select id from mail order by sent_at desc limit 120)
 	or m.stage in ('accepted', 'delivered')
 order by m.sent_at desc, m.id`;
 var nameOf = (db, id, name, cwd) => name || (cwd ? cwd.split("/").filter(Boolean).pop() : void 0) || (id === "operator" ? id : nameOf$1(db, id));
+/** A display label for a thread author: the operator, the runtime, a live person or a departed person's retained name. */
+function personName(db, id) {
+	if (id === "operator") return "You";
+	if (id === "harness") return "Pi";
+	const row = db.prepare("select name, cwd from sessions where id = ?").get(id);
+	return nameOf(db, id, row?.name ?? null, row?.cwd ?? null);
+}
 var hasThreads = (db) => db.prepare("select 1 from sqlite_master where type = 'table' and name = 'thread_messages'").get() !== void 0;
 /** The operator is not a session row: its needs-you state is its unread thread cursor. */
 function readOperatorMail(db) {
 	if (!hasThreads(db)) return [];
 	const follows = db.prepare("pragma table_info(thread_participants)").all().some((column) => column.name === "following");
-	return db.prepare(`select t.id, t.subject, max(m.at) as lastAt,
-		count(case when m.seq > p.read_up_to and m.sender != ? then 1 end) as unread
+	return db.prepare(`select t.id, t.subject, t.kind, max(m.at) as lastAt,
+		count(case when m.seq > p.read_up_to and m.sender != ? then 1 end) as unread,
+		count(m.seq) as messages,
+		(select l.sender from thread_messages l where l.thread_id = t.id order by l.seq desc limit 1) as lastFrom,
+		(select substr(l.body, 1, 280) from thread_messages l where l.thread_id = t.id order by l.seq desc limit 1) as preview,
+		(select group_concat(q.participant) from thread_participants q where q.thread_id = t.id) as participants
 		from threads t join thread_participants p on p.thread_id = t.id and p.participant = ?
 		join thread_messages m on m.thread_id = t.id
 		${follows ? "where t.kind != 'channel' or p.following = 1" : ""}
-		group by t.id order by lastAt desc`).all(OPERATOR, OPERATOR);
+		group by t.id order by lastAt desc`).all(OPERATOR, OPERATOR).map((row) => ({
+		...row,
+		lastFromName: row.lastFrom ? personName(db, row.lastFrom) : void 0,
+		participants: (row.participants ?? "").split(",").filter(Boolean)
+	}));
 }
 /** Read a thread only if the operator participates. The caller marks the returned sequence read through the runtime. */
 function readOperatorThread(db, id) {
@@ -10149,17 +10164,23 @@ function openWorldBackend(paths) {
 				ok: false,
 				reason: "The session runtime is not connected."
 			};
-			const command = {
+			const send = (sessionId, command) => socket?.write(`${JSON.stringify({
+				type: "command",
+				commandId: `agent-world-${randomUUID()}`,
+				sessionId,
+				command
+			})}\n`);
+			send("agent-world", {
 				kind: "set_preference",
 				key: DESK_KEY,
 				value: next
-			};
-			socket.write(`${JSON.stringify({
-				type: "command",
-				commandId: `agent-world-${randomUUID()}`,
-				sessionId: "agent-world",
-				command
-			})}\n`);
+			});
+			send("operator", {
+				kind: "channel_charter",
+				thread: next.thread,
+				listener: next.person,
+				charter: "This is the operator's front desk. Route what he writes here to the right people, reply in under 100 words, and keep him on top of the work."
+			});
 			desk = next;
 			lastSeq = -1;
 			poll();
