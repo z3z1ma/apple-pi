@@ -1,17 +1,27 @@
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { Message } from "@earendil-works/pi-ai";
 import { describe, expect, it } from "vitest";
-import { renderMessage } from "../src/render-entries.js";
-import { searchEntries } from "../src/search-entries.js";
+import { sessionSearchTool } from "../src/tool.js";
 
-const search = (messages: Message[], query: string) =>
-	searchEntries(
-		messages.map((msg, index) => renderMessage(msg, index)),
-		messages,
-		query,
-	);
+const search = async (messages: Message[], query: string): Promise<string> => {
+	const dir = mkdtempSync(join(tmpdir(), "evidence-recall-"));
+	const file = join(dir, "session.jsonl");
+	const entries = messages.map((message, index) => ({ type: "message", id: `evidence-${index}`, message }));
+	writeFileSync(file, entries.map((entry) => JSON.stringify(entry)).join("\n"));
+	try {
+		const result = await sessionSearchTool.execute("current-search", { query }, undefined, undefined, {
+			sessionManager: { getSessionFile: () => file, getBranch: () => entries },
+		} as any);
+		return (result.content[0] as any).text;
+	} finally {
+		rmSync(dir, { recursive: true, force: true });
+	}
+};
 
 describe("answer-bearing evidence windows", () => {
-	it("prefers a local passage covering more meaningful query terms over the first weak match", () => {
+	it("shows the decision passage rather than an earlier weak match", async () => {
 		const message = {
 			role: "assistant",
 			content: [
@@ -26,18 +36,24 @@ describe("answer-bearing evidence windows", () => {
 				},
 			],
 		} as any;
-		const hits = search([message], "alpha beta gamma");
-		expect(hits[0].snippet).toContain("Keep the owner stable.");
-		expect(hits[0].snippet).not.toContain("mentioned in passing");
+		const output = await search([message], "alpha beta gamma");
+		expect(output).toContain("Read source: entry:evidence-0");
+		expect(output).toContain("Keep the owner stable.");
+		expect(output).not.toContain("alpha mentioned in passing");
 	});
 
-	it("labels thinking, attempted calls and failed results rather than presenting them as successful facts", () => {
+	it("labels thinking, attempted calls and failed results rather than presenting them as successful facts", async () => {
 		const messages: Message[] = [
 			{
 				role: "assistant",
 				content: [
 					{ type: "thinking", thinking: "hypothesisneedle unproven" },
-					{ type: "toolCall", id: "attempt", name: "write", arguments: { path: "a.ts", content: "payloadneedle" } },
+					{
+						type: "toolCall",
+						id: "attempt",
+						name: "write",
+						arguments: { path: "a.ts", content: "payloadneedle durable change" },
+					},
 				],
 			} as any,
 			{
@@ -48,12 +64,18 @@ describe("answer-bearing evidence windows", () => {
 				content: [{ type: "text", text: "failuretarget permission denied" }],
 			} as any,
 		];
-		expect(search(messages, "hypothesisneedle")[0].snippet).toContain("[thinking]");
-		expect(search(messages, "payloadneedle")[0].snippet).toContain("[attempted write call:attempt]");
-		expect(search(messages, "failuretarget")[0].snippet).toContain("[failed write call:attempt]");
+		const thinking = await search(messages, "hypothesisneedle");
+		expect(thinking).toContain("[thinking]");
+		expect(thinking).toContain("hypothesisneedle unproven");
+		const attempted = await search(messages, "payloadneedle");
+		expect(attempted).toContain("[attempted write call:attempt]");
+		expect(attempted).toContain("payloadneedle durable change");
+		const failed = await search(messages, "failuretarget");
+		expect(failed).toContain("[failed write call:attempt]");
+		expect(failed).toContain("failuretarget permission denied");
 	});
 
-	it("keeps repeated recall output behind original evidence in default discovery", () => {
+	it("shows original evidence before repeated recall output with both source addresses", async () => {
 		const messages: Message[] = [
 			{
 				role: "toolResult",
@@ -63,6 +85,8 @@ describe("answer-bearing evidence windows", () => {
 			} as any,
 			{ role: "user", content: "needle: the original decision was to retain the owner" } as any,
 		];
-		expect(search(messages, "needle").map((hit) => hit.index)).toEqual([1, 0]);
+		const output = await search(messages, "needle");
+		const addresses = [...output.matchAll(/Read source: entry:(evidence-\d+)/g)].map((match) => match[1]);
+		expect(addresses).toEqual(["evidence-1", "evidence-0"]);
 	});
 });

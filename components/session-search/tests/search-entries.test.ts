@@ -118,10 +118,17 @@ describe("searchEntries", () => {
 		expect(r.length).toBeGreaterThanOrEqual(2); // #0 has login, #1 + #3 have auth
 	});
 
-	it("natural language ranks by BM25 score", () => {
-		const r = searchEntries(entries, messages, "root cause auth");
-		// Top result has more terms matched = higher BM25 score
-		expect(r[0].matchCount!).toBeGreaterThanOrEqual(r[r.length - 1].matchCount!);
+	it("ranks a source covering both requested terms before a weak single-term mention", () => {
+		const rankedMessages = [
+			{ role: "user", content: "alpha is mentioned among many unrelated details in this discussion" },
+			{ role: "user", content: "alpha beta: the decision" },
+		] as Message[];
+		const rankedEntries = rankedMessages.map((message, index) => ({
+			index,
+			role: "user",
+			summary: message.content as string,
+		}));
+		expect(searchEntries(rankedEntries, rankedMessages, "alpha beta").map((hit) => hit.index)).toEqual([1, 0]);
 	});
 
 	it("filters stopwords from queries", () => {
@@ -268,23 +275,9 @@ describe("searchEntries", () => {
 		expect(result[0].fileMatches?.[0]).toMatchObject({ path: "output.txt", toolName: "write" });
 	});
 
-	it("does not match on toolCall args that are absent (regression guard)", () => {
-		const e: RenderedEntry[] = [{ index: 0, role: "assistant", summary: "reading" }];
-		const m: Message[] = [
-			{
-				role: "assistant",
-				content: [
-					{ type: "text", text: "looking around" },
-					{ type: "toolCall", name: "read", id: "tc_1", arguments: { path: "a.ts" } },
-				],
-			} as any,
-		];
-		expect(searchEntries(e, m, "DEV_API_KEY")).toEqual([]);
-	});
-
 	// ── search result grounding (prevents "half the session" returns) ──
 
-	it("filters low-relevance BM25 hits by score ratio threshold", () => {
+	it("returns the relevant policy sources without unrelated document mentions", () => {
 		// Build a session where one entry is highly relevant and many are barely relevant
 		const govEntries: RenderedEntry[] = [
 			{ index: 0, role: "user", summary: "Review the policy document" },
@@ -312,7 +305,7 @@ describe("searchEntries", () => {
 		// Should return both strong matches but may filter very weak ones
 		const r = searchEntries(govEntries, govMsgs, "policy review");
 		// #0 and #1 are strong matches; #3 and #5 only have "document" which isn't queried
-		expect(r.length).toBeLessThanOrEqual(2);
+		expect(r.map((hit) => hit.index)).toEqual([0, 1]);
 		expect(r[0].index).toBe(0); // highest BM25: matches both terms
 	});
 

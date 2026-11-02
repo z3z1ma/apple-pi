@@ -2,7 +2,6 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { loadAllMessages } from "../src/load-messages.js";
 import { sessionSearchTool } from "../src/tool.js";
 
 const records = [
@@ -45,14 +44,14 @@ const records = [
 ].map((entry) => ({ ...entry, timestamp: "2026-11-02T08:00:00Z" }));
 
 const withSession = async (
-	run: (file: string, invoke: (params: any) => Promise<string>) => Promise<void>,
+	run: (file: string, invoke: (params: any, signal?: AbortSignal) => Promise<string>) => Promise<void>,
 	entries: any[] = records,
 ) => {
 	const dir = mkdtempSync(join(tmpdir(), "source-recall-"));
 	const file = join(dir, "session.jsonl");
 	writeFileSync(file, entries.map((entry) => JSON.stringify(entry)).join("\n"));
-	const invoke = async (params: any) => {
-		const result = await sessionSearchTool.execute("search-call", params, undefined, undefined, {
+	const invoke = async (params: any, signal?: AbortSignal) => {
+		const result = await sessionSearchTool.execute("search-call", params, signal, undefined, {
 			sessionManager: {
 				getSessionFile: () => file,
 				getBranch: () => entries.filter((entry) => entry.id !== "offbranch"),
@@ -95,7 +94,14 @@ describe("source-complete personal recall", () => {
 					query: "arrayneedle",
 					filter: { role: "assistant", tool: "edit", after: "2026-11-02", before: "2026-11-03" },
 				}),
-			).toContain("arrayneedle");
+			).toContain("Read source: entry:edit");
+			expect(await invoke({ query: "arrayneedle", filter: { role: "user" } })).toContain("No matches");
+			expect(await invoke({ query: "arrayneedle", filter: { after: "2026-11-02T08:00:00Z" } })).toContain(
+				"Read source: entry:edit",
+			);
+			expect(await invoke({ query: "arrayneedle", filter: { before: "2026-11-02T08:00:00Z" } })).toContain(
+				"No matches",
+			);
 			expect(await invoke({ query: "arrayneedle", filter: { tool: "write" } })).toContain("No matches");
 			expect(await invoke({ query: "arrayneedle", filter: { after: "2026-11-03" } })).toContain("No matches");
 			for (const filter of [
@@ -126,20 +132,26 @@ describe("source-complete personal recall", () => {
 			expect(first).toContain("Interpretation: explicit safe regex");
 			expect(first).toContain("Page 1/16");
 			expect(first).toContain("76 total matches retained by relevance");
-			expect(await invoke({ query: "regex:needle", page: 6 })).toContain("Page 6/16");
+			const recovered: string[] = [];
+			for (let page = 1; page <= 16; page++) {
+				const output = await invoke({ query: "regex:needle", page });
+				for (const match of output.matchAll(/Read source: entry:(page-\d+)/g)) recovered.push(match[1]!);
+			}
+			expect(recovered).toHaveLength(entries.length);
+			expect(new Set(recovered)).toEqual(new Set(entries.map((entry) => entry.id)));
 			expect(await invoke({ query: "regex:needle", page: 16 })).not.toContain("Use page:17");
 			expect(await invoke({ query: "regex:needle", page: 17 })).toContain("beyond 16 pages");
 			expect(await invoke({ query: "regex:[" })).toContain("Invalid regex query");
 		}, entries);
 	});
 
-	it("honors already-aborted calls before loading or searching", async () => {
-		await expect(
-			sessionSearchTool.execute("aborted", { query: "regex:needle" }, AbortSignal.abort(), undefined, {} as any),
-		).rejects.toThrow();
+	it("honors already-aborted calls even when searchable history is available", async () => {
+		await withSession(async (_file, invoke) => {
+			await expect(invoke({ query: "regex:needle" }, AbortSignal.abort())).rejects.toThrow(/abort/i);
+		});
 	});
 	it("recovers complete write/edit arguments by ID and continues long sources without losing content", async () => {
-		const payload = Array.from({ length: 80 }, (_, i) => `unique payload line ${i}`).join("\n");
+		const payload = Array.from({ length: 80 }, (_, i) => `unique payload line ${i} END`).join("\n");
 		const entries = [
 			{
 				type: "message",
@@ -161,15 +173,27 @@ describe("source-complete personal recall", () => {
 		await withSession(async (_file, invoke) => {
 			const first = await invoke({ query: "entry:body:0:5" });
 			expect(first).toContain("Continue with entry:body:5:5");
-			const full = await invoke({ query: "entry:body:0:2000" });
-			expect(full).toContain(JSON.stringify(payload).slice(1, -1));
-			expect(full).toContain("original bytes");
-			expect(full).toContain("replacement bytes");
+			const windows: string[] = [];
+			const visited = new Set<string>();
+			let address: string | undefined = "entry:body:0:5";
+			while (address) {
+				expect(visited.has(address)).toBe(false);
+				visited.add(address);
+				const output = await invoke({ query: address });
+				windows.push(output);
+				address = /Continue with (entry:body:\d+:5)/.exec(output)?.[1];
+			}
+			const recovered = windows.join("\n");
+			for (const line of payload.split("\n")) expect(recovered).toContain(line);
+			expect(recovered).toContain("original bytes");
+			expect(recovered).toContain("replacement bytes");
+			expect(first).toContain("#0:a.ts");
+			expect(await invoke({ query: "#0:a.ts:full" })).toContain(payload);
 			expect(await invoke({ expand: [0] })).toContain("replacement bytes");
 		}, entries);
 	});
 
-	it("excludes the issuing entry but keeps exact recovery, and links results to their question and attempted call", async () => {
+	it("excludes the issuing entry but keeps exact recovery, and links results to preceding input and attempted calls", async () => {
 		const entries = [
 			{ type: "message", id: "q", parentId: null, message: { role: "user", content: "What happened to the write?" } },
 			{
@@ -217,7 +241,7 @@ describe("source-complete personal recall", () => {
 		}, entries);
 	});
 	it("discovers visible custom records, summaries, notebook text and array edit bodies without renumbering messages", async () => {
-		await withSession(async (file, invoke) => {
+		await withSession(async (_file, invoke) => {
 			for (const [term, id, kind] of [
 				["dispatchneedle", "mail", "custom_message"],
 				["summaryneedle", "compact", "compaction"],
@@ -231,14 +255,15 @@ describe("source-complete personal recall", () => {
 			}
 			expect(await invoke({ query: "arrayneedle" })).toContain("#1");
 			expect(await invoke({ query: "unsearchablestate" })).toContain("No matches");
-			const loaded = loadAllMessages(file, false);
-			expect(loaded.rendered.filter((entry) => entry.index !== undefined).map((entry) => entry.index)).toEqual([0, 1]);
+			const edit = await invoke({ expand: [1] });
+			expect(edit).toContain("entry:edit");
+			expect(edit).toContain("arrayneedle after");
 			expect(await invoke({ expand: [0] })).toContain("original zero");
 			expect(await invoke({ query: "#1:a.ts:full" })).toContain("arrayneedle after");
 		});
 	});
 
-	it("expands stable source IDs with continuation and preserves lineage scope", async () => {
+	it("expands stable source IDs and preserves lineage scope", async () => {
 		await withSession(async (_file, invoke) => {
 			expect(await invoke({ query: "entry:mail" })).toContain("dispatchneedle received");
 			const notebook = await invoke({ query: "entry:notes" });
