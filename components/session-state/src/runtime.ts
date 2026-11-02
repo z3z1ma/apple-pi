@@ -1695,9 +1695,10 @@ export class Runtime {
 				where p.dead = 0 order by i.generation is null, i.generation desc, p.active desc, p.updated_at desc limit 1`)
 				.get(person) as { socket: string; pane: string } | undefined;
 			const commandId = `wake:${randomUUID()}`;
+			// Replayed mail only rides a turn; an empty prompt would leave the woken person idle with its mail unread.
 			const command: Extract<Command, { kind: "start" }> = {
 				kind: "start",
-				prompt: "",
+				prompt: "You were woken because mail arrived while you were away. Read it and act on it.",
 				...(pane ? { tmux: { socket: pane.socket, pane: pane.pane } } : {}),
 			};
 			const now = Date.now();

@@ -87,6 +87,14 @@ test("mail to an on-call person at home wakes it once and the mail reaches it", 
 		},
 		{ timeout: 10000 },
 	);
+	// Replayed mail only rides a turn, so the woken person must also get a steer that starts one.
+	const commands = readFileSync(`${log}.commands`, "utf8")
+		.trim()
+		.split("\n")
+		.map((line) => JSON.parse(line));
+	expect(commands).toContainEqual(
+		expect.objectContaining({ kind: "steer", text: expect.stringContaining("mail arrived") }),
+	);
 	const launches = readFileSync(log, "utf8").trim().split("\n");
 	expect(launches).toHaveLength(1);
 	expect(JSON.parse(launches[0]!)).toEqual(expect.arrayContaining(["--session-id", "desk"]));
