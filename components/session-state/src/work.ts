@@ -17,6 +17,8 @@ export type WorkAction =
 	| ({ action: "assign"; person: string; goal?: string; title?: string; task?: string } & Worth)
 	| { action: "focus"; task: string }
 	| { action: "unassign"; person: string; task: string }
+	/** End an ephemeral task for everyone on it: done, or cancelled when the work is no longer wanted. */
+	| { action: "close"; task: string; status: "done" | "cancelled" }
 	| { action: "finish"; outcome: string }
 	| { action: "promote"; task: string; title?: string; description?: string };
 export type WorkCommand = {
@@ -270,6 +272,36 @@ function writeOutcome(
 	writeAtomicTextFile(path, after);
 }
 
+/** End every open assignment on an ephemeral task and close it in place, as done or cancelled. */
+function closeTask(
+	db: DatabaseSync,
+	task: WorkTask,
+	actor: string,
+	status: "done" | "cancelled",
+	now: number,
+	rollback: (() => void)[],
+): WorkTask {
+	if (!task.ephemeral) throw new Error("Close a ledger task with its ledger status");
+	if (task.archived_at) throw new Error("The task is already closed");
+	const open = db.prepare("select id, person from assignments where task_id = ? and ended_at is null").all(task.id) as {
+		id: number;
+		person: string;
+	}[];
+	for (const held of open) {
+		if (held.person !== actor) mayManage(db, actor, held.person);
+		db.prepare("update assignments set ended_at = ?, end_reason = 'unassigned' where id = ?").run(now, held.id);
+		db.prepare("delete from work_focus where person = ? and task_id = ?").run(held.person, task.id);
+	}
+	const path = join(task.bundle, "task.md");
+	const before = readFileSync(path, "utf8");
+	rollback.push(() => writeAtomicTextFile(path, before));
+	writeAtomicTextFile(path, before.replace(/^Status:.*$/m, `Status: ${status}`));
+	db.prepare("update work_tasks set archived_at = ?, close_status = ? where id = ?").run(now, status, task.id);
+	if (status === "done") resolveWaitsOn(db, task.id, now);
+	participate(db, task, actor, now);
+	return { ...task, archived_at: now, close_status: status };
+}
+
 /** Apply inside the runtime's transaction; rollback/committed hold the filesystem half of that transaction. */
 export function changeWork(
 	db: DatabaseSync,
@@ -346,6 +378,9 @@ export function changeWork(
 			db.prepare("delete from work_focus where person = ? and task_id = ?").run(person, task.id);
 			participate(db, task, actor, now);
 			body = `${nameOf(db, actor)} unassigned ${nameOf(db, person)} from ${taskTitle(task)}.`;
+		} else if (command.action === "close") {
+			task = closeTask(db, task, actor, command.status, now, rollback);
+			body = `${nameOf(db, actor)} closed ${taskTitle(task)} as ${command.status}.`;
 		} else {
 			if (!task.ephemeral || task.archived_at) throw new Error("Promote a live ephemeral task");
 			const previous = task.bundle;

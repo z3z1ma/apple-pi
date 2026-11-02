@@ -573,6 +573,10 @@ export interface AgentWorkplaceApi extends IntegrationsApi {
 	readTask(task: string): Promise<TaskRead>;
 	/** Hand a task to a person as the operator. The runtime owns assignment, focus, notification, and waking. */
 	assignTask(person: string, task: string): Promise<CommandReceipt>;
+	/** End a person's assignment to a task as the operator. */
+	unassignTask(person: string, task: string): Promise<CommandReceipt>;
+	/** Close an ephemeral task for everyone on it, as done or cancelled. */
+	closeTask(task: string, status: "done" | "cancelled"): Promise<CommandReceipt>;
 	/** Observe a shared channel, meeting, or task thread; only an operator participant marks it read. */
 	readWorkplaceThread(thread: string): Promise<ThreadRead>;
 	/**

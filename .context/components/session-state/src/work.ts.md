@@ -5,6 +5,11 @@ Why: moving the source before recording the new path can leave an assignment poi
 Coupled: components/session-state/src/runtime.ts, components/shared/src/ledger-files.ts, components/session-state/src/work-tools.ts
 Verify: components/session-state/tests/work.test.ts, components/session-state/tests/work-recovery.test.ts
 
+## symbol:closeTask
+
+The operator (or a manager of every holder) closes an ephemeral task for everyone on it: open assignments end as `unassigned`, focus clears, `Status:` in task.md becomes done or cancelled, and the bundle stays in place like a finish. Ledger tasks are refused; their close is `ledger_status` moving the bundle, which `closeLedgerTask` records.
+Verify: components/session-state/tests/work.test.ts
+
 ## symbol:cleanMovedBundles
 
 Temporary-peer disposal records explicit `discard` receipts only after process-death proof. Those receipts use this same recovery owner as promotion moves. Leaving them pending strands program scopes even after every person and process is gone; clearing them without deleting the owned bundle falsely acknowledges cleanup. Historical `finish` receipts still preserve their original files.

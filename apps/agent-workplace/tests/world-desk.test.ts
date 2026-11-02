@@ -246,7 +246,20 @@ async function openDesk(appearance: "light" | "dark", width = 1440, desk = true)
 				};
 				for (const listener of listeners) listener(world);
 			};
+			w.work = [];
 			w.agentWorkplace = {
+				assignTask: async (person: string, task: string) => {
+					w.work.push(["assign", person, task]);
+					return { ok: true, stage: "applied" };
+				},
+				unassignTask: async (person: string, task: string) => {
+					w.work.push(["unassign", person, task]);
+					return { ok: true, stage: "applied" };
+				},
+				closeTask: async (task: string, status: string) => {
+					w.work.push(["close", task, status]);
+					return { ok: true, stage: "applied" };
+				},
 				markSeen: async (id: string) => {
 					w.seen.push(id);
 					return { ok: true };
@@ -400,7 +413,8 @@ test("Chat opens at the desk, and a post there always notifies its coordinator",
 		const panel = page.getByRole("region", { name: "Thread: Add GitHub PR threads" });
 		await panel.getByText("Iris: build GitHub PR threads").waitFor();
 		await page.getByRole("region", { name: "Threads", exact: true }).waitFor();
-		await panel.getByRole("button", { name: "Add to sidebar" }).click();
+		await panel.getByRole("button", { name: "Task", exact: true }).click();
+		await page.getByRole("menuitem", { name: "Add to sidebar" }).click();
 		const pinned = page.getByRole("region", { name: "Pinned threads" });
 		await pinned.getByRole("button", { name: /Add GitHub PR threads/ }).waitFor();
 		await shot(page, "thread-light");
@@ -441,6 +455,45 @@ test("Threads lists live work before closed work, and Activity puts questions fi
 		);
 		expect(await activity.locator(".wp-activity-kind").first().textContent()).toBe("Needs your answer");
 		await shot(page, "activity-dark");
+		expect(errors).toEqual([]);
+	} finally {
+		await page.close();
+	}
+});
+
+test("a waiting thread is nudged, reassigned or closed from its header", { timeout: 60_000 }, async () => {
+	const { page, errors } = await openDesk("light");
+	try {
+		await page.getByRole("button", { name: /^Threads/ }).click();
+		await page
+			.getByRole("region", { name: "Threads", exact: true })
+			.getByRole("button", { name: /Review the schedules change Waiting/ })
+			.click();
+		const header = page.locator(".wp-thread-conversation-header");
+		await header.getByRole("button", { name: "Nudge" }).click();
+		await header.getByText("Nudged Milo.").waitFor();
+		await page.setViewportSize({ width: 1100, height: 800 });
+		expect((await page.evaluate(() => (window as any).instructions)).at(-1)).toMatchObject({
+			id: "milo",
+			kind: "talk",
+		});
+		await shot(page, "thread-actions-light");
+
+		await header.getByRole("button", { name: "Task", exact: true }).click();
+		await page.getByRole("menuitem", { name: /^Reassign/ }).click();
+		const picker = page.getByRole("dialog", { name: "Reassign task" });
+		await picker.getByRole("textbox").fill("Iris");
+		await picker.getByRole("textbox").press("Enter");
+		await header.getByText("Given to Iris.").waitFor();
+
+		await header.getByRole("button", { name: "Task", exact: true }).click();
+		await page.getByRole("menuitem", { name: "Mark done" }).click();
+		await header.getByText("Closed as done.").waitFor();
+		expect(await page.evaluate(() => (window as any).work)).toEqual([
+			["assign", "iris", "t2"],
+			["unassign", "milo", "t2"],
+			["close", "t2", "done"],
+		]);
 		expect(errors).toEqual([]);
 	} finally {
 		await page.close();

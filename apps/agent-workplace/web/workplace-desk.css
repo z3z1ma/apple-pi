@@ -769,7 +769,8 @@
 	min-height: 0;
 }
 .wp-thread-conversation-header .wp-header-person {
-	min-width: 0;
+	flex: 1 1 180px;
+	min-width: 140px;
 }
 .wp-thread-conversation-header h1 {
 	overflow: hidden;
@@ -794,6 +795,36 @@
 	color: var(--wp-text);
 	font-size: 12px;
 	white-space: nowrap;
+}
+.wp-app .wp-thread-actions {
+	display: flex;
+	flex: none;
+	align-items: center;
+	gap: 6px;
+}
+.wp-app .wp-thread-actions > button {
+	height: 28px;
+	padding: 0 10px;
+	border: 1px solid var(--wp-border);
+	border-radius: 6px;
+	background: var(--wp-bg);
+	color: var(--wp-text);
+	font-size: 12px;
+	white-space: nowrap;
+}
+.wp-app .wp-thread-actions > button:hover {
+	background: var(--wp-hover);
+}
+.wp-app .wp-thread-action-note {
+	max-width: 260px;
+	overflow: hidden;
+	color: var(--wp-muted);
+	font-size: 12px;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.wp-app .wp-thread-action-note[data-ok="false"] {
+	color: var(--wp-danger);
 }
 .wp-app .wp-thread-pin[aria-pressed="true"] {
 	background: var(--wp-selected);

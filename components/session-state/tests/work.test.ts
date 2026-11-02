@@ -7,6 +7,7 @@ import { afterAll, beforeAll, expect, test, vi } from "vitest";
 import installLedger from "../../../extensions/ledger.js";
 import { fauxSession, type Reply } from "../../../tests/helpers/faux-session.js";
 import { addLedgerTask } from "../../shared/src/ledger-files.js";
+import { sendCommand } from "../src/client.js";
 import type { CommunicationAttempt, ConversationInfo } from "../src/communication-types.js";
 import type { coordinationIn } from "../src/coordination-inspection.js";
 import bridge from "../src/index.js";
@@ -445,6 +446,42 @@ test("the runtime records once when each task opens and how it closes, even for 
 		await close(manager.run);
 	}
 }, 45000);
+
+test("the operator closes an ephemeral task for everyone on it, but not a ledger task or a closed one", async () => {
+	const manager = await person(undefined, "coordinator");
+	const engineer = await person(manager.id);
+	const closeTask = (task: string, status: "done" | "cancelled") =>
+		sendCommand(
+			"operator",
+			{ kind: "work", action: "close", cwd: manager.run.cwd, task, status },
+			{ socketPath: state.socketPath },
+		);
+	try {
+		const stale = await manager.invoke("assign", { person: engineer.id, goal: "Old idea.", title: "Stale" });
+		await packets(engineer.run, 1);
+		const closed = await closeTask(stale.id, "cancelled");
+		expect(closed.stage, closed.reason).toBe("applied");
+		expect(query(state.dbPath, "select close_status from work_tasks where id = ?", stale.id)).toEqual([
+			{ close_status: "cancelled" },
+		]);
+		expect(
+			query(state.dbPath, "select end_reason from assignments where task_id = ? and person = ?", stale.id, engineer.id),
+		).toEqual([{ end_reason: "unassigned" }]);
+		expect(query(state.dbPath, "select 1 from work_focus where person = ?", engineer.id)).toEqual([]);
+		expect(readFileSync(join(stale.bundle, "task.md"), "utf8")).toMatch(/^Status: cancelled$/m);
+		expect((await closeTask(stale.id, "done")).reason).toContain("already closed");
+
+		await manager.invoke("ledger_add", { title: "Keep in ledger", description: "Ledger", slug: "keep" });
+		const ledger = join(manager.run.cwd, ".ledger");
+		const keep = readdirSync(ledger).find((name) => name.endsWith("-keep"))!;
+		const taken = await engineer.invoke("take_task", { task: join(ledger, keep) });
+		await packets(engineer.run, 2);
+		expect((await closeTask(taken.id, "done")).reason).toContain("ledger status");
+	} finally {
+		await close(engineer.run);
+		await close(manager.run);
+	}
+}, 30000);
 
 test("a new task carries the value and cost of delay its writer estimated, and the next read sees an edit", async () => {
 	const manager = await person(undefined, "coordinator");

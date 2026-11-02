@@ -267,6 +267,10 @@ export function workplaceReader(readTask: ReturnType<typeof taskReader>) {
 export interface WorkplaceActions {
 	readTask(task: string): Promise<TaskRead>;
 	assignTask(person: string, task: string): Promise<CommandReceipt>;
+	/** End a person's assignment to a task on the board; the runtime checks the operator may. */
+	unassignTask(person: string, task: string): Promise<CommandReceipt>;
+	/** Close an ephemeral task for everyone on it; ledger tasks close through their ledger status. */
+	closeTask(task: string, status: "done" | "cancelled"): Promise<CommandReceipt>;
 	readWorkplaceThread(thread: string): Promise<ThreadRead>;
 	setChannelMembership(thread: string, joined: boolean): Promise<CommandReceipt>;
 }
@@ -294,6 +298,30 @@ export function openWorkplace(path: string, commands: Commands, snapshot: () => 
 				kind: "work",
 				...(tmux ? { tmux } : {}),
 				action: "assign",
+				person,
+				task: task.id,
+				cwd: task.project,
+			});
+			return result.ok ? { ok: true, stage: "applied" } : result;
+		},
+		async closeTask(id, status) {
+			const task = findTask(id);
+			if (!task) return { ok: false, reason: "That task is no longer on the board." };
+			const result = await commands.send(OPERATOR, {
+				kind: "work",
+				action: "close",
+				task: task.id,
+				status,
+				cwd: task.project,
+			});
+			return result.ok ? { ok: true, stage: "applied" } : result;
+		},
+		async unassignTask(person, id) {
+			const task = findTask(id);
+			if (!task) return { ok: false, reason: "That task is no longer on the board." };
+			const result = await commands.send(OPERATOR, {
+				kind: "work",
+				action: "unassign",
 				person,
 				task: task.id,
 				cwd: task.project,

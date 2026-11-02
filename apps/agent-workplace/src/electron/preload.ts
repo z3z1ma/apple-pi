@@ -173,6 +173,8 @@ const api: AgentWorkplaceApi = {
 	replyThread: (thread, body) => ipcRenderer.invoke("world:reply-thread", thread, body) as Promise<CommandReceipt>,
 	readTask: (task) => ipcRenderer.invoke("world:read-task", task) as Promise<TaskRead>,
 	assignTask: (person, task) => ipcRenderer.invoke("world:assign-task", person, task) as Promise<CommandReceipt>,
+	unassignTask: (person, task) => ipcRenderer.invoke("world:unassign-task", person, task) as Promise<CommandReceipt>,
+	closeTask: (task, status) => ipcRenderer.invoke("world:close-task", task, status) as Promise<CommandReceipt>,
 	readWorkplaceThread: (thread) => ipcRenderer.invoke("world:workplace-thread", thread) as Promise<ThreadRead>,
 	setChannelMembership: (thread, joined) =>
 		ipcRenderer.invoke("world:channel-membership", thread, joined) as Promise<CommandReceipt>,

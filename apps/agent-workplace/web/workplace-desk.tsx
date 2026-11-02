@@ -10,10 +10,12 @@ import type {
 } from "../src/world.js";
 import { QuestionForm } from "./overlay/conversation/question-form.js";
 import { plainLine } from "./overlay/conversation/quote.js";
+import { useWorkplaceMenu } from "./workplace-context-menu.js";
 import { Icon } from "./workplace-icon.js";
 import { later, pinnedThreads, useLater } from "./workplace-later.js";
+import { deliver } from "./workplace-message-actions.js";
 import { PersonAvatar, PersonName, presenceOf, sessionStatus } from "./workplace-people.js";
-import type { SwitchTarget } from "./workplace-switcher.js";
+import { destinations, Picker, type SwitchTarget } from "./workplace-switcher.js";
 import { ThreadPane } from "./workplace-thread.js";
 import "./workplace-desk.css";
 
@@ -1200,6 +1202,13 @@ function ThreadConversation({
 	const [tools, setTools] = useState<HTMLElement | null>(null);
 	const pins = pinnedThreads.use();
 	const pinned = pins.some((item) => item.key === thread.id);
+	const togglePin = () =>
+		pinned ? pinnedThreads.remove(thread.id) : pinnedThreads.add({ key: thread.id, title: thread.title });
+	const [note, setNote] = useState<{ ok: boolean; text: string }>();
+	const report = (ok: boolean, text: string) => {
+		setNote({ ok, text });
+		if (ok) setTimeout(() => setNote(undefined), 4000);
+	};
 	return (
 		<section className="wp-thread-conversation" aria-label={`Thread: ${thread.title}`}>
 			<header className="wp-conversation-header wp-thread-conversation-header">
@@ -1218,20 +1227,33 @@ function ThreadConversation({
 								{index < people.length - 1 && ", "}
 							</span>
 						))}
+						{note && (
+							<span className="wp-thread-action-note" data-ok={note.ok} role="status">
+								{note.text}
+							</span>
+						)}
 					</p>
 				</div>
 				<div className="wp-header-tools" ref={setTools} />
-				<button
-					type="button"
-					className="wp-thread-pin"
-					aria-pressed={pinned}
-					title={pinned ? "Remove from the sidebar" : "Keep in the sidebar, like a channel"}
-					onClick={() =>
-						pinned ? pinnedThreads.remove(thread.id) : pinnedThreads.add({ key: thread.id, title: thread.title })
-					}
-				>
-					{pinned ? "In sidebar" : "Add to sidebar"}
-				</button>
+				{live ? (
+					<ThreadActions
+						world={world}
+						task={live}
+						waiting={state === "waiting"}
+						report={report}
+						pin={{ label: pinned ? "Remove from sidebar" : "Add to sidebar", onSelect: togglePin }}
+					/>
+				) : (
+					<button
+						type="button"
+						className="wp-thread-pin"
+						aria-pressed={pinned}
+						title={pinned ? "Remove from the sidebar" : "Keep in the sidebar, like a channel"}
+						onClick={togglePin}
+					>
+						{pinned ? "In sidebar" : "Add to sidebar"}
+					</button>
+				)}
 				<button
 					type="button"
 					className="wp-thread-close"
@@ -1244,6 +1266,92 @@ function ThreadConversation({
 			</header>
 			<ThreadPane key={thread.id} id={thread.id} world={world} drafts={drafts} embedded toolbarHost={tools} />
 		</section>
+	);
+}
+
+/** Unstick an in-flight task from its thread: nudge whoever holds it, hand it to someone else, or close it. */
+function ThreadActions({
+	world,
+	task,
+	waiting,
+	report,
+	pin,
+}: {
+	world: WorldSnapshot;
+	task: WorkplaceTask;
+	waiting: boolean;
+	report: (ok: boolean, text: string) => void;
+	pin: { label: string; onSelect: () => void };
+}) {
+	const openMenu = useWorkplaceMenu();
+	const [picking, setPicking] = useState(false);
+	const holders = task.assignees.map((assignee) => assignee.person);
+	const nameOf = (id: string) => personIn(world, id)?.person.name ?? id;
+	const nudge = async () => {
+		const body = `The operator is checking on "${task.title}". Continue it now, or reply in its thread with what blocks you.`;
+		const failed: string[] = [];
+		for (const id of holders) {
+			const awake = world.characters.some((person) => person.id === id);
+			const sent = await deliver(world, { kind: "dm", id }, body);
+			const woke = awake || (await api.wake(id)).ok;
+			if (!sent.ok || !woke) failed.push(nameOf(id));
+		}
+		report(
+			!failed.length,
+			failed.length ? `Not reached: ${failed.join(", ")}` : `Nudged ${holders.map(nameOf).join(", ")}.`,
+		);
+	};
+	const reassign = async (to: string) => {
+		setPicking(false);
+		const given = await api.assignTask(to, task.id);
+		if (!given.ok) return report(false, `Not given to ${nameOf(to)}: ${given.reason}`);
+		for (const id of holders.filter((holder) => holder !== to)) await api.unassignTask(id, task.id);
+		report(true, `Given to ${nameOf(to)}.`);
+	};
+	const close = async (status: "done" | "cancelled") => {
+		const result = await api.closeTask(task.id, status);
+		report(result.ok, result.ok ? (status === "done" ? "Closed as done." : "Cancelled.") : result.reason);
+	};
+	const people = destinations(world).filter((item) => item.target.kind === "dm" && !holders.includes(item.target.id));
+	return (
+		<div className="wp-thread-actions">
+			{waiting && holders.length > 0 && (
+				<button
+					type="button"
+					onClick={() => void nudge()}
+					title="Ask whoever holds it to continue or say what blocks them"
+				>
+					Nudge
+				</button>
+			)}
+			<button
+				type="button"
+				aria-haspopup="menu"
+				onClick={(event) =>
+					openMenu(event, [
+						{ label: "Reassign\u2026", onSelect: () => setPicking(true) },
+						...(task.ephemeral
+							? [
+									{ label: "Mark done", onSelect: () => void close("done") },
+									{ label: "Cancel task", onSelect: () => void close("cancelled") },
+								]
+							: []),
+						pin,
+					])
+				}
+			>
+				Task
+			</button>
+			{picking && (
+				<Picker
+					label="Reassign task"
+					placeholder={`Give "${task.title}" to\u2026`}
+					items={people}
+					close={() => setPicking(false)}
+					choose={(item) => item.target.kind === "dm" && void reassign(item.target.id)}
+				/>
+			)}
+		</div>
 	);
 }
 

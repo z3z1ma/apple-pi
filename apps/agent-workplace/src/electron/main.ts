@@ -230,6 +230,16 @@ function start() {
 			? workplace.assignTask(person, task)
 			: { ok: false, reason: "A person and task are required." },
 	);
+	ipcMain.handle("world:unassign-task", (_event, person: unknown, task: unknown) =>
+		typeof person === "string" && typeof task === "string"
+			? workplace.unassignTask(person, task)
+			: { ok: false, reason: "A person and task are required." },
+	);
+	ipcMain.handle("world:close-task", (_event, task: unknown, status: unknown) =>
+		typeof task === "string" && (status === "done" || status === "cancelled")
+			? workplace.closeTask(task, status)
+			: { ok: false, reason: "A task and done or cancelled are required." },
+	);
 	ipcMain.handle("world:workplace-thread", (_event, thread: unknown) =>
 		typeof thread === "string" ? workplace.readWorkplaceThread(thread) : { ok: false, reason: "No thread was named." },
 	);

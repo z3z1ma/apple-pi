@@ -9192,6 +9192,42 @@ function openWorkplace(path, commands, snapshot) {
 				stage: "applied"
 			} : result;
 		},
+		async closeTask(id, status) {
+			const task = findTask(id);
+			if (!task) return {
+				ok: false,
+				reason: "That task is no longer on the board."
+			};
+			const result = await commands.send(OPERATOR, {
+				kind: "work",
+				action: "close",
+				task: task.id,
+				status,
+				cwd: task.project
+			});
+			return result.ok ? {
+				ok: true,
+				stage: "applied"
+			} : result;
+		},
+		async unassignTask(person, id) {
+			const task = findTask(id);
+			if (!task) return {
+				ok: false,
+				reason: "That task is no longer on the board."
+			};
+			const result = await commands.send(OPERATOR, {
+				kind: "work",
+				action: "unassign",
+				person,
+				task: task.id,
+				cwd: task.project
+			});
+			return result.ok ? {
+				ok: true,
+				stage: "applied"
+			} : result;
+		},
 		async setChannelMembership(thread, joined) {
 			const result = await commands.send(OPERATOR, {
 				kind: "channel_membership",
@@ -12623,6 +12659,14 @@ function start() {
 	ipcMain.handle("world:assign-task", (_event, person, task) => typeof person === "string" && typeof task === "string" ? workplace.assignTask(person, task) : {
 		ok: false,
 		reason: "A person and task are required."
+	});
+	ipcMain.handle("world:unassign-task", (_event, person, task) => typeof person === "string" && typeof task === "string" ? workplace.unassignTask(person, task) : {
+		ok: false,
+		reason: "A person and task are required."
+	});
+	ipcMain.handle("world:close-task", (_event, task, status) => typeof task === "string" && (status === "done" || status === "cancelled") ? workplace.closeTask(task, status) : {
+		ok: false,
+		reason: "A task and done or cancelled are required."
 	});
 	ipcMain.handle("world:workplace-thread", (_event, thread) => typeof thread === "string" ? workplace.readWorkplaceThread(thread) : {
 		ok: false,
