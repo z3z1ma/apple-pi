@@ -27,7 +27,17 @@ The operator wants to feel the organization's intelligence. The runtime watches 
 
 ## Current State
 
-Proposal approved with the decisions above. Building step 1.
+All six steps are built, committed and live (runtime schema 48, app relaunched):
+
+- Stream: GitHub, Jira and Slack read each minute (`04c54ab5`, `9d7a3026`); all three set to `all` for the operator.
+- Triage: proven live. The coordinator decided all 186 first-day items (177 pass, 4 answer, 3 draft, 1 link, 1 task), delegating verification to Lula.
+- Rules (`f494f78c`) and notes plus the scout role (`eb4a818d`): built and tested with fixtures, not yet used live.
+- Model: `desk` profile (`117a553e`); the live coordinator runs Terra xhigh. An explicit model choice now persists across restarts (`a48ad891`).
+
+Open:
+
+- The live `model-profiles.json` gets its `desk` entry only after every running Pi session has reloaded; older code rejects the unknown profile name.
+- The coordinator needs a reload to load the scout instructions and hire the scout; exploration is unproven live.
 
 ## Outcome
 
