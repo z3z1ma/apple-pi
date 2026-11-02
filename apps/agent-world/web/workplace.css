@@ -1284,6 +1284,8 @@ body.workplace {
 	margin: 5px 0;
 }
 .wp-session .aw-conv-fold-line {
+	box-sizing: border-box;
+	width: 100%;
 	padding: 5px 8px;
 	border: 1px solid var(--wp-border);
 	border-radius: 5px;
@@ -1300,6 +1302,14 @@ body.workplace {
 .wp-session .aw-conv-fold-label {
 	font-weight: 550;
 	color: var(--wp-accent);
+}
+.wp-session .aw-conv-thought .aw-conv-fold-line {
+	font-size: 11px;
+}
+.wp-session .aw-conv-thought .aw-conv-fold-label {
+	color: var(--wp-muted);
+	font-weight: 500;
+	font-style: italic;
 }
 .wp-session .aw-conv-fold-arg {
 	font-size: 11px;

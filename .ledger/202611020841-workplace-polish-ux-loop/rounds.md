@@ -73,3 +73,7 @@ Open: the desk keeps a separate row for search / Catch up / Read latest / Action
 ## Round 10: coming back to things
 
 - U11 Nothing let the operator park a message to act on later; with many agents reporting, important lines scroll away. **Fixed:** Save for later (bookmark on hover or the message menu) on every DM, channel and thread message; a Later view in the sidebar (and in the switcher) lists them newest first, opens each where it was, and Done removes it. Kept on the device.
+
+## Round 11: a working agent's DM
+
+- V13 With tool calls shown, "Thought it over" folds were large bold purple pills, and tool lines were as wide as their text, so the column had a ragged edge. **Fixed:** every fold is a full-width line; thoughts read as muted italic lines at tool-line size.

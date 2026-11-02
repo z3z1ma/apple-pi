@@ -216,6 +216,21 @@ if (scenario === "actions") {
 		await page.close();
 	}
 }
+if (scenario === "working") {
+	for (const [appearance, width] of [
+		["light", 1440],
+		["dark", 900],
+	] as const) {
+		const page = await open(width, 900, appearance);
+		await page.locator(".wp-dm .wp-dm-link").filter({ hasText: "Tadhg" }).first().click();
+		await page.waitForTimeout(2000);
+		await shot(page, `${appearance}-${width}-working`);
+		await page.getByRole("button", { name: "Show tool calls" }).click();
+		await page.waitForTimeout(800);
+		await shot(page, `${appearance}-${width}-working-tools`);
+		await page.close();
+	}
+}
 if (scenario === "rest") {
 	for (const [appearance, width] of [
 		["light", 1440],
