@@ -116,3 +116,8 @@ Open: the desk keeps a separate row for search / Catch up / Read latest / Action
 - U20 Follow-ups to a working agent wait in its bridge until the run ends; while they wait, the DM's Sent line offers **Withdraw**. A stopped run does not send its waiting follow-ups (they fail as not sent).
 - U21 Emoji reactions (done, seen, agreed, thanks) on channel and thread messages: recorded by the runtime, shown to every reader, waking nobody.
 - Found and fixed on the way: every session without a manager flag was sent a spurious `transfer` on each hello (null compared with ""), which also broke seven Workplace tests.
+
+## Round 20: operator notes
+
+- Reactions work in DMs too: a DM message is a transcript entry, so its reaction is keyed `entry:<session>:<entry>`, operator only, and transcript pages carry them.
+- "Ask the desk to handle" is now "Send to desk".
