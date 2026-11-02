@@ -676,7 +676,15 @@ export function ThreadPane({
 						</label>
 						<div className="wp-compose-footer">
 							<span>
-								{channel ? "Enter to post · Shift + Enter for a new line" : "Ctrl / Command + Enter to reply"}
+								{channel ? (
+									<>
+										<kbd>Enter</kbd> posts &middot; <kbd>Shift</kbd>+<kbd>Enter</kbd> new line
+									</>
+								) : (
+									<>
+										<kbd>{"\u2318"}</kbd>/<kbd>Ctrl</kbd>+<kbd>Enter</kbd> replies
+									</>
+								)}
 							</span>
 							<button type="submit" className="wp-primary" disabled={locked || !draft.trim()}>
 								{channel ? "Post message" : "Send reply"}

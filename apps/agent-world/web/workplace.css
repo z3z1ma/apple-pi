@@ -848,7 +848,20 @@ body.workplace {
 	gap: 12px;
 }
 .wp-compose-footer > span {
+	font-size: 11px;
+	color: var(--wp-muted);
+}
+.wp-compose-footer kbd,
+.wp-session .aw-conv-hint kbd {
+	display: inline-block;
+	margin: 0 2px;
+	padding: 0 4px;
+	border: 1px solid var(--wp-border);
+	border-bottom-width: 2px;
+	border-radius: 4px;
+	font-family: inherit;
 	font-size: 10px;
+	line-height: 15px;
 	color: var(--wp-muted);
 }
 .wp-thread-note {
@@ -1337,10 +1350,7 @@ body.workplace {
 	font-size: 11px;
 	color: var(--wp-muted);
 }
-.wp-session .aw-conv-hint kbd {
-	font-family: inherit;
-	color: var(--wp-muted);
-}
+
 .wp-session .aw-cta {
 	flex: none;
 	white-space: nowrap;
