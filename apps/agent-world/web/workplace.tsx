@@ -13,10 +13,12 @@ import { WorkplaceCode } from "./workplace-code.js";
 import { useWorkplaceMenu, WorkplaceMenuProvider } from "./workplace-context-menu.js";
 import {
 	activityItems,
+	ChannelHeader,
 	ChatNav,
 	GroupList,
 	type OpenThread,
 	OrganizationView,
+	SidebarSection,
 	ThreadPanel,
 	useActivitySeen,
 } from "./workplace-desk.js";
@@ -536,63 +538,65 @@ function Chat({
 						deskUnread={desk ? (unreads.get(desk.thread) ?? 0) : 0}
 						needsYou={view === "activity" ? 0 : unseenActivity.size}
 					/>
-					<h2 className="wp-channel-heading">
-						Channels{" "}
-						<span>
-							{channels.filter((thread) => thread.id !== desk?.thread && !thread.id.startsWith("team:")).length}
-						</span>
-						<span className="wp-channel-tools">
-							<button
-								type="button"
-								aria-label="Discover or create channels"
-								title="Discover or create channels"
-								onClick={() => setDiscovering(true)}
-							>
-								+
-							</button>
-						</span>
-					</h2>
-					{renameChannel && (
-						<div className="wp-channel-rename">
-							<OrganizationNameForm
-								key={renameChannel.id}
-								id={renameChannel.id}
-								name={renameChannel.name}
-								onClose={closeChannelRename}
-							/>
-						</div>
-					)}
-					{channels
-						.filter(
-							(thread) =>
-								thread.id !== desk?.thread &&
-								!thread.id.startsWith("team:") &&
-								matches(channelName(thread.id, thread.subject, world)),
-						)
-						.map((thread) => (
-							<button
-								type="button"
-								className="wp-channel"
-								aria-haspopup={/^(organization|team):/.test(thread.id) ? "menu" : undefined}
-								onContextMenu={(event) => channelMenu(event, thread)}
-								onKeyDown={(event) => channelMenu(event, thread)}
-								data-unread={(unreads.get(thread.id) ?? 0) > 0}
-								aria-label={`# ${channelName(thread.id, thread.subject, world)}`}
-								aria-description={`${unreads.get(thread.id) ?? 0} unread messages`}
-								key={thread.id}
-								aria-pressed={selectedChannel?.id === thread.id}
-								onClick={() => setSelection({ kind: "channel", id: thread.id })}
-							>
-								<span>#</span>
-								<span>{channelName(thread.id, thread.subject, world)}</span>
-								{(unreads.get(thread.id) ?? 0) > 0 && (
-									<b className="wp-unread-count" aria-hidden="true">
-										{unreads.get(thread.id)}
-									</b>
-								)}
-							</button>
-						))}
-					{!channels.length && <p className="wp-sidebar-note">Discover shared context or create a topic channel.</p>}
+					<SidebarSection
+						id="channels"
+						title="Channels"
+						count={channels.filter((thread) => thread.id !== desk?.thread && !thread.id.startsWith("team:")).length}
+						tools={
+							<span className="wp-channel-tools">
+								<button
+									type="button"
+									aria-label="Discover or create channels"
+									title="Discover or create channels"
+									onClick={() => setDiscovering(true)}
+								>
+									+
+								</button>
+							</span>
+						}
+					>
+						{renameChannel && (
+							<div className="wp-channel-rename">
+								<OrganizationNameForm
+									key={renameChannel.id}
+									id={renameChannel.id}
+									name={renameChannel.name}
+									onClose={closeChannelRename}
+								/>
+							</div>
+						)}
+						{channels
+							.filter(
+								(thread) =>
+									thread.id !== desk?.thread &&
+									!thread.id.startsWith("team:") &&
+									matches(channelName(thread.id, thread.subject, world)),
+							)
+							.map((thread) => (
+								<button
+									type="button"
+									className="wp-channel"
+									aria-haspopup={/^(organization|team):/.test(thread.id) ? "menu" : undefined}
+									onContextMenu={(event) => channelMenu(event, thread)}
+									onKeyDown={(event) => channelMenu(event, thread)}
+									data-unread={(unreads.get(thread.id) ?? 0) > 0}
+									aria-label={`# ${channelName(thread.id, thread.subject, world)}`}
+									aria-description={`${unreads.get(thread.id) ?? 0} unread messages`}
+									key={thread.id}
+									aria-pressed={selectedChannel?.id === thread.id}
+									onClick={() => setSelection({ kind: "channel", id: thread.id })}
+								>
+									<span>#</span>
+									<span>{channelName(thread.id, thread.subject, world)}</span>
+									{(unreads.get(thread.id) ?? 0) > 0 && (
+										<b className="wp-unread-count" aria-hidden="true">
+											{unreads.get(thread.id)}
+										</b>
+									)}
+								</button>
+							))}
+						{!channels.length && <p className="wp-sidebar-note">Discover shared context or create a topic channel.</p>}
+					</SidebarSection>
 					<GroupList
 						world={world}
 						groups={channels.filter((thread) => thread.id.startsWith("team:"))}
@@ -603,17 +607,13 @@ function Chat({
 						menu={channelMenu}
 					/>
 					{heads.length > 0 && (
-						<section aria-label="VIPs">
-							<h2>
-								VIPs <span>{heads.length}</span>
-							</h2>
+						<SidebarSection id="vips" title="VIPs" count={heads.length}>
 							{heads.filter((head) => matches(head.character.name)).map((head) => personRow(head.character, head.home))}
-						</section>
+						</SidebarSection>
 					)}
-					<h2>
-						Direct messages <span>{direct.length}</span>
-					</h2>
-					{direct.filter((agent) => matches(agent.name)).map((agent) => personRow(agent))}
+					<SidebarSection id="direct" title="Direct messages" count={direct.length}>
+						{direct.filter((agent) => matches(agent.name)).map((agent) => personRow(agent))}
+					</SidebarSection>
 					{sleeping.length > 0 && (
 						<details className="wp-sleepers">
 							<summary>Away ({sleeping.length})</summary>
@@ -711,27 +711,12 @@ function Chat({
 						</>
 					) : selectedChannel ? (
 						<>
-							<header className="wp-conversation-header">
-								<div>
-									<h1
-										tabIndex={-1}
-										aria-haspopup={/^(organization|team):/.test(selectedChannel.id) ? "menu" : undefined}
-										onContextMenu={(event) => channelMenu(event, selectedChannel)}
-										onKeyDown={(event) => channelMenu(event, selectedChannel)}
-									>
-										# {channelName(selectedChannel.id, selectedChannel.subject, world)}
-									</h1>
-									<p>
-										{selectedChannel.participants.length} participants ·{" "}
-										{selectedChannel.id.startsWith("organization:")
-											? "Organization channel"
-											: selectedChannel.id.startsWith("team:")
-												? "Direct-report team channel"
-												: "Channel"}
-									</p>
-								</div>
-								<span className="wp-session-label">Shared conversation</span>
-							</header>
+							<ChannelHeader
+								world={world}
+								channel={selectedChannel}
+								label={channelName(selectedChannel.id, selectedChannel.subject, world)}
+								menu={channelMenu}
+							/>
 							{active && (
 								<ThreadPane
 									key={selectedChannel.id}
@@ -740,6 +725,7 @@ function Chat({
 									channelLabel={channelName(selectedChannel.id, selectedChannel.subject, world)}
 									world={world}
 									drafts={drafts}
+									embedded
 								/>
 							)}
 						</>

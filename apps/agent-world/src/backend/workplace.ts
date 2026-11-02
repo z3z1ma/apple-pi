@@ -42,10 +42,9 @@ function visibleBundles(directory: string): string[] {
 
 function readThreads(db: DatabaseSync, roots: Map<string, string>): WorkplaceThread[] {
 	if (!hasTable(db, "threads")) return [];
-	const topics = db
-		.prepare("pragma table_info(threads)")
-		.all()
-		.some((column) => column.name === "channel_type");
+	const columns = (db.prepare("pragma table_info(threads)").all() as { name: string }[]).map((column) => column.name);
+	const topics = columns.includes("channel_type");
+	const charters = columns.includes("listener");
 	const visible = topics
 		? `(t.kind = 'channel' and (t.channel_type != 'topic' or exists (select 1 from thread_participants own where own.thread_id = t.id and own.participant = 'operator' and own.following = 1))) or (t.kind = 'meeting' and t.closed_at is null)`
 		: "t.kind = 'channel' or (t.kind = 'meeting' and t.closed_at is null)";
@@ -61,6 +60,7 @@ function readThreads(db: DatabaseSync, roots: Map<string, string>): WorkplaceThr
 	const rows = db
 		.prepare(`select t.id, t.kind, t.subject, t.created_by as createdBy, t.closed_at,
 		${topics ? "t.channel_type as channelType, t.scope_head as scopeHead," : ""}
+		${charters ? "t.listener, t.charter, t.purpose," : ""}
 		coalesce(max(m.seq), 0) as lastSeq, coalesce(max(m.at), t.created_at) as lastAt
 		from threads t left join thread_messages m on m.thread_id = t.id
 		where ${visible} group by t.id

@@ -130,6 +130,57 @@ if (scenario === "tour") {
 		await page.close();
 	}
 }
+if (scenario === "chat") {
+	for (const [appearance, width] of [
+		["light", 1440],
+		["dark", 1100],
+		["light", 900],
+	] as const) {
+		const page = await open(width, 900, appearance);
+		const name = `${appearance}-${width}`;
+		const dm = page.locator(".wp-dm .wp-dm-link").first();
+		if (await dm.count()) {
+			await dm.click();
+			await page.waitForTimeout(1500);
+			await shot(page, `${name}-dm`);
+		}
+		const channel = page.locator(".wp-channel").first();
+		if (await channel.count()) {
+			await channel.click();
+			await page.waitForTimeout(1200);
+			await shot(page, `${name}-channel`);
+		}
+		const group = page.locator(".wp-group").first();
+		if (await group.count()) {
+			await group.click();
+			await page.waitForTimeout(1200);
+			await shot(page, `${name}-group`);
+		}
+		await page.getByRole("button", { name: /^Threads/ }).click();
+		await page.waitForTimeout(500);
+		const thread = page.locator(".wp-threads-list button").first();
+		if (await thread.count()) {
+			await thread.click();
+			await page.waitForTimeout(1200);
+			await shot(page, `${name}-thread-panel`);
+		}
+		await page.close();
+	}
+}
+if (scenario === "rest") {
+	for (const [appearance, width] of [
+		["light", 1440],
+		["dark", 1100],
+	] as const) {
+		const page = await open(width, 900, appearance);
+		for (const tab of ["Org", "Code", "Issues"]) {
+			await page.getByRole("button", { name: tab, exact: true }).click();
+			await page.waitForTimeout(1500);
+			await shot(page, `${appearance}-${width}-${tab.toLowerCase()}`);
+		}
+		await page.close();
+	}
+}
 await browser.close();
 world.close();
 process.exit(0);

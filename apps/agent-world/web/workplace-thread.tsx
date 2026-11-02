@@ -525,6 +525,7 @@ export function ThreadPane({
 				}}
 			>
 				{!page && pending && <p role="status">Reading conversation...</p>}
+				{!listener && page && !page.messages.length && !search && <p className="wp-thread-empty">No messages yet.</p>}
 				{listener && page && !page.messages.length && !search && (
 					<div className="wp-desk-welcome">
 						<h2>Tell the organization what you need</h2>

@@ -1534,7 +1534,7 @@ test("channel author and participant names open their exact DMs without sending 
 		expect(await pages(page)).toEqual([["pi-tests", null]]);
 		await page.getByRole("textbox", { name: "Instruct pi-tests", exact: true }).fill("Keep this DM draft.");
 		await page.getByRole("button", { name: /^Group: Orla/ }).click();
-		await page.locator(".wp-thread-header").getByRole("button", { name: "Orla", exact: true }).click();
+		await page.locator(".wp-channel-header p").getByRole("button", { name: "Orla", exact: true }).click();
 		await page.locator(".wp-conversation-header").getByRole("heading", { name: "Orla", exact: true }).waitFor();
 		await vi.waitFor(async () => expect((await pages(page)).at(-1)).toEqual([HQ, null]));
 		await page.getByRole("button", { name: /^pi-tests/ }).click();

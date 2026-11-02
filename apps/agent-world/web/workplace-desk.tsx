@@ -570,10 +570,7 @@ export function GroupList({
 		.filter((row) => row.full.toLowerCase().includes(filter.toLowerCase()));
 	if (!rows.length) return null;
 	return (
-		<section aria-label="Groups" className="wp-group-list">
-			<h2>
-				Groups <span>{rows.length}</span>
-			</h2>
+		<SidebarSection id="groups" title="Groups" count={rows.length}>
 			{rows.map(({ group, members, label, full }) => {
 				const unread = unreads.get(group.id) ?? 0;
 				return (
@@ -605,7 +602,115 @@ export function GroupList({
 					</button>
 				);
 			})}
+		</SidebarSection>
+	);
+}
+
+const COLLAPSED = "workplace-sidebar-collapsed";
+
+/** A sidebar section whose heading collapses it, remembered on this device. */
+export function SidebarSection({
+	id,
+	title,
+	count,
+	tools,
+	children,
+}: {
+	id: string;
+	title: string;
+	count: number;
+	tools?: React.ReactNode;
+	children: React.ReactNode;
+}) {
+	const [collapsed, setCollapsed] = useState(() =>
+		(JSON.parse(localStorage.getItem(COLLAPSED) ?? "[]") as string[]).includes(id),
+	);
+	const toggle = () => {
+		const stored = new Set(JSON.parse(localStorage.getItem(COLLAPSED) ?? "[]") as string[]);
+		if (collapsed) stored.delete(id);
+		else stored.add(id);
+		localStorage.setItem(COLLAPSED, JSON.stringify([...stored]));
+		setCollapsed(!collapsed);
+	};
+	return (
+		<section aria-label={title} className="wp-sidebar-section" data-collapsed={collapsed}>
+			<h2>
+				<button type="button" className="wp-section-toggle" aria-expanded={!collapsed} onClick={toggle}>
+					<Icon name={collapsed ? "chevron-right" : "chevron-down"} />
+					{title}
+				</button>
+				<span>{count}</span>
+				{tools}
+			</h2>
+			{!collapsed && children}
 		</section>
+	);
+}
+
+/** A channel's header: groups show their people; channels show their kind, purpose and any standing charter. */
+export function ChannelHeader({
+	world,
+	channel,
+	label,
+	menu,
+}: {
+	world: WorldSnapshot;
+	channel: {
+		id: string;
+		subject: string;
+		participants: string[];
+		purpose?: string | null;
+		listener?: string | null;
+		charter?: string | null;
+	};
+	label: string;
+	menu: (event: React.MouseEvent<HTMLElement> | React.KeyboardEvent<HTMLElement>, thread: { id: string }) => void;
+}) {
+	const group = channel.id.startsWith("team:");
+	const head = group ? channel.id.slice("team:".length) : undefined;
+	const members = head
+		? [head, ...channel.participants.filter((id) => id !== head && id !== "operator")]
+		: channel.participants.filter((id) => id !== "operator");
+	const name = (id: string) => personIn(world, id)?.person.name ?? id;
+	const listener = channel.listener ? name(channel.listener) : undefined;
+	const kind = channel.id.startsWith("organization:") ? "Whole organization" : (channel.purpose ?? "Topic channel");
+	return (
+		<header className="wp-conversation-header wp-channel-header">
+			{head ? (
+				<span className="wp-group-avatars wp-channel-header-avatars" aria-hidden="true">
+					{members.slice(0, 2).map((id) => (
+						<PersonAvatar key={id} id={id} name={name(id)} interactive={false} />
+					))}
+				</span>
+			) : null}
+			<div className="wp-header-person">
+				<h1
+					tabIndex={-1}
+					aria-haspopup={/^(organization|team):/.test(channel.id) ? "menu" : undefined}
+					onContextMenu={(event) => menu(event, channel)}
+					onKeyDown={(event) => menu(event, channel)}
+				>
+					{head ? `${name(head)}'s team` : `# ${label}`}
+				</h1>
+				<p title={members.map(name).join(", ")}>
+					{head
+						? members.map((id, index) => (
+								<span key={id}>
+									<PersonName id={id} name={name(id)} />
+									{index < members.length - 1 && ", "}
+								</span>
+							))
+						: `${members.length} ${members.length === 1 ? "member" : "members"} \u00b7 ${kind}`}
+				</p>
+			</div>
+			{listener && (
+				<span className="wp-channel-charter" title={channel.charter ?? undefined}>
+					<Icon name="bell" />
+					{listener} listens
+					{channel.charter ? <small>{channel.charter}</small> : null}
+				</span>
+			)}
+		</header>
 	);
 }
 

@@ -179,6 +179,10 @@ export interface WorkplaceThread {
 	lastSeq: number;
 	lastAt: number;
 	participants: string[];
+	/** A channel's purpose, and the listener pushed every post with the charter it applies; older runtimes omit them. */
+	purpose?: string | null;
+	listener?: string | null;
+	charter?: string | null;
 }
 
 export interface WorkplaceTask {

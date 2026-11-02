@@ -213,6 +213,110 @@
 .wp-activity-list li[data-new="true"] strong {
 	font-weight: 750;
 }
+.wp-channel-badge {
+	display: grid;
+	place-items: center;
+	flex: none;
+	width: 34px;
+	height: 34px;
+	border-radius: 8px;
+	background: var(--wp-panel);
+	border: 1px solid var(--wp-border);
+	color: var(--wp-muted);
+	font-size: 18px;
+	font-weight: 600;
+}
+.wp-channel-header-avatars {
+	width: 38px;
+	height: 34px;
+}
+.wp-channel-header-avatars .wp-avatar-tile {
+	width: 24px;
+	height: 24px;
+	font-size: 11px;
+	box-shadow: 0 0 0 2px var(--wp-bg);
+}
+.wp-channel-header .wp-header-person p {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.wp-channel-charter {
+	display: grid;
+	grid-template-columns: auto 1fr;
+	align-items: center;
+	column-gap: 6px;
+	max-width: 38%;
+	padding: 5px 10px;
+	border: 1px solid var(--wp-border);
+	border-radius: 8px;
+	background: var(--wp-panel);
+	font-size: 12px;
+	font-weight: 600;
+}
+.wp-channel-charter .wp-icon {
+	width: 13px;
+	height: 13px;
+	color: var(--wp-accent);
+}
+.wp-channel-charter small {
+	grid-column: 2;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-weight: 400;
+	color: var(--wp-muted);
+	font-size: 11px;
+}
+.wp-thread-panel .wp-thread-header {
+	padding: 8px 18px;
+}
+.wp-thread-empty {
+	padding: 40px 0;
+	text-align: center;
+	font-size: 13px;
+	color: var(--wp-muted);
+}
+.wp-chat-sidebar .wp-sidebar-section > h2 {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	margin: 18px 4px 4px 4px;
+}
+.wp-chat-sidebar .wp-sidebar-section > h2 > span {
+	float: none;
+	margin-left: auto;
+}
+.wp-chat-sidebar .wp-sidebar-section > h2 > span + .wp-channel-tools {
+	margin-left: 6px;
+}
+.wp-app .wp-chat-sidebar .wp-sidebar-section .wp-channel-tools button {
+	display: grid;
+	place-items: center;
+	width: 20px;
+	height: 20px;
+	padding: 0;
+	border: 1px solid var(--wp-border);
+	border-radius: 5px;
+	background: var(--wp-bg);
+	color: var(--wp-muted);
+	font-size: 13px;
+	line-height: 1;
+}
+.wp-app .wp-chat-sidebar .wp-section-toggle {
+	display: inline-flex;
+	gap: 4px;
+	width: auto;
+	padding: 2px 6px 2px 2px;
+	border-radius: 5px;
+	color: var(--wp-muted);
+	font-size: 12px;
+	font-weight: 650;
+}
+.wp-section-toggle .wp-icon {
+	width: 12px;
+	height: 12px;
+}
 .wp-nav-count {
 	margin-left: auto;
 	font-size: 10px;
