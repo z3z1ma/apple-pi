@@ -234,6 +234,8 @@ async function openDesk(appearance: "light" | "dark", width = 1440, desk = true)
 			});
 			w.posts = [];
 			w.instructions = [];
+			const held_ = new Map<string, (result: unknown) => void>();
+			const receipts = new Set<(receipt: unknown) => void>();
 			w.seen = [];
 			w.unsee = (id: string) => {
 				world = {
@@ -249,9 +251,27 @@ async function openDesk(appearance: "light" | "dark", width = 1440, desk = true)
 					w.seen.push(id);
 					return { ok: true };
 				},
-				instruct: async (id: string, _command: string, instruction: any) => {
+				instruct: async (id: string, command: string, instruction: any) => {
 					w.instructions.push({ id, ...instruction });
+					if (instruction.kind === "withdraw") {
+						const held = held_.get(instruction.command);
+						if (!held) return { ok: false, reason: "already taken: the agent has it" };
+						held_.delete(instruction.command);
+						for (const listener of receipts)
+							listener({ commandId: instruction.command, characterId: id, stage: "failed", reason: "withdrawn" });
+						held({ ok: false, reason: "withdrawn" });
+						return { ok: true };
+					}
+					// A follow-up the session holds until its run settles: delivered, not yet applied.
+					if (instruction.kind === "follow_up" && instruction.text === "wait for me") {
+						for (const listener of receipts) listener({ commandId: command, characterId: id, stage: "delivered" });
+						return new Promise((resolve) => held_.set(command, resolve));
+					}
 					return { ok: true };
+				},
+				onReceipt: (listener: (receipt: unknown) => void) => {
+					receipts.add(listener);
+					return () => receipts.delete(listener);
 				},
 				workspace: { resolvePaths: async () => ({ ok: true, files: [] }) },
 				snapshot: async () => world,
@@ -642,6 +662,31 @@ test("a desk message that became work opens its task thread", { timeout: 60_000 
 		await asked.getByText("Bring GitHub PRs into the organization").click({ button: "right" });
 		await page.getByRole("menuitem", { name: "Reply in thread" }).click();
 		await page.getByRole("region", { name: "Thread: Add GitHub PR threads" }).waitFor();
+		expect(errors).toEqual([]);
+	} finally {
+		await page.close();
+	}
+});
+
+test("a follow-up to a working agent can be withdrawn before it reads it", { timeout: 60_000 }, async () => {
+	const { page, errors } = await openDesk("light");
+	try {
+		await page
+			.getByRole("region", { name: "Direct messages", exact: true })
+			.getByRole("button", { name: /^Iris/ })
+			.click();
+		await page.getByRole("textbox", { name: "Instruct Iris" }).fill("wait for me");
+		await page.getByRole("button", { name: "Tell it after this" }).click();
+		const sent = page.getByRole("list", { name: "Sent" });
+		await sent.getByRole("button", { name: "Withdraw" }).waitFor();
+		await shot(page, "withdraw-light");
+		await sent.getByRole("button", { name: "Withdraw" }).click();
+		await sent.getByText("Withdrawn", { exact: true }).waitFor();
+		expect(await sent.getByRole("button", { name: "Withdraw" }).count()).toBe(0);
+		expect(await page.evaluate(() => (window as any).instructions.at(-1))).toMatchObject({
+			id: "iris",
+			kind: "withdraw",
+		});
 		expect(errors).toEqual([]);
 	} finally {
 		await page.close();

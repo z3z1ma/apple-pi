@@ -134,8 +134,8 @@ test("busy: Redirect now sends steer, Tell it after this sends follow_up, and Re
 		await vi.waitFor(() => expect(character(id)?.facts?.run).not.toBe("idle"), { timeout: 5000 });
 		const steer = await send(id, { kind: "steer", text: "Go left instead." });
 		expect(steer.stages).toEqual([{ stage: "accepted" }, { stage: "delivered" }, { stage: "applied" }]);
-		const follow = await send(id, { kind: "follow_up", text: "Then tidy up." });
-		expect(follow.stages).toEqual([{ stage: "accepted" }, { stage: "delivered" }, { stage: "applied" }]);
+		// A follow-up is held by the session until the run settles, so it can still be withdrawn.
+		const following = send(id, { kind: "follow_up", text: "Then tidy up." });
 		const talk = await send(id, { kind: "talk", text: "Hi." });
 		expect(talk.result).toMatchObject({ ok: false, reason: expect.stringContaining("busy") });
 		expect(talk.stages.at(-1)).toMatchObject({ stage: "failed", reason: expect.stringContaining("busy") });
@@ -151,9 +151,12 @@ test("busy: Redirect now sends steer, Tell it after this sends follow_up, and Re
 				),
 			{ timeout: 3000 },
 		);
-		// The steer and the follow-up would each start another held request; end the run here.
+		// The steer would start another held request; end the run here. A follow-up still held is then not sent.
 		await run.session.abort();
 		await turn.catch(() => {});
+		const follow = await following;
+		expect(follow.stages.slice(0, 2)).toEqual([{ stage: "accepted" }, { stage: "delivered" }]);
+		expect(follow.stages.at(-1)).toMatchObject({ stage: "failed", reason: expect.stringContaining("stopped") });
 	} finally {
 		await close(run);
 	}

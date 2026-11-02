@@ -46,7 +46,35 @@ test("talking to an idle session starts a turn, with accepted, delivered, and ap
 	}
 }, 20000);
 
-test("talk to a busy session fails; steer, follow-up, and abort reach it", async () => {
+test("a follow-up waits for the run to settle and is then sent as the next turn", async () => {
+	const holds: ((reply: Reply) => void)[] = [];
+	const run = await fauxSession(
+		[bridge],
+		(_context, signal) =>
+			signal?.aborted ? fauxAssistantMessage("") : new Promise<Reply>((resolve) => holds.push(resolve)),
+		[],
+	);
+	try {
+		const id = run.session.sessionManager.getSessionId();
+		await seen(id);
+		const turn = run.session.prompt("work");
+		await vi.waitFor(() => expect(holds).toHaveLength(1));
+		const following = sendCommand(state.socketPath, id, { kind: "follow_up", text: "then tidy" });
+		await vi.waitFor(() => expect(JSON.parse(row(id).queue as string)).toMatchObject({ followUps: 1, pending: true }));
+		holds[0]!(fauxAssistantMessage("done working"));
+		expect((await following).at(-1)).toEqual({ stage: "applied" });
+		await vi.waitFor(() => expect(holds).toHaveLength(2));
+		expect(run.session.messages.some((m) => m.role === "user" && JSON.stringify(m.content).includes("then tidy"))).toBe(
+			true,
+		);
+		holds[1]!(fauxAssistantMessage("tidied"));
+		await turn;
+	} finally {
+		await close(run);
+	}
+}, 20000);
+
+test("talk to a busy session fails; steer and abort reach it; a held follow-up can be withdrawn", async () => {
 	const holds: ((reply: Reply) => void)[] = [];
 	const run = await fauxSession(
 		[bridge],
@@ -66,15 +94,24 @@ test("talk to a busy session fails; steer, follow-up, and abort reach it", async
 		expect((await sendCommand(state.socketPath, id, { kind: "steer", text: "go left" })).at(-1)).toEqual({
 			stage: "applied",
 		});
-		expect((await sendCommand(state.socketPath, id, { kind: "follow_up", text: "then tidy" })).at(-1)).toEqual({
+		const tidy = sendCommand(state.socketPath, id, { kind: "follow_up", text: "then tidy" }, { commandId: "tidy" });
+		const drop = sendCommand(state.socketPath, id, { kind: "follow_up", text: "never mind" }, { commandId: "drop" });
+		await vi.waitFor(() => expect(JSON.parse(row(id).queue as string)).toMatchObject({ steers: 1, followUps: 2 }));
+		expect((await sendCommand(state.socketPath, id, { kind: "withdraw", command: "drop" })).at(-1)).toEqual({
 			stage: "applied",
 		});
+		expect((await drop).at(-1)).toEqual({ stage: "failed", reason: "withdrawn" });
+		expect((await sendCommand(state.socketPath, id, { kind: "withdraw", command: "drop" })).at(-1)).toMatchObject({
+			stage: "failed",
+			reason: expect.stringContaining("already taken"),
+		});
 		await vi.waitFor(() => expect(JSON.parse(row(id).queue as string)).toMatchObject({ steers: 1, followUps: 1 }));
-		// abort is applied only once the run has stopped
+		// abort is applied only once the run has stopped; a follow-up still held then is not sent
 		const aborting = sendCommand(state.socketPath, id, { kind: "abort" });
 		await vi.waitFor(() => expect(run.session.isStreaming).toBe(true));
 		await run.session.abort(); // the faux model holds its reply; the command's abort and this one end the run alike
 		expect((await aborting).at(-1)).toEqual({ stage: "applied" });
+		expect((await tidy).at(-1)).toMatchObject({ stage: "failed", reason: expect.stringContaining("stopped") });
 		await turn.catch(() => {});
 	} finally {
 		await close(run);

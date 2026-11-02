@@ -190,11 +190,13 @@ test("asking a busy agent sends follow_up, so its turn is not interrupted", asyn
 			ts: "1700000002.000000",
 			url: "https://acme.slack.com/archives/C9/p1700000002000000",
 		} as const;
-		const result = await api.delegate("aw-delegate-2", { to: id, item: thread, ask: "look-into" });
-		expect(result).toEqual({ ok: true, to: id, command: "follow_up" });
-		expect(sentCommands(id).map((command) => command.kind)).toEqual(["follow_up"]);
+		const delegating = api.delegate("aw-delegate-2", { to: id, item: thread, ask: "look-into" });
+		await vi.waitFor(() => expect(sentCommands(id).map((command) => command.kind)).toEqual(["follow_up"]));
+		// The session holds the follow-up until the current run ends, then sends it as the next turn.
+		holds[0]!(fauxAssistantMessage("done with that"));
+		expect(await delegating).toEqual({ ok: true, to: id, command: "follow_up" });
+		await vi.waitFor(() => expect(holds).toHaveLength(2));
 		expect(outside.seen).toEqual([]);
-		// The follow-up would start another held request; end the run here.
 		await run.session.abort();
 		await turn.catch(() => {});
 	} finally {

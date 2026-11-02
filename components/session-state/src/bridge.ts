@@ -477,6 +477,23 @@ function handedOver(sessionId: string): Set<string> {
 	return ids;
 }
 
+/**
+ * Follow-ups an operator or program sent while the session was busy, held until its run settles so they can still be
+ * withdrawn. Kept on `globalThis` per session id, like `handedOver`, so an extension reload does not lose them.
+ */
+const HELD_FOLLOW_UPS = Symbol.for("apple-pi.session-state.held-follow-ups");
+function heldFollowUps(sessionId: string): { commandId: string; text: string }[] {
+	const global = globalThis as Record<symbol, Map<string, { commandId: string; text: string }[]> | undefined>;
+	const all = global[HELD_FOLLOW_UPS] ?? new Map<string, { commandId: string; text: string }[]>();
+	global[HELD_FOLLOW_UPS] = all;
+	let held = all.get(sessionId);
+	if (!held) {
+		held = [];
+		all.set(sessionId, held);
+	}
+	return held;
+}
+
 export default function sessionStateBridge(pi: ExtensionAPI): void {
 	// Registered even when switched off: Pi exits with "Unknown option" on a flag no extension registered.
 	pi.registerFlag("reports-to", {
@@ -531,8 +548,30 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 	});
 	// Steers and follow-ups the operator typed during a run. Pi delivers steers before follow-ups, one user message each.
 	let queued = { steers: 0, followUps: 0 };
-	const reportQueue = (ctx: ExtensionContext) =>
-		link?.facts({ queue: { ...queued, pending: ctx.hasPendingMessages() } });
+	const reportQueue = (ctx: ExtensionContext) => {
+		const waiting = heldFollowUps(ctx.sessionManager.getSessionId()).length;
+		link?.facts({
+			queue: {
+				steers: queued.steers,
+				followUps: queued.followUps + waiting,
+				pending: ctx.hasPendingMessages() || waiting > 0,
+			},
+		});
+	};
+	/** Hand the held follow-ups to Pi once the run settled: the first starts the next run, the rest queue behind it. */
+	const releaseFollowUps = (ctx: ExtensionContext, aborted: boolean) => {
+		const held = heldFollowUps(ctx.sessionManager.getSessionId());
+		const waiting = held.splice(0);
+		if (!link) return;
+		if (aborted) {
+			for (const item of waiting) link.progress(item.commandId, "failed", "stopped before it was sent; send it again");
+			return;
+		}
+		waiting.forEach((item, index) => {
+			pi.sendUserMessage(item.text, index === 0 ? undefined : { deliverAs: "followUp" });
+			link?.progress(item.commandId, "applied");
+		});
+	};
 	// Top-level tools now running, in start order; Pi may run several at once.
 	let tools = new Map<string, Tool>();
 	// Transcript entries are append-only, so the count of entries already indexed is enough to find new ones.
@@ -610,8 +649,23 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 					pi.sendUserMessage(command.text, { deliverAs: "steer" });
 					break;
 				case "follow_up":
-					pi.sendUserMessage(command.text, { deliverAs: "followUp" });
+					if (ctx.isIdle()) {
+						pi.sendUserMessage(command.text);
+						break;
+					}
+					// Held here, not in Pi's queue, so it can be withdrawn until the run settles; applied when handed over.
+					heldFollowUps(ctx.sessionManager.getSessionId()).push({ commandId, text: command.text });
+					reportQueue(ctx);
+					return;
+				case "withdraw": {
+					const held = heldFollowUps(ctx.sessionManager.getSessionId());
+					const index = held.findIndex((item) => item.commandId === command.command);
+					if (index < 0) return fail("already taken: the agent has it");
+					held.splice(index, 1);
+					target.progress(command.command, "failed", "withdrawn");
+					reportQueue(ctx);
 					break;
+				}
 				case "abort":
 					ctx.abort();
 					await settled(ctx);
@@ -861,5 +915,7 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 			...(event.aborted ? { lastAbortAt: Date.now() } : {}),
 			config: config(pi, ctx, skills, mcpServers),
 		});
+		releaseFollowUps(ctx, event.aborted);
+		reportQueue(ctx);
 	});
 }

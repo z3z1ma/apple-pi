@@ -117,7 +117,10 @@ export interface ReadEntries {
 export type Command =
 	| { kind: "talk"; text: string }
 	| { kind: "steer"; text: string }
+	/** Sent after the current run; held by the session until then, so it can be withdrawn. */
 	| { kind: "follow_up"; text: string }
+	/** Withdraw a follow-up (`command`, its command id) the session still holds; fails once the agent has it. */
+	| { kind: "withdraw"; command: string }
 	/** Wait for idle, run a program's request, and return that run's reply on its command receipt. */
 	| ({ kind: "run_turn" } & PeerTurn)
 	/** Cancel only this program request, whether queued or currently running. */

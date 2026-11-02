@@ -41,3 +41,10 @@ Reply deltas are transient: dropped while disconnected, never kept for a reconne
 Why: Pi's `message_update` callback must never wait, and a runtime that stops reading would otherwise queue a line per delta in the Pi process.
 Coupled: components/session-state/src/runtime.ts
 Verify: components/session-state/tests/bridge-backpressure.test.ts
+
+## symbol:heldFollowUps
+
+A `follow_up` that reaches a busy session is held by the bridge, not handed to Pi's queue, until `agent_settled`: then the first starts the next turn and the rest queue behind it as Pi follow-ups, each reported applied as it is handed over. A `withdraw` naming a held follow-up removes it and fails it as `withdrawn`. An aborted run fails the held ones as not sent rather than starting work the operator just stopped. Held follow-ups count in the reported `queue`, and live on `globalThis` per session id so an extension reload keeps them.
+Why: the operator asked to take back a message before the agent reads it; Pi's queue cannot be edited from an extension, so the only withdrawable place is before the hand-over.
+Coupled: components/session-state/src/protocol.ts, apps/agent-workplace/src/backend/instructions.ts, apps/agent-workplace/web/overlay/conversation/actions.tsx
+Verify: components/session-state/tests/commands.test.ts, apps/agent-workplace/tests/instruct.test.ts, apps/agent-workplace/tests/world-desk.test.ts

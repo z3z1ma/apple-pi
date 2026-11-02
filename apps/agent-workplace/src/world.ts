@@ -485,7 +485,9 @@ export type QuestionnaireReply = { selected: string[] } | { custom: string };
 export type Instruction =
 	| { kind: "talk" | "steer" | "follow_up"; text: string }
 	| { kind: "abort"; confirmed?: boolean }
-	| { kind: "answer"; questionnaire: string; replies: QuestionnaireReply[] };
+	| { kind: "answer"; questionnaire: string; replies: QuestionnaireReply[] }
+	/** Take back a follow-up (`command`, its command id) the agent has not taken yet. */
+	| { kind: "withdraw"; command: string };
 
 /**
  * A watched character's reply as it is written: each piece of text (`delta`, in order within its `streamId`), then

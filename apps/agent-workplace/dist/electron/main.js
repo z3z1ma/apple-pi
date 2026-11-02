@@ -1475,6 +1475,12 @@ function instructionCommand(character, instruction) {
 		case "abort":
 			if ((character.facts?.run ?? "idle") !== "idle" && given.confirmed !== true) return { refused: `${character.name} is busy; stopping it needs your confirmation.` };
 			return { command: { kind: "abort" } };
+		case "withdraw":
+			if (typeof given.command !== "string" || !given.command) return { refused: "Nothing to withdraw." };
+			return { command: {
+				kind: "withdraw",
+				command: given.command
+			} };
 		case "answer": {
 			const replies = Array.isArray(given.replies) ? given.replies.map(reply) : void 0;
 			if (typeof given.questionnaire !== "string" || !replies?.length || replies.some((r) => r === void 0)) return { refused: "That answer does not fit the questions." };

@@ -51,7 +51,8 @@ Any client can ask a session to do something by sending `{"type": "command", "co
 | --- | --- | --- |
 | `talk` | `text` | A new user turn; fails with `busy` while a run is active |
 | `steer` | `text` | Redirects the active run at its next boundary (starts a turn when idle) |
-| `follow_up` | `text` | Queued until the active run ends |
+| `follow_up` | `text` | Held by the session's bridge until the active run ends, then sent as the next turn (applied then); if the run is stopped it fails as not sent. Starts a turn at once when idle |
+| `withdraw` | `command` | Takes back a follow-up (by its command id) the bridge still holds; that follow-up fails as `withdrawn`. Fails once the agent has it |
 | `abort` | | Stops the active run; applied once the run has stopped |
 | `rename` | `name` | Renames the session |
 | `set_model` | `provider`, `id` | Switches model; fails for an unknown or unavailable model |

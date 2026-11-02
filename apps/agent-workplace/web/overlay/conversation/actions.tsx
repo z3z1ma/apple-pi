@@ -35,6 +35,7 @@ const LABEL: Record<Instruction["kind"], string> = {
 	follow_up: "After this",
 	abort: "Stop",
 	answer: "Answer",
+	withdraw: "Withdraw",
 };
 
 /** The stages shown for a receipt, in order, in the runtime's own words. */
@@ -296,13 +297,26 @@ function ReceiptLine({ sent }: { sent: Sent }) {
 	const failed = sent.stages.includes("failed");
 	const applied = sent.stages.includes("applied");
 	const state = failed ? "failed" : applied ? "applied" : "pending";
+	// A follow-up the session holds until its run settles can still be taken back.
+	const held = sent.kind === "follow_up" && state === "pending" && sent.stages.includes("delivered");
 	return (
 		<li className={`aw-conv-receipt aw-conv-receipt-${state}`} data-command={sent.commandId} data-stage={state}>
 			<span className="aw-conv-receipt-what">{LABEL[sent.kind]}</span>
 			{sent.text && <q className="aw-conv-receipt-text">{preview(sent.text)}</q>}
+			{held && (
+				<button
+					type="button"
+					className="aw-conv-withdraw"
+					title="Take it back before the agent reads it"
+					onMouseDown={keepFocus}
+					onClick={() => void conversationPanel.withdraw(sent.characterId, sent.commandId)}
+				>
+					Withdraw
+				</button>
+			)}
 			{failed ? (
 				<span className="aw-conv-receipt-failed" role="status">
-					Failed: {sent.reason ?? "no reason given"}
+					{sent.reason === "withdrawn" ? "Withdrawn" : `Failed: ${sent.reason ?? "no reason given"}`}
 				</span>
 			) : (
 				<span className="aw-conv-stages">

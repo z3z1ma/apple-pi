@@ -135,6 +135,16 @@ export const conversationPanel = {
 		sentListeners.add(listener);
 		return () => sentListeners.delete(listener);
 	},
+	/** Take back a follow-up the agent has not taken yet; its own receipt then reports it withdrawn. */
+	withdraw(characterId: string, command: string): Promise<boolean> {
+		const api = state.api;
+		if (!api?.instruct) return Promise.resolve(false);
+		const commandId = `agent-workplace-${Date.now().toString(36)}-${(++commandCount).toString(36)}-withdraw`;
+		return api.instruct(characterId, commandId, { kind: "withdraw", command }).then(
+			(result) => result.ok,
+			() => false,
+		);
+	},
 	/** Send an instruction to a character; its stages appear in `sent` as the receipts arrive. */
 	instruct(character: Character, instruction: Instruction): Promise<boolean> {
 		const api = state.api;

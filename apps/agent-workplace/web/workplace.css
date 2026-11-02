@@ -1496,6 +1496,19 @@ body.workplace {
 .wp-session .aw-conv-receipt-text {
 	color: var(--wp-muted);
 }
+.wp-app .wp-session .aw-conv-withdraw {
+	margin: 0 6px;
+	padding: 1px 8px;
+	border: 1px solid var(--wp-border);
+	border-radius: 5px;
+	background: var(--wp-bg);
+	color: var(--wp-text);
+	font-family: inherit;
+	font-size: 11px;
+}
+.wp-app .wp-session .aw-conv-withdraw:hover {
+	background: var(--wp-hover);
+}
 .wp-session .aw-conv-stage {
 	color: var(--wp-muted);
 }

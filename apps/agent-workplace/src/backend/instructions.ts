@@ -38,6 +38,9 @@ export function instructionCommand(
 				return { refused: `${character.name} is busy; stopping it needs your confirmation.` };
 			return { command: { kind: "abort" } };
 		}
+		case "withdraw":
+			if (typeof given.command !== "string" || !given.command) return { refused: "Nothing to withdraw." };
+			return { command: { kind: "withdraw", command: given.command } };
 		case "answer": {
 			const replies = Array.isArray(given.replies) ? given.replies.map(reply) : undefined;
 			if (typeof given.questionnaire !== "string" || !replies?.length || replies.some((r) => r === undefined))
