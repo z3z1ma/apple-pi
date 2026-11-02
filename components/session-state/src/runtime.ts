@@ -1206,7 +1206,7 @@ export class Runtime {
 		return this.preparePost(
 			`${commandId}:${phase}`,
 			HARNESS,
-			{ thread: `departure:${commandId}`, threadKind: "mail", subject: `Departure: ${person}`, to, body },
+			{ thread: `departure:${commandId}`, threadKind: "mail", subject: `Departure: ${nameOf(db, person)}`, to, body },
 			Date.now(),
 		);
 	}
@@ -1222,7 +1222,9 @@ export class Runtime {
 	private commitExternal(write: Parameters<ExternalCommit>[0]): void {
 		if (!this.db) return;
 		const pending: ReturnType<Runtime["preparePost"]>[] = [];
-		this.atomically(() => write((id, post, now) => pending.push(this.preparePost(id, HARNESS, post, now))));
+		this.atomically(() =>
+			write((id, post, now, bodies) => pending.push(this.preparePost(id, HARNESS, post, now, undefined, bodies))),
+		);
 		for (const item of pending) for (const { target, id, mail } of item.deliveries) this.dispatch(target, id, mail);
 	}
 
@@ -1424,6 +1426,7 @@ export class Runtime {
 		post: ThreadPost,
 		now: number,
 		changed?: { person: string; goal: boolean },
+		recipientBodies?: Record<string, string>,
 	) {
 		const db = this.db!;
 		const posted = postToThread(db, sender, commandId, post, now);
@@ -1435,7 +1438,7 @@ export class Runtime {
 		const charter = charterOf(db, posted.thread);
 		const listener = charter?.listener ?? undefined;
 		for (const participant of new Set([
-			...posted.push,
+			...posted.push.filter((person) => !recipientBodies || recipientBodies[person] !== undefined),
 			...(changed ? [changed.person] : []),
 			...(listener ? [listener] : []),
 		])) {
@@ -1443,7 +1446,10 @@ export class Runtime {
 			const mail: Command = {
 				kind: "mail",
 				from: sender,
-				body: participant === listener ? chartered(post.body, charter?.charter ?? null) : post.body,
+				body:
+					participant === listener
+						? chartered(recipientBodies?.[participant] ?? post.body, charter?.charter ?? null)
+						: (recipientBodies?.[participant] ?? post.body),
 				sentAt: new Date(now).toISOString(),
 				thread: posted.thread,
 				subject: posted.subject,
@@ -1456,7 +1462,7 @@ export class Runtime {
 				...(changed?.person === participant && changed.goal ? { taskGoal: true } : {}),
 			};
 			const id = `${commandId}:${participant}`;
-			const target = this.queueDelivery(id, participant, mail);
+			const target = this.queueDelivery(id, participant, mail, undefined, participant === listener);
 			if (target) deliveries.push({ target, id, mail });
 			else
 				asleep.push(
@@ -1631,6 +1637,8 @@ export class Runtime {
 		recipient: string,
 		command: Extract<Command, { kind: "mail" | "close" }>,
 		generation?: number,
+		/** A channel's listener is on duty for it, so its mail wakes the listener even when it is not on call. */
+		onDuty = false,
 	): Connection | undefined {
 		const db = this.db!;
 		const current = db.prepare("select generation from sessions where id = ?").get(recipient) as
@@ -1657,7 +1665,7 @@ export class Runtime {
 				connection.sessionId === recipient &&
 				connection.generation === (generation ?? current?.generation),
 		);
-		if (!target && command.kind === "mail" && generation === undefined) this.wakeOnCall(recipient);
+		if (!target && command.kind === "mail" && generation === undefined) this.wakeOnCall(recipient, onDuty);
 		return target;
 	}
 
@@ -1665,12 +1673,12 @@ export class Runtime {
 	 * Wake an on-call person at home so waiting mail reaches it: beside a live pane of the tmux server it last ran in,
 	 * or headless when none is attached. Runs after the current transaction; the mail itself waits as usual.
 	 */
-	private wakeOnCall(person: string): boolean {
+	private wakeOnCall(person: string, onDuty = false): boolean {
 		const db = this.db!;
 		const row = db.prepare("select on_call, retired_at, kind from sessions where id = ?").get(person) as
 			| { on_call: number | null; retired_at: number | null; kind: string }
 			| undefined;
-		if (row?.on_call !== 1 || row.retired_at !== null || row.kind !== "root") return false;
+		if (!row || (row.on_call !== 1 && !onDuty) || row.retired_at !== null || row.kind !== "root") return false;
 		if (this.waking.has(person)) return true;
 		if (this.starting.has(person) || departureOf(db, person) || temporaryCallers(db).has(person)) return false;
 		this.waking.add(person);

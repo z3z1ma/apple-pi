@@ -1,5 +1,5 @@
 // The operator's sign-ins for Atlassian and Slack: one private (0600) JSON file under the session-state directory,
-// read and written only here, in Electron's main process (decision 07). Nothing in this module logs, and `status` is
+// accessed through this module by Electron's main process and the runtime's read-only external poller. Nothing logs here, and `status` is
 // the only view of it the renderer gets: no token, cookie, or password ever leaves the backend.
 import {
 	chmodSync,

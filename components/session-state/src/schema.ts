@@ -402,6 +402,14 @@ const MIGRATIONS = [
 	// A channel's listener is pushed every post and applies its charter (components/session-state/src/channel-charters.ts).
 	`alter table threads add column listener text;
 	alter table threads add column charter text;`,
+	// Departure threads used to be titled by session id; name them by the person their departure recorded.
+	`update threads set subject = 'Departure: ' || (
+		select json_extract(e.data, '$.name') from events e
+		where e.type = 'person_departed' and e.session_id = substr(threads.subject, 12)
+			and json_extract(e.data, '$.name') is not null order by e.seq desc limit 1)
+	where subject like 'Departure: %' and exists (
+		select 1 from events e where e.type = 'person_departed' and e.session_id = substr(threads.subject, 12)
+			and json_extract(e.data, '$.name') is not null);`,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;
