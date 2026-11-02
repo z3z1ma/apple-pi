@@ -11,6 +11,7 @@ import { activity } from "./overlay/interface/model.js";
 import { ChannelBrowser } from "./workplace-channels.js";
 import { WorkplaceCode } from "./workplace-code.js";
 import { useWorkplaceMenu, WorkplaceMenuProvider } from "./workplace-context-menu.js";
+import { activityItems, ChatNav, type OpenThread, OrganizationView, ThreadPanel } from "./workplace-desk.js";
 import { Icon } from "./workplace-icon.js";
 import { WorkplaceIssues } from "./workplace-issues.js";
 import { channelName, useWorkplaceNames } from "./workplace-names.js";
@@ -352,7 +353,16 @@ function Chat({
 			if (renameChannel?.trigger.isConnected) renameChannel.trigger.focus();
 		});
 	};
-	const [selection, setSelection] = useState<{ kind: "dm" | "channel"; id: string }>();
+	const [selection, setSelection] = useState<{
+		kind: "dm" | "channel" | "desk" | "threads" | "activity";
+		id: string;
+	}>();
+	const view = selection?.kind ?? "desk";
+	const [openThread, setOpenThread] = useState<OpenThread>();
+	const showThread = (thread: OpenThread) => {
+		setOpenThread(thread);
+		setProfile(undefined);
+	};
 	const [filter, setFilter] = useState("");
 	const personMenu = usePersonMenu();
 	const [showTools, setShowTools] = useState(false);
@@ -425,7 +435,14 @@ function Chat({
 			})),
 	];
 	const unreads = channelUnreads(world);
+	const desk = world.desk;
 	const selectedChannel = channels.find((thread) => selection?.kind === "channel" && thread.id === selection.id);
+	const needsYou = activityItems(world, {
+		dm: (id) => openDM(id),
+		thread: showThread,
+		mail: (id) =>
+			showThread({ id, title: world.operatorMail?.find((thread) => thread.id === id)?.subject ?? "Conversation" }),
+	});
 	const lasting = orgPeople(world);
 	const parents = new Map(lasting.map((person) => [person.character.id, person.parent]));
 	const heads = lasting.filter(
@@ -503,8 +520,15 @@ function Chat({
 							onChange={(e) => setFilter(e.target.value)}
 						/>
 					</label>
+					<ChatNav
+						world={world}
+						view={view}
+						select={(kind) => setSelection({ kind, id: kind })}
+						deskUnread={desk ? (unreads.get(desk.thread) ?? 0) : 0}
+						needsYou={needsYou.length}
+					/>
 					<h2 className="wp-channel-heading">
-						Channels <span>{channels.length}</span>
+						Channels <span>{channels.filter((thread) => thread.id !== desk?.thread).length}</span>
 						<span className="wp-channel-tools">
 							<button
 								type="button"
@@ -527,7 +551,7 @@ function Chat({
 						</div>
 					)}
 					{channels
-						.filter((thread) => matches(channelName(thread.id, thread.subject, world)))
+						.filter((thread) => thread.id !== desk?.thread && matches(channelName(thread.id, thread.subject, world)))
 						.map((thread) => (
 							<button
 								type="button"
@@ -694,18 +718,17 @@ function Chat({
 							)}
 						</>
 					) : (
-						<div className="wp-empty">
-							<span className="wp-empty-icon">
-								<Icon name="chat" />
-							</span>
-							<h1>A direct line to your organization</h1>
-							<p>
-								Choose an agent to work in its live Pi session.
-								<br />
-								Choose a channel to read the team's shared conversation.
-							</p>
-							{selection && <p>The selected person or channel is no longer available.</p>}
-						</div>
+						active && (
+							<OrganizationView
+								view={view}
+								world={world}
+								drafts={drafts}
+								needsYou={needsYou}
+								selectedThread={openThread?.id}
+								openThread={showThread}
+								openDM={openDM}
+							/>
+						)
 					)}
 				</main>
 				{active && discovering && (
@@ -719,6 +742,9 @@ function Chat({
 							setDiscovering(false);
 						}}
 					/>
+				)}
+				{active && openThread && !profile && (
+					<ThreadPanel world={world} thread={openThread} drafts={drafts} onClose={() => setOpenThread(undefined)} />
 				)}
 				{active && profile && (
 					<PersonProfile key={profile.id} {...profile} onClose={closeProfile} resize={profileSize} />

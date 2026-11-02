@@ -1,0 +1,580 @@
+import { useMemo, useState } from "react";
+import type { Character, Desk, DormantAgent, WorkplaceTask, WorldSnapshot } from "../src/world.js";
+import { Icon } from "./workplace-icon.js";
+import { PersonAvatar, PersonName, presenceOf, sessionStatus } from "./workplace-people.js";
+import { ThreadPane } from "./workplace-thread.js";
+import "./workplace-desk.css";
+
+const api = window.agentWorld;
+
+/** A task conversation open beside the main view, like a Slack thread. */
+export type OpenThread = { id: string; title: string };
+
+const ago = (at: number | null | undefined) => {
+	if (!at) return "";
+	const minutes = Math.round((Date.now() - at) / 60_000);
+	if (minutes < 1) return "now";
+	if (minutes < 60) return `${minutes}m`;
+	const hours = Math.round(minutes / 60);
+	return hours < 24 ? `${hours}h` : `${Math.round(hours / 24)}d`;
+};
+
+function personIn(world: WorldSnapshot, id: string): { person: Character | DormantAgent; away: boolean } | undefined {
+	const awake = world.characters.find((person) => person.id === id);
+	if (awake) return { person: awake, away: false };
+	const dormant = world.dormant?.find((person) => person.id === id && !person.retiredAt);
+	return dormant ? { person: dormant, away: true } : undefined;
+}
+
+/** Root coordinators who could listen at the desk, awake ones first. */
+function deskCandidates(world: WorldSnapshot): { id: string; name: string; away: boolean }[] {
+	const awake = world.characters
+		.filter((person) => person.facts?.title === "Coordinator" && !person.facts.reportsTo && !person.facts.temporary)
+		.map((person) => ({ id: person.id, name: person.name, away: false }));
+	const asleep = (world.dormant ?? [])
+		.filter((person) => person.title === "Coordinator" && !person.reportsTo && !person.retiredAt && !person.temporary)
+		.map((person) => ({ id: person.id, name: person.name, away: true }));
+	return [...awake, ...asleep];
+}
+
+function DeskSetup({ world }: { world: WorldSnapshot }) {
+	const candidates = deskCandidates(world);
+	const [busy, setBusy] = useState(false);
+	const [error, setError] = useState("");
+	const open = async (person: string) => {
+		setBusy(true);
+		setError("");
+		try {
+			const created = await api.communications.createChannel({
+				attempt: crypto.randomUUID(),
+				scopeHead: person,
+				name: "desk",
+				purpose:
+					"The operator's front desk: he tells the organization what he needs here, and the coordinator routes it.",
+				invite: [person],
+			});
+			if (created.outcome !== "applied" || !created.effect) {
+				setError(created.reason ?? `Creating the desk channel was ${created.outcome}.`);
+				return;
+			}
+			const stored = await api.setDesk?.({ thread: created.effect.thread.id, person });
+			if (stored && !stored.ok) setError(stored.reason ?? "The desk was not stored.");
+		} catch (failure) {
+			setError(String(failure));
+		} finally {
+			setBusy(false);
+		}
+	};
+	const hire = async () => {
+		setBusy(true);
+		setError("");
+		try {
+			const cwd = world.characters[0]?.facts?.cwd ?? world.dormant?.[0]?.cwd;
+			if (!cwd) {
+				setError("Start any Pi session first, so the coordinator has a directory to work in.");
+				return;
+			}
+			const receipt = await api.recruit({ name: "", cwd, role: "coordinator" });
+			if (!receipt.ok || !receipt.sessionId) {
+				setError(receipt.ok ? "The coordinator could not start." : receipt.reason);
+				return;
+			}
+			await open(receipt.sessionId);
+		} catch (failure) {
+			setError(String(failure));
+		} finally {
+			setBusy(false);
+		}
+	};
+	return (
+		<div className="wp-desk-setup">
+			<span className="wp-empty-icon">
+				<Icon name="desk" />
+			</span>
+			<h1>Open the front desk</h1>
+			<p>
+				Talk to the whole organization in one place. A coordinator listens at the desk, turns what you write into owned
+				work, and tells you when something needs you.
+			</p>
+			{candidates.length ? (
+				<div className="wp-desk-candidates">
+					{candidates.map((candidate) => (
+						<button
+							key={candidate.id}
+							type="button"
+							className="wp-primary"
+							disabled={busy}
+							onClick={() => void open(candidate.id)}
+						>
+							Open the desk with {candidate.name}
+							{candidate.away ? " (away; wakes on mail)" : ""}
+						</button>
+					))}
+				</div>
+			) : (
+				<button type="button" className="wp-primary" disabled={busy} onClick={() => void hire()}>
+					Hire a coordinator and open the desk
+				</button>
+			)}
+			{error && <p className="wp-error">{error}</p>}
+		</div>
+	);
+}
+
+/** Work in flight: the task threads people hold now, newest activity first. */
+function InFlight({
+	world,
+	selected,
+	openThread,
+}: {
+	world: WorldSnapshot;
+	selected?: string;
+	openThread: (thread: OpenThread) => void;
+}) {
+	const tasks = (world.workplace?.tasks ?? []).filter((task) => task.thread && task.assignees.length);
+	if (!tasks.length) return null;
+	return (
+		<section className="wp-desk-flight" aria-label="Work in flight">
+			<h2>
+				In flight <span>{tasks.length}</span>
+			</h2>
+			<div className="wp-desk-flight-list">
+				{tasks.map((task) => (
+					<TaskChip
+						key={task.id}
+						world={world}
+						task={task}
+						selected={selected === task.thread}
+						onOpen={() => openThread({ id: task.thread!, title: task.title })}
+					/>
+				))}
+			</div>
+		</section>
+	);
+}
+
+function TaskChip({
+	world,
+	task,
+	selected,
+	onOpen,
+}: {
+	world: WorldSnapshot;
+	task: WorkplaceTask;
+	selected: boolean;
+	onOpen: () => void;
+}) {
+	const working = task.assignees.some(
+		(assignee) => world.characters.find((person) => person.id === assignee.person)?.facts?.status === "working",
+	);
+	return (
+		<button type="button" className="wp-task-chip" aria-pressed={selected} data-working={working} onClick={onOpen}>
+			<span className="wp-task-chip-avatars" aria-hidden="true">
+				{task.assignees.slice(0, 3).map((assignee) => {
+					const found = personIn(world, assignee.person);
+					return (
+						<PersonAvatar
+							key={assignee.person}
+							id={assignee.person}
+							name={found?.person.name ?? "?"}
+							interactive={false}
+							presence={presenceOf(
+								found && !found.away ? (found.person as Character) : undefined,
+								!found || found.away,
+							)}
+						/>
+					);
+				})}
+			</span>
+			<span className="wp-task-chip-title">{task.title}</span>
+			{task.status && <small>{task.status}</small>}
+		</button>
+	);
+}
+
+export function DeskView({
+	world,
+	desk,
+	drafts,
+	selectedThread,
+	openThread,
+	openDM,
+}: {
+	world: WorldSnapshot;
+	desk: Desk | null | undefined;
+	drafts: Map<string, string>;
+	selectedThread?: string;
+	openThread: (thread: OpenThread) => void;
+	openDM: (id: string) => void;
+}) {
+	if (!desk) return <DeskSetup world={world} />;
+	const listener = personIn(world, desk.person);
+	const channel = world.workplace?.threads.find((thread) => thread.id === desk.thread) ?? { lastSeq: 0 };
+	const awake = listener && !listener.away ? (listener.person as Character) : undefined;
+	return (
+		<>
+			<header className="wp-conversation-header wp-desk-header">
+				<span className="wp-desk-badge" aria-hidden="true">
+					<Icon name="desk" />
+				</span>
+				<div className="wp-header-person">
+					<h1>Front desk</h1>
+					<p>
+						{listener ? (
+							<>
+								<span className={`wp-dot is-${presenceOf(awake, !awake)}`} />
+								<PersonName id={desk.person} name={listener.person.name} /> listens here
+								{awake ? ` \u00b7 ${sessionStatus(awake)}` : " \u00b7 Away; wakes when you write"}
+							</>
+						) : (
+							"The desk's coordinator is no longer in the organization; open the desk again with another."
+						)}
+					</p>
+				</div>
+				{listener && (
+					<button type="button" className="wp-desk-dm" onClick={() => openDM(desk.person)}>
+						Open {listener.person.name}'s session
+					</button>
+				)}
+			</header>
+			<InFlight world={world} selected={selectedThread} openThread={openThread} />
+			<ThreadPane
+				key={desk.thread}
+				id={desk.thread}
+				channel={channel}
+				channelLabel="desk"
+				world={world}
+				drafts={drafts}
+				listener={desk.person}
+			/>
+		</>
+	);
+}
+
+/** Slack's Threads: every task conversation, live work first, then by latest change. */
+export function ThreadsView({
+	world,
+	selectedThread,
+	openThread,
+}: {
+	world: WorldSnapshot;
+	selectedThread?: string;
+	openThread: (thread: OpenThread) => void;
+}) {
+	const [filter, setFilter] = useState("");
+	const rows = useMemo(() => {
+		const live = new Map((world.workplace?.tasks ?? []).map((task) => [task.thread, task]));
+		const history = (world.workplace?.workHistory ?? []).map((task) => ({
+			thread: task.thread,
+			title: task.title,
+			status: task.status,
+			live: live.has(task.thread),
+			people: [...new Set(task.participants.map((participant) => participant.person))],
+			updatedAt: task.updatedAt ?? task.closedAt ?? task.openedAt ?? 0,
+			closed: task.closedAt !== null,
+		}));
+		const known = new Set(history.map((row) => row.thread));
+		const extra = (world.workplace?.tasks ?? [])
+			.filter((task) => task.thread && !known.has(task.thread))
+			.map((task) => ({
+				thread: task.thread!,
+				title: task.title,
+				status: task.status,
+				live: true,
+				people: task.assignees.map((assignee) => assignee.person),
+				updatedAt: Date.now(),
+				closed: false,
+			}));
+		return [...extra, ...history].sort(
+			(a, b) => Number(b.live) - Number(a.live) || Number(a.closed) - Number(b.closed) || b.updatedAt - a.updatedAt,
+		);
+	}, [world.workplace]);
+	const shown = rows.filter((row) => row.title.toLowerCase().includes(filter.toLowerCase()));
+	return (
+		<section className="wp-threads-view" aria-label="Threads">
+			<header className="wp-conversation-header">
+				<div>
+					<h1>Threads</h1>
+					<p>Every piece of work has a conversation. Open one to read it or reply to everyone working on it.</p>
+				</div>
+				<label className="wp-find wp-threads-find">
+					<Icon name="search" />
+					<input
+						aria-label="Find a thread"
+						placeholder="Find a thread"
+						value={filter}
+						onChange={(e) => setFilter(e.target.value)}
+					/>
+				</label>
+			</header>
+			<ul className="wp-threads-list">
+				{shown.map((row) => (
+					<li key={row.thread}>
+						<button
+							type="button"
+							aria-pressed={selectedThread === row.thread}
+							data-live={row.live}
+							onClick={() => openThread({ id: row.thread, title: row.title })}
+						>
+							<span className="wp-threads-avatars" aria-hidden="true">
+								{row.people.slice(0, 4).map((id) => {
+									const found = personIn(world, id);
+									return (
+										<PersonAvatar
+											key={id}
+											id={id}
+											name={found?.person.name ?? "?"}
+											interactive={false}
+											presence={presenceOf(
+												found && !found.away ? (found.person as Character) : undefined,
+												!found || found.away,
+											)}
+										/>
+									);
+								})}
+							</span>
+							<span className="wp-threads-title">
+								<strong>{row.title}</strong>
+								<small>
+									{row.live ? "In flight" : row.closed ? "Closed" : "Open"}
+									{row.status ? ` \u00b7 ${row.status}` : ""}
+								</small>
+							</span>
+							<time>{ago(row.updatedAt)}</time>
+						</button>
+					</li>
+				))}
+				{!shown.length && <li className="wp-sidebar-note">No task conversations yet.</li>}
+			</ul>
+		</section>
+	);
+}
+
+export type ActivityItem = {
+	key: string;
+	kind: "asking" | "escalation" | "result" | "mail";
+	who: string;
+	name: string;
+	text: string;
+	at: number;
+	open: () => void;
+};
+
+/** Everything that needs the operator, most blocking first: questions, escalations, unseen results, unread mail. */
+export function activityItems(
+	world: WorldSnapshot,
+	go: { dm: (id: string) => void; thread: (thread: OpenThread) => void; mail: (thread: string) => void },
+): ActivityItem[] {
+	const items: ActivityItem[] = [];
+	for (const person of world.characters) {
+		if (person.facts?.temporary) continue;
+		if (person.facts?.asking)
+			items.push({
+				key: `ask:${person.id}`,
+				kind: "asking",
+				who: person.id,
+				name: person.name,
+				text: person.facts.asking.text ?? "Is waiting for your answer.",
+				at: person.facts.needsYouSince ?? 0,
+				open: () => go.dm(person.id),
+			});
+		else if (person.facts?.unseen)
+			items.push({
+				key: `result:${person.id}`,
+				kind: "result",
+				who: person.id,
+				name: person.name,
+				text: person.facts.task ? `Finished a run on ${person.facts.task.title}` : "Finished a run you have not seen.",
+				at: person.facts.settledAt ?? 0,
+				open: () => go.dm(person.id),
+			});
+	}
+	for (const escalation of world.workplace?.escalations ?? []) {
+		const found = personIn(world, escalation.person);
+		items.push({
+			key: `esc:${escalation.thread}`,
+			kind: "escalation",
+			who: escalation.person,
+			name: found?.person.name ?? escalation.person,
+			text: "Escalated a decision to you.",
+			at: 0,
+			open: () => go.mail(escalation.thread),
+		});
+	}
+	for (const thread of world.operatorMail ?? []) {
+		if (!thread.unread || world.workplace?.escalations.some((escalation) => escalation.thread === thread.id)) continue;
+		items.push({
+			key: `mail:${thread.id}`,
+			kind: "mail",
+			who: thread.id,
+			name: thread.subject,
+			text: `${thread.unread} unread ${thread.unread === 1 ? "message" : "messages"}`,
+			at: thread.lastAt,
+			open: () => go.mail(thread.id),
+		});
+	}
+	const order = { asking: 0, escalation: 1, result: 2, mail: 3 };
+	return items.sort((a, b) => order[a.kind] - order[b.kind] || b.at - a.at);
+}
+
+const LABEL: Record<ActivityItem["kind"], string> = {
+	asking: "Needs your answer",
+	escalation: "Escalation",
+	result: "Result to review",
+	mail: "Unread mail",
+};
+
+export function ActivityView({ items }: { items: ActivityItem[] }) {
+	return (
+		<section className="wp-activity-view" aria-label="Activity">
+			<header className="wp-conversation-header">
+				<div>
+					<h1>Activity</h1>
+					<p>What needs you, most blocking first. Everything else keeps moving without you.</p>
+				</div>
+			</header>
+			{items.length ? (
+				<ul className="wp-activity-list">
+					{items.map((item) => (
+						<li key={item.key} data-kind={item.kind}>
+							<button type="button" onClick={item.open}>
+								<PersonAvatar id={item.who} name={item.name} interactive={false} />
+								<span>
+									<span className="wp-activity-kind">{LABEL[item.kind]}</span>
+									<strong>{item.name}</strong>
+									<span className="wp-activity-text">{item.text}</span>
+								</span>
+								<time>{ago(item.at)}</time>
+							</button>
+						</li>
+					))}
+				</ul>
+			) : (
+				<div className="wp-empty">
+					<span className="wp-empty-icon">
+						<Icon name="bell" />
+					</span>
+					<h1>Nothing needs you</h1>
+					<p>The organization is working. Questions, escalations and results will appear here.</p>
+				</div>
+			)}
+		</section>
+	);
+}
+
+export type OrganizationKind = "desk" | "threads" | "activity";
+
+/** The organization views at the top of the Chat sidebar. */
+export function ChatNav({
+	world,
+	view,
+	select,
+	deskUnread,
+	needsYou,
+}: {
+	world: WorldSnapshot;
+	view: string;
+	select: (kind: OrganizationKind) => void;
+	deskUnread: number;
+	needsYou: number;
+}) {
+	const live = (world.workplace?.tasks ?? []).filter((task) => task.thread && task.assignees.length).length;
+	const item = (kind: OrganizationKind, label: string, icon: "desk" | "threads" | "bell", count: number) => (
+		<button
+			type="button"
+			className="wp-nav-item"
+			aria-pressed={view === kind}
+			data-unread={count > 0 && kind !== "threads"}
+			onClick={() => select(kind)}
+		>
+			<Icon name={icon} />
+			<span>{label}</span>
+			{count > 0 && <b className={kind === "threads" ? "wp-nav-count" : "wp-unread-count"}>{count}</b>}
+		</button>
+	);
+	return (
+		<nav className="wp-chat-nav" aria-label="Workplace views">
+			{item("desk", "Front desk", "desk", deskUnread)}
+			{item("threads", "Threads", "threads", live)}
+			{item("activity", "Activity", "bell", needsYou)}
+		</nav>
+	);
+}
+
+/** The main pane for an organization view, or a notice when a selected person or channel is gone. */
+export function OrganizationView({
+	view,
+	world,
+	drafts,
+	needsYou,
+	selectedThread,
+	openThread,
+	openDM,
+}: {
+	view: string;
+	world: WorldSnapshot;
+	drafts: Map<string, string>;
+	needsYou: ActivityItem[];
+	selectedThread?: string;
+	openThread: (thread: OpenThread) => void;
+	openDM: (id: string) => void;
+}) {
+	if (view === "desk")
+		return (
+			<DeskView
+				world={world}
+				desk={world.desk}
+				drafts={drafts}
+				selectedThread={selectedThread}
+				openThread={openThread}
+				openDM={openDM}
+			/>
+		);
+	if (view === "threads") return <ThreadsView world={world} selectedThread={selectedThread} openThread={openThread} />;
+	if (view === "activity") return <ActivityView items={needsYou} />;
+	return (
+		<div className="wp-empty">
+			<span className="wp-empty-icon">
+				<Icon name="chat" />
+			</span>
+			<h1>A direct line to your organization</h1>
+			<p>The selected person or channel is no longer available.</p>
+		</div>
+	);
+}
+
+/** A task conversation open beside the main view; replies reach everyone working on it. */
+export function ThreadPanel({
+	world,
+	thread,
+	drafts,
+	onClose,
+}: {
+	world: WorldSnapshot;
+	thread: OpenThread;
+	drafts: Map<string, string>;
+	onClose: () => void;
+}) {
+	const task = world.workplace?.tasks.find((item) => item.thread === thread.id);
+	return (
+		<aside className="wp-thread-panel" aria-label={`Thread: ${thread.title}`}>
+			<header>
+				<div>
+					<span className="wp-eyebrow">THREAD</span>
+					<h2>{thread.title}</h2>
+					{task && (
+						<p>
+							{task.assignees
+								.map((assignee) => personIn(world, assignee.person)?.person.name ?? assignee.person)
+								.join(", ")}
+						</p>
+					)}
+				</div>
+				<button type="button" aria-label="Close thread" title="Close thread" onClick={onClose}>
+					<Icon name="close" />
+				</button>
+			</header>
+			<ThreadPane key={thread.id} id={thread.id} world={world} drafts={drafts} embedded />
+		</aside>
+	);
+}

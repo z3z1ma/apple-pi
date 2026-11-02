@@ -343,7 +343,7 @@ function conversationInfo(db, person, id) {
 		participants: access ? memberships.filter((member) => row.kind !== "channel" || member.following).map(participantInfo) : [],
 		invitations: access ? memberships.filter((member) => member.invited).map(participantInfo) : [],
 		permissions: {
-			post: access && row.closed_at === null && (row.kind === "channel" ? row.channel_type === "topic" || Boolean(mine) : row.kind !== "task" || Boolean(mine)),
+			post: access && row.closed_at === null && (row.kind === "channel" ? row.channel_type === "topic" || Boolean(mine) : row.kind !== "task" || Boolean(mine) || person === "operator"),
 			join: access && row.kind === "channel",
 			invite: participant && row.kind !== "task",
 			remove: participant && row.kind !== "task",
@@ -3949,6 +3949,8 @@ function readRole(path, name) {
 	if (Object.hasOwn(fm, "thinking")) return `${path}: put effort in each models entry instead of a thinking field`;
 	if (typeof fm.writes !== "boolean") return `${path}: writes must be true or false`;
 	if (typeof fm.manages !== "boolean") return `${path}: manages must be true or false`;
+	if (fm.dispatches !== void 0 && typeof fm.dispatches !== "boolean") return `${path}: dispatches must be true or false`;
+	if (fm.dispatches === true && (fm.writes || !fm.manages)) return `${path}: a dispatching role manages and does not write`;
 	if (!body) return `${path}: the body (the role's obligation) is empty`;
 	return {
 		name,
@@ -3957,6 +3959,7 @@ function readRole(path, name) {
 		models,
 		writes: fm.writes,
 		manages: fm.manages,
+		dispatches: fm.dispatches === true,
 		body,
 		path
 	};
@@ -9708,6 +9711,15 @@ var STORE_TIMEOUT_MS = 5e3;
 * `{ wings: { [coordinator id]: repository[] }, avatar: look, theme: id }`.
 */
 var PREFERENCE_KEY = "agent-world";
+/** The `preferences` key of the front desk, `{ thread, person }`; the runtime routes unfollowed outside activity there. */
+var DESK_KEY = "desk";
+function readDesk(database) {
+	const value = parse$2(database.prepare("select value from preferences where key = ?").get(DESK_KEY)?.value);
+	return typeof value?.thread === "string" && typeof value.person === "string" ? {
+		thread: value.thread,
+		person: value.person
+	} : null;
+}
 var sessionsSql = (columns) => `
 select s.id, s.name, s.cwd, s.reports_to as reportsTo, s.git,
 	${OPTIONAL_COLUMNS.map((column) => columns[column] ? `s.${column}` : `null as ${column}`).join(", ")},
@@ -9803,6 +9815,7 @@ function openWorldBackend(paths) {
 	let mail = [];
 	let operatorMail = [];
 	let workplace;
+	let desk = null;
 	let db;
 	let socket;
 	let socketOpen = false;
@@ -9952,6 +9965,7 @@ function openWorldBackend(paths) {
 			dormant = dormantAgents(world.dormant, byId, (task) => readTask(task, rereadTasks), dormant, !rereadTasks);
 			operatorMail = readOperatorMail(db);
 			workplace = readWorkplace(db, [...sessionsById.values()], rereadTasks);
+			desk = readDesk(db);
 			world = placeWorkplace(world, [...sessionsById.values()], workplace);
 			const nextMail = readMail(db);
 			if (JSON.stringify(nextMail) !== JSON.stringify(mail)) mail = nextMail;
@@ -10019,7 +10033,8 @@ function openWorldBackend(paths) {
 			dormant,
 			mail,
 			operatorMail,
-			workplace
+			workplace,
+			desk
 		});
 	};
 	const onLine = (line) => {
@@ -10129,6 +10144,27 @@ function openWorldBackend(paths) {
 		},
 		setAvatarLook: (look) => choose("avatar", look),
 		setTheme: (id) => choose("theme", id),
+		async setDesk(next) {
+			if (!socket || !socketOpen) return {
+				ok: false,
+				reason: "The session runtime is not connected."
+			};
+			const command = {
+				kind: "set_preference",
+				key: DESK_KEY,
+				value: next
+			};
+			socket.write(`${JSON.stringify({
+				type: "command",
+				commandId: `agent-world-${randomUUID()}`,
+				sessionId: "agent-world",
+				command
+			})}\n`);
+			desk = next;
+			lastSeq = -1;
+			poll();
+			return { ok: true };
+		},
 		close() {
 			closed = true;
 			settle(void 0, {
@@ -12411,6 +12447,17 @@ function start() {
 		};
 		if (window && !window.isDestroyed()) window.setBackgroundColor(themeBackdrop(join(appDir, "themes"), id));
 		return world.setTheme(id);
+	});
+	ipcMain.handle("world:set-desk", (_event, desk) => {
+		const { thread, person } = desk ?? {};
+		if (typeof thread !== "string" || typeof person !== "string") return {
+			ok: false,
+			reason: "A desk needs a channel and a person."
+		};
+		return world.setDesk({
+			thread,
+			person
+		});
 	});
 	ipcMain.handle("world:instruct", (_event, characterId, commandId, instruction) => {
 		if (typeof characterId !== "string" || typeof commandId !== "string" || !commandId) return {

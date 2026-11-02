@@ -24,6 +24,9 @@ const paths = {
 	compose: "m5 16-1 4 4-1L20 7l-3-3L5 16Z M14 7l3 3",
 	tools: "m8 7-5 5 5 5 M16 7l5 5-5 5 M14 4l-4 16",
 	inbox: "m3 14 3-9h12l3 9v5H3v-5Z M3 14h5l2 3h4l2-3h5",
+	desk: "M3 11 12 4l9 7 M5 10v10h14V10 M10 20v-6h4v6",
+	threads: "M4 4h12v9H8l-4 3V4Z M8 16v1h8l4 3V8h-4",
+	bell: "M6 16V11a6 6 0 0 1 12 0v5l2 2H4l2-2Z M10 21h4",
 };
 
 export function Icon({ name }: { name: keyof typeof paths }) {

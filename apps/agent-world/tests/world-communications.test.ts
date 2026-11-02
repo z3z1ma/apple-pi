@@ -452,6 +452,7 @@ test("channel history pages and searches without catch-up and posts only explici
 		await openChannel(page);
 		expect((await calls(page, "readThread"))[0]).toMatchObject({ view: "recent" });
 		expect((await calls(page, "readThread"))[0].attempt).toBeUndefined();
+		await page.getByRole("button", { name: "Search this conversation", exact: true }).click();
 		await page.getByRole("spinbutton", { name: "Message page size" }).fill("1");
 		await page.getByRole("button", { name: "Read latest", exact: true }).click();
 		await page.getByRole("button", { name: "Earlier messages", exact: true }).waitFor();
@@ -607,6 +608,7 @@ test("failed catch-up acknowledgment preserves the confirmed position and recove
 		await openChannel(page);
 		await page.getByRole("button", { name: "Join channel", exact: true }).last().click();
 		await page.getByRole("button", { name: "Catch up", exact: true }).waitFor();
+		await page.getByRole("button", { name: "Search this conversation", exact: true }).click();
 		await page.getByRole("spinbutton", { name: "Message page size" }).fill("1");
 		await page.evaluate(() => {
 			(window as any).failAck = true;

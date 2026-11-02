@@ -12,6 +12,7 @@ import { FileReferenceCwd, FileReferenceText } from "./file-references.js";
 import { Markdown } from "./overlay/conversation/transcript.js";
 import { useWindowFocus } from "./use-window-focus.js";
 import { CommunicationDialog, CommunicationRecipients } from "./workplace-communications.js";
+import { Icon } from "./workplace-icon.js";
 import { PersonAvatar, PersonName } from "./workplace-people.js";
 
 const api = window.agentWorld;
@@ -25,13 +26,20 @@ export function ThreadPane({
 	channelLabel,
 	world,
 	drafts,
+	listener,
+	embedded,
 }: {
 	id: string;
 	channel?: Pick<WorkplaceThread, "lastSeq">;
 	channelLabel?: string;
 	world: WorldSnapshot;
 	drafts: Map<string, string>;
+	/** A person every channel post notifies, such as the front desk's coordinator. */
+	listener?: string;
+	/** Hosted in a pane that already names the conversation: no title or participant line of its own. */
+	embedded?: boolean;
 }) {
+	const [searching, setSearching] = useState(false);
 	const [page, setPage] = useState<ConversationPage>();
 	const [unreadAfter, setUnreadAfter] = useState<number>();
 	const [draft, setDraft] = useState(drafts.get(id) ?? "");
@@ -197,7 +205,7 @@ export function ThreadPane({
 	const accept = async (result: CommunicationResult, body?: string) => {
 		if (result.outcome === "applied" && body !== undefined && drafts.get(id) === body) drafts.delete(id);
 		if (!mounted.current) return;
-		setNote(describe(result));
+		setNote(listener && body !== undefined && result.outcome === "applied" ? "" : describe(result));
 		if (result.outcome === "refused") setError(result.reason ?? "Operation refused.");
 		if (result.outcome !== "applied" || !result.effect) return;
 		if (body !== undefined) {
@@ -298,7 +306,13 @@ export function ThreadPane({
 		if (locked || !thread?.permissions.post || !draft.trim()) return;
 		void run(
 			channel ? "Post" : "Reply",
-			(attempt) => api.communications.post({ attempt, thread: id, body: draft, ...(channel ? { notify } : {}) }),
+			(attempt) =>
+				api.communications.post({
+					attempt,
+					thread: id,
+					body: draft,
+					...(channel ? { notify: listener ? [...new Set([listener, ...notify])] : notify } : {}),
+				}),
 			draft,
 		);
 	};
@@ -329,15 +343,41 @@ export function ThreadPane({
 	return (
 		<article className={`wp-thread${channel ? " wp-thread-channel" : ""}`}>
 			<header className="wp-thread-header">
-				{!channel && <h1>{thread?.name ?? "Reading conversation..."}</h1>}
+				{!channel && !embedded && <h1>{thread?.name ?? "Reading conversation..."}</h1>}
 				<p>
-					{thread?.participants.map((person, index) => (
-						<span key={person.id}>
-							{index > 0 && ", "}
-							<PersonName id={person.id} name={person.id === "operator" ? "You" : person.name} />
-						</span>
-					))}
+					{!embedded &&
+						thread?.participants.map((person, index) => (
+							<span key={person.id}>
+								{index > 0 && ", "}
+								<PersonName id={person.id} name={person.id === "operator" ? "You" : person.name} />
+							</span>
+						))}
 				</p>
+				<button
+					type="button"
+					className="wp-thread-search-toggle"
+					aria-label="Search this conversation"
+					title="Search this conversation, or change the page size"
+					aria-pressed={searching}
+					onClick={() => {
+						setSearching(!searching);
+						if (searching) setSearch(undefined);
+					}}
+				>
+					<Icon name="search" />
+				</button>
+				{thread && (!channel || thread.following) && (
+					<button
+						type="button"
+						disabled={locked || !Number.isSafeInteger(limit) || limit < 1}
+						onClick={() => {
+							followLatest.current = false;
+							void read({ thread: id, view: "catch_up", limit });
+						}}
+					>
+						Catch up
+					</button>
+				)}
 				<button
 					type="button"
 					disabled={pending}
@@ -449,6 +489,7 @@ export function ThreadPane({
 			)}
 			<form
 				className="wp-channel-recall"
+				hidden={!searching}
 				onSubmit={(event) => {
 					event.preventDefault();
 					void find();
@@ -474,18 +515,6 @@ export function ThreadPane({
 						onChange={(event) => setLimit(Number(event.target.value))}
 					/>
 				</label>
-				{thread && (!channel || thread.following) && (
-					<button
-						type="button"
-						disabled={locked || !Number.isSafeInteger(limit) || limit < 1}
-						onClick={() => {
-							followLatest.current = false;
-							void read({ thread: id, view: "catch_up", limit });
-						}}
-					>
-						Catch up
-					</button>
-				)}
 			</form>
 			<div
 				className="wp-thread-messages"
@@ -559,7 +588,7 @@ export function ThreadPane({
 						</button>
 					</div>
 				)}
-				{attempt && (
+				{attempt && attempt.result?.outcome !== "applied" && (
 					<p className="wp-thread-attempt">
 						{attempt.label} attempt: {attempt.id} · {attempt.result?.outcome ?? "uncertain"}{" "}
 						<button type="button" disabled={pending} onClick={() => void recover()}>
@@ -581,7 +610,7 @@ export function ThreadPane({
 							send();
 						}}
 					>
-						{channel && (
+						{channel && !listener && (
 							<details className="wp-thread-notify">
 								<summary>
 									{notify.length ? `Notify ${notify.length} selected people` : "Notify: nobody (quiet post)"}
@@ -600,10 +629,18 @@ export function ThreadPane({
 							</details>
 						)}
 						<label>
-							{channel ? "Post to channel as operator" : "Reply to everyone"}
+							<span className="wp-visually-hidden">
+								{channel ? "Post to channel as operator" : "Reply to everyone"}
+							</span>
 							<textarea
 								aria-label={channel ? "Post to channel" : "Reply to everyone"}
-								placeholder={channel ? "Write to this channel..." : "Write your reply..."}
+								placeholder={
+									listener
+										? "Tell the organization what you need..."
+										: channel
+											? "Write to this channel..."
+											: "Write your reply..."
+								}
 								value={draft}
 								disabled={locked}
 								onChange={(event) => {
@@ -764,58 +801,87 @@ function ThreadMessages({
 		unreadAfter === undefined
 			? undefined
 			: messages.find((message) => message.seq > unreadAfter && message.from !== "operator")?.seq;
-	return messages.map((message) => (
-		<Fragment key={message.id}>
-			{message.seq === firstUnread && (
-				<div className="wp-unread-divider">
-					<span aria-hidden="true">New messages</span>
-					<hr aria-label="New messages" />
-				</div>
-			)}
-			<article className="wp-message" id={`message-${message.seq}`}>
-				<PersonAvatar
-					id={message.from}
-					name={message.from === "operator" ? "You" : message.fromName}
-					className="wp-message-avatar"
-				/>
-				<div className="wp-message-content">
-					<header>
-						<strong>
-							<PersonName id={message.from} name={message.from === "operator" ? "You" : message.fromName} />
-						</strong>
-						<time dateTime={new Date(message.at).toISOString()}>{new Date(message.at).toLocaleString()}</time>
-						<span className="wp-message-reference" title={`${thread.id}#${message.seq}`}>
-							#{message.seq}
-						</span>
-						{canPin && (
-							<button
-								className="wp-message-pin"
-								type="button"
-								aria-label={`Pin message ${message.seq}`}
-								onClick={() => pin(message.seq)}
-							>
-								Pin
-							</button>
-						)}
-					</header>
-					<div className="wp-message-body">
-						<FileReferenceCwd.Provider
-							value={
-								message.from === "operator"
-									? undefined
-									: (world.characters.find((person) => person.id === message.from)?.facts?.cwd ??
-										world.dormant?.find((person) => person.id === message.from)?.cwd)
-							}
-						>
-							{channel ? (
-								<Markdown text={message.body} onLink={(href, file) => followLink(message.from, href, file)} />
-							) : (
-								<FileReferenceText text={message.body} />
-							)}
-						</FileReferenceCwd.Provider>
+	return messages.map((message, index) => {
+		const previous = messages[index - 1];
+		const newDay = !previous || dayOf(previous.at) !== dayOf(message.at);
+		const continued =
+			!newDay && previous?.from === message.from && message.at - previous.at < GROUP_MS && message.seq !== firstUnread;
+		return (
+			<Fragment key={message.id}>
+				{newDay && (
+					<div className="wp-day-divider">
+						<span>{dayLabel(message.at)}</span>
 					</div>
-				</div>
-			</article>
-		</Fragment>
-	));
+				)}
+				{message.seq === firstUnread && (
+					<div className="wp-unread-divider">
+						<span aria-hidden="true">New messages</span>
+						<hr aria-label="New messages" />
+					</div>
+				)}
+				<article className={`wp-message${continued ? " is-continued" : ""}`} id={`message-${message.seq}`}>
+					<PersonAvatar
+						id={message.from}
+						name={message.from === "operator" ? "You" : message.fromName}
+						className="wp-message-avatar"
+					/>
+					<div className="wp-message-content">
+						<header>
+							<strong>
+								<PersonName id={message.from} name={message.from === "operator" ? "You" : message.fromName} />
+							</strong>
+							<time dateTime={new Date(message.at).toISOString()} title={new Date(message.at).toLocaleString()}>
+								{new Date(message.at).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}
+							</time>
+							<span className="wp-message-reference" title={`${thread.id}#${message.seq}`}>
+								#{message.seq}
+							</span>
+							{canPin && (
+								<button
+									className="wp-message-pin"
+									type="button"
+									aria-label={`Pin message ${message.seq}`}
+									onClick={() => pin(message.seq)}
+								>
+									Pin
+								</button>
+							)}
+						</header>
+						<div className="wp-message-body">
+							<FileReferenceCwd.Provider
+								value={
+									message.from === "operator"
+										? undefined
+										: (world.characters.find((person) => person.id === message.from)?.facts?.cwd ??
+											world.dormant?.find((person) => person.id === message.from)?.cwd)
+								}
+							>
+								{channel ? (
+									<Markdown text={message.body} onLink={(href, file) => followLink(message.from, href, file)} />
+								) : (
+									<FileReferenceText text={message.body} />
+								)}
+							</FileReferenceCwd.Provider>
+						</div>
+					</div>
+				</article>
+			</Fragment>
+		);
+	});
+}
+
+/** Consecutive messages from one author within this span read as one block, as in Slack. */
+const GROUP_MS = 5 * 60_000;
+const dayOf = (at: number) => new Date(at).toDateString();
+function dayLabel(at: number): string {
+	const today = new Date();
+	const yesterday = new Date(today.getTime() - 86_400_000);
+	if (dayOf(at) === today.toDateString()) return "Today";
+	if (dayOf(at) === yesterday.toDateString()) return "Yesterday";
+	return new Date(at).toLocaleDateString(undefined, {
+		weekday: "long",
+		month: "long",
+		day: "numeric",
+		...(new Date(at).getFullYear() === today.getFullYear() ? {} : { year: "numeric" }),
+	});
 }

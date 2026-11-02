@@ -169,6 +169,80 @@
 	align-items: center;
 	gap: 8px;
 }
+.wp-day-divider {
+	position: relative;
+	display: flex;
+	justify-content: center;
+	margin: 14px 0 4px;
+}
+.wp-day-divider::before {
+	content: "";
+	position: absolute;
+	left: 0;
+	right: 0;
+	top: 50%;
+	border-top: 1px solid var(--wp-border);
+}
+.wp-day-divider span {
+	position: relative;
+	padding: 3px 12px;
+	border: 1px solid var(--wp-border);
+	border-radius: 12px;
+	background: var(--wp-bg);
+	font-size: 11px;
+	font-weight: 650;
+	color: var(--wp-text);
+}
+.wp-thread .wp-message.is-continued {
+	padding-top: 0;
+	margin-top: -8px;
+}
+.wp-thread .wp-message.is-continued .wp-message-avatar {
+	visibility: hidden;
+	height: 0;
+}
+.wp-thread .wp-message.is-continued header strong {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+}
+.wp-thread .wp-message.is-continued header {
+	opacity: 0;
+	height: 0;
+	overflow: hidden;
+}
+.wp-thread .wp-message.is-continued:hover header {
+	opacity: 1;
+	height: auto;
+}
+.wp-channel-recall[hidden] {
+	display: none;
+}
+.wp-app .wp-thread-header .wp-thread-search-toggle {
+	display: grid;
+	place-items: center;
+	width: 26px;
+	height: 24px;
+	padding: 0;
+}
+.wp-app .wp-thread-header .wp-thread-search-toggle .wp-icon {
+	width: 14px;
+	height: 14px;
+}
+.wp-app .wp-thread-header .wp-thread-search-toggle[aria-pressed="true"] {
+	background: var(--wp-selected);
+	color: var(--wp-text);
+}
+.wp-visually-hidden {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+}
 .wp-channel-recall input {
 	background: var(--wp-bg);
 	border: 1px solid var(--wp-border);

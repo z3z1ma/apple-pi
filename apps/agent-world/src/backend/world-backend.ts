@@ -8,6 +8,7 @@ import { createConnection, type Socket } from "node:net";
 import { DatabaseSync } from "node:sqlite";
 import type {
 	CommandResult,
+	Desk,
 	DormantAgent,
 	FeedLine,
 	KeptPart,
@@ -42,6 +43,8 @@ export interface WorldBackend {
 	setAvatarLook(look: string): Promise<CommandResult>;
 	/** Choose the theme; the snapshot shows it at once, and it resolves once the runtime stored it. */
 	setTheme(id: string): Promise<CommandResult>;
+	/** Make a channel and its coordinator the front desk (the runtime's `desk` preference, which the runtime reads too). */
+	setDesk(desk: Desk): Promise<CommandResult>;
 	close(): void;
 }
 
@@ -85,6 +88,18 @@ const STORE_TIMEOUT_MS = 5000;
  * `{ wings: { [coordinator id]: repository[] }, avatar: look, theme: id }`.
  */
 export const PREFERENCE_KEY = "agent-world";
+/** The `preferences` key of the front desk, `{ thread, person }`; the runtime routes unfollowed outside activity there. */
+export const DESK_KEY = "desk";
+
+function readDesk(database: DatabaseSync): Desk | null {
+	const row = database.prepare("select value from preferences where key = ?").get(DESK_KEY) as
+		| { value: string }
+		| undefined;
+	const value = parse<Partial<Desk>>(row?.value);
+	return typeof value?.thread === "string" && typeof value.person === "string"
+		? { thread: value.thread, person: value.person }
+		: null;
+}
 
 // Every top-level session with what places it: awake while its current incarnation is alive. A column a runtime started
 // before its migration has not added yet reads as null; explicit work is selected only when its tables exist.
@@ -205,6 +220,7 @@ export function openWorldBackend(paths: { db: string; socket: string }): WorldBa
 	let mail: MailItem[] = [];
 	let operatorMail: MailThreadSummary[] = [];
 	let workplace: Workplace | undefined;
+	let desk: Desk | null = null;
 	let db: DatabaseSync | undefined;
 	let socket: Socket | undefined;
 	let socketOpen = false;
@@ -364,6 +380,7 @@ export function openWorldBackend(paths: { db: string; socket: string }): WorldBa
 			dormant = dormantAgents(world.dormant, byId, (task) => readTask(task, rereadTasks), dormant, !rereadTasks);
 			operatorMail = readOperatorMail(db);
 			workplace = readWorkplace(db, [...sessionsById.values()], rereadTasks);
+			desk = readDesk(db);
 			world = placeWorkplace(world, [...sessionsById.values()], workplace);
 			const nextMail = readMail(db);
 			if (JSON.stringify(nextMail) !== JSON.stringify(mail)) mail = nextMail;
@@ -437,6 +454,7 @@ export function openWorldBackend(paths: { db: string; socket: string }): WorldBa
 			mail,
 			operatorMail,
 			workplace,
+			desk,
 		});
 	};
 
@@ -535,6 +553,17 @@ export function openWorldBackend(paths: { db: string; socket: string }): WorldBa
 		},
 		setAvatarLook: (look) => choose("avatar", look),
 		setTheme: (id) => choose("theme", id),
+		async setDesk(next) {
+			if (!socket || !socketOpen) return { ok: false, reason: "The session runtime is not connected." };
+			const command = { kind: "set_preference", key: DESK_KEY, value: next };
+			socket.write(
+				`${JSON.stringify({ type: "command", commandId: `agent-world-${randomUUID()}`, sessionId: "agent-world", command })}\n`,
+			);
+			desk = next;
+			lastSeq = -1;
+			poll();
+			return { ok: true };
+		},
 		close() {
 			closed = true;
 			settle(undefined, { ok: false, reason: "Agent World closed before the runtime stored it." });

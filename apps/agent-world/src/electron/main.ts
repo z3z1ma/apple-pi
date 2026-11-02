@@ -154,6 +154,12 @@ function start() {
 		if (window && !window.isDestroyed()) window.setBackgroundColor(themeBackdrop(join(appDir, "themes"), id));
 		return world.setTheme(id);
 	});
+	ipcMain.handle("world:set-desk", (_event, desk: unknown) => {
+		const { thread, person } = (desk ?? {}) as { thread?: unknown; person?: unknown };
+		if (typeof thread !== "string" || typeof person !== "string")
+			return { ok: false, reason: "A desk needs a channel and a person." };
+		return world.setDesk({ thread, person });
+	});
 	ipcMain.handle("world:instruct", (_event, characterId: unknown, commandId: unknown, instruction: unknown) => {
 		if (typeof characterId !== "string" || typeof commandId !== "string" || !commandId)
 			return { ok: false, reason: "No character was named." };

@@ -69,6 +69,7 @@ var api = {
 	setAvatarLook: (look) => electron.ipcRenderer.invoke("world:avatar-look", look),
 	themes: () => electron.ipcRenderer.invoke("world:themes"),
 	setTheme: (id) => electron.ipcRenderer.invoke("world:set-theme", id),
+	setDesk: (desk) => electron.ipcRenderer.invoke("world:set-desk", desk),
 	instruct: (characterId, commandId, instruction) => electron.ipcRenderer.invoke("world:instruct", characterId, commandId, instruction),
 	onReceipt(listener) {
 		const forward = (_event, receipt) => listener(receipt);

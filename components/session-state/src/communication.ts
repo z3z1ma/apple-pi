@@ -173,7 +173,9 @@ export function conversationInfo(db: DatabaseSync, person: string, id: string): 
 			post:
 				access &&
 				row.closed_at === null &&
-				(row.kind === "channel" ? row.channel_type === "topic" || Boolean(mine) : row.kind !== "task" || Boolean(mine)),
+				(row.kind === "channel"
+					? row.channel_type === "topic" || Boolean(mine)
+					: row.kind !== "task" || Boolean(mine) || person === OPERATOR),
 			join: access && row.kind === "channel",
 			invite: participant && row.kind !== "task",
 			remove: participant && row.kind !== "task",

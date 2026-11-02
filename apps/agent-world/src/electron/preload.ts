@@ -138,6 +138,7 @@ const api: AgentWorldApi = {
 	setAvatarLook: (look) => ipcRenderer.invoke("world:avatar-look", look) as Promise<CommandResult>,
 	themes: () => ipcRenderer.invoke("world:themes") as Promise<ThemeChoice[]>,
 	setTheme: (id) => ipcRenderer.invoke("world:set-theme", id) as Promise<CommandResult>,
+	setDesk: (desk) => ipcRenderer.invoke("world:set-desk", desk) as Promise<CommandResult>,
 	instruct: (characterId, commandId, instruction) =>
 		ipcRenderer.invoke("world:instruct", characterId, commandId, instruction) as Promise<CommandResult>,
 	onReceipt(listener) {
