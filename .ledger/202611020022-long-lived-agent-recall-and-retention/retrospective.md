@@ -1,4 +1,4 @@
-Status: retained implementation reviewed next; isolated ranking experiment authorized afterward
+Status: retained implementation independently reviewed; isolated ranking experiment preparing held-out questions
 Created: 2026-11-02
 Updated: 2026-11-02
 
@@ -32,6 +32,6 @@ The ancestry label 'question' was another overclaim: notifications and learning 
 
 ## Improvements and remaining decisions
 
-The original research made no production change or archival operation. Authorized implementation retains extraction/addressing and visible-evidence fixes; the query/ranking/filter/page increment was withdrawn. Its legacy limitations remain explicit rather than hidden by a nominal feature-complete claim. A fresh retained-source review must settle before the next isolated ranking/answer-context experiment. That experiment requires frozen and prewritten held-out quality gains before any main landing. Keep cutoffs, labels and negative cases fixed, independently judge novel hits, and distinguish warm filesystem timing from cold startup/RSS.
+The original research made no production change or archival operation. Authorized implementation retains extraction/addressing and visible-evidence fixes; the query/ranking/filter/page increment was withdrawn. Its legacy limitations remain explicit rather than hidden by a nominal feature-complete claim. The corrected-target review has settled; the isolated ranking/answer-context experiment is preparing held-out questions under experiment.md. That experiment requires frozen and prewritten held-out quality gains before any main landing. Keep cutoffs, labels and negative cases fixed, independently judge novel hits, and distinguish warm filesystem timing from cold startup/RSS.
 
 Private gold and mappings remain outside the repository in documented temporary directories; those can disappear, so exact manual-label reproduction depends on retaining them privately or relabeling originals. Operator acceptance of completed review/experiment results, native-storage integration, fault testing, actual long-horizon behavior and finite total-state retention remain separate open obligations. Storage/archive implementation remains unapproved.

@@ -67,6 +67,43 @@ const withSession = async (
 };
 
 describe("source-complete personal recall", () => {
+	it("keeps matches from different conversation turns in separate displayed segments", async () => {
+		const entries = [
+			{ type: "message", id: "first-question", parentId: null, message: { role: "user", content: "First topic" } },
+			{
+				type: "message",
+				id: "first-answer",
+				parentId: "first-question",
+				message: { role: "assistant", content: [{ type: "text", text: "needle in the first conversation" }] },
+			},
+			{
+				type: "message",
+				id: "second-question",
+				parentId: "first-answer",
+				message: { role: "user", content: "Second topic" },
+			},
+			{
+				type: "message",
+				id: "second-answer",
+				parentId: "second-question",
+				message: { role: "assistant", content: [{ type: "text", text: "needle needle in the second conversation" }] },
+			},
+		];
+		await withSession(async (_file, invoke) => {
+			const output = await invoke({ query: "needle" });
+			expect(output).toContain("2 matches across 2 segments");
+			const segments = output.split(/^--- /m).filter((segment) => segment.includes("Read source:"));
+			expect(segments).toHaveLength(2);
+			for (const [answer, question] of [
+				["first-answer", "first-question"],
+				["second-answer", "second-question"],
+			]) {
+				const segment = segments.find((part) => part.includes(`Read source: entry:${answer}`));
+				expect(segment).toContain(`preceding input entry:${question}`);
+			}
+		}, entries);
+	});
+
 	it("follows discovered saved-program evidence through entry and numeric recovery", async () => {
 		const entries = [
 			{

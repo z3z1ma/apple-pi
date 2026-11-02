@@ -38,8 +38,10 @@ describe("answer-bearing evidence windows", () => {
 			"labelneedle",
 		);
 		expect(output).toContain("[assistant text]");
-		expect(output).not.toContain(quoted);
 		expect(output).toContain("labelneedle is an ordinary assistant statement.");
+		expect(
+			await search([{ role: "assistant", content: [{ type: "text", text: content }] } as Message], "entry:evidence-0"),
+		).toContain(quoted);
 	});
 	it("shows the decision passage rather than an earlier weak match", async () => {
 		const message = {

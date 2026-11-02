@@ -12,6 +12,12 @@ it.each([false, true])(
 	"excludes the issuing parent through native nested execution (delegated: %s)",
 	async (delegated) => {
 		const cwd = mkdtempSync(join(tmpdir(), "nested-recall-"));
+		const sessionManager = SessionManager.create(cwd, join(cwd, "sessions"));
+		const historicalEntryId = sessionManager.appendMessage({
+			role: "user",
+			content: "historicalneedle retained evidence",
+			timestamp: 0,
+		});
 		const runner = await fauxSession(
 			[
 				(pi) => {
@@ -44,25 +50,31 @@ it.each([false, true])(
 				fauxAssistantMessage(fauxToolCall("compose", { query: "selfonlyneedle" }, { id: "outer" }), {
 					stopReason: "toolUse",
 				}),
+				fauxAssistantMessage(fauxToolCall("compose", { query: "historicalneedle" }, { id: "historical" }), {
+					stopReason: "toolUse",
+				}),
 				fauxAssistantMessage("Done"),
 			],
 			["compose", "delegate", "search_session"],
-			{ cwd, sessionManager: SessionManager.create(cwd, join(cwd, "sessions")) },
+			{ cwd, sessionManager },
 		);
 		try {
 			await runner.session.prompt("Proceed.");
-			const output = runner.session.messages.find(
-				(message) => message.role === "toolResult" && message.toolCallId === "outer",
-			);
-			expect(output?.role).toBe("toolResult");
-			if (output?.role !== "toolResult") throw new Error("Missing outer tool result");
-			expect(output.isError).toBe(false);
-			expect(
-				output.content
+			for (const [callId, expected] of [
+				["outer", ["No matches"]],
+				["historical", [`Read source: entry:${historicalEntryId}`, "historicalneedle retained evidence"]],
+			] as const) {
+				const output = runner.session.messages.find(
+					(message) => message.role === "toolResult" && message.toolCallId === callId,
+				);
+				if (output?.role !== "toolResult") throw new Error(`Missing ${callId} tool result`);
+				expect(output.isError).toBe(false);
+				const text = output.content
 					.filter((part) => part.type === "text")
 					.map((part) => part.text)
-					.join("\n"),
-			).toContain("No matches");
+					.join("\n");
+				for (const passage of expected) expect(text).toContain(passage);
+			}
 		} finally {
 			runner.dispose();
 			rmSync(cwd, { recursive: true, force: true });
