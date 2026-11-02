@@ -329,6 +329,45 @@ test("a configured desk channel gets one explicit notification, while followed c
 	).toEqual([{ session_id: "desk" }]);
 });
 
+test("rolled-back external mail does not wake its off-call listener, while a committed retry does", async () => {
+	await person("desk", { onCall: false }, true);
+	await sendCommand(state.socketPath, "operator", {
+		kind: "external",
+		action: "watch",
+		repo: "acme/widget",
+		events: ["issues"],
+	});
+	const db = new DatabaseSync(state.dbPath);
+	db.prepare(
+		"insert into threads (id, kind, subject, created_by, created_at, listener, charter) values ('desk-channel', 'channel', 'Desk', 'desk', 1, 'desk', 'Observe incoming issues')",
+	).run();
+	db.prepare("insert into preferences (key, value, updated_at) values ('desk', ?, 1)").run(
+		JSON.stringify({ thread: "desk-channel", person: "desk" }),
+	);
+	db.exec(
+		"create trigger reject_consumption before insert on external_seen begin select raise(abort, 'publication probe'); end",
+	);
+	db.close();
+	routes[`${repo}/issues`] = [{ ...comment(8, "rollback candidate"), number: 8, title: "Candidate" }];
+	syncRoutes();
+	await poll();
+	await new Promise<void>((resolve) => setImmediate(resolve));
+	expect(query(state.dbPath, "select 1 from thread_messages where body like '%rollback candidate%'")).toHaveLength(0);
+	expect(query(state.dbPath, "select 1 from commands where kind = 'mail' and session_id = 'desk'")).toHaveLength(0);
+	expect(query(state.dbPath, "select 1 from events where type = 'on_call_woken' and session_id = 'desk'")).toHaveLength(
+		0,
+	);
+	const retry = new DatabaseSync(state.dbPath);
+	retry.exec("drop trigger reject_consumption");
+	retry.close();
+	await poll();
+	await new Promise<void>((resolve) => setImmediate(resolve));
+	expect(query(state.dbPath, "select 1 from commands where kind = 'mail' and session_id = 'desk'")).toHaveLength(1);
+	expect(query(state.dbPath, "select 1 from events where type = 'on_call_woken' and session_id = 'desk'")).toHaveLength(
+		1,
+	);
+});
+
 test("failed publication rolls back event consumption and retries the whole batch", async () => {
 	await person();
 	await follow();
