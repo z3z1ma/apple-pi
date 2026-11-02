@@ -192,7 +192,21 @@ async function openDesk(appearance: "light" | "dark", width = 1440, desk = true)
 			});
 			w.posts = [];
 			w.instructions = [];
+			w.seen = [];
+			w.unsee = (id: string) => {
+				world = {
+					...world,
+					characters: world.characters.map((person: any) =>
+						person.id === id ? { ...person, facts: { ...person.facts, unseen: true } } : person,
+					),
+				};
+				for (const listener of listeners) listener(world);
+			};
 			w.agentWorld = {
+				markSeen: async (id: string) => {
+					w.seen.push(id);
+					return { ok: true };
+				},
 				instruct: async (id: string, _command: string, instruction: any) => {
 					w.instructions.push({ id, ...instruction });
 					return { ok: true };
@@ -421,6 +435,46 @@ test("a message is answered with its quote, and forwarded to a thread or a perso
 		const [told] = await page.evaluate(() => (window as any).instructions);
 		expect(told).toMatchObject({ id: "iris", kind: "follow_up" });
 		expect(told.text).toMatch(/^> \*\*Cora\*\*/);
+		expect(errors).toEqual([]);
+	} finally {
+		await page.close();
+	}
+});
+
+test("a DM draft survives a reload with a pencil in the sidebar; Alt + arrows move and Shift + Escape marks all read", {
+	timeout: 60_000,
+}, async () => {
+	const { page, errors } = await openDesk("light");
+	try {
+		await page.getByRole("heading", { name: "Front desk", exact: true }).waitFor();
+		const direct = page.getByRole("region", { name: "Direct messages", exact: true });
+		await direct.getByRole("button", { name: /^Iris/ }).click();
+		await page.getByRole("textbox", { name: "Instruct Iris" }).fill("Half a thought about webhooks");
+		await page.getByRole("button", { name: /^Front desk/ }).click();
+		await direct.getByRole("img", { name: "Draft" }).waitFor();
+		await page.reload();
+		await page.getByRole("heading", { name: "Front desk", exact: true }).waitFor();
+		await direct.getByRole("img", { name: "Draft" }).waitFor();
+		await direct.getByRole("button", { name: /^Iris/ }).click();
+		expect(await page.getByRole("textbox", { name: "Instruct Iris" }).inputValue()).toBe(
+			"Half a thought about webhooks",
+		);
+
+		await page.getByRole("button", { name: /^Front desk/ }).click();
+		await page.keyboard.press("Alt+ArrowDown");
+		await page.getByRole("heading", { name: "Threads", exact: true }).waitFor();
+		await page.keyboard.press("Alt+ArrowUp");
+		await page.getByRole("heading", { name: "Front desk", exact: true }).waitFor();
+
+		await page.evaluate(() => (window as any).unsee("milo"));
+		await page.locator('.wp-dm[data-unread="true"]').waitFor();
+		await page.keyboard.press("Alt+Shift+ArrowDown");
+		await page.getByRole("heading", { name: "Activity", exact: true }).waitFor();
+		await page.keyboard.press("Alt+Shift+ArrowDown");
+		await page.locator(".wp-conversation-header h1").filter({ hasText: "Milo" }).waitFor();
+		await page.evaluate(() => (window as any).unsee("iris"));
+		await page.keyboard.press("Shift+Escape");
+		await vi.waitFor(async () => expect(await page.evaluate(() => (window as any).seen)).toContain("iris"));
 		expect(errors).toEqual([]);
 	} finally {
 		await page.close();

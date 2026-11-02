@@ -4,7 +4,7 @@
 // It also keeps what outlives one opening of the panel: each character's unsent draft, and the instructions sent to it
 // with the receipt stages they reached.
 import type { AgentWorldApi, Character, Instruction, ReceiptStage } from "../../../src/world.js";
-import { setWorldDraftDirty } from "../../world-drafts.js";
+import { StoredDrafts } from "../../stored-drafts.js";
 import { onePanel } from "../one-panel.js";
 import type { QuotedMessage } from "./quote.js";
 
@@ -44,7 +44,7 @@ const update = (change: Partial<PanelState>) => {
 	for (const listener of listeners) listener();
 };
 
-const drafts = new Map<string, string>();
+const drafts = new StoredDrafts("workplace-draft:dm:");
 const replies = new Map<string, QuotedMessage>();
 const quoteListeners = new Set<(characterId: string) => void>();
 /** A questionnaire form's choices so far, per question, by the questionnaire's id. */
@@ -111,9 +111,7 @@ export const conversationPanel = {
 	/** What the operator had typed to a character and not sent; kept while the app runs. */
 	draft: (characterId: string) => drafts.get(characterId) ?? "",
 	setDraft(characterId: string, text: string) {
-		if (text) drafts.set(characterId, text);
-		else drafts.delete(characterId);
-		setWorldDraftDirty(drafts, drafts.size > 0);
+		drafts.set(characterId, text);
 	},
 	/** The message the next reply to a character answers, quoted above it when sent; an open reply box shows it. */
 	replyTo: (characterId: string) => replies.get(characterId),

@@ -527,6 +527,43 @@ body.workplace {
 	width: 13px;
 	height: 13px;
 }
+.wp-draft-mark {
+	display: inline-grid;
+	flex: none;
+	place-items: center;
+	margin-left: auto;
+	color: var(--wp-muted);
+}
+.wp-draft-mark .wp-icon {
+	width: 13px;
+	height: 13px;
+}
+.wp-app .wp-mark-read {
+	margin-left: auto;
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	height: 28px;
+	padding: 0 8px 0 12px;
+	border: 1px solid var(--wp-border);
+	border-radius: 6px;
+	background: var(--wp-bg);
+	color: var(--wp-text);
+	font-size: 12px;
+}
+.wp-app .wp-mark-read:hover {
+	background: var(--wp-hover);
+}
+.wp-mark-read kbd {
+	padding: 0 4px;
+	border: 1px solid var(--wp-border);
+	border-bottom-width: 2px;
+	border-radius: 4px;
+	font-family: inherit;
+	font-size: 10px;
+	line-height: 15px;
+	color: var(--wp-muted);
+}
 .wp-dm[data-selected="true"] strong {
 	font-weight: 650;
 }

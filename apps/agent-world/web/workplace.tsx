@@ -1,6 +1,6 @@
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createRoot } from "react-dom/client";
-import type { CommunicationResult, ConversationInfo } from "../src/communications.js";
+import type { ConversationInfo } from "../src/communications.js";
 import type { Character, WorkplaceThread, WorldSnapshot } from "../src/world.js";
 import { FileReferenceCwd, FileReferenceNavigation, type FileReferenceTarget } from "./file-references.js";
 import { sleeperCharacter } from "./game/layout.js";
@@ -8,6 +8,7 @@ import { EmbeddedConversation } from "./overlay/conversation/conversation-panel.
 import { conversationPanel } from "./overlay/conversation/panel-state.js";
 import { TranscriptAuthor, TranscriptMessage, type TranscriptMessageInfo } from "./overlay/conversation/transcript.js";
 import { activity } from "./overlay/interface/model.js";
+import { StoredDrafts } from "./stored-drafts.js";
 import { ChannelBrowser } from "./workplace-channels.js";
 import { WorkplaceCode } from "./workplace-code.js";
 import { useWorkplaceMenu, WorkplaceMenuProvider } from "./workplace-context-menu.js";
@@ -46,7 +47,16 @@ const store = worldStore(api);
 conversationPanel.connect(api);
 document.body.classList.add("workplace");
 document.title = "Workplace";
-const drafts = new Map<string, string>();
+const drafts = new StoredDrafts("workplace-draft:thread:");
+
+/** A pencil on a sidebar row whose conversation holds unsent words. */
+function DraftMark() {
+	return (
+		<span className="wp-draft-mark" role="img" aria-label="Draft" title="Unsent draft">
+			<Icon name="compose" />
+		</span>
+	);
+}
 
 /** A DM's messages with actions; replying quotes into this person's reply box while it can take one. */
 function dmMessageFor(id: string, where: string, canReply: boolean) {
@@ -133,9 +143,7 @@ function Workplace() {
 				!codeDirty &&
 				terminalCount === 0 &&
 				!planState.dirty &&
-				!document.querySelector(".wp-world-frame[data-world-dirty]") &&
-				![...drafts.values()].some(Boolean) &&
-				!world?.characters.some((person) => Boolean(conversationPanel.draft(person.id)))
+				!document.querySelector(".wp-world-frame[data-world-dirty]")
 			)
 				return;
 			event.preventDefault();
@@ -143,7 +151,7 @@ function Workplace() {
 		};
 		window.addEventListener("beforeunload", protectDrafts);
 		return () => window.removeEventListener("beforeunload", protectDrafts);
-	}, [codeDirty, terminalCount, planState.dirty, world]);
+	}, [codeDirty, terminalCount, planState.dirty]);
 	const [requestedDM, setRequestedDM] = useState<{ id: string; key: string }>();
 	const [requestedChannel, setRequestedChannel] = useState<{ id: string; key: string }>();
 	const openChannel = (id: string) => {
@@ -525,6 +533,48 @@ function Chat({
 		() => (dmId ? dmMessageFor(dmId, `DM with ${dmName}`, dmAwake) : undefined),
 		[dmId, dmName, dmAwake],
 	);
+	const latest = useRef(world);
+	latest.current = world;
+	/** Every unseen DM seen and every unread channel caught up to its latest post, as Slack's Shift + Escape. */
+	const markAllRead = useCallback(async () => {
+		const now = latest.current;
+		await Promise.all([
+			...now.characters.filter((agent) => agent.facts?.unseen).map((agent) => api.markSeen(agent.id)),
+			...[...channelUnreads(now)]
+				.filter(([, count]) => count > 0)
+				.map(([thread, count]) =>
+					api.communications.readThread({ thread, view: "catch_up", limit: count, attempt: crypto.randomUUID() }),
+				),
+		]);
+	}, []);
+	// Alt + Up/Down moves through the sidebar's conversations (with Shift, only unread ones); Shift + Escape marks all read.
+	useEffect(() => {
+		if (!active) return;
+		const onKey = (event: KeyboardEvent) => {
+			if (event.key === "Escape" && event.shiftKey && !event.altKey && !event.metaKey && !event.ctrlKey) {
+				event.preventDefault();
+				void markAllRead();
+				return;
+			}
+			if (!event.altKey || event.metaKey || event.ctrlKey) return;
+			if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+			const rows = [
+				...(layout.current?.querySelectorAll<HTMLButtonElement>(
+					".wp-chat-sidebar :is(.wp-nav-item, .wp-channel, .wp-group, .wp-dm-link)",
+				) ?? []),
+			].filter((row) => row.getClientRects().length > 0);
+			const current = rows.findIndex((row) => row.getAttribute("aria-pressed") === "true");
+			const step = event.key === "ArrowDown" ? 1 : -1;
+			for (let index = current + step; index >= 0 && index < rows.length; index += step) {
+				if (event.shiftKey && !rows[index]!.closest("[data-unread='true']")) continue;
+				event.preventDefault();
+				rows[index]!.click();
+				return;
+			}
+		};
+		window.addEventListener("keydown", onKey);
+		return () => window.removeEventListener("keydown", onKey);
+	}, [active, markAllRead]);
 	const go = (target: SwitchTarget) => {
 		if (target.kind === "view") setSelection({ kind: target.view, id: target.view });
 		else if (target.kind === "dm") openDM(target.id);
@@ -551,6 +601,7 @@ function Chat({
 		>
 			<span>#</span>
 			<span>{channelName(thread.id, thread.subject, world)}</span>
+			{selectedChannel?.id !== thread.id && drafts.get(thread.id) && <DraftMark />}
 			{(unreads.get(thread.id) ?? 0) > 0 && (
 				<b className="wp-unread-count" aria-hidden="true">
 					{unreads.get(thread.id)}
@@ -589,6 +640,7 @@ function Chat({
 					</span>
 					<small>{home ? "Away" : (agent.facts?.task?.title ?? agent.facts?.title ?? activity(agent))}</small>
 				</span>
+				{person?.id !== agent.id && conversationPanel.draft(agent.id) && <DraftMark />}
 				{agent.facts?.unseen && <span className="wp-unread-dot" aria-hidden="true" />}
 				{agent.facts?.asking && <b className="wp-needs">?</b>}
 			</button>
@@ -700,6 +752,7 @@ function Chat({
 							selected={selectedChannel?.id}
 							open={(id) => setSelection({ kind: "channel", id })}
 							menu={channelMenu}
+							draftMark={(id) => (drafts.get(id) ? <DraftMark /> : null)}
 						/>
 						{heads.length > 0 && (
 							<SidebarSection id="vips" title="VIPs" count={heads.length}>
@@ -839,6 +892,7 @@ function Chat({
 									selectedThread={openThread?.id}
 									openThread={showThread}
 									openDM={openDM}
+									markAllRead={() => void markAllRead()}
 								/>
 							)
 						)}

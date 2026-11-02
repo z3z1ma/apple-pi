@@ -582,7 +582,6 @@ export function useActivitySeen(items: ActivityItem[], viewing: boolean): Set<st
 	);
 	const keys = items.map(activityKey);
 	const current = keys.join("|");
-	// biome-ignore lint/correctness/useExhaustiveDependencies: the joined keys stand for the item list.
 	useEffect(() => {
 		if (!viewing) return;
 		const next = new Set(current ? current.split("|") : []);
@@ -592,7 +591,15 @@ export function useActivitySeen(items: ActivityItem[], viewing: boolean): Set<st
 	return new Set(keys.filter((key) => !seen.has(key)));
 }
 
-export function ActivityView({ items, unseen }: { items: ActivityItem[]; unseen: Set<string> }) {
+export function ActivityView({
+	items,
+	unseen,
+	markAllRead,
+}: {
+	items: ActivityItem[];
+	unseen: Set<string>;
+	markAllRead: () => void;
+}) {
 	return (
 		<section className="wp-activity-view" aria-label="Activity">
 			<header className="wp-conversation-header">
@@ -600,6 +607,14 @@ export function ActivityView({ items, unseen }: { items: ActivityItem[]; unseen:
 					<h1>Activity</h1>
 					<p>What needs you, most blocking first. Everything else keeps moving without you.</p>
 				</div>
+				<button
+					type="button"
+					className="wp-mark-read"
+					title="Mark every conversation read (Shift + Escape)"
+					onClick={markAllRead}
+				>
+					Mark all read <kbd>{"\u21e7Esc"}</kbd>
+				</button>
 			</header>
 			{items.length ? (
 				<ul className="wp-activity-list">
@@ -643,12 +658,15 @@ export function GroupList({
 	selected,
 	open,
 	menu,
+	draftMark,
 }: {
 	world: WorldSnapshot;
 	groups: { id: string; subject: string; participants: string[] }[];
 	filter: string;
 	unreads: Map<string, number>;
 	selected?: string;
+	/** The pencil for a group whose conversation holds unsent words, or nothing. */
+	draftMark: (id: string) => React.ReactNode;
 	open: (id: string) => void;
 	menu: (event: React.MouseEvent<HTMLElement> | React.KeyboardEvent<HTMLElement>, thread: { id: string }) => void;
 }) {
@@ -687,6 +705,7 @@ export function GroupList({
 						<span className="wp-group-label" title={`${members.length} people`}>
 							{label}
 						</span>
+						{selected !== group.id && draftMark(group.id)}
 						{unread > 0 && (
 							<b className="wp-unread-count" aria-hidden="true">
 								{unread}
@@ -1002,12 +1021,14 @@ export function OrganizationView({
 	selectedThread,
 	openThread,
 	openDM,
+	markAllRead,
 }: {
 	view: string;
 	world: WorldSnapshot;
 	drafts: Map<string, string>;
 	needsYou: ActivityItem[];
 	unseen: Set<string>;
+	markAllRead: () => void;
 	selectedThread?: string;
 	openThread: (thread: OpenThread) => void;
 	openDM: (id: string) => void;
@@ -1024,7 +1045,7 @@ export function OrganizationView({
 			/>
 		);
 	if (view === "threads") return <ThreadsView world={world} selectedThread={selectedThread} openThread={openThread} />;
-	if (view === "activity") return <ActivityView items={needsYou} unseen={unseen} />;
+	if (view === "activity") return <ActivityView items={needsYou} unseen={unseen} markAllRead={markAllRead} />;
 	return (
 		<div className="wp-empty">
 			<span className="wp-empty-icon">

@@ -29,3 +29,9 @@ Captured live with `live-mirror.ts chat` and `actions`.
 5. Create a task from a message (assign to a person) without leaving the conversation.
 6. Agent status at a glance: what each person is doing now, in the DM header and sidebar hover.
 7. Bulk: select several conversations; send one instruction to many agents.
+
+## Round 3: attention and steps across conversations
+
+- U4 Drafts were lost on reload and invisible once you left a conversation; quitting with any draft asked to confirm. **Fixed:** DM and channel/thread/mail drafts are stored on the device per conversation; a pencil marks sidebar rows holding one; drafts no longer hold Quit.
+- U5 No way to move between conversations without the mouse. **Fixed:** Alt + Up/Down walks the sidebar; Alt + Shift + Up/Down only stops at unread ones (Slack's keys).
+- U6 No mark-all-read. **Fixed:** Shift + Escape (and a button in Activity) marks every unseen DM seen and catches every unread channel up.
