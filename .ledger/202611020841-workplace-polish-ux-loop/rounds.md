@@ -52,3 +52,10 @@ Open: the desk keeps a separate row for search / Catch up / Read latest / Action
 
 - V9 The desk and the thread side panel still spent a row on reading controls, and the channel fix positioned them absolutely. **Fixed at the shared cause:** `ThreadPane` takes a `toolbarHost` and portals search / Catch up / Read latest / Actions into its host's header (channel header, desk header beside Listening, thread panel under its title); the absolute-position rule is gone.
 - V10 Threads filter counts wrapped onto a second line when the side panel narrowed the list. **Fixed:** segment labels stay on one line.
+
+## Round 7: Mail against Superhuman / Gmail
+
+- M1 The inbox was mostly "Departure: …" notices from Pi, burying mail from people. **Fixed:** a People / Updates split (Superhuman's split inbox) in the list title row, each with its unread count.
+- M2 The Activity folder showed a heavy "211" badge for a delivery log nobody clears. **Fixed:** a quiet count.
+- M3 The reader spent a row on reading controls. **Fixed:** they sit beside the subject (the shared header slot).
+- M4 At 1100 px the list overflowed: rows clipped their times and subjects without ellipsis. **Fixed:** the row's text column cannot grow past the pane; subjects ellipsize; the search field no longer collapses.

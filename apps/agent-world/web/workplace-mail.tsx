@@ -67,6 +67,10 @@ function letters(items: MailItem[]): Letter[] {
 
 const KIND_LABEL: Record<string, string> = { escalation: "Escalation", task: "Task", meeting: "Meeting" };
 
+/** A conversation only Pi itself has written in (departures, notices): it goes under Updates, not People. */
+const fromPi = (thread: MailThreadSummary) =>
+	(thread.participants ?? []).every((id) => id === "harness" || id === "operator") && thread.lastFrom === "harness";
+
 function Avatar({ id, world }: { id: string; world: WorldSnapshot }) {
 	if (id === "harness")
 		return (
@@ -110,7 +114,7 @@ function InboxRow({
 							{KIND_LABEL[thread.kind]}
 						</span>
 					)}
-					{thread.subject}
+					<span className="wp-mail-subject-text">{thread.subject}</span>
 				</span>
 				{thread.preview && (
 					<span className="wp-mail-row-preview">
@@ -213,6 +217,8 @@ export function Mail({
 	const [recipient, setRecipient] = useState("");
 	const [delivery, setDelivery] = useState<string>();
 	const [unreadOnly, setUnreadOnly] = useState(false);
+	const [split, setSplit] = useState<"people" | "updates">("people");
+	const [readerTools, setReaderTools] = useState<HTMLElement | null>(null);
 	const [activitySeen, setActivitySeen] = useState(() => Number(localStorage.getItem(ACTIVITY_SEEN) ?? 0));
 	const layout = useRef<HTMLDivElement>(null);
 	const list = usePaneResize({
@@ -236,8 +242,12 @@ export function Mail({
 	const newActivity = traffic.filter((letter) => letter.sentAt > activitySeen).length;
 	const unread = threads.reduce((sum, thread) => sum + thread.unread, 0);
 	const needle = query.toLowerCase();
+	const splitOf = (thread: MailThreadSummary) => (fromPi(thread) ? "updates" : "people");
+	const splitUnread = (which: "people" | "updates") =>
+		threads.filter((thread) => splitOf(thread) === which && thread.unread > 0).length;
 	const matchingThreads = threads.filter(
 		(thread) =>
+			splitOf(thread) === split &&
 			`${thread.subject} ${thread.preview ?? ""} ${(thread.participants ?? []).map((id) => nameIn(world, id)).join(" ")}`
 				.toLowerCase()
 				.includes(needle) &&
@@ -276,9 +286,12 @@ export function Mail({
 						>
 							<Icon name={icon} />
 							<span>{title}</span>
-							{count > 0 && (
-								<b title={key === "traffic" ? `${count} new since you last looked` : `${count} unread`}>{count}</b>
-							)}
+							{count > 0 &&
+								(key === "traffic" ? (
+									<small title={`${count} new since you last looked`}>{count}</small>
+								) : (
+									<b title={`${count} unread`}>{count}</b>
+								))}
 						</button>
 					))}
 				</nav>
@@ -287,19 +300,46 @@ export function Mail({
 				<section ref={list.ref} className="wp-mail-list" aria-label={folder === "inbox" ? "Inbox" : "Delivery log"}>
 					<header className="wp-mail-list-header">
 						<div className="wp-mail-list-title">
-							<h2>{folder === "inbox" ? "Inbox" : folder === "sent" ? "Sent" : "Activity"}</h2>
-							<span>
-								{folder === "inbox"
-									? `${matchingThreads.length} ${matchingThreads.length === 1 ? "conversation" : "conversations"}`
-									: `${shownLetters.length} ${shownLetters.length === 1 ? "message" : "messages"}`}
-							</span>
+							<h2
+								title={
+									folder === "inbox"
+										? `${matchingThreads.length} ${matchingThreads.length === 1 ? "conversation" : "conversations"}`
+										: undefined
+								}
+							>
+								{folder === "inbox" ? "Inbox" : folder === "sent" ? "Sent" : "Activity"}
+							</h2>
+							{folder === "inbox" ? (
+								<fieldset className="wp-segmented wp-mail-split" aria-label="Who it is from">
+									{(
+										[
+											["people", "People"],
+											["updates", "Updates"],
+										] as const
+									).map(([key, label]) => (
+										<button
+											key={key}
+											type="button"
+											aria-pressed={split === key}
+											title={key === "updates" ? "Notices from Pi itself" : "Mail from people"}
+											onClick={() => setSplit(key)}
+										>
+											{label}
+											{splitUnread(key) > 0 && <span>{splitUnread(key)}</span>}
+										</button>
+									))}
+								</fieldset>
+							) : (
+								<span>{`${shownLetters.length} ${shownLetters.length === 1 ? "message" : "messages"}`}</span>
+							)}
 						</div>
 						<div className="wp-mail-tools">
 							<label className="wp-mail-search">
 								<Icon name="search" />
 								<input
 									aria-label="Search mail"
-									placeholder={folder === "inbox" ? "Search people, subjects, text" : "Search messages"}
+									placeholder="Search"
+									title={folder === "inbox" ? "Search people, subjects and text" : "Search messages"}
 									value={query}
 									onChange={(e) => setQuery(e.target.value)}
 								/>
@@ -347,7 +387,10 @@ export function Mail({
 						active && (
 							<>
 								<header className="wp-mail-reader-header">
-									<h1>{thread?.subject ?? "Conversation"}</h1>
+									<div className="wp-mail-reader-title">
+										<h1>{thread?.subject ?? "Conversation"}</h1>
+										<div className="wp-header-tools" ref={setReaderTools} />
+									</div>
 									<div className="wp-mail-reader-people">
 										{(thread?.participants ?? []).map((id) => (
 											<span key={id} className="wp-mail-person">
@@ -362,7 +405,14 @@ export function Mail({
 										)}
 									</div>
 								</header>
-								<ThreadPane key={selected} id={selected} world={world} drafts={drafts} embedded />
+								<ThreadPane
+									key={selected}
+									id={selected}
+									world={world}
+									drafts={drafts}
+									embedded
+									toolbarHost={readerTools}
+								/>
 							</>
 						)
 					) : letter && folder !== "inbox" ? (

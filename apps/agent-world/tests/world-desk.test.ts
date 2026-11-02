@@ -71,7 +71,28 @@ async function openDesk(appearance: "light" | "dark", width = 1440, desk = true)
 					}),
 				],
 				dormant: [],
-				operatorMail: [],
+				operatorMail: [
+					{
+						id: "mail:departure",
+						subject: "Departure: Old Hand",
+						lastAt: now - 30_000,
+						unread: 1,
+						participants: ["harness", "operator"],
+						lastFrom: "harness",
+						lastFromName: "Pi",
+						preview: "Permanent departure cleanup completed.",
+					},
+					{
+						id: "mail:iris",
+						subject: "Webhook secret",
+						lastAt: now - 20_000,
+						unread: 0,
+						participants: ["iris", "operator"],
+						lastFrom: "iris",
+						lastFromName: "Iris",
+						preview: "Where should the secret live?",
+					},
+				],
 				mail: ["iris", "milo"].map((to) => ({
 					id: `post-1:${to}`,
 					from: "operator",
@@ -356,6 +377,12 @@ test("Mail shows a message to several people once, with each recipient's deliver
 	const { page, errors } = await openDesk("light");
 	try {
 		await page.getByRole("button", { name: "Mail", exact: true }).click();
+		const inbox = page.getByRole("region", { name: "Inbox", exact: true });
+		await inbox.getByText("Webhook secret").waitFor();
+		expect(await inbox.getByText("Departure: Old Hand").count()).toBe(0);
+		await page.getByRole("button", { name: /^Updates/ }).click();
+		await inbox.getByText("Departure: Old Hand").waitFor();
+		expect(await inbox.getByText("Webhook secret").count()).toBe(0);
 		await page.getByRole("button", { name: /^Sent/ }).click();
 		const rows = page.getByRole("region", { name: "Delivery log" }).locator(".wp-mail-row");
 		await rows.first().waitFor();
