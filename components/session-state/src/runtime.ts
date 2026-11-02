@@ -787,7 +787,7 @@ export class Runtime {
 		}
 		if (command.kind === "schedule" || command.kind === "unschedule" || command.kind === "channel_charter") {
 			receipt("accepted");
-			this.scheduleCommand(commandId, sessionId, command, now);
+			this.standingCommand(commandId, sessionId, command, now);
 			return;
 		}
 		if (
@@ -1251,7 +1251,8 @@ export class Runtime {
 		});
 	}
 
-	private scheduleCommand(
+	/** Durable standing arrangements: schedules and channel charters. */
+	private standingCommand(
 		commandId: string,
 		sender: string,
 		command: Extract<Command, { kind: "schedule" | "unschedule" | "channel_charter" }>,
