@@ -1,0 +1,5 @@
+## file
+
+Checked against the live accounts on 2026-11-02: GitHub `notifications` (`all=true&since=`) follows his watches and reports `reason`; Jira has no feed, so the reader turns new comments and changelog entries on issues where he is assignee, reporter or watcher into items, skipping his own; Slack's web client `activity.feed` needs `mode=chrono_reads_and_unreads` and an explicit `types` list (without them it answers `invalid_arguments`), references messages only by channel and ts, and leaves out DMs, which come from `client.counts` `ims`/`mpims` and `conversations.history`. A first read (no cursor) looks back one day and fetches no GitHub comment bodies, so starting a source costs one burst of reads, not years of history. No reader marks anything read.
+Coupled: apps/agent-workplace/src/backend/integrations/slack.ts, apps/agent-workplace/src/backend/integrations/credentials.ts, apps/agent-workplace/src/backend/integrations/atlassian.ts
+Verify: components/session-state/tests/activity.test.ts

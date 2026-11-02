@@ -446,6 +446,32 @@ export const TRANSCRIPT_TEXT_MAX = 20_000;
  * One page of a conversation, oldest entry first. `before` is the cursor for the page before it, or null at the start
  * of the history. `missing` counts indexed entries the transcript no longer holds.
  */
+/** One thing that happened outside (Slack, GitHub, Jira) involving the operator, and the desk's decision on it. */
+export interface OutsideItem {
+	id: string;
+	source: OutsideSource;
+	kind: string;
+	conversation: string;
+	title: string;
+	actor: string | null;
+	url: string | null;
+	excerpt: string | null;
+	at: number;
+	direct: boolean;
+	deliveredAt: number | null;
+	triage: { by: string; action: string; note: string; ref?: string; at: number } | null;
+}
+export type OutsideSource = "github" | "jira" | "slack";
+/** How a source is followed: all items to the desk, only those addressed to him, listed only, or not read. */
+export type OutsideMode = "all" | "direct" | "list" | "off";
+export type OutsideRead =
+	| {
+			ok: true;
+			items: OutsideItem[];
+			sources: { source: OutsideSource; mode: OutsideMode; polledAt: number | null; error: string | null }[];
+	  }
+	| { ok: false; reason: string };
+
 /** A DM message that matched a search: whose conversation, which entry, who said it, and the words around the match. */
 export interface ConversationHit {
 	session: string;
@@ -590,6 +616,10 @@ export interface AgentWorkplaceApi extends IntegrationsApi {
 	unassignTask(person: string, task: string): Promise<CommandReceipt>;
 	/** Close an ephemeral task for everyone on it, as done or cancelled. */
 	closeTask(task: string, status: "done" | "cancelled"): Promise<CommandReceipt>;
+	/** The newest outside activity, optionally one source's or only what the desk has not decided. */
+	readOutside(request: { source?: OutsideSource; untriaged?: boolean; limit: number }): Promise<OutsideRead>;
+	/** Choose how each source is followed; a source turned on is read at once. */
+	setOutsideModes(modes: Partial<Record<OutsideSource, OutsideMode>>): Promise<CommandReceipt>;
 	/** Observe a shared channel, meeting, or task thread; only an operator participant marks it read. */
 	readWorkplaceThread(thread: string): Promise<ThreadRead>;
 	/**

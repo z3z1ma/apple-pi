@@ -56,6 +56,8 @@ const FACT_COLUMNS: Record<keyof Facts, string> = {
 };
 const JSON_FACTS = new Set<string>(["prompt", "queue", "config", "previousSession", "git"]);
 
+import { triageActivity } from "./activity.js";
+import { ACTIVITY_POLL_MS, ActivityPoller, readSource } from "./activity-poller.js";
 import { type AttentionRow, jumpTarget, statusSummary } from "./attention.js";
 import { chartered, charterOf, setCharter } from "./channel-charters.js";
 import { syncChannels } from "./channels.js";
@@ -248,6 +250,8 @@ export class Runtime {
 	private reviews?: ReviewJobs;
 	private external?: ExternalThreads;
 	private externalTimer?: NodeJS.Timeout;
+	private activity?: ActivityPoller;
+	private activityTimer?: NodeJS.Timeout;
 	private externalCommands: Promise<void> = Promise.resolve();
 	private lock?: DatabaseSync;
 	private server?: Server;
@@ -299,6 +303,7 @@ export class Runtime {
 		migrate(this.db);
 		this.external = new ExternalThreads(this.db, this.paths.dir, (write) => this.commitExternal(write));
 		this.recoverExternal();
+		this.activity = new ActivityPoller(this.db, (write) => this.commitExternal(write), readSource(this.paths.dir));
 		this.reviews = new ReviewJobs(this.db, this.paths, (notice) => this.reviewNotice(notice));
 		this.reviews.recover();
 		this.recoverReviews();
@@ -335,6 +340,8 @@ export class Runtime {
 		this.tmuxTimer = setInterval(() => void this.pollTmux(), TMUX_POLL_MS);
 		this.externalTimer = setInterval(() => void this.external?.poll(), 60_000);
 		void this.external.poll();
+		this.activityTimer = setInterval(() => void this.activity?.poll(), ACTIVITY_POLL_MS);
+		void this.activity.poll();
 		this.checkLiveness();
 		this.checkFriction();
 		void this.pollTmux();
@@ -347,6 +354,8 @@ export class Runtime {
 		this.reviews?.stop();
 		this.external?.stop();
 		clearInterval(this.externalTimer);
+		this.activity?.stop();
+		clearInterval(this.activityTimer);
 		clearInterval(this.timer);
 		clearInterval(this.tmuxTimer);
 		clearTimeout(this.programTimer);
@@ -779,6 +788,8 @@ export class Runtime {
 				).run(command.key, JSON.stringify(command.value), Date.now());
 				this.event("client", null, null, "preference_set", { key: command.key, value: command.value });
 				this.setCommandStage(commandId, "applied");
+				// A source just turned on is read now, not at the next minute.
+				if (command.key === "activity-triage") void this.activity?.poll();
 			}
 			return;
 		}
@@ -791,7 +802,8 @@ export class Runtime {
 			command.kind === "schedule" ||
 			command.kind === "unschedule" ||
 			command.kind === "channel_charter" ||
-			command.kind === "react"
+			command.kind === "react" ||
+			command.kind === "activity_triage"
 		) {
 			receipt("accepted");
 			this.standingCommand(commandId, sessionId, command, now);
@@ -1264,11 +1276,12 @@ export class Runtime {
 	private standingCommand(
 		commandId: string,
 		sender: string,
-		command: Extract<Command, { kind: "schedule" | "unschedule" | "channel_charter" | "react" }>,
+		command: Extract<Command, { kind: "schedule" | "unschedule" | "channel_charter" | "react" | "activity_triage" }>,
 		now: number,
 	): void {
 		try {
-			if (command.kind === "react") {
+			if (command.kind === "activity_triage") triageActivity(this.db!, sender, command.items, command, now);
+			else if (command.kind === "react") {
 				react(this.db!, sender, OPERATOR, command, now);
 				if (command.on) void this.reactionNotice(command.message, command.emoji);
 			} else if (command.kind === "schedule") createSchedule(this.db!, commandId, sender, command, now);

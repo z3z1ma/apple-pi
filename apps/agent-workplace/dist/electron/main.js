@@ -8869,6 +8869,59 @@ async function listThemes(themesDir, options) {
 	}));
 }
 //#endregion
+//#region components/session-state/src/activity.ts
+var ACTIVITY_SOURCES = [
+	"github",
+	"jira",
+	"slack"
+];
+var TRIAGE_MODES = [
+	"all",
+	"direct",
+	"list",
+	"off"
+];
+var stored = (row) => ({
+	id: row.id,
+	source: row.source,
+	kind: row.kind,
+	conversation: row.conversation,
+	title: row.title,
+	actor: row.actor,
+	url: row.url,
+	excerpt: row.excerpt,
+	at: row.at,
+	direct: row.direct === 1,
+	observedAt: row.observed_at,
+	deliveredAt: row.delivered_at,
+	triage: row.triage ? JSON.parse(row.triage) : null
+});
+var activityAvailable = (db) => Boolean(db.prepare("select 1 from sqlite_master where name = 'activity_items'").get());
+function activityHealth(db) {
+	return db.prepare("select source, polled_at, error from activity_cursors order by source").all().map((row) => ({
+		source: row.source,
+		polledAt: row.polled_at,
+		error: row.error
+	}));
+}
+function activityPage(db, filter) {
+	const where = ["1 = 1"];
+	const args = [];
+	if (filter.source) where.push("source = ?") && args.push(filter.source);
+	if (filter.before !== void 0) where.push("at < ?") && args.push(filter.before);
+	if (filter.untriaged) where.push("triage is null");
+	if (filter.conversation) where.push("conversation = ?") && args.push(filter.conversation);
+	return db.prepare(`select * from activity_items where ${where.join(" and ")} order by at desc, id limit ?`).all(...args, filter.limit).map(stored);
+}
+function triageModes(db) {
+	const row = db.prepare("select value from preferences where key = 'activity-triage'").get();
+	let chosen = {};
+	try {
+		chosen = row ? JSON.parse(row.value) : {};
+	} catch {}
+	return Object.fromEntries(ACTIVITY_SOURCES.map((source) => [source, TRIAGE_MODES.includes(chosen[source]) ? chosen[source] : "off"]));
+}
+//#endregion
 //#region apps/agent-workplace/src/backend/projection.ts
 /** The key of a manager's team room among a headquarters' wings. */
 var teamRoom = (manager) => `team:${manager}`;
@@ -9271,6 +9324,56 @@ function openWorkplace(path, commands, snapshot) {
 				person,
 				task: task.id,
 				cwd: task.project
+			});
+			return result.ok ? {
+				ok: true,
+				stage: "applied"
+			} : result;
+		},
+		async readOutside(request) {
+			if (!existsSync(path)) return {
+				ok: false,
+				reason: "The session database is not available."
+			};
+			const db = new DatabaseSync(path, { readOnly: true });
+			try {
+				if (!activityAvailable(db)) return {
+					ok: false,
+					reason: "Restart the session runtime to follow outside activity."
+				};
+				const modes = triageModes(db);
+				const health = new Map(activityHealth(db).map((row) => [row.source, row]));
+				return {
+					ok: true,
+					items: activityPage(db, request),
+					sources: ACTIVITY_SOURCES.map((source) => ({
+						source,
+						mode: modes[source],
+						polledAt: health.get(source)?.polledAt ?? null,
+						error: health.get(source)?.error ?? null
+					}))
+				};
+			} finally {
+				db.close();
+			}
+		},
+		async setOutsideModes(changes) {
+			let current = {};
+			if (existsSync(path)) {
+				const db = new DatabaseSync(path, { readOnly: true });
+				try {
+					current = triageModes(db);
+				} finally {
+					db.close();
+				}
+			}
+			const result = await commands.send(OPERATOR, {
+				kind: "set_preference",
+				key: "activity-triage",
+				value: {
+					...current,
+					...changes
+				}
 			});
 			return result.ok ? {
 				ok: true,
@@ -12752,6 +12855,42 @@ function start() {
 	ipcMain.handle("world:unassign-task", (_event, person, task) => typeof person === "string" && typeof task === "string" ? workplace.unassignTask(person, task) : {
 		ok: false,
 		reason: "A person and task are required."
+	});
+	ipcMain.handle("world:read-outside", (_event, request) => {
+		const value = request ?? {};
+		const source = [
+			"github",
+			"jira",
+			"slack"
+		].includes(value.source) ? value.source : void 0;
+		return Number.isSafeInteger(value.limit) && value.limit > 0 ? workplace.readOutside({
+			source,
+			untriaged: value.untriaged === true,
+			limit: value.limit
+		}) : {
+			ok: false,
+			reason: "A page size is required."
+		};
+	});
+	ipcMain.handle("world:outside-modes", (_event, modes) => {
+		const chosen = {};
+		for (const source of [
+			"github",
+			"jira",
+			"slack"
+		]) {
+			const mode = modes?.[source];
+			if ([
+				"all",
+				"direct",
+				"list",
+				"off"
+			].includes(mode)) chosen[source] = mode;
+		}
+		return Object.keys(chosen).length ? workplace.setOutsideModes(chosen) : {
+			ok: false,
+			reason: "Choose a mode for a source."
+		};
 	});
 	ipcMain.handle("world:close-task", (_event, task, status) => typeof task === "string" && (status === "done" || status === "cancelled") ? workplace.closeTask(task, status) : {
 		ok: false,

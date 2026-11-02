@@ -3,6 +3,7 @@
 import type { ReviewCommand } from "../../code-review/src/operations.js";
 import type { QuestionnaireReply } from "../../shared/src/questionnaire-events.js";
 import type { TurnProgress, TurnResult } from "../../shared/src/turn-observer.js";
+import type { TriageAction } from "./activity.js";
 import type { CommunicationCommand, MessageReference } from "./communication-types.js";
 import type { ExternalCommand } from "./external-threads.js";
 import type { LinkRecord } from "./links.js";
@@ -186,6 +187,8 @@ export type Command =
 	| { kind: "channel_membership"; thread: string; joined: boolean }
 	/** Add (`on`) or remove the sender's emoji reaction on a thread message; it notifies nobody. */
 	| { kind: "react"; message: string; emoji: string; on: boolean }
+	/** Record the desk's decision on outside activity items (components/session-state/src/activity.ts). */
+	| { kind: "activity_triage"; items: string[]; action: TriageAction; note: string; ref?: string }
 	/**
 	 * Start the session (a new id, or a stopped session by its id) with `pi` in a new tmux window after `tmux.pane`'s
 	 * window. The runtime opens the window itself; `cwd` and `name` default to the stopped session's. Applied when the

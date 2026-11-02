@@ -37,6 +37,7 @@ import {
 	isWorkspaceSave,
 	type WorkspaceApi,
 } from "../workspace.js";
+import type { OutsideMode, OutsideSource } from "../world.js";
 import { wireCommunications } from "./communications-ipc.js";
 import { wireIntegrations } from "./integrations-ipc.js";
 import { wireReviews } from "./reviews-ipc.js";
@@ -241,6 +242,25 @@ function start() {
 			? workplace.unassignTask(person, task)
 			: { ok: false, reason: "A person and task are required." },
 	);
+	ipcMain.handle("world:read-outside", (_event, request: unknown) => {
+		const value = (request ?? {}) as { source?: unknown; untriaged?: unknown; limit?: unknown };
+		const source = ["github", "jira", "slack"].includes(value.source as string)
+			? (value.source as OutsideSource)
+			: undefined;
+		return Number.isSafeInteger(value.limit) && (value.limit as number) > 0
+			? workplace.readOutside({ source, untriaged: value.untriaged === true, limit: value.limit as number })
+			: { ok: false, reason: "A page size is required." };
+	});
+	ipcMain.handle("world:outside-modes", (_event, modes: unknown) => {
+		const chosen: Partial<Record<OutsideSource, OutsideMode>> = {};
+		for (const source of ["github", "jira", "slack"] as const) {
+			const mode = (modes as Record<string, unknown> | null)?.[source];
+			if (["all", "direct", "list", "off"].includes(mode as string)) chosen[source] = mode as OutsideMode;
+		}
+		return Object.keys(chosen).length
+			? workplace.setOutsideModes(chosen)
+			: { ok: false, reason: "Choose a mode for a source." };
+	});
 	ipcMain.handle("world:close-task", (_event, task: unknown, status: unknown) =>
 		typeof task === "string" && (status === "done" || status === "cancelled")
 			? workplace.closeTask(task, status)

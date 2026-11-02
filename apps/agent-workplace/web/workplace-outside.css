@@ -1,0 +1,209 @@
+/* Outside activity in Activity (workplace-outside.tsx). Rows share the Activity list's layout. */
+
+.wp-activity-scroll {
+	flex: 1;
+	min-height: 0;
+	overflow-y: auto;
+	padding-bottom: 24px;
+}
+.wp-activity-scroll > .wp-activity-list {
+	overflow: visible;
+	padding-bottom: 6px;
+}
+.wp-activity-calm {
+	margin: 14px 26px 0;
+	color: var(--wp-muted);
+	font-size: 13px;
+}
+
+.wp-outside {
+	padding: 6px 14px 0;
+}
+.wp-outside-head {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 10px;
+	padding: 10px 12px 8px;
+}
+.wp-outside-head h2 {
+	margin: 0 6px 0 0;
+	font-size: 15px;
+}
+.wp-outside-filters,
+.wp-outside-sources {
+	min-width: 0;
+	margin: 0;
+	padding: 0;
+	border: 0;
+}
+.wp-outside-filters {
+	display: flex;
+	gap: 4px;
+}
+.wp-app .wp-outside-filters button,
+.wp-app .wp-outside-sources-open {
+	height: 26px;
+	padding: 0 10px;
+	border: 1px solid var(--wp-border);
+	border-radius: 13px;
+	background: var(--wp-bg);
+	color: var(--wp-text);
+	font-size: 12px;
+}
+.wp-app .wp-outside-filters button[aria-pressed="true"] {
+	border-color: var(--wp-text);
+	background: var(--wp-text);
+	color: var(--wp-bg);
+}
+.wp-app .wp-outside-sources-open {
+	margin-left: auto;
+	border-radius: 6px;
+}
+.wp-outside-undecided {
+	display: flex;
+	align-items: center;
+	gap: 5px;
+	color: var(--wp-muted);
+	font-size: 12px;
+}
+
+.wp-outside-sources {
+	display: grid;
+	gap: 8px;
+	margin: 0 12px 8px;
+	padding: 12px;
+	border: 1px solid var(--wp-border);
+	border-radius: 8px;
+	background: var(--wp-panel);
+}
+.wp-outside-sources label {
+	display: grid;
+	grid-template-columns: 70px minmax(0, 300px) minmax(0, 1fr);
+	align-items: center;
+	gap: 10px;
+	font-size: 12px;
+}
+.wp-outside-sources select {
+	min-width: 0;
+	height: 28px;
+	border: 1px solid var(--wp-border);
+	border-radius: 6px;
+	background: var(--wp-bg);
+	color: var(--wp-text);
+	font-size: 12px;
+}
+.wp-outside-sources span {
+	color: var(--wp-muted);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.wp-outside-sources span[data-error="true"],
+.wp-outside-note[data-error="true"] {
+	color: var(--wp-danger);
+}
+
+.wp-outside-note {
+	margin: 6px 26px;
+	color: var(--wp-muted);
+	font-size: 13px;
+}
+.wp-app .wp-outside-note button {
+	border: 0;
+	background: none;
+	color: var(--wp-link);
+	font: inherit;
+	padding: 0;
+}
+
+.wp-outside-list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+.wp-outside-list li + li {
+	border-top: 1px solid var(--wp-border);
+}
+.wp-app .wp-outside-list button {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	width: 100%;
+	padding: 10px 12px;
+	border: 0;
+	border-radius: 8px;
+	background: transparent;
+	color: var(--wp-text);
+	text-align: left;
+	font-size: 13px;
+}
+.wp-app .wp-outside-list button:hover:not(:disabled) {
+	background: var(--wp-hover);
+}
+.wp-outside-list time {
+	flex: none;
+	font-size: 11px;
+	color: var(--wp-muted);
+}
+.wp-outside-list strong {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-weight: 600;
+}
+.wp-outside-list li[data-direct="true"] strong {
+	font-weight: 700;
+}
+.wp-outside-list li[data-direct="true"] .wp-activity-kind {
+	color: var(--wp-accent);
+}
+.wp-outside-text b,
+.wp-outside-list .wp-activity-text b {
+	font-weight: 600;
+	color: var(--wp-text);
+}
+.wp-outside-more {
+	text-transform: none;
+	letter-spacing: 0;
+	font-weight: 500;
+}
+.wp-outside-tile {
+	display: grid;
+	flex: none;
+	place-items: center;
+	width: 34px;
+	height: 34px;
+	border-radius: 8px;
+	background: var(--wp-panel);
+	color: var(--wp-muted);
+	font-size: 14px;
+	font-weight: 700;
+}
+.wp-outside-triage {
+	display: flex;
+	align-items: center;
+	gap: 5px;
+	margin-top: 2px;
+	color: var(--wp-muted);
+	font-size: 12px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.wp-outside-triage svg {
+	flex: none;
+	width: 13px;
+	height: 13px;
+}
+.wp-outside-triage b {
+	color: var(--wp-text);
+	font-weight: 600;
+}
+.wp-outside-triage[data-action="task"] b,
+.wp-outside-triage[data-action="draft"] b {
+	color: var(--wp-positive);
+}
+.wp-outside-triage[data-action="pending"] {
+	font-style: italic;
+}

@@ -14,6 +14,7 @@ import { useWorkplaceMenu } from "./workplace-context-menu.js";
 import { Icon } from "./workplace-icon.js";
 import { later, pinnedThreads, useLater } from "./workplace-later.js";
 import { deliver } from "./workplace-message-actions.js";
+import { OutsideActivity } from "./workplace-outside.js";
 import { PersonAvatar, PersonName, presenceOf, sessionStatus } from "./workplace-people.js";
 import { destinations, Picker, type SwitchTarget } from "./workplace-switcher.js";
 import { ThreadPane } from "./workplace-thread.js";
@@ -632,10 +633,12 @@ export function useActivitySeen(items: ActivityItem[], viewing: boolean): Set<st
 }
 
 export function ActivityView({
+	world,
 	items,
 	unseen,
 	markAllRead,
 }: {
+	world: WorldSnapshot;
 	items: ActivityItem[];
 	unseen: Set<string>;
 	markAllRead: () => void;
@@ -658,46 +661,43 @@ export function ActivityView({
 					Mark all read <kbd>{"\u21e7Esc"}</kbd>
 				</button>
 			</header>
-			{items.length ? (
-				<ul className="wp-activity-list">
-					{items.map((item) => (
-						<li key={item.key} data-kind={item.kind} data-new={unseen.has(activityKey(item))}>
-							<button type="button" onClick={item.open}>
-								<PersonAvatar id={item.who} name={item.name} interactive={false} />
-								<span className="wp-activity-body">
-									<span className="wp-activity-kind">{LABEL[item.kind]}</span>
-									<strong>{item.name}</strong>
-									<span className="wp-activity-text">{item.text}</span>
-								</span>
-								{unseen.has(activityKey(item)) && <span className="wp-activity-new">New</span>}
-								<time>{ago(item.at)}</time>
-							</button>
-							{item.answer &&
-								(answering === item.key ? (
-									<div className="wp-session wp-activity-answer">
-										<QuestionForm
-											key={item.answer.questionnaire.id}
-											character={item.answer.character}
-											questionnaire={item.answer.questionnaire}
-										/>
-									</div>
-								) : (
-									<button type="button" className="wp-activity-answer-open" onClick={() => setAnswering(item.key)}>
-										Answer here
-									</button>
-								))}
-						</li>
-					))}
-				</ul>
-			) : (
-				<div className="wp-empty">
-					<span className="wp-empty-icon">
-						<Icon name="bell" />
-					</span>
-					<h1>Nothing needs you</h1>
-					<p>The organization is working. Questions, escalations and results will appear here.</p>
-				</div>
-			)}
+			<div className="wp-activity-scroll">
+				{items.length ? (
+					<ul className="wp-activity-list">
+						{items.map((item) => (
+							<li key={item.key} data-kind={item.kind} data-new={unseen.has(activityKey(item))}>
+								<button type="button" onClick={item.open}>
+									<PersonAvatar id={item.who} name={item.name} interactive={false} />
+									<span className="wp-activity-body">
+										<span className="wp-activity-kind">{LABEL[item.kind]}</span>
+										<strong>{item.name}</strong>
+										<span className="wp-activity-text">{item.text}</span>
+									</span>
+									{unseen.has(activityKey(item)) && <span className="wp-activity-new">New</span>}
+									<time>{ago(item.at)}</time>
+								</button>
+								{item.answer &&
+									(answering === item.key ? (
+										<div className="wp-session wp-activity-answer">
+											<QuestionForm
+												key={item.answer.questionnaire.id}
+												character={item.answer.character}
+												questionnaire={item.answer.questionnaire}
+											/>
+										</div>
+									) : (
+										<button type="button" className="wp-activity-answer-open" onClick={() => setAnswering(item.key)}>
+											Answer here
+										</button>
+									))}
+							</li>
+						))}
+					</ul>
+				) : (
+					<p className="wp-activity-calm">Nothing in the organization needs you.</p>
+				)}
+				<OutsideActivity world={world} />
+			</div>
 		</section>
 	);
 }
@@ -1121,7 +1121,8 @@ export function OrganizationView({
 		return (
 			<ThreadsView world={world} thread={thread} openThread={openThread} closeThread={closeThread} drafts={drafts} />
 		);
-	if (view === "activity") return <ActivityView items={needsYou} unseen={unseen} markAllRead={markAllRead} />;
+	if (view === "activity")
+		return <ActivityView world={world} items={needsYou} unseen={unseen} markAllRead={markAllRead} />;
 	if (view === "later") return <LaterView go={go} />;
 	return (
 		<div className="wp-empty">

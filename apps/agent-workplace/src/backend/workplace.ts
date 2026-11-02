@@ -1,6 +1,13 @@
 import { existsSync, lstatSync, readdirSync, readFileSync, realpathSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import {
+	ACTIVITY_SOURCES,
+	activityAvailable,
+	activityHealth,
+	activityPage,
+	triageModes,
+} from "../../../../components/session-state/src/activity.js";
 import type {
 	CharacterFacts,
 	CommandReceipt,
@@ -13,7 +20,7 @@ import type {
 	WorkplaceThread,
 	WorldSnapshot,
 } from "../world.js";
-import { OPERATOR } from "../world.js";
+import { OPERATOR, type OutsideMode, type OutsideRead, type OutsideSource } from "../world.js";
 import type { Commands } from "./commands.js";
 import type { taskReader } from "./facts.js";
 import { operatorPane } from "./inn.js";
@@ -271,6 +278,8 @@ export interface WorkplaceActions {
 	unassignTask(person: string, task: string): Promise<CommandReceipt>;
 	/** Close an ephemeral task for everyone on it; ledger tasks close through their ledger status. */
 	closeTask(task: string, status: "done" | "cancelled"): Promise<CommandReceipt>;
+	readOutside(request: { source?: OutsideSource; untriaged?: boolean; limit: number }): Promise<OutsideRead>;
+	setOutsideModes(modes: Partial<Record<OutsideSource, OutsideMode>>): Promise<CommandReceipt>;
 	readWorkplaceThread(thread: string): Promise<ThreadRead>;
 	setChannelMembership(thread: string, joined: boolean): Promise<CommandReceipt>;
 }
@@ -301,6 +310,45 @@ export function openWorkplace(path: string, commands: Commands, snapshot: () => 
 				person,
 				task: task.id,
 				cwd: task.project,
+			});
+			return result.ok ? { ok: true, stage: "applied" } : result;
+		},
+		async readOutside(request) {
+			if (!existsSync(path)) return { ok: false, reason: "The session database is not available." };
+			const db = new DatabaseSync(path, { readOnly: true });
+			try {
+				if (!activityAvailable(db))
+					return { ok: false, reason: "Restart the session runtime to follow outside activity." };
+				const modes = triageModes(db);
+				const health = new Map(activityHealth(db).map((row) => [row.source, row]));
+				return {
+					ok: true,
+					items: activityPage(db, request),
+					sources: ACTIVITY_SOURCES.map((source) => ({
+						source,
+						mode: modes[source],
+						polledAt: health.get(source)?.polledAt ?? null,
+						error: health.get(source)?.error ?? null,
+					})),
+				};
+			} finally {
+				db.close();
+			}
+		},
+		async setOutsideModes(changes) {
+			let current: Record<string, string> = {};
+			if (existsSync(path)) {
+				const db = new DatabaseSync(path, { readOnly: true });
+				try {
+					current = triageModes(db);
+				} finally {
+					db.close();
+				}
+			}
+			const result = await commands.send(OPERATOR, {
+				kind: "set_preference",
+				key: "activity-triage",
+				value: { ...current, ...changes },
 			});
 			return result.ok ? { ok: true, stage: "applied" } : result;
 		},

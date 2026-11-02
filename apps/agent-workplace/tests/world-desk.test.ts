@@ -260,6 +260,70 @@ async function openDesk(appearance: "light" | "dark", width = 1440, desk = true)
 					w.work.push(["close", task, status]);
 					return { ok: true, stage: "applied" };
 				},
+				readOutside: async (request: any) => {
+					const items = [
+						{
+							id: "github:1:2",
+							source: "github",
+							kind: "review_requested",
+							conversation: "github:acme/api#12",
+							title: "acme/api#12 Retry webhooks",
+							actor: "dana",
+							url: "https://github.com/acme/api/pull/12",
+							excerpt: "Can you look before the release?",
+							at: now - 120_000,
+							direct: true,
+							deliveredAt: now - 110_000,
+							triage: { by: "cora", action: "task", note: "Milo reviews it today", ref: "t2", at: now - 60_000 },
+						},
+						{
+							id: "github:1:1",
+							source: "github",
+							kind: "comment",
+							conversation: "github:acme/api#12",
+							title: "acme/api#12 Retry webhooks",
+							actor: "dana",
+							url: "https://github.com/acme/api/pull/12",
+							excerpt: "Pushed a fix.",
+							at: now - 300_000,
+							direct: false,
+							deliveredAt: null,
+							triage: null,
+						},
+						{
+							id: "slack:dm:D1:1",
+							source: "slack",
+							kind: "dm",
+							conversation: "slack:D1",
+							title: "DM with Priya",
+							actor: "Priya",
+							url: "https://acme.slack.com/archives/D1/p1",
+							excerpt: "Are we still on for the demo?",
+							at: now - 30_000,
+							direct: true,
+							deliveredAt: now - 20_000,
+							triage: null,
+						},
+					].filter((item) => !request.source || item.source === request.source);
+					return {
+						ok: true,
+						items: items.sort((a, b) => b.at - a.at),
+						sources: ["github", "jira", "slack"].map((source) => ({
+							source,
+							mode: w.modes?.[source] ?? (source === "jira" ? "off" : "all"),
+							polledAt: source === "jira" ? null : now - 40_000,
+							error: null,
+						})),
+					};
+				},
+				setOutsideModes: async (modes: any) => {
+					w.modes = { ...(w.modes ?? {}), ...modes };
+					return { ok: true, stage: "applied" };
+				},
+				openLink: async (url: string) => {
+					w.opened = url;
+					return { ok: true };
+				},
 				markSeen: async (id: string) => {
 					w.seen.push(id);
 					return { ok: true };
@@ -508,6 +572,36 @@ test("a waiting thread is nudged, reassigned or closed from its header", { timeo
 			["unassign", "milo", "t2"],
 			["close", "t2", "done"],
 		]);
+		expect(errors).toEqual([]);
+	} finally {
+		await page.close();
+	}
+});
+
+test("Activity lists outside work by conversation with the desk's decision, and sources can be turned on", {
+	timeout: 60_000,
+}, async () => {
+	const { page, errors } = await openDesk("light");
+	try {
+		await page.getByRole("button", { name: /^Activity/ }).click();
+		const outside = page.getByRole("region", { name: "Outside activity" });
+		const rows = outside.locator(".wp-outside-list > li");
+		await rows.first().waitFor();
+		expect(await rows.locator("strong").allTextContents()).toEqual(["DM with Priya", "acme/api#12 Retry webhooks"]);
+		await outside.getByText("1 more").waitFor();
+		await outside.getByText("Milo reviews it today").waitFor();
+		await outside.getByText("With the desk").waitFor();
+		await shot(page, "outside-light");
+		await outside.getByRole("button", { name: "GitHub", exact: true }).click();
+		await vi.waitFor(async () => expect(await rows.count()).toBe(1));
+		await rows.first().locator("button").click();
+		await vi.waitFor(async () =>
+			expect(await page.evaluate(() => (window as any).opened)).toBe("https://github.com/acme/api/pull/12"),
+		);
+		await outside.getByRole("button", { name: "Sources" }).click();
+		await outside.getByRole("combobox", { name: "jira mode" }).selectOption("direct");
+		await vi.waitFor(async () => expect(await page.evaluate(() => (window as any).modes)).toEqual({ jira: "direct" }));
+		await shot(page, "outside-sources-light");
 		expect(errors).toEqual([]);
 	} finally {
 		await page.close();

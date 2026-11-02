@@ -418,6 +418,24 @@ const MIGRATIONS = [
 		at integer not null,
 		primary key (message_id, person, emoji)
 	) strict;`,
+	// The operator's outside activity (Slack, GitHub, Jira) and what the desk decided about it (components/session-state/src/activity.ts).
+	`create table activity_items (
+		id text primary key,
+		source text not null,
+		kind text not null,
+		conversation text not null,
+		title text not null,
+		actor text,
+		url text,
+		excerpt text,
+		at integer not null,
+		observed_at integer not null,
+		direct integer not null,
+		delivered_at integer,
+		triage text
+	) strict;
+	create index activity_items_at on activity_items (at);
+	create table activity_cursors (source text primary key, cursor text not null, polled_at integer not null, error text) strict;`,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

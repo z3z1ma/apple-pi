@@ -3,6 +3,7 @@ import { defineTool, type ExtensionAPI, type ExtensionContext } from "@earendil-
 import { Type } from "typebox";
 import { organizationOf } from "../../organization/src/directory.js";
 import { managesPeople } from "../../organization/src/install.js";
+import { ACTIVITY_TOOLS, installActivityTools, mayUseActivity } from "./activity-tools.js";
 import { resolvePerson } from "./addresses.js";
 import { sendCommand } from "./client.js";
 import { coordinationIn } from "./coordination-inspection.js";
@@ -470,6 +471,7 @@ function organizationOverview(ctx: ExtensionContext): string {
 
 export function installWork(pi: ExtensionAPI): void {
 	installExternalTools(pi);
+	installActivityTools(pi);
 	pi.registerCommand("org", {
 		description: "Inspect organization waits, work and requests; economics or experience for detail",
 		handler: async (args, ctx) => {
@@ -838,11 +840,14 @@ export function installWork(pi: ExtensionAPI): void {
 	const activate = (_event: unknown, ctx: ExtensionContext) => {
 		const active = pi.getActiveTools();
 		const allowed = managesPeople(ctx);
+		const activity = allowed ? ACTIVITY_TOOLS : mayUseActivity(ctx) ? ["activity"] : [];
+		const gated = [...INSIGHT_TOOLS, ...EXTERNAL_MANAGER_TOOLS, ...ACTIVITY_TOOLS];
 		const next = [
 			...new Set([
-				...active.filter((name) => allowed || ![...INSIGHT_TOOLS, ...EXTERNAL_MANAGER_TOOLS].includes(name)),
+				...active.filter((name) => allowed || !gated.includes(name) || activity.includes(name)),
 				...PERSON_TASK_TOOLS,
 				...(allowed ? [...INSIGHT_TOOLS, ...EXTERNAL_MANAGER_TOOLS] : []),
+				...activity,
 			]),
 		];
 		if (next.length !== active.length || next.some((name, index) => name !== active[index])) pi.setActiveTools(next);
