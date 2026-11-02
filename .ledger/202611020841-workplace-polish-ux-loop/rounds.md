@@ -104,3 +104,15 @@ Open: the desk keeps a separate row for search / Catch up / Read latest / Action
 ## Round 17: which work is actually moving
 
 - U18 Every in-flight thread read "In flight", whether or not anyone was on it. **Changed:** a thread is "Working" only while one of its owners has it in focus and is working now, and "Waiting" otherwise (the desk strip, the Threads list and the thread header share one rule); a Waiting filter lists them. On the live data 33 of 35 in-flight threads wait: held assignments nobody is working, the stall the watchdog role exists to catch.
+
+## Round 18: names (operator decisions)
+
+- The app is **Agent Workplace**: `apps/agent-workplace`, `extensions/agent-workplace.ts`, `docs/agent-workplace.md`, `/workplace` (no `/world`), window and docs titled Agent Workplace, preload API `window.agentWorkplace`. World stays the embedded game (its iframe is titled World, its wiki vocabulary and the theme/game code keep "world"). The app's directory and state files move from their `agent-world` names on the next start. The `agent-world` runtime preference (World's wings and avatar) and the Slack sign-in partition keep their stored names.
+- **Front desk is the Desk** everywhere (labels, docs, roles); the code and stored preference were already `desk`.
+
+## Round 19: desk, withdraw, reactions (approved order 1, 2, 3)
+
+- U19 A desk message now shows the task it produced (a Slack-style thread line with its reply count) and "Reply in thread"; the coordinator records the `message produced task` link when it makes the task.
+- U20 Follow-ups to a working agent wait in its bridge until the run ends; while they wait, the DM's Sent line offers **Withdraw**. A stopped run does not send its waiting follow-ups (they fail as not sent).
+- U21 Emoji reactions (done, seen, agreed, thanks) on channel and thread messages: recorded by the runtime, shown to every reader, waking nobody.
+- Found and fixed on the way: every session without a manager flag was sent a spurious `transfer` on each hello (null compared with ""), which also broke seven Workplace tests.
