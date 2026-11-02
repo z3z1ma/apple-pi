@@ -225,7 +225,7 @@ export class ExternalThreads {
 		if (address.provider === "jira") {
 			this.validateCredentials(credentials);
 			if (
-				(command.url.startsWith("https://") && new URL(command.url).origin !== new URL(credentials.site).origin) ||
+				(address.url.startsWith("https://") && new URL(address.url).origin !== new URL(credentials.site).origin) ||
 				(saved && new URL(saved.url).origin !== new URL(credentials.site).origin)
 			)
 				throw new Error(
@@ -247,6 +247,7 @@ export class ExternalThreads {
 			title = item.title;
 			address.url = item.html_url;
 			state.metadata = metadata(item);
+			if (item.head) state.pendingRefs = [item.head.sha];
 		} else {
 			this.validateCredentials(credentials);
 			const item = await this.jira(`/rest/api/3/issue/${address.number}?fields=summary,status`, credentials);
@@ -310,6 +311,9 @@ export class ExternalThreads {
 				if (policy.policy === "ignore" || (source.events ? policy.policy !== "candidate" : !this.followers(source.id)))
 					continue;
 				const state = JSON.parse(source.state) as State;
+				for (const [name, entry] of Object.entries(state.ci)) {
+					if (typeof entry === "string") state.ci[name] = { conclusion: entry, at: source.since - 1, id: 0 };
+				}
 				try {
 					const now = Date.now();
 					const credentials = source.provider === "jira" ? this.credentials() : undefined;
@@ -423,7 +427,14 @@ export class ExternalThreads {
 			)
 			.get() as { id: string } | undefined;
 		const person = configured?.person ?? fallback?.id ?? OPERATOR;
-		const thread = configured?.thread ?? `external:desk:${person}`;
+		const fallbackId = `external:desk:${person}`;
+		const open = this.db
+			.prepare(
+				"select id from threads where (id = ? or id like ?) and closed_at is null order by created_at desc limit 1",
+			)
+			.get(fallbackId, `${fallbackId}:%`) as { id: string } | undefined;
+		const retained = this.db.prepare("select 1 from threads where id = ?").get(fallbackId);
+		const thread = configured?.thread ?? open?.id ?? (retained ? `${fallbackId}:${now}` : fallbackId);
 		if (configured) participateIn(this.db, thread, HARNESS, now, "pull");
 		publish(
 			`external:desk:${source.id}:${events.map((event) => event.key).join(":")}`,
@@ -452,6 +463,7 @@ export class ExternalThreads {
 		if (pull) item = await this.github(`${base}/pulls/${source.number}`);
 		const title = item.title;
 		const events: Event[] = [];
+		const previousHead = state.metadata ? JSON.parse(state.metadata)[3] : undefined;
 		const snapshot = metadata(item);
 		if (state.metadata !== snapshot)
 			events.push(
@@ -494,7 +506,11 @@ export class ExternalThreads {
 				);
 			const commits = await this.githubList(`${base}/pulls/${source.number}/commits`);
 			events.push(
-				...(await this.checkEvents(source, state, [...commits.map((commit) => commit.sha!), item.head!.sha])),
+				...(await this.checkEvents(source, state, [
+					...commits.map((commit) => commit.sha!),
+					item.head!.sha,
+					...(previousHead ? [previousHead] : []),
+				])),
 			);
 		}
 		return events.map((event) => ({ ...event, title })).sort((a, b) => a.at - b.at);

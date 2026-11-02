@@ -737,6 +737,130 @@ test("Jira sign-in changes during a poll discard its batch and same-key site col
 	expect(collision.at(-1)).toEqual({ stage: "failed", reason: expect.stringContaining("another site") });
 });
 
+test.each(["failure", "success"])("retained %s CI state advances across upgrade and restart", async (conclusion) => {
+	await person();
+	await follow();
+	const db = new DatabaseSync(state.dbPath);
+	const row = db.prepare("select state from external_sources where id = ?").get(thread) as { state: string };
+	const saved = JSON.parse(row.state);
+	saved.ci = { unit: conclusion };
+	delete saved.pendingRefs;
+	delete saved.head;
+	db.prepare("update external_sources set state = ? where id = ?").run(JSON.stringify(saved), thread);
+	db.close();
+	routes[`${repo}/commits/abc/check-runs`] = { check_runs: [check(1, "success")] };
+	syncRoutes();
+	runtime.stop();
+	runtime = new Runtime(statePaths());
+	expect(await runtime.start()).toBe(true);
+	await poll();
+	const current = JSON.parse(
+		query<{ state: string }>(state.dbPath, "select state from external_sources where id = ?", thread)[0]!.state,
+	);
+	expect(current.ci.unit).toMatchObject({ conclusion: "success", id: 1 });
+	expect(bodies().includes("recovered (success)")).toBe(conclusion === "failure");
+	routes[`${repo}/commits/abc/check-runs`].check_runs.push(
+		check(2, "failure", new Date(Date.parse(stamp) + 1000).toISOString()),
+	);
+	syncRoutes();
+	await poll();
+	routes[`${repo}/commits/abc/check-runs`].check_runs.push(
+		check(3, "success", new Date(Date.parse(stamp) + 2000).toISOString()),
+	);
+	syncRoutes();
+	await poll();
+	expect(messages().at(-1)!.body).toContain("recovered (success)");
+	const count = messages().length;
+	runtime.stop();
+	runtime = new Runtime(statePaths());
+	expect(await runtime.start()).toBe(true);
+	await poll();
+	expect(messages()).toHaveLength(count);
+});
+
+test("the accepted PR head survives a force push before the first poll", async () => {
+	await person();
+	await follow();
+	routes[`${repo}/pulls/7`].head.sha = "def";
+	routes[`${repo}/pulls/7/commits`] = [{ sha: "def" }];
+	routes[`${repo}/commits/def/check-runs`] = { check_runs: [] };
+	routes[`${repo}/commits/abc/check-runs`] = { check_runs: [check(1, "failure")] };
+	syncRoutes();
+	await poll();
+	expect(bodies()).toContain("unit: failure");
+	expect(bodies()).toContain("checks/1");
+	await poll();
+	expect(messages().filter((row) => row.body.includes("checks/1"))).toHaveLength(1);
+});
+
+test("a whitespace-padded Jira URL still has to match the signed-in site", async () => {
+	await person();
+	openCredentials(integrationFiles(state.stateDir).credentials).set("atlassian", {
+		site: "https://a.atlassian.net",
+		email: "a@example.test",
+		token: "private-test-token",
+	});
+	const request = vi.fn(
+		async () => new Response(JSON.stringify({ fields: { summary: "Wrong site's issue", status: { name: "Open" } } })),
+	);
+	vi.stubGlobal("fetch", request);
+	const result = await sendCommand(state.socketPath, "reader", {
+		kind: "external",
+		action: "follow",
+		url: " https://b.atlassian.net/browse/ABC-1 ",
+	});
+	expect(result.at(-1)).toEqual({ stage: "failed", reason: expect.stringContaining("another site") });
+	expect(request).not.toHaveBeenCalled();
+	expect(query(state.dbPath, "select 1 from external_sources where id = 'jira:ABC-1'")).toHaveLength(0);
+});
+
+test("an archived fallback stays archived while later candidates reuse an open successor", async () => {
+	await person("desk", { onCall: true, manages: true });
+	await sendCommand(state.socketPath, "desk", {
+		kind: "external",
+		action: "watch",
+		repo: "acme/widget",
+		events: ["issues"],
+	});
+	routes[`${repo}/issues`] = [{ ...comment(8, "first candidate"), number: 8, title: "First" }];
+	syncRoutes();
+	await poll();
+	const archived = "external:desk:desk";
+	const result = await sendCommand(state.socketPath, "desk", {
+		kind: "communication",
+		version: 1,
+		input: { tool: "archive_thread", arguments: { thread: archived, summary: "Finished reading" } },
+		operation: { action: "archive", thread: archived, body: "Finished reading" },
+	});
+	expect(result.at(-1)?.stage).toBe("applied");
+	const db = new DatabaseSync(state.dbPath);
+	db.prepare(
+		"insert into threads (id, kind, subject, created_by, created_at, closed_at) values ('closed-desk', 'channel', 'Desk', 'desk', ?, ?)",
+	).run(Date.now(), Date.now());
+	db.prepare("insert into preferences (key, value, updated_at) values ('desk', ?, ?)").run(
+		JSON.stringify({ thread: "closed-desk", person: "desk" }),
+		Date.now(),
+	);
+	db.close();
+	routes[`${repo}/issues`].push({ ...comment(9, "second candidate"), number: 9, title: "Second" });
+	syncRoutes();
+	await poll();
+	const open = query<{ id: string }>(
+		state.dbPath,
+		"select id from threads where id like 'external:desk:desk:%' and closed_at is null",
+	);
+	expect(open).toHaveLength(1);
+	expect(
+		query<{ body: string }>(state.dbPath, "select body from thread_messages where thread_id = ?", open[0]!.id)[0]!.body,
+	).toContain("second candidate");
+	routes[`${repo}/issues`].push({ ...comment(10, "third candidate"), number: 10, title: "Third" });
+	syncRoutes();
+	await poll();
+	await poll();
+	expect(query(state.dbPath, "select 1 from thread_messages where thread_id = ?", open[0]!.id)).toHaveLength(2);
+	expect(query(state.dbPath, "select 1 from threads where id = ? and closed_at is not null", archived)).toHaveLength(1);
+});
+
 test("the daemon imports its external poller under native Node type stripping", () => {
 	expect(() =>
 		execFileSync(
