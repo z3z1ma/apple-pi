@@ -44,14 +44,14 @@ const records = [
 ].map((entry) => ({ ...entry, timestamp: "2026-11-02T08:00:00Z" }));
 
 const withSession = async (
-	run: (file: string, invoke: (params: any, signal?: AbortSignal) => Promise<string>) => Promise<void>,
+	run: (file: string, invoke: (params: any) => Promise<string>) => Promise<void>,
 	entries: any[] = records,
 ) => {
 	const dir = mkdtempSync(join(tmpdir(), "source-recall-"));
 	const file = join(dir, "session.jsonl");
 	writeFileSync(file, entries.map((entry) => JSON.stringify(entry)).join("\n"));
-	const invoke = async (params: any, signal?: AbortSignal) => {
-		const result = await sessionSearchTool.execute("search-call", params, signal, undefined, {
+	const invoke = async (params: any) => {
+		const result = await sessionSearchTool.execute("search-call", params, undefined, undefined, {
 			sessionManager: {
 				getSessionFile: () => file,
 				getBranch: () => entries.filter((entry) => entry.id !== "offbranch"),
@@ -82,73 +82,6 @@ describe("source-complete personal recall", () => {
 			expect(output).toContain("preceding input entry:notice");
 			expect(output).not.toContain("question entry:");
 		}, entries);
-	});
-	it("applies explicit source/role/tool/time filters and reports invalid filters", async () => {
-		await withSession(async (_file, invoke) => {
-			expect(await invoke({ query: "regex:needle", filter: { source: "custom_message" } })).toContain("dispatchneedle");
-			expect(await invoke({ query: "regex:needle", filter: { source: "custom_message" } })).not.toContain(
-				"summaryneedle retained",
-			);
-			expect(
-				await invoke({
-					query: "arrayneedle",
-					filter: { role: "assistant", tool: "edit", after: "2026-11-02", before: "2026-11-03" },
-				}),
-			).toContain("Read source: entry:edit");
-			expect(await invoke({ query: "arrayneedle", filter: { role: "user" } })).toContain("No matches");
-			expect(await invoke({ query: "arrayneedle", filter: { after: "2026-11-02T08:00:00Z" } })).toContain(
-				"Read source: entry:edit",
-			);
-			expect(await invoke({ query: "arrayneedle", filter: { before: "2026-11-02T08:00:00Z" } })).toContain(
-				"No matches",
-			);
-			expect(await invoke({ query: "arrayneedle", filter: { tool: "write" } })).toContain("No matches");
-			expect(await invoke({ query: "arrayneedle", filter: { after: "2026-11-03" } })).toContain("No matches");
-			for (const filter of [
-				{ after: "yesterday" },
-				{ before: "2026-02-30" },
-				{ role: "unknown" },
-				{ source: "unknown" },
-			])
-				expect(await invoke({ query: "needle", filter })).toContain("Invalid filter");
-			expect(await invoke({ query: "entry:mail", filter: { source: "message" } })).toContain(
-				"filters do not apply to exact recovery",
-			);
-		});
-	});
-
-	it("makes literal interpretation and all retained pages visible at the public seam", async () => {
-		const entries = Array.from({ length: 76 }, (_, i) => ({
-			type: "message",
-			id: `page-${i}`,
-			message: { role: "user", content: i === 75 ? "needle needle needle alpha.ts" : "needle context alphaXts" },
-		}));
-		await withSession(async (_file, invoke) => {
-			const literal = await invoke({ query: "alpha.ts" });
-			expect(literal).toContain("Interpretation: literal");
-			expect(literal).toContain("entry:page-75");
-			expect(literal).not.toContain("entry:page-0");
-			const first = await invoke({ query: "regex:needle" });
-			expect(first).toContain("Interpretation: explicit safe regex");
-			expect(first).toContain("Page 1/16");
-			expect(first).toContain("76 total matches retained by relevance");
-			const recovered: string[] = [];
-			for (let page = 1; page <= 16; page++) {
-				const output = await invoke({ query: "regex:needle", page });
-				for (const match of output.matchAll(/Read source: entry:(page-\d+)/g)) recovered.push(match[1]!);
-			}
-			expect(recovered).toHaveLength(entries.length);
-			expect(new Set(recovered)).toEqual(new Set(entries.map((entry) => entry.id)));
-			expect(await invoke({ query: "regex:needle", page: 16 })).not.toContain("Use page:17");
-			expect(await invoke({ query: "regex:needle", page: 17 })).toContain("beyond 16 pages");
-			expect(await invoke({ query: "regex:[" })).toContain("Invalid regex query");
-		}, entries);
-	});
-
-	it("honors already-aborted calls even when searchable history is available", async () => {
-		await withSession(async (_file, invoke) => {
-			await expect(invoke({ query: "regex:needle" }, AbortSignal.abort())).rejects.toThrow(/abort/i);
-		});
 	});
 	it("recovers complete write/edit arguments by ID and continues long sources without losing content", async () => {
 		const payload = Array.from({ length: 80 }, (_, i) => `unique payload line ${i} END`).join("\n");
@@ -187,7 +120,6 @@ describe("source-complete personal recall", () => {
 			for (const line of payload.split("\n")) expect(recovered).toContain(line);
 			expect(recovered).toContain("original bytes");
 			expect(recovered).toContain("replacement bytes");
-			expect(first).toContain("#0:a.ts");
 			expect(await invoke({ query: "#0:a.ts:full" })).toContain(payload);
 			expect(await invoke({ expand: [0] })).toContain("replacement bytes");
 		}, entries);

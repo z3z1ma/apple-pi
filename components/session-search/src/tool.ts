@@ -12,13 +12,13 @@ import {
 import { formatRecallOutput, formatTouchedOutput } from "./format-recall.js";
 import { getActiveLineageEntryIds } from "./lineage.js";
 import { loadAllMessages } from "./load-messages.js";
-import { matchesRecallFilter, validateRecallFilter } from "./query-filter.js";
 import { normalizeRecallMode, normalizeRecallScope } from "./recall-scope.js";
 import { renderMessage } from "./render-entries.js";
 import { getFileIndicators, getTouchedFiles, type SearchHit, searchEntries } from "./search-entries.js";
 
 const DEFAULT_RECENT = 25;
 const PAGE_SIZE = 5;
+const MAX_PAGES = 5;
 
 export const invalidExpandIndices = (requested: number[], available: Set<number>): number[] =>
 	requested.filter((i) => !Number.isSafeInteger(i) || i < 0 || !available.has(i));
@@ -35,7 +35,7 @@ export const sessionSearchTool = defineTool({
 		"Search this session's earlier conversation, tool calls, and write/edit payloads. " +
 		"Use it after compaction when you need to remember a prior decision, recover earlier tool output, or revisit a file version written during the session. " +
 		"This looks through session history, not git history or the current repository. " +
-		"Search literal text (default) or explicit 'regex:<pattern>', list touched files, inspect only write/edit payloads, expand entries, recover a written file with query:'#N:path', or recover an omitted tool result with query:'call:<id>'. " +
+		"Search text or regex, list touched files, inspect only write/edit payloads, expand entries, recover a written file with query:'#N:path', or recover an omitted tool result with query:'call:<id>'. " +
 		"Expand any source by query:'entry:<id>[:offset[:limit]]' (zero-based lines). New custom, summary and notebook records use stable IDs, not message ordinals. " +
 		"It follows the active lineage by default; scope:'all' includes other branches.",
 	promptSnippet: "Recover earlier conversation, tool results, and file operations from this session.",
@@ -46,39 +46,8 @@ export const sessionSearchTool = defineTool({
 		query: Type.Optional(
 			Type.String({
 				description:
-					"Literal text/path terms by default (case-insensitive, spelling variants); multi-word terms are relevance-ranked, with at least two meaningful terms required for queries of three or more terms. Explicit safe regex: 'regex:hook|inject'. Recover a source with 'entry:<id>[:offset[:limit]]', written content with '#N:path[:offset[:limit]|:full]', or a result with 'call:<toolCallId>'.",
+					"Search text or regex (e.g. 'hook|inject'); multi-word terms are OR-ranked. Recover written content with '#N:path[:offset[:limit]|:full]', or an omitted tool result with 'call:<toolCallId>' from a pair receipt.",
 			}),
-		),
-		filter: Type.Optional(
-			Type.Object(
-				{
-					after: Type.Optional(
-						Type.String({ description: "Inclusive ISO date or timestamp (timezone required for timestamps)." }),
-					),
-					before: Type.Optional(
-						Type.String({ description: "Exclusive ISO date or timestamp (timezone required for timestamps)." }),
-					),
-					role: Type.Optional(
-						Type.String({
-							description:
-								"Exact role: user, assistant, tool_result, bash, custom_message, compaction, branch_summary, notebook.",
-						}),
-					),
-					tool: Type.Optional(
-						Type.String({
-							description: "Exact tool name in a direct attempted call, result, or nested execution operation.",
-						}),
-					),
-					source: Type.Optional(
-						Type.String({
-							description: "Exact source kind: message, custom_message, compaction, branch_summary, notebook.",
-						}),
-					),
-				},
-				{
-					description: "Narrow discovery/browse/touched results; exact source recovery uses scope, not these filters.",
-				},
-			),
 		),
 		expand: Type.Optional(
 			Type.Array(Type.Integer({ minimum: 0 }), {
@@ -104,25 +73,7 @@ export const sessionSearchTool = defineTool({
 		),
 	}),
 	// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: recall resolution owns the complete request-validation and scope-selection flow.
-	async execute(toolCallId, params, signal, _onUpdate, ctx) {
-		signal?.throwIfAborted();
-		try {
-			validateRecallFilter(params.filter);
-			if (
-				params.filter &&
-				((params.expand?.length && !params.query) ||
-					(params.query &&
-						(parseEntryQuery(params.query) || parseCallQuery(params.query) || parseDrillDown(params.query))))
-			)
-				throw new Error(
-					"Discovery filters do not apply to exact recovery; omit filter and use scope to select the source.",
-				);
-		} catch (error) {
-			return {
-				content: [{ type: "text", text: error instanceof Error ? error.message : "Invalid filter." }],
-				details: undefined,
-			};
-		}
+	async execute(toolCallId, params, _signal, _onUpdate, ctx) {
 		if (params.page !== undefined && invalidPositiveInteger(params.page)) {
 			return {
 				content: [{ type: "text", text: "Invalid page: page must be a positive integer." }],
@@ -154,19 +105,16 @@ export const sessionSearchTool = defineTool({
 		const lineageEntryIds = rawScope === "lineage" ? activeEntryIds : undefined;
 		const entryRequest = params.query ? parseEntryQuery(params.query) : undefined;
 		if (entryRequest) {
-			const { rendered, rawMessages } = loadAllMessages(sessionFile, true, lineageEntryIds);
-			return {
-				content: [{ type: "text", text: expandSourceEntry(rendered, entryRequest, rawMessages) }],
-				details: undefined,
-			};
+			const { rendered } = loadAllMessages(sessionFile, true, lineageEntryIds);
+			return { content: [{ type: "text", text: expandSourceEntry(rendered, entryRequest) }], details: undefined };
 		}
 		const expandSet = new Set(params.expand ?? []);
 		const hasExpand = expandSet.size > 0;
 		const callId = params.query ? parseCallQuery(params.query) : undefined;
 		if (callId) {
-			const { rendered, rawMessages } = loadAllMessages(sessionFile, false, lineageEntryIds);
+			const { rawMessages } = loadAllMessages(sessionFile, false, lineageEntryIds);
 			return {
-				content: [{ type: "text", text: expandToolCall(rawMessages, callId, rendered) }],
+				content: [{ type: "text", text: expandToolCall(rawMessages, callId) }],
 				details: undefined,
 			};
 		}
@@ -176,6 +124,19 @@ export const sessionSearchTool = defineTool({
 			const { rendered, rawMessages } = loadAllMessages(sessionFile, false, lineageEntryIds);
 			return {
 				content: [{ type: "text", text: expandEntryFile(rendered, rawMessages, drillDown) }],
+				details: undefined,
+			};
+		}
+
+		if (mode === "touched") {
+			const { rendered, rawMessages } = loadAllMessages(sessionFile, false, lineageEntryIds);
+			return {
+				content: [
+					{
+						type: "text",
+						text: formatTouchedOutput(getTouchedFiles(rawMessages, rendered), params.page),
+					},
+				],
 				details: undefined,
 			};
 		}
@@ -209,28 +170,16 @@ export const sessionSearchTool = defineTool({
 		const eligible = loaded.rendered
 			.map((entry, offset) => ({ entry, message: loaded.rawMessages[offset]! }))
 			.filter(
-				({ entry, message }) =>
-					matchesRecallFilter(entry, message, params.filter) &&
-					(!Array.isArray(message.content) ||
-						!message.content.some((part) => part.type === "toolCall" && part.id === toolCallId)),
+				({ message }) =>
+					!Array.isArray(message.content) ||
+					!message.content.some((part) => part.type === "toolCall" && part.id === toolCallId),
 			);
 		const msgs = eligible.map(({ entry }) => entry);
 		const rawMessages = eligible.map(({ message }) => message);
-		const interpretation = `Interpretation: ${params.query?.trim().startsWith("regex:") ? "explicit safe regex" : "literal terms (spelling variants; relevance-ranked)"}; scope:${rawScope}${params.filter ? `; filter:${JSON.stringify(params.filter)}` : ""}`;
-		if (mode === "touched")
-			return {
-				content: [
-					{
-						type: "text",
-						text: `${interpretation}\n${formatTouchedOutput(getTouchedFiles(rawMessages, msgs), params.page)}`,
-					},
-				],
-				details: undefined,
-			};
 		let allResults: SearchHit[];
 		try {
 			allResults = params.query?.trim()
-				? searchEntries(msgs, rawMessages, params.query, mode, signal)
+				? searchEntries(msgs, rawMessages, params.query, mode)
 				: msgs.slice(-DEFAULT_RECENT).map((entry, offset) => {
 						const rawOffset = Math.max(0, rawMessages.length - DEFAULT_RECENT) + offset;
 						const fileMatches = getFileIndicators(rawMessages[rawOffset]!);
@@ -244,12 +193,12 @@ export const sessionSearchTool = defineTool({
 		if (params.query?.trim()) {
 			const page = Math.max(1, params.page ?? 1);
 			const totalPages = Math.ceil(allResults.length / PAGE_SIZE);
-			if (allResults.length > 0 && page > totalPages) {
+			if (allResults.length > 0 && page > Math.min(totalPages, MAX_PAGES)) {
 				return {
 					content: [
 						{
 							type: "text",
-							text: `${interpretation}\nPage ${page} is beyond ${totalPages} pages (${allResults.length} ranked matches${scopeLabel}).`,
+							text: `Too many results to page through (${allResults.length} matches across ${totalPages} pages). Try a more specific query${scopeLabel}.`,
 						},
 					],
 					details: undefined,
@@ -259,7 +208,7 @@ export const sessionSearchTool = defineTool({
 			const pageResults = allResults.slice(start, start + PAGE_SIZE) as SearchHit[];
 			const header =
 				totalPages > 1
-					? `Page ${page}/${totalPages} (${allResults.length} total matches retained by relevance${scopeLabel})`
+					? `Page ${page}/${totalPages} (${allResults.length} total matches${scopeLabel})`
 					: `${allResults.length} matches${scopeLabel}`;
 
 			const expanded: number[] = [];
@@ -280,7 +229,13 @@ export const sessionSearchTool = defineTool({
 			}
 
 			const footerParts: string[] = [];
-			if (page < totalPages) footerParts.push(`--- Use page:${page + 1} for more results ---`);
+			if (page < totalPages && page < MAX_PAGES) {
+				footerParts.push(`--- Use page:${page + 1} for more results ---`);
+			} else if (totalPages > MAX_PAGES) {
+				footerParts.push(
+					`--- Results truncated at ${MAX_PAGES} pages. Use a more specific query or scope to narrow results. ---`,
+				);
+			}
 			if (hasExpand) {
 				const notExpanded = [...expandSet].filter((i) => !expanded.includes(i));
 				const noun = expanded.length === 1 ? "entry" : "entries";
@@ -296,16 +251,8 @@ export const sessionSearchTool = defineTool({
 			}
 			const footer = footerParts.length ? `\n${footerParts.join("\n")}` : "";
 			return {
-				content: [
-					{
-						type: "text",
-						text: `${interpretation}\n${formatRecallOutput(pageResults, params.query, header)}${footer}`,
-					},
-				],
+				content: [{ type: "text", text: formatRecallOutput(pageResults, params.query, header) + footer }],
 				details: {
-					interpretation,
-					total: allResults.length,
-					totalPages,
 					sources: pageResults.map(({ entryId, index, timestamp, sourceKind, lineage }) => ({
 						entryId,
 						index,
@@ -317,7 +264,7 @@ export const sessionSearchTool = defineTool({
 			};
 		}
 
-		const output = `${interpretation}\n${rawScope === "all" ? "Scope: all\n" : ""}${formatRecallOutput(allResults, params.query)}`;
+		const output = `${rawScope === "all" ? "Scope: all\n" : ""}${formatRecallOutput(allResults, params.query)}`;
 		return {
 			content: [{ type: "text", text: output }],
 			details: undefined,

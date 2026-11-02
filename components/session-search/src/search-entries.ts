@@ -77,7 +77,7 @@ const SUFFIX_VARIANT_PAIRS: [RegExp, string][] = [
  */
 const expandSpellingVariants = (term: string): string => {
 	// Don't expand terms that already look like regex
-	if (/[|*+?{}()[\]\\^$.]/.test(term)) return escapeRegex(term);
+	if (/[|*+?{}()[\]\\^$.]/.test(term)) return term;
 	// Too short to plausibly be a suffix variant
 	if (term.length < 4) return term;
 
@@ -106,16 +106,16 @@ export class UnsafeSearchRegexError extends Error {
 	}
 }
 
-/** Compile only the explicit bounded regex subset; report syntax errors. */
+/** Compile the bounded regex subset, falling back to a literal for syntax errors. */
 const safeRegex = (pattern: string): RegExp => {
-	if (!pattern) throw new Error("Invalid regex query: pattern is empty.");
 	if (pattern.length > MAX_REGEX_SOURCE_LEN) {
 		throw new UnsafeSearchRegexError(`pattern exceeds ${MAX_REGEX_SOURCE_LEN} characters`);
 	}
 	try {
+		// Preserve the historic literal fallback for malformed regex syntax.
 		new RegExp(pattern);
 	} catch {
-		throw new Error("Invalid regex query: use a valid pattern after regex: or remove regex: to search literally.");
+		return new RegExp(escapeRegex(pattern), "i");
 	}
 	// Even without quantifiers, repeated ambiguous groups can make a native
 	// engine explore exponentially many alternatives. Top-level alternation is
@@ -152,9 +152,13 @@ const safeRegex = (pattern: string): RegExp => {
 	try {
 		return new RegExp(source, "i");
 	} catch {
-		throw new Error("Invalid regex query after bounding the wildcard.");
+		// Malformed regexes have historically been treated as literal searches.
+		return new RegExp(escapeRegex(pattern), "i");
 	}
 };
+
+/** Detect if the query looks like a single regex pattern (contains regex metacharacters). */
+const looksLikeRegex = (query: string): boolean => /[|*+?{}()[\]\\^$.]/.test(query);
 
 // ── Precompiled term cache ──
 
@@ -168,7 +172,7 @@ const compileTerms = (terms: string[]): Map<string, RegExp> => {
 	const cache = new Map<string, RegExp>();
 	for (const t of terms) {
 		const expanded = expandSpellingVariants(t);
-		const source = expanded;
+		const source = expanded.length > MAX_REGEX_SOURCE_LEN ? escapeRegex(expanded.slice(0, 64)) : expanded;
 		try {
 			cache.set(t, new RegExp(source, "gi"));
 		} catch {
@@ -310,6 +314,11 @@ const countMatches = (hay: string, termCache: Map<string, RegExp>): number => {
 const BM25_K = 1.2;
 const BM25_B = 0.75;
 
+// ── Search result caps ──
+
+/** Hard cap on total search results to prevent "half the session" returns. */
+const MAX_SEARCH_RESULTS = 50;
+
 /** Minimum BM25 score as a fraction of the top-scoring result.
  *  Entries scoring below this ratio of the best hit are excluded
  *  as low-relevance noise. */
@@ -325,7 +334,6 @@ const MIN_TERM_MATCH_FOR_MULTITERM = 2;
  * Uses matchAll to avoid recompiling the regex for the global flag.
  */
 const termFreq = (text: string, pattern: RegExp): number => {
-	pattern.lastIndex = 0;
 	let count = 0;
 	for (const _ of text.matchAll(pattern)) count++;
 	return count;
@@ -522,9 +530,7 @@ export const searchEntries = (
 	messages: Message[],
 	query?: string,
 	mode: RecallMode = "history",
-	signal?: AbortSignal,
 ): SearchHit[] => {
-	signal?.throwIfAborted();
 	if (!query?.trim()) return entries;
 
 	// Capture transcript identity while entries are still in chronological order.
@@ -532,10 +538,6 @@ export const searchEntries = (
 	// unrelated hits look like a single chronological turn in the formatter.
 	let currentTurnId: number | string = entries[0]?.entryId ?? entries[0]?.index ?? 0;
 	const turnIds = entries.map((entry) => {
-		if (entry.entryId && entry.parentId !== undefined)
-			return entry.role === "user" || entry.sourceKind !== "message"
-				? entry.entryId
-				: (entry.context?.find((context) => context.role === "preceding input")?.address ?? entry.entryId);
 		if (entry.role === "user" || entry.role === "bash" || (entry.sourceKind && entry.sourceKind !== "message"))
 			currentTurnId = entry.entryId ?? entry.index ?? 0;
 		return currentTurnId;
@@ -544,31 +546,49 @@ export const searchEntries = (
 		// Turn identity is formatter metadata, not a public search-result field.
 		Object.defineProperty(entry, "turnId", { value: turnIds[offset], enumerable: false });
 		const message = messages[offset];
-		if (
-			(message?.role === "toolResult" && ["search_session", "revisit_note"].includes(message.toolName)) ||
-			(message?.role === "assistant" &&
-				Array.isArray(message.content) &&
-				message.content.some(
-					(part) => part.type === "toolCall" && ["search_session", "revisit_note"].includes(part.name),
-				))
-		)
+		if (message?.role === "toolResult" && ["search_session", "revisit_note"].includes(message.toolName))
 			entry.recallEcho = true;
 		return entry;
 	};
 
 	const rawQuery = query.trim();
 
-	const explicitRegex = rawQuery.startsWith("regex:") ? safeRegex(rawQuery.slice(6)) : undefined;
-	const terms = explicitRegex ? [rawQuery.slice(6)] : [...new Set(filterStopwords(rawQuery.split(/\s+/)))];
-	const termCache = explicitRegex
-		? new Map([[terms[0]!, new RegExp(explicitRegex.source, "gi")]])
-		: compileTerms(terms);
+	// If query looks like a single regex pattern (contains metacharacters),
+	// treat the whole thing as one pattern — don't split into terms.
+	// Apply a source length cap to prevent pathological patterns.
+	if (looksLikeRegex(rawQuery)) {
+		const regex = safeRegex(rawQuery);
+		const hits: SearchHit[] = [];
+		for (let i = 0; i < entries.length; i++) {
+			const e = entries[i];
+			const msg = messages[i];
+			const text = msg ? fullText(msg, mode) : e.summary;
+			const filePart = e.files?.join(" ") ?? "";
+			const hay = mode === "file" ? text : `${e.role} ${text} ${filePart}`;
+			if (regex.test(hay)) {
+				const snip = lineSnippet(text, regex);
+				const fileMatches = matchingFiles(msg, regex);
+				hits.push(
+					withTurn({ ...e, snippet: snip, matchCount: 1, ...(fileMatches.length > 0 ? { fileMatches } : {}) }, i),
+				);
+				if (hits.length >= MAX_SEARCH_RESULTS) break;
+			}
+		}
+		return hits;
+	}
+
+	// Natural language / multi-word query: BM25 scoring
+
+	// Precompile all term regexes once — used across countMatches,
+	// buildBM25Context, bm25Score, and snippet generation.
+	const rawTerms = rawQuery.split(/\s+/);
+	const terms = filterStopwords(rawTerms);
+	const termCache = compileTerms(terms);
 	const snipRe = snippetRegex(terms, termCache);
 
 	// Build all docs for BM25 context
 	const docs: string[] = [];
 	for (let i = 0; i < entries.length; i++) {
-		signal?.throwIfAborted();
 		const e = entries[i];
 		const msg = messages[i];
 		const text = msg ? fullText(msg, mode) : e.summary;
@@ -619,6 +639,11 @@ export const searchEntries = (
 
 	// Recall output repeats other evidence; keep it addressable behind original sources.
 	scored.sort((a, b) => Number(Boolean(a.hit.recallEcho)) - Number(Boolean(b.hit.recallEcho)) || b.score - a.score);
+
+	// Hard cap on total results
+	if (scored.length > MAX_SEARCH_RESULTS) {
+		scored.length = MAX_SEARCH_RESULTS;
+	}
 
 	return scored.map((s) => s.hit);
 };
