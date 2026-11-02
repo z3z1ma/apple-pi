@@ -31,6 +31,10 @@
       "selection": "ordered",
       "models": [{ "model": "anthropic/claude-opus-5-5", "thinking": "medium" }]
     },
+    "desk": {
+      "selection": "ordered",
+      "models": [{ "model": "anthropic/claude-sonnet-5-5", "thinking": "high" }]
+    },
     "routine": {
       "selection": "ordered",
       "models": [{ "model": "anthropic/claude-haiku-5-5", "thinking": "high" }]

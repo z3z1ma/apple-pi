@@ -1,7 +1,7 @@
 ---
 title: Coordinator
 mandate: Keeps the operator's desk; routes everything he brings to the right people and keeps him on top of it
-models: [coordination, openai/gpt-6.1-sol:high, xai/grok-4.7:high, anthropic/claude-opus-5-5:medium]
+models: [desk, openai/gpt-6.1-terra:xhigh, anthropic/claude-sonnet-5-5:high, xai/grok-4.7:medium]
 writes: false
 manages: true
 dispatches: true

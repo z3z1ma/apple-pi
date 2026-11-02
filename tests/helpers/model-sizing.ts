@@ -20,6 +20,7 @@ export const PROFILE_SIZING_BANDS: Record<string, number> = {
 	balanced: 3,
 	coding: 3,
 	coordination: 3,
+	desk: 2,
 	writing: 2,
 	"visual-engineering": 2,
 	quick: 1,

@@ -23,6 +23,7 @@ export const INFERENCE_PROFILE_NAMES = [
 	"coding",
 	"visual-engineering",
 	"coordination",
+	"desk",
 	"routine",
 	"writing",
 ] as const;
@@ -44,6 +45,10 @@ export const INFERENCE_PROFILE_CATALOG: readonly InferenceProfileCatalogEntry[] 
 		description: "Model strong in UI, spatial, and multimodal reasoning, with model-specific effort.",
 	},
 	{ profile: "coordination", description: "Model suited to planning, delegation, and coordinating work." },
+	{
+		profile: "desk",
+		description: "Capable, economical model for the desk's steady triage and routing of everything that arrives.",
+	},
 	{ profile: "routine", description: "Economical model for routine, well-defined work." },
 	{ profile: "writing", description: "Model suited to clear technical writing with measured reasoning." },
 ];
