@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import type {
 	Character,
 	Desk,
@@ -695,6 +695,152 @@ export function GroupList({
 				);
 			})}
 		</SidebarSection>
+	);
+}
+
+const SECTIONS = "workplace-sidebar-sections";
+
+/** The operator's own sidebar sections, and which conversation sits in which; local to this device. */
+export type Sections = {
+	list: { id: string; name: string }[];
+	placement: Record<string, string>;
+};
+
+export function useSections() {
+	const [sections, setSections] = useState<Sections>(() => {
+		const stored = JSON.parse(localStorage.getItem(SECTIONS) ?? "null") as Sections | null;
+		return stored ?? { list: [], placement: {} };
+	});
+	const save = (next: Sections) => {
+		localStorage.setItem(SECTIONS, JSON.stringify(next));
+		setSections(next);
+	};
+	return {
+		sections,
+		/** Put a conversation (`dm:<id>` or `channel:<id>`) in a section, or back in its default place with null. */
+		move: (key: string, section: string | null) => {
+			const placement = { ...sections.placement };
+			if (section) placement[key] = section;
+			else delete placement[key];
+			save({ ...sections, placement });
+		},
+		create: (name: string, key?: string) => {
+			const id = crypto.randomUUID();
+			save({
+				list: [...sections.list, { id, name }],
+				placement: key ? { ...sections.placement, [key]: id } : sections.placement,
+			});
+		},
+		rename: (id: string, name: string) =>
+			save({ ...sections, list: sections.list.map((item) => (item.id === id ? { ...item, name } : item)) }),
+		remove: (id: string) =>
+			save({
+				list: sections.list.filter((item) => item.id !== id),
+				placement: Object.fromEntries(Object.entries(sections.placement).filter(([, value]) => value !== id)),
+			}),
+		/** Menu items that move one conversation between sections. */
+		menuItems: (key: string, ask: (create: (name: string) => void) => void) => [
+			...sections.list
+				.filter((item) => sections.placement[key] !== item.id)
+				.map((item) => ({
+					label: `Move to ${item.name}`,
+					onSelect: () => {
+						const placement = { ...sections.placement, [key]: item.id };
+						save({ ...sections, placement });
+					},
+				})),
+			{
+				label: "Move to a new section\u2026",
+				onSelect: () =>
+					ask((name) => {
+						const id = crypto.randomUUID();
+						const latest = JSON.parse(localStorage.getItem(SECTIONS) ?? "null") as Sections | null;
+						const base = latest ?? sections;
+						save({ list: [...base.list, { id, name }], placement: { ...base.placement, [key]: id } });
+					}),
+			},
+			...(sections.placement[key]
+				? [
+						{
+							label: "Remove from section",
+							onSelect: () => {
+								const placement = { ...sections.placement };
+								delete placement[key];
+								save({ ...sections, placement });
+							},
+						},
+					]
+				: []),
+		],
+	};
+}
+
+/** The operator's own sections, each listing the conversations placed in it, with a control to remove the section. */
+export function CustomSections({
+	store,
+	render,
+}: {
+	store: ReturnType<typeof useSections>;
+	render: (key: string) => React.ReactNode;
+}) {
+	return store.sections.list.map((section) => {
+		const keys = Object.entries(store.sections.placement)
+			.filter(([, id]) => id === section.id)
+			.map(([key]) => key);
+		return (
+			<SidebarSection
+				key={section.id}
+				id={`custom:${section.id}`}
+				title={section.name}
+				count={keys.length}
+				tools={
+					<span className="wp-channel-tools">
+						<button
+							type="button"
+							aria-label={`Remove section ${section.name}`}
+							title="Remove section (its conversations return to their places)"
+							onClick={() => store.remove(section.id)}
+						>
+							{"\u00d7"}
+						</button>
+					</span>
+				}
+			>
+				{keys.map((key) => (
+					<Fragment key={key}>{render(key)}</Fragment>
+				))}
+				{!keys.length && <p className="wp-sidebar-note">Right-click a conversation to move it here.</p>}
+			</SidebarSection>
+		);
+	});
+}
+
+/** A small inline form that names a new section; Electron has no window.prompt. */
+export function SectionNamer({ onDone }: { onDone: (name: string | null) => void }) {
+	const [name, setName] = useState("");
+	return (
+		<form
+			className="wp-section-namer"
+			onSubmit={(event) => {
+				event.preventDefault();
+				onDone(name.trim() || null);
+			}}
+		>
+			<input
+				// biome-ignore lint/a11y/noAutofocus: the form opens from an explicit menu choice to type a name.
+				autoFocus
+				aria-label="Section name"
+				placeholder="Section name"
+				value={name}
+				onChange={(event) => setName(event.target.value)}
+				onKeyDown={(event) => {
+					if (event.key === "Escape") onDone(null);
+				}}
+			/>
+			<button type="submit" disabled={!name.trim()}>
+				Add
+			</button>
+		</form>
 	);
 }
 

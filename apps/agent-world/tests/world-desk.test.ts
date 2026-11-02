@@ -352,6 +352,32 @@ test("Mail shows a message to several people once, with each recipient's deliver
 	}
 });
 
+test("a conversation moves into the operator's own sidebar section and back", { timeout: 60_000 }, async () => {
+	const { page, errors } = await openDesk("light");
+	try {
+		await page.getByRole("heading", { name: "Front desk", exact: true }).waitFor();
+		const direct = page.getByRole("region", { name: "Direct messages", exact: true });
+		await direct.getByRole("group", { name: "Iris", exact: true }).click({ button: "right" });
+		await page.getByRole("menuitem", { name: "Move to a new section\u2026" }).click();
+		await page.getByRole("textbox", { name: "Section name" }).fill("Core");
+		await page.getByRole("button", { name: "Add", exact: true }).click();
+		const core = page.getByRole("region", { name: "Core", exact: true });
+		await core.getByRole("group", { name: "Iris", exact: true }).waitFor();
+		expect(await direct.getByRole("group", { name: "Iris", exact: true }).count()).toBe(0);
+		await shot(page, "section-light");
+		await page.reload();
+		await page.getByRole("region", { name: "Core", exact: true }).getByRole("group", { name: "Iris" }).waitFor();
+		await page.getByRole("button", { name: "Remove section Core" }).click();
+		await page
+			.getByRole("region", { name: "Direct messages", exact: true })
+			.getByRole("group", { name: "Iris", exact: true })
+			.waitFor();
+		expect(errors).toEqual([]);
+	} finally {
+		await page.close();
+	}
+});
+
 test("Without a desk, Chat offers to open one with the root coordinator", { timeout: 60_000 }, async () => {
 	const { page, errors } = await openDesk("light", 1100, false);
 	try {

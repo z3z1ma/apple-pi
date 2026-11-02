@@ -26,7 +26,10 @@ type Operation = {
 	problem?: string;
 };
 type MenuEvent = MouseEvent<HTMLElement> | KeyboardEvent<HTMLElement>;
-type Actions = { world: WorldSnapshot; menu: (event: MenuEvent, id: string) => void };
+type Actions = {
+	world: WorldSnapshot;
+	menu: (event: MenuEvent, id: string, extra?: { label: string; onSelect: () => void }[]) => void;
+};
 const ActionsContext = createContext<Actions | null>(null);
 
 function personIn(world: WorldSnapshot, id: string): Person | undefined {
@@ -118,7 +121,8 @@ export function WorkplacePersonActions({ world, children }: { world: WorldSnapsh
 		const plan = action === "call" ? callPlan(current.current, id) : { affected: [], expected: [] };
 		setOperation({ id: crypto.randomUUID(), person, action, trigger, ...plan });
 	};
-	const menu = (event: MenuEvent, id: string) => {
+	/** `extra` adds the caller's own placement items (such as sidebar sections) after the lifecycle actions. */
+	const menu = (event: MenuEvent, id: string, extra: { label: string; onSelect: () => void }[] = []) => {
 		const person = personIn(current.current, id);
 		if (!person) return;
 		const trigger = event.currentTarget;
@@ -127,6 +131,7 @@ export function WorkplacePersonActions({ world, children }: { world: WorldSnapsh
 				? { label: "Send home", onSelect: () => begin("home", id, trigger) }
 				: { label: "Call in", onSelect: () => begin("call", id, trigger) },
 			{ label: "Let go", onSelect: () => begin("retire", id, trigger) },
+			...extra,
 		]);
 	};
 	return (

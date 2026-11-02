@@ -15,12 +15,15 @@ import {
 	activityItems,
 	ChannelHeader,
 	ChatNav,
+	CustomSections,
 	GroupList,
 	type OpenThread,
 	OrganizationView,
+	SectionNamer,
 	SidebarSection,
 	ThreadPanel,
 	useActivitySeen,
+	useSections,
 } from "./workplace-desk.js";
 import { Icon } from "./workplace-icon.js";
 import { WorkplaceIssues } from "./workplace-issues.js";
@@ -349,13 +352,16 @@ function Chat({
 		channel: Pick<WorkplaceThread, "id">,
 	) => {
 		const head = /^(?:organization|team):(.+)$/.exec(channel.id)?.[1];
-		if (!head) return;
 		const trigger = event.currentTarget;
-		const name =
-			world.characters.find((person) => person.id === head)?.name ??
-			world.dormant?.find((person) => person.id === head)?.name ??
-			head;
-		openMenu(event, [{ label: "Rename", onSelect: () => setRenameChannel({ id: head, name, trigger }) }]);
+		const name = head
+			? (world.characters.find((person) => person.id === head)?.name ??
+				world.dormant?.find((person) => person.id === head)?.name ??
+				head)
+			: "";
+		openMenu(event, [
+			...(head ? [{ label: "Rename", onSelect: () => setRenameChannel({ id: head, name, trigger }) }] : []),
+			...sectionMenu(`channel:${channel.id}`),
+		]);
 	};
 	const closeChannelRename = () => {
 		setRenameChannel(undefined);
@@ -363,6 +369,8 @@ function Chat({
 			if (renameChannel?.trigger.isConnected) renameChannel.trigger.focus();
 		});
 	};
+	const sectionStore = useSections();
+	const [naming, setNaming] = useState<(name: string) => void>();
 	const [selection, setSelection] = useState<{
 		kind: "dm" | "channel" | "desk" | "threads" | "activity";
 		id: string;
@@ -461,13 +469,39 @@ function Chat({
 			(!person.parent || !parents.has(person.parent)) && descendants(person.character.id, parents).length >= 4,
 	);
 	const headIds = new Set(heads.map((person) => person.character.id));
-	const direct = world.characters.filter((agent) => !headIds.has(agent.id));
+	const placed = (key: string) =>
+		sectionStore.sections.list.some((item) => item.id === sectionStore.sections.placement[key]);
+	const direct = world.characters.filter((agent) => !headIds.has(agent.id) && !placed(`dm:${agent.id}`));
+	const sectionMenu = (key: string) => sectionStore.menuItems(key, (create) => setNaming(() => create));
 	const sleeping = world.dormant?.filter((agent) => !agent.retiredAt && !headIds.has(agent.id)) ?? [];
 	const sleeper = world.dormant?.find((agent) => selection?.kind === "dm" && agent.id === selection.id);
 	const person =
 		world.characters.find((agent) => selection?.kind === "dm" && agent.id === selection.id) ??
 		(sleeper ? sleeperCharacter(sleeper) : undefined);
 	const matches = (name: string) => name.toLowerCase().includes(filter.toLowerCase());
+	const channelRow = (thread: (typeof channels)[number]) => (
+		<button
+			type="button"
+			className="wp-channel"
+			aria-haspopup="menu"
+			onContextMenu={(event) => channelMenu(event, thread)}
+			onKeyDown={(event) => channelMenu(event, thread)}
+			data-unread={(unreads.get(thread.id) ?? 0) > 0}
+			aria-label={`# ${channelName(thread.id, thread.subject, world)}`}
+			aria-description={`${unreads.get(thread.id) ?? 0} unread messages`}
+			key={thread.id}
+			aria-pressed={selectedChannel?.id === thread.id}
+			onClick={() => setSelection({ kind: "channel", id: thread.id })}
+		>
+			<span>#</span>
+			<span>{channelName(thread.id, thread.subject, world)}</span>
+			{(unreads.get(thread.id) ?? 0) > 0 && (
+				<b className="wp-unread-count" aria-hidden="true">
+					{unreads.get(thread.id)}
+				</b>
+			)}
+		</button>
+	);
 	const personRow = (agent: Character, home = false) => (
 		<fieldset
 			className="wp-dm"
@@ -476,14 +510,14 @@ function Chat({
 			aria-label={agent.name}
 			data-selected={person?.id === agent.id}
 			data-unread={!!agent.facts?.unseen}
-			onContextMenu={(event) => personMenu(event, agent.id)}
+			onContextMenu={(event) => personMenu(event, agent.id, sectionMenu(`dm:${agent.id}`))}
 		>
 			<PersonAvatar id={agent.id} name={agent.name} className="wp-person-icon" presence={presenceOf(agent, home)} />
 			<button
 				type="button"
 				className="wp-dm-link"
 				aria-haspopup="menu"
-				onKeyDown={(event) => personMenu(event, agent.id)}
+				onKeyDown={(event) => personMenu(event, agent.id, sectionMenu(`dm:${agent.id}`))}
 				aria-description={agent.facts?.unseen ? "Unread update" : undefined}
 				aria-pressed={person?.id === agent.id}
 				onClick={() => openDM(agent.id)}
@@ -538,6 +572,28 @@ function Chat({
 						deskUnread={desk ? (unreads.get(desk.thread) ?? 0) : 0}
 						needsYou={view === "activity" ? 0 : unseenActivity.size}
 					/>
+					{naming && (
+						<SectionNamer
+							onDone={(name) => {
+								if (name) naming(name);
+								setNaming(undefined);
+							}}
+						/>
+					)}
+					<CustomSections
+						store={sectionStore}
+						render={(key) => {
+							if (key.startsWith("channel:")) {
+								const thread = channels.find((item) => item.id === key.slice("channel:".length));
+								return thread && matches(channelName(thread.id, thread.subject, world)) ? channelRow(thread) : null;
+							}
+							const id = key.slice("dm:".length);
+							const awake = world.characters.find((agent) => agent.id === id);
+							const away = world.dormant?.find((agent) => agent.id === id && !agent.retiredAt);
+							const agent = awake ?? (away ? sleeperCharacter(away) : undefined);
+							return agent && matches(agent.name) ? personRow(agent, !awake) : null;
+						}}
+					/>
 					<SidebarSection
 						id="channels"
 						title="Channels"
@@ -570,36 +626,15 @@ function Chat({
 								(thread) =>
 									thread.id !== desk?.thread &&
 									!thread.id.startsWith("team:") &&
+									!placed(`channel:${thread.id}`) &&
 									matches(channelName(thread.id, thread.subject, world)),
 							)
-							.map((thread) => (
-								<button
-									type="button"
-									className="wp-channel"
-									aria-haspopup={/^(organization|team):/.test(thread.id) ? "menu" : undefined}
-									onContextMenu={(event) => channelMenu(event, thread)}
-									onKeyDown={(event) => channelMenu(event, thread)}
-									data-unread={(unreads.get(thread.id) ?? 0) > 0}
-									aria-label={`# ${channelName(thread.id, thread.subject, world)}`}
-									aria-description={`${unreads.get(thread.id) ?? 0} unread messages`}
-									key={thread.id}
-									aria-pressed={selectedChannel?.id === thread.id}
-									onClick={() => setSelection({ kind: "channel", id: thread.id })}
-								>
-									<span>#</span>
-									<span>{channelName(thread.id, thread.subject, world)}</span>
-									{(unreads.get(thread.id) ?? 0) > 0 && (
-										<b className="wp-unread-count" aria-hidden="true">
-											{unreads.get(thread.id)}
-										</b>
-									)}
-								</button>
-							))}
+							.map(channelRow)}
 						{!channels.length && <p className="wp-sidebar-note">Discover shared context or create a topic channel.</p>}
 					</SidebarSection>
 					<GroupList
 						world={world}
-						groups={channels.filter((thread) => thread.id.startsWith("team:"))}
+						groups={channels.filter((thread) => thread.id.startsWith("team:") && !placed(`channel:${thread.id}`))}
 						filter={filter}
 						unreads={unreads}
 						selected={selectedChannel?.id}
@@ -608,7 +643,9 @@ function Chat({
 					/>
 					{heads.length > 0 && (
 						<SidebarSection id="vips" title="VIPs" count={heads.length}>
-							{heads.filter((head) => matches(head.character.name)).map((head) => personRow(head.character, head.home))}
+							{heads
+								.filter((head) => matches(head.character.name) && !placed(`dm:${head.character.id}`))
+								.map((head) => personRow(head.character, head.home))}
 						</SidebarSection>
 					)}
 					<SidebarSection id="direct" title="Direct messages" count={direct.length}>

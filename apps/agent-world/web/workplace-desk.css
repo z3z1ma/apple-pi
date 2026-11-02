@@ -399,6 +399,33 @@
 .wp-threads-list button[data-unread="true"] strong {
 	font-weight: 800;
 }
+.wp-section-namer {
+	display: flex;
+	gap: 6px;
+	margin: 10px 4px 0;
+}
+.wp-app .wp-section-namer input {
+	flex: 1;
+	min-width: 0;
+	height: 28px;
+	padding: 0 8px;
+	border: 1px solid var(--wp-accent);
+	border-radius: 6px;
+	background: var(--wp-bg);
+	color: var(--wp-text);
+	font-size: 12px;
+}
+.wp-app .wp-chat-sidebar .wp-section-namer button {
+	width: auto;
+	height: 28px;
+	padding: 0 10px;
+	border: 0;
+	border-radius: 6px;
+	background: var(--wp-accent-strong);
+	color: #fff;
+	font-size: 12px;
+	font-weight: 600;
+}
 .wp-nav-count {
 	margin-left: auto;
 	font-size: 10px;
