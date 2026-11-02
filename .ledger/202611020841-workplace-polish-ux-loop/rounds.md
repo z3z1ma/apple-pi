@@ -39,3 +39,11 @@ Captured live with `live-mirror.ts chat` and `actions`.
 ## Round 4: front desk proactiveness
 
 - U7 The coordinator only reacted to what the operator typed into the desk; Slack messages to him and PR activity reached nobody unless he relayed them. **Changed:** `roles/coordinator.md` now keeps standing schedules (a Slack sweep every 15 minutes that triages DMs, mentions and his threads into the desk, tasks or drafted replies, and a daily morning brief) and watches his repositories and in-flight external threads. It never sends Slack messages as him. Takes effect when the coordinator session next starts or reloads; unproven live.
+
+## Round 5: addressing people from a channel
+
+- U8 Names in a channel post were only text; asking someone's attention meant opening a Notify picker. **Fixed:** typing @ in a channel or the desk lists people; Enter or Tab inserts the name and the post notifies everyone still @mentioned (prose names stay text).
+- U9 Turning any message into work took copying it to the desk by hand. **Fixed:** "Ask the front desk to handle" on every message posts it to the desk, quoted, and notifies the coordinator; one click.
+- V8 Quoted messages ran the author line into the first quoted line. **Fixed:** the quote's header is its own paragraph.
+
+Open: the desk keeps a separate row for search / Catch up / Read latest / Actions under the in-flight strip.

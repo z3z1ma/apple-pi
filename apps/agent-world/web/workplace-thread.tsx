@@ -15,6 +15,7 @@ import { Markdown } from "./overlay/conversation/transcript.js";
 import { useWindowFocus } from "./use-window-focus.js";
 import { CommunicationDialog, CommunicationRecipients } from "./workplace-communications.js";
 import { Icon } from "./workplace-icon.js";
+import { useMentions } from "./workplace-mentions.js";
 import { ActionableMessage } from "./workplace-message-actions.js";
 import { PersonAvatar, PersonName } from "./workplace-people.js";
 
@@ -53,6 +54,11 @@ export function ThreadPane({
 	const [unreadAfter, setUnreadAfter] = useState<number>();
 	const [draft, setDraft] = useState(drafts.get(id) ?? "");
 	const [replyTo, setReplyTo] = useState<QuotedMessage>();
+	const composer = useRef<HTMLTextAreaElement>(null);
+	const mentions = useMentions(world, composer, draft, (value) => {
+		setDraft(value);
+		drafts.set(id, value);
+	});
 	const [notify, changeNotify] = useState<string[]>(notificationDrafts.get(id) ?? []);
 	const setNotify = (people: string[]) => {
 		changeNotify(people);
@@ -73,7 +79,6 @@ export function ThreadPane({
 	const mounted = useRef(true);
 	const messages = useRef<HTMLDivElement>(null);
 	const actionsMenu = useRef<HTMLDetailsElement>(null);
-	const composer = useRef<HTMLTextAreaElement>(null);
 	const followLatest = useRef(!!channel);
 	const attemptedSeq = useRef(0);
 	const focused = useWindowFocus();
@@ -316,7 +321,9 @@ export function ThreadPane({
 	const send = () => {
 		if (locked || !thread?.permissions.post || !draft.trim()) return;
 		const body = withQuote(draft, replyTo);
+		const mentioned = mentions.mentioned(draft);
 		setReplyTo(undefined);
+		mentions.reset();
 		void run(
 			channel ? "Post" : "Reply",
 			(attempt) =>
@@ -324,7 +331,7 @@ export function ThreadPane({
 					attempt,
 					thread: id,
 					body,
-					...(channel ? { notify: listener ? [...new Set([listener, ...notify])] : notify } : {}),
+					...(channel ? { notify: [...new Set([...(listener ? [listener] : []), ...notify, ...mentioned])] } : {}),
 				}),
 			body,
 		);
@@ -663,11 +670,12 @@ export function ThreadPane({
 									disabled={locked}
 								/>
 								<p>
-									Only selected people receive attention. Names in prose are just text; recipients must already have
-									access.
+									Only selected and @mentioned people receive attention; other names in prose are just text. Recipients
+									must already have access.
 								</p>
 							</details>
 						)}
+						{channel && mentions.list}
 						<label>
 							<span className="wp-visually-hidden">
 								{channel ? "Post to channel as operator" : "Reply to everyone"}
@@ -687,8 +695,10 @@ export function ThreadPane({
 								onChange={(event) => {
 									setDraft(event.target.value);
 									drafts.set(id, event.target.value);
+									if (channel) mentions.track(event.target.value, event.target.selectionStart);
 								}}
 								onKeyDown={(event) => {
+									if (channel && mentions.onKeyDown(event)) return;
 									if (
 										event.key === "Enter" &&
 										!event.nativeEvent.isComposing &&

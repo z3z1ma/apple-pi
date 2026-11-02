@@ -411,7 +411,7 @@ test("a message is answered with its quote, and forwarded to a thread or a perso
 		await composer.press("Enter");
 		await vi.waitFor(async () => expect(await page.evaluate(() => (window as any).posts)).toHaveLength(1));
 		const [answer] = await page.evaluate(() => (window as any).posts);
-		expect(answer.body).toMatch(/^> \*\*Cora\*\*.*\n> Recorded as \*\*Add GitHub PR threads\*\*/);
+		expect(answer.body).toMatch(/^> \*\*Cora\*\*.*\n>\n> Recorded as \*\*Add GitHub PR threads\*\*/);
 		expect(answer.body.endsWith("\n\nHave Iris start with the webhook.")).toBe(true);
 		expect(await page.getByText("Replying to").count()).toBe(0);
 
@@ -422,7 +422,7 @@ test("a message is answered with its quote, and forwarded to a thread or a perso
 		await destination.fill("github");
 		await shot(page, "forward-light");
 		await destination.press("Enter");
-		await page.getByText("Forwarded to Add GitHub PR threads").waitFor();
+		await page.getByText("Sent to Add GitHub PR threads").waitFor();
 		const forwarded = (await page.evaluate(() => (window as any).posts)).at(-1);
 		expect(forwarded.thread).toBe("task:t1");
 		expect(forwarded.body).toMatch(/^For your brief\.\n\n> \*\*Cora\*\*/);
@@ -431,10 +431,39 @@ test("a message is answered with its quote, and forwarded to a thread or a perso
 		await page.getByRole("menuitem", { name: "Forward\u2026" }).click();
 		await destination.fill("iris");
 		await destination.press("Enter");
-		await page.getByText("Forwarded to Iris").waitFor();
+		await page.getByText("Sent to Iris").waitFor();
 		const [told] = await page.evaluate(() => (window as any).instructions);
 		expect(told).toMatchObject({ id: "iris", kind: "follow_up" });
 		expect(told.text).toMatch(/^> \*\*Cora\*\*/);
+
+		await composer.pressSequentially("@ir");
+		const people = page.getByRole("list", { name: "People to mention" });
+		await people.getByText("Iris", { exact: true }).waitFor();
+		await shot(page, "mention-light");
+		await composer.press("Enter");
+		expect(await composer.inputValue()).toBe("@Iris ");
+		await composer.pressSequentially("please take the webhook");
+		await composer.press("Enter");
+		await vi.waitFor(async () =>
+			expect((await page.evaluate(() => (window as any).posts)).at(-1)).toMatchObject({
+				thread: "topic:desk",
+				body: "@Iris please take the webhook",
+				notify: ["cora", "iris"],
+			}),
+		);
+
+		const flight = page.getByRole("region", { name: "Work in flight" });
+		await flight.getByRole("button", { name: /2 in flight/ }).click();
+		await flight.getByRole("button", { name: /Add GitHub PR threads/ }).click();
+		const panel = page.getByRole("complementary", { name: "Thread: Add GitHub PR threads" });
+		await panel.getByText("Iris: build GitHub PR threads").click({ button: "right" });
+		await page.getByRole("menuitem", { name: "Ask the front desk to handle" }).click();
+		await page.getByText("Sent to the front desk").waitFor();
+		expect((await page.evaluate(() => (window as any).posts)).at(-1)).toMatchObject({
+			thread: "topic:desk",
+			notify: ["cora"],
+			body: expect.stringMatching(/^Please handle this\.\n\n> \*\*Cora\*\*/),
+		});
 		expect(errors).toEqual([]);
 	} finally {
 		await page.close();

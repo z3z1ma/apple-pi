@@ -29,7 +29,11 @@ function selectionIn(element: HTMLElement | null): string | undefined {
 	return selection.toString().trim() || undefined;
 }
 
-const ForwardContext = createContext<((message: QuotedMessage) => void) | null>(null);
+const ForwardContext = createContext<{
+	forward: (message: QuotedMessage) => void;
+	/** Hand the message to the front desk to deal with, when there is a desk. */
+	handOff?: (message: QuotedMessage) => void;
+} | null>(null);
 
 /**
  * A message with Slack's actions: a toolbar on hover or focus and the same items on right-click. Reply and Forward
@@ -50,7 +54,9 @@ export function ActionableMessage({
 	children: ReactNode;
 } & Omit<HTMLAttributes<HTMLElement>, "className" | "children">) {
 	const openMenu = useWorkplaceMenu();
-	const forward = useContext(ForwardContext);
+	const sending = useContext(ForwardContext);
+	const forward = sending?.forward;
+	const handOff = sending?.handOff;
 	const element = useRef<HTMLElement>(null);
 	const chosen = () => {
 		const part = selectionIn(element.current);
@@ -61,6 +67,7 @@ export function ActionableMessage({
 		return [
 			...(onReply ? [{ label: "Reply", onSelect: () => onReply(target) }] : []),
 			...(forward ? [{ label: "Forward\u2026", onSelect: () => forward(target) }] : []),
+			...(handOff ? [{ label: "Ask the front desk to handle", onSelect: () => handOff(target) }] : []),
 			{
 				label: target === message ? "Copy text" : "Copy selection",
 				onSelect: () => void navigator.clipboard.writeText(target.text),
@@ -115,7 +122,12 @@ export function ActionableMessage({
 type Delivery = { ok: true } | { ok: false; reason: string };
 
 /** Send words to a destination as the operator: a person's conversation (or mail while away), or a thread. */
-async function deliver(world: WorldSnapshot, target: SwitchTarget, body: string): Promise<Delivery> {
+async function deliver(
+	world: WorldSnapshot,
+	target: SwitchTarget,
+	body: string,
+	notify: string[] = [],
+): Promise<Delivery> {
 	const api = window.agentWorld;
 	if (target.kind === "dm") {
 		const awake = world.characters.find((person) => person.id === target.id);
@@ -128,7 +140,12 @@ async function deliver(world: WorldSnapshot, target: SwitchTarget, body: string)
 		return receipt.ok ? { ok: true } : { ok: false, reason: receipt.reason };
 	}
 	if (target.kind === "view") return { ok: false, reason: "Choose a person, channel or thread." };
-	const result = await api.communications.post({ attempt: crypto.randomUUID(), thread: target.id, body });
+	const result = await api.communications.post({
+		attempt: crypto.randomUUID(),
+		thread: target.id,
+		body,
+		...(notify.length ? { notify } : {}),
+	});
 	if ("outcome" in result && result.outcome === "applied") return { ok: true };
 	return {
 		ok: false,
@@ -154,19 +171,46 @@ export function ForwardProvider({
 		const timer = setTimeout(() => setToast(undefined), 6000);
 		return () => clearTimeout(timer);
 	}, [toast]);
-	const open = useMemo(
-		() => (next: QuotedMessage) => {
-			returnFocus.current = document.activeElement as HTMLElement | null;
-			setMessage(next);
-		},
-		[],
+	const send = (target: SwitchTarget, label: string, body: string, notify?: string[]) =>
+		void deliver(world, target, body, notify).then(
+			(result) =>
+				setToast(
+					result.ok
+						? { text: `Sent to ${label}`, target }
+						: { text: `Not sent to ${label}: ${result.reason}`, failed: true },
+				),
+			(failure: unknown) => setToast({ text: `Not sent: ${String(failure)}`, failed: true }),
+		);
+	const deskThread = world.desk?.thread;
+	const deskPerson = world.desk?.person;
+	const latestSend = useRef(send);
+	latestSend.current = send;
+	const value = useMemo(
+		() => ({
+			forward: (next: QuotedMessage) => {
+				returnFocus.current = document.activeElement as HTMLElement | null;
+				setMessage(next);
+			},
+			...(deskThread && deskPerson
+				? {
+						handOff: (next: QuotedMessage) =>
+							latestSend.current(
+								{ kind: "channel", id: deskThread },
+								"the front desk",
+								`Please handle this.\n\n${quote(next)}`,
+								[deskPerson],
+							),
+					}
+				: {}),
+		}),
+		[deskThread, deskPerson],
 	);
 	const close = () => {
 		setMessage(undefined);
 		if (returnFocus.current?.isConnected) returnFocus.current.focus();
 	};
 	return (
-		<ForwardContext.Provider value={open}>
+		<ForwardContext.Provider value={value}>
 			{children}
 			{message && (
 				<ForwardDialog
@@ -175,16 +219,7 @@ export function ForwardProvider({
 					close={close}
 					send={(item, note) => {
 						close();
-						const body = [note.trim(), quote(message)].filter(Boolean).join("\n\n");
-						void deliver(world, item.target, body).then(
-							(result) =>
-								setToast(
-									result.ok
-										? { text: `Forwarded to ${item.label}`, target: item.target }
-										: { text: `Not forwarded to ${item.label}: ${result.reason}`, failed: true },
-								),
-							(failure: unknown) => setToast({ text: `Not forwarded: ${String(failure)}`, failed: true }),
-						);
+						send(item.target, item.label, [note.trim(), quote(message)].filter(Boolean).join("\n\n"));
 					}}
 				/>
 			)}

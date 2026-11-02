@@ -17,7 +17,7 @@ export function quote(message: QuotedMessage): string {
 			})
 		: "";
 	const head = [`**${message.author}**`, message.where, when].filter(Boolean).join(" \u00b7 ");
-	return [head, ...message.text.trim().split("\n")].map((line) => (line ? `> ${line}` : ">")).join("\n");
+	return [head, "", ...message.text.trim().split("\n")].map((line) => (line ? `> ${line}` : ">")).join("\n");
 }
 
 /** Markdown read as one line of plain words, for a one-line excerpt. */

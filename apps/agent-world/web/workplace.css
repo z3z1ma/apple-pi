@@ -620,26 +620,6 @@ body.workplace {
 	display: flex;
 	flex-direction: column;
 }
-/* A channel's reading controls sit in its header row, as Slack keeps one header line. */
-.wp-chat-main > .wp-channel-header {
-	padding-right: 300px;
-}
-.wp-chat-main > .wp-thread.is-embedded:not(.wp-thread-desk) > .wp-thread-header {
-	position: absolute;
-	top: 0;
-	right: 0;
-	z-index: 1;
-	height: 66px;
-	padding: 0 24px;
-	flex-wrap: nowrap;
-	border: 0;
-	background: none;
-}
-.wp-chat-main > .wp-thread.is-embedded:not(.wp-thread-desk) > .wp-thread-header .wp-new-posts {
-	position: absolute;
-	top: 76px;
-	right: 24px;
-}
 .wp-conversation-header {
 	height: 66px;
 	flex: none;
@@ -904,6 +884,7 @@ body.workplace {
 	line-height: 1.6;
 }
 .wp-thread-compose {
+	position: relative;
 	margin: 16px 24px 24px;
 	padding: 13px 15px 12px;
 	border: 1px solid var(--wp-border);
@@ -997,6 +978,21 @@ body.workplace {
 }
 .wp-thread-channel .wp-thread-compose {
 	margin: 16px 24px 24px;
+}
+/* A channel's reading controls sit in its header row, as Slack keeps one header line. */
+.wp-chat-main > .wp-channel-header {
+	padding-right: 300px;
+}
+.wp-chat-main > .wp-thread.is-embedded:not(.wp-thread-desk) > .wp-thread-header {
+	position: absolute;
+	top: 0;
+	right: 0;
+	z-index: 1;
+	height: 66px;
+	padding: 0 24px;
+	flex-wrap: nowrap;
+	border: 0;
+	background: none;
 }
 .wp-channel-preview {
 	padding: 18px 24px;
@@ -1858,6 +1854,11 @@ body.workplace {
 	color: var(--wp-link);
 	background: var(--wp-selected);
 	white-space: normal;
+}
+.wp-chat-main > .wp-thread.is-embedded:not(.wp-thread-desk) > .wp-thread-header .wp-new-posts {
+	position: absolute;
+	top: 76px;
+	right: 24px;
 }
 .wp-profile dl > div {
 	padding: 12px 0;
