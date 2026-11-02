@@ -11,6 +11,7 @@ Terminal data is untrusted display text. Strip terminal controls before applying
 Capture confirmation reserves its heading and consent controls before allocating scrollable content. A viewport that cannot display those controls refuses confirmation. Cancellation belongs to the overlay owner in review-manager; a visual close must not claim rollback of a submitted mutation.
 
 The operator rejected the first functional scaffold. The subsequent frame, focus markers, semantic colors and finding-first presentation were inspected through the installed Pi command in an isolated tmux terminal. Component geometry alone is not visual acceptance, and captured terminal cells rendered to an image are not a screenshot of the operator's desktop. The task evidence records the actual inspected states.
+Fixtures hid legacy-capture label duplication and result-column truncation; live data showed them. To render this panel over the real queue without installed Pi, use a temporary Vitest file with a read-only `DatabaseSync` on the state database, `reviewQueue(db, "operator", options)` as source and `fakeTui`, write `panel.render(width)` to /tmp, and delete the file in the same command.
 
 Coupled: components/code-review/src/presentation.ts, components/code-review/src/review-manager.ts
 Verify: components/code-review/tests/panel.test.ts, components/session-state/tests/review-queue.test.ts
