@@ -279,9 +279,9 @@ An absolute scenario origin unequal to recording time remains a clock mismatch; 
 
 ## The role catalog
 
-A role is a Markdown file: front matter (`title`, `mandate`, `models`, `writes`, `manages`) and a body that is the role's obligation, what it is not responsible for, how it works, and what it delivers, ending with the one standing rule: say what you verified and what you believe. The catalog is the package's `roles/` directory, then `~/.pi/agent/roles/`, then `<cwd>/.pi/roles/`, a later file replacing an earlier one of the same name. A malformed file is reported by path and skipped. Managers see the whole catalog in their prompt and hire by name.
+A role is a Markdown file: front matter (`title`, `mandate`, `models`, `writes`, `manages`, optional `dispatches`) and a body that is the role's obligation, what it is not responsible for, how it works, and what it delivers, ending with the one standing rule: say what you verified and what you believe. The catalog is the package's `roles/` directory, then `~/.pi/agent/roles/`, then `<cwd>/.pi/roles/`, a later file replacing an earlier one of the same name. A malformed file is reported by path and skipped. Managers see the whole catalog in their prompt and hire by name.
 
-The package's roles are listed below; their files own the current model recommendations. `advises` means the role has no `edit` or `write` tool: it reads, runs, and reports, and someone who writes carries its findings into code.
+The package's roles are listed below; their files own the current model recommendations. `advises` means the role has no `edit` or `write` tool: it reads, runs, and reports, and someone who writes carries its findings into code. `dispatches` (managing, nonwriting roles only) also removes `bash`, `pi_exec`, `search_branches` and `monitor`: the person routes work and cannot do it, so delegation is structural rather than a prompt. A dispatching person is on call: mail that arrives while it is at home wakes it.
 
 | Role | Title | Mandate | Mind, in order | Thinking | Posture |
 | --- | --- | --- | --- | --- | --- |
@@ -290,7 +290,7 @@ The package's roles are listed below; their files own the current model recommen
 | `chaos-engineering-specialist` | Chaos Engineering Specialist | Design failure injection, partial outage, retry, degradation | `openai/gpt-6.1-sol`, `anthropic/claude-sonnet-5-5` | medium | advises |
 | `chief-architect` | Chief Architect | Judge boundaries, invariants, evolution, coherence | `anthropic/claude-opus-5-5`, `openai/gpt-6-astra` | high | advises |
 | `code-review-specialist` | Code Review Specialist | Find real defects, regressions, maintainability problems in diffs | `openai/gpt-6.1-sol`, `anthropic/claude-sonnet-5-5` | medium | advises |
-| `coordinator` | Coordinator | Chief of staff for the operator; runs the org, keeps threads, sweeps | `openai/gpt-6.1-sol`, `anthropic/claude-opus-5-5` | high | manages, writes |
+| `coordinator` | Coordinator | The operator's front desk; routes everything he brings to the right people and keeps him on top of it | `openai/gpt-6.1-sol`, `anthropic/claude-opus-5-5` | high | manages, dispatches |
 | `database-reliability-architect` | Database Reliability Architect | Attack migrations, locking, isolation, corruption, rollback | `anthropic/claude-opus-5-5`, `openai/gpt-6.1-sol` | high | advises |
 | `developer-experience-lead` | Developer Experience Lead | Judge APIs, naming, errors, docs, integration friction | `antigravity/gemini-3.8-flash`, `openai/gpt-6.1-sol` | medium | advises |
 | `director-of-engineering` | Director of Engineering | Route work, set decision gates, resolve conflicts, own delivery | `openai/gpt-6.1-sol`, `anthropic/claude-opus-5-5` | high | manages, writes |

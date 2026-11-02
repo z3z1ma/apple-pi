@@ -59,8 +59,8 @@ test("the package catalog loads, a project file overrides by name, and a bad fil
 	const cwd = tempDir();
 	const packaged = loadRoles(cwd);
 	expect(packaged.problems).toEqual([]);
+	expect(packaged.roles.get("coordinator")).toMatchObject({ manages: true, writes: false, dispatches: true });
 	for (const name of [
-		"coordinator",
 		"director-of-engineering",
 		"product-manager",
 		"engineering-manager",
@@ -105,6 +105,30 @@ test("a role without writes loses edit and write, gets the role section, and kee
 	} finally {
 		run.dispose();
 	}
+});
+
+test("a dispatching role keeps reading and loses the shell, file writing and program tools", async () => {
+	const run = await fauxSession(
+		[organization],
+		[fauxAssistantMessage("ok")],
+		["read", "bash", "edit", "write", "grep"],
+	);
+	try {
+		await restartWithRole(run, "coordinator");
+		await run.session.prompt("hi");
+		const tools = run.session.getActiveToolNames();
+		expect(tools).toEqual(expect.arrayContaining(["read", "grep"]));
+		for (const name of ["bash", "edit", "write", "pi_exec"]) expect(tools).not.toContain(name);
+	} finally {
+		run.dispose();
+	}
+});
+
+test("a dispatching role that writes or does not manage is refused", () => {
+	const dir = tempDir();
+	const path = join(dir, "router.md");
+	writeFileSync(path, ROLE.replace("writes: false", "writes: false\ndispatches: true"));
+	expect(readRole(path, "router")).toBe(`${path}: a dispatching role manages and does not write`);
 });
 
 test("a role that writes keeps edit and write; an unroled session has no role section", async () => {
@@ -297,7 +321,6 @@ test.each([
 	{ role: undefined, parent: null, allowed: true },
 	{ role: undefined, parent: "boss", allowed: false },
 	{ role: "implementation-engineer", parent: null, allowed: false },
-	{ role: "coordinator", parent: "boss", allowed: true },
 	{ role: "director-of-engineering", parent: null, allowed: true },
 	{ role: "product-manager", parent: "boss", allowed: true },
 	{ role: "engineering-manager", parent: "boss", allowed: true },

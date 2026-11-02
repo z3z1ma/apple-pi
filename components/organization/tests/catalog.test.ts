@@ -33,7 +33,14 @@ test("every package role loads with a mandate, a profile, concrete defaults, and
 	expect(catalog.problems).toEqual([]);
 	expect(catalog.roles.size).toBeGreaterThan(0);
 	const managers = [...catalog.roles.values()].filter((role) => role.manages).map((role) => role.name);
-	expect(managers.sort()).toEqual(["coordinator", "director-of-engineering"]);
+	expect(managers.sort()).toEqual([
+		"coordinator",
+		"director-of-engineering",
+		"engineering-manager",
+		"product-manager",
+		"research-lead",
+		"service-owner",
+	]);
 	for (const role of catalog.roles.values()) {
 		expect(role.mandate, role.name).not.toBe("");
 		expect(isInferenceProfileName(role.models[0]!), role.name).toBe(true);

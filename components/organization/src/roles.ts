@@ -27,6 +27,8 @@ export interface Role {
 	writes: boolean;
 	/** Whether the person gets the manager tools and charter. */
 	manages: boolean;
+	/** Whether the person only routes work: no shell, file-writing or program tools, so it delegates instead of doing. */
+	dispatches: boolean;
 	body: string;
 	path: string;
 }
@@ -94,6 +96,10 @@ export function readRole(path: string, name: string): Role | string {
 	if (Object.hasOwn(fm, "thinking")) return `${path}: put effort in each models entry instead of a thinking field`;
 	if (typeof fm.writes !== "boolean") return `${path}: writes must be true or false`;
 	if (typeof fm.manages !== "boolean") return `${path}: manages must be true or false`;
+	if (fm.dispatches !== undefined && typeof fm.dispatches !== "boolean")
+		return `${path}: dispatches must be true or false`;
+	if (fm.dispatches === true && (fm.writes || !fm.manages))
+		return `${path}: a dispatching role manages and does not write`;
 	if (!body) return `${path}: the body (the role's obligation) is empty`;
 	return {
 		name,
@@ -102,6 +108,7 @@ export function readRole(path: string, name: string): Role | string {
 		models: models as string[],
 		writes: fm.writes,
 		manages: fm.manages,
+		dispatches: fm.dispatches === true,
 		body,
 		path,
 	};

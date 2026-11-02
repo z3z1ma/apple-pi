@@ -57,6 +57,8 @@ export interface Facts {
 	title: string | null;
 	/** Whether the role manages (holds the manager tools and charter); null without a role. */
 	manages: boolean | null;
+	/** Whether the person is on call: mail that arrives while it is at home wakes it. Dispatching roles are on call. */
+	onCall: boolean | null;
 	/** One line of the soul drawn at hire, or null without a role. */
 	soul: string | null;
 	/** The person's self: the document it keeps about itself and its teammates, or null before its first `update_self`. */

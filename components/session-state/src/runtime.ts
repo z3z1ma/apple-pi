@@ -46,6 +46,7 @@ const FACT_COLUMNS: Record<keyof Facts, string> = {
 	role: "role",
 	title: "role_title",
 	manages: "manages",
+	onCall: "on_call",
 	soul: "soul",
 	self: "self",
 	parentSessionFile: "parent_session_file",
@@ -258,6 +259,8 @@ export class Runtime {
 	private readonly attentionShown = new Map<string, string>();
 	/** Sessions this runtime opened a window for, until their bridge connects or the window closes. */
 	private readonly starting = new Map<string, SessionStart>();
+	/** On-call people whose wake is scheduled or launching, so a burst of mail wakes each once. */
+	private readonly waking = new Set<string>();
 	/** Manager-tool hires this process created, until that start connects or fails. A restart does not recover the set. */
 	private readonly newHires = new Set<string>();
 	private readonly headless = new Map<string, ChildProcess>();
@@ -806,11 +809,14 @@ export class Runtime {
 			return;
 		}
 		if (waits) {
+			const woken = current && this.wakeOnCall(sessionId);
 			receipt(
 				"accepted",
-				current
-					? "not running; the mail waits until it opens"
-					: "unknown; the mail waits until a session with this id opens",
+				woken
+					? "on call; waking it for this mail"
+					: current
+						? "not running; the mail waits until it opens"
+						: "unknown; the mail waits until a session with this id opens",
 			);
 			return;
 		}
@@ -1523,7 +1529,54 @@ export class Runtime {
 				connection.sessionId === recipient &&
 				connection.generation === (generation ?? current?.generation),
 		);
+		if (!target && command.kind === "mail" && generation === undefined) this.wakeOnCall(recipient);
 		return target;
+	}
+
+	/**
+	 * Wake an on-call person at home so waiting mail reaches it: beside a live pane of the tmux server it last ran in,
+	 * or headless when none is attached. Runs after the current transaction; the mail itself waits as usual.
+	 */
+	private wakeOnCall(person: string): boolean {
+		const db = this.db!;
+		const row = db.prepare("select on_call, retired_at, kind from sessions where id = ?").get(person) as
+			| { on_call: number | null; retired_at: number | null; kind: string }
+			| undefined;
+		if (row?.on_call !== 1 || row.retired_at !== null || row.kind !== "root") return false;
+		if (this.waking.has(person)) return true;
+		if (this.starting.has(person) || departureOf(db, person) || temporaryCallers(db).has(person)) return false;
+		this.waking.add(person);
+		setImmediate(() => {
+			if (this.db !== db || this.starting.has(person)) return void this.waking.delete(person);
+			const live = db
+				.prepare(`select 1 from sessions s join incarnations i on i.session_id = s.id and i.generation = s.generation
+				where s.id = ? and i.ended_at is null and i.process_state in ('alive', 'alive_bridge_lost')`)
+				.get(person);
+			if (live) return void this.waking.delete(person);
+			const pane = db
+				.prepare(`select p.socket, p.id as pane from tmux_panes p
+				left join incarnations i on i.session_id = ? and i.tmux_socket = p.socket
+				where p.dead = 0 order by i.generation is null, i.generation desc, p.active desc, p.updated_at desc limit 1`)
+				.get(person) as { socket: string; pane: string } | undefined;
+			const commandId = `wake:${randomUUID()}`;
+			const command: Extract<Command, { kind: "start" }> = {
+				kind: "start",
+				prompt: "",
+				...(pane ? { tmux: { socket: pane.socket, pane: pane.pane } } : {}),
+			};
+			const now = Date.now();
+			db.prepare(
+				`insert into commands (command_id, session_id, generation, bound_generation, kind, command, stage, created_at, updated_at)
+				values (?, ?, null, null, 'start', ?, 'accepted', ?, ?)`,
+			).run(commandId, person, JSON.stringify(command), now, now);
+			this.event("runtime", person, null, "on_call_woken", { commandId });
+			this.startSession(commandId, person, command)
+				.catch((error) => {
+					if (this.db === db) this.setCommandStage(commandId, "failed", `On-call wake failed: ${error}`);
+				})
+				.finally(() => this.waking.delete(person));
+		});
+		return true;
 	}
 
 	/**

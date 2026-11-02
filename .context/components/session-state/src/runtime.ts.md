@@ -131,6 +131,12 @@ Why: fitness replays these events as history. A crash between snapshot and event
 Coupled: components/session-state/src/fitness.ts
 Verify: components/session-state/tests/cost-history.test.ts
 
+## symbol:Runtime.wakeOnCall
+
+Unbound mail to an on-call person at home (`sessions.on_call = 1`, reported by dispatching roles) schedules one wake after the current transaction; the mail itself stays queued and rides the woken session's first run. The `waking` set plus `starting` make a burst wake once. The pane is a live pane on the tmux server the person last ran in, else any live pane, else a headless launch. Retired, departing and temporary identities never wake.
+Why: the front desk must answer the operator when its process has quit; waking inside `preparePost`'s transaction would launch a process for mail that might roll back.
+Verify: components/session-state/tests/on-call.test.ts
+
 ## symbol:Runtime.finishWorkCommand
 
 An awake assignee needs no launch. A sleeping assignee wakes beside the assigning session's pane; an operator assignment instead uses the terminal supplied by the UI, because `operator` has no session row or incarnation. The wake target stays in the persisted command for recovery. A wake failure reports that the assignment was already saved rather than claiming it rolled back.

@@ -84,10 +84,15 @@ function storedRole(ctx: ExtensionContext): RoleEntry | undefined {
 	return stored;
 }
 
+/** Tools that do work rather than route it; a dispatching person keeps reading, communication and management. */
+const EXECUTION_TOOLS = new Set(["bash", "edit", "write", "pi_exec", "search_branches", "monitor"]);
+
 function applyPosture(pi: ExtensionAPI, role: Role): void {
 	if (role.writes) return;
 	const active = pi.getActiveTools();
-	const next = active.filter((name) => name !== "edit" && name !== "write");
+	const next = active.filter((name) =>
+		role.dispatches ? !EXECUTION_TOOLS.has(name) : name !== "edit" && name !== "write",
+	);
 	if (next.length !== active.length) pi.setActiveTools(next);
 }
 

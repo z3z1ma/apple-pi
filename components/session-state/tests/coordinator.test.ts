@@ -567,7 +567,7 @@ test.each([false, true])(
 		try {
 			await run.session.prompt("hi");
 			const prompt = run.session.agent.state.systemPrompt;
-			if (enabled) expect(prompt).toContain("<role>\nYou are a coordinator");
+			if (enabled) expect(prompt).toContain("<role>\nYou are the coordinator");
 			else expect(prompt).not.toContain("<role>");
 			if (enabled) expect(prompt).toContain("<manager>\n");
 			else expect(prompt).not.toContain("<manager>");

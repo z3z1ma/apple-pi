@@ -14,7 +14,7 @@ export const CATALOG_SYSTEM_PROMPT_TAG = "role-catalog";
 export function catalogSection(roles: Iterable<Role>): string {
 	const lines = [...roles].map(
 		(role) =>
-			`- \`${role.name}\`: ${role.title}. ${role.mandate}. ${role.manages ? "Manages. " : ""}${role.writes ? "Writes files." : "Advises; changes no files."}`,
+			`- \`${role.name}\`: ${role.title}. ${role.mandate}. ${role.manages ? "Manages. " : ""}${role.dispatches ? "Routes work; runs no commands." : role.writes ? "Writes files." : "Advises; changes no files."}`,
 	);
 	return `The roles you can hire with \`hire\`. Each is a lasting obligation on a named mind; they are written to collide, so hire the perspectives a decision needs, not the whole catalog.
 

@@ -355,6 +355,7 @@ function helloFor(
 			role: sessionRole(ctx)?.name ?? null,
 			title: sessionRole(ctx)?.title ?? null,
 			manages: sessionRole(ctx)?.manages ?? null,
+			onCall: sessionRole(ctx)?.dispatches ?? null,
 			soul: sessionSoulLine(ctx) ?? null,
 			self: sessionSelf(ctx) ?? null,
 			parentSessionFile: sessions.getHeader()?.parentSession ?? null,

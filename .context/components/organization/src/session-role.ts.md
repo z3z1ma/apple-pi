@@ -22,6 +22,8 @@ Why: the review runtime records each pass's policy (deep or balanced profile) an
 Coupled: components/session-state/src/review-attempt.ts, components/session-state/src/runtime.ts, components/code-review/src/policy.ts
 Verify: components/organization/tests/roles.test.ts, components/session-state/tests/review-queue.test.ts
 
+A dispatching role (`dispatches: true`) also drops `bash`, `pi_exec`, `search_branches` and `monitor`, keeping reading, interns, communication and management. Delegation is enforced by the tool set because prompt-only delegation fails: DeepSeek's ablation saw a neutral-prompt main session delegate in 0 of 5 runs.
+
 Posture (`writes: false` dropping `edit` and `write`) is applied at `session_start` and again at every `before_agent_start`.
 Why: Pi restores the active tool set from the saved transcript after extensions load, so a session created before the role existed, or one whose user re-enabled a tool, would otherwise start a run with `edit` back.
 Coupled: components/session-state/src/bridge.ts, components/session-state/src/coordinator.ts
