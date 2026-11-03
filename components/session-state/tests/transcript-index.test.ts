@@ -1,4 +1,4 @@
-import { appendFileSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createConnection } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -108,6 +108,12 @@ test("hits carry #N ordinals counted as load-messages counts them, and eligibili
 	await indexTranscript(db, "s2", file);
 	const all = searchIndex(db, { query: "heron", limit: 10 });
 	expect(Object.fromEntries(all.map((hit) => [hit.entry, hit.ordinal]))).toEqual({ m0: 0, c0: null, m2: 2, m3: 3 });
+	// Each hit's offset and length are exactly its line, so a reader can fetch the body without scanning.
+	const text = readFileSync(file);
+	for (const hit of all)
+		expect(JSON.parse(text.subarray(hit.offset, hit.offset + hit.length).toString()).id).toBe(hit.entry);
+	expect(searchIndex(db, { query: "heron", sessions: ["elsewhere"] })).toEqual([]);
+	expect(searchIndex(db, { query: "heron", sessions: ["s2"] })).toHaveLength(4);
 	const rest = { query: "heron", exclude: [{ session: "s2", entries: ["m3", "c0"] }] };
 	expect(countIndex(db, rest)).toBe(2);
 	const first = searchIndex(db, { ...rest, limit: 1 });

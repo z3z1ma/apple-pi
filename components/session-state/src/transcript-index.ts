@@ -31,6 +31,16 @@ const SCHEMA = [
 	);
 	delete from files;
 	alter table files add column messages integer not null default 0;`,
+	// `scope`: the session as one token (`scopeToken`), so session and span filters intersect inside FTS. `offset` and
+	// `length`: the entry's line in the transcript, for a direct read of a hit's body. Rebuilds the derived index.
+	`drop table entries;
+	create virtual table entries using fts5(
+		words, calls, results, scope,
+		session_id unindexed, entry_id unindexed, at unindexed, role unindexed, ordinal unindexed, echo unindexed,
+		offset unindexed, length unindexed,
+		tokenize = 'porter unicode61'
+	);
+	delete from files;`,
 ];
 
 export function openIndex(path: string, readOnly = false): DatabaseSync {
@@ -120,6 +130,11 @@ export function indexedEntry(entry: Record<string, any>): IndexedEntry | undefin
 /** How much of a transcript one read takes. */
 const CHUNK_BYTES = 4 << 20;
 
+/** A session as one FTS token, so a session filter intersects inside the full-text query instead of after it. */
+function scopeToken(sessionId: string): string {
+	return `s${Buffer.from(sessionId).toString("hex")}`;
+}
+
 /**
  * Bring one session's rows up to date with its transcript: append what was written since the last read, or start over
  * when the file was replaced or shrank. Yields between chunks so a long backfill never holds the thread.
@@ -139,8 +154,9 @@ export async function indexTranscript(db: DatabaseSync, sessionId: string, file:
 			messages = 0;
 		}
 		const insert = db.prepare(
-			"insert into entries (words, calls, results, session_id, entry_id, at, role, ordinal, echo) values (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+			"insert into entries (words, calls, results, scope, session_id, entry_id, at, role, ordinal, echo, offset, length) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
 		);
+		const scope = scopeToken(sessionId);
 		const mark = db.prepare(
 			"insert into files (session_id, file, inode, bytes, messages) values (?, ?, ?, ?, ?) on conflict (session_id) do update set file = excluded.file, inode = excluded.inode, bytes = excluded.bytes, messages = excluded.messages",
 		);
@@ -157,16 +173,25 @@ export async function indexTranscript(db: DatabaseSync, sessionId: string, file:
 				position += bytesRead;
 				continue;
 			}
+			const held = carry.reduce((sum, part) => sum + part.length, 0);
 			const complete = Buffer.concat([...carry, read.subarray(0, last)]);
+			// Where `complete` starts in the file, so each line's byte offset can be kept for direct reads.
+			const base = position - held;
 			const consumed = position + last + 1;
 			carry = [read.subarray(last + 1)];
 			db.exec("begin");
 			try {
-				for (const line of complete.toString().split("\n")) {
-					if (!line) continue;
+				for (let start = 0; start < complete.length; ) {
+					const found = complete.indexOf(10, start);
+					const end = found < 0 ? complete.length : found;
+					const offset = base + start;
+					const bytes = end - start;
+					const text = complete.subarray(start, end).toString();
+					start = end + 1;
+					if (!text) continue;
 					let parsed: Record<string, any>;
 					try {
-						parsed = JSON.parse(line);
+						parsed = JSON.parse(text);
 					} catch {
 						continue;
 					}
@@ -178,12 +203,15 @@ export async function indexTranscript(db: DatabaseSync, sessionId: string, file:
 						entry.words,
 						entry.calls,
 						entry.results,
+						scope,
 						sessionId,
 						entry.entryId,
 						entry.at,
 						entry.role,
 						ordinal,
 						entry.echo ? 1 : 0,
+						offset,
+						bytes,
 					);
 				}
 				mark.run(sessionId, file, ino, consumed, messages);
@@ -223,6 +251,9 @@ export interface SearchHit {
 	role: string;
 	/** A message entry's `#N`; null for other records. */
 	ordinal: number | null;
+	/** The entry's line in its transcript, for one direct read of its body. */
+	offset: number;
+	length: number;
 	snippet: string;
 	score: number;
 }
@@ -231,11 +262,13 @@ export interface SearchHit {
  * The query's words as FTS5 phrases, any of which may match; bm25 ranks entries holding more of them, and rarer ones,
  * higher. Quoting keeps punctuation and FTS5 operators in the query literal.
  */
-function ftsQuery(query: string, fields: "words" | "all"): string | undefined {
+function ftsQuery(query: string, fields: "words" | "all", sessions: string[]): string | undefined {
 	const terms = query.match(/[\p{L}\p{N}_]+/gu);
 	if (!terms?.length) return undefined;
-	const all = terms.map((term) => `"${term}"`).join(" OR ");
-	return fields === "words" ? `words : (${all})` : all;
+	const any = terms.map((term) => `"${term}"`).join(" OR ");
+	const text = fields === "words" ? `words : (${any})` : `{words calls results} : (${any})`;
+	if (!sessions.length) return text;
+	return `(${text}) AND scope : (${sessions.map((id) => `"${scopeToken(id)}"`).join(" OR ")})`;
 }
 
 /** Ranked entries matching words of `query`, newest first among equal scores. */
@@ -246,11 +279,15 @@ export function searchIndex(db: DatabaseSync, request: SearchRequest): SearchHit
 	const { where, params } = eligible;
 	const limit = request.limit && request.limit > 0 ? request.limit : 20;
 	const offset = request.offset && request.offset > 0 ? request.offset : 0;
-	const column = fields === "words" ? 0 : -1;
+	// A snippet from each text column; the first that holds a match is shown. Letting FTS5 choose could pick `scope`.
+	const columns = fields === "words" ? [0] : [0, 1, 2];
+	const snippets = columns
+		.map((column) => `snippet(entries, ${column}, '\u00ab', '\u00bb', '\u2026', 24) as snippet${column}`)
+		.join(", ");
 	const rows = db
 		.prepare(
-			`select session_id, entry_id, at, role, ordinal, bm25(entries) as score,
-				snippet(entries, ${column}, '\u00ab', '\u00bb', '\u2026', 24) as snippet
+			// The scope column only selects sessions; it weighs nothing in ranking.
+			`select session_id, entry_id, at, role, ordinal, offset, length, bm25(entries, 1, 1, 1, 0) as score, ${snippets}
 			from entries where ${where} order by echo, score, at desc limit ? offset ?`,
 		)
 		.all(...params, limit, offset) as {
@@ -259,8 +296,12 @@ export function searchIndex(db: DatabaseSync, request: SearchRequest): SearchHit
 		at: number;
 		role: string;
 		ordinal: number | null;
+		offset: number;
+		length: number;
 		score: number;
-		snippet: string;
+		snippet0: string;
+		snippet1?: string;
+		snippet2?: string;
 	}[];
 	return rows.map((row) => ({
 		session: row.session_id,
@@ -268,7 +309,9 @@ export function searchIndex(db: DatabaseSync, request: SearchRequest): SearchHit
 		at: row.at,
 		role: row.role,
 		ordinal: row.ordinal,
-		snippet: row.snippet,
+		offset: row.offset,
+		length: row.length,
+		snippet: [row.snippet0, row.snippet1, row.snippet2].find((text) => text?.includes("\u00ab")) ?? row.snippet0,
 		score: row.score,
 	}));
 }
@@ -284,7 +327,10 @@ export function countIndex(db: DatabaseSync, request: SearchRequest): number {
 
 /** The query and every eligibility rule as one WHERE clause, so filtering happens before ranking limits. */
 function eligibility(request: SearchRequest): { where: string; params: (string | number)[] } | undefined {
-	const match = ftsQuery(request.query, request.fields ?? "all");
+	const sessions = request.sessions?.length
+		? request.sessions
+		: [...new Set((request.spans ?? []).map((span) => span.session))];
+	const match = ftsQuery(request.query, request.fields ?? "all", sessions);
 	if (!match) return undefined;
 	const where: string[] = ["entries match ?"];
 	const params: (string | number)[] = [match];
@@ -330,7 +376,11 @@ export class TranscriptIndexer {
 
 	/** A page of ranked hits, and how many entries match in all. */
 	search(request: SearchRequest): { hits: SearchHit[]; total: number } {
-		this.reader ??= openIndex(this.path, true);
+		if (!this.reader) {
+			this.reader = openIndex(this.path, true);
+			// The worker writes while searches read; wait out its short transactions instead of failing.
+			this.reader.exec("pragma busy_timeout = 5000");
+		}
 		return { hits: searchIndex(this.reader, request), total: countIndex(this.reader, request) };
 	}
 
