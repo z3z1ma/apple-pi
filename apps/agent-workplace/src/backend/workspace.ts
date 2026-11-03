@@ -274,18 +274,14 @@ export function openWorkspace(snapshot: () => WorldSnapshot): WorkspaceApi {
 				if (request.cwd !== undefined) {
 					try {
 						source = directory(request.cwd);
-					} catch {
-						/* Unavailable source context leaves only explicit absolute references resolvable. */
-					}
+					} catch {}
 				}
 				const files: WorkspaceResolvedPath[] = [];
 				for (const candidate of new Set(request.paths)) {
 					try {
 						const file = resolveReference(candidate, source);
 						if (file) files.push(file);
-					} catch {
-						/* Missing, inaccessible or confined candidates remain ordinary text. */
-					}
+					} catch {}
 				}
 				return { files };
 			}),
@@ -302,9 +298,7 @@ export function openWorkspace(snapshot: () => WorldSnapshot): WorkspaceApi {
 				for (const candidate of candidates) {
 					try {
 						roots.add(await gitRoot(directory(candidate)));
-					} catch {
-						/* A retained session directory can be missing or no longer be a repository. Manual paths remain available. */
-					}
+					} catch {}
 				}
 				return { roots: [...roots].sort() };
 			}),

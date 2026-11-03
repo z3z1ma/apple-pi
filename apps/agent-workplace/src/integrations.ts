@@ -183,7 +183,6 @@ export type OutsideWriteIntent =
 	| { kind: "jira-comment"; key: string; body: string }
 	| { kind: "jira-transition"; key: string; transition: string }
 	| { kind: "slack-reply"; channel: string; threadTs: string; text: string }
-	/** Mark a channel (or one thread in it) read up to `ts`: the operator's explicit choice, so it needs no confirmation. */
 	| { kind: "slack-mark-read"; channel: string; ts: string; threadTs?: string };
 
 export interface WriteDescription {

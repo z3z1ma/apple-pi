@@ -13,9 +13,7 @@ export const getActiveLineageEntryIds = (sessionManager: LineageSessionManagerLi
 		if (branch.length > 0) {
 			return new Set(branch.map((e) => e.id).filter((id): id is string => Boolean(id)));
 		}
-	} catch {
-		// fall through to defensive fallback
-	}
+	} catch {}
 
 	try {
 		const all = sessionManager.getEntries?.() ?? [];

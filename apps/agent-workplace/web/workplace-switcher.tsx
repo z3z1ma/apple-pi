@@ -7,7 +7,6 @@ import { PersonAvatar } from "./workplace-people.js";
 
 export type SwitchTarget =
 	| { kind: "view"; view: "desk" | "threads" | "activity" | "later" | "notes" | "canvases" }
-	/** `entry`: a message in the DM to scroll to. */
 	| { kind: "dm"; id: string; entry?: string }
 	| { kind: "channel"; id: string }
 	| { kind: "thread"; id: string; title: string };

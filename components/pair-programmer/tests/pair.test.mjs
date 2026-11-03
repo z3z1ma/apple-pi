@@ -1745,7 +1745,6 @@ test("integration: terminal turn — a lagging-review nit the final turn's revie
 	const h = buildIntegration({
 		onReview: async (_text, { tool, reviewCount }) => {
 			if (reviewCount === 1) await tool.execute("n1", { note: "rename var", severity: "nit" });
-			// review 2 (the final turn's) stays silent → the nit was addressed/superseded
 		},
 	});
 	h.rt.push("turn 1");
@@ -1889,7 +1888,6 @@ test("integration: held blocker is dropped when the reconfirm review recants", a
 	const h = buildIntegration({
 		onReview: async (_text, { tool, reviewCount }) => {
 			if (reviewCount === 1) await tool.execute("a1", { note: "off-by-one", severity: "blocker" });
-			// review 2: agent fixed it → pair stays silent → held note evaporates
 		},
 	});
 	h.rt.push("turn 1");

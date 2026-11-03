@@ -9,6 +9,9 @@ Live reviews, and the Log and Mail tabs, refresh on a two-second tick that is of
 
 Evidence views live in workplace-review-views.tsx, one purpose-built view per part; no part falls back to raw text or JSON in a code block, and the browser test asserts that for every tab. They trust the shared reader shapes from review-read.ts; a reader shape change must update its view. The queue shrinks to its rows (at most QUEUE_SHARE of the panes) so a short queue leaves room for evidence; the page size comes from the panes' height, not the list's, because the list's own height follows its rows.
 
+Queue requests anchor the selected review with `around` and accept the returned page offset, matching the TUI queue's selection behavior.
+Why: live reordering must keep the selected review on the shown page rather than selecting a different row at the old offset.
+
 Mutation retries preserve the original attempt and arguments after uncertainty. Management cannot submit approval; only the captured browser page carries the human verdict. Opening Reviews hides rather than unmounts Monaco and terminals; closing it must retain dirty buffers without writes. The backend/runtime and actual bundled Electron probe test different boundaries than the renderer fixture.
 
 Coupled: apps/agent-workplace/web/workplace-code.tsx, apps/agent-workplace/src/reviews.ts, apps/agent-workplace/src/backend/reviews.ts

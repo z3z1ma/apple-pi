@@ -674,7 +674,6 @@ test("every building's sign board names its place in the theme's words, fitted i
 		const signs = await view<SignView[]>(page, "signs()");
 		expect(signs.map((sign) => sign.door).sort(), theme).toEqual(
 			place.doors
-				// The way to the street is an open-air exit, not a building: it has no sign board.
 				.filter((door) => door.to !== "street")
 				.map((door) => door.name)
 				.sort(),

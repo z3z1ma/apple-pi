@@ -33,21 +33,13 @@ export interface MinimapView {
 
 export type WorldIntent =
 	| { kind: "walk-to"; place: string; at: [x: number, y: number] }
-	/** The Places tab: go to a place at once. */
 	| { kind: "travel"; place: PlaceRef }
-	/** Go to a character: travel to its place and walk up to it. */
 	| { kind: "go-to"; character: string }
-	/** Talk to a character from anywhere, without walking: open its conversation. */
 	| { kind: "talk-to"; character: string }
-	/** Show a character's observed facts (the interface's character card). */
 	| { kind: "examine"; character: string }
-	/** Switch the operator's tmux client to the character's pane (the interface asks the backend). */
 	| { kind: "terminal"; character: string }
-	/** Settings: show or hide the walk grid. */
 	| { kind: "walk-grid"; shown: boolean }
-	/** Settings: wear another theme (`main.tsx` checks its pack, switches, and keeps the choice). */
 	| { kind: "choose-theme"; theme: string }
-	/** Open a tab of the side panel (a place sends the operator to Settings to sign in). */
 	| { kind: "open-tab"; tab: "agents" | "needs-you" | "work" | "mail" | "slack" | "places" | "settings" };
 
 export interface ThemeOption {

@@ -111,7 +111,6 @@ export function WorkplaceReviews({ root, active, world }: { root: string; active
 		if (!active) return;
 		let current = true;
 		void api
-			// The page follows the selected review through live reordering, as the TUI queue does.
 			.queue({
 				...(root ? { cwd: root } : {}),
 				limit,

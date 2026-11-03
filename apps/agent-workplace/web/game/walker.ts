@@ -286,7 +286,6 @@ export class Walker {
 		const vertical = dy < 0 ? "up" : "down";
 		if (side) this.facing = horizontal;
 		else if (upright) this.facing = vertical;
-		// Near 45 degrees: keep facing one of the run's two directions, preferring the one already faced.
 		else if (this.facing !== horizontal && this.facing !== vertical) this.facing = horizontal;
 	}
 

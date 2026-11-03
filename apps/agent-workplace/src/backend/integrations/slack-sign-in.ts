@@ -45,9 +45,7 @@ export function captureSlackSession(window: SignInWindow): Promise<{ token: stri
 				if (typeof token !== "string") return;
 				const [cookie] = await window.webContents.session.cookies.get({ url: SLACK_SIGN_IN_URL, name: "d" });
 				if (cookie?.value) finish({ token, cookie: cookie.value });
-			} catch {
-				// The page is navigating (sign-in redirects); look again on the next tick.
-			}
+			} catch {}
 		};
 		const timer = setInterval(() => void look(), POLL_MS);
 		const limit = setTimeout(() => finish(undefined), SIGN_IN_MS);

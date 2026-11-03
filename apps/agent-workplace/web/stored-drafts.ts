@@ -10,9 +10,7 @@ export class StoredDrafts extends Map<string, string> {
 				const value = key?.startsWith(prefix) ? localStorage.getItem(key) : null;
 				if (key && value) super.set(key.slice(prefix.length), value);
 			}
-		} catch {
-			// Storage refused (a private window): drafts live only in memory, as before.
-		}
+		} catch {}
 	}
 
 	override set(key: string, value: string): this {

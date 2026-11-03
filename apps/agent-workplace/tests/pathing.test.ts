@@ -162,7 +162,7 @@ describe("paths over a walk grid", () => {
 		const hall = fantasy("headquarters");
 		const grid = gridFor(hall);
 		const trips: [Point, Point][] = [
-			[hall.entries.start, hall.doors[1].standAt], // to the gallery archway
+			[hall.entries.start, hall.doors[1].standAt],
 			[hall.entries.square, hall.entries["common-room"]],
 			[hall.entries["common-room"], hall.entries.gallery],
 			[

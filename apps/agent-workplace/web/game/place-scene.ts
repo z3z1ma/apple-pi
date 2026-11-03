@@ -1908,7 +1908,6 @@ export class PlaceScene extends Phaser.Scene {
 		const fidgets = this.fidgets?.targetsAt([x, y]) ?? [];
 		const doors = this.doors.filter(({ rect }) => inside(rect)).map((door) => this.doorTarget(door));
 		const furniture = (this.layout.place.furniture ?? [])
-			// Over someone at the recruiting desk, the coordinator's own Recruit says it once.
 			.filter(({ rect, use }) => inside(rect) && !(use === "recruit" && people.length))
 			.map((piece) => this.furnitureTarget(piece));
 		const banners = this.bannerRects.filter(({ rect }) => inside(rect)).map(({ name }) => this.bannerTarget(name));
