@@ -17,10 +17,12 @@ Tool directives are not comments and stay:
 
 - `biome-ignore`;
 - `@ts-expect-error`, `@ts-ignore`, `@ts-nocheck`;
+- `@vitest-environment`;
 - triple-slash references and shebangs;
 - bundler annotations: `@vite-ignore`, `#__PURE__`, `@__PURE__`, `webpackIgnore`.
 
-Run it with `node lint/no-comments.mjs [paths...]`. With no paths it checks every tracked source file. It joins
+Run it with `node lint/no-comments.mjs [paths...]`. With no paths it checks every tracked source file. It uses the
+harness's detector (`components/repo-rules/src/comments.ts`), so it reports exactly what an edit would be refused for. It joins
 `npm run lint` once the migration of existing comments reaches zero (ledger task `202611022254-mechanize-judgment`).
 
 ## Rules

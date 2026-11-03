@@ -33,6 +33,11 @@ test("in an opted-in repository a new comment is refused, with where its rationa
 		edits: [{ oldText: "export const b = 2;", newText: "export const b = [\n\t{ x: 1 }, // weak match\n];" }],
 	});
 	expect(afterComma).toMatch(/weak match/);
+	const inJsx = await editRefusal(file, "write", {
+		content: "export const V = () => (\n\t<div>\n\t\t{/* jsx note */}\n\t\t<a>http://x</a>\n\t</div>\n);\n",
+	});
+	expect(inJsx).toMatch(/jsx note/);
+	expect(inJsx).not.toMatch(/http/);
 	expect(
 		await editRefusal(file, "edit", { edits: [{ oldText: "export const b = 2;", newText: "export const b = 4;" }] }),
 	).toBeUndefined();

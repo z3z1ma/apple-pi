@@ -37,11 +37,6 @@ function allComments(path: string, text: string): SourceComment[] {
 		for (const child of node.getChildren(source)) visit(child);
 	};
 	visit(source);
-	if (jsx)
-		for (const match of text.matchAll(/\{\s*(\/\*[\s\S]*?\*\/)\s*\}/g)) {
-			const at = (match.index ?? 0) + match[0].indexOf(match[1]!);
-			add(at, at + match[1]!.length);
-		}
 	return found;
 }
 
