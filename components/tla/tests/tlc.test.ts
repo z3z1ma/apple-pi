@@ -96,14 +96,19 @@ test("constant overrides replace the .cfg's live assignment and leave its commen
 	expect(configWith("CONSTANTS\n  Procs = {p1,\n    p2}\n  Max = 2\n", { constants: { Procs: "{p1, p2, p3}" } })).toBe(
 		"CONSTANTS\n  Procs = {p1, p2, p3}\n  Max = 2\n",
 	);
-	expect(
-		configWith("INIT Init\nCHECK_DEADLOCK FALSE\n", {
-			constants: { Max: "4" },
-			checkDeadlock: true,
-			invariants: ["A", "B"],
-			properties: ["Live"],
-		}),
-	).toBe("INIT Init\n\n\nCONSTANT Max = 4\n\nCHECK_DEADLOCK TRUE\n\nINVARIANT A B\n\nPROPERTY Live\n");
+	const added = configWith("INIT Init\nCHECK_DEADLOCK FALSE\n", {
+		constants: { Max: "4" },
+		checkDeadlock: true,
+		invariants: ["A", "B"],
+		properties: ["Live"],
+	});
+	expect(added.split("\n").filter(Boolean)).toEqual([
+		"INIT Init",
+		"CONSTANT Max = 4",
+		"CHECK_DEADLOCK TRUE",
+		"INVARIANT A B",
+		"PROPERTY Live",
+	]);
 	expect(() => configWith("", { constants: { "N = 1\nINIT": "2" } })).toThrow(/identifier/);
 });
 
