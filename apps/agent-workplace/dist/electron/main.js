@@ -12598,6 +12598,7 @@ var CAPTURE_WAIT_MS = 2e4;
 var CAPTURE_DELAY_MS = 1500;
 app.setName("Agent Workplace");
 app.setPath("userData", join(agentDir(), "agent-workplace", "electron-data"));
+app.commandLine.appendSwitch("disable-features", "LocalNetworkAccessChecks");
 protocol.registerSchemesAsPrivileged([{
 	scheme: "app",
 	privileges: {

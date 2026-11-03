@@ -2,7 +2,7 @@ import { type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState }
 
 import type { ExplainChangePage, ExplainPart } from "../../src/page-data";
 import { useConnected } from "../connected";
-import { initialTheme } from "../initial-theme";
+import { initialTheme, useEmbedderTheme } from "../initial-theme";
 import { drawDiagrams } from "../markdown/mermaid";
 import { Icon, Kbd } from "../ui";
 import { Launcher, Sidebar, useTutor } from "./chat";
@@ -57,6 +57,7 @@ function Section({
 
 export function ExplainChange({ page }: { page: ExplainChangePage }) {
 	const [theme, setTheme] = useState<"light" | "dark">(initialTheme);
+	useEmbedderTheme(setTheme);
 	const [answers, setAnswers] = useState<Record<number, number>>({});
 	const [keys, setKeys] = useState(false);
 	const [current, setCurrent] = useState("top");

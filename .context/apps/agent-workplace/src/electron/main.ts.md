@@ -3,6 +3,10 @@
 `app.setPath("userData", ...)` must run before `app.requestSingleInstanceLock()`, and the scheme registration before `app` is ready.
 Why: Electron keeps the single-instance lock in the userData directory; taking it first would lock the default "Electron" directory, so a `/workplace` with another agent directory or the default one would not find the running window.
 
+Chromium's `LocalNetworkAccessChecks` feature is switched off before the app is ready.
+Why: a person's browser page (sign-off, explanation) is served on `127.0.0.1` and shown in an iframe in their DM. Chromium's local-network checks block that frame from the app's origin with `ERR_BLOCKED_BY_LOCAL_NETWORK_ACCESS_CHECKS`; headless Chrome 156 reproduced the block, and the same switch lifts it. The window loads only `app://` and those loopback pages, so the checks protect nothing here.
+Verify: apps/agent-workplace/tests/world-conversation.test.ts
+
 `appDir` assumes this file runs as `dist/electron/main.js` and the preload as `dist/electron/preload.cjs`.
 Why: Electron runs only the bundled output; moving it can break UI, theme and preload paths despite a passing source typecheck. The built-host check must validate that path contract.
 Coupled: apps/agent-workplace/electron.vite.config.ts, apps/agent-workplace/src/app-files.ts

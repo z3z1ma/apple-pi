@@ -3,6 +3,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import type { CodeReviewPage, Verdict } from "../src/page-data";
 import { useConnected } from "./connected";
 import { type Review, ReviewContext } from "./context";
+import { useEmbedderTheme } from "./initial-theme";
 import { buildModel, type Model } from "./model";
 import { ChapterPage, HunkPage, Modal, Overview, Rail, submitReview, TopBar, VERDICT_LABEL } from "./pages";
 import {
@@ -189,6 +190,11 @@ export function CodeReview({ page }: { page: CodeReviewPage }) {
 	useEffect(() => {
 		document.documentElement.dataset.theme = s.theme;
 	}, [s.theme]);
+	useEmbedderTheme((theme) =>
+		update((d) => {
+			d.theme = theme;
+		}),
+	);
 
 	const appliedScroll = useRef(0);
 	useLayoutEffect(() => {

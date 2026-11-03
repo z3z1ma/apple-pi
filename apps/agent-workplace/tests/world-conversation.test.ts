@@ -1,8 +1,12 @@
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type Browser, chromium, type Page } from "playwright-core";
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
+import { buildMarkdownPage, markdownTemplate } from "../../../components/browser-pages/src/markdown-review.js";
+import { openPageSession } from "../../../components/browser-pages/src/page-server.js";
+import { embedPage } from "../../../components/browser-pages/src/saved-page.js";
 import { appFile, contentType } from "../src/app-files.js";
 import type { Character, CharacterFacts, MailThread, TranscriptEntry, WorldSnapshot } from "../src/world.js";
 import { addRecipient, recipients } from "./helpers/select.js";
@@ -16,7 +20,11 @@ const PAGE = 50;
 
 let browser: Browser;
 beforeAll(async () => {
-	browser = await chromium.launch({ executablePath: CHROME, headless: true });
+	browser = await chromium.launch({
+		executablePath: CHROME,
+		headless: true,
+		args: ["--disable-features=LocalNetworkAccessChecks"],
+	});
 });
 afterAll(() => browser?.close());
 
@@ -1433,6 +1441,62 @@ test("a browser-page tool in a DM offers to open its page inline, in place of th
 		await page.close();
 	}
 }, 30000);
+
+test("a real review page open in a DM follows Workplace's light/dark toggle without reloading", async () => {
+	const repo = mkdtempSync(join(tmpdir(), "inline-page-"));
+	mkdirSync(join(repo, "docs"));
+	writeFileSync(join(repo, "docs", "plan.md"), "# Plan\n\nShip the inline page.\n");
+	const token = "inline-theme-token";
+	const { page: data } = await buildMarkdownPage({ path: "docs/plan.md" }, repo, token);
+	const session = await openPageSession(embedPage(await markdownTemplate(data), data), token, () => undefined);
+	const signOff: TranscriptEntry = {
+		kind: "assistant",
+		id: "doc-review",
+		at: at(90),
+		parts: [{ kind: "tool", call: { id: "doc-call", name: "sign_off_document", arg: null, input: "{}" } }],
+		error: null,
+		aborted: false,
+	};
+	const { page, errors } = await openWorld(world(), {
+		"pi-tests": [...SUITE, signOff],
+		ledger: [],
+		asker: [],
+		[HQ]: [],
+	});
+	page.setDefaultTimeout(8000);
+	await page.addInitScript((url) => {
+		(window as any).agentWorkplace.browserPage = async () => ({ tool: "sign_off_document", url });
+	}, session.url);
+	try {
+		await page.getByRole("link", { name: "Workplace", exact: true }).click();
+		await page.getByRole("button", { name: /^pi-tests/ }).click();
+		await log(page).getByRole("button", { name: "Open here" }).click();
+		const appearance = () => page.locator(".wp-app").getAttribute("data-appearance");
+		const start = await appearance();
+		const frame = () => page.frames().find((candidate) => candidate.url().startsWith(session.url))!;
+		await vi.waitFor(
+			async () => expect(await frame()?.evaluate(() => document.documentElement.dataset.theme)).toBe(start),
+			{ timeout: 8000 },
+		);
+		expect(new URL(frame().url()).searchParams.get("theme")).toBe(start);
+		await frame().evaluate(() => {
+			(window as any).loadedOnce = true;
+		});
+		await page.getByRole("button", { name: "Theme: dark mode", exact: true }).click();
+		const next = await appearance();
+		expect(next).not.toBe(start);
+		await vi.waitFor(
+			async () => expect(await frame().evaluate(() => document.documentElement.dataset.theme)).toBe(next),
+			{ timeout: 5000 },
+		);
+		expect(await frame().evaluate(() => (window as any).loadedOnce)).toBe(true);
+		expect(errors).toEqual([]);
+	} finally {
+		await page.close();
+		session.close();
+		rmSync(repo, { recursive: true, force: true });
+	}
+}, 40000);
 
 test("DM tool activity stays in a truncated lower line and the composer keeps a continuous border", async () => {
 	const longArg = `npm run verify -- ${"long_argument/".repeat(200)}`;

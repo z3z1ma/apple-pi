@@ -64,6 +64,7 @@ declare module "electron" {
 	export const app: {
 		setName(name: string): void;
 		setPath(name: "userData", path: string): void;
+		commandLine: { appendSwitch(name: string, value?: string): void };
 		requestSingleInstanceLock(): boolean;
 		whenReady(): Promise<void>;
 		quit(): void;

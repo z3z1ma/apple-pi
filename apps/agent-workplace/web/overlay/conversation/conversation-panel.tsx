@@ -110,11 +110,7 @@ function useInlinePage(person: string) {
 	const openPage = async (callId: string, label: string) => {
 		const live = await window.agentWorkplace.browserPage?.(person, callId);
 		setNote(live ? undefined : { person, text: `That ${label.toLowerCase()} page is closed.` });
-		if (!live) return;
-		const url = new URL(live.url);
-		const appearance = document.querySelector(".wp-app")?.getAttribute("data-appearance");
-		if (appearance === "light" || appearance === "dark") url.searchParams.set("theme", appearance);
-		setOpened({ person, url: url.href, label });
+		if (live) setOpened({ person, url: live.url, label });
 	};
 	return {
 		page: opened?.person === person ? opened : undefined,
@@ -122,6 +118,38 @@ function useInlinePage(person: string) {
 		openPage,
 		closePage: () => setOpened(undefined),
 	};
+}
+
+function appearanceNow(): string | null {
+	return document.querySelector(".wp-app")?.getAttribute("data-appearance") ?? null;
+}
+
+function useAppearance(): string | null {
+	const [appearance, setAppearance] = useState(appearanceNow);
+	useEffect(() => {
+		const app = document.querySelector(".wp-app");
+		if (!app) return;
+		const observer = new MutationObserver(() => setAppearance(appearanceNow()));
+		observer.observe(app, { attributes: true, attributeFilter: ["data-appearance"] });
+		return () => observer.disconnect();
+	}, []);
+	return appearance;
+}
+
+function themed(url: string, appearance: string | null): string {
+	const themedUrl = new URL(url);
+	if (appearance === "light" || appearance === "dark") themedUrl.searchParams.set("theme", appearance);
+	return themedUrl.href;
+}
+
+function PageFrame({ url, label, appearance }: { url: string; label: string; appearance: string | null }) {
+	const [src] = useState(() => themed(url, appearance));
+	const frame = useRef<HTMLIFrameElement>(null);
+	useEffect(() => {
+		if (appearance === "light" || appearance === "dark")
+			frame.current?.contentWindow?.postMessage({ type: "apple-pi:theme", theme: appearance }, new URL(url).origin);
+	}, [appearance, url]);
+	return <iframe ref={frame} title={`${label} page`} src={src} />;
 }
 
 function InlinePage({
@@ -133,6 +161,7 @@ function InlinePage({
 	note?: string;
 	onClose(): void;
 }) {
+	const appearance = useAppearance();
 	return (
 		<>
 			{note && (
@@ -147,11 +176,11 @@ function InlinePage({
 							Back to conversation
 						</button>
 						<strong>{page.label}</strong>
-						<button type="button" onClick={() => void window.agentWorkplace.openLink?.(page.url)}>
+						<button type="button" onClick={() => void window.agentWorkplace.openLink?.(themed(page.url, appearance))}>
 							Open in browser
 						</button>
 					</header>
-					<iframe title={`${page.label} page`} src={page.url} />
+					<PageFrame key={page.url} url={page.url} label={page.label} appearance={appearance} />
 				</section>
 			)}
 		</>

@@ -2,6 +2,7 @@ import { type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useSta
 
 import type { MarkdownBlock, TextSpan, Verdict } from "../../src/page-data";
 import { useConnected } from "../connected";
+import { useEmbedderTheme } from "../initial-theme";
 import { Icon, Kbd } from "../ui";
 import { type DocReview, useDocReview } from "./context";
 import { annotationsAt, applyMarks, readSelection } from "./marks";
@@ -118,6 +119,11 @@ export function useReader(setup: ReaderSetup) {
 	useEffect(() => {
 		document.documentElement.dataset.theme = s.theme;
 	}, [s.theme]);
+	useEmbedderTheme((theme) =>
+		update((d) => {
+			d.theme = theme;
+		}),
+	);
 
 	useLayoutEffect(() => drawMarks(s, file));
 	useEffect(() => {
