@@ -3,22 +3,18 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, sep } from "node:path";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 
-/** Context files mirror the project tree: `app/main.py` is governed by `.context/app/main.py.md`. */
 export const CONTEXT_DIRECTORY = ".context";
 export const CONTEXT_FILE_EXTENSION = ".md";
 
-/** Tool results that can carry a marker; anything else that quotes one does not count as delivery. */
 const DELIVERING_TOOLS = new Set(["read", "edit", "write"]);
 
 type ContextFileStatus = "no_context_file" | "live" | "missing" | "malformed";
 
 export interface ResolvedContext {
 	status: ContextFileStatus;
-	/** Whether the resolved path was the context file rather than the source file. */
 	isContextFile: boolean;
 	sourcePath: string;
 	contextFilePath: string;
-	/** Source path as markers and messages show it: relative to the working directory when inside it. */
 	displayPath: string;
 	contextFileDisplayPath: string;
 	content?: string;
@@ -26,7 +22,6 @@ export interface ResolvedContext {
 	diagnostic?: string;
 }
 
-/** The nearest Git worktree root holding `cwd`, or `cwd` outside Git. */
 export function projectRoot(cwd: string): string {
 	for (let current = cwd; ; current = dirname(current)) {
 		if (existsSync(join(current, ".git"))) return current;
@@ -43,7 +38,6 @@ function displayPath(path: string, cwd: string): string {
 	return inside(cwd, path)?.split(sep).join("/") ?? path;
 }
 
-/** The source and context file paths for `path`, which may be either; undefined outside the project or for other files under `.context/`. */
 function contextFilePair(path: string, root: string): { sourcePath: string; contextFilePath: string } | undefined {
 	const local = inside(root, path);
 	if (!local) return undefined;
@@ -88,7 +82,6 @@ function loadContextFile(contextFilePath: string): { content?: string; diagnosti
 	return content ? { content } : { diagnostic: "it is empty" };
 }
 
-/** The context file that governs `path` (a source file or its context file) and whether its current marker is in `messages`. */
 export function resolveContext(
 	path: string,
 	cwd: string,

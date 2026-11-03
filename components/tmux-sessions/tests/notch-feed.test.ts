@@ -15,21 +15,18 @@ const scratch = mkdtempSync(join(tmpdir(), "pi-notch-feed-"));
 const binary = join(scratch, "pi-notch");
 afterAll(() => rmSync(scratch, { recursive: true, force: true }));
 
-// Built as notch.sh builds it; never launched as a panel, only with --feed-once.
 beforeAll(() => {
 	if (!hasSwiftc) return;
 	const result = spawnSync("swiftc", ["-O", source, "-o", binary], { encoding: "utf8" });
 	expect(result.status, result.stderr).toBe(0);
 }, 300_000);
 
-/** A state database with the live sessions below, plus sessions the notch must leave out. */
 function fixture(agentDir: string) {
 	mkdirSync(join(agentDir, "state"), { recursive: true });
 	const bundle = join(agentDir, "ledger", "202601010000-fix");
 	mkdirSync(bundle, { recursive: true });
 	writeFileSync(join(bundle, "task.md"), "Intro\n# Fix the parser\n\nStatus: ready\n");
 	const db = new DatabaseSync(join(agentDir, "state", "apple-pi.db"));
-	// As the runtime keeps it; closing removes the -shm file, as a stopped runtime leaves it.
 	db.exec("pragma journal_mode = wal");
 	migrate(db);
 	const session = db.prepare(
@@ -53,12 +50,10 @@ function fixture(agentDir: string) {
 	);
 	session.run("work", "root", "/work/gamma", null, "running_tool", 1, 5000, null, null, "read", "/x.ts", null);
 	incarnation.run("work", 1, "alive", null, "%3");
-	// Settled unseen, then started another run without the operator: working, with its result still unseen.
 	session.run("again", "root", "/work/eta", null, "thinking", 1, 6000, null, 2000, null, null, null);
 	incarnation.run("again", 1, "alive", null, "%7");
 	session.run("quiet", "root", "/work/delta", "Idle one", "idle", 1, 7000, null, null, null, null, null);
 	incarnation.run("quiet", 1, "alive", null, "%9");
-	// Left out: a subagent, an ended session, a session outside tmux, and one whose current generation has not started.
 	session.run("child", "child", "/work/alpha", null, "thinking", 1, 1000, null, null, null, null, null);
 	incarnation.run("child", 1, "alive", null, "%1");
 	session.run("gone", "root", "/work/alpha", null, "idle", 1, 1000, null, null, null, null, null);

@@ -6,14 +6,13 @@ import { Type } from "typebox";
 import { abortable } from "../../shared/src/abortable.js";
 import { forkCwd, forkMessages } from "../../shared/src/fork-context.js";
 import { resolveToolPath } from "../../shared/src/tool-path.js";
-import { type ContextLintResult, lintContext } from "./lint.js";
 import { contextBlock, gateRefusal, malformedNotice, resolveContext } from "./context-file.js";
+import { type ContextLintResult, lintContext } from "./lint.js";
 
 export const CONTEXT_LINT_TOOL_NAME = "context_lint";
 
 const MUTATION_TOOLS = new Set(["edit", "write"]);
 
-/** What the model sees now: a fork's own conversation, or the session's compaction-aware branch. */
 function effectiveMessages(ctx: ExtensionContext): readonly AgentMessage[] {
 	return forkMessages(ctx.sessionManager.getSessionId()) ?? ctx.sessionManager.buildSessionProjection().messages;
 }
@@ -70,11 +69,6 @@ function createContextLintTool() {
 	});
 }
 
-/**
- * Deliver each source file's context file on a top-level read and block a top-level edit or
- * write until the context file's current marker is in the model's context. Calls a tool such as
- * `pi_exec` makes carry `parentToolCallId`; they get raw reads and no gate.
- */
 export function installCodeContext(pi: ExtensionAPI): void {
 	pi.on("tool_call", (event, ctx) => {
 		if (event.parentToolCallId || !MUTATION_TOOLS.has(event.toolName)) return;
@@ -95,7 +89,6 @@ export function installCodeContext(pi: ExtensionAPI): void {
 		let text: string | undefined;
 		if (context.status === "malformed" && reading) text = malformedNotice(context);
 		else if (context.status === "missing") {
-			// A whole read of the context file already shows its content, and a mutation of it was just made.
 			const wholeContextFileRead =
 				context.isContextFile && event.input.offset === undefined && event.input.limit === undefined;
 			text = reading && !wholeContextFileRead ? contextBlock(context) : context.marker;

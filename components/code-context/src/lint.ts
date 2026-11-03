@@ -2,7 +2,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 
 import { wikiPageExists } from "../../wiki/src/graph.js";
-import { CONTEXT_DIRECTORY, projectRoot, CONTEXT_FILE_EXTENSION } from "./context-file.js";
+import { CONTEXT_DIRECTORY, CONTEXT_FILE_EXTENSION, projectRoot } from "./context-file.js";
 
 export type ContextFindingKind =
 	| "orphaned-context-file"
@@ -15,7 +15,6 @@ export type ContextFindingKind =
 
 export interface ContextFinding {
 	kind: ContextFindingKind;
-	/** Project-relative context file path, under `.context/`. */
 	path: string;
 	line?: number;
 	message: string;
@@ -36,7 +35,6 @@ function escapeRegExp(value: string): string {
 	return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-/** Project-relative paths of the Markdown files under `.context/`. */
 function contextFilePaths(root: string): string[] {
 	const directory = join(root, CONTEXT_DIRECTORY);
 	if (!existsSync(directory)) return [];
@@ -49,7 +47,6 @@ function contextFilePaths(root: string): string[] {
 interface LintedContextFile {
 	path: string;
 	sourcePath: string;
-	/** The source text, or undefined when the source file is gone. */
 	source: string | undefined;
 	seen: Set<string>;
 }
@@ -128,7 +125,6 @@ function lintContextFile(root: string, path: string, isWikiPage: (target: string
 	return findings;
 }
 
-/** Check every context file of the project holding `cwd` for structure and references that no longer hold. */
 export async function lintContext(cwd: string, signal?: AbortSignal): Promise<ContextLintResult> {
 	const root = projectRoot(cwd);
 	const paths = contextFilePaths(root);

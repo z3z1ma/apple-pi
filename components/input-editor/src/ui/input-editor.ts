@@ -50,7 +50,6 @@ export function sanitizeStatusText(text: string): string {
 	return cleanOneLine(text);
 }
 
-/** ANSI-aware truncation used for every segment and card row. */
 export function fitToWidth(text: string, width: number, omission = "…"): string {
 	if (width <= 0) return "";
 	if (visibleWidth(text) <= width) return text;
@@ -243,10 +242,6 @@ function editorRail(theme: Theme, isShellMode = false): string {
 	return `${theme.fg(color, RAIL_GLYPH)} `;
 }
 
-/**
- * Render the information zones around native editor content. `editorLines`
- * contains only the prompt rows; autocomplete is appended after this function returns.
- */
 export function renderInputCard(
 	snapshot: FooterSnapshot,
 	theme: Theme,
@@ -265,27 +260,22 @@ export function renderInputCard(
 
 	const rows: string[] = [];
 
-	// Show top border only when there is scrolled-off content above the viewport.
 	if (viewport?.above) {
 		rows.push(fitToWidth(theme.fg("dim", renderEditorBorder(width, "above", viewport.above)), width));
 	}
 
-	// Top padding line
 	rows.push(`${rail}${" ".repeat(innerWidth)}`);
 
-	// Prompt lines
 	for (const line of prompt) {
 		rows.push(`${rail}${fillLine(line, innerWidth)}`);
 	}
 
-	// Model metadata line with breathing gap
 	const metadata = renderMetadataRow(snapshot, theme, innerWidth, workingStatus);
 	if (metadata) {
 		rows.push(`${rail}${" ".repeat(innerWidth)}`);
 		rows.push(`${rail}${fillLine(metadata, innerWidth)}`);
 	}
 
-	// Show bottom border only when there is scrolled-off content below the viewport.
 	if (viewport?.below) {
 		rows.push(fitToWidth(theme.fg("dim", renderEditorBorder(width, "below", viewport.below)), width));
 	}
@@ -370,7 +360,6 @@ export function collectInputCardSnapshot(
 	};
 }
 
-/** Custom editor that preserves Pi's complete native editor behavior. */
 export class InputCardEditor extends PiCustomEditor {
 	#disposed = false;
 	#unsubscribeBranch: (() => void) | undefined;

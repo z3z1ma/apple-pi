@@ -23,7 +23,6 @@ const hasSwiftc = onMac && spawnSync("/bin/sh", ["-c", "command -v swiftc"]).sta
 const scratch = mkdtempSync(join(tmpdir(), "pi-notch-test-"));
 afterAll(() => rmSync(scratch, { recursive: true, force: true }));
 
-// The panel is compiled on users' machines at first start, so a shell that no longer compiles must fail here first.
 test.skipIf(!hasSwiftc)(
 	"the notch shell type-checks",
 	() => {
@@ -33,7 +32,6 @@ test.skipIf(!hasSwiftc)(
 	120_000,
 );
 
-/** A PATH holding only the tools the launcher needs, so the real `swiftc` (also in /usr/bin on macOS) is absent. */
 function toolsPath(): string {
 	const tools = join(scratch, "tools");
 	mkdirSync(tools, { recursive: true });
@@ -44,7 +42,6 @@ function toolsPath(): string {
 	return tools;
 }
 
-/** A fake `swiftc` that counts its calls and writes, as the binary, a stub that records the arguments it was launched with. */
 function fakeSwiftc(): string {
 	const bin = join(scratch, "fake-swiftc");
 	mkdirSync(bin, { recursive: true });
@@ -79,7 +76,6 @@ test.skipIf(!onMac)(
 			PI_CODING_AGENT_DIR: piHome,
 			CALLS: calls,
 			LAUNCHED: launched,
-			// Pi runs inside a tmux server; the panel serves every server, so it must not inherit that one.
 			TMUX: "/tmp/tmux-test/named,1,0",
 			TMUX_PANE: "%1",
 		};

@@ -88,13 +88,9 @@ describe("input editor rendering", () => {
 		const lines = renderInputCard(completeSnapshot, theme, 120, ["hello world"]);
 		const plain = lines.map(stripTerminalSequences);
 
-		// 0: top breathing line
 		expect(plain[0]).toBe(`│ ${" ".repeat(118)}`);
-		// 1: prompt line
 		expect(plain[1]).toBe(`│ hello world${" ".repeat(107)}`);
-		// 2: breathing line before metadata
 		expect(plain[2]).toBe(`│ ${" ".repeat(118)}`);
-		// 3: metadata line with right-justified status
 		expect(plain[3]).toMatch(/^│ GPT Test OpenAI high/);
 		expect(plain[3].trimEnd().endsWith("pair · mcp:3 · hit:80% · ctx:33%")).toBe(true);
 		expect(lines).toHaveLength(4);

@@ -79,12 +79,9 @@ function restoreBuiltInSurfaces(ctx: ExtensionContext): void {
 	}
 	try {
 		ctx.ui.setFooter(undefined);
-	} catch {
-		// Pi provides no additional recovery path.
-	}
+	} catch {}
 }
 
-/** Install the TUI-only input editor through Pi's public editor and footer APIs. */
 export function installForTui(ctx: ExtensionContext, cacheHitTracker?: CacheHitRateTracker): void {
 	if (ctx.mode !== "tui") return;
 	cacheHitTracker ??= cacheHitTrackerFromHistory(ctx);
@@ -144,7 +141,6 @@ export function installForTui(ctx: ExtensionContext, cacheHitTracker?: CacheHitR
 	}
 }
 
-/** Register the TUI-only Apple Pi input editor without changing RPC UI state. */
 export default function installInputEditor(pi: ExtensionAPI): void {
 	let cacheHitTracker: CacheHitRateTracker | undefined;
 

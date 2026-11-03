@@ -1,13 +1,3 @@
-/**
- * tmux glue for root interactive Pi sessions: load the sidebar's tmux plugin once per tmux server, ring the
- * pane's bell when a run settles, and start the notch panel on macOS. What each session is doing lives in the
- * session-state model, which the sidebar, the dashboard, and the notch read.
- *
- * Optional environment variables:
- * - `PI_TMUX_DISABLED=1`       turn this extension off.
- * - `PI_TMUX_SESSION_BELL=off` do not ring the pane bell on settle.
- */
-
 import { appendFile, stat } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
@@ -20,7 +10,6 @@ const NOTCH = fileURLToPath(new URL("../scripts/notch.sh", import.meta.url));
 const isDisabled = () => /^(?:1|true|yes|on)$/iu.test(process.env.PI_TMUX_DISABLED || "");
 const bellDisabled = () => /^(?:0|false|no|off)$/iu.test(process.env.PI_TMUX_SESSION_BELL || "");
 
-/** The tty of the pane this Pi runs in, or nothing outside tmux. */
 async function paneTty(pi: ExtensionAPI): Promise<string | undefined> {
 	const pane = process.env.TMUX_PANE;
 	if (!pane) return undefined;
@@ -28,10 +17,6 @@ async function paneTty(pi: ExtensionAPI): Promise<string | undefined> {
 	return result.code === 0 ? result.stdout.trim() || undefined : undefined;
 }
 
-/**
- * Load the tmux plugin unless this server already loaded this exact file. The stamp holds the path and
- * modification time, so an updated package reloads its bindings and hooks on the next Pi start.
- */
 async function ensurePlugin(pi: ExtensionAPI): Promise<void> {
 	const stamp = `${PLUGIN}:${(await stat(PLUGIN)).mtimeMs}`;
 	const loaded = await pi.exec("tmux", ["show-option", "-gqv", "@pi_sessions_plugin"], { timeout: 2_000 });
@@ -52,11 +37,9 @@ export default function piTmuxSessions(pi: ExtensionAPI): void {
 			tty = paneTty(pi).catch(() => undefined);
 			ensurePlugin(pi).catch(() => {});
 		}
-		// Every new root session, so `/new` after a crash or a package update brings the right panel back.
 		if (process.platform === "darwin") pi.exec(NOTCH, ["start"]).catch(() => {});
 	});
 
-	// Writing BEL to the pane's own pty makes tmux count a bell for that pane, which marks its window.
 	pi.on("agent_settled", async (_event, ctx) => {
 		if (process.env[PROGRAM_ID_ENV] || !ctx.isIdle() || bellDisabled() || !tty) return;
 		const path = await tty;

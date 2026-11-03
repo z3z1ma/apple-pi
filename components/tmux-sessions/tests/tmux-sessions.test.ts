@@ -11,7 +11,6 @@ async function flushUntil(predicate: () => boolean): Promise<void> {
 	await vi.waitFor(() => expect(predicate()).toBe(true));
 }
 
-/** A fake Pi in a tmux pane whose tty is a temporary file; records every exec. */
 function startPi(
 	options: { platform?: NodeJS.Platform; server?: Map<string, string>; notch?: () => Promise<unknown> } = {},
 ) {
