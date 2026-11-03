@@ -178,7 +178,6 @@ export type SourceAddressedSerialization = {
 };
 
 export type SourceAddressedSerializationOptions = {
-	/** Maximum estimated tokens in the final source-addressed text. */
 	maxTokens?: number;
 };
 
@@ -202,12 +201,6 @@ function isSourceRenderableEntry(entry: RenderableEntry): boolean {
 	return entry.type === "message" || entry.type === "custom_message" || entry.type === "branch_summary";
 }
 
-/**
- * Serialize complete source entries up to the token budget. If the first entry
- * alone exceeds the budget, include a clearly marked head/tail excerpt so one
- * pathological tool result cannot permanently block observation coverage.
- * The original ledger entry is never modified and remains recallable by id.
- */
 export function serializeSourceAddressedBranchEntries(
 	entries: RenderableEntry[],
 	options: SourceAddressedSerializationOptions = {},

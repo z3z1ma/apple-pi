@@ -14,7 +14,6 @@ const DISTILL_INSTRUCTION = `Distill the open learnings of this session. Decide 
 
 Read each destination before you edit it and merge with what is there. Keep \`.pi/LEARNINGS.md\` short: merge duplicates and remove lines that no longer hold. Write only non-sensitive synthesis: leave out credentials and private transcript text. Changes to AGENTS.md, docs, skills, code, or files outside the project belong to \`/promote\`, which the user runs.`;
 
-/** The distill instruction with every open learning listed, since the caller may not have seen all of them. */
 export function distillPrompt(learnings: readonly Reflection[]): string {
 	return `${DISTILL_INSTRUCTION}\n\nOpen learnings:\n${learnings.map(reflectionToSummaryLine).join("\n")}`;
 }

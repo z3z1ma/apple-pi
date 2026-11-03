@@ -3,7 +3,6 @@ export const NOTEBOOK_REFLECTIONS_RECORDED = "notebook.reflections.recorded";
 export const NOTEBOOK_OBSERVATIONS_DROPPED = "notebook.observations.dropped";
 export const NOTEBOOK_REFLECTIONS_RETIRED = "notebook.reflections.retired";
 export const NOTEBOOK_FOLDED = "notebook.folded";
-/** One atomic record for a completed pair programmer maintenance review. */
 export const NOTEBOOK_MAINTENANCE = "notebook.maintenance";
 
 export const RELEVANCE_VALUES = ["low", "medium", "high", "critical"] as const;

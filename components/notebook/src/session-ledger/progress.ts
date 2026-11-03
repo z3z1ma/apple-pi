@@ -44,8 +44,6 @@ function isValidCoverageEntry(
 ): entry is Entry & { data: { coversUpToId: string } } {
 	if (entry.type !== "custom") return false;
 	if (!isObject(entry.data) || typeof entry.data.coversUpToId !== "string") return false;
-	// A maintenance envelope is the canonical coverage marker for every
-	// maintenance dimension, including intentionally empty reviews.
 	if (entry.customType === NOTEBOOK_MAINTENANCE) return isNotebookMaintenanceEntry(entry);
 	if (entry.customType !== customType) return false;
 
@@ -142,12 +140,6 @@ export function findLastCompactionIndex(entries: Entry[]): number {
 	return -1;
 }
 
-// ==== Real (provider-reported) token accounting ====
-//
-// These helpers measure context growth from provider-reported usage for the
-// observation and reflection coverage clocks. Automatic compaction keeps its
-// separate raw source-entry clock because its setting counts ledger entries.
-
 type UsageLike = {
 	totalTokens?: number;
 	input?: number;
@@ -179,16 +171,6 @@ function validAssistantContextTokens(entry: Entry): number | undefined {
 	return contextTokensFromUsage(msg.usage);
 }
 
-/**
- * Real context tokens right after a compaction anchor.
- *
- * Only usage from an assistant that responded AFTER the compaction is a valid
- * post-compaction baseline: pi's own docs state the last assistant usage
- * before/at a compaction reflects the PRE-compaction context size. The usage
- * carried on the compaction entry itself is the summary-generation call's
- * usage (pre-compaction scale, a different LLM call), so it is deliberately
- * NOT used as a baseline.
- */
 export function realContextTokensAfterCompaction(entries: Entry[], compactionIdx: number): number | undefined {
 	for (let i = compactionIdx + 1; i < entries.length; i++) {
 		const t = validAssistantContextTokens(entries[i]);
@@ -197,13 +179,6 @@ export function realContextTokensAfterCompaction(entries: Entry[], compactionIdx
 	return undefined;
 }
 
-/**
- * Real context tokens at the time observation coverage ended: last valid
- * assistant usage at/before the covered entry. Returns undefined when no valid
- * usage exists (e.g. an error/abort storm) — callers must fall back to the
- * raw estimate rather than measuring from zero, which would otherwise read the
- * full context as "growth" and re-fire stages every turn.
- */
 export function realContextTokensAtCoverage(entries: Entry[], coverageIdx: number): number | undefined {
 	for (let i = coverageIdx; i >= 0; i--) {
 		const t = validAssistantContextTokens(entries[i]);
@@ -212,17 +187,6 @@ export function realContextTokensAtCoverage(entries: Entry[], coverageIdx: numbe
 	return undefined;
 }
 
-/**
- * Real context growth since the most recent anchor (a compaction, or the given
- * coverage marker), measured from provider-reported usage.
- *
- * Returns undefined when the baseline cannot be measured reliably — no usage
- * at/after the anchor, or the current context is SMALLER than the baseline
- * (accounting basis changed, e.g. a mid-session model/provider switch that
- * counts usage differently). Callers must fall back to the raw estimate in
- * that case; clamping a stale baseline to 0 would starve the stage forever,
- * and measuring from zero would over-fire it.
- */
 export function realTokensSinceCoverageIndex(
 	entries: Entry[],
 	coverageIdx: number,

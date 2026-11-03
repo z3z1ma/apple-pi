@@ -74,13 +74,9 @@ export function loadConfig(
 	projectTrustedOrEnv: boolean | NodeJS.ProcessEnv = false,
 	env: NodeJS.ProcessEnv = process.env,
 ): Config {
-	// Keep the former `(cwd, env)` call shape for consumers while defaulting it
-	// to untrusted; hooks pass the explicit trust bit.
 	const projectTrusted = typeof projectTrustedOrEnv === "boolean" ? projectTrustedOrEnv : false;
 	if (typeof projectTrustedOrEnv !== "boolean") env = projectTrustedOrEnv;
 	const globalConfig = readNamespacedConfig(join(getAgentDir(), "settings.json"));
-	// Project settings are executable-project authority and must never affect an
-	// untrusted workspace. Global/user settings and explicit environment remain safe.
 	const projectConfig = projectTrusted ? readNamespacedConfig(join(cwd, ".pi", "settings.json")) : {};
 	return {
 		...DEFAULTS,

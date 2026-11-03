@@ -8,7 +8,6 @@ import { openLearnings } from "./open-learnings.js";
 export const LEARNING_REFLECTION_MESSAGE_TYPE = "notebook.learning-reflection";
 export const LEARNING_DISTILLATION_MESSAGE_TYPE = "notebook.learning-distillation";
 
-/** New tokens between automatic reflections; chosen by the user, to be tuned from real use. */
 export const LEARNING_REFLECTION_SPACING_TOKENS = 500_000;
 
 const QUESTIONS =
@@ -23,7 +22,6 @@ export function learningReflectionPrompt(evidence: readonly string[]): string {
 	return withEvidence(`${QUESTIONS} If nothing is worth keeping, say so in one line.`, evidence);
 }
 
-/** The learning questions and evidence, for a caller that supplies its own closing instruction. */
 export function learningQuestions(evidence: readonly string[]): string {
 	return withEvidence(QUESTIONS, evidence);
 }
@@ -33,7 +31,6 @@ function describeCall(toolName: string, input: Record<string, unknown>): string 
 	return typeof target === "string" ? `${toolName}: \`${target.split("\n")[0]}\`` : toolName;
 }
 
-/** A failure the agent predicted teaches nothing; a success the bash tool marks as a surprise does. */
 function describeEvidence(event: ToolResultEvent): string | undefined {
 	if (event.isError) return event.input.expect === "failure" ? undefined : describeCall(event.toolName, event.input);
 	const details = event.details as { surprise?: unknown } | undefined;
@@ -42,10 +39,6 @@ function describeEvidence(event: ToolResultEvent): string | undefined {
 		: undefined;
 }
 
-/**
- * Failed or surprising tool calls, deduplicated in first-seen order. Tool calls made inside a
- * forked continuation are not the agent's own. The caller empties it when it reflects.
- */
 export function trackLearningEvidence(pi: ExtensionAPI): string[] {
 	const evidence: string[] = [];
 	pi.on("tool_result", (event, ctx) => {
@@ -56,7 +49,6 @@ export function trackLearningEvidence(pi: ExtensionAPI): string[] {
 	return evidence;
 }
 
-/** Reflection and distillation forks run one at a time, so a distill sees what a reflection captured. */
 function forkLane(pi: ExtensionAPI): (start: () => Promise<void>) => void {
 	let lane = Promise.resolve();
 	let generation = 0;
@@ -72,13 +64,6 @@ function forkLane(pi: ExtensionAPI): (start: () => Promise<void>) => void {
 	};
 }
 
-/**
- * Capture: once enough new tokens have passed, reflect in a headless fork after a
- * completed run, with the failed or surprising tool calls of that stretch as evidence.
- * Distill: right after each compaction, while the context has room, a headless fork
- * moves durable open learnings to project files and retires stale ones.
- * `/reflect` and `/distill` ask the main agent in-band at any time.
- */
 export function registerLearningCycle(pi: ExtensionAPI): void {
 	const reflect = registerForkedContinuation(pi, LEARNING_REFLECTION_MESSAGE_TYPE, "Reflection");
 	const distill = registerForkedContinuation(pi, LEARNING_DISTILLATION_MESSAGE_TYPE, "Distill");

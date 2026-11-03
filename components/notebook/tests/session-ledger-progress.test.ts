@@ -71,7 +71,7 @@ describe("notebook ledger progress helpers", () => {
 			branchSummary("sum-1", "cccccccccccc"),
 		];
 
-		expect(rawTokensAfterIndex(entries, 0)).toBe(5); // raw-2: 2 + sum-1: 3
+		expect(rawTokensAfterIndex(entries, 0)).toBe(5);
 		expect(rawTokensAfterIndex(entries, 1)).toBe(5);
 		expect(rawTokensAfterIndex(entries, 2)).toBe(3);
 	});
@@ -96,9 +96,9 @@ describe("notebook ledger progress helpers", () => {
 			textCustomMessage("raw-4", "dddddddddddddddd"),
 		];
 
-		expect(rawTokensSinceObservationCoverage(entries)).toBe(9); // raw-2 + raw-3 + raw-4
-		expect(rawTokensSinceReflectionCoverage(entries)).toBe(7); // raw-3 + raw-4
-		expect(rawTokensSinceDropCoverage(entries)).toBe(7); // covers ledger entry notebook-eeeeeeeeeeee, raw after it
+		expect(rawTokensSinceObservationCoverage(entries)).toBe(9);
+		expect(rawTokensSinceReflectionCoverage(entries)).toBe(7);
+		expect(rawTokensSinceDropCoverage(entries)).toBe(7);
 	});
 
 	it("advances the reflection clock from later retirements", () => {

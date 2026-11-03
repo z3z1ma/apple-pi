@@ -116,8 +116,6 @@ describe("source-addressed serialization budget", () => {
 		expect(result.text).toContain("original source remains in the session ledger");
 		expect(result.text).not.toContain("raw-next");
 
-		// Budgeting changes only the pair programmer notebook projection. Recall still renders
-		// the original, unmodified ledger entry in full.
 		const recalled = renderRecallSourceEntry(hugeEntry);
 		expect(recalled).toContain(source);
 		expect(recalled?.length).toBeGreaterThan(result.text.length);

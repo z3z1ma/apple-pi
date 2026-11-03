@@ -1,6 +1,5 @@
 import { type Config, DEFAULTS, loadConfig } from "./config.js";
 
-/** Root-owned deterministic notebook state. The pair programmer owns the model work. */
 export class Runtime {
 	config: Config = { ...DEFAULTS };
 	configLoaded = false;

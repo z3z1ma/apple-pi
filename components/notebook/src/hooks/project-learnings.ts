@@ -8,10 +8,6 @@ import { setSystemPromptSection } from "../../../shared/src/system-prompt-sectio
 export const PROJECT_LEARNINGS_PATH = ".pi/LEARNINGS.md";
 export const PROJECT_LEARNINGS_TAG = "project-learnings";
 
-/**
- * Adds `.pi/LEARNINGS.md` to the system prompt at each run. Pi appends a changed
- * section as a system message, so the cached prefix stays intact.
- */
 export function registerProjectLearnings(pi: ExtensionAPI): void {
 	pi.on("before_agent_start", (event, ctx) => {
 		const path = join(ctx.cwd, PROJECT_LEARNINGS_PATH);

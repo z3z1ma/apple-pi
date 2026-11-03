@@ -17,11 +17,6 @@ export function buildNotebookPacket(
 	};
 }
 
-/**
- * Land current conclusions once after each compaction as a persisted message.
- * It then stays byte-identical in history, so provider prefix caches keep
- * matching. Rebuilding or moving it per request re-sends the whole prefix.
- */
 export function registerNotebookCompactionPacket(pi: ExtensionAPI): void {
 	pi.on("session_compact", (_event, ctx) => {
 		const packet = buildNotebookPacket((ctx.sessionManager?.getBranch?.() ?? []) as Entry[]);

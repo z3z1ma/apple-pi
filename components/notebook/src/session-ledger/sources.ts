@@ -5,7 +5,6 @@ export function childSourceId(sessionId: string, entryId: string): string {
 	return `child:${sessionId}:${entryId}`;
 }
 
-/** Archived child sources are recallable without becoming primary context or coverage. */
 export function notebookSourceEntries(entries: Entry[]): Entry[] {
 	return entries.flatMap((entry) => {
 		if (isSourceEntry(entry)) return [entry];

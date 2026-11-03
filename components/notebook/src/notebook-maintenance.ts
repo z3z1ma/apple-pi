@@ -270,7 +270,6 @@ export function commitNotebookUpdate(
 	return true;
 }
 
-/** Private pairing capability. Calls stage data only; the root host commits it after a successful pair programmer turn. */
 export class UpdateNotebookTool {
 	readonly name = UPDATE_NOTEBOOK_TOOL_NAME;
 	readonly label = "Update pair programmer notebook";
