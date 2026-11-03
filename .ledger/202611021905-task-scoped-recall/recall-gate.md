@@ -1,0 +1,45 @@
+# Indexed recall decision gate
+
+Status: protocol frozen before candidate runs; task-scoped questions being authored independently.
+Owner: Kofi Bhattacharya. Decision owner: Tadhg Marinescu/operator.
+
+## Decision and controls
+
+Replace whole-transcript personal discovery with a persistent index only if it preserves measured recall quality and removes the measured query cost. This is an infrastructure non-inferiority decision, not a claim of better salience. Tadhg confirmed this distinction in task-thread message 8235. Later salience changes require improvement, separately authorized.
+
+Keep the original six and previous held-out six questions, historical cutoffs, original query strings, lineage selection, issuer exclusion, top-five limit and relevance criteria unchanged. Original frozen gold SHA256: `dd8ad3e1ec212bce7de4c3aecf3b00b005805ffa0e47931d15a22290ae75e882`. Previous held-out SHA256: `005b8fd5a899ff05eeec5a07f3e048329e886fd93d530f183cc1b221e9a3d557`.
+
+The previous held-out set is now a regression set, not fresh confirmation evidence. Ciaran independently authors six new task-scoped questions and complete bounded-episode labels before any candidate run. He selects actual historical work/asks, identifies task/person/prefix membership, excludes prior episodes and copied ancestry, and records the limits of manually reconstructed task membership. Its artifact/hash will be frozen before execution. A task focus interval means written while focused, not necessarily about that task.
+
+Baseline source is the unchanged reviewed personal engine (`0843bfd3` production source), frozen in a detached checkout. Record exact source revision and hashes for both engines and harness for each run. Candidate revision is supplied by Tadhg after his freeze. Changes after inspection of private outcomes are exploratory and need an explicit new confirmation decision.
+
+## Measurement interface
+
+`engine-replay.mjs` runs one engine over a private gold file. Engine adapters accept a temporary historical-prefix file, unchanged query, and options, and return ranked entry IDs. The baseline adapter calls the actual `sessionSearchTool` and keeps its complete displayed response plus production provenance metadata. Ranking order comes from metadata, not printed grouping order.
+
+The index adapter calls `openIndex`, `indexTranscript` and `searchIndex` from the supplied source checkout, using a temporary database only. It indexes a projection of the same historical prefix: the original session header plus eligible lineage entries, excluding the issuing assistant request (including native parent calls). Projection hashes and counts are recorded. This projection supplies caller eligibility absent from the low-level API; it is not proof that production enforces scope. No post-ranking filtering or query migration hides candidate differences. The candidate's extraction and query semantics remain its own.
+
+Before-results amendment (Tadhg, message 8242): candidate frozen at `f026f6f1` now ORs FTS terms and indexes custom data and result details. The intended integration keeps heuristic regex and exact-address calls on the current engine; only NL discovery uses the index. Six old calls are regex-like. Route them unchanged through the frozen baseline adapter, report indexed NL and unchanged-path regex separately and together. Preserve original input strings. FTS stemming/tokenization and extraction still differ, so this is not an isolated BM25 experiment. `fields: all` is the primary replacement comparison. `words` is a separate diagnostic, never a substitute score selected after results.
+
+An ID-only result can establish episode recovery, not displayed-answer sufficiency. FTS snippets are retained as candidate diagnostic output, not treated as the actual tool display. The display gate remains unverified until integrated actual tool output is evaluated under the frozen answer criteria. Exact entry/call/file recovery and legacy regex semantics need focused integration checks in addition to quality measures.
+
+## Mandatory landing criteria
+
+On EACH old set separately, at top five:
+
+- Bounded-episode relevant-source recall is at least baseline.
+- Evidence-hit question count is at least baseline.
+- Relevant-result precision (relevant slots / five slots per question) is at least baseline.
+- Actual displayed-answer sufficiency question count is at least baseline.
+
+Disclose each question's regression even when aggregate non-inferiority holds. An unknown relevance or display judgment is incomplete evidence, not a passing score. Keep general relevance, episode membership, source availability and displayed sufficiency separate. Label novel returned sources by reading originals under unchanged criteria; reuse earlier judgments only under checked source/display identity. These small purposive single-rater sets support bounded regression detection, not statistical population non-inferiority or downstream-use claims.
+
+Task scopes add a third independent set. Compare current search over the declared same source corpus against indexed search over that corpus, then evaluate span filtering separately. Preserve permission checks, scope membership and stable session+entry addresses. An unscoped personal engine cannot serve as an implemented cross-person task baseline without an explicit multi-source control. Before that seam exists, authoring and per-source results are preparation, not a passed task-scope gate.
+
+Warm indexed query p95 must be <=50 ms AND at least five times faster than the current full tool call on the SAME largest NL-query historical prefix among the twelve old cases (size selected without outcome inspection; regex remains on the unchanged path). Use that case's unchanged query. First query/call is reported separately; then use 20 sequential measured repetitions and nearest-rank p95 (19th sorted observation). No parallel load from this harness. Record first-run state as uncontrolled OS cache, not a cold-disk measurement. Report index build duration, prefix bytes, index size and adapter/setup work separately. Index construction is excluded from warm-query latency because production persists it; first-use/backfill cost remains explicit. Once an actual runtime/tool path exists, repeat latency there: low-level SQL speed alone cannot pass end-to-end replacement latency.
+
+## Stop and permitted effects
+
+A verified mandatory loss is sufficient to block landing. Additional unjudged dimensions remain unjudged when they cannot reverse that decision. Preserve negative results and distinguish a method error from an adverse observation. A confound is corrected transparently before claiming a comparison.
+
+Private questions, excerpts, original IDs, mappings and raw outputs stay outside Git/mail in mode0700 scratch directories and mode0600 files. Source transcripts and the live runtime database stay read-only. Parse JSONL directly; temporary prefix files and index databases live only in scratch and are cleaned after execution. No daemon restart, live backfill, provider run, full suite or production edit belongs to this evaluation lane. Focused checks run serially with one worker.
