@@ -1,5 +1,3 @@
-/* Outside activity in Activity (workplace-outside.tsx). Rows share the Activity list's layout. */
-
 .wp-activity-scroll {
 	flex: 1;
 	min-height: 0;

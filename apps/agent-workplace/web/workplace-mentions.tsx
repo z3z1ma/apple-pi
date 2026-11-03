@@ -5,7 +5,6 @@ import "./workplace-mentions.css";
 
 type Person = { id: string; name: string; detail: string };
 
-/** The @word being typed just before the caret, if any. */
 function typedMention(text: string, caret: number): { start: number; query: string } | undefined {
 	const match = /(?:^|\s)@([^\s@]*)$/.exec(text.slice(0, caret));
 	return match ? { start: caret - match[1]!.length - 1, query: match[1]!.toLowerCase() } : undefined;
@@ -23,10 +22,6 @@ function people(world: WorldSnapshot | undefined): Person[] {
 	];
 }
 
-/**
- * Slack's @-mentions for a composer: typing @ lists people, Enter or Tab inserts the name, and `mentioned` gives the
- * people whose @Name is still in the text, so a post can ask for their attention.
- */
 export function useMentions(
 	world: WorldSnapshot | undefined,
 	box: RefObject<HTMLTextAreaElement | null>,
@@ -66,7 +61,7 @@ export function useMentions(
 		setOpen(undefined);
 		caretAfterInsert.current = at;
 	};
-	/** True when the key belonged to the open list. */
+
 	const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
 		if (!open || !shown.length) return false;
 		if (event.key === "ArrowDown" || event.key === "ArrowUp") {
@@ -117,7 +112,7 @@ export function useMentions(
 		onKeyDown,
 		mentioned: (value: string) =>
 			chosen.filter((person) => value.includes(`@${person.name}`)).map((person) => person.id),
-		/** The text with each chosen @Name followed by its id once, so an agent reading it knows exactly who is meant. */
+
 		withIds: (value: string) =>
 			chosen.reduce(
 				(out, person) =>

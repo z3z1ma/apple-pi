@@ -1,8 +1,3 @@
-// What the HTML overlay shows about the view itself, set by the Phaser scene: the place's name, short notices, and a
-// choice to make (which headquarters to enter). Each change replaces the state object, as useSyncExternalStore needs.
-//
-// It also carries what the interface and the world say to each other: the minimap the world publishes, and intents
-// the interface sends (travel, go to, talk to, walk to a point) for the world to carry out.
 import type { PlaceRef } from "../src/world.js";
 import type { AvatarLook } from "./looks.js";
 
@@ -12,7 +7,6 @@ export interface Choice {
 	choose(): void;
 }
 
-/** A dot on the minimap, in the place's tiles. */
 export interface MinimapDot {
 	id: string;
 	kind: "agent" | "townsfolk" | "avatar";
@@ -20,34 +14,24 @@ export interface MinimapDot {
 	y: number;
 }
 
-/** The current place as the minimap draws it: its painting scaled to fit, and who is where. */
 export interface MinimapView {
-	/** The place's key (`placeKey`). */
 	place: string;
-	/** The painting's URL. */
+
 	painting: string;
-	/** The place's size in tiles. */
+
 	cols: number;
 	rows: number;
-	/** The painting's own width in tiles; a growing place lays `strips` of it side by side. */
+
 	paintingCols: number;
 	strips?: { from: number; to: number; at: number }[];
 	dots: MinimapDot[];
-	/** The part of the place on screen, in tiles. */
+
 	view?: { x: number; y: number; w: number; h: number };
-	/**
-	 * The ways out to the next place out of doors (the square's exit to the street, the street's way back): where each
-	 * meets the edge it leaves by (tiles), that edge, and what the place it leads to is called.
-	 */
+
 	exits?: { name: string; x: number; y: number; edge: "left" | "right" | "top" | "bottom" }[];
 }
 
-/**
- * What the interface asks of the world. Every action on a character works from the side panel wherever the avatar is:
- * the world carries out walking and travel; the interface itself handles examining and the terminal.
- */
 export type WorldIntent =
-	/** A click on the minimap: walk to that point (tiles) of the current place. */
 	| { kind: "walk-to"; place: string; at: [x: number, y: number] }
 	/** The Places tab: go to a place at once. */
 	| { kind: "travel"; place: PlaceRef }
@@ -66,7 +50,6 @@ export type WorldIntent =
 	/** Open a tab of the side panel (a place sends the operator to Settings to sign in). */
 	| { kind: "open-tab"; tab: "agents" | "needs-you" | "work" | "mail" | "slack" | "places" | "settings" };
 
-/** A theme in Settings: its name and line, and why it cannot be worn when its pack is broken. */
 export interface ThemeOption {
 	id: string;
 	name: string;
@@ -79,20 +62,17 @@ export interface ViewState {
 	subtitle?: string;
 	notice?: { id: number; text: string };
 	chooser?: { title: string; choices: Choice[] };
-	/** Set by the world as the view or the people in it change. */
+
 	minimap?: MinimapView;
-	/** Whether the world draws its walk grid. */
+
 	walkGrid?: boolean;
-	/** What the theme calls each kind of place (`Theme.labels`), once the theme has loaded. */
+
 	labels?: Record<string, string>;
-	/** The theme's avatar looks to choose from in Settings, once the theme has loaded. */
+
 	avatarLooks?: AvatarLook[];
-	/**
-	 * A theme the world could not wear, shown until dismissed: which, what it wears instead, and why (each problem as
-	 * `file: fault`).
-	 */
+
 	themeProblem?: { theme: string; showing: string; problems: string[]; switching?: boolean };
-	/** The themes to choose from in Settings, and the one worn. */
+
 	themes?: ThemeOption[];
 	theme?: string;
 }
@@ -102,9 +82,9 @@ export interface ViewStore {
 	subscribe(listener: () => void): () => void;
 	update(change: Partial<ViewState>): void;
 	notify(text: string): void;
-	/** Send an intent to every intent listener. */
+
 	intend(intent: WorldIntent): void;
-	/** Calls `listener` with each intent; returns a function that stops the calls. */
+
 	onIntent(listener: (intent: WorldIntent) => void): () => void;
 }
 

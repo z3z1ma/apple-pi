@@ -2,7 +2,6 @@ import { useSyncExternalStore } from "react";
 import type { QuotedMessage } from "./overlay/conversation/quote.js";
 import type { SwitchTarget } from "./workplace-switcher.js";
 
-/** A list kept on this device under one localStorage key, newest first, shared by every view that reads it. */
 function storedList<T extends { key: string }>(name: string) {
 	const changed = `${name}-changed`;
 	let cache: T[] | undefined;
@@ -45,14 +44,12 @@ function storedList<T extends { key: string }>(name: string) {
 	};
 }
 
-/** A message the operator saved to come back to, with where it was. */
 export interface SavedMessage extends QuotedMessage {
 	key: string;
 	origin: SwitchTarget;
 	savedAt: number;
 }
 
-/** One identity per message and place, so saving twice keeps one entry. */
 export const savedKey = (origin: SwitchTarget, message: QuotedMessage) =>
 	`${origin.kind}:${"id" in origin ? origin.id : origin.view}:${message.at}:${message.author}`;
 
@@ -64,12 +61,10 @@ export const later = {
 };
 export const useLater = saved.use;
 
-/** A task thread the operator keeps in the sidebar, like a channel. */
 export interface PinnedThread {
 	key: string;
 	title: string;
 }
 export const pinnedThreads = storedList<PinnedThread>("workplace-pinned-threads");
 
-/** Conversations the operator muted (`dm:<id>`, `channel:<id>`): they stay listed but never count as unread. */
 export const muted = storedList<{ key: string }>("workplace-muted");

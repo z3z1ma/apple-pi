@@ -2,7 +2,6 @@ import type { WorldSnapshot } from "../src/world.js";
 import { conversationPanel } from "./overlay/conversation/panel-state.js";
 import { deliver } from "./workplace-message-actions.js";
 
-/** Slash commands a channel composer runs itself instead of posting. */
 export const COMMANDS = [
 	{ name: "dm", usage: "/dm @person message", help: "Tell one person something without leaving here" },
 	{ name: "wake", usage: "/wake @person", help: "Bring a person at home back" },
@@ -20,7 +19,6 @@ function everyone(world: WorldSnapshot): Person[] {
 	];
 }
 
-/** The person named first in `rest` (with or without @), by the longest matching name, and the words after it. */
 function named(world: WorldSnapshot, rest: string): { person: Person; words: string } | undefined {
 	const text = rest.replace(/^@/, "");
 	const match = everyone(world)
@@ -29,13 +27,11 @@ function named(world: WorldSnapshot, rest: string): { person: Person; words: str
 	return match ? { person: match, words: text.slice(match.name.length).trim() } : undefined;
 }
 
-/** Commands whose name starts with what was typed after the slash, while no space follows it yet. */
 export function commandHints(draft: string) {
 	const typed = /^\/(\w*)$/.exec(draft)?.[1];
 	return typed === undefined ? [] : COMMANDS.filter((command) => command.name.startsWith(typed.toLowerCase()));
 }
 
-/** Run a slash command; undefined when the text is not one, otherwise what happened, for the composer's status line. */
 export async function runCommand(
 	world: WorldSnapshot,
 	draft: string,

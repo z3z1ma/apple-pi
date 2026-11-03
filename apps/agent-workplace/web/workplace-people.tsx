@@ -35,10 +35,6 @@ export function sessionStatus(person: Character): string {
 	}[facts?.run ?? "idle"];
 }
 
-/**
- * Slack's presence: working and asking show their own colour, idle is present but inactive (green with a z: a live
- * session that is not running), away is gray (no running session).
- */
 export type Presence = "working" | "asking" | "idle" | "away";
 export const PRESENCE_LABEL: Record<Presence, string> = {
 	working: "Working",
@@ -47,7 +43,6 @@ export const PRESENCE_LABEL: Record<Presence, string> = {
 	away: "Away",
 };
 
-/** A person in the world snapshot's characters is present; a dormant or missing person is away. */
 export function presenceOf(person: Character | undefined, away = false): Presence {
 	return away || !person ? "away" : (person.facts?.status ?? "idle");
 }
@@ -69,7 +64,7 @@ export function PersonAvatar({
 	name: string;
 	className?: string;
 	interactive?: boolean;
-	/** Draws the presence dot in the avatar's corner. */
+
 	presence?: Presence;
 }) {
 	const people = useContext(ChatPeople);

@@ -1,6 +1,5 @@
 import type { WorldSnapshot } from "../src/world.js";
 
-/** Search recorded metadata across teams; reading a task remains a separate operator action. */
 export function searchOrg(world: WorldSnapshot, query: string, names: Readonly<Record<string, string>> = {}) {
 	const people = [
 		...world.characters

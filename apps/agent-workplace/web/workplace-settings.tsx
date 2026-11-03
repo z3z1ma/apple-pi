@@ -10,7 +10,6 @@ const MODES: { id: AppearanceMode; label: string }[] = [
 	{ id: "system", label: "System" },
 ];
 
-/** A small drawing of Workplace in a theme: rail, conversation list, and a message with its buttons. */
 function Preview({ palette }: { palette: Palette }) {
 	return (
 		<span className="wp-theme-preview" style={{ background: palette.bg }} aria-hidden="true">
@@ -46,7 +45,6 @@ function Section({ title, note, children }: { title: string; note?: string; chil
 	);
 }
 
-/** Workplace's settings: how it looks, and (from `children`) what it is connected to. */
 export function WorkplaceSettings({
 	theme,
 	setTheme,

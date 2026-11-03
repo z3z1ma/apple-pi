@@ -9,7 +9,6 @@ const api = window.agentWorkplace;
 const when = (at: number) =>
 	new Date(at).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 
-/** The organization's notes: what the scout and the desk learned, and the threads they found to be connected. */
 export function NotesView({ world }: { world: WorldSnapshot }) {
 	const [words, setWords] = useState("");
 	const [read, setRead] = useState<NotesRead>();

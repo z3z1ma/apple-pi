@@ -12,11 +12,10 @@ const api = window.agentWorkplace;
 let composeAttempt:
 	| { id: string; to: string[]; cc: string[]; subject: string; body: string; result?: CommunicationResult }
 	| undefined;
-/** The subject a message without one gets. */
+
 const NO_SUBJECT = "Message from the operator";
 const ACTIVITY_SEEN = "workplace-mail-activity-seen";
 
-/** Today: the time. This year: day and time. Older: the full date. */
 export function when(at: number): string {
 	const date = new Date(at);
 	const now = new Date();
@@ -49,7 +48,6 @@ function inboxThreads(world: WorldSnapshot) {
 	return (world.operatorMail ?? []).filter((thread) => !channels.has(thread.id));
 }
 
-/** One message to several people is several delivery records; show it once, with each recipient's state. */
 type Letter = { key: string; from: string; fromName: string; body: string; sentAt: number; deliveries: MailItem[] };
 
 function letters(items: MailItem[]): Letter[] {
@@ -72,7 +70,6 @@ function letters(items: MailItem[]): Letter[] {
 
 const KIND_LABEL: Record<string, string> = { escalation: "Escalation", task: "Task", meeting: "Meeting" };
 
-/** A conversation only Pi itself has written in (departures, notices): it goes under Updates, not People. */
 const fromPi = (thread: MailThreadSummary) =>
 	(thread.participants ?? []).every((id) => id === "harness" || id === "operator") && thread.lastFrom === "harness";
 

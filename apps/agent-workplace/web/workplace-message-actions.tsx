@@ -24,7 +24,6 @@ export type MessageAction = { label: string; onSelect: () => void };
 
 export type Reaction = { emoji: string; people: string[] };
 
-/** `current` with the operator's `emoji` added, or removed when it was already there. */
 export function toggledReaction(current: Reaction[], emoji: string): { next: Reaction[]; on: boolean } {
 	const on = !current.some((item) => item.emoji === emoji && item.people.includes("operator"));
 	const next = on
@@ -39,7 +38,6 @@ export function toggledReaction(current: Reaction[], emoji: string): { next: Rea
 	return { next, on };
 }
 
-/** A message's reactions as pills: each emoji, its count and who chose it; clicking one toggles the operator's. */
 export function ReactionPills({
 	reactions,
 	toggle,
@@ -69,7 +67,6 @@ export function ReactionPills({
 	);
 }
 
-/** The quick acknowledgments: done, seen, agreed, thanks. */
 export const REACTIONS = [
 	["\u2705", "done"],
 	["\u{1F440}", "seen"],
@@ -77,7 +74,6 @@ export const REACTIONS = [
 	["\u{1F64F}", "thanks"],
 ] as const;
 
-/** The text selected inside `element`, when the selection lies wholly within it. */
 function selectionIn(element: HTMLElement | null): string | undefined {
 	const selection = window.getSelection();
 	if (!element || !selection || selection.isCollapsed) return undefined;
@@ -87,14 +83,10 @@ function selectionIn(element: HTMLElement | null): string | undefined {
 
 const ForwardContext = createContext<{
 	forward: (message: QuotedMessage) => void;
-	/** Hand the message to the desk to deal with, when there is a desk. */
+
 	handOff?: (message: QuotedMessage) => void;
 } | null>(null);
 
-/**
- * A message with Slack's actions: a toolbar on hover or focus and the same items on right-click. Reply and Forward
- * act on the selected part of the message when the operator selected some, and on the whole message otherwise.
- */
 export function ActionableMessage({
 	message,
 	onReply,
@@ -107,9 +99,9 @@ export function ActionableMessage({
 }: {
 	message: QuotedMessage;
 	onReply?: (message: QuotedMessage) => void;
-	/** Add an emoji reaction: an acknowledgment that wakes nobody. */
+
 	react?: (emoji: string) => void;
-	/** Where the message lives, so it can be saved for later and opened again. */
+
 	origin?: SwitchTarget;
 	extra?: MessageAction[];
 	className: string;
@@ -226,7 +218,6 @@ export function ActionableMessage({
 
 type Delivery = { ok: true } | { ok: false; reason: string };
 
-/** Send words to a destination as the operator: a person's conversation (or mail while away), or a thread. */
 export async function deliver(
 	world: WorldSnapshot,
 	target: SwitchTarget,
@@ -258,7 +249,6 @@ export async function deliver(
 	};
 }
 
-/** Forwarding for every message inside: a destination picker with an optional note, and a toast with the outcome. */
 export function ForwardProvider({
 	world,
 	go,

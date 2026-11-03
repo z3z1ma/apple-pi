@@ -1,5 +1,8 @@
 ## file
 
+Clear a sent review comment only when the field still equals the submitted draft.
+Why: text typed during that request is a new draft and must survive completion of the prior send.
+
 Review reads are on demand, separate from the world snapshot. Bind every async payload to its complete request identity before rendering: switching from summary to source renders once before effects clear old state, so late-result fences alone cannot prevent a summary being read as a source object. Scope queue snapshots to their requested directory too. A built Chrome navigation test reproduced this crash and now exercises the transition.
 
 Live reviews, and the Log and Mail tabs, refresh on a two-second tick that is off while the view is hidden. A tick reloads only live evidence (summary, log, mail) under the same request key, so the shown page stays until the new one arrives instead of flashing a loading state; other tabs load once per key. Controls use `section.wp-reviews` selectors because the Code pane's later `.wp-code button { font: inherit }` otherwise resets their size.

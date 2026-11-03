@@ -121,7 +121,7 @@ export function WorkplacePersonActions({ world, children }: { world: WorldSnapsh
 		const plan = action === "call" ? callPlan(current.current, id) : { affected: [], expected: [] };
 		setOperation({ id: crypto.randomUUID(), person, action, trigger, ...plan });
 	};
-	/** `extra` adds the caller's own placement items (such as sidebar sections) after the lifecycle actions. */
+
 	const menu = (event: MenuEvent, id: string, extra: { label: string; onSelect: () => void }[] = []) => {
 		const person = personIn(current.current, id);
 		if (!person) return;

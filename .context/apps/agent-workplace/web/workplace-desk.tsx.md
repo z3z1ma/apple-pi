@@ -1,5 +1,8 @@
 ## file
 
+Threads exclude tasks whose participants are only discarded or temporary review/program peers. Custom sidebar sections and placements stay device-local.
+Why: internal execution machinery is not an operator conversation, and personal sidebar organization is not shared organizational state.
+
 The desk is a stored preference (`desk`: `{thread, person}`) read by the backend and by the runtime's external-thread routing; the UI writes it only through `setDesk` after creating the channel, never by guessing from a channel name. Desk posts pass the coordinator as `listener`, which ThreadPane adds to every post's notify list; `setDesk` also makes the coordinator the channel's runtime listener, which pushes every post and wakes it when away. The UI notify keeps working against a runtime older than channel listeners.
 Why: the operator chose the coordinator's channel as the default composer; channels are pull, so without one of these the coordinator would never be told.
 

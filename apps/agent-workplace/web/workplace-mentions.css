@@ -1,5 +1,3 @@
-/* The @-mention list over a channel composer (workplace-mentions.tsx). */
-
 .wp-mentions {
 	position: absolute;
 	left: 0;
@@ -53,7 +51,6 @@
 	white-space: nowrap;
 }
 
-/* A DM's composer anchors its mention list too. */
 .wp-session .aw-conv-box {
 	position: relative;
 }

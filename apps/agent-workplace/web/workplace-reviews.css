@@ -78,7 +78,7 @@
 	color: var(--wp-muted);
 	overflow-wrap: anywhere;
 }
-/* The section element outranks the Code pane's later `.wp-code button { font: inherit }`. */
+
 section.wp-reviews button,
 section.wp-reviews input,
 section.wp-reviews select,
@@ -354,7 +354,6 @@ section.wp-reviews button:disabled {
 	background: var(--wp-hover);
 }
 
-/* Shared building blocks for the evidence views. */
 .wp-review-body h4,
 .wp-review-body h5 {
 	color: var(--wp-text);

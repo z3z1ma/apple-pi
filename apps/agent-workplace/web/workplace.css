@@ -1,4 +1,3 @@
-/* The workplace owns its palette; the World modal keeps its own theme. */
 body.workplace {
 	margin: 0;
 	background: #1b1d21;
@@ -988,7 +987,7 @@ body.workplace {
 .wp-thread-channel .wp-thread-compose {
 	margin: 16px 24px 24px;
 }
-/* A conversation's reading controls sit in its host's header row, as Slack keeps one header line. */
+
 .wp-header-tools {
 	display: flex;
 	flex: none;
@@ -1076,7 +1075,7 @@ body.workplace {
 	font-size: 12px;
 	padding: 12px 0;
 }
-/* Earlier messages and more search results: a small centered pill, as Slack shows them. */
+
 .wp-earlier {
 	display: flex;
 	justify-content: center;
@@ -1106,7 +1105,7 @@ body.workplace {
 	color: var(--wp-muted);
 	font-size: 11px;
 }
-/* The same safe Markdown styles serve session DMs and team channels. */
+
 .wp-app .aw-md {
 	max-width: 920px;
 	color: var(--wp-text);
@@ -1210,7 +1209,7 @@ body.workplace {
 .wp-app .aw-md-link-dead {
 	color: var(--wp-muted);
 }
-/* Session overrides remain inside wp-session: the World modal is a separate surface. */
+
 .wp-session {
 	position: relative;
 	isolation: isolate;

@@ -27,7 +27,6 @@ type Buffer = {
 const api = window.agentWorkplace;
 const fileKey = (root: string, path: string) => JSON.stringify([root, path]);
 
-/** A repository's folder name, with its parent folder when another listed repository has the same name. */
 function repositoryName(path: string, all: string[]) {
 	const parts = path.split("/").filter(Boolean);
 	const name = parts.at(-1) ?? path;
@@ -35,7 +34,6 @@ function repositoryName(path: string, all: string[]) {
 	return clash ? `${name} (${parts.at(-2) ?? "/"})` : name;
 }
 
-/** The worktree's branch and flags; with `path`, also where it lives (the option's tooltip). */
 function worktreeLabel(tree: WorkspaceWorktree, path = true) {
 	return [
 		tree.branch ?? "",
@@ -300,7 +298,7 @@ export function WorkplaceCode({
 			loaded.monaco.editor.defineTheme("workplace-code", {
 				base,
 				inherit: true,
-				// Syntax in the Workplace theme's own colors.
+
 				rules: [
 					{ token: "comment", foreground: token("--wp-muted"), fontStyle: "italic" },
 					{ token: "keyword", foreground: token("--wp-accent") },
@@ -356,7 +354,6 @@ export function WorkplaceCode({
 			return;
 		}
 		if (!current.model) {
-			// Overlapping workspace roots can open the same file with separate retained drafts.
 			current.model = loaded.monaco.editor.createModel(
 				current.text,
 				undefined,

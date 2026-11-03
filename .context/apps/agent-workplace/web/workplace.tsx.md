@@ -1,5 +1,8 @@
 ## file
 
+Preference persistence is best-effort; an unavailable storage backend leaves the choice active in this window.
+Why: a blocked browser preference store must not prevent an in-window appearance change.
+
 Chat and Mail keep shared usePaneResize state in these retained shells. The standalone profile receives Chat's handle rather than owning width inside its on-demand reader. Sidebar lifecycle actions use right-click on DM/VIP rows and sleeping buttons, with Shift+F10/ContextMenu on the native name buttons. The rail has no visible ellipsis buttons: the operator rejected their repeated visual weight. Row context opening preserves selection and uses the existing shared person-menu owner; keyboard closing returns to the name button. The name-adjacent Working image uses only awake facts.status=working, excluding home rows; it changes neither presence/unread state nor conversation selection.
 Why: a person menu belongs to the row's person, not the selected conversation; inspecting and cancelling another person's action must preserve the active reader and draft. Home-history status must stay readable in both VIP and ordinary sleeping rows: Unicode escapes are interpreted inside JavaScript strings, but print literally in raw JSX text.
 Coupled: apps/agent-workplace/web/workplace-resize.tsx, apps/agent-workplace/web/workplace-person-actions.tsx

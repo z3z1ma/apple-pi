@@ -19,7 +19,7 @@ export type Item = {
 	target: SwitchTarget;
 	person?: string;
 	icon?: "desk" | "threads" | "bell" | "bookmark" | "file" | "compose";
-	/** Already matched by a search, so the typed words need not appear in its label. */
+
 	found?: boolean;
 };
 
@@ -108,7 +108,6 @@ function items(world: WorldSnapshot): Item[] {
 	return [...views, ...people, ...channels, ...threads];
 }
 
-/** Where a message can be sent: people, the desk, channels and task threads. */
 export function destinations(world: WorldSnapshot): Item[] {
 	const desk = world.desk?.thread;
 	return [
@@ -127,7 +126,6 @@ export function destinations(world: WorldSnapshot): Item[] {
 	];
 }
 
-/** Slack's quick switcher: Command or Control + K jumps to any person, channel, thread or view. */
 export function QuickSwitcher({
 	world,
 	active,
@@ -175,7 +173,6 @@ export function QuickSwitcher({
 	);
 }
 
-/** Names first, then messages that mention the words, from every channel and thread the operator can read. */
 function JumpPicker({
 	world,
 	close,
@@ -231,7 +228,6 @@ function JumpPicker({
 	);
 }
 
-/** A message found by search, opening its conversation. */
 const when = (at: number) =>
 	new Date(at).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 
@@ -274,7 +270,6 @@ function messageItem(world: WorldSnapshot, message: ConversationMessage): Item {
 	};
 }
 
-/** A modal list filtered as the operator types; arrows move, Enter chooses, Escape closes. */
 export function Picker({
 	label,
 	placeholder,
@@ -294,14 +289,14 @@ export function Picker({
 	close: () => void;
 	choose: (item: Item) => void;
 	children?: ReactNode;
-	/** Destinations already chosen, shown in the field before the query. */
+
 	chips?: ReactNode;
-	/** Enter with nothing typed. */
+
 	finish?: () => void;
-	/** Backspace with nothing typed. */
+
 	unchip?: () => void;
 	footer?: ReactNode;
-	/** Told each change of the typed words. */
+
 	onQuery?: (query: string) => void;
 }) {
 	const [query, setQuery] = useState("");

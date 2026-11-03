@@ -41,10 +41,10 @@ const parts = [
 type Part = (typeof parts)[number];
 const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error));
 const LIVE = ["capturing", "queued", "running", "cancelling"];
-/** Live reviews, their log and their mail refresh on this period; settled evidence loads once. */
+
 const POLL_MS = 2000;
 const ROW_PX = 34;
-/** The queue may take this share of the panes; it shrinks to its rows so a short queue leaves room for evidence. */
+
 const QUEUE_SHARE = 0.4;
 
 function stateTone(state: ReviewSummary["state"]): string {
@@ -75,9 +75,9 @@ export function WorkplaceReviews({ root, active, world }: { root: string; active
 	const [analytics, showAnalytics] = useState(false);
 	const [comment, setComment] = useState("");
 	const current = queue?.page?.rows.find((review) => review.id === selected);
-	// Log and mail change without a new assessment revision, so only they follow the live tick.
+
 	const liveTick = part === "log" || part === "mail" ? tick : 0;
-	// Everything a payload depends on: an assessment change or a new page size invalidates the shown evidence.
+
 	const detailKey = JSON.stringify([selected, current?.revision, part, path, side, detailOffset, limit, version]);
 	const detail = detailState?.key === detailKey ? detailState.value : undefined;
 	const [capture, showCapture] = useState(false);
@@ -461,7 +461,6 @@ export function WorkplaceReviews({ root, active, world }: { root: string; active
 												attempt: crypto.randomUUID(),
 												operation: { action: "comment", review: current.id, body: draft.trim() },
 											}).then((sent) => {
-												// Text typed while the comment was sending is a new draft, not the sent one.
 												if (sent) setComment((now) => (now === draft ? "" : now));
 											});
 										}}
@@ -798,7 +797,10 @@ function ReviewCapture({
 						Lasting owner ID{" "}
 						<input
 							required
-							placeholder={owners.slice(0, 3).map((person) => person.id).join(", ")}
+							placeholder={owners
+								.slice(0, 3)
+								.map((person) => person.id)
+								.join(", ")}
 							value={owner}
 							onChange={(event) => {
 								setOwner(event.target.value);

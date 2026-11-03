@@ -1,5 +1,3 @@
-// The world UI: Phaser draws the places, React draws HTML over them. Both read the backend's snapshots through
-// `window.agentWorkplace`, the preload API (a fixture in the headless tests).
 import * as Phaser from "phaser";
 import { createRoot } from "react-dom/client";
 import type { AgentWorkplaceApi, ThemeChoice } from "../src/world.js";
@@ -41,21 +39,21 @@ import { worldStore } from "./world-store.js";
 declare global {
 	interface Window {
 		agentWorkplace: AgentWorkplaceApi;
-		/** Read-only view of what the world draws, for tests (and `lookAt`, which only moves the view). */
+
 		agentWorldView: {
 			place(): string | undefined;
 			painting(): string | undefined;
 			characters(): string[];
 			figures(): FigureView[];
-			/** Characters walking out because their session stopped or moved elsewhere. */
+
 			departing(): FigureView[];
-			/** The animated overlays in the place's slots: fire, water, and glows. */
+
 			overlays(): OverlayView[];
-			/** The frames the painting is drawn from: `__BASE` for a whole painting, one per strip for the gallery. */
+
 			paintingFrames(): string[];
-			/** Each texture's filtering now: true where its pixels are drawn crisp (nearest), false where smoothed. */
+
 			filters(): Record<string, boolean>;
-			/** The banners hung in the place and the names stitched on them. */
+
 			banners(): BannerView[];
 			doors(): DoorView[];
 			gallery():
@@ -63,49 +61,47 @@ declare global {
 				| undefined;
 			walkGrid(): boolean;
 			lookAt(door: string): boolean;
-			/** Messenger birds in flight with mail: which letter, from whom to whom, where, and its wing frame. */
+
 			birds(): { id: string; from: string; to: string; x: number; y: number; frame: number; out: boolean }[];
-			/** In the town square, the townsfolk standing for Slack channels with unread messages. */
+
 			townsfolk(): TownsfolkView[];
-			/** The names lettered on the buildings' sign boards. */
+
 			signs(): SignView[];
-			/** At the forge, the pull requests lying on its benches. */
+
 			work(): WorkView[];
-			/** At the quest office, the issues pinned on its board. */
+
 			notices(): NoticeView[];
-			/** The place's fidget objects: what each shows and what it is doing. */
+
 			fidgets(): FidgetView[];
-			/** The world's cursor and the click markers showing (`PlaceScene.pointerView`). */
+
 			pointer(): ReturnType<PlaceScene["pointerView"]> | undefined;
-			/** The place's host (the innkeeper), where it stands. */
+
 			host(): { name: string; look: string; x: number; y: number } | undefined;
-			/** The square's recruiter, where it stands. */
+
 			recruiter(): { name: string; look: string; x: number; y: number } | undefined;
-			/** The pack's ambient characters standing here (ticket 08). */
+
 			ambient(): AmbientView[];
-			/** What moves in the place besides its characters, and out of doors the light of the time of day (ticket 11). */
+
 			atmosphere(): ReturnType<PlaceScene["atmosphereView"]>;
-			/** The operator's avatar: where it is, its facing and frame, and the rest of its walk. */
+
 			avatar(): AvatarView | undefined;
-			/** A point in tiles, on screen in CSS px. */
+
 			toScreen(x: number, y: number): [number, number] | undefined;
 			zoom(): { zoom: number; target: number; min: number; max: number } | undefined;
-			/** Ids of the characters talked to, in order (the conversation panel will open for them). */
+
 			talkedTo(): string[];
 		};
-		/** What the interface asked of the world, in order, for tests. */
+
 		agentWorldInterface: { intents(): WorldIntent[] };
 	}
 }
 
-// The game's menu replaces the browser's everywhere.
 window.addEventListener("contextmenu", (event) => event.preventDefault(), { capture: true });
 
 const store = worldStore(window.agentWorkplace);
 const view = viewStore();
 createRoot(document.getElementById("overlay")!).render(<Overlay store={store} view={view} />);
 
-/** The last theme the world wore, kept in this window's storage: where a broken pack falls back to. */
 const LAST_GOOD = "agent-world:last-good-theme";
 const FIRST_THEME = "fantasy";
 
@@ -117,7 +113,6 @@ const firstSnapshot = new Promise<void>((resolve) => {
 	});
 });
 
-/** The installed packs as the backend checked them; a fixture backend without a list knows only the first theme. */
 let installed: ThemeChoice[] = [];
 async function readInstalled() {
 	try {
@@ -125,11 +120,9 @@ async function readInstalled() {
 	} catch {}
 }
 
-/** Why a pack cannot be worn, as `file: fault` lines; none when it can. */
 const problemsOf = (choice: ThemeChoice | undefined) =>
 	choice?.problems.map(({ file, fault }) => `${file}: ${fault}`) ?? [];
 
-/** The pack `id`, checked by the backend and again here; a broken one throws `ThemeProblem`. */
 async function check(id: string): Promise<Theme> {
 	try {
 		const problems = problemsOf(installed.find((choice) => choice.id === id));
@@ -140,10 +133,6 @@ async function check(id: string): Promise<Theme> {
 	}
 }
 
-/**
- * Load the first pack of `wanted` that is good. A pack that is wanted first but broken is reported with its problems,
- * so the world can say why it wears another.
- */
 async function firstGood(wanted: (string | null | undefined)[]): Promise<{ theme: Theme; failed?: ThemeProblem }> {
 	const ids = [...new Set([...wanted, FIRST_THEME, ...installed.map((choice) => choice.id)])].filter(
 		(id): id is string => !!id,
@@ -159,7 +148,6 @@ async function firstGood(wanted: (string | null | undefined)[]): Promise<{ theme
 	throw failed ?? new ThemeProblem(FIRST_THEME, ["No theme pack could be read."]);
 }
 
-/** The themes Settings offers: every installed pack (a broken one with why), or the one worn when none are listed. */
 function offerThemes() {
 	const worn = themeStore.get();
 	const options: ThemeOption[] = installed.length
@@ -175,7 +163,6 @@ function offerThemes() {
 	view.update({ themes: options, theme: worn?.id });
 }
 
-/** Wear `theme` everywhere outside the scenes: tokens and skin, labels, avatar looks; and remember it as good. */
 async function wear(theme: Theme) {
 	themeStore.set(theme);
 	await applyTheme(theme);
@@ -186,7 +173,6 @@ async function wear(theme: Theme) {
 	} catch {}
 }
 
-/** Say on screen, until dismissed, that the world wears `showing` because `failed` is broken. */
 function report(failed: ThemeProblem | undefined, showing: Theme, switching = false) {
 	if (!failed || failed.id === showing.id) return;
 	view.update({ themeProblem: { theme: failed.id, showing: showing.name, problems: failed.problems, switching } });
@@ -204,7 +190,7 @@ const lastGood = (() => {
 const opening = await firstGood([store.get()?.theme, lastGood]);
 await wear(opening.theme);
 report(opening.failed, opening.theme);
-/** Themes found broken since the world opened: a snapshot naming one again does not try it again. */
+
 const failedThemes = new Set(opening.failed ? [opening.failed.id] : []);
 
 const place = new PlaceScene(store, view);
@@ -219,11 +205,7 @@ const game = new Phaser.Game({
 
 let switching = false;
 let next: string | undefined;
-/**
- * Switch the world to the theme `id`, live: check its pack first (a broken one leaves everything as it was and says
- * why), then fade the place out, drop every texture of the old pack, dress the page in the new one, and reopen the same
- * place in it. Characters, states, panels, and selections live outside the scenes and stay. Resolves true once worn.
- */
+
 async function switchTheme(id: string): Promise<boolean> {
 	if (id === themeStore.get()?.id) return true;
 	if (switching) {
@@ -259,12 +241,11 @@ async function switchTheme(id: string): Promise<boolean> {
 	}
 }
 
-// The theme chosen elsewhere (another window, the preference changed) is worn here too.
 store.subscribe(() => {
 	const id = store.get()?.theme;
 	if (id && id !== themeStore.get()?.id && !failedThemes.has(id)) void switchTheme(id);
 });
-/** Settings: a theme is kept only once the world wears it, so a broken pack is never remembered as the choice. */
+
 async function chooseTheme(id: string) {
 	await readInstalled();
 	offerThemes();
@@ -272,7 +253,7 @@ async function chooseTheme(id: string) {
 }
 
 const talkedTo: string[] = [];
-// Talking to a character, from the world or the side panel, opens its conversation panel.
+
 conversationPanel.connect(window.agentWorkplace);
 placePanels.connect(window.agentWorkplace, view);
 recruiting.connect(window.agentWorkplace, view);
@@ -284,7 +265,7 @@ slack.connect(window.agentWorkplace);
 forge.connect(window.agentWorkplace);
 atlassian.connect(window.agentWorkplace, view);
 void atlassian.refreshStatus();
-// Outside writes as the operator, from any place, reach the chatbox.
+
 chatLines.connect(window.agentWorkplace);
 conversations.subscribe((character) => {
 	talkedTo.push(character.id);
@@ -323,7 +304,6 @@ window.agentWorldView = {
 	talkedTo: () => [...talkedTo],
 };
 
-// The interface: the minimap follows the scene, and the interface's intents reach the world.
 publishMinimap(view, store, active);
 const intents: WorldIntent[] = [];
 window.agentWorldInterface = { intents: () => [...intents] };
@@ -331,9 +311,9 @@ view.onIntent((intent) => {
 	intents.push(intent);
 	const scene = active();
 	const character = "character" in intent ? store.get()?.characters.find((c) => c.id === intent.character) : undefined;
-	// The scene handles walk-to, go-to, and walk-grid itself.
+
 	if (intent.kind === "travel") scene?.travel(intent.place);
 	if (intent.kind === "choose-theme") void chooseTheme(intent.theme);
-	// Talk to from the side panel: the conversation opens without walking.
+
 	if (intent.kind === "talk-to" && character) conversations.open(character);
 });

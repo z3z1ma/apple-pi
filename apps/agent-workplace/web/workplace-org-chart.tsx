@@ -140,7 +140,7 @@ export function OrgChart({
 				return Number.isFinite(next) && next > 0 ? next : value;
 			});
 		};
-		// Chromium sends trackpad pinch as ctrl+wheel; a passive listener cannot stop page zoom.
+
 		element.addEventListener("wheel", wheel, { passive: false });
 		return () => element.removeEventListener("wheel", wheel);
 	}, [headId]);

@@ -1,36 +1,29 @@
-// Workplace themes: the palettes of well-known editor and app themes, each with a light and a dark variant. A theme
-// gives a few base colors; the rest of Workplace's palette (hover, selection, tints, text on fills) is derived from
-// them, so every surface follows a theme through the same `--wp-*` variables. "Workplace" is the palette written in
-// workplace.css itself and sets no variables.
-
-/** The colors a theme variant chooses; everything else is derived. */
 export interface Palette {
-	/** Messages and content. */
 	bg: string;
-	/** Headers, cards and the composer. */
+
 	panel: string;
-	/** The conversation list beside the rail. */
+
 	sidebar: string;
 	text: string;
 	muted: string;
 	border: string;
-	/** Selection, focus and the primary control. */
+
 	accent: string;
 	link: string;
-	/** The send and create buttons, and "done". */
+
 	green: string;
 	danger: string;
 	warning: string;
-	/** The app rail and title bar; always dark, as in Slack. */
+
 	rail: string;
-	/** Inline code. */
+
 	code: string;
 }
 
 export interface Theme {
 	id: string;
 	name: string;
-	/** What it is, for the picker. */
+
 	note: string;
 	light: Palette;
 	dark: Palette;
@@ -571,7 +564,6 @@ function rgb(hex: string): [number, number, number] {
 	return [(value >> 16) & 255, (value >> 8) & 255, value & 255];
 }
 
-/** `share` of `over` laid on `base`. */
 function mix(base: string, over: string, share: number): string {
 	const a = rgb(base);
 	const b = rgb(over);
@@ -589,12 +581,10 @@ function luminance(hex: string): number {
 	return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;
 }
 
-/** Text that reads on a fill of `color`. */
 function on(color: string): string {
 	return luminance(color) > 0.4 ? "#14161a" : "#ffffff";
 }
 
-/** Every `--wp-*` variable of a variant. */
 export function themeVariables(palette: Palette, dark: boolean): Record<string, string> {
 	const { bg, text, accent, green, danger, rail } = palette;
 	return {

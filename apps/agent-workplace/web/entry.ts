@@ -18,7 +18,6 @@ if (embeddedWorld) {
 	window.agentWorldReplyWatches = createReplyWatches(window.agentWorkplace);
 }
 
-// The standalone World route remains available for game fixtures and captures.
 if (location.search !== "?world" && !embeddedWorld) {
 	await import("./workplace.js");
 } else {

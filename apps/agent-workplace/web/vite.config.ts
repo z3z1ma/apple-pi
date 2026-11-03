@@ -5,7 +5,6 @@ import { defineConfig } from "vite";
 
 const here = import.meta.dirname;
 
-// The world UI, built into dist/web and committed. Theme art is not bundled: Electron serves themes/ beside it.
 export default defineConfig({
 	root: here,
 	base: "./",

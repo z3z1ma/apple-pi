@@ -60,7 +60,6 @@ document.body.classList.add("workplace");
 document.title = "Workplace";
 const drafts = new StoredDrafts("workplace-draft:thread:");
 
-/** A pencil on a sidebar row whose conversation holds unsent words. */
 function DraftMark() {
 	return (
 		<span className="wp-draft-mark" role="img" aria-label="Draft" title="Unsent draft">
@@ -69,7 +68,6 @@ function DraftMark() {
 	);
 }
 
-/** A DM's messages with actions; replying quotes into this person's reply box while it can take one. */
 function dmMessageFor(id: string, where: string, canReply: boolean) {
 	return function DMMessage({
 		message,
@@ -82,7 +80,6 @@ function dmMessageFor(id: string, where: string, canReply: boolean) {
 		entry: string;
 		children: ReactNode;
 	}) {
-		// Reactions changed here show at once; the next page read brings the same from the runtime.
 		const [changed, setChanged] = useState<Reaction[]>();
 		const reactions = changed ?? message.reactions ?? [];
 		const react = (emoji: string) => {
@@ -107,7 +104,6 @@ function dmMessageFor(id: string, where: string, canReply: boolean) {
 	};
 }
 
-/** Scroll a DM to one of its loaded messages and mark it briefly, once the conversation has drawn it. */
 function revealEntry(entry: string, tries = 50) {
 	const found = document.querySelector<HTMLElement>(`.wp-session [data-entry="${CSS.escape(entry)}"]`);
 	if (!found) {
@@ -135,7 +131,6 @@ function inboxThreads(world: WorldSnapshot) {
 	return (world.operatorMail ?? []).filter((thread) => !channels.has(thread.id));
 }
 
-/** A device-local preference; storage can be disabled, and then the choice lasts for this window. */
 function stored(key: string): string | null {
 	try {
 		return localStorage.getItem(key);
@@ -148,12 +143,9 @@ function remember(key: string, value: string | null): void {
 	try {
 		if (value === null) localStorage.removeItem(key);
 		else localStorage.setItem(key, value);
-	} catch {
-		/* An unavailable preference store does not block the change. */
-	}
+	} catch {}
 }
 
-/** Whether the system is in dark mode, following it as it changes. */
 function useSystemDark(): boolean {
 	const [dark, setDark] = useState(() => matchMedia("(prefers-color-scheme: dark)").matches);
 	useEffect(() => {
@@ -184,7 +176,7 @@ function Workplace() {
 		setThemeId(id);
 		remember("workplace-theme", id === DEFAULT_THEME ? null : id);
 	};
-	// The house theme is the palette workplace.css writes; every other theme sets the variables on the app.
+
 	const themeStyle = useMemo(
 		() =>
 			theme.id === DEFAULT_THEME
@@ -541,7 +533,7 @@ function Chat({
 	const view = selection?.kind ?? "desk";
 	const [openThread, setOpenThread] = useState<OpenThread>();
 	const [channelTools, setChannelTools] = useState<HTMLElement | null>(null);
-	// A task thread opens as a full conversation beside the Threads list, from wherever it was chosen.
+
 	const showThread = (thread: OpenThread) => {
 		setOpenThread(thread);
 		setSelection({ kind: "threads", id: "threads" });
@@ -662,7 +654,7 @@ function Chat({
 	);
 	const latest = useRef(world);
 	latest.current = world;
-	/** Every unseen DM seen and every unread channel caught up to its latest post, as Slack's Shift + Escape. */
+
 	const markAllRead = useCallback(async () => {
 		const now = latest.current;
 		await Promise.all([
@@ -674,7 +666,7 @@ function Chat({
 				),
 		]);
 	}, []);
-	// Alt + Up/Down moves through the sidebar's conversations (with Shift, only unread ones); Shift + Escape marks all read.
+
 	useEffect(() => {
 		if (!active) return;
 		const onKey = (event: KeyboardEvent) => {

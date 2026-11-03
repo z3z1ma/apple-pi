@@ -25,13 +25,11 @@ import "./workplace-desk.css";
 const api = window.agentWorkplace;
 
 const FLIGHT_OPEN = "workplace-desk-flight-open";
-// The page editor (Tiptap and ProseMirror) loads when Canvases first opens, not with the window.
+
 const CanvasesView = lazy(() => import("./workplace-canvases.js").then((module) => ({ default: module.CanvasesView })));
 
-/** A task conversation open beside the main view, like a Slack thread. */
 export type OpenThread = { id: string; title: string };
 
-/** Someone holding the task has it in focus and is working right now; otherwise the task waits. */
 const workingOn = (world: WorldSnapshot, task: WorkplaceTask) =>
 	task.assignees.some(
 		(assignee) =>
@@ -54,7 +52,6 @@ function personIn(world: WorldSnapshot, id: string): { person: Character | Dorma
 	return dormant ? { person: dormant, away: true } : undefined;
 }
 
-/** Root coordinators who could listen at the desk, awake ones first. */
 function deskCandidates(world: WorldSnapshot): { id: string; name: string; away: boolean }[] {
 	const awake = world.characters
 		.filter((person) => person.facts?.title === "Coordinator" && !person.facts.reportsTo && !person.facts.temporary)
@@ -148,7 +145,6 @@ function DeskSetup({ world }: { world: WorldSnapshot }) {
 	);
 }
 
-/** Work in flight: the task threads people hold now, newest activity first. */
 function InFlight({
 	world,
 	selected,
@@ -333,7 +329,6 @@ export function DeskView({
 
 type ThreadFilter = "all" | "live" | "waiting" | "closed";
 
-/** "Name: text", without repeating the name when the text already starts with it ("Ada assigned ..."). */
 function preview(world: WorldSnapshot, from: string | null, text: string): string {
 	const flat = text.replace(/\s+/g, " ");
 	if (!from) return flat;
@@ -341,7 +336,6 @@ function preview(world: WorldSnapshot, from: string | null, text: string): strin
 	return flat.startsWith(name) ? flat : `${name}: ${flat}`;
 }
 
-/** Slack's Threads: every task conversation, with its latest message; live work first, then the most recent. */
 export function ThreadsView({
 	world,
 	thread,
@@ -350,7 +344,7 @@ export function ThreadsView({
 	drafts,
 }: {
 	world: WorldSnapshot;
-	/** The thread open beside the list, as a full conversation. */
+
 	thread?: OpenThread;
 	openThread: (thread: OpenThread) => void;
 	closeThread: () => void;
@@ -366,7 +360,7 @@ export function ThreadsView({
 		const temporary = (id: string) =>
 			world.characters.find((person) => person.id === id)?.facts?.temporary ??
 			world.dormant?.find((person) => person.id === id)?.temporary;
-		// Review and program peers' own tasks are machinery, not conversations the operator follows.
+
 		const machinery = (task: WorkplaceTaskHistory) =>
 			task.participants.length > 0 &&
 			task.participants.every((participant) => participant.outcome === "discarded" || temporary(participant.person));
@@ -396,7 +390,7 @@ export function ThreadsView({
 		return [...extra, ...history]
 			.map((row) => {
 				const last = activity[row.thread];
-				// In flight, but none of its current owners is working now: the work waits on someone.
+
 				const task = live.get(row.thread);
 				const waiting = row.live && !(task && workingOn(world, task));
 				return { ...row, last, waiting, latest: Math.max(row.updatedAt, last?.lastAt ?? 0) };
@@ -543,11 +537,10 @@ export type ActivityItem = {
 	text: string;
 	at: number;
 	open: () => void;
-	/** A question the operator can answer right in Activity. */
+
 	answer?: { character: Character; questionnaire: Questionnaire };
 };
 
-/** Everything that needs the operator, most blocking first: questions, escalations, unseen results, unread mail. */
 export function activityItems(
 	world: WorldSnapshot,
 	go: { dm: (id: string) => void; thread: (thread: OpenThread) => void; mail: (thread: string) => void },
@@ -617,10 +610,6 @@ const LABEL: Record<ActivityItem["kind"], string> = {
 const ACTIVITY_SEEN = "workplace-activity-seen";
 const activityKey = (item: ActivityItem) => `${item.key}@${item.at}`;
 
-/**
- * What in Activity is new since the operator last looked: an item stays new until Activity was open while it was
- * listed. The seen keys are local to this device.
- */
 export function useActivitySeen(items: ActivityItem[], viewing: boolean): Set<string> {
 	const [seen, setSeen] = useState<Set<string>>(
 		() => new Set(JSON.parse(localStorage.getItem(ACTIVITY_SEEN) ?? "[]") as string[]),
@@ -706,10 +695,6 @@ export function ActivityView({
 	);
 }
 
-/**
- * Team channels (a manager and its direct reports) read as group conversations, like a Slack group DM: the people,
- * not a channel name. Organization and topic channels stay channels.
- */
 export function GroupList({
 	world,
 	groups,
@@ -725,7 +710,7 @@ export function GroupList({
 	filter: string;
 	unreads: Map<string, number>;
 	selected?: string;
-	/** The pencil for a group whose conversation holds unsent words, or nothing. */
+
 	draftMark: (id: string) => React.ReactNode;
 	open: (id: string) => void;
 	menu: (event: React.MouseEvent<HTMLElement> | React.KeyboardEvent<HTMLElement>, thread: { id: string }) => void;
@@ -780,7 +765,6 @@ export function GroupList({
 
 const SECTIONS = "workplace-sidebar-sections";
 
-/** The operator's own sidebar sections, and which conversation sits in which; local to this device. */
 export type Sections = {
 	list: { id: string; name: string }[];
 	placement: Record<string, string>;
@@ -797,7 +781,7 @@ export function useSections() {
 	};
 	return {
 		sections,
-		/** Put a conversation (`dm:<id>` or `channel:<id>`) in a section, or back in its default place with null. */
+
 		move: (key: string, section: string | null) => {
 			const placement = { ...sections.placement };
 			if (section) placement[key] = section;
@@ -818,7 +802,7 @@ export function useSections() {
 				list: sections.list.filter((item) => item.id !== id),
 				placement: Object.fromEntries(Object.entries(sections.placement).filter(([, value]) => value !== id)),
 			}),
-		/** Menu items that move one conversation between sections. */
+
 		menuItems: (key: string, ask: (create: (name: string) => void) => void) => [
 			...sections.list
 				.filter((item) => sections.placement[key] !== item.id)
@@ -855,7 +839,6 @@ export function useSections() {
 	};
 }
 
-/** The operator's own sections, each listing the conversations placed in it, with a control to remove the section. */
 export function CustomSections({
 	store,
 	render,
@@ -895,7 +878,6 @@ export function CustomSections({
 	});
 }
 
-/** A small inline form that names a new section; Electron has no window.prompt. */
 export function SectionNamer({ onDone }: { onDone: (name: string | null) => void }) {
 	const [name, setName] = useState("");
 	return (
@@ -926,7 +908,6 @@ export function SectionNamer({ onDone }: { onDone: (name: string | null) => void
 
 const COLLAPSED = "workplace-sidebar-collapsed";
 
-/** A sidebar section whose heading collapses it, remembered on this device. */
 export function SidebarSection({
 	id,
 	title,
@@ -965,7 +946,6 @@ export function SidebarSection({
 	);
 }
 
-/** A channel's header: groups show their people; channels show their kind, purpose and any standing charter. */
 export function ChannelHeader({
 	world,
 	channel,
@@ -974,7 +954,7 @@ export function ChannelHeader({
 	tools,
 }: {
 	world: WorldSnapshot;
-	/** Receives the header's slot for the conversation's reading controls. */
+
 	tools?: (slot: HTMLElement | null) => void;
 	channel: {
 		id: string;
@@ -1038,7 +1018,6 @@ export function ChannelHeader({
 
 export type OrganizationKind = "desk" | "threads" | "activity" | "later" | "notes" | "canvases";
 
-/** The organization views at the top of the Chat sidebar. */
 export function ChatNav({
 	world,
 	view,
@@ -1085,7 +1064,6 @@ export function ChatNav({
 	);
 }
 
-/** The main pane for an organization view, or a notice when a selected person or channel is gone. */
 export function OrganizationView({
 	view,
 	world,
@@ -1148,7 +1126,6 @@ export function OrganizationView({
 	);
 }
 
-/** Messages the operator saved to come back to, newest first, each opening where it was. */
 function LaterView({ go }: { go: (target: SwitchTarget) => void }) {
 	const saved = useLater();
 	return (
@@ -1195,7 +1172,6 @@ function LaterView({ go }: { go: (target: SwitchTarget) => void }) {
 	);
 }
 
-/** A task conversation open beside the main view; replies reach everyone working on it. */
 function ThreadConversation({
 	world,
 	thread,
@@ -1283,7 +1259,6 @@ function ThreadConversation({
 	);
 }
 
-/** Unstick an in-flight task from its thread: nudge whoever holds it, hand it to someone else, or close it. */
 function ThreadActions({
 	world,
 	task,
@@ -1369,7 +1344,6 @@ function ThreadActions({
 	);
 }
 
-/** The pinned task threads in the sidebar: each opens in Threads, with its unread count. */
 export function PinnedThreadList({
 	world,
 	selected,

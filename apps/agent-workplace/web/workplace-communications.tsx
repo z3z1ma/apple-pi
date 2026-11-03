@@ -15,7 +15,7 @@ export function CommunicationDialog({
 	busy: boolean;
 	close: () => void;
 	children: ReactNode;
-	/** Room for a list, such as channel discovery. */
+
 	wide?: boolean;
 }) {
 	const dialog = useRef<HTMLDialogElement>(null);
@@ -32,7 +32,7 @@ export function CommunicationDialog({
 	useEffect(() => {
 		const onEscape = (event: KeyboardEvent) => {
 			if (event.key !== "Escape") return;
-			// An open list inside the dialog closes first, as in any app.
+
 			if (dialog.current?.querySelector('[aria-expanded="true"]')) return;
 			event.preventDefault();
 			event.stopImmediatePropagation();
@@ -64,7 +64,6 @@ export function CommunicationDialog({
 	);
 }
 
-/** People to address in a channel action: chips with typeahead, and a known ID typed in full. */
 export function CommunicationRecipients({
 	world,
 	label,

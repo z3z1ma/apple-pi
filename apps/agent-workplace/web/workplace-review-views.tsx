@@ -20,8 +20,6 @@ import type {
 } from "../../../components/code-review/src/results.js";
 import type { ReviewConfiguration, ReviewRequest } from "../../../components/code-review/src/types.js";
 
-/** Evidence views for the Reviews pane: each part rendered for reading, not as raw text or JSON. */
-
 type Page<T> = { total: number; page: { offset: number; nextOffset: number | null; rows: T[] } | null };
 type Tone = "done" | "live" | "warn" | "bad" | "muted";
 
@@ -69,7 +67,6 @@ function Empty({ children }: { children: ReactNode }) {
 	return <p className="wp-review-empty">{children}</p>;
 }
 
-/** Stable React keys for static text lists: the text itself, numbered when it repeats. */
 function keyed<T>(items: T[], text: (item: T) => string): [string, T][] {
 	const seen = new Map<string, number>();
 	return items.map((item) => {
@@ -82,7 +79,6 @@ function keyed<T>(items: T[], text: (item: T) => string): [string, T][] {
 
 const BULLET = /^\s*- /;
 
-/** Plain text with blank-line paragraphs and "- " lines as bullets; never a code block. */
 function Prose({ text }: { text: string }) {
 	return (
 		<div className="wp-review-prose">
@@ -496,7 +492,7 @@ function TargetView({ data }: { data: TargetData }) {
 type Chunk = {
 	id: string;
 	title: string;
-	/** Absent on plans recorded before scopes were paths. */
+
 	paths?: string[];
 	context: string[];
 	risks?: { kind: string; reason: string }[];
@@ -560,7 +556,7 @@ function PlanView({ data }: { data: PlanData }) {
 							{chunk.id} · {chunk.regions.length} {chunk.regions.length === 1 ? "region" : "regions"}
 						</span>
 					</header>
-					{/* Plans recorded before scopes were paths name regions instead; they have no paths to show. */}
+					{}
 					{chunk.paths?.length ? (
 						<p className="wp-review-chips">
 							{chunk.paths.map((path) => (

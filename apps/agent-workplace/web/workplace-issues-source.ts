@@ -10,7 +10,6 @@ function storedSource(): IssuesSource | undefined {
 	return value === "jira" || value === "github" ? value : undefined;
 }
 
-/** Settings and a retained Issues pane share the explicit choice without remounting either reader. */
 export function useIssuesSource(enabled = true) {
 	const [source, setSource] = useState<IssuesSource | undefined>(storedSource);
 	const [error, setError] = useState("");

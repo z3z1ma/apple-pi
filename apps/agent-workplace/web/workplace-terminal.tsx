@@ -32,10 +32,6 @@ const terminalTheme = {
 	black: "#444c56",
 } satisfies ITheme;
 
-/**
- * A new terminal's colors: the dark variant of the Workplace theme in use when it opens (the house theme keeps the
- * palette above). Ghostty takes colors only at construction, so a running terminal keeps the ones it opened with.
- */
 function openingTheme(element: Element | null): ITheme {
 	const id = element?.closest<HTMLElement>("[data-theme]")?.dataset.theme;
 	if (!id || id === DEFAULT_THEME) return terminalTheme;
@@ -128,7 +124,7 @@ function TerminalView({
 					const size = fit.proposeDimensions();
 					if (!size || size.cols <= 0 || size.rows <= 0) return;
 					fit.fit();
-					// FitAddon ignores a fit within 50 ms of its last resize; a size change landing then would be lost for good.
+
 					if (term.cols !== size.cols || term.rows !== size.rows) refit = setTimeout(fitVisible, 60);
 					if (started) return;
 					started = true;

@@ -1,7 +1,3 @@
-/**
- * Unsent words kept on this device: each entry is its own localStorage key under `prefix`, so a draft survives a
- * reload or relaunch, and two documents (Workplace and its World frame) never overwrite each other's drafts.
- */
 export class StoredDrafts extends Map<string, string> {
 	private readonly prefix: string;
 

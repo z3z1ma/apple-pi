@@ -72,7 +72,6 @@ const EFFECTS: Record<OutsideRule["effect"], string> = {
 	route: "Sent to",
 };
 
-/** Where a conversation lives, as the runtime's rules name it (`activity.ts` `placeOf`). */
 function placeOf(conversation: string): string {
 	const github = /^github:([^#:]+)/.exec(conversation);
 	if (github) return `github:${github[1]}`;
@@ -100,17 +99,12 @@ const ruleText = (rule: OutsideRule) =>
 		.filter(Boolean)
 		.join(" \u00b7 ");
 
-/** Items about the same PR, issue or Slack thread, newest first, shown once with how many more there are. */
 function conversations(items: OutsideItem[]) {
 	const groups = new Map<string, OutsideItem[]>();
 	for (const item of items) groups.set(item.conversation, [...(groups.get(item.conversation) ?? []), item]);
 	return [...groups.values()];
 }
 
-/**
- * The operator's outside activity: Slack, GitHub, Jira, calendar and email as the runtime reads them, each conversation's newest item
- * with the desk's decision, and how each source is followed.
- */
 export function OutsideActivity({ world }: { world: WorldSnapshot }) {
 	const [source, setSource] = useState<OutsideSource>();
 	const [undecided, setUndecided] = useState(false);

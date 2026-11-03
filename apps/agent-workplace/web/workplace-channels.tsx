@@ -7,9 +7,9 @@ import { Icon } from "./workplace-icon.js";
 import { orgPeople } from "./workplace-org.js";
 
 const api = window.agentWorkplace;
-/** Channels per discovery page; More channels continues. */
+
 const PAGE = 50;
-/** Typing pause before discovery searches again. */
+
 const SEARCH_PAUSE_MS = 200;
 let pendingCreation:
 	| { attempt: string; scopeHead: string; name: string; purpose: string; invite: string[] }
@@ -78,7 +78,7 @@ export function ChannelBrowser({
 			mounted.current = false;
 		};
 	}, []);
-	// Discovery reads channel metadata only, and searches again as the operator types or filters.
+
 	// biome-ignore lint/correctness/useExhaustiveDependencies: find reads these same filters
 	useEffect(() => {
 		if (creating) return;

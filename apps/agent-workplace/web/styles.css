@@ -1,6 +1,3 @@
-/* The page and the world's own HTML (the place's title, notices, the chooser, the disconnected veil): layout only.
-   How they look (colours, type, borders, backgrounds) comes from the theme pack's skin (themes/<theme>/interface/). */
-
 html,
 body {
 	margin: 0;
@@ -28,7 +25,7 @@ body {
 	gap: 1px;
 	padding: 7px 22px 8px;
 	white-space: nowrap;
-	/* Clear of the orbs and minimap on the right (and as far from the left), however long a wing's name. */
+
 	box-sizing: border-box;
 	max-width: calc(100vw - 600px);
 }
@@ -54,7 +51,6 @@ body {
 	animation: notice-in 160ms ease-out;
 }
 
-/* A notice that stays until dismissed (a broken theme pack), below the passing ones. */
 .notice-lasting {
 	top: 120px;
 	display: grid;

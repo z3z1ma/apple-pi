@@ -1,5 +1,3 @@
-// Workplace's own form controls, in place of the browser's: a select whose list matches the app (with type-to-find,
-// and a filter field for long lists), and a recipients field with chips and typeahead, as in Gmail.
 import { type KeyboardEvent, type ReactNode, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { Icon } from "./workplace-icon.js";
 import { PersonAvatar } from "./workplace-people.js";
@@ -7,10 +5,8 @@ import "./workplace-fields.css";
 
 export type Choice<T extends string> = { value: T; label: string; detail?: string; disabled?: boolean };
 
-/** A list with more choices than this gets a filter field at its top. */
 const FILTER_FROM = 8;
 
-/** Where a popup list goes: under its control, or above it when there is no room below. */
 function usePlacement(anchor: React.RefObject<HTMLElement | null>, open: boolean) {
 	const [place, setPlace] = useState<React.CSSProperties>({});
 	useLayoutEffect(() => {
@@ -36,7 +32,6 @@ function usePlacement(anchor: React.RefObject<HTMLElement | null>, open: boolean
 	return place;
 }
 
-/** Close a popup when a press lands outside both its control and the popup. */
 function useOutside(open: boolean, close: () => void, ...inside: React.RefObject<HTMLElement | null>[]) {
 	useEffect(() => {
 		if (!open) return;
@@ -49,10 +44,6 @@ function useOutside(open: boolean, close: () => void, ...inside: React.RefObject
 	});
 }
 
-/**
- * A select: the chosen label on a button, and a list that opens below it. Arrows move, Enter or a click chooses,
- * Escape closes, letters jump to the first matching choice, and long lists can be filtered.
- */
 export function Select<T extends string>({
 	value,
 	options,
@@ -66,7 +57,7 @@ export function Select<T extends string>({
 	value: T;
 	options: Choice<T>[];
 	onChange: (value: T) => void;
-	/** The accessible name, since the visible text is the chosen label. */
+
 	label: string;
 	disabled?: boolean;
 	placeholder?: string;
@@ -127,7 +118,6 @@ export function Select<T extends string>({
 			}
 			close(event.key === "Escape");
 		} else if (event.key.length === 1 && options.length <= FILTER_FROM && !event.metaKey && !event.ctrlKey) {
-			// Type-to-find, as a native select does.
 			const now = Date.now();
 			typed.current = { text: now - typed.current.at < 700 ? typed.current.text + event.key : event.key, at: now };
 			const found = shown.findIndex((option) =>
@@ -208,10 +198,6 @@ export function Select<T extends string>({
 
 export type Recipient = { id: string; name: string; detail?: string };
 
-/**
- * Gmail's recipients field: chosen people as chips, and a typeahead that finds people by name or role. Enter, Tab
- * or a comma adds the highlighted person; Backspace in an empty field removes the last chip.
- */
 export function Recipients({
 	label,
 	people,
@@ -228,9 +214,9 @@ export function Recipients({
 	onChange: (ids: string[]) => void;
 	disabled?: boolean;
 	placeholder?: string;
-	/** Controls at the field's end, such as Gmail's Cc. */
+
 	trailing?: ReactNode;
-	/** Enter also adds typed text that matches nobody listed, as an ID the runtime resolves. */
+
 	free?: boolean;
 }) {
 	const [query, setQuery] = useState("");

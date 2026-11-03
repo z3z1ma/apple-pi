@@ -1,6 +1,3 @@
-/* Settings (workplace-settings.tsx): appearance and connections. */
-
-/* Not `.wp-settings`: the shell gives the app that class while Settings is open. */
 .wp-settings-page {
 	display: flex;
 	flex: 1;

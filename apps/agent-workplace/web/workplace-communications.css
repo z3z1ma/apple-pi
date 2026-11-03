@@ -63,7 +63,6 @@
 	color: var(--wp-muted);
 }
 
-/* Channel discovery, laid out like Slack's channel browser. */
 .wp-communication-dialog[data-wide] .wp-modal-body {
 	display: flex;
 	flex-direction: column;

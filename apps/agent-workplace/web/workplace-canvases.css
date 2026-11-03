@@ -1,5 +1,3 @@
-/* The operator's canvases (workplace-canvases.tsx): a list beside the page he writes in. */
-
 .wp-canvases {
 	display: grid;
 	grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
@@ -12,7 +10,7 @@
 	min-height: 0;
 	border-right: 1px solid var(--wp-border);
 }
-/* The list's header lines up with the page's header beside it. */
+
 .wp-canvas-list .wp-conversation-header {
 	box-sizing: border-box;
 	height: 52px;
@@ -165,7 +163,6 @@
 	flex: 1;
 }
 
-/* The page scrolls as a whole; its text keeps a readable measure in the middle. */
 .wp-canvas-page {
 	flex: 1;
 	padding: 36px max(48px, calc((100% - 760px) / 2)) 120px;

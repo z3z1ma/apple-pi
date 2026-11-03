@@ -9,9 +9,9 @@ import { Icon } from "./workplace-icon.js";
 import "./workplace-canvases.css";
 
 const api = window.agentWorkplace;
-/** Canvases listed at a time; the list reads metadata and a preview only, never whole bodies. */
+
 const PAGE = 200;
-/** Typing pauses this long before a save, so a burst of keys is one write. */
+
 const SAVE_AFTER_MS = 700;
 
 const ago = (at: number) => {
@@ -22,7 +22,6 @@ const ago = (at: number) => {
 	return hours < 24 ? `${hours}h ago` : new Date(at).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 };
 
-/** The blocks "/" offers at the start of an empty line, as in Notion and Slack canvases. */
 const BLOCKS: { label: string; hint: string; run: (editor: Editor) => void }[] = [
 	{ label: "Text", hint: "Plain paragraph", run: (editor) => editor.chain().focus().setParagraph().run() },
 	{ label: "Heading 1", hint: "#", run: (editor) => editor.chain().focus().setHeading({ level: 1 }).run() },
@@ -36,7 +35,6 @@ const BLOCKS: { label: string; hint: string; run: (editor: Editor) => void }[] =
 	{ label: "Divider", hint: "---", run: (editor) => editor.chain().focus().setHorizontalRule().run() },
 ];
 
-/** The operator's canvases: his own documents, listed beside the one he is writing in. */
 export function CanvasesView({ world }: { world: WorldSnapshot }) {
 	const [words, setWords] = useState("");
 	const [list, setList] = useState<CanvasList>();
@@ -148,7 +146,7 @@ function CanvasEditor({
 	const [save, setSave] = useState<Save>({ state: "saved" });
 	const [missing, setMissing] = useState<string>();
 	const [slash, setSlash] = useState<{ query: string; from: number; x: number; y: number; index: number }>();
-	// The version this editor started from, and whether it holds words not yet written.
+
 	const version = useRef(0);
 	const dirty = useRef(false);
 	const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -220,7 +218,7 @@ function CanvasEditor({
 	useEffect(() => {
 		if (editor) void load();
 	}, [editor, id]);
-	// An agent may write while he reads: take the newer text when he has nothing unsaved.
+
 	// biome-ignore lint/correctness/useExhaustiveDependencies: every snapshot can carry another writer's change.
 	useEffect(() => {
 		if (dirty.current || !editor) return;
@@ -229,7 +227,7 @@ function CanvasEditor({
 			void load();
 		});
 	}, [world]);
-	// Leaving the canvas writes what is pending.
+
 	useEffect(() => () => void flush(), [flush]);
 
 	const blocks = slash
@@ -342,7 +340,7 @@ function CanvasEditor({
 					onKeyDown={(event) => {
 						if (event.key === "Enter") {
 							event.preventDefault();
-							// Focus now, not on the next frame as `commands.focus` does, so the next keys land in the text.
+
 							editor?.chain().setTextSelection(1).run();
 							editor?.view.focus();
 						}

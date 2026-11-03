@@ -44,13 +44,13 @@ export function ThreadPane({
 	channelLabel?: string;
 	world: WorldSnapshot;
 	drafts: Map<string, string>;
-	/** A person every channel post notifies, such as the desk's coordinator. */
+
 	listener?: string;
-	/** Hosted in a pane that already names the conversation: no title or participant line of its own. */
+
 	embedded?: boolean;
-	/** The host pane's header slot for the reading controls (search, Actions). */
+
 	toolbarHost?: HTMLElement | null;
-	/** Open a task thread a message produced (its recorded `message produced task` link). */
+
 	openThread?: (thread: { id: string; title: string }) => void;
 }) {
 	const hosted = (tools: ReactNode) => (toolbarHost ? createPortal(tools, toolbarHost) : tools);
@@ -77,7 +77,7 @@ export function ThreadPane({
 	};
 	const [pending, setPending] = useState(false);
 	const [error, setError] = useState("");
-	// Reactions this reader changed, shown at once; a later read brings the same from the runtime.
+
 	const [reacted, setReacted] = useState(new Map<string, Reaction[]>());
 	const reactionsOf = (message: ConversationMessage) => reacted.get(message.id) ?? message.reactions ?? [];
 	const toggleReaction = (message: ConversationMessage, emoji: string) => {
@@ -114,7 +114,7 @@ export function ThreadPane({
 	const locked = pending || unresolved;
 	const latestSeq = page?.window_through ?? 0;
 	const hasNew = !!channel && channel.lastSeq > latestSeq;
-	// Loading earlier messages keeps what he was reading in place, as the page grows above it.
+
 	const keepFromBottom = useRef<number | undefined>(undefined);
 	const lastTop = useRef(0);
 	useLayoutEffect(() => {
@@ -192,8 +192,7 @@ export function ThreadPane({
 		keepFromBottom.current = el.scrollHeight - el.scrollTop;
 		void read({ ...(readOptions.current ?? { thread: id, view, limit }), cursor: page.next_cursor }, true);
 	};
-	// Like Slack: what he is looking at is read. The newest message counts as seen while the window has focus and the
-	// conversation shows its end; reading older pages or searching marks nothing.
+
 	const markedThrough = useRef(0);
 	const markSeen = () => {
 		if (!page || !focused || !followLatest.current || search || page.view !== "recent") return;
@@ -494,8 +493,7 @@ export function ThreadPane({
 						)}
 					</>,
 				)}
-				{/* While he reads older posts, or to retry a failed read: shown while following, it would shrink the list
-				    and stop the following. */}
+				{}
 				{hasNew && (!followLatest.current || Boolean(error)) && (
 					<button
 						type="button"
@@ -561,7 +559,7 @@ export function ThreadPane({
 						onChange={(event) => {
 							const next = Number(event.target.value);
 							setLimit(next);
-							// The newest page shows again at the new size; a search keeps its own results.
+
 							if (!search && Number.isSafeInteger(next) && next > 0) {
 								followLatest.current = !!channel;
 								void read({ thread: id, view: "recent", limit: next });
@@ -577,7 +575,7 @@ export function ThreadPane({
 					const el = messages.current;
 					if (el) followLatest.current = el.scrollHeight - el.clientHeight - el.scrollTop < 24;
 					if (followLatest.current) markSeen();
-					// Like Slack, earlier messages load as he scrolls up to them; scrolling the reader to its end loads nothing.
+
 					if (el && el.scrollTop < lastTop.current && el.scrollTop < 120) earlier();
 					if (el) lastTop.current = el.scrollTop;
 				}}
@@ -1055,10 +1053,8 @@ function ThreadMessages({
 	});
 }
 
-/** The operator reads as You and the runtime as Pi, not by their internal addresses. */
 const displayName = (id: string, name: string) => (id === "operator" ? "You" : id === "harness" ? "Pi" : name);
 
-/** Consecutive messages from one author within this span read as one block, as in Slack. */
 const GROUP_MS = 5 * 60_000;
 const dayOf = (at: number) => new Date(at).toDateString();
 function dayLabel(at: number): string {

@@ -1,5 +1,3 @@
-/* Workplace's select and recipients field (workplace-fields.tsx). */
-
 .wp-app .wp-select {
 	display: inline-flex;
 	align-items: center;
@@ -217,7 +215,6 @@
 	font-size: 12px;
 }
 
-/* A labelled row around a Workplace control: its caption above, the control below. */
 .wp-field {
 	display: grid;
 	gap: 6px;
@@ -233,7 +230,6 @@
 	width: 100%;
 }
 
-/* Buttons for forms and modals: a quiet default and one primary action. */
 .wp-app .wp-button {
 	display: inline-flex;
 	align-items: center;
@@ -283,10 +279,6 @@
 	background: color-mix(in srgb, var(--wp-danger) 86%, var(--wp-text));
 }
 
-/*
- * A modal: a native dialog with a title row, a close button, a scrolling body and a footer of actions. It fades in
- * without a transform, which would move fixed popup lists inside it and shift its measured bounds.
- */
 .wp-app dialog.wp-modal {
 	display: none;
 	max-height: calc(100dvh - 48px);
@@ -403,7 +395,6 @@
 	background: color-mix(in srgb, var(--wp-panel) 60%, var(--wp-bg));
 }
 
-/* The other Workplace dialogs keep their own layout and share the modal's backdrop, entrance and buttons. */
 .wp-app :is(.wp-person-dialog, .wp-org-move-dialog, .wp-issues-confirm, .wp-work-dialog)::backdrop {
 	background: rgb(18 12 22 / 0.45);
 	backdrop-filter: blur(2px);
@@ -444,7 +435,7 @@
 	box-shadow: 0 0 0 3px color-mix(in srgb, var(--wp-accent) 18%, transparent);
 	outline: none;
 }
-/* Fields that draw their own focus ring around an inner input. */
+
 .wp-app :is(.wp-recipients, .wp-channel-find, .wp-channel-name-input) input:focus-visible,
 .wp-app .wp-modal :is(.wp-field, .wp-modal-form > label) :is(input, textarea):focus-visible,
 .wp-app .wp-select-filter:focus-visible {

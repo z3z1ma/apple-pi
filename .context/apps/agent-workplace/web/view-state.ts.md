@@ -1,3 +1,8 @@
+## file
+
+Replace the view state object on each update.
+Why: useSyncExternalStore subscribers detect changed snapshot identity, not mutation within the existing object.
+
 ## symbol:WorldIntent
 
 Intents are a broadcast: the interface handles `examine` and `terminal` itself (whoever sends them, so the world's right-click menu can send them too); the world must handle `walk-to`, `travel`, `go-to`, `talk-to`, and `walk-grid`. `main.tsx` wires the world's side until the game subscribes itself: `travel` and `go-to` through `PlaceScene.travel`, `talk-to` through `conversations.open` (no walking), `walk-grid` through a synthetic G key, and `walk-to` not at all yet.
