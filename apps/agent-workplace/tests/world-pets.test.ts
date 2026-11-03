@@ -15,20 +15,13 @@ import {
 import type { Character, WorldSnapshot } from "../src/world.js";
 import { PERSON_TILES } from "../web/game/walker.js";
 
-// Seam 2 for pets varied and to scale (alive pass, ticket 03): the committed, built world UI in headless Chrome over a
-// fixture backend. In each theme every pet is its own animal in its own place, drawn at its kind's height beside a
-// standing character (a cat about a third, a dog about half, a small animal less), and each answers hover, a left
-// click, and its menu with its own verbs, poses, and Examine line; a pet asleep purrs on in its sleep when petted and
-// wakes to play. None of it calls the backend.
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const ORIGIN = "http://localhost";
 const appDir = fileURLToPath(new URL("..", import.meta.url));
-// AGENT_WORLD_SHOTS=<dir> saves close-ups there as aw-03-<theme>-<look>-*.png.
 const SHOTS = process.env.AGENT_WORLD_SHOTS;
 const THEMES = ["fantasy", "tech-office", "anime-school"] as const;
 const read = <T>(path: string): T => JSON.parse(readFileSync(join(appDir, path), "utf8"));
 
-/** How tall each kind of pet sits beside a standing character (shares of its height). */
 const SIZES = { cat: [0.28, 0.38], dog: [0.4, 0.56], small: [0.12, 0.3], perched: [0.36, 0.5] } as const;
 const ANIMAL: Record<string, Record<string, keyof typeof SIZES>> = {
 	fantasy: { "": "cat", "cat-black": "cat", hound: "dog", owl: "small", rabbit: "small" },
@@ -105,7 +98,6 @@ async function openWorld(theme: string) {
 			watchReplies: async () => {},
 			onReply: () => () => {},
 			openLink: async () => ({ ok: true }),
-			// The forge reads its benches on entering: none open.
 			pullRequests: async () => ({ ok: true, pullRequests: [] }),
 			outsideWrites: async () => [],
 			onOutsideWrite: () => () => {},
@@ -181,7 +173,6 @@ async function closeUp(page: Page, pet: PetView, name: string) {
 	});
 }
 
-/** Wait until the pet shows `art` and return what it shows then. */
 const showing = (page: Page, art: string, what: string) =>
 	vi.waitFor(
 		async () => {
@@ -219,7 +210,6 @@ describe.each(THEMES)("in the %s theme", (theme) => {
 			expect(before, what).toMatchObject({ name, look: slot.look ?? null, asleep: !!slot.asleep });
 			await closeUp(page, before, `aw-03-${theme}-${slot.look ?? "own"}-0`);
 
-			// Sitting up (awake at rest; asleep, once woken), its height beside a standing character is its kind's.
 			const quiet = (await calls(page)).length;
 			const at = () => screen(page, before.x, before.y - Math.min(before.h / 2, 0.25));
 			let [sx, sy] = await at();
@@ -237,25 +227,21 @@ describe.each(THEMES)("in the %s theme", (theme) => {
 			expect(share, `${what}: ${share.toFixed(2)} of a character's height`).toBeGreaterThanOrEqual(low);
 			expect(share, what).toBeLessThanOrEqual(high);
 			if (slot.asleep) {
-				// Woken, it plays, then curls up asleep again.
 				await showing(page, frames.play, `${what} plays once woken`);
 				await showing(page, frames.sleep, `${what} goes back to sleep`);
 			}
 
-			// Hover: its own verb and name.
 			[sx, sy] = await at();
 			await page.mouse.move(sx, sy);
 			await vi.waitFor(async () => expect(await hoverText(page), what).toContain(`${style.verbs.pet} ${name}`), {
 				timeout: 3000,
 			});
-			// The menu: its own plays, then Examine.
 			await page.mouse.click(sx, sy, { button: "right" });
 			expect(await menuItems(page), what).toEqual(
 				expect.arrayContaining([`${style.verbs.pet} ${name}`, `${style.verbs.play} ${name}`, `Examine ${name}`]),
 			);
 			await page.keyboard.press("Escape");
 
-			// A left click: the avatar walks up, then pets it (eyes closed; asleep, it purrs on in its sleep).
 			await page.mouse.click(sx, sy);
 			await vi.waitFor(
 				async () => {
@@ -269,7 +255,6 @@ describe.each(THEMES)("in the %s theme", (theme) => {
 			);
 			const avatar = await view<AvatarView>(page, "avatar()");
 			expect(Math.hypot(avatar.x - slot.at[0], avatar.y - slot.at[1]), `${what}: walked up`).toBeLessThan(2.3);
-			// On the floor, the avatar stands beside it (or behind), never in front, where its figure would hide the pet.
 			if (before.onFloor)
 				expect(
 					Math.abs(avatar.x - slot.at[0]) >= 0.9 || avatar.y < slot.at[1],
@@ -281,7 +266,6 @@ describe.each(THEMES)("in the %s theme", (theme) => {
 			});
 
 			if (!slot.asleep) {
-				// Played with from the menu: its own playful pose.
 				[sx, sy] = await at();
 				await page.mouse.click(sx, sy, { button: "right" });
 				await page
@@ -293,7 +277,6 @@ describe.each(THEMES)("in the %s theme", (theme) => {
 				await page.waitForTimeout(1600);
 			}
 
-			// Examine: its own line.
 			[sx, sy] = await at();
 			await page.mouse.click(sx, sy, { button: "right" });
 			await page.locator(".pointer-menu [role=menuitem]", { hasText: `Examine ${name}` }).click();
@@ -304,7 +287,6 @@ describe.each(THEMES)("in the %s theme", (theme) => {
 					),
 				{ timeout: 3000 },
 			);
-			// (The forge reads its benches again while you are there: that is the forge, not the pet.)
 			const made = (await calls(page)).slice(quiet).filter((call) => !["pullRequests", "outsideWrites"].includes(call));
 			expect(made, `${what}: calls to the backend`).toEqual([]);
 		}

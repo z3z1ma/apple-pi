@@ -8,17 +8,11 @@ import { FIDGETS, type FidgetKind, slotStyle, type ThemeManifest } from "../src/
 import type { Character, CharacterFacts, WorldSnapshot } from "../src/world.js";
 import type { PlaceData } from "../web/theme.js";
 
-// Seam 2 for fidget objects (ticket 29): the committed, built world UI in headless Chrome over a fixture backend that
-// records every call made to it. In each theme, every kind of fidget object answers hover text, a left click (the
-// avatar walks up, then its default play changes how it looks), and the right-click menu (every play and Examine);
-// and none of it calls the backend: a fidget sends no command and makes no outside call.
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const ORIGIN = "http://localhost";
 const appDir = fileURLToPath(new URL("..", import.meta.url));
-// AGENT_WORLD_SHOTS=<dir> saves close-ups there as aw-29-<theme>-<kind>-*.png.
 const SHOTS = process.env.AGENT_WORLD_SHOTS;
 const THEMES = ["fantasy", "tech-office", "anime-school"] as const;
-/** Where to look for each kind first: places the Places tab reaches without a function place's own backend. */
 const PLACES = ["headquarters", "common-room", "square", "inn", "rookery", "library"] as const;
 
 const read = <T>(path: string): T => JSON.parse(readFileSync(join(appDir, path), "utf8"));
@@ -69,7 +63,6 @@ const world = (theme: string): WorldSnapshot =>
 		mail: [],
 	}) as unknown as WorldSnapshot;
 
-/** Open the world over a fixture backend; `window.calls` records every call made to it, by name. */
 async function openWorld(theme: string) {
 	const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
 	const errors: string[] = [];
@@ -100,7 +93,6 @@ async function openWorld(theme: string) {
 			sendMail: async () => ({ ok: true, stage: "applied" }),
 			openLink: async () => ({ ok: true }),
 		};
-		// Every call the world makes to its backend is recorded by name.
 		w.agentWorkplace = new Proxy(api, {
 			get(target, key) {
 				const value = target[key as string];
@@ -115,7 +107,6 @@ async function openWorld(theme: string) {
 	await page.goto(`${ORIGIN}/index.html?world`);
 	await vi.waitFor(async () => expect(await view(page, "avatar()")).toBeTruthy(), { timeout: 15000 });
 	await page.waitForTimeout(500);
-	// Clicks reach the world through the interface's panels (they still draw for screenshots).
 	await page.addStyleTag({ content: ".aw-interface, .aw-interface * { pointer-events: none !important; }" });
 	return { page, errors };
 }
@@ -156,7 +147,6 @@ async function fidget(page: Page, index: number): Promise<FidgetView> {
 	return all.find((f) => f.index === index)!;
 }
 
-/** Travel by the Places tab (unless there already), and zoom out to see the place whole. */
 async function travel(page: Page, label: string, key: string, errors: string[] = []) {
 	if ((await view(page, "place()")) !== key) {
 		const places = page.getByRole("tab", { name: "Places", exact: true });
@@ -170,7 +160,6 @@ async function travel(page: Page, label: string, key: string, errors: string[] =
 	await page.waitForTimeout(900);
 }
 
-/** Send the avatar a few tiles off, so walking up to the fidget is a walk. */
 async function walkAway(page: Page, place: PlaceData, at: [number, number]) {
 	const [ex, ey] = place.entries.start ?? Object.values(place.entries)[0];
 	const far = Math.hypot(ex - at[0], ey - at[1]) > 3 ? [ex, ey] : place.spots[0];
@@ -192,9 +181,7 @@ async function closeUp(page: Page, f: FidgetView, name: string) {
 	});
 }
 
-/** Whether its default play shows on it (each kind its own way). */
 function playedDefault(kind: FidgetKind, f: FidgetView): boolean {
-	// A pet (whichever look) is being petted: its own frame for it, with hearts.
 	if (kind === "pet") return f.playing === "pet" && f.particles > 0;
 	if (kind === "spin") return f.speed > 0;
 	if (kind === "bell") return f.art === "bell-ringing";
@@ -208,7 +195,6 @@ function playedDefault(kind: FidgetKind, f: FidgetView): boolean {
 describe.each(THEMES)("in the %s theme", (theme) => {
 	const manifest = read<ThemeManifest>(`themes/${theme}/theme.json`);
 	const placeData = (name: string) => read<PlaceData>(`themes/${theme}/places/${name}.json`);
-	// Each kind the pack places, where it is first found in the places tried.
 	const found = new Map<FidgetKind, { place: string; index: number }>();
 	for (const name of PLACES)
 		placeData(name)
@@ -230,7 +216,6 @@ describe.each(THEMES)("in the %s theme", (theme) => {
 			const slot = data.overlaySlots.filter((s) => s.kind === "fidget")[index];
 			const key = place === "headquarters" || place === "common-room" ? `${place}:${HQ}` : place;
 			await travel(page, manifest.labels[place], key, errors);
-			// A pet wears its look's name and verbs (alive pass, ticket 03).
 			const style = slotStyle(manifest.fidgets![kind]!, slot);
 			const name = slot.name ?? style.name;
 			const before = await fidget(page, index);
@@ -240,7 +225,6 @@ describe.each(THEMES)("in the %s theme", (theme) => {
 			const shot = `aw-29-${theme}-${kind}`;
 			await closeUp(page, before, `${shot}-0`);
 
-			// Hover: its default play, named.
 			const plays: string[] = kind === "light" ? ["on"] : kind === "box" ? ["open"] : [...FIDGETS[kind].plays];
 			await page.mouse.move(sx, sy);
 			await vi.waitFor(
@@ -252,7 +236,6 @@ describe.each(THEMES)("in the %s theme", (theme) => {
 				{ timeout: 3000 },
 			);
 
-			// The right-click menu: every play, then Examine.
 			const quiet = (await calls(page)).length;
 			await page.mouse.click(sx, sy, { button: "right" });
 			expect(await menuItems(page)).toEqual(
@@ -260,14 +243,12 @@ describe.each(THEMES)("in the %s theme", (theme) => {
 			);
 			await page.keyboard.press("Escape");
 
-			// Left click: the avatar walks up first, and only then does it play.
 			const start = await view<AvatarView>(page, "avatar()");
 			expect(Math.hypot(start.x - slot.at[0], start.y - slot.at[1]), `${kind}: starts away`).toBeGreaterThan(1.9);
 			await page.mouse.click(sx, sy);
 			let walked = false;
 			let early = false;
 			for (let i = 0; i < 80; i++) {
-				// Both in one frame's look, so an arrival between two reads is not taken for an early play.
 				const [avatar, now] = (await page.evaluate((i) => {
 					const world = (window as any).agentWorldView;
 					return [world.avatar(), world.fidgets().find((f: { index: number }) => f.index === i)];
@@ -287,8 +268,6 @@ describe.each(THEMES)("in the %s theme", (theme) => {
 			});
 			await closeUp(page, await fidget(page, index), `${shot}-1`);
 
-			// Its other play from the menu (a toggle offers the way back), then Examine.
-			// Where it is on screen now: the view follows the avatar.
 			const point = () => screen(page, before.x, before.y - Math.min(before.h / 2, 0.4));
 			await page.waitForTimeout(2600);
 			let [mx, my] = await point();
@@ -325,7 +304,6 @@ describe.each(THEMES)("in the %s theme", (theme) => {
 				{ timeout: 3000 },
 			);
 
-			// None of it reached the backend.
 			expect((await calls(page)).slice(quiet), `${kind}: calls to the backend`).toEqual([]);
 		}
 		expect(errors).toEqual([]);
