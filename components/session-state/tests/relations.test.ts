@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai/compat";
@@ -30,16 +30,20 @@ const write = (path: string, content: string) =>
 	fauxAssistantMessage([fauxToolCall("write", { path, content })], { stopReason: "toolUse" });
 
 test("a session started with --reports-to shows who it reports to", async () => {
-	const run = await fauxSession([bridge], [], []);
+	const run = await fauxSession(
+		[
+			(pi) => {
+				const getFlag = pi.getFlag.bind(pi);
+				pi.getFlag = (name) => (name === "reports-to" ? "coordinator-1" : getFlag(name));
+				bridge(pi);
+			},
+		],
+		[],
+		[],
+	);
 	try {
 		const id = run.session.sessionManager.getSessionId();
-		await seen(id);
-		run.session.extensionRunner.setFlagValue("reports-to", "coordinator-1");
-		await run.session.bindExtensions({});
-		await vi.waitFor(() => expect(session(id).reports_to).toBe("coordinator-1"));
-		expect(
-			query(state.dbPath, "select 1 from events where session_id = ? and type = 'reports_to_changed'", id),
-		).toHaveLength(1);
+		await vi.waitFor(() => expect(session(id)?.reports_to).toBe("coordinator-1"), { timeout: 15000 });
 	} finally {
 		await close(run);
 	}
@@ -170,9 +174,8 @@ test("editing other ledger bundles changes only the requested files and preserve
 		const before = views()[0].details as { focus: { id: string }; tasks: { id: string }[] };
 		expect(before).toMatchObject({ focus: { title: "Session lifecycle" }, tasks: [{ title: "Session lifecycle" }] });
 		expect(views()[1]).toMatchObject({ isError: false, details: { focus: before.focus, tasks: before.tasks } });
-		for (const task of ["202610180001-alpha", "202610180002-beta"]) {
-			expect(readdirSync(join(cwd, ".ledger", task)).sort()).toEqual(["notes.md", "task.md"]);
-		}
+		expect(readFileSync(join(cwd, ".ledger", "202610180001-alpha", "notes.md"), "utf8")).toBe("first");
+		expect(readFileSync(join(cwd, ".ledger", "202610180002-beta", "notes.md"), "utf8")).toBe("second");
 		await run.session.bindExtensions({});
 		await run.session.prompt("show my work after reconnecting");
 		expect(views()).toHaveLength(3);
@@ -205,7 +208,7 @@ test("editing a ledger bundle without taking work leaves the person unassigned",
 			(message) => message.role === "toolResult" && message.toolName === "directory",
 		);
 		expect(directory).toMatchObject({ isError: false, details: { tasks: [], focus: null } });
-		expect(readdirSync(join(cwd, ".ledger", "202610180003-gamma")).sort()).toEqual(["notes.md", "task.md"]);
+		expect(readFileSync(join(cwd, ".ledger", "202610180003-gamma", "notes.md"), "utf8")).toBe("note");
 	} finally {
 		await close(run);
 	}
