@@ -8,3 +8,5 @@ Escape closes an open list first. Dialog Escape handlers that listen on `window`
 Why: a capture listener runs before the list sees the key, so without the skip one Escape closed the whole create-channel modal instead of its open dropdown.
 Coupled: apps/agent-workplace/web/workplace-fields.css, apps/agent-workplace/web/workplace-communications.tsx, apps/agent-workplace/tests/helpers/select.ts
 Verify: apps/agent-workplace/tests/world-communications.test.ts, apps/agent-workplace/tests/world-org.test.ts
+
+The open listbox carries the same accessible name as its combobox button, so `getByLabel(label)` matches two elements while the list is open; tests read a field's label before opening it, as `tests/helpers/select.ts` does. Recipients reuses the `wp-select-popup` styles, so option layout targets the text span's own class (`wp-option-text`), never `[role=option] > span`, which stretched avatar spans into wide pills. The composite fields draw their own focus ring, so the global `.wp-app :focus-visible` outline is turned off for their inner input; otherwise a second ring shows inside the field.
