@@ -1,6 +1,3 @@
-// The transcript index's writer, run as a worker thread of the runtime (see `TranscriptIndexer`). Each message names a
-// session and its transcript file; the worker brings that session's rows up to date, one session at a time, coalescing
-// repeated requests for a session that is already waiting.
 import { parentPort, workerData } from "node:worker_threads";
 import { indexTranscript, openIndex } from "./transcript-index.hot.js";
 

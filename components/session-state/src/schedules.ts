@@ -1,8 +1,3 @@
-/**
- * Durable schedules: mail that the runtime sends on time, once or repeatedly, surviving restarts. Each firing is an
- * ordinary harness post on the schedule's own thread, so it reaches the recipient (waking it when on call) and stays
- * in its history.
- */
 
 import type { DatabaseSync } from "node:sqlite";
 
@@ -37,7 +32,6 @@ export function createSchedule(
 	).run(id, owner, command.to, command.body, Math.max(command.firstAt, now), command.everyMs ?? null, now);
 }
 
-/** Cancel a schedule its owner or recipient holds; the operator can cancel any. */
 export function cancelSchedule(db: DatabaseSync, id: string, actor: string, operator: string, now: number): void {
 	const row = db.prepare("select owner, target, cancelled_at from schedules where id = ?").get(id) as
 		| Pick<Schedule, "owner" | "target" | "cancelled_at">
@@ -69,10 +63,6 @@ export function nextScheduleAt(db: DatabaseSync): number | undefined {
 	return row.at ?? undefined;
 }
 
-/**
- * Record a firing: a one-time schedule ends; a repeating one moves to its next time after now, skipping firings missed
- * while the runtime was down rather than sending them all at once.
- */
 export function markFired(db: DatabaseSync, schedule: Schedule, now: number): void {
 	if (schedule.every_ms === null) {
 		db.prepare("update schedules set cancelled_at = ?, last_fired_at = ? where id = ?").run(now, now, schedule.id);

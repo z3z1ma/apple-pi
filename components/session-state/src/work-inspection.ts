@@ -113,7 +113,6 @@ function waitDuration(task: WorkTask, context: InspectionContext, waits: Link[])
 	);
 }
 
-/** Shared task evidence for delivery reports and explicitly associated conversations. */
 export function taskEvidence(db: DatabaseSync, organization: string, context: InspectionContext) {
 	const tasks = new Map(context.tasks.map((task) => [task.id, task]));
 	const evidence = evidenceByTask(db, organization, context.to);
@@ -141,7 +140,6 @@ export function taskEvidence(db: DatabaseSync, organization: string, context: In
 	};
 }
 
-/** Delivery records and waiting exposure share the existing work classification and historical ownership. */
 export function progressIn(
 	db: DatabaseSync,
 	organization: string,
@@ -256,7 +254,6 @@ export function progressIn(
 	};
 }
 
-/** Traverse only declared wait edges, returning one witness path per distinct upstream reference. */
 export function dependencyPaths(waits: { from: string; to: string; ref: string }[], target: string) {
 	const incoming = new Map<string, typeof waits>();
 	for (const wait of waits) {

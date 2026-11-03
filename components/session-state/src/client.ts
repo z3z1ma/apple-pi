@@ -10,10 +10,6 @@ const RUNTIME_MAIN = fileURLToPath(new URL("./runtime-main.runtime.ts", import.m
 const REGISTER = new URL("./register.mjs", import.meta.url).href;
 export const RETRY_MS = 250;
 
-/**
- * Start a runtime detached from the caller; it keeps running after the caller ends. Its output goes to the
- * runtime log, and a failed start is reported through `warn` (exit 0 only means another runtime runs).
- */
 export function spawnRuntime(warn: (message: string) => void): ChildProcess | undefined {
 	const paths = statePaths();
 	let log: number;
@@ -58,7 +54,6 @@ function open(path: string, signal?: AbortSignal): Promise<Socket> {
 	});
 }
 
-/** Connect to the runtime, starting one when none answers. An explicit socket connects without starting a daemon. */
 export async function connectRuntime(signal?: AbortSignal, socketPath?: string): Promise<Socket> {
 	if (socketPath !== undefined) return open(socketPath, signal);
 	let started = false;
@@ -81,10 +76,6 @@ export async function connectRuntime(signal?: AbortSignal, socketPath?: string):
 	}
 }
 
-/**
- * Send one command and return the receipt that settles it for the sender: with `until: "accepted"` the first one
- * (the runtime has stored it, which is enough for mail), otherwise applied or failed.
- */
 export async function sendCommand(
 	sessionId: string,
 	command: Command,

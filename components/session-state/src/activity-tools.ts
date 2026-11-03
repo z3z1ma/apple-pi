@@ -1,4 +1,3 @@
-// Native tools over the operator's outside activity: read the stream, and record the desk's decision on items.
 import { defineTool, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { managesPeople } from "../../organization/src/install.js";
@@ -18,10 +17,8 @@ import { notesAvailable, readNotes } from "./notes.js";
 import { withThreads } from "./threads.js";
 
 export const ACTIVITY_TOOLS = ["activity", "triage", "activity_rule", "notes", "note", "canvases", "canvas"];
-/** What the scout holds: it reads the stream and keeps notes, and leaves decisions to the desk. */
 export const SCOUT_TOOLS = ["activity", "notes", "note", "canvases", "canvas"];
 
-/** The desk's coordinator and other managers triage; the scout reads what the desk sees. */
 export const mayUseActivity = (ctx: ExtensionContext) => managesPeople(ctx) || sessionRole(ctx)?.name === "scout";
 
 const text = (value: unknown) => ({

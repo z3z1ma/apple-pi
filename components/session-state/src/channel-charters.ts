@@ -1,8 +1,3 @@
-/**
- * Channel charters: a channel can name a listener, who is pushed every post in it, and a charter, a standing policy the
- * listener applies to those posts (for example: reproduce reported bugs silently and post only confirmed fixes). This
- * turns recurring routing into policy without a new engine: delivery is the ordinary channel mail.
- */
 
 import type { DatabaseSync } from "node:sqlite";
 
@@ -18,10 +13,6 @@ export function charterOf(db: DatabaseSync, thread: string): Charter | undefined
 	return row?.kind === "channel" ? { listener: row.listener, charter: row.charter } : undefined;
 }
 
-/**
- * Set or clear a channel's listener and charter. The operator, the channel's scope head and managing people may set
- * them; the listener must be a current person. The runtime records the event, as for its other commands.
- */
 export function setCharter(db: DatabaseSync, actor: string, operator: string, thread: string, next: Charter): void {
 	const row = db.prepare("select kind, scope_head from threads where id = ?").get(thread) as
 		| { kind: string; scope_head: string | null }
@@ -44,7 +35,6 @@ export function setCharter(db: DatabaseSync, actor: string, operator: string, th
 	);
 }
 
-/** The body a listener receives: the post, then the charter it applies. */
 export function chartered(body: string, charter: string | null): string {
 	return charter ? `${body}\n\nChannel charter (you listen here): ${charter}` : body;
 }
