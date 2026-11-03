@@ -51,7 +51,6 @@
 	grid-template-columns: 240px minmax(0, 1fr) 360px;
 }
 
-/* outline */
 .md-app .outline {
 	overflow: auto;
 	padding: 18px 10px 90px;
@@ -112,7 +111,6 @@
 	color: var(--ink-3);
 }
 
-/* document */
 .paper {
 	max-width: 800px;
 	margin: 28px auto 160px;
@@ -301,7 +299,7 @@
 	border-left: 3px solid var(--line-2);
 	color: var(--ink-2);
 }
-/* A table never runs past the paper: long code in a cell breaks, and a table still too wide scrolls in its block. */
+
 .blk-content:has(> table) {
 	overflow-x: auto;
 }
@@ -396,7 +394,6 @@
 	color: var(--ink-3);
 }
 
-/* annotations in the text */
 mark.an {
 	color: inherit;
 	padding: 1px 0;
@@ -513,7 +510,6 @@ mark.an.flash {
 	align-items: center;
 }
 
-/* floating toolbar and popovers */
 .tbar {
 	position: fixed;
 	z-index: 40;
@@ -647,7 +643,6 @@ mark.an.flash {
 	}
 }
 
-/* annotations panel */
 .panel {
 	overflow: auto;
 	border-left: 1px solid var(--line);
@@ -750,7 +745,6 @@ mark.an.flash {
 	line-height: 1.6;
 }
 
-/* the panel's heading for each document, on pages with several */
 .pg-file {
 	display: block;
 	width: 100%;

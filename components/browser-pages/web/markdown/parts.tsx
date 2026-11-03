@@ -6,7 +6,6 @@ import { useDocReview } from "./context";
 import { renderBlock } from "./render";
 import { addAnnotation, annotation, annotationTitle, blockKey, LABELS, splitKey, VERDICTS } from "./state";
 
-/** Line diff of a block's source and the reviewer's rewrite. */
 function SourceDiff({ before, after }: { before: string; after: string }) {
 	const a = before.split("\n");
 	const b = after.split("\n");
@@ -33,10 +32,6 @@ function SourceDiff({ before, after }: { before: string; after: string }) {
 	);
 }
 
-/**
- * The rendered block. Memoised so React never replaces the DOM that highlights and Mermaid decorate. Text offsets
- * point into the original block, so a rewritten block has no `data-content`: it takes no new marks and draws none.
- */
 const BlockContent = memo(function BlockContent({ id, html }: { id?: string; html: string }) {
 	// biome-ignore lint/security/noDangerouslySetInnerHtml: renderBlock escapes all document text and drops unsafe URLs.
 	return <div className="blk-content" data-content={id} dangerouslySetInnerHTML={{ __html: html }} />;
@@ -166,7 +161,6 @@ export function Block({ block }: { block: MarkdownBlock }) {
 	);
 }
 
-/** The bar above a selection. Typing a letter while it shows starts a comment; the app handles that key. */
 export function Toolbar() {
 	const { session, s, update, position, openPop, file } = useDocReview();
 	const toolbar = s.toolbar;
@@ -266,7 +260,6 @@ export function Composer() {
 	);
 }
 
-/** What a clicked highlight holds, with a way to remove it. Overlapping highlights show together. */
 export function AnnotationPop() {
 	const { s, update, readOnly } = useDocReview();
 	const pop = s.pop;
@@ -310,7 +303,6 @@ export function AnnotationPop() {
 	);
 }
 
-/** Every annotation, in review order; with `grouped`, under a heading per document. */
 export function Panel({ total, grouped }: { total: number; grouped: boolean }) {
 	const { s, openPop, lineOf, reveal, readOnly } = useDocReview();
 	const rows: ReactNode[] = [];
@@ -383,7 +375,6 @@ export function Panel({ total, grouped }: { total: number; grouped: boolean }) {
 	);
 }
 
-/** A centred sheet over the page; a click outside or Esc closes it. */
 function Sheet({ title, children }: { title: string; children: ReactNode }) {
 	const { update } = useDocReview();
 	return (
@@ -424,7 +415,6 @@ export function Keys({ keys }: { keys: [string, string][] }) {
 	);
 }
 
-/** The verdict sheet; `children` adds page-specific notes above the verdicts. */
 export function Finish({ children }: { children?: ReactNode }) {
 	const { s, update, submit, session } = useDocReview();
 	if (s.submit === "sent" && session.live)

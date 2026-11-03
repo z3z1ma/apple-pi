@@ -9,11 +9,10 @@ export interface Composer {
 	kind: CommentKind;
 	text: string;
 	replyTo?: string;
-	/** "ask" sends the text to the agent as a question instead of saving a comment. */
+
 	mode: "comment" | "ask";
 }
 
-/** A question asked in the page; `answer` or `error` arrives later. */
 export interface Ask {
 	id: string;
 	hunk: string;
@@ -26,7 +25,7 @@ export interface Ask {
 
 export interface State {
 	lens: "story" | "attention";
-	/** "overview", a chapter id, "unplaced", or "hunk" (the attention lens's single-unit page). */
+
 	page: string;
 	focus: string | null;
 	seen: Record<string, boolean>;
@@ -49,10 +48,10 @@ export interface State {
 	modal: null | "verdict" | "keys" | "comments";
 	theme: "light" | "dark";
 	submit: "idle" | "sending" | "sent" | "failed";
-	/** A requested scroll: "top" of the stage or a hunk id, applied once per `scrollSeq`. */
+
 	scrollTo: string | null;
 	scrollSeq: number;
-	/** The decision last revealed, so Q and ⇧Q move on from it. */
+
 	decisionCursor: string | null;
 	seq: number;
 }
@@ -113,7 +112,6 @@ export function focusHunk(m: Model, s: State, target: string, opts: { top?: bool
 	else if (opts.scroll !== false) scroll(s, id);
 }
 
-/** Shows one element inside a hunk, opening and unfolding whatever hides it, and scrolls it to the middle. */
 function revealIn(m: Model, s: State, hunk: string, element: string): void {
 	s.lens = "story";
 	s.modal = null;
@@ -137,7 +135,6 @@ export function revealComment(m: Model, s: State, comment: State["comments"][num
 	revealIn(m, s, comment.hunk, `cmt-${comment.id}`);
 }
 
-/** Q: the next unanswered open question (or any open question once all are answered). ⇧Q: the next judgment call. */
 export function nextDecision(m: Model, s: State, kind: "question" | "judgment"): void {
 	const order = [...m.page.decisions].sort(
 		(a, b) => m.storyOrder.indexOf(a.hunk) - m.storyOrder.indexOf(b.hunk) || a.idx - b.idx,
@@ -202,7 +199,6 @@ export function seenNext(m: Model, s: State): void {
 	else s.modal = "verdict";
 }
 
-/** Marks every place of the focused repeated change seen, then moves on like seenNext. */
 export function seenPatternNext(m: Model, s: State, focus: string): void {
 	const hunks = m.page.patterns[m.patternOf[focus]].hunks;
 	for (const id of hunks) {

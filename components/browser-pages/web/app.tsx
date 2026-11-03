@@ -14,11 +14,11 @@ import {
 	markPageSeen,
 	nextDecision,
 	pageIsChapter,
+	type State,
 	saveComposer,
 	seenNext,
 	seenPatternNext,
 	setLens,
-	type State,
 	step,
 	toResult,
 } from "./state";
@@ -26,7 +26,6 @@ import { Icon } from "./ui";
 
 type Change = (draft: State) => void;
 
-/** The state change a key asks for in the current state, or undefined when the key does nothing here. */
 function keyChange(
 	key: string,
 	shift: boolean,
@@ -99,7 +98,7 @@ function keyChange(
 
 export function CodeReview({ page }: { page: CodeReviewPage }) {
 	const m = useMemo(() => buildModel(page), [page]);
-	// A page that cannot reach its session (a saved copy, or one whose session ended) reads, but takes no review.
+
 	const { connected, agent, recheck } = useConnected(page.session);
 	const readOnly = !connected;
 	const canAsk = page.session.ask && agent && !readOnly;
@@ -191,12 +190,11 @@ export function CodeReview({ page }: { page: CodeReviewPage }) {
 		document.documentElement.dataset.theme = s.theme;
 	}, [s.theme]);
 
-	// Apply a requested scroll once, after the page it targets has rendered.
 	const appliedScroll = useRef(0);
 	useLayoutEffect(() => {
 		if (s.scrollSeq === appliedScroll.current) return;
 		appliedScroll.current = s.scrollSeq;
-		// The rail first: a later scrollIntoView elsewhere would cancel the stage's smooth scroll.
+
 		document.querySelector(".r-ch.on, .r-hunk.on")?.scrollIntoView({ block: "nearest" });
 		const stage = document.getElementById("stage");
 		if (!stage || !s.scrollTo) return;
@@ -208,9 +206,9 @@ export function CodeReview({ page }: { page: CodeReviewPage }) {
 		const target = document.getElementById(element ? s.scrollTo.slice(3) : `hunk-${s.scrollTo}`);
 		if (!target) return;
 		const top = target.getBoundingClientRect().top - stage.getBoundingClientRect().top + stage.scrollTop;
-		// Hunks align under the sticky file header; revealed elements sit a third of the way down.
+
 		const to = element ? top - stage.clientHeight / 3 : top - 48;
-		// Long jumps land at once; a smooth scroll across thousands of lines only delays the answer.
+
 		const far = Math.abs(to - stage.scrollTop) > stage.clientHeight * 2;
 		stage.scrollTo({ top: to, behavior: far ? "auto" : "smooth" });
 	}, [s.scrollSeq, s.scrollTo]);

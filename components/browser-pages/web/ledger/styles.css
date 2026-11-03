@@ -46,7 +46,7 @@
 .cv-t {
 	white-space: pre;
 }
-/* status colours */
+
 .s-done {
 	--st: var(--pass);
 }
@@ -63,7 +63,6 @@
 	--st: var(--accent);
 }
 
-/* bundle tree */
 .tree {
 	--tree-indent: 14px;
 	overflow: auto;
@@ -226,7 +225,6 @@
 	color: var(--ink-3);
 }
 
-/* stage */
 .wide {
 	max-width: 1080px;
 	margin: 0 auto;
@@ -299,7 +297,6 @@
 	font-weight: 500;
 }
 
-/* ticket graph */
 .graph-card {
 	padding: 20px 24px 18px;
 	border-radius: 16px;
@@ -583,7 +580,6 @@
 	text-overflow: ellipsis;
 }
 
-/* documents row on the overview */
 .docs {
 	display: grid;
 	grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
@@ -644,7 +640,6 @@
 	color: var(--ink-3);
 }
 
-/* ticket strip above a ticket */
 .tk-flow {
 	display: grid;
 	grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
@@ -748,7 +743,6 @@
 	font-size: 14px;
 }
 
-/* evidence files */
 .codeview {
 	padding: 14px 0;
 	border-radius: 12px;

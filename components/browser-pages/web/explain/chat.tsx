@@ -8,7 +8,7 @@ type Start = NonNullable<TutorTurn["start"]>;
 export interface Message {
 	role: "reader" | "tutor";
 	text: string;
-	/** The passage a reader's message is about. */
+
 	quote?: { src: string; text: string };
 	pending?: boolean;
 	failed?: boolean;
@@ -17,10 +17,6 @@ export interface Message {
 const QUICK = ["Give me a hint", "Just tell me"];
 const SUGGEST = ["Walk me through the main idea", "Quiz me on this change", "Which part is easiest to get wrong?"];
 
-/**
- * The conversation with the tutor: the agent, answering from a read-only fork of its own conversation. Every reply
- * holds its place in the thread from the moment it is asked, so answers stay in order.
- */
 export function useTutor(token: string, onFailure: () => void) {
 	const [open, setOpen] = useState(false);
 	const [mode, setMode] = useState<"socratic" | "direct">("socratic");
@@ -57,7 +53,7 @@ export function useTutor(token: string, onFailure: () => void) {
 				onFailure();
 			});
 	};
-	/** Opens the sidebar on a new line of conversation that starts from `from`. */
+
 	const begin = (text: string, from: Start, quote?: Message["quote"]) => {
 		start.current = from;
 		setOpen(true);
@@ -67,7 +63,6 @@ export function useTutor(token: string, onFailure: () => void) {
 	return { open, setOpen, mode, setMode, messages, send, begin, asked };
 }
 
-/** Tutor text as Markdown, with "Step 2", "Question 3", and "Figure 1" turned into links to them. */
 function tutorHtml(text: string): string {
 	return blockMarkdown(text).replace(
 		/(^|>)([^<]*)/g,
@@ -218,14 +213,12 @@ export function Sidebar({
 	);
 }
 
-/** The sidebar's left edge. Its width lives in `--chat-w` on the page grid, so it stays when the sidebar closes. */
 function Grip({ sidebar }: { sidebar: RefObject<HTMLElement | null> }) {
 	const grid = () => sidebar.current?.parentElement;
 	const resize = (width: number) => {
 		const body = grid();
 		if (!body) return;
-		// Wide enough for the header. Wider than the default 420px only while the article keeps 480px beside the
-		// contents column, so on a narrow window a drag never makes the sidebar narrower than it opened.
+
 		const contents = body.firstElementChild?.getBoundingClientRect().width ?? 0;
 		const most = Math.max(420, body.clientWidth - contents - 480);
 		const px = Math.max(320, Math.min(width, most));
@@ -250,7 +243,7 @@ function Grip({ sidebar }: { sidebar: RefObject<HTMLElement | null> }) {
 			onDoubleClick={() => grid()?.style.removeProperty("--chat-w")}
 			onKeyDown={(e) => {
 				const step = e.key === "ArrowLeft" ? 40 : e.key === "ArrowRight" ? -40 : 0;
-				// The set width, not the rendered one: the column animates toward it.
+
 				const width = Number.parseFloat(grid()?.style.getPropertyValue("--chat-w") ?? "") || edge()?.width;
 				if (!step || width === undefined) return;
 				e.preventDefault();

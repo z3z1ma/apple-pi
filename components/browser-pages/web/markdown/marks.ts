@@ -1,6 +1,5 @@
 import type { TextSpan } from "../../src/page-data.js";
 
-/** Text that belongs to the document: the block's rendered content, without decorations the page adds. */
 function textNodes(content: Element): Text[] {
 	const out: Text[] = [];
 	const walker = document.createTreeWalker(content, NodeFilter.SHOW_TEXT);
@@ -13,7 +12,6 @@ function textNodes(content: Element): Text[] {
 
 const contentOf = (block: string) => document.querySelector(`[data-content="${block}"]`);
 
-/** The text offset in `content` of a selection boundary, which may sit in a text node or between an element's children. */
 function offsetIn(content: Element, node: Node, offset: number): number {
 	const boundary = document.createRange();
 	boundary.setStart(node, offset);
@@ -32,7 +30,6 @@ export interface Selected {
 	rect: DOMRect;
 }
 
-/** The current selection as one span per block it touches, or undefined when it holds no document text. */
 export function readSelection(): Selected | undefined {
 	const selection = getSelection();
 	if (!selection || selection.isCollapsed) return undefined;
@@ -64,11 +61,10 @@ export interface Mark {
 	id: string;
 	spans: TextSpan[];
 	className: string;
-	/** Text shown after the last marked piece, such as a suggested replacement. */
+
 	after?: { tag: "ins" | "span"; className: string; text: string };
 }
 
-/** Removes every mark and decoration, then wraps each mark's spans. Safe to call after any render. */
 export function applyMarks(marks: Mark[]): void {
 	for (const old of document.querySelectorAll("[data-content] mark.an")) old.replaceWith(...old.childNodes);
 	for (const deco of document.querySelectorAll("[data-content] .deco")) deco.remove();
@@ -106,10 +102,6 @@ export function applyMarks(marks: Mark[]): void {
 	}
 }
 
-/**
- * The annotations under a clicked element, innermost first. Overlapping annotations nest their marks, so a click
- * inside the overlap belongs to all of them.
- */
 export function annotationsAt(target: Element): string[] {
 	const ids: string[] = [];
 	for (let el = target.closest("[data-an]"); el; el = el.parentElement?.closest("[data-an]") ?? null) {

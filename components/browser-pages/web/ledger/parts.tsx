@@ -47,13 +47,12 @@ const FileIcon = {
 export const titleOf = (doc: { path: string; blocks: MarkdownBlock[] }) =>
 	doc.blocks.find((b) => b.heading?.depth === 1)?.heading?.text ?? doc.path;
 
-/** What the page knows about the bundle, shared by its parts. */
 export interface Bundle {
 	page: LedgerReviewPage;
 	view: string;
 	open: (path: string) => void;
 	opened: Set<string>;
-	/** Annotations and rewrites in a file, or in every file under a folder prefix ending in `/`. */
+
 	count: (path: string) => number;
 }
 
@@ -67,8 +66,6 @@ export function TicketChip({ ticket, bundle }: { ticket: Ticket; bundle: Bundle 
 		</button>
 	);
 }
-
-// ---------------------------------------------------------------------------- the tree
 
 interface Folder {
 	name: string;
@@ -233,14 +230,11 @@ export function Tree({
 	);
 }
 
-// ---------------------------------------------------------------------------- the overview
-
 const ReadOnlyBlocks = memo(function ReadOnlyBlocks({ blocks }: { blocks: MarkdownBlock[] }) {
 	// biome-ignore lint/security/noDangerouslySetInnerHtml: renderBlock escapes all document text and drops unsafe URLs.
 	return <div dangerouslySetInnerHTML={{ __html: blocks.map((b) => renderBlock(b)).join("") }} />;
 });
 
-/** The blocks under `task.md`'s `## Intent` heading, up to the next heading of the same depth. */
 function intentOf(page: LedgerReviewPage): MarkdownBlock[] {
 	const blocks = page.documents.find((d) => d.path === "task.md")?.blocks ?? [];
 	const start = blocks.findIndex((b) => b.heading && /^intent$/i.test(b.heading.text.trim()));
@@ -413,8 +407,6 @@ export function Overview({ bundle, banner }: { bundle: Bundle; banner: ReactNode
 	);
 }
 
-// ---------------------------------------------------------------------------- a ticket's neighbourhood
-
 export function TicketFlow({ ticket, bundle }: { ticket: Ticket; bundle: Bundle }) {
 	const { tickets } = bundle.page;
 	const before = ticket.blockers.flatMap((b) => tickets.find((t) => t.id === b) ?? []);
@@ -458,9 +450,6 @@ export function TicketFlow({ ticket, bundle }: { ticket: Ticket; bundle: Bundle 
 	);
 }
 
-// ---------------------------------------------------------------------------- an evidence file
-
-/** One line of an evidence file. Its text sits in a `data-content` span so selections and highlights index only it. */
 const EvidenceLine = memo(function EvidenceLine({ n, line }: { n: number; line: Segment[] }) {
 	return (
 		<div className="cvl" id={`l${n}`}>

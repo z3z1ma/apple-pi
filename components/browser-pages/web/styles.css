@@ -140,7 +140,6 @@ h2 code,
 	border-radius: 4px;
 }
 
-/* ---------- controls ---------- */
 .btn {
 	display: inline-flex;
 	align-items: center;
@@ -361,7 +360,6 @@ h2 code,
 	--a: var(--att-low);
 }
 
-/* ---------- app frame ---------- */
 .app {
 	display: grid;
 	grid-template-columns: 300px minmax(0, 1fr);
@@ -448,7 +446,6 @@ h2 code,
 	padding: 28px 36px 160px;
 }
 
-/* ---------- rail ---------- */
 .lens {
 	display: grid;
 	grid-template-columns: 1fr 1fr;
@@ -636,7 +633,6 @@ h2 code,
 	color: var(--ink-3);
 }
 
-/* ---------- overview ---------- */
 .eyebrow {
 	display: flex;
 	flex-wrap: wrap;
@@ -1139,7 +1135,6 @@ h2 code,
 	margin-top: 40px;
 }
 
-/* ---------- chapter ---------- */
 .ch-h {
 	display: flex;
 	gap: 20px;
@@ -1302,7 +1297,6 @@ h2 code,
 	margin: 10px 0 16px;
 }
 
-/* ---------- files and hunks ---------- */
 .file {
 	border: 1px solid var(--line);
 	border-radius: 14px;
@@ -1621,7 +1615,6 @@ mark {
 	color: var(--d);
 }
 
-/* inline blocks in the diff */
 .inl {
 	margin: 6px 18px 8px 102px;
 	font: 13.5px / 1.55 var(--font-ui);
@@ -1880,7 +1873,6 @@ textarea:focus {
 	font-weight: 600;
 }
 
-/* ---------- shared blocks ---------- */
 .callout {
 	display: flex;
 	gap: 12px;
@@ -2116,7 +2108,6 @@ textarea:focus {
 	box-shadow: 0 0 0 3px color-mix(in srgb, var(--vc) 14%, transparent);
 }
 
-/* ---------- overlays ---------- */
 .overlay {
 	position: fixed;
 	inset: 0;
@@ -2210,7 +2201,6 @@ textarea:focus {
 	}
 }
 
-/* ---------- production additions ---------- */
 #root {
 	height: 100%;
 }
@@ -2508,7 +2498,6 @@ textarea:focus {
 	}
 }
 
-/* a live page whose session ended: it still reads, but takes nothing */
 .lost-note {
 	position: fixed;
 	left: 50%;

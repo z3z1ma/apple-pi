@@ -1,8 +1,8 @@
 import { type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import type { MarkdownBlock, TextSpan, Verdict } from "../../src/page-data";
-import { Icon, Kbd } from "../ui";
 import { useConnected } from "../connected";
+import { Icon, Kbd } from "../ui";
 import { type DocReview, useDocReview } from "./context";
 import { annotationsAt, applyMarks, readSelection } from "./marks";
 import { drawDiagrams } from "./mermaid";
@@ -48,7 +48,6 @@ async function askAgent(
 	}
 }
 
-/** Highlights for the annotations on text in `file`, drawn over blocks the reviewer has not rewritten. */
 function drawMarks(s: State, file: string): void {
 	applyMarks(
 		s.annotations
@@ -67,7 +66,6 @@ function drawMarks(s: State, file: string): void {
 	);
 }
 
-/** The keys every reader page has; a page lists its own first. */
 export const READER_KEYS: [string, string][] = [
 	["J / K", "Next / previous section"],
 	["Type over a selection", "Comment on the selected text"],
@@ -79,29 +77,25 @@ export const READER_KEYS: [string, string][] = [
 export interface ReaderSetup {
 	session: DocReview["session"];
 	result: SavedReview | undefined;
-	/** The document a saved annotation without `file` belongs to. */
+
 	defaultFile: string;
-	/** The document on screen; empty when none is. */
+
 	file: string;
-	/** Its headings, for `J`/`K` and the outline. */
+
 	headings: MarkdownBlock[];
 	position: DocReview["position"];
 	lineOf: DocReview["lineOf"];
-	/** Opens `file` when it is not on screen; the reader then scrolls to the block. */
+
 	open: (file: string) => void;
-	/** Page keys, tried before the shared ones; returns true when it handled the key. */
+
 	onKey?: (e: KeyboardEvent, s: State) => boolean;
-	/** Fields the page adds to its submission. */
+
 	extra?: () => Record<string, unknown>;
 }
 
-/**
- * The document reader both review pages share: annotation state, selection toolbar, popovers, highlights, sections
- * and scroll-spy, keys, and submission. A page supplies its documents through `setup` and lays out the rest.
- */
 export function useReader(setup: ReaderSetup) {
 	const { file, headings } = setup;
-	// A page that cannot reach its session (a saved copy, or one whose session ended) reads, but takes no review.
+
 	const { connected, agent, recheck } = useConnected(setup.session);
 	const readOnly = !connected;
 	const session = { ...setup.session, ask: setup.session.ask && agent };
@@ -124,7 +118,7 @@ export function useReader(setup: ReaderSetup) {
 	useEffect(() => {
 		document.documentElement.dataset.theme = s.theme;
 	}, [s.theme]);
-	// Highlights are DOM decorations over the rendered blocks; reapply them after every render.
+
 	useLayoutEffect(() => drawMarks(s, file));
 	useEffect(() => {
 		void drawDiagrams(s.theme);
@@ -134,7 +128,7 @@ export function useReader(setup: ReaderSetup) {
 		const box = stage.current;
 		if (!el || !box) return;
 		const to = el.getBoundingClientRect().top - box.getBoundingClientRect().top + box.scrollTop - offset;
-		// Long jumps land at once; a smooth scroll across a long document only delays the answer.
+
 		box.scrollTo({ top: to, behavior: Math.abs(to - box.scrollTop) > box.clientHeight * 2 ? "auto" : "smooth" });
 	};
 	const show = (block: string, annotation?: string) => {
@@ -148,7 +142,7 @@ export function useReader(setup: ReaderSetup) {
 			m.classList.add("flash");
 		}
 	};
-	// A reveal in another document waits for that document to render.
+
 	useEffect(() => {
 		if (!pending) return;
 		show(pending.block, pending.annotation);
@@ -216,7 +210,7 @@ export function useReader(setup: ReaderSetup) {
 		const next = list[Math.max(0, Math.min(list.length - 1, i + step))];
 		if (next) goTo(next.id);
 	};
-	/** The current section is the last heading above a line near the top of the stage. */
+
 	const onScroll = () => {
 		const top = (stage.current?.getBoundingClientRect().top ?? 0) + 140;
 		const passed = headings.filter((h) => (document.getElementById(h.id)?.getBoundingClientRect().top ?? 0) < top);
@@ -253,7 +247,6 @@ export function useReader(setup: ReaderSetup) {
 	const keyState = useRef({ review, section });
 	keyState.current = { review, section };
 
-	// Selecting document text opens the toolbar above it.
 	useEffect(() => {
 		const onMouseUp = (e: MouseEvent) => {
 			if (readOnly || (e.target as Element).closest(".tbar, .pop, .modal, textarea, .gut")) return;
@@ -298,7 +291,6 @@ export function useReader(setup: ReaderSetup) {
 	return { review, s, update, stage, current, goTo, onScroll, onDocClick, total };
 }
 
-/** ⌘↵ saves or finishes, Esc closes, a letter over a selection starts a comment, J and K move between sections. */
 function onKey(e: KeyboardEvent, review: DocReview, section: (step: number) => void, setup: ReaderSetup): void {
 	const { s, update, readOnly } = review;
 	const typing = (e.target as Element).closest?.("textarea, input");
@@ -338,7 +330,6 @@ function onKey(e: KeyboardEvent, review: DocReview, section: (step: number) => v
 	}
 }
 
-/** The bar across the top: the 🥧, what is under review, and the review's controls. */
 export function TopBar({
 	title,
 	path,
@@ -420,7 +411,6 @@ export function TopBar({
 	);
 }
 
-/** The saved copy's verdict line, and the agent's note until the reviewer hides it. */
 export function Banner({ result, note }: { result?: SavedReview & { submittedAt: string }; note?: string }) {
 	const { s, update } = useDocReview();
 	return (
@@ -454,7 +444,6 @@ export function Banner({ result, note }: { result?: SavedReview & { submittedAt:
 	);
 }
 
-/** The toolbar, popovers, and sheets that float over every reader page. */
 export function Floats({ keys, finish }: { keys: [string, string][]; finish?: ReactNode }) {
 	const { readOnly, session, s } = useDocReview();
 	return (
