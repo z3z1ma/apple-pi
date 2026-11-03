@@ -1,5 +1,9 @@
 ## file
 
+`Role` is how a character is drawn: a coordinator keeps headquarters, a worker reports to one, an independent reports to none. The role a person holds for life is `facts.title`, not this drawing role.
+Why: a display role and a catalog role are different facts. Treating the drawing role as the hired role would mislabel independents and workers.
+Coupled: apps/agent-workplace/src/backend/projection.ts, .wiki/pages/agent-world-language.md
+
 RecruitRequest.brief is optional initial work, not the person's identity. Omitted/blank brief creates no task and uses an explicitly empty opening prompt; supplying a catalog role still permits automatic naming. Electron's explicit forwarding boundary must accept the absent value as well as a string.
 Coupled: apps/agent-workplace/src/backend/lifecycle.ts, apps/agent-workplace/src/electron/main.ts
 Verify: apps/agent-workplace/tests/add-person.test.ts
