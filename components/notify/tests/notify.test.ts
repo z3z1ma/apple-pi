@@ -15,8 +15,6 @@ process.env.PI_NOTIFY_APP = testApp;
 process.env.PI_NOTIFY_DISABLE_LOG = "1";
 process.env.TMUX_PANE = "%931";
 
-// The extension delivers only on macOS; pin the platform so the lifecycle
-// assertions are deterministic on any host running the suite.
 Object.defineProperty(process, "platform", { value: "darwin" });
 
 const extension = await import("../src/index.js");
@@ -96,13 +94,10 @@ test("bakes the absolute tmux binary and socket into the click command", () => {
 	const target = parseTmuxTarget("$2\tcurrent work\t@343\t21\t%931\t1\tπ\n");
 	assert.ok(target);
 	const command = buildFocusCommand(target, "/run/current-system/sw/bin/tmux", "/private/tmp/tmux-502/default");
-	// The click runs with no $TMUX or interactive $PATH, so both the tmux path
-	// and the server socket must be present in the stored command string.
 	expect(command).toMatch(/'TMUX_BIN=\/run\/current-system\/sw\/bin\/tmux'/);
 	expect(command).toMatch(/'TMUX_SOCKET=\/private\/tmp\/tmux-502\/default'/);
 	expect(command).toMatch(/'\/usr\/bin\/env'/);
 	expect(command).toMatch(/focus-tmux\.sh/);
-	// Omitting the optional args must not emit empty env assignments.
 	expect(buildFocusCommand(target)).not.toMatch(/TMUX_BIN=/);
 });
 
@@ -128,8 +123,6 @@ function createLifecycleHarness({ focused = false }: { focused?: boolean } = {})
 		async exec(command: string, args: string[]) {
 			calls.push({ command, args });
 			if (args.some((arg) => String(arg).includes("focus-check.sh"))) {
-				// focus-check.sh exits 0 only when the operator is already viewing
-				// the pane; non-zero otherwise.
 				return { code: focused ? 0 : 1, stdout: "", stderr: "", killed: false };
 			}
 			if (String(command).endsWith("tmux")) {
@@ -240,7 +233,6 @@ test("notifies when ask_user_question starts but not for other tools", async () 
 	handlers.get("input")?.({ text: "help me pick a backend", source: "interactive" });
 	handlers.get("before_agent_start")?.({ messageType: "user", prompt: "help me pick a backend" });
 
-	// A non-ask tool must never notify, even though it also starts mid-turn.
 	handlers.get("tool_execution_start")?.({ toolName: "read", args: { path: "README.md" } }, ctx);
 	await flushUntil(() => calls.length > 0, 5);
 	expect(notifierCall(calls)).toBeUndefined();
@@ -249,7 +241,6 @@ test("notifies when ask_user_question starts but not for other tools", async () 
 		{ toolName: "ask_user_question", args: { questions: [{ question: "Which storage backend?" }] } },
 		ctx,
 	);
-	// Delivery is fire-and-forget, so wait for the notifier spawn to land.
 	await flushUntil(() => Boolean(notifierCall(calls)));
 
 	const call = notifierCall(calls);
@@ -456,7 +447,6 @@ test("/notify-test always delivers, ignoring pane focus", async () => {
 
 	await command.handler("", testCtx);
 
-	// The manual test must never consult the focus check nor be suppressed.
 	expect(focusCheckCall(calls)).toBeUndefined();
 	assert.ok(notifierCall(calls), "notify-test should deliver a notification");
 	expect(notices.at(-1)?.level).toBe("info");

@@ -1,21 +1,3 @@
-/**
- * Native macOS completion notifications for Pi.
- *
- * - Fires on agent_settled, after retries, compaction, and queued follow-ups.
- * - Treats failed or cancelled compaction as a provisional task failure until a
- *   later successful assistant message proves the continuation recovered.
- * - Fires when ask_user_question starts, so an away operator learns Pi is
- *   waiting on their input rather than still working.
- * - Shows tmux coordinates, the latest user prompt, and the final outcome.
- * - Clicking the notification activates Ghostty and selects the original pane.
- * - Run /notify-setup once for a dedicated sender app and icon.
- * - Run /notify-test after /reload to verify delivery and click-to-focus.
- *
- * Optional environment variables:
- * PI_NOTIFY_DISABLED=1, PI_NOTIFY_SOUND, PI_NOTIFY_APP,
- * PI_NOTIFY_FOCUS_SCRIPT, PI_NOTIFY_LOG_PATH, PI_NOTIFY_DISABLE_LOG=1.
- */
-
 import { constants } from "node:fs";
 import { access, appendFile, mkdir } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -250,16 +232,11 @@ export function parseTmuxTarget(output: string): TmuxTarget | undefined {
 }
 
 export function tmuxSocketFromEnv(): string {
-	// $TMUX is "<socket>,<pid>,<session>" inside a tmux client; the socket is the
-	// portion before the first comma.
 	return (process.env.TMUX || "").split(",")[0] || "";
 }
 
 export function buildFocusCommand(target: TmuxTarget | undefined, tmuxBin?: string, tmuxSocket?: string): string {
 	if (!target?.paneId) return "";
-	// The click runs in a minimal launchd context with no $TMUX or interactive
-	// $PATH, so bake the absolute tmux binary and server socket into the stored
-	// command. terminal-notifier persists this exact string and runs it later.
 	const env = ["/usr/bin/env"];
 	if (tmuxBin) env.push(`TMUX_BIN=${tmuxBin}`);
 	if (tmuxSocket) env.push(`TMUX_SOCKET=${tmuxSocket}`);
@@ -304,17 +281,6 @@ async function isFile(path: string): Promise<boolean> {
 	}
 }
 
-// Resolve an absolute tmux path. The focus script runs in a launchd context
-// with a minimal PATH that may exclude the real install (e.g. nix-darwin at
-// /run/current-system/sw/bin), so the extension must resolve the absolute path
-// here and bake it into the click command.
-//
-// Resolve via the PATH first: the tmux client must match the running server's
-// protocol version, and the server was started by whatever tmux is on the
-// user's PATH — the same environment Pi inherits. A shell PATH lookup returns
-// that binary. The hardcoded candidates are only a last resort when no tmux is
-// on PATH, and could otherwise bake in a mismatched build (e.g. a Homebrew
-// tmux against a nix-started server), so they must not win over the PATH.
 async function resolveTmuxBin(pi: ExtensionAPI): Promise<string> {
 	try {
 		const result = await pi.exec("/bin/sh", ["-c", "command -v tmux"], {
@@ -354,11 +320,6 @@ async function readTmuxTarget(pi: ExtensionAPI, tmuxBin: string): Promise<TmuxTa
 	return result.code === 0 ? parseTmuxTarget(result.stdout) : undefined;
 }
 
-// Report whether the operator is already looking at the Pi pane: Ghostty is
-// frontmost and the pane's tmux window is the active window of an attached
-// session. Delegated to focus-check.sh so the platform detection stays with the
-// other bash focus logic. Fails open — any error or inconclusive result returns
-// false so a real notification is never suppressed by a detection failure.
 async function isOperatorViewingPane(
 	pi: ExtensionAPI,
 	tmuxBin: string,
@@ -462,8 +423,6 @@ async function deliverNotification(
 	const group = `pi-agent-turn-complete-${safeId(sessionId || target?.paneId || project)}`;
 	const content: NotificationContent = { title, subtitle, body, group };
 
-	// Suppress redundant automatic notifications when the operator is already
-	// viewing the pane. Skipped for /notify-test, which must always deliver.
 	if (skipIfFocused && (await isOperatorViewingPane(pi, tmuxBin, tmuxSocket, target))) {
 		await appendLog({
 			ts: new Date().toISOString(),
@@ -569,22 +528,14 @@ export default function piNotifyExtension(pi: ExtensionAPI): void {
 	});
 
 	pi.on("session_compact_failed", (event) => {
-		// A failed compaction can settle with an older successful assistant message
-		// still in memory. Preserve this provisional outcome until a later assistant
-		// response succeeds (message_end clears it below).
 		latestError = event.aborted ? undefined : compactText(event.errorMessage) || "Context compaction failed";
 		latestAborted = event.aborted;
 	});
 
 	pi.on("tool_execution_start", (event, ctx) => {
-		// The ask tool blocks the turn waiting on the operator, so agent_settled
-		// never fires while it is pending. Notify here that Pi needs input; do not
-		// gate on ctx.isIdle(), which is false mid-turn.
 		if (event.toolName !== ASK_TOOL) return;
 		if (process.platform !== "darwin" || notificationsDisabled() || ctx.mode !== "tui") return;
 		const prompt = latestPrompt || latestBranchText(ctx, "user");
-		// This event blocks the tool pipeline until the handler resolves, so deliver
-		// without awaiting; otherwise notifier timeouts would delay the dialog.
 		void deliverNotification(pi, ctx, prompt, askQuestionSummary(event.args), "Pi needs your input", true).catch(
 			() => {},
 		);
@@ -607,7 +558,6 @@ export default function piNotifyExtension(pi: ExtensionAPI): void {
 				: latestAborted || event.aborted
 					? "Task cancelled."
 					: latestAssistant || latestBranchText(ctx, "assistant");
-		// Event handlers participate in settlement; delivery must continue independently.
 		void deliverNotification(pi, ctx, prompt, answer, "Task complete", true).catch((error) =>
 			appendLog({
 				ts: new Date().toISOString(),
