@@ -6,7 +6,6 @@ import { migrate } from "../../session-state/src/schema.js";
 import { indexTranscript, openIndex } from "../../session-state/src/transcript-index.hot.js";
 import { startRuntime, stopRuntime, tempStateDir } from "../../session-state/tests/helpers.js";
 
-/** Give an existing tool scenario its own runtime and indexed prefix, with no live state or model calls. */
 export async function startRecallRuntime(file: string, records: any[], sessionId = "fixture", normalize = true) {
 	const keys = ["PI_CODING_AGENT_DIR", "PI_SESSION_STATE_DISABLED", "TMUX_TMPDIR", "TMUX", "TMUX_PANE"];
 	const previous = keys.map((key) => [key, process.env[key]] as const);

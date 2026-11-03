@@ -63,7 +63,6 @@ describe("renderMessage", () => {
 		const longThinking = "x".repeat(400);
 		const r = renderMessage(assistantWithThinking("short", longThinking), 1, false);
 		expect(r.summary).toContain("[thinking]");
-		// Thinking should be clipped to ~150 chars
 		expect(r.summary.length).toBeLessThan(longThinking.length);
 	});
 

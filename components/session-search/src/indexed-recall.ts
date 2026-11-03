@@ -23,7 +23,6 @@ type AttributedHit = IndexedHit & { file: string | null; name: string | null; ta
 
 export class RecallRefusal extends Error {}
 
-/** Connect only to the configured socket: recall neither starts a daemon nor changes the corpus. */
 async function requestRuntime(request: SearchTranscripts | ReadEntry, signal?: AbortSignal): Promise<any> {
 	signal?.throwIfAborted();
 	const socket = await connectRuntime(signal, statePaths().socket);
@@ -80,7 +79,6 @@ export async function readQualifiedEntry(
 	);
 	const entry = reply.entry as RecallRecord;
 	if (!entry || entry.id !== entryId) throw new Error("The transcript runtime did not return the requested entry.");
-	// The numeric ordinal belongs to that transcript; source recovery uses its globally qualified identity.
 	const source = renderSource(entry, entry.type === "message" && entry.message ? 0 : undefined, true);
 	if (!source) throw new RecallRefusal(`Indexed entry ${entry.id} has no supported source body.`);
 	const rendered = source.display;

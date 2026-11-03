@@ -41,10 +41,7 @@ const loadDiscoveryMessages = (
 				message.role !== "assistant" ||
 				!Array.isArray(message.content) ||
 				!message.content.some(
-					(part) =>
-						part.type === "toolCall" &&
-						// Native nested calls extend the persisted caller ID as caller/n.
-						(part.id === toolCallId || toolCallId.startsWith(`${part.id}/`)),
+					(part) => part.type === "toolCall" && (part.id === toolCallId || toolCallId.startsWith(`${part.id}/`)),
 				),
 		);
 	return {

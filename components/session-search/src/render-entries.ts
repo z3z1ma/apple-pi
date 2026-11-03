@@ -11,7 +11,6 @@ export interface RenderedEntry {
 	sourceKind?: string;
 	customType?: string;
 	lineage?: "active" | "off-lineage";
-	/** Qualified source recovery for another transcript or an indexed-only record kind. */
 	sourceSession?: string;
 	sourceName?: string;
 	task?: string;
@@ -66,7 +65,6 @@ export const renderMessage = (msg: Message, index: number, full = false): Render
 			...(files.length > 0 && { files }),
 		};
 	}
-	// bashExecution has command+output instead of content
 	if ((msg as any).role === "bashExecution") {
 		const cmd = (msg as any).command ?? "";
 		const out = (msg as any).output ?? "";

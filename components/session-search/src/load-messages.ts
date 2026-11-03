@@ -97,7 +97,6 @@ export const loadAllMessages = (
 	sessionFile: string,
 	full: boolean,
 	allowedEntryIds?: Set<string>,
-	/** Optional filter by global message index; added source kinds have no message ordinal. */
 	entryFilter?: (globalIndex: number) => boolean,
 	activeEntryIds?: Set<string>,
 ): LoadedMessages => {

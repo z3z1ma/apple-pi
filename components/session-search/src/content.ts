@@ -1,14 +1,11 @@
 import type { Message } from "@earendil-works/pi-ai";
 
-/** Same chars/4 estimate as the cut. Used to enforce one compile budget. */
 export const estimateTextTokens = (text: string): number => Math.ceil(text.length / 4);
 
 export const clip = (text: string, max = 200): string => {
 	if (text.length <= max) return text;
-	// Try to cut at a word boundary
 	const cut = text.lastIndexOf(" ", max);
 	let end = cut > max * 0.6 ? cut : max;
-	// Avoid splitting a surrogate pair
 	if (end > 0 && end < text.length) {
 		const code = text.charCodeAt(end - 1);
 		if (code >= 0xd800 && code <= 0xdbff) end--;
@@ -16,19 +13,13 @@ export const clip = (text: string, max = 200): string => {
 	return text.slice(0, end);
 };
 
-/**
- * Clip text to last sentence boundary at or before `max` chars.
- * Falls back to word boundary (clip()) if no sentence end is found in the
- * acceptable range. Trailing whitespace stripped.
- */
 export const clipSentence = (text: string, max = 200): string => {
 	if (text.length <= max) return text;
-	// Look for sentence terminators followed by space/newline within [max*0.5, max]
 	const window = text.slice(0, max);
 	const matches = [...window.matchAll(/[.!?](?:\s|$)/g)];
 	if (matches.length > 0) {
 		const last = matches[matches.length - 1];
-		const end = (last.index ?? 0) + 1; // include the punctuation
+		const end = (last.index ?? 0) + 1;
 		if (end >= max * 0.5) return text.slice(0, end);
 	}
 	return clip(text, max);
@@ -72,15 +63,10 @@ const toolCallParts = (content: Message["content"]): string[] => {
 	return content.filter((part) => part.type === "toolCall").map((part) => toolCallArgText(part.arguments));
 };
 
-/** Extract all string-valued arguments from toolCall content parts.
- *  Lets search_session match against tool invocations — e.g. a bash
- *  toolCall's `arguments.command`, a grep's `pattern`, an edit's
- *  `oldText`/`newText`. Non-string args are skipped. */
 export const toolCallsOf = (content: Message["content"]): string => toolCallParts(content).filter(Boolean).join("\n");
 
 const CONTENT_PATH_KEYS = ["path", "file_path", "filePath", "file"] as const;
 
-/** Whether arguments contain a file path plus written or replaced content. */
 export const isContentBearing = (args: Record<string, unknown>): boolean => {
 	if (!CONTENT_PATH_KEYS.some((key) => typeof args[key] === "string")) return false;
 	if (typeof args.content === "string" && args.content.length > 0) return true;
@@ -95,7 +81,6 @@ export const isContentBearing = (args: Record<string, unknown>): boolean => {
 	return typeof args.oldText === "string" || typeof args.newText === "string";
 };
 
-/** Extract written and replaced text from one file-operation argument object. */
 export const contentBearingText = (args: Record<string, unknown>): string => {
 	const parts: string[] = [];
 	if (typeof args.content === "string") parts.push(args.content);
@@ -112,7 +97,6 @@ export const contentBearingText = (args: Record<string, unknown>): string => {
 	return parts.join("\n");
 };
 
-/** Extract a snippet of ~`radius` chars around the first match of `term` in `text`. */
 const _snippet = (text: string, term: string, radius = 60): string | null => {
 	const idx = text.toLowerCase().indexOf(term.toLowerCase());
 	if (idx === -1) return null;

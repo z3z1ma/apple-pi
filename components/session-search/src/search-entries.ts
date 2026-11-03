@@ -19,66 +19,31 @@ export interface TouchedFile {
 
 export interface SearchHit extends RenderedEntry {
 	recallEcho?: boolean;
-	/** Original transcript turn, captured before relevance ranking reorders hits. */
 	turnId?: number | string;
-	/** Context snippet around the first matched term (only when query provided) */
 	snippet?: string;
-	/** Number of query terms matched (for ranking) */
 	matchCount?: number;
-	/** Matching write/edit payloads that can be expanded with #N:path. */
 	fileMatches?: FileMatch[];
 }
 
 const escapeRegex = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-// ── British/American spelling variant expansion ──
-
-// Suffix replacement pairs for Commonwealth/US spelling variants.
-// When a query term ends with one suffix, the regex is expanded to match
-// either variant. This ensures that searching "authorization" finds
-// "authorisation" and vice-versa.
-//
-// CRITICAL: replacements must avoid unbounded quantifiers and nested
-// optional groups to prevent regex backtracking (ReDoS). Every optional
-// group (e.g. (?:ue)?) is fine because the content is a fixed literal
-// followed by an anchor implied by the term boundary. However, open-ended
-// quantifiers like + or * must never appear in these replacements.
 const SUFFIX_VARIANT_PAIRS: [RegExp, string][] = [
-	// -isation ↔ -ization (must come before -ise/-ize)
 	[/isation$/i, "i[sz]ation"],
 	[/ization$/i, "i[sz]ation"],
-	// -yse ↔ -yze
 	[/yse$/i, "y[zs]e"],
 	[/yze$/i, "y[zs]e"],
-	// -our ↔ -or — use possessive-style fixed alternation instead of
-	// optional quantifier to avoid backtracking on repeated "or" sequences.
-	// ou?r can backtrack on "orororor..." — use (?:our|or) instead which
-	// commits after matching one alternative.
 	[/our$/i, "(?:our|or)"],
 	[/or$/i, "(?:our|or)"],
-	// -ise ↔ -ize
 	[/ise$/i, "i[zs]e"],
 	[/ize$/i, "i[zs]e"],
-	// -ogue ↔ -og — (?:ue)? is safe: fixed literal, no repetition
 	[/ogue$/i, "og(?:ue)?"],
-	// -mme ↔ -m (programme/program)
 	[/mme$/i, "m(?:me)?"],
-	// -ence ↔ -ense (defence/defense, offence/offence, licence/license)
 	[/ence$/i, "en[cs]e"],
 	[/ense$/i, "en[cs]e"],
 ];
 
-/**
- * Expand a literal query term into a regex that matches both British
- * and American spelling variants. Returns the original escaped term
- * if no variant pattern applies.
- *
- * Only applies to simple word terms (no existing regex metacharacters).
- */
 const expandSpellingVariants = (term: string): string => {
-	// Don't expand terms that already look like regex
 	if (/[|*+?{}()[\]\\^$.]/.test(term)) return term;
-	// Too short to plausibly be a suffix variant
 	if (term.length < 4) return term;
 
 	for (const [suffix, replacement] of SUFFIX_VARIANT_PAIRS) {
@@ -87,15 +52,9 @@ const expandSpellingVariants = (term: string): string => {
 			return escapeRegex(base) + replacement;
 		}
 	}
-	return term; // no variant found
+	return term;
 };
 
-// ── Regex safety ──
-
-// Regex queries run in the JavaScript engine, which has no execution timeout.
-// Keep the supported regex subset deliberately small: one bounded `.*`
-// wildcard is enough for the documented `fail.*build` use case, while
-// rejecting quantifiers eliminates catastrophic nested/backtracking patterns.
 const MAX_REGEX_SOURCE_LEN = 256;
 const MAX_WILDCARD_CHARS = 256;
 
@@ -106,20 +65,15 @@ export class UnsafeSearchRegexError extends Error {
 	}
 }
 
-/** Compile the bounded regex subset, falling back to a literal for syntax errors. */
 const safeRegex = (pattern: string): RegExp => {
 	if (pattern.length > MAX_REGEX_SOURCE_LEN) {
 		throw new UnsafeSearchRegexError(`pattern exceeds ${MAX_REGEX_SOURCE_LEN} characters`);
 	}
 	try {
-		// Preserve the historic literal fallback for malformed regex syntax.
 		new RegExp(pattern);
 	} catch {
 		return new RegExp(escapeRegex(pattern), "i");
 	}
-	// Even without quantifiers, repeated ambiguous groups can make a native
-	// engine explore exponentially many alternatives. Top-level alternation is
-	// still supported; grouping is deliberately outside the safe subset.
 	if (/[()]/.test(pattern)) {
 		throw new UnsafeSearchRegexError("grouped patterns are not supported");
 	}
@@ -139,8 +93,6 @@ const safeRegex = (pattern: string): RegExp => {
 			throw new UnsafeSearchRegexError("quantifiers other than .* are not supported");
 		}
 		if (!inClass && char === "*") {
-			// An escaped dot is a literal-dot repetition, which is also bounded
-			// safely here; all other repetitions are rejected.
 			if (pattern[i - 1] !== "." || ++wildcardCount > 1) {
 				throw new UnsafeSearchRegexError("only one .* wildcard is supported");
 			}
@@ -152,22 +104,12 @@ const safeRegex = (pattern: string): RegExp => {
 	try {
 		return new RegExp(source, "i");
 	} catch {
-		// Malformed regexes have historically been treated as literal searches.
 		return new RegExp(escapeRegex(pattern), "i");
 	}
 };
 
-/** Detect if the query looks like a single regex pattern (contains regex metacharacters). */
 export const looksLikeRegex = (query: string): boolean => /[|*+?{}()[\]\\^$.]/.test(query);
 
-// ── Precompiled term cache ──
-
-// Avoids recompiling the same term regex across countMatches, BM25,
-// and snippet generation. Keyed by the original term string.
-/** Compile all query term regexes once into a cache.
- *  Uses the 'gi' flag so the same compiled regex can be used for both
- *  .test() and termFreq (matchAll). Helpers that use .test() must
- *  reset lastIndex before each call to avoid stale state from the 'g' flag. */
 const compileTerms = (terms: string[]): Map<string, RegExp> => {
 	const cache = new Map<string, RegExp>();
 	for (const t of terms) {
@@ -182,29 +124,20 @@ const compileTerms = (terms: string[]): Map<string, RegExp> => {
 	return cache;
 };
 
-/** Test whether a compiled (global) regex matches the haystack.
- *  Resets lastIndex before testing to avoid stale state from the 'g' flag. */
 const reTest = (re: RegExp, hay: string): boolean => {
 	re.lastIndex = 0;
 	return re.test(hay);
 };
 
-/** Build a regex for snippet highlighting — matches first available term
- *  (with spelling variant expansion). Uses atomic-group-safe alternation.
- *  Snippet regex only needs 'i' (not 'g') since it's used for .test()
- *  on individual lines. */
 const snippetRegex = (terms: string[], termCache: Map<string, RegExp>): RegExp => {
 	const alts = terms.map((t) => {
 		const re = termCache.get(t);
-		// Use the already-compiled/validated pattern source
 		return re ? re.source : escapeRegex(t);
 	});
 	return new RegExp(alts.join("|"), "i");
 };
 
-// ── Stopwords for natural language queries ──
 const STOPWORDS = new Set([
-	// English
 	"the",
 	"a",
 	"an",
@@ -294,14 +227,11 @@ const STOPWORDS = new Set([
 	"those",
 ]);
 
-/** Remove stopwords, keep meaningful terms. */
 export const filterStopwords = (terms: string[]): string[] => {
 	const meaningful = terms.filter((t) => !STOPWORDS.has(t.toLowerCase()) && t.length > 1);
-	// If all terms were stopwords, return original (don't lose everything)
 	return meaningful.length > 0 ? meaningful : terms;
 };
 
-/** Count how many distinct terms match the haystack. Uses precompiled cache. */
 const countMatches = (hay: string, termCache: Map<string, RegExp>): number => {
 	let count = 0;
 	for (const re of termCache.values()) {
@@ -310,29 +240,15 @@ const countMatches = (hay: string, termCache: Map<string, RegExp>): number => {
 	return count;
 };
 
-// ── BM25-lite scoring ──
 const BM25_K = 1.2;
 const BM25_B = 0.75;
 
-// ── Search result caps ──
-
-/** Hard cap on total search results to prevent "half the session" returns. */
 const MAX_SEARCH_RESULTS = 50;
 
-/** Minimum BM25 score as a fraction of the top-scoring result.
- *  Entries scoring below this ratio of the best hit are excluded
- *  as low-relevance noise. */
 const MIN_SCORE_RATIO = 0.1;
 
-/** For multi-term queries (3+ meaningful terms), require at least this
- *  many terms to match. This prevents common domain vocabulary from
- *  matching almost every entry via OR semantics. */
 const MIN_TERM_MATCH_FOR_MULTITERM = 2;
 
-/**
- * Count occurrences of a compiled regex pattern in text.
- * Uses matchAll to avoid recompiling the regex for the global flag.
- */
 const termFreq = (text: string, pattern: RegExp): number => {
 	let count = 0;
 	for (const _ of text.matchAll(pattern)) count++;
@@ -340,12 +256,11 @@ const termFreq = (text: string, pattern: RegExp): number => {
 };
 
 interface BM25Context {
-	n: number; // total docs
-	avgDl: number; // average doc length (words)
-	df: Map<string, number>; // term -> number of docs containing it
+	n: number;
+	avgDl: number;
+	df: Map<string, number>;
 }
 
-/** Precompute IDF and avgDl across all docs. Uses precompiled term cache. */
 const buildBM25Context = (docs: string[], termCache: Map<string, RegExp>): BM25Context => {
 	const n = docs.length;
 	const df = new Map<string, number>();
@@ -363,7 +278,6 @@ const buildBM25Context = (docs: string[], termCache: Map<string, RegExp>): BM25C
 	return { n, avgDl: totalLen / Math.max(n, 1), df };
 };
 
-/** BM25 score for a single doc against query terms. Uses precompiled cache. */
 const bm25Score = (doc: string, termCache: Map<string, RegExp>, ctx: BM25Context): number => {
 	const dl = doc.split(/\s+/).length;
 	let score = 0;
@@ -373,9 +287,7 @@ const bm25Score = (doc: string, termCache: Map<string, RegExp>, ctx: BM25Context
 		if (tf === 0) continue;
 
 		const docFreq = ctx.df.get(t) ?? 0;
-		// IDF: log((N - df + 0.5) / (df + 0.5) + 1)
 		const idf = Math.log((ctx.n - docFreq + 0.5) / (docFreq + 0.5) + 1);
-		// TF saturation with length normalization
 		const tfNorm = (tf * (BM25_K + 1)) / (tf + BM25_K * (1 - BM25_B + (BM25_B * dl) / ctx.avgDl));
 		score += idf * tfNorm;
 	}
@@ -388,7 +300,6 @@ interface SearchText {
 	sections: Array<{ line: number; label: string }>;
 }
 
-/** Prefer the local window covering the most query terms; retain structural evidence labels. */
 const lineSnippet = (
 	document: SearchText,
 	regex: RegExp,
@@ -427,7 +338,6 @@ interface FileOperation {
 	args: Record<string, unknown>;
 }
 
-/** Content-bearing direct and nested operations represented by one message. */
 export const fileOperationsOf = (msg: Message): FileOperation[] => {
 	const operations: FileOperation[] = [];
 	if (Array.isArray(msg.content)) {
@@ -489,7 +399,6 @@ const matchingFiles = (msg: Message | undefined, regex: RegExp): FileMatch[] => 
 	return matches;
 };
 
-/** Build searchable text with labels located by persisted structure, never by payload syntax. */
 const fullText = (msg: Message, mode: RecallMode): SearchText => {
 	if ((msg as any).role === "bashExecution") {
 		return { text: mode === "file" ? "" : `${(msg as any).command ?? ""} ${(msg as any).output ?? ""}`, sections: [] };
@@ -535,7 +444,6 @@ const fullText = (msg: Message, mode: RecallMode): SearchText => {
 	return { text: parts.join("\n"), sections };
 };
 
-/** Describe an already-ranked source without applying the personal engine's ranking or eligibility rules. */
 export const describeSearchHit = (
 	entry: RenderedEntry,
 	message: Message,
@@ -548,7 +456,6 @@ export const describeSearchHit = (
 	const document = fullText(message, "history");
 	let snippet = lineSnippet(document, regex, 2, cache);
 	if (!snippet && indexedSnippet) {
-		// FTS stemming can match "fixed" for "fixing". Select that passage but keep labels from the source structure.
 		const matched = [...indexedSnippet.matchAll(/\u00ab([^\u00ab\u00bb]+)\u00bb/g)].map((match) => match[1]!);
 		const matchedCache = compileTerms(matched);
 		if (matched.length) snippet = lineSnippet(document, snippetRegex(matched, matchedCache), 2, matchedCache);
@@ -572,9 +479,6 @@ export const searchEntries = (
 ): SearchHit[] => {
 	if (!query?.trim()) return entries;
 
-	// Capture transcript identity while entries are still in chronological order.
-	// BM25 later sorts by relevance, so deriving this after ranking would make
-	// unrelated hits look like a single chronological turn in the formatter.
 	let currentTurnId: number | string = entries[0]?.entryId ?? entries[0]?.index ?? 0;
 	const turnIds = entries.map((entry) => {
 		if (entry.role === "user" || entry.role === "bash" || (entry.sourceKind && entry.sourceKind !== "message"))
@@ -582,7 +486,6 @@ export const searchEntries = (
 		return currentTurnId;
 	});
 	const withTurn = (entry: SearchHit, offset: number): SearchHit => {
-		// Turn identity is formatter metadata, not a public search-result field.
 		Object.defineProperty(entry, "turnId", { value: turnIds[offset], enumerable: false });
 		const message = messages[offset];
 		if (message?.role === "toolResult" && ["search_session", "revisit_note"].includes(message.toolName))
@@ -592,9 +495,6 @@ export const searchEntries = (
 
 	const rawQuery = query.trim();
 
-	// If query looks like a single regex pattern (contains metacharacters),
-	// treat the whole thing as one pattern — don't split into terms.
-	// Apply a source length cap to prevent pathological patterns.
 	if (looksLikeRegex(rawQuery)) {
 		const regex = safeRegex(rawQuery);
 		const hits: SearchHit[] = [];
@@ -616,16 +516,11 @@ export const searchEntries = (
 		return hits;
 	}
 
-	// Natural language / multi-word query: BM25 scoring
-
-	// Precompile all term regexes once — used across countMatches,
-	// buildBM25Context, bm25Score, and snippet generation.
 	const rawTerms = rawQuery.split(/\s+/);
 	const terms = filterStopwords(rawTerms);
 	const termCache = compileTerms(terms);
 	const snipRe = snippetRegex(terms, termCache);
 
-	// Build all docs for BM25 context
 	const docs: string[] = [];
 	for (let i = 0; i < entries.length; i++) {
 		const e = entries[i];
@@ -637,10 +532,6 @@ export const searchEntries = (
 
 	const ctx = buildBM25Context(docs, termCache);
 
-	// For multi-term queries, require a minimum number of terms to match.
-	// This prevents common domain vocabulary (e.g. "document", "policy",
-	// "review" in government/corporate sessions) from matching nearly
-	// every entry via pure OR semantics.
 	const minMatchCount = terms.length >= 3 ? MIN_TERM_MATCH_FOR_MULTITERM : 1;
 
 	const scored: Array<{ hit: SearchHit; score: number }> = [];
@@ -662,11 +553,6 @@ export const searchEntries = (
 
 	scored.sort((a, b) => b.score - a.score);
 
-	// Apply score ratio threshold: drop entries scoring below a fraction
-	// of the top result. These are low-relevance noise matches.
-	// Only applies when there are multiple terms (where OR semantics
-	// can pull in tangential matches). Single-term queries have no
-	// noise floor — the term either matches or it doesn't.
 	if (scored.length > 1 && terms.length >= 2) {
 		const topScore = scored[0].score;
 		if (topScore > 0) {
@@ -676,10 +562,8 @@ export const searchEntries = (
 		}
 	}
 
-	// Recall output repeats other evidence; keep it addressable behind original sources.
 	scored.sort((a, b) => Number(Boolean(a.hit.recallEcho)) - Number(Boolean(b.hit.recallEcho)) || b.score - a.score);
 
-	// Hard cap on total results
 	if (scored.length > MAX_SEARCH_RESULTS) {
 		scored.length = MAX_SEARCH_RESULTS;
 	}

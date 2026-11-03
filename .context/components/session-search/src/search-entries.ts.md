@@ -6,6 +6,8 @@ Why: deterministic lexical ranking is not proof of better historical evidence re
 
 The legacy frequency counter inherits lastIndex from earlier tests of cached global regular expressions; matchAll can therefore skip first occurrences. Isolated candidate `98ec44fa` resets that cursor, but its frozen episode recovery fell from 7/19 to 6/19 despite a held-out rise from 6/20 to 7/20. Main retains the old scorer under the operator's quality gate. Treat correct frequency arithmetic and better historical retrieval as separate claims; a future correction needs an explicit decision, not an assumed gain from passing a unit probe.
 
+Native JavaScript regex evaluation has no execution timeout. The legacy query subset bounds wildcard work and rejects grouping as well as quantifiers: repeated ambiguous groups can cause exponential backtracking even without repetition operators. Malformed syntax retains the historical literal fallback. Spelling expansions bypass the explicit-query subset, so keep suffix alternatives finite and optional suffixes fixed-width; their order must preserve longer suffixes before shorter overlapping ones.
+
 Build evidence-section coordinates alongside searchable text from persisted content structure. Select a window's governing label from those coordinates, while retaining literal payload lines as data. Keep stable source identity through future ranking changes.
 
 FTS stemming can retrieve a word form absent from the literal query. Its highlighted terms may locate a window, while section coordinates from the persisted source still supply the evidence label.

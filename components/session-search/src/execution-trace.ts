@@ -63,7 +63,6 @@ const legacyOperationOf = (value: unknown): ExecutionOperation | undefined => {
 	};
 };
 
-/** Read nested operations from apple-pi or pi-fabric durable tool-result details. */
 export const executionOperationsOf = (details: unknown): ExecutionOperation[] => {
 	if (!isRecord(details)) return [];
 	if (isRecord(details.trace)) {

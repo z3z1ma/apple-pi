@@ -38,12 +38,6 @@ const invoke = async (tool: any, file: string, params: Record<string, unknown>) 
 	}
 };
 
-// Build a multi-line user message whose match is on line 0 and whose
-// PAIR_FULL_MARKER sits on line 4. The lineSnippet window used by
-// searchEntries returns only ±2 lines around the match (lines 0–2), so
-// the pair is excluded from the truncated snippet — but
-// renderMessage(full=true) includes every line. That contrast is what
-// lets us prove expand actually swapped in full content.
 const buildContent = () =>
 	[
 		"SEARCHTOKEN alpha match here",
@@ -76,12 +70,10 @@ describe("search_session expand + query composition", () => {
 		try {
 			const tool = register();
 
-			// Baseline: query alone — the ±2 line snippet excludes the pair.
 			const baseline = await invoke(tool, file, { query: "SEARCHTOKEN" });
 			expect(baseline).toContain("1 matches");
 			expect(baseline).not.toContain("PAIR_FULL_MARKER");
 
-			// Composed: expand the matching index → full content surfaces the pair.
 			const composed = await invoke(tool, file, { query: "SEARCHTOKEN", expand: [1] });
 			expect(baseline).not.toContain("expanded");
 			expect(composed).toContain("PAIR_FULL_MARKER");

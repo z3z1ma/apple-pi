@@ -114,7 +114,6 @@ beforeAll(async () => {
 			.join("\n");
 		writeFileSync(path, `${transcript}\n`);
 	}
-	// Seed an isolated stopped runtime's database; the daemon is its only writer after start.
 	const db = new DatabaseSync(state.dbPath);
 	migrate(db);
 	const person = db.prepare(

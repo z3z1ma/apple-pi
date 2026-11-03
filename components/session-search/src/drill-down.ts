@@ -36,13 +36,11 @@ export const expandSourceEntry = (
 	return `entry:${request.id} [${entry.sourceKind}] ${entry.timestamp ?? ""}\nLines ${request.offset + 1}-${end} of ${lines.length}\n\n${lines.slice(request.offset, end).join("\n")}${next}`;
 };
 
-/** Parse `call:<toolCallId>` from an pair receipt address. */
 export const parseCallQuery = (query: string): string | undefined => {
 	const match = CALL_QUERY.exec(query.trim());
 	return match?.[1];
 };
 
-/** Recover a persisted primary tool-result body by toolCallId. */
 export const expandToolCall = (messages: Message[], callId: string): string => {
 	for (const message of messages) {
 		if (message.role !== "toolResult") continue;
@@ -57,7 +55,6 @@ export const expandToolCall = (messages: Message[], callId: string): string => {
 	return `No primary tool result for call:${callId}.`;
 };
 
-/** Parse #N:path, #N:path:full, #N:path:offset, or #N:path:offset:limit. */
 export const parseDrillDown = (query: string): DrillDownRequest | undefined => {
 	const match = DRILL_DOWN.exec(query.trim());
 	if (!match) return undefined;
@@ -121,7 +118,6 @@ const formatContent = (path: string, toolName: string, body: string, request: Dr
 	return `${heading}${range}\n\n${window}${continuation}`;
 };
 
-/** Expand file payloads from messages already filtered to the requested recall scope. */
 export const expandEntryFile = (rendered: RenderedEntry[], messages: Message[], request: DrillDownRequest): string => {
 	const offset = rendered.findIndex((entry) => entry.index === request.index);
 	if (offset < 0) return `Entry #${request.index} is not available in the requested scope.`;

@@ -1,9 +1,5 @@
 import type { FileMatch, SearchHit, TouchedFile } from "./search-entries.js";
 
-// Roles that start a new conversation segment (turn).
-// A segment begins at a user or bashExecution (user-initiated action)
-// and continues through assistant responses, tool calls, and tool results
-// until the next user/bash boundary.
 const SEGMENT_START_ROLES = new Set(["user", "bash"]);
 
 const sourceAddress = (entry: SearchHit): string =>
@@ -12,37 +8,15 @@ const sourceAddress = (entry: SearchHit): string =>
 export const entryAddress = (entry: SearchHit): string =>
 	entry.index !== undefined ? `#${entry.index}` : sourceAddress(entry);
 
-/**
- * A segment is a contiguous group of entries forming one conversational turn:
- * a user/assistant message followed by its associated tool calls, tool results,
- * and bash executions. The next user/assistant message starts a new segment.
- */
 interface RecallSegment {
-	/** Entry indices covered by this segment (e.g. "#42-#47") */
 	range: string;
-	/** All entries in this segment, in order */
 	entries: SearchHit[];
-	/** Which entries within this segment matched the query */
 	matchedIndices: Set<number>;
 }
 
-/**
- * Group entries into conversation segments (turns).
- *
- * A segment starts at a user or assistant message and includes all
- * subsequent tool calls, tool results, and bash executions until
- * the next user/assistant boundary.
- *
- * When entries lack explicit `snippet` markers (e.g. called from
- * external code or tests), all entries in query mode are treated
- * as matched.
- */
 const groupSegments = (entries: SearchHit[], hasQuery: boolean): RecallSegment[] => {
 	if (entries.length === 0) return [];
 
-	// Search results are relevance-ranked. When search supplied transcript turn
-	// ids, group by those stable identities rather than treating ranked neighbors
-	// as chronological neighbors.
 	if (entries.some((entry) => entry.turnId !== undefined)) {
 		const byTurn = new Map<number | string, SearchHit[]>();
 		for (const entry of entries) {
@@ -67,8 +41,6 @@ const groupSegments = (entries: SearchHit[], hasQuery: boolean): RecallSegment[]
 		});
 	}
 
-	// Detect whether entries have snippet markers set.
-	// If none do but we have a query, treat the entire set as matched.
 	const anySnippet = entries.some((e) => e.snippet !== undefined);
 	const assumeAllMatched = hasQuery && !anySnippet;
 
@@ -92,7 +64,6 @@ const groupSegments = (entries: SearchHit[], hasQuery: boolean): RecallSegment[]
 		}
 	}
 
-	// Last segment
 	const slice = entries.slice(start);
 	if (slice.length > 0) {
 		const matched = new Set<number>();
@@ -124,7 +95,6 @@ const formatFileMatch = (match: FileMatch, entry: SearchHit, query: boolean): st
 	return `  [${match.toolName}] ${shortPath(match.path)} — ${match.lineCount} ${unit}    use ${address}${snippet}`;
 };
 
-/** Format a single entry line with optional match indicator. */
 const formatEntry = (e: SearchHit, matched: boolean): string => {
 	const prefix = matched ? ">" : " ";
 	const fileSuffix = e.files?.length ? ` files:[${e.files.join(", ")}]` : "";
@@ -149,11 +119,9 @@ const formatEntry = (e: SearchHit, matched: boolean): string => {
 	);
 };
 
-/** Format a segment with its entries. */
 const formatSegment = (seg: RecallSegment): string => {
 	const lines: string[] = [];
 
-	// Segment header with match count
 	const matchCount = seg.matchedIndices.size;
 	if (matchCount > 0 && matchCount < seg.entries.length) {
 		lines.push(`--- ${seg.range} (${matchCount}/${seg.entries.length} entries match) ---`);
@@ -171,7 +139,6 @@ const formatSegment = (seg: RecallSegment): string => {
 	return lines.join("\n");
 };
 
-/** Count total unique matches across all segments. */
 const countMatches = (segments: RecallSegment[]): number => {
 	let total = 0;
 	for (const seg of segments) {
@@ -203,14 +170,12 @@ export const formatRecallOutput = (entries: SearchHit[], query?: string, headerO
 		return query ? `No matches for "${query}" in session history.` : "No entries in session history.";
 	}
 
-	// Browse mode (no query): keep flat format, no structure needed
 	if (!query) {
 		const header = headerOverride || `Session history (${entries.length} entries):`;
 		const lines = entries.map((entry) => formatEntry(entry, false).trimStart());
 		return `${header}\n\n${lines.join("\n\n")}`;
 	}
 
-	// Search mode: group into structure-preserving segments
 	const header = headerOverride
 		? `${headerOverride} for "${query}":`
 		: `Found ${entries.length} matches for "${query}":`;
@@ -225,16 +190,12 @@ export const formatRecallOutput = (entries: SearchHit[], query?: string, headerO
 
 	const formatted = segments.filter((seg) => seg.matchedIndices.size > 0).map(formatSegment);
 
-	// Add adjacent non-matching segments as context around the first
-	// matched segment (so the agent sees the conversation flow).
 	if (segments.length > 1) {
 		const firstMatchIdx = segments.findIndex((s) => s.matchedIndices.size > 0);
 		if (firstMatchIdx >= 0) {
-			// Show the segment before for context (only if it has no matches itself)
 			if (firstMatchIdx > 0 && segments[firstMatchIdx - 1].matchedIndices.size === 0) {
 				formatted.unshift(formatSegment(segments[firstMatchIdx - 1]));
 			}
-			// Show the segment after for context (only if not already shown)
 			if (firstMatchIdx < segments.length - 1) {
 				const next = segments[firstMatchIdx + 1];
 				if (next.matchedIndices.size === 0) {

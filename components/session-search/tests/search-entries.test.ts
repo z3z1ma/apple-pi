@@ -49,11 +49,9 @@ describe("searchEntries", () => {
 		expect(r[0].snippet).toContain("root");
 	});
 
-	// ── regex support ──
-
 	it("supports regex pattern: alternation", () => {
 		const r = searchEntries(entries, messages, "login|auth");
-		expect(r).toHaveLength(3); // "login bug", "auth.ts", "auth module"
+		expect(r).toHaveLength(3);
 		expect(r.map((h) => h.index).sort()).toEqual([0, 1, 3]);
 	});
 
@@ -100,37 +98,27 @@ describe("searchEntries", () => {
 		expect(r).toEqual([]);
 	});
 
-	// ── natural language queries (OR logic + ranking) ──
-
 	it("natural language query uses OR logic with multi-term minimum", () => {
-		// "root cause auth" -- 3 meaningful terms → requires ≥2 matches
-		// #3 has all 3 (root, cause, auth); #1 has only auth (1 term, below threshold)
 		const r = searchEntries(entries, messages, "root cause auth");
 		expect(r.length).toBe(1);
-		expect(r[0].index).toBe(3); // "Found the root cause in auth module" matches all 3
+		expect(r[0].index).toBe(3);
 	});
 
 	it("2-term OR query matches on single term (no multi-term floor)", () => {
-		// 2 meaningful terms → no floor, matches entries with ANY term
 		const r = searchEntries(entries, messages, "login auth");
-		expect(r.length).toBeGreaterThanOrEqual(2); // #0 has login, #1 + #3 have auth
+		expect(r.length).toBeGreaterThanOrEqual(2);
 	});
 
 	it("filters stopwords from queries", () => {
-		// "the root cause of it" → stopwords: the, of, it → meaningful: root, cause
 		const r = searchEntries(entries, messages, "the root cause of it");
 		expect(r).toHaveLength(1);
 		expect(r[0].index).toBe(3);
 	});
 
 	it("keeps all terms if all are stopwords", () => {
-		// When all terms are stopwords, keep them (don't drop everything)
-		// "the" appears in "Found the root cause" so it matches
 		const r = searchEntries(entries, messages, "the");
 		expect(r.length).toBeGreaterThan(0);
 	});
-
-	// ── line-based snippet ──
 
 	it("snippet shows context lines around match", () => {
 		const multiline = "line 0\nline 1\nline 2 TARGET\nline 3\nline 4\nline 5";
@@ -156,8 +144,6 @@ describe("searchEntries", () => {
 		expect(snip).not.toContain("line 3");
 	});
 
-	// ── thinking content searchability ──
-
 	it("finds terms in thinking content", () => {
 		const e: RenderedEntry[] = [
 			{ index: 0, role: "user", summary: "Fix the parser" },
@@ -179,8 +165,6 @@ describe("searchEntries", () => {
 		expect(r[0].snippet).toContain("race condition");
 	});
 
-	// ── toolCall argument searchability (bash command, edit text) ──
-
 	it("finds terms in a bash toolCall's arguments.command", () => {
 		const e: RenderedEntry[] = [
 			{ index: 0, role: "user", summary: "set up env" },
@@ -201,9 +185,6 @@ describe("searchEntries", () => {
 				],
 			} as any,
 		];
-		// Query has no regex metacharacters, so it takes the BM25 term path
-		// (the .dev.vars dots would otherwise make the whole query a single
-		// contiguous regex — a separate query-parsing concern).
 		const r = searchEntries(e, m, "DEV_API_KEY grep curl");
 		expect(r).toHaveLength(1);
 		expect(r[0].index).toBe(1);
@@ -263,17 +244,14 @@ describe("searchEntries", () => {
 		expect(result[0].fileMatches?.[0]).toMatchObject({ path: "output.txt", toolName: "write" });
 	});
 
-	// ── search result grounding (prevents "half the session" returns) ──
-
 	it("returns the relevant policy sources without unrelated document mentions", () => {
-		// Build a session where one entry is highly relevant and many are barely relevant
 		const govEntries: RenderedEntry[] = [
 			{ index: 0, role: "user", summary: "Review the policy document" },
 			{ index: 1, role: "assistant", summary: "I found the policy document. It covers the review process." },
 			{ index: 2, role: "user", summary: "Check the deployment pipeline" },
-			{ index: 3, role: "assistant", summary: "The pipeline has a step for document generation" }, // weak match
+			{ index: 3, role: "assistant", summary: "The pipeline has a step for document generation" },
 			{ index: 4, role: "user", summary: "Fix the login bug" },
-			{ index: 5, role: "assistant", summary: "Updated the document in README" }, // very weak
+			{ index: 5, role: "assistant", summary: "Updated the document in README" },
 		];
 		const govMsgs: Message[] = [
 			{ role: "user", content: "Review the policy document" } as any,
@@ -289,20 +267,16 @@ describe("searchEntries", () => {
 			{ role: "user", content: "Fix the login bug" } as any,
 			{ role: "assistant", content: [{ type: "text", text: "Updated the document in README" }] } as any,
 		];
-		// 2-term query: policy + review → no multi-term floor
-		// Should return both strong matches but may filter very weak ones
 		const r = searchEntries(govEntries, govMsgs, "policy review");
-		// #0 and #1 are strong matches; #3 and #5 only have "document" which isn't queried
 		expect(r.map((hit) => hit.index).sort()).toEqual([0, 1]);
 	});
 
 	it("requires 2+ term matches for 3+ term queries", () => {
-		// Simulates a government session with common domain vocabulary
 		const govEntries: RenderedEntry[] = [
 			{ index: 0, role: "user", summary: "Review the policy document" },
-			{ index: 1, role: "assistant", summary: "Checking policy" }, // only 1/3 terms
-			{ index: 2, role: "user", summary: "Fix login bug" }, // 0/3 terms
-			{ index: 3, role: "assistant", summary: "Review policy and update document" }, // 2/3 terms
+			{ index: 1, role: "assistant", summary: "Checking policy" },
+			{ index: 2, role: "user", summary: "Fix login bug" },
+			{ index: 3, role: "assistant", summary: "Review policy and update document" },
 		];
 		const govMsgs: Message[] = [
 			{ role: "user", content: "Review the policy document" } as any,
@@ -310,8 +284,6 @@ describe("searchEntries", () => {
 			{ role: "user", content: "Fix login bug" } as any,
 			{ role: "assistant", content: [{ type: "text", text: "Review policy and update document" }] } as any,
 		];
-		// "review policy document" = 3 terms → requires ≥2 matches
-		// #0 matches all 3, #1 matches only "policy" (1 term → filtered), #3 matches "review" + "document" (2 terms → kept)
 		const r = searchEntries(govEntries, govMsgs, "review policy document");
 		expect(r.length).toBe(2);
 		const indices = r.map((h) => h.index).sort();
@@ -320,7 +292,6 @@ describe("searchEntries", () => {
 	});
 
 	it("hard caps regex search results", () => {
-		// Build many entries that all match the same regex
 		const manyEntries: RenderedEntry[] = Array.from({ length: 100 }, (_, i) => ({
 			index: i,
 			role: "user" as const,
@@ -335,6 +306,6 @@ describe("searchEntries", () => {
 				}) as any,
 		);
 		const r = searchEntries(manyEntries, manyMsgs, "document.*review");
-		expect(r.length).toBeLessThanOrEqual(50); // MAX_SEARCH_RESULTS
+		expect(r.length).toBeLessThanOrEqual(50);
 	});
 });

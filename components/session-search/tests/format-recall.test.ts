@@ -37,13 +37,10 @@ describe("formatRecallOutput", () => {
 		});
 
 		it("groups entries into segments by turn", () => {
-			// Segments are split on user/bash boundaries
 			const entries: SearchHit[] = [
-				// Segment 1: user + assistant + tool_result (only user matches)
 				{ index: 0, role: "user", summary: "fix auth", snippet: "fix auth" },
 				{ index: 1, role: "assistant", summary: "checking...", snippet: undefined },
 				{ index: 2, role: "tool_result", summary: "file not found", snippet: undefined },
-				// Segment 2: second user turn (assistant matches)
 				{ index: 3, role: "user", summary: "check the logs", snippet: undefined },
 				{ index: 4, role: "assistant", summary: "found the auth bug", snippet: "auth bug" },
 			];
@@ -68,7 +65,6 @@ describe("formatRecallOutput", () => {
 		});
 
 		it("shows segment context for adjacent turns", () => {
-			// Single match — adjacent segments shown as context
 			const entries: SearchHit[] = [
 				{ index: 0, role: "user", summary: "hello", snippet: undefined },
 				{ index: 1, role: "assistant", summary: "hi", snippet: undefined },
