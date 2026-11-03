@@ -12,6 +12,7 @@ import {
 } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { hostPackageEnv } from "../../../components/session-state/src/client.js";
 import { agentDir } from "../../../components/session-state/src/paths.js";
 
 export const ELECTRON_VERSION = "44.9.0";
@@ -23,9 +24,10 @@ export function appDir(): string {
 	return dir;
 }
 
-const MAIN = fileURLToPath(new URL("../dist/electron/main.js", import.meta.url));
+const START = fileURLToPath(new URL("./electron/start.mjs", import.meta.url));
+const LOADED = "agent-workplace: loaded";
 const STEP_TIMEOUT_MS = 10 * 60_000;
-const START_WATCH_MS = 2000;
+const START_POLL_MS = 100;
 const OUTPUT_KEPT = 4000;
 
 export function electronDir(): string {
@@ -222,8 +224,8 @@ export function startLog(): string {
 	return join(appDir(), "electron.log");
 }
 
-export function startAgentWorkplace(electron: string, watchMs = START_WATCH_MS): Promise<StartResult> {
-	const env = { ...process.env };
+export function startAgentWorkplace(electron: string): Promise<StartResult> {
+	const env = hostPackageEnv();
 	delete env.ELECTRON_RUN_AS_NODE;
 	const log = startLog();
 	mkdirSync(dirname(log), { recursive: true });
@@ -232,17 +234,21 @@ export function startAgentWorkplace(electron: string, watchMs = START_WATCH_MS):
 		let timer: NodeJS.Timeout | undefined;
 		const settle = (result: StartResult) => {
 			if (!timer) return;
-			clearTimeout(timer);
+			clearInterval(timer);
 			timer = undefined;
 			resolve(result);
 		};
-		timer = setTimeout(() => settle({ ok: true }), watchMs);
+		timer = setInterval(() => {
+			if (readFileSync(log, "utf8").includes(LOADED)) settle({ ok: true });
+		}, START_POLL_MS);
 		try {
-			const child = spawn(electron, [MAIN], { detached: true, stdio: ["ignore", "ignore", fd], env });
+			const child = spawn(electron, [START], { detached: true, stdio: ["ignore", "ignore", fd], env });
 			child.on("error", (error) => settle({ ok: false, reason: error.message }));
 			child.on("exit", (code, signal) => {
 				if (code === 0) return settle({ ok: true });
-				const tail = readFileSync(log, "utf8").trim().split("\n").slice(-3).join(" ").slice(0, 300);
+				const lines = readFileSync(log, "utf8").trim().split("\n");
+				const failed = lines.find((line) => line.startsWith("agent-workplace: failed to load"));
+				const tail = (failed ?? lines.slice(-3).join(" ")).slice(0, 300);
 				settle({ ok: false, reason: `it quit at start (${signal ?? `exit ${code}`})${tail ? `: ${tail}` : ""}` });
 			});
 			child.unref();

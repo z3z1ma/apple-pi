@@ -3,12 +3,17 @@ import { randomUUID } from "node:crypto";
 import { closeSync, mkdirSync, openSync } from "node:fs";
 import { createConnection, type Socket } from "node:net";
 import { fileURLToPath } from "node:url";
+import { getPackageDir } from "@earendil-works/pi-coding-agent";
 import { statePaths } from "./paths.js";
 import { type Command, lineReader, type Receipt } from "./protocol.js";
 
 const RUNTIME_MAIN = fileURLToPath(new URL("./runtime-main.runtime.ts", import.meta.url));
 const REGISTER = new URL("./register.mjs", import.meta.url).href;
 export const RETRY_MS = 250;
+
+export function hostPackageEnv(): NodeJS.ProcessEnv {
+	return { ...process.env, PI_HOST_PACKAGE_DIR: process.env.PI_HOST_PACKAGE_DIR ?? getPackageDir() };
+}
 
 export function spawnRuntime(warn: (message: string) => void): ChildProcess | undefined {
 	const paths = statePaths();
@@ -23,7 +28,7 @@ export function spawnRuntime(warn: (message: string) => void): ChildProcess | un
 	const child = spawn(process.execPath, ["--import", REGISTER, RUNTIME_MAIN], {
 		detached: true,
 		stdio: ["ignore", log, log],
-		env: process.env,
+		env: hostPackageEnv(),
 	});
 	closeSync(log);
 	child.on("error", (error) => warn(`Session state: cannot start the runtime: ${error.message}`));

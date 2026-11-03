@@ -156,7 +156,7 @@ test("the retry shows each install step in the status line, then opens the world
 		undefined,
 	]);
 	expect(notices.map((n) => n.message).slice(-2)).toEqual(["Electron is installed.", "Opening Agent Workplace."]);
-	expect(readFileSync(electronLog, "utf8").trim()).toMatch(/apps\/agent-workplace\/dist\/electron\/main\.js$/);
+	expect(readFileSync(electronLog, "utf8").trim()).toMatch(/apps\/agent-workplace\/src\/electron\/start\.mjs$/);
 	expect(leftovers()).toEqual([`electron-${ELECTRON_VERSION}`]);
 }, 20000);
 
@@ -178,4 +178,19 @@ test("once installed, /workplace opens at once; an app that quits at start says 
 			level: "error",
 		},
 	]);
+
+	notices.length = 0;
+	writeFileSync(
+		binary,
+		`#!/bin/sh\necho "agent-workplace: failed to load: Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'typebox'" >&2\necho "    at resolve" >&2\nexit 1\n`,
+	);
+	await world("", ctx);
+	expect(notices.map((n) => n.message)).toEqual([
+		"Agent Workplace did not open: it quit at start (exit 1): agent-workplace: failed to load: Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'typebox'. Run /workplace again to retry.",
+	]);
+
+	notices.length = 0;
+	writeFileSync(binary, `#!/bin/sh\nsleep 0.3\necho "agent-workplace: loaded" >&2\nsleep 1\n`);
+	await world("", ctx);
+	expect(notices.map((n) => n.message)).toEqual(["Opening Agent Workplace."]);
 }, 20000);

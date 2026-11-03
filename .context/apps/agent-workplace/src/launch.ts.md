@@ -14,6 +14,7 @@ Verify: apps/agent-workplace/tests/launch.test.ts
 
 ## symbol:startAgentWorkplace
 
-The app's stderr goes to `<agent dir>/agent-workplace/electron.log`, and the start is watched for `START_WATCH_MS`; an exit with code 0 in that time (a second instance handing over to the first) counts as opened.
-Why: a detached start with ignored output gave no reason when Electron could not run; the watch says why without keeping Pi attached to the app.
+Electron starts `src/electron/start.mjs`, not `main.js`: it installs the host-package resolve hook, then imports `main.js`. It writes `agent-workplace: loaded` to stderr on success; on failure it writes `agent-workplace: failed to load: <error>` and exits 1. The app's stderr goes to `<agent dir>/agent-workplace/electron.log`. The start counts as opened only when that loaded line appears, or on exit 0 (a second instance handing over to the first). Any other exit is a failure that reports the failed-to-load line.
+Why: Electron does not quit when its main module fails to load (it shows an error dialog, which can be invisible under WSLg). The old "still alive after 2 s" check therefore reported success for an app that never loaded, and the operator saw "Opening Workplace" forever.
+The environment carries `PI_HOST_PACKAGE_DIR` (`hostPackageEnv`), so that main's imports of Pi's own libraries resolve in an installed package (see register.mjs).
 Verify: apps/agent-workplace/tests/launch.test.ts

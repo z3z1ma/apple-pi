@@ -7,7 +7,7 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { createConnection } from "node:net";
 import { isDeepStrictEqual, promisify } from "node:util";
 import { DatabaseSync } from "node:sqlite";
-import { getAgentDir, parseFrontmatter } from "@earendil-works/pi-coding-agent";
+import { getAgentDir, getPackageDir, parseFrontmatter } from "@earendil-works/pi-coding-agent";
 import { execFile, spawn } from "node:child_process";
 import { spawn as spawn$1 } from "@lydell/node-pty";
 import { isUtf8 } from "node:buffer";
@@ -4552,6 +4552,12 @@ function lineReader(onLine) {
 //#region components/session-state/src/client.ts
 var RUNTIME_MAIN = fileURLToPath(new URL("./runtime-main.runtime.ts", import.meta.url));
 var REGISTER = new URL("./register.mjs", import.meta.url).href;
+function hostPackageEnv() {
+	return {
+		...process.env,
+		PI_HOST_PACKAGE_DIR: process.env.PI_HOST_PACKAGE_DIR ?? getPackageDir()
+	};
+}
 function spawnRuntime(warn) {
 	const paths = statePaths();
 	let log;
@@ -4576,7 +4582,7 @@ function spawnRuntime(warn) {
 			log,
 			log
 		],
-		env: process.env
+		env: hostPackageEnv()
 	});
 	closeSync(log);
 	child.on("error", (error) => warn(`Session state: cannot start the runtime: ${error.message}`));
