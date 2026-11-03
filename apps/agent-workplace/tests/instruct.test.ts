@@ -22,8 +22,6 @@ import { instruct } from "../src/backend/instructions.js";
 import { openWorldBackend, type WorldBackend } from "../src/backend/world-backend.js";
 import type { Instruction, ReceiptStage, ReplyStreamEvent } from "../src/world.js";
 
-// Seam 1 for instructing an agent from the panel: the backend API in Node, without Electron, over a real session-state
-// runtime, with faux Pi sessions running the real bridge.
 const state = tempStateDir();
 const cwd = mkdtempSync(join(tmpdir(), "aw-instruct-"));
 writeFileSync(join(cwd, "app.ts"), "export const value = 1;\n");
@@ -51,7 +49,6 @@ afterAll(async () => {
 const character = (id: string) => world.snapshot().characters.find((c) => c.id === id);
 let commandCount = 0;
 
-/** Send an instruction as the panel does, collecting its receipt stages. */
 async function send(id: string, instruction: Instruction) {
 	const stages: { stage: ReceiptStage; reason?: string }[] = [];
 	const commandId = `aw-test-${++commandCount}`;
@@ -61,7 +58,6 @@ async function send(id: string, instruction: Instruction) {
 	return { result, stages, commandId };
 }
 
-/** A faux session with a transcript file, once it is a character in the world. */
 async function awake(replyTo: Parameters<typeof fauxSession>[1], streamText = false) {
 	const run = await fauxSession([bridge], replyTo, [], {
 		streamText,
@@ -97,17 +93,14 @@ test("Reply sends talk with its receipts, and the reply streams to the watcher, 
 		expect(deltas.map((e) => e.delta).join("")).toBe(blocks.join(""));
 		const end = mine.find((e) => e.kind === "end")!;
 		expect(end.kind === "end" && end.streamId).toBe(deltas[0].streamId);
-		// The stored entry replaces the streamed text with the same words, so nothing jumps.
 		const stored = end.kind === "end" ? end.entry : null;
 		expect(stored?.kind).toBe("assistant");
 		const storedText =
 			stored?.kind === "assistant" ? stored.parts.map((part) => (part.kind === "text" ? part.text : "")).join("") : "";
 		expect(storedText).toBe(blocks.join(""));
-		// The panel's history then holds the same entry, by the same id.
 		const page = await conversations.page(id);
 		expect(page.ok && page.entries.at(-1)?.id).toBe(end.kind === "end" && end.entry?.id);
 
-		// The chatbox line, from the runtime's own record of the command.
 		await vi.waitFor(
 			() =>
 				expect(feedTexts()).toEqual(
@@ -134,7 +127,6 @@ test("busy: Redirect now sends steer, Tell it after this sends follow_up, and Re
 		await vi.waitFor(() => expect(character(id)?.facts?.run).not.toBe("idle"), { timeout: 5000 });
 		const steer = await send(id, { kind: "steer", text: "Go left instead." });
 		expect(steer.stages).toEqual([{ stage: "accepted" }, { stage: "delivered" }, { stage: "applied" }]);
-		// A follow-up is held by the session until the run settles, so it can still be withdrawn.
 		const following = send(id, { kind: "follow_up", text: "Then tidy up." });
 		const talk = await send(id, { kind: "talk", text: "Hi." });
 		expect(talk.result).toMatchObject({ ok: false, reason: expect.stringContaining("busy") });
@@ -151,7 +143,6 @@ test("busy: Redirect now sends steer, Tell it after this sends follow_up, and Re
 				),
 			{ timeout: 3000 },
 		);
-		// The steer would start another held request; end the run here. A follow-up still held is then not sent.
 		await run.session.abort();
 		await turn.catch(() => {});
 		const follow = await following;
@@ -168,7 +159,6 @@ test("Stop on a busy agent sends nothing until confirmed; confirmed, it sends ab
 		const turn = run.session.prompt("work forever");
 		await vi.waitFor(() => expect(character(id)?.facts?.run).not.toBe("idle"), { timeout: 5000 });
 
-		// Declined (or never confirmed): refused here, and the runtime never hears of it.
 		const declined = await send(id, { kind: "abort" });
 		expect(declined.result).toMatchObject({ ok: false, reason: expect.stringContaining("confirmation") });
 		expect(declined.stages).toEqual([{ stage: "failed", reason: expect.stringContaining("confirmation") }]);
@@ -202,8 +192,6 @@ test("an idle agent stops without confirmation; instructions the panel cannot se
 	}
 }, 30000);
 
-// Ticket 14: answering questions in the world.
-
 const questions = [
 	{
 		question: "Which runtime should the service use?",
@@ -234,11 +222,9 @@ const questions = [
 const ENTER = "\r";
 const DOWN = "\x1b[B";
 const SPACE = " ";
-// In the terminal dialog: Node; Tests and Docs, then done; the free-text choice with words typed; submit.
 const typed = [ENTER, SPACE, DOWN, SPACE, DOWN, DOWN, ENTER, DOWN, DOWN, ENTER, ..."Add a changelog", ENTER, ENTER];
 const formReplies = [{ selected: ["Node"] }, { selected: ["Tests", "Docs"] }, { custom: "Add a changelog" }];
 
-/** A terminal that shows the real questionnaire dialog and can type into it. */
 function terminal() {
 	let dialog: { handleInput(data: string): void; focused: boolean } | undefined;
 	let closed = false;
@@ -268,7 +254,6 @@ function terminal() {
 	};
 }
 
-/** A faux session running a real `ask_user_question`, shown in a terminal, once the world sees the question. */
 async function asking() {
 	const screen = terminal();
 	const run = await fauxSession(
@@ -282,7 +267,6 @@ async function asking() {
 	);
 	const id = run.session.sessionManager.getSessionId();
 	try {
-		// Without a UI bound before the first prompt, the tool drops itself at before_agent_start.
 		await run.session.bindExtensions({ mode: "tui", uiContext: screen.ui as never });
 		const turn = run.session.prompt("ask me");
 		await vi.waitFor(() => expect(character(id)?.facts?.asking?.questionnaire).toBeDefined(), { timeout: 15000 });
@@ -333,7 +317,6 @@ test("answering from the form sends answer with one reply per question; the tool
 		expect(toolResult(fromForm.run)).toBe(toolResult(fromTerminal.run));
 		expect(toolResult(fromForm.run)).toContain("Add a changelog");
 		expect(commandsFor(fromForm.id)).toEqual(["answer"]);
-		// The question closes in every view.
 		await vi.waitFor(() => expect(character(fromForm.id)?.facts?.asking).toBeNull(), { timeout: 3000 });
 		await vi.waitFor(() => expect(feedTexts()).toContain(`${character(fromForm.id)?.name}'s question was answered.`), {
 			timeout: 3000,

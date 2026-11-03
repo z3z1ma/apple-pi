@@ -31,7 +31,6 @@ import {
 } from "../src/backend/world-backend.js";
 import type { FeedKind, FeedLine, WorldSnapshot, WorldUpdate } from "../src/world.js";
 
-// Seam 1: the backend API in Node, without Electron, over a real session-state runtime.
 const state = tempStateDir();
 const processes: ReturnType<typeof standInProcess>[] = [];
 const heartbeats: NodeJS.Timeout[] = [];
@@ -58,7 +57,6 @@ const recorded = (sql: string, ...params: string[]) =>
 	vi.waitFor(() => expect(query(state.dbPath, sql, ...params)).toHaveLength(1), { timeout: 15000 });
 const soon = (check: () => void) => vi.waitFor(check, { timeout: 3000 });
 
-/** A top-level session on a fake bridge, kept alive by heartbeats; `stop` ends it the way Pi quits. */
 async function session(
 	id: string,
 	options: {
@@ -92,7 +90,7 @@ async function session(
 			},
 		},
 	});
-	link.socket.on("error", () => {}); // heartbeats meet a closed socket while the runtime is down
+	link.socket.on("error", () => {});
 	const beat = setInterval(() => link.send({ type: "heartbeat" }), 1000);
 	heartbeats.push(beat);
 	await soon(() => expect(character(id)).toBeDefined());
@@ -163,7 +161,6 @@ test("the coordinator is in its hall, its workers in their repository's wing or 
 	expect(character("solo")).toMatchObject({ role: "independent", place: { kind: "square" } });
 	expect(latest().headquarters.map((hq) => hq.id)).toEqual(["coord-1"]);
 	expect(wings("coord-1")).toEqual(["alpha:1"]);
-	// Characters come in the order their sessions started, so nobody moves when another leaves.
 	const ids = latest().characters.map((c) => c.id);
 	expect(ids.indexOf("coord-1")).toBeLessThan(ids.indexOf("w-alpha"));
 	expect(ids.indexOf("w-alpha")).toBeLessThan(ids.indexOf("solo"));
@@ -256,7 +253,6 @@ test("a wing stays once seen, in first-seen order, boarded when its last agent s
 	await soon(() => expect(wings("coord-1")).toEqual(["alpha:2", "beta:1", "gamma:1"]));
 	await beta.stop();
 	await soon(() => expect(wings("coord-1")).toEqual(["alpha:2", "beta:0", "gamma:1"]));
-	// Remembered through the runtime, as a preference.
 	await soon(() => {
 		const [row] = query<{ value: string }>(state.dbPath, "select value from preferences where key = ?", PREFERENCE_KEY);
 		expect(JSON.parse(row?.value ?? "{}").wings).toEqual({
@@ -283,7 +279,6 @@ test("a wing counts its dormant workers, whose door shows closed rather than boa
 				.headquarters.find((hq) => hq.id === "coord-1")!
 				.wings.map((wing) => [wing.name, [wing.headcount, wing.dormant]]),
 		);
-	// alpha: two awake and w-gone stopped; beta: its only worker stopped; gamma: one awake.
 	await soon(() => expect(dormant()).toEqual({ alpha: [2, 1], beta: [0, 1], gamma: [1, 0] }));
 }, 10000);
 
@@ -293,7 +288,6 @@ test("an update to the window leaves out the inn and the mail while unchanged, a
 	const stop = world.subscribe((snapshot) => sent.push(toUpdate(snapshot)));
 	try {
 		const sleeper = await session("upd-sleeper");
-		// The first update carries everything; one where only an awake character changed leaves the inn and mail out.
 		expect(sent[0].unchanged).toBeUndefined();
 		expect(sent[0]).toHaveProperty("dormant");
 		expect(sent[0]).toHaveProperty("mail");
@@ -303,7 +297,6 @@ test("an update to the window leaves out the inn and the mail while unchanged, a
 		expect(later.unchanged).toEqual(["dormant", "mail"]);
 		expect(later).not.toHaveProperty("dormant");
 		expect(later).not.toHaveProperty("mail");
-		// A session stops: the inn changed, so it goes whole, with the new sleeper; the mail stays out.
 		await sleeper.stop();
 		await soon(() => expect(sent.at(-1)?.dormant?.map((agent) => agent.id)).toContain("upd-sleeper"));
 		expect(sent.at(-1)!.unchanged).toEqual(["mail"]);
@@ -357,7 +350,6 @@ test("the theme chosen in Settings is stored through the runtime, keeping the wi
 	const restarted = openWorldBackend({ db: state.dbPath, socket: state.socketPath });
 	try {
 		await soon(() => expect(restarted.snapshot().theme).toBe("tech-office"));
-		// Choosing the look afterwards keeps the theme, and the other way round.
 		expect(await restarted.setAvatarLook("avatar-knight")).toEqual({ ok: true });
 		expect(await restarted.setTheme("anime-school")).toEqual({ ok: true });
 		expect(stored()).toEqual({ ...before, avatar: "avatar-knight", theme: "anime-school" });
@@ -369,7 +361,6 @@ test("the theme chosen in Settings is stored through the runtime, keeping the wi
 	await soon(() => expect(latest().theme).toBe("anime-school"));
 }, 30000);
 
-// A scratch tmux server for panes, never the operator's: tempStateDir points TMUX_TMPDIR at its own directory.
 const TMUX_NAME = `aw-${process.pid}`;
 const tmux = (...args: string[]) =>
 	execFileSync("tmux", ["-L", TMUX_NAME, "-f", "/dev/null", ...args], { encoding: "utf8", timeout: 5000 }).trim();
@@ -392,10 +383,8 @@ afterAll(() => {
 	} catch {}
 });
 
-/** The next unused pane of the scratch server's `work` session, which no client shows until a test switches to it. */
 const nextPane = () => panes.shift()!;
 
-/** A live top-level session in a scratch pane, on a bridge speaking the socket protocol; `send` changes its state. */
 async function agent(id: string, facts: Record<string, unknown> = {}, cwd = `/home/${id}`) {
 	const stand = standInProcess();
 	processes.push(stand);
@@ -454,7 +443,6 @@ test("each character carries the facts the views show: run state, tool, ledger t
 		cost: 1.25,
 		tmux: { socket: realpathSync(tmuxSocket), pane },
 	});
-	// The runtime reads tmux once a second; then the pane's tmux session and window are known.
 	await vi.waitFor(() => expect(character("facts-1")?.facts?.tmux?.session).toBe("work"), { timeout: 5000 });
 	send({ type: "tool_end", id: "t1", name: "bash", durationMs: 5, isError: false, current: null });
 	send({ type: "run", run: "idle" });
@@ -491,7 +479,6 @@ test("attention matches the tmux sidebar for the same sessions: asking, finished
 		expect(character("att-seen")?.facts).toMatchObject({ status: "idle", unseen: false, needsYouSince: null });
 	});
 
-	// The sidebar's own model, reading the same database for the same tmux server.
 	const script = [
 		"import json, sys",
 		"sys.path.insert(0, 'components/tmux-sessions/sidebar')",
@@ -543,13 +530,11 @@ test("runtime events reach the chatbox feed within a second: start, settle, ques
 	await mail;
 	void sendCommand(state.socketPath, "feed-1", { kind: "talk", text: "Run the tests." });
 	await within(/^Message for feed-1: Run the tests\.$/, "commands");
-	// The views' own bookkeeping is not news.
 	await sendCommand(state.socketPath, "feed-1", { kind: "mark_seen" });
 
 	send({ type: "shutdown", reason: "quit" });
 	await within(/^feed-1 stopped \(quit\)\.$/, "agents");
 	expect(lines.some((l) => /mark_seen|seen|preference/i.test(l.text))).toBe(false);
-	// Each line once, in order; and the backlog a newly opened world starts with.
 	expect(lines.map((l) => l.seq)).toEqual([...new Set(lines.map((l) => l.seq))].sort((a, b) => a - b));
 	expect(world.feed().map((l) => l.text)).toEqual(expect.arrayContaining(lines.map((l) => l.text)));
 }, 30000);
@@ -569,7 +554,6 @@ test("a command that fails says why in the feed", async () => {
 	expect(lines.find((l) => l.text === "Stop for att-finished.")?.kind).toBe("commands");
 }, 30000);
 
-/** Attach a client to the scratch server's `home` session through a pseudo-terminal, as a terminal app would. */
 async function attachClient() {
 	const script = [
 		"import os, pty, sys",
@@ -598,7 +582,6 @@ test("Go to its terminal switches the operator's tmux client to the character's 
 	expect(await world.goToTerminal("term-1")).toEqual({ ok: true });
 	expect(clientPane()).toBe(pane);
 	expect(tmux("list-clients", "-F", "#{session_name}")).toBe("work");
-	// The runtime sees a client showing the pane: every view agrees the operator saw it.
 	await vi.waitFor(() => expect(character("term-1")?.facts?.unseen).toBe(false), { timeout: 5000 });
 
 	expect(await world.goToTerminal("solo")).toEqual({ ok: false, reason: "solo is not running in tmux." });
