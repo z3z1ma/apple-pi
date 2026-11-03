@@ -146,7 +146,7 @@ describe("worktree forks", () => {
 		});
 	});
 
-	it("kills every process its shell started before the fork's result resolves", async () => {
+	it("kills a child left in the shell's process group before the fork's result resolves", async () => {
 		const { session, cwd } = await settledSession({
 			"fork daemon": call(
 				"bash",

@@ -7,7 +7,7 @@ import {
 	initTheme,
 	ToolExecutionComponent,
 } from "@earendil-works/pi-coding-agent";
-import { Container, Spacer, Text, visibleWidth } from "@earendil-works/pi-tui";
+import { Container, Text, visibleWidth } from "@earendil-works/pi-tui";
 import { beforeAll, describe, expect, it } from "vitest";
 import { renderInline } from "../../shared/src/compact-custom-message.js";
 import {
@@ -27,14 +27,7 @@ import {
 	stripAnsi,
 } from "../src/formatters.js";
 import installTerseToolsExtension from "../src/installer.js";
-import {
-	installTerseToolRenderer,
-	isFirstToolInSequence,
-	isLastToolInSequence,
-	isTransparentChild,
-	precedingHasTextDelta,
-	setActiveTheme,
-} from "../src/patch.js";
+import { installTerseToolRenderer, setActiveTheme } from "../src/patch.js";
 
 beforeAll(() => initTheme());
 
@@ -400,11 +393,6 @@ describe("terse tool renderer integration with ToolExecutionComponent", () => {
 		container.addChild(t2);
 		container.addChild(t3);
 
-		expect(isFirstToolInSequence(t1)).toBe(false);
-		expect(isLastToolInSequence(t1)).toBe(false);
-		expect(isLastToolInSequence(t2)).toBe(false);
-		expect(isLastToolInSequence(t3)).toBe(true);
-
 		const lines = container.render(100);
 		expect(lines).toHaveLength(3);
 		expect(stripAnsi(lines[0])).toBe("● Bash(git status)");
@@ -491,61 +479,7 @@ describe("terse tool renderer integration with ToolExecutionComponent", () => {
 		expect(stripAnsi(truncated)).toBe(`  ${"x".repeat(33)}...`);
 	});
 
-	it("identifies transparent intermediate siblings with isTransparentChild", () => {
-		expect(isTransparentChild(null)).toBe(true);
-		expect(isTransparentChild(undefined)).toBe(true);
-		expect(isTransparentChild(new Spacer(1))).toBe(true);
-
-		const toolOnlyMsg = new AssistantMessageComponent(
-			{
-				role: "assistant",
-				content: [{ type: "toolCall", id: "c1", name: "bash", args: {} }],
-				api: "chat",
-				provider: "test",
-				model: "m",
-				usage: { inputTokens: 5, outputTokens: 10 },
-				stopReason: "toolUse",
-				timestamp: Date.now(),
-			} as any,
-			true,
-		);
-		expect(isTransparentChild(toolOnlyMsg)).toBe(true);
-
-		const thoughtOnlyMsg = new AssistantMessageComponent(
-			{
-				role: "assistant",
-				content: [
-					{ type: "thinking", thinking: "thinking before tool" },
-					{ type: "toolCall", id: "c1", name: "bash", args: {} },
-				],
-				api: "chat",
-				provider: "test",
-				model: "m",
-				usage: { inputTokens: 5, outputTokens: 10 },
-				stopReason: "toolUse",
-				timestamp: Date.now(),
-			} as any,
-			true,
-		);
-		expect(isTransparentChild(thoughtOnlyMsg)).toBe(true);
-
-		const textMsg = new AssistantMessageComponent(
-			{
-				role: "assistant",
-				content: [{ type: "text", text: "Finished the task." }],
-				api: "chat",
-				provider: "test",
-				model: "m",
-				usage: { inputTokens: 5, outputTokens: 10 },
-				stopReason: "stop",
-				timestamp: Date.now(),
-			} as any,
-			true,
-		);
-		expect(isTransparentChild(textMsg)).toBe(false);
-	});
-
-	it("unifies multi-turn tool loops across hidden intermediate thinking", () => {
+	it.each([false, true])("keeps multi-turn tool rows adjacent with intermediate thinking: %s", (withThinking) => {
 		const container = new Container();
 
 		const t1 = new ToolExecutionComponent(
@@ -562,7 +496,7 @@ describe("terse tool renderer integration with ToolExecutionComponent", () => {
 			{
 				role: "assistant",
 				content: [
-					{ type: "thinking", thinking: "Inspecting the file before the next tool call" },
+					...(withThinking ? [{ type: "thinking", thinking: "Inspecting the file before the next tool call" }] : []),
 					{ type: "toolCall", id: "call_2", name: "read", args: { path: "foo.ts" } },
 				],
 				api: "chat",
@@ -590,9 +524,6 @@ describe("terse tool renderer integration with ToolExecutionComponent", () => {
 		container.addChild(t2);
 
 		expect(intermediateAssistant.render(80)).toHaveLength(0);
-
-		expect(isLastToolInSequence(t1)).toBe(false);
-		expect(isLastToolInSequence(t2)).toBe(true);
 
 		const lines = container.render(100);
 		expect(lines).toHaveLength(2);
@@ -633,8 +564,6 @@ describe("terse tool renderer integration with ToolExecutionComponent", () => {
 
 		container.addChild(thoughtAssistant);
 		container.addChild(tool);
-
-		expect(precedingHasTextDelta(tool)).toBe(false);
 
 		const lines = container.render(100);
 		const joined = lines.map(stripAnsi).join("\n");
@@ -784,8 +713,6 @@ describe("terse tool renderer integration with ToolExecutionComponent", () => {
 
 		container.addChild(textAssistant);
 		container.addChild(tool);
-
-		expect(precedingHasTextDelta(tool)).toBe(true);
 
 		const lines = container.render(100);
 		const textIdx = lines.findIndex((l) => l.includes("I will start by checking"));
