@@ -15,7 +15,6 @@ afterAll(async () => {
 	rmSync(dir, { recursive: true, force: true });
 });
 
-/** A transcript of `count` user and assistant messages, as Pi writes it, plus the index rows a bridge reports for it. */
 function transcript(count: number) {
 	const start = Date.parse("2026-01-01T00:00:00Z");
 	const entries = [{ type: "session", id: "header", timestamp: new Date(start).toISOString() }];
@@ -34,7 +33,6 @@ function transcript(count: number) {
 	return { entries, rows, text: `${entries.map((entry) => JSON.stringify(entry)).join("\n")}\n` };
 }
 
-/** A session whose bridge reported `rows` for the transcript at `file`. */
 async function indexedSession(id: string, file: string, rows: unknown[]) {
 	const bridge = await fakeBridge(state.socketPath, id, proc.pid, proc.startedAt, { session: { file } });
 	bridge.send({ type: "index", rows });
@@ -48,7 +46,6 @@ async function indexedSession(id: string, file: string, rows: unknown[]) {
 	return bridge;
 }
 
-/** Ask for one page over the socket, as a view would. */
 async function readEntries(request: Record<string, unknown>, waitMs = 3000): Promise<Record<string, any>> {
 	const socket = createConnection(state.socketPath);
 	await new Promise((resolve) => socket.once("connect", resolve));
@@ -110,7 +107,6 @@ test("a page holds the newest entries in transcript order, with a cursor to the 
 
 test("a text-only page skips tool work and mail, paging only written words", async () => {
 	const { entries, rows, text } = transcript(6);
-	// Entries 1 and 2 become tool work and mail: an assistant without text, and a custom message.
 	const indexed = rows.map((row, i) =>
 		i === 1 ? { ...row, size: 0 } : i === 2 ? { ...row, role: "custom", tool: "apple-pi.mailbox-message" } : row,
 	);

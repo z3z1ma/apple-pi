@@ -472,7 +472,7 @@ test("compute counts only while the spender was a member, and never the spend it
 	db.prepare(
 		"insert into sessions (id, kind, cwd, run_state, generation, source, updated_at, reports_to) values ('joiner', 'root', '/', 'idle', 1, 'test', 0, 'lead')",
 	).run();
-	event(1 * HOUR, "joiner", "cost_changed", { from: 0, to: 5 }); // its own organization then
+	event(1 * HOUR, "joiner", "cost_changed", { from: 0, to: 5 });
 	event(2 * HOUR, "joiner", "reports_to_changed", { from: null, to: "lead" });
 	event(3 * HOUR, "joiner", "cost_changed", { from: 5, to: 9 });
 	event(4 * HOUR, "joiner", "retired", { reason: "done" });
@@ -501,9 +501,9 @@ test("a report counts only once its whole chain has joined: a former root brings
 			.run(id, manager);
 	add("other", "lead");
 	add("helper", "other");
-	event(1 * HOUR, "helper", "reports_to_changed", { from: null, to: "other" }); // joins its old root
-	event(3 * HOUR, "helper", "cost_changed", { from: 0, to: 4 }); // spent in the other organization
-	event(5 * HOUR, "other", "reports_to_changed", { from: null, to: "lead" }); // the old root joins this one
+	event(1 * HOUR, "helper", "reports_to_changed", { from: null, to: "other" });
+	event(3 * HOUR, "helper", "cost_changed", { from: 0, to: 4 });
+	event(5 * HOUR, "other", "reports_to_changed", { from: null, to: "lead" });
 	event(6 * HOUR, "helper", "cost_changed", { from: 4, to: 6 });
 	expect(realizedFitness(db, "root", 0, 8 * HOUR).compute).toBeCloseTo(2, 9);
 });

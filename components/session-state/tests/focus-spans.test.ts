@@ -62,11 +62,9 @@ test("earlier focus history is replayed once from work changes and their task po
 		change.run(`c${index}`, task, person, action);
 		post.run(`c${index}:post`, index + 1, at);
 	});
-	// Eve is still focused; the triggers would write her span too, so record today's focus without them.
 	db.exec("drop trigger focus_span_open");
 	db.prepare("insert into work_focus (person, task_id) values ('eve', 't3')").run();
 	reconstructSpans(db, 1000);
-	// A second start replays nothing again.
 	reconstructSpans(db, 2000);
 	expect(taskSpans(db, ["t1", "t2", "t3"]).map((span) => [span.person, span.task, span.from, span.to])).toEqual([
 		["ada", "t1", 100, 200],
@@ -85,7 +83,6 @@ test("a task's spans are searchable by its people, managers above them, and the 
 	expect(maySearchTask(db, "operator", "t1")).toBe(true);
 	expect(maySearchTask(db, "ben", "t1")).toBe(false);
 	expect(maySearchTask(db, "eve", "t1")).toBe(false);
-	// Reading one of Ada's entries: inside a span of a task the reader may search, or never.
 	const during = (taskSpans(db, ["t1"])[0]!.from as number) + 1;
 	expect(mayReadEntry(db, "lead", "ada", during)).toBe(true);
 	expect(mayReadEntry(db, "lead", "ada", during - 10_000)).toBe(false);

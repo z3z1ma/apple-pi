@@ -35,7 +35,7 @@ test("a session started with --reports-to shows who it reports to", async () => 
 		const id = run.session.sessionManager.getSessionId();
 		await seen(id);
 		run.session.extensionRunner.setFlagValue("reports-to", "coordinator-1");
-		await run.session.bindExtensions({}); // a new session_start reads the flag
+		await run.session.bindExtensions({});
 		await vi.waitFor(() => expect(session(id).reports_to).toBe("coordinator-1"));
 		expect(
 			query(state.dbPath, "select 1 from events where session_id = ? and type = 'reports_to_changed'", id),
@@ -55,7 +55,7 @@ test("a forked session names its parent, and a session that followed another in 
 	});
 	const runs = [parent];
 	try {
-		await parent.session.prompt("hi"); // writes the file a fork copies
+		await parent.session.prompt("hi");
 		await seen(parentManager.getSessionId());
 		const childManager = SessionManager.forkFrom(parentManager.getSessionFile()!, cwd, sessionDir);
 		const child = await fauxSession([bridge], [], [], { cwd, sessionManager: childManager });
@@ -68,7 +68,6 @@ test("a forked session names its parent, and a session that followed another in 
 				}),
 			{ timeout: 15000 },
 		);
-		// The host switched this process from the parent to the child, as /new or /resume does.
 		await child.session.extensionRunner.emit({
 			type: "session_start",
 			reason: "resume",
@@ -81,7 +80,6 @@ test("a forked session names its parent, and a session that followed another in 
 			file: parentManager.getSessionFile(),
 			reason: "resume",
 		});
-		// Navigating again from another known session points at that one instead.
 		const otherManager = SessionManager.create(cwd, sessionDir);
 		const other = await fauxSession([bridge], [fauxAssistantMessage("other")], [], {
 			cwd,

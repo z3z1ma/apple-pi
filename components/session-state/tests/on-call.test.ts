@@ -21,7 +21,6 @@ const log = join(state.agentDir, "launch.json");
 beforeAll(async () => {
 	const bin = join(state.agentDir, "bin");
 	mkdirSync(bin);
-	// A stand-in pi: it says hello and records every command it receives.
 	writeFileSync(
 		join(bin, "pi"),
 		`#!${process.execPath}
@@ -98,7 +97,6 @@ test("mail to an on-call person at home wakes it once and the mail reaches it", 
 		},
 		{ timeout: 10000 },
 	);
-	// Replayed mail only rides a turn, so the woken person must also get a steer that starts one.
 	const commands = readFileSync(`${log}.commands`, "utf8")
 		.trim()
 		.split("\n")
@@ -148,7 +146,6 @@ test("a channel's listener is pushed every post with the charter it applies", { 
 		db.prepare(
 			"insert into threads (id, kind, channel_type, subject, created_by, created_at) values ('topic:bugs', 'channel', 'topic', 'bugs', 'operator', 1)",
 		).run();
-		// The operator follows the channel quietly; the listener is not a participant at all.
 		db.prepare(
 			"insert into thread_participants (thread_id, participant, delivery, read_up_to, joined_at, invited) values ('topic:bugs', 'operator', 'pull', 0, 1, 1)",
 		).run();
@@ -207,7 +204,6 @@ test("after a restart, a channel listener whose mail still waits is woken; other
 	const pid = runtimePid(state.pidPath)!;
 	process.kill(pid, "SIGTERM");
 	await vi.waitFor(() => expect(() => process.kill(pid, 0)).toThrow(), { timeout: 5000 });
-	// Mail committed for a listener whose wake was lost with the stopped runtime.
 	const db = new DatabaseSync(state.dbPath);
 	try {
 		db.exec(

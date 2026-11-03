@@ -37,7 +37,6 @@ const questions = [
 	},
 ];
 const replies: QuestionnaireReply[] = [{ selected: ["Node"] }, { selected: ["Docs", "Tests"] }];
-// The same choices typed in the dialog: Node; then Tests, Docs, and "done"; then submit.
 const typedReplies = [ENTER, SPACE, DOWN, SPACE, DOWN, DOWN, ENTER, ENTER];
 
 const toolTurn = (name: string, args: Parameters<typeof fauxToolCall>[1]): Reply =>
@@ -54,7 +53,6 @@ const openPrompt = (id: string) =>
 		{ timeout: 15000 },
 	);
 
-/** A terminal that shows the real questionnaire dialog and can type into it. */
 function terminal() {
 	let dialog: { handleInput(data: string): void; focused: boolean } | undefined;
 	let closed = false;
@@ -99,7 +97,7 @@ async function askingSession() {
 		const open = await openPrompt(id);
 		return { run, id, turn, screen, questionnaire: open.id as string };
 	} catch (error) {
-		await close(run); // a session left open would start a new runtime after the test stops this one
+		await close(run);
 		throw error;
 	}
 }

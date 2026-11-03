@@ -149,10 +149,9 @@ test("talk to a busy session fails; steer and abort reach it; a held follow-up c
 			reason: expect.stringContaining("already taken"),
 		});
 		await vi.waitFor(() => expect(JSON.parse(row(id).queue as string)).toMatchObject({ steers: 1, followUps: 1 }));
-		// abort is applied only once the run has stopped; a follow-up still held then is not sent
 		const aborting = sendCommand(state.socketPath, id, { kind: "abort" });
 		await vi.waitFor(() => expect(run.session.isStreaming).toBe(true));
-		await run.session.abort(); // the faux model holds its reply; the command's abort and this one end the run alike
+		await run.session.abort();
 		expect((await aborting).at(-1)).toEqual({ stage: "applied" });
 		expect((await tidy).at(-1)).toMatchObject({ stage: "failed", reason: expect.stringContaining("stopped") });
 		await turn.catch(() => {});
@@ -174,7 +173,6 @@ test("rename and thinking-level commands change the session", async () => {
 		expect((await sendCommand(state.socketPath, id, { kind: "set_thinking", level: "off" })).at(-1)).toEqual({
 			stage: "applied",
 		});
-		// The faux registry knows one model, which it returns for any name.
 		expect(
 			(
 				await sendCommand(state.socketPath, id, {

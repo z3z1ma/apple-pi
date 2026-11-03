@@ -28,7 +28,6 @@ const seen = (id: string) =>
 	vi.waitFor(() => expect(query(state.dbPath, "select 1 from sessions where id = ?", id)).toHaveLength(1), {
 		timeout: 15000,
 	});
-/** A person's bridge, recording every command the runtime sends it. */
 const fake = async (id: string, reportsTo: string) => {
 	const stand = standInProcess();
 	processes.push(stand);
@@ -112,7 +111,7 @@ test("a manager transfers a person with its team, is refused a cycle or a strang
 		await root.session.prompt("move p1");
 		expect(toolResults(root).at(-1)).toMatchObject({ isError: false, text: "Person p1 now reports to Person m2." });
 		expect(reportsTo("p1")).toBe("m2");
-		expect(reportsTo("p2")).toBe("p1"); // the team moved with its manager
+		expect(reportsTo("p2")).toBe("p1");
 		await vi.waitFor(() => expect(p1.received).toContainEqual({ kind: "transfer", manager: "m2", by: rootId }));
 		const notice = {
 			from: rootId,
@@ -228,7 +227,6 @@ test("after a transfer, prompt context and close notices use the new manager, an
 			}),
 		);
 
-		// A replacement bridge still carries the old flag; wait until it applies the recorded manager.
 		await mover.session.bindExtensions({});
 		await vi.waitFor(
 			() =>
@@ -249,7 +247,7 @@ test("after a transfer, prompt context and close notices use the new manager, an
 			() => expect(mailTo("m-new")).toContainEqual({ from: moverId, body: expect.stringContaining("closed") }),
 			{ timeout: 15000 },
 		);
-		expect(mailTo("m-old").map((mail) => mail.from)).toEqual([bossId]); // the transfer notice only
+		expect(mailTo("m-old").map((mail) => mail.from)).toEqual([bossId]);
 	} finally {
 		await close(mover);
 		await close(boss);
