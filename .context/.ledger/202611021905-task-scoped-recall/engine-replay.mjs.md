@@ -7,6 +7,9 @@ The metadata list is ranked page order; printed groups can reorder hits. Source 
 Keep original records read-only and private text/identities outside Git. Frozen prefix/record hashes detect provenance drift, and source hashes detect code drift. Run against detached source roots. Before repeating a failed comparison, distinguish an adapter error from an adverse candidate outcome; preserve both.
 Why: a changed question corpus or source version can look like a retrieval gain or regression.
 
+Detached source roots do not freeze this adapter or its tests. Record the harness revision/hash, inspect concurrent reflection changes and retain both run artifacts. Reuse semantic labels only after checking complete response identity; response equivalence does not transfer latency or coverage to a later actual-tool target.
+Why: setup-cleanup-only reflection changes reproduced all candidate responses exactly, while the forthcoming tool used a different implementation and corpus contract.
+
 Resolve source identity and load the baseline adapter before allocating temporary transcript material; clean allocated material on both success and failure.
 Why: a missing checkout or failed import can otherwise leave a scratch directory outside the replay's cleanup boundary.
 

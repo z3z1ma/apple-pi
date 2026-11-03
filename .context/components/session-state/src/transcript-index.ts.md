@@ -13,6 +13,9 @@ The corpus is what search_session shows, no more: messages, `custom_message`, su
 Why: docs/context.md keeps state-only extension records out of recall, and an echoed result repeating a word outscored the original under plain bm25; the existing source-recall and evidence-context tests hold both rules. A new notebook record type must be added to both lists.
 Coupled: components/session-search/src/load-messages.ts, components/session-search/src/search-entries.ts
 
+BM25 statistics cover the whole indexed table even when the eligibility WHERE clause selects only particular sessions or task spans. Adding ineligible sessions can change eligible hits' relative order. A temporary per-prefix index establishes local-corpus behavior, not ranking equivalence to the persistent multi-person index.
+Why: an in-memory control reversed two eligible rows after adding only another person's rows. Intended-corpus ranking must be checked separately before transferring local replay claims.
+
 Ranking is gated: replacing `search_session`'s engine with this index must pass Kofi's frozen and held-out recall sets (non-inferiority for the infrastructure swap, beating both for later salience changes). Query words are OR'ed, matching the current engine's semantics, and quoted so punctuation stays literal; regex queries are not translated.
 Why: two earlier ranking changes raised precision but lost episode recall and were rolled back (`.ledger/history/202611020022-long-lived-agent-recall-and-retention/`).
 Coupled: components/session-state/src/transcript-indexer.ts, components/session-state/src/runtime.ts, components/session-state/src/paths.ts
