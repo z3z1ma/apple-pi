@@ -118,8 +118,12 @@ test("a newest read_entries page stays within its latency budget on a large tran
 		expect(page.error).toBeUndefined();
 		expect(page.missing).toBeUndefined();
 		expect(page.entries).toHaveLength(50);
-		expect(page.entries[0].id).toBe(`large-${LARGE_ENTRIES - 50}`);
-		expect(page.entries.at(-1).id).toBe(`large-${LARGE_ENTRIES - 1}`);
+		expect(page.entries.map((entry: any) => ({ id: entry.id, content: entry.message.content }))).toEqual(
+			Array.from({ length: 50 }, (_, i) => {
+				const n = LARGE_ENTRIES - 50 + i;
+				return { id: `large-${n}`, content: [{ type: "text", text: `Message ${n}: ${"x".repeat(2048)}` }] };
+			}),
+		);
 		expect(page.before).toBe(`large-${LARGE_ENTRIES - 50}`);
 	});
 	budget("read_entries p95 ms", measured.p95, 3, { ...measured, entries: LARGE_ENTRIES, bytes: largeBytes, page: 50 });

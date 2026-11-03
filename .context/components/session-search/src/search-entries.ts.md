@@ -1,6 +1,6 @@
 ## file
 
-Keep this module's legacy heuristic-regex and BM25 ranking paths for the remaining personal modes; the isolated index candidate delegates only evidence-window description here, rather than calling this scorer. The unified literal/explicit-regex pipeline was withdrawn after a frozen evaluation improved precision but lost historical evidence and sufficient displayed answers. Its candidate/page changes belong to that experiment too.
+Keep this module's legacy heuristic-regex and BM25 ranking paths for the remaining personal modes; indexed history discovery delegates only evidence-window description here, rather than calling this scorer. The unified literal/explicit-regex pipeline was withdrawn after a frozen evaluation improved precision but lost historical evidence and sufficient displayed answers. Its candidate/page changes belong to that experiment too.
 
 Why: deterministic lexical ranking is not proof of better historical evidence retrieval. A future ranking change must beat the frozen baseline and a held-out question set written before results are inspected.
 

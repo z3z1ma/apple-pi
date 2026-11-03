@@ -73,8 +73,12 @@ describe("formatRecallOutput", () => {
 				{ index: 4, role: "user", summary: "thanks", snippet: undefined },
 			];
 			const r = formatRecallOutput(entries, "auth");
-			expect(r).toMatch(/---/);
-			expect(r).toContain("fix auth");
+			expect(r).toContain("#0 [user] hello");
+			expect(r).toContain("#1 [assistant] hi");
+			expect(r).toContain("> #2 [user] fix auth");
+			expect(r).toContain("#4 [user] thanks");
+			expect(r.indexOf("#1 [assistant] hi")).toBeLessThan(r.indexOf("> #2 [user] fix auth"));
+			expect(r.indexOf("> #2 [user] fix auth")).toBeLessThan(r.indexOf("#4 [user] thanks"));
 		});
 
 		it("handles entries without snippet (assume all matched)", () => {

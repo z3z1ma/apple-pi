@@ -30,10 +30,13 @@ describe("renderMessage", () => {
 		expect(r.summary.startsWith("ERROR")).toBe(true);
 	});
 
-	it("truncates long user text", () => {
-		const long = "x".repeat(500);
+	it("keeps long user text compact while full rendering recovers it", () => {
+		const long = `Message starts here. ${"x".repeat(500)} MESSAGE_END`;
 		const r = renderMessage(userMsg(long), 0);
-		expect(r.summary.length).toBeLessThanOrEqual(300);
+		expect(r.summary).toContain("Message starts here.");
+		expect(r.summary).not.toContain("MESSAGE_END");
+		expect(r.summary.length).toBeLessThan(long.length);
+		expect(renderMessage(userMsg(long), 0, true).summary).toBe(long);
 	});
 
 	it("renders bashExecution message", () => {
@@ -60,9 +63,11 @@ describe("renderMessage", () => {
 	});
 
 	it("clips thinking in non-full mode", () => {
-		const longThinking = "x".repeat(400);
+		const longThinking = `Thinking starts here. ${"x".repeat(400)} REASONING_END`;
 		const r = renderMessage(assistantWithThinking("short", longThinking), 1, false);
-		expect(r.summary).toContain("[thinking]");
+		expect(r.summary).toContain("[thinking] Thinking starts here.");
+		expect(r.summary).toContain("short");
+		expect(r.summary).not.toContain("REASONING_END");
 		expect(r.summary.length).toBeLessThan(longThinking.length);
 	});
 
