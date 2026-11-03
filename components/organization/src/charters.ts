@@ -1,16 +1,9 @@
-/**
- * The system prompt sections of the organization: `<org>` for every root session (who it is, how the directory,
- * mail, and the tree work), `<manager>` for a session whose role manages (how to build and run a team), and
- * `<role-catalog>` for whoever holds the manager tools (what it can hire).
- */
-
 import type { Role } from "./roles.js";
 
 export const ORG_SYSTEM_PROMPT_TAG = "org";
 export const MANAGER_SYSTEM_PROMPT_TAG = "manager";
 export const CATALOG_SYSTEM_PROMPT_TAG = "role-catalog";
 
-/** The roles a manager can hire, one line each: the name `hire` takes, the title, and the mandate. */
 export function catalogSection(roles: Iterable<Role>): string {
 	const lines = [...roles].map(
 		(role) =>
@@ -24,10 +17,8 @@ ${lines.join("\n")}`;
 export interface OrgIdentity {
 	id: string;
 	name: string | null;
-	/** The role's title, or null for an unroled session. */
 	title: string | null;
 	manages: boolean;
-	/** The manager's session id; null for a root. */
 	managerId: string | null;
 	rootId: string;
 }
@@ -61,7 +52,6 @@ export function orgSection(who: OrgIdentity): string {
 ${asks}`;
 }
 
-/** The charter of a managing role. Its principal brings it work: the operator for a root, the manager above for a hired manager. */
 export function managerCharter(managerId: string | null): string {
 	const who = managerId ? `your manager (\`${managerId}\`)` : "the operator";
 	const them = managerId ? "them" : "him";

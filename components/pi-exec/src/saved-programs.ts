@@ -146,7 +146,6 @@ function readProgram(cwd: string, name: string, directory = existingProgramsDire
 	return { name, code, ...programMetadata(code, path) };
 }
 
-/** Discover regular .py files without executing repository code. Ignore malformed entries. */
 export function listSavedPrograms(cwd: string): SavedProgram[] {
 	const directory = existingProgramsDirectory(cwd);
 	if (!directory) return [];
@@ -157,14 +156,11 @@ export function listSavedPrograms(cwd: string): SavedProgram[] {
 		if (!entry.isFile() || !entry.name.endsWith(".py")) continue;
 		try {
 			programs.push(readProgram(cwd, entry.name.slice(0, -3), directory));
-		} catch {
-			// An invalid file must not prevent valid neighboring programs from being discovered.
-		}
+		} catch {}
 	}
 	return programs;
 }
 
-/** Load validated project-local Python source afresh; file symlinks are never executable programs. */
 export function readSavedProgram(cwd: string, name: string): SavedProgram {
 	return readProgram(cwd, name);
 }
@@ -205,7 +201,6 @@ interface ProgramRunnerTool {
 	execute: ToolDefinition<any, any>["execute"];
 }
 
-/** Register one `program_<name>` tool per saved program, refreshed only where a schema change cannot break prompt caching. */
 export function installSavedProgramTools(pi: ExtensionAPI, piExecTool: ProgramRunnerTool): void {
 	let registeredLimits = piExecTool.parameters.properties.limits;
 	function syncSavedProgramTools(cwd: string): void {
@@ -232,7 +227,6 @@ export function installSavedProgramTools(pi: ExtensionAPI, piExecTool: ProgramRu
 						}
 						const current = readSavedProgram(ctx.cwd, program.name);
 						const { reset, limits, inputs: explicitInputs, ...rest } = rawParams as Record<string, any>;
-						// Defaults belong to the registered schema, not a mid-turn source edit.
 						const inputs: Record<string, string> = Object.create(null);
 						for (const param of program.params) {
 							if (param.default !== undefined) inputs[param.name] = String(param.default);
@@ -257,16 +251,13 @@ export function installSavedProgramTools(pi: ExtensionAPI, piExecTool: ProgramRu
 					},
 				});
 			}
-		} catch {
-			// Missing, inaccessible, or unconfined programs directories expose no tools.
-		}
+		} catch {}
 	}
 
 	function hasSessionMessages(ctx: ExtensionContext): boolean {
 		try {
 			return (ctx.sessionManager.getBranch() ?? []).some((entry) => entry.type === "message");
 		} catch {
-			// If the cache state is unknown, do not risk a mid-turn schema mutation.
 			return true;
 		}
 	}

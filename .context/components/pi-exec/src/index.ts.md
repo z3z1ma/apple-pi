@@ -1,5 +1,8 @@
 ## file
 
+Activity snapshots omit child-call detail; the retained execution trace keeps it. Running programs share the above-editor surface with public agents and managed tasks. Programs discover tools by name, so MCP waits for every server before one runs.
+Why: a snapshot that included child detail would duplicate the trace, and a program that started before MCP finished would miss tools it can only name.
+
 The initial registered tool is unprivileged. Role resolution or runtime root registration can occur after pi_exec's session-start hook, so reconcile capability-specific parameters again before the agent turn. Keep the code parameter's description live with the selected peer capability. This affects model-facing context, not the independent peer-calls host guard.
 Why: Pi loads these extensions in separate module graphs, and a new role's transcript entry may not exist when pi_exec first registers. The session-role reader supplies the recorded role across those graphs.
 

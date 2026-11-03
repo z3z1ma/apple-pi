@@ -24,7 +24,6 @@ function errorText(error: unknown): string {
 	return error instanceof Error ? error.message : String(error);
 }
 
-/** Activity snapshots omit child detail; the retained execution trace includes it. */
 function detailsActivity(snapshot: ExecActivitySnapshot): ExecActivitySnapshot {
 	return { ...snapshot, calls: snapshot.calls.map(({ children: _children, ...call }) => call) };
 }
@@ -45,7 +44,6 @@ export default function piExec(pi: ExtensionAPI): void {
 	let peerAccess = false;
 	const programSession = installProgramSession(pi);
 	const invocations = new Map<string, ExecInvocation>();
-	// Running programs share the above-editor surface with public agents and managed tasks.
 	const activeWork = getActiveWorkSurface(pi);
 	let tuiMode = false;
 	const unregisterActiveWork = activeWork.registerSource(
@@ -80,7 +78,6 @@ export default function piExec(pi: ExtensionAPI): void {
 		label: "Pi Exec",
 		executionMode: "sequential",
 		description: PI_EXEC_DESCRIPTION,
-		// Programs discover and call tools by name, so MCP waits for every server before one runs.
 		reachesTools: () => "all",
 		promptSnippet: PI_EXEC_PROMPT_SNIPPET,
 		promptGuidelines: [...PI_EXEC_PROMPT_GUIDELINES, SAVED_PROGRAM_PROMPT_GUIDELINE],
@@ -326,7 +323,6 @@ export default function piExec(pi: ExtensionAPI): void {
 	pi.on("session_start", (_event, ctx) => registerForRole(ctx));
 	pi.on("before_agent_start", (event, ctx) => {
 		registerForRole(ctx);
-		// Pi has already assembled tool-derived guidance; this section reaches the first managing-role turn too.
 		if (peerAccess)
 			setSystemPromptSection(event.systemPromptOptions, "pi-exec-peers", PI_EXEC_PEER_PROMPT_GUIDELINES.join("\n"));
 	});

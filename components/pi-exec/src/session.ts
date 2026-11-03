@@ -22,7 +22,6 @@ export interface ProgramRunRequest {
 	peerBindings?: Record<string, string>;
 	timeoutMs: number;
 	callBudget: number;
-	/** Start from empty Python state and checkpoint it before running. */
 	reset: boolean;
 	hostCall: ProgramHostCall;
 	signal: AbortSignal | undefined;
@@ -31,7 +30,6 @@ export interface ProgramRunRequest {
 
 export interface ProgramRun {
 	execution: ProgramExecution;
-	/** Why restored Python state was unavailable, reported once on the next run. */
 	notice?: string;
 }
 
@@ -58,11 +56,6 @@ async function close(live: LiveSession): Promise<void> {
 	await live.close().catch((error) => console.error("pi_exec Monty cleanup failed", error));
 }
 
-/**
- * Own one Monty interpreter for the current Pi session branch. Python globals persist across runs and are
- * checkpointed into the branch after every usable run. Switching branches discards the interpreter; the next run
- * restores that branch's latest checkpoint. An unusable run rolls back to the last checkpoint.
- */
 export function installProgramSession(pi: ExtensionAPI): {
 	run(ctx: ExtensionToolContext, request: ProgramRunRequest): Promise<ProgramRun>;
 } {
@@ -71,7 +64,6 @@ export function installProgramSession(pi: ExtensionAPI): {
 	let hostCalls = 0;
 	let selected: BranchCheckpoint | undefined;
 	let notice: string | undefined;
-	// Incremented whenever the owner is discarded, so in-flight work can detect that its session went away.
 	let generation = 0;
 	let activeAbort: AbortController | undefined;
 
@@ -142,7 +134,6 @@ export function installProgramSession(pi: ExtensionAPI): {
 				selected = { found: false };
 				notice = undefined;
 			}
-			// Monty counts suspensions across a checkout; rebase from the last checkpoint before the next run could exhaust it.
 			if (owner && hostCalls + request.callBudget > PROGRAM_ENVELOPE_MAXIMA.callBudget) {
 				await discard();
 				selected = branchCheckpoint(ctx);

@@ -68,10 +68,6 @@ function toolSignature(name: string, schema: Schema, output: string, declaration
 	return `async def ${name}(${fields.length ? `*, ${fields.join(", ")}` : ""}) -> ${output}: ...`;
 }
 
-/**
- * Core tool signatures. Pi runs an active core tool other than bash, so its registered schema wins for type
- * checking; the model-facing text uses Pi's own definitions.
- */
 export function corePythonStubs(cwd = ".", callable: readonly AgentTool[] = []): string {
 	const declarations: string[] = [];
 	const signatures: string[] = [];
@@ -91,7 +87,6 @@ export function corePythonStubs(cwd = ".", callable: readonly AgentTool[] = []):
 
 const HOST_PYTHON_STUBS = ["def schema(shape: Any) -> dict[str, Any]: ...", ...HOST_FUNCTION_STUBS];
 
-/** Complete type-checking stubs, including the signature of every callable extension tool. */
 export function guestPythonStubs(cwd: string, callable: readonly AgentTool[]): string {
 	const declarations: string[] = [];
 	const extensions = extensionPythonTools(callable).map((tool) =>
@@ -107,7 +102,6 @@ export function guestPythonStubs(cwd: string, callable: readonly AgentTool[]): s
 	].join("\n");
 }
 
-/** Model-facing stubs: full core and host signatures; extension tools are discovered on demand so this text stays stable. */
 function guestPromptStubs(cwd = ".", includePeers = true): string {
 	return [
 		corePythonStubs(cwd),
@@ -156,7 +150,6 @@ export function piExecGuestApiContract(includePeers = true): string {
 export const PI_EXEC_DISPLAY_PARAMETER_DESCRIPTION =
 	"Tool-call metadata for the live card and activity widget. Not a program global; pass display outside code.";
 
-/** Attach a read-time description so wrap's copied `parameters` object stays live. */
 export function attachLiveDescription<T extends object>(schema: T, read: () => string): T {
 	Object.defineProperty(schema, "description", {
 		configurable: true,
