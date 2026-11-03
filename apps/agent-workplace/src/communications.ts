@@ -50,7 +50,6 @@ export interface CommunicationsApi {
 		purpose: string;
 		invite?: string[];
 	}): Promise<CommunicationResult>;
-	/** Catch-up needs a stable UI attempt; recent/range inspections remain query-only. */
 	readThread(request: ConversationReadOptions & { attempt?: string }): Promise<CommunicationRead>;
 	searchMessages(options: MessageSearchOptions): Promise<CommunicationQuery<MessageSearchResult>>;
 	post(request: CommunicationPost): Promise<CommunicationResult>;
@@ -59,13 +58,11 @@ export interface CommunicationsApi {
 	invite(request: CommunicationAction & { people: string[] }): Promise<CommunicationResult>;
 	removeInvitations(request: CommunicationAction & { people: string[] }): Promise<CommunicationResult>;
 	pin(request: CommunicationAction & { seq: number }): Promise<CommunicationResult>;
-	/** Add or remove the operator's emoji reaction on a message; it notifies nobody. */
 	react(request: {
 		message: string;
 		emoji: string;
 		on: boolean;
 	}): Promise<{ ok: true } | { ok: false; reason: string }>;
-	/** He saw the conversation up to `seq`: his read position moves there, never back. */
 	markRead(request: { thread: string; seq: number }): Promise<{ ok: true } | { ok: false; reason: string }>;
 	archive(request: CommunicationAction & { summary: string; notify?: string[] }): Promise<CommunicationResult>;
 	reopen(request: CommunicationAction & { reason: string; notify?: string[] }): Promise<CommunicationResult>;

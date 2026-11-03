@@ -1,6 +1,3 @@
-// The part of Electron's API that Agent Workplace uses. Electron is installed on first launch, not as a dependency of
-// apple-pi (docs/adr/0001-agent-world-runtime.md), so its own type definitions are not installed; extend this when
-// the app needs more.
 declare module "electron" {
 	interface NativeImage {
 		toPNG(): Buffer;
@@ -79,7 +76,6 @@ declare module "electron" {
 
 	export const shell: {
 		openExternal(url: string): Promise<void>;
-		/** Opens a file in its default app; resolves with an error message, or "" when it opened. */
 		openPath(path: string): Promise<string>;
 		showItemInFolder(path: string): void;
 	};

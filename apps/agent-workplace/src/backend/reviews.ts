@@ -20,7 +20,6 @@ import type { ReviewsApi } from "../reviews.js";
 import { OPERATOR } from "../world.js";
 import type { Commands } from "./commands.js";
 
-/** On-demand operator views; every mutation still belongs to the runtime. */
 export function openReviews(path: string, commands: Commands) {
 	function store<T>(read: (db: DatabaseSync) => T): T {
 		const db = new DatabaseSync(path, { readOnly: true });

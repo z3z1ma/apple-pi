@@ -1,7 +1,3 @@
-// The role catalog as the hire form offers it: the package's `roles/` directory, then `~/.pi/agent/roles/`, a later
-// file replacing an earlier one of the same name, as `components/organization/src/roles.ts` loads them for Pi. Only the
-// lines the form shows are read here (title, mandate, manages, writes), from the front matter, without Pi's loader:
-// the backend is a plain Node module.
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -9,7 +5,6 @@ import type { RoleChoice } from "../world.js";
 
 const PACKAGE_ROLES = fileURLToPath(new URL("../../../../roles/", import.meta.url));
 
-/** The front matter's scalar fields, `key: value` one per line between the `---` fences. */
 function frontMatter(text: string): Record<string, string> | undefined {
 	const match = /^---\r?\n([\s\S]*?)\r?\n---/.exec(text);
 	if (!match) return undefined;

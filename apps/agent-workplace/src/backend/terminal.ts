@@ -1,6 +1,3 @@
-// Go to its terminal: switch the operator's tmux client to a character's pane. The client is the one attached to the
-// pane's server that the operator used last; `switch-client` to a pane id selects that pane's session, window, and
-// pane at once. Leaving the world changes nothing else in tmux.
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import type { TerminalResult } from "../world.js";
@@ -13,7 +10,6 @@ async function tmux(socket: string, args: string[]): Promise<string> {
 	return stdout;
 }
 
-/** Switch the most recently active client of the server at `socket` to `pane`; `name` is the character's. */
 export async function switchToPane(socket: string, pane: string, name: string): Promise<TerminalResult> {
 	let clients: { tty: string; activity: number }[];
 	try {
@@ -25,7 +21,6 @@ export async function switchToPane(socket: string, pane: string, name: string): 
 				return { tty, activity: Number(activity) || 0 };
 			});
 	} catch {
-		// tmux answers "no server running" (or cannot run at all): either way, no terminal shows the pane.
 		clients = [];
 	}
 	const client = clients.sort((a, b) => b.activity - a.activity)[0];

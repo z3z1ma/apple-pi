@@ -24,7 +24,6 @@ export function wireCommunications(api: CommunicationsApi): void {
 		ipcMain.handle(`communications:${method}`, (_event, request: unknown) => {
 			if (!request || typeof request !== "object" || Array.isArray(request))
 				throw new Error("A communication request is required.");
-			// Each adapter extracts its own operation fields; the renderer never supplies a runtime command.
 			return api[method](request as never);
 		});
 	}

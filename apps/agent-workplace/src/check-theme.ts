@@ -1,7 +1,3 @@
-// The pack check for theme authors, from the repository's root:
-//   node --import ./components/session-state/src/register.mjs apps/agent-workplace/src/check-theme.ts [<pack dir> ...]
-// prints each problem as `<pack>/<file>: <fault>` and exits 1 when any pack has one. With no directory, it checks
-// every pack in apps/agent-workplace/themes/.
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { checkThemePack, listThemes } from "./backend/theme-packs.js";

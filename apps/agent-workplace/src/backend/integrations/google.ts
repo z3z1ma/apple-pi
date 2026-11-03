@@ -1,7 +1,6 @@
 import { execFile } from "node:child_process";
 import type { CliStatus } from "../../integrations.js";
 
-/** Project only the account: gws status also contains private local credential diagnostics. */
 export function googleStatus(env?: NodeJS.ProcessEnv): Promise<CliStatus> {
 	return new Promise((resolve) => {
 		execFile("gws", ["auth", "status"], { env: env ?? process.env, timeout: 30_000 }, (error, stdout) => {

@@ -1,11 +1,7 @@
-// Instructing an agent from the conversation panel (decision 13): each instruction becomes its session-state command
-// (`talk`, `steer`, `follow_up`, `abort`, `answer`) and reports its receipts. The only guard is Stop's: stopping a
-// busy agent needs the operator's confirmation, so an unconfirmed `abort` for a busy character sends nothing.
 import type { Command } from "../../../../components/session-state/src/protocol.js";
 import type { Character, CommandResult, Instruction, QuestionnaireReply, ReceiptStage } from "../world.js";
 import type { Commands } from "./commands.js";
 
-/** The longest text an instruction may carry; Pi takes any, but the panel is for messages, not files. */
 const TEXT_MAX = 100_000;
 
 const reply = (value: unknown): QuestionnaireReply | undefined => {
@@ -16,7 +12,6 @@ const reply = (value: unknown): QuestionnaireReply | undefined => {
 	return undefined;
 };
 
-/** The command an instruction sends to `character`, or why it is refused (and nothing is sent). */
 export function instructionCommand(
 	character: Character | undefined,
 	instruction: unknown,
@@ -53,10 +48,6 @@ export function instructionCommand(
 	return { refused: "The conversation panel cannot send that." };
 }
 
-/**
- * Send an instruction to an awake character through `commands`, reporting each receipt stage. A refused instruction
- * reports `failed` with its reason and sends nothing.
- */
 export async function instruct(
 	commands: Commands,
 	character: Character | undefined,
@@ -77,7 +68,6 @@ export async function instruct(
 			onReceipt(stage, reason);
 		},
 	});
-	// The runtime not answering, or going away, is a failure the runtime itself could not report.
 	if (!result.ok && !failed) onReceipt("failed", result.reason);
 	return result;
 }

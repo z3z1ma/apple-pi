@@ -1,13 +1,9 @@
-// Searches what the operator and agents said in DMs: the words of user and assistant entries in each person's own
-// transcript. Ripgrep finds candidate lines on demand; each is parsed and kept only when its visible text matches, so
-// tool output, thoughts and mail never count as something a person said.
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import type { ConversationHit, ConversationSearch } from "../world.js";
 import { transcriptEntry } from "./transcript.js";
 
-/** Matches kept per transcript before parsing; a person's DM rarely needs more to show the newest. */
 const PER_FILE = 50;
 
 function sessionFiles(db: string): Map<string, string> {
@@ -40,7 +36,6 @@ function ripgrep(query: string, files: string[]): Promise<string> {
 			],
 			{ maxBuffer: 256 * 1024 * 1024 },
 			(error, stdout) => {
-				// Exit 1 is "no match".
 				if (error && (error as { code?: unknown }).code !== 1) reject(error);
 				else resolve(stdout);
 			},

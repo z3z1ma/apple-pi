@@ -4,8 +4,6 @@ import { defineConfig } from "vite";
 
 const here = import.meta.dirname;
 
-// The mode names the entry: `main` (ESM, the main process) or `preload` (CommonJS, as sandboxed preloads must be).
-// Both go to dist/electron/ and are committed, with everything they import bundled except Electron and Node.
 export default defineConfig(({ mode }) => ({
 	root: resolve(here, "src/electron"),
 	plugins: [
@@ -18,7 +16,6 @@ export default defineConfig(({ mode }) => ({
 					"browser-pages/src/markdown-review.ts",
 				];
 				if (!assets.some((path) => id === resolve(here, "../../components", path))) return;
-				// These modules locate shipped assets beside their source, not beside the Electron bundle.
 				const source = JSON.stringify(relative(resolve(here, "dist/electron"), id));
 				return { code: code.replaceAll("import.meta.url", `new URL(${source}, import.meta.url).href`), map: null };
 			},
@@ -27,7 +24,7 @@ export default defineConfig(({ mode }) => ({
 	build: {
 		ssr: resolve(here, "src/electron", `${mode}.ts`),
 		outDir: resolve(here, "dist/electron"),
-		emptyOutDir: mode === "main", // main builds first
+		emptyOutDir: mode === "main",
 		target: "node24",
 		minify: false,
 		reportCompressedSize: false,

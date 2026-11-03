@@ -1,11 +1,5 @@
-// Where each URL of the world UI lives on disk. Electron serves the UI through its app:// protocol with this map, and
-// the headless Chrome tests route their requests through it, so both load the same files.
 import { extname, join, normalize, sep } from "node:path";
 
-/**
- * The file for a URL path: `/themes/...` from the theme packs, anything else from the built UI. Undefined for a
- * path that would leave those directories.
- */
 export function appFile(appDir: string, pathname: string): string | undefined {
 	const path = normalize(decodeURIComponent(pathname)).replace(/^[/\\]+/, "");
 	if (path.split(sep).includes("..")) return undefined;
