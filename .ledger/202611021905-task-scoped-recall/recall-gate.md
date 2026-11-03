@@ -1,6 +1,11 @@
 # Indexed recall decision gate
 
-Status: protocol and independently authored task set frozen before candidate runs; prototype source judging and baseline evaluations complete. The actual-tool landing target is separately frozen; its evaluation is pending.
+Status: gate work stopped by operator direction; the protocols below are retained history.
+
+## Outcome
+
+Candidate 1 (`2ade19c9`) failed the latency gate, independently confirmed; it was not activated.
+The operator chose to land candidate 2 on main without a further gate run (message 8432); this inquiry does not establish its quality or latency acceptance.
 Owner: Kofi Bhattacharya. Decision owner: Tadhg Marinescu/operator.
 
 ## Terms used in this evaluation
@@ -40,6 +45,14 @@ The index adapter calls `openIndex`, `indexTranscript` and `searchIndex` from th
 Before-results amendment (Tadhg, message 8242): candidate frozen at `f026f6f1` now ORs FTS terms and indexes custom data and result details. The intended integration keeps heuristic regex and exact-address calls on the current engine; only NL discovery uses the index. Six old calls are regex-like. Route them unchanged through the frozen baseline adapter, report indexed NL and unchanged-path regex separately and together. Preserve original input strings. FTS stemming/tokenization and extraction still differ, so this is not an isolated BM25 experiment. `fields: all` is the primary replacement comparison. `words` is a separate diagnostic, never a substitute score selected after results.
 
 An ID-only result can establish episode recovery, not displayed-answer sufficiency. FTS snippets are retained as candidate diagnostic output, not treated as the actual tool display. The display gate remains unverified until integrated actual tool output is evaluated under the frozen answer criteria. Exact entry/call/file recovery and legacy regex semantics need focused integration checks in addition to quality measures.
+
+## Candidate 2 pre-results proposal (superseded by operator stop)
+
+Tadhg accepted candidate 1's latency failure and no activation (8400), then authorized a distinct target (8405): baseline stopword alignment, session-token filtering inside FTS, per-entry byte offsets/lengths for direct reads, reader busy timeout, and actual retrieval failures raised through Pi's native tool-error path. Defined refusals remain ordinary results; no fallback, scope or permission weakening is authorized. Stopword alignment changes query semantics and must be evaluated, not presented as only a ranking-weight change. Fiona owns the new tool branch; Tadhg owns the index work. Candidate 1 and its captures stay unchanged.
+
+Before candidate-2 output, Kofi selected a second latency case by size alone: Q4, the largest NL-query prefix among the old twelve from a DIFFERENT source history than Q3. Its normalized prefix is 83,908,166 bytes, SHA256 `39b6591114f60b4f4fdd9e4d7bf5263634cf300fbc823823273c89298789f7de`; original query/cutoff unchanged. Baseline `810e8e0d` first call is 242.29 ms; nearest-rank p95 over 20 serial warm calls is 152.955333 ms. Full display, ranked IDs, provenance and params match the retained baseline. Both Q3 and Q4 must meet the same <=50 ms AND >=5x conditions; Q3's original baseline remains 407.6149 ms. All four quality criteria still apply separately to all three sets. The task set is now exposed regression evidence, not fresh confirmation; no semantic or latency pass transfers from candidate 1.
+
+The read-only v3 background snapshot captured at 2026-11-03T04:00:08.301Z has 135,371 rows across 116 transcripts, 785,793,024 bytes, SHA256 `7e40ebb54174880ee0a6eba8c2482e4b6963adb2d4134c02db36d4f47f922dc9`; backup took 1,914.52 ms. Its version and scope/offset/length/ordinal/echo columns are verified. It is distinct from the retained v2 background and contains later appends; future cross-candidate differences cannot be attributed solely to code. The same bounded contemporary-background interpretation applies. Adapt the harness's schema/error observation to the new frozen source explicitly before running it.
 
 ## Mandatory landing criteria
 

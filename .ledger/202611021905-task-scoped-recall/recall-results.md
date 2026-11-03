@@ -1,8 +1,8 @@
 # Indexed recall evaluation
 
-Status: local-prefix and task-control baseline judging complete; actual-tool integration gates pending.
+Status: candidate 1 fails the latency gate, independently reproduced. The operator stopped further gate work and chose candidate 2 for main without another gate run.
 
-The decision is whether an indexed `search_session` can replace whole-transcript search without losing measured recall quality. This report records a low-level prototype comparison, not approval of the replacement. [The decision gate](recall-gate.md) defines the metrics, controls and required checks. The two old sets each contain six historical questions; the new task set contains six independently authored task-scoped questions.
+The decision is whether an indexed `search_session` can replace whole-transcript search without losing measured recall quality. This report keeps the low-level prototype comparison separate from the frozen actual-tool evaluation; neither is approval of the replacement. [The decision gate](recall-gate.md) defines the metrics, controls and required checks. The two old sets each contain six historical questions; the new task set contains six independently authored task-scoped questions.
 
 ## Frozen setup
 
@@ -106,6 +106,44 @@ node --import ./components/session-state/src/register.mjs \
 
 The initial three adapter tests passed. Maintainer reflection replaced helper-structure assertions with five replay-level behavioral checks: default historical recovery, all-branch recovery, supplementary relevance labels, frozen-evidence rejection, and failed-setup cleanup. All five passed serially against the detached baseline; rerunning both private sets after the adapter cleanup change preserved all twelve complete response records exactly. Three task-control CLI checks additionally passed: cross-person recovery with stable source identity/original ordinals and unchanged input bytes, rejection of undeclared task intervals, and rejection of changed frozen evidence. The combined eight checks passed serially against the detached baseline. The standalone SQLite diagnostic remains method evidence rather than a test of task-control behavior. The public tests exercise the current engine only; the private candidate observations above are separate evidence, not coverage from those tests. No full suite, provider run, runtime restart or live backfill ran in this evaluation lane.
 
-## Next step
+## Actual-tool observations
 
-Baseline judgments are complete. Fiona owns a separate-branch actual tool candidate with SQL eligibility before top-k and the existing formatter. Fiona supplied frozen `2ade19c932dfc40ce012e13850a9d43baa2a5ec2` and its scratch-runtime setup in message 8346. `tool-replay.mjs` now uses the actual exported tool, full prefix indexes and isolated runtime state; three serial public controls and a separate 15-test indexed-recall rerun pass. Tadhg accepted a read-only v2 live-index backup as the fixed contemporary background comparison (message 8353); the captured identity and method are in the gate. Next replay the two old sets and the task set, have Ciaran judge novel returned sources and actual displays, and measure background-sensitive ranking and end-to-end latency before recommending replacement. The explicit multi-source task-corpus control was frozen before its output inspection and its displays are judged. Compare the actual task candidate against it under decision 8314: task queries match indexed words, including punctuation that would trigger the legacy control's regex heuristic. Decision 8308's initial task-regex refusal is superseded before candidate freeze/results; no unsupported-route loss or gain has been observed. All four non-inferiority criteria apply separately there, and unknown task permissions cannot satisfy the separate authorization gate.
+Frozen candidate: `2ade19c932dfc40ce012e13850a9d43baa2a5ec2`; actual replay harness: `905211b2`. All 36 captures exist: each six-question set under local full-prefix and fixed contemporary-background conditions. Every selected prefix hash matches between conditions; total indexed-row arithmetic matches snapshot rows minus selected persons' replaced rows plus their local prefix rows in all 18 comparisons. Returned sources have no observed membership or ordinal violation. These are setup/address checks, not general relevance or display judgments.
+
+| Set | Baseline episode sources | Actual local | Actual fixed background |
+| --- | ---: | ---: | ---: |
+| Frozen six | 7/19 | 7/19 | 7/19 |
+| Previous held-out six | 6/20 | 9/20 | 8/20 |
+| New task six | 6/19 | 10/19* | 7/19 |
+
+`*` Task-local T2 returned an indexed-search database-lock error, with missing details and `toolError:false`. Its empty result is a failed retrieval, not a normal no-match or semantic-quality observation. The retained capture is not replaced by later success. Actual-tool general relevance, evidence-hit counts and display sufficiency are still unverified; no source-quality pass follows from this table.
+
+### Mandatory end-to-end latency
+
+The same preselected Q3 query and 110,294,070-byte historical prefix were used. Each actual-tool condition has one separately reported first call and 20 serial warm calls, with identical complete outputs throughout. Nearest-rank p95 is the 19th sorted warm observation; OS cache is uncontrolled, not cold-disk state.
+
+| Path | First call | Warm p95 | Speedup vs 407.61 ms baseline | Gate |
+| --- | ---: | ---: | ---: | --- |
+| Actual tool, local prefix | 79.85 ms | 67.50 ms | 6.04x | fails <=50 ms |
+| Actual tool, fixed background | 191.98 ms | 201.31 ms | 2.02x | fails <=50 ms and >=5x |
+| Independent fixed-background replay | 220.12 ms | 236.83 ms | 1.72x | fails <=50 ms and >=5x |
+
+The gate requires BOTH <=50 ms AND >=5x. Low-level SQL's earlier 8.63 ms does not transfer to this full path. Ciaran independently reproduced the background failure and verified baseline timing arithmetic, without independently rerunning baseline timings. Kofi checked exact candidate/harness/background/gold identities, complete response/metadata/parameter/prefix equivalence and p95 arithmetic against the 15,263-byte independent artifact (SHA256 `f8cbf27aa07f4653c07363cc701c2f936c9c291bb7afb0a2265ea3bb6a1cb4c6`). Tadhg accepted the failure/no activation in message 8400. Under the declared stop rule, the confirmed mandatory failure stopped nondecisive semantic/display judging. Shared host load and OS cache are uncontrolled; this is a bounded gate failure, not typical-latency estimation or independently diagnosed root cause.
+
+Local setup took 1,267.72 ms, including 688.66 ms indexing; index size was 49,246,208 bytes. Background setup took 4,088.54 ms, including 263.21 ms snapshot copy and 3,205.91 ms selected-session replacement/indexing; resulting index size was 785,793,024 bytes. These costs are outside warm calls. Snapshot backup itself took 1,458.22 ms; that is not a full backfill measurement. The accepted background covers 116 indexed transcripts of 123 known to the live runtime and holds contemporary other-person statistics, not a reconstructed historical organization.
+
+Private captures: `/tmp/kofi-index-recall/{frozen,heldout,task}-actual-{local,background}-private.json`; latency: `latency-actual-{local,background}-private.json`. Original queries, source records, code identities and outputs remain retained privately.
+
+### Independent stop and remaining judgments
+
+Ciaran mechanically checked all 24 old-set captures against frozen gold, source/harness identities, original parameters, prefix eligibility, ordinals and printed markers. Fifty of 53 unique question/source pairs reused prior single-rater labels under original-record hashes; three novel pairs remain unjudged. Twelve displays reused baseline judgments by exact response hash; twelve nonidentical old-set displays and task quality remain unjudged. No new semantic labels were authored and the task metadata audit is incomplete. Stop artifact: `/tmp/ciaran-task-recall/actual-tool-stop-judgments-v1-private.json`, 32,641 bytes, mode0600, SHA256 `e30dfffc137130748db0c4c2bb2d624eaa6a780b9b64059177d00b0972d5c75f`. The original task-local lock failure is retained and was not independently reproduced or diagnosed by Ciaran.
+
+Method correction: an initial claim that H3/H6 had five local hits was an unchecked assumption. Both actual local and background captures have zero; 20 repeated background calls matched local IDs/text exactly. The claim was withdrawn and the judging goal corrected; no code change or candidate fix followed.
+
+## Operator closeout
+
+Candidate 1 stays frozen and unactivated. Candidate 2 is separately authorized (message 8405), with Fiona owning its tool branch and Tadhg the index changes: baseline stopword alignment, FTS-indexed session filtering, per-entry direct byte reads and reader busy timeout; real retrieval failures take the native tool-error path. These are implementation changes, not measured acceptance. The operator directed landing on main without another gate run (message 8432); gate work is finished. No earlier pass transfers.
+
+The new preselected latency case is Q4, the largest remaining NL prefix from a different history than Q3, chosen by size before any candidate-2 output: 83,908,166 bytes. Both cases require <=50 ms AND >=5x, using the original queries/cutoffs and 20 serial warm calls. Q4's newly measured baseline first call is 242.29 ms and warm p95 152.96 ms. Its complete response matches the retained original baseline. All three source-quality sets now serve as exposed regressions, not fresh confirmation. Actual tool/field/permission checks and all four quality criteria remain required; unknown historical task permissions remain unknown.
+
+The gate records the separately captured v3 contemporary background. Its corpus differs from the v2 snapshot, so a future candidate-2 improvement cannot be attributed solely to code changes. The planned further freeze/replay was cancelled by operator direction. No candidate-2 gate result exists in this report; landing remains Fiona and Tadhg's work.
