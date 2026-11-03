@@ -26,7 +26,7 @@ const notebookText = (entry: any): string | undefined => {
 	return text || undefined;
 };
 
-const sourceContext = (
+export const sourceContext = (
 	entry: any,
 	message: Message,
 	question: any,
@@ -72,7 +72,7 @@ const sourceContext = (
 	return context;
 };
 
-const renderSource = (
+export const renderSource = (
 	entry: any,
 	index: number | undefined,
 	full: boolean,

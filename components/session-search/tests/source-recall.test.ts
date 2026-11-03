@@ -1,8 +1,9 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { sessionSearchTool } from "../src/tool.js";
+import { startRecallRuntime } from "./indexed-runtime.js";
 
 const records = [
 	{ type: "message", id: "first", message: { role: "user", content: "original zero" } },
@@ -49,12 +50,14 @@ const withSession = async (
 ) => {
 	const dir = mkdtempSync(join(tmpdir(), "source-recall-"));
 	const file = join(dir, "session.jsonl");
-	writeFileSync(file, entries.map((entry) => JSON.stringify(entry)).join("\n"));
+	const runtime = await startRecallRuntime(file, entries);
 	const invoke = async (params: any) => {
 		const result = await sessionSearchTool.execute("search-call", params, undefined, undefined, {
 			sessionManager: {
+				getSessionId: () => runtime.sessionId,
 				getSessionFile: () => file,
-				getBranch: () => entries.filter((entry) => entry.id !== "offbranch"),
+				getEntries: () => runtime.entries,
+				getBranch: () => runtime.entries.filter((entry) => entry.id !== "offbranch"),
 			},
 		} as any);
 		return (result.content[0] as any).text as string;
@@ -62,6 +65,7 @@ const withSession = async (
 	try {
 		await run(file, invoke);
 	} finally {
+		await runtime.stop();
 		rmSync(dir, { recursive: true, force: true });
 	}
 };

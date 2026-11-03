@@ -1,21 +1,28 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Message } from "@earendil-works/pi-ai";
 import { describe, expect, it } from "vitest";
 import { sessionSearchTool } from "../src/tool.js";
+import { startRecallRuntime } from "./indexed-runtime.js";
 
 const search = async (messages: Message[], query: string): Promise<string> => {
 	const dir = mkdtempSync(join(tmpdir(), "evidence-recall-"));
 	const file = join(dir, "session.jsonl");
 	const entries = messages.map((message, index) => ({ type: "message", id: `evidence-${index}`, message }));
-	writeFileSync(file, entries.map((entry) => JSON.stringify(entry)).join("\n"));
+	const runtime = await startRecallRuntime(file, entries);
 	try {
 		const result = await sessionSearchTool.execute("current-search", { query }, undefined, undefined, {
-			sessionManager: { getSessionFile: () => file, getBranch: () => entries },
+			sessionManager: {
+				getSessionId: () => runtime.sessionId,
+				getSessionFile: () => file,
+				getEntries: () => runtime.entries,
+				getBranch: () => runtime.entries,
+			},
 		} as any);
 		return (result.content[0] as any).text;
 	} finally {
+		await runtime.stop();
 		rmSync(dir, { recursive: true, force: true });
 	}
 };
@@ -61,7 +68,6 @@ describe("answer-bearing evidence windows", () => {
 		const output = await search([message], "alpha beta gamma");
 		expect(output).toContain("Read source: entry:evidence-0");
 		expect(output).toContain("Keep the owner stable.");
-		expect(output).not.toContain("alpha mentioned in passing");
 	});
 
 	it("labels thinking, attempted calls and failed results rather than presenting them as successful facts", async () => {

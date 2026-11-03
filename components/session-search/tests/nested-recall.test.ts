@@ -7,6 +7,7 @@ import { Type } from "typebox";
 import { expect, it } from "vitest";
 import { fauxSession } from "../../../tests/helpers/faux-session.js";
 import { registerRecallTool } from "../src/tool.js";
+import { startRecallRuntime } from "./indexed-runtime.js";
 
 it.each([false, true])(
 	"excludes the issuing parent through native nested execution (delegated: %s)",
@@ -18,6 +19,7 @@ it.each([false, true])(
 			content: "historicalneedle retained evidence",
 			timestamp: 0,
 		});
+		let runtime: Awaited<ReturnType<typeof startRecallRuntime>> | undefined;
 		const runner = await fauxSession(
 			[
 				(pi) => {
@@ -39,6 +41,12 @@ it.each([false, true])(
 						description: "Run a composed recall request",
 						parameters: Type.Object({ query: Type.String() }),
 						async execute(_id, args, _signal, _update, ctx) {
+							runtime ??= await startRecallRuntime(
+								ctx.sessionManager.getSessionFile()!,
+								ctx.sessionManager.getEntries(),
+								ctx.sessionManager.getSessionId(),
+								false,
+							);
 							const outcome = await ctx.executeTool(delegated ? "delegate" : "search_session", args);
 							if (outcome.isError) throw new Error("Composed search failed");
 							return outcome.result;
@@ -77,6 +85,7 @@ it.each([false, true])(
 			}
 		} finally {
 			runner.dispose();
+			await runtime?.stop();
 			rmSync(cwd, { recursive: true, force: true });
 		}
 	},

@@ -10,11 +10,12 @@ import {
 	parseEntryQuery,
 } from "./drill-down.js";
 import { formatRecallOutput, formatTouchedOutput } from "./format-recall.js";
+import { RecallRefusal, readQualifiedEntry, searchIndexedHistory } from "./indexed-recall.js";
 import { getActiveLineageEntryIds } from "./lineage.js";
 import { loadAllMessages } from "./load-messages.js";
 import { normalizeRecallMode, normalizeRecallScope } from "./recall-scope.js";
 import { renderMessage } from "./render-entries.js";
-import { getFileIndicators, getTouchedFiles, type SearchHit, searchEntries } from "./search-entries.js";
+import { getFileIndicators, getTouchedFiles, looksLikeRegex, type SearchHit, searchEntries } from "./search-entries.js";
 
 const DEFAULT_RECENT = 25;
 const PAGE_SIZE = 5;
@@ -63,12 +64,26 @@ export const sessionSearchTool = defineTool({
 		"This looks through session history, not git history or the current repository. " +
 		"Search text or regex, list touched files, inspect only write/edit payloads, expand entries, recover a written file with query:'#N:path', or recover an omitted tool result with query:'call:<id>'. " +
 		"Expand any source by query:'entry:<id>[:offset[:limit]]' (zero-based lines). New custom, summary and notebook records use stable IDs, not message ordinals. " +
-		"It follows the active lineage by default; scope:'all' includes other branches.",
+		"It follows the active lineage by default; scope:'all' includes other branches. " +
+		"Natural-language history discovery uses the runtime's index. Use tasks:[id] to search what people wrote while focused on those authorized tasks; task queries match words, not regex patterns, and punctuation is ignored. Use fields:'words' to omit tool payloads from indexed discovery. " +
+		"Other people's sources use entry:<session>/<id>[:offset[:limit]]. Runtime failures/refusals are reported, not replaced with another engine.",
 	promptSnippet: "Recover earlier conversation, tool results, and file operations from this session.",
 	promptGuidelines: [
 		"Use search_session for earlier work or evidence missing from context, including after compaction. Use grep, find, or read for current repository files; use revisit_note for a known notebook id.",
 	],
 	parameters: Type.Object({
+		tasks: Type.Optional(
+			Type.Array(Type.String({ minLength: 1 }), {
+				description:
+					"Search these tasks' focus spans across their workers. Requires task access. History queries match words, not regex patterns; punctuation is ignored. A span means written while focused, not necessarily about the task.",
+			}),
+		),
+		fields: Type.Optional(
+			Type.Union([Type.Literal("words"), Type.Literal("all")], {
+				description:
+					"Indexed discovery: words searches written text, thinking, mail and summaries; all (default) also searches tool calls and results.",
+			}),
+		),
 		query: Type.Optional(
 			Type.String({
 				description:
@@ -99,7 +114,7 @@ export const sessionSearchTool = defineTool({
 		),
 	}),
 	// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: recall resolution owns the complete request-validation and scope-selection flow.
-	async execute(toolCallId, params, _signal, _onUpdate, ctx) {
+	async execute(toolCallId, params, signal, _onUpdate, ctx) {
 		if (params.page !== undefined && invalidPositiveInteger(params.page)) {
 			return {
 				content: [{ type: "text", text: "Invalid page: page must be a positive integer." }],
@@ -130,13 +145,79 @@ export const sessionSearchTool = defineTool({
 		const activeEntryIds = getActiveLineageEntryIds(ctx.sessionManager);
 		const lineageEntryIds = rawScope === "lineage" ? activeEntryIds : undefined;
 		const entryRequest = params.query ? parseEntryQuery(params.query) : undefined;
+		const callId = params.query ? parseCallQuery(params.query) : undefined;
+		const drillDown = params.query ? parseDrillDown(params.query) : undefined;
+		if (entryRequest?.id.includes("/")) {
+			try {
+				const caller = ctx.sessionManager.getSessionId();
+				const slash = entryRequest.id.indexOf("/");
+				if (
+					entryRequest.id.slice(0, slash) === caller &&
+					rawScope === "lineage" &&
+					!activeEntryIds.has(entryRequest.id.slice(slash + 1))
+				)
+					return { content: [{ type: "text", text: expandSourceEntry([], entryRequest) }], details: undefined };
+				return {
+					content: [{ type: "text", text: await readQualifiedEntry(entryRequest, caller, signal) }],
+					details: undefined,
+				};
+			} catch (error) {
+				const message = `Cannot read qualified transcript source: ${error instanceof Error ? error.message : String(error)}`;
+				if (error instanceof RecallRefusal) return { content: [{ type: "text", text: message }], details: undefined };
+				throw new Error(message, { cause: error });
+			}
+		}
+		const indexedQuery =
+			params.query?.trim() &&
+			mode === "history" &&
+			params.expand === undefined &&
+			!entryRequest &&
+			!callId &&
+			!drillDown &&
+			(params.tasks?.length || !looksLikeRegex(params.query.trim()));
+		if (params.tasks?.length && !indexedQuery) {
+			return {
+				content: [
+					{
+						type: "text",
+						text: "Task search matches words through the index. Supply a history query or a qualified entry:<session>/<id> source; file, touched, local exact addresses and numeric expansion keep the personal engine.",
+					},
+				],
+				details: undefined,
+			};
+		}
+		if (indexedQuery) {
+			try {
+				const result = await searchIndexedHistory({
+					query: params.query!.trim(),
+					toolCallId,
+					caller: ctx.sessionManager.getSessionId(),
+					entries: ctx.sessionManager.getEntries(),
+					activeEntryIds,
+					scope: rawScope,
+					tasks: params.tasks,
+					fields: params.fields,
+					page: params.page ?? 1,
+					pageSize: PAGE_SIZE,
+					maxPages: MAX_PAGES,
+					signal,
+				});
+				return { content: [{ type: "text", text: result.text }], details: { sources: result.sources } };
+			} catch (error) {
+				if (error instanceof RecallRefusal)
+					return { content: [{ type: "text", text: error.message }], details: undefined };
+				throw new Error(
+					`Indexed session search failed: ${error instanceof Error ? error.message : String(error)}. No personal-engine fallback was used.`,
+					{ cause: error },
+				);
+			}
+		}
 		if (entryRequest) {
 			const { rendered } = loadAllMessages(sessionFile, true, lineageEntryIds);
 			return { content: [{ type: "text", text: expandSourceEntry(rendered, entryRequest) }], details: undefined };
 		}
 		const expandSet = new Set(params.expand ?? []);
 		const hasExpand = expandSet.size > 0;
-		const callId = params.query ? parseCallQuery(params.query) : undefined;
 		if (callId) {
 			const { rawMessages } = loadAllMessages(sessionFile, false, lineageEntryIds);
 			return {
@@ -145,7 +226,6 @@ export const sessionSearchTool = defineTool({
 			};
 		}
 
-		const drillDown = params.query ? parseDrillDown(params.query) : undefined;
 		if (drillDown) {
 			const { rendered, rawMessages } = loadAllMessages(sessionFile, false, lineageEntryIds);
 			return {

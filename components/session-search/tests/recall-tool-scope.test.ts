@@ -1,8 +1,9 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { registerRecallTool } from "../src/tool.js";
+import { startRecallRuntime } from "./indexed-runtime.js";
 
 const makeSession = () => {
 	const dir = mkdtempSync(join(tmpdir(), "session-search-recall-scope-"));
@@ -26,14 +27,26 @@ const register = () => {
 };
 
 const invoke = async (tool: any, file: string, params: Record<string, unknown>) => {
-	const result = await tool.execute("tool-call", params, undefined, undefined, {
-		sessionManager: {
-			getSessionFile: () => file,
-			getBranch: () => [{ id: "m1" }],
-			getEntries: () => [{ id: "m1" }, { id: "m2" }],
-		},
-	});
-	return result.content[0].text as string;
+	const runtime = await startRecallRuntime(
+		file,
+		readFileSync(file, "utf8")
+			.trim()
+			.split("\n")
+			.map((line) => JSON.parse(line)),
+	);
+	try {
+		const result = await tool.execute("tool-call", params, undefined, undefined, {
+			sessionManager: {
+				getSessionId: () => runtime.sessionId,
+				getSessionFile: () => file,
+				getBranch: () => runtime.entries.filter((entry) => entry.id === "m1"),
+				getEntries: () => runtime.entries,
+			},
+		});
+		return result.content[0].text as string;
+	} finally {
+		await runtime.stop();
+	}
 };
 
 describe("search_session scope", () => {

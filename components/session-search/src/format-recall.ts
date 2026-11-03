@@ -6,8 +6,11 @@ import type { FileMatch, SearchHit, TouchedFile } from "./search-entries.js";
 // until the next user/bash boundary.
 const SEGMENT_START_ROLES = new Set(["user", "bash"]);
 
+const sourceAddress = (entry: SearchHit): string =>
+	`entry:${entry.sourceSession ? `${entry.sourceSession}/` : ""}${entry.entryId}`;
+
 export const entryAddress = (entry: SearchHit): string =>
-	entry.index !== undefined ? `#${entry.index}` : `entry:${entry.entryId}`;
+	entry.index !== undefined ? `#${entry.index}` : sourceAddress(entry);
 
 /**
  * A segment is a contiguous group of entries forming one conversational turn:
@@ -114,10 +117,11 @@ const shortPath = (path: string): string => {
 	return parts.length > 3 ? `.../${parts.slice(-3).join("/")}` : normalized;
 };
 
-const formatFileMatch = (match: FileMatch, index: number, query: boolean): string => {
+const formatFileMatch = (match: FileMatch, entry: SearchHit, query: boolean): string => {
 	const unit = query ? (match.lineCount === 1 ? "match" : "matches") : match.lineCount === 1 ? "line" : "lines";
 	const snippet = match.snippet ? `\n    | ${match.snippet}` : "";
-	return `  [${match.toolName}] ${shortPath(match.path)} — ${match.lineCount} ${unit}    use #${index}:${match.path}${snippet}`;
+	const address = entry.sourceSession ? sourceAddress(entry) : `#${entry.index}:${match.path}`;
+	return `  [${match.toolName}] ${shortPath(match.path)} — ${match.lineCount} ${unit}    use ${address}${snippet}`;
 };
 
 /** Format a single entry line with optional match indicator. */
@@ -126,9 +130,9 @@ const formatEntry = (e: SearchHit, matched: boolean): string => {
 	const fileSuffix = e.files?.length ? ` files:[${e.files.join(", ")}]` : "";
 	const body = matched && e.snippet ? e.snippet : e.summary;
 	const fileMatches = e.fileMatches?.slice(0, 3) ?? [];
-	const indicators = fileMatches.map((match) => formatFileMatch(match, e.index!, matched)).join("\n");
+	const indicators = fileMatches.map((match) => formatFileMatch(match, e, matched)).join("\n");
 	const omitted = (e.fileMatches?.length ?? 0) - fileMatches.length;
-	const provenance = [e.entryId ? `entry:${e.entryId}` : "", e.timestamp, e.sourceKind, e.customType, e.lineage]
+	const provenance = [e.entryId ? sourceAddress(e) : "", e.timestamp, e.sourceKind, e.customType, e.lineage]
 		.filter(Boolean)
 		.join(" | ");
 	return (
@@ -137,7 +141,9 @@ const formatEntry = (e: SearchHit, matched: boolean): string => {
 		(e.context?.length
 			? `\n${e.context.map((context) => `  ${context.role} ${context.address}: ${context.summary}`).join("\n")}`
 			: "") +
-		(e.entryId && matched ? `\n  Read source: entry:${e.entryId}` : "") +
+		(e.sourceSession ? `\n  Transcript: ${e.sourceName ?? e.sourceSession} (${e.sourceSession})` : "") +
+		(e.task ? `\n  Written while focused on task: ${e.task}` : "") +
+		(e.entryId && matched ? `\n  Read source: ${sourceAddress(e)}` : "") +
 		(indicators ? `\n${indicators}` : "") +
 		(omitted > 0 ? `\n  ...(${omitted} more file matches)` : "")
 	);

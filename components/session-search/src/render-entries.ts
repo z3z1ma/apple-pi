@@ -11,6 +11,10 @@ export interface RenderedEntry {
 	sourceKind?: string;
 	customType?: string;
 	lineage?: "active" | "off-lineage";
+	/** Qualified source recovery for another transcript or an indexed-only record kind. */
+	sourceSession?: string;
+	sourceName?: string;
+	task?: string;
 	context?: Array<{ address: string; role: string; summary: string }>;
 	role: string;
 	summary: string;

@@ -158,7 +158,7 @@ const safeRegex = (pattern: string): RegExp => {
 };
 
 /** Detect if the query looks like a single regex pattern (contains regex metacharacters). */
-const looksLikeRegex = (query: string): boolean => /[|*+?{}()[\]\\^$.]/.test(query);
+export const looksLikeRegex = (query: string): boolean => /[|*+?{}()[\]\\^$.]/.test(query);
 
 // ── Precompiled term cache ──
 
@@ -295,7 +295,7 @@ const STOPWORDS = new Set([
 ]);
 
 /** Remove stopwords, keep meaningful terms. */
-const filterStopwords = (terms: string[]): string[] => {
+export const filterStopwords = (terms: string[]): string[] => {
 	const meaningful = terms.filter((t) => !STOPWORDS.has(t.toLowerCase()) && t.length > 1);
 	// If all terms were stopwords, return original (don't lose everything)
 	return meaningful.length > 0 ? meaningful : terms;
@@ -533,6 +533,35 @@ const fullText = (msg: Message, mode: RecallMode): SearchText => {
 		}
 	}
 	return { text: parts.join("\n"), sections };
+};
+
+/** Describe an already-ranked source without applying the personal engine's ranking or eligibility rules. */
+export const describeSearchHit = (
+	entry: RenderedEntry,
+	message: Message,
+	query: string,
+	indexedSnippet?: string,
+): SearchHit => {
+	const terms = filterStopwords(query.trim().split(/\s+/));
+	const cache = compileTerms(terms);
+	const regex = snippetRegex(terms, cache);
+	const document = fullText(message, "history");
+	let snippet = lineSnippet(document, regex, 2, cache);
+	if (!snippet && indexedSnippet) {
+		// FTS stemming can match "fixed" for "fixing". Select that passage but keep labels from the source structure.
+		const matched = [...indexedSnippet.matchAll(/\u00ab([^\u00ab\u00bb]+)\u00bb/g)].map((match) => match[1]!);
+		const matchedCache = compileTerms(matched);
+		if (matched.length) snippet = lineSnippet(document, snippetRegex(matched, matchedCache), 2, matchedCache);
+	}
+	const fileMatches = matchingFiles(message, regex);
+	return {
+		...entry,
+		snippet,
+		...(fileMatches.length ? { fileMatches } : {}),
+		...(message.role === "toolResult" && ["search_session", "revisit_note"].includes(message.toolName)
+			? { recallEcho: true }
+			: {}),
+	};
 };
 
 export const searchEntries = (
