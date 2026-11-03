@@ -6,11 +6,6 @@ import { describe, expect, it } from "vitest";
 
 import { installSearchRootGuard, searchRootBlockReason } from "../src/index.js";
 
-// This guard is deliberately dumb and best-effort: stop the obvious case of an agent grepping or
-// globbing over a huge directory (home, "/", or a configured root) by no fault of its own. It is
-// not a shell interpreter and does not try to resist deliberate evasion; anywhere a bash command
-// gets genuinely ambiguous, it gives up and lets the command run.
-
 const HOME = "/Users/example";
 const CODE_PROJECTS = `${HOME}/code_projects`;
 const WORK = `${CODE_PROJECTS}/work`;
@@ -228,10 +223,6 @@ describe("search root guard: bash, best-effort cd tracking", () => {
 });
 
 describe("search root guard: bash, best-effort means giving up on real ambiguity", () => {
-	// Each of these is a genuine, accepted limitation of a deliberately non-clever guard: a shell
-	// variable, command substitution, pipeline, wrapper command, control-flow construct, or other
-	// indirection that this guard does not try to resolve. It fails open rather than trying to be a
-	// shell interpreter.
 	it.each([
 		`ROOT=${WORK}; rg needle "$ROOT"`,
 		"rg needle ~someone-else",
