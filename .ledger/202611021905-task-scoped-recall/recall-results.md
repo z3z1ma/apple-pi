@@ -22,7 +22,9 @@ The previous experiment stopped after a mandatory episode loss and left previous
 
 Latency case selected before candidate results: Q3, largest NL-query prefix among the old twelve, 110,294,070 normalized JSONL bytes. First full current-tool call 404.57 ms; 20 sequential warm full-tool calls p95=407.61 ms. OS cache state is uncontrolled. These are local API calls through a manager facade, not provider/tool-dispatch or live-runtime end-to-end latency.
 
-## Local-prefix candidate observation
+## Local-prefix prototype observation
+
+This section concerns `f026f6f1`, not the later actual-tool landing target. Tadhg's explicit target decision 8301 replaces it with Fiona's forthcoming frozen tool candidate, including `ce4e8808` supported-custom-record extraction and recall-echo demotion. No source-quality or latency pass below transfers to that target; it requires its own observations and judgments.
 
 Frozen candidate `f026f6f1`, original queries, top five, eligible lineage corpus, `fields: all`:
 

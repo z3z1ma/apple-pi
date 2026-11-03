@@ -15,6 +15,8 @@ The previous held-out set is now a regression set, not fresh confirmation eviden
 
 Baseline source is the unchanged reviewed personal engine (`0843bfd3` production source), frozen in a detached checkout. Record exact source revision and hashes for both engines and harness for each run. Candidate revision is supplied by Tadhg after his freeze. Changes after inspection of private outcomes are exploratory and need an explicit new confirmation decision.
 
+Explicit target amendment before actual-tool results (Tadhg, message 8301): Fiona's separately frozen tool candidate is the landing target. It includes index contract restorations from `ce4e8808`: index only supported notebook custom records rather than arbitrary state data, and demote earlier recall-tool results before BM25 and limits. The initial `f026f6f1` local-prefix run remains prototype evidence; none of its source-quality or latency passes transfers to the new target. Keep its negative/distributional observations, rerun the old sets as regressions, and use the still-unqueried task set for fresh candidate evidence under the same four criteria. Actual display, intended-corpus ranking and integrated latency remain mandatory.
+
 ## Measurement interface
 
 `engine-replay.mjs` runs one engine over a private gold file. Engine adapters accept a temporary historical-prefix file, unchanged query, and options, and return ranked entry IDs. The baseline adapter calls the actual `sessionSearchTool` and keeps its complete displayed response plus production provenance metadata. Ranking order comes from metadata, not printed grouping order.
