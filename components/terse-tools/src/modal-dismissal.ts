@@ -2,7 +2,6 @@ import { type Component, type OverlayHandle, TuiAltScreen, type TuiMouseEvent } 
 
 const PATCHED = Symbol.for("apple_pi.modal_outside_click");
 
-// Keep the rest of the gesture away from the transcript, even after Escape removes the modal.
 const dismissedGesture: Component = {
 	render: () => [],
 	invalidate() {},
@@ -10,7 +9,6 @@ const dismissedGesture: Component = {
 };
 
 export function installModalDismissal(): void {
-	// Pi exposes overlay bounds but keeps the normalized mouse dispatch hook protected.
 	const proto = TuiAltScreen.prototype as unknown as TuiAltScreen & {
 		[PATCHED]?: boolean;
 		showOverlay: TuiAltScreen["showOverlay"];

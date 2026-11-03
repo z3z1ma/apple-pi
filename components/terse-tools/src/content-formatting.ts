@@ -10,10 +10,6 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { visibleWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
 
-/**
- * A result's content for display: its text replaced by the styled rendition in `details.styledOutput`
- * (Bash's terminal colors) when it has one.
- */
 export function displayedContent<Block extends { type: string; text?: string }>(result: {
 	content?: Block[];
 	details?: unknown;
@@ -37,7 +33,6 @@ export function displayedOutputText(result: {
 export function outputTextLines(text: string, theme: Theme, color: "toolOutput" | "error" = "toolOutput"): string[] {
 	const normalized = text.replace(/\t/g, "   ");
 	const width = normalized.split(/\r\n|\r|\n/).reduce((max, line) => Math.max(max, visibleWidth(line)), 1);
-	// Carry command styles across literal newlines before the UI adds its own colors and borders.
 	return wrapTextWithAnsi(normalized, width).map((line) =>
 		theme.fg(color, /\x1b\[[0-9;:]*m/.test(line) ? `${line}\x1b[0m` : line),
 	);
@@ -64,7 +59,6 @@ export function outputWarningLines(details: unknown, theme: Theme): string[] {
 }
 
 export function diffLines(text: string, theme: Theme): string[] {
-	// Pi's edit diffs carry line numbers; other tools can return ordinary unified patches.
 	if (/^[+-]\s*\d+ /m.test(text)) {
 		return renderDiff(text).replaceAll("\x1b[7m", "\x1b[1m").replaceAll("\x1b[27m", "\x1b[22m").split("\n");
 	}

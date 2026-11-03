@@ -227,7 +227,6 @@ export function customizeThinkingDisplay(comp: AssistantMessageComponent): void 
 	const msg = (comp as any).lastMessage;
 	if (!msg || !Array.isArray(msg.content)) return;
 
-	// Always ensure hiddenThinkingLabel is empty so Pi never generates "Thinking..."
 	(comp as any).hiddenThinkingLabel = "";
 
 	const hasTools = msg.content.some((c: any) => c.type === "toolCall");
@@ -245,7 +244,6 @@ export function customizeThinkingDisplay(comp: AssistantMessageComponent): void 
 		}
 	}
 
-	// If no thinking and no text, clear container completely
 	if (thinkingBlocks.length === 0 && !hasText && !hasStopError) {
 		container.clear();
 		return;
@@ -326,12 +324,10 @@ export function installTerseToolRenderer(): void {
 			const hasStopError =
 				msg.stopReason === "length" || (!hasTools && (msg.stopReason === "aborted" || msg.stopReason === "error"));
 
-			// While streaming thinking (no tools yet and no text yet), do not show thinking in transcript
 			if (isStreaming && !hasTools && !hasText && !hasStopError) {
 				return [];
 			}
 
-			// Tool-only without thinking or text and without error
 			if (hasTools && !hasText && !hasThinking && !hasStopError) {
 				return [];
 			}
@@ -339,28 +335,23 @@ export function installTerseToolRenderer(): void {
 
 		let lines = origAssistantRender.call(this, width);
 
-		// Filter out any standalone "Thinking..." lines
 		lines = lines.filter((line) => {
 			const text = stripAnsi(line).trim();
 			return text !== "Thinking..." && text !== "Thinking…" && text.toLowerCase() !== "thinking...";
 		});
 
-		// If lines only contain empty/whitespace lines and there is no text/error, return []
 		if (lines.length > 0 && lines.every((l) => l.trim() === "")) {
 			return [];
 		}
 
-		// Collapse multiple leading blank lines
 		while (lines.length > 1 && lines[0] === "" && lines[1] === "") {
 			lines.shift();
 		}
 
-		// Ensure exactly one leading blank line if preceded by a tool execution
 		if (precedingIsToolCall(this) && lines.length > 0 && lines[0] !== "") {
 			lines.unshift("");
 		}
 
-		// Ensure a single line break at the bottom of the thought card before tool calls
 		if (msg) {
 			const hasTools = msg.content?.some((c: any) => c.type === "toolCall");
 			const hasText = msg.content?.some((c: any) => c.type === "text" && c.text?.trim());
@@ -381,7 +372,6 @@ export function installTerseToolRenderer(): void {
 		return lines;
 	};
 
-	// The terse rows replace Pi's child layout, so mouse routing must use these same rows.
 	ToolExecutionComponent.prototype.handleMouse = function (event) {
 		if ((this as any).hideComponent || event.type !== "click" || event.button !== "left") return undefined;
 		if (event.x < 0 || event.x >= event.width || event.y < 0 || event.y >= event.height) return undefined;
@@ -516,9 +506,6 @@ export function installTerseToolRenderer(): void {
 		}
 	};
 
-	// Suppress shortcut conflict warnings from our own package. These are
-	// informational — the extension override still wins — and the user has
-	// intentionally overridden the built-in keybindings.
 	const origGetShortcutDiagnostics = ExtensionRunner.prototype.getShortcutDiagnostics;
 	ExtensionRunner.prototype.getShortcutDiagnostics = function () {
 		const diagnostics = origGetShortcutDiagnostics.call(this);

@@ -110,15 +110,13 @@ describe("terse tool formatters", () => {
 	it("formats status bullets with appropriate theme colors", () => {
 		const runningBullet = formatStatusBullet("running", testTheme);
 		expect(runningBullet).toContain("●");
-		expect(runningBullet).toContain("\x1b[33m"); // yellow
-
+		expect(runningBullet).toContain("\x1b[33m");
 		const successBullet = formatStatusBullet("success", testTheme);
 		expect(successBullet).toContain("●");
-		expect(successBullet).toContain("\x1b[32m"); // green
-
+		expect(successBullet).toContain("\x1b[32m");
 		const errorBullet = formatStatusBullet("error", testTheme);
 		expect(errorBullet).toContain("●");
-		expect(errorBullet).toContain("\x1b[31m"); // red
+		expect(errorBullet).toContain("\x1b[31m");
 	});
 
 	it("formats home paths replacing $HOME with ~", () => {
@@ -311,24 +309,20 @@ describe("terse tool formatters", () => {
 
 	it("formats compaction divider rule with centered title and dim styling", () => {
 		const rule = formatCompactionRule("Conversation compacted", 80, testTheme);
-		expect(rule).toContain("\x1b[2m"); // dim
+		expect(rule).toContain("\x1b[2m");
 		const stripped = stripAnsi(rule);
 		expect(visibleWidth(stripped)).toBe(80);
 		expect(stripped).toContain(" Conversation compacted ");
-		// Label is 24 chars (" Conversation compacted "), remaining 56 = 28 left, 28 right
 		expect(stripped).toBe(`${"─".repeat(28)} Conversation compacted ${"─".repeat(28)}`);
 
-		// Odd width
 		const oddRule = stripAnsi(formatCompactionRule("Conversation compacted", 81, testTheme));
 		expect(visibleWidth(oddRule)).toBe(81);
 		expect(oddRule).toBe(`${"─".repeat(28)} Conversation compacted ${"─".repeat(29)}`);
 
-		// Narrow width truncates gracefully
 		const narrow = stripAnsi(formatCompactionRule("Conversation compacted", 20, testTheme));
 		expect(visibleWidth(narrow)).toBeLessThanOrEqual(20);
 		expect(narrow).toContain("...");
 
-		// Width <= 0
 		expect(formatCompactionRule("Conversation compacted", 0, testTheme)).toBe("");
 	});
 
@@ -343,12 +337,10 @@ describe("terse tool formatters", () => {
 	it("formats compaction summary in collapsed and expanded modes", () => {
 		const summaryText = "Fixed the rendering bug in TUI.\nAll tests are passing.";
 
-		// Collapsed mode: single line
 		const collapsed = formatCompactionSummary("Conversation compacted", summaryText, false, 80, testTheme);
 		expect(collapsed).toHaveLength(1);
 		expect(stripAnsi(collapsed[0])).toBe(`${"─".repeat(28)} Conversation compacted ${"─".repeat(28)}`);
 
-		// Expanded mode: header, blank line, markdown summary, blank line, closing rule
 		const expanded = formatCompactionSummary("Conversation compacted", summaryText, true, 80, testTheme);
 		expect(expanded[0]).toBe(collapsed[0]);
 		expect(expanded[1]).toBe("");
@@ -356,12 +348,10 @@ describe("terse tool formatters", () => {
 		expect(expanded[expanded.length - 2]).toBe("");
 		expect(stripAnsi(expanded[expanded.length - 1])).toBe("─".repeat(80));
 
-		// All expanded lines stay within terminal width
 		for (const l of expanded) {
 			expect(visibleWidth(l)).toBeLessThanOrEqual(80);
 		}
 
-		// Empty summary in expanded mode: header + closing rule
 		const emptyExpanded = formatCompactionSummary("Conversation compacted", "", true, 80, testTheme);
 		expect(emptyExpanded).toHaveLength(2);
 		expect(emptyExpanded[0]).toBe(collapsed[0]);
@@ -489,7 +479,7 @@ describe("terse tool renderer integration with ToolExecutionComponent", () => {
 		expect(stripAnsi(formatThoughtHeader(10000, undefined, testTheme))).toBe("▶ Thought for 10s");
 		expect(stripAnsi(formatThoughtHeader(undefined, 850, testTheme))).toBe("▶ Thought for 850 tokens");
 		expect(stripAnsi(formatThoughtHeader(undefined, undefined, testTheme))).toBe("▶ Thought");
-		expect(formatThoughtHeader(1000, 100, testTheme)).toContain("\x1b[2m"); // muted
+		expect(formatThoughtHeader(1000, 100, testTheme)).toContain("\x1b[2m");
 	});
 
 	it("formats thought snippet with indentation and line trimming", () => {
@@ -599,15 +589,11 @@ describe("terse tool renderer integration with ToolExecutionComponent", () => {
 		container.addChild(intermediateAssistant);
 		container.addChild(t2);
 
-		// Hidden thinking contributes no rows between tool calls.
 		expect(intermediateAssistant.render(80)).toHaveLength(0);
 
-		// t1 recognizes intermediateAssistant is transparent, so t1 is NOT the last tool
 		expect(isLastToolInSequence(t1)).toBe(false);
-		// t2 is the last tool
 		expect(isLastToolInSequence(t2)).toBe(true);
 
-		// Multi-turn tools render contiguously with no blank line between them
 		const lines = container.render(100);
 		expect(lines).toHaveLength(2);
 		expect(stripAnsi(lines[0])).toBe("● Bash(git status)");
@@ -648,7 +634,6 @@ describe("terse tool renderer integration with ToolExecutionComponent", () => {
 		container.addChild(thoughtAssistant);
 		container.addChild(tool);
 
-		// Tool call does NOT prepend a newline after thinking alone
 		expect(precedingHasTextDelta(tool)).toBe(false);
 
 		const lines = container.render(100);
@@ -658,7 +643,6 @@ describe("terse tool renderer integration with ToolExecutionComponent", () => {
 		expect(joined).toContain("The crash log indicates");
 		expect(joined).toContain("● Bash(git status) (ctrl+o to expand)");
 
-		// Thought card has a line break at the bottom before subsequent tool call
 		const thoughtIdx = lines.findIndex((l) => l.includes("The crash log indicates"));
 		expect(thoughtIdx).toBeGreaterThanOrEqual(0);
 		expect(lines[thoughtIdx + 1]).toBe("");
@@ -679,7 +663,6 @@ describe("terse tool renderer integration with ToolExecutionComponent", () => {
 		);
 		container.addChild(tool1);
 
-		// Turn 2: Thought card without text before tool call
 		const thoughtAssistant = new AssistantMessageComponent(
 			undefined,
 			false, // hideThinkingBlock = false
@@ -733,7 +716,6 @@ describe("terse tool renderer integration with ToolExecutionComponent", () => {
 		);
 		container.addChild(tool1);
 
-		// Assistant message with thought AND text delta
 		const assistantMsg = new AssistantMessageComponent(undefined, false);
 		container.addChild(assistantMsg);
 
@@ -763,14 +745,11 @@ describe("terse tool renderer integration with ToolExecutionComponent", () => {
 
 		const lines = container.render(100);
 		expect(stripAnsi(lines[0])).toBe("● Bash(git status) (ctrl+o to expand)");
-		// Exactly 1 blank line before thought card
 		expect(lines[1]).toBe("");
 		expect(stripAnsi(lines[2])).toContain("▶ Thought");
 		expect(stripAnsi(lines[3])).toContain("Analyzing the repository state");
-		// Exactly 1 blank line between thought card and text
 		expect(lines[4]).toBe("");
 		expect(stripAnsi(lines[5])).toContain("README is the pitch.");
-		// Exactly 1 blank line between text and next tool
 		expect(lines[6]).toBe("");
 		expect(stripAnsi(lines[7])).toBe("● Read(foo.ts) (ctrl+o to expand)");
 		expect(lines).toHaveLength(8);
@@ -812,7 +791,6 @@ describe("terse tool renderer integration with ToolExecutionComponent", () => {
 		expect(precedingHasTextDelta(tool)).toBe(true);
 
 		const lines = container.render(100);
-		// lines must contain text followed by a blank line before tool call
 		const textIdx = lines.findIndex((l) => l.includes("I will start by checking"));
 		expect(textIdx).toBeGreaterThanOrEqual(0);
 		expect(lines[textIdx + 1]).toBe("");
@@ -892,13 +870,11 @@ describe("terse tool renderer integration with ToolExecutionComponent", () => {
 		);
 		container.addChild(tool);
 
-		// Collapsed
 		const collapsedLines = tool.render(80);
 		for (const l of collapsedLines) {
 			expect(visibleWidth(l)).toBeLessThanOrEqual(80);
 		}
 
-		// Expanded
 		tool.setExpanded(true);
 		tool.updateResult({
 			content: [{ type: "text", text: `${"line 1 ".repeat(30)}\nline 2` }],
@@ -1157,16 +1133,13 @@ describe("terse tools extension spinner and label lifecycle", () => {
 
 		installTerseToolsExtension(mockPi);
 
-		// session_start clears hidden thinking label
 		handlers.get("session_start")?.({}, mockCtx);
 		expect(hiddenLabel).toBe("");
 
-		// turn_start clears hidden thinking label
 		hiddenLabel = "dirty";
 		handlers.get("turn_start")?.({}, mockCtx);
 		expect(hiddenLabel).toBe("");
 
-		// message_update with thinking updates the spinner
 		handlers.get("message_update")?.(
 			{
 				message: {
@@ -1178,7 +1151,6 @@ describe("terse tools extension spinner and label lifecycle", () => {
 		);
 		expect(workingMessage).toBe("Thinking (Analyzing the solution)");
 
-		// message_update with subsequent toolCall restores spinner
 		handlers.get("message_update")?.(
 			{
 				message: {
@@ -1193,7 +1165,6 @@ describe("terse tools extension spinner and label lifecycle", () => {
 		);
 		expect(workingMessage).toBeUndefined();
 
-		// message_update with subsequent text restores spinner
 		handlers.get("message_update")?.(
 			{
 				message: {
@@ -1208,22 +1179,18 @@ describe("terse tools extension spinner and label lifecycle", () => {
 		);
 		expect(workingMessage).toBeUndefined();
 
-		// tool_execution_start restores spinner
 		workingMessage = "Thinking (dirty)";
 		handlers.get("tool_execution_start")?.({}, mockCtx);
 		expect(workingMessage).toBeUndefined();
 
-		// message_end restores spinner
 		workingMessage = "Thinking (dirty)";
 		handlers.get("message_end")?.({}, mockCtx);
 		expect(workingMessage).toBeUndefined();
 
-		// turn_end restores spinner
 		workingMessage = "Thinking (dirty)";
 		handlers.get("turn_end")?.({}, mockCtx);
 		expect(workingMessage).toBeUndefined();
 
-		// agent_end restores spinner
 		workingMessage = "Thinking (dirty)";
 		handlers.get("agent_end")?.({}, mockCtx);
 		expect(workingMessage).toBeUndefined();

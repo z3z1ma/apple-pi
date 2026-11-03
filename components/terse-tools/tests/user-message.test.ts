@@ -34,13 +34,8 @@ describe("user message styling", () => {
 		const prompt = "Summarize the latest Zentui editor improvements.";
 		const lines = formatUserMessage(prompt, 80, testTheme);
 
-		// Structure:
-		// 0: top breathing line with rail
-		// 1: prompt content line with rail
-		// 2: bottom breathing line with rail
 		expect(lines).toHaveLength(3);
 
-		// Terminal width constraint: all lines must fit within 80 cells
 		for (const line of lines) {
 			expect(visibleWidth(line)).toBeLessThanOrEqual(80);
 		}
@@ -50,11 +45,9 @@ describe("user message styling", () => {
 		expect(plain[1]).toBe(`│ ${prompt}${" ".repeat(80 - 2 - prompt.length)}`);
 		expect(plain[2]).toBe(`│ ${" ".repeat(78)}`);
 
-		// Styling checks
-		expect(lines[0]).toContain("\x1b[35m│\x1b[39m"); // accent rail
-		expect(lines[1]).toContain("\x1b[35m│\x1b[39m"); // accent rail
+		expect(lines[0]).toContain("\x1b[35m│\x1b[39m");
+		expect(lines[1]).toContain("\x1b[35m│\x1b[39m");
 
-		// OSC 133 prompt zone markers
 		expect(lines[0]).toContain("\x1b]133;A\x07");
 		expect(lines[2]).toContain("\x1b]133;B\x07\x1b]133;C\x07");
 	});
@@ -69,7 +62,6 @@ describe("user message styling", () => {
 		}
 
 		const plain = lines.map(stripTerminalSequences);
-		// Every line starts with the rail
 		for (const p of plain) {
 			expect(p.startsWith("│ ")).toBe(true);
 		}
@@ -104,11 +96,9 @@ describe("user message styling", () => {
 		expect(plain[1]).toContain("Hello from test user prompt");
 		expect(plain[2]).toBe(`│ ${" ".repeat(78)}`);
 
-		// Re-rendering returns cached result
 		const cachedLines = comp.render(80);
 		expect(cachedLines).toBe(lines);
 
-		// Invalidating clears cache
 		comp.invalidate();
 		const refreshedLines = comp.render(80);
 		expect(refreshedLines).not.toBe(lines);
