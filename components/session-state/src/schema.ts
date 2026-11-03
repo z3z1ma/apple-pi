@@ -1,6 +1,5 @@
 import type { DatabaseSync } from "node:sqlite";
 
-// Forward migrations; index i takes the database from user_version i to i + 1. Never edit a shipped entry.
 const MIGRATIONS = [
 	`create table sessions (
 		id text primary key,
@@ -109,7 +108,7 @@ const MIGRATIONS = [
 		source text not null,
 		primary key (session_id, entry_id, part)
 	) strict;`,
-	// `at` is when the transcript entry was written; `observed_at` is when the runtime first indexed it.
+
 	`alter table messages add column observed_at integer;`,
 	`alter table sessions add column reports_to text;
 	alter table sessions add column parent_session_file text;
@@ -140,33 +139,31 @@ const MIGRATIONS = [
 		created_at integer not null,
 		updated_at integer not null
 	) strict;`,
-	// Mail is a command; this view names its edges. A mail is delivered once applied (its transcript holds it).
+
 	`create view mail as
 		select command_id as id, json_extract(command, '$.from') as sender, session_id as receiver,
 			json_extract(command, '$.body') as body, created_at as sent_at,
 			case stage when 'applied' then updated_at end as delivered_at, stage, reason
 		from commands where kind = 'mail';`,
-	// Attention: when the operator last saw the session, when it last settled, and since when it needs the operator
-	// (an open prompt, or a settle after the last seen time); null when it does not.
+
 	`alter table sessions add column seen_at integer;
 	alter table sessions add column settled_at integer;
 	alter table sessions add column needs_you_since integer;`,
-	// The incarnation a client bound a command to, kept apart from the one it was handed to: bound mail never waits for
-	// a later incarnation.
+
 	`alter table commands add column bound_generation integer;`,
-	// Choices a view keeps across restarts (the notch's vibes, rooms, looks, and positions), as JSON by key.
+
 	`create table preferences (
 		key text primary key,
 		value text not null,
 		updated_at integer not null
 	) strict;`,
-	// What the session says it works on now (session-title's stated intent), shown when it has no ledger task.
+
 	`alter table sessions add column intent text;`,
-	// The role a hired person holds for life (the name of a role catalog file); null for an unroled session.
+
 	`alter table sessions add column role text;`,
 	`alter table sessions add column soul text;`,
 	`alter table sessions add column self text;`,
-	// A retired person: when and why it left; cleared when a manager reopens it. Every manager change, for the record.
+
 	`alter table sessions add column retired_at integer;
 	alter table sessions add column retired_reason text;
 	create table manager_changes (
@@ -177,14 +174,13 @@ const MIGRATIONS = [
 		by text not null,
 		at integer not null
 	) strict;`,
-	// The role's title, so views that read the database (sidebar, dashboard, Agent Workplace) show it without the catalog.
+
 	`alter table sessions add column role_title text;`,
-	// Whether the role manages (1), does not (0), or the session has no role (null); views draw managers by it.
+
 	`alter table sessions add column manages integer;`,
-	// A subagent never needs the operator (its parent takes its result); clear what earlier runtimes set.
+
 	`update sessions set needs_you_since = null where kind = 'child';`,
-	// Threads: every exchange between people. A participant is a session id or the operator; a pushed participant
-	// gets each new message as mail, a pulled one reads it when it chooses. Messages are ordered by `seq`.
+
 	`create table threads (
 		id text primary key,
 		kind text not null,
@@ -211,7 +207,7 @@ const MIGRATIONS = [
 		at integer not null
 	) strict;
 	create index thread_messages_by_thread on thread_messages (thread_id, seq);`,
-	// Team membership follows the tree; an explicit invitation survives a change of manager.
+
 	`alter table thread_participants add column invited integer not null default 0;`,
 	`create table work_tasks (
 		id text primary key,
@@ -242,7 +238,7 @@ const MIGRATIONS = [
 		action text not null,
 		previous_bundle text
 	) strict;`,
-	// A program owns a launch before the person or process exists. Creation ancestry is not the reporting tree.
+
 	`create table program_scopes (
 		id text primary key,
 		caller text not null,
@@ -263,13 +259,12 @@ const MIGRATIONS = [
 	create index peers_by_program on program_peers(program_id);
 	alter table commands add column program_id text;
 	create index commands_by_program on commands(program_id) where program_id is not null;`,
-	// When a task became the organization's obligation, and how it closed; `archived_at` is when it closed.
-	// A task recorded before this column opened when it was first assigned, the first time the runtime recorded it.
+
 	`alter table work_tasks add column opened_at integer;
 	alter table work_tasks add column close_status text;
 	update work_tasks set opened_at = (select min(assigned_at) from assignments where task_id = work_tasks.id);
 	update work_tasks set close_status = 'done' where ephemeral = 1 and archived_at is not null;`,
-	// Relationships between work, people, and results; the relation comes from the vocabulary in relations.json.
+
 	`create table links (
 		id text primary key,
 		from_kind text not null,
@@ -298,7 +293,7 @@ const MIGRATIONS = [
 	 from program_peers p
 	 where not exists (select 1 from events e where e.session_id = p.session_id and e.type in ('program_peer_created', 'program_peer_observed'));`,
 	`create index events_by_type on events (type, seq);`,
-	// When a manager-tool hire first connected. Null is unknown, including every person recorded before this column.
+
 	`alter table sessions add column hired_at integer;`,
 	`alter table sessions add column specialization text;`,
 	`alter table threads add column channel_type text;
@@ -371,9 +366,9 @@ const MIGRATIONS = [
 	) strict;
 	create index review_decisions_by_review on review_decisions(review_id, created_at);`,
 	`alter table review_jobs add column additional_work text not null default '[]';`,
-	// A person on call is woken by mail that arrives while it is at home (the coordinator's desk).
+
 	`alter table sessions add column on_call integer;`,
-	// Mail the runtime sends on time, once or repeatedly (components/session-state/src/schedules.ts).
+
 	`create table schedules (
 		id text primary key,
 		owner text not null,
@@ -399,10 +394,10 @@ const MIGRATIONS = [
 	create table external_seen (source text not null, event text not null, primary key (source, event)) strict;
 	create table external_policies (provider text primary key, policy text not null, ignore_bots integer not null, last_error text) strict;
 	insert into external_policies (provider, policy, ignore_bots) values ('github', 'candidate', 1), ('jira', 'explicit', 1);`,
-	// A channel's listener is pushed every post and applies its charter (components/session-state/src/channel-charters.ts).
+
 	`alter table threads add column listener text;
 	alter table threads add column charter text;`,
-	// Departure threads used to be titled by session id; name them by the person their departure recorded.
+
 	`update threads set subject = 'Departure: ' || (
 		select json_extract(e.data, '$.name') from events e
 		where e.type = 'person_departed' and e.session_id = substr(threads.subject, 12)
@@ -410,7 +405,7 @@ const MIGRATIONS = [
 	where id like 'departure:%' and subject like 'Departure: %' and exists (
 		select 1 from events e where e.type = 'person_departed' and e.session_id = substr(threads.subject, 12)
 			and json_extract(e.data, '$.name') is not null);`,
-	// Reactions on thread messages: acknowledgments that wake nobody (components/session-state/src/reactions.ts).
+
 	`create table message_reactions (
 		message_id text not null,
 		person text not null,
@@ -418,7 +413,7 @@ const MIGRATIONS = [
 		at integer not null,
 		primary key (message_id, person, emoji)
 	) strict;`,
-	// The operator's outside activity (Slack, GitHub, Jira) and what the desk decided about it (components/session-state/src/activity.ts).
+
 	`create table activity_items (
 		id text primary key,
 		source text not null,
@@ -436,7 +431,7 @@ const MIGRATIONS = [
 	) strict;
 	create index activity_items_at on activity_items (at);
 	create table activity_cursors (source text primary key, cursor text not null, polled_at integer not null, error text) strict;`,
-	// Rules people and agents make about outside activity; an item keeps the rule that decided it on arrival.
+
 	`create table activity_rules (
 		id text primary key,
 		match text not null,
@@ -447,7 +442,7 @@ const MIGRATIONS = [
 		created_at integer not null
 	) strict;
 	alter table activity_items add column rule text;`,
-	// The organization's notes: knowledge and connections that outlive one task (components/session-state/src/notes.ts).
+
 	`create table notes (
 		id text primary key,
 		title text not null,
@@ -458,7 +453,7 @@ const MIGRATIONS = [
 		created_at integer not null,
 		updated_at integer not null
 	) strict;`,
-	// The operator's canvases: his own Markdown documents, versioned so no write overwrites another (canvases.ts).
+
 	`create table canvases (
 		id text primary key,
 		title text not null,
@@ -471,11 +466,9 @@ const MIGRATIONS = [
 		pinned integer not null
 	) strict;
 	create index canvases_updated on canvases (updated_at);`,
-	// A conversation page is the newest entries before a cursor: read in time order without sorting a whole session.
+
 	`create index messages_by_time on messages (session_id, part, at);`,
-	// Who worked on which task when: one span per stretch of a person's focus, written by triggers on `work_focus` so
-	// every path that changes focus records it. A person's entries between `started_at` and `ended_at` are that task's
-	// part of their transcript. `reconstructed` spans were replayed from earlier work changes (runtime startup).
+
 	`create table focus_spans (
 		person text not null,
 		task_id text not null,

@@ -1,5 +1,11 @@
 ## file
 
+Migration array index i advances user_version i to i + 1; shipped entries stay immutable and schema changes append a new entry. Transcript `at` records entry time, while `observed_at` records first runtime indexing. Bound command incarnations remain separate from delivery incarnations: bound mail cannot wait for a replacement process. Role title and nullable manages snapshots let query-only views render without loading the role catalog. Program creation ancestry is separate from reporting ancestry. Historical subagent attention cleanup reflects the parent receiving the result rather than operator attention.
+Why: these persisted meanings cannot be inferred from today's column names or reconstructed from current process and catalog state.
+
+Focus spans are written by work_focus triggers so every focus mutation participates. Reconstructed spans come from runtime startup replay of earlier work changes, not original observation. The legacy task opening backfill uses first recorded assignment, and archived_at means closure time independently of bundle movement.
+Why: historical reconstruction and current writer facts have different provenance; filesystem location is not task lifecycle time.
+
 Communication capability adds metadata/following and commands.result to the existing stores. Legacy participant cursors, explicit invitation flags and conversation kinds remain recorded facts; existing channel rows receive structural type/scope, while topic scope is recorded on creation. Result persistence is the existing command journal's original effect/page, not another outbox or memory store. The query capability check reads this migration marker, and new versioned command kinds fail on an older daemon.
 Coupled: components/session-state/src/communication.ts, components/session-state/src/runtime.ts
 Verify: components/session-state/tests/communication-core.test.ts
