@@ -22,3 +22,18 @@ Tool directives are not comments and stay:
 
 Run it with `node lint/no-comments.mjs [paths...]`. With no paths it checks every tracked source file; `npm run lint`
 runs it too.
+
+## Rules
+
+Code rules are Biome GritQL plugins in `rules/`, each applied to its paths by an `overrides` entry in `biome.json`:
+
+- `no-native-select.grit`: Workplace uses `Select` and `Recipients`, not native dropdowns.
+- `workplace-palette.grit`: Workplace stylesheets take colors from `--wp-*` theme variables; white and black overlays
+  are allowed.
+
+Agent-action rules live in `components/action-rules`: a `tool_call` hook refuses commands that hurt a shared checkout
+(`git rm`/`git mv`, `pkill`/`killall`, `sed -i ''`, a plain full `npm test`) and a `git add`/`git commit` issued in
+the same message as an `edit` or `write`.
+
+Writing GritQL: regex capture groups bind variables and fail to compile, so use `(?:...)`. Matching a node by regex
+works (`$v where { $v <: r"..." }`).
