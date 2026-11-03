@@ -6,8 +6,6 @@ import { findPath, gridFor } from "../web/game/pathing.js";
 import { Wander, type WanderBody, type WanderHooks } from "../web/game/wander.js";
 import type { PlaceData, Point } from "../web/theme.js";
 
-// Life (tickets 06 and 07) as plain logic: the idle rhythm each character keeps, and wandering over a real place's
-// data with walkers that walk their paths at walking speed. The built UI's side is in world-life.test.ts.
 const themes = fileURLToPath(new URL("../themes/", import.meta.url));
 const load = (id: string, name: string): PlaceData =>
 	JSON.parse(readFileSync(`${themes}${id}/places/${name}.json`, "utf8"));
@@ -21,7 +19,6 @@ afterAll(() => {
 });
 
 describe("idles", () => {
-	/** When each idle starts, over `ms` of standing, ticked a frame at a time. */
 	const schedule = (seed: string, ms: number) => {
 		const clock = new IdleClock(seed);
 		const starts: { t: number; name: IdleName }[] = [];
@@ -47,7 +44,6 @@ describe("idles", () => {
 	it("keep each character's own rhythm: the same seed the same, neighbours never in step", () => {
 		expect(schedule("orla", 120_000)).toEqual(schedule("orla", 120_000));
 		const ids = ["docs", "tests", "solo", "orla", "C01", "C02", "C03", "host:square", "recruiter"];
-		// Standing in one room: each idle plays about a second and a half, and nobody starts one another is playing.
 		const clocks = ids.map((id) => new IdleClock(id));
 		const playing = new Map<string, { name: IdleName; until: number }>();
 		const starts: { id: string; t: number; name: IdleName }[] = [];
@@ -67,7 +63,6 @@ describe("idles", () => {
 				starts.some((o) => o.id !== start.id && o.name === start.name && Math.abs(o.t - start.t) < 1500),
 				`${start.id} starts ${start.name} with a neighbour at ${start.t}`,
 			).toBe(false);
-		// And their rhythms differ: no two start their first idle at the same moment.
 		const firsts = ids.map((id) => starts.find((s) => s.id === id)!.t);
 		expect(new Set(firsts).size).toBe(ids.length);
 	});
@@ -88,7 +83,6 @@ describe("idles", () => {
 	});
 });
 
-/** A walker as wandering sees it: walks its path at walking speed, faces, and plays idles. */
 class Body implements WanderBody {
 	x: number;
 	y: number;
@@ -134,7 +128,6 @@ class Body implements WanderBody {
 
 const dist = (a: Point, b: Point) => Math.hypot(a[0] - b[0], a[1] - b[1]);
 
-/** A place with wanderers in it, run frame by frame; `avatar` is where the operator's avatar stands. */
 function world(place: PlaceData, avatar?: Point) {
 	const bodies = new Map<string, { body: Body; home: Point }>();
 	const hooks: WanderHooks = {
@@ -151,7 +144,6 @@ function world(place: PlaceData, avatar?: Point) {
 			state.wander.add(id, kind, body, () => home, may);
 			return body;
 		},
-		/** Run for `ms`, calling `each` after every frame. */
 		run(ms: number, each?: (t: number) => void) {
 			for (let t = 0; t < ms; t += FRAME) {
 				state.wander.update(FRAME);
@@ -176,7 +168,6 @@ describe.each(["fantasy", "tech-office", "anime-school"])("wandering in %s", (id
 		w.run(4 * 60_000, () => {
 			for (const { spot, body } of folk) {
 				const at: Point = [body.x, body.y];
-				// Every step is on walkable floor.
 				expect(grid.blocked[Math.floor(at[1] * 2) * grid.cols + Math.floor(at[0] * 2)], `${at}`).toBe(0);
 				if (body.moving || dist(at, spot) < 0.05) continue;
 				away++;
@@ -210,9 +201,7 @@ describe.each(["fantasy", "tech-office", "anime-school"])("wandering in %s", (id
 		});
 		expect(left, "the idle agent left its spot").toBeGreaterThanOrEqual(0);
 		expect(back - left, "and came back within a while").toBeLessThan(20_000);
-		// Back home, it stays a good while before it goes out again.
 		if (again >= 0) expect(again - back).toBeGreaterThanOrEqual(45_000);
-		// Called to work while out: it heads straight back.
 		w.run(5 * 60_000, () => {
 			if (idle && dist([idler.x, idler.y], hq.spots[0]) > 0.3 && !idler.moving) idle = false;
 		});
@@ -234,12 +223,10 @@ describe.each(["fantasy", "tech-office", "anime-school"])("wandering in %s", (id
 			const avatar = w.state.avatar;
 			if (met && avatar) {
 				after.push(w.state.wander.view("C01").state);
-				// From then on it never stops in the avatar's way.
 				if (!body.moving) expect(dist([body.x, body.y], avatar)).toBeGreaterThanOrEqual(1.2);
 			}
 			if (met || body.moving || w.state.wander.view("C01").state !== "there") return;
 			met = true;
-			// The avatar walks up beside it: there is a way (wanderers never block the avatar's grid).
 			const beside: Point = [body.x + 0.8, body.y];
 			const grid = gridFor(square, [square.spots[4]]);
 			const path = findPath(grid, Object.values(square.entries)[0], [beside]);

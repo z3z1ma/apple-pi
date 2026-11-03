@@ -17,10 +17,6 @@ import { floorFidgets } from "../web/game/fidget-spots.js";
 import { findPath, gridFor, isOpen } from "../web/game/pathing.js";
 import type { PlaceData, Point } from "../web/theme.js";
 
-// Ambient NPCs (ticket 08): each pack's cast of characters who are there for fun, defined in its manifest (`ambient`)
-// and placed in its places' data (`ambient`). The pack check holds every pack to the cast's shape and placement; the
-// real packs each cast four, one place each, in the square and fitting interiors; and a cast member's lines rotate,
-// with its reaction when it is clicked several times in a row.
 const themesDir = fileURLToPath(new URL("../themes/", import.meta.url));
 const packs = readdirSync(themesDir).filter((id) => existsSync(join(themesDir, id, "theme.json")));
 const placeFiles = (id: string) =>
@@ -46,25 +42,20 @@ const editJson = (file: string, change: (value: any) => void) => {
 };
 const dist = (a: Point, b: Point) => Math.hypot(a[0] - b[0], a[1] - b[1]);
 
-/** Where each pack's cast is expected: the inn's own character, and one posted by the headquarters' door. */
 const FITTING: Record<string, { inn: string; door?: string }> = {
 	fantasy: { inn: "bard", door: "guard" },
 	"tech-office": { inn: "barista" },
 	"anime-school": { inn: "lunchlady", door: "monitor" },
 };
 
-/** Looks nobody of the headquarters crew may wear: the agents', the coordinator's, the avatars', and every host's. */
 const CREW_LOOK_ROLES = ["townsfolk", "ambient"];
-/** Where the crew stands: the rooms the world shows once per coordinator. */
 const CREW_ROOMS: Record<string, [least: number, most: number]> = { headquarters: [3, 4], "common-room": [1, 2] };
-/** How far a point is from a rect [x, y, w, h], in tiles. */
 const fromRect = ([x, y]: Point, [rx, ry, rw, rh]: number[]) =>
 	Math.hypot(Math.max(rx - x, 0, x - (rx + rw)), Math.max(ry - y, 0, y - (ry + rh)));
 
 describe.each(packs)("%s", (id) => {
 	const looks: Record<string, Look> = JSON.parse(readFileSync(join(themesDir, id, "characters", "looks.json"), "utf8"));
 	const everyone = manifestOf(id).ambient ?? {};
-	// The town's cast, one place each; the headquarters crew (`crew`) staffs every coordinator's headquarters.
 	const cast = Object.fromEntries(Object.entries(everyone).filter(([, member]) => !member.crew));
 	const crew = Object.fromEntries(Object.entries(everyone).filter(([, member]) => member.crew));
 	const placed = placeFiles(id).flatMap((name) =>
@@ -86,7 +77,6 @@ describe.each(packs)("%s", (id) => {
 			expect(member.lines.length, `${name}'s lines`).toBeGreaterThanOrEqual(4);
 			expect(member.reactions.length, `${name}'s reactions`).toBeGreaterThanOrEqual(2);
 			expect(member.barks?.length ?? 0, `${name}'s barks`).toBeGreaterThanOrEqual(2);
-			// Lines read in the small dialogue box in a few seconds.
 			for (const line of [...member.lines, ...member.reactions, ...(member.barks ?? [])])
 				expect(line.length, line).toBeLessThanOrEqual(120);
 			for (const bark of member.barks ?? []) expect(bark.length, bark).toBeLessThanOrEqual(46);
@@ -124,7 +114,6 @@ describe.each(packs)("%s", (id) => {
 				entry.at,
 				...floorFidgets(place),
 			]);
-			// Beside it or a little in front, as the scene's `approach` stands.
 			const stands: Point[] = [
 				[-1.1, 0.05],
 				[1.1, 0.05],
@@ -147,8 +136,6 @@ describe.each(packs)("%s", (id) => {
 			expect(here.length, `the crew in the ${room}`).toBeGreaterThanOrEqual(least);
 			expect(here.length, `the crew in the ${room}`).toBeLessThanOrEqual(most);
 			for (const entry of here) expect(crew[entry.cast], `${entry.cast} in the ${room} is crew`).toBeDefined();
-			// Each wears its own look here: a townsperson's (or another look made for nobody's work), never one the town's
-			// cast wears, an agent's, the coordinator's, the avatar's, or a host's.
 			const theirs = here.map((entry) => crew[entry.cast].look);
 			expect(new Set(theirs).size, `looks in the ${room}`).toBe(theirs.length);
 			for (const look of theirs) {
@@ -177,7 +164,6 @@ describe.each(packs)("%s", (id) => {
 			const homes = (place.ambient ?? []).map((entry) => entry.at);
 			const desk = place.furniture?.find((piece) => piece.use === "recruit");
 			for (const at of homes) if (desk) expect(fromRect(at, desk.rect), `${at} by the desk`).toBeGreaterThanOrEqual(2);
-			// With the crew at home, everyone at their spots: every door, every spot, and the desk can still be reached.
 			const grid = gridFor(place, [...place.spots, ...homes, ...floorFidgets(place)]);
 			const goals: [string, Point[]][] = [
 				...place.doors.map((door): [string, Point[]] => [door.name, [door.standAt]]),
@@ -296,7 +282,6 @@ describe("the pack check", { timeout: 30_000 }, () => {
 		});
 		const hall = load("fantasy", "headquarters");
 		const room = load("fantasy", "common-room");
-		// Open floor clear of everything the check keeps them from, found from the place's own data.
 		const free = (place: PlaceData, n: number): Point[] => {
 			const grid = gridFor(place);
 			const taken: Point[] = [
@@ -331,7 +316,6 @@ describe("the pack check", { timeout: 30_000 }, () => {
 					{ cast: "steward-b", at: h2 },
 				];
 			});
-			// One look per person in a place: the common room may wear a look the hall wears.
 			editJson(join(d, "places/common-room.json"), (place) => {
 				place.ambient = [{ cast: "steward-c", at: r1 }];
 			});
@@ -372,7 +356,6 @@ describe("the pack check", { timeout: 30_000 }, () => {
 				"theme.json: ambient.steward-d wears ambient-bard, which ambient.bard wears too",
 				"places/square.json: ambient steward-e is headquarters crew, who stand only in the headquarters or its common room",
 				"theme.json: ambient.steward-f.crew is not true or false",
-				// Unmarked, it may not stand in a room that repeats.
 				"places/common-room.json: ambient steward-f stands in a room the world shows once per coordinator or wing",
 			]),
 		);
@@ -410,7 +393,6 @@ describe("what a cast member says", () => {
 			said.push(patter.next().line);
 		}
 		expect(said).toEqual(["one", "two", "three", "one"]);
-		// Met again (another visit), it goes on from where it was.
 		const again = new Patter("fantasy:bard", member, memory);
 		again.click(100_000);
 		expect(again.next()).toEqual({ line: "two", reaction: false });
@@ -431,7 +413,6 @@ describe("what a cast member says", () => {
 			true,
 		]);
 		expect(results.slice(-2).map((r) => r.line)).toEqual(["easy!", "again?"]);
-		// The talk lines went on only for the talks, not the reactions.
 		patter.click(now + STREAK_MS * 3);
 		expect(patter.next()).toEqual({ line: member.lines[REACT_AFTER - 1], reaction: false });
 	});
@@ -439,7 +420,6 @@ describe("what a cast member says", () => {
 	it("counts clicks made while the avatar was still walking up", () => {
 		const patter = new Patter("fantasy:bard", member, new Map());
 		for (let i = 0; i < REACT_AFTER; i++) patter.click(i * 300);
-		// Only the last click's walk arrives: it reacts.
 		expect(patter.next().reaction).toBe(true);
 	});
 });
