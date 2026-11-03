@@ -1,14 +1,8 @@
-// A full-text index of every session's transcript, so recall is one indexed query instead of reading and parsing a
-// whole transcript per search. Pi's JSONL stays the source of truth: the index holds each entry's searchable text and
-// its address (session, entry id, time); readers drill into the file for the entry itself. The index lives in its own
-// database beside the runtime's, written only by the indexer worker (`transcript-indexer.worker.ts`), read by the runtime.
 import { open } from "node:fs/promises";
 import { DatabaseSync } from "node:sqlite";
 import { Worker } from "node:worker_threads";
 
 const SCHEMA = [
-	// One row per transcript entry. `words`: what people and agents wrote (operator and agent messages, thinking, mail,
-	// summaries). `calls`: tool names and arguments. `results`: tool output.
 	`create virtual table entries using fts5(
 		words, calls, results,
 		session_id unindexed, entry_id unindexed, at unindexed, role unindexed,
@@ -20,9 +14,7 @@ const SCHEMA = [
 		inode integer not null,
 		bytes integer not null
 	) strict;`,
-	// `ordinal`: a message entry's `#N` in search_session's addresses, counting every `message` record from the file's
-	// start (load-messages.ts); `files.messages` carries the count across appends. `echo`: 1 for an earlier recall's own
-	// result (search_session, revisit_note), which ranks behind original evidence. The index is derived, so this rebuilds.
+
 	`drop table entries;
 	create virtual table entries using fts5(
 		words, calls, results,
@@ -31,8 +23,7 @@ const SCHEMA = [
 	);
 	delete from files;
 	alter table files add column messages integer not null default 0;`,
-	// `scope`: the session as one token (`scopeToken`), so session and span filters intersect inside FTS. `offset` and
-	// `length`: the entry's line in the transcript, for a direct read of a hit's body. Rebuilds the derived index.
+
 	`drop table entries;
 	create virtual table entries using fts5(
 		words, calls, results, scope,
@@ -64,13 +55,12 @@ export interface IndexedEntry {
 	words: string;
 	calls: string;
 	results: string;
-	/** An earlier recall's result, as search-entries.ts marks `recallEcho`. */
+
 	echo?: boolean;
 }
 
-/** Recall tools whose results repeat evidence found elsewhere. */
 const RECALL_TOOLS = ["search_session", "revisit_note"];
-/** The notebook records search_session shows (load-messages.ts); other `custom` records are extension state. */
+
 const NOTEBOOK_RECORDS = ["notebook.observations.recorded", "notebook.reflections.recorded", "notebook.maintenance"];
 
 function textOf(content: unknown): string {
@@ -84,7 +74,6 @@ function textOf(content: unknown): string {
 		.join("\n");
 }
 
-/** An entry's searchable text, or undefined for entries with nothing to find (model changes, labels). */
 export function indexedEntry(entry: Record<string, any>): IndexedEntry | undefined {
 	if (typeof entry?.id !== "string" || typeof entry.timestamp !== "string") return undefined;
 	const at = Date.parse(entry.timestamp);
@@ -92,7 +81,6 @@ export function indexedEntry(entry: Record<string, any>): IndexedEntry | undefin
 	if (entry.type === "message") {
 		const message = entry.message ?? {};
 		if (message.role === "toolResult") {
-			// Nested work (a program's own tool calls) is kept in the result's details.
 			const details = message.details === undefined ? "" : `\n${JSON.stringify(message.details)}`;
 			return {
 				...base,
@@ -116,7 +104,7 @@ export function indexedEntry(entry: Record<string, any>): IndexedEntry | undefin
 		return { ...base, role: "custom", words: textOf(entry.content), calls: String(entry.customType ?? "") };
 	if (entry.type === "compaction" || entry.type === "branch_summary")
 		return { ...base, role: entry.type, words: String(entry.summary ?? "") };
-	// Extension records the session keeps, such as notebook learnings.
+
 	if (entry.type === "custom" && NOTEBOOK_RECORDS.includes(entry.customType)) {
 		const notes = [...(entry.data?.observations ?? []), ...(entry.data?.reflections ?? [])]
 			.filter((note: any) => typeof note?.content === "string")
@@ -127,18 +115,12 @@ export function indexedEntry(entry: Record<string, any>): IndexedEntry | undefin
 	return undefined;
 }
 
-/** How much of a transcript one read takes. */
 const CHUNK_BYTES = 4 << 20;
 
-/** A session as one FTS token, so a session filter intersects inside the full-text query instead of after it. */
 function scopeToken(sessionId: string): string {
 	return `s${Buffer.from(sessionId).toString("hex")}`;
 }
 
-/**
- * Bring one session's rows up to date with its transcript: append what was written since the last read, or start over
- * when the file was replaced or shrank. Yields between chunks so a long backfill never holds the thread.
- */
 export async function indexTranscript(db: DatabaseSync, sessionId: string, file: string): Promise<void> {
 	const handle = await open(file, "r");
 	try {
@@ -175,7 +157,7 @@ export async function indexTranscript(db: DatabaseSync, sessionId: string, file:
 			}
 			const held = carry.reduce((sum, part) => sum + part.length, 0);
 			const complete = Buffer.concat([...carry, read.subarray(0, last)]);
-			// Where `complete` starts in the file, so each line's byte offset can be kept for direct reads.
+
 			const base = position - held;
 			const consumed = position + last + 1;
 			carry = [read.subarray(last + 1)];
@@ -195,7 +177,7 @@ export async function indexTranscript(db: DatabaseSync, sessionId: string, file:
 					} catch {
 						continue;
 					}
-					// Every message record takes the next ordinal, searchable or not, as load-messages.ts counts them.
+
 					const ordinal = parsed?.type === "message" && parsed.message ? messages++ : null;
 					const entry = indexedEntry(parsed);
 					if (!entry || !(entry.words || entry.calls || entry.results)) continue;
@@ -231,16 +213,16 @@ export async function indexTranscript(db: DatabaseSync, sessionId: string, file:
 
 export interface SearchRequest {
 	query: string;
-	/** Sessions to search; all when absent. */
+
 	sessions?: string[];
-	/** Each session's entries between these times (inclusive), as task spans give them. */
+
 	spans?: { session: string; from: number; to: number }[];
-	/** Entries never to return, applied before ranking limits: off-lineage entries, the search's own call. */
+
 	exclude?: { session: string; entries: string[] }[];
-	/** `words` searches only what people and agents wrote; `all` also tool calls and results. */
+
 	fields?: "words" | "all";
 	limit?: number;
-	/** Ranked hits to skip, for paging. */
+
 	offset?: number;
 }
 
@@ -249,19 +231,15 @@ export interface SearchHit {
 	entry: string;
 	at: number;
 	role: string;
-	/** A message entry's `#N`; null for other records. */
+
 	ordinal: number | null;
-	/** The entry's line in its transcript, for one direct read of its body. */
+
 	offset: number;
 	length: number;
 	snippet: string;
 	score: number;
 }
 
-/**
- * The query's words as FTS5 phrases, any of which may match; bm25 ranks entries holding more of them, and rarer ones,
- * higher. Quoting keeps punctuation and FTS5 operators in the query literal.
- */
 function ftsQuery(query: string, fields: "words" | "all", sessions: string[]): string | undefined {
 	const terms = query.match(/[\p{L}\p{N}_]+/gu);
 	if (!terms?.length) return undefined;
@@ -271,7 +249,6 @@ function ftsQuery(query: string, fields: "words" | "all", sessions: string[]): s
 	return `(${text}) AND scope : (${sessions.map((id) => `"${scopeToken(id)}"`).join(" OR ")})`;
 }
 
-/** Ranked entries matching words of `query`, newest first among equal scores. */
 export function searchIndex(db: DatabaseSync, request: SearchRequest): SearchHit[] {
 	const fields = request.fields ?? "all";
 	const eligible = eligibility(request);
@@ -279,14 +256,13 @@ export function searchIndex(db: DatabaseSync, request: SearchRequest): SearchHit
 	const { where, params } = eligible;
 	const limit = request.limit && request.limit > 0 ? request.limit : 20;
 	const offset = request.offset && request.offset > 0 ? request.offset : 0;
-	// A snippet from each text column; the first that holds a match is shown. Letting FTS5 choose could pick `scope`.
+
 	const columns = fields === "words" ? [0] : [0, 1, 2];
 	const snippets = columns
 		.map((column) => `snippet(entries, ${column}, '\u00ab', '\u00bb', '\u2026', 24) as snippet${column}`)
 		.join(", ");
 	const rows = db
 		.prepare(
-			// The scope column only selects sessions; it weighs nothing in ranking.
 			`select session_id, entry_id, at, role, ordinal, offset, length, bm25(entries, 1, 1, 1, 0) as score, ${snippets}
 			from entries where ${where} order by echo, score, at desc limit ? offset ?`,
 		)
@@ -316,7 +292,6 @@ export function searchIndex(db: DatabaseSync, request: SearchRequest): SearchHit
 	}));
 }
 
-/** How many entries `request` matches, under the same eligibility as `searchIndex`, for paging. */
 export function countIndex(db: DatabaseSync, request: SearchRequest): number {
 	const eligible = eligibility(request);
 	if (!eligible) return 0;
@@ -325,7 +300,6 @@ export function countIndex(db: DatabaseSync, request: SearchRequest): number {
 	).n;
 }
 
-/** The query and every eligibility rule as one WHERE clause, so filtering happens before ranking limits. */
 function eligibility(request: SearchRequest): { where: string; params: (string | number)[] } | undefined {
 	const sessions = request.sessions?.length
 		? request.sessions
@@ -350,10 +324,6 @@ function eligibility(request: SearchRequest): { where: string; params: (string |
 	return { where: where.join(" and "), params };
 }
 
-/**
- * The runtime's side of the index: a worker thread (`transcript-indexer.worker.ts`) keeps it current, so tokenizing gigabytes
- * of transcript never holds the runtime's own thread, and searches read it through a separate read-only connection.
- */
 export class TranscriptIndexer {
 	private readonly path: string;
 	private readonly worker: Worker;
@@ -369,16 +339,14 @@ export class TranscriptIndexer {
 		this.worker.unref();
 	}
 
-	/** Index what `sessionId`'s transcript holds beyond what was read before. */
 	update(sessionId: string, file: string): void {
 		this.worker.postMessage({ sessionId, file });
 	}
 
-	/** A page of ranked hits, and how many entries match in all. */
 	search(request: SearchRequest): { hits: SearchHit[]; total: number } {
 		if (!this.reader) {
 			this.reader = openIndex(this.path, true);
-			// The worker writes while searches read; wait out its short transactions instead of failing.
+
 			this.reader.exec("pragma busy_timeout = 5000");
 		}
 		return { hits: searchIndex(this.reader, request), total: countIndex(this.reader, request) };

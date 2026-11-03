@@ -1,7 +1,5 @@
 #!/usr/bin/env node
-// Mail a Pi session: pi-send <session-id> [--from <name>] [message]
-// Without a message argument, the message is read from stdin. Starts the session-state runtime when none runs,
-// prints the mail id, and says on stderr when the session is not running and the mail waits.
+
 import { readFileSync } from "node:fs";
 import "../src/register.mjs";
 
