@@ -14,7 +14,6 @@ import { type Conversations, openConversations, PAGE_SIZE } from "../src/backend
 import { openWorldBackend, type WorldBackend } from "../src/backend/world-backend.js";
 import type { ConversationPage, TranscriptEntry, WorldSnapshot } from "../src/world.js";
 
-// Seam 1 for the conversation panel: the backend API in Node, without Electron, over a real session-state runtime.
 const state = tempStateDir();
 const dir = mkdtempSync(join(tmpdir(), "aw-conversation-"));
 const proc = standInProcess();
@@ -39,7 +38,6 @@ const START = Date.parse("2026-10-19T09:00:00Z");
 type Raw = { type: string; id: string; timestamp: string } & Record<string, unknown>;
 const stamp = (n: number) => new Date(START + n * 1000).toISOString();
 
-/** Write `entries` as Pi's session JSONL and report them to the runtime's index as the bridge would. */
 async function indexedSession(id: string, entries: Raw[], extra: Record<string, unknown> = {}) {
 	const file = join(dir, `${id}.jsonl`);
 	const header = { type: "session", id: "header", timestamp: stamp(0) };
@@ -72,7 +70,6 @@ const message = (id: string, n: number, body: Record<string, unknown>): Raw => (
 	message: body,
 });
 
-/** A short, real-looking session: a request, thinking, a tool call and its result, mail, and a reply with code. */
 const SESSION: Raw[] = [
 	message("u1", 1, { role: "user", content: "Run the session-state suite and fix whatever breaks." }),
 	message("a1", 2, {
@@ -209,7 +206,6 @@ test("pages run newest first with cursors, and every entry of a long transcript 
 		seen.unshift(...page.entries.map((entry) => entry.id));
 		cursors.push(page.before);
 		if (!page.before) break;
-		// The cursor is the first entry of this page: the next page ends just before it.
 		expect(page.before).toBe(page.entries[0].id);
 		before = page.before;
 	}
@@ -251,7 +247,6 @@ test("marking a finished character seen clears needs-you in every view, with the
 	await vi.waitFor(() => expect(facts("seen-1")).toMatchObject({ unseen: false, needsYouSince: null }), {
 		timeout: 3000,
 	});
-	// The runtime's own record, which the sidebar, dashboard, and notch read.
 	expect(
 		query<{ needs: number | null }>(state.dbPath, "select needs_you_since as needs from sessions where id = 'seen-1'"),
 	).toEqual([{ needs: null }]);

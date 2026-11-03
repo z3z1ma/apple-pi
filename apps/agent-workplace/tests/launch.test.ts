@@ -15,9 +15,6 @@ import { afterAll, beforeAll, beforeEach, expect, test, vi } from "vitest";
 import agentWorkplace from "../../../extensions/agent-workplace.js";
 import { ELECTRON_VERSION } from "../src/launch.js";
 
-// Seam 3: the `/workplace` command with a fake `npm` on PATH. The fake installs a stand-in Electron package whose
-// `@electron/get` reports progress (or fails as if offline) and whose install.js writes a stand-in Electron binary;
-// nothing is downloaded.
 const root = mkdtempSync(join(tmpdir(), "aw-launch-"));
 const bin = join(root, "bin");
 const fixture = join(root, "fixture");
@@ -29,7 +26,6 @@ const FAKE_NPM_OK = `#!/bin/sh
 while [ $# -gt 0 ]; do [ "$1" = "--prefix" ] && prefix="$2"; shift; done
 /bin/cp -R "${fixture}/node_modules" "$prefix/"
 `;
-// As npm 11 reports a registry it cannot resolve; it has already begun writing node_modules.
 const FAKE_NPM_OFFLINE = `#!/bin/sh
 while [ $# -gt 0 ]; do [ "$1" = "--prefix" ] && prefix="$2"; shift; done
 /bin/mkdir -p "$prefix/node_modules/.staging"
@@ -165,7 +161,7 @@ test("the retry shows each install step in the status line, then opens the world
 }, 20000);
 
 test("once installed, /workplace opens at once; an app that quits at start says why", async () => {
-	fakeNpm("#!/bin/sh\nexit 3\n"); // never called
+	fakeNpm("#!/bin/sh\nexit 3\n");
 	await world("", ctx);
 	expect(notices.map((n) => n.message)).toEqual(["Opening Agent Workplace."]);
 	expect(statuses).toEqual(["Agent Workplace: opening...", undefined]);

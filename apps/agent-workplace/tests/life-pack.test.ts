@@ -9,9 +9,6 @@ import { floorFidgets } from "../web/game/fidget-spots.js";
 import { findPath, gridFor, isOpen } from "../web/game/pathing.js";
 import type { PlaceData, Point } from "../web/theme.js";
 
-// Life in the places (tickets 06 and 07): every look's idle sheet (eight standing poses) and each place's points of
-// interest, where wanderers pause. The pack check holds every pack to both; a pack may leave either out, but what it
-// has must be right.
 const themesDir = fileURLToPath(new URL("../themes/", import.meta.url));
 const packs = readdirSync(themesDir).filter((id) => existsSync(join(themesDir, id, "theme.json")));
 const load = (id: string, name: string): PlaceData =>
@@ -31,7 +28,6 @@ const editJson = (file: string, change: (value: any) => void) => {
 	writeFileSync(file, JSON.stringify(value));
 };
 
-/** Places where characters stand about and may wander. */
 const LIVED_IN = ["square", "street", "headquarters", "common-room", "wing-small", "wing-large"];
 
 describe.each(packs)("%s", (id) => {
@@ -64,7 +60,6 @@ describe.each(packs)("%s", (id) => {
 					Math.hypot(at[0] - point.at[0], at[1] - point.at[1]),
 					`${point.name} near ${what}`,
 				).toBeGreaterThanOrEqual(least);
-			// Reachable with everyone at their spots.
 			const path = findPath(crowded, from, [point.at]);
 			expect(path && Math.hypot(path.goal[0] - point.at[0], path.goal[1] - point.at[1]), point.name).toBeLessThan(0.05);
 		}

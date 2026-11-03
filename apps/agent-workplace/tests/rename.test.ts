@@ -14,9 +14,6 @@ import { type Lifecycle, openLifecycle } from "../src/backend/lifecycle.js";
 import { openWorldBackend, type WorldBackend } from "../src/backend/world-backend.js";
 import type { CommandResult, FeedLine } from "../src/world.js";
 
-// Seam 1 for renaming an agent (ticket 12): the backend API over a real session-state runtime, with a faux Pi session
-// running the real bridge. Rename sends the runtime's `rename` command and resolves with its receipt; the new name is
-// then the character's in the world snapshot (the figure, the side panel, and the conversation panel all read it).
 const state = tempStateDir();
 let world: WorldBackend;
 let commands: Commands;
@@ -58,11 +55,9 @@ test("Rename on an awake agent sends rename with the new name, resolves with its
 	const { run, id } = await awake();
 	const receipt = await lifecycle.rename(id, "  Ada   the  builder ");
 	expect(receipt).toEqual({ ok: true, stage: "applied" });
-	// One line: the name is also the tmux window's.
 	expect(renames(id)).toEqual([{ kind: "rename", name: "Ada the builder" }]);
 	expect(run.session.sessionManager.getSessionName()).toBe("Ada the builder");
 	await soon(() => expect(nameOf(id)).toBe("Ada the builder"));
-	// The chatbox line, from the runtime's own record of the command.
 	await soon(() => expect(lines.map((line) => line.text)).toContain("Rename for Ada the builder: Ada the builder"));
 }, 40000);
 

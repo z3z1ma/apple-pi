@@ -9,9 +9,6 @@ import { floorFidgets } from "../web/game/fidget-spots.js";
 import { findPath, gridFor, isOpen } from "../web/game/pathing.js";
 import type { PlaceData, Point } from "../web/theme.js";
 
-// Recruiting in the places (ticket 10): the square's recruiter stands at a booth on open floor, in sight and out of
-// everyone's way, and the headquarters' desk recruits workers; the pack check holds every pack to both, and to the
-// theme's own words for them.
 const themesDir = fileURLToPath(new URL("../themes/", import.meta.url));
 const packs = readdirSync(themesDir).filter((id) => existsSync(join(themesDir, id, "theme.json")));
 const load = (id: string, name: string): PlaceData =>
@@ -33,7 +30,6 @@ describe.each(packs)("%s", (id) => {
 		];
 		for (const other of keepClear)
 			expect(Math.hypot(at[0] - other[0], at[1] - other[1]), `recruiter near ${other}`).toBeGreaterThanOrEqual(1.2);
-		// With everyone at their spots and the recruiter at its booth, the avatar still reaches it and every door.
 		const crowded = gridFor(square, [...square.spots, at, ...(square.host ? [square.host.at] : [])]);
 		for (const [way, from] of Object.entries(square.entries)) {
 			const path = findPath(crowded, from, [
@@ -53,7 +49,6 @@ describe.each(packs)("%s", (id) => {
 
 	it("keeps the recruiter in sight: no foreground piece is drawn over it", () => {
 		const [x, y] = square.recruiter!.at;
-		// A standing figure covers about 0.9 tiles across and two tiles up from its feet.
 		for (const { rect, feet } of square.foreground ?? []) {
 			const [rx, ry, rw, rh] = rect;
 			const overlaps = x + 0.45 > rx && x - 0.45 < rx + rw && y > ry && y - 2 < ry + rh;

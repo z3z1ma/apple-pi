@@ -5,8 +5,6 @@ import { pathToFileURL } from "node:url";
 import { afterAll, describe, expect, it } from "vitest";
 import { fileLink, openFileLink, openLink, webLink } from "../src/backend/links.js";
 
-// Links in transcripts open in the system browser through the main process (Electron's `shell.openExternal`, passed
-// in here): web links only, since a transcript is untrusted text.
 describe("opening a transcript's links", () => {
 	it("opens http and https links as full URLs", async () => {
 		const opened: string[] = [];
@@ -52,8 +50,6 @@ describe("opening a transcript's links", () => {
 	});
 });
 
-// Links to files open in the operator's default app for them (Electron's `shell.openPath`, passed in here), and a file
-// that could run is shown in Finder instead (`shell.showItemInFolder`).
 describe("opening a transcript's links to files", () => {
 	const home = mkdtempSync(join(tmpdir(), "aw-links-"));
 	mkdirSync(join(home, "docs"));
@@ -72,7 +68,6 @@ describe("opening a transcript's links to files", () => {
 		expect(fileLink(guide, "/elsewhere")).toBe(guide);
 		expect(fileLink(pathToFileURL(guide).href, undefined)).toBe(guide);
 		expect(fileLink("docs/my%20notes.md", home)).toBe(join(home, "docs", "my notes.md"));
-		// A line suffix is dropped when the path with it is not a file.
 		expect(fileLink("docs/guide.md:12", home)).toBe(guide);
 		expect(fileLink("docs/guide.md:12:3", home)).toBe(guide);
 		expect(fileLink("docs/guide.md#L4-L9", home)).toBe(guide);
