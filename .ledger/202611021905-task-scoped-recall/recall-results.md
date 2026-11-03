@@ -1,6 +1,6 @@
 # Indexed recall evaluation
 
-Status: local-prefix candidate comparison complete; relevance judging and actual-tool integration gates pending.
+Status: local-prefix source-quality judging complete; task-control judging and actual-tool integration gates pending.
 
 ## Frozen setup
 
@@ -16,9 +16,9 @@ All twelve baseline displayed responses are byte-for-byte identical to the retai
 | Set | Relevant@5 | General evidence-hit questions | Bounded episode sources@5 | Episode-hit questions | Sufficient actual display |
 | --- | --- | --- | --- | --- | --- |
 | Frozen six | 10/30 | 5/6 | 7/19 | 4/6 | 2/6, reused judgments |
-| Previous held-out six | incomplete: 10 returned sources unjudged | incomplete | 6/20 | 3/6 | unjudged |
+| Previous held-out six | 9/30 | 3/6 | 6/20 | 3/6 | 2/6, newly judged |
 
-The previous experiment stopped after a mandatory episode loss and never completed the previous held-out precision/display labels. That absence remains explicit. The new comparison cannot claim complete non-inferiority from those partial labels.
+The previous experiment stopped after a mandatory episode loss and left previous held-out precision/display incomplete. Ciaran completed those labels in this inquiry under the frozen criteria; these are new judgments, not labels retroactively claimed for the old experiment.
 
 Latency case selected before candidate results: Q3, largest NL-query prefix among the old twelve, 110,294,070 normalized JSONL bytes. First full current-tool call 404.57 ms; 20 sequential warm full-tool calls p95=407.61 ms. OS cache state is uncontrolled. These are local API calls through a manager facade, not provider/tool-dispatch or live-runtime end-to-end latency.
 
@@ -35,11 +35,19 @@ Frozen candidate `f026f6f1`, original queries, top five, eligible lineage corpus
 | Previous held-out six, unchanged regex only | 2 | 2 |
 | Previous held-out six, combined | 6/20 | 9/20 |
 
-Per-question changes: Q1 gains one episode source, Q4 loses its sole episode source; H4 gains two and H5 gains one. All other episode numerators are unchanged. These aggregate episode counts meet non-inferiority, so they do not justify stopping the inquiry. Q4's regression is retained rather than hidden by the aggregate. General relevance still has six novel frozen hits and incomplete previous held-out labels. No precision or actual-display pass is claimed. Ciaran owns independent source judging under the frozen criteria.
+Per-question changes: Q1 gains one episode source, Q4 loses its sole episode source; H4 gains two and H5 gains one. All other episode numerators are unchanged. These aggregate episode counts meet non-inferiority, so they do not justify stopping the inquiry. Q4's regression is retained rather than hidden by the aggregate. Ciaran completed general source relevance for both engines: frozen relevant slots 10/30 -> 10/30 and evidence-hit questions 5/6 -> 5/6; previous held-out relevant slots 9/30 -> 10/30 and evidence-hit questions 3/6 -> 3/6. The three aggregate source-quality criteria hold separately on both sets. Actual indexed display remains unverified.
 
 Q3 indexed warm query p95=8.63 ms over 20 sequential repetitions, against full current-tool p95=407.61 ms (47.2x faster). First indexed query 8.55 ms; index construction 734.91 ms; temporary database+WAL+SHM 58,274,176 bytes. This passes the low-level local latency threshold only. It excludes persistent-index construction as predeclared and does not establish production multi-person or end-to-end latency.
 
 Concurrent maintainer reflection changed adapter setup cleanup and removed unused option properties, without changing retrieval. Kofi reran all twelve candidate cases after inspecting that diff: complete private response records are byte-for-byte identical to the initial candidate run. No adverse output was tuned away. Original and check runs, code hashes and timing samples remain privately retained. The five current-engine public tests also passed in Kofi's own rerun.
+
+## Independent source judgments and regression disclosure
+
+Private complete judgments: `/tmp/ciaran-task-recall/index-judging/judgments-v1-private.json`, mode0600, exact JSON SHA256 `f4105b41737fdfb9b9c9ee69ef55786771a230fb0f46d72c6c4b02318bd4e63c`. Ciaran judged all 64 unique question/source pairs, rereading all 20 returned sources absent from supplied labels (two had older withdrawn-ranking judgments). He independently reproduced all 24 complete baseline/candidate outputs and checked corpus, queries, routing and source identity. Kofi independently checked the saved artifact hash, all 64 source-record hashes, ranked membership, display hashes where present, label completeness and relevance counts. This is one semantic rater plus mechanical verification, not inter-rater agreement.
+
+Frozen Q4 loses its sole episode source while Q1 gains one of four. Micro source totals tie, but per-question macro episode recall falls 45.8% -> 33.3%. This is a disclosed regression under the predeclared aggregate gate, not a post-results veto criterion. The three previous-held-out gains are notebook-writing records repeating facts already available in baseline results; they add no evidence-hit question. More recovered records therefore do not establish new facts or better answer coverage.
+
+The explicit multi-source task baseline control recovers 6/19 episode sources, with 12 returned sources needing general-relevance judgments. Its displayed sufficiency is not yet judged. This remains a separately defined control, not an existing cross-person tool capability.
 
 ## Task-set timing and limits
 
@@ -51,7 +59,7 @@ The requested freeze-before-scope-build order was not met: scope implementation 
 
 ## Integration boundaries
 
-The temporary eligible-prefix index measures local-corpus ranking and low-level query latency. FTS5 collection statistics span the full table even when SQL filters session/span matches; a production multi-session index can rank the same eligible entries differently. Actual intended-corpus/tool checks are still necessary.
+The temporary eligible-prefix index measures local-corpus ranking and low-level query latency. A standalone in-memory SQLite diagnostic confirmed that adding another person's rows can change ranking within an unchanged eligible subset, because FTS5 collection statistics span the full table even when SQL filters session/span matches. This is a method limit, not a regression requirement that our task-control CLI must enforce. Actual intended-corpus/tool checks are still necessary.
 
 FTS snippets are diagnostic, not actual `search_session` display. Production eligibility requires the frozen actual-display gate, integrated lineage/issuer selection, permission/membership checks, stable exact recovery and end-to-end query latency. A fast low-level call alone cannot pass those gates.
 
@@ -73,16 +81,25 @@ node --import ./components/session-state/src/register.mjs \
 
 The final judgments argument is optional. For timing, use the privately selected single-question Q3 gold and 20 repetitions. Every run records source/harness/gold hashes, prefix/projection hashes, returned-source membership and raw private outputs. Cleanup removes temporary prefixes/databases, not retained private evidence.
 
-Public adapter checks (no private data, current engine only):
+The explicit multi-source task control uses a separate private task gold artifact and retains its report outside the repository:
+
+```bash
+node --import ./components/session-state/src/register.mjs \
+  .ledger/202611021905-task-scoped-recall/task-control.mjs \
+  PRIVATE_TASK_GOLD /tmp/PRIVATE_TASK_OUTPUT BASELINE_ROOT
+```
+
+Public adapter/control checks (synthetic data, current engine only):
 
 ```bash
 node --import ./components/session-state/src/register.mjs \
   --test --test-concurrency=1 \
-  .ledger/202611021905-task-scoped-recall/engine-replay.test.mjs
+  .ledger/202611021905-task-scoped-recall/engine-replay.test.mjs \
+  .ledger/202611021905-task-scoped-recall/task-control.test.mjs
 ```
 
-The initial three adapter tests passed. Maintainer reflection replaced helper-structure assertions with five replay-level behavioral checks: default historical recovery, all-branch recovery, supplementary relevance labels, frozen-evidence rejection, and failed-setup cleanup. All five passed serially against the detached baseline; rerunning both private sets after the adapter cleanup change preserved all twelve complete response records exactly. The public tests exercise the current engine only; the private candidate observations above are separate evidence, not coverage from those tests. No full suite, provider run, runtime restart or live backfill ran in this evaluation lane.
+The initial three adapter tests passed. Maintainer reflection replaced helper-structure assertions with five replay-level behavioral checks: default historical recovery, all-branch recovery, supplementary relevance labels, frozen-evidence rejection, and failed-setup cleanup. All five passed serially against the detached baseline; rerunning both private sets after the adapter cleanup change preserved all twelve complete response records exactly. Three task-control CLI checks additionally passed: cross-person recovery with stable source identity/original ordinals and unchanged input bytes, rejection of undeclared task intervals, and rejection of changed frozen evidence. The combined eight checks passed serially against the detached baseline. The standalone SQLite diagnostic remains method evidence rather than a test of task-control behavior. The public tests exercise the current engine only; the private candidate observations above are separate evidence, not coverage from those tests. No full suite, provider run, runtime restart or live backfill ran in this evaluation lane.
 
 ## Next step
 
-Complete missing source relevance and baseline previous-held-out display judgments. Fiona owns a separate-branch actual tool candidate with SQL eligibility before top-k and the existing formatter. Evaluate its frozen actual output, intended-corpus ranking and end-to-end latency before recommending replacement. Build the explicit multi-source task-corpus control before inspecting task outputs; all four non-inferiority criteria apply separately there, and unknown task permissions cannot satisfy the separate authorization gate.
+Complete task-control source relevance and display judgments. Fiona owns a separate-branch actual tool candidate with SQL eligibility before top-k and the existing formatter. Evaluate its frozen actual output, intended-corpus ranking and end-to-end latency before recommending replacement. The explicit multi-source task-corpus control was frozen before its output inspection; next judge its displayed results and compare the actual task candidate against it. All four non-inferiority criteria apply separately there, and unknown task permissions cannot satisfy the separate authorization gate.
