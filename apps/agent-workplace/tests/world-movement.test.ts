@@ -8,11 +8,9 @@ import type { Character, WorldSnapshot } from "../src/world.js";
 import { BODY_CLEARANCE, clearanceAt, clearRun, findPath, gridFor, isOpen } from "../web/game/pathing.js";
 import type { PlaceData, Point } from "../web/theme.js";
 
-// Seam 2 (the built world UI in headless Chrome against a fixture backend), for walking, pointing, and the camera.
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const ORIGIN = "http://localhost";
 const appDir = fileURLToPath(new URL("..", import.meta.url));
-// AGENT_WORLD_SHOTS=<dir> saves screenshots, including a frame sequence of one walk, as aw-06-*.png.
 const SHOTS = process.env.AGENT_WORLD_SHOTS;
 
 const fantasy = (name: string): PlaceData =>
@@ -61,15 +59,13 @@ async function openWorld(first: WorldSnapshot) {
 			conversation: async () => ({ ok: true, entries: [], before: null, missing: 0 }),
 			markSeen: async () => ({ ok: true }),
 		};
-		// Whether each context menu the page saw was stopped before the browser could show its own.
 		(window as any).contextMenus = [];
 		document.addEventListener("contextmenu", (event) => (window as any).contextMenus.push(event.defaultPrevented));
 	}, first);
 	await page.goto(`${ORIGIN}/index.html?world`);
-	// These tests click the world itself: let clicks pass through the interface's panels (still drawn for screenshots).
 	await page.addStyleTag({ content: ".aw-interface, .aw-interface * { pointer-events: none !important; }" });
 	await vi.waitFor(async () => expect(await avatar(page)).toBeTruthy(), { timeout: 15000 });
-	await page.waitForTimeout(400); // the arrival fade
+	await page.waitForTimeout(400);
 	return { page, errors };
 }
 
@@ -110,11 +106,9 @@ const arrived = (page: Page, timeout = 12000) =>
 async function shot(page: Page, name: string) {
 	if (!SHOTS) return;
 	mkdirSync(SHOTS, { recursive: true });
-	// CSS animations stay at their first frame in headless Chrome; "disabled" shows them finished.
 	await page.screenshot({ path: join(SHOTS, `aw-06-${name}.png`), animations: "disabled" });
 }
 
-/** Every point along a path, every few hundredths of a tile. */
 function along(points: Point[]): Point[] {
 	const out: Point[] = [];
 	for (let i = 1; i < points.length; i++) {
@@ -126,7 +120,6 @@ function along(points: Point[]): Point[] {
 	return out;
 }
 
-/** The avatar in one animation frame, and where the place's corner was on screen. */
 interface Frame {
 	t: number;
 	x: number;
@@ -137,7 +130,6 @@ interface Frame {
 	view: Point;
 }
 
-/** Record the avatar every animation frame until `stop()` in the page. */
 const record = (page: Page) =>
 	page.evaluate(() => {
 		const frames: Frame[] = [];
@@ -164,20 +156,17 @@ test("the avatar starts at the hall's start; a click across the room walks strai
 		expect([start.x, start.y]).toEqual(HALL.entries.start);
 		expect(start.look).toBe("avatar-traveller");
 		await shot(page, "hall-start");
-		// Across the hall, round the long table in the south-west to the gap beside the shelves.
 		const goal: Point = [4.6, 13];
 		await record(page);
 		await clickAt(page, goal);
 		const walk = (await avatar(page))!;
 		const grid = gridFor(HALL);
 		for (const point of along(walk.path)) expect(isOpen(grid, point), `${point}`).toBe(true);
-		// No zig-zag: every corner is needed, the run that skips it would pass too close to furniture.
 		const need = (p: Point) => Math.min(BODY_CLEARANCE, clearanceAt(grid, p));
 		for (let i = 1; i < walk.path.length - 1; i++)
 			expect(clearRun(grid, walk.path[i - 1], walk.path[i + 1], need(walk.path[i - 1]), need(walk.path[i + 1]))).toBe(
 				false,
 			);
-		// A frame sequence of the walk, for judging the feel.
 		for (let i = 1; i <= 6; i++) {
 			await page.waitForTimeout(450);
 			await shot(page, `walk-${i}`);
@@ -186,14 +175,12 @@ test("the avatar starts at the hall's start; a click across the room walks strai
 		const frames = await recorded(page);
 		const end = (await avatar(page))!;
 		expect(Math.hypot(end.x - goal[0], end.y - goal[1])).toBeLessThan(0.03);
-		// Continuous: from the first step to arrival, every frame moves, and none jumps.
 		const moving = frames.filter((f) => f.moving);
 		for (let i = 1; i < moving.length; i++) {
 			const step = Math.hypot(moving[i].x - moving[i - 1].x, moving[i].y - moving[i - 1].y);
 			expect(step).toBeGreaterThan(0);
 			expect(step).toBeLessThan(0.3);
 		}
-		// The walk cycle runs: all four phases show.
 		expect(new Set(moving.map((f) => f.frame % 4)).size).toBe(4);
 		expect(errors).toEqual([]);
 	} finally {
@@ -205,7 +192,6 @@ test("a click on furniture walks to the nearest open floor; a second click mid-w
 	const { page, errors } = await openWorld(world());
 	try {
 		const orla = await figure(page, HQ);
-		// The weapon rack on the east side of the hall (the desk at the top recruits, ticket 10).
 		const table: Point = [25, 9.4];
 		const expected = findPath(gridFor(HALL, [[orla.x, orla.y]]), HALL.entries.start, table)!.goal;
 		await clickAt(page, table);
@@ -215,7 +201,6 @@ test("a click on furniture walks to the nearest open floor; a second click mid-w
 		expect(isOpen(gridFor(HALL), [end.x, end.y])).toBe(true);
 		expect(Math.hypot(end.x - table[0], end.y - table[1])).toBeLessThan(1.6);
 
-		// Walk west (open floor east of the notice board, whose click opens a panel), then click east while still walking.
 		await record(page);
 		await clickAt(page, [7.5, 11]);
 		await page.waitForTimeout(700);
@@ -226,7 +211,6 @@ test("a click on furniture walks to the nearest open floor; a second click mid-w
 		const frames = await recorded(page);
 		const final = (await avatar(page))!;
 		expect(Math.hypot(final.x - 24, final.y - 11.5)).toBeLessThan(0.03);
-		// From the first click to arrival, the avatar never stood still for a frame.
 		const first = frames.findIndex((f) => f.moving);
 		const last = frames.findLastIndex((f) => f.moving);
 		const walk = frames.slice(first, last + 1);
@@ -235,7 +219,6 @@ test("a click on furniture walks to the nearest open floor; a second click mid-w
 		expect(turn).toBeGreaterThan(0);
 		for (let i = 1; i < walk.length; i++)
 			expect(Math.hypot(walk[i].x - walk[i - 1].x, walk[i].y - walk[i - 1].y)).toBeGreaterThan(0);
-		// It turned where it was: the new walk starts from its position then, not from a grid cell.
 		expect(Math.hypot(walk[turn].x - walk[turn - 1].x, walk[turn].y - walk[turn - 1].y)).toBeLessThan(0.3);
 		expect(errors).toEqual([]);
 	} finally {
@@ -257,7 +240,6 @@ test("hover text names the left-click action; right click lists every action and
 		await pointAt(page, [dx + dw / 2, dy + dh / 2]);
 		await vi.waitFor(async () => expect(await hoverText(page)).toBe("Enter Archway to the gallery / 1 more option"));
 		await shot(page, "hover-door");
-		// Just beside the door, only walking.
 		await pointAt(page, [dx - 0.6, dy + dh / 2]);
 		await vi.waitFor(async () => expect(await hoverText(page)).toBe("Walk here"));
 
@@ -275,7 +257,6 @@ test("hover text names the left-click action; right click lists every action and
 			"Cancel",
 		]);
 		await shot(page, "menu");
-		// Right clicks on the menu, the title, and the hover text are the game's too.
 		const box = (await menu.boundingBox())!;
 		await page.mouse.click(box.x + 8, box.y + 6, { button: "right" });
 		await page.mouse.click(640, 30, { button: "right" });
@@ -288,7 +269,6 @@ test("hover text names the left-click action; right click lists every action and
 		await menu.waitFor({ state: "detached", timeout: 2000 });
 		await clickAt(page, body, "right");
 		await page.getByRole("menuitem", { name: "Examine Orla the Wise" }).click();
-		// The interface's character card answers it.
 		await vi.waitFor(async () =>
 			expect(await page.evaluate(() => (window as any).agentWorldInterface.intents())).toContainEqual({
 				kind: "examine",
@@ -296,7 +276,6 @@ test("hover text names the left-click action; right click lists every action and
 			}),
 		);
 		await shot(page, "examine");
-		// Examining does not walk.
 		expect((await avatar(page))?.moving).toBe(false);
 		expect(await view(page, "talkedTo()")).toEqual([]);
 		expect(errors).toEqual([]);
@@ -317,21 +296,17 @@ test("talking to a character and using a door walk up first; walking past a door
 		const by = (await avatar(page))!;
 		expect(by.moving).toBe(false);
 		expect(Math.hypot(by.x - orla.x, by.y - orla.y)).toBeLessThan(1.5);
-		// Facing Orla.
 		const [fx, fy] = [orla.x - by.x, orla.y - by.y];
 		expect(by.facing).toBe(Math.abs(fx) > Math.abs(fy) ? (fx < 0 ? "left" : "right") : fy < 0 ? "up" : "down");
 		await shot(page, "talked");
-		// The conversation opened over the world; Escape closes it.
 		await page.getByRole("dialog", { name: "Conversation with Orla the Wise" }).waitFor({ timeout: 2000 });
 		await page.keyboard.press("Escape");
 
-		// Walk to the archway's stand point and past the door: no travel.
 		const archway = HALL.doors.find((d) => d.name === "Archway to the gallery")!;
 		await clickAt(page, archway.standAt);
 		await arrived(page);
 		await clickAt(page, [archway.standAt[0], archway.standAt[1] + 2.5]);
 		await arrived(page);
-		// "Walk here" on the door itself walks, too.
 		const [dx, dy, dw, dh] = archway.rect;
 		await clickAt(page, [dx + dw / 2, dy + dh / 2], "right");
 		await page.getByRole("menuitem", { name: "Walk here" }).click();
@@ -339,18 +314,15 @@ test("talking to a character and using a door walk up first; walking past a door
 		await page.waitForTimeout(400);
 		expect(await place(page)).toBe(`headquarters:${HQ}`);
 
-		// Enter: walk to the stand point, then go through and arrive at the gallery's entry from the hall.
 		await clickAt(page, [archway.standAt[0], archway.standAt[1] + 3]);
 		await arrived(page);
 		await record(page);
 		await clickAt(page, [dx + dw / 2, dy + dh / 2]);
 		await vi.waitFor(async () => expect(await place(page)).toBe(`gallery:${HQ}`), { timeout: 8000 });
-		// It comes in through the gallery's archway and walks on to its entry from the hall, facing into the room.
 		await arrived(page);
 		const frames = await recorded(page);
 		const lastInHall = frames.filter((f) => f.x > 20).at(-1)!;
 		expect(Math.hypot(lastInHall.x - archway.standAt[0], lastInHall.y - archway.standAt[1])).toBeLessThan(1);
-		// Through the hall's doorway without a stop at its stand point: every frame from there on moves.
 		const throughHall = frames.filter(
 			(f) => f.x > 20 && Math.hypot(f.x - archway.standAt[0], f.y - archway.standAt[1]) < 0.4,
 		);
@@ -372,7 +344,6 @@ test("talking to a character and using a door walk up first; walking past a door
 test("the camera follows the avatar across a place larger than the window, and the wheel zooms smoothly", async () => {
 	const { page, errors } = await openWorld(world());
 	try {
-		// Through the hall doors to the square, which is wider than the window.
 		const doors = HALL.doors.find((d) => d.name === "Hall doors")!;
 		const [dx, dy, dw, dh] = doors.rect;
 		await clickAt(page, [dx + dw / 2, dy + dh / 2]);
@@ -384,7 +355,6 @@ test("the camera follows the avatar across a place larger than the window, and t
 		expect([arrival.x, arrival.y]).toEqual(square.entries.headquarters);
 		await shot(page, "square-arrival");
 
-		// Walk east along the street; the view follows, easing, with the avatar near the middle.
 		await record(page);
 		await clickAt(page, [24, 10.2]);
 		await page.waitForTimeout(1500);
@@ -395,26 +365,21 @@ test("the camera follows the avatar across a place larger than the window, and t
 		await arrived(page, 15000);
 		await page.waitForTimeout(1500);
 		const frames = await recorded(page);
-		// Near the painting's east edge the view stops at the edge: the painting still fills the window (no backdrop
-		// shows past it), and the avatar, clear of the side panel, stays where it is on screen.
 		const [sx] = await screen(page, [34, 10]);
 		const [east] = await screen(page, [44, 10]);
 		expect(east).toBeCloseTo(1280, 0);
 		const panel = await page.evaluate(() => document.querySelector(".aw-side")!.getBoundingClientRect().left);
 		expect(sx).toBeGreaterThan(640);
 		expect(sx + 24).toBeLessThan(panel);
-		// The view eased: it never moved more than a walking step's worth of screen in one frame.
 		for (let i = 1; i < frames.length; i++)
 			expect(
 				Math.hypot(frames[i].view[0] - frames[i - 1].view[0], frames[i].view[1] - frames[i - 1].view[1]),
 			).toBeLessThan(15);
 		await shot(page, "square-east");
-		// The square opens at the painting's own scale, larger than the window.
 		const opening = await page.evaluate(() => (window as any).agentWorldView.zoom());
 		expect(opening.zoom).toBeCloseTo(1, 5);
 		expect(frames.length).toBeGreaterThan(10);
 
-		// The wheel: out to the whole place, in to the closest, easing through the values in between.
 		const zooms: number[] = [];
 		await page.mouse.move(640, 400);
 		for (let i = 0; i < 6; i++) await page.mouse.wheel(0, 200);

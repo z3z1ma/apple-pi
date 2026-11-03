@@ -13,18 +13,13 @@ import type {
 } from "../src/integrations.js";
 import type { Character, CharacterFacts, WorldSnapshot } from "../src/world.js";
 
-// Seam 2 for the quest office and the library (tickets 24-26): the committed, built world UI in headless Chrome over a
-// fixture backend that answers the function places' API (Atlassian sign-in, Jira, Confluence, the outside-write gate,
-// delegation) and records every call, so a test can tell what was sent and that nothing was written unconfirmed.
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const ORIGIN = "http://localhost";
 const appDir = fileURLToPath(new URL("..", import.meta.url));
-// AGENT_WORLD_SHOTS=<dir> saves screenshots there as aw-24-*.png, aw-25-*.png, aw-26-*.png, in every theme.
 const SHOTS = process.env.AGENT_WORLD_SHOTS;
 const SITE = "https://acme.atlassian.net";
 const TOKEN = "ATATT-secret-token-123";
 
-// Each test walks the built world through a place and its panels; under load that takes longer than Vitest's 5 s.
 vi.setConfig({ testTimeout: 45_000 });
 
 let browser: Browser;
@@ -176,7 +171,6 @@ const PAGE: ConfluencePage = {
 		'<script>window.pwned = 5</script><img src="https://acme.atlassian.net/wiki/download/flow.png" alt="flow.png"><style>body{display:none}</style>',
 };
 
-/** Open the world over a fixture backend; `window.calls` records what it was asked, `window.answers` what it says. */
 async function openWorld(first: WorldSnapshot, signedIn: boolean, assigned: JiraIssue[] = ASSIGNED) {
 	const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
 	const errors: string[] = [];
@@ -349,7 +343,6 @@ interface NoticeView {
 	kind: string;
 	x: number;
 	y: number;
-	/** The paper as drawn, in tiles: its opaque bounds (pins included), unturned. */
 	paper: [number, number, number, number];
 	alpha: number;
 	sign: boolean;
@@ -363,9 +356,7 @@ async function shot(page: Page, name: string) {
 	await page.screenshot({ path: join(SHOTS, `${name}.png`), animations: "disabled" });
 }
 
-/** Travel to a place from the Places tab, and wait for it. */
 async function travel(page: Page, name: RegExp, key: string) {
-	// The open tab folds when clicked again: open Places only when it is not the tab shown.
 	const places = page.getByRole("tab", { name: "Places", exact: true });
 	if ((await places.getAttribute("aria-selected")) !== "true" || (await page.locator(".aw-side.aw-folded").count()))
 		await places.dispatchEvent("click");
@@ -374,7 +365,6 @@ async function travel(page: Page, name: RegExp, key: string) {
 	await page.waitForTimeout(700);
 }
 
-/** Talk to the place's host (the clerk, the librarian): a click on it walks up and opens its panel. */
 async function talkToHost(page: Page, dialog: string) {
 	await clickThrough(page);
 	const host = await view<{ x: number; y: number }>(page, "host()");
@@ -396,7 +386,6 @@ describe("Atlassian sign-in in Settings", () => {
 		await vi.waitFor(async () =>
 			expect(await section.getByRole("status").textContent()).toBe("Atlassian did not accept that email and token."),
 		);
-		// A refused token is not kept in the field either.
 		expect(await section.getByLabel("API token").inputValue()).toBe("");
 		await shot(page, "aw-24-settings-refused");
 
@@ -406,7 +395,6 @@ describe("Atlassian sign-in in Settings", () => {
 		expect(await section.textContent()).toContain("acme.atlassian.net");
 		expect(await section.textContent()).toContain("alex@acme.test");
 		expect(await section.textContent()).toContain("Set");
-		// The token is nowhere in the page once sent.
 		expect(await page.content()).not.toContain(TOKEN);
 		expect(await page.locator("input[type=password]").count()).toBe(0);
 		expect((await callsOf(page, "signInAtlassian")).at(-1)).toEqual([
@@ -459,13 +447,11 @@ describe("the quest office", () => {
 		await vi.waitFor(async () => expect(await notices(page)).toHaveLength(10));
 		const pinned = await notices(page);
 		const kinds = Object.fromEntries(pinned.map((n) => [n.key, n.kind]));
-		// The most pressing first: the highest priority, then high, then the rest.
 		expect(pinned.map((n) => n.key).slice(0, 2)).toEqual(["DATA-7", "APP-101"]);
 		expect(kinds).toMatchObject({ "DATA-7": "urgent", "APP-101": "urgent", "APP-97": "progress", "OPS-12": "open" });
 		expect(pinned.some((n) => n.key === "APP-126")).toBe(false);
 		await shot(page, "aw-24-board");
 
-		// Reading a notice walks to the board and opens the issue.
 		await clickThrough(page);
 		const first = pinned.find((n) => n.key === "APP-101")!;
 		const [sx, sy] = await screen(page, first.x, first.y);
@@ -510,7 +496,6 @@ describe("the quest office", () => {
 			"SameSite flag",
 		])
 			expect(text).toContain(shown);
-		// The description is sanitised: nothing ran, nothing loads, no handler or style survives.
 		const description = issueDialog.locator(".aw-issue-description");
 		expect(await description.locator("script, img, iframe, style, [onclick], [onerror], [style]").count()).toBe(0);
 		expect(await description.locator(".aw-rich-image").textContent()).toBe("safari-screenshot.png");
@@ -527,7 +512,6 @@ describe("the quest office", () => {
 			["openLink", `${SITE}/browse/APP-101`],
 			["openLink", `${SITE}/browse/APP-1`],
 		]);
-		// Back to the list, the search still there.
 		await issueDialog.getByRole("button", { name: /Back/ }).click();
 		await vi.waitFor(async () =>
 			expect(await page.getByRole("searchbox", { name: "Search every issue" }).inputValue()).toBe("safari"),
@@ -555,7 +539,6 @@ describe("the quest office", () => {
 		expect(await confirm.textContent()).toContain("APP-101 on acme.atlassian.net");
 		expect(await confirm.getByLabel("Exactly what is sent").textContent()).toBe("Fixed by setting SameSite=Lax.");
 		expect(await callsOf(page, "confirmWrite")).toEqual([]);
-		// The same confirmation as every place's: until it is answered, Tab never reaches the issue behind it.
 		for (let i = 0; i < 6; i++) {
 			await page.keyboard.press("Tab");
 			const behind = await page.evaluate(() => {
@@ -565,7 +548,6 @@ describe("the quest office", () => {
 			expect(behind, `Tab ${i + 1}`).toBe(false);
 		}
 		await shot(page, "aw-25-confirm-comment");
-		// Escape cancels the confirmation, not the issue; nothing is sent.
 		await page.keyboard.press("Escape");
 		await confirm.waitFor({ state: "detached" });
 		expect(await dialog.isVisible()).toBe(true);
@@ -582,7 +564,6 @@ describe("the quest office", () => {
 			["confirmWrite", { kind: "jira-comment", key: "APP-101", body: "Fixed by setting SameSite=Lax." }, "t2"],
 		]);
 		expect(describe[1]).toEqual({ kind: "jira-comment", key: "APP-101", body: "Fixed by setting SameSite=Lax." });
-		// Logged in the chatbox.
 		await vi.waitFor(async () =>
 			expect(await page.getByRole("log", { name: "World events" }).textContent()).toContain(
 				"You commented on APP-101.",
@@ -657,7 +638,6 @@ describe("the quest office", () => {
 		await talkToHost(page, "The quest office");
 		expect(await names()).toEqual(["The quest office"]);
 
-		// The rookery's letter from the Mail tab (the side panel lies under the panel's veil, so the click is dispatched).
 		await page.getByRole("tab", { name: "Mail", exact: true }).dispatchEvent("click");
 		await page.locator(".aw-mail-write").dispatchEvent("click");
 		await vi.waitFor(async () => expect(await names()).toEqual(["The rookery"]));
@@ -666,7 +646,6 @@ describe("the quest office", () => {
 		await page.waitForTimeout(300);
 		expect(await names()).toEqual([]);
 
-		// A conversation from the Agents tab closes the clerk's panel too.
 		await talkToHost(page, "The quest office");
 		await page.getByRole("tab", { name: "Agents", exact: true }).dispatchEvent("click");
 		await page.getByRole("button", { name: /^scribe/ }).dispatchEvent("click");
@@ -712,7 +691,6 @@ describe("the library", () => {
 			["openLink", `${SITE}/wiki/spaces/ENG/pages/9`],
 		]);
 
-		// The page joins the shelf of pages read lately.
 		await reader.getByRole("button", { name: /Back/ }).click();
 		await dialog.getByRole("searchbox", { name: "Search all of Confluence" }).fill("");
 		const recent = page.getByRole("dialog", { name: "The library" }).getByRole("list", { name: "Read lately" });
@@ -768,16 +746,11 @@ describe("the library", () => {
 	});
 });
 
-/**
- * Each pack's painted board, traced on its quest-office painting (tiles): the cork (fantasy, anime) or the whiteboard
- * (tech) inside its frame.
- */
 const BOARDS: Record<string, [number, number, number, number]> = {
 	fantasy: [7.64, 1.06, 8.75, 2.97],
 	"tech-office": [6.59, 0.62, 11.61, 2.32],
 	"anime-school": [7.75, 0.47, 9.81, 2.5],
 };
-/** Board left showing between two notices, and between a notice and the board's edge (tiles). */
 const BOARD_SHOWS = 0.12;
 
 describe("the board in every pack", () => {
@@ -810,7 +783,6 @@ describe("the board in every pack", () => {
 		});
 });
 
-// The same places in every theme, for judging the art and the skins on screenshots (AGENT_WORLD_SHOTS only).
 describe.skipIf(!SHOTS)("in every theme", () => {
 	for (const theme of ["fantasy", "tech-office", "anime-school"])
 		test(`the quest office and the library in ${theme}`, async () => {
@@ -875,13 +847,10 @@ describe("the Places tab", () => {
 		const { page, errors } = await openWorld(world(), true);
 		const row = (name: string) => page.locator(".aw-place").filter({ hasText: name });
 		await page.getByRole("tab", { name: "Places", exact: true }).dispatchEvent("click");
-		// Opening the tab reads what was not read yet: the quest office counts its open issues and the pressing ones.
 		await vi.waitFor(async () =>
 			expect(await row("The quest office").textContent()).toContain("5 assigned, 2 pressing"),
 		);
-		// Nothing read in the library yet: no count.
 		expect(await row("The library").locator(".aw-row-detail").textContent()).toBe("");
-		// A page read in the library is counted.
 		await travel(page, /^The library/, "library");
 		await talkToHost(page, "The library");
 		const dialog = page.getByRole("dialog", { name: "The library" });
@@ -894,7 +863,6 @@ describe("the Places tab", () => {
 		await vi.waitFor(async () => expect(await reader.textContent()).toContain("Never release on a Friday."));
 		await page.keyboard.press("Escape");
 		await reader.waitFor({ state: "detached" });
-		// Away from the library (where its row says "You are here"), its row counts what was read.
 		await travel(page, /^Village square/, "square");
 		await vi.waitFor(async () => expect(await row("The library").textContent()).toContain("1 page read lately"));
 		await shot(page, "aw-31-places-counts");

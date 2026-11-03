@@ -1,0 +1,4 @@
+## file
+
+Walking, pointing, and the camera use the committed built world UI. Context menus are stopped before the browser shows its own. Clicks pass through the interface panels. CSS animations stay at their first frame in headless Chrome, so captures disable them to show the finished frame. A path keeps every corner whose skip would pass too close to furniture. A redirected walk starts from the avatar's position, not a grid cell, and never stands still for a frame. Examining does not walk. Enter walks to the stand point, then goes through. The view follows along a street wider than the window, eases, and stops at the painting's edge so no backdrop shows past it. The wheel zooms from the whole place to the closest, easing through the values between. `AGENT_WORLD_SHOTS` saves `aw-06-*.png`.
+Why: a snap to a grid cell, or a view that revealed the backdrop, would break the walk the operator sees.

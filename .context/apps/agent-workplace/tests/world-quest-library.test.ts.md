@@ -1,0 +1,5 @@
+## file
+
+The quest office and library use the committed built world UI over a fixture that answers Atlassian, Jira, Confluence, the outside-write gate, and delegation, and records every call. Nothing is written unconfirmed. A refused token is not kept. A sent token is nowhere on the page. Notices are highest priority first. Descriptions are sanitised: nothing runs, loads, or keeps a handler or style. Escape cancels the confirmation, not the issue, and sends nothing. Tab stays in the confirmation until it is answered. Opening the tab reads what was not read yet. A page read in the library is counted even away from the library. These walks can take longer than Vitest's 5 seconds under load. `AGENT_WORLD_SHOTS` saves `aw-24-*.png`, `aw-25-*.png`, and `aw-26-*.png`.
+Each pack's painted board is traced on its quest-office painting: cork in fantasy and anime, whiteboard in tech. `BOARD_SHOWS` is the board left showing between notices and the frame, in tiles.
+Why: an unconfirmed write or a token left on the page would expose a credential or send a change the operator refused.

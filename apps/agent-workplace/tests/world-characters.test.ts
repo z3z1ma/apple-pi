@@ -8,12 +8,9 @@ import type { Character, CharacterFacts, WorldSnapshot } from "../src/world.js";
 import { gridFor, isOpen } from "../web/game/pathing.js";
 import type { Look, PlaceData } from "../web/theme.js";
 
-// Seam 2 for characters (looks, poses, badges, barks, walking in and out): the committed, built world UI in headless
-// Chrome, with the preload API replaced by a fixture backend that records what the world asks of it.
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const ORIGIN = "http://localhost";
 const appDir = fileURLToPath(new URL("..", import.meta.url));
-// AGENT_WORLD_SHOTS=<dir> saves screenshots there as aw-05-*.png and aw-07-*.png.
 const SHOTS = process.env.AGENT_WORLD_SHOTS;
 const LOOKS: Record<string, Look> = JSON.parse(
 	readFileSync(fileURLToPath(new URL("../themes/fantasy/characters/looks.json", import.meta.url)), "utf8"),
@@ -26,7 +23,6 @@ beforeAll(async () => {
 });
 afterAll(() => browser?.close());
 
-/** Open the world over a fixture backend; `push` sends it a new snapshot; `window.avatarLooks` lists looks chosen. */
 async function openWorld(first: WorldSnapshot, options: { clickThrough?: boolean } = {}) {
 	const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
 	const errors: string[] = [];
@@ -70,7 +66,7 @@ async function openWorld(first: WorldSnapshot, options: { clickThrough?: boolean
 		await page.addStyleTag({ content: ".aw-interface, .aw-interface * { pointer-events: none !important; }" });
 	const push = (snapshot: WorldSnapshot) => page.evaluate((s) => (window as any).pushSnapshot(s), snapshot);
 	await vi.waitFor(async () => expect(await avatar(page)).toBeTruthy(), { timeout: 15000 });
-	await page.waitForTimeout(400); // the arrival fade
+	await page.waitForTimeout(400);
 	return { page, push, errors };
 }
 
@@ -118,7 +114,6 @@ async function shot(page: Page, name: string) {
 	await page.screenshot({ path: join(SHOTS, `${name}.png`), animations: "disabled" });
 }
 
-/** A close-up of the world around a point (tiles), for judging a character's pose, badge, and bark. */
 async function closeup(page: Page, name: string, x: number, y: number) {
 	if (!SHOTS) return;
 	mkdirSync(SHOTS, { recursive: true });
@@ -129,14 +124,12 @@ async function closeup(page: Page, name: string, x: number, y: number) {
 	await page.addStyleTag({ content: ".aw-interface { visibility: visible; }" });
 }
 
-/** Zoom the view out with the wheel, as far as it goes, so the whole room shows. */
 async function zoomOut(page: Page) {
 	await page.mouse.move(640, 300);
 	for (let i = 0; i < 4; i++) await page.mouse.wheel(0, 400);
 	await page.waitForTimeout(700);
 }
 
-// A fixture world: Orla coordinates; her workers are in the apple-pi wing.
 const HQ = "orla";
 const T0 = Date.now() - 3_600_000;
 function facts(over: Partial<CharacterFacts> = {}): CharacterFacts {
@@ -206,7 +199,6 @@ test("the avatar look chosen in Settings is worn at once, sent to the backend, a
 		const looks = page.getByRole("group", { name: "Avatar look" });
 		const names = await looks.locator("label").allTextContents();
 		expect(names).toEqual(["Traveller", "Knight", "Bard"]);
-		// Each look shows its portrait.
 		const portraits = await looks.locator("img").evaluateAll((images) =>
 			images.map((image) => {
 				const img = image as HTMLImageElement;
@@ -237,7 +229,6 @@ test("the avatar look chosen in Settings is worn at once, sent to the backend, a
 		await page.close();
 	}
 
-	// The next start wears the look the backend kept; a look the theme lacks falls back to its first.
 	const again = await openWorld(world([ORLA], { avatarLook: "avatar-bard" }));
 	try {
 		expect((await avatar(again.page))?.look).toBe("avatar-bard");
@@ -261,13 +252,11 @@ test("a character keeps its look when its process restarts and when the app rest
 	try {
 		await vi.waitFor(async () => expect(await looksIn(first.page)).toHaveProperty(HQ), { timeout: 3000 });
 		expect((await looksIn(first.page))[HQ]).toBe("coordinator");
-		// The workers: travel to their wing.
 		await tab(first.page, "Places");
 		await first.page.getByRole("button", { name: /^apple-pi wing/ }).click();
 		await vi.waitFor(async () => expect(Object.keys(await looksIn(first.page))).toHaveLength(3), { timeout: 5000 });
 		before = await looksIn(first.page);
 		for (const look of Object.values(before)) expect(looksFor("agent")).toContain(look);
-		// pi-tests's process stops and starts again: the same session, the same look.
 		await first.push(world(cast.filter((c) => c.id !== "pi-tests")));
 		await vi.waitFor(async () => expect(await figure(first.page, "pi-tests")).toBeUndefined(), { timeout: 8000 });
 		await first.push(world(cast));
@@ -292,7 +281,6 @@ test("a character keeps its look when its process restarts and when the app rest
 test("walking shows the four-phase stride in every direction", async () => {
 	const { page, errors } = await openWorld(world([ORLA]), { clickThrough: true });
 	try {
-		// From the hall's start, walk down, up, left, and right in turn, recording every animation frame.
 		const legs: [string, number, number][] = [
 			["down", 15, 13.6],
 			["up", 15, 8.8],
@@ -313,7 +301,6 @@ test("walking shows the four-phase stride in every direction", async () => {
 			});
 			const [sx, sy] = await screen(page, x, y);
 			await page.mouse.click(sx, sy);
-			// A short recording of the stride: the avatar, close up, every few hundredths of a second.
 			if (SHOTS)
 				for (let i = 0; i < 8; i++) {
 					const a = (await avatar(page))!;
@@ -345,7 +332,6 @@ test("walking shows the four-phase stride in every direction", async () => {
 	}
 }, 60000);
 
-/** Open the world and go to the apple-pi wing through the Places tab; clicks then reach the world itself. */
 async function inTheWing(snapshot: WorldSnapshot) {
 	const opened = await openWorld(snapshot);
 	await tab(opened.page, "Places");
@@ -385,7 +371,6 @@ test("a session moving from idle to working to asking changes pose and badge eac
 		await vi.waitFor(async () => expect(await docs()).toMatchObject({ pose: "seated", badge: "working" }), {
 			timeout: 2000,
 		});
-		// Seated at work: the two seated frames alternate, at the same spot.
 		const seen = new Set<number>();
 		for (let i = 0; i < 30 && seen.size < 2; i++) {
 			seen.add((await docs())!.frame);
@@ -406,7 +391,6 @@ test("a session moving from idle to working to asking changes pose and badge eac
 			timeout: 2000,
 		});
 		await closeup(page, "aw-07-unseen", spot!.x, spot!.y);
-		// Seen (the conversation opened, or the sidebar marked it): the badge clears.
 		await push(world([ORLA, worker("pi-docs", 1)]));
 		await vi.waitFor(async () => expect(await docs()).toMatchObject({ pose: "standing", badge: null }), {
 			timeout: 2000,
@@ -418,11 +402,10 @@ test("a session moving from idle to working to asking changes pose and badge eac
 }, 60000);
 
 test("a newly started session's character comes in by the door and walks to its spot; a stopped one walks out", async () => {
-	const DOOR: [number, number] = [9, 13.2]; // the small wing's door to the gallery, where one stands to use it
+	const DOOR: [number, number] = [9, 13.2];
 	const { page, push, errors } = await inTheWing(world([ORLA, worker("pi-docs", 1)]));
 	try {
 		await vi.waitFor(async () => expect(await figure(page, "pi-docs")).toBeDefined(), { timeout: 3000 });
-		// Record every animation frame of the newcomer.
 		await page.evaluate(() => {
 			const track: { x: number; y: number; alpha: number; moving: boolean }[] = [];
 			(window as any).track = track;
@@ -449,14 +432,12 @@ test("a newly started session's character comes in by the door and walks to its 
 			alpha: number;
 			moving: boolean;
 		}[];
-		// It appeared in the doorway, faded in, passed where one stands to use the door, and walked to its spot.
 		expect(arrival[0].alpha).toBeLessThan(0.5);
 		expect(Math.hypot(arrival[0].x - DOOR[0], arrival[0].y - DOOR[1])).toBeLessThan(1.2);
 		expect(arrival[0].y).toBeGreaterThan(DOOR[1]);
 		expect(arrival.some((p) => Math.hypot(p.x - DOOR[0], p.y - DOOR[1]) < 0.2)).toBe(true);
 		expect(arrival.filter((p) => p.moving).length).toBeGreaterThan(20);
 
-		// pi-docs stops: it walks out the same way, and is gone.
 		await page.evaluate(() => {
 			(window as any).trackDeparture = true;
 		});
@@ -491,13 +472,11 @@ test("out of doors a working character stands at work with its badge, breathing;
 				timeout: 3000,
 			},
 		);
-		// The Places tab is still open from going to the wing.
 		await page.getByRole("button", { name: /^Village square/ }).click();
 		await vi.waitFor(async () => expect(await view(page, "place()")).toBe("square"), { timeout: 5000 });
 		await vi.waitFor(async () => expect(await figure(page, "solo")).toMatchObject({ pose: "busy", badge: "working" }), {
 			timeout: 3000,
 		});
-		// Standing, not on a stool (the seated frames 12 and 13 bring one), the whole time it works.
 		for (let i = 0; i < 10; i++) {
 			expect((await figure(page, "solo"))!.frame).toBe(14);
 			await page.waitForTimeout(120);
@@ -530,7 +509,6 @@ test("barks appear now and then, only over characters that need the operator", a
 		for (let i = 0; i < 40; i++) {
 			const now = await figures(page);
 			for (const f of now) if (f.bark) barking.set(f.id, (barking.get(f.id) ?? new Set()).add(f.bark));
-			// A bark never covers another, the place's title, or a panel.
 			const boxes = now.flatMap((f) => (f.barkBox ? [f.barkBox] : []));
 			boxes.forEach((box, j) => {
 				for (const other of [...ui, ...boxes.slice(j + 1)])
@@ -539,7 +517,7 @@ test("barks appear now and then, only over characters that need the operator", a
 			const asker = now.find((f) => f.id === "asker" && f.bark);
 			if (asker && !shown) {
 				shown = true;
-				await page.waitForTimeout(250); // the bubble fades in
+				await page.waitForTimeout(250);
 				await shot(page, "aw-07-barks");
 				await closeup(page, "aw-07-bark", asker.x, asker.y);
 			}
@@ -560,9 +538,7 @@ test("furniture in front hides the part of a character behind it; asking charact
 	const { page, errors } = await inTheWing(world([ORLA, worker("pi-docs", 1, asking())]));
 	try {
 		await page.addStyleTag({ content: ".aw-interface, .aw-interface * { pointer-events: none !important; }" });
-		// The whole room in view, so the camera holds still.
 		await zoomOut(page);
-		// The asking character stands on open floor at its spot, in front of its table.
 		const docs = (await figure(page, "pi-docs"))!;
 		expect(docs).toMatchObject({ pose: "asking", frame: 15 });
 		expect(SMALL.spots).toContainEqual([docs.x, docs.y]);
@@ -570,7 +546,6 @@ test("furniture in front hides the part of a character behind it; asking charact
 		const table = SMALL.foreground!.find((piece) => piece.rect[0] < 4 && piece.rect[1] < 7)!;
 		expect(docs.y).toBeGreaterThan(table.feet);
 
-		// Behind the table (north of it), the table hides the avatar's legs and not its head.
 		const behind: [number, number] = [4, 5.95];
 		const walkTo = async ([x, y]: [number, number]) => {
 			const [sx, sy] = await screen(page, x, y);
@@ -583,7 +558,7 @@ test("furniture in front hides the part of a character behind it; asking charact
 				},
 				{ timeout: 10000, interval: 50 },
 			);
-			await page.waitForTimeout(600); // the camera settles
+			await page.waitForTimeout(600);
 		};
 		const clips = async () => {
 			const [left, top] = await screen(page, behind[0] - 0.25, table.rect[1] + 0.02);
