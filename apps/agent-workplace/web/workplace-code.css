@@ -470,3 +470,19 @@
 		text-align: center;
 	}
 }
+.wp-code-panes.without-files {
+	grid-template-columns: minmax(0, 1fr);
+}
+.wp-code-panes.without-files.with-git {
+	grid-template-columns: minmax(0, 1fr) 6px var(--wp-git-width, 340px);
+}
+@media (max-width: 1100px) {
+	.wp-code-panes.without-files.with-git {
+		grid-template-columns: minmax(0, 1fr) 6px var(--wp-git-width, 280px);
+	}
+}
+@media (max-width: 850px) {
+	.wp-code-panes.without-files.with-git {
+		grid-template-columns: minmax(0, 1fr);
+	}
+}

@@ -674,7 +674,7 @@ test("real Monaco retains dirty files across file and app switches, then saves e
 		await page.getByRole("button", { name: "Chat", exact: true }).click();
 		await page.getByRole("button", { name: "Mail", exact: true }).click();
 		await page.getByRole("button", { name: "Code", exact: true }).click();
-		expect(await editorText(page)).toContain("operator draft");
+		await vi.waitFor(async () => expect(await editorText(page)).toContain("operator draft"));
 		expect(await page.evaluate(() => (window as any).workspaceCalls.saves)).toEqual([]);
 		await shot(page, "dirty-retained");
 		await page.getByRole("button", { name: "View unstaged diff: src/main.ts", exact: true }).click();
@@ -686,7 +686,7 @@ test("real Monaco retains dirty files across file and app switches, then saves e
 		await shot(page, "dirty-diff-preview");
 		await preview.getByRole("button", { name: "Close diff", exact: true }).click();
 		await editor(page).waitFor();
-		expect(await editorText(page)).toContain("operator draft");
+		await vi.waitFor(async () => expect(await editorText(page)).toContain("operator draft"));
 		await page.getByRole("button", { name: "Save", exact: true }).click();
 		await page.getByText("Saved src/main.ts", { exact: true }).waitFor();
 		expect(await page.evaluate(() => (window as any).workspaceCalls.saves)).toEqual([
@@ -702,6 +702,41 @@ test("real Monaco retains dirty files across file and app switches, then saves e
 			text: 'export const message = "saved by shortcut";\n',
 		});
 		await page.getByRole("img", { name: "Unsaved changes", exact: true }).waitFor({ state: "hidden" });
+		expect(errors).toEqual([]);
+	} finally {
+		await page.close();
+	}
+}, 45_000);
+
+test("long lines wrap, and Files and Git can each be hidden without losing the draft", async () => {
+	const { page, errors } = await openCode();
+	try {
+		await openMain(page);
+		const long = `export const message = "${"wrapped words ".repeat(40)}";\n`;
+		await replaceText(page, long);
+		await vi.waitFor(async () =>
+			expect(await page.locator(".wp-code-editor-pane .view-line").count()).toBeGreaterThan(2),
+		);
+		const panes = page.locator(".wp-code-panes");
+		const files = page.getByRole("complementary", { name: "Files", exact: true });
+		const git = page.getByRole("complementary", { name: "Repository changes", exact: true });
+		const editorLeft = () => page.locator(".wp-code-editor-pane").evaluate((node) => node.getBoundingClientRect().left);
+		const panesLeft = await panes.evaluate((node) => node.getBoundingClientRect().left);
+		expect(await editorLeft()).toBeGreaterThan(panesLeft + 100);
+		await page.getByRole("button", { name: "Files", exact: true }).click();
+		await files.waitFor({ state: "hidden" });
+		expect(Math.abs((await editorLeft()) - panesLeft)).toBeLessThan(2);
+		await page.getByRole("button", { name: "Git", exact: true }).click();
+		await git.waitFor({ state: "hidden" });
+		const wide = await page.locator(".wp-code-editor-pane").evaluate((node) => node.getBoundingClientRect().width);
+		expect(wide).toBeGreaterThan((await panes.evaluate((node) => node.getBoundingClientRect().width)) - 2);
+		await shot(page, "panes-hidden");
+		await page.getByRole("button", { name: "Files", exact: true }).click();
+		await page.getByRole("button", { name: "Git", exact: true }).click();
+		await files.waitFor();
+		await git.waitFor();
+		expect(await editorText(page)).toContain("wrapped words");
+		expect(await page.evaluate(() => (window as any).workspaceCalls.saves)).toEqual([]);
 		expect(errors).toEqual([]);
 	} finally {
 		await page.close();

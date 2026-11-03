@@ -164,6 +164,7 @@ export function WorkplaceCode({
 	const [busy, setBusy] = useState(false);
 	const [saving, setSaving] = useState(false);
 	const [showGit, setShowGit] = useState(true);
+	const [showFiles, setShowFiles] = useState(true);
 	const panes = useRef<HTMLDivElement>(null);
 	const files = usePaneResize({
 		label: "Files width",
@@ -180,6 +181,7 @@ export function WorkplaceCode({
 					: 0;
 			return available - side;
 		},
+		enabled: showFiles,
 	});
 	const git = usePaneResize({
 		label: "Source control width",
@@ -328,6 +330,7 @@ export function WorkplaceCode({
 			minimap: { enabled: false },
 			fontSize: 13,
 			scrollBeyondLastLine: false,
+			wordWrap: "on",
 			padding: { top: 12 },
 			renderWhitespace: "selection",
 			fixedOverflowWidgets: true,
@@ -717,6 +720,9 @@ export function WorkplaceCode({
 				<button type="button" aria-pressed={showReviews} onClick={() => setShowReviews(!showReviews)}>
 					Reviews
 				</button>
+				<button type="button" aria-pressed={showFiles} onClick={() => setShowFiles(!showFiles)}>
+					Files
+				</button>
 				<button type="button" aria-pressed={showGit} onClick={() => setShowGit(!showGit)}>
 					Git
 				</button>
@@ -742,10 +748,11 @@ export function WorkplaceCode({
 				hidden={showReviews}
 				ref={panes}
 				style={{ ...files.style, ...git.style }}
-				className={`wp-code-panes ${showGit ? "with-git" : ""}`}
+				className={`wp-code-panes ${showGit ? "with-git" : ""} ${showFiles ? "" : "without-files"}`}
 			>
 				<aside
 					className="wp-code-files"
+					hidden={!showFiles}
 					aria-label="Files"
 					tabIndex={-1}
 					ref={(node) => {
@@ -800,7 +807,7 @@ export function WorkplaceCode({
 						<p className="wp-code-empty">Choose a repository or enter its absolute path.</p>
 					)}
 				</aside>
-				{files.separator}
+				{showFiles && files.separator}
 				<main className="wp-code-editor-pane">
 					<div className="wp-code-tabs" role="tablist" aria-label="Open files">
 						{openBuffers.map(([key, buffer]) => (
