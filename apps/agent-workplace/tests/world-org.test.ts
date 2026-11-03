@@ -5,6 +5,7 @@ import { type Browser, chromium, type Page } from "playwright-core";
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
 import { appFile, contentType } from "../src/app-files.js";
 import type { Character, CharacterFacts, RoleChoice, WorkplaceTaskHistory, WorldSnapshot } from "../src/world.js";
+import { choose, chosen } from "./helpers/select.js";
 import { installWorkplaceCommunications } from "./helpers/workplace-communications.js";
 
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
@@ -1082,7 +1083,7 @@ test("reporting controls and dragging confirm the same branch; refusals preserve
 			.evaluateAll((options) => options.map((option) => (option as HTMLOptionElement).value));
 		for (const id of ["ben", "cleo", "ellis"]) expect(managers).not.toContain(id);
 		await reporting.focus();
-		await reporting.selectOption("daria");
+		await choose(reporting, "daria");
 		const dialog = page.getByRole("dialog", { name: "Change reporting?", exact: true });
 		await dialog.waitFor();
 		await vi.waitFor(async () =>
@@ -1123,14 +1124,14 @@ test("reporting controls and dragging confirm the same branch; refusals preserve
 		await dialog.waitFor({ state: "hidden" });
 		await page.getByRole("complementary", { name: "Profile: Ben", exact: true }).waitFor();
 		expect(await reporting.evaluate((node) => node === document.activeElement)).toBe(true);
-		expect(await reporting.inputValue()).toBe("ada");
+		expect(await chosen(reporting)).toBe("ada");
 		expect(await page.evaluate(() => (window as any).orgCalls.moves)).toEqual([]);
-		await reporting.selectOption("");
+		await choose(reporting, "");
 		await dialog.getByText(/independent organization/).waitFor();
 		await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
 		expect(await reporting.evaluate((node) => node === document.activeElement)).toBe(true);
-		expect(await reporting.inputValue()).toBe("ada");
-		await reporting.selectOption("daria");
+		expect(await chosen(reporting)).toBe("ada");
+		await choose(reporting, "daria");
 		await confirmMove(page);
 		await vi.waitFor(async () => expect(await page.evaluate(() => (window as any).orgCalls.moves)).toHaveLength(1));
 		await page.keyboard.press("Escape");
@@ -1151,7 +1152,7 @@ test("reporting controls and dragging confirm the same branch; refusals preserve
 			.click();
 		await page.getByRole("button", { name: "Close profile", exact: true }).click();
 		await page.getByRole("button", { name: "View profile: Ben", exact: true }).click();
-		expect(await reporting.inputValue()).toBe("ada");
+		expect(await chosen(reporting)).toBe("ada");
 		await page.getByRole("button", { name: "Close profile", exact: true }).click();
 		await card(page, "Ben").dragTo(page.getByRole("button", { name: "Open team: Daria", exact: true }));
 		await confirmMove(page);
@@ -1166,8 +1167,8 @@ test("reporting controls and dragging confirm the same branch; refusals preserve
 		await page.getByRole("dialog", { name: "Change reporting?", exact: true }).waitFor({ state: "hidden" });
 		await openTeam(page, "Daria");
 		await page.getByRole("button", { name: "View profile: Ben", exact: true }).click();
-		expect(await reporting.inputValue()).toBe("daria");
-		await reporting.selectOption("");
+		expect(await chosen(reporting)).toBe("daria");
+		await choose(reporting, "");
 		await confirmMove(page);
 		await vi.waitFor(async () => expect(await page.evaluate(() => (window as any).orgCalls.moves)).toHaveLength(3));
 		expect(await page.evaluate(() => (window as any).orgCalls.moves[2])).toEqual({ ...first, manager: null });
@@ -1180,7 +1181,7 @@ test("reporting controls and dragging confirm the same branch; refusals preserve
 		await page.getByRole("button", { name: "All teams", exact: true }).click();
 		await openTeam(page, "Ben");
 		await page.getByRole("button", { name: "View profile: Ben", exact: true }).click();
-		expect(await reporting.inputValue()).toBe("");
+		expect(await chosen(reporting)).toBe("");
 		expect(errors).toEqual([]);
 	} finally {
 		await page.close();
@@ -1191,7 +1192,7 @@ async function draftTeam(page: Page, goal = "Implement the Org chart and verify 
 	await page.getByRole("button", { name: "New team", exact: true }).click();
 	await page.getByRole("textbox", { name: "Team task", exact: true }).fill(goal);
 	await page.getByRole("textbox", { name: "Repository", exact: true }).fill(REPOSITORY);
-	await page.getByRole("combobox", { name: "Role to add", exact: true }).selectOption("implementation-engineer");
+	await choose(page.getByRole("combobox", { name: "Role to add", exact: true }), "implementation-engineer");
 	await page.getByRole("button", { name: "Add role", exact: true }).click();
 	await page.getByRole("button", { name: "Add role", exact: true }).click();
 }
@@ -1232,7 +1233,7 @@ test("planned catalog roles can repeat, retain edits across Chat/Mail, and open 
 		);
 		expect(await page.getByRole("textbox", { name: "Name (optional)", exact: true }).inputValue()).toBe("Morgan");
 		expect(await engineers.count()).toBe(2);
-		await page.getByRole("combobox", { name: "Existing teammate", exact: true }).selectOption("ben");
+		await choose(page.getByRole("combobox", { name: "Existing teammate", exact: true }), "ben");
 		await page.getByRole("button", { name: "Add teammate", exact: true }).click();
 		const plan = page.getByRole("complementary", { name: "Team plan", exact: true });
 		for (const name of ["Ben", "Cleo", "Ellis"]) await plan.getByText(name, { exact: true }).waitFor();
@@ -1485,7 +1486,7 @@ test.each([
 			await openTeam(page, "Ada");
 			await page.getByRole("button", { name: "Add person", exact: true }).click();
 			const form = page.getByRole("complementary", { name: "Add person", exact: true });
-			await form.getByRole("combobox", { name: "Role", exact: true }).selectOption("implementation-engineer");
+			await choose(form.getByRole("combobox", { name: "Role", exact: true }), "implementation-engineer");
 			await form.getByRole("textbox", { name: "Repository", exact: true }).fill(REPOSITORY);
 			await form.getByRole("textbox", { name: "Goal", exact: true }).fill(goal);
 			await form.getByRole("textbox", { name: "Specialization", exact: true }).fill(specialization);
@@ -1547,7 +1548,7 @@ test.each(["", "Review keyboard behavior."])(
 			const plan = page.getByRole("complementary", { name: "Team plan", exact: true });
 			await plan.getByRole("textbox", { name: "Specialization", exact: true }).fill("Keyboard accessibility");
 			await plan.getByRole("textbox", { name: "Position goal", exact: true }).fill(positionGoal);
-			await plan.getByRole("combobox", { name: "Existing teammate", exact: true }).selectOption("cleo");
+			await choose(plan.getByRole("combobox", { name: "Existing teammate", exact: true }), "cleo");
 			await plan.getByRole("button", { name: "Add teammate", exact: true }).click();
 			expect(await plan.getByRole("textbox", { name: "Position goal", exact: true }).count()).toBe(0);
 			await plan.getByRole("button", { name: "Planned role: Implementation Engineer 3", exact: true }).click();

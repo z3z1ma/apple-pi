@@ -419,7 +419,7 @@
 .wp-issues-signin p {
 	color: var(--wp-muted);
 }
-.wp-issues :is(.wp-issues-delegate, .wp-issues-signin) label {
+.wp-issues :is(.wp-issues-delegate, .wp-issues-signin) :is(label, .wp-field) {
 	display: flex;
 	flex-direction: column;
 	gap: 6px;

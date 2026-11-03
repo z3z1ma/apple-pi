@@ -11,6 +11,7 @@ import type {
 import { QuestionForm } from "./overlay/conversation/question-form.js";
 import { plainLine } from "./overlay/conversation/quote.js";
 import { useWorkplaceMenu } from "./workplace-context-menu.js";
+import { Select } from "./workplace-fields.js";
 import { Icon } from "./workplace-icon.js";
 import { later, pinnedThreads, useLater } from "./workplace-later.js";
 import { deliver } from "./workplace-message-actions.js";
@@ -289,24 +290,24 @@ export function DeskView({
 					</p>
 				</div>
 				<div className="wp-header-tools" ref={setTools} />
-				<label className="wp-desk-listener">
+				<div className="wp-desk-listener">
 					<span>Listening</span>
-					<select
-						aria-label="Who listens at the desk"
+					<Select
+						label="Who listens at the desk"
 						value={desk.person}
-						onChange={(event) => void api.setDesk?.({ thread: desk.thread, person: event.target.value })}
-					>
-						{!deskCandidates(world).some((candidate) => candidate.id === desk.person) && (
-							<option value={desk.person}>{listener?.person.name ?? "Former coordinator"}</option>
-						)}
-						{deskCandidates(world).map((candidate) => (
-							<option key={candidate.id} value={candidate.id}>
-								{candidate.name}
-								{candidate.away ? " (away)" : ""}
-							</option>
-						))}
-					</select>
-				</label>
+						options={[
+							...(deskCandidates(world).some((candidate) => candidate.id === desk.person)
+								? []
+								: [{ value: desk.person, label: listener?.person.name ?? "Former coordinator" }]),
+							...deskCandidates(world).map((candidate) => ({
+								value: candidate.id,
+								label: candidate.name,
+								...(candidate.away ? { detail: "Away" } : {}),
+							})),
+						]}
+						onChange={(person) => void api.setDesk?.({ thread: desk.thread, person })}
+					/>
+				</div>
 				{listener && (
 					<button type="button" className="wp-desk-dm" onClick={() => openDM(desk.person)}>
 						Open session

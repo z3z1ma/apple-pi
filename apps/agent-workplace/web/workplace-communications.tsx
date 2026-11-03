@@ -1,5 +1,7 @@
-import { type ReactNode, useEffect, useId, useRef, useState } from "react";
+import { type ReactNode, useEffect, useId, useRef } from "react";
 import type { WorldSnapshot } from "../src/world.js";
+import { Recipients } from "./workplace-fields.js";
+import { Icon } from "./workplace-icon.js";
 import "./workplace-communications.css";
 
 export function CommunicationDialog({
@@ -7,11 +9,14 @@ export function CommunicationDialog({
 	busy,
 	close,
 	children,
+	wide = false,
 }: {
 	title: string;
 	busy: boolean;
 	close: () => void;
 	children: ReactNode;
+	/** Room for a list, such as channel discovery. */
+	wide?: boolean;
 }) {
 	const dialog = useRef<HTMLDialogElement>(null);
 	const heading = useId();
@@ -27,6 +32,8 @@ export function CommunicationDialog({
 	useEffect(() => {
 		const onEscape = (event: KeyboardEvent) => {
 			if (event.key !== "Escape") return;
+			// An open list inside the dialog closes first, as in any app.
+			if (dialog.current?.querySelector('[aria-expanded="true"]')) return;
 			event.preventDefault();
 			event.stopImmediatePropagation();
 			if (!busy) close();
@@ -37,25 +44,27 @@ export function CommunicationDialog({
 	return (
 		<dialog
 			ref={dialog}
-			className="wp-communication-dialog"
+			className="wp-modal wp-communication-dialog"
+			data-wide={wide || undefined}
 			aria-labelledby={heading}
 			aria-busy={busy}
 			onCancel={(event) => {
 				event.preventDefault();
-				if (!busy) close();
+				if (!busy && !dialog.current?.querySelector('[aria-expanded="true"]')) close();
 			}}
 		>
-			<header>
+			<header className="wp-modal-header">
 				<h2 id={heading}>{title}</h2>
-				<button type="button" disabled={busy} onClick={close}>
-					Close
+				<button type="button" className="wp-modal-close" aria-label="Close" disabled={busy} onClick={close}>
+					<Icon name="close" />
 				</button>
 			</header>
-			{children}
+			<div className="wp-modal-body">{children}</div>
 		</dialog>
 	);
 }
 
+/** People to address in a channel action: chips with typeahead, and a known ID typed in full. */
 export function CommunicationRecipients({
 	world,
 	label,
@@ -71,60 +80,18 @@ export function CommunicationRecipients({
 	candidates?: { id: string; name: string }[];
 	disabled?: boolean;
 }) {
-	const [address, setAddress] = useState("");
-	const suggestions = useId();
-	const people = candidates ?? [...world.characters, ...(world.dormant ?? []).filter((person) => !person.retiredAt)];
-	const add = () => {
-		const id = address.trim();
-		if (!id) return;
-		if (!value.includes(id)) onChange([...value, id]);
-		setAddress("");
-	};
+	const people = (
+		candidates ?? [...world.characters, ...(world.dormant ?? []).filter((person) => !person.retiredAt)]
+	).map((person) => ({ id: person.id, name: person.name }));
 	return (
-		<fieldset className="wp-communication-recipients" disabled={disabled}>
-			<legend>{label}</legend>
-			<div className="wp-communication-address">
-				<input
-					aria-label={`${label}: person`}
-					list={suggestions}
-					placeholder="Choose a person or enter a known ID"
-					value={address}
-					onChange={(event) => setAddress(event.target.value)}
-					onKeyDown={(event) => {
-						if (event.key === "Enter") {
-							event.preventDefault();
-							event.stopPropagation();
-							add();
-						}
-					}}
-				/>
-				<datalist id={suggestions}>
-					{people.map((person) => (
-						<option key={person.id} value={person.id}>
-							{person.name}
-						</option>
-					))}
-				</datalist>
-				<button type="button" disabled={disabled || !address.trim()} onClick={add}>
-					Add
-				</button>
-			</div>
-			{value.length > 0 && (
-				<ul>
-					{value.map((id) => (
-						<li key={id}>
-							<span>{people.find((person) => person.id === id)?.name ?? id}</span>
-							<button
-								type="button"
-								aria-label={`Remove ${label.toLowerCase()}: ${id}`}
-								onClick={() => onChange(value.filter((person) => person !== id))}
-							>
-								Remove
-							</button>
-						</li>
-					))}
-				</ul>
-			)}
-		</fieldset>
+		<Recipients
+			label={label}
+			people={people}
+			chosen={value}
+			onChange={onChange}
+			disabled={disabled}
+			placeholder="Name, or a known ID and Enter"
+			free
+		/>
 	);
 }

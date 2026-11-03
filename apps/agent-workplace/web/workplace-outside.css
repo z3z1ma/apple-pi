@@ -77,14 +77,14 @@
 	border-radius: 8px;
 	background: var(--wp-panel);
 }
-.wp-outside-sources label {
+.wp-outside-sources .wp-outside-source {
 	display: grid;
 	grid-template-columns: 70px minmax(0, 300px) minmax(0, 1fr);
 	align-items: center;
 	gap: 10px;
 	font-size: 12px;
 }
-.wp-outside-sources select {
+.wp-outside-sources .wp-select {
 	min-width: 0;
 	height: 28px;
 	border: 1px solid var(--wp-border);

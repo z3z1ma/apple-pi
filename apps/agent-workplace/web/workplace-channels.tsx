@@ -2,9 +2,15 @@ import { useEffect, useRef, useState } from "react";
 import type { ConversationInfo } from "../src/communications.js";
 import type { WorldSnapshot } from "../src/world.js";
 import { CommunicationDialog, CommunicationRecipients } from "./workplace-communications.js";
+import { Select } from "./workplace-fields.js";
+import { Icon } from "./workplace-icon.js";
 import { orgPeople } from "./workplace-org.js";
 
 const api = window.agentWorkplace;
+/** Channels per discovery page; More channels continues. */
+const PAGE = 50;
+/** Typing pause before discovery searches again. */
+const SEARCH_PAUSE_MS = 200;
 let pendingCreation:
 	| { attempt: string; scopeHead: string; name: string; purpose: string; invite: string[] }
 	| undefined;
@@ -22,13 +28,13 @@ export function ChannelBrowser({
 	const [query, setQuery] = useState("");
 	const [archived, setArchived] = useState<"exclude" | "include" | "only">("exclude");
 	const [scopeHead, setScopeHead] = useState(pendingCreation?.scopeHead ?? "");
-	const [limit, setLimit] = useState(50);
 	const [threads, setThreads] = useState<ConversationInfo[]>([]);
 	const [cursor, setCursor] = useState<string>();
 	const [name, setName] = useState(pendingCreation?.name ?? "");
 	const [purpose, setPurpose] = useState(pendingCreation?.purpose ?? "");
 	const [invite, setInvite] = useState<string[]>(pendingCreation?.invite ?? []);
 	const [busy, setBusy] = useState(false);
+	const [searching, setSearching] = useState(true);
 	const [error, setError] = useState("");
 	const [attempt, setAttempt] = useState<string | undefined>(pendingCreation?.attempt);
 	const [notRecorded, setNotRecorded] = useState(false);
@@ -36,20 +42,23 @@ export function ChannelBrowser({
 	const searchOptions = useRef<
 		{ query?: string; archived: "exclude" | "include" | "only"; scopeHead?: string; limit: number } | undefined
 	>(undefined);
+	const latest = useRef(0);
 	const mounted = useRef(true);
 	const people = orgPeople(world);
 	const ids = new Set(people.map((person) => person.character.id));
 	const heads = people.filter((person) => !person.parent || !ids.has(person.parent));
+	const nameOf = (id: string) => people.find((person) => person.character.id === id)?.character.name ?? id;
 	const find = async (continuation?: string) => {
-		setBusy(true);
+		const request = ++latest.current;
+		setSearching(true);
 		setError("");
 		try {
 			const options =
 				continuation && searchOptions.current
 					? searchOptions.current
-					: { query: query.trim() || undefined, archived, scopeHead: scopeHead || undefined, limit };
+					: { query: query.trim() || undefined, archived, scopeHead: scopeHead || undefined, limit: PAGE };
 			const result = await api.communications.findChannels({ ...options, cursor: continuation });
-			if (!mounted.current) return;
+			if (!mounted.current || request !== latest.current) return;
 			if (!result.ok) {
 				setError(result.reason);
 				return;
@@ -58,19 +67,24 @@ export function ChannelBrowser({
 			setThreads((previous) => (continuation ? [...previous, ...result.value.threads] : result.value.threads));
 			setCursor(result.value.next_cursor);
 		} catch (failure) {
-			if (mounted.current) setError(String(failure));
+			if (mounted.current && request === latest.current) setError(String(failure));
 		} finally {
-			if (mounted.current) setBusy(false);
+			if (mounted.current && request === latest.current) setSearching(false);
 		}
 	};
-	// biome-ignore lint/correctness/useExhaustiveDependencies: opening discovers metadata once; filters run on explicit Search
 	useEffect(() => {
 		mounted.current = true;
-		void find();
 		return () => {
 			mounted.current = false;
 		};
 	}, []);
+	// Discovery reads channel metadata only, and searches again as the operator types or filters.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: find reads these same filters
+	useEffect(() => {
+		if (creating) return;
+		const timer = setTimeout(() => void find(), searchOptions.current ? SEARCH_PAUSE_MS : 0);
+		return () => clearTimeout(timer);
+	}, [query, archived, scopeHead, creating]);
 	const recover = async () => {
 		if (!attempt) return;
 		setBusy(true);
@@ -127,71 +141,75 @@ export function ChannelBrowser({
 			if (mounted.current) setBusy(false);
 		}
 	};
+	const locked = busy || !!attempt;
 	return (
-		<CommunicationDialog title={creating ? "Create topic channel" : "Discover channels"} busy={busy} close={close}>
-			<p>
-				Topic channels share context within their recorded organization. Joining follows activity; invitations grant
-				retained-history access. Neither starts people or assigns work.
-			</p>
-			<div className="wp-channel-tools">
-				<button type="button" disabled={busy || !!attempt} onClick={() => setCreating(!creating)}>
-					{creating ? "Back to discovery" : "Create topic channel"}
-				</button>
-			</div>
+		<CommunicationDialog
+			title={creating ? "Create topic channel" : "Discover channels"}
+			busy={busy}
+			close={close}
+			wide={!creating}
+		>
 			{creating ? (
 				<form
+					className="wp-modal-form"
 					onSubmit={(event) => {
 						event.preventDefault();
 						void create();
 					}}
 				>
-					<label>
-						Organization scope
-						<select
-							required
+					<p className="wp-modal-lede">
+						Everyone in the chosen organization can find, read and post. Invited people get access and follow it.
+						Creating is quiet: nobody starts work.
+					</p>
+					<div className="wp-field">
+						<span>Organization scope</span>
+						<Select
+							label="Organization scope"
 							value={scopeHead}
-							disabled={busy || !!attempt}
-							onChange={(event) => setScopeHead(event.target.value)}
-						>
-							<option value="">Choose an organization</option>
-							{heads.map((person) => (
-								<option value={person.character.id} key={person.character.id}>
-									{person.character.name}
-								</option>
-							))}
-						</select>
-					</label>
-					<label>
-						Channel name
-						<input
-							required
-							value={name}
-							disabled={busy || !!attempt}
-							onChange={(event) => setName(event.target.value)}
+							placeholder="Choose an organization"
+							disabled={locked}
+							options={heads.map((person) => ({
+								value: person.character.id,
+								label: person.character.name,
+								detail: person.character.facts?.title ?? "",
+							}))}
+							onChange={setScopeHead}
 						/>
+					</div>
+					<label className="wp-field">
+						<span>Channel name</span>
+						<span className="wp-channel-name-input">
+							<span aria-hidden="true">#</span>
+							<input
+								required
+								value={name}
+								placeholder="checkout-review"
+								disabled={locked}
+								onChange={(event) => setName(event.target.value)}
+							/>
+						</span>
 					</label>
-					<label>
-						Purpose
+					<label className="wp-field">
+						<span>Purpose</span>
 						<textarea
 							required
 							value={purpose}
-							disabled={busy || !!attempt}
+							placeholder="What this channel is for"
+							disabled={locked}
 							onChange={(event) => setPurpose(event.target.value)}
 						/>
 					</label>
-					<CommunicationRecipients
-						world={world}
-						label="Invite"
-						value={invite}
-						onChange={setInvite}
-						disabled={busy || !!attempt}
-					/>
-					<p>
-						Everyone in this recorded branch can discover, read and post. Invited people gain explicit access and follow
-						it. Creation is quiet.
-					</p>
-					<footer>
-						<button type="submit" disabled={busy || !!attempt || !scopeHead || !name.trim() || !purpose.trim()}>
+					<CommunicationRecipients world={world} label="Invite" value={invite} onChange={setInvite} disabled={locked} />
+					{error && <p role="alert">{error}</p>}
+					<footer className="wp-modal-footer">
+						<button type="button" className="wp-button" disabled={locked} onClick={() => setCreating(false)}>
+							Back
+						</button>
+						<button
+							type="submit"
+							className="wp-button wp-button-primary"
+							disabled={locked || !scopeHead || !name.trim() || !purpose.trim()}
+						>
 							Create channel
 						</button>
 					</footer>
@@ -199,85 +217,111 @@ export function ChannelBrowser({
 			) : (
 				<>
 					<form
+						className="wp-channel-search"
 						onSubmit={(event) => {
 							event.preventDefault();
 							void find();
 						}}
 					>
-						<label>
-							Name or purpose
-							<input value={query} onChange={(event) => setQuery(event.target.value)} />
-						</label>
-						<label>
-							Organization filter
-							<select value={scopeHead} onChange={(event) => setScopeHead(event.target.value)}>
-								<option value="">All accessible organizations</option>
-								{heads.map((person) => (
-									<option key={person.character.id} value={person.character.id}>
-										{person.character.name}
-									</option>
-								))}
-							</select>
-						</label>
-						<label>
-							Archive state
-							<select value={archived} onChange={(event) => setArchived(event.target.value as typeof archived)}>
-								<option value="exclude">Active channels</option>
-								<option value="include">Active and archived</option>
-								<option value="only">Archived channels</option>
-							</select>
-						</label>
-						<label>
-							Page size
+						<label className="wp-channel-find">
+							<Icon name="search" />
 							<input
-								type="number"
-								min="1"
-								step="1"
-								required
-								value={limit}
-								onChange={(event) => setLimit(Number(event.target.value))}
+								aria-label="Name or purpose"
+								placeholder="Search by name or purpose"
+								value={query}
+								onChange={(event) => setQuery(event.target.value)}
 							/>
 						</label>
-						<button type="submit" disabled={busy || !Number.isSafeInteger(limit) || limit < 1}>
-							Search channels
-						</button>
+						<div className="wp-channel-filters">
+							<Select
+								label="Organization filter"
+								value={scopeHead}
+								options={[
+									{ value: "", label: "All organizations" },
+									...heads.map((person) => ({ value: person.character.id, label: person.character.name })),
+								]}
+								onChange={setScopeHead}
+							/>
+							<Select
+								label="Archive state"
+								value={archived}
+								options={[
+									{ value: "exclude" as const, label: "Active channels" },
+									{ value: "include" as const, label: "Active and archived" },
+									{ value: "only" as const, label: "Archived channels" },
+								]}
+								onChange={setArchived}
+							/>
+							<button
+								type="button"
+								className="wp-button wp-button-primary"
+								disabled={locked}
+								onClick={() => setCreating(true)}
+							>
+								<Icon name="plus" />
+								Create topic channel
+							</button>
+						</div>
 					</form>
-					<section className="wp-channel-discovery" aria-label="Accessible channels">
+					<section className="wp-channel-discovery" aria-label="Accessible channels" aria-busy={searching}>
 						{threads.map((thread) => (
-							<article key={thread.id}>
-								<h3>{thread.name}</h3>
-								<p>{thread.purpose ?? "Structural channel"}</p>
-								{thread.scope_head && (
-									<p>
-										Recorded scope:{" "}
-										{people.find((person) => person.character.id === thread.scope_head)?.character.name ??
-											thread.scope_head}
-									</p>
-								)}
-								{thread.pinned && <p>Current context: message #{thread.pinned.seq}</p>}
-								<p>
-									{thread.channel_type} · {thread.following ? "Following" : "Not following"}
-									{thread.archived ? " · Archived" : ""}
-								</p>
-								<button type="button" disabled={busy} onClick={() => open(thread)}>
-									Open {thread.name}
-								</button>
-							</article>
+							<button
+								key={thread.id}
+								type="button"
+								className="wp-channel-row"
+								aria-label={`Open ${thread.name}`}
+								onClick={() => open(thread)}
+							>
+								<span className="wp-channel-row-name">
+									<span aria-hidden="true">#</span>
+									{thread.name}
+									{thread.archived && <small>Archived</small>}
+								</span>
+								<span className="wp-channel-row-purpose">{thread.purpose ?? "Structural channel"}</span>
+								<span className="wp-channel-row-meta">
+									{thread.following ? (
+										<span className="wp-channel-following">
+											<Icon name="check" />
+											Following
+										</span>
+									) : (
+										<span>Not following</span>
+									)}
+									{thread.scope_head && <span>{nameOf(thread.scope_head)}&rsquo;s organization</span>}
+									<span>{thread.channel_type}</span>
+									{thread.pinned && <span>Pinned #{thread.pinned.seq}</span>}
+								</span>
+								<span className="wp-channel-row-open" aria-hidden="true">
+									Open
+								</span>
+							</button>
 						))}
-						{!busy && !threads.length && <p>No matching accessible channels.</p>}
+						{!searching && !threads.length && !error && (
+							<div className="wp-channel-empty">
+								<p>No channels match.</p>
+								<button type="button" className="wp-button" onClick={() => setCreating(true)}>
+									Create a channel instead
+								</button>
+							</div>
+						)}
+						{cursor && (
+							<button
+								type="button"
+								className="wp-pill wp-channel-more"
+								disabled={searching}
+								onClick={() => void find(cursor)}
+							>
+								{searching ? "Loading\u2026" : "More channels"}
+							</button>
+						)}
 					</section>
-					{cursor && (
-						<button type="button" disabled={busy} onClick={() => void find(cursor)}>
-							More channels
-						</button>
-					)}
+					{error && <p role="alert">{error}</p>}
 				</>
 			)}
-			{error && <p role="alert">{error}</p>}
 			{attempt && (
 				<p className="wp-thread-attempt">
 					Attempt: {attempt}{" "}
-					<button type="button" disabled={busy} onClick={() => void recover()}>
+					<button type="button" className="wp-button" disabled={busy} onClick={() => void recover()}>
 						Check creation outcome
 					</button>
 				</p>
@@ -298,6 +342,7 @@ export function ChannelBrowser({
 					</label>
 					<button
 						type="button"
+						className="wp-button"
 						disabled={busy || !acknowledgeDuplicate}
 						onClick={() => {
 							pendingCreation = undefined;

@@ -3,6 +3,7 @@ import type { JiraIssue, JiraIssueDetail, JiraTransition } from "../src/integrat
 import type { WorldSnapshot } from "../src/world.js";
 import { useOutsideWrite, type WriteState } from "./overlay/places/outside-write.js";
 import { RichView } from "./overlay/places/rich-view.js";
+import { Select } from "./workplace-fields.js";
 import { Icon } from "./workplace-icon.js";
 import { usePaneResize } from "./workplace-resize.js";
 import "./workplace-issues.css";
@@ -161,23 +162,21 @@ function DelegateIssue({
 		>
 			<h3>Delegate to your team</h3>
 			<p>This sends an instruction, not a Jira assignment.</p>
-			<label>
-				Person or team head
-				<select
-					aria-label="Person or team head"
+			<div className="wp-field">
+				<span>Person or team head</span>
+				<Select
+					label="Person or team head"
 					value={to}
+					placeholder="Choose a recipient"
 					disabled={locked || !world.connected}
-					onChange={(event) => setTo(event.target.value)}
-				>
-					<option value="">Choose a recipient</option>
-					{people.map((person) => (
-						<option key={person.id} value={person.id}>
-							{person.name}
-							{heads.has(person.id) ? " (team head)" : ""}
-						</option>
-					))}
-				</select>
-			</label>
+					options={people.map((person) => ({
+						value: person.id,
+						label: person.name,
+						...(heads.has(person.id) ? { detail: "Team head" } : {}),
+					}))}
+					onChange={setTo}
+				/>
+			</div>
 			<label>
 				Goal and context
 				<textarea

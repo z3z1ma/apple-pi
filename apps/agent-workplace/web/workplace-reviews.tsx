@@ -20,6 +20,7 @@ import type {
 import type { ReviewRequest, ReviewTarget } from "../../../components/code-review/src/types.js";
 import type { ReviewManagement, ReviewsApi } from "../src/reviews.js";
 import type { WorldSnapshot } from "../src/world.js";
+import { Select } from "./workplace-fields.js";
 import { EvidenceView, SourceView } from "./workplace-review-views.js";
 import "./workplace-reviews.css";
 
@@ -412,17 +413,18 @@ export function WorkplaceReviews({ root, active, world }: { root: string; active
 							<div className="wp-review-body">
 								{part === "source" && (
 									<form onSubmit={(event) => event.preventDefault()}>
-										<select
-											aria-label="Captured side"
+										<Select
+											label="Captured side"
 											value={side}
-											onChange={(event) => {
-												setSide(event.target.value as typeof side);
+											options={[
+												{ value: "after" as const, label: "after" },
+												{ value: "before" as const, label: "before" },
+											]}
+											onChange={(next) => {
+												setSide(next);
 												setDetailOffset(0);
 											}}
-										>
-											<option>after</option>
-											<option>before</option>
-										</select>
+										/>
 										<input
 											aria-label="Captured file path"
 											placeholder="Blank lists captured files"
@@ -757,20 +759,21 @@ function ReviewCapture({
 			>
 				<fieldset disabled={busy || !!pending}>
 					<legend>{root || "Select a repository first"}</legend>
-					<label>
-						Target{" "}
-						<select
+					<div className="wp-field">
+						<span>Target</span>
+						<Select
+							label="Target"
 							value={kind}
-							onChange={(event) => {
-								setKind(event.target.value as typeof kind);
+							options={(["working-tree", "staged", "commit", "range", "branch"] as const).map((value) => ({
+								value,
+								label: value,
+							}))}
+							onChange={(next) => {
+								setKind(next);
 								setPreview(undefined);
 							}}
-						>
-							{["working-tree", "staged", "commit", "range", "branch"].map((kind) => (
-								<option key={kind}>{kind}</option>
-							))}
-						</select>
-					</label>
+						/>
+					</div>
 					<label>
 						Base{" "}
 						<input

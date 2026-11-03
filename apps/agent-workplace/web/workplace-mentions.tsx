@@ -11,7 +11,8 @@ function typedMention(text: string, caret: number): { start: number; query: stri
 	return match ? { start: caret - match[1]!.length - 1, query: match[1]!.toLowerCase() } : undefined;
 }
 
-function people(world: WorldSnapshot): Person[] {
+function people(world: WorldSnapshot | undefined): Person[] {
+	if (!world) return [];
 	return [
 		...world.characters
 			.filter((person) => !person.facts?.temporary)
@@ -27,7 +28,7 @@ function people(world: WorldSnapshot): Person[] {
  * people whose @Name is still in the text, so a post can ask for their attention.
  */
 export function useMentions(
-	world: WorldSnapshot,
+	world: WorldSnapshot | undefined,
 	box: RefObject<HTMLTextAreaElement | null>,
 	text: string,
 	setText: (text: string) => void,
@@ -116,6 +117,15 @@ export function useMentions(
 		onKeyDown,
 		mentioned: (value: string) =>
 			chosen.filter((person) => value.includes(`@${person.name}`)).map((person) => person.id),
+		/** The text with each chosen @Name followed by its id once, so an agent reading it knows exactly who is meant. */
+		withIds: (value: string) =>
+			chosen.reduce(
+				(out, person) =>
+					out.includes(`@${person.name} (${person.id})`)
+						? out
+						: out.replace(`@${person.name}`, `@${person.name} (${person.id})`),
+				value,
+			),
 		reset: () => setChosen([]),
 	};
 }

@@ -114,8 +114,16 @@ export function ThreadPane({
 	const locked = pending || unresolved;
 	const latestSeq = page?.window_through ?? 0;
 	const hasNew = !!channel && channel.lastSeq > latestSeq;
+	// Loading earlier messages keeps what he was reading in place, as the page grows above it.
+	const keepFromBottom = useRef<number | undefined>(undefined);
+	const lastTop = useRef(0);
 	useLayoutEffect(() => {
-		if (page && followLatest.current && messages.current) messages.current.scrollTop = messages.current.scrollHeight;
+		const el = messages.current;
+		if (!page || !el) return;
+		if (keepFromBottom.current !== undefined) {
+			el.scrollTop = el.scrollHeight - keepFromBottom.current;
+			keepFromBottom.current = undefined;
+		} else if (followLatest.current) el.scrollTop = el.scrollHeight;
 	}, [page]);
 	const read = useCallback(async (options: ConversationReadOptions, append = false) => {
 		if (!Number.isSafeInteger(options.limit) || options.limit < 1) {
@@ -177,6 +185,13 @@ export function ThreadPane({
 		attemptedSeq.current = channel!.lastSeq;
 		void read({ thread: id, view: "recent", limit });
 	}, [thread, hasNew, locked, focused, channel, search, read, id, limit]);
+	const earlier = () => {
+		const el = messages.current;
+		if (!page?.next_cursor || pending || search || !el) return;
+		followLatest.current = false;
+		keepFromBottom.current = el.scrollHeight - el.scrollTop;
+		void read({ ...(readOptions.current ?? { thread: id, view, limit }), cursor: page.next_cursor }, true);
+	};
 	// Like Slack: what he is looking at is read. The newest message counts as seen while the window has focus and the
 	// conversation shows its end; reading older pages or searching marks nothing.
 	const markedThrough = useRef(0);
@@ -562,9 +577,13 @@ export function ThreadPane({
 					const el = messages.current;
 					if (el) followLatest.current = el.scrollHeight - el.clientHeight - el.scrollTop < 24;
 					if (followLatest.current) markSeen();
+					// Like Slack, earlier messages load as he scrolls up to them; scrolling the reader to its end loads nothing.
+					if (el && el.scrollTop < lastTop.current && el.scrollTop < 120) earlier();
+					if (el) lastTop.current = el.scrollTop;
 				}}
 			>
 				{!page && pending && <p role="status">Reading conversation...</p>}
+				{search && <p role="status">Search results are inspection only; catch-up is unchanged.</p>}
 				{!listener && page && !page.messages.length && !search && <p className="wp-thread-empty">No messages yet.</p>}
 				{listener && page && !page.messages.length && !search && (
 					<div className="wp-desk-welcome">
@@ -580,7 +599,13 @@ export function ThreadPane({
 						</ul>
 					</div>
 				)}
-				{search && <p role="status">Search results are inspection only; catch-up is unchanged.</p>}
+				{!search && page?.next_cursor && (
+					<div className="wp-earlier">
+						<button type="button" className="wp-pill" disabled={pending} onClick={earlier}>
+							{pending ? "Loading\u2026" : view === "recent" ? "Earlier messages" : "Next message page"}
+						</button>
+					</div>
+				)}
 				{page && (
 					<ThreadMessages
 						world={world}
@@ -610,24 +635,12 @@ export function ThreadPane({
 						}
 					/>
 				)}
-				{search?.next_cursor ? (
-					<button type="button" disabled={pending} onClick={() => void find(search.next_cursor)}>
-						More search results
-					</button>
-				) : (
-					!search &&
-					page?.next_cursor && (
-						<button
-							type="button"
-							disabled={pending}
-							onClick={() => {
-								followLatest.current = false;
-								void read({ ...(readOptions.current ?? { thread: id, view, limit }), cursor: page.next_cursor }, true);
-							}}
-						>
-							{view === "recent" ? "Earlier messages" : "Next message page"}
+				{search?.next_cursor && (
+					<div className="wp-earlier">
+						<button type="button" className="wp-pill" disabled={pending} onClick={() => void find(search.next_cursor)}>
+							More search results
 						</button>
-					)
+					</div>
 				)}
 				{error && <p role="alert">{error}</p>}
 				{note && <p role="status">{note}</p>}
@@ -815,6 +828,7 @@ export function ThreadPane({
 					close={() => setDialog(undefined)}
 				>
 					<form
+						className="wp-modal-form"
 						onSubmit={(event) => {
 							event.preventDefault();
 							submitDialog();
@@ -822,7 +836,7 @@ export function ThreadPane({
 					>
 						{dialog === "invite" || dialog === "remove" ? (
 							<>
-								<p>
+								<p className="wp-modal-lede">
 									{dialog === "invite"
 										? "Invitees gain access to retained history. Invitations change no reporting lines or assignments and launch nobody."
 										: "Remove explicit grants or mail members. Organization-derived channel access may remain; this does not make a person leave their organization."}
@@ -844,13 +858,13 @@ export function ThreadPane({
 							</>
 						) : (
 							<>
-								<p>
+								<p className="wp-modal-lede">
 									{dialog === "archive"
 										? "Publish a conclusion and archive together. This records your conclusion, not consensus or completed work."
 										: "Record a reason and reopen this discussion. This restores neither actors nor assignments."}
 								</p>
-								<label>
-									{dialog === "archive" ? "Conclusion" : "Reopening reason"}
+								<label className="wp-field">
+									<span>{dialog === "archive" ? "Conclusion" : "Reopening reason"}</span>
 									<textarea
 										required
 										value={reason}
@@ -873,12 +887,13 @@ export function ThreadPane({
 						{unresolved && (
 							<p>Outcome uncertain. Close this dialog and check the saved attempt before another action.</p>
 						)}
-						<footer>
-							<button type="button" disabled={pending} onClick={() => setDialog(undefined)}>
+						<footer className="wp-modal-footer">
+							<button type="button" className="wp-button" disabled={pending} onClick={() => setDialog(undefined)}>
 								Cancel
 							</button>
 							<button
 								type="submit"
+								className="wp-button wp-button-primary"
 								disabled={locked || (dialog === "invite" || dialog === "remove" ? !people.length : !reason.trim())}
 							>
 								Confirm {dialog}

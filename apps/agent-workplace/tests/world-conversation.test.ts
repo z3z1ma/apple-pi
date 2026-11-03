@@ -5,6 +5,7 @@ import { type Browser, chromium, type Page } from "playwright-core";
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
 import { appFile, contentType } from "../src/app-files.js";
 import type { Character, CharacterFacts, MailThread, TranscriptEntry, WorldSnapshot } from "../src/world.js";
+import { addRecipient, recipients } from "./helpers/select.js";
 import { installWorkplaceCommunications } from "./helpers/workplace-communications.js";
 
 // Seam 2 for the conversation panel: the committed, built world UI in headless Chrome, with the preload API replaced by
@@ -1872,13 +1873,13 @@ test("closing and reopening a mail draft retains its body and recipient across a
 		await page.getByRole("link", { name: "Workplace", exact: true }).click();
 		await page.getByRole("button", { name: "Mail", exact: true }).click();
 		await page.getByRole("button", { name: "Compose", exact: true }).click();
-		await page.getByRole("combobox", { name: "Mail recipient", exact: true }).selectOption("pi-tests");
+		await addRecipient(page.locator("body"), "To", "pi-tests");
 		await page.getByRole("textbox", { name: "Mail body", exact: true }).fill("Keep this recipient with this draft.");
 		await page.getByRole("button", { name: "Close new message", exact: true }).click();
 		await page.getByRole("button", { name: "Chat", exact: true }).click();
 		await page.getByRole("button", { name: "Mail", exact: true }).click();
 		await page.getByRole("button", { name: "Compose", exact: true }).click();
-		expect(await page.getByRole("combobox", { name: "Mail recipient", exact: true }).inputValue()).toBe("pi-tests");
+		expect(await recipients(page.locator("body"))).toEqual(["pi-tests"]);
 		expect(await page.getByRole("textbox", { name: "Mail body", exact: true }).inputValue()).toBe(
 			"Keep this recipient with this draft.",
 		);

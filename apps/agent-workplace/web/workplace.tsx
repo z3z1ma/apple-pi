@@ -4,6 +4,7 @@ import type { ConversationInfo } from "../src/communications.js";
 import type { Character, WorkplaceThread, WorldSnapshot } from "../src/world.js";
 import { FileReferenceCwd, FileReferenceNavigation, type FileReferenceTarget } from "./file-references.js";
 import { sleeperCharacter } from "./game/layout.js";
+import { MentionPeople } from "./overlay/conversation/actions.js";
 import { EmbeddedConversation } from "./overlay/conversation/conversation-panel.js";
 import { conversationPanel } from "./overlay/conversation/panel-state.js";
 import { TranscriptAuthor, TranscriptMessage, type TranscriptMessageInfo } from "./overlay/conversation/transcript.js";
@@ -907,7 +908,9 @@ function Chat({
 										{active && (
 											<FileReferenceCwd.Provider value={person.facts?.cwd}>
 												<TranscriptMessage.Provider value={dmMessage}>
-													<EmbeddedConversation character={person} store={store} showTools={showTools} />
+													<MentionPeople.Provider value={world}>
+														<EmbeddedConversation character={person} store={store} showTools={showTools} />
+													</MentionPeople.Provider>
 												</TranscriptMessage.Provider>
 											</FileReferenceCwd.Provider>
 										)}

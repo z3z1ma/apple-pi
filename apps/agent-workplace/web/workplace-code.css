@@ -27,7 +27,7 @@
 	font-size: 12px;
 	color: var(--wp-muted);
 }
-.wp-code-toolbar select {
+.wp-code-toolbar .wp-select {
 	max-width: 380px;
 	min-width: 160px;
 }
@@ -438,7 +438,7 @@
 	.wp-code-panes {
 		grid-template-columns: var(--wp-files-width, 180px) 6px minmax(0, 1fr);
 	}
-	.wp-code-toolbar select {
+	.wp-code-toolbar .wp-select {
 		max-width: 240px;
 	}
 }

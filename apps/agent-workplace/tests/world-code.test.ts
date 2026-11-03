@@ -6,6 +6,7 @@ import { afterAll, beforeAll, expect, test, vi } from "vitest";
 import { appFile, contentType } from "../src/app-files.js";
 import type { WorkspaceDiff, WorkspacePath, WorkspaceSave } from "../src/workspace.js";
 import type { WorldSnapshot } from "../src/world.js";
+import { choose, chosen } from "./helpers/select.js";
 
 const APP = fileURLToPath(new URL("..", import.meta.url));
 const ORIGIN = "http://localhost";
@@ -559,7 +560,7 @@ test("Code reviews show retained evidence and explicit capture consent without l
 		await reviews.getByRole("button", { name: /abcdef0 Export the value/ }).waitFor();
 		await reviews.getByRole("tab", { name: "Source" }).click();
 		await reviews.getByRole("button", { name: "value.ts", exact: true }).click();
-		await reviews.getByLabel("Captured side").selectOption("before");
+		await choose(reviews.getByLabel("Captured side"), "before");
 		await reviews.getByText("original captured source", { exact: true }).waitFor();
 		const tabs = {
 			Summary: "Two scopes carry the risk.",
@@ -943,13 +944,18 @@ test("linked worktrees expose metadata and retain separate drafts without saving
 		await manualRoot.clear();
 		const select = page.getByRole("combobox", { name: "Linked worktree", exact: true });
 		await vi.waitFor(async () => expect(await select.isEnabled()).toBe(true));
-		const entries = await select.locator("option").evaluateAll((options) =>
-			options.map((option) => ({
-				value: (option as HTMLOptionElement).value,
-				text: option.textContent ?? "",
-				disabled: (option as HTMLOptionElement).disabled,
-			})),
-		);
+		await select.click();
+		const entries = await page
+			.getByRole("listbox", { name: "Linked worktree", exact: true })
+			.getByRole("option")
+			.evaluateAll((options) =>
+				options.map((option) => ({
+					value: option.getAttribute("data-value"),
+					text: option.textContent ?? "",
+					disabled: option.getAttribute("aria-disabled") === "true",
+				})),
+			);
+		await page.keyboard.press("Escape");
 		expect(entries.find((entry) => entry.value === LINKED_ROOT)).toMatchObject({
 			disabled: false,
 			text: expect.stringContaining("Locked"),
@@ -963,9 +969,9 @@ test("linked worktrees expose metadata and retain separate drafts without saving
 			disabled: true,
 			text: expect.stringContaining("Bare"),
 		});
-		await select.selectOption(LINKED_ROOT);
+		await choose(select, LINKED_ROOT);
 		await vi.waitFor(async () =>
-			expect(await page.getByRole("combobox", { name: "Code repository", exact: true }).inputValue()).toBe(LINKED_ROOT),
+			expect(await chosen(page.getByRole("combobox", { name: "Code repository", exact: true }))).toBe(LINKED_ROOT),
 		);
 		await openMain(page);
 		await replaceText(page, 'export const message = "linked-root draft";\n');
@@ -973,10 +979,10 @@ test("linked worktrees expose metadata and retain separate drafts without saving
 			expect.arrayContaining([{ root: LINKED_ROOT, path: "src/main.ts" }]),
 		);
 		await shot(page, "linked-worktree-draft");
-		await select.selectOption(ROOT);
+		await choose(select, ROOT);
 		await page.getByRole("tab", { name: /main\.ts/ }).click();
 		expect(await editorText(page)).toContain("original-root draft");
-		await select.selectOption(LINKED_ROOT);
+		await choose(select, LINKED_ROOT);
 		await page.getByRole("tab", { name: /main\.ts/ }).click();
 		expect(await editorText(page)).toContain("linked-root draft");
 		expect(await page.evaluate(() => (window as any).workspaceCalls.saves)).toEqual([]);
@@ -1164,10 +1170,10 @@ test("bulk close confirms dirty targets atomically and preserves buffers in othe
 			.click();
 		await vi.waitFor(async () => expect(await editorText(page)).toContain("Fixture project"));
 		const roots = page.getByRole("combobox", { name: "Code repository", exact: true });
-		await roots.selectOption(`${ROOT}-other`);
+		await choose(roots, `${ROOT}-other`);
 		await openMain(page);
 		await replaceText(page, 'export const message = "other repository draft";\n');
-		await roots.selectOption(ROOT);
+		await choose(roots, ROOT);
 		const readme = page.getByRole("tab", { name: "README.md", exact: true });
 		await readme.click();
 		await readme.click({ button: "right" });
@@ -1188,7 +1194,7 @@ test("bulk close confirms dirty targets atomically and preserves buffers in othe
 		await menu.getByRole("menuitem", { name: "Close all", exact: true }).click();
 		await readme.waitFor({ state: "hidden" });
 		expect(prompts).toHaveLength(2);
-		await roots.selectOption(`${ROOT}-other`);
+		await choose(roots, `${ROOT}-other`);
 		const other = page.getByRole("tab", { name: /main.ts/ });
 		await other.click();
 		expect(await editorText(page)).toContain("other repository draft");

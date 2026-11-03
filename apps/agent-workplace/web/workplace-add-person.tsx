@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { NAME_MAX, type RoleChoice, type WorldSnapshot } from "../src/world.js";
+import { Select } from "./workplace-fields.js";
 import "./workplace-add-person.css";
 
 export function AddPerson({
@@ -118,14 +119,15 @@ export function AddPerson({
 			<form onSubmit={submit} aria-busy={busy}>
 				<fieldset disabled={busy || !!pending}>
 					<label htmlFor={`${id}-role`}>Role</label>
-					<select id={`${id}-role`} value={role} required onChange={(event) => setRole(event.target.value)}>
-						{!roles.length && <option value="">Loading roles...</option>}
-						{roles.map((choice) => (
-							<option key={choice.name} value={choice.name}>
-								{choice.title}
-							</option>
-						))}
-					</select>
+					<Select
+						id={`${id}-role`}
+						label="Role"
+						value={role}
+						placeholder={roles.length ? "Choose a role" : "Loading roles\u2026"}
+						disabled={busy || !!pending}
+						options={roles.map((choice) => ({ value: choice.name, label: choice.title, detail: choice.mandate }))}
+						onChange={setRole}
+					/>
 					{selected && (
 						<div className="wp-add-person-mandate">
 							<p>{selected.mandate}</p>

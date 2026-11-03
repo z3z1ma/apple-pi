@@ -6,6 +6,7 @@ import { afterAll, beforeAll, expect, test, vi } from "vitest";
 import { appFile, contentType } from "../src/app-files.js";
 import type { WorkspaceApi, WorkspacePath } from "../src/workspace.js";
 import type { ConversationPage, WorldSnapshot } from "../src/world.js";
+import { choose } from "./helpers/select.js";
 import { installWorkplaceCommunications } from "./helpers/workplace-communications.js";
 
 const APP = fileURLToPath(new URL("..", import.meta.url));
@@ -366,7 +367,7 @@ test("mail links open their own canonical root, preserve dirty buffers and surfa
 		await page.keyboard.insertText("DRAFT");
 		await page.getByRole("img", { name: "Unsaved changes", exact: true }).waitFor();
 		await page.getByRole("button", { name: "Mail", exact: true }).click();
-		await page.getByRole("button", { name: /^Review these files/ }).click();
+		await page.getByRole("button", { name: /Review these files/ }).click();
 		await fileLink(page, `${OTHER}/src/other.ts:3:5`).waitFor();
 		await fileLink(page, "src/main.ts:3:5").waitFor();
 		const known = page.locator(".wp-message").filter({ hasText: "Other repository" });
@@ -383,7 +384,7 @@ test("mail links open their own canonical root, preserve dirty buffers and surfa
 		await fileLink(page, `${OTHER}/src/other.ts:3:5`).click();
 		await codeReady(page, "other.ts");
 		expect((await calls(page)).reads.at(-1)).toEqual({ root: `${OTHER}/src`, path: "other.ts" });
-		await page.getByRole("combobox", { name: "Code repository", exact: true }).selectOption(ROOT);
+		await choose(page.getByRole("combobox", { name: "Code repository", exact: true }), ROOT);
 		await page.getByRole("tab").and(page.locator('[title="src/main.ts"]')).click();
 		await vi.waitFor(async () =>
 			expect(await page.locator(".monaco-editor .view-lines").textContent()).toContain("0123DRAFT456789"),

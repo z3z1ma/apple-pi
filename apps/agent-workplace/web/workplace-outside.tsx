@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { OutsideItem, OutsideMode, OutsideRead, OutsideRule, OutsideSource, WorldSnapshot } from "../src/world.js";
 import { useWorkplaceMenu } from "./workplace-context-menu.js";
+import { Select } from "./workplace-fields.js";
 import { Icon } from "./workplace-icon.js";
 import "./workplace-outside.css";
 
@@ -166,24 +167,19 @@ export function OutsideActivity({ world }: { world: WorldSnapshot }) {
 			{choosing && read?.ok && (
 				<fieldset className="wp-outside-sources" aria-label="How each source is followed">
 					{read.sources.map((item) => (
-						<label key={item.source}>
+						<div key={item.source} className="wp-outside-source">
 							<strong>{SOURCES.find((known) => known.id === item.source)?.label}</strong>
-							<select
-								aria-label={`${item.source} mode`}
+							<Select
+								label={`${item.source} mode`}
 								value={item.mode}
-								onChange={(event) => void choose(item.source, event.target.value as OutsideMode)}
-							>
-								{MODES.map((mode) => (
-									<option key={mode.id} value={mode.id}>
-										{mode.label}
-									</option>
-								))}
-							</select>
+								options={MODES.map((mode) => ({ value: mode.id, label: mode.label }))}
+								onChange={(mode) => void choose(item.source, mode)}
+							/>
 							<span data-error={Boolean(item.error)}>
 								{item.error ??
 									(item.mode === "off" ? "" : item.polledAt ? `Read ${ago(item.polledAt)} ago` : "Reading\u2026")}
 							</span>
-						</label>
+						</div>
 					))}
 					{read.rules.length > 0 && (
 						<ul className="wp-outside-rules" aria-label="Rules">

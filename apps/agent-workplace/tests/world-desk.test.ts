@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { type Browser, chromium, type Page } from "playwright-core";
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
 import { appFile, contentType } from "../src/app-files.js";
+import { choose } from "./helpers/select.js";
 
 const ORIGIN = "http://localhost";
 const appDir = fileURLToPath(new URL("..", import.meta.url));
@@ -672,7 +673,7 @@ test("Activity lists outside work by conversation with the desk's decision, and 
 		);
 		await outside.getByRole("button", { name: "Sources" }).click();
 		await outside.getByRole("list", { name: "Rules" }).getByText("You hid acme/api").waitFor();
-		await outside.getByRole("combobox", { name: "jira mode" }).selectOption("direct");
+		await choose(outside.getByRole("combobox", { name: "jira mode" }), "direct");
 		await vi.waitFor(async () => expect(await page.evaluate(() => (window as any).modes)).toEqual({ jira: "direct" }));
 		await shot(page, "outside-sources-light");
 		await page.getByRole("button", { name: /^Notes/ }).click();

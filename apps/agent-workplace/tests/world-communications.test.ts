@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { type Browser, chromium, type Page } from "playwright-core";
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
 import { appFile, contentType } from "../src/app-files.js";
+import { addRecipient, choose, recipients } from "./helpers/select.js";
 
 const ORIGIN = "http://localhost";
 const appDir = fileURLToPath(new URL("..", import.meta.url));
@@ -417,23 +418,25 @@ test("channel discovery creates in the explicitly selected organization without 
 		await page.getByRole("button", { name: "Discover or create channels" }).click();
 		const dialog = page.getByRole("dialog", { name: "Discover channels", exact: true });
 		await dialog.getByRole("button", { name: "Open checkout", exact: true }).waitFor();
+		await shot(page, "discover-light-1440");
 		expect(await calls(page, "readThread")).toEqual([]);
 		await dialog.getByRole("button", { name: "Create topic channel", exact: true }).click();
-		await page.getByRole("combobox", { name: "Organization scope", exact: true }).selectOption("ben");
+		await choose(page.getByRole("combobox", { name: "Organization scope", exact: true }), "ben");
 		await page.getByRole("textbox", { name: "Channel name", exact: true }).fill("checkout review");
 		await page
 			.getByRole("textbox", { name: "Purpose", exact: true })
 			.fill("Keep cross-team evidence without changing reporting.");
 		const creation = page.getByRole("dialog", { name: "Create topic channel", exact: true });
-		const inputBounds = (await creation.getByRole("combobox", { name: "Invite: person", exact: true }).boundingBox())!;
-		const addBounds = (await creation.getByRole("button", { name: "Add", exact: true }).boundingBox())!;
-		expect(inputBounds.width).toBeGreaterThan(addBounds.width);
+		const inputBounds = (await creation
+			.getByRole("combobox", { name: "Invite recipients", exact: true })
+			.boundingBox())!;
+		expect(inputBounds.width).toBeGreaterThan(120);
 		const titleBounds = (await creation
 			.getByRole("heading", { name: "Create topic channel", exact: true })
 			.boundingBox())!;
 		const closeBounds = (await creation.getByRole("button", { name: "Close", exact: true }).boundingBox())!;
 		expect(titleBounds.x + titleBounds.width).toBeLessThanOrEqual(closeBounds.x);
-		expect(addBounds.x + addBounds.width).toBeLessThanOrEqual(page.viewportSize()!.width);
+		expect(inputBounds.x + inputBounds.width).toBeLessThanOrEqual(page.viewportSize()!.width);
 		await shot(page, "create-light-1440");
 		await page.getByRole("button", { name: "Create channel", exact: true }).click();
 		await page.getByRole("heading", { name: "# checkout review", exact: true }).waitFor();
@@ -488,11 +491,8 @@ test("channel history pages and searches without catch-up and posts only explici
 		await vi.waitFor(async () => expect(await calls(page, "post")).toHaveLength(1));
 		expect((await calls(page, "post"))[0].notify).toEqual([]);
 		await page.getByText("Notify: nobody (quiet post)", { exact: true }).click();
-		await page.getByRole("combobox", { name: "Notify: person", exact: true }).fill("ben");
-		await page
-			.getByRole("group", { name: "Notify", exact: true })
-			.getByRole("button", { name: "Add", exact: true })
-			.click();
+		await page.getByRole("combobox", { name: "Notify recipients", exact: true }).fill("ben");
+		await page.getByRole("combobox", { name: "Notify recipients", exact: true }).press("Enter");
 		await body.fill("Please inspect the refresh evidence.");
 		await page.getByRole("button", { name: "Post message", exact: true }).click();
 		await vi.waitFor(async () => expect(await calls(page, "post")).toHaveLength(2));
@@ -529,24 +529,30 @@ test("participants can invite, revoke only explicit grants, archive and reopen t
 		await actions.click();
 		await page.getByRole("button", { name: "Invite people", exact: true }).click();
 		let dialog = page.getByRole("dialog", { name: "Invite people", exact: true });
-		await dialog.getByRole("combobox", { name: "Invite: person", exact: true }).fill("known-foreign-id");
-		await dialog.getByRole("button", { name: "Add", exact: true }).click();
+		await dialog.getByRole("combobox", { name: "Invite recipients", exact: true }).fill("known-foreign-id");
+		await dialog.getByRole("combobox", { name: "Invite recipients", exact: true }).press("Enter");
 		await dialog.getByRole("button", { name: "Confirm invite", exact: true }).click();
 		await vi.waitFor(async () => expect(await calls(page, "invite")).toHaveLength(1));
 		expect((await calls(page, "invite"))[0].people).toEqual(["known-foreign-id"]);
 		await actions.click();
 		await page.getByRole("button", { name: "Remove invitations", exact: true }).click();
 		dialog = page.getByRole("dialog", { name: "Remove explicit invitations", exact: true });
-		expect(await dialog.locator('datalist option[value="foreign-guest"]').textContent()).toBe("Foreign Guest");
-		await dialog.getByRole("combobox", { name: "Remove invitation: person", exact: true }).fill("foreign-guest");
-		await dialog.getByRole("button", { name: "Add", exact: true }).click();
+		const removal = dialog.getByRole("combobox", { name: "Remove invitation recipients", exact: true });
+		await removal.fill("foreign-guest");
+		expect(
+			await page
+				.getByRole("listbox", { name: "Remove invitation suggestions", exact: true })
+				.locator('[data-value="foreign-guest"]')
+				.textContent(),
+		).toContain("Foreign Guest");
+		await removal.press("Enter");
 		await dialog.getByRole("button", { name: "Confirm remove", exact: true }).click();
 		await page.getByText(/Foreign Guest: explicit invitation removed; no access; not following/).waitFor();
 		await actions.click();
 		await page.getByRole("button", { name: "Remove invitations", exact: true }).click();
 		dialog = page.getByRole("dialog", { name: "Remove explicit invitations", exact: true });
-		await dialog.getByRole("combobox", { name: "Remove invitation: person", exact: true }).fill("ben");
-		await dialog.getByRole("button", { name: "Add", exact: true }).click();
+		await dialog.getByRole("combobox", { name: "Remove invitation recipients", exact: true }).fill("ben");
+		await dialog.getByRole("combobox", { name: "Remove invitation recipients", exact: true }).press("Enter");
 		await dialog.getByRole("button", { name: "Confirm remove", exact: true }).click();
 		await page.getByText(/Ben: explicit invitation removed; still has access; following/).waitFor();
 		await actions.click();
@@ -673,7 +679,7 @@ test("Mail Compose recovers a lost send outcome after closing without creating a
 		await page.getByRole("button", { name: "Mail", exact: true }).click();
 		await page.getByRole("button", { name: "Compose", exact: true }).click();
 		let compose = page.getByRole("dialog", { name: "New message", exact: true });
-		await compose.getByRole("combobox", { name: "Mail recipient", exact: true }).selectOption("ben");
+		await addRecipient(compose, "To", "ben");
 		await compose.getByRole("textbox", { name: "Mail body", exact: true }).fill("One addressed new thread.");
 		await page.evaluate(() => {
 			(window as any).uncertainMail = true;
@@ -694,7 +700,7 @@ test("Mail Compose recovers a lost send outcome after closing without creating a
 		expect(await compose.getByRole("textbox", { name: "Mail body", exact: true }).inputValue()).toBe(
 			"One addressed new thread.",
 		);
-		expect(await compose.getByRole("combobox", { name: "Mail recipient", exact: true }).inputValue()).toBe("ben");
+		expect(await recipients(compose)).toEqual(["ben"]);
 		await compose.getByRole("button", { name: "Check mail outcome", exact: true }).click();
 		await compose.getByRole("status").filter({ hasText: "Sent to Ben." }).waitFor();
 		expect(await calls(page, "sendMail")).toHaveLength(1);

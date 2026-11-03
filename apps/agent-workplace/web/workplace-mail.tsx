@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { CommunicationResult } from "../src/communications.js";
 import type { MailItem, MailThreadSummary, WorldSnapshot } from "../src/world.js";
+import { Recipients } from "./workplace-fields.js";
 import { Icon } from "./workplace-icon.js";
 import { PersonAvatar } from "./workplace-people.js";
 import { usePaneResize } from "./workplace-resize.js";
@@ -8,7 +9,11 @@ import { ThreadPane } from "./workplace-thread.js";
 import "./workplace-mail.css";
 
 const api = window.agentWorkplace;
-let composeAttempt: { id: string; to: string; body: string; result?: CommunicationResult } | undefined;
+let composeAttempt:
+	| { id: string; to: string[]; cc: string[]; subject: string; body: string; result?: CommunicationResult }
+	| undefined;
+/** The subject a message without one gets. */
+const NO_SUBJECT = "Message from the operator";
 const ACTIVITY_SEEN = "workplace-mail-activity-seen";
 
 /** Today: the time. This year: day and time. Older: the full date. */
@@ -457,8 +462,25 @@ function Compose({
 	setRecipient: (id: string) => void;
 }) {
 	const people = [...world.characters, ...(world.dormant ?? []).filter((person) => !person.retiredAt)];
+	const candidates = [
+		...world.characters
+			.filter((person) => !person.facts?.temporary)
+			.map((person) => ({ id: person.id, name: person.name, detail: person.facts?.title ?? "" })),
+		...(world.dormant ?? [])
+			.filter((person) => !person.retiredAt && !person.temporary)
+			.map((person) => ({
+				id: person.id,
+				name: person.name,
+				detail: person.title ? `${person.title} \u00b7 away` : "Away",
+			})),
+	];
 	const [attempt, setAttempt] = useState(composeAttempt);
-	const to = attempt?.to ?? (recipient || people[0]?.id || "");
+	const [chosenTo, setChosenTo] = useState<string[]>(() => (recipient ? [recipient] : []));
+	const [chosenCc, setChosenCc] = useState<string[]>([]);
+	const [copying, setCopying] = useState(false);
+	const [subject, setSubject] = useState(drafts.get("compose-subject") ?? "");
+	const to = attempt?.to ?? chosenTo;
+	const cc = attempt?.cc ?? chosenCc;
 	const [body, setBody] = useState(drafts.get("compose") ?? "");
 	const [pending, setPending] = useState(false);
 	const [status, setStatus] = useState(composeAttempt ? "Saved mail attempt; check its original outcome." : "");
@@ -492,19 +514,25 @@ function Compose({
 	const send = async () => {
 		if (
 			locked ||
-			!to ||
+			!to.length ||
 			!body.trim() ||
 			(composeAttempt && !["applied", "refused"].includes(composeAttempt.result?.outcome ?? "pending"))
 		)
 			return;
-		const entry = { id: crypto.randomUUID(), to, body };
+		const entry = { id: crypto.randomUUID(), to, cc, subject: subject.trim() || NO_SUBJECT, body };
 		composeAttempt = entry;
 		setAttempt(entry);
 		setPending(true);
 		setStatus("");
 		try {
 			reflect(
-				await api.communications.sendMail({ attempt: entry.id, to: [to], subject: "Message from the operator", body }),
+				await api.communications.sendMail({
+					attempt: entry.id,
+					to: entry.to,
+					...(entry.cc.length ? { cc: entry.cc } : {}),
+					subject: entry.subject,
+					body,
+				}),
 				entry,
 			);
 		} catch (failure) {
@@ -542,25 +570,45 @@ function Compose({
 					void send();
 				}}
 			>
-				<label className="wp-compose-to">
-					<span>To</span>
-					<select
-						aria-label="Mail recipient"
-						value={to}
+				<Recipients
+					label="To"
+					people={candidates}
+					chosen={to}
+					disabled={locked}
+					onChange={(ids) => {
+						setChosenTo(ids);
+						setRecipient(ids[0] ?? "");
+						setAttempt(undefined);
+						composeAttempt = undefined;
+					}}
+					trailing={
+						!copying && !cc.length && !locked ? (
+							<button type="button" className="wp-compose-cc" onClick={() => setCopying(true)}>
+								Cc
+							</button>
+						) : undefined
+					}
+				/>
+				{(copying || cc.length > 0) && (
+					<Recipients
+						label="Cc"
+						people={candidates.filter((person) => !to.includes(person.id))}
+						chosen={cc}
 						disabled={locked}
-						onChange={(e) => {
-							setRecipient(e.target.value);
-							setAttempt(undefined);
-							composeAttempt = undefined;
-						}}
-					>
-						{people.map((person) => (
-							<option key={person.id} value={person.id}>
-								{person.name}
-							</option>
-						))}
-					</select>
-				</label>
+						onChange={setChosenCc}
+					/>
+				)}
+				<input
+					className="wp-compose-subject"
+					aria-label="Subject"
+					placeholder="Subject"
+					value={attempt?.subject ?? subject}
+					disabled={locked}
+					onChange={(event) => {
+						setSubject(event.target.value);
+						drafts.set("compose-subject", event.target.value);
+					}}
+				/>
 				<textarea
 					aria-label="Mail body"
 					placeholder="Write a message…"
@@ -610,7 +658,7 @@ function Compose({
 				)}
 				<footer>
 					<span className="wp-muted">Durable mail, signed as you. People who are away get it when they come back.</span>
-					<button type="submit" className="wp-primary" disabled={locked || !to || !body.trim()}>
+					<button type="submit" className="wp-primary" disabled={locked || !to.length || !body.trim()}>
 						{pending ? "Sending…" : sent ? "Sent" : "Send mail"}
 					</button>
 				</footer>

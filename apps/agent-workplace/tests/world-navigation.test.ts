@@ -5,6 +5,7 @@ import { type Browser, chromium, type Page } from "playwright-core";
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
 import { appFile, contentType } from "../src/app-files.js";
 import type { WorldSnapshot } from "../src/world.js";
+import { addRecipient, recipients } from "./helpers/select.js";
 import { installWorkplaceCommunications } from "./helpers/workplace-communications.js";
 
 const APP = fileURLToPath(new URL("..", import.meta.url));
@@ -267,7 +268,7 @@ test("World is lazy and retained, preserving Code, Chat, Mail and its own draft 
 		await chatDraft.fill("Keep the Chat draft separate.");
 		await page.getByRole("button", { name: "Mail", exact: true }).click();
 		await page.getByRole("button", { name: "Compose", exact: true }).click();
-		await page.getByRole("combobox", { name: "Mail recipient", exact: true }).selectOption("ada");
+		await addRecipient(page.locator("body"), "To", "ada");
 		await page.getByRole("textbox", { name: "Mail body", exact: true }).fill("Keep the Mail draft and recipient.");
 		await page.getByRole("button", { name: "Close new message", exact: true }).click();
 		await page.getByRole("button", { name: "Code", exact: true }).click();
@@ -351,7 +352,7 @@ test("World is lazy and retained, preserving Code, Chat, Mail and its own draft 
 		);
 		await page.getByRole("button", { name: "Mail", exact: true }).click();
 		await page.getByRole("button", { name: "Compose", exact: true }).click();
-		expect(await page.getByRole("combobox", { name: "Mail recipient", exact: true }).inputValue()).toBe("ada");
+		expect(await recipients(page.locator("body"))).toEqual(["ada"]);
 		expect(await page.getByRole("textbox", { name: "Mail body", exact: true }).inputValue()).toBe(
 			"Keep the Mail draft and recipient.",
 		);

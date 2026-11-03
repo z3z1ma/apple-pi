@@ -6,6 +6,7 @@ import { afterAll, beforeAll, expect, test, vi } from "vitest";
 import { appFile, contentType } from "../src/app-files.js";
 import type { Delegation, JiraIssue, OutsideWriteIntent } from "../src/integrations.js";
 import type { Receipt, WorldSnapshot } from "../src/world.js";
+import { choose, chosen } from "./helpers/select.js";
 
 const APP = fileURLToPath(new URL("..", import.meta.url));
 const ORIGIN = "http://localhost";
@@ -297,16 +298,16 @@ test("Issues reads on explicit selection, retains goal drafts, and delegates onl
 		await disclosure.click();
 		const recipient = page.getByRole("combobox", { name: "Person or team head", exact: true });
 		const goal = page.getByRole("textbox", { name: "Goal and context", exact: true });
-		expect(await recipient.inputValue()).toBe("");
+		expect(await chosen(recipient)).toBe("");
 		expect(await page.getByRole("button", { name: "Send instruction", exact: true }).isEnabled()).toBe(false);
-		await recipient.selectOption("ada");
+		await choose(recipient, "ada");
 		await goal.fill("Fix the totals and prove the rounding rule is unchanged.");
 		await page.getByRole("button", { name: "Refresh issue", exact: true }).click();
 		await vi.waitFor(async () =>
 			expect(await page.evaluate(() => (window as any).issueCalls.details)).toEqual(["APP-1", "APP-1"]),
 		);
 		await page.getByRole("button", { name: "Refresh issues", exact: true }).click();
-		expect(await recipient.inputValue()).toBe("ada");
+		expect(await chosen(recipient)).toBe("ada");
 		expect(await goal.inputValue()).toBe("Fix the totals and prove the rounding rule is unchanged.");
 		await disclosure.click();
 		await goal.waitFor({ state: "hidden" });
@@ -315,7 +316,7 @@ test("Issues reads on explicit selection, retains goal drafts, and delegates onl
 		await page.getByRole("button", { name: "Read issue: APP-2 Review keyboard workflow", exact: true }).click();
 		await page.getByRole("heading", { name: /^APP-2 .*Review keyboard workflow$/ }).waitFor();
 		await openFirst(page);
-		expect(await recipient.inputValue()).toBe("ada");
+		expect(await chosen(recipient)).toBe("ada");
 		expect(await goal.inputValue()).toBe("Fix the totals and prove the rounding rule is unchanged.");
 		await page.getByRole("searchbox", { name: "Search issues", exact: true }).fill("APP-2");
 		await page.getByRole("button", { name: "Search", exact: true }).click();
@@ -402,7 +403,7 @@ test("Search all finds unassigned work and My issues retains its selected detail
 		await detail.getByText("Delegate", { exact: true }).click();
 		const recipient = detail.getByRole("combobox", { name: "Person or team head", exact: true });
 		const goal = detail.getByRole("textbox", { name: "Goal and context", exact: true });
-		await recipient.selectOption("ada");
+		await choose(recipient, "ada");
 		await goal.fill("Investigate this unassigned issue before choosing a change.");
 		await shot(page, "all-unassigned-draft");
 		const assignedBefore = await page.evaluate(() => (window as any).issueCalls.assigned);
@@ -413,7 +414,7 @@ test("Search all finds unassigned work and My issues retains its selected detail
 		expect(await query.inputValue()).toBe("");
 		expect(await page.evaluate(() => (window as any).issueCalls.assigned)).toBe(assignedBefore + 1);
 		await detail.getByText("Outside current results", { exact: true }).waitFor();
-		expect(await recipient.inputValue()).toBe("ada");
+		expect(await chosen(recipient)).toBe("ada");
 		expect(await goal.inputValue()).toBe("Investigate this unassigned issue before choosing a change.");
 		expect(await page.evaluate(() => (window as any).issueCalls.details)).toEqual(["APP-3"]);
 		expect(await page.evaluate(() => (window as any).issueCalls.delegated)).toEqual([]);

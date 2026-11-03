@@ -4,6 +4,7 @@ import type { WorkspaceEntry, WorkspaceWorktree } from "../src/workspace.js";
 import type { WorldSnapshot } from "../src/world.js";
 import type { FileReferenceTarget } from "./file-reference-paths.js";
 import { useWorkplaceMenu } from "./workplace-context-menu.js";
+import { Select } from "./workplace-fields.js";
 import { GitDiffText, type GitDiffView, GitPane } from "./workplace-git.js";
 import { Icon } from "./workplace-icon.js";
 import { QuickOpen } from "./workplace-quick-open.js";
@@ -652,50 +653,42 @@ export function WorkplaceCode({
 	return (
 		<section className="wp-code" aria-label="Code workspace" data-connected={world.connected}>
 			<header className="wp-code-toolbar">
-				<label>
-					Repository{" "}
-					<select aria-label="Code repository" value={root} onChange={(event) => switchRoot(event.target.value)}>
-						<option value="">Choose a repository</option>
-						{repositoryList.map((repository) => (
-							<option key={repository} value={repository} title={repository}>
-								{repositoryName(repository, repositoryList)}
-							</option>
-						))}
-					</select>
-				</label>
-				<select
+				<Select
+					label="Code repository"
+					value={root}
+					placeholder="Choose a repository"
+					options={repositoryList.map((repository) => ({
+						value: repository,
+						label: repositoryName(repository, repositoryList),
+						detail: repository,
+					}))}
+					onChange={switchRoot}
+				/>
+				<Select
 					className="wp-code-worktrees"
-					aria-label="Linked worktree"
-					title={worktreeError ?? (worktreeRoot ? `Linked worktrees of ${worktreeRoot}` : "Linked worktrees")}
+					label="Linked worktree"
 					value={
 						worktrees.find((tree) => tree.path === root)?.path ?? worktrees.find((tree) => tree.current)?.path ?? ""
 					}
+					placeholder={
+						worktreeLoading
+							? "Discovering worktrees\u2026"
+							: worktreeError
+								? "Worktrees unavailable"
+								: "No linked worktrees"
+					}
 					disabled={worktreeLoading || !worktrees.length}
-					onChange={(event) => {
-						const tree = worktrees.find((entry) => entry.path === event.target.value);
+					options={worktrees.map((tree) => ({
+						value: tree.path,
+						label: worktreeLabel(tree, false),
+						detail: worktreeLabel(tree),
+						disabled: tree.bare || tree.prunable !== undefined,
+					}))}
+					onChange={(path) => {
+						const tree = worktrees.find((entry) => entry.path === path);
 						if (tree && !tree.bare && tree.prunable === undefined) switchRoot(tree.path);
 					}}
-				>
-					{!worktrees.length && (
-						<option value="">
-							{worktreeLoading
-								? "Discovering worktrees..."
-								: worktreeError
-									? "Worktrees unavailable"
-									: "No linked worktrees"}
-						</option>
-					)}
-					{worktrees.map((tree) => (
-						<option
-							key={tree.path}
-							value={tree.path}
-							disabled={tree.bare || tree.prunable !== undefined}
-							title={worktreeLabel(tree)}
-						>
-							{worktreeLabel(tree, false)}
-						</option>
-					))}
-				</select>
+				/>
 				<form
 					onSubmit={(event) => {
 						event.preventDefault();

@@ -7,6 +7,7 @@ import { appFile, contentType } from "../src/app-files.js";
 import type { TerminalApi, TerminalEvent } from "../src/terminal.js";
 import type { WorkspaceApi } from "../src/workspace.js";
 import type { WorldSnapshot } from "../src/world.js";
+import { choose } from "./helpers/select.js";
 
 const APP = fileURLToPath(new URL("..", import.meta.url));
 const ORIGIN = "http://localhost";
@@ -271,7 +272,7 @@ test("hiding, retained World and repository changes preserve the shell and draft
 		await page.getByRole("button", { name: "Show terminal", exact: true }).waitFor();
 		await page.getByRole("button", { name: "Chat", exact: true }).click();
 		await page.getByRole("button", { name: "Code", exact: true }).click();
-		await page.getByRole("combobox", { name: "Code repository", exact: true }).selectOption(`${ROOT}-other`);
+		await choose(page.getByRole("combobox", { name: "Code repository", exact: true }), `${ROOT}-other`);
 		await page.getByRole("button", { name: "Show terminal", exact: true }).click();
 		await page.getByRole("tab", { name: `Terminal 1: ${ROOT}/canonical`, exact: true }).waitFor();
 		expect((await calls(page)).creates).toHaveLength(1);

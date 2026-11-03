@@ -3,8 +3,9 @@
 // it is busy); asking, its questionnaire as a form, or for any other dialog a pointer to its terminal
 // (`question-form.tsx`). Enter sends (Reply, or Redirect now while it works), Shift+Enter starts a new line, and the
 // box keeps the focus. Each instruction sent shows the receipt stages it reached. Drafts outlive closing the panel.
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import type { Character, Instruction, ReceiptStage } from "../../../src/world.js";
+import { createContext, useContext, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import type { Character, Instruction, ReceiptStage, WorldSnapshot } from "../../../src/world.js";
+import { useMentions } from "../../workplace-mentions.js";
 import { activity } from "../interface/model.js";
 import { conversationPanel, type Sent } from "./panel-state.js";
 import { QuestionForm, TerminalOnly } from "./question-form.js";
@@ -103,11 +104,15 @@ export function Footer({
 	);
 }
 
+/** The organization a composer can @mention people from; Workplace supplies it, World has none and no mentions. */
+export const MentionPeople = createContext<WorldSnapshot | undefined>(undefined);
+
 export function Actions({ character, note, onSend }: { character: Character; note?: string; onSend: () => void }) {
 	const busy = (character.facts?.run ?? "idle") !== "idle";
 	const [text, setText] = useState(() => conversationPanel.draft(character.id));
 	const [confirming, setConfirming] = useState(false);
 	const box = useRef<HTMLTextAreaElement>(null);
+	const mentions = useMentions(useContext(MentionPeople), box, text, (value) => change(value));
 
 	useEffect(() => {
 		const el = box.current;
@@ -137,7 +142,8 @@ export function Actions({ character, note, onSend }: { character: Character; not
 
 	const send = (kind: "talk" | "steer" | "follow_up") => {
 		if (!text.trim()) return;
-		const words = withQuote(text, replyTo);
+		const words = withQuote(mentions.withIds(text), replyTo);
+		mentions.reset();
 		conversationPanel.setReplyTo(character.id, undefined);
 		change("");
 		onSend();
@@ -170,6 +176,7 @@ export function Actions({ character, note, onSend }: { character: Character; not
 			<Receipts characterId={character.id} />
 			{replyTo && <ReplyingTo message={replyTo} clear={() => conversationPanel.setReplyTo(character.id, undefined)} />}
 			<div className="aw-conv-box">
+				{mentions.list}
 				<span className="aw-conv-pen" aria-hidden="true" />
 				<textarea
 					ref={box}
@@ -182,8 +189,12 @@ export function Actions({ character, note, onSend }: { character: Character; not
 					}
 					rows={rows}
 					value={text}
-					onChange={(event) => change(event.target.value)}
+					onChange={(event) => {
+						change(event.target.value);
+						mentions.track(event.target.value, event.target.selectionStart);
+					}}
 					onKeyDown={(event) => {
+						if (mentions.onKeyDown(event)) return;
 						if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
 						event.preventDefault();
 						send(busy ? "steer" : "talk");

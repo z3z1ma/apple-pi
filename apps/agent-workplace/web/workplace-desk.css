@@ -536,7 +536,7 @@
 	font-size: 11px;
 	color: var(--wp-muted);
 }
-.wp-app .wp-desk-listener select {
+.wp-app .wp-desk-listener .wp-select {
 	height: 28px;
 	padding: 0 6px;
 	border: 1px solid var(--wp-border);

@@ -3,6 +3,7 @@ import type { OrgStartProgress } from "../src/org.js";
 import type { Character, RoleChoice, WorldSnapshot } from "../src/world.js";
 import { sleeperCharacter } from "./game/layout.js";
 import { AddPerson } from "./workplace-add-person.js";
+import { Select } from "./workplace-fields.js";
 import { OrgChart } from "./workplace-org-chart.js";
 import { OrgMoveConfirm } from "./workplace-org-confirm.js";
 import { OrgNameEditor } from "./workplace-org-name.js";
@@ -535,71 +536,64 @@ export function Org({
 													placeholder="/path/to/repository"
 												/>
 											</label>
-											<label>
-												Head role
-												<select
-													aria-label="Head role"
-													value={draft.positions[0]?.role}
+											<div className="wp-field">
+												<span>Head role</span>
+												<Select
+													label="Head role"
+													value={draft.positions[0]?.role ?? ""}
 													disabled={started}
-													onChange={(event) =>
+													options={roles
+														.filter((choice) => choice.manages)
+														.map((choice) => ({ value: choice.name, label: choice.title, detail: choice.mandate }))}
+													onChange={(value) =>
 														setDraft({
 															...draft,
 															positions: draft.positions.map((item, index) =>
-																index === 0 ? { ...item, role: event.target.value } : item,
+																index === 0 ? { ...item, role: value } : item,
 															),
 														})
 													}
-												>
-													{roles
-														.filter((choice) => choice.manages)
-														.map((choice) => (
-															<option key={choice.name} value={choice.name}>
-																{choice.title}
-															</option>
-														))}
-												</select>
-											</label>
+												/>
+											</div>
 											<div className="wp-org-add">
-												<label>
-													Role to add
-													<select
-														aria-label="Role to add"
+												<div className="wp-field">
+													<span>Role to add</span>
+													<Select
+														label="Role to add"
 														value={roleToAdd}
 														disabled={started}
-														onChange={(event) => setRoleToAdd(event.target.value)}
-													>
-														{roles.map((choice) => (
-															<option key={choice.name} value={choice.name}>
-																{choice.title}
-															</option>
-														))}
-													</select>
-												</label>
+														options={roles.map((choice) => ({
+															value: choice.name,
+															label: choice.title,
+															detail: choice.mandate,
+														}))}
+														onChange={setRoleToAdd}
+													/>
+												</div>
 												<button type="button" disabled={started || !roleToAdd} onClick={addRole}>
 													Add role
 												</button>
 											</div>
 											<div className="wp-org-add">
-												<label>
-													Existing teammate
-													<select
-														aria-label="Existing teammate"
+												<div className="wp-field">
+													<span>Existing teammate</span>
+													<Select
+														label="Existing teammate"
 														value={existingToAdd}
+														placeholder="Choose a person"
 														disabled={started}
-														onChange={(event) => setExistingToAdd(event.target.value)}
-													>
-														<option value="">Choose a person</option>
-														{people
+														options={people
 															.filter(
 																(candidate) => !draft.positions.some((item) => item.id === candidate.character.id),
 															)
-															.map((candidate) => (
-																<option key={candidate.character.id} value={candidate.character.id}>
-																	{candidate.character.name}
-																</option>
-															))}
-													</select>
-												</label>
+															.map((candidate) => ({
+																value: candidate.character.id,
+																label: candidate.character.name,
+																detail: candidate.character.facts?.title ?? "",
+															}))}
+														onChange={setExistingToAdd}
+													/>
+												</div>
 												<button type="button" disabled={started || !existingToAdd} onClick={addExisting}>
 													Add teammate
 												</button>
@@ -679,26 +673,24 @@ export function Org({
 														</label>
 													)}
 													{currentPosition.manager !== null && (
-														<label>
-															Reports to
-															<select
-																aria-label="Reports to"
+														<div className="wp-field">
+															<span>Reports to</span>
+															<Select
+																label="Reports to"
 																value={currentPosition.manager}
-																onChange={(event) => updatePosition({ manager: event.target.value })}
-															>
-																{draft.positions
+																options={draft.positions
 																	.filter(
 																		(item) =>
 																			role(item.role)?.manages &&
 																			!descendants(currentPosition.id, draftParents).includes(item.id),
 																	)
-																	.map((item) => (
-																		<option key={item.id} value={item.id}>
-																			{item.name || role(item.role)?.title}
-																		</option>
-																	))}
-															</select>
-														</label>
+																	.map((item) => ({
+																		value: item.id,
+																		label: item.name || role(item.role)?.title || item.id,
+																	}))}
+																onChange={(manager) => updatePosition({ manager })}
+															/>
+														</div>
 													)}
 													<button
 														type="button"
@@ -736,31 +728,30 @@ export function Org({
 												Add person
 											</button>
 										)}
-										<label>
-											Reports to
-											<select
-												aria-label="Reports to"
+										<div className="wp-field">
+											<span>Reports to</span>
+											<Select
+												label="Reports to"
 												value={parent}
 												disabled={busy || typeof api.orgMove !== "function"}
-												onChange={(event) => {
-													setParent(event.target.value);
-													if (event.target.value !== (person.parent ?? ""))
-														propose(selected, event.target.value || null);
+												options={[
+													{ value: "", label: "Independent" },
+													...people
+														.filter(
+															(candidate) =>
+																manages(candidate) && !descendants(selected, parents).includes(candidate.character.id),
+														)
+														.map((candidate) => ({
+															value: candidate.character.id,
+															label: candidate.character.name,
+														})),
+												]}
+												onChange={(value) => {
+													setParent(value);
+													if (value !== (person.parent ?? "")) propose(selected, value || null);
 												}}
-											>
-												<option value="">Independent</option>
-												{people
-													.filter(
-														(candidate) =>
-															manages(candidate) && !descendants(selected, parents).includes(candidate.character.id),
-													)
-													.map((candidate) => (
-														<option key={candidate.character.id} value={candidate.character.id}>
-															{candidate.character.name}
-														</option>
-													))}
-											</select>
-										</label>
+											/>
+										</div>
 										<p className="wp-org-reporting-hint">
 											Choose a manager or Independent, then confirm the branch move.
 										</p>

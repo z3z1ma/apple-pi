@@ -5,6 +5,7 @@ const paths = {
 	refresh: "M3 12a9 9 0 0 1 15.36-6.36L21 8 M21 3v5h-5 M21 12a9 9 0 0 1-15.36 6.36L3 16 M8 16H3v5",
 	"chevron-right": "m9 5 7 7-7 7",
 	"chevron-down": "m5 9 7 7 7-7",
+	check: "m5 12.5 4.5 4.5L19 7.5",
 	folder: "M3 7V4h6l2 3h10v13H3V7Z",
 	"folder-open": "M3 12V4h6l2 3h10v5 M3 12h19l-4 8H3v-8Z",
 	file: "M14 3H4v18h16V9l-6-6Z M14 3v6h6",
