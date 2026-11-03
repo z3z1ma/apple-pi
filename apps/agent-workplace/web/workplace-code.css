@@ -556,6 +556,13 @@
 	padding: 8px 12px;
 	color: var(--wp-muted);
 }
+.wp-code-ask-status button {
+	padding: 0;
+	border: 0;
+	background: none;
+	color: var(--wp-link);
+	font: inherit;
+}
 .wp-code-ask-messages {
 	margin: 0;
 	padding: 6px 12px;

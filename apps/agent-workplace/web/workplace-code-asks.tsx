@@ -56,7 +56,7 @@ const ACTIONS: { kind: AskKind; label: string; placeholder: string; send: string
 
 const actionOf = (kind: AskKind) => ACTIONS.find((action) => action.kind === kind)!;
 
-export function askBody(ask: CodeAsk, request: string): string {
+function askBody(ask: CodeAsk, request: string): string {
 	const where = `\`${ask.root}/${ask.path}\` lines ${ask.start}-${ask.end}`;
 	const lead =
 		ask.kind === "fix"
@@ -191,7 +191,7 @@ function AskThread({
 							<p className="wp-code-ask-status">
 								Review {reviewState ?? "queued"}
 								{findings && ` \u00b7 ${findings.length} finding${findings.length === 1 ? "" : "s"}`}
-								<button type="button" className="wp-link-button" onClick={onOpenReviews}>
+								<button type="button" onClick={onOpenReviews}>
 									Open in Reviews
 								</button>
 							</p>
