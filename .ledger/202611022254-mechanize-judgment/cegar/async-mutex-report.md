@@ -56,4 +56,4 @@ After cancellation removes the acquisition queue, notify newly eligible unlock o
 
 A source-derived finite model found the same five-step ordering: initial value 1 -> queue weight 2 -> register observer weight 1 -> cancel acquisition -> fresh observer completes while the earlier observer remains pending. The implementation test, rather than the abstract model alone, establishes the reported behavior.
 
-No upstream issue or pull request has been opened. Filing remains the operator's decision.
+Upstream status (checked 2026-11-03 before filing, which the operator approved): this defect is already reported as [#94](https://github.com/DirtyHairy/async-mutex/issues/94) (2026-10-12). The maintainer acknowledged it, and fix PR [#95](https://github.com/DirtyHairy/async-mutex/pull/95), which includes a test, is open. We filed nothing, to avoid a duplicate. The loop found it independently, so the finding is real, but it is not new.
