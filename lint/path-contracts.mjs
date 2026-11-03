@@ -66,14 +66,14 @@ function check(file, hot) {
 		failures.add(`${file}:${line + 1}:${character + 1}: ${message}`);
 	};
 	if (extname(file) === ".tsx") report(source, "Daemon and worker imports stay outside JSX/DOM modules.");
-	const dependency = (specifier, node) => {
+	const dependency = (specifier, node, inHotPath = hot) => {
 		if (/^(?:electron|react|react-dom|react-native)(?:\/|$)|\.(?:css|html|svg)$/.test(specifier))
 			return report(node, "Daemon and worker code use Node modules and plain shared data, not UI imports.");
 		if (!specifier.startsWith(".")) return;
 		const target = resolve(dirname(file), specifier);
 		const resolved = [target.replace(/\.js$/, ".ts"), target].find(existsSync);
 		if (!resolved) return report(node, `Missing local execution dependency: ${specifier}`);
-		if (/\.(?:[cm]?js|tsx?)$/.test(resolved)) check(resolved, hot);
+		if (/\.(?:[cm]?js|tsx?)$/.test(resolved)) check(resolved, inHotPath);
 	};
 	function visit(node) {
 		if (
@@ -114,7 +114,7 @@ function check(file, hot) {
 		if (ts.isNewExpression(node) && node.expression.getText(source) === "URL") {
 			const argument = node.arguments?.[0];
 			if (argument && ts.isStringLiteral(argument) && /\.(?:runtime|worker)\.ts$/.test(argument.text))
-				dependency(argument.text, node);
+				dependency(argument.text, node, false);
 		}
 		if (ts.isNewExpression(node) && workerConstructors.has(node.expression.getText(source))) {
 			const url = node.arguments?.[0];

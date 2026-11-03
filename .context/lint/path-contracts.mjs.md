@@ -1,6 +1,6 @@
 ## file
 
-Suffixes mark execution entries, not an inventory of every daemon dependency. Follow the entry's local value-import closure so an ordinary unsuffixed helper cannot introduce a non-erasable declaration or UI dependency. Hot dependency visits carry a separate context flag: importing a helper through both a cold entry and a hot entry must still check the stricter use. Type-only dependencies are erased rather than executed.
+Suffixes mark execution entries, not an inventory of every daemon dependency. Follow the entry's local value-import closure so an ordinary unsuffixed helper cannot introduce a non-erasable declaration or UI dependency. Hot dependency visits carry a separate context flag: importing a helper through both a cold entry and a hot entry must still check the stricter use. Type-only dependencies are erased rather than executed. An execution-entry URL starts a separate context: a worker launched from a hot helper keeps the Node contract, but its background work does not inherit the launching thread's hot restriction.
 
 Literal worker constructors keep an explicit .worker.ts URL; named/namespace aliases of node:worker_threads are recognized. The checker covers repository-local code, not third-party implementations, arbitrary runtime evaluation or semantic call-graph purity. The direct API-name ban intentionally also rejects imports/aliases before the operation is called. GritQL gives immediate direct-file feedback; this script additionally catches dependency wrappers and computed method access.
 

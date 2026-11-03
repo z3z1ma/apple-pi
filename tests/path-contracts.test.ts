@@ -105,6 +105,16 @@ test("hot contracts follow helper imports, so moving blocking work to an ordinar
 	expect(computed.stderr).toContain("Hot paths use bounded file reads");
 });
 
+test("worker execution keeps its Node contract without inheriting the launching thread's hot context", () => {
+	const result = check({
+		"components/example/start.hot.ts":
+			"import { Worker } from 'node:worker_threads'; new Worker(new URL('./job.worker.ts', import.meta.url));",
+		"components/example/job.worker.ts":
+			"import { readFileSync } from 'node:fs'; export const data = readFileSync('file');",
+	});
+	expect(result.status, result.stderr).toBe(0);
+});
+
 test("bounded reads, async children and erasable fields remain allowed", () => {
 	const result = check({
 		"components/example/read.hot.ts":
