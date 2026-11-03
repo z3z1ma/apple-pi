@@ -77,7 +77,7 @@ import {
 	saveHandoff,
 } from "./departures.js";
 import { type ExternalCommand, type ExternalCommit, ExternalThreads } from "./external-threads.js";
-import { maySearchTask, reconstructSpans, taskSpans } from "./focus-spans.js";
+import { mayReadEntry, maySearchTask, reconstructSpans, taskSpans } from "./focus-spans.js";
 import { recordLink, resolveLink } from "./links.js";
 import { removeNote, writeNote } from "./notes.js";
 import { discardProgramPeople, programDescendants, temporaryCallers } from "./program-peers.js";
@@ -3198,7 +3198,11 @@ export class Runtime {
 
 	/** Ranked transcript entries from the full-text index. */
 	private searchTranscripts(connection: Connection, request: SearchTranscripts): void {
-		const reply = (body: { hits: (SearchHit & { task?: string })[] } | { error: string }) =>
+		const reply = (
+			body:
+				| { hits: (SearchHit & { task?: string; file: string | null; name: string | null })[]; total: number }
+				| { error: string },
+		) =>
 			connection.socket.write(
 				`${JSON.stringify({ type: "transcript_hits", requestId: request.requestId, ...body })}\n`,
 			);
@@ -3213,9 +3217,9 @@ export class Runtime {
 					error: `Only people assigned to a task, and managers above anyone who worked on it, may search it: ${refused.join(", ")}`,
 				});
 			const spans = taskSpans(db, tasks);
-			if (tasks.length && !spans.length) return void reply({ hits: [] });
+			if (tasks.length && !spans.length) return void reply({ hits: [], total: 0 });
 			const now = Date.now();
-			const hits = this.transcripts!.search({
+			const { hits, total } = this.transcripts!.search({
 				query: request.query,
 				...(Array.isArray(request.sessions)
 					? { sessions: request.sessions.filter((id) => typeof id === "string") }
@@ -3223,17 +3227,36 @@ export class Runtime {
 				...(spans.length
 					? { spans: spans.map((span) => ({ session: span.person, from: span.from, to: span.to ?? now })) }
 					: {}),
+				...(Array.isArray(request.exclude)
+					? {
+							exclude: request.exclude
+								.filter((each) => typeof each?.session === "string" && Array.isArray(each.entries))
+								.map((each) => ({
+									session: each.session,
+									entries: each.entries.filter((id) => typeof id === "string"),
+								})),
+						}
+					: {}),
 				fields: request.fields === "words" ? "words" : "all",
 				...(Number.isInteger(request.limit) ? { limit: request.limit } : {}),
+				...(Number.isInteger(request.offset) ? { offset: request.offset } : {}),
 			});
-			// Name the task each hit was written under.
+			// Each hit with its transcript file and person, and the task it was written under.
+			const session = db.prepare("select session_file, name from sessions where id = ?");
 			reply({
 				hits: hits.map((hit) => {
+					const row = session.get(hit.session) as { session_file: string | null; name: string | null } | undefined;
 					const span = spans.find(
 						(each) => each.person === hit.session && hit.at >= each.from && hit.at <= (each.to ?? now),
 					);
-					return span ? { ...hit, task: span.task } : hit;
+					return {
+						...hit,
+						file: row?.session_file ?? null,
+						name: row?.name ?? null,
+						...(span ? { task: span.task } : {}),
+					};
 				}),
+				total,
 			});
 		} catch (error) {
 			reply({ error: `cannot search transcripts: ${(error as Error).message}` });
@@ -3259,10 +3282,16 @@ export class Runtime {
 			| undefined;
 		if (!row) return void reply({ error: "unknown session" });
 		if (!row.session_file) return void reply({ error: "session has no transcript file" });
+		const times = this.entryTimes(request.sessionId, [request.entryId]);
+		// A person reading another's entry (recall drill-down) needs a task span they may search that covers it.
+		if (
+			typeof request.caller === "string" &&
+			!mayReadEntry(this.db!, request.caller, request.sessionId, times.get(request.entryId))
+		)
+			return void reply({ error: "That entry is outside every task you may search." });
 		let found: Map<string, unknown>;
 		try {
-			found = (await readTranscriptEntries(row.session_file, this.entryTimes(request.sessionId, [request.entryId])))
-				.found;
+			found = (await readTranscriptEntries(row.session_file, times)).found;
 		} catch (error) {
 			return void reply({ error: `cannot read transcript: ${(error as Error).message}` });
 		}

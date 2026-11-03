@@ -101,6 +101,8 @@ export interface ReadEntry {
 	requestId: string;
 	sessionId: string;
 	entryId: string;
+	/** A person reading on their own behalf (recall drill-down): another's entry needs a task span they may search. */
+	caller?: string;
 }
 
 /**
@@ -127,8 +129,12 @@ export interface SearchTranscripts {
 	tasks?: string[];
 	/** Who asks: a session id, or "operator". */
 	caller?: string;
+	/** Entries never to return, applied before ranking limits (off-lineage entries, the search's own call). */
+	exclude?: { session: string; entries: string[] }[];
 	fields?: "words" | "all";
 	limit?: number;
+	/** Ranked hits to skip, for paging; the reply's `total` counts every match under the same rules. */
+	offset?: number;
 }
 
 /** What a client can ask a session to do. */

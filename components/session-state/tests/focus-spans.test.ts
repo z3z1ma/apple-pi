@@ -1,6 +1,6 @@
 import { DatabaseSync } from "node:sqlite";
 import { expect, test } from "vitest";
-import { maySearchTask, reconstructSpans, taskSpans } from "../src/focus-spans.js";
+import { mayReadEntry, maySearchTask, reconstructSpans, taskSpans } from "../src/focus-spans.js";
 import { migrate } from "../src/schema.js";
 
 function database() {
@@ -85,4 +85,11 @@ test("a task's spans are searchable by its people, managers above them, and the 
 	expect(maySearchTask(db, "operator", "t1")).toBe(true);
 	expect(maySearchTask(db, "ben", "t1")).toBe(false);
 	expect(maySearchTask(db, "eve", "t1")).toBe(false);
+	// Reading one of Ada's entries: inside a span of a task the reader may search, or never.
+	const during = (taskSpans(db, ["t1"])[0]!.from as number) + 1;
+	expect(mayReadEntry(db, "lead", "ada", during)).toBe(true);
+	expect(mayReadEntry(db, "lead", "ada", during - 10_000)).toBe(false);
+	expect(mayReadEntry(db, "eve", "ada", during)).toBe(false);
+	expect(mayReadEntry(db, "ada", "ada", undefined)).toBe(true);
+	expect(mayReadEntry(db, "lead", "ada", undefined)).toBe(false);
 });

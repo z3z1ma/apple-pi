@@ -20,6 +20,16 @@ const SCHEMA = [
 		inode integer not null,
 		bytes integer not null
 	) strict;`,
+	// `ordinal`: a message entry's `#N` in search_session's addresses, counting every `message` record from the file's
+	// start (load-messages.ts); `files.messages` carries the count across appends. The index is derived, so this rebuilds.
+	`drop table entries;
+	create virtual table entries using fts5(
+		words, calls, results,
+		session_id unindexed, entry_id unindexed, at unindexed, role unindexed, ordinal unindexed,
+		tokenize = 'porter unicode61'
+	);
+	delete from files;
+	alter table files add column messages integer not null default 0;`,
 ];
 
 export function openIndex(path: string, readOnly = false): DatabaseSync {
@@ -104,19 +114,21 @@ export async function indexTranscript(db: DatabaseSync, sessionId: string, file:
 	const handle = await open(file, "r");
 	try {
 		const { size, ino } = await handle.stat();
-		const known = db.prepare("select file, inode, bytes from files where session_id = ?").get(sessionId) as
-			| { file: string; inode: number; bytes: number }
+		const known = db.prepare("select file, inode, bytes, messages from files where session_id = ?").get(sessionId) as
+			| { file: string; inode: number; bytes: number; messages: number }
 			| undefined;
 		let position = known?.bytes ?? 0;
+		let messages = known?.messages ?? 0;
 		if (known && (known.file !== file || known.inode !== ino || size < known.bytes)) {
 			db.prepare("delete from entries where session_id = ?").run(sessionId);
 			position = 0;
+			messages = 0;
 		}
 		const insert = db.prepare(
-			"insert into entries (words, calls, results, session_id, entry_id, at, role) values (?, ?, ?, ?, ?, ?, ?)",
+			"insert into entries (words, calls, results, session_id, entry_id, at, role, ordinal) values (?, ?, ?, ?, ?, ?, ?, ?)",
 		);
 		const mark = db.prepare(
-			"insert into files (session_id, file, inode, bytes) values (?, ?, ?, ?) on conflict (session_id) do update set file = excluded.file, inode = excluded.inode, bytes = excluded.bytes",
+			"insert into files (session_id, file, inode, bytes, messages) values (?, ?, ?, ?, ?) on conflict (session_id) do update set file = excluded.file, inode = excluded.inode, bytes = excluded.bytes, messages = excluded.messages",
 		);
 		let carry: Buffer[] = [];
 		while (position < size) {
@@ -138,16 +150,19 @@ export async function indexTranscript(db: DatabaseSync, sessionId: string, file:
 			try {
 				for (const line of complete.toString().split("\n")) {
 					if (!line) continue;
-					let entry: IndexedEntry | undefined;
+					let parsed: Record<string, any>;
 					try {
-						entry = indexedEntry(JSON.parse(line));
+						parsed = JSON.parse(line);
 					} catch {
 						continue;
 					}
+					// Every message record takes the next ordinal, searchable or not, as load-messages.ts counts them.
+					const ordinal = parsed?.type === "message" && parsed.message ? messages++ : null;
+					const entry = indexedEntry(parsed);
 					if (!entry || !(entry.words || entry.calls || entry.results)) continue;
-					insert.run(entry.words, entry.calls, entry.results, sessionId, entry.entryId, entry.at, entry.role);
+					insert.run(entry.words, entry.calls, entry.results, sessionId, entry.entryId, entry.at, entry.role, ordinal);
 				}
-				mark.run(sessionId, file, ino, consumed);
+				mark.run(sessionId, file, ino, consumed, messages);
 				db.exec("commit");
 			} catch (error) {
 				db.exec("rollback");
@@ -156,7 +171,7 @@ export async function indexTranscript(db: DatabaseSync, sessionId: string, file:
 			position += bytesRead;
 			await new Promise((resolve) => setImmediate(resolve));
 		}
-		if (!known && position === 0) mark.run(sessionId, file, ino, 0);
+		if (!known && position === 0) mark.run(sessionId, file, ino, 0, 0);
 	} finally {
 		await handle.close();
 	}
@@ -168,9 +183,13 @@ export interface SearchRequest {
 	sessions?: string[];
 	/** Each session's entries between these times (inclusive), as task spans give them. */
 	spans?: { session: string; from: number; to: number }[];
+	/** Entries never to return, applied before ranking limits: off-lineage entries, the search's own call. */
+	exclude?: { session: string; entries: string[] }[];
 	/** `words` searches only what people and agents wrote; `all` also tool calls and results. */
 	fields?: "words" | "all";
 	limit?: number;
+	/** Ranked hits to skip, for paging. */
+	offset?: number;
 }
 
 export interface SearchHit {
@@ -178,6 +197,8 @@ export interface SearchHit {
 	entry: string;
 	at: number;
 	role: string;
+	/** A message entry's `#N`; null for other records. */
+	ordinal: number | null;
 	snippet: string;
 	score: number;
 }
@@ -196,9 +217,51 @@ function ftsQuery(query: string, fields: "words" | "all"): string | undefined {
 /** Ranked entries matching words of `query`, newest first among equal scores. */
 export function searchIndex(db: DatabaseSync, request: SearchRequest): SearchHit[] {
 	const fields = request.fields ?? "all";
-	const match = ftsQuery(request.query, fields);
-	if (!match) return [];
+	const eligible = eligibility(request);
+	if (!eligible) return [];
+	const { where, params } = eligible;
 	const limit = request.limit && request.limit > 0 ? request.limit : 20;
+	const offset = request.offset && request.offset > 0 ? request.offset : 0;
+	const column = fields === "words" ? 0 : -1;
+	const rows = db
+		.prepare(
+			`select session_id, entry_id, at, role, ordinal, bm25(entries) as score,
+				snippet(entries, ${column}, '\u00ab', '\u00bb', '\u2026', 24) as snippet
+			from entries where ${where} order by score, at desc limit ? offset ?`,
+		)
+		.all(...params, limit, offset) as {
+		session_id: string;
+		entry_id: string;
+		at: number;
+		role: string;
+		ordinal: number | null;
+		score: number;
+		snippet: string;
+	}[];
+	return rows.map((row) => ({
+		session: row.session_id,
+		entry: row.entry_id,
+		at: row.at,
+		role: row.role,
+		ordinal: row.ordinal,
+		snippet: row.snippet,
+		score: row.score,
+	}));
+}
+
+/** How many entries `request` matches, under the same eligibility as `searchIndex`, for paging. */
+export function countIndex(db: DatabaseSync, request: SearchRequest): number {
+	const eligible = eligibility(request);
+	if (!eligible) return 0;
+	return (
+		db.prepare(`select count(*) as n from entries where ${eligible.where}`).get(...eligible.params) as { n: number }
+	).n;
+}
+
+/** The query and every eligibility rule as one WHERE clause, so filtering happens before ranking limits. */
+function eligibility(request: SearchRequest): { where: string; params: (string | number)[] } | undefined {
+	const match = ftsQuery(request.query, request.fields ?? "all");
+	if (!match) return undefined;
 	const where: string[] = ["entries match ?"];
 	const params: (string | number)[] = [match];
 	if (request.sessions?.length) {
@@ -209,29 +272,12 @@ export function searchIndex(db: DatabaseSync, request: SearchRequest): SearchHit
 		where.push(`(${request.spans.map(() => "(session_id = ? and at between ? and ?)").join(" or ")})`);
 		for (const span of request.spans) params.push(span.session, span.from, span.to);
 	}
-	const column = fields === "words" ? 0 : -1;
-	const rows = db
-		.prepare(
-			`select session_id, entry_id, at, role, bm25(entries) as score,
-				snippet(entries, ${column}, '\u00ab', '\u00bb', '\u2026', 24) as snippet
-			from entries where ${where.join(" and ")} order by score, at desc limit ?`,
-		)
-		.all(...params, limit) as {
-		session_id: string;
-		entry_id: string;
-		at: number;
-		role: string;
-		score: number;
-		snippet: string;
-	}[];
-	return rows.map((row) => ({
-		session: row.session_id,
-		entry: row.entry_id,
-		at: row.at,
-		role: row.role,
-		snippet: row.snippet,
-		score: row.score,
-	}));
+	for (const excluded of request.exclude ?? []) {
+		if (!excluded.entries.length) continue;
+		where.push(`not (session_id = ? and entry_id in (${excluded.entries.map(() => "?").join(", ")}))`);
+		params.push(excluded.session, ...excluded.entries);
+	}
+	return { where: where.join(" and "), params };
 }
 
 /**
@@ -258,9 +304,10 @@ export class TranscriptIndexer {
 		this.worker.postMessage({ sessionId, file });
 	}
 
-	search(request: SearchRequest): SearchHit[] {
+	/** A page of ranked hits, and how many entries match in all. */
+	search(request: SearchRequest): { hits: SearchHit[]; total: number } {
 		this.reader ??= openIndex(this.path, true);
-		return searchIndex(this.reader, request);
+		return { hits: searchIndex(this.reader, request), total: countIndex(this.reader, request) };
 	}
 
 	stop(): void {

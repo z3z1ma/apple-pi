@@ -3,7 +3,7 @@ import { createConnection } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
-import { indexTranscript, openIndex, searchIndex } from "../src/transcript-index.js";
+import { countIndex, indexTranscript, openIndex, searchIndex } from "../src/transcript-index.js";
 import { fakeBridge, standInProcess, startRuntime, stopRuntime, tempStateDir } from "./helpers.js";
 
 const dir = mkdtempSync(join(tmpdir(), "transcript-index-"));
@@ -77,6 +77,42 @@ test("an index follows a transcript as it grows and when it is replaced, and sea
 	await indexTranscript(db, "s1", file);
 	expect(ids("pelican")).toEqual([]);
 	expect(ids("herons")).toEqual(["u9"]);
+	db.close();
+});
+
+test("hits carry #N ordinals counted as load-messages counts them, and eligibility applies before paging", async () => {
+	const file = join(dir, "ordinal.jsonl");
+	// An assistant message with no text still takes an ordinal; a custom message does not.
+	writeFileSync(
+		file,
+		user("m0", 1, "heron one") +
+			line({
+				type: "message",
+				id: "m1",
+				parentId: null,
+				timestamp: new Date(T + 2).toISOString(),
+				message: { role: "assistant", content: [] },
+			}) +
+			line({
+				type: "custom_message",
+				customType: "mail",
+				content: "heron mail",
+				id: "c0",
+				parentId: null,
+				timestamp: new Date(T + 3).toISOString(),
+			}) +
+			user("m2", 4, "heron two") +
+			user("m3", 5, "heron three"),
+	);
+	const db = openIndex(join(dir, "ordinal.db"));
+	await indexTranscript(db, "s2", file);
+	const all = searchIndex(db, { query: "heron", limit: 10 });
+	expect(Object.fromEntries(all.map((hit) => [hit.entry, hit.ordinal]))).toEqual({ m0: 0, c0: null, m2: 2, m3: 3 });
+	const rest = { query: "heron", exclude: [{ session: "s2", entries: ["m3", "c0"] }] };
+	expect(countIndex(db, rest)).toBe(2);
+	const first = searchIndex(db, { ...rest, limit: 1 });
+	const second = searchIndex(db, { ...rest, limit: 1, offset: 1 });
+	expect([...first, ...second].map((hit) => hit.entry).sort()).toEqual(["m0", "m2"]);
 	db.close();
 });
 

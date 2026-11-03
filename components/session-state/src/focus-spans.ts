@@ -83,6 +83,21 @@ export function taskSpans(db: DatabaseSync, tasks: string[]): FocusSpan[] {
 }
 
 /**
+ * Whether `caller` may read `session`'s entry written at `at`: their own, or one inside a span of a task they may
+ * search. An entry with no indexed time cannot be placed in a span.
+ */
+export function mayReadEntry(db: DatabaseSync, caller: string, session: string, at: number | undefined): boolean {
+	if (caller === OPERATOR || caller === session) return true;
+	if (at === undefined) return false;
+	const covering = db
+		.prepare(
+			"select distinct task_id from focus_spans where person = ? and started_at <= ? and (ended_at is null or ended_at >= ?)",
+		)
+		.all(session, at, at) as { task_id: string }[];
+	return covering.some((row) => maySearchTask(db, caller, row.task_id));
+}
+
+/**
  * Whether `caller` may search a task's spans: the operator; anyone ever assigned to the task; and anyone above, in
  * today's reporting tree, a person who worked on it (operator decision, 2026-11-02).
  */
