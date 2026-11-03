@@ -117,6 +117,16 @@ export interface ReadEntries {
 	textOnly?: boolean;
 }
 
+/** A full-text search of transcripts through the runtime's index (`transcript-index.ts`). */
+export interface SearchTranscripts {
+	type: "search_transcripts";
+	requestId: string;
+	query: string;
+	sessions?: string[];
+	fields?: "words" | "all";
+	limit?: number;
+}
+
 /** What a client can ask a session to do. */
 export type Command =
 	| { kind: "talk"; text: string }
@@ -384,6 +394,7 @@ export type BridgeMessage =
 	| { type: "turn_progress"; commandId: string; progress: TurnProgress }
 	| ReadEntry
 	| ReadEntries
+	| SearchTranscripts
 	| Subscribe
 	/** The bridge's own session is implied by its connection. */
 	| Omit<ReplyDelta, "sessionId">

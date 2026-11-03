@@ -26,6 +26,7 @@ import {
 	type ReplyDelta,
 	type ReplyEnd,
 	type RunState,
+	type SearchTranscripts,
 	SILENCE_MS,
 	type Tool,
 } from "./protocol.js";
@@ -95,6 +96,7 @@ import {
 	setServerOptions,
 	socketFiles,
 } from "./tmux.js";
+import { type SearchHit, TranscriptIndexer } from "./transcript-index.js";
 import { readTranscriptEntries } from "./transcript-read.js";
 import {
 	changeWork,
@@ -253,6 +255,7 @@ export class Runtime {
 	private external?: ExternalThreads;
 	private externalTimer?: NodeJS.Timeout;
 	private activity?: ActivityPoller;
+	private transcripts?: TranscriptIndexer;
 	private activityTimer?: NodeJS.Timeout;
 	private externalCommands: Promise<void> = Promise.resolve();
 	private lock?: DatabaseSync;
@@ -303,6 +306,12 @@ export class Runtime {
 		this.db = new DatabaseSync(this.paths.db);
 		this.db.exec("pragma journal_mode = wal");
 		migrate(this.db);
+		this.transcripts = new TranscriptIndexer(this.paths.transcriptIndex);
+		// Bring every transcript's index up to date in the background; afterwards each `index` report extends it.
+		for (const row of this.db
+			.prepare("select id, session_file from sessions where session_file is not null order by updated_at desc")
+			.all() as { id: string; session_file: string }[])
+			this.transcripts.update(row.id, row.session_file);
 		this.external = new ExternalThreads(this.db, this.paths.dir, (write) => this.commitExternal(write));
 		this.recoverExternal();
 		this.activity = new ActivityPoller(this.db, (write) => this.commitExternal(write), readSource(this.paths.dir));
@@ -353,6 +362,7 @@ export class Runtime {
 	}
 
 	stop(): void {
+		this.transcripts?.stop();
 		this.reviews?.stop();
 		this.external?.stop();
 		clearInterval(this.externalTimer);
@@ -468,6 +478,10 @@ export class Runtime {
 				: [];
 			connection.subscriptions = new Set(ids);
 			connection.socket.write(`${JSON.stringify({ type: "subscribed", sessionIds: ids })}\n`);
+			return;
+		}
+		if (message.type === "search_transcripts") {
+			this.searchTranscripts(connection, message);
 			return;
 		}
 		if (message.type === "read_entries") {
@@ -3172,6 +3186,34 @@ export class Runtime {
 		} catch (error) {
 			db.exec("rollback");
 			throw error;
+		}
+		// The transcript now holds entries the full-text index has not read.
+		const file = db.prepare("select session_file from sessions where id = ?").get(sessionId) as
+			| { session_file: string | null }
+			| undefined;
+		if (file?.session_file) this.transcripts?.update(sessionId, file.session_file);
+	}
+
+	/** Ranked transcript entries from the full-text index. */
+	private searchTranscripts(connection: Connection, request: SearchTranscripts): void {
+		const reply = (body: { hits: SearchHit[] } | { error: string }) =>
+			connection.socket.write(
+				`${JSON.stringify({ type: "transcript_hits", requestId: request.requestId, ...body })}\n`,
+			);
+		if (typeof request.query !== "string") return void reply({ error: "query must be a string" });
+		try {
+			reply({
+				hits: this.transcripts!.search({
+					query: request.query,
+					...(Array.isArray(request.sessions)
+						? { sessions: request.sessions.filter((id) => typeof id === "string") }
+						: {}),
+					fields: request.fields === "words" ? "words" : "all",
+					...(Number.isInteger(request.limit) ? { limit: request.limit } : {}),
+				}),
+			});
+		} catch (error) {
+			reply({ error: `cannot search transcripts: ${(error as Error).message}` });
 		}
 	}
 

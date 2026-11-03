@@ -11,6 +11,8 @@ export interface StatePaths {
 	pid: string;
 	/** The runtime's stdout and stderr. */
 	log: string;
+	/** The full-text index of every transcript (`transcript-index.ts`), kept apart from the runtime's own database. */
+	transcriptIndex: string;
 }
 
 /** Pi's own rule for `PI_CODING_AGENT_DIR`: a leading `~` means the home directory. */
@@ -32,5 +34,6 @@ export function statePaths(): StatePaths {
 		lock: join(dir, "apple-pi-runtime.lock"),
 		pid: join(dir, "apple-pi-runtime.pid"),
 		log: join(dir, "apple-pi-runtime.log"),
+		transcriptIndex: join(dir, "transcript-index.db"),
 	};
 }

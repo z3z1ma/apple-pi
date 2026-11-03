@@ -1,0 +1,127 @@
+import { appendFileSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { createConnection } from "node:net";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterAll, beforeAll, expect, test, vi } from "vitest";
+import { indexTranscript, openIndex, searchIndex } from "../src/transcript-index.js";
+import { fakeBridge, standInProcess, startRuntime, stopRuntime, tempStateDir } from "./helpers.js";
+
+const dir = mkdtempSync(join(tmpdir(), "transcript-index-"));
+const state = tempStateDir();
+const proc = standInProcess();
+beforeAll(() => startRuntime(state.socketPath));
+afterAll(async () => {
+	proc.child.kill();
+	await stopRuntime(state);
+	rmSync(dir, { recursive: true, force: true });
+});
+
+const T = Date.parse("2026-11-01T00:00:00Z");
+const line = (entry: object) => `${JSON.stringify(entry)}\n`;
+const user = (id: string, i: number, text: string) =>
+	line({
+		type: "message",
+		id,
+		parentId: null,
+		timestamp: new Date(T + i).toISOString(),
+		message: { role: "user", content: text },
+	});
+const assistant = (id: string, i: number, text: string, call?: { name: string; arguments: object }) =>
+	line({
+		type: "message",
+		id,
+		parentId: null,
+		timestamp: new Date(T + i).toISOString(),
+		message: {
+			role: "assistant",
+			content: [
+				{ type: "text", text },
+				...(call ? [{ type: "toolCall", id: `c-${id}`, name: call.name, arguments: call.arguments }] : []),
+			],
+		},
+	});
+const result = (id: string, i: number, text: string) =>
+	line({
+		type: "message",
+		id,
+		parentId: null,
+		timestamp: new Date(T + i).toISOString(),
+		message: { role: "toolResult", toolName: "bash", content: [{ type: "text", text }] },
+	});
+
+test("an index follows a transcript as it grows and when it is replaced, and searches words or everything", async () => {
+	const file = join(dir, "grow.jsonl");
+	writeFileSync(
+		file,
+		user("u1", 1, "Why do the pelican builds fail?") +
+			assistant("a1", 2, "Checking the build log.", { name: "bash", arguments: { command: "npm run build" } }) +
+			result("r1", 3, "error: pelican module missing"),
+	);
+	const db = openIndex(join(dir, "grow.db"));
+	expect(await indexTranscript(db, "s1", file)).toBe(3);
+	const ids = (query: string, fields: "words" | "all" = "all") =>
+		searchIndex(db, { query, fields }).map((hit) => hit.entry);
+	expect(ids("pelican").sort()).toEqual(["r1", "u1"]);
+	expect(ids("pelican", "words")).toEqual(["u1"]);
+	// Any word may match; entries holding more of them rank first.
+	expect(ids("npm build")[0]).toBe("a1");
+	expect(ids("pelican missing")).toEqual(["r1", "u1"]);
+
+	appendFileSync(file, assistant("a2", 4, "The pelican module was renamed to heron."));
+	expect(await indexTranscript(db, "s1", file)).toBe(1);
+	expect(ids("heron")).toEqual(["a2"]);
+
+	// A rewritten file starts over rather than keeping rows for entries it no longer holds.
+	rmSync(file);
+	writeFileSync(file, user("u9", 9, "A fresh start about herons."));
+	await indexTranscript(db, "s1", file);
+	expect(ids("pelican")).toEqual([]);
+	expect(ids("herons")).toEqual(["u9"]);
+	db.close();
+});
+
+test("the runtime indexes a session's transcript and answers searches over its socket", async () => {
+	const file = join(dir, "live.jsonl");
+	writeFileSync(file, user("e1", 1, "Remember the albatross migration plan."));
+	const bridge = await fakeBridge(state.socketPath, "live", proc.pid, proc.startedAt, { session: { file } });
+	try {
+		bridge.send({
+			type: "index",
+			rows: [{ entryId: "e1", part: "", at: T + 1, role: "user", size: 37, preview: "Remember the albatross" }],
+		});
+		const search = async (query: string) => {
+			const socket = createConnection(state.socketPath);
+			await new Promise((resolve) => socket.once("connect", resolve));
+			const reply = new Promise<Record<string, any>>((resolve) => {
+				let buffer = "";
+				socket.on("data", (chunk) => {
+					buffer += chunk.toString();
+					if (buffer.includes("\n")) resolve(JSON.parse(buffer.slice(0, buffer.indexOf("\n"))));
+				});
+			});
+			socket.write(`${JSON.stringify({ type: "search_transcripts", requestId: "q", query, sessions: ["live"] })}\n`);
+			const answer = await reply;
+			socket.destroy();
+			return answer;
+		};
+		await vi.waitFor(
+			async () => expect((await search("albatross")).hits?.map((hit: any) => hit.entry)).toEqual(["e1"]),
+			{
+				timeout: 10_000,
+			},
+		);
+		appendFileSync(file, assistant("e2", 2, "The albatross plan moved to Thursday."));
+		bridge.send({
+			type: "index",
+			rows: [{ entryId: "e2", part: "", at: T + 2, role: "assistant", size: 38, preview: "The" }],
+		});
+		await vi.waitFor(
+			async () => expect((await search("Thursday")).hits?.map((hit: any) => hit.entry)).toEqual(["e2"]),
+			{
+				timeout: 10_000,
+			},
+		);
+	} finally {
+		bridge.socket.destroy();
+	}
+}, 30_000);
