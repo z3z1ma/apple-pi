@@ -1,8 +1,3 @@
-// The quest office's Jira: REST API v3 with the operator's email and API token. Reads his open issues (assigned and
-// not done, no sprint filter), text search across every issue, one issue with its comments, and the transitions Jira
-// allows now; writes (comment, transition) only through the outside-write gate (`gate.ts`).
-// Endpoints: POST /rest/api/3/search/jql (the old /search is deprecated), GET /rest/api/3/issue/{key}?expand=
-// renderedFields, GET and POST /rest/api/3/issue/{key}/transitions, POST /rest/api/3/issue/{key}/comment (ADF body).
 import type { JiraComment, JiraIssue, JiraIssueDetail, JiraTransition, Outcome, Refusal } from "../../integrations.js";
 import { atlassianRequest, type Fetch, htmlText, queryText } from "./atlassian.js";
 import type { AtlassianCredentials } from "./credentials.js";
@@ -42,7 +37,6 @@ function toIssue(site: string, raw: unknown): JiraIssue {
 	};
 }
 
-/** Atlassian Document Format to plain text: paragraphs and list items on their own lines. */
 export function adfText(node: unknown): string {
 	const walk = (value: unknown): string => {
 		if (!value || typeof value !== "object") return "";
@@ -82,7 +76,6 @@ export function adfText(node: unknown): string {
 		.trim();
 }
 
-/** Plain text as an ADF document: blank lines part paragraphs, single newlines become hard breaks. */
 export function textAdf(text: string) {
 	const paragraphs = text
 		.replace(/\r\n/g, "\n")
@@ -109,7 +102,6 @@ export interface Jira {
 	search(text: string): Promise<Outcome<{ issues: JiraIssue[] }>>;
 	issue(key: string): Promise<Outcome<{ detail: JiraIssueDetail }>>;
 	transitions(key: string): Promise<Outcome<{ transitions: JiraTransition[] }>>;
-	/** Writes: only the gate calls these. */
 	comment(key: string, body: string): Promise<Outcome<{ url: string }>>;
 	transition(key: string, transitionId: string): Promise<Outcome<{ url: string }>>;
 }
@@ -143,7 +135,6 @@ export function openJira(credentials: () => AtlassianCredentials | undefined, fe
 			const found = await jql(`text ~ "${words}" ORDER BY updated DESC`);
 			const key = issueKey(text);
 			if (!key || !found.ok) return found;
-			// A key finds its issue, even where text search would not.
 			const exact = await request(`/rest/api/3/issue/${key}?fields=${FIELDS.join(",")}`);
 			if (!exact.ok) return found;
 			const issue = toIssue(site(), exact.json);

@@ -44,7 +44,6 @@ import { organizationRoots, type SessionRow } from "./projection.js";
 const hasTable = (db: DatabaseSync, name: string) =>
 	Boolean(db.prepare("select 1 from sqlite_master where type = 'table' and name = ?").get(name));
 
-/** Same scope as the native directory: live bundles in this directory's ancestors, never a recursive search. */
 function visibleBundles(directory: string): string[] {
 	if (!existsSync(directory)) return [];
 	const result: string[] = [];
@@ -61,7 +60,6 @@ function visibleBundles(directory: string): string[] {
 	}
 }
 
-/** Each task thread's size, latest message and the operator's unread count, for the Threads list. */
 function readTaskActivity(db: DatabaseSync): NonNullable<Workplace["taskActivity"]> {
 	const rows = db
 		.prepare(`select m.thread_id as thread, count(*) as messages, max(m.at) as lastAt,
@@ -72,11 +70,9 @@ function readTaskActivity(db: DatabaseSync): NonNullable<Workplace["taskActivity
 		left join thread_participants p on p.thread_id = m.thread_id and p.participant = 'operator'
 		group by m.thread_id`)
 		.all() as unknown as (NonNullable<Workplace["taskActivity"]>[string] & { thread: string })[];
-	// The operator counts unread only in task threads it joined; everything else is observation, not mail to it.
 	return Object.fromEntries(rows.map(({ thread, ...row }) => [thread, row]));
 }
 
-/** Messages that work came from: a recorded `message produced task` link, as message id to the task's thread. */
 function readMessageTasks(db: DatabaseSync): NonNullable<Workplace["messageTasks"]> {
 	if (!hasTable(db, "links") || !hasTable(db, "work_tasks")) return {};
 	const rows = db
@@ -125,7 +121,6 @@ function readThreads(db: DatabaseSync, roots: Map<string, string>): WorkplaceThr
 
 function readEscalations(db: DatabaseSync, roots: Map<string, string>): Workplace["escalations"] {
 	if (!hasTable(db, "threads")) return [];
-	// Explicit escalation threads retain ordinary participant/read-cursor delivery.
 	const rows = db
 		.prepare(`select distinct t.id, t.created_by from threads t
 		join thread_participants p on p.thread_id = t.id and p.participant = ?
@@ -200,7 +195,6 @@ function taskHistory(
 	};
 }
 
-/** Files are rediscovered on the backend's task reread, not on each tool or streaming event. */
 export function workplaceReader(readTask: ReturnType<typeof taskReader>) {
 	let directoryKey: string | undefined;
 	const bundles = new Map<string, string[]>();
@@ -288,9 +282,7 @@ export function workplaceReader(readTask: ReturnType<typeof taskReader>) {
 export interface WorkplaceActions {
 	readTask(task: string): Promise<TaskRead>;
 	assignTask(person: string, task: string): Promise<CommandReceipt>;
-	/** End a person's assignment to a task on the board; the runtime checks the operator may. */
 	unassignTask(person: string, task: string): Promise<CommandReceipt>;
-	/** Close an ephemeral task for everyone on it; ledger tasks close through their ledger status. */
 	closeTask(task: string, status: "done" | "cancelled"): Promise<CommandReceipt>;
 	readOutside(request: { source?: OutsideSource; untriaged?: boolean; limit: number }): Promise<OutsideRead>;
 	setOutsideModes(modes: Partial<Record<OutsideSource, OutsideMode>>): Promise<CommandReceipt>;
@@ -303,7 +295,6 @@ export interface WorkplaceActions {
 	setChannelMembership(thread: string, joined: boolean): Promise<CommandReceipt>;
 }
 
-/** The operator observes shared workplace conversations; only a participant marks them read or replies. */
 export function openWorkplace(path: string, commands: Commands, snapshot: () => WorldSnapshot): WorkplaceActions {
 	const mailbox = openMailbox(path, commands);
 	const findTask = (id: string) => snapshot().workplace?.tasks.find((task) => task.id === id || task.bundle === id);

@@ -72,7 +72,6 @@ function rootOf(id: string, parents: Map<string, string | null>): string {
 	return id;
 }
 
-/** Operator planning over the runtime's existing people, command receipts and thread authority. */
 export function openOrg(paths: { db: string; agentDir: string }, commands: Commands, snapshot: () => WorldSnapshot) {
 	const listeners = new Set<(progress: OrgStartProgress) => void>();
 	const running = new Map<string, Promise<OrgStartProgress>>();

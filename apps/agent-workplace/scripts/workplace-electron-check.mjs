@@ -1,4 +1,3 @@
-// Real Electron navigation and Org IPC over an isolated runtime; no operator state or model calls.
 import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
 import { once } from "node:events";
@@ -88,7 +87,6 @@ try {
 		{ env, stdio: "ignore" },
 	);
 	await waitFor(() => existsSync(socketPath));
-	// Trace the real protocol without replacing any runtime or Electron handler.
 	renameSync(socketPath, upstreamPath);
 	proxy = createServer((client) => {
 		const upstream = createConnection(upstreamPath);
@@ -434,7 +432,6 @@ try {
 	assert.equal(await world.locator("body").evaluate(() => window.workplaceCheckDocument), worldDocumentId);
 	await page.getByRole("button", { name: "Chat", exact: true }).click();
 	assert.equal(await page.evaluate(() => window.workplaceCheckDocument), documentId);
-	// A real anchor navigation exercises Electron's exact allow-list; replacing history alone does not.
 	await page.evaluate(() => {
 		const link = document.createElement("a");
 		link.href = "?workplace=org";

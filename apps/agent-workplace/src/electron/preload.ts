@@ -1,5 +1,3 @@
-// The only way the world UI reaches the backend: a narrow typed API on `window.agentWorkplace`. Sandboxed preloads run
-// as CommonJS with only a few Electron modules, so this is built to dist/electron/preload.cjs.
 import { contextBridge, ipcRenderer } from "electron";
 import type { RetirePeopleProgress } from "../departures.js";
 import type { IntegrationsApi, OutsideWriteEntry } from "../integrations.js";
@@ -230,7 +228,6 @@ const api: AgentWorkplaceApi = {
 	...places(),
 };
 
-/** The function places' calls: each `places:<name>` channel, typed by `IntegrationsApi`. */
 function places(): IntegrationsApi {
 	const call =
 		<K extends keyof IntegrationsApi>(channel: string) =>

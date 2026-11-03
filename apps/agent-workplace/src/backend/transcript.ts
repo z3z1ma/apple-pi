@@ -1,12 +1,7 @@
-// Pi's transcript entries (its session JSONL, as the runtime's `read_entries` returns them) shaped for the conversation
-// panel: one entry per message, tool calls kept in their place inside the assistant message, and long text cut. The
-// world UI never sees raw entries, so it needs no knowledge of Pi's message format.
 import { TRANSCRIPT_TEXT_MAX, type TranscriptEntry, type TranscriptPart } from "../world.js";
 
-/** The custom message type of delivered mail (`components/session-state/src/mail.ts`). */
 const MAIL = "apple-pi.mailbox-message";
 
-/** The argument a tool call is known by, in the bridge's order (`components/session-state/src/bridge.ts`). */
 const MAIN_ARGS = ["command", "path", "pattern", "query", "description", "task", "name", "code"];
 
 function mainArg(args: unknown): string | null {
@@ -26,7 +21,6 @@ function cut(text: string): { text: string; cut: boolean } {
 
 const clip = (text: string) => cut(text).text;
 
-/** The text of a message's content (a string, or text and image parts), and how many images it holds. */
 function contentOf(content: unknown): { text: string; images: number } {
 	if (typeof content === "string") return { text: content, images: 0 };
 	const texts: string[] = [];
@@ -38,7 +32,6 @@ function contentOf(content: unknown): { text: string; images: number } {
 	return { text: texts.join("\n"), images };
 }
 
-/** The mail's body: from its details, else the text inside the `<mailbox-message>` wrapper. */
 function mailOf(entry: Record<string, unknown>): { from: string; text: string } {
 	const details = entry.details as { from?: unknown; body?: unknown } | undefined;
 	const raw = contentOf(entry.content).text;
@@ -71,7 +64,6 @@ function partsOf(content: unknown): TranscriptPart[] {
 	return parts;
 }
 
-/** One transcript entry for the panel; undefined for entries it does not show. */
 export function transcriptEntry(raw: unknown): TranscriptEntry | undefined {
 	if (!raw || typeof raw !== "object") return undefined;
 	const entry = raw as Record<string, unknown>;

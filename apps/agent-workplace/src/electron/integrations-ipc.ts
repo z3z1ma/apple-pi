@@ -1,6 +1,3 @@
-// The function places' IPC: each `places:*` channel calls the integrations backend (`src/backend/integrations/`) with
-// arguments checked there, and Slack's sign-in opens its own window. Secrets never cross IPC: sign-ins go in as
-// arguments (Atlassian) or are captured in this process (Slack), and only status comes back.
 import { BrowserWindow, ipcMain } from "electron";
 import type { Commands } from "../backend/commands.js";
 import { openIntegrations } from "../backend/integrations/index.js";
@@ -33,7 +30,6 @@ export function wireIntegrations(options: {
 				height: 760,
 				title: "Sign in to Slack",
 				backgroundColor: "#ffffff",
-				// Its own persistent cookie jar, apart from the world's window; no preload, no Node.
 				webPreferences: {
 					partition: "persist:agent-world-slack",
 					contextIsolation: true,
@@ -41,7 +37,6 @@ export function wireIntegrations(options: {
 					nodeIntegration: false,
 				},
 			});
-			// Slack turns away browsers it does not know; present as the Chrome that Electron is.
 			window.webContents.setUserAgent(window.webContents.getUserAgent().replace(/ (Electron|Agent ?World)\/\S+/gi, ""));
 			void window.loadURL(SLACK_SIGN_IN_URL);
 			const session = await captureSlackSession(window);
@@ -73,7 +68,6 @@ export function wireIntegrations(options: {
 	handle("confirm-write", (intent, token) => integrations.confirmWrite(intent, token));
 	handle("outside-writes", () => integrations.outsideWrites());
 	integrations.onOutsideWrite((entry) => options.toWindow("places:outside-write", entry));
-	// Receipts go out with the instructions' own, so the panel and chatbox follow them the same way.
 	handle("delegate", (commandId, delegation) =>
 		integrations.delegate(commandId, delegation, (receipt) => options.toWindow("world:receipt", receipt)),
 	);

@@ -1,6 +1,3 @@
-// Mail between sessions, as the rookery and the Mail tab show it: the runtime's `mail` view (one row per `mail`
-// command), newest first, with every mail still waiting however old. A mail is delivered once the receiver's
-// transcript records it; until then it waits (a dormant receiver gets it when it wakes).
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
@@ -10,7 +7,6 @@ import type { CommandReceipt, ThreadRead } from "../world.js";
 import { MAIL_BODY_MAX, type MailItem, type MailThread, type MailThreadSummary, OPERATOR } from "../world.js";
 import type { Commands } from "./commands.js";
 
-/** Recent mail kept in the snapshot, besides every mail still waiting. */
 export const MAIL_KEPT = 120;
 
 export interface Mailbox {
@@ -92,7 +88,6 @@ interface MailRow {
 const nameOf = (db: DatabaseSync, id: string, name: string | null, cwd: string | null) =>
 	name || (cwd ? cwd.split("/").filter(Boolean).pop() : undefined) || (id === OPERATOR ? id : retainedName(db, id));
 
-/** A display label for a thread author: the operator, the runtime, a live person or a departed person's retained name. */
 function personName(db: DatabaseSync, id: string): string {
 	if (id === OPERATOR) return "You";
 	if (id === "harness") return "Pi";
@@ -105,7 +100,6 @@ function personName(db: DatabaseSync, id: string): string {
 const hasThreads = (db: DatabaseSync) =>
 	db.prepare("select 1 from sqlite_master where type = 'table' and name = 'thread_messages'").get() !== undefined;
 
-/** The operator is not a session row: its needs-you state is its unread thread cursor. */
 export function readOperatorMail(db: DatabaseSync): MailThreadSummary[] {
 	if (!hasThreads(db)) return [];
 	const follows = db
@@ -133,7 +127,6 @@ export function readOperatorMail(db: DatabaseSync): MailThreadSummary[] {
 	}));
 }
 
-/** Read a thread only if the operator participates. The caller marks the returned sequence read through the runtime. */
 export function readOperatorThread(db: DatabaseSync, id: string): MailThread | undefined {
 	if (!hasThreads(db)) return undefined;
 	const follows = db
@@ -149,7 +142,6 @@ export function readOperatorThread(db: DatabaseSync, id: string): MailThread | u
 	return thread ? { ...thread, readUpTo: participant.read_up_to } : undefined;
 }
 
-/** The stored conversation. Its caller decides whether this is a participant read or a shared-board observation. */
 export function readStoredThread(db: DatabaseSync, id: string): MailThread | undefined {
 	const row = db.prepare("select subject, closed_at from threads where id = ?").get(id) as
 		| { subject: string; closed_at: number | null }
@@ -176,7 +168,6 @@ export function readStoredThread(db: DatabaseSync, id: string): MailThread | und
 	return { id, subject: row.subject, closed: row.closed_at !== null, participants, messages };
 }
 
-/** The mail the world shows now. */
 export function readMail(db: DatabaseSync): MailItem[] {
 	const rows = db.prepare(MAIL).all() as unknown as MailRow[];
 	return rows.map((row) => {

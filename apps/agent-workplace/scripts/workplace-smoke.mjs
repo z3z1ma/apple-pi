@@ -1,4 +1,3 @@
-// Fixture-only browser check; never connects to the operator's runtime or sends real messages.
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";

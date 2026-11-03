@@ -28,7 +28,6 @@ function people(value: unknown): string[] {
 	return value;
 }
 
-/** Read-only views and operator commands over the runtime's existing communication journal. */
 export function openCommunications(path: string, commands: Commands): CommunicationsApi {
 	function read<T>(query: (db: DatabaseSync) => T): T {
 		const db = new DatabaseSync(path, { readOnly: true });
@@ -174,14 +173,12 @@ export function openCommunications(path: string, commands: Commands): Communicat
 			const message = typeof request.message === "string" ? request.message : "";
 			const emoji = typeof request.emoji === "string" ? request.emoji : "";
 			if (!message || !emoji) return { ok: false, reason: "A message and an emoji are required." };
-			// Fixed actor and kind; the renderer supplies only the message, the emoji and whether it is on.
 			return commands.send(OPERATOR, { kind: "react", message, emoji, on: request.on === true });
 		},
 		async markRead(request) {
 			const thread = typeof request.thread === "string" ? request.thread : "";
 			if (!thread || !Number.isSafeInteger(request.seq) || request.seq < 1)
 				return { ok: false, reason: "A thread and a message sequence are required." };
-			// Fixed actor and kind: the operator saw this conversation up to `seq`.
 			return commands.send(OPERATOR, { kind: "thread_read", thread, seq: request.seq });
 		},
 		pin(request) {
