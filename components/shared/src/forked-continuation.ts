@@ -23,11 +23,6 @@ const SEARCH_TOOLS = new Set(["ls", "grep", "find"]);
 
 const SESSIONS_KEY = Symbol.for("apple-pi.forked-continuation.sessions");
 
-/**
- * Pi gives extensions no handle on their AgentSession. Remember each session
- * by its session manager, which is the object extension contexts expose, when
- * the host binds extensions or it starts a run.
- */
 function liveSessions(): WeakMap<object, AgentSession> {
 	const prototype = AgentSession.prototype as AgentSession & Record<PropertyKey, unknown>;
 	const existing = prototype[SESSIONS_KEY] as WeakMap<object, AgentSession> | undefined;
@@ -61,17 +56,12 @@ function messageText(message: AgentMessage | undefined): string {
 }
 
 export interface ForkRequest {
-	/** The conversation the fork starts from. */
 	messages: AgentMessage[];
-	/** The one message appended after it: a prompt, or the result of a pending tool call. */
 	append: AgentMessage;
-	/** Names the fork's usage entries in the parent session. */
 	label: string;
-	/** Tool consumers return usage to their caller instead of recording it in the parent. */
 	recordUsage?: boolean;
 	worktree?: ForkWorktree;
 	blockedTools?: ReadonlySet<string>;
-	/** Called with each assistant reply's usage as it ends, so a caller can enforce a token limit. */
 	onUsage?: (usage: Usage) => void;
 }
 
@@ -89,12 +79,10 @@ export function liveSession(ctx: ExtensionContext): AgentSession | undefined {
 	return liveSessions().get(ctx.sessionManager);
 }
 
-/** Track sessions before binding and prompting, so startup handlers can find them too. */
 export function trackLiveSessions(): void {
 	liveSessions();
 }
 
-/** Keeps the parent's prefix intact and closes only its still-unanswered tool calls, at the end, with `note`. */
 export function closePendingCalls(messages: AgentMessage[], note: string): void {
 	const pending = new Map<string, { id: string; name: string }>();
 	for (const message of messages) {
@@ -113,7 +101,6 @@ export function closePendingCalls(messages: AgentMessage[], note: string): void 
 		});
 }
 
-/** Passive notices follow thinking visibility, independently of tool expansion. */
 function registerPassiveMessageRenderer(pi: ExtensionAPI, customType: string): void {
 	let session: AgentSession | undefined;
 	pi.on("session_start", (_event, ctx) => {
@@ -139,13 +126,11 @@ function registerPassiveMessageRenderer(pi: ExtensionAPI, customType: string): v
 	});
 }
 
-/** Writes stay in the worktree or the fork's private temporary directory (spec I5). */
 function writesOutside(path: string, { root, tmp }: ForkWorktree): boolean {
 	let target: string;
 	try {
 		target = canonical(path);
 	} catch {
-		// A path that cannot be resolved cannot be shown to stay in the worktree.
 		return true;
 	}
 	return !within(target, canonical(root)) && !within(target, canonical(tmp));
@@ -165,8 +150,6 @@ function forkDirectory(parentCwd: string, { root, parentRoot }: ForkWorktree): s
 function remapCommand(command: string, { root, parentRoot, tmp }: ForkWorktree): string {
 	if (!parentRoot) return command;
 	const parentPath = new RegExp(`${parentRoot.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\w.-])`, "g");
-	// The worktree and the temporary directory may live under the parent root (in its git
-	// directory), so leave their own paths alone.
 	const keep = (text: string, kept: string[]): string => {
 		const [first, ...rest] = kept;
 		if (first === undefined) return text.replace(parentPath, root);
@@ -178,9 +161,7 @@ function remapCommand(command: string, { root, parentRoot, tmp }: ForkWorktree):
 	return keep(command, [root, tmp]);
 }
 
-/** Point a tool call at the worktree in place; return a refusal when it would write outside it. */
 function isolate(tool: string, args: Record<string, unknown>, worktree: ForkWorktree, cwd: string): string | undefined {
-	// A managed background task would outlive the attempt and its worktree.
 	if (tool === "bash" && args.run_in_background) return NO_BACKGROUND;
 	if (tool === "bash" && typeof args.command === "string") {
 		args.command = remapCommand(args.command, worktree);
@@ -206,12 +187,6 @@ function groupAlive(pgid: number): boolean {
 	}
 }
 
-/**
- * Kill each process group and wait, up to `waitMs`, until none of its members exists, so a
- * caller that runs next (branch scoring) cannot be watched by a process the fork left behind.
- * A group that outlives the wait fails the fork's result rather than letting the caller go on.
- * A process that left its group (setsid) escapes; branch search accepts that residual risk.
- */
 async function killProcessGroups(groups: Iterable<number>, waitMs = 2000): Promise<void> {
 	const pending = [...groups];
 	for (const pgid of pending) {
@@ -228,20 +203,9 @@ async function killProcessGroups(groups: Iterable<number>, waitMs = 2000): Promi
 		throw new Error(`Processes of the fork survived SIGKILL in process groups ${alive.join(", ")}.`);
 }
 
-/**
- * Continue an identical copy of a conversation: same system prompt, tool loadout,
- * model, and provider session id, starting from `messages` with `append` added.
- * The session-bound request and turn hooks stay with the parent, so the fork never
- * writes to the parent transcript; its tools still run through the parent's hooks.
- * With a worktree, the fork's own tool hook points paths and shell commands at it
- * before those hooks run, and the shell runs there with the fork's private temporary
- * directory; every process the shell started is killed, and that directory deleted,
- * before the result resolves.
- */
 export function startFork(session: AgentSession, request: ForkRequest): ForkHandle {
 	const parent = session.agent;
 	const { worktree, blockedTools } = request;
-	// The fork works in the worktree's copy of the directory the parent session runs in.
 	const cwd = worktree && forkDirectory(session.sessionManager.getCwd(), worktree);
 	const fork = new Agent({
 		initialState: {
@@ -303,7 +267,6 @@ export function startFork(session: AgentSession, request: ForkRequest): ForkHand
 		.finally(async () => {
 			unsubscribe();
 			if (!worktree) return;
-			// Nothing may write the temporary directory once it is gone, so the processes go first.
 			try {
 				await killProcessGroups(processGroups as Set<number>);
 			} finally {
@@ -314,13 +277,6 @@ export function startFork(session: AgentSession, request: ForkRequest): ForkHand
 	return { result, abort: () => fork.abort() };
 }
 
-/**
- * Register a passive continuation that runs in a headless fork and returns one
- * message. The message joins the parent's context without starting or steering a
- * turn: at once when idle, or at the end of the current turn while one streams.
- * The returned promise settles once that fork does; it never rejects. `compose` turns the fork's reply into the
- * message, or into none.
- */
 export function registerForkedContinuation(
 	pi: ExtensionAPI,
 	customType: string,

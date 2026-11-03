@@ -180,7 +180,6 @@ function readIndex(
 	return current;
 }
 
-/** Replace a file through a sibling temporary so readers never see a truncated index. */
 export function writeAtomicTextFile(path: string, content: string): void {
 	const directory = join(path, "..");
 	const mode = pathExists(path) ? lstatSync(path).mode & 0o777 : undefined;
@@ -201,7 +200,6 @@ function acquireLedgerLease(root: string): () => void {
 	});
 }
 
-/** Live bundles under the session's directory and every ancestor that holds a `.ledger/`. */
 export function visibleLiveBundles(cwd: string): string[] {
 	const bundles: string[] = [];
 	let current = realpathSync(cwd);
@@ -360,7 +358,6 @@ function createLedgerTask(
 	}
 }
 
-/** Publish a bundle through the same ledger transaction as ledger_add; hold its lease until the assignment commits. */
 export function promoteLedgerTask(
 	root: string,
 	bundle: string,
@@ -439,7 +436,6 @@ function archiveTask(root: string, taskId: string, status: ClosedLedgerStatus): 
 	const historyTaskPath = `.ledger/history/${taskId}/task.md`;
 
 	assertDirectory(ledgerPath, ".ledger");
-	// Read and validate every source and destination before changing task.md.
 	if (pathExists(historyBundleAbsolute))
 		throw new Error(`The ledger task is already archived: .ledger/history/${taskId}`);
 	if (!pathExists(liveBundleAbsolute)) throw new Error(`Requested ledger task not found: .ledger/${taskId}`);
@@ -476,7 +472,6 @@ function archiveTask(root: string, taskId: string, status: ClosedLedgerStatus): 
 	let historyIndexChanged = false;
 	let historyCreated = false;
 	try {
-		// Stage the destination path before changing task metadata.
 		mkdirIfNeeded(historyPath);
 		historyCreated = !historyExisted;
 		assertDirectory(historyPath, ".ledger/history");
@@ -493,7 +488,6 @@ function archiveTask(root: string, taskId: string, status: ClosedLedgerStatus): 
 		writeAtomicTextFile(historyIndexAbsolute, nextHistoryIndex);
 		historyIndexChanged = true;
 	} catch (error) {
-		// Restore indexes first, then return the bundle and its original status.
 		try {
 			if (historyIndexChanged) {
 				if (historyIndexExisted) writeAtomicTextFile(historyIndexAbsolute, currentHistoryIndex);

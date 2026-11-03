@@ -125,7 +125,6 @@ function parseCandidate(path: string, label: string, raw: unknown): ModelProfile
 	return { model: candidate.model, thinking: candidate.thinking as ModelThinkingLevel };
 }
 
-/** Read and validate the complete user-global model profile authority. */
 export function loadModelProfiles(options: { optional?: boolean } = {}): Record<string, ModelProfile> {
 	const path = modelProfilesPath();
 	let source: string;
@@ -185,7 +184,6 @@ export interface ModelProfileRegistry {
 	hasConfiguredAuth?(model: Model<any>): boolean;
 }
 
-/** Use registered candidates with configured authentication when the registry can check it. */
 export function resolveModelProfileCandidates(
 	name: string,
 	profile: ModelProfile,
@@ -230,7 +228,6 @@ function unavailableProfile(name: string, profile: ModelProfile): never {
 	);
 }
 
-/** Select only from the caller's eligible candidates, retaining each candidate's thinking level. */
 export function selectModelProfile(
 	name: string,
 	profile: ModelProfile,
@@ -246,7 +243,6 @@ export function selectModelProfile(
 	return candidates[index]!;
 }
 
-/** Resolve and select one profile bundle against Pi's model registry. */
 export function resolveModelProfile(name: string, registry: ModelProfileRegistry): ResolvedModelProfile {
 	const normalized = name.trim();
 	if (!normalized || normalized !== name) {
@@ -263,14 +259,12 @@ export function resolveModelProfile(name: string, registry: ModelProfileRegistry
 	return selectModelProfile(name, profile, resolveModelProfileCandidates(name, profile, registry));
 }
 
-/** One request on a user-global model profile, without the conversation or tools. */
 export type ProfileRequest = (
 	profile: string,
 	prompt: string,
 	signal: AbortSignal,
 ) => Promise<{ text: string; usage: Usage }>;
 
-/** A one-shot {@link ProfileRequest} against Pi's model registry: one user prompt, the reply's text. */
 export function profileRequest(
 	registry: Pick<ExtensionContext["modelRegistry"], "find" | "streamSimple">,
 ): ProfileRequest {
