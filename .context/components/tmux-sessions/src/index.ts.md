@@ -1,7 +1,10 @@
 ## file
 
 Root interactive sessions load the sidebar plugin once per tmux server, ring the pane bell when a run settles, and start the notch panel on macOS. Session activity stays in the session-state model that those views read. `PI_TMUX_DISABLED=1` turns the extension off. `PI_TMUX_SESSION_BELL=off` skips the settle bell.
-Why: writing BEL to the pane's own pty is what makes tmux count a bell and mark the window. Each new root session starts the notch again so `/new` after a crash or package update restores the panel.
+Why: writing BEL to the pane's own pty is what makes tmux count a bell and mark the window.
+
+Each new root session starts the notch again.
+Why: `/new` after a crash or package update must restore the panel without waiting for a tmux server restart.
 
 Temporary program peers keep normal tmux integration but leave routine completion attention to their caller. Their automatic bell is quiet; the notify extension still reports a question needing the operator.
 Coupled: components/notify/src/index.ts, components/session-state/src/protocol.ts
