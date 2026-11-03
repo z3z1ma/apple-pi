@@ -20,8 +20,8 @@ Tool directives are not comments and stay:
 - triple-slash references and shebangs;
 - bundler annotations: `@vite-ignore`, `#__PURE__`, `@__PURE__`, `webpackIgnore`.
 
-Run it with `node lint/no-comments.mjs [paths...]`. With no paths it checks every tracked source file; `npm run lint`
-runs it too.
+Run it with `node lint/no-comments.mjs [paths...]`. With no paths it checks every tracked source file. It joins
+`npm run lint` once the migration of existing comments reaches zero (ledger task `202611022254-mechanize-judgment`).
 
 ## Rules
 
@@ -29,7 +29,7 @@ Code rules are Biome GritQL plugins in `rules/`, each applied to its paths by an
 
 - `no-native-select.grit`: Workplace uses `Select` and `Recipients`, not native dropdowns.
 - `workplace-palette.grit`: Workplace stylesheets take colors from `--wp-*` theme variables; white and black overlays
-  are allowed.
+  are allowed. `workplace.css` is excluded because it defines the house palette itself.
 
 Agent-action rules live in `components/action-rules`: a `tool_call` hook refuses commands that hurt a shared checkout
 (`git rm`/`git mv`, `pkill`/`killall`, `sed -i ''`, a plain full `npm test`) and a `git add`/`git commit` issued in

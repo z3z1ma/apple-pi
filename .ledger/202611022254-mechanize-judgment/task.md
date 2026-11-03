@@ -44,7 +44,19 @@ deterministic checks agents hit immediately. This follows poteto's 4-day game th
 
 ## Current State
 
-Lanes assigned 2026-11-03.
+Lanes assigned 2026-11-03. Landed so far:
+
+- **Lesson compiler (Tadhg):**
+  - Two GritQL rules: `no-native-select` and `workplace-palette`. Both are wired per path in `biome.json`, and their three hits are fixed.
+  - The action-rules extension (`components/action-rules`).
+  - The comment checker (`lint/no-comments.mjs`), not yet in `npm run lint`.
+  - The distill and code-review instructions now put rules before prose.
+  - Learnings the action rules enforce are retired from `.pi/LEARNINGS.md`.
+- **Comment ban:** batches are landing per lane; `node lint/no-comments.mjs | tail -1` shows the remaining count (6,067 at the start).
+- **Next:**
+  - Add the comment checker to `npm run lint` at zero.
+  - Restart the runtime after Rahul's renames and Deniz's session-state pass.
+  - Rebuild Workplace after Hye-jin's pass.
 
 ## Outcome
 

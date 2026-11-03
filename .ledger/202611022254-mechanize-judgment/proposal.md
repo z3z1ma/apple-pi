@@ -43,7 +43,7 @@ probabilistically. A rule costs nothing until it fires and is followed every tim
   - No `\u` escapes in JSX text.
   - No TypeScript parameter properties or enums in files the runtime loads under strip-only Node.
   - No `readFileSync` of a transcript in runtime or recall code (the per-call whole-file parse that made search slow).
-  - No `edit` / `display: flex` pairs without a `[hidden]` rule.
+  - No `display: flex` on an element that is also hidden with the `hidden` attribute, unless a `[hidden]` rule wins.
   - `useExhaustiveDependencies`-style misses we keep suppressing.
 - **Agent actions are lintable too.** Several of our worst repeats are behaviors, not code:
   - an edit and its commit in one parallel batch;
