@@ -15,7 +15,7 @@ State the claim in observable terms. Separate safety (something bad never happen
 
 ## Derive the model from the implementation
 
-Read the code, its `.context` files, the governing intent and the relevant tests. Identify the actual writers, durable stores, transaction boundaries, queues and observers. Trace startup and error paths as well as the success path. Map every modeled action to its implementation owner in the model's companion document.
+Read the code, its `.context` invariants where present, the governing intent and the relevant tests. Identify the actual writers, durable stores, transaction boundaries, queues and observers. Trace startup and error paths as well as the success path. Map every modeled action to its implementation owner in the model's companion document.
 
 Represent durable state separately from volatile state. Make a transaction one durable transition, with volatile intermediate phases where a crash can occur. Preserve separate stores as separate transitions: a database commit and a transcript or filesystem write are different events. Model acknowledgments and retries independently from effects. Keep the identity and deduplication rule the implementation actually uses.
 
@@ -40,11 +40,19 @@ An optional second runner argument selects another `.cfg`. The runner supports o
 
 Require a completed state-space search with no remaining queue and successful exit, not merely a parsed spec or a timed-out search. Retain the command, configuration, tool version, state counts and result. A deliberately broken model should produce a failing exit and trace; this checks that the test can detect violations rather than accept every invocation.
 
-## Turn a counterexample into evidence
+## Counterexample-to-test loop
 
-Read the shortest trace and map every step back to an actual call, write, commit or crash boundary. Challenge the abstraction: a trace may expose a modeling error or an environmental assumption rather than a product defect. Report a source-supported implementation counterexample, with its trace and scope, before changing the implementation.
+For each counterexample from the implementation model, map the shortest trace to actual calls, writes, commits or crash boundaries. Translate it into an ordinary behavioral test in the repository's own framework, against the real implementation. Keep scheduling and snapshot controls explicit, and preserve the implementation's authority and transaction guards.
 
-Translate a confirmed trace into a focused behavioral test using the repository's existing harness. Make the real implementation fail for that ordering, then make an authorized repair at the shared owner and rerun the test and model. A seeded durable snapshot proves recovery from that snapshot; a controlled crash proves the specific interruption exercised. State which one ran.
+Use the intended behavioral assertion as the oracle:
+
+- **Fails for the modeled ordering:** report the defect with its trace, failing test and scope before fixing it. Make an authorized repair at the shared owner, then rerun the test and model.
+- **Passes:** refine the abstraction from source and rerun TLC, preserving the implementation assertion.
+- **Setup, loader or model error:** repair the harness or model, then reach the intended assertion before classifying the trace.
+
+Keep an iteration record: source/model revisions, abstraction changes, checker command/configuration/version, trace, test command, outcome and elapsed time. Measure time-to-candidate and time-to-clean-reproduction separately from the start of the investigation, including source reading and harness repair. Retain evidence outside disposable checker state so another session can reproduce the result.
+
+State what the test exercised: a seeded snapshot proves recovery from that snapshot; a controlled crash proves the particular interruption. Classify a deliberately faulty model as a checker control, and a completed finite search as evidence within its declared bounds.
 
 ## Done
 
