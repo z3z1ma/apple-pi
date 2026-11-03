@@ -369,7 +369,6 @@ test("freshness separates a stable committed target from checkout changes, polic
 	writeFileSync(rolePath, role.replace("fixture/code-review-specialist:high", "fixture/replacement:high"));
 	expect(await readReviewFreshness("owner", job.id)).toMatchObject({ requestedTarget: "changed", policy: "changed" });
 	writeFileSync(rolePath, role);
-	// A project role in the live checkout only is not part of the committed target capture reads.
 	mkdirSync(join(repository, ".pi", "roles"), { recursive: true });
 	writeFileSync(
 		join(repository, ".pi", "roles", "code-review-specialist.md"),
@@ -1410,8 +1409,6 @@ test("a policy change during a real SDK turn retains raw results without accepti
 		"select state, reason, result, output from review_attempts where review_id = ? and kind = 'focused'",
 		job.id,
 	)[0]!;
-	// The focused and integration turns run in parallel and both observe the change. Whichever settles first fails the
-	// review and stops the other, which may then be recorded as cancelled; neither may become accepted coverage.
 	expect(attempt).toMatchObject({
 		state: expect.stringMatching(/^(failed|cancelled)$/),
 		reason: expect.stringContaining("policy changed during the turn"),
@@ -1551,7 +1548,6 @@ test("reported cost keeps invalid observations and nonfinite totals unavailable"
 				reportedAttempts: 0,
 				totalAttempts: 2,
 			});
-			// Analytics counts unreported attempts instead of pricing them at zero.
 			const analytics = reviewAnalytics(db, "owner");
 			expect(analytics).toMatchObject({ dollars: 0, unreported: 2 });
 			expect(analytics.byPhase.every((row) => row.reported === 0 && row.dollars === 0)).toBe(true);
@@ -1700,7 +1696,6 @@ test("the owner is mailed when the plan is ready, as each pass's findings are co
 	const [plan, streamed, outcome] = messages();
 	expect(plan!.body).toContain("is planned: 1 scope, 2 passes, 2 questions");
 	expect(streamed!.body).toContain("1 confirmed finding from pass value-correctness");
-	// The plan's depth, not the role, sets each attempt's model tier.
 	expect(
 		query<{ kind: string; policy: string }>(
 			state.dbPath,
@@ -1809,7 +1804,6 @@ test("readers name the change, take comments, show pass logs and analytics, and 
 			"select session_file as file from review_attempts where review_id = ? order by created_at desc limit 1",
 			committed.id,
 		)[0]!.file!;
-		// A record that is not an object is skipped; the entries after it still show.
 		writeFileSync(
 			transcript,
 			`${readFileSync(transcript, "utf8")}null\n${JSON.stringify({ type: "message", message: { role: "assistant", content: [{ type: "text", text: "after null" }] } })}\n`,
@@ -1939,7 +1933,6 @@ test("actual first provider inputs keep author narrative and other first reports
 		expect(inputs).not.toContain("AUTHOR_NARRATIVE_SENTINEL");
 		expect(inputs).not.toContain("Team context at your arrival");
 		expect(inputs).toContain("export const value = 2;");
-		// Each validator shard sees its own sealed report; the one for the focused pass carries the sentinel.
 		if (attempt.kind === "validation") validatorSawFirstReports ||= inputs.includes("OTHER_FIRST_REPORT_SENTINEL");
 		else expect(inputs.split("\n").slice(0, 4).join("\n")).not.toContain("OTHER_FIRST_REPORT_SENTINEL");
 		const requests = inputs
@@ -2076,7 +2069,6 @@ test("after interruption an obsolete receipt cannot complete the replacement att
 	await vi.waitFor(
 		() =>
 			expect(
-				// Every concurrent replacement inspection replays the obsolete receipt through its own socket.
 				query(state.dbPath, "select id from sessions where last_error = ?", `Observed obsolete receipt ${old.id}:turn`)
 					.length,
 			).toBeGreaterThan(0),

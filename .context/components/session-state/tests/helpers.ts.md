@@ -1,3 +1,8 @@
+## file
+
+`tempStateDir` isolates tmux: an empty socket directory and no inherited pane, so the runtime never reads the operator's servers. A test that needs tmux starts scratch servers and points `TMUX_TMPDIR` at its own directory.
+Why: an inherited pane or the operator's socket directory would attach the test runtime to his live sessions.
+
 ## symbol:fakeBridge
 
 Put organization fields such as `reportsTo` and `manages` in `hello.facts`, and check the stored reporting line when a fixture's tree matters.
@@ -7,6 +12,11 @@ Treat this fake as a socket peer, not a Pi session: receiving a runtime `close` 
 Why: other test fakes expose `.stop()`, and applying that interface here caused a test failure; waiting for automatic shutdown instead can leave the incarnation alive while its stand-in process still runs.
 Coupled: components/session-state/src/protocol.ts, components/session-state/src/runtime.ts
 Verify: components/session-state/tests/peers.test.ts, apps/agent-workplace/tests/workplace.test.ts
+
+## symbol:close
+
+`dispose` alone emits no `session_shutdown`, so the bridge would stay connected and start a new runtime once the test stops the old one. `close` emits shutdown first.
+Why: a disposed session's link stays connected; when the test stops the runtime, the link starts a new one into a directory the test is deleting.
 
 ## symbol:sendCommand
 

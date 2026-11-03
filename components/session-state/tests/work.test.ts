@@ -36,7 +36,6 @@ async function person(manager?: string, role?: string, cwd?: string) {
 				installLedger(pi);
 			},
 		],
-		// A finished task starts a self-reflection fork; it answers without taking the script's next call.
 		(context) =>
 			JSON.stringify(context.messages.at(-1)).includes("You have finished a task.")
 				? fauxAssistantMessage("Nothing changed.")
@@ -143,7 +142,6 @@ test("taking, switching, rereading, and compaction append the explicit goal; fin
 		});
 		expect(first.ephemeral).toBe(1);
 		expect(first.bundle).toContain("/state/tasks/");
-		// The short title names the task; the goal keeps every line.
 		expect(readFileSync(join(first.bundle, "task.md"), "utf8")).toContain(
 			"# Requests stall\n\n## Intent\n\nFind why requests stall.\nVerify the slow path.",
 		);
@@ -306,7 +304,6 @@ test("links stay universal; insights belong to an unroled root, not its unroled 
 				expect(who.run.session.getActiveToolNames().includes(tool)).toBe(who === root);
 			expect(await who.attempt("progress", {})).toMatchObject({ isError: who !== root });
 		}
-		// The human inspection command remains available without granting model tools.
 		const notices: string[] = [];
 		const errors: unknown[] = [];
 		await root.run.session.bindExtensions({
@@ -413,7 +410,6 @@ test("the runtime records once when each task opens and how it closes, even for 
 		expect(closed).toMatchObject({ opened_at: opened.opened_at, close_status: "done" });
 		expect(closed.archived_at).not.toBeNull();
 
-		// Created through the tool: open at creation, though nobody is ever assigned.
 		await manager.invoke("ledger_add", { title: "Drop the old flag", description: "Remove it", slug: "drop-flag" });
 		await manager.invoke("ledger_add", { title: "Rewrite the parser", description: "Maybe", slug: "rewrite" });
 		const ledger = join(manager.run.cwd, ".ledger");
@@ -430,7 +426,6 @@ test("the runtime records once when each task opens and how it closes, even for 
 		expect(done.archived_at).not.toBeNull();
 		expect(lifecycle(join(ledger, "history", basename(rewrite)))[0]).toMatchObject({ close_status: "cancelled" });
 
-		// Created before the runtime heard of it: opens when first recorded, here when taken.
 		const older = await addLedgerTask(manager.run.cwd, "Old backlog item", "Predates the records");
 		expect(lifecycle(join(manager.run.cwd, older.bundlePath))).toEqual([]);
 		const taken = await engineer.invoke("take_task", { task: join(manager.run.cwd, older.bundlePath) });
@@ -1134,13 +1129,11 @@ test("a database before lifecycle tracking gains task lifecycle columns and keep
 		db.exec(
 			"insert into assignments (person, task_id, assigned_by, assigned_at) values ('a', 't', 'm', 700), ('b', 't', 'm', 500), ('a', 'u', 'm', 800)",
 		);
-		// Back to the version before the lifecycle columns: the links table came after them.
 		db.exec(
 			"drop table links; alter table work_tasks drop column opened_at; alter table work_tasks drop column close_status",
 		);
 		rewindRecentSchema(db, 24);
 		migrate(db);
-		// Opened at the first assignment; an archived ephemeral task closed done.
 		expect(db.prepare("select id, opened_at, close_status from work_tasks order by id").all()).toEqual([
 			{ id: "t", opened_at: 500, close_status: "done" },
 			{ id: "u", opened_at: 800, close_status: null },

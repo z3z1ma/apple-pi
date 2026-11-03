@@ -9,15 +9,12 @@ import bridge from "../src/index.js";
 import type { Command } from "../src/protocol.js";
 import { close, query, sendCommand, startRuntime, stopRuntime, tempStateDir } from "./helpers.js";
 
-// A scratch tmux server under its own TMUX_TMPDIR, whose windows find a fake `pi` first on PATH. The fake records
-// how it was started and connects to the runtime as that session's bridge, as a real Pi would.
 const tmuxDir = mkdtempSync(join(tmpdir(), "apc-"));
 const fakeDir = mkdtempSync(join(tmpdir(), "apc-bin-"));
 const workDir = realpathSync(mkdtempSync(join(tmpdir(), "apc-work-")));
 const piLog = join(fakeDir, "starts.jsonl");
 const state = tempStateDir();
 vi.stubEnv("TMUX_TMPDIR", tmuxDir);
-// A window gets the PATH of the tmux client that opened it, here the runtime, which inherits this one.
 vi.stubEnv("PATH", `${fakeDir}:${process.env.PATH}`);
 vi.stubEnv("FAKE_PI_LOG", piLog);
 writeFileSync(
@@ -114,16 +111,14 @@ const toolResults = (run: Awaited<ReturnType<typeof coordinator>>) =>
 		m.role === "toolResult" ? [{ isError: m.isError, text: JSON.stringify(m.content) }] : [],
 	);
 
-/** A session started with `--role coordinator` whose model makes the given tool calls in turn. */
 async function coordinator(calls: Reply[]) {
 	const run = await fauxSession([bridge], [...calls, fauxAssistantMessage("done")], []);
 	await withRole(run, "coordinator");
 	return run;
 }
 
-/** Restart the session with `--role <name>` (a new session_start reads the flag) and wait until the runtime records the role. */
 async function withRole(run: Awaited<ReturnType<typeof fauxSession>>, role: string | undefined) {
-	if (!role) return; // unroled is the default
+	if (!role) return;
 	const id = run.session.sessionManager.getSessionId();
 	run.session.extensionRunner.setFlagValue("role", role);
 	await run.session.bindExtensions({});
@@ -612,7 +607,6 @@ test("a hired person's soul and self reach the runtime, and the self follows the
 		const self = `## My story\n${story}`;
 		await vi.waitFor(() => expect(facts().self).toBe(self));
 
-		// A new process of the same session (a rebind here) reports the self and soul its transcript holds.
 		const { soul } = facts();
 		await run.session.bindExtensions({});
 		await run.session.prompt("back");

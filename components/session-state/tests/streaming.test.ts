@@ -22,7 +22,6 @@ afterAll(async () => {
 
 type Message = Record<string, any>;
 
-/** A client on the socket that collects every line it receives. */
 async function client() {
 	const socket: Socket = createConnection(state.socketPath);
 	await new Promise((resolve) => socket.once("connect", resolve));
@@ -39,7 +38,6 @@ async function client() {
 	return { socket, messages, send };
 }
 
-/** A client subscribed to `sessionIds`, once the runtime confirmed it. */
 async function subscriber(sessionIds: string[]) {
 	const c = await client();
 	c.send({ type: "subscribe", sessionIds });
@@ -54,7 +52,6 @@ const textOf = (messages: Message[]) =>
 		.map((m) => m.delta)
 		.join("");
 
-/** A faux session whose reply streams as one delta per block, and its id once the runtime knows it. */
 async function streamingSession(blocks: string[]) {
 	const run = await fauxSession([bridge], [fauxAssistantMessage(blocks.map((text) => fauxText(text)))], [], {
 		streamText: true,
@@ -68,7 +65,6 @@ async function streamingSession(blocks: string[]) {
 	return { run, id };
 }
 
-/** The transcript entry a client reads for `entryId`. */
 async function readEntry(sessionId: string, entryId: string) {
 	const c = await client();
 	c.send({ type: "read_entry", requestId: "r", sessionId, entryId });
@@ -142,7 +138,6 @@ test("streamed text is never written to events or messages; the entry named at t
 }, 30000);
 
 test("a client that stops reading does not hold up the bridge or other clients; what it missed is coalesced or dropped", async () => {
-	// A bridge on the socket sends each delta as its own line, as a slow real stream would.
 	const proc = standInProcess();
 	const link = await fakeBridge(state.socketPath, "bursty", proc.pid, proc.startedAt);
 	const blocks = Array.from({ length: 400 }, (_, i) => `[${i}]${"x".repeat(2000)}`);
@@ -155,7 +150,6 @@ test("a client that stops reading does not hold up the bridge or other clients; 
 			link.send({ type: "reply_delta", streamId: "s1", seq: i + 1, delta });
 		});
 		link.send({ type: "reply_end", streamId: "s1", messageEntryId: "e1" });
-		// The bridge's link keeps flowing: the runtime answers it while one subscriber reads nothing.
 		link.send({ type: "run", run: "idle" });
 		link.send({ type: "run", run: "thinking" });
 		await vi.waitFor(() =>
@@ -164,13 +158,11 @@ test("a client that stops reading does not hold up the bridge or other clients; 
 			]),
 		);
 		await vi.waitFor(() => expect(streamed(fast.messages).at(-1)?.type).toBe("reply_end"), { timeout: 5000 });
-		// A client that reads gets all the text in order, though a burst may arrive coalesced (`seq` skips).
 		const fastSeqs = fast.messages.filter((m) => m.type === "reply_delta").map((m) => m.seq);
 		expect(fastSeqs).toEqual([...fastSeqs].sort((a, b) => a - b));
 		expect(fastSeqs.at(-1)).toBe(blocks.length);
 		expect(textOf(fast.messages)).toBe(blocks.join(""));
 
-		// The next reply starts while the stalled client still has not read the first.
 		link.send({ type: "reply_delta", streamId: "s2", seq: 1, delta: "Next " });
 		link.send({ type: "reply_delta", streamId: "s2", seq: 2, delta: "reply." });
 		link.send({ type: "reply_end", streamId: "s2", messageEntryId: "e2" });
@@ -179,15 +171,12 @@ test("a client that stops reading does not hold up the bridge or other clients; 
 		stalled.socket.resume();
 		await vi.waitFor(() => expect(streamed(stalled.messages).at(-1)?.streamId).toBe("s2"), { timeout: 5000 });
 		const stream = streamed(stalled.messages);
-		// Of the first reply it got what fit in its socket's buffers; the rest was dropped once the next reply started.
-		// Only the last end is held, and it ends the first reply too: the client reads that reply from history.
 		const first = stream.filter((m) => m.streamId === "s1");
 		expect(textOf(first).length).toBeLessThan(blocks.join("").length / 2);
 		expect(blocks.join("").startsWith(textOf(first))).toBe(true);
 		const seqs = first.filter((m) => m.type === "reply_delta").map((m) => m.seq);
 		expect(seqs).toEqual([...seqs].sort((a, b) => a - b));
 		expect(first.every((m) => m.type === "reply_delta")).toBe(true);
-		// The newest reply arrives whole, coalesced.
 		const second = stream.filter((m) => m.streamId === "s2");
 		expect(textOf(second)).toBe("Next reply.");
 		expect(second.at(-1)).toEqual({ type: "reply_end", sessionId: "bursty", streamId: "s2", messageEntryId: "e2" });

@@ -10,8 +10,6 @@ import { jumpTarget, statusSummary } from "../src/attention.js";
 import bridge from "../src/index.js";
 import { close, query, sendCommand, startRuntime, stopRuntime, tempStateDir } from "./helpers.js";
 
-// A scratch tmux server under its own TMUX_TMPDIR, with a real client attached through a pty, so "the pane a
-// client shows" is what tmux itself reports.
 const tmuxDir = mkdtempSync(join(tmpdir(), "apa-"));
 const state = tempStateDir();
 vi.stubEnv("TMUX_TMPDIR", tmuxDir);
@@ -28,7 +26,6 @@ beforeAll(async () => {
 	tmux("new-window", "-d", "-t", "work");
 	tmux("new-window", "-d", "-t", "work");
 	socket = tmux("display-message", "-p", "#{socket_path}");
-	// The client attaches to window 2, which holds no Pi session.
 	tmux("select-window", "-t", "work:2");
 	client = spawn(
 		"python3",
@@ -64,7 +61,6 @@ const row = (id: string) =>
 	query<Row>(state.dbPath, "select seen_at, settled_at, needs_you_since from sessions where id = ?", id)[0];
 const pane = (window: number) => tmux("display-message", "-p", "-t", `work:${window}`, "#{pane_id}");
 
-/** A faux session bound to a pane of the scratch server; `replies` as for `fauxSession`. */
 async function inPane(window: number, replies: Parameters<typeof fauxSession>[1], tools: string[] = []) {
 	vi.stubEnv("TMUX", `${socket},1,0`);
 	vi.stubEnv("TMUX_PANE", pane(window));
@@ -79,7 +75,7 @@ async function inPane(window: number, replies: Parameters<typeof fauxSession>[1]
 			{ timeout: 15000 },
 		);
 	} catch (error) {
-		await close(run); // a session left open would start a new runtime after the test stops this one
+		await close(run);
 		throw error;
 	}
 	return { run, id };
@@ -130,13 +126,11 @@ test("a mark-seen command clears needs you; an open questionnaire needs you unti
 		["ask_user_question"],
 	);
 	try {
-		// With a UI from the start: without one, ask_user_question leaves the active tools.
 		run.session.sessionManager.appendSessionInfo("Questionnaire reader");
 		await run.session.bindExtensions({
 			mode: "tui",
 			uiContext: { custom: () => new Promise((resolve) => (answer = resolve)), notify: () => {} } as never,
 		});
-		// The rebound bridge reconnects; a settle before that would go unseen by the runtime.
 		await vi.waitFor(
 			() =>
 				expect(query(state.dbPath, "select name from sessions where id = ?", id)).toEqual([
@@ -146,7 +140,6 @@ test("a mark-seen command clears needs you; an open questionnaire needs you unti
 		);
 		await run.session.prompt("work");
 		await vi.waitFor(() => expect(row(id).needs_you_since).not.toBeNull());
-		// A view that saw an earlier incarnation cannot clear this one.
 		expect((await sendCommand(state.socketPath, id, { kind: "mark_seen" }, { generation: 99 })).at(-1)).toMatchObject({
 			stage: "failed",
 		});
@@ -157,7 +150,6 @@ test("a mark-seen command clears needs you; an open questionnaire needs you unti
 		const turn = run.session.prompt("ask me");
 		await vi.waitFor(() => expect(row(id).needs_you_since).not.toBeNull(), { timeout: 10000 });
 		await vi.waitFor(() => expect(option("@pi_agents")).toContain("? 1"), { timeout: 5000 });
-		// Seeing it does not clear an open prompt.
 		await sendCommand(state.socketPath, id, { kind: "mark_seen" });
 		expect(row(id).needs_you_since).not.toBeNull();
 		answer({ answers: [], cancelled: true });
@@ -188,7 +180,6 @@ test("the jump target is the pane that has needed you longest, and the jump key 
 		const sidebar = new URL("../../tmux-sessions/scripts/sidebar.sh", import.meta.url).pathname;
 		tmux("run-shell", `'${sidebar}' jump '${clientName}'`);
 		expect(tmux("list-clients", "-F", "#{pane_id}")).toBe(pane(0));
-		// Shown now, so seen: the next one in line becomes the target.
 		await vi.waitFor(() => expect(option("@pi_jump_target")).toBe(pane(1)), { timeout: 5000 });
 	} finally {
 		tmux("select-window", "-t", "work:2");
@@ -204,16 +195,13 @@ test("a session that works again shows as working, and the jump key prefers a se
 		prompt,
 		needsYouSince,
 	});
-	// %1 settled unseen at 100 and then started another run (from mail, say); %2 settled unseen at 200 and is idle.
 	const rows = [row("%1", "running_tool", 100), row("%2", "idle", 200), row("%3", "idle", null)];
 	const summary = statusSummary(rows);
 	expect(summary).toContain("\u2713 1");
 	expect(summary).toContain("\u283f 1");
 	expect(summary).toContain("\u00b7 1");
 	expect(jumpTarget(rows)).toBe("%2");
-	// With nothing else waiting, the working session's unseen result is still a place to jump to.
 	expect(jumpTarget([row("%1", "thinking", 100), row("%3", "idle", null)])).toBe("%1");
-	// A question waits now as a done session does: the older of the two goes first, and both beat a working one.
 	expect(jumpTarget([...rows, row("%4", "idle", 300, true)])).toBe("%2");
 	expect(jumpTarget([row("%1", "thinking", 100), row("%4", "idle", 300, true)])).toBe("%4");
 });

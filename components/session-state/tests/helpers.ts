@@ -7,11 +7,6 @@ import { DatabaseSync } from "node:sqlite";
 import { expect, vi } from "vitest";
 import { type Command, lineReader } from "../src/protocol.js";
 
-/**
- * A temporary agent directory for one test file, with session state enabled and pointed at it. tmux is
- * isolated too: an empty socket directory and no inherited pane, so the runtime never reads the operator's
- * servers. A test that needs tmux starts scratch servers and points `TMUX_TMPDIR` at its own directory.
- */
 export function tempStateDir() {
 	const agentDir = mkdtempSync(join(tmpdir(), "aps-"));
 	vi.stubEnv("PI_CODING_AGENT_DIR", agentDir);
@@ -29,7 +24,6 @@ export function tempStateDir() {
 	};
 }
 
-/** Read the database the way a view does: a fresh read-only connection per query. */
 export function query<T = Record<string, unknown>>(dbPath: string, sql: string, ...params: (string | number)[]): T[] {
 	if (!existsSync(dbPath)) return [];
 	const db = new DatabaseSync(dbPath, { readOnly: true });
@@ -40,10 +34,6 @@ export function query<T = Record<string, unknown>>(dbPath: string, sql: string, 
 	}
 }
 
-/**
- * End a faux session the way Pi does. `dispose` alone emits no `session_shutdown`, so the bridge would stay
- * connected and start a new runtime once the test stops the old one.
- */
 export async function close(run: {
 	session: { extensionRunner: { emit(event: unknown): Promise<unknown> } };
 	dispose(): void;
@@ -52,7 +42,6 @@ export async function close(run: {
 	run.dispose();
 }
 
-/** Start the runtime the way a bridge does, and wait until it accepts connections. */
 export async function startRuntime(socketPath: string) {
 	const main = new URL("../src/runtime-main.ts", import.meta.url).pathname;
 	const register = new URL("../src/register.mjs", import.meta.url).href;
@@ -60,7 +49,6 @@ export async function startRuntime(socketPath: string) {
 	await vi.waitFor(() => expect(existsSync(socketPath)).toBe(true), { timeout: 10000 });
 }
 
-/** A process to stand for a session's Pi process, with its start time as `ps` reports it. */
 export function standInProcess(): { child: ChildProcess; pid: number; startedAt: number } {
 	const child = spawn("sleep", ["600"], { stdio: "ignore" });
 	const pid = child.pid!;
@@ -68,7 +56,6 @@ export function standInProcess(): { child: ChildProcess; pid: number; startedAt:
 	return { child, pid, startedAt };
 }
 
-/** A bridge speaking the socket protocol directly, so a test can drop it or silence it at will. */
 export async function fakeBridge(
 	socketPath: string,
 	sessionId: string,
@@ -89,7 +76,6 @@ export async function fakeBridge(
 	return { socket, send };
 }
 
-/** Give a socket stand-in a scripted reply to correlated turns; lifecycle commands stay under the test's control. */
 export function replyToTurns(link: Awaited<ReturnType<typeof fakeBridge>>, text: string): void {
 	link.socket.on(
 		"data",
@@ -112,7 +98,6 @@ export function runtimePid(pidPath: string): number | undefined {
 	return Number.isFinite(pid) ? pid : undefined;
 }
 
-/** Stop the runtime this test file started, by the pid it recorded, and remove the directory. */
 export async function stopRuntime(state: { agentDir: string; pidPath: string }) {
 	const pid = runtimePid(state.pidPath);
 	if (pid) {
@@ -137,7 +122,6 @@ export async function stopRuntime(state: { agentDir: string; pidPath: string }) 
 type Receipt = { stage: string; reason?: string };
 let commandCounter = 0;
 
-/** Send one command as a client would, and collect its receipts until it is applied or failed. */
 export async function sendCommand(
 	socketPath: string,
 	sessionId: string,

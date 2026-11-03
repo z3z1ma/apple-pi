@@ -97,7 +97,6 @@ test("mail between sessions starts a turn when idle and steers a running turn, a
 	try {
 		await seen(to);
 		await seen(from);
-		// The receiver has not run yet: live mail still starts a turn; only mail that waited for it rides the next one.
 		await sender.session.prompt("ask for a review");
 		await vi.waitFor(() => expect(mailIn(receiver.session)).toHaveLength(1), { timeout: 10000 });
 		await vi.waitFor(() => expect(receiver.session.messages.at(-1)).toMatchObject({ role: "assistant" }));
@@ -106,11 +105,10 @@ test("mail between sessions starts a turn when idle and steers a running turn, a
 		const turn = receiver.session.prompt("work long");
 		await vi.waitFor(() => expect(receiver.session.isStreaming).toBe(true));
 		await sender.session.prompt("redirect it");
-		// Handed to the receiver while its run still waits on the model.
 		await vi.waitFor(() => expect(mail(to)[1]).toMatchObject({ body: "switch to docs", stage: "delivered" }));
 		const before = receiver.requests.length;
 		release(fauxAssistantMessage("working"));
-		await turn; // the steer joined this run: its model saw the mail without a new prompt
+		await turn;
 		expect(receiver.requests.length).toBeGreaterThan(before);
 		expect(sawText(receiver.requests.slice(before), "switch to docs")).toBe(true);
 
@@ -196,7 +194,6 @@ test("mail to a stopped session waits and arrives in its next turn after it open
 		sessionManager: SessionManager.open(file, sessionDir),
 	});
 	try {
-		// The reopened session's bridge has the waiting mail before the first prompt.
 		await vi.waitFor(
 			() =>
 				expect(query(state.dbPath, "select stage from commands where session_id = ? and kind = 'mail'", id)).toEqual([
@@ -230,10 +227,10 @@ test("a worker that closes mails its supervisor, but not on reload", async () =>
 	);
 	try {
 		await seen(supervisorId);
-		await supervisor.session.prompt("start"); // past startup, so mail starts a turn
+		await supervisor.session.prompt("start");
 		worker.session.sessionManager.appendSessionInfo("docs-worker");
 		const workerId = worker.session.sessionManager.getSessionId();
-		await worker.session.bindExtensions({}); // the recorded reporting line survives a rebind
+		await worker.session.bindExtensions({});
 		await vi.waitFor(
 			() =>
 				expect(query(state.dbPath, "select reports_to from sessions where id = ?", workerId)).toEqual([
@@ -241,7 +238,7 @@ test("a worker that closes mails its supervisor, but not on reload", async () =>
 				]),
 			{ timeout: 10000 },
 		);
-		await worker.session.extensionRunner.emit({ type: "session_shutdown", reason: "reload" }); // no notice
+		await worker.session.extensionRunner.emit({ type: "session_shutdown", reason: "reload" });
 		worker.session.sessionManager.appendSessionInfo("docs-worker-reloaded");
 		await worker.session.bindExtensions({});
 		await vi.waitFor(
@@ -280,7 +277,6 @@ test("mail counts as delivered only once the session's file holds it", async () 
 			sentAt: new Date().toISOString(),
 		});
 		await vi.waitFor(() => expect(mailIn(receiver.session)).toHaveLength(1), { timeout: 10000 });
-		// The mail opened the session's first turn; Pi writes no file until a reply exists, so it is not delivered.
 		await new Promise((resolve) => setTimeout(resolve, 1500));
 		expect(mail(id)[0]).toMatchObject({ stage: "delivered", delivered_at: null });
 		release(fauxAssistantMessage("on it"));

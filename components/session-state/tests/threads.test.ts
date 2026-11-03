@@ -28,10 +28,6 @@ const seen = (id: string) =>
 	vi.waitFor(() => expect(query(state.dbPath, "select 1 from sessions where id = ?", id)).toHaveLength(1), {
 		timeout: 15000,
 	});
-/**
- * A person's bridge that records the mail the runtime hands it and, unless `unread`, reports it applied as a
- * transcript would (a pushed message that reached the transcript counts as read).
- */
 const person = async (id: string, name: string, reportsTo: string | null, unread = false) => {
 	const stand = standInProcess();
 	processes.push(stand);
@@ -89,7 +85,6 @@ test("mail is a thread: send_mail with a copy reaches everyone, a reply reaches 
 				]),
 			);
 
-		// Ada replies through the runtime as her session would; the manager and Ben both receive it.
 		const receipts = await sendCommand(state.socketPath, "thr-ada", {
 			kind: "thread_post",
 			thread,
@@ -131,7 +126,6 @@ test("my-team and my-manager follow the tree; mail to a sleeping person waits an
 		await seen(leadId);
 		const cy = await person("thr-cy", "Cy", leadId);
 		const dee = await person("thr-dee", "Dee", leadId);
-		// Dee goes to sleep: its process ends.
 		dee.stand.child.kill();
 		dee.socket.destroy();
 		await vi.waitFor(
@@ -150,7 +144,6 @@ test("my-team and my-manager follow the tree; mail to a sleeping person waits an
 		const waiting = query(state.dbPath, "select stage from commands where session_id = 'thr-dee' and kind = 'mail'");
 		expect(waiting).toEqual([{ stage: "accepted" }]);
 
-		// A report's my-manager is its manager.
 		const sent2 = await sendCommand(state.socketPath, "thr-cy", {
 			kind: "thread_post",
 			thread: "t-cymanager",
@@ -175,7 +168,6 @@ test("inbox lists only the caller's threads, counts what it has not read, and re
 	try {
 		await seen(readerId);
 		await person("thr-eve", "Eve", readerId);
-		// Fay's process takes mail but never records it, so it stays unread for her.
 		await person("thr-fay", "Fay", readerId, true);
 		await sendCommand(state.socketPath, "thr-eve", {
 			kind: "thread_post",
@@ -195,7 +187,6 @@ test("inbox lists only the caller's threads, counts what it has not read, and re
 		expect(withThreads((db) => threadsOf(db, "thr-fay", true))).toMatchObject([
 			{ id: "t-inbox2", subject: "Between us", unread: 2, last: { from: "Eve", body: "And another." } },
 		]);
-		// The reader's mail reached its transcript, so nothing is new; with all: true it still lists its thread.
 		await vi.waitFor(() => expect(withThreads((db) => threadsOf(db, readerId, true))).toEqual([]));
 		script.push(call("inbox", { all: true }));
 		await reader.session.prompt("what threads am I in");
@@ -208,7 +199,6 @@ test("inbox lists only the caller's threads, counts what it has not read, and re
 		await reader.session.prompt("snoop");
 		expect(results(reader).at(-1)).toMatchObject({ isError: true });
 		expect(results(reader).at(-1)!.text).not.toContain("Not for the lead.");
-		// Reading marks a thread read for its reader.
 		await sendCommand(state.socketPath, "thr-fay", { kind: "thread_read", thread: "t-inbox2", seq: 1_000_000 });
 		expect(withThreads((db) => threadsOf(db, "thr-fay", true))).toEqual([]);
 	} finally {
