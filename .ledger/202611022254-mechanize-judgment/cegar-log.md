@@ -1,5 +1,7 @@
 # Counterexample-to-test experiment
 
+Outcome: complete in commits `346f6908` and `6c8a5c3f`. One review cancellation defect was reproduced and fixed; departure produced no counterexample within its finite bound. No implementation follow-up or runtime restart is requested by this record. TLC is the TLA+ state-space checker. A review generation identifies one admitted round of work; a departure generation identifies a person's session incarnation.
+
 Owner: Niamh Virtanen. Assignment: `work-42e81213-eee7-4093-bd21-7977954031dd`.
 Started 2026-11-03 at 06:27:47 UTC (task focus, thread sequence 8720). Times below are wall-clock observations, not provider/CPU effort. Work runs on main in the shared checkout; no live daemon restart or paid model turn.
 
@@ -27,7 +29,7 @@ At final inspection (06:59 UTC), bounded each cancellation identity to one admis
 
 The regression uses a real isolated child Runtime, public commands, real SQLite transactions and actual artifact integrity verification. It seeds an incomplete review and previous attempt/scope; removing that scope represents successful earlier cleanup. IPC independently releases actual `waitCleanup` polling timers, a feasible ordering of two independent polls around an intervening command. Queue wake alone is suppressed so no reviewer/model launches; the queue is observed before its worker claims it. This proves the cancellation mutation race, not actual reviewer process cleanup, arbitrary scheduling, semantic review quality or live activation.
 
-The fix changes only cancellation's final generation predicate. Existing comments in `review-jobs.ts` remain Deniz's separate cleanup lane. No runtime restart is part of this experiment.
+The fix changes only cancellation's final generation predicate. At the fix increment, existing comments in `review-jobs.ts` were left to Deniz's separate cleanup lane. No runtime restart is part of this experiment.
 
 ### Review increment validation
 
@@ -77,7 +79,25 @@ One behavioral TLC counterexample was generated, translated and confirmed as a r
 - Shared `context_lint` at 06:55 observed 613 files and three unrelated missing symbols in concurrently migrated browser-pages sidecars: `code-review.ts` / `sameRename`, `saved-page.ts` / `savedPage`, `web/ledger/graph.ts` / `layoutTickets`. Root was notified; no neighboring source/context was changed. Final rerun observed the same three issues across 616 files. The earlier review increment's 586-file lint was clean.
 - Full suite, paid model, installed-package execution, physical crash testing and live activation were not run. All owned child runtimes exited and their temporary state directories were removed by the test finalizers.
 
-## Portability observations so far
+## Reproduce from the checkout
+
+With the repository's development dependencies and Java available, run:
+
+```sh
+node scripts/run-tlc.mjs specs/review-lifecycle.tla
+node scripts/run-tlc.mjs specs/departure-lifecycle.tla
+npx vitest run tests/lifecycle-models.test.ts components/session-state/tests/review-cancel-race.test.ts --maxWorkers=1
+```
+
+Both current models and the implementation regression should pass. The archived pre-fix trace and red test are historical failures, not the expected current result. A future behavioral model counterexample needs its own real-code regression and report before a production fix; a TLC construction error needs model repair first.
+
+## Maintainer follow-up review
+
+The regression now observes the shared public `readReview` projection instead of raw SQL columns/fixed generation values. It requires the accepted additional-work question to remain queued and the assessment to stay unchanged after the older cancellation completes. Schema seeding and the timer seam remain fixture setup, not product assertions. The fixture's queue suppression and timer controls remain necessary to reproduce this particular public-command race without launching model work; the two CLI tests remain checks of models, not evidence that TypeScript satisfies them.
+
+The revised public-reader assertion was executed against the pre-fix implementation in a disposable detached worktree at `346f6908^`: it failed on `queued` becoming `cancelled` and revision 2 becoming 3 (3.90s total, `/tmp/niamh-reflection-red.log`). The worktree and its owned dependency symlink were removed after checking their status. On current code, the revised regression plus both model checks passed 3/3 (6.17s, `/tmp/niamh-reflection-green.log`); Node/web types, scoped Biome and new-source comment checks passed. The first follow-up context lint reported one neighboring missing coupled path in `stored-drafts.ts.md` (`workplace-compose.tsx`), not a failure in these sidecars; the final rerun passed across 641 context files after that separate lane settled. Full-suite, installed-package and live-runtime claims remain unverified.
+
+## Portability observations
 
 - The portable operation is model -> retained trace -> ordinary implementation regression -> classify the result. Apple-pi's real runtime fixture, SQL schema and IPC scheduler are repository-specific test adapters, not part of the general skill or runner.
 - The repository ignores `*.log`, including evidence inside the ledger. Retained evidence uses `.txt`; the first explicit staging attempt stopped on this ignore rule before committing. Record source/implementation revision and durable trace/config before changing a real defect. The runner's disposable TLC directory is useful operationally, but stdout/stderr must be retained outside it for the experiment record. Vitest emits a final extra blank line; trim that terminal whitespace and run the staged whitespace check after adding retained outputs. The final commit attempt first stopped on those blank lines before committing; the evidence assertions and timings are unchanged.
@@ -87,3 +107,64 @@ One behavioral TLC counterexample was generated, translated and confirmed as a r
 - The general skill should require time-to-candidate and time-to-clean-reproduction separately, including source reading and harness repair. A passing trace test calls for source-supported refinement, not weakening the implementation assertion. Stable command identities also need explicit single-admission/settled states: resetting a pending slot can silently model a different command rather than an exact retry.
 - No runner code change was needed for either model: explicit spec/config paths, canonical module staging, real nonzero status and standard-library loading already work independently of the model's repository. Keep its current single-local-module limitation explicit. Retained output/config/source plus the project's regression command suffice for this loop; this experiment does not justify a new runtime, persistent checker database or generic test-adapter framework.
 - Checkout-only Vitest commands and installed runner/spec commands remain distinct. Root's `0e13c4be` already clarified that installation boundary; this experiment leaves those shared guidance files untouched.
+
+## Outside repository: async-mutex
+
+Assignment: `work-b0b98c0e-f8e3-4baf-9ff4-e464540a8847`. Focused 2026-11-03 at **07:12:49 UTC** (task thread 8845). Used the portable skill at `216f2a49` and the existing bundled runner, with no apple-pi runtime, schema, IPC or test adapters. All times are elapsed wall-clock, including cloning, dependencies, source reading and setup repair.
+
+### Target and contract
+
+Cloned https://github.com/DirtyHairy/async-mutex at `b0bb4c5aa0e42eb5ffc8d9342e56bb6de1b95554` into `/tmp/niamh-cegar-async-mutex`. This is the MIT-licensed async-mutex 0.5.0 source. Chose its weighted semaphore because acquisition queues, priority-aware unlock observers and cancellation interact across promise boundaries; its local Mocha/ts-node tests run in milliseconds. The clone has no project `.context` or AGENTS files in its source root. Read README/API documentation, implementation and relevant existing tests instead of inventing an adapter.
+
+The README at lines 453-455 promises that `waitForUnlock(weight, priority)` resolves as soon as acquisition with those arguments is possible. Its cancellation caveat preserves held locks; the counterexample has **no holders** and value 1 throughout.
+
+### Semaphore model, trace and classification
+
+Retained [model](cegar/async-mutex-semaphore.tla), [configuration](cegar/async-mutex-semaphore.cfg), [TLC trace](cegar/async-mutex-tlc.txt), [ordinary Mocha reproduction](cegar/async-mutex-cancel-unlock-observer.ts), [combined test output](cegar/async-mutex-tests.txt) and [upstream-ready report](cegar/async-mutex-report.md).
+
+| Model action | Actual source at the recorded revision |
+| --- | --- |
+| AcquireHeavy | `src/Semaphore.ts:24-39`, acquire weight 2/priority 0 with free value 1: queue the request. |
+| WaitLight | `src/Semaphore.ts:49-62` and `_couldLockImmediately` at 132-135: equal-priority head blocks an observer requesting weight 1, despite its weight fitting the free capacity. |
+| Cancel | `src/Semaphore.ts:82-85`: reject queued acquisitions and clear `_queue`, leaving unlock observers unchanged. |
+| Audit | Ordinary cancelled-acquisition and fresh `waitForUnlock(1,0)` promise barriers. Observe the earlier notification without timers, sleeps, private fields or scheduler mocks. |
+
+`EligibleObserverNotStranded` checks the README's prompt eligibility notification at this observable barrier, not an invented deadline or a guarantee that an observer reserves a permit. The instance has one heavy acquisition, one existing light observer, one cancellation and one fresh observer; value/priority are fixed and there are no holders, releases or timeouts. TLC returns a five-state trace: initial -> heavy queued -> light observer pending -> cancellation clears heavy -> fresh observer can proceed but old observer is still pending. The search stops at this real invariant violation; it is **not** reported as a clean exhaustive run.
+
+The implementation assertion fails at the same observable. A companion control calling `setValue(getValue())` dispatches the existing observer without increasing capacity. The finding was reported before any source fix (task thread 8873). Tadhg requested a suggested fix **described only**: after clearing the acquisition queue, notify newly eligible unlock observers using existing draining logic while preserving value and held permits. That change remains unapplied and unverified. No issue, PR or other upstream contact was made.
+
+### Iterations and timing
+
+| UTC / elapsed from focus | Change / evidence | Outcome |
+| --- | --- | --- |
+| 07:13-07:16 / first 3m | Clone, inspect contracts/source/tests, `npm install --ignore-scripts --no-audit --no-fund`, then ordinary semaphore baseline. | Host Node 26.7.0 failed in yargs before tests: `ReferenceError: require is not defined in ES module scope`. [Setup output](cegar/async-mutex-node26-setup.txt). Classified as setup, not a product defect. |
+| About 07:16 / about 3m | Use Node 22 with the repository's existing Mocha TDD/ts-node configuration. | All 42 original semaphore tests passed in 14ms. |
+| **07:18:08 / 5m19s** | Run the source-derived semaphore model from the **outside repository cwd**, passing its local spec path to the absolute bundled runner. | **Time-to-candidate:** TLC exit 12, `EligibleObserverNotStranded`, 14 generated/12 distinct states, depth 5, two still queued at the violation. |
+| 07:19:37 / 6m48s | Translate the trace into the repository's own test framework, with one behavioral assertion and one value-dispatch control. | Intended assertion failed; control passed (3ms). Node 22 also emitted a nonfatal native-TypeScript module warning. |
+| **07:20:05 / 7m16s** | Disable native TypeScript stripping so the project's existing ts-node registration owns TypeScript loading. Same test and assertion. | **Time-to-clean-reproduction:** one intended failure/one pass, 4ms, exit 1, without loader warnings or unrelated errors. |
+| About 07:21 / about 9m | Run original semaphore suite and reproduction together, checking upstream `src` has no diff. | **43 passing / 1 intended failure**, 16ms. All 42 original tests and the positive control pass; the new observable assertion alone fails. |
+| 07:28:38 / 15m49s | Optional second area: source-derived timeout/late-permit cleanup model, below. | 9 generated/8 distinct states, depth 5, no errors, complete queue and temporal-property check. |
+| About 07:29 / about 16m | Existing `test/withTimeout.ts`, unchanged, through the same ordinary test framework. | **105 passing**, 26ms. No new counterexample to translate. |
+
+### Second area: timeout compensation
+
+[TimeoutRelease model](cegar/async-mutex-timeout.tla), [configuration](cegar/async-mutex-timeout.cfg), [TLC result](cegar/async-mutex-timeout-tlc.txt), [existing implementation tests](cegar/async-mutex-timeout-tests.txt).
+
+`src/withTimeout.ts` sets a timer and awaits the underlying acquire. A late ticket after timeout is released instead of being returned to the rejected caller; an on-time ticket clears the timer and `runExclusive` releases it in `finally`. Modeled one unit permit, one original holder and one decorated request: inner grant, outer timeout, await continuation, callback entry/completion and permit return. `NoTimedOutCallback` and `PermitConservation` are safety claims. `LateGrantReturned` is conditional liveness: an already granted timed-out ticket is eventually returned **assuming weak fairness of the grant-handling microtask**. It does not assume the original holder eventually releases or that arbitrary user callbacks terminate. The model overapproximates timer/await ordering and excludes cancellation, weights, additional callers and crashes. No counterexample was found, and none was manufactured into a new test.
+
+### Reproduce and portability result
+
+From the retained clone:
+
+```sh
+node /Users/alexanderbut/code_projects/personal/apple-pi/scripts/run-tlc.mjs specs/semaphore-cancel.tla
+npx --yes --package=node@22.23.4 node --no-experimental-strip-types node_modules/mocha/bin/mocha.js test/semaphore.ts test/cancel-unlock-observer.ts
+node /Users/alexanderbut/code_projects/personal/apple-pi/scripts/run-tlc.mjs specs/timeout-release.tla
+npx --yes --package=node@22.23.4 node --no-experimental-strip-types node_modules/mocha/bin/mocha.js test/withTimeout.ts
+```
+
+The first two commands intentionally fail for the recorded model invariant/implementation assertion; the second two pass. The runner path is this installation's bundled executable, not a copied implementation adapter. To reconstruct elsewhere, clone the recorded upstream revision, install its development dependencies, copy the retained model/config and Mocha test into that checkout, and invoke the installed runner by its own path. Recorded toolchain: Node 22.23.4 for Mocha, host Node 26.7.0 for the runner, Java 21.0.4, TLA+ 1.7.4/TLC 2.19, Mocha 10.3.0, ts-node 10.9.2, TypeScript 5.4.2 and tslib 2.6.2. `npm install` updated the clone's yarn.lock and created package-lock.json; source files remain unchanged. Those installed dependencies and lockfiles remain in the retained clone.
+
+**No skill or runner fix was needed.** Explicit external spec/config paths, canonical module staging, safety failure status and a fair temporal property all worked unchanged. The setup friction belonged to the outside project's tooling under the host Node version; the skill's existing setup/loader classification handled it. This is one confirmed defect and one bounded positive model in one outside project, not a general portability or detection-rate claim. The standalone upstream-ready report contains the README promise, minimal test and unapplied suggested fix. The outside project's `tsc --noEmit` and ESLint on the new reproduction passed; retained local evidence/report links resolve. Terminal blank lines/trailing spaces in captured test output were normalized for repository whitespace checks without changing assertions, counts or traces. No apple-pi production source or test adapter was changed for this outside experiment.
+
+Per Tadhg's follow-up direction (8874), **keep `/tmp/niamh-cegar-async-mutex` until the operator decides whether to file**. No clone deletion or upstream source fix is authorized by this record. No process or service was left running.

@@ -1,0 +1,17 @@
+file:///private/tmp/niamh-cegar-async-mutex/node_modules/yargs/yargs:3
+const {applyExtends, cjsPlatformShim, Parser, Yargs, processArgv} = require('./build/index.cjs')
+                                                                    ^
+
+ReferenceError: require is not defined in ES module scope, you can use import instead
+    at file:///private/tmp/niamh-cegar-async-mutex/node_modules/yargs/yargs:3:69
+    at ModuleJobSync.runSync (node:internal/modules/esm/module_job:673:37)
+    at ModuleLoader.importSyncForRequire (node:internal/modules/esm/loader:350:47)
+    at loadESMFromCJS (node:internal/modules/cjs/loader:1752:24)
+    at Module._compile (node:internal/modules/cjs/loader:1916:5)
+    at Object..js (node:internal/modules/cjs/loader:2074:10)
+    at Module.load (node:internal/modules/cjs/loader:1656:32)
+    at Module._load (node:internal/modules/cjs/loader:1448:12)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.require (node:internal/modules/cjs/loader:1679:12)
+
+Node.js v26.7.0

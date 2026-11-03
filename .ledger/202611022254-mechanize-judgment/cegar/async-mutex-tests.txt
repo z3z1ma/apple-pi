@@ -1,0 +1,70 @@
+
+
+  Semaphore
+    ✔ acquire does not block while the semaphore has not reached zero
+    ✔ acquire with weight does block while the semaphore has reached zero until it is released again
+    ✔ acquire unblocks high-priority tasks first
+    ✔ acquire allows light high-priority tasks to skip the line
+    ✔ acquire prioritizes high-priority tasks even if they are heavier
+    ✔ acquire allows heavy items to run eventually
+    ✔ acquire blocks when the semaphore has reached zero until it is released again
+    ✔ the semaphore increments again after a release
+    ✔ a semaphore can be initialized to negative values
+    ✔ the releaser is idempotent
+    ✔ the releaser increments by the correct weight
+    ✔ runExclusive passes semaphore value
+    ✔ runExclusive passes result (immediate)
+    ✔ runExclusive passes result (promise)
+    ✔ runExclusive passes rejection
+    ✔ runExclusive passes exception
+    ✔ runExclusive is exclusive
+    ✔ exceptions during runExclusive do not leave semaphore locked
+    ✔ runExclusive passes the correct weight
+    ✔ runExclusive executes high-priority tasks first
+    ✔ new semaphore is unlocked
+    ✔ isLocked reflects the semaphore state
+    ✔ getValue returns the Semaphore's value
+    ✔ setValue sets the semaphore value and runs all applicable waiters
+    ✔ setValue works fine with isolated weights
+    ✔ the release method releases a locked semaphore
+    ✔ calling release on a unlocked semaphore does not throw
+    ✔ cancel rejects all pending locks with E_CANCELED
+    ✔ cancel rejects with a custom error if provided
+    ✔ a canceled waiter will not lock the semaphore again
+    ✔ cancel works fine with isolated weights
+    ✔ waitForUnlock does not block while the semaphore has not reached zero
+    ✔ waitForUnlock blocks when the semaphore has reached zero
+    ✔ waitForUnlock unblocks after a release
+    ✔ waitForUnlock only unblocks if the configured weight can be acquired
+    ✔ waitForUnlock unblocks only high-priority waiters immediately
+    ✔ waitForUnlock unblocks waiters of descending priority as the queue drains
+    ✔ waitForUnlock resolves immediately when the queue is empty
+    ✔ waitForUnlock only unblocks when the semaphore can actually be acquired again
+    ✔ trying to acquire with a negative weight throws
+    ✔ trying to release with a negative weight throws
+    ✔ trying to waitForUnlock with a negative weight throws
+
+  Cancellation unlock observers
+    1) cancel notifies an existing observer when it removes the only blocking acquisition
+    ✔ dispatching the unchanged value notifies the same eligible observer
+
+
+  43 passing (16ms)
+  1 failing
+
+  1) Cancellation unlock observers
+       cancel notifies an existing observer when it removes the only blocking acquisition:
+
+      AssertionError [ERR_ASSERTION]: the older observer must be notified when cancellation makes its weight eligible
+
+false !== true
+
+      + expected - actual
+
+      -false
+      +true
+
+      at /private/tmp/niamh-cegar-async-mutex/test/cancel-unlock-observer.ts:19:16
+      at step (node_modules/tslib/tslib.js:195:27)
+      at Object.next (node_modules/tslib/tslib.js:176:57)
+      at fulfilled (node_modules/tslib/tslib.js:166:62)

@@ -1,0 +1,46 @@
+TLC 1.7.4: /private/tmp/niamh-cegar-async-mutex/specs/semaphore-cancel.tla (/private/tmp/niamh-cegar-async-mutex/specs/semaphore-cancel.cfg), 1 worker
+TLC2 Version 2.19 of 08 August 2024 (rev: 5a47802)
+Running breadth-first search Model-Checking with fp 61 and seed 2722231767700834514 with 1 worker on 18 cores with 5461MB heap and 64MB offheap memory [pid: 52261] (Mac OS X 26.7.2 aarch64, Azul Systems, Inc. 21.0.4 x86_64, MSBDiskFPSet, DiskStateQueue).
+Parsing file /private/var/folders/m0/1lt4df1s78xgj4s6yk5c9wp00000gp/T/apple-pi-tlc-SESWt2/SemaphoreCancel.tla
+Parsing file /private/var/folders/m0/1lt4df1s78xgj4s6yk5c9wp00000gp/T/Naturals.tla
+Semantic processing of module Naturals
+Semantic processing of module SemaphoreCancel
+Starting... (2026-11-03 00:18:07)
+Computing initial states...
+Finished computing initial states: 1 distinct state generated at 2026-11-03 00:18:07.
+Error: Invariant EligibleObserverNotStranded is violated.
+Error: The behavior up to this point is:
+State 1: <Initial predicate>
+/\ cancelled = FALSE
+/\ waiter = "none"
+/\ audited = FALSE
+/\ head = "none"
+
+State 2: <AcquireHeavy line 16, col 5 to line 18, col 47 of module SemaphoreCancel>
+/\ cancelled = FALSE
+/\ waiter = "none"
+/\ audited = FALSE
+/\ head = "queued"
+
+State 3: <WaitLight line 23, col 5 to line 25, col 45 of module SemaphoreCancel>
+/\ cancelled = FALSE
+/\ waiter = "pending"
+/\ audited = FALSE
+/\ head = "queued"
+
+State 4: <Cancel line 30, col 5 to line 32, col 36 of module SemaphoreCancel>
+/\ cancelled = TRUE
+/\ waiter = "pending"
+/\ audited = FALSE
+/\ head = "cancelled"
+
+State 5: <Audit line 38, col 5 to line 40, col 44 of module SemaphoreCancel>
+/\ cancelled = TRUE
+/\ waiter = "pending"
+/\ audited = TRUE
+/\ head = "cancelled"
+
+14 states generated, 12 distinct states found, 2 states left on queue.
+The depth of the complete state graph search is 5.
+The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 3 and the 95th percentile is 3).
+Finished in 00s at (2026-11-03 00:18:07)
