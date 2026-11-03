@@ -34,11 +34,15 @@ const lifecycle = openLifecycle({ ...paths, agentDir: agentDir() }, commands, ()
 const reviews = openReviews(paths.db, commands).api;
 const workspace = openWorkspace(() => world.snapshot());
 
+const calls = { conversation: 0 };
 const READS: Record<string, (...args: never[]) => unknown> = {
 	snapshot: () => world.snapshot(),
 	feed: () => world.feed(),
 	profile: (id: string) => world.profile(id),
-	conversation: (id: string, before?: string) => conversations.page(id, before),
+	conversation: (id: string, before?: string, textOnly?: boolean) => {
+		calls.conversation++;
+		return conversations.page(id, before, textOnly);
+	},
 	readThread: (thread: string) => lifecycle.readThread(thread),
 	readTask: (task: string) => workplace.readTask(task),
 	readOutside: (request: { limit: number }) => workplace.readOutside(request),
@@ -140,6 +144,42 @@ if (scenario === "tour") {
 		}
 		await page.close();
 	}
+}
+if (scenario === "dms") {
+	// Time opening each named DM (or the first eight) until its transcript draws messages, and count page reads.
+	const page = await open(1440, 900, "light");
+	await page.evaluate(() => {
+		(window as any).__long = 0;
+		new PerformanceObserver((list) => {
+			for (const entry of list.getEntries()) (window as any).__long += entry.duration;
+		}).observe({ type: "longtask", buffered: false });
+	});
+	const names = process.argv.slice(4);
+	const links = page.locator(".wp-dm .wp-dm-link");
+	const all = names.length ? names : (await links.allInnerTexts()).slice(0, 8).map((text) => text.split("\n")[0]!);
+	for (const name of all) {
+		await page.getByRole("button", { name: /^Threads/ }).click();
+		await page.waitForTimeout(300);
+		const before = calls.conversation;
+		await page.evaluate(() => ((window as any).__long = 0));
+		const start = Date.now();
+		await links.filter({ hasText: name }).first().click();
+		const log = page.getByRole("log", { name: "Transcript" });
+		let shown = 0;
+		while (Date.now() - start < 60_000) {
+			shown = await log.locator("article").count().catch(() => 0);
+			if (shown || (await log.locator(".aw-conv-start").count().catch(() => 0))) break;
+			await page.waitForTimeout(25);
+		}
+		const drawn = Date.now() - start;
+		await page.waitForTimeout(1500);
+		const long = await page.evaluate(() => Math.round((window as any).__long));
+		console.log(
+			JSON.stringify({ name, drawnMs: drawn, messages: shown, pageReads: calls.conversation - before, longTaskMs: long }),
+		);
+		await shot(page, `dm-${name.replace(/\W+/g, "-")}`);
+	}
+	await page.close();
 }
 if (scenario === "chat") {
 	for (const [appearance, width] of [
