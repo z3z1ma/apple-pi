@@ -7,5 +7,8 @@ TLA+ module identifiers cannot contain hyphens, so a spec is staged in a scratch
 `pass` requires both exit code 0 and TLC's "No error has been found" line. Anything unrecognized is `error` with the first error line, so a parse failure, a missing Java or a crash is never read as success. The verdict comes from TLC's text output (TLC 2.19), not its exit codes alone. A violation's trace is parsed from the `State n: <action>` blocks; a value that wraps onto further lines is joined onto its variable.
 Why: the counterexample-to-test loop needs the trace as data, and a runner that swallowed TLC's failures would make every model look correct.
 
+Cancellation checks `signal.aborted` right after attaching its abort listener.
+Why: a signal aborted while the JAR was being verified or the scratch directory staged never fires a listener added later, so Java would run the whole search after the caller had cancelled.
+
 Coupled: components/tlc/src/index.ts, skills/formal-verification/SKILL.md, tests/formal-verification.test.ts, tests/lifecycle-models.test.ts
 Verify: components/tlc/tests/tlc.test.ts, tests/formal-verification.test.ts

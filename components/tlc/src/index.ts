@@ -22,8 +22,7 @@ function report(result: TlcResult, spec: string): string {
 			for (const [name, value] of Object.entries(state.variables)) lines.push(`  ${name} = ${value}`);
 		}
 	}
-	if (result.verdict === "error")
-		lines.push("", "TLC output (end):", result.output.trimEnd().split("\n").slice(-30).join("\n"));
+	if (result.verdict === "error") lines.push("", "TLC output:", result.output.trimEnd());
 	return lines.join("\n");
 }
 

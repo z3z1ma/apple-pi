@@ -143,6 +143,7 @@ export async function runTlc(options: {
 		child.stderr.on("data", take);
 		const stop = () => child.kill("SIGTERM");
 		options.signal?.addEventListener("abort", stop, { once: true });
+		if (options.signal?.aborted) stop();
 		try {
 			const exitCode = await new Promise<number | null>((resolve, reject) => {
 				child.once("error", (error) =>
