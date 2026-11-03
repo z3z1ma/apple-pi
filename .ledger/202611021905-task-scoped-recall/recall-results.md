@@ -1,12 +1,14 @@
 # Indexed recall evaluation
 
-Status: local-prefix source-quality judging complete; task-control judging and actual-tool integration gates pending.
+Status: local-prefix and task-control baseline judging complete; actual-tool integration gates pending.
+
+The decision is whether an indexed `search_session` can replace whole-transcript search without losing measured recall quality. This report records a low-level prototype comparison, not approval of the replacement. [The decision gate](recall-gate.md) defines the metrics, controls and required checks. The two old sets each contain six historical questions; the new task set contains six independently authored task-scoped questions.
 
 ## Frozen setup
 
 - Protocol/harness: `5bfd4f07` (`recall-gate.md`, `engine-replay.mjs`, three public adapter tests).
 - Baseline detached revision: `810e8e0d8860919eaa3c8907ef8fa2784e2b6e0f`. Personal-search production source has no diff from reviewed `0843bfd3`.
-- Candidate detached revision requested by Tadhg: `f026f6f1`. Hybrid control keeps legacy regex on the baseline engine and sends only NL discovery to the index. No private outcome selected this routing; Tadhg specified it before candidate execution (task-thread message 8242).
+- Prototype candidate detached revision requested by Tadhg: `f026f6f1`. Hybrid control keeps legacy regex on the baseline engine and sends only NL discovery to the index. No private outcome selected this routing; Tadhg specified it before candidate execution (task-thread message 8242).
 - Private scratch root: `/tmp/kofi-index-recall/` (mode0700). Gold and results stay outside Git. Original transcripts/live runtime database are untouched.
 
 ## Baseline reproduction
@@ -49,7 +51,9 @@ Private complete judgments: `/tmp/ciaran-task-recall/index-judging/judgments-v1-
 
 Frozen Q4 loses its sole episode source while Q1 gains one of four. Micro source totals tie, but per-question macro episode recall falls 45.8% -> 33.3%. This is a disclosed regression under the predeclared aggregate gate, not a post-results veto criterion. The three previous-held-out gains are notebook-writing records repeating facts already available in baseline results; they add no evidence-hit question. More recovered records therefore do not establish new facts or better answer coverage.
 
-The explicit multi-source task baseline control recovers 6/19 episode sources, with 12 returned sources needing general-relevance judgments. Its displayed sufficiency is not yet judged. This remains a separately defined control, not an existing cross-person tool capability.
+The explicit multi-source task baseline control is now fully judged: 11/30 relevant slots, 4/6 evidence-hit questions, 6/19 episode sources and 1/6 sufficient displays. In frozen order T1-T6, relevance counts are [4,1,0,3,0,3], episode fractions [2/4,1/3,0/1,2/2,0/4,1/5], and only T4's display is sufficient. Ciaran read all 21 returned sources, including the 12 outside authored episodes, and independently reproduced all six complete control outputs. Private judgments: `/tmp/ciaran-task-recall/task-control-judgments-v1-private.json`, mode0600, exact SHA256 `292bf1281852a14645c2e22b8eb9c1307fb1ef2b7ec51de02e0dce2d94708d3f`. Kofi verified all 21 record hashes, six display hashes/memberships and relevance counts. This is a separately defined control, not an existing cross-person tool capability.
+
+One authored handoff query returns no legacy-regex result despite positive sources in its corpus. The only sufficient control display is proximal design-context recovery, not proof of long-range cross-person recall. Partial source support does not turn attempted edits or expected command success into proof of execution. Baseline queries and labels remain unchanged.
 
 ## Task-set timing and limits
 
@@ -104,4 +108,4 @@ The initial three adapter tests passed. Maintainer reflection replaced helper-st
 
 ## Next step
 
-Complete task-control source relevance and display judgments. Fiona owns a separate-branch actual tool candidate with SQL eligibility before top-k and the existing formatter. Evaluate its frozen actual output, intended-corpus ranking and end-to-end latency before recommending replacement. The explicit multi-source task-corpus control was frozen before its output inspection; next judge its displayed results and compare the actual task candidate against it. All four non-inferiority criteria apply separately there, and unknown task permissions cannot satisfy the separate authorization gate.
+Baseline judgments are complete. Fiona owns a separate-branch actual tool candidate with SQL eligibility before top-k and the existing formatter. Evaluate its frozen actual output, intended-corpus ranking and end-to-end latency before recommending replacement. The explicit multi-source task-corpus control was frozen before its output inspection and its displays are judged. Compare the actual task candidate against it under decision 8314: task queries match indexed words, including punctuation that would trigger the legacy control's regex heuristic. Decision 8308's initial task-regex refusal is superseded before candidate freeze/results; no unsupported-route loss or gain has been observed. All four non-inferiority criteria apply separately there, and unknown task permissions cannot satisfy the separate authorization gate.

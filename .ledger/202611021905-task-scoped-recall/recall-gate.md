@@ -3,7 +3,13 @@
 Status: protocol and independently authored task set frozen before candidate runs.
 Owner: Kofi Bhattacharya. Decision owner: Tadhg Marinescu/operator.
 
-NL means a natural-language query, rather than a regex pattern or exact source address. FTS5 is SQLite's full-text index; BM25 is its relevance score. A bounded episode is the preselected historical work interval whose source records have been labeled relevant or irrelevant to a question.
+## Terms used in this evaluation
+
+- **NL** is a natural-language query, rather than a regex pattern or exact source address. **FTS5** is SQLite's full-text index; **BM25** is its relevance score.
+- **Gold** is the frozen question and source-label artifact. A **historical prefix** ends at that question's original cutoff, so later answers cannot enter the search corpus. **Lineage** is the selected entry's parent chain; **issuer exclusion** removes the assistant request currently issuing the search.
+- **General relevance** means a source supports the question's answer. An **evidence-hit question** has at least one such source in its top five, including relevant sources outside the labeled episode.
+- A **bounded episode** is the preselected historical work interval whose sources were labeled. **Episode recall** counts only its relevant source IDs recovered in the top five. The aggregate, or **micro**, score divides total recovered episode sources by total relevant episode sources. **Macro** recall averages each question's recall fraction, giving every question equal weight.
+- **Precision@5** uses five fixed slots per question, even if fewer hits return: each six-question set has a denominator of 30. **Display sufficiency** means the displayed text meets the frozen answer criteria, without needing another source read. Relevant source IDs alone cannot establish it.
 
 ## Decision and controls
 
@@ -16,6 +22,8 @@ The previous held-out set is now a regression set, not fresh confirmation eviden
 Baseline source is the unchanged reviewed personal engine (`0843bfd3` production source), frozen in a detached checkout. Record exact source revision and hashes for both engines and harness for each run. Candidate revision is supplied by Tadhg after his freeze. Changes after inspection of private outcomes are exploratory and need an explicit new confirmation decision.
 
 Explicit target amendment before actual-tool results (Tadhg, message 8301): Fiona's separately frozen tool candidate is the landing target. It includes index contract restorations from `ce4e8808`: index only supported notebook custom records rather than arbitrary state data, and demote earlier recall-tool results before BM25 and limits. The initial `f026f6f1` local-prefix run remains prototype evidence; none of its source-quality or latency passes transfers to the new target. Keep its negative/distributional observations, rerun the old sets as regressions, and use the still-unqueried task set for fresh candidate evidence under the same four criteria. Actual display, intended-corpus ranking and integrated latency remain mandatory.
+
+Pre-freeze routing history: product decision 8308 initially refused task-scoped heuristic-regex queries. Before any task-candidate outputs, decision 8314 superseded that refusal because ordinary punctuation routes three realistic frozen questions as regex. With `tasks`, all nonempty history queries now use indexed word matching, keeping original strings unchanged; the regex heuristic remains only for personal searches without tasks. Tasks combined with file/touched/expand still refuse visibly, preserving runtime permission ownership. Keep all six questions and denominators unchanged. T2/T3/T5 use regex in the legacy control but words in the candidate; this task comparison therefore includes an intentional query-semantics change, not an isolated BM25 effect. The decision followed route classification and baseline observation, not candidate outcomes. The reconstructed corpus and unknown historical permission limits still apply.
 
 ## Measurement interface
 
