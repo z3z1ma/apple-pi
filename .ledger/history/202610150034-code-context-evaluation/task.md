@@ -1,4 +1,4 @@
-Status: planning
+Status: cancelled
 Created: 2026-10-15
 Updated: 2026-10-15
 

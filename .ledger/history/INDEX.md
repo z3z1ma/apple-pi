@@ -181,3 +181,7 @@
 - `.ledger/history/202610030836-responsive-work-panel/task.md` — cancelled — Make the shared work panel the direct responsive control surface — Replace the centered work picker with one non-capturing Agents/Tasks panel; command aliases select tabs and narrow terminals use a top-center half-height layout.
 
 - `.ledger/history/202610041515-repository-history-replay/task.md` — cancelled — Repository histories as replay worlds for improving the harness — Treat each completed ledger task with its transcripts, commits, and scalar measures as a stored history; accumulate them per repository and replay or re-simulate harness policies over them to make the agent work better in that repository (after Dream-RSI).
+
+- `.ledger/history/202610030109-context-ablation-experiment/task.md` — cancelled — Measure a learning's value by removing it from a fresh agent's context — Proposed experiment: run a fresh agent on a known-answer task with one curated learning removed, compare effort with a full-context baseline, and use the difference to keep or prune the learning.
+
+- `.ledger/history/202610150034-code-context-evaluation/task.md` — cancelled — Evaluate code context sidecars on replayed failure tasks — Phase 5 of code-context sidecars: replay 3–5 historical failure tasks under Baseline, Read-only injection, and Full v1 (gate) and compare pre-edit constraint awareness, plan changes after blocks, violation rates, and token overhead.
