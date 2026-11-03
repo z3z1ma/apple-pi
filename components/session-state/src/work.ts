@@ -17,7 +17,6 @@ export type WorkAction =
 	| ({ action: "assign"; person: string; goal?: string; title?: string; task?: string } & Worth)
 	| { action: "focus"; task: string }
 	| { action: "unassign"; person: string; task: string }
-	/** End an ephemeral task for everyone on it: done, or cancelled when the work is no longer wanted. */
 	| { action: "close"; task: string; status: "done" | "cancelled" }
 	| { action: "finish"; outcome: string }
 	| { action: "promote"; task: string; title?: string; description?: string };
