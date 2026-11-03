@@ -59,14 +59,11 @@ const NO_USER = "No user is attached to this run, so no review page was opened."
 
 interface PageRun<P extends PageData, R extends { verdict: string }> {
 	page: P;
-	/** The built app the page data goes into. */
 	template: string;
 	root: string;
 	parse: (body: unknown) => R | undefined | Promise<R | undefined>;
-	/** The passage and question a page asks about, or undefined for a malformed question. */
 	question: (body: unknown) => { passage: Passage; question: string } | undefined;
 	format: (result: R, saved: string) => string;
-	/** Answers the page's `GET /file` requests, for pages that load files on demand. */
 	file?: (path: string) => Promise<unknown | undefined>;
 }
 
@@ -74,7 +71,6 @@ export default function browserPages(pi: ExtensionAPI): void {
 	const sessions = new Set<() => void>();
 	trackLiveSessions();
 
-	/** Serves one page until the reviewer submits, saves it with the result, and returns the text for the model. */
 	async function review<P extends PageData, R extends { verdict: string }>(
 		run: PageRun<P, R>,
 		ctx: ExtensionContext,
@@ -92,7 +88,6 @@ export default function browserPages(pi: ExtensionAPI): void {
 			file: run.file,
 			health: () => ({ ask: !!liveSession(ctx) }),
 		});
-		// Rendering may have outlasted a cancellation; a cancelled call publishes nothing.
 		if (signal?.aborted) {
 			session.close();
 			throw signal.reason ?? new Error("The review was cancelled");
@@ -268,11 +263,9 @@ export default function browserPages(pi: ExtensionAPI): void {
 				(review) => capturedChange(ctx.sessionManager.getSessionId(), review, signal),
 				signal,
 			);
-			// A call cancelled while the page was being built neither saves nor opens it.
 			signal?.throwIfAborted();
 			const template = await explainTemplate(page);
 			signal?.throwIfAborted();
-			// The saved copy is for sharing: no session, no reader state, so it reads as a plain page anywhere.
 			const saved = await savePage(
 				embedPage(template, { ...page, session: { token: "", live: false, ask: false } }),
 				root,

@@ -13,7 +13,6 @@ export interface RawLine {
 
 export interface RawHunk {
 	lines: RawLine[];
-	/** Why a file change has no text lines, such as "Binary file". */
 	note?: string;
 }
 
@@ -26,14 +25,11 @@ export interface RawFile {
 }
 
 export interface RepoDiff {
-	/** The repository the paths belong to: the author's, or a retained capture. */
 	root: string;
 	baseTree: string;
 	headTree: string;
 	labels: { base: string; head: string };
-	/** The head commit's subject when the change is one commit. */
 	subject?: string;
-	/** Paths the diff is limited to; files outside them can still be read as surrounding context. */
 	scope?: string[];
 	files: RawFile[];
 	git(args: string[]): Promise<Buffer>;
@@ -47,7 +43,6 @@ function stripPrefix(path: string): string {
 	return path.replace(/^[ab]\//, "").replace(/\t$/, "");
 }
 
-/** Parses `git diff` output into files and hunks with old and new line numbers. */
 export function parseUnifiedDiff(text: string): RawFile[] {
 	const files: RawFile[] = [];
 	let file: RawFile | undefined;
@@ -120,10 +115,6 @@ function label(target: GitTarget, change: { baseCommit: string | null; headCommi
 	}
 }
 
-/**
- * Patch headers C-quote unusual filenames, so file identities come from the NUL-delimited status listing, which
- * shares the patch's order. A type change (T) is the one status Git writes as two sections for the same path.
- */
 function assignPaths(files: RawFile[], status: Buffer): void {
 	const records = status.toString("utf8").split("\0").filter(Boolean);
 	const identities: { path: string; oldPath?: string }[] = [];
@@ -144,10 +135,6 @@ function assignPaths(files: RawFile[], status: Buffer): void {
 	}
 }
 
-/**
- * Git diffs non-UTF8 text line by line, and decoding it would silently replace bytes. Such a file is shown as binary,
- * as a capture records it, rather than as altered text.
- */
 function markUndecodable(files: RawFile[], patch: Buffer): void {
 	const starts: number[] = [];
 	for (let at = 0; at < patch.length; ) {
@@ -163,7 +150,6 @@ function markUndecodable(files: RawFile[], patch: Buffer): void {
 	}
 }
 
-/** Parse one tree-to-tree patch and serve exact bytes from either side; the caller closes it. */
 async function readTrees(
 	trees: Omit<RepoDiff, "files" | "labels">,
 	labels: RepoDiff["labels"],
@@ -194,7 +180,6 @@ async function readTrees(
 	}
 }
 
-/** The selected change, from the same Git snapshot every change-selection tool uses. */
 export async function readChange(cwd: string, target: GitTarget, signal?: AbortSignal): Promise<RepoDiff> {
 	const change = await openGitChange(cwd, target, { signal });
 	const subject =
@@ -206,10 +191,6 @@ export async function readChange(cwd: string, target: GitTarget, signal?: AbortS
 	return readTrees({ ...change, root: change.repository, subject }, label(target, change));
 }
 
-/**
- * A retained review capture: its own repository and trees. Sign-off limits the diff to the reviewed paths;
- * explanations show the whole capture, so changed context is never labelled unchanged.
- */
 export async function readCapturedChange(
 	artifact: ReviewArtifact,
 	options: { scoped?: boolean; signal?: AbortSignal } = {},
@@ -218,7 +199,6 @@ export async function readCapturedChange(
 	const trees = openTrees(artifact.source, artifact.baseTree, artifact.headTree, { signal: options.signal });
 	const short = (id: string) => id.slice(0, 7);
 	const kind = artifact.request.target.kind;
-	// A mutable capture's head is a snapshot, not the commit its checkout was on.
 	const head =
 		kind === "working-tree" || kind === "staged"
 			? `${kind === "staged" ? "captured index" : "captured working tree"} ${short(artifact.headTree)}`
@@ -243,7 +223,6 @@ const LOCKFILES = new Set([
 	"composer.lock",
 ]);
 
-/** Lockfiles and paths marked `linguist-generated` by the head tree's `.gitattributes`. */
 export async function generatedPaths(diff: RepoDiff, paths: string[]): Promise<Set<string>> {
 	const generated = new Set(paths.filter((path) => LOCKFILES.has(path.slice(path.lastIndexOf("/") + 1))));
 	if (paths.length === 0) return generated;

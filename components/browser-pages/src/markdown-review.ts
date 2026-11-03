@@ -46,7 +46,6 @@ export async function repositoryRoot(dir: string): Promise<string | undefined> {
 	}
 }
 
-/** Splits the file into top-level blocks with source lines; code fences come highlighted. */
 export async function blocksOf(source: string): Promise<MarkdownBlock[]> {
 	const blocks: MarkdownBlock[] = [];
 	let line = 1;
@@ -78,7 +77,6 @@ export async function buildMarkdownPage(
 	token: string,
 ): Promise<{ page: MarkdownReviewPage; root: string }> {
 	cwd = resolve(cwd, params.cwd ?? ".");
-	// Git reports the real path of the repository, so compare it with the real path of the file.
 	const file = await realpath(isAbsolute(params.path) ? params.path : resolve(cwd, params.path));
 	const source = await readFile(file, "utf8");
 	const root = (await repositoryRoot(dirname(file))) ?? (await realpath(cwd));
@@ -100,10 +98,8 @@ export async function buildMarkdownPage(
 
 const MERMAID = fileURLToPath(new URL("../dist/mermaid.min.js", import.meta.url));
 
-/** A page app, with Mermaid inlined only when its documents have a diagram: Mermaid is most of a page's weight. */
 export async function withDiagrams(template: string, blocks: MarkdownBlock[]): Promise<string> {
 	if (!blocks.some((b) => b.mermaid)) return template;
-	// A classic script runs before the app's module script and sets `globalThis.mermaid`.
 	const mermaid = (await readFile(MERMAID, "utf8")).replace(/<\/script/gi, "<\\/script");
 	return template.replace(PAGE_DATA_MARKER, () => `<script>${mermaid}</script>${PAGE_DATA_MARKER}`);
 }
@@ -111,8 +107,6 @@ export async function withDiagrams(template: string, blocks: MarkdownBlock[]): P
 export async function markdownTemplate(page: MarkdownReviewPage): Promise<string> {
 	return withDiagrams(await readTemplate("markdown-review"), page.blocks);
 }
-
-// ---------------------------------------------------------------------------- what the page sends back
 
 const TYPES = new Set(["comment", "delete", "suggest", "label", "ask"]);
 const LABELS = new Set(["good", "clarify"]);
@@ -122,7 +116,6 @@ export const optionalString = (v: unknown): v is string | undefined => v === und
 export const isVerdict = (v: unknown): v is MarkdownResult["verdict"] => VERDICTS.has(v as string);
 const hasBlockIn = (blocks: MarkdownBlock[]) => (id: string) => blocks.some((b) => b.id === id);
 
-/** The spans of an annotation or question, each on a block `hasBlock` accepts, or undefined. */
 export function parseSpans(value: unknown, hasBlock: (block: string) => boolean): TextSpan[] | undefined {
 	if (!Array.isArray(value) || value.length === 0) return undefined;
 	const spans: TextSpan[] = [];
@@ -131,8 +124,6 @@ export function parseSpans(value: unknown, hasBlock: (block: string) => boolean)
 		const whole = span.start === undefined && span.end === undefined;
 		const start = span.start as number;
 		const end = span.end as number;
-		// Offsets index the text the page rendered, which can be longer than the source (a table's rows and cells each
-		// add a newline), so only their shape is checked. They place highlights in the page; the model gets lines and quotes.
 		const range = Number.isInteger(start) && Number.isInteger(end) && start >= 0 && end > start;
 		if (!whole && !range) return undefined;
 		spans.push(whole ? { block: span.block as string } : { block: span.block as string, start, end });
@@ -140,7 +131,6 @@ export function parseSpans(value: unknown, hasBlock: (block: string) => boolean)
 	return spans;
 }
 
-/** A question about a passage the page shows, or undefined. */
 export function parseMarkdownQuestion(body: unknown, page: MarkdownReviewPage) {
 	if (!isObject(body) || typeof body.question !== "string" || !body.question.trim()) return undefined;
 	const spans = parseSpans(body.spans, hasBlockIn(page.blocks));
@@ -148,7 +138,6 @@ export function parseMarkdownQuestion(body: unknown, page: MarkdownReviewPage) {
 	return { spans, quote: body.quote?.trim() || undefined, question: body.question.trim() };
 }
 
-/** One annotation the page sent, on blocks `hasBlock` accepts, or undefined when anything in it is malformed. */
 export function parseAnnotation(a: unknown, hasBlock: (block: string) => boolean): MarkdownAnnotation | undefined {
 	if (!isObject(a) || !TYPES.has(a.type as string)) return undefined;
 	const spans = parseSpans(a.spans, hasBlock);
@@ -166,7 +155,6 @@ export function parseAnnotation(a: unknown, hasBlock: (block: string) => boolean
 	};
 }
 
-/** Validates the page's submission against the page it was served. Anything malformed is rejected whole. */
 export function parseMarkdownResult(body: unknown, page: MarkdownReviewPage): MarkdownResult | undefined {
 	if (!isObject(body) || !isVerdict(body.verdict) || !optionalString(body.overall)) return undefined;
 	if (!Array.isArray(body.annotations) || !Array.isArray(body.edits)) return undefined;
@@ -190,9 +178,6 @@ export function parseMarkdownResult(body: unknown, page: MarkdownReviewPage): Ma
 	};
 }
 
-// ---------------------------------------------------------------------------- text for the model
-
-/** `path:30` or `path:30-34` for the blocks a set of spans touches. */
 export function linesOf(path: string, blocks: MarkdownBlock[], spans: TextSpan[]): string {
 	const touched = blocks.filter((b) => spans.some((s) => s.block === b.id));
 	const from = Math.min(...touched.map((b) => b.line));
@@ -200,7 +185,6 @@ export function linesOf(path: string, blocks: MarkdownBlock[], spans: TextSpan[]
 	return `${path}:${from}${to > from ? `-${to}` : ""}`;
 }
 
-/** The passage a question is about, for the read-only fork's prompt. */
 export function markdownPassage(path: string, blocks: MarkdownBlock[], spans: TextSpan[], quote: string | undefined) {
 	const whole = blocks.filter((b) => spans.some((s) => s.block === b.id)).map((b) => b.raw);
 	return { where: linesOf(path, blocks, spans), excerpt: quote ?? whole.join("\n\n") };
@@ -215,7 +199,6 @@ const VERDICT_TEXT: Record<MarkdownResult["verdict"], string> = {
 const LABEL_TEXT: Record<MarkdownLabel, string> = { good: "👍 looks good", clarify: "❓ clarify this" };
 const quoted = (text: string | undefined) => (text ? ` “${text.replace(/\s*\n\s*/g, " / ")}”` : "");
 
-/** One annotation for the model, where `where` is its `path:lines`. */
 export function annotationLines(a: MarkdownAnnotation, where: string): string[] {
 	const whole = a.spans.every((s) => s.start === undefined);
 	if (a.type === "comment")
@@ -228,7 +211,6 @@ export function annotationLines(a: MarkdownAnnotation, where: string): string[] 
 	return [`- asked · ${where}${quoted(a.quote)}: ${a.text ?? ""}`, ...answer];
 }
 
-/** A rewritten block for the model, as before and after. */
 export function rewriteLines(where: string, before: string, after: string): string[] {
 	return [
 		`- ${where}`,

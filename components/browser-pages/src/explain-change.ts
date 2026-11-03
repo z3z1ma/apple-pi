@@ -63,7 +63,6 @@ export type ExplainChangeParams = Static<typeof ExplainChangeParamsSchema>;
 const FENCE = /^(`{3,}|~{3,})([^\n]*)\n([\s\S]*?)\n?\1[ \t]*$/;
 const REFERENCE = /^(.+?):(\d+)(?:-(\d+))?$/;
 
-/** Removed lines keyed by the new-side line they stood before, and the new-side lines the change added. */
 function marksOf(lines: RawLine[]) {
 	const added = new Set<number>();
 	const removed = new Map<number, RawLine[]>();
@@ -86,7 +85,6 @@ function marksOf(lines: RawLine[]) {
 	return { added, removed };
 }
 
-/** Reads `code path:FROM-TO` references against the change, with every file read and highlighted once. */
 function excerpts(diff: RepoDiff) {
 	const highlighted = new Map<string, Promise<Segment[][] | undefined>>();
 	const lines = (key: string, path: string, read: () => Promise<string | undefined>) => {
@@ -107,13 +105,11 @@ function excerpts(diff: RepoDiff) {
 		const [, path, a, b] = match;
 		const from = Number(a);
 		const to = Number(b ?? a);
-		// A type change is two sections for one path (deletion, then addition); cite the side that exists after.
 		const matches = diff.files.filter((f) => f.path === path);
 		const file = matches.find((f) => f.status !== "D") ?? matches[0];
 		const bytes = await diff.read(file?.status === "D" ? "before" : "after", path);
 		if (file?.binary || (bytes && !isUtf8(bytes)))
 			return `\`${path}\` is binary or not UTF-8 text, so it cannot be cited as code; describe it in prose.`;
-		// A file the change deletes has only its old lines, so its references count lines before the change.
 		const gone = file?.status === "D" ? await before(path) : undefined;
 		const now = gone ?? (await after(path));
 		if (!now) return `\`${path}\` does not exist after the change.`;
@@ -137,7 +133,6 @@ function excerpts(diff: RepoDiff) {
 	};
 }
 
-/** A section's Markdown as parts: `code` fences become real excerpts and `figure` fences sandboxed figures. */
 async function partsOf(
 	source: string,
 	excerpt: (reference: string) => Promise<CodeExcerpt | string>,
@@ -197,7 +192,6 @@ async function explanation(
 	const warnings: string[] = [];
 	const excerpt = excerpts(diff);
 	const parts = (source: string) => partsOf(source, excerpt, warnings);
-	// Every step settles before the caller closes the change, even when one of them fails.
 	const settled = await Promise.allSettled(
 		params.steps.map(async (s) => ({ title: s.title, parts: await parts(s.body) })),
 	);
@@ -212,7 +206,6 @@ async function explanation(
 		background: await parts(params.background),
 		intuition: await parts(params.intuition),
 	};
-	// A type change is two sections for one path; count it as one file.
 	const counts = new Map<string, { path: string; add: number; del: number }>();
 	for (const f of diff.files) {
 		const lines = f.hunks.flatMap((h) => h.lines);
@@ -252,9 +245,6 @@ export async function explainTemplate(page: ExplainChangePage): Promise<string> 
 	);
 }
 
-// ---------------------------------------------------------------------------- the tutor in the sidebar
-
-/** One turn the page sends, or undefined when it is malformed. */
 export function parseTutorTurn(body: unknown, page: ExplainChangePage): TutorTurn | undefined {
 	if (!isObject(body) || typeof body.message !== "string" || !body.message.trim()) return undefined;
 	if (body.mode !== "socratic" && body.mode !== "direct") return undefined;
@@ -291,7 +281,6 @@ const SOCRATIC = `Teach Socratically. Your goal is the reader's understanding, n
 - When the reader shows they understand, say so in a sentence and stop asking.`;
 const DIRECT = `Answer the reader directly: plainly, in two to five sentences, grounded in the change and the repository. If a question they could ask next would deepen their understanding, end with it.`;
 
-/** The prompt for one tutor turn, for a read-only fork of the conversation that wrote the explanation. */
 export function tutorPrompt(page: ExplainChangePage, turn: TutorTurn): string {
 	const start = turn.start;
 	const asks = start?.kind === "check" || start?.kind === "quiz";
@@ -337,9 +326,6 @@ export function tutorPrompt(page: ExplainChangePage, turn: TutorTurn): string {
 	return lines.filter((l, i, all) => l !== "" || all[i - 1] !== "").join("\n");
 }
 
-// ---------------------------------------------------------------------------- what the agent hears back
-
-/** A short note on what the reader did, for the agent's next turn, or undefined when they did nothing yet. */
 export function readerNote(body: unknown, page: ExplainChangePage): string | undefined {
 	if (!isObject(body) || !Array.isArray(body.answers) || !Array.isArray(body.asked)) return undefined;
 	const answers = body.answers.flatMap((a) =>

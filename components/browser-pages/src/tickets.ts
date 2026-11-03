@@ -1,21 +1,14 @@
 import type { Ticket } from "./page-data.js";
 
 const TICKET = /^tickets\/(\d+)[-_][^/]*\.md$/;
-/**
- * A number written as a ticket reference: it starts the line or a list item (`01: Title`, `01 (Title)`, `#01`, `[01](…)`,
- * `and 02`, `ticket 03`), not a phrase such as "Retry 408".
- */
 const REFERENCE = /(?:^|[,;([#]|\band\b|\btickets?\b)\s*(\d{1,3})(?=\s*[:(),;.\]]|\s*$|\s+and\b)/gi;
-/** Any two- or three-digit number, as ticket numbers are written (`01`, `12`); single digits are prose, such as "Phase 2". */
 const NUMBER = /(?<![\w.])(\d{2,3})(?![\w.])/g;
 
-/** The number of a `tickets/NN-slug.md` path, or undefined for any other file. */
 export function ticketNumber(path: string): number | undefined {
 	const match = TICKET.exec(path);
 	return match ? Number(match[1]) : undefined;
 }
 
-/** The bundle's tickets, in number order, as their files state them. */
 export function parseTickets(files: { path: string; source: string }[]): Ticket[] {
 	const numbered = files.flatMap((f) => {
 		const id = ticketNumber(f.path);
@@ -26,8 +19,6 @@ export function parseTickets(files: { path: string; source: string }[]): Ticket[
 		.map(({ path, source, id }) => {
 			const heading = /^#\s+(.+)$/m.exec(source)?.[1] ?? path;
 			const blockedBy = /\*\*Blocked by:\*\*\s*([^\n]*)/.exec(source)?.[1] ?? "";
-			// A ticket of the bundle counts wherever its number appears; another number counts only where it reads as a
-			// reference, so "Retry 408" in a title is not a missing ticket.
 			const shaped = [...blockedBy.matchAll(REFERENCE)].map((m) => Number(m[1]));
 			const known = [...blockedBy.matchAll(NUMBER)].map((m) => Number(m[1])).filter((n) => ids.has(n));
 			const named = [...new Set([...shaped, ...known])];
@@ -49,7 +40,6 @@ export type TicketState = "done" | "progress" | "frontier" | "blocked";
 
 const isDone = (t: Ticket | undefined) => !!t && /^done$/i.test(t.status);
 
-/** Done, in progress, ready to start (every blocker done), or blocked; a ticket waiting on a missing ticket is blocked. */
 export function ticketState(t: Ticket, all: Ticket[]): TicketState {
 	if (isDone(t)) return "done";
 	if (/progress/i.test(t.status)) return "progress";
@@ -59,10 +49,6 @@ export function ticketState(t: Ticket, all: Ticket[]): TicketState {
 
 const pad = (n: number) => String(n).padStart(2, "0");
 
-/**
- * Where the graph breaks the `to-tickets` rules: a blocker that is not a ticket here, a blocker numbered after its
- * dependent, a cycle, or no ticket that can start.
- */
 export function graphProblems(tickets: Ticket[]): string[] {
 	const problems: string[] = [];
 	for (const t of tickets)

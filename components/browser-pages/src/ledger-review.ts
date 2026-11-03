@@ -42,7 +42,6 @@ export const ReviewLedgerTaskParamsSchema = Type.Object({
 
 export type ReviewLedgerTaskParams = Static<typeof ReviewLedgerTaskParamsSchema>;
 
-/** The bundle directory `task` names: the directory directly under `.ledger/` or `.ledger/history/` that holds it. */
 async function bundleDir(task: string, cwd: string, root: string): Promise<string> {
 	let ledger: string;
 	try {
@@ -77,7 +76,6 @@ async function filesUnder(dir: string, prefix = ""): Promise<string[]> {
 	return out;
 }
 
-/** Reading order: the task, its spec or plan, other documents, tickets, the retrospective, then everything in folders. */
 function rank(path: string): number {
 	if (path === "task.md") return 0;
 	if (path === "spec.md" || path === "plan.md") return 1;
@@ -134,10 +132,6 @@ export async function ledgerTemplate(page: LedgerReviewPage): Promise<string> {
 	);
 }
 
-/**
- * The lines of an evidence file the page lists, highlighted. They stay on the page, so the saved copy shows every
- * file the reviewer opened. Paths come only from the page's own list, so the page cannot read outside the bundle.
- */
 export async function serveEvidence(page: LedgerReviewPage, dir: string, path: string) {
 	const file = page.evidence.find((e) => e.path === path);
 	if (!file) return undefined;
@@ -149,9 +143,6 @@ export async function serveEvidence(page: LedgerReviewPage, dir: string, path: s
 	return { lines: file.lines, binary: file.binary };
 }
 
-// ---------------------------------------------------------------------------- what the page sends back
-
-/** Accepts the blocks of `file`: a document's Markdown blocks, or `l<N>` lines of an evidence file already served. */
 function blocksIn(page: LedgerReviewPage, file: unknown): ((block: string) => boolean) | undefined {
 	const doc = page.documents.find((d) => d.path === file);
 	if (doc) return (id) => doc.blocks.some((b) => b.id === id);
@@ -163,7 +154,6 @@ function blocksIn(page: LedgerReviewPage, file: unknown): ((block: string) => bo
 	};
 }
 
-/** A question about a passage in one of the page's files, or undefined. */
 export function parseLedgerQuestion(body: unknown, page: LedgerReviewPage) {
 	if (!isObject(body) || typeof body.question !== "string" || !body.question.trim()) return undefined;
 	const hasBlock = blocksIn(page, body.file);
@@ -172,7 +162,6 @@ export function parseLedgerQuestion(body: unknown, page: LedgerReviewPage) {
 	return { file: body.file as string, spans, quote: body.quote?.trim() || undefined, question: body.question.trim() };
 }
 
-/** Validates the page's submission against the page it was served. Anything malformed is rejected whole. */
 export function parseLedgerResult(body: unknown, page: LedgerReviewPage): LedgerResult | undefined {
 	if (!isObject(body) || !isVerdict(body.verdict) || !optionalString(body.overall)) return undefined;
 	if (!Array.isArray(body.annotations) || !Array.isArray(body.edits) || !Array.isArray(body.opened)) return undefined;
@@ -201,9 +190,6 @@ export function parseLedgerResult(body: unknown, page: LedgerReviewPage): Ledger
 	};
 }
 
-// ---------------------------------------------------------------------------- text for the model
-
-/** `path:lines` of a passage, with the path as the repository names it. */
 function where(page: LedgerReviewPage, file: string, spans: TextSpan[]): string {
 	const path = `${page.path}/${file}`;
 	const doc = page.documents.find((d) => d.path === file);
@@ -214,7 +200,6 @@ function where(page: LedgerReviewPage, file: string, spans: TextSpan[]): string 
 	return `${path}:${from}${to > from ? `-${to}` : ""}`;
 }
 
-/** The passage a question is about, for the read-only fork's prompt. */
 export function ledgerPassage(page: LedgerReviewPage, file: string, spans: TextSpan[], quote: string | undefined) {
 	const doc = page.documents.find((d) => d.path === file);
 	if (doc) return markdownPassage(`${page.path}/${file}`, doc.blocks, spans, quote);

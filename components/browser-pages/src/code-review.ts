@@ -151,8 +151,6 @@ export const ReviewCodeParamsSchema = Type.Object(
 export type ReviewCodeParams = Static<typeof ReviewCodeParamsSchema>;
 type Ref = { file: string; lines?: string };
 
-// ---------------------------------------------------------------------------- repeated changes
-
 const LITERAL_WORDS = new Set(
 	"import export from const let var function return if else elif for while do async await new throw try catch except finally raise type interface extends implements class def fn pub mut impl struct enum match case switch default break continue static private public protected readonly as of in is not and or typeof keyof instanceof null nil None undefined true false True False void this self super yield lambda pass".split(
 		" ",
@@ -174,11 +172,6 @@ function renameOf(a: string, b: string): [string, string] | undefined {
 	return /^[a-z][a-z0-9_]+$/.test(from) && /^[a-z][a-z0-9_]+$/.test(to) ? [from, to] : undefined;
 }
 
-/**
- * A hint, not proof of equal behaviour: true when `other` differs from `example` only by one consistent name
- * substitution (invoice → tax, in any case form) taken from the file names, or from the first differing name
- * when both share a file. Keywords, literals, numbers, and operators never count as a rename.
- */
 function renamedFrom(
 	example: { file: string; lines: RawLine[] | DiffLine[] },
 	other: { file: string; lines: RawLine[] | DiffLine[] },
@@ -212,11 +205,8 @@ function renamedFrom(
 	return pairs.every(([a, b]) => forms.reduce((acc, [f, t]) => acc.split(f).join(t), a) === b);
 }
 
-// ---------------------------------------------------------------------------- page building
-
 const lineText = (line: RawLine | DiffLine) => ("text" in line ? line.text : line.s.map((seg) => seg.t).join(""));
 
-/** Common prefix and suffix after each line's own indentation, so a re-indented line marks only real edits. */
 function similarity(a: string, b: string): { p: number; s: number; score: number; ia: number; ib: number } {
 	const ia = a.length - a.trimStart().length;
 	const ib = b.length - b.trimStart().length;
@@ -232,7 +222,6 @@ function similarText(a: string, b: string): { p: number; s: number; score: numbe
 	return { p, s, score: (p + s) / Math.max(a.length, b.length, 1) };
 }
 
-/** Marks the changed middle of each removed line and the added line most like it in the same run. */
 function wordMarks(lines: DiffLine[]): void {
 	let i = 0;
 	while (i < lines.length) {
@@ -273,16 +262,12 @@ async function highlighted(path: string, content: string | undefined): Promise<S
 	return content === undefined ? undefined : highlightLines(content, path);
 }
 
-/** A maximal run of changed lines inside one git hunk: the smallest piece the agent can place. */
 interface Island {
 	file: string;
-	/** All lines of the git hunk the island belongs to. */
 	lines: DiffLine[];
 	block: number;
-	/** First and last changed line, as indexes into `lines`; e = s - 1 for a file with no text lines. */
 	s: number;
 	e: number;
-	/** Lines the island touches, on the new side (old side for a deleted file). */
 	range?: [number, number];
 	note?: string;
 	owner?: string;
@@ -303,7 +288,6 @@ function islandsOf(file: string, status: string, lines: DiffLine[], block: numbe
 		const run = lines.slice(s, i);
 		const side = status === "D" ? "o" : "n";
 		const numbers = run.map((l) => l[side]).filter((v): v is number => v !== undefined);
-		// A pure deletion sits where the next line now is.
 		const at = lines[i]?.n ?? (lines[s - 1]?.n !== undefined ? lines[s - 1].n! + 1 : undefined);
 		const range: [number, number] | undefined = numbers.length
 			? [Math.min(...numbers), Math.max(...numbers)]
@@ -315,7 +299,6 @@ function islandsOf(file: string, status: string, lines: DiffLine[], block: numbe
 	return out;
 }
 
-/** Splits a run of added lines, such as a new file, at the given first lines of new pieces. */
 function splitAdded(run: Island, starts: Set<number> | undefined): Island[] {
 	if (!starts || run.e <= run.s || run.lines.slice(run.s, run.e + 1).some((l) => l.t !== "+")) return [run];
 	const pieces: Island[] = [];
@@ -330,7 +313,6 @@ function splitAdded(run: Island, starts: Set<number> | undefined): Island[] {
 	return pieces;
 }
 
-/** Cuts git hunks where the owner changes, so each piece holds exactly what one chapter entry placed. */
 function cutHunks(islands: Island[], hunks: Record<string, Hunk>, order: string[]): void {
 	const blocks = new Map<number, Island[]>();
 	for (const island of islands) blocks.set(island.block, [...(blocks.get(island.block) ?? []), island]);
@@ -369,7 +351,6 @@ function cutHunks(islands: Island[], hunks: Record<string, Hunk>, order: string[
 	}
 }
 
-/** The former base/head arguments must fail loudly rather than silently review the default target. */
 export function rejectRemovedSelection(params: object): void {
 	const removed = ["base", "head"].filter((key) => key in params);
 	if (removed.length)
@@ -378,10 +359,6 @@ export function rejectRemovedSelection(params: object): void {
 		);
 }
 
-/**
- * Builds the page from the agent's structure and the selected change. Code always comes from Git objects:
- * the live target's snapshot, or a supplied retained diff. The page owns and closes the diff.
- */
 export async function buildCodeReviewPage(
 	params: ReviewCodeParams,
 	cwd: string,
@@ -451,7 +428,6 @@ async function pageOf(params: ReviewCodeParams, cwd: string, token: string, diff
 		const path = normalize(file);
 		return files.find((f) => f.path === path || f.oldPath === path)?.path;
 	};
-	// Every chapter entry's range bounds a place where a run of added lines may be cut.
 	const bounds = new Map<string, Set<number>>();
 	const bound = (ref: Ref) => {
 		const path = pathOf(ref.file);
@@ -495,7 +471,6 @@ async function pageOf(params: ReviewCodeParams, cwd: string, token: string, diff
 			);
 	};
 
-	// First pass: every chapter entry claims its islands, so hunks can be cut where ownership changes.
 	params.chapters.forEach((c, ci) => {
 		c.changes.forEach((change, k) => {
 			const where = `chapter ${ci + 1}, change ${k + 1}`;
@@ -599,8 +574,6 @@ async function pageOf(params: ReviewCodeParams, cwd: string, token: string, diff
 	return { page, root: diff.root };
 }
 
-// ---------------------------------------------------------------------------- result from the page
-
 const VERDICTS = new Set(["approve", "approve_notes", "changes", "dismissed"]);
 const KINDS = new Set(["change", "question", "concern", "nit", "praise"]);
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null;
@@ -612,8 +585,6 @@ export interface Question {
 	question: string;
 }
 
-/** A question about lines the page actually shows, or undefined. */
-/** The page app, with Mermaid inlined only when the agent's prose has a diagram. */
 export async function codeReviewTemplate(page: CodeReviewPage): Promise<string> {
 	return withDiagrams(await readTemplate("code-review"), [
 		...page.intent,
@@ -633,7 +604,6 @@ export function parseQuestion(body: unknown, page: CodeReviewPage): Question | u
 	return { hunk: body.hunk, start, end, question: body.question.trim() };
 }
 
-/** Validates the page's submission against the page it was served. Anything malformed is rejected whole. */
 export function parseReviewResult(body: unknown, page: CodeReviewPage): ReviewResult | undefined {
 	if (!isObject(body) || !VERDICTS.has(body.verdict as string)) return undefined;
 	if (!Array.isArray(body.comments) || !Array.isArray(body.decisions) || !Array.isArray(body.seen)) return undefined;
@@ -698,10 +668,6 @@ export function parseReviewResult(body: unknown, page: CodeReviewPage): ReviewRe
 	};
 }
 
-// ---------------------------------------------------------------------------- result for the model
-
-/** The `file:41-43` anchor of lines in a hunk, and the first non-blank line they cover. */
-/** The lines a question is about, for the read-only fork's prompt. */
 export function questionPassage(page: CodeReviewPage, q: Question) {
 	const hunk = page.hunks[q.hunk];
 	const chapter = page.chapters.find((c) => c.changes.some((change) => change.id === q.hunk));
@@ -732,7 +698,6 @@ const VERDICT_TEXT: Record<ReviewResult["verdict"], string> = {
 	dismissed: "closed without a verdict",
 };
 
-/** The model-facing text of a submitted review. */
 export function formatReviewResult(page: CodeReviewPage, result: ReviewResult, savedPath?: string): string {
 	const out = [`The reviewer ${VERDICT_TEXT[result.verdict]}.`];
 	if (result.summary?.trim()) out.push("", `Summary: ${result.summary.trim()}`);
