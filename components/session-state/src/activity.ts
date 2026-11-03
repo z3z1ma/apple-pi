@@ -1,33 +1,23 @@
-// The operator's outside activity: what Slack, GitHub, Jira, calendar and email say happened that involves him, kept as one stream of
-// items, and what the desk decided about each. Items are facts observed at a source; the decision is the desk's.
 import type { DatabaseSync } from "node:sqlite";
 
 export const ACTIVITY_SOURCES = ["github", "jira", "slack", "calendar", "gmail"] as const;
 export type ActivitySource = (typeof ACTIVITY_SOURCES)[number];
 
-/**
- * How a source is followed: every new item goes to the desk for triage, only items addressed to him, items are only
- * listed, or the source is not read at all. A source is off until the operator turns it on.
- */
 export type TriageMode = "all" | "direct" | "list" | "off";
 export const TRIAGE_MODES = ["all", "direct", "list", "off"] as const;
 export const TRIAGE_ACTIONS = ["task", "link", "draft", "answer", "pass"] as const;
 export type TriageAction = (typeof TRIAGE_ACTIONS)[number];
 
 export interface ActivityItem {
-	/** `<source>:<source's own key>`; the same event seen again is the same item. */
 	id: string;
 	source: ActivitySource;
-	/** What happened, in the source's terms: mention, review_requested, comment, assigned, dm, reply... */
 	kind: string;
-	/** Items about the same PR, issue or Slack thread share it. */
 	conversation: string;
 	title: string;
 	actor: string | null;
 	url: string | null;
 	excerpt: string | null;
 	at: number;
-	/** Addressed to the operator himself: a mention, a DM, a review request, an assignment. */
 	direct: boolean;
 }
 
@@ -35,7 +25,6 @@ export interface Triage {
 	by: string;
 	action: TriageAction;
 	note: string;
-	/** What the decision produced or points at: a task, thread or message id, or an outside link. */
 	ref?: string;
 	at: number;
 }
@@ -44,17 +33,11 @@ export interface StoredItem extends ActivityItem {
 	observedAt: number;
 	deliveredAt: number | null;
 	triage: Triage | null;
-	/** The rule that decided the item on arrival, while that rule exists. */
 	rule: { id: string; effect: RuleEffect; note: string } | null;
 }
 
-/**
- * What a rule does to matching new items: hide them, keep them listed without triage, always send them for triage,
- * or send them to one person instead of the desk.
- */
 export type RuleEffect = "hide" | "quiet" | "triage" | "route";
 export const RULE_EFFECTS = ["hide", "quiet", "triage", "route"] as const;
-/** Every given field must match: a place is a repository, Jira project or Slack channel; words match title or text. */
 export interface RuleMatch {
 	source?: ActivitySource;
 	kind?: string;
@@ -72,7 +55,6 @@ export interface ActivityRule {
 	createdAt: number;
 }
 
-/** Where a conversation lives: `github:owner/repo`, `jira:PROJECT`, `slack:<channel>`. */
 export function placeOf(conversation: string): string {
 	const github = /^github:([^#:]+)/.exec(conversation);
 	if (github) return `github:${github[1]}`;
@@ -180,7 +162,6 @@ export function ruleMatches(match: RuleMatch, item: ActivityItem): boolean {
 	);
 }
 
-/** Record on each new item the newest rule that matches it, and return the rule beside each item. */
 export function applyRules(db: DatabaseSync, items: ActivityItem[]): { item: ActivityItem; rule?: ActivityRule }[] {
 	const rules = activityRules(db);
 	const update = db.prepare("update activity_items set rule = ? where id = ?");
@@ -194,7 +175,6 @@ export function applyRules(db: DatabaseSync, items: ActivityItem[]): { item: Act
 export const activityAvailable = (db: DatabaseSync) =>
 	Boolean(db.prepare("select 1 from sqlite_master where name = 'activity_items'").get());
 
-/** Keep the items not seen before and return them; an item seen again keeps its first record and decision. */
 export function recordActivity(db: DatabaseSync, items: ActivityItem[], now: number): ActivityItem[] {
 	const insert = db.prepare(
 		`insert into activity_items (id, source, kind, conversation, title, actor, url, excerpt, at, observed_at, direct)
@@ -255,7 +235,6 @@ export function activityPage(
 		limit: number;
 		untriaged?: boolean;
 		conversation?: string;
-		/** Include items a hide rule decided; left out by default. */
 		hidden?: boolean;
 	},
 ): StoredItem[] {
@@ -293,10 +272,6 @@ export function triageModes(db: DatabaseSync): Record<ActivitySource, TriageMode
 	) as Record<ActivitySource, TriageMode>;
 }
 
-/**
- * Who should look at each new item: the desk under its source's mode, unless a rule hides it, quiets it, always
- * sends it for triage, or routes it to another person. Rules are applied and recorded here.
- */
 export function forTriage(
 	db: DatabaseSync,
 	items: ActivityItem[],
@@ -325,7 +300,6 @@ export function markDelivered(db: DatabaseSync, ids: string[], now: number): voi
 	for (const id of ids) update.run(now, id);
 }
 
-/** Record the desk's decision on items; a later decision replaces an earlier one. */
 export function triageActivity(
 	db: DatabaseSync,
 	by: string,
@@ -342,7 +316,6 @@ export function triageActivity(
 	if (missing.length) throw new Error(`No activity item ${missing.join(", ")}.`);
 }
 
-/** The items as a batch the coordinator reads: one line each, with the id it triages by. */
 export function triageBatch(items: ActivityItem[]): string {
 	const line = (item: ActivityItem) =>
 		[
