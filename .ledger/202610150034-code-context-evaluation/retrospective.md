@@ -6,12 +6,12 @@ Updated: 2026-10-15
 
 ## What Mattered
 
-Pending completion of the undertaking.
+- Never started; cancelled during cleanup.
 
 ## Learnings
 
-Pending completion of the undertaking.
+- None.
 
 ## Improvements
 
-Pending completion of the undertaking.
+- None.

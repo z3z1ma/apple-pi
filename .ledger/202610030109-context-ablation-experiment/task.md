@@ -44,4 +44,4 @@ Next step: the operator picks the first trigger; then answer the remaining open 
 
 ## Outcome
 
-Pending.
+Cancelled by the operator on 2026-11-03 during the ledger cleanup; it was never started.
