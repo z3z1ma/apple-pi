@@ -33,6 +33,7 @@ operator's decisions (2026-11-02).
   the decided access.
 - Not yet: the `search_session` tool still uses the old engine and has no `tasks` parameter. It waits for Kofi's gate:
   the harness is frozen at `5bfd4f07` and Ciaran is writing the task set.
+- Integration rule, raised by Kofi: the tool must apply cutoff, lineage and issuer exclusion inside the index query (before `limit`), never by filtering already-ranked top hits. `searchIndex` already filters sessions and spans in SQL; lineage and issuer exclusion need the same.
 - Known limit, raised by Kofi: FTS5 bm25 statistics cover the whole index, so per-prefix comparisons measure local
   ranking. An end-to-end check on the live index is planned.
 
