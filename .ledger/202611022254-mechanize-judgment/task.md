@@ -58,10 +58,18 @@ Lanes assigned 2026-11-03. Landed so far:
 - **TLA+:**
   - Niamh's skill, runner and command-journal model landed (`6cdcb032`, no violation).
   - The counterexample-to-test experiment is running (`work-42e81213`, log in `cegar-log.md`). The first lead is a stale review cancel racing an extend; it is not confirmed yet.
-- **Comment ban:**
-  - Lanes are landing batches; `node lint/no-comments.mjs | tail -1` shows the remaining count (6,067 at the start, 1,574 now).
-  - Ezra and Hye-jin are done (Hye-jin's build is pending).
-  - Deniz has session-state `src` after Rahul's renames (`5345bdcf`).
+- **Comment ban: done.** 6,067 comments down to 0. `npm run lint` enforces it (`934a8928`), and so does the harness on every edit (`.pi/rules/policy.json`). The detector walks every token (`12fd7902`); the lint script and the harness share it.
+- **Path contracts:** Rahul `15899a60`, in `npm run lint` (`1d4f94e7`); the hot-path GritQL rule is in `.pi/rules`.
+- **Budgets:** Fiona `79a115bb`, `185bb15c` (`build-budgets.md`).
+- **Counterexample-to-test loop:**
+  - Real defect in apple-pi's review cancel/extend, fixed in `346f6908` (12m44s to defect).
+  - Departure model is clean.
+  - Loop added to the skill in `216f2a49`.
+  - First outside repository: a confirmed defect in async-mutex (`Semaphore.cancel` strands existing `waitForUnlock` observers). Not reported upstream; the operator decides.
+- **Activation (2026-11-03 00:24):**
+  - Runtime restarted on `runtime-main.runtime.ts` (pid 18503); the index worker is writing.
+  - Workplace dist rebuilt (`65cb8d30`). The app's Quit was refused by its leave guard, so the operator relaunches it.
+  - Pi sessions started before `5345bdcf` cannot restart the runtime themselves (the old entry file is gone) until they reload.
 - **Next:**
   - Add the comment checker to `npm run lint` at zero.
   - Restart the runtime after Rahul's renames and Deniz's session-state pass.
