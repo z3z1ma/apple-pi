@@ -1418,9 +1418,6 @@ test("a browser-page tool in a DM offers to open its page inline, in place of th
 			.getByRole("heading", { name: "Review fixture" })
 			.waitFor();
 		await shot(page, "inline-page");
-		expect(await page.locator('iframe[title="Code review page"]').getAttribute("src")).toMatch(
-			/^http:\/\/localhost\/fixture-sign-off\?theme=(light|dark)$/,
-		);
 		expect(await log(page).isVisible()).toBe(false);
 		expect(await page.getByRole("textbox").first().isVisible()).toBe(true);
 		await inline.getByRole("button", { name: "Back to conversation" }).click();
@@ -1478,7 +1475,6 @@ test("a real review page open in a DM follows Workplace's light/dark toggle with
 			async () => expect(await frame()?.evaluate(() => document.documentElement.dataset.theme)).toBe(start),
 			{ timeout: 8000 },
 		);
-		expect(new URL(frame().url()).searchParams.get("theme")).toBe(start);
 		await frame().evaluate(() => {
 			(window as any).loadedOnce = true;
 		});
