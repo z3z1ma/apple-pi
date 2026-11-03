@@ -23,22 +23,11 @@ Write `Init`, `Next` and named invariants in `specs/<system>.tla`, with the fini
 
 ## Run the checker
 
-In this package, [the TLC runner](../../scripts/run-tlc.mjs) downloads a pinned, SHA-256-checked `tla2tools.jar` to the user cache and runs one worker in a disposable directory. It needs Java (the repository uses Java 21). Run:
+Call `tlc_check` with the `.tla` path (and `config` when the `.cfg` is not beside it). It runs TLC with a pinned, checksummed `tla2tools.jar` (downloaded on first use; needs Java) and returns a verdict: `pass`, `violation` with the property name, `deadlock`, or `error`. A violation or deadlock comes with the counterexample as numbered states, each with its action and variable values, plus state counts and depth. One module plus the standard TLA+ modules is supported; the declared module name may differ from the file name.
 
-```bash
-node scripts/run-tlc.mjs specs/command-journal.tla
-npx vitest run tests/formal-verification.test.ts --maxWorkers=1
-```
+[`examples/lost-update.tla`](examples/lost-update.tla) is a small model to try first: two workers read a counter and write back the value plus one, and `tlc_check` finds the interleaving that loses an update.
 
-The Vitest command requires a development checkout; tests and dev dependencies are not shipped. In an installed package, run from this skill's directory instead:
-
-```bash
-node ../../scripts/run-tlc.mjs ../../specs/command-journal.tla
-```
-
-An optional second runner argument selects another `.cfg`. The runner supports one module plus the standard TLA+ libraries; it stages the declared module name so kebab-case repository paths remain valid. See the [command journal model](../../specs/README.md) for a worked source mapping and proof boundary.
-
-Require a completed state-space search with no remaining queue and successful exit, not merely a parsed spec or a timed-out search. Retain the command, configuration, tool version, state counts and result. A deliberately broken model should produce a failing exit and trace; this checks that the test can detect violations rather than accept every invocation.
+Require a `pass` with no states left on the queue, not merely a parsed spec or a stopped search. Retain the spec, configuration, tool version, state counts and verdict. A deliberately broken model should come back as a violation with a trace; this checks that the check can detect violations rather than accept every model.
 
 ## Counterexample-to-test loop
 

@@ -1,19 +1,11 @@
-import { execFile } from "node:child_process";
 import { resolve } from "node:path";
-import { promisify } from "node:util";
 import { expect, test } from "vitest";
-
-const execute = promisify(execFile);
+import { runTlc } from "../components/tlc/src/tlc.js";
 
 for (const model of ["review-lifecycle", "departure-lifecycle"]) {
 	test(`${model} exhausts its finite safety model`, async () => {
-		const result = await execute(process.execPath, [
-			resolve("scripts/run-tlc.mjs"),
-			resolve(`specs/${model}.tla`),
-			resolve(`specs/${model}.cfg`),
-		]);
-		const output = result.stdout + result.stderr;
-		expect(output).toContain("Model checking completed. No error has been found.");
-		expect(output).toMatch(/\d+ distinct states found, 0 states left on queue/);
+		const result = await runTlc({ spec: resolve(`specs/${model}.tla`), config: resolve(`specs/${model}.cfg`) });
+		expect(result.verdict, result.output).toBe("pass");
+		expect(result.stats?.left).toBe(0);
 	}, 120_000);
 }

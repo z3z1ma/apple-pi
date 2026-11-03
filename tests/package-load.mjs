@@ -223,6 +223,7 @@ try {
 		"wiki_references",
 		"context_lint",
 		"repo_rules",
+		"tlc_check",
 		"task",
 		"bash",
 		"search_branches",
@@ -448,8 +449,7 @@ try {
 		"Agent Workplace's raw art and generation inputs stay in the repository",
 	);
 	assert(manifest.files.includes("skills/"), "package manifest omits skills");
-	for (const path of ["scripts/run-tlc.mjs", "specs/"])
-		assert(manifest.files.includes(path), `package manifest omits formal verification dependency: ${path}`);
+	assert(!manifest.files.includes("specs/"), "apple-pi's own TLA+ models stay repository content");
 	assert(manifest.files.includes("prompts/"), "package manifest omits prompt templates");
 	assert(manifest.files.includes("docs/"), "package manifest omits documentation");
 	const { templates: promptTemplates, diagnostics: promptDiagnostics } = loadPromptTemplates({
@@ -556,6 +556,13 @@ try {
 		for (const [, link] of readFileSync(file, "utf8").matchAll(/\]\(([^)]+)\)/g)) {
 			if (/^(https?:|#)/.test(link)) continue;
 			assert(existsSync(resolve(dirname(file), link.split("#")[0])), `${file}: missing reference ${link}`);
+		}
+	}
+	for (const skill of packagedSkills) {
+		for (const [, link] of readFileSync(`skills/${skill}/SKILL.md`, "utf8").matchAll(/\]\(([^)]+)\)/g)) {
+			if (/^(https?:|#)/.test(link)) continue;
+			const target = resolve(`skills/${skill}`, link.split("#")[0]);
+			assert(target.startsWith(resolve("skills") + "/"), `${skill} reaches outside skills/: ${link}`);
 		}
 	}
 	for (const skill of browserSkills) {

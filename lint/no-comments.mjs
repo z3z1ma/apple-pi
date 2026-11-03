@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { COMMENTED_SOURCE, sourceComments } from "../components/repo-rules/src/comments.ts";
 
 const SKIP = /(^|\/)(dist|node_modules|\.ledger)\//;
 
 const files = execFileSync("git", ["ls-files", "-z", ...process.argv.slice(2)], { encoding: "utf8" })
 	.split("\0")
-	.filter((file) => file && COMMENTED_SOURCE.test(file) && !SKIP.test(file));
+	.filter((file) => file && COMMENTED_SOURCE.test(file) && !SKIP.test(file) && existsSync(file));
 let count = 0;
 for (const file of files)
 	for (const comment of sourceComments(file, readFileSync(file, "utf8"))) {

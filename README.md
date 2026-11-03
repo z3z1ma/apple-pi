@@ -479,7 +479,7 @@ flowchart LR
 | `to-tickets` | `SKILL.md` | Breaks a plan or specification into approved tracer-bullet tickets with explicit blocking edges. |
 | `domain-modeling` | `ADR-FORMAT.md`, `DOMAIN-LANGUAGE-FORMAT.md` | Sharpens the project's ubiquitous domain terminology as terms resolve, and offers an Architecture Decision Record for a durable, surprising trade-off when you approve it. |
 | `diagnosing-bugs` | `SKILL.md` | Replaces shotgun debugging (mutating three files based on a stack trace guess) with systematic hypothesis generation, reproduction, and root-cause isolation. |
-| `formal-verification` | `SKILL.md`, `specs/`, `scripts/run-tlc.mjs` | Models crash/replay state machines from their implementation in TLA+, checks finite instances with TLC, and turns confirmed counterexamples into regression tests. See [lifecycle models](specs/README.md). |
+| `formal-verification` | `SKILL.md`, `examples/` | Models crash/replay state machines from their implementation in TLA+, checks finite instances with the `tlc_check` tool, and turns confirmed counterexamples into regression tests. apple-pi's own models are in [specs/](specs/README.md). |
 | `tdd` | `mocking.md`, `tests.md` | Red-green cycles at confirmed seams where behavior suits test-first work, with explicit guardrails against tautological mock-heavy tests; refactoring is a separate later step. |
 | `llm-wiki` | `references/initialize.md`, `references/ingest.md`, `references/maintain.md`, `references/query.md` | Procedures for curating and querying the repository's local knowledge graph (`components/wiki`). |
 | `prototype` | `logic.md`, `ui.md` | Explicitly separates throwaway spike rules (fast feedback, exploratory UI/logic) from production hardening. |

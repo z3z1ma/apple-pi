@@ -14,6 +14,7 @@ export default defineConfig({
 			"components/anthropic-watchdog/tests/**/*.test.ts",
 			"components/home-search-guard/tests/**/*.test.ts",
 			"components/repo-rules/tests/**/*.test.ts",
+			"components/tlc/tests/**/*.test.ts",
 			"components/ask-user-question/tests/**/*.test.ts",
 			"components/shared/tests/**/*.test.ts",
 			"components/notebook/tests/**/*.test.ts",

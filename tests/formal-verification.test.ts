@@ -1,30 +1,16 @@
-import { execFile } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { promisify } from "node:util";
 import { expect, test } from "vitest";
+import { runTlc } from "../components/tlc/src/tlc.js";
 
-const execute = promisify(execFile);
-const runner = resolve("scripts/run-tlc.mjs");
 const model = resolve("specs/command-journal.tla");
 const configuration = resolve("specs/command-journal.cfg");
 
-async function check(spec: string, config = configuration) {
-	try {
-		const result = await execute(process.execPath, [runner, spec, config]);
-		return { code: 0, output: result.stdout + result.stderr };
-	} catch (error) {
-		const failure = error as { code: number | string; stdout: string; stderr: string };
-		return { code: failure.code, output: failure.stdout + failure.stderr };
-	}
-}
-
 test("the command journal model exhausts its finite crash/replay state space", async () => {
-	const result = await check(model);
-	expect(result.code, result.output).toBe(0);
-	expect(result.output).toContain("Model checking completed. No error has been found.");
-	expect(result.output).toMatch(/\d+ distinct states found, 0 states left on queue/);
+	const result = await runTlc({ spec: model, config: configuration });
+	expect(result.verdict, result.output).toBe("pass");
+	expect(result.stats?.left).toBe(0);
 }, 120_000);
 
 const faults = [
@@ -55,7 +41,7 @@ const faults = [
 ];
 
 for (const fault of faults) {
-	test(`TLC fails and prints a trace for ${fault.name}`, async () => {
+	test(`TLC reports the violation and its trace for ${fault.name}`, async () => {
 		const scratch = await mkdtemp(join(tmpdir(), "apple-pi-tlc-fault-"));
 		try {
 			const source = await readFile(model, "utf8");
@@ -64,11 +50,10 @@ for (const fault of faults) {
 			const config = join(scratch, "command-journal.cfg");
 			await writeFile(spec, source.replace(fault.before, fault.after));
 			await writeFile(config, (await readFile(configuration, "utf8")).replace("{first, second}", "{first}"));
-			const result = await check(spec, config);
-			expect(result.code, result.output).toBeTypeOf("number");
-			expect(result.code, result.output).not.toBe(0);
-			expect(result.output).toContain(fault.violation);
-			expect(result.output).toContain("State 1:");
+			const result = await runTlc({ spec, config });
+			expect(result.verdict, result.output).toBe("violation");
+			expect(result.property).toBe(fault.violation);
+			expect(result.trace[0]?.action).toBe("Initial predicate");
 		} finally {
 			await rm(scratch, { recursive: true, force: true });
 		}
