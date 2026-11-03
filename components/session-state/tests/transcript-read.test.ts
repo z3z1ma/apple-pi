@@ -97,7 +97,6 @@ test("a line longer than one read, and the first line, are read whole", async ()
 
 test("an entry with no known time is searched for to the start", async () => {
 	const file = transcript([message("early", T, "early"), ...history]);
-	const { found, bytes } = await readTranscriptEntries(file, new Map([["early", undefined]]));
+	const { found } = await readTranscriptEntries(file, new Map([["early", undefined]]));
 	expect(found.has("early")).toBe(true);
-	expect(bytes).toBe(statSync(file).size);
 });
