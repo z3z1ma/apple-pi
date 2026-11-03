@@ -21,11 +21,12 @@ const SCHEMA = [
 		bytes integer not null
 	) strict;`,
 	// `ordinal`: a message entry's `#N` in search_session's addresses, counting every `message` record from the file's
-	// start (load-messages.ts); `files.messages` carries the count across appends. The index is derived, so this rebuilds.
+	// start (load-messages.ts); `files.messages` carries the count across appends. `echo`: 1 for an earlier recall's own
+	// result (search_session, revisit_note), which ranks behind original evidence. The index is derived, so this rebuilds.
 	`drop table entries;
 	create virtual table entries using fts5(
 		words, calls, results,
-		session_id unindexed, entry_id unindexed, at unindexed, role unindexed, ordinal unindexed,
+		session_id unindexed, entry_id unindexed, at unindexed, role unindexed, ordinal unindexed, echo unindexed,
 		tokenize = 'porter unicode61'
 	);
 	delete from files;
@@ -53,7 +54,14 @@ export interface IndexedEntry {
 	words: string;
 	calls: string;
 	results: string;
+	/** An earlier recall's result, as search-entries.ts marks `recallEcho`. */
+	echo?: boolean;
 }
+
+/** Recall tools whose results repeat evidence found elsewhere. */
+const RECALL_TOOLS = ["search_session", "revisit_note"];
+/** The notebook records search_session shows (load-messages.ts); other `custom` records are extension state. */
+const NOTEBOOK_RECORDS = ["notebook.observations.recorded", "notebook.reflections.recorded", "notebook.maintenance"];
 
 function textOf(content: unknown): string {
 	if (typeof content === "string") return content;
@@ -81,6 +89,7 @@ export function indexedEntry(entry: Record<string, any>): IndexedEntry | undefin
 				role: "tool_result",
 				calls: String(message.toolName ?? ""),
 				results: textOf(message.content) + details,
+				echo: RECALL_TOOLS.includes(message.toolName),
 			};
 		}
 		if (message.role === "assistant") {
@@ -98,8 +107,13 @@ export function indexedEntry(entry: Record<string, any>): IndexedEntry | undefin
 	if (entry.type === "compaction" || entry.type === "branch_summary")
 		return { ...base, role: entry.type, words: String(entry.summary ?? "") };
 	// Extension records the session keeps, such as notebook learnings.
-	if (entry.type === "custom" && entry.data !== undefined)
-		return { ...base, role: "custom", words: JSON.stringify(entry.data), calls: String(entry.customType ?? "") };
+	if (entry.type === "custom" && NOTEBOOK_RECORDS.includes(entry.customType)) {
+		const notes = [...(entry.data?.observations ?? []), ...(entry.data?.reflections ?? [])]
+			.filter((note: any) => typeof note?.content === "string")
+			.map((note: any) => `note:${note.id} ${note.content}`)
+			.join("\n\n");
+		return notes ? { ...base, role: "notebook", words: notes, calls: String(entry.customType) } : undefined;
+	}
 	return undefined;
 }
 
@@ -125,7 +139,7 @@ export async function indexTranscript(db: DatabaseSync, sessionId: string, file:
 			messages = 0;
 		}
 		const insert = db.prepare(
-			"insert into entries (words, calls, results, session_id, entry_id, at, role, ordinal) values (?, ?, ?, ?, ?, ?, ?, ?)",
+			"insert into entries (words, calls, results, session_id, entry_id, at, role, ordinal, echo) values (?, ?, ?, ?, ?, ?, ?, ?, ?)",
 		);
 		const mark = db.prepare(
 			"insert into files (session_id, file, inode, bytes, messages) values (?, ?, ?, ?, ?) on conflict (session_id) do update set file = excluded.file, inode = excluded.inode, bytes = excluded.bytes, messages = excluded.messages",
@@ -160,7 +174,17 @@ export async function indexTranscript(db: DatabaseSync, sessionId: string, file:
 					const ordinal = parsed?.type === "message" && parsed.message ? messages++ : null;
 					const entry = indexedEntry(parsed);
 					if (!entry || !(entry.words || entry.calls || entry.results)) continue;
-					insert.run(entry.words, entry.calls, entry.results, sessionId, entry.entryId, entry.at, entry.role, ordinal);
+					insert.run(
+						entry.words,
+						entry.calls,
+						entry.results,
+						sessionId,
+						entry.entryId,
+						entry.at,
+						entry.role,
+						ordinal,
+						entry.echo ? 1 : 0,
+					);
 				}
 				mark.run(sessionId, file, ino, consumed, messages);
 				db.exec("commit");
@@ -227,7 +251,7 @@ export function searchIndex(db: DatabaseSync, request: SearchRequest): SearchHit
 		.prepare(
 			`select session_id, entry_id, at, role, ordinal, bm25(entries) as score,
 				snippet(entries, ${column}, '\u00ab', '\u00bb', '\u2026', 24) as snippet
-			from entries where ${where} order by score, at desc limit ? offset ?`,
+			from entries where ${where} order by echo, score, at desc limit ? offset ?`,
 		)
 		.all(...params, limit, offset) as {
 		session_id: string;

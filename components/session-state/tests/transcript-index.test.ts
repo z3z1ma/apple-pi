@@ -116,6 +116,49 @@ test("hits carry #N ordinals counted as load-messages counts them, and eligibili
 	db.close();
 });
 
+test("only the records search_session shows are indexed, and earlier recall results rank behind original evidence", async () => {
+	const file = join(dir, "sources.jsonl");
+	const at = (i: number) => new Date(T + i).toISOString();
+	writeFileSync(
+		file,
+		line({
+			type: "custom",
+			customType: "extension.state",
+			data: { secret: "needle" },
+			id: "x",
+			parentId: null,
+			timestamp: at(1),
+		}) +
+			line({
+				type: "custom",
+				customType: "notebook.reflections.recorded",
+				data: { reflections: [{ id: "n1", content: "the needle lives in the barn" }] },
+				id: "nb",
+				parentId: null,
+				timestamp: at(2),
+			}) +
+			user("orig", 3, "needle: retain owner") +
+			line({
+				type: "message",
+				id: "echo",
+				parentId: null,
+				timestamp: at(4),
+				message: {
+					role: "toolResult",
+					toolName: "search_session",
+					content: [{ type: "text", text: "needle needle needle" }],
+				},
+			}),
+	);
+	const db = openIndex(join(dir, "sources.db"));
+	await indexTranscript(db, "s3", file);
+	const hits = searchIndex(db, { query: "needle" }).map((hit) => hit.entry);
+	expect(hits).not.toContain("x");
+	expect(hits.at(-1)).toBe("echo");
+	expect(hits.slice(0, -1).sort()).toEqual(["nb", "orig"]);
+	db.close();
+});
+
 test("the runtime indexes a session's transcript and answers searches over its socket", async () => {
 	const file = join(dir, "live.jsonl");
 	writeFileSync(file, user("e1", 1, "Remember the albatross migration plan."));
