@@ -1,9 +1,6 @@
-/** What a task is worth, from the header of its task.md: the lines before its first heading. */
 export interface Valuation {
-	/** Dollars; null when the task is unvalued, which is not the same as $0. */
 	value: number | null;
 	costOfDelayPerHour: number;
-	/** Who marked the value as an estimate; null for an unattributed value. */
 	estimatedBy: string | null;
 }
 
@@ -12,7 +9,6 @@ export interface Worth {
 	cost_of_delay?: number;
 }
 
-// Any amount the writer's number formatting produces, including exponent form; `amount` rejects the rest.
 const AMOUNT = String.raw`\$([\d.eE+-]+)`;
 const VALUE = new RegExp(String.raw`^Value:\s*${AMOUNT}(?:\s*\(estimated by (.+)\))?\s*$`, "m");
 const DELAY = new RegExp(String.raw`^Cost of delay:\s*${AMOUNT}\s*/\s*(hour|day)\s*$`, "m");
@@ -34,7 +30,6 @@ function amount(text: string | undefined): number | null {
 	return Number.isFinite(number) && number >= 0 ? number : null;
 }
 
-/** The header lines a new task.md carries, each value marked as its writer's estimate. */
 export function worthLines(worth: Worth, writer: string): string {
 	return (
 		(worth.value === undefined ? "" : `Value: $${worth.value} (estimated by ${writer})\n`) +

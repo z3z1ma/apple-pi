@@ -7,10 +7,8 @@ import { installCommunicationTools } from "./communication-tools.js";
 import type { MessageReference } from "./communication-types.js";
 import { type ThreadKind, type ThreadPost, withThreads } from "./threads.js";
 
-/** The custom type preserves delivery identity and rendering for existing transcripts. */
 export const MAIL_CUSTOM_TYPE = "apple-pi.mailbox-message";
 
-/** One delivered message; id is its durable delivery command ID. */
 export interface Mail {
 	id: string;
 	from: string;
@@ -43,7 +41,6 @@ export function mailText(mail: Mail): string {
 	return `<mail${thread}${kind}${reference} from="${attribute(from)}" ts="${mail.ts}">\n${mail.body}\n</mail>`;
 }
 
-/** Startup delivery rides the first host turn; live delivery can start a turn itself, unless it is only a record. */
 export function deliverMail(pi: ExtensionAPI, mail: Mail, startingUp: boolean, quiet = false): void {
 	pi.sendMessage<Mail>(
 		{ customType: MAIL_CUSTOM_TYPE, content: mailText(mail), display: true, details: mail },
@@ -51,7 +48,6 @@ export function deliverMail(pi: ExtensionAPI, mail: Mail, startingUp: boolean, q
 	);
 }
 
-/** The pair's staged second-opinion request uses this internal writer, not a native tool invocation. */
 export async function sendThreadMessage(
 	self: string,
 	post: ThreadPost,
@@ -64,7 +60,6 @@ export async function sendThreadMessage(
 	return receipt.reason;
 }
 
-/** Rendering and transcript delivery remain independent from communication queries and mutations. */
 export function installMail(pi: ExtensionAPI): void {
 	trackLiveSessions();
 	let session: ReturnType<typeof liveSession>;

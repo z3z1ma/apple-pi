@@ -5,17 +5,12 @@ export interface StatePaths {
 	dir: string;
 	db: string;
 	socket: string;
-	/** An SQLite file the runtime holds an exclusive lock on for its whole life; the OS frees it on exit. */
 	lock: string;
-	/** The running runtime's pid, written after it takes the lock. */
 	pid: string;
-	/** The runtime's stdout and stderr. */
 	log: string;
-	/** The full-text index of every transcript (`transcript-index.ts`), kept apart from the runtime's own database. */
 	transcriptIndex: string;
 }
 
-/** Pi's own rule for `PI_CODING_AGENT_DIR`: a leading `~` means the home directory. */
 export function agentDir(): string {
 	const configured = process.env.PI_CODING_AGENT_DIR;
 	if (!configured) return join(homedir(), ".pi", "agent");
@@ -24,7 +19,6 @@ export function agentDir(): string {
 	return resolve(configured);
 }
 
-/** Where the runtime keeps its files; read at call time so tests can redirect it. */
 export function statePaths(): StatePaths {
 	const dir = join(agentDir(), "state");
 	return {

@@ -1,4 +1,3 @@
-// Lets Node run this package's TypeScript source as-is: imports name `./x.js`, while the file is `./x.ts`.
 import { registerHooks } from "node:module";
 
 registerHooks({

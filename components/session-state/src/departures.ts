@@ -16,7 +16,6 @@ export interface Departure {
 	sessionFile: string | null;
 }
 
-/** A permanent identity fact, not a claim that process and filesystem cleanup has finished. */
 export function departureOf(db: DatabaseSync, person: string): Departure | undefined {
 	const row = db
 		.prepare("select data from events where session_id = ? and type = 'person_departed' order by seq desc limit 1")
@@ -57,7 +56,6 @@ export interface DepartureWriter {
 	sessionFile: string | null;
 }
 
-/** Rejected hellos are resource observations, never accepted incarnations or membership. */
 export function departureWriters(db: DatabaseSync, person: string): DepartureWriter[] {
 	const rows = db
 		.prepare(`select seq, at, data from events where session_id = ? and type = 'departure_writer_seen'
@@ -66,7 +64,6 @@ export function departureWriters(db: DatabaseSync, person: string): DepartureWri
 	return rows.map(({ seq, at, data }) => ({ ...JSON.parse(data), seq, at }) as DepartureWriter);
 }
 
-/** Only observed writer/binding changes invalidate process proof, not unrelated tool or mail traffic. */
 export function departureWatermark(db: DatabaseSync): number {
 	return (
 		db
@@ -76,7 +73,6 @@ export function departureWatermark(db: DatabaseSync): number {
 	).seq;
 }
 
-/** Called only after process proof; the guard revalidates it after reading a header and before every unlink. */
 export async function removeDepartureFiles(
 	stateDirectory: string,
 	person: string,
@@ -121,7 +117,6 @@ function removeUsageFiles(stateDirectory: string, person: string, checkOwnership
 	unlinkIfPresent(`${file}.1`);
 }
 
-/** The caller owns the cleanup transaction and has already ended current thread participation. */
 export function removeDepartureRecords(db: DatabaseSync, person: string, now: number): void {
 	for (const [table, column] of [
 		["sessions", "id"],
@@ -133,7 +128,6 @@ export function removeDepartureRecords(db: DatabaseSync, person: string, now: nu
 	])
 		db.prepare(`delete from ${table} where ${column} = ?`).run(person);
 
-	// Retain event chronology and shared facts; only these payloads carry private session context.
 	db.prepare(`update events set data = '{}' where session_id = ? and type in (
 		'prompt_opened', 'prompt_closed', 'queue_changed', 'config_changed', 'self_changed', 'soul_changed',
 		'git_changed', 'last_error_changed', 'parent_session_file_changed', 'previous_session_changed', 'current_task_changed'
