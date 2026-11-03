@@ -59,7 +59,6 @@ export type ReviewNotify = (notice: {
 	key: string;
 	subject: string;
 	body: string;
-	/** A person commenting; milestones come from the harness. */
 	sender?: string;
 }) => void;
 
@@ -91,7 +90,6 @@ function outcomeNotice(
 	].join("\n");
 }
 
-/** Confirmed findings from one validated report, sent as soon as its validator settles. */
 function findingsNotice(
 	id: string,
 	report: ReviewReport,
@@ -112,10 +110,6 @@ function findingsNotice(
 	].join("\n");
 }
 
-/**
- * Run independent passes with a bounded pool, keeping plan order in the results. The first failure aborts the
- * remaining passes, and every started pass settles (including reviewer cleanup) before the failure propagates.
- */
 async function inParallel<T, R>(
 	items: T[],
 	limit: number,
@@ -149,7 +143,6 @@ async function inParallel<T, R>(
 	return results;
 }
 
-/** Runtime-owned capture and admission. Request sockets never own this work. */
 export class ReviewJobs {
 	private stopped = false;
 	private pumping?: Promise<void>;
@@ -164,7 +157,6 @@ export class ReviewJobs {
 		this.notify = notify;
 	}
 
-	/** Mail the owner one milestone; a failed notice never changes the review. */
 	private notice(job: ReviewJob, key: string, body: string): void {
 		try {
 			this.notify({
@@ -245,7 +237,6 @@ export class ReviewJobs {
 			return id;
 		}
 		const job = readReview(this.db, actor, operation.review);
-		// Anyone who can read a review may comment on its thread; the owner hears it like any reply.
 		if (operation.action === "comment") {
 			this.notify({
 				review: job.id,
@@ -523,7 +514,6 @@ export class ReviewJobs {
 			);
 			const reviewedAttempts = { ...job.selectedAttempts };
 			const validatorPolicy = roles.find((role) => role.name === "code-review-specialist")?.policy;
-			// Each report is validated by its own validator in parallel; a short merge then links duplicates.
 			const shards = await inParallel(reports, REVIEW_PASS_CONCURRENCY, signal, async (report, shardSignal) => {
 				const inspected = { [report.pass]: reviewedAttempts[report.pass]! };
 				const shard = await runReviewAttempt(
@@ -564,7 +554,6 @@ export class ReviewJobs {
 					context: {
 						phase: "validation",
 						artifact: source,
-						// The combined result carries these too, so a reused merge must have seen the same shard results.
 						shards: shards.map(({ summary, coverageGaps, limitations }) => ({ summary, coverageGaps, limitations })),
 						findings: reports.flatMap((report) =>
 							report.findings.map((finding) => ({
