@@ -18,7 +18,6 @@ afterAll(async () => {
 	rmSync(sessionDir, { recursive: true, force: true });
 });
 
-/** Ask the runtime for one entry over its socket, as any view would. */
 async function readEntry(sessionId: string, entryId: string): Promise<Record<string, unknown>> {
 	const socket = createConnection(state.socketPath);
 	await new Promise((resolve) => socket.once("connect", resolve));
@@ -76,7 +75,7 @@ test("completed messages, tool calls, and tool results are indexed, and an entry
 		expect(rows.find((row) => row.role === "tool_call")).toMatchObject({ tool: "read", preview: "app.ts" });
 		const final = rows.filter((row) => row.role === "assistant").at(-1)!;
 		expect(final.size).toBe(longReply.length);
-		expect((final.preview as string).length).toBeLessThan(longReply.length); // a preview, not the text
+		expect((final.preview as string).length).toBeLessThan(longReply.length);
 
 		const lines = readFileSync(manager.getSessionFile()!, "utf8")
 			.trim()

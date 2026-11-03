@@ -111,7 +111,6 @@ test("channels are pulled; only explicit notification requests a participant's a
 			role: "assistant",
 			content: [expect.objectContaining({ text: "received" })],
 		});
-		// A later, unaddressed reply stays pulled: a mention never subscribes someone to every post.
 		lead.script.push(call("reply", { thread: channel, body: "Deployment finished." }));
 		await lead.run.session.prompt("post the outcome");
 		expect(query(state.dbPath, "select session_id from commands where kind = 'mail'")).toEqual([

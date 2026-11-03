@@ -1,6 +1,5 @@
 import type { DatabaseSync } from "node:sqlite";
 
-/** Remove physical changes since v29; each older fixture removes its own earlier columns/data. */
 export function rewindRecentSchema(db: DatabaseSync, version: number): void {
 	const columns = [
 		[31, "sessions", "hired_at"],

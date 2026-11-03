@@ -7,8 +7,6 @@ import { fakeBridge, query, sendCommand, standInProcess, startRuntime, stopRunti
 
 const state = tempStateDir();
 beforeAll(async () => {
-	// A stopped runtime's database at the two crash boundaries: accepted before the post transaction, or committed
-	// with its outgoing mail before the caller's applied receipt. Only fixture setup writes the database here.
 	mkdirSync(state.stateDir, { recursive: true });
 	const db = new DatabaseSync(state.dbPath);
 	migrate(db);

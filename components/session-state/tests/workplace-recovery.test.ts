@@ -65,7 +65,6 @@ beforeAll(async () => {
 		db.prepare(`insert into commands (command_id, session_id, generation, bound_generation, kind, command, stage, created_at, updated_at)
 			values (?, ?, 1, 1, 'close', ?, 'accepted', 2, 2)`).run(`${id}:close`, id, JSON.stringify({ kind: "close" }));
 	}
-	// Old mail must wait for a later reopening, rather than starting work while a committed retirement closes.
 	db.prepare(`insert into commands (command_id, session_id, kind, command, stage, created_at, updated_at)
 		values ('old-mail', 'done', 'mail', ?, 'accepted', 0, 0)`).run(
 		JSON.stringify({ kind: "mail", from: "manager", body: "Old queued work", sentAt: new Date(0).toISOString() }),
@@ -145,7 +144,6 @@ test("an ordinary dormant member's previous-incarnation close never closes its l
 		await vi.waitFor(() =>
 			expect(query(state.dbPath, "select generation from sessions where id = 'reopened'")).toEqual([{ generation: 2 }]),
 		);
-		// A delivered barrier shows this bridge has processed everything from its hello.
 		expect((await sendCommand(state.socketPath, "reopened", { kind: "steer", text: "Barrier" })).at(-1)?.stage).toBe(
 			"applied",
 		);

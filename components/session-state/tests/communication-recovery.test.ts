@@ -36,7 +36,6 @@ beforeAll(async () => {
 			db.prepare(
 				"insert into commands(command_id,session_id,kind,command,stage,created_at,updated_at) values (?,'sender','communication',?,'accepted',1,1)",
 			).run(`recovery-${suffix}`, JSON.stringify(command(suffix)));
-		// Simulate the committed effect+outbox boundary before a terminal receipt, not an OS crash.
 		const publish: PublishCommunication = (post, _suffix, sender = "sender") => {
 			const result = postToThread(db, sender, "recovery-done", post, 1);
 			if (typeof result === "string") throw new Error(result);
@@ -68,7 +67,6 @@ beforeAll(async () => {
 		};
 		const effect = applyCommunication(db, "sender", command("done").operation, 1, "recovery-done", publish);
 		db.prepare("update commands set result = ? where command_id = 'recovery-done'").run(JSON.stringify(effect));
-		// Revocation stops future access, but cannot revoke this already-addressed notification.
 		participateIn(db, "recovery-done", "recipient", 2, null);
 		db.exec(
 			"create trigger reject_archive before insert on commands when new.command_id = 'archive-broken:recipient' begin select raise(abort, 'outbox unavailable'); end",

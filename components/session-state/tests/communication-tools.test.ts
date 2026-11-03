@@ -49,7 +49,6 @@ async function applied(self: string, name: string, args: Record<string, unknown>
 	return details;
 }
 
-// These exercise public native execution over the isolated real runtime. Core tests own wider authority/retention coverage.
 test("an SDK replay preserves the original alias audience and thread rather than resolving a newer team", async () => {
 	const root = await person("native-mail-root");
 	const ben = await person("native-mail-ben", root);

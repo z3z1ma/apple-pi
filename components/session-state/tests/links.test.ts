@@ -255,7 +255,6 @@ test("a legacy link with a missing recorder can be resolved through its survivin
 		db.prepare(
 			"insert into work_tasks (id, bundle, project, organization, ephemeral, thread, opened_at) values (?, ?, '/', 'root', 1, ?, 0)",
 		).run(task, `/${task}`, `task:${task}`);
-	// Legacy links have no stored organization; only the task endpoints survive here.
 	db.prepare(
 		"insert into links (id, from_kind, from_id, to_kind, to_id, relation, recorded_by, inferred, created_at) values ('L', 'task', 't1', 'task', 't2', 'blocks', 'peer', 0, 1)",
 	).run();

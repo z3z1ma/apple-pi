@@ -7,8 +7,6 @@ import { query, startRuntime, stopRuntime, tempStateDir } from "./helpers.js";
 const state = tempStateDir();
 
 beforeAll(async () => {
-	// A stopped runtime, with accepted membership commands at both crash boundaries. Only this fixture writes the
-	// database; the runtime then reconciles channels and replays those commands.
 	mkdirSync(state.stateDir, { recursive: true });
 	const db = new DatabaseSync(state.dbPath);
 	migrate(db);

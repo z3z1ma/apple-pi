@@ -133,7 +133,6 @@ async function follow(id = "reader") {
 	expect(result.at(-1)).toEqual({ stage: "applied" });
 }
 
-// Runtime publication is the assertion boundary: source data and every recipient's ordinary mail outbox.
 test("first follow creates push membership without backfill; review comments and failures wake an on-call follower", async () => {
 	await person("reader", { onCall: true }, true);
 	routes[`${repo}/issues/7/comments`] = [comment(1, "Old discussion", old)];

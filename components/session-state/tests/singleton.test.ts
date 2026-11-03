@@ -16,7 +16,7 @@ test("runtimes started at the same moment leave exactly one running", async () =
 		const child = spawn(process.execPath, ["--import", register, main], { stdio: "ignore", env: process.env });
 		return new Promise<number | null>((done) => {
 			child.on("exit", (code) => done(code));
-			setTimeout(() => done(null), 4000); // still running after four seconds
+			setTimeout(() => done(null), 4000);
 		});
 	});
 	const codes = await Promise.all(exits);

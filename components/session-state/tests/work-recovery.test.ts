@@ -43,7 +43,6 @@ beforeAll(async () => {
 	db.prepare(
 		"insert into work_changes (command_id, task_id, person, action, previous_bundle) values ('moved', 'moved-task', 'person', 'finish', ?)",
 	).run(source);
-	// A runtime that stopped after accepting a ledger task's open and another's close, before applying either.
 	const ledgerProject = join(state.agentDir, "ledger-project");
 	const opened = join(ledgerProject, ".ledger", "202601010000-opened");
 	const closed = join(ledgerProject, ".ledger", "history", "202601010000-closed");

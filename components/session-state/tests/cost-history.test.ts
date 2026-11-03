@@ -26,7 +26,6 @@ test("spend a session already had when the runtime first hears of it is marked a
 			]),
 		);
 		bridge.socket.destroy();
-		// A reconnect after an outage reports spend made while the runtime was away: real spend, not a baseline.
 		const again = await fakeBridge(state.socketPath, "veteran", proc.pid, proc.startedAt, { facts: { cost: 20 } });
 		await vi.waitFor(() => expect(costs().at(-1)).toEqual({ from: 15, to: 20 }));
 		again.socket.destroy();

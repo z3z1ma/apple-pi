@@ -11,7 +11,6 @@ import { close, query, startRuntime, stopRuntime, tempStateDir } from "./helpers
 const state = tempStateDir();
 const bin = join(state.agentDir, "bin");
 mkdirSync(bin);
-// The onboarding test supplies the launched person's real faux session below; this stands in for its process.
 writeFileSync(join(bin, "pi"), `#!${process.execPath}\nsetInterval(() => {}, 1000);\n`);
 chmodSync(join(bin, "pi"), 0o755);
 vi.stubEnv("PATH", `${bin}:${process.env.PATH}`);

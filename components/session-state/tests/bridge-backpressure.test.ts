@@ -10,7 +10,6 @@ const state = tempStateDir();
 afterAll(() => rmSync(state.agentDir, { recursive: true, force: true }));
 
 test("a runtime that stops reading does not hold up the reply; the bridge coalesces the text it could not send", async () => {
-	// A stand-in runtime that accepts the bridge and then stops reading.
 	mkdirSync(state.stateDir, { recursive: true });
 	const lines: Record<string, any>[] = [];
 	let link: Socket | undefined;

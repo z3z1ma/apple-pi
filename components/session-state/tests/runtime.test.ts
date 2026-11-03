@@ -94,7 +94,7 @@ test("a clean shutdown ends the incarnation as exited, and reopening the session
 		sessions.push(first);
 		const id = manager.getSessionId();
 		await vi.waitFor(seen(id), { timeout: 15000 });
-		await first.session.prompt("hello"); // writes the session file so it can be reopened
+		await first.session.prompt("hello");
 		await close(sessions.pop()!);
 		await vi.waitFor(
 			() =>
@@ -134,7 +134,7 @@ test("a reload keeps the process's incarnation instead of starting a new generat
 	try {
 		const id = run.session.sessionManager.getSessionId();
 		await vi.waitFor(seen(id), { timeout: 15000 });
-		await run.session.bindExtensions({ onError: () => {} }); // reload emits session_start only to a bound host
+		await run.session.bindExtensions({ onError: () => {} });
 		await run.session.reload();
 		await new Promise((resolve) => setTimeout(resolve, 1500));
 		expect(

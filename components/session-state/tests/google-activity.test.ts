@@ -4,7 +4,6 @@ import { join } from "node:path";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import { readCalendar, readGmail } from "../src/activity-sources.js";
 
-// A stand-in `gws` on PATH that answers each request from canned JSON, the way the real CLI prints it.
 const answers: Record<string, unknown> = {};
 let dir = "";
 let path = "";
@@ -74,7 +73,6 @@ test("calendar keeps what he would notice: one item per real change, never per a
 	]);
 	expect(JSON.parse(first.cursor).updated).toBe("2026-11-02T14:00:00Z");
 
-	// Someone else replying updates the series; the same thing he would see keeps the same item.
 	answers["calendar events list"] = {
 		items: [
 			{

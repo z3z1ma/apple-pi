@@ -385,7 +385,6 @@ test("restart finds a renamed window even when the launch died before recording 
 	process.kill(daemon, "SIGKILL");
 	await interrupted;
 	await vi.waitFor(() => expect(processGone(daemon)).toBe(true));
-	// Seed the persisted crash point: the window opened, but the daemon never recorded the returned pane id.
 	const db = new DatabaseSync(state.dbPath);
 	try {
 		db.prepare("update program_peers set pane = null where session_id = ?").run(id);

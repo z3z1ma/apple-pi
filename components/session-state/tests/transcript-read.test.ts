@@ -18,7 +18,6 @@ const message = (id: string, at: number, text: string) =>
 		timestamp: iso(at),
 		message: { role: "user", content: text, timestamp: at },
 	});
-// Pi writes these with their payload first and their own id last; the payload can hold ids of its own.
 const mail = (id: string, at: number) =>
 	JSON.stringify({
 		type: "custom_message",
@@ -39,7 +38,6 @@ function transcript(lines: string[]): string {
 }
 
 const T = 1_800_000_000_000;
-/** Many old entries, about 6 MB, before the ones a test asks for. */
 const history = Array.from({ length: 3000 }, (_, i) => message(`old-${i}`, T + i, "x".repeat(2000)));
 
 test("finds an entry whose own id follows a payload holding other ids", async () => {
