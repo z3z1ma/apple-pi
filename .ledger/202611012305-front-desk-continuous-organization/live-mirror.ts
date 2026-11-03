@@ -93,7 +93,7 @@ async function open(width: number, height: number, appearance: "light" | "dark")
 		return JSON.parse(JSON.stringify((await (read as (...a: unknown[]) => unknown)(...args)) ?? null));
 	});
 	await page.addInitScript((mode) => {
-		localStorage.setItem("workplace-appearance", mode);
+		if (!localStorage.getItem("workplace-appearance")) localStorage.setItem("workplace-appearance", mode);
 		const call = (method: string) => (...args: unknown[]) => (window as any).__mirror(method, args);
 		const listeners = (method: string) => (listener: (value: unknown) => void) => {
 			if (method !== "onUpdate") return () => {};
@@ -144,6 +144,36 @@ if (scenario === "tour") {
 		}
 		await page.close();
 	}
+}
+if (scenario === "themes") {
+	// Each theme (or the named ones) in light and dark: Chat with a DM open, and Settings.
+	const ids = process.argv.slice(4);
+	const page = await open(1440, 900, "light");
+	const all = ids.length
+		? ids
+		: await page.evaluate(async () =>
+				[...document.querySelectorAll("[data-theme]")].map((node) => (node as HTMLElement).dataset.theme!),
+			);
+	for (const id of all)
+		for (const mode of ["light", "dark"]) {
+			await page.evaluate(
+				([theme, appearance]) => {
+					localStorage.setItem("workplace-theme", theme!);
+					localStorage.setItem("workplace-appearance", appearance!);
+				},
+				[id, mode],
+			);
+			await page.goto("http://localhost/");
+			await page.waitForTimeout(1200);
+			await page.locator(".wp-dm .wp-dm-link").first().click();
+			await page.waitForTimeout(1200);
+			await shot(page, `theme-${id}-${mode}-chat`);
+			await page.getByRole("button", { name: "Settings", exact: true }).click();
+			await page.waitForTimeout(400);
+			await shot(page, `theme-${id}-${mode}-settings`);
+			await page.getByRole("button", { name: "Chat", exact: true }).click();
+		}
+	await page.close();
 }
 if (scenario === "dms") {
 	// Time opening each named DM (or the first eight) until its transcript draws messages, and count page reads.

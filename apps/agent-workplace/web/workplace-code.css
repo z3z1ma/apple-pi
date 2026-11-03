@@ -274,7 +274,7 @@
 }
 .wp-code-editor-toolbar .wp-code-save:not(:disabled) {
 	background: var(--wp-green);
-	color: #fff;
+	color: var(--wp-on-green);
 	border-color: var(--wp-green);
 }
 .wp-code-editor-host {

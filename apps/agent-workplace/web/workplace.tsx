@@ -44,7 +44,9 @@ import { OrganizationNameForm, OrgNameEditor } from "./workplace-org-name.js";
 import { ChatPeople, PersonAvatar, PersonName, PersonProfile, presenceOf, sessionStatus } from "./workplace-people.js";
 import { PersonActionsButton, usePersonMenu, WorkplacePersonActions } from "./workplace-person-actions.js";
 import { usePaneResize } from "./workplace-resize.js";
+import { type AppearanceMode, WorkplaceSettings } from "./workplace-settings.js";
 import { QuickSwitcher, type SwitchTarget } from "./workplace-switcher.js";
+import { DEFAULT_THEME, THEMES, themeOf, themeVariables } from "./workplace-themes.js";
 import { ThreadPane } from "./workplace-thread.js";
 import { WorkplaceWorld } from "./workplace-world.js";
 import { worldStore } from "./world-store.js";
@@ -132,28 +134,68 @@ function inboxThreads(world: WorldSnapshot) {
 	return (world.operatorMail ?? []).filter((thread) => !channels.has(thread.id));
 }
 
+/** A device-local preference; storage can be disabled, and then the choice lasts for this window. */
+function stored(key: string): string | null {
+	try {
+		return localStorage.getItem(key);
+	} catch {
+		return null;
+	}
+}
+
+function remember(key: string, value: string | null): void {
+	try {
+		if (value === null) localStorage.removeItem(key);
+		else localStorage.setItem(key, value);
+	} catch {
+		/* An unavailable preference store does not block the change. */
+	}
+}
+
+/** Whether the system is in dark mode, following it as it changes. */
+function useSystemDark(): boolean {
+	const [dark, setDark] = useState(() => matchMedia("(prefers-color-scheme: dark)").matches);
+	useEffect(() => {
+		const query = matchMedia("(prefers-color-scheme: dark)");
+		const change = () => setDark(query.matches);
+		query.addEventListener("change", change);
+		return () => query.removeEventListener("change", change);
+	}, []);
+	return dark;
+}
+
 function Workplace() {
 	const world = useSyncExternalStore(store.subscribe, store.get);
-	const [dark, setDark] = useState(() => {
-		try {
-			const saved = localStorage.getItem("workplace-appearance");
-			if (saved) return saved === "dark";
-		} catch {
-			/* Storage can be disabled; the switch still works for this window. */
-		}
-		return matchMedia("(prefers-color-scheme: dark)").matches;
+	const [mode, setModeState] = useState<AppearanceMode>(() => {
+		const saved = stored("workplace-appearance");
+		return saved === "dark" || saved === "light" ? saved : "system";
 	});
-	const toggleAppearance = () => {
-		setDark(!dark);
-		try {
-			localStorage.setItem("workplace-appearance", dark ? "light" : "dark");
-		} catch {
-			/* An unavailable preference store does not block changing appearance. */
-		}
+	const systemDark = useSystemDark();
+	const dark = mode === "system" ? systemDark : mode === "dark";
+	const setMode = (next: AppearanceMode) => {
+		setModeState(next);
+		remember("workplace-appearance", next === "system" ? null : next);
 	};
+	const toggleAppearance = () => setMode(dark ? "light" : "dark");
+	const [themeId, setThemeId] = useState(() => stored("workplace-theme") ?? DEFAULT_THEME);
+	const theme = themeOf(themeId);
+	const setTheme = (id: string) => {
+		setThemeId(id);
+		remember("workplace-theme", id === DEFAULT_THEME ? null : id);
+	};
+	// The house theme is the palette workplace.css writes; every other theme sets the variables on the app.
+	const themeStyle = useMemo(
+		() =>
+			theme.id === DEFAULT_THEME
+				? undefined
+				: (themeVariables(dark ? theme.dark : theme.light, dark) as React.CSSProperties),
+		[theme, dark],
+	);
 	const initialView = new URLSearchParams(location.search).get("workplace");
 	const [view, setView] = useState(
-		["org", "mail", "code", "issues", "world"].includes(initialView ?? "") ? (initialView ?? "chat") : "chat",
+		["org", "mail", "code", "issues", "world", "settings"].includes(initialView ?? "")
+			? (initialView ?? "chat")
+			: "chat",
 	);
 	const [orgVisited, setOrgVisited] = useState(initialView === "org");
 	const [codeVisited, setCodeVisited] = useState(initialView === "code");
@@ -197,6 +239,20 @@ function Workplace() {
 		history.replaceState(null, "", "?workplace=chat");
 	};
 	const unread = world ? inboxThreads(world).reduce((sum, thread) => sum + thread.unread, 0) : 0;
+	const openMenu = useWorkplaceMenu();
+	const themeMenu = [
+		...THEMES.map((each) => ({
+			label: `${each.id === theme.id ? "\u2713 " : ""}${each.name}`,
+			onSelect: () => setTheme(each.id),
+		})),
+		{
+			label: "All themes and settings\u2026",
+			onSelect: () => {
+				setView("settings");
+				history.replaceState(null, "", "?workplace=settings");
+			},
+		},
+	];
 	const silenced = new Set(muted.use().map((item) => item.key));
 	const unreadChat = world
 		? world.characters.filter((person) => person.facts?.unseen && !silenced.has(`dm:${person.id}`)).length +
@@ -206,6 +262,8 @@ function Workplace() {
 		<div
 			className={`wp-app wp-${["org", "code", "issues"].includes(view) ? `${view}-view` : view}`}
 			data-appearance={dark ? "dark" : "light"}
+			data-theme={theme.id}
+			style={themeStyle}
 		>
 			<nav className="wp-rail" aria-label="Applications">
 				<span className="wp-brand" aria-hidden="true">
@@ -291,13 +349,29 @@ function Workplace() {
 					className="wp-appearance-toggle"
 					aria-label="Theme: dark mode"
 					aria-pressed={dark}
-					title={dark ? "Switch to light mode" : "Switch to dark mode"}
+					title={`${theme.name}: ${dark ? "switch to light" : "switch to dark"}. Right-click for themes.`}
 					onClick={toggleAppearance}
+					onContextMenu={(event) => openMenu(event, themeMenu)}
+					onKeyDown={(event) => openMenu(event, themeMenu)}
 				>
 					<span className="wp-rail-icon">
 						<Icon name={dark ? "sun" : "moon"} />
 					</span>
 					Theme
+				</button>
+				<button
+					type="button"
+					aria-label="Settings"
+					aria-pressed={view === "settings"}
+					onClick={() => {
+						setView("settings");
+						history.replaceState(null, "", "?workplace=settings");
+					}}
+				>
+					<span className="wp-rail-icon">
+						<Icon name="settings" />
+					</span>
+					Settings
 				</button>
 				<button
 					type="button"
@@ -336,7 +410,9 @@ function Workplace() {
 											? "Issues"
 											: view === "world"
 												? "World"
-												: "Mail"}
+												: view === "settings"
+													? "Settings"
+													: "Mail"}
 						</span>
 					</strong>
 					<button
@@ -399,6 +475,9 @@ function Workplace() {
 									<div hidden={view !== "issues"}>
 										<WorkplaceIssues world={world} active={view === "issues"} openDM={openDM} />
 									</div>
+								)}
+								{view === "settings" && (
+									<WorkplaceSettings theme={theme} setTheme={setTheme} mode={mode} setMode={setMode} dark={dark} />
 								)}
 								{worldVisited && (
 									<div hidden={view !== "world"}>

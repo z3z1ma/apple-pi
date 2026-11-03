@@ -61,7 +61,7 @@
 .wp-issues-confirm .wp-issues-primary {
 	border-color: var(--wp-green);
 	background: var(--wp-green);
-	color: #fff;
+	color: var(--wp-on-green);
 	font-weight: 600;
 }
 .wp-issues-toolbar {

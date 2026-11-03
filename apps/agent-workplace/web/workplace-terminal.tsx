@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { TerminalEvent, TerminalSession } from "../src/terminal.js";
 import { Icon } from "./workplace-icon.js";
 import { usePaneResize } from "./workplace-resize.js";
+import { DEFAULT_THEME, themeOf } from "./workplace-themes.js";
 import "./workplace-terminal.css";
 
 type Exit = Extract<TerminalEvent, { type: "exit" }>;
@@ -31,6 +32,17 @@ const terminalTheme = {
 	black: "#444c56",
 } satisfies ITheme;
 
+/**
+ * A new terminal's colors: the dark variant of the Workplace theme in use when it opens (the house theme keeps the
+ * palette above). Ghostty takes colors only at construction, so a running terminal keeps the ones it opened with.
+ */
+function openingTheme(element: Element | null): ITheme {
+	const id = element?.closest<HTMLElement>("[data-theme]")?.dataset.theme;
+	if (!id || id === DEFAULT_THEME) return terminalTheme;
+	const { bg, text } = themeOf(id).dark;
+	return { ...terminalTheme, background: bg, foreground: text, cursor: text, white: text };
+}
+
 function TerminalView({
 	id,
 	root,
@@ -43,6 +55,7 @@ function TerminalView({
 	onStatus: (id: string, patch: Partial<SessionView>) => void;
 }) {
 	const host = useRef<HTMLDivElement>(null);
+	const [opening] = useState(() => openingTheme(document.querySelector(".wp-app")));
 	const shown = useRef(visible);
 	shown.current = visible;
 	const layout = useRef<() => void>(() => {});
@@ -71,7 +84,7 @@ function TerminalView({
 					ghostty,
 					fontSize: 13,
 					fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
-					theme: terminalTheme,
+					theme: opening,
 					cursorBlink: false,
 				});
 				terminal = term;
@@ -162,13 +175,11 @@ function TerminalView({
 			terminal?.dispose();
 			if (started) void api.close({ id }).catch(console.error);
 		};
-	}, [id, root, onStatus]);
+	}, [id, root, onStatus, opening]);
 	useEffect(() => {
 		if (visible) layout.current();
 	}, [visible]);
-	return (
-		<div ref={host} className="wp-terminal-host" style={{ background: terminalTheme.background }} hidden={!visible} />
-	);
+	return <div ref={host} className="wp-terminal-host" style={{ background: opening.background }} hidden={!visible} />;
 }
 
 export function WorkplaceTerminal({

@@ -28,7 +28,7 @@
 	border: 0;
 	border-radius: 8px;
 	background: var(--wp-green);
-	color: #fff;
+	color: var(--wp-on-green);
 	font-size: 13px;
 	font-weight: 650;
 }
@@ -279,7 +279,7 @@
 	padding: 1px 6px;
 	border-radius: 9px;
 	background: var(--wp-accent);
-	color: #fff;
+	color: var(--wp-on-accent);
 	font-size: 10px;
 	text-align: center;
 }

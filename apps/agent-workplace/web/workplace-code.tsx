@@ -296,10 +296,19 @@ export function WorkplaceCode({
 					.getPropertyValue(name)
 					.trim()
 					.replace(/^#([\da-f])([\da-f])([\da-f])$/i, "#$1$1$2$2$3$3");
+			const token = (name: string) => color(name).replace(/^#/, "");
 			loaded.monaco.editor.defineTheme("workplace-code", {
 				base,
 				inherit: true,
-				rules: [],
+				// Syntax in the Workplace theme's own colors.
+				rules: [
+					{ token: "comment", foreground: token("--wp-muted"), fontStyle: "italic" },
+					{ token: "keyword", foreground: token("--wp-accent") },
+					{ token: "string", foreground: token("--wp-positive") },
+					{ token: "number", foreground: token("--wp-warning") },
+					{ token: "type", foreground: token("--wp-link") },
+					{ token: "regexp", foreground: token("--wp-code-text") },
+				],
 				colors: {
 					"editor.background": color("--wp-bg"),
 					"editor.foreground": color("--wp-text"),
@@ -314,7 +323,7 @@ export function WorkplaceCode({
 		};
 		updateTheme();
 		const observer = new MutationObserver(updateTheme);
-		if (app) observer.observe(app, { attributes: true, attributeFilter: ["data-appearance"] });
+		if (app) observer.observe(app, { attributes: true, attributeFilter: ["data-appearance", "data-theme"] });
 		const created = loaded.monaco.editor.create(host, {
 			model: null,
 			automaticLayout: true,

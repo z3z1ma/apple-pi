@@ -52,7 +52,7 @@
 }
 .wp-org .wp-org-primary {
 	border-color: transparent;
-	color: #fff;
+	color: var(--wp-on-green);
 	background: var(--wp-green);
 	font-weight: 650;
 }

@@ -1,0 +1,139 @@
+/* Settings (workplace-settings.tsx): appearance and connections. */
+
+/* Not `.wp-settings`: the shell gives the app that class while Settings is open. */
+.wp-settings-page {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	min-width: 0;
+	min-height: 0;
+	height: 100%;
+	background: var(--wp-bg);
+}
+.wp-settings-header {
+	flex: none;
+	padding: 18px 32px 14px;
+	border-bottom: 1px solid var(--wp-border);
+}
+.wp-app .wp-settings-header h1 {
+	font-size: 20px;
+	font-weight: 750;
+}
+.wp-settings-body {
+	flex: 1;
+	min-height: 0;
+	padding: 24px 32px 48px;
+	overflow-y: auto;
+}
+.wp-settings-section {
+	max-width: 1080px;
+	margin-bottom: 36px;
+}
+.wp-settings-section > header {
+	margin-bottom: 14px;
+}
+.wp-app .wp-settings-section h2 {
+	font-size: 15px;
+	font-weight: 700;
+}
+.wp-app .wp-settings-section > header p {
+	margin-top: 2px;
+	color: var(--wp-muted);
+	font-size: 13px;
+}
+.wp-settings-mode {
+	margin-bottom: 16px;
+}
+.wp-theme-grid {
+	min-width: 0;
+	margin: 0;
+	padding: 0;
+	border: 0;
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+	gap: 14px;
+}
+.wp-app .wp-theme-card {
+	display: grid;
+	gap: 8px;
+	padding: 8px;
+	border: 1px solid var(--wp-border);
+	border-radius: 10px;
+	background: var(--wp-panel);
+	color: var(--wp-text);
+	text-align: left;
+	cursor: pointer;
+}
+.wp-app .wp-theme-card:focus-within {
+	outline: 2px solid var(--wp-accent);
+	outline-offset: 2px;
+}
+.wp-app .wp-theme-card:hover {
+	border-color: color-mix(in srgb, var(--wp-accent) 50%, var(--wp-border));
+}
+.wp-app .wp-theme-card[data-checked="true"] {
+	border-color: var(--wp-accent);
+	box-shadow: 0 0 0 2px var(--wp-accent);
+}
+.wp-theme-preview {
+	display: flex;
+	height: 96px;
+	overflow: hidden;
+	border-radius: 6px;
+	box-shadow: inset 0 0 0 1px #0000001a;
+}
+.wp-theme-rail {
+	flex: none;
+	width: 14px;
+}
+.wp-theme-side {
+	display: flex;
+	flex: none;
+	flex-direction: column;
+	gap: 6px;
+	width: 34%;
+	padding: 10px 8px;
+	border-right: 1px solid;
+}
+.wp-theme-side i,
+.wp-theme-main i {
+	display: block;
+	height: 5px;
+	border-radius: 3px;
+	opacity: 0.85;
+}
+.wp-theme-side i:first-child {
+	opacity: 1;
+}
+.wp-theme-main {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	gap: 7px;
+	padding: 12px 10px;
+}
+.wp-theme-actions {
+	display: flex;
+	gap: 5px;
+	margin-top: auto;
+}
+.wp-theme-actions b {
+	width: 22px;
+	height: 9px;
+	border-radius: 3px;
+}
+.wp-theme-name {
+	display: grid;
+	padding: 0 2px 2px;
+}
+.wp-theme-name strong {
+	font-size: 13px;
+	font-weight: 650;
+}
+.wp-theme-name small {
+	overflow: hidden;
+	color: var(--wp-muted);
+	font-size: 11px;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}

@@ -269,7 +269,7 @@
 .wp-app .wp-button-primary {
 	border-color: transparent;
 	background: var(--wp-accent);
-	color: var(--wp-bg);
+	color: var(--wp-on-accent);
 }
 .wp-app .wp-button-primary:hover:not(:disabled) {
 	background: color-mix(in srgb, var(--wp-accent) 86%, var(--wp-text));
@@ -432,7 +432,7 @@
 	:is(.wp-person-confirm, .wp-org-primary, .wp-issues-primary) {
 	border-color: transparent;
 	background: var(--wp-accent);
-	color: var(--wp-bg);
+	color: var(--wp-on-accent);
 }
 .wp-app
 	:is(.wp-person-dialog footer, .wp-org-move-dialog > div, .wp-issues-confirm > div)

@@ -1129,3 +1129,41 @@ test("Without a desk, Chat offers to open one with the root coordinator", { time
 		await page.close();
 	}
 });
+
+test("a theme from Settings repaints the whole app, in light and dark, and stays chosen", {
+	timeout: 30_000,
+}, async () => {
+	const { page, errors } = await openDesk("light");
+	const palette = () =>
+		page.evaluate(() => {
+			const app = document.querySelector<HTMLElement>(".wp-app")!;
+			const style = getComputedStyle(app);
+			return {
+				theme: app.dataset.theme,
+				bg: style.getPropertyValue("--wp-bg").trim(),
+				body: getComputedStyle(document.querySelector(".wp-rail")!).backgroundColor,
+			};
+		});
+	try {
+		await page.getByRole("heading", { name: "Desk", exact: true }).waitFor();
+		await page.getByRole("button", { name: "Settings", exact: true }).click();
+		const themes = page.getByRole("group", { name: "Theme", exact: true });
+		await themes.getByText("Gruvbox", { exact: true }).click();
+		expect(await palette()).toMatchObject({ theme: "gruvbox", bg: "#fbf1c7", body: "rgb(60, 56, 54)" });
+		expect(await themes.getByRole("radio", { name: "Gruvbox", exact: true }).isChecked()).toBe(true);
+		await page.getByRole("button", { name: "Dark", exact: true }).click();
+		expect(await palette()).toMatchObject({ theme: "gruvbox", bg: "#282828" });
+		await shot(page, "settings-gruvbox-dark");
+		await page.reload();
+		await page.getByRole("heading", { name: "Settings", exact: true }).waitFor();
+		expect((await palette()).theme).toBe("gruvbox");
+		await page.getByRole("button", { name: "Theme: dark mode", exact: true }).click({ button: "right" });
+		await page.getByRole("menuitem", { name: "Slacker", exact: true }).click();
+		expect((await palette()).theme).toBe("slacker");
+		await themes.getByText("Workplace", { exact: true }).click();
+		expect((await page.locator(".wp-app").getAttribute("style")) ?? "").toBe("");
+		expect(errors).toEqual([]);
+	} finally {
+		await page.close();
+	}
+});

@@ -38,6 +38,8 @@ body.workplace {
 	--wp-plum: #35213e;
 	--wp-rail: #291831;
 	--wp-shadow: 0 8px 40px #21132924;
+	--wp-on-accent: #fff;
+	--wp-on-green: #fff;
 	color-scheme: light;
 	color: var(--wp-text);
 	background: var(--wp-bg);
@@ -67,6 +69,8 @@ body.workplace {
 	--wp-plum: #241c2c;
 	--wp-rail: #18151d;
 	--wp-shadow: 0 8px 40px #0006;
+	--wp-on-accent: #1b1d21;
+	--wp-on-green: #fff;
 	color-scheme: dark;
 }
 .wp-app,
@@ -105,7 +109,7 @@ body.workplace {
 .wp-app button.wp-icon-button.wp-code-save:not(:disabled) {
 	background: var(--wp-accent);
 	border-color: var(--wp-accent);
-	color: #fff;
+	color: var(--wp-on-accent);
 }
 .wp-app button:disabled {
 	cursor: default;
@@ -914,7 +918,7 @@ body.workplace {
 .wp-app button.wp-primary {
 	border-radius: 6px;
 	background: var(--wp-green);
-	color: white;
+	color: var(--wp-on-green);
 	font-size: 12px;
 	padding: 8px 14px;
 	font-weight: 550;
@@ -1499,7 +1503,7 @@ body.workplace {
 }
 .wp-session .aw-conv-act-bar > .aw-cta:last-child {
 	background: var(--wp-green);
-	color: white;
+	color: var(--wp-on-green);
 	font-weight: 550;
 }
 .wp-session .aw-conv-act-bar > .aw-cta-danger {
