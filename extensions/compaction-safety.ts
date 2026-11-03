@@ -45,7 +45,6 @@ function installAutomaticFailureGate(): void {
 	Object.defineProperty(prototype, AUTO_COMPACTION_FAILURE_GATE, { value: true });
 }
 
-/** Stop the active continuation when Pi cannot complete automatic compaction. */
 export default function compactionSafety(pi: ExtensionAPI): void {
 	installAutomaticFailureGate();
 	pi.on("session_compact_failed", (event, ctx) => {

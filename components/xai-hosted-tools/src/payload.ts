@@ -13,10 +13,6 @@ function toolType(tool: unknown): unknown {
 	return typeof tool === "object" && tool !== null ? (tool as { type?: unknown }).type : undefined;
 }
 
-/**
- * Add xAI's built-in Responses web_search and x_search tools when the selected
- * model is on that provider and API. Completions-routed xAI models are left unchanged.
- */
 export function applyXaiHostedTools(payload: unknown, model: XaiHostedToolsModelRef | null | undefined): unknown {
 	if (!isXaiResponsesModel(model) || payload === null || typeof payload !== "object") {
 		return undefined;

@@ -127,7 +127,6 @@ export async function runIntern(
 			});
 			const abort = () => {
 				aborted = true;
-				// Pi's SIGTERM handler stops its detached tool processes before disposing the session.
 				child.kill("SIGTERM");
 			};
 			if (signal.aborted) abort();

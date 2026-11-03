@@ -36,7 +36,6 @@ function configPath(): string {
 	return join(getAgentDir(), "vroom.json");
 }
 
-/** Pre-rename path. Read as a one-time fallback so upgrading does not silently disable an existing toggle. */
 function legacyConfigPath(): string {
 	return join(getAgentDir(), "codex-fast.json");
 }
@@ -52,7 +51,6 @@ async function readFastModeState(path: string): Promise<boolean | undefined> {
 	}
 }
 
-/** The provider display name when the active model supports priority service tier, or undefined otherwise. */
 function activeProviderLabel(ctx: ExtensionContext): string | undefined {
 	const provider = ctx.model?.provider;
 	return typeof provider === "string" ? PROVIDER_LABELS[provider] : undefined;
@@ -131,8 +129,6 @@ export function registerVroom(pi: ExtensionAPI, storage: FastModeStorage = globa
 				ctx.ui.notify("Usage: /fast", "error");
 				return;
 			}
-			// Command handlers can run while the agent is streaming. Serialize rapid
-			// toggles, but publish the first transition to memory immediately.
 			if (pendingSave) await pendingSave.catch(() => undefined);
 			await setEnabled(!enabled, ctx);
 		},
@@ -151,9 +147,6 @@ export function registerVroom(pi: ExtensionAPI, storage: FastModeStorage = globa
 	pi.on("model_select", (_event, ctx) => updateStatus(ctx));
 
 	pi.on("before_provider_request", async (event, ctx) => {
-		// Every session that loads fast mode refreshes the shared setting before
-		// each request. A mid-turn toggle therefore affects its next continuation,
-		// including sessions that were already running when the setting changed.
 		if (!pendingSave) {
 			try {
 				const stored = await storage.load();

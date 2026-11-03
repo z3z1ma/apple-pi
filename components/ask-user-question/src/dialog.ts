@@ -1,27 +1,27 @@
 import type { Theme } from "@earendil-works/pi-coding-agent";
 import {
+	type Component,
 	Editor,
 	type EditorTheme,
+	type Focusable,
+	isKeyRelease,
 	Key,
+	type KeybindingsManager,
 	matchesKey,
 	Text,
-	type Component,
-	type Focusable,
-	type KeybindingsManager,
 	type TUI,
-	isKeyRelease,
 	visibleWidth,
 	wrapTextWithAnsi,
 } from "@earendil-works/pi-tui";
 
 import {
+	type AskUserQuestionParams,
 	CUSTOM_ANSWER_LABEL,
 	FINISH_MULTI_SELECT_LABEL,
-	questionHeader,
-	type AskUserQuestionParams,
 	type Question,
 	type QuestionAnswer,
 	type QuestionnaireResult,
+	questionHeader,
 } from "./types.js";
 
 type AnswerMap = Map<number, QuestionAnswer>;
@@ -35,7 +35,6 @@ function singleLine(text: string): string {
 	return text.replace(/\s+/g, " ").trim();
 }
 
-/** Interactive tabbed questionnaire used by the model-facing tool. */
 export class QuestionnaireDialog implements Component, Focusable {
 	private readonly questions: readonly Question[];
 	private readonly answers: AnswerMap = new Map();

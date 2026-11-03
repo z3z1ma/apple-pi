@@ -14,7 +14,6 @@ import { setSystemPromptSection } from "../components/shared/src/system-prompt-s
 export { addLedgerTask, transitionLedgerTask } from "../components/shared/src/ledger-files.js";
 export const LEDGER_EXTENSION_PATH = fileURLToPath(import.meta.url);
 
-/** Record task lifecycle and caller participation, unless session state is off or has never run here. */
 async function recordInRuntime(
 	ctx: ExtensionContext,
 	command: Extract<Command, { kind: "task_opened" | "task_moved" }>,

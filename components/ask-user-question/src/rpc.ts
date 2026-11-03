@@ -1,10 +1,10 @@
 import {
-	CUSTOM_ANSWER_LABEL,
-	questionHeader,
 	type AskUserQuestionParams,
+	CUSTOM_ANSWER_LABEL,
 	type Question,
 	type QuestionAnswer,
 	type QuestionnaireResult,
+	questionHeader,
 } from "./types.js";
 
 export interface QuestionnaireDialogUI {
@@ -91,7 +91,6 @@ async function askMulti(
 	return { ...answerBase(question, questionIndex), kind: "custom", answer: trimmed };
 }
 
-/** Walk a questionnaire through RPC/ACP hosts' native select/input dialogs. */
 export async function runRpcQuestionnaire(
 	ui: QuestionnaireDialogUI,
 	params: AskUserQuestionParams,

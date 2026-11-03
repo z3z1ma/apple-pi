@@ -27,7 +27,6 @@ const NO_UI_MESSAGE =
 const NO_CUSTOM_UI_MESSAGE =
 	"The questionnaire was not shown because this client cannot render it. Ask the questions as ordinary chat text instead.";
 
-/** Answers sent from outside the terminal, in the shape the dialog produces, or why they do not fit the questions. */
 function answersFromReplies(params: AskUserQuestionParams, replies: QuestionnaireReply[]): QuestionAnswer[] | string {
 	if (replies.length !== params.questions.length)
 		return `expected ${params.questions.length} answers, got ${replies.length}`;
@@ -133,7 +132,6 @@ export function registerAskUserQuestionTool(pi: ExtensionAPI): void {
 			}
 			if (signal?.aborted) return buildQuestionnaireToolResult({ answers: [], cancelled: true });
 
-			// An answer from outside the terminal closes the dialog and replaces its result.
 			let closed = false;
 			let replied: QuestionAnswer[] | undefined;
 			let markClosed: () => void = () => {};
@@ -146,7 +144,6 @@ export function registerAskUserQuestionTool(pi: ExtensionAPI): void {
 				questions: typed.questions,
 				closed: whenClosed,
 				answer: (replies) => {
-					// An abort may have ended the dialog already, before its result arrived here.
 					if (closed || signal?.aborted) return "the questionnaire is already closed";
 					const answers = answersFromReplies(typed, replies);
 					if (typeof answers === "string") return answers;

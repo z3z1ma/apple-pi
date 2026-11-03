@@ -30,10 +30,6 @@ function execRtkRewrite(
 	});
 }
 
-/**
- * Call `rtk rewrite <command>`.
- * Returns the rewritten command string, or null if unrewritten / RTK unavailable.
- */
 export async function rewriteCommand(command: string, options?: RewriteOptions): Promise<string | null> {
 	options?.signal?.throwIfAborted();
 	if (!command || typeof command !== "string" || !command.trim()) {
@@ -63,7 +59,6 @@ export async function rewriteCommand(command: string, options?: RewriteOptions):
 		return null;
 	} catch {
 		options?.signal?.throwIfAborted();
-		// Fail-open: never block or throw on unexpected rewrite errors
 		return null;
 	}
 }

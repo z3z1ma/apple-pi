@@ -24,7 +24,6 @@ export async function probeRtk(options?: { signal?: AbortSignal }): Promise<RtkS
 		return cachedStatus;
 	}
 
-	// Off unless the operator opts in: RTK's compact output replaces the colors and layout Bash's terminal gives.
 	if (process.env.RTK_ENABLED !== "1") {
 		cachedStatus = { available: false };
 		return cachedStatus;
@@ -51,7 +50,6 @@ export async function probeRtk(options?: { signal?: AbortSignal }): Promise<RtkS
 			return cachedStatus;
 		}
 
-		// Non-standard version output format; fallback to available if binary ran
 		cachedStatus = { available: true, version: rawVersion || undefined };
 		return cachedStatus;
 	} catch {

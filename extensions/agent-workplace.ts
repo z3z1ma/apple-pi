@@ -10,15 +10,12 @@ import {
 
 const STATUS = "agent-workplace";
 
-/** The status line for each install step. */
 function stepText(step: InstallStep): string {
 	if (step.stage === "installing") return `Agent Workplace: installing Electron ${ELECTRON_VERSION} with npm...`;
 	if (step.stage === "unpacking") return "Agent Workplace: unpacking Electron...";
 	return `Agent Workplace: downloading Electron ${ELECTRON_VERSION}...${step.percent === null ? "" : ` ${step.percent}%`}`;
 }
 
-// `/workplace` opens Agent Workplace (apps/agent-workplace/), installing Electron on first use. The install shows its steps in
-// the status line; a failed one says why and leaves nothing behind, so `/workplace` again retries from the start.
 export default function agentWorkplace(pi: ExtensionAPI) {
 	let installing: Promise<string> | undefined;
 	pi.registerCommand("workplace", {

@@ -7,7 +7,6 @@ import { isRtkAvailable, parseSemver, probeRtk, resetRtkCache, rewriteCommand } 
 const hasRtk = spawnSync("rtk", ["--version"]).status === 0;
 const itWithRtk = (name: string, fn: () => Promise<void>) => (hasRtk ? it : it.skip)(`${name} (needs rtk on PATH)`, fn);
 
-// RTK is opt-in; these tests run with it enabled unless a test turns it off.
 const originalEnabled = process.env.RTK_ENABLED;
 beforeEach(() => {
 	resetRtkCache();
@@ -70,12 +69,10 @@ describe("RTK detector", () => {
 	it("caches probe result until resetRtkCache is called", async () => {
 		const first = await probeRtk();
 		delete process.env.RTK_ENABLED;
-		// Cached result should still return available
 		const second = await probeRtk();
 		expect(second).toBe(first);
 
 		resetRtkCache();
-		// Now it should re-probe and see RTK switched off
 		const third = await probeRtk();
 		expect(third.available).toBe(false);
 	});
@@ -155,7 +152,6 @@ describe("Terse tools RTK bullet rendering", () => {
 		);
 		expect(lineRtk).toContain("▲");
 		expect(lineRtk).not.toContain("●");
-		// Also verify command is clean (git status)
 		expect(lineRtk).toContain("git status");
 	});
 });

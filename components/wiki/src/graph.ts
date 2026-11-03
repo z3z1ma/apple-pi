@@ -126,7 +126,6 @@ async function readNonSymlinkFile(
 	}
 }
 
-/** Resolve the nearest Git worktree root, or retain the current project directory outside Git. */
 export async function findWikiProjectRoot(start: string, signal?: AbortSignal): Promise<string> {
 	signal?.throwIfAborted();
 	const initial = await realpath(resolve(start));
@@ -146,7 +145,6 @@ function maskInlineCode(
 	line: string,
 	delimiterLength = 0,
 ): { line: string; visibleLine: string; delimiterLength: number } {
-	// split("") retains UTF-16 width, so RegExp match indices remain source columns.
 	const chars = line.split("");
 	const visibleChars = line.split("");
 	let index = 0;
@@ -177,7 +175,6 @@ function normalizeHeadingText(value: string): string {
 }
 
 function fenceMatch(line: string): RegExpExecArray | null {
-	// Obsidian accepts fenced code in blockquotes and immediately after list markers.
 	const container = "(?: {0,3}>[ \\t]?| {0,3}(?:[-+*]|\\d+[.)])[ \\t]+)*";
 	return new RegExp(`^${container} {0,3}(\`{3,}|~{3,})`).exec(line);
 }
@@ -416,7 +413,6 @@ async function loadWikiGraph(start: string, signal?: AbortSignal): Promise<WikiG
 	for (const page of pages) {
 		for (const link of page.links) {
 			const slugMatches = pagesBySlug.get(slugKey(link.target)) ?? [];
-			// A dotted Obsidian target is an attachment only when it cannot name a real page.
 			if (slugMatches.length === 0 && extname(link.target) && extname(link.target).toLowerCase() !== ".md") continue;
 			linkCount += 1;
 			const matches = !link.target && link.hasFragment && link.fragment ? [page] : slugMatches;
@@ -497,7 +493,6 @@ export async function lintWiki(start: string, signal?: AbortSignal): Promise<Wik
 	};
 }
 
-/** Whether each Obsidian link target names a wiki page, for checking links from outside `.wiki/`. */
 export async function wikiPageExists(start: string, signal?: AbortSignal): Promise<(target: string) => boolean> {
 	const graph = await loadWikiGraph(start, signal);
 	const keys = new Set(graph.pages.map((page) => page.key));

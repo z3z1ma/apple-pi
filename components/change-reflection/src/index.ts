@@ -39,7 +39,6 @@ function describeRun(toolName: string, input: Record<string, unknown>, isError: 
 	return `\`${label}\`${status}`;
 }
 
-/** What ran after each code path's last change, so claims can be checked against it. */
 function runsAfterChanges(code: readonly string[], runsAfter: ReadonlyMap<string, readonly string[]>): string {
 	const groups = new Map<string, string[]>();
 	for (const path of code) {
@@ -82,11 +81,6 @@ export function reflectionPrompt(paths: readonly string[], runsAfter: ReadonlyMa
 	].join("\n\n");
 }
 
-/**
- * Paths changed by successful built-in `edit`/`write` calls, in first-change order, each with what
- * ran after its last change. Tool calls made inside a forked continuation are not the agent's own.
- * The caller clears it when its reflection window ends.
- */
 export function trackChanges(pi: ExtensionAPI): Map<string, string[]> {
 	const changed = new Map<string, string[]>();
 	pi.on("session_start", () => changed.clear());

@@ -1,4 +1,3 @@
-/** Recognizes complete non-ping SSE events without retaining event data. */
 export class SseProgress {
 	private readonly decoder = new TextDecoder();
 	private field: string | null = "";
