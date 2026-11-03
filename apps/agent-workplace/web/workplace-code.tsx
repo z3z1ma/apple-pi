@@ -317,6 +317,17 @@ export function WorkplaceCode({
 					"editor.selectionBackground": color("--wp-selected"),
 					"editorCursor.foreground": color("--wp-accent"),
 					"editor.lineHighlightBackground": color("--wp-panel"),
+					"editorWidget.background": color("--wp-panel"),
+					"editorWidget.border": color("--wp-border"),
+					"menu.background": color("--wp-panel"),
+					"menu.foreground": color("--wp-text"),
+					"menu.border": color("--wp-border"),
+					"menu.selectionBackground": color("--wp-selected"),
+					"menu.selectionForeground": color("--wp-text"),
+					"quickInput.background": color("--wp-panel"),
+					"quickInput.foreground": color("--wp-text"),
+					"quickInputList.focusBackground": color("--wp-selected"),
+					"quickInputList.focusForeground": color("--wp-text"),
 				},
 			});
 			loaded.monaco.editor.setTheme("workplace-code");
@@ -326,6 +337,7 @@ export function WorkplaceCode({
 		if (app) observer.observe(app, { attributes: true, attributeFilter: ["data-appearance", "data-theme"] });
 		const created = loaded.monaco.editor.create(host, {
 			model: null,
+			useShadowDOM: false,
 			automaticLayout: true,
 			minimap: { enabled: false },
 			fontSize: 13,

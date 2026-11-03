@@ -725,6 +725,12 @@ test("word wrap toggles from the editor's command palette, and Files and Git can
 		await toggleWrap();
 		await vi.waitFor(async () => expect(await rows()).toBeGreaterThan(2));
 		await shot(page, "wrapped");
+		await editor(page).click({ button: "right" });
+		const menu = page.locator(".monaco-menu-container .monaco-scrollable-element").first();
+		await menu.waitFor();
+		expect(await menu.evaluate((node) => getComputedStyle(node).backgroundColor)).toMatch(/^rgb\(/);
+		await shot(page, "editor-menu");
+		await page.keyboard.press("Escape");
 		const panes = page.locator(".wp-code-panes");
 		const files = page.getByRole("complementary", { name: "Files", exact: true });
 		const git = page.getByRole("complementary", { name: "Repository changes", exact: true });
