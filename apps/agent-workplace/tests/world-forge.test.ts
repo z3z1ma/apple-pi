@@ -8,12 +8,9 @@ import type { PullRequest, PullRequestDetail } from "../src/integrations.js";
 import type { Character, CharacterFacts, WorldSnapshot } from "../src/world.js";
 import type { PlaceData } from "../web/theme.js";
 
-// Seam 2 for the forge (tickets 21-23): the committed, built world UI in headless Chrome over a fixture backend that
-// answers the integrations API (pull requests, a diff, the outside-write gate, delegation) and records every call.
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const ORIGIN = "http://localhost";
 const appDir = fileURLToPath(new URL("..", import.meta.url));
-// AGENT_WORLD_SHOTS=<dir> saves screenshots there as aw-2x-*.png.
 const SHOTS = process.env.AGENT_WORLD_SHOTS;
 const placeData = (theme: string): PlaceData =>
 	JSON.parse(readFileSync(fileURLToPath(new URL(`../themes/${theme}/places/forge.json`, import.meta.url)), "utf8"));
@@ -169,7 +166,6 @@ const DETAIL: PullRequestDetail = {
 	cut: false,
 };
 
-/** Open the world over a fixture backend; `window.calls` records what it was asked. */
 async function openWorld(first: WorldSnapshot, answers: Record<string, unknown> = {}) {
 	const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
 	const errors: string[] = [];
@@ -277,7 +273,7 @@ async function openWorld(first: WorldSnapshot, answers: Record<string, unknown> 
 	);
 	await page.goto(`${ORIGIN}/index.html?world`);
 	await vi.waitFor(async () => expect(await view(page, "avatar()")).toBeTruthy(), { timeout: 15000 });
-	await page.waitForTimeout(400); // the arrival fade
+	await page.waitForTimeout(400);
 	return { page, errors };
 }
 
@@ -313,7 +309,6 @@ async function shot(page: Page, name: string) {
 	await page.screenshot({ path: join(SHOTS, `${name}.png`), animations: "disabled" });
 }
 
-/** Travel to the forge from the Places tab, zoomed out so the whole room shows. */
 async function toForge(page: Page) {
 	await tab(page, "Places");
 	await page.getByRole("button", { name: /^(The forge|The hardware lab|The shop workshop)/ }).click();
@@ -323,7 +318,6 @@ async function toForge(page: Page) {
 	await page.waitForTimeout(800);
 }
 
-/** Talk to the forge's host: the smith's list opens. */
 async function talkToSmith(page: Page, theme = "fantasy") {
 	await clickThrough(page);
 	const [x, y] = placeData(theme).host!.at;
@@ -346,26 +340,21 @@ test("the forge lays the open pull requests on its benches in their CI state, re
 		expect(byNumber[41]).toMatchObject({ ci: "failing", art: "blade-failing" });
 		expect(byNumber[42]).toMatchObject({ ci: "running", art: "blade-running" });
 		expect(byNumber[43]).toMatchObject({ ci: "passing", art: "blade-passing" });
-		// A draft lies a little faded; one without checks wears the plain piece.
 		expect(byNumber[44].art).toBe("blade-passing");
 		expect(byNumber[44].alpha).toBeLessThan(1);
-		// Each lies on a workbench slot of the painting.
 		const slots = placeData("fantasy").overlaySlots.filter((slot) => slot.kind === "work");
 		for (const piece of pieces)
 			expect(slots.some((slot) => slot.at[0] === piece.x && slot.at[1] === piece.y)).toBe(true);
-		// Read on entering, then again on the interval while the operator stays.
 		await vi.waitFor(async () => expect((await called(page, "pullRequests")).length).toBeGreaterThanOrEqual(2), {
 			timeout: 5000,
 		});
 		await shot(page, "aw-21-forge");
-		// Hovering a piece names it on a sign.
 		const piece = byNumber[41];
 		const [sx, sy] = await screen(page, piece.x, piece.y - 0.4);
 		await page.mouse.move(sx, sy);
 		await vi.waitFor(async () => expect((await work(page)).find((p) => p.number === 41)?.sign).toBe(true));
 		await expect.poll(() => page.locator(".pointer-hover").textContent()).toContain("#41 Parse comments as tokens");
 		await shot(page, "aw-21-forge-hover");
-		// Leaving stops the reading (the Places tab is still open).
 		await page.getByRole("button", { name: /^Village square/ }).click();
 		await vi.waitFor(async () => expect(await view(page, "place()")).toBe("square"));
 		const after = (await called(page, "pullRequests")).length;
@@ -390,11 +379,9 @@ test("the smith lists every pull request with its CI, and a card shows its facts
 		expect(await rows.first().getByRole("img", { name: "CI failing" }).count()).toBe(1);
 		expect(await panel.getByRole("img", { name: "CI running" }).count()).toBeGreaterThan(0);
 		await shot(page, "aw-21-list");
-		// Search narrows the list.
 		await panel.getByRole("searchbox", { name: "Search the pull requests" }).fill("ledger");
 		await expect.poll(() => rows.count()).toBe(1);
 		await panel.getByRole("searchbox", { name: "Search the pull requests" }).fill("");
-		// A row opens the card.
 		await rows.first().getByRole("button").click();
 		const card = page.getByRole("dialog", { name: "Pull request #41" });
 		await card.waitFor();
@@ -415,7 +402,6 @@ test("the smith lists every pull request with its CI, and a card shows its facts
 		await shot(page, "aw-21-card");
 		await card.getByRole("button", { name: "Open in GitHub" }).click();
 		await expect.poll(() => called(page, "openLink")).toEqual([["openLink", LINKED.url]]);
-		// Back to the list, and Escape closes the forge.
 		await card.getByRole("button", { name: "All pull requests" }).click();
 		await panel.waitFor();
 		await page.keyboard.press("Escape");
@@ -461,7 +447,6 @@ test("looking over a piece on a bench walks up to it and opens its card", async 
 	}
 }, 60000);
 
-/** Open #41's review page from its card. */
 async function openReview(page: Page) {
 	await toForge(page);
 	const panel = await talkToSmith(page);
@@ -510,7 +495,6 @@ test("a review is sent through the gate only once confirmed as shown; declining 
 	try {
 		const review = await openReview(page);
 		const text = review.getByRole("textbox", { name: "Your review" });
-		// Comment and Request changes need words; Approve does not.
 		expect(await review.getByRole("button", { name: "Comment", exact: true }).isDisabled()).toBe(true);
 		expect(await review.getByRole("button", { name: "Request changes" }).isDisabled()).toBe(true);
 		await text.fill("Keep the comment's position too, please.");
@@ -521,19 +505,16 @@ test("a review is sent through the gate only once confirmed as shown; declining 
 		expect(shown).toContain("z3z1ma/apple-pi#41 on GitHub");
 		expect(shown).toContain("Keep the comment's position too, please.");
 		await shot(page, "aw-22-confirm");
-		// Declining sends nothing, and the draft stays.
 		await confirm.getByRole("button", { name: "Don\u2019t send" }).click();
 		await expect.poll(() => confirm.count()).toBe(0);
 		expect(await called(page, "confirmWrite")).toEqual([]);
 		expect(await text.inputValue()).toBe("Keep the comment's position too, please.");
-		// Escape while it shows declines too, and keeps the review page open.
 		await review.getByRole("button", { name: "Comment", exact: true }).click();
 		await page.getByRole("alertdialog", { name: "Comment on pull request?" }).waitFor();
 		await page.keyboard.press("Escape");
 		await expect.poll(() => page.getByRole("alertdialog").count()).toBe(0);
 		expect(await review.isVisible()).toBe(true);
 		expect(await called(page, "confirmWrite")).toEqual([]);
-		// Confirmed, it goes with the token for exactly what was shown.
 		await review.getByRole("button", { name: "Comment", exact: true }).click();
 		const comment = page.getByRole("alertdialog", { name: "Comment on pull request?" });
 		await comment.getByRole("button", { name: "Send as you" }).click();
@@ -555,7 +536,6 @@ test("a review is sent through the gate only once confirmed as shown; declining 
 		const chat = page.getByRole("log", { name: "World events" });
 		await expect.poll(async () => (await chat.textContent()) ?? "").toContain("You commented on z3z1ma/apple-pi#41");
 		expect(await text.inputValue()).toBe("");
-		// An approval needs no words.
 		await review.getByRole("button", { name: "Approve" }).click();
 		const approve = page.getByRole("alertdialog", { name: "Approve pull request?" });
 		expect(await approve.textContent()).toContain("No text");
@@ -679,19 +659,16 @@ test("pull requests beyond the benches are counted under the place's title, and 
 		await vi.waitFor(async () => expect(await view(page, "place()")).toBe("forge"), { timeout: 5000 });
 		const slots = placeData("fantasy").overlaySlots.filter((slot) => slot.kind === "work").length;
 		await vi.waitFor(async () => expect(await work(page)).toHaveLength(slots), { timeout: 5000 });
-		// At the default zoom, the count of those on the rack is in view: under the title.
 		const title = page.locator(".place-title");
 		await vi.waitFor(async () =>
 			expect(await title.textContent()).toContain(`${many.length - slots} more on the rack`),
 		);
 		await shot(page, "aw-31-forge-rack");
-		// Hovering a piece signs it; once its card opens over the world, the sign and the hover text go.
 		await clickThrough(page);
 		const piece = (await work(page))[0];
 		const [sx, sy] = await screen(page, piece.x, piece.y - 0.35);
 		await page.mouse.move(sx, sy);
 		await vi.waitFor(async () => expect((await work(page)).some((p) => p.sign)).toBe(true));
-		// The card is a panel the pointer can be over again.
 		await page.evaluate(() => {
 			for (const style of document.querySelectorAll("style"))
 				if (style.textContent?.includes("pointer-events: none !important")) style.remove();

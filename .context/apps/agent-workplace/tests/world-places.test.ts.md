@@ -1,0 +1,4 @@
+## file
+
+Places use the committed built world UI in headless Chrome with a fixture backend. One overlay sits in each slot. Wing doors close when a repository's last agent stops. Banners stitch the name itself, whole or cut to the first three or more letters plus a full stop, with an ellipsis only when nothing else fits. The cloth answers the pointer with the whole name. Panels let clicks through here, so checks look at where things are drawn. Character sheets are drawn larger than their pixels, nearest and never blurred. Furniture pieces are frames of the painting, which stays drawn whole. Fidgets are read through `fidgets()` in `world-fidgets.test.ts`. `AGENT_WORLD_SHOTS` saves `aw-04-*.png`.
+Why: a blurred scale or a banner that hid the full name would fail the operator's reading of the place.

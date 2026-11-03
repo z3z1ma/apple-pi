@@ -8,14 +8,9 @@ import type { AmbientMember, ThemeManifest } from "../src/theme-pack.js";
 import type { Character, CharacterFacts, WorldSnapshot } from "../src/world.js";
 import type { PlaceData, Point } from "../web/theme.js";
 
-// Seam 2 for ambient characters (ticket 08): the committed, built world UI in headless Chrome over a fixture backend.
-// Each pack's cast stands where its place data says, answers the pointer (Talk to, Examine), says its lines in turn in
-// the small dialogue box, reacts when clicked several times in a row, and with life on, strolls (unless posted) and
-// now and then barks.
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const ORIGIN = "http://localhost";
 const appDir = fileURLToPath(new URL("..", import.meta.url));
-// AGENT_WORLD_SHOTS=<dir> saves screenshots there as aw-ambient-*.png.
 const SHOTS = process.env.AGENT_WORLD_SHOTS;
 const THEMES = ["fantasy", "tech-office", "anime-school"] as const;
 const placeOf = (theme: string, name: string): PlaceData =>
@@ -60,7 +55,6 @@ const BRAM: Character = {
 };
 const world = (theme: string): WorldSnapshot =>
 	({ connected: true, headquarters: [], characters: [BRAM], dormant: [], mail: [], theme }) as WorldSnapshot;
-/** Two coordinators, each with its headquarters: the crew staffs both. */
 const coordinator = (id: string, name: string, n: number): Character => ({
 	id,
 	name,
@@ -82,7 +76,6 @@ const twoHeadquarters = (theme: string): WorldSnapshot =>
 		theme,
 	}) as WorldSnapshot;
 
-/** Every call the page makes to `window.agentWorkplace` (the backend), by name. */
 const calls = (page: Page) => page.evaluate(() => [...((window as any).__calls as string[])]);
 const forgetCalls = (page: Page) => page.evaluate(() => ((window as any).__calls.length = 0));
 
@@ -118,7 +111,6 @@ async function openWorld(first: WorldSnapshot, pace?: number) {
 				outsideWrites: async () => [],
 				onOutsideWrite: () => () => {},
 			};
-			// Count every call the page makes to the backend, so a test can prove a play sent nothing.
 			w.__calls = [];
 			const api = w.agentWorkplace;
 			w.agentWorkplace = new Proxy(api, {
@@ -140,7 +132,6 @@ async function openWorld(first: WorldSnapshot, pace?: number) {
 		{ timeout: 15000 },
 	);
 	await page.waitForTimeout(500);
-	// Clicks reach the world through the interface's panels (they still draw for screenshots).
 	await page.addStyleTag({ content: ".aw-interface, .aw-interface * { pointer-events: none !important; }" });
 	return { page, errors };
 }
@@ -175,14 +166,12 @@ const noticeText = (page: Page) => page.evaluate(() => document.querySelector(".
 const dist = (a: Point, b: Point) => Math.hypot(a[0] - b[0], a[1] - b[1]);
 const said = (member: AmbientMember, line: string) => `${member.name}: \u201c${line}\u201d`;
 
-/** Zoom out as far as the wheel goes, so the whole place shows. */
 async function zoomOut(page: Page) {
 	await page.mouse.move(640, 400);
 	for (let i = 0; i < 5; i++) await page.mouse.wheel(0, 500);
 	await page.waitForTimeout(900);
 }
 
-/** The middle of someone's body on screen. */
 const bodyOf = async (page: Page, id: string) => {
 	const one = (await cast(page)).find((c) => c.id === id)!;
 	return screen(page, one.x, one.y - 0.8);
@@ -195,7 +184,6 @@ async function stillAvatar(page: Page) {
 	});
 }
 
-/** Travel to a place from the Places tab, under one coordinator's heading when given, and wait to arrive. */
 async function travel(page: Page, label: string, key: string, owner?: string) {
 	if (!(await page.getByRole("tabpanel", { name: "Places" }).count()))
 		await page.getByRole("tab", { name: "Places", exact: true }).dispatchEvent("click");
@@ -233,7 +221,6 @@ describe.each(THEMES)("%s", (theme) => {
 				const placement = square.ambient!.find((e) => e.cast === one.id)!;
 				expect(one).toMatchObject({ name: members[one.id].name, look: members[one.id].look, moving: false });
 				expect([one.x, one.y]).toEqual(placement.at);
-				// The pointer over it offers Talk to first, and Examine.
 				await page.mouse.move(...(await bodyOf(page, one.id)));
 				await vi.waitFor(async () => expect(await hoverText(page)).toBe(`Talk to ${one.name} / 2 more options`), {
 					timeout: 3000,
@@ -242,7 +229,6 @@ describe.each(THEMES)("%s", (theme) => {
 			}
 			await shot(page, `aw-ambient-${theme}-square`);
 
-			// A left click talks: the avatar walks up and it says its first line, then its next.
 			const talker = here.find((c) => !c.stays)!;
 			const member = members[talker.id];
 			await page.mouse.click(...(await bodyOf(page, talker.id)));
@@ -258,7 +244,6 @@ describe.each(THEMES)("%s", (theme) => {
 			await vi.waitFor(async () => expect(await noticeText(page)).toBe(said(member, member.lines[1])), {
 				timeout: 3000,
 			});
-			// Clicked again and again: its reaction (and a gesture).
 			await page.waitForTimeout(2000);
 			for (let i = 0; i < 3; i++) {
 				await page.mouse.click(...(await bodyOf(page, talker.id)));
@@ -271,7 +256,6 @@ describe.each(THEMES)("%s", (theme) => {
 			expect(reacting.idle).toBe(member.gesture ?? "shrug");
 			await shot(page, `aw-ambient-${theme}-reaction`, talker.home);
 
-			// The menu: Talk to and Examine; Examine says what it is.
 			await page.waitForTimeout(2000);
 			await page.mouse.click(...(await bodyOf(page, talker.id)), { button: "right" });
 			const items = page.locator(".pointer-menu [role=menuitem]");
@@ -301,10 +285,8 @@ describe.each(THEMES)("%s", (theme) => {
 		try {
 			expect(await view(page, "place()")).toBe("headquarters:orla");
 			await zoomOut(page);
-			// The counter sees the page's calls (opening the world read its snapshot); only what the crew does counts.
 			expect(await calls(page)).toContain("snapshot");
 			await forgetCalls(page);
-			/** The crew here stands at home, as the place's data says, each a crew member of the pack. */
 			const atHome = async (data: PlaceData) => {
 				const here = await cast(page);
 				const homes = data.ambient ?? [];
@@ -321,7 +303,6 @@ describe.each(THEMES)("%s", (theme) => {
 			expect(inHall.length).toBeGreaterThanOrEqual(3);
 			await shot(page, `aw-hq-crew-${theme}-hall`);
 
-			// The pointer offers Talk to; a click talks (its first line), then again and again gets its reaction.
 			const talker = inHall.find((c) => !c.stays)!;
 			const member = members[talker.id];
 			await page.mouse.move(...(await bodyOf(page, talker.id)));
@@ -343,7 +324,6 @@ describe.each(THEMES)("%s", (theme) => {
 				timeout: 3000,
 			});
 			expect((await cast(page)).find((c) => c.id === talker.id)!.idle).toBe(member.gesture ?? "shrug");
-			// Examine says what it is.
 			await page.waitForTimeout(2000);
 			await page.mouse.click(...(await bodyOf(page, talker.id)), { button: "right" });
 			const items = page.locator(".pointer-menu [role=menuitem]");
@@ -353,10 +333,8 @@ describe.each(THEMES)("%s", (theme) => {
 				.first()
 				.dispatchEvent("click");
 			await vi.waitFor(async () => expect(await noticeText(page)).toBe(member.examine), { timeout: 3000 });
-			// Talking, pestering, and examining sent the backend nothing.
 			expect(await calls(page)).toEqual([]);
 
-			// The common room has its own crew, who talk there too.
 			await travel(page, manifest.labels["common-room"], "common-room:orla", "Orla");
 			await zoomOut(page);
 			const inRoom = await atHome(room);
@@ -372,7 +350,6 @@ describe.each(THEMES)("%s", (theme) => {
 			await shot(page, `aw-hq-crew-${theme}-common-room-talk`, helper.home);
 			expect(await calls(page)).toEqual([]);
 
-			// The second coordinator's headquarters has the same crew, and its common room too: the staff of any.
 			await travel(page, manifest.labels.headquarters, "headquarters:kestrel", "Kestrel");
 			await zoomOut(page);
 			await atHome(hall);

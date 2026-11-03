@@ -7,12 +7,9 @@ import { appFile, contentType } from "../src/app-files.js";
 import type { Character, CharacterFacts, DormantAgent, MailItem, WorldSnapshot } from "../src/world.js";
 import type { PlaceData } from "../web/theme.js";
 
-// Seam 2 for the rookery and mail (ticket 16): the committed, built world UI in headless Chrome over a fixture backend
-// that records the letters the operator sends and answers with receipts.
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const ORIGIN = "http://localhost";
 const appDir = fileURLToPath(new URL("..", import.meta.url));
-// AGENT_WORLD_SHOTS=<dir> saves screenshots there as aw-16-*.png.
 const SHOTS = process.env.AGENT_WORLD_SHOTS;
 const ROOKERY: PlaceData = JSON.parse(
 	readFileSync(fileURLToPath(new URL("../themes/fantasy/places/rookery.json", import.meta.url)), "utf8"),
@@ -24,7 +21,6 @@ beforeAll(async () => {
 });
 afterAll(() => browser?.close());
 
-/** Open the world over a fixture backend; `push` sends a new snapshot; `window.calls` records what it was asked. */
 async function openWorld(first: WorldSnapshot) {
 	const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
 	const errors: string[] = [];
@@ -42,7 +38,6 @@ async function openWorld(first: WorldSnapshot) {
 		let current = snapshot;
 		const w = window as any;
 		w.calls = [];
-		// What the next call of each kind answers; a test changes it before acting.
 		w.answers = {
 			wake: { ok: true, stage: "applied" },
 			endSession: { ok: true, stage: "applied" },
@@ -94,7 +89,7 @@ async function openWorld(first: WorldSnapshot) {
 	await page.goto(`${ORIGIN}/index.html?world`);
 	const push = (snapshot: WorldSnapshot) => page.evaluate((s) => (window as any).pushSnapshot(s), snapshot);
 	await vi.waitFor(async () => expect(await view(page, "avatar()")).toBeTruthy(), { timeout: 15000 });
-	await page.waitForTimeout(400); // the arrival fade
+	await page.waitForTimeout(400);
 	return { page, push, errors };
 }
 
@@ -116,7 +111,6 @@ const calls = (page: Page) => page.evaluate(() => (window as any).calls) as Prom
 const screen = (page: Page, x: number, y: number) =>
 	page.evaluate(([a, b]) => (window as any).agentWorldView.toScreen(a, b), [x, y]) as Promise<[number, number]>;
 const tab = (page: Page, name: string) => page.getByRole("tab", { name, exact: true }).click();
-/** Clicks reach the world through the interface's panels (they still draw for screenshots). */
 const clickThrough = (page: Page) =>
 	page.addStyleTag({ content: ".aw-interface, .aw-interface * { pointer-events: none !important; }" });
 
@@ -127,12 +121,10 @@ async function shot(page: Page, name: string) {
 	await page.screenshot({ path: join(SHOTS, `${name}.png`), animations: "disabled" });
 }
 
-/** Travel to a place from the Places tab, and wait until everyone is at their spot. */
 async function travel(page: Page, name: RegExp, key: string) {
 	await tab(page, "Places");
 	await page.getByRole("button", { name }).click();
 	await vi.waitFor(async () => expect(await view(page, "place()")).toBe(key), { timeout: 5000 });
-	// Zoom out with the wheel, as far as it goes, so the whole room shows.
 	await page.mouse.move(640, 300);
 	for (let i = 0; i < 4; i++) await page.mouse.wheel(0, 400);
 	await page.waitForTimeout(800);
@@ -249,7 +241,6 @@ function world(characters: Character[], mail: MailItem[] = MAIL, dormant: Dorman
 	};
 }
 
-/** Open the rookery keeper's view by talking to the keeper. */
 async function talkToKeeper(page: Page) {
 	await clickThrough(page);
 	const [x, y] = ROOKERY.host!.at;
@@ -266,7 +257,6 @@ test("the rookery keeper shows recent mail and mail waiting for sleepers, each w
 	try {
 		await travel(page, /^The rookery/, "rookery");
 		expect(await view(page, "host()")).toMatchObject({ name: "Rookery keeper", look: "rookery-keeper" });
-		// Letters lie on the sorting desk while mail waits.
 		expect((await view<{ kind: string }[]>(page, "overlays()")).map((o) => o.kind)).toContain("letters");
 		await shot(page, "aw-16-rookery");
 		const rookery = await talkToKeeper(page);
@@ -274,7 +264,6 @@ test("the rookery keeper shows recent mail and mail waiting for sleepers, each w
 		expect(await waiting.getByRole("listitem").count()).toBe(1);
 		const waitingRow = await waiting.getByRole("listitem").first().textContent();
 		for (const text of ["Orla", "sleepy", "Waiting", "rebase the docs branch"]) expect(waitingRow).toContain(text);
-		// Recent mail, newest first, without repeating what waits for sleepers.
 		const recent = rookery.getByRole("region", { name: "Recent mail" });
 		const rows = recent.getByRole("listitem");
 		expect(await rows.count()).toBe(2);
@@ -307,7 +296,6 @@ test("writing a letter mails any agent, awake or asleep, as the operator, and sh
 		expect(await calls(page)).toContainEqual(["sendMail", "parser", "Please add the comment tokens today."]);
 		await shot(page, "aw-16-letter-sent");
 
-		// To a sleeper, the receipt says it waits.
 		await page.evaluate(() => {
 			(window as any).answers.sendMail = {
 				ok: true,
@@ -345,7 +333,6 @@ test("the Mail tab lists the same traffic and writes a letter from anywhere", as
 		const rookery = page.getByRole("dialog", { name: "The rookery" });
 		await rookery.getByRole("combobox", { name: "To" }).waitFor({ timeout: 3000 });
 		expect(await view(page, "place()")).toBe(`headquarters:${HQ}`);
-		// While it is open, Tab and Shift+Tab keep to its own controls; Escape closes it and the world has the keys.
 		const inPanel = () =>
 			page.evaluate(
 				() => !!document.querySelector("[role=dialog][aria-label='The rookery']")?.contains(document.activeElement),
@@ -368,7 +355,6 @@ test("a letter between two characters here flies as a bird from sender to receiv
 	try {
 		await travel(page, /^apple-pi wing/, `wing:${HQ}:/r/apple-pi`);
 		await vi.waitFor(async () => expect((await figures(page)).every((f) => !f.moving)).toBe(true), { timeout: 8000 });
-		// Mail already known when the place opened flies no bird.
 		expect(await birds(page)).toEqual([]);
 		const fresh = letter("m4", PARSER, LEXER, "Tokens are in.", 0);
 		await push(world([ORLA, PARSER, LEXER], [fresh, ...MAIL]));
@@ -387,10 +373,9 @@ test("a letter between two characters here flies as a bird from sender to receiv
 			for (const bird of await birds(page)) frames.add(bird.frame);
 			await page.waitForTimeout(90);
 		}
-		expect(frames.size).toBeGreaterThan(1); // its wings beat
+		expect(frames.size).toBeGreaterThan(1);
 		await vi.waitFor(async () => expect(await birds(page)).toEqual([]), { timeout: 6000 });
 
-		// To Orla in the hall: it flies out through the door.
 		const away = letter("m5", LEXER, ORLA, "Done here.", 0);
 		await push(world([ORLA, PARSER, LEXER], [away, fresh, ...MAIL]));
 		await vi.waitFor(async () => expect((await birds(page)).map((b) => b.id)).toEqual(["m5"]), { timeout: 3000 });

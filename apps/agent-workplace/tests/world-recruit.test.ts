@@ -8,14 +8,9 @@ import { loadRoleChoices } from "../src/backend/roles.js";
 import type { Character, CharacterFacts, ThemeChoice, WorldSnapshot } from "../src/world.js";
 import type { PlaceData } from "../web/theme.js";
 
-// Seam 2 for recruiting (ticket 10): the committed, built world UI in headless Chrome over a fixture backend that
-// records each recruit and answers with a receipt, then pushes the snapshot with the new agent in it. In every pack,
-// the coordinator's desk (and the coordinator) recruits a worker for that coordinator, and the square's recruiter an
-// independent agent, each in the theme's own words; the form offers the package's role catalog with each mandate.
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const ORIGIN = "http://localhost";
 const appDir = fileURLToPath(new URL("..", import.meta.url));
-// AGENT_WORLD_SHOTS=<dir> saves screenshots there as aw-10-<theme>-*.png.
 const SHOTS = process.env.AGENT_WORLD_SHOTS;
 const PACKS = ["fantasy", "tech-office", "anime-school"] as const;
 const pack = (id: string) => ({
@@ -99,10 +94,8 @@ const world = (theme: string, more: Character[] = []): WorldSnapshot => ({
 });
 
 const good = (id: string, name: string): ThemeChoice => ({ id, name, description: null, problems: [] });
-/** The package's catalog, as the backend reads it (no user roles: a directory with none). */
 const ROLES = loadRoleChoices("/nonexistent");
 
-/** Open the world over a fixture backend; `window.recruits` records each recruit it was asked for. */
 async function openWorld(theme: string) {
 	const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
 	const errors: string[] = [];
@@ -153,7 +146,6 @@ async function openWorld(theme: string) {
 					w.recruits.push(request);
 					const sessionId = `new-${++made}`;
 					await new Promise((resolve) => setTimeout(resolve, 300));
-					// The runtime's bridge connects: the new session joins the world.
 					const character = {
 						id: sessionId,
 						name: request.name,
@@ -181,7 +173,7 @@ async function openWorld(theme: string) {
 		timeout: 20000,
 	});
 	await vi.waitFor(async () => expect(await view(page, "avatar()")).toBeTruthy(), { timeout: 15000 });
-	await page.waitForTimeout(500); // the arrival fade
+	await page.waitForTimeout(500);
 	return { page, errors };
 }
 
@@ -213,7 +205,6 @@ describe.each(PACKS)("%s", (id) => {
 		const { page, errors } = await openWorld(id);
 		try {
 			expect(await view(page, "place()")).toBe(`headquarters:${HQ}`);
-			// The coordinator itself offers to recruit; so does its desk, beside it.
 			await clickThrough(page);
 			const orla = (await view<{ id: string; x: number; y: number }[]>(page, "figures()")).find((f) => f.id === HQ)!;
 			const [ox, oy] = await screen(page, orla.x, orla.y - 0.8);
@@ -222,7 +213,6 @@ describe.each(PACKS)("%s", (id) => {
 				expect.arrayContaining(["Talk to Orla", "Examine Orla", say("recruit-worker")]),
 			);
 			await page.keyboard.press("Escape");
-			// The desk's corner, clear of the coordinator standing in front of it.
 			const desk = place("headquarters").furniture!.find((piece) => piece.use === "recruit")!;
 			const [sx, sy] = await screen(page, desk.rect[0] + 0.4, desk.rect[1] + desk.rect[3] - 0.3);
 			await page.mouse.click(sx, sy, { button: "right" });
@@ -234,7 +224,6 @@ describe.each(PACKS)("%s", (id) => {
 			const form = page.getByRole("dialog", { name: title });
 			await form.waitFor({ timeout: 5000 });
 			expect(await form.locator(".aw-place-says").textContent()).toContain(say("recruit-worker-greeting"));
-			// The repositories the world knows: the coordinator's wings, then awake agents', then any directory.
 			expect(await form.getByLabel("Repository").locator("option").allTextContents()).toEqual([
 				"apple-pi \u2014 /r/apple-pi",
 				"handbook \u2014 /r/handbook",
@@ -242,7 +231,6 @@ describe.each(PACKS)("%s", (id) => {
 				"Another directory\u2026",
 			]);
 			expect(await form.getByLabel("Goal").getAttribute("placeholder")).toBe(say("recruit-brief"));
-			// The role: every catalog role by title, the first chosen, its mandate under the select.
 			const role = form.getByLabel(say("recruit-role"));
 			await vi.waitFor(async () => expect(await role.locator("option").count()).toBe(ROLES.length));
 			expect(await role.locator("option").allTextContents()).toEqual(ROLES.map((offered) => offered.title));
@@ -266,7 +254,6 @@ describe.each(PACKS)("%s", (id) => {
 			]);
 			await shot(page, `aw-10-${id}-worker-receipt`);
 
-			// The new worker is in its wing: going to it walks into the wing.
 			await form.getByRole("button", { name: "Go to docs" }).click();
 			await vi.waitFor(async () => expect(await view(page, "place()")).toBe(`wing:${HQ}:/r/handbook`), {
 				timeout: 8000,
@@ -287,7 +274,6 @@ describe.each(PACKS)("%s", (id) => {
 			await page.getByRole("tab", { name: "Places", exact: true }).click();
 			await page.getByTitle(`Travel to ${manifest.labels.square}`, { exact: true }).click();
 			await vi.waitFor(async () => expect(await view(page, "place()")).toBe("square"), { timeout: 8000 });
-			// Fold the side panel, and zoom out as far as the wheel goes, so the whole square shows.
 			await page.getByRole("tab", { name: "Places", exact: true }).click();
 			await page.mouse.move(640, 300);
 			for (let i = 0; i < 4; i++) await page.mouse.wheel(0, 400);
@@ -305,12 +291,10 @@ describe.each(PACKS)("%s", (id) => {
 			);
 			await page.getByRole("menuitem", { name: `Talk to ${manifest.labels.recruiter}` }).click();
 			await clickable(page);
-			// The avatar walks across the square to the booth first.
 			const form = page.getByRole("dialog", { name: say("recruit-independent-title") });
 			await form.waitFor({ timeout: 25_000 });
 			expect(await form.locator(".aw-place-says").textContent()).toContain(say("recruit-independent-greeting"));
 			await form.getByLabel("Name").fill("scout");
-			// At the square the role may be none, and is by default.
 			const role = form.getByLabel(say("recruit-role"));
 			await vi.waitFor(async () => expect(await role.locator("option").count()).toBe(ROLES.length + 1));
 			expect((await role.locator("option").allTextContents())[0]).toBe(say("recruit-no-role"));
@@ -328,7 +312,6 @@ describe.each(PACKS)("%s", (id) => {
 				.first()
 				.waitFor();
 
-			// Closed, the square shows the new agent walking in from its door.
 			await page.keyboard.press("Escape");
 			await vi.waitFor(async () => expect(await view(page, "characters()")).toContain("scout"), { timeout: 5000 });
 			await page.waitForTimeout(500);

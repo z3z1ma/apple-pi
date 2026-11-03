@@ -6,13 +6,9 @@ import { afterAll, beforeAll, expect, test, vi } from "vitest";
 import { appFile, contentType } from "../src/app-files.js";
 import type { Character, CharacterFacts, ThemeChoice, WorldSnapshot } from "../src/world.js";
 
-// Seam 2 for theme packs: the committed, built world UI in headless Chrome against a fixture backend. A broken pack
-// fails safely (the world opens in the last good theme and says why); Settings switches theme live, changing only
-// presentation; and the same world reads the same in every theme.
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const ORIGIN = "http://localhost";
 const appDir = fileURLToPath(new URL("..", import.meta.url));
-// AGENT_WORLD_SHOTS=<dir> saves screenshots there, as aw-<ticket>-*.png.
 const SHOTS = process.env.AGENT_WORLD_SHOTS;
 
 async function shot(page: Page, name: string) {
@@ -96,10 +92,6 @@ const world = (theme?: string): WorldSnapshot => ({
 	mail: [],
 });
 
-/**
- * Open the world with a fixture backend. `themes` is what its pack check reports (left out, the backend has no list);
- * `serve` replaces files of the served packs (null answers 404), as a broken pack on disk would.
- */
 async function openWorld(
 	first: WorldSnapshot,
 	options: { themes?: ThemeChoice[]; serve?: Record<string, string | null>; lastGood?: string } = {},
@@ -112,7 +104,6 @@ async function openWorld(
 		const served = options.serve?.[path.slice(1)];
 		if (served === null) return route.fulfill({ status: 404 });
 		if (served !== undefined) return route.fulfill({ body: served, contentType: contentType(path) });
-		// A pack copied from fantasy under another name serves fantasy's files.
 		const file = appFile(appDir, path.replace(/^\/themes\/broken-[a-z]+\//, "/themes/fantasy/"));
 		if (!file || !existsSync(file)) return route.fulfill({ status: 404 });
 		await route.fulfill({ body: readFileSync(file), contentType: contentType(file) });
@@ -178,7 +169,6 @@ test("a pack with a missing file falls back to the first theme and says on scree
 		);
 		await expect(notice.textContent()).resolves.toContain("places/inn.json: is missing");
 		await shot(page, "aw-18-fallback-notice");
-		// It stays until dismissed.
 		await page.waitForTimeout(3000);
 		expect(await notice.isVisible()).toBe(true);
 		await notice.getByRole("button", { name: "Dismiss" }).click();
@@ -227,7 +217,6 @@ test("a manifest that is not JSON fails the same way", { timeout: 30_000 }, asyn
 const view = <T>(page: Page, call: string): Promise<T> =>
 	page.evaluate((c) => new Function(`return window.agentWorldView.${c}`)(), call) as Promise<T>;
 type Figure = { id: string; badge: string | null; pose: string; moving: boolean };
-/** Who is in the place and how each shows its state, once everyone stands still. */
 async function cast(page: Page) {
 	let figures: Figure[] = [];
 	await vi.waitFor(
@@ -249,7 +238,6 @@ async function travel(page: Page, title: string, place: string) {
 	await page.locator(`.aw-place .aw-row-main[title="Travel to ${title}"]`).click();
 	await vi.waitFor(async () => expect(await view(page, "place()")).toBe(place), { timeout: 10000 });
 }
-/** The icon a side-panel tab wears: the pack's SVG (its mask) or "built in" for the world's own drawing. */
 const tabIcon = (page: Page, name: string) =>
 	page.getByRole("tab", { name, exact: true }).evaluate((tab) => {
 		const icon = tab.querySelector<HTMLElement>(".aw-tab-icon");
@@ -273,14 +261,12 @@ test("Settings switches theme live: the same place, characters, states, selectio
 		await page.locator(".aw-row-main", { hasText: "pi-tests" }).click();
 		await tab(page, "Settings");
 		await shot(page, "aw-19-settings-fantasy");
-		// The tabs wear the pack's own icons where it draws one (Work and Places); the rest wear the world's own.
 		expect(await tabIcon(page, "Work")).toContain("themes/fantasy/interface/icons/work.svg");
 		expect(await tabIcon(page, "Places")).toContain("themes/fantasy/interface/icons/places.svg");
 		expect(await tabIcon(page, "Agents")).toBe("built in");
 
 		await page.locator("label", { hasText: tech.name }).click();
 		await vi.waitFor(async () => expect(await wearing(page)).toBe("tech-office"), { timeout: 10000 });
-		// Kept once worn.
 		await vi.waitFor(async () =>
 			expect(await page.evaluate(() => (window as any).chosenThemes)).toEqual(["tech-office"]),
 		);
@@ -289,19 +275,16 @@ test("Settings switches theme live: the same place, characters, states, selectio
 		});
 		expect(await cast(page)).toEqual(before);
 		await vi.waitFor(async () => expect(await title(page)).toBe(`apple-pi ${tech.labels.wing}`), { timeout: 5000 });
-		// The skin and the pack's own lines are the new theme's.
 		expect(await page.evaluate(() => document.querySelector("link.aw-theme-skin")?.getAttribute("href"))).toContain(
 			"themes/tech-office/",
 		);
 		expect(await tabIcon(page, "Work")).toContain("themes/tech-office/interface/icons/work.svg");
 		expect(await tabIcon(page, "Places")).toContain("themes/tech-office/interface/icons/places.svg");
-		// The open tab and the selection stay.
 		expect(await page.getByRole("tab", { name: "Settings", exact: true }).getAttribute("aria-selected")).toBe("true");
 		await shot(page, "aw-19-settings-tech");
 		await tab(page, "Agents");
 		await expect(page.locator(".aw-row-selected .aw-row-name").textContent()).resolves.toBe("pi-tests");
 
-		// A conversation open while the theme changes stays open, in the new look.
 		await page.locator(".aw-row-main", { hasText: "pi-docs" }).click();
 		await page.getByRole("button", { name: "Talk to pi-docs" }).first().click();
 		const panel = page.getByRole("dialog", { name: "Conversation with pi-docs" });
@@ -363,7 +346,6 @@ test("the world opens in the theme the operator kept, and a broken one falls bac
 	}
 });
 
-/** What the world shows of `character`'s actions: its right-click menu over it in the world, then closed. */
 async function menuOn(page: Page, id: string) {
 	const figure = (await view<{ id: string; x: number; y: number }[]>(page, "figures()")).find((f) => f.id === id)!;
 	const [x, y] = (await view<[number, number]>(page, `toScreen(${figure.x}, ${figure.y - 0.8})`))!;
@@ -387,11 +369,9 @@ test("the same world reads the same in all three themes: the same characters, st
 			await travel(page, `apple-pi ${labels.wing}`, `wing:${HQ}:/r/apple-pi`);
 			await shot(page, `aw-20-${theme}-wing`);
 			const figures = await cast(page);
-			// Zoomed out to see the whole room, so every character is on screen.
 			await page.mouse.move(500, 400);
 			for (let i = 0; i < 6; i++) await page.mouse.wheel(0, 400);
 			await page.waitForTimeout(700);
-			// The world's own panels cover part of it; right-click the characters themselves.
 			const through = await page.addStyleTag({
 				content: ".aw-interface, .aw-interface * { pointer-events: none !important; }",
 			});
