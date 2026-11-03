@@ -6,12 +6,9 @@ import { afterAll, beforeAll, expect, test, vi } from "vitest";
 import { appFile, contentType } from "../src/app-files.js";
 import type { Character, CharacterFacts, WorldSnapshot } from "../src/world.js";
 
-// Explicit focused work in the agent rows, Work tab, examine card, and conversation panel.
-// The built world UI in headless Chrome against a fixture backend.
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const ORIGIN = "http://localhost";
 const appDir = fileURLToPath(new URL("..", import.meta.url));
-// AGENT_WORLD_SHOTS=<dir> saves screenshots as aw-13-*.png.
 const SHOTS = process.env.AGENT_WORLD_SHOTS;
 
 let browser: Browser;
@@ -44,7 +41,6 @@ async function openWorld(snapshot: WorldSnapshot) {
 		};
 	}, snapshot);
 	await page.goto(`${ORIGIN}/index.html?world`);
-	// The interface draws before the world starts; the world handles Talk to only once a place is shown.
 	await vi.waitFor(
 		async () => expect(await page.evaluate(() => (window as any).agentWorldView?.place())).toBeTruthy(),
 		{
@@ -118,7 +114,6 @@ const row = (page: Page, name: string) => page.getByRole("button", { name: new R
 test("ledger and ephemeral focuses appear across the views while an unassigned person has no work line", async () => {
 	const { page, errors } = await openWorld(WORLD);
 	try {
-		// Agents tab rows.
 		await expect(row(page, "Kofi Marchetti").locator(".aw-row-work").textContent()).resolves.toBe(
 			"Retry failed invoices",
 		);
@@ -126,7 +121,6 @@ test("ledger and ephemeral focuses appear across the views while an unassigned p
 		await expect(row(page, "Orla Brannigan").locator(".aw-row-work").count()).resolves.toBe(0);
 		await shot(page, "agents");
 
-		// Both types of assigned work have a group; the unassigned root is separate.
 		await page.getByRole("tab", { name: "Work", exact: true }).click();
 		const loose = page.getByRole("region", { name: "No focused task" });
 		await expect(loose.getByRole("button", { name: /^Orla Brannigan/ }).count()).resolves.toBe(1);
@@ -144,7 +138,6 @@ test("ledger and ephemeral focuses appear across the views while an unassigned p
 		).resolves.toBe(1);
 		await shot(page, "work");
 
-		// Examine card.
 		await row(page, "Ada Lovejoy").click();
 		await page.getByRole("button", { name: "Examine Ada Lovejoy" }).click();
 		const card = page.getByRole("dialog", { name: "Examine Ada Lovejoy" });
@@ -160,7 +153,6 @@ test("ledger and ephemeral focuses appear across the views while an unassigned p
 		await expect(tasked.textContent()).resolves.toContain("Focused taskRetry failed invoices (in-progress)");
 		await tasked.getByRole("button", { name: "Close" }).click();
 
-		// Conversation panel.
 		await page.getByRole("tab", { name: "Agents", exact: true }).click();
 		await row(page, "Ada Lovejoy").click();
 		await page.getByRole("button", { name: "Talk to Ada Lovejoy" }).click();

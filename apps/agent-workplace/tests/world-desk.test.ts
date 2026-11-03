@@ -18,7 +18,6 @@ beforeAll(async () => {
 });
 afterAll(() => browser?.close());
 
-/** Workplace with a desk, two tasks in flight, a closed one, a person asking, and a fake conversation store. */
 async function openDesk(appearance: "light" | "dark", width = 1440, desk = true) {
 	const page = await browser.newPage({ viewport: { width, height: 900 } });
 	const errors: string[] = [];
@@ -249,7 +248,6 @@ async function openDesk(appearance: "light" | "dark", width = 1440, desk = true)
 			};
 			w.work = [];
 			w.agentWorkplace = {
-				// Settings shows the connected accounts; none are signed in here.
 				credentialStatus: async () => ({ atlassian: null, slack: null }),
 				githubStatus: async () => ({ ok: true, account: null }),
 				googleStatus: async () => ({ ok: true, account: null }),
@@ -408,7 +406,6 @@ async function openDesk(appearance: "light" | "dark", width = 1440, desk = true)
 						held({ ok: false, reason: "withdrawn" });
 						return { ok: true };
 					}
-					// A follow-up the session holds until its run settles: delivered, not yet applied.
 					if (instruction.kind === "follow_up" && instruction.text === "wait for me") {
 						for (const listener of receipts) listener({ commandId: command, characterId: id, stage: "delivered" });
 						return new Promise((resolve) => held_.set(command, resolve));
@@ -727,7 +724,6 @@ test("a canvas is a page he writes in: blocks from /, saved as Markdown, and nev
 		await page.getByRole("region", { name: "Canvases" }).getByText("Launch plan").waitFor();
 		await shot(page, "canvas-light");
 
-		// Someone else writes in the canvas; the next save is refused and he chooses.
 		await page.evaluate(() => {
 			const canvas = (window as any).canvases["canvas-1"];
 			canvas.version += 1;
@@ -1165,7 +1161,6 @@ test("a theme from Settings repaints the whole app, in light and dark, and stays
 		await page.getByRole("menuitem", { name: "Slacker", exact: true }).click();
 		expect((await palette()).theme).toBe("slacker");
 		await themes.getByText("Workplace", { exact: true }).click();
-		// Back on the house palette (light: the fixture opens every load in light mode).
 		expect(await palette()).toMatchObject({ theme: "workplace", bg: "#fff" });
 		expect(errors).toEqual([]);
 	} finally {
