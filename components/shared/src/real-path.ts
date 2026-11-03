@@ -1,7 +1,6 @@
 import { lstatSync, readlinkSync } from "node:fs";
 import { dirname, isAbsolute, join, parse, relative, sep } from "node:path";
 
-/** True when `path` is `dir` or lies under it, compared as given. */
 export function within(path: string, dir: string): boolean {
 	const rel = relative(dir, path);
 	return rel === "" || (rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel));
@@ -13,15 +12,6 @@ function components(path: string): string[] {
 	return path.split(sep).filter((part) => part !== "" && part !== ".");
 }
 
-/**
- * The path with symlinks resolved the way the kernel resolves it for a write: components left to
- * right, `..` moving to the parent of the resolved directory so far, and a symlink replaced by its
- * target's components (from the root when the target is absolute). Resolving `..` lexically
- * first would let `pivot/../x` stay inside a directory while `pivot` leads out of it. Once a
- * component does not exist, the rest resolves lexically, since writing creates it there; a
- * dangling symlink therefore resolves to the target a write would create. Any other failure to
- * inspect a component, and more than MAX_LINKS links, throws, as the kernel would fail the write.
- */
 export function canonical(path: string): string {
 	const absolute = isAbsolute(path) ? path : `${process.cwd()}${sep}${path}`;
 	const root = parse(absolute).root;
@@ -44,7 +34,6 @@ export function canonical(path: string): string {
 		try {
 			link = lstatSync(next).isSymbolicLink() ? readlinkSync(next) : undefined;
 		} catch (error) {
-			// Only absence resolves lexically; any other failure leaves the path unknown.
 			const code = (error as NodeJS.ErrnoException).code;
 			if (code !== "ENOENT" && code !== "ENOTDIR") throw error;
 			missing = true;

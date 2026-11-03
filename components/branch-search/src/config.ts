@@ -3,16 +3,12 @@ import { join, posix } from "node:path";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { relativePathsProblem } from "../../shared/src/relative-paths.js";
 
-/** Read from the Pi agent directory, then from `.pi/` in a trusted project. */
 export const CONFIG_FILE = "branch-search.json";
 
 export interface BranchSearchConfig {
-	/** Approaches the enumerator lists, and the most attempts that run. */
 	attempts: number;
-	/** Limits per attempt. */
 	limits: { wallClockSec?: number; outputTokens?: number };
 	workspace: { cloneIgnored: string[] };
-	/** With `profile`, a model on that profile chooses among the attempts that pass every gate. */
 	judge?: { profile?: string };
 }
 
@@ -22,7 +18,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/** Project values replace user values key by key; arrays replace whole. */
 function merge(base: Record<string, unknown>, override: Record<string, unknown>): Record<string, unknown> {
 	const merged = { ...base };
 	for (const [key, value] of Object.entries(override)) {
@@ -44,7 +39,6 @@ function readFile(path: string): Record<string, unknown> {
 	return parsed;
 }
 
-/** The merged, unvalidated configuration. */
 export function readBranchSearchConfig(cwd: string, projectTrusted: boolean, agentDir = getAgentDir()): unknown {
 	const user = readFile(join(agentDir, CONFIG_FILE));
 	return projectTrusted ? merge(user, readFile(join(cwd, ".pi", CONFIG_FILE))) : user;
@@ -81,7 +75,6 @@ function lookup(config: unknown, key: string): unknown {
 	return value;
 }
 
-/** Every required key present and valid; otherwise text naming each missing or invalid key. */
 export function validateBranchSearchConfig(raw: unknown): ConfigResult {
 	const problems: string[] = [];
 	for (const [key, check, presence] of KEYS) {
@@ -104,10 +97,6 @@ export function validateBranchSearchConfig(raw: unknown): ConfigResult {
 	};
 }
 
-/**
- * Validated relative paths in one spelling (`./a//b/` becomes `a/b`), so every consumer, such as a
- * git exclusion pattern or an overlap check, sees the same path.
- */
 export function normalizePaths(paths: readonly string[]): string[] {
 	return paths.map((path) => posix.normalize(path.replaceAll("\\", "/")).replace(/(.)\/+$/, "$1"));
 }

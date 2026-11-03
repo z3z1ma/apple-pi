@@ -1,14 +1,5 @@
-/**
- * Shared selection and scroll key matchers for focused TUI managers.
- *
- * Resolves `tui.select.*` through the user's keybindings when pi provides a
- * manager, falling back to the previous hardcoded keys otherwise. The viewer's
- * k/j and shift+arrow aliases always work alongside whatever is bound.
- */
-
 import { type KeyId, matchesKey } from "@earendil-works/pi-tui";
 
-/** The keybinding ids the conversation viewers resolve. */
 export type ViewerKeybinding =
 	| "tui.select.up"
 	| "tui.select.down"
@@ -17,7 +8,6 @@ export type ViewerKeybinding =
 	| "tui.input.tab"
 	| "app.message.copy";
 
-/** Structural subset of pi-tui's `KeybindingsManager` (which satisfies it). */
 export interface ViewerKeybindings {
 	matches(data: string, keybinding: ViewerKeybinding): boolean;
 	getKeys?(keybinding: ViewerKeybinding): KeyId[];

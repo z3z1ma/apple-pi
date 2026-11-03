@@ -13,7 +13,6 @@ afterEach(() => {
 
 const model = { id: "m", provider: "p", api: "a" } as unknown as Model<string>;
 
-/** A user-global profile file mapping `quick` to p/m, in a temporary agent directory. */
 function profiles(): void {
 	const dir = mkdtempSync(join(tmpdir(), "apple-pi-profile-request-"));
 	writeFileSync(

@@ -12,7 +12,6 @@ const ALONE = `Call ${TOOL_NAME} on its own, as the only tool call in its messag
 const IN_FORK = `${TOOL_NAME} is not available inside a forked continuation.`;
 const RUNNING = "A branch search is already running in this session.";
 
-/** The configuration, or the text that says why it cannot be used. */
 function loadConfig(
 	ctx: ExtensionContext,
 ): { ok: true; config: BranchSearchConfig } | { ok: false; text: string; level: "error" | "warning" } {
@@ -26,7 +25,6 @@ function loadConfig(
 	return validated.ok ? validated : { ...validated, level: "warning" };
 }
 
-/** True when `toolCallId` is the only tool call of the message the conversation ends with. */
 function callsAlone(messages: AgentMessage[], toolCallId: string): boolean {
 	const last = messages.at(-1);
 	if (last?.role !== "assistant") return false;
@@ -34,7 +32,6 @@ function callsAlone(messages: AgentMessage[], toolCallId: string): boolean {
 	return calls.length === 1 && calls[0]?.id === toolCallId;
 }
 
-/** The fork prompt as the result of the pending `search_branches` call, so the fork point ends with that call. */
 function answerCall(toolCallId: string): (prompt: string) => AgentMessage {
 	return (prompt) => ({
 		role: "toolResult",
@@ -46,16 +43,9 @@ function answerCall(toolCallId: string): (prompt: string) => AgentMessage {
 	});
 }
 
-/**
- * The `search_branches` tool. One search per root session; the call blocks until the search ends and
- * returns the report as its result. Aborting the call, session switch, tree navigation, and shutdown
- * cancel the search, which still cleans up.
- */
 export default function registerBranchSearch(pi: ExtensionAPI): void {
 	trackLiveSessions();
-	/** The running search: aborting its controller cancels it; `done` settles once it has cleaned up. */
 	let active: { controller: AbortController; done: Promise<void> } | undefined;
-	/** Cancel the search and wait until its worktrees, refs, and record are final. */
 	const cancelForSession = async () => {
 		const search = active;
 		if (!search) return;

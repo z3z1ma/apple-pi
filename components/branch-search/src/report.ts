@@ -2,7 +2,6 @@ import { qualifies } from "./judge.js";
 import type { AttemptRecord, SearchRecord } from "./record.js";
 import { branchRef, type DiffStat, PLAIN_DIFF } from "./workspace.js";
 
-/** The command that brings a winner that was not applied into the workspace. */
 export function mergeCommand(base: string, id: string, winner: string): string {
 	return `git diff ${PLAIN_DIFF.join(" ")} --binary ${base} ${branchRef(id, winner)} | git apply --3way`;
 }
@@ -23,13 +22,11 @@ function fate(attempt: AttemptRecord): string {
 	return parts.join("; ");
 }
 
-/** The judge's median, with the spread of its runs when it ran more than once. */
 function judgeValue({ value, runs }: { value: number | null; runs: number[] }): string {
 	const shown = String(value ?? "—");
 	return runs.length > 1 ? `${shown} (${Math.min(...runs)}–${Math.max(...runs)})` : shown;
 }
 
-/** Plain text, summary line first. */
 export function formatReport(record: SearchRecord, recordPath: string, winnerStat?: DiffStat): string {
 	const qualified = record.attempts.filter(({ scores }) => scores && qualifies(scores));
 	const lines = [

@@ -98,7 +98,6 @@ test("a same-second edit with an unchanged size is not hidden by the copied inde
 	await writeFile(join(cwd, "value.ts"), "export const value = 2;\n");
 	await utimes(join(cwd, "value.ts"), mtime, mtime);
 	await utimes(join(cwd, ".git/index"), mtime, mtime);
-	// Snapshot in a later second: a copy stamped "now" would make the entry look clean.
 	await new Promise((resolve) => setTimeout(resolve, 1100));
 	const change = await openGitChange(cwd, { kind: "working-tree", base: "HEAD" });
 	try {
@@ -126,7 +125,6 @@ test("index promises, cached conversions and every attribute source cannot hide 
 	await writeFile(join(cwd, "crlf.txt"), "one\r\ntwo\r\n");
 	git(cwd, "add", ".");
 	git(cwd, "commit", "-qm", "normalized");
-	// Git stored LF; the disk keeps CRLF and the stat cache calls it clean once the second has passed.
 	await new Promise((resolve) => setTimeout(resolve, 1100));
 	git(cwd, "status", "--porcelain");
 	git(cwd, "config", "filter.trip.clean", `sh -c 'touch ${marker}; tr a-z A-Z'`);

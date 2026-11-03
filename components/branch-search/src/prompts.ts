@@ -6,7 +6,6 @@ export interface Candidate {
 	firstStep: string;
 }
 
-/** How the attempts are judged, as the enumerator and each attempt read it. */
 function judging(judges: readonly Judge[], gates: readonly Gate[], protect: readonly string[]): string {
 	const lines = [
 		"Each attempt is judged in its own copy of the repository, in this order:",
@@ -74,7 +73,6 @@ ${judging(judges, gates, protect)}
 Commit fully to this approach. Run the gates and judges yourself as you work. Make reasonable decisions on your own; the user is away. Stop when the work is done under this approach, or when you have concrete evidence that it cannot work.`;
 }
 
-/** The request to `judge.profile`: choose among attempts that passed every gate. */
 export function choicePrompt(
 	goal: string,
 	judges: readonly Judge[],
@@ -110,7 +108,6 @@ function isText(value: unknown): value is string {
 	return typeof value === "string" && value.trim() !== "";
 }
 
-/** The enumerator's reply as candidates, or the reason it cannot be used. */
 export function parseCandidates(reply: string): Candidate[] | string {
 	const value = parseJson(reply) as { candidates?: unknown } | undefined;
 	if (value === undefined) return "it is not valid JSON";
@@ -126,7 +123,6 @@ export function parseCandidates(reply: string): Candidate[] | string {
 	return candidates;
 }
 
-/** The judge model's choice among `keys`, or the reason its reply cannot be used. */
 export function parseChoice(reply: string, keys: readonly string[]): { winner: string; reason: string } | string {
 	const value = parseJson(reply) as { winner?: unknown; reason?: unknown } | undefined;
 	if (value === undefined) return "it is not valid JSON";

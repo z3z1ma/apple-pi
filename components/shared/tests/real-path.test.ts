@@ -23,7 +23,6 @@ describe("canonical", () => {
 		symlinkSync("pivot/../hidden.sh", join(inside, "gate.sh"));
 
 		expect(canonical(join(inside, "gate.sh"))).toBe(join(outside, "hidden.sh"));
-		// Unnormalized, as a tool argument can arrive: the .. applies after gate.sh is followed.
 		expect(canonical(`${inside}/gate.sh/../x`)).toBe(join(outside, "x"));
 	});
 

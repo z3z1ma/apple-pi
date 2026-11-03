@@ -8,10 +8,8 @@ export interface CommandResult {
 	ms: number;
 }
 
-/** Each command keeps this much of the end of its stdout and of its stderr. */
 export const OUTPUT_TAIL_BYTES = 64 * 1024;
 
-/** Collects a stream, keeping only its last OUTPUT_TAIL_BYTES bytes. */
 function tail() {
 	let kept = Buffer.alloc(0);
 	return {
@@ -23,11 +21,6 @@ function tail() {
 	};
 }
 
-/**
- * Run a command with `bash -lc` in `cwd`. The command gets its own process group, which a timeout or
- * the abort signal kills whole. When the command settles, anything it left running in that group is
- * killed too.
- */
 export function runCommand(
 	command: string,
 	cwd: string,
@@ -62,7 +55,6 @@ export function runCommand(
 						kill();
 					}, timeoutSec * 1000);
 		signal?.addEventListener("abort", kill, { once: true });
-		// An abort that fired before the listener existed would otherwise be missed.
 		if (signal?.aborted) kill();
 		const settle = () => {
 			clearTimeout(timer);

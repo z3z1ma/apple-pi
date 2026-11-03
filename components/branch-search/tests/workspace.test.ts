@@ -91,7 +91,6 @@ describe("base snapshot", { timeout: 30_000 }, () => {
 });
 
 describe("apply", { timeout: 30_000 }, () => {
-	/** A repository with an uncommitted edit in its base and a winner that changes, adds, and adds a binary file. */
 	async function searched() {
 		const dir = repo({ "app.ts": "export const value = 1;\n", "keep.txt": "keep\n" });
 		writeFileSync(join(dir, "keep.txt"), "keep, uncommitted\n");
@@ -162,7 +161,6 @@ describe("apply", { timeout: 30_000 }, () => {
 		const winner = await commitWorktree(dir, wt, "bs-test", "r0");
 		await removeWorktrees(dir, [wt]);
 		const patchPath = join(await gitCommonDir(dir), "apple-pi", "winner.patch");
-		// A read-only directory makes git apply fail after it has written the writable files.
 		chmodSync(join(dir, "ro"), 0o555);
 		const index = readFileSync(join(dir, ".git", "index"));
 		let result: Awaited<ReturnType<typeof applyWinner>>;
@@ -193,7 +191,6 @@ describe("apply", { timeout: 30_000 }, () => {
 		rmSync(join(wt, "z.txt"));
 		const winner = await commitWorktree(dir, wt, "bs-test", "r0");
 		await removeWorktrees(dir, [wt]);
-		// The patch wrote a.txt and added.txt; someone else then changed b.txt, recreated z.txt, and wrote mine.txt.
 		writeFileSync(join(dir, "a.txt"), "a winner\n");
 		writeFileSync(join(dir, "added.txt"), "added\n");
 		writeFileSync(join(dir, "b.txt"), "b edited by the user\n");

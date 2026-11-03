@@ -28,7 +28,6 @@ export const SIDECAR_USAGE_RECORD_KEYS = [
 	"attention",
 ] as const;
 
-/** Consultant records remain in older on-disk usage logs; only the pair writes new sidecar calls. */
 export type SidecarAgent = "pair" | "consultant";
 
 export type SidecarUsageRecord = {
@@ -149,11 +148,6 @@ export function buildSidecarUsageRecord(
 	return record;
 }
 
-/**
- * Append one usage record when a session has been bound. Missing context is a
- * deliberate no-op so unit tests that never enable recording cannot write into
- * the real agent directory.
- */
 export function recordSidecarUsage(input: SidecarUsageInput): void {
 	const context = storage.getStore();
 	if (!context) return;
