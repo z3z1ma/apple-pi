@@ -1,7 +1,3 @@
-// Reading the operator's outside activity, one source at a time. Each read takes the source's cursor and returns the
-// new items and the next cursor; it never marks anything read outside. GitHub's notifications already follow his
-// watches, Slack's activity feed his notification settings; Jira has no feed, so it reads the issues he is assignee,
-// reporter or watcher of and turns their new comments and changes into items.
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { promisify } from "node:util";
@@ -14,7 +10,7 @@ import { adfText } from "../../../apps/agent-workplace/src/backend/integrations/
 import type { ActivityItem } from "./activity.js";
 
 const exec = promisify(execFile);
-/** A first read with no cursor looks back this far, so the stream starts with today rather than empty or years. */
+
 const FIRST_LOOK_MS = 24 * 3_600_000;
 const EXCERPT_MAX = 280;
 
@@ -27,8 +23,6 @@ const excerpt = (text: string | undefined | null) => {
 	const flat = (text ?? "").replace(/\s+/g, " ").trim();
 	return flat ? (flat.length > EXCERPT_MAX ? `${flat.slice(0, EXCERPT_MAX)}\u2026` : flat) : null;
 };
-
-// GitHub
 
 interface Notification {
 	id: string;
@@ -57,7 +51,6 @@ async function gh(path: string, signal: AbortSignal): Promise<any> {
 	}
 }
 
-/** `https://api.github.com/repos/o/r/pulls/12` as the page a person opens. */
 const githubPage = (api: string | null, repo: string) =>
 	api
 		? api.replace("https://api.github.com/repos/", "https://github.com/").replace(/\/pulls\/(\d+)$/, "/pull/$1")
@@ -78,7 +71,7 @@ export async function readGitHub(cursor: string | undefined, now: number, signal
 		const conversation = number ? `github:${repo}#${number}` : `github:${repo}:${note.id}`;
 		let actor: string | null = null;
 		let said: string | null = null;
-		// A first read only lists; later reads fetch what was said, a few at a time per minute.
+
 		if (cursor && note.subject.latest_comment_url && note.subject.latest_comment_url !== note.subject.url) {
 			const comment = await gh(note.subject.latest_comment_url.replace("https://api.github.com/", ""), signal).catch(
 				() => undefined,
@@ -101,8 +94,6 @@ export async function readGitHub(cursor: string | undefined, now: number, signal
 	}
 	return { items, cursor: newest };
 }
-
-// Jira
 
 interface JiraIssue {
 	key: string;
@@ -191,8 +182,6 @@ export async function readJira(
 	}
 	return { items, cursor: String(newest) };
 }
-
-// Slack
 
 const SLACK_TYPES =
 	"thread_v2,message_reaction,at_user,at_user_group,at_channel,at_everyone,keyword,list_record_assigned,list_user_mentioned,external_channel_invite";
@@ -297,7 +286,7 @@ export async function readSlack(
 			| { ts: string; user?: string; text?: string; thread_ts?: string }
 			| undefined;
 	};
-	/** Slack's markup as a person reads it: names for user and channel ids, link text for links. */
+
 	const readable = async (text: string | undefined) => {
 		if (!text) return text;
 		let out = text;
@@ -357,7 +346,7 @@ export async function readSlack(
 			direct: shape.direct,
 		});
 	}
-	// Direct messages are not in the activity feed; unread ones come from the client's counts.
+
 	let dmNewest = dmSince;
 	const counts = await call("client.counts", {});
 	for (const conversation of [...(counts.ims ?? []), ...(counts.mpims ?? [])] as {
@@ -396,8 +385,6 @@ export async function readSlack(
 	return { items, cursor: JSON.stringify({ feed: feedNewest, dm: dmNewest }) };
 }
 
-// Google Workspace, through the operator's signed-in `gws` CLI.
-
 async function gws(args: string[], params: Record<string, unknown>, signal: AbortSignal): Promise<any[]> {
 	try {
 		const { stdout } = await exec("gws", [...args, "--params", JSON.stringify(params)], {
@@ -405,7 +392,7 @@ async function gws(args: string[], params: Record<string, unknown>, signal: Abor
 			timeout: 30_000,
 			maxBuffer: 64 * 1024 * 1024,
 		});
-		// One JSON value, or one per line with --page-all.
+
 		return stdout.trim().startsWith("{") && !args.includes("--page-all")
 			? [JSON.parse(stdout)]
 			: stdout
@@ -459,15 +446,11 @@ const startOf = (event: CalendarEvent) => Date.parse(event.start?.dateTime ?? ev
 const attending = (event: CalendarEvent) =>
 	event.organizer?.self ||
 	["accepted", "tentative"].includes(event.attendees?.find((who) => who.self)?.responseStatus ?? "");
-/** The hour of his morning (local time) from which the day's agenda goes to the desk. */
+
 const AGENDA_HOUR = 6;
-/** How soon before a meeting the desk hears it is coming, so it can prepare him. */
+
 const STARTING_SOON_MS = 60 * 60_000;
 
-/**
- * His primary calendar: invitations, cancellations and changes to meetings still ahead (edits to past occurrences of
- * a series are left out), and each meeting he attends shortly before it starts.
- */
 export async function readCalendar(cursor: string | undefined, now: number, signal: AbortSignal): Promise<SourceRead> {
 	const previous = (() => {
 		try {
@@ -478,7 +461,7 @@ export async function readCalendar(cursor: string | undefined, now: number, sign
 	})();
 	let agenda = previous.agenda;
 	const since = previous.updated ?? new Date(now - FIRST_LOOK_MS).toISOString();
-	// Series, not their occurrences: a change to a weekly meeting is one change, not one per week.
+
 	const pages = await gws(
 		["calendar", "events", "list", "--page-all", "--page-limit", "20"],
 		{ calendarId: "primary", updatedMin: since, singleEvents: false, showDeleted: true, maxResults: 250 },
@@ -512,14 +495,14 @@ export async function readCalendar(cursor: string | undefined, now: number, sign
 	for (const event of pages.flatMap((page) => (page.items ?? []) as CalendarEvent[])) {
 		if (event.updated > newest) newest = event.updated;
 		const when = Date.parse(event.originalStartTime?.dateTime ?? event.originalStartTime?.date ?? "") || startOf(event);
-		// A series stays current while it repeats; a single meeting or one changed occurrence only while it is ahead.
+
 		if (!event.recurrence && when < now) continue;
 		const mine = event.attendees?.find((who) => who.self)?.responseStatus;
 		if (mine === "declined") continue;
-		// A deleted event carries no title to show; an invitation to a series arrives once, with the series.
+
 		if (!event.summary || (event.recurringEventId && mine === "needsAction")) continue;
 		const fresh = Date.parse(event.created ?? "") > sinceMs;
-		// The first read lists what needs him, not every meeting that changed yesterday.
+
 		if (!cursor && event.status !== "cancelled" && !(mine === "needsAction" && fresh)) continue;
 		const kind =
 			event.status === "cancelled"
@@ -528,7 +511,6 @@ export async function readCalendar(cursor: string | undefined, now: number, sign
 					? "invited"
 					: "changed";
 		items.push({
-			// Keyed by what he would notice, not by `updated`: every attendee's reply updates an event.
 			id: `calendar:${event.id}:${fingerprint(event, mine)}`,
 			source: "calendar",
 			kind,
@@ -567,7 +549,7 @@ export async function readCalendar(cursor: string | undefined, now: number, sign
 			direct: true,
 		});
 	}
-	// Once a day, from the start of his morning: the day's meetings, so the desk can plan the day with him.
+
 	const day = new Date(now);
 	const today = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, "0")}-${String(day.getDate()).padStart(2, "0")}`;
 	if (day.getHours() >= AGENDA_HOUR && previous.agenda !== today) {
@@ -606,11 +588,6 @@ export async function readCalendar(cursor: string | undefined, now: number, sign
 	return { items, cursor: JSON.stringify({ updated: newest, agenda }) };
 }
 
-/**
- * Mail that slipped past Slack: his inbox without his own mail, promotions and social mail, and the senders whose
- * news already arrives through another source (GitHub, Jira, Slack, calendar invitations, no-reply robots). A message
- * from a person to him is addressed to him; mailing lists and automated mail are only listed.
- */
 const GMAIL_QUERY =
 	"in:inbox -from:me -category:promotions -category:social -category:forums " +
 	"-from:(notifications@github.com OR noreply OR no-reply OR donotreply OR do-not-reply OR calendar-notification@google.com OR atlassian.net OR slack.com) " +
