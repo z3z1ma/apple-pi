@@ -26,4 +26,4 @@ Shelved by the operator (2026-10-04): the replay plumbing was half-baked. The re
 
 ## Outcome
 
-Pending.
+Cancelled: shelved by the operator on 2026-10-04, and its plumbing was removed. Resuming it needs a fresh decision.

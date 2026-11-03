@@ -6,12 +6,12 @@ Updated: 2026-10-04
 
 ## What Mattered
 
-Pending completion of the undertaking.
+- The replay plumbing was half-built and was removed.
 
 ## Learnings
 
-Pending completion of the undertaking.
+- None beyond the task record.
 
 ## Improvements
 
-Pending completion of the undertaking.
+- None.

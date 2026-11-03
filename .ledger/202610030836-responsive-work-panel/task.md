@@ -19,7 +19,9 @@ Implemented and committed on `main` as `78e81fe` (`feat(work): open one responsi
 
 ## Outcome
 
-Pending final acceptance. Next:
+Cancelled: superseded. The `/work` panel was removed when `/reviews` replaced it (semantic review queue task). The steps below were never run.
+
+Previously pending:
 
 1. In fullscreen Pi, open `/agents`, focus the panel, and send a steering message to a running agent asking it to echo a unique marker. Confirm the marker appears in the agent's response, not just in the submitted message, and record the result here.
 2. Obtain operator acceptance after that check and explicit authority before closing this task. The implementation is already committed; task closure is not yet authorized.

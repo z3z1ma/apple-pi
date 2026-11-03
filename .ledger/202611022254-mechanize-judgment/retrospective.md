@@ -6,7 +6,7 @@ Updated: 2026-11-03
 
 ## What Mattered
 
-Pending completion of the undertaking.
+- The operator redirected repo machinery into harness capabilities twice (rules, then TLA+). The skill-link loader check now enforces the second correction.
 
 ## Learnings
 
@@ -16,4 +16,4 @@ Pending completion of the undertaking.
 
 ## Improvements
 
-Pending completion of the undertaking.
+- Classify each new capability as harness or repo at design time, and build its native options before reporting limits.

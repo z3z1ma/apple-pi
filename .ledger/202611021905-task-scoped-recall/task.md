@@ -60,4 +60,4 @@ The runtime query is `search_transcripts` in `runtime.ts`. The tool is `componen
 
 ## Outcome
 
-Pending.
+Done. The transcript index, focus spans and task-scoped runtime search are live. `search_session` uses the index for natural-language queries, has `tasks` and `fields` parameters, and lets `entry:` addresses reach another person's entries (`b6e19afb`). It is in daily use.

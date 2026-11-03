@@ -40,4 +40,8 @@ Each increment is committed, activated (runtime restart, app relaunch) and usabl
 
 ## Outcome
 
-Pending.
+Done. Items 1-8 are built, committed and live: dispatch posture, on call, durable schedules, the desk with Threads/Activity, the watchdog role, external GitHub/Jira threads, and channel charters. Item 9 (inline and spill) was dropped by the operator's outcomes-over-cost ranking. Further Workplace work continued in the polish loop and desk intelligence tasks. CI events on external threads remain unproven live, because the repository has no workflows.
+
+### Assignment 673: Tadhg Marinescu
+
+Closed during the operator's ledger cleanup. Increments 1-8 are built and live; increment 9 was dropped by operator decision. Live CI events remain unproven.

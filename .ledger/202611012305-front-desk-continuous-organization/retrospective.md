@@ -6,7 +6,7 @@ Updated: 2026-11-01
 
 ## What Mattered
 
-Pending completion of the undertaking.
+- Live checks found what fixtures missed: the first real PR comment exposed the empty-prompt wake bug.
 
 ## Learnings
 
@@ -16,4 +16,4 @@ Pending completion of the undertaking.
 
 ## Improvements
 
-Pending completion of the undertaking.
+- A live CI event check needs a repository with workflows.

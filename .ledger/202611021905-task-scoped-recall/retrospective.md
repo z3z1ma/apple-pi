@@ -6,7 +6,7 @@ Updated: 2026-11-03
 
 ## What Mattered
 
-Pending completion of the undertaking.
+- The index answered in milliseconds what whole-file scans needed hundreds of milliseconds for. Kofi's rule (filter ineligible entries inside the query, before the limit) kept the ranking honest.
 
 ## Learnings
 
@@ -24,4 +24,4 @@ Lessons from the index conversion and actual-tool evaluation.
 
 ## Improvements
 
-Pending completion of the undertaking.
+- The evaluation gate cost hours. Offer such gates as options with their cost.

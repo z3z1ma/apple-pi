@@ -6,12 +6,12 @@ Updated: 2026-10-03
 
 ## What Mattered
 
-Pending completion of the undertaking.
+- The panel shipped, then was replaced by `/reviews` before its last acceptance check.
 
 ## Learnings
 
-Pending completion of the undertaking.
+- None beyond the task record.
 
 ## Improvements
 
-Pending completion of the undertaking.
+- None.

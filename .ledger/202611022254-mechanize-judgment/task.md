@@ -74,4 +74,12 @@ Lanes assigned 2026-11-03. Landed so far:
 
 ## Outcome
 
-Pending.
+Done. Landed:
+
+- `.pi/rules` as a harness capability, with rule samples, firing counts and the `repo_rules` tool.
+- The comment ban: 0 comments left.
+- Path contracts and build budgets.
+- The counterexample-to-test loop: one real apple-pi race, fixed. The async-mutex defect was already reported upstream, so nothing was filed.
+- TLA+ as native tools: `tlc_check` and `tla_symbolic_check` (Apalache).
+
+The operator's activation items are done. Deterministic replay and headless tuning loops were not started.

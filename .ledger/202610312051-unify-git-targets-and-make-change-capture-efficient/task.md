@@ -13,7 +13,7 @@ Implemented; see [checklist](checklist.md) and [evidence](evidence.md). One shar
 
 ## Outcome
 
-Pending completion.
+Done; implemented and live (assignment outcome below).
 
 ### Assignment 585: Tadhg Marinescu
 

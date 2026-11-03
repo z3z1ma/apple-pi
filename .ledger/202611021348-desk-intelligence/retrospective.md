@@ -6,12 +6,12 @@ Updated: 2026-11-02
 
 ## What Mattered
 
-Pending completion of the undertaking.
+- Making ingestion the runtime's job, rather than `remind_me` sweeps, let the coordinator triage as items arrived.
 
 ## Learnings
 
-Pending completion of the undertaking.
+- An explicit model choice must persist across restarts, or the coordinator falls back to the default model.
 
 ## Improvements
 
-Pending completion of the undertaking.
+- Observe the scout's exploration over time before relying on its notes.

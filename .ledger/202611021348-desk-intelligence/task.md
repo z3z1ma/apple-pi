@@ -41,4 +41,8 @@ Open: the scout is not hired yet (asked the coordinator by mail); exploration an
 
 ## Outcome
 
-Pending.
+Done. All six steps are built and live: the activity stream (GitHub, Jira, Slack, calendar, email), coordinator triage (proven on 186 first-day items), rules, notes, the scout role, and the desk model profile. The scout (Tamar Brannigan) is hired, but exploration and notes have not been observed over time.
+
+### Assignment 744: Tadhg Marinescu
+
+Closed during the operator's ledger cleanup. The activity stream, triage, rules, notes, the scout role and the desk model are live. Exploration and notes have not been observed over time.

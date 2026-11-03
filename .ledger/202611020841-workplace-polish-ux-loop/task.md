@@ -22,4 +22,8 @@ Fourteen rounds done and live (`rounds.md`); gap assessment in `gap-assessment.m
 
 ## Outcome
 
-Pending.
+Closed after 22 live rounds (see `rounds.md`), followed by themes and settings, Canvases, fast DMs, the Code tab toggles, editor agent actions, and browser pages inline in the DM. The ranked delta in `gap-assessment.md` is not all built. Open items: Canvases in Cmd-K and the sidebar, and an agent status board. Start a new task for any of these.
+
+### Assignment 732: Tadhg Marinescu
+
+Closed during the operator's ledger cleanup. Twenty-two polish rounds and the later Workplace features are live. Remaining ranked-delta items, including Canvases in Cmd-K and the sidebar and an agent status board, are recorded in the bundle for a new task.

@@ -6,7 +6,7 @@ Updated: 2026-11-02
 
 ## What Mattered
 
-Pending completion of the undertaking.
+- The operator's daily use and the read-only live mirror found real-data defects that fixture screenshots hid.
 
 ## Learnings
 
@@ -14,4 +14,4 @@ Pending completion of the undertaking.
 
 ## Improvements
 
-Pending completion of the undertaking.
+- An open-ended loop gives no natural close; future polish should be bounded tasks.

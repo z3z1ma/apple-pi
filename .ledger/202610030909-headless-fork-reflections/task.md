@@ -31,7 +31,7 @@ User decisions:
 
 ## Current State
 
-Implemented and validated; awaiting user review. Not committed.
+Done. Committed and live; documented in `docs/forked-continuations.md`.
 
 ## Outcome
 
