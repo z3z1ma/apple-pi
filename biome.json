@@ -46,6 +46,10 @@
       }
     },
     {
+      "includes": ["**/*.hot.ts"],
+      "plugins": ["./.pi/rules/hot-bounded-io.grit"]
+    },
+    {
       "includes": ["apps/agent-workplace/web/workplace*.tsx"],
       "plugins": ["./.pi/rules/no-native-select.grit"]
     },

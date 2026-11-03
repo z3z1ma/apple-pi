@@ -1,6 +1,7 @@
 {
   "comments": "forbid",
   "rules": [
+    { "plugin": "hot-bounded-io.grit", "includes": ["**/*.hot.ts"] },
     { "plugin": "no-native-select.grit", "includes": ["apps/agent-workplace/web/workplace*.tsx"] },
     {
       "plugin": "workplace-palette.grit",

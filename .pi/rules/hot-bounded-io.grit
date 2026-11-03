@@ -1,0 +1,6 @@
+language js
+
+$api where {
+  $api <: r"^(?:readFile|readFileSync|execSync|execFileSync|spawnSync)$",
+  register_diagnostic(span=$api, message="Hot paths use bounded file reads and asynchronous child processes; keep whole-file reads and synchronous subprocesses outside .hot.ts modules.")
+}

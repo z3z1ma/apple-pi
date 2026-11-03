@@ -40,6 +40,16 @@ Choose the composition path by intent:
 
 Pi Exec's `skills.list()` and `skills.body()` remain introspection APIs for model-visible skills only. Direct skill-to-skill references need no runtime invocation bridge.
 
+## Execution paths
+
+Execution-context suffixes are contracts:
+
+- `.runtime.ts` marks a strip-only Node daemon entry, not every module it imports.
+- `.worker.ts` marks a worker-thread entry, constructed with an explicit file URL.
+- `.hot.ts` marks per-request/event work: use bounded reads and asynchronous child processes.
+
+`node lint/path-contracts.mjs` follows local value imports, re-exports, literal dynamic imports and execution-entry URLs from those files. It rejects non-erasable declarations/parameter properties and UI imports in the Node closure; hot restrictions also follow local dependencies. Type-only dependencies are not executed. The hot-path GritQL rule in `.pi/rules/` provides the same direct API restriction in Biome and the edit/write gate. These are static source checks, not a sandbox for third-party packages or computed code loading.
+
 ## Quality commands
 
 ```bash
