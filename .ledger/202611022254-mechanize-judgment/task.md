@@ -46,18 +46,14 @@ deterministic checks agents hit immediately. This follows poteto's 4-day game th
 
 Lanes assigned 2026-11-03. Landed so far:
 
-- **Lesson compiler (Tadhg):**
-  - Two GritQL rules: `no-native-select` and `workplace-palette`. Both are wired per path in `biome.json`, and their three hits are fixed.
-  - The action-rules extension (`components/action-rules`).
-  - The comment checker (`lint/no-comments.mjs`), not yet in `npm run lint`.
-  - The distill and code-review instructions now put rules before prose.
-  - Learnings the action rules enforce are retired from `.pi/LEARNINGS.md`.
+- **Rules instead of prose (Tadhg):**
+  - Two GritQL rules, `no-native-select` and `workplace-palette`, are wired per path in `biome.json`; their three hits are fixed.
+  - The distill and code-review instructions now put rules before prose. Learnings the rules enforce are retired from `.pi/LEARNINGS.md`.
 - **Harness rules engine (`7686406e`, operator redirect, see `harness-direction.md`):**
-  - `components/repo-rules` replaces `components/action-rules`. Any repository with `.pi/rules/` has every edit/write checked against its `policy.json` (comment ban, GritQL rules per path) and every shell command against its `actions`. A commit in the same message as an edit is refused in every repository.
+  - `components/repo-rules` replaces the earlier apple-pi-only `components/action-rules`. Any repository with `.pi/rules/` has every edit/write checked against its `policy.json` (comment ban, GritQL rules per path) and every shell command against its `actions`. A commit in the same message as an edit is refused in every repository.
   - The apple-pi rules moved from `lint/rules/` to `.pi/rules/`.
 - **TLA+:**
   - Niamh's skill, runner and command-journal model landed (`6cdcb032`, no violation).
-  - The counterexample-to-test experiment is running (`work-42e81213`, log in `cegar-log.md`). The first lead is a stale review cancel racing an extend; it is not confirmed yet.
 - **Comment ban: done.** 6,067 comments down to 0. `npm run lint` enforces it (`934a8928`), and so does the harness on every edit (`.pi/rules/policy.json`). The detector walks every token (`12fd7902`); the lint script and the harness share it.
 - **Path contracts:** Rahul `15899a60`, in `npm run lint` (`1d4f94e7`); the hot-path GritQL rule is in `.pi/rules`.
 - **Budgets:** Fiona `79a115bb`, `185bb15c` (`build-budgets.md`).
@@ -71,9 +67,10 @@ Lanes assigned 2026-11-03. Landed so far:
   - Workplace dist rebuilt (`65cb8d30`). The app's Quit was refused by its leave guard, so the operator relaunches it.
   - Pi sessions started before `5345bdcf` cannot restart the runtime themselves (the old entry file is gone) until they reload.
 - **Next:**
-  - Add the comment checker to `npm run lint` at zero.
-  - Restart the runtime after Rahul's renames and Deniz's session-state pass.
-  - Rebuild Workplace after Hye-jin's pass.
+  - The operator relaunches Workplace and reloads older Pi sessions.
+  - The operator decides whether to report the async-mutex defect upstream (Niamh's report is in this bundle).
+  - Niamh continues the outside-repository loop (`work-b0b98c0e`, `cegar-log.md`).
+  - Close this task with a retrospective once those land.
 
 ## Outcome
 
