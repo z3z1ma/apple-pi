@@ -66,6 +66,8 @@
     "apps/agent-workplace/themes/",
     "extensions/",
     "skills/",
+    "scripts/run-tlc.mjs",
+    "specs/",
     "prompts/",
     "docs/",
     "LICENSE",

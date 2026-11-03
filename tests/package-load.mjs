@@ -447,6 +447,8 @@ try {
 		"Agent Workplace's raw art and generation inputs stay in the repository",
 	);
 	assert(manifest.files.includes("skills/"), "package manifest omits skills");
+	for (const path of ["scripts/run-tlc.mjs", "specs/"])
+		assert(manifest.files.includes(path), `package manifest omits formal verification dependency: ${path}`);
 	assert(manifest.files.includes("prompts/"), "package manifest omits prompt templates");
 	assert(manifest.files.includes("docs/"), "package manifest omits documentation");
 	const { templates: promptTemplates, diagnostics: promptDiagnostics } = loadPromptTemplates({
@@ -490,6 +492,7 @@ try {
 	const engineeringSkills = [
 		"prototype",
 		"diagnosing-bugs",
+		"formal-verification",
 		"research",
 		"tdd",
 		"resolving-merge-conflicts",
@@ -546,6 +549,7 @@ try {
 	const processGuidance = [
 		...[...processSkills, "handbook-writing"].map((name) => `skills/${name}/SKILL.md`),
 		"skills/handbook-writing/references/processes.md",
+		"skills/formal-verification/SKILL.md",
 	];
 	for (const file of processGuidance) {
 		for (const [, link] of readFileSync(file, "utf8").matchAll(/\]\(([^)]+)\)/g)) {
