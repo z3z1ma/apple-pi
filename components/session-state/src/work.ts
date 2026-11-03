@@ -24,7 +24,6 @@ export type WorkAction =
 export type WorkCommand = {
 	kind: "work";
 	cwd: string;
-	/** The operator has no incarnation; its UI supplies the attached terminal to wake beside. */
 	tmux?: { socket: string; pane: string };
 } & WorkAction;
 
@@ -35,9 +34,7 @@ export interface WorkTask {
 	organization: string;
 	ephemeral: number;
 	thread: string;
-	/** When it closed, independent of whether its bundle moved. */
 	archived_at: number | null;
-	/** When it became the organization's obligation; null for a task recorded before this column existed. */
 	opened_at: number | null;
 	close_status: "done" | "cancelled" | null;
 }
@@ -57,7 +54,6 @@ export interface WorkChange {
 	task: WorkTask;
 	person: string;
 	post: ThreadPost;
-	/** The changed person hears its own change, too, even when it wrote the thread message. */
 	notify: string;
 	goal: boolean;
 }
@@ -88,7 +84,6 @@ export function taskTitle(task: WorkTask): string {
 	);
 }
 
-/** The goal is a file, not a cached database field. A missing goal is an error, not an empty assignment. */
 export function goalText(person: string): string | undefined {
 	return withWork((db) => {
 		const task = focusedTask(db, person);
@@ -133,7 +128,6 @@ function findTask(db: DatabaseSync, cwd: string, input: string): WorkTask | unde
 		| undefined;
 }
 
-/** The runtime's id for a task named by its id, its bundle, its task.md, or its ledger id. */
 export function taskIdOf(db: DatabaseSync, cwd: string, input: string): string {
 	const task = findTask(db, cwd, input);
 	if (!task) throw new Error(`No task ${input}`);
@@ -211,7 +205,6 @@ function createTask(
 	);
 }
 
-/** The task becomes the organization's obligation now, with its own thread. */
 function recordTask(
 	db: DatabaseSync,
 	id: string,
@@ -272,7 +265,6 @@ function writeOutcome(
 	writeAtomicTextFile(path, after);
 }
 
-/** End every open assignment on an ephemeral task and close it in place, as done or cancelled. */
 function closeTask(
 	db: DatabaseSync,
 	task: WorkTask,
@@ -302,7 +294,6 @@ function closeTask(
 	return { ...task, archived_at: now, close_status: status };
 }
 
-/** Apply inside the runtime's transaction; rollback/committed hold the filesystem half of that transaction. */
 export function changeWork(
 	db: DatabaseSync,
 	stateDir: string,
@@ -400,7 +391,6 @@ export function changeWork(
 	return { task, person, post: { thread: task.thread, body }, notify: person, goal };
 }
 
-/** Record a ledger task and its caller's participation, without assigning work or reopening it. */
 export function openLedgerTask(db: DatabaseSync, sender: string, bundle: string, now: number): WorkTask {
 	const path = realpathSync(bundle);
 	const known = db.prepare("select * from work_tasks where bundle = ?").get(path) as unknown as WorkTask | undefined;
@@ -410,10 +400,6 @@ export function openLedgerTask(db: DatabaseSync, sender: string, bundle: string,
 	return task;
 }
 
-/**
- * Follow a ledger archive without taking, finishing, or focusing work on anyone's behalf, and record the close once.
- * A task the runtime never heard of opens and closes now, for the sender's organization.
- */
 export function closeLedgerTask(
 	db: DatabaseSync,
 	sender: string,
@@ -442,7 +428,6 @@ export function closeLedgerTask(
 	);
 }
 
-/** Finish explicit promotion/discard cleanup after a crash; historical finishes preserve their source bundles. */
 export function cleanMovedBundles(db: DatabaseSync): void {
 	db.prepare(
 		"update work_changes set previous_bundle = null where action = 'finish' and previous_bundle is not null",

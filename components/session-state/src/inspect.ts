@@ -7,16 +7,11 @@ import { membership, openWaits, taskOwnership } from "./fitness.js";
 import { WAITS } from "./links.js";
 import { audienceAt, nameOf } from "./threads.js";
 
-/**
- * Read-only views of the organization for the inspection tools. Each reports recorded facts and counts with references
- * (`person:`, `task:`, `file:`, `link:`, `thread:`) and draws no conclusion; the caller interprets.
- */
 
 export interface Window {
 	cwd: string;
 	from?: number;
 	to?: number;
-	/** Keep only people in this person's subtree. */
 	subtree?: string;
 }
 
@@ -27,7 +22,6 @@ interface Touch {
 	path: string;
 }
 
-/** Status as the directory reports it, plus `left` for a former member. */
 function statuses(db: DatabaseSync, organization: string): Map<string, string> {
 	const words: Record<string, string> = { busy: "working", waiting: "asking the operator", idle: "idle" };
 	return new Map(
@@ -38,7 +32,6 @@ function statuses(db: DatabaseSync, organization: string): Map<string, string> {
 	);
 }
 
-/** Every read, edit, and write the runtime indexed for the organization's people, with the path made absolute. */
 function touches(db: DatabaseSync, organization: string, window: Window): Touch[] {
 	const history = membership(db, organization);
 	const within = (person: string, at: number) => {
@@ -77,7 +70,6 @@ function absolute(cwd: string, path: string): string {
 	return path.startsWith("~") ? join(homedir(), path.slice(1)) : resolve(cwd, path);
 }
 
-/** A path when it names one (it has a separator or starts with `.` or `~`); otherwise a word to find within paths. */
 function matcher(area: string, cwd: string): (path: string) => boolean {
 	if (area.includes("/") || area.startsWith(".") || area.startsWith("~")) {
 		const root = absolute(cwd, area);
@@ -97,12 +89,6 @@ export function taskTitleOf(bundle: string): string | null {
 		: null;
 }
 
-/**
- * Who knows an area (a path, or a word within paths): the people who called read or edit there, with counts, last
- * touch, the tasks they held while touching it (with the outcome of a finished one), their status, and whether a
- * compaction of their session started since their last touch, sorted by how many touches, then by recency. Calls are
- * counted whether or not they succeeded, and a compaction that started may have failed: both are what the runtime records.
- */
 export function expertsOn(db: DatabaseSync, organization: string, area: string, window: Window) {
 	const status = statuses(db, organization);
 	const ownership = taskOwnership(db, organization);
@@ -155,7 +141,6 @@ export function expertsOn(db: DatabaseSync, organization: string, area: string, 
 		.sort(byActivity);
 }
 
-/** What a person knows: the directories it read or edited in, with counts and last touch, most touched first. */
 export function areasOf(db: DatabaseSync, organization: string, person: string, window: Window) {
 	const areas = new Map<string, { ref: string; reads: number; edits: number; lastTouch: number }>();
 	for (const touch of touches(db, organization, window).filter((t) => t.person === person)) {
@@ -176,7 +161,6 @@ function byActivity(
 	return b.reads + b.edits - (a.reads + a.edits) || b.lastTouch - a.lastTouch || a.ref.localeCompare(b.ref);
 }
 
-/** Narrow a view to one person's subtree, one person, or one task; the whole organization when empty. */
 export type Scope = { subtree?: string; person?: string; task?: string };
 
 interface OpenWait {
@@ -192,14 +176,6 @@ interface OpenWait {
 	resolved_at?: number | null;
 }
 
-/**
- * What blocks what: the organization's open waits at the window's end, grouped by what they wait on (most waits first,
- * then the oldest), each with its waiter, reason, age, and whether it crosses teams; with a window start, also the
- * waits resolved inside the window, with how long they waited. Everything is judged as of the moment that matters:
- * the window's end for an open wait, the resolution for a resolved one. The waiter is whoever held the waiting task
- * then (or the waiting person; the recorder when neither is known). Two people are on one team when one manages the
- * other or they share a manager; a wait crosses teams when no waiter shares a team with anyone it waits on.
- */
 export function waitsIn(db: DatabaseSync, organization: string, window: Window, scope: Scope = {}) {
 	const at = window.to ?? Date.now();
 	const { owns } = taskOwnership(db, organization);
@@ -207,7 +183,6 @@ export function waitsIn(db: DatabaseSync, organization: string, window: Window, 
 	const heldBy = db.prepare(
 		"select person from assignments where task_id = ? and assigned_at <= ? and (ended_at is null or ended_at > ?)",
 	);
-	// Only members count as holders: an old link may still point at another organization's task.
 	const holdersAt = (task: string, when: number) =>
 		(heldBy.all(task, when, when) as { person: string }[])
 			.map((row) => row.person)
@@ -269,7 +244,6 @@ export function waitsIn(db: DatabaseSync, organization: string, window: Window, 
 	};
 }
 
-/** Open task states at the cutoff, plus arrivals and closes inside the requested window. */
 export function workIn(db: DatabaseSync, organization: string, window: Window, scope: Scope = {}) {
 	const at = window.to ?? Date.now();
 	const { owns } = taskOwnership(db, organization);
@@ -447,7 +421,6 @@ export function communicationIn(db: DatabaseSync, organization: string, window: 
 	};
 }
 
-/** Scope a wait by its recorder, endpoint people, or task holders at the judged moment. */
 function scoped(
 	scope: Scope,
 	holdersAt: (task: string, when: number) => string[],
