@@ -6,6 +6,11 @@ A session's progress is a byte offset past its last complete line, plus `files.m
 Why: search_session's addresses (`#N`, `#N:path`) outlive the session; a different count would point existing citations at different evidence.
 Coupled: components/session-search/src/load-messages.ts
 
+Each row carries its session as one indexed token (`scope`, from `scopeToken`), and session or span filters are part of the FTS MATCH (`scope : (...)`), with bm25 weight 0 so ranking is unchanged. Text terms are restricted to `{words calls results}` so a query word can never match a scope token, and snippets are taken per text column (FTS5's best-column choice could pick `scope`).
+Why: filtering sessions in SQL after MATCH made a common-word query rank every person's matches first: 2.3 s cold and a 201 ms p95 in Kofi's whole-index latency gate, which candidate 1 failed.
+
+Each row stores its line's byte `offset` and `length`, measured on the Buffer (not the decoded string, whose indices differ for multi-byte text), so readers fetch a hit's body with one read instead of scanning backwards (156 MB for a 100-hour-old hit). Offsets are valid only for the file and inode the `files` row names; a replaced or shrunk file is reindexed from zero, and readers check the read line's id. The runtime's read-only connection sets a busy timeout because the worker writes concurrently; without it a search failed with "database is locked".
+
 Eligibility (sessions, task spans, `exclude`) lives in one WHERE clause shared by `searchIndex` and `countIndex`, so it applies before `limit`/`offset` and the total matches the pages. Exclusion lists only what to drop (off-lineage entries, the issuing call): an allow-list of a long transcript's branch would grow past SQLite's parameter limit.
 Why: filtering already-ranked top hits hides eligible evidence that ranked just below the cut (Kofi's recall gate rule).
 
