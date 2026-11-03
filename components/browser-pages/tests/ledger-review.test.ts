@@ -168,13 +168,12 @@ describe("results", () => {
 });
 
 describe("sign_off_task tool", () => {
-	// A page server, a browser subprocess, and a cold Shiki start: slower than 5 s under full-suite load.
 	it("opens the page, serves an evidence file, and saves the page with it and the result", {
 		timeout: 30_000,
 	}, async () => {
 		const bin = mkdtempSync(join(tmpdir(), "browser-pages-bin-"));
 		const agentDir = mkdtempSync(join(tmpdir(), "browser-pages-agent-"));
-		// A stand-in browser: it opens one evidence file, then approves.
+
 		const browser = `#!/bin/sh\nurl="$1"\nbase="\${url%%\\?*}"\ntoken="\${url##*t=}"\ncurl -s -H "x-page-token: $token" "\${base}file?path=evidence/run.json" > /dev/null\ncurl -s -X POST -H "x-page-token: $token" -H "content-type: application/json" --data '{"verdict":"approve","annotations":[],"edits":[],"opened":["task.md","evidence/run.json"]}' "\${base}result" > /dev/null\n`;
 		for (const name of ["open", "xdg-open"]) {
 			writeFileSync(join(bin, name), browser);

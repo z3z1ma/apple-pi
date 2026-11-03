@@ -12,10 +12,10 @@ import { buildMarkdownPage } from "../src/markdown-review.js";
 import type { ExplainPart } from "../src/page-data.js";
 
 const ID = "202610150900-retry-http";
-let base: string; // a temporary directory outside any repository, holding everything below
-let outer: string; // a repository with its own uncommitted change
-let wt: string; // a worktree of `outer`, nested inside it, with a different uncommitted change
-let outside: string; // a directory in no repository
+let base: string;
+let outer: string;
+let wt: string;
+let outside: string;
 
 const write = (root: string, path: string, text: string) => {
 	mkdirSync(dirname(join(root, path)), { recursive: true });
@@ -24,7 +24,6 @@ const write = (root: string, path: string, text: string) => {
 const git = (cwd: string, ...args: string[]) => execFileSync("git", args, { cwd, stdio: "pipe" }).toString().trim();
 
 beforeEach(() => {
-	// Git reports real paths; on macOS the temporary directory sits behind a symlink.
 	base = realpathSync(mkdtempSync(join(tmpdir(), "browser-pages-cwd-")));
 	outer = join(base, "outer");
 	wt = join(outer, "wt");
@@ -42,7 +41,7 @@ beforeEach(() => {
 	git(outer, "add", ".");
 	git(outer, "commit", "-q", "-m", "base");
 	git(outer, "worktree", "add", "-q", "-b", "feature", wt);
-	// Each checkout has a change of its own.
+
 	write(outer, "src/a.ts", "export const a = 2;\n");
 	write(wt, "src/b.ts", "export const b = 2;\nexport const c = 3;\n");
 	write(wt, "docs/plan.md", "# Worktree plan\n\nThe worktree plan.\n");
@@ -50,8 +49,6 @@ beforeEach(() => {
 	write(outside, "notes.md", "# Outside notes\n\nNo repository here.\n");
 });
 afterEach(() => rmSync(base, { recursive: true, force: true }));
-
-// ---------------------------------------------------------------------------- sign_off_code
 
 const review = (file: string, over: Partial<ReviewCodeParams> = {}): ReviewCodeParams => ({
 	title: "Change",
@@ -62,7 +59,7 @@ const review = (file: string, over: Partial<ReviewCodeParams> = {}): ReviewCodeP
 	...over,
 });
 const changed = (page: { files: { path: string }[] }) => page.files.map((f) => f.path);
-// The worktree's own changes: none of them is the outer repository's `src/a.ts`.
+
 const WT_CHANGES = [`.ledger/${ID}/task.md`, "docs/plan.md", "src/b.ts"];
 
 describe("buildCodeReviewPage with cwd", () => {
@@ -111,8 +108,6 @@ describe("buildCodeReviewPage with cwd", () => {
 		await expect(buildCodeReviewPage(review("src/a.ts", { cwd: outside }), outer, "t")).rejects.toThrow();
 	});
 });
-
-// ---------------------------------------------------------------------------- explain_change
 
 const explain = (ref: string, over: Partial<ExplainChangeParams> = {}): ExplainChangeParams => ({
 	title: "Change",
@@ -185,8 +180,6 @@ describe("buildExplainPage with cwd", () => {
 	});
 });
 
-// ---------------------------------------------------------------------------- sign_off_document
-
 describe("buildMarkdownPage with cwd", () => {
 	it("without cwd, reads the path from the session's directory as before", async () => {
 		const { page, root } = await buildMarkdownPage({ path: "docs/plan.md" }, outer, "t");
@@ -233,8 +226,6 @@ describe("buildMarkdownPage with cwd", () => {
 		await expect(buildMarkdownPage({ path: "docs/plan.md", cwd: "missing" }, outer, "t")).rejects.toThrow();
 	});
 });
-
-// ---------------------------------------------------------------------------- sign_off_task
 
 describe("buildLedgerPage with cwd", () => {
 	it("without cwd, finds the task in the session's repository as before", async () => {

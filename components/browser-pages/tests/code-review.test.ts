@@ -232,13 +232,12 @@ describe("buildCodeReviewPage", () => {
 });
 
 describe("sign_off_code tool", () => {
-	// A page server, a browser subprocess, and a cold Shiki start: slower than 5 s under full-suite load.
 	it("opens the page, waits for the submission, saves the page, and returns the review", {
 		timeout: 30_000,
 	}, async () => {
 		const bin = mkdtempSync(join(tmpdir(), "browser-pages-bin-"));
 		const agentDir = mkdtempSync(join(tmpdir(), "browser-pages-agent-"));
-		// A stand-in browser: it submits an approval for whatever page it is asked to open.
+
 		const browser = `#!/bin/sh\nurl="$1"\ncurl -s -X POST -H "x-page-token: \${url##*t=}" -H "content-type: application/json" --data '{"verdict":"approve","summary":"Ship it.","comments":[],"decisions":[],"seen":[]}' "\${url%%\\?*}result" > /dev/null\n`;
 		for (const name of ["open", "xdg-open"]) {
 			writeFileSync(join(bin, name), browser);
@@ -310,7 +309,7 @@ describe("repeated changes", () => {
 			file: `src/jobs/${n}.ts`,
 		}));
 		base.chapters[1].changes.push({ summary: "Each job runs.", places });
-		// Two places in one file that differ only by a flag: no name explains the change, so it is flagged.
+
 		write("src/jobs/cache.ts", "enable({ cache: false });\n\nenable({ cache: true });\n");
 		base.chapters[1].changes.push({
 			summary: "Each cache is enabled.",

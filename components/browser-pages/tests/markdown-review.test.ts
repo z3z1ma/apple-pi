@@ -116,7 +116,7 @@ describe("results", () => {
 			question: "Why?",
 		});
 		expect(parseMarkdownQuestion({ spans: [{ block: "nope" }], question: "Why?" }, page)).toBeUndefined();
-		// The page's text runs past the source: marked puts a newline after each element, and a table adds more.
+
 		const past = {
 			...valid,
 			annotations: [{ type: "comment", spans: [{ block: para, start: 0, end: 31 }], text: "x" }],
@@ -165,7 +165,6 @@ describe("results", () => {
 });
 
 describe("sign_off_document tool", () => {
-	// A page server, a browser subprocess, and a cold Shiki start: slower than 5 s under full-suite load.
 	it("opens the page, waits for the submission, and saves the page with the result", { timeout: 30_000 }, async () => {
 		const bin = mkdtempSync(join(tmpdir(), "browser-pages-bin-"));
 		const agentDir = mkdtempSync(join(tmpdir(), "browser-pages-agent-"));

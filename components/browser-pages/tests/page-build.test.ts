@@ -6,13 +6,12 @@ import { fileURLToPath } from "node:url";
 import { build } from "vite";
 import { expect, it } from "vitest";
 
-// Git installs omit dev dependencies, so the package ships the built page. It must match its source.
 it.each(["code-review", "markdown-review", "ledger-review", "explain-change"])(
 	"the committed %s page matches a fresh build of web/ (run npm run build:web)",
 	{ timeout: 120_000 },
 	async (kind) => {
 		const outDir = mkdtempSync(join(tmpdir(), "browser-pages-build-"));
-		// Vitest sets NODE_ENV=test, which would select React's development build.
+
 		const env = process.env.NODE_ENV;
 		process.env.NODE_ENV = "production";
 		try {

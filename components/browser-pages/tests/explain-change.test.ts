@@ -93,7 +93,7 @@ describe("buildExplainPage", () => {
 		).page;
 		expect(tree.ref).toBe("uncommitted changes");
 		expect(rows(code(tree.steps[0].parts)[0])).toEqual([" 1 export const one = 1;", "+2 export const two = 2;"]);
-		// A branch that left main before its last commit, with a change of its own.
+
 		git("checkout", "-q", "-b", "other", "HEAD~1");
 		write("src/other.ts", "export const other = true;\n");
 		git("add", "src/other.ts");
@@ -218,7 +218,7 @@ describe("the tutor", () => {
 			page,
 		)!;
 		expect(tutorPrompt(page, talk)).toContain("A. a (the reader's choice)\nB. b (right)");
-		// A check asks first, so it reads the same in either mode; a reader's own question follows the mode.
+
 		const check = parseTutorTurn(
 			{ message: "Check me.", mode: "direct", thread: [], start: { kind: "check", step: 0 } },
 			page,
@@ -323,7 +323,7 @@ describe("explain_change tool", () => {
 					headers: { "x-page-token": token, "content-type": "application/json" },
 					body: body === undefined ? undefined : JSON.stringify(body),
 				});
-			// No live session runs in this test, so the page learns that the tutor cannot answer and hides it.
+
 			expect(await (await call("/health")).json()).toEqual({ ask: false });
 			const note = { answers: [{ question: 0, chosen: 1 }], asked: ["Why four?"] };
 			await call("/note", note);

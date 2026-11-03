@@ -85,7 +85,7 @@ it("answers a reviewer's question from a read-only fork of the live conversation
 				const result = context.messages.at(-1)!;
 				if (result.role === "toolResult")
 					rationale = result.content.flatMap((b) => (b.type === "text" ? [b.text] : [])).join("\n");
-				// Read-only page questions must still refuse a write after reading the target checkout.
+
 				return fauxAssistantMessage(fauxToolCall("bash", { command: "touch escaped.txt" }, { id: "fork-bash" }), {
 					stopReason: "toolUse",
 				});
