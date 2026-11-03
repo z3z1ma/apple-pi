@@ -6,7 +6,6 @@ export interface PairNote {
 	note: string;
 	kind?: PairNoteKind;
 	severity?: PairSeverity;
-	// Older transcripts retain consultant notes and their attribution.
 	source?: "pair" | "consultant" | "advisor";
 	adjudication?: "confirm" | "refute" | "refine" | "uncertain";
 }

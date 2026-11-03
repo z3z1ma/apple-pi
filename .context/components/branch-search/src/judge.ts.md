@@ -1,0 +1,4 @@
+## file
+
+A scalar judge is a command whose last stdout line is one finite number, with a direction. Absent repeat means one run. Absent timeout means no limit. A gate string has no time limit.
+Why: scoring runs one command at a time. Every worktree's gates run in turn, then judges run only on worktrees that passed every gate. Each judge's runs go round-robin across those worktrees, run 1 of each then run 2 of each, so machine drift favors none. A run that fails or prints no number fails that worktree's judge and skips its later runs. After every command, an intact check runs. A worktree that fails it is marked tampered and runs nothing more. An attempt cannot win if a gate failed or a judge printed no number. Qualifying attempts sort by declared judge order and direction, then smaller diff, then key. Changing a protected path fails the attempt before that ranking.

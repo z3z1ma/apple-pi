@@ -701,7 +701,6 @@ export class PairReviewScheduler {
 		}
 		const nextPhase = this.#pendingPhase();
 		const changed = nextPhase !== undefined && nextPhase !== this.#committedPhase;
-		// mutation/verification wakes are enter-phase checkpoints, not per-edit reviews.
 		if (changed && nextPhase === "verification" && wakes.has("verification")) reasons.push("phase_verification");
 		if (changed && nextPhase === "mutation" && wakes.has("mutation")) reasons.push("phase_mutation");
 		if (

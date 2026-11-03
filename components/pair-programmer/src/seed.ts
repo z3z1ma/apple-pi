@@ -15,7 +15,6 @@ function isTerminalAssistant(message: { content?: unknown } | undefined): boolea
 	);
 }
 
-/** Last implementing-agent turns kept in the compact seed. */
 export const RECENT_TRAJECTORY_TURNS = 8;
 
 export type SeedUserMessage = {
@@ -41,7 +40,6 @@ function entryMessage(entry: { message?: unknown; type?: string }): { role?: str
 	return undefined;
 }
 
-/** Current request plus the two most recently completed ones. */
 export function collectRecentUserRequests(entries: readonly unknown[]): SeedUserRequest[] {
 	const requests: SeedUserMessage[][] = [];
 	let current: SeedUserMessage[] = [];
@@ -207,11 +205,6 @@ export function formatRecentTrajectory(entries: readonly unknown[], issueReceipt
 	return parts.length ? `## What your partner has been doing\n${parts.join("\n\n")}` : "";
 }
 
-/**
- * Render the still-uncovered primary trajectory once for pair programmer session seeding.
- * Source ids remain attached while successful tool bodies use the same compact
- * receipts as live pair programmer review rather than submitting a second notebook transcript.
- */
 export function formatSourceAddressedTrajectory(
 	entries: readonly unknown[],
 	allowedSourceEntryIds: readonly string[],

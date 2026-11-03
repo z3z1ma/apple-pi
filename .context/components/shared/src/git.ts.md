@@ -1,0 +1,4 @@
+## file
+
+Git helpers shared by branch search and history evaluation run in their own process group. Every failure path settles only after the process has exited, so callers can remove the directories it was using. The repository root uses the session's spelling of the path, which is the one the model sees. Exact bytes are kept for blobs, patches and NUL-delimited paths. The text helper trims.
+Why: status-like reads pass no optional locks, so they never refresh the user's index. A process that ignores TERM must not keep a deadline pending. The leader can exit while a descendant keeps running, so a stopped command owns its whole group and cleanup waits until none of it remains. Copy-on-write clones use the system `cp -c` where the filesystem supports them. A GNU `cp` earlier on PATH does not own `-c`. Ignored directories are cloned only when the destination does not already have them.

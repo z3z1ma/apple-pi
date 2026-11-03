@@ -18,11 +18,6 @@ function followsAssistantProse(component: CustomMessageComponent, width: number)
 	return false;
 }
 
-/**
- * Render custom messages of `customType` like tool calls: adjacent within a sequence, separated from assistant prose.
- * Pi adds the spacer outside the registered renderer, so the
- * component's own render is patched once per process; the patch leaves every other message as it is.
- */
 export function renderInline(customType: string): void {
 	const prototype = CustomMessageComponent.prototype as Patched;
 	let types = prototype[COMPACT_TYPES];
@@ -42,7 +37,6 @@ export function renderInline(customType: string): void {
 	types.add(customType);
 }
 
-/** Whether `component` is a custom message rendered inline, so the tool after it stays on the next line. */
 export function rendersInline(component: unknown): boolean {
 	if (!(component instanceof CustomMessageComponent)) return false;
 	const { message } = component as unknown as { message?: { customType?: string } };

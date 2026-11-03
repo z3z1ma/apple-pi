@@ -1,0 +1,4 @@
+## file
+
+A fork has its own repository copy, the parent workspace whose paths map onto it, and a private temporary directory outside every worktree. That directory is created when the fork starts and deleted when it ends. The fork's tool hooks see the parent session manager, so its own conversation is stored separately.
+Why: the scope is on `globalThis` so every module copy, including reloads, tests and child loaders, sees one scope. Trackers can limit that check to their own session. A recorded process group is killed when the fork settles. Call the returned function when the group's leader exits, because a group with no member left is forgotten at once. A later kill must not reach an unrelated group that reused its number. Groups that emptied since they were recorded are dropped so the set does not hold a number for long.

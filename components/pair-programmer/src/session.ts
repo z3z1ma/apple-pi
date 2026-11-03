@@ -13,7 +13,6 @@ import { SET_PAIR_ATTENTION_TOOL_NAME } from "./review-scheduler.js";
 export const PAIR_AGENT_RETRIES = 1;
 export const PAIR_SESSION_EXTENSION_PATHS: readonly string[] = [];
 
-/** `createAgentSession({ tools })` is an allowlist. Custom tools omitted here never register. */
 export const PAIR_SESSION_TOOLS = [
 	"share_note",
 	"ask_for_second_opinion",

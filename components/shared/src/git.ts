@@ -2,33 +2,21 @@ import { execFile, spawn } from "node:child_process";
 import { existsSync, mkdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 
-/** Git and repository-copy helpers shared by branch search and the history evaluation. */
-
 export interface GitOptions {
 	env?: NodeJS.ProcessEnv;
-	/** Written to git's stdin. */
 	input?: string | Uint8Array;
 	signal?: AbortSignal;
-	/** Directory to run in; defaults to the cwd argument. */
 	cwd?: string;
-	/** Fail and stop the command once it has run this long. */
 	timeoutMs?: number;
-	/** Fail and stop the command as soon as stdout and stderr together exceed this many bytes. */
 	maxBytes?: number;
 }
 
-/** Time between asking a stopped Git process group to exit and killing it. */
 const KILL_GRACE_MS = 2000;
 
 export async function git(cwd: string, args: string[], options: GitOptions = {}): Promise<string> {
 	return (await gitBytes(cwd, args, options)).toString("utf8").trim();
 }
 
-/**
- * Exact bytes for blobs, patches and NUL-delimited paths; the text helper intentionally trims. The command runs in
- * its own process group, and every failure path (exit, abort, deadline, output limit) settles only after the
- * process has exited, so callers can remove the directories it was using.
- */
 export function gitBytes(cwd: string, args: string[], options: GitOptions = {}): Promise<Buffer> {
 	return new Promise((resolvePromise, reject) => {
 		if (options.signal?.aborted) {
@@ -37,7 +25,6 @@ export function gitBytes(cwd: string, args: string[], options: GitOptions = {}):
 		}
 		const child = spawn("git", args, {
 			cwd: options.cwd ?? cwd,
-			// No optional locks: status-like reads never refresh the user's index.
 			env: { ...process.env, GIT_OPTIONAL_LOCKS: "0", ...options.env },
 			detached: process.platform !== "win32",
 			stdio: [options.input === undefined ? "ignore" : "pipe", "pipe", "pipe"],
@@ -56,7 +43,6 @@ export function gitBytes(cwd: string, args: string[], options: GitOptions = {}):
 			if (failure) return;
 			failure = reason;
 			signalGroup("SIGTERM");
-			// A process that ignores TERM must not keep a deadline or cancellation pending forever.
 			escalation = setTimeout(() => signalGroup("SIGKILL"), KILL_GRACE_MS);
 		};
 		const abort = () =>
@@ -87,7 +73,6 @@ export function gitBytes(cwd: string, args: string[], options: GitOptions = {}):
 			if (escalation) clearTimeout(escalation);
 			options.signal?.removeEventListener("abort", abort);
 			const stderr = Buffer.concat(errors).toString("utf8");
-			// The leader can exit while a descendant that ignored TERM keeps running; a stopped command owns its whole group.
 			if (failure) void groupGone(child.pid).then(() => reject(failure));
 			else if (code !== 0) reject(new Error(`git ${args.join(" ")} failed: ${stderr.trim() || `exit ${code}`}`));
 			else resolvePromise(Buffer.concat(chunks));
@@ -99,7 +84,6 @@ export function gitBytes(cwd: string, args: string[], options: GitOptions = {}):
 	});
 }
 
-/** Kill what remains of a stopped command's process group and wait until none of it is left. */
 async function groupGone(pid: number | undefined): Promise<void> {
 	if (!pid || process.platform === "win32") return;
 	for (;;) {
@@ -112,14 +96,11 @@ async function groupGone(pid: number | undefined): Promise<void> {
 	}
 }
 
-/** The repository root in the session's spelling of the path, which is the one the model sees. */
 export async function repoRoot(cwd: string): Promise<string> {
 	return resolve(cwd, await git(cwd, ["rev-parse", "--show-cdup"]));
 }
 
 function cloneCommand(source: string, target: string): [string, string[]] {
-	// Copy-on-write clones where the filesystem supports them (APFS, btrfs, XFS). On macOS the
-	// system cp owns -c; a GNU cp earlier on PATH does not.
 	return process.platform === "darwin"
 		? ["/bin/cp", ["-cR", source, target]]
 		: ["cp", ["-R", "--reflink=auto", source, target]];
@@ -134,7 +115,6 @@ function run(command: string, args: string[]): Promise<void> {
 	});
 }
 
-/** Clone each listed ignored directory of `root` that exists into `path`, unless `path` already has it. */
 export async function cloneIgnoredDirs(root: string, path: string, cloneIgnored: string[]): Promise<void> {
 	for (const entry of cloneIgnored) {
 		const source = join(root, entry);
