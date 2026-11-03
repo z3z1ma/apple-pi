@@ -1,6 +1,6 @@
 # Indexed recall evaluation
 
-Status: baseline reproduced; independent task-set authoring pending; candidate unexecuted.
+Status: baseline reproduced; independent task set frozen; candidate unexecuted.
 
 ## Frozen setup
 
@@ -24,7 +24,9 @@ Latency case selected before candidate results: Q3, largest NL-query prefix amon
 
 ## Task-set timing and limits
 
-Ciaran authors the new task-scoped set without viewing candidate code/results. Four cases use actual historical calls; two proposed genuine handoffs use newly authored queries from actual asks and explicit task sets. Recorded focus evidence, reconstructed corpus membership and historical requester permission are separate facts.
+Ciaran authored the new task-scoped set without viewing candidate code/results. Private artifact: `/tmp/ciaran-task-recall/task-heldout-v1-private.json` (mode0600), SHA256 `0452aa7eeab7e0a8e655db9cc5f87f9f937a50a35e2b2b011ebec50e7937feef`, exact JSON without trailing newline, emitted at 2026-11-03T02:35:20.877Z. Six questions cover 49 unique labeled records: 19 relevant, 30 negative, 10 non-message, four distinct histories. Four queries are actual historical calls; two genuine cross-person handoffs use newly authored queries from actual asks and explicit task sets. Their historical other-task access is unknown, so those two are corpus-retrieval cases, not authorization tests. Recorded focus evidence, reconstructed corpus membership and historical requester permission are separate facts.
+
+Kofi independently verified all eight normalized prefix hashes, nine task-span hashes, 49 source hashes, label membership, relevant-ID consistency and cutoff ordering. Reparse of all 37 prior exposure files found zero malformed records and zero overlap with 4,551 selected-prefix identities (200,823 records at verification, 53 new appends after the author's check). Those are provenance checks, not independent relevance judgments. Sampling remains purposive/clustered with named-log and proximal-context cases; copied mail is not independent evidence.
 
 The requested freeze-before-scope-build order was not met: scope implementation `911e2eec` appeared on main while authoring continued. The set can still be frozen before any candidate result inspection, with its independent author unexposed to candidate code. Preserve that narrower claim rather than rewriting timing.
 
@@ -60,4 +62,8 @@ node --import ./components/session-state/src/register.mjs \
   .ledger/202611021905-task-scoped-recall/engine-replay.test.mjs
 ```
 
-These three tests passed, as did scoped Biome, syntax checks, whitespace and context_lint (388 files). No full suite, provider run, runtime restart or live backfill ran in this evaluation lane.
+The initial three adapter tests passed. Maintainer reflection replaced helper-structure assertions with five replay-level behavioral checks: default historical recovery, all-branch recovery, supplementary relevance labels, frozen-evidence rejection, and failed-setup cleanup. They exercise the current engine only; candidate behavior remains unverified until execution. No full suite, provider run, runtime restart or live backfill ran in this evaluation lane.
+
+## Next step
+
+Freeze and verify Ciaran's private task-scoped artifact, then run the exact detached candidate against the old sets. Report indexed NL and unchanged-path regex separately. If the ID-level gate survives, complete missing relevance judgments and evaluate actual integrated display and latency before recommending replacement.
