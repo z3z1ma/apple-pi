@@ -3,10 +3,10 @@ import { basename, dirname, isAbsolute, join, normalize, parse, posix, relative,
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { BrowserWindow, app, dialog, ipcMain, net, protocol, shell } from "electron";
 import { homedir, tmpdir } from "node:os";
+import { DatabaseSync } from "node:sqlite";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { createConnection } from "node:net";
 import { isDeepStrictEqual, promisify } from "node:util";
-import { DatabaseSync } from "node:sqlite";
 import { getAgentDir, getPackageDir, parseFrontmatter } from "@earendil-works/pi-coding-agent";
 import { execFile, spawn } from "node:child_process";
 import { spawn as spawn$1 } from "@lydell/node-pty";
@@ -45,6 +45,26 @@ function appFile(appDir, pathname) {
 	if (path.split(sep).includes("..")) return void 0;
 	if (path.startsWith(`themes${sep}`)) return join(appDir, path);
 	return join(appDir, "dist", "web", path || "index.html");
+}
+//#endregion
+//#region apps/agent-workplace/src/backend/code-authors.ts
+function absolute(cwd, path) {
+	return path.startsWith("~") ? join(homedir(), path.slice(1)) : resolve(cwd, path);
+}
+function lastEditor(dbPath, file) {
+	const db = new DatabaseSync(dbPath, { readOnly: true });
+	try {
+		const row = db.prepare(`select m.session_id, m.at, m.preview, s.cwd, s.name from messages m join sessions s on s.id = m.session_id
+				where m.part <> '' and m.tool in ('edit', 'write') and s.retired_at is null
+				order by m.at desc`).all().find((candidate) => absolute(candidate.cwd, candidate.preview) === file);
+		return row ? {
+			id: row.session_id,
+			name: row.name ?? row.session_id.slice(0, 8),
+			editedAt: row.at
+		} : null;
+	} finally {
+		db.close();
+	}
 }
 //#endregion
 //#region apps/agent-workplace/src/backend/commands.ts
@@ -12865,6 +12885,7 @@ function start() {
 		toWindow
 	});
 	ipcMain.handle("world:open-link", (_event, url) => openLink(url, (href) => shell.openExternal(href)));
+	ipcMain.handle("world:code-author", (_event, path) => typeof path === "string" ? lastEditor(statePaths().db, path) : null);
 	ipcMain.handle("world:open-file", (_event, href, base) => openFileLink(href, base, (path) => shell.openPath(path), (path) => shell.showItemInFolder(path)));
 	const toUpdate = leaveOutUnchanged();
 	world.subscribe((snapshot) => {

@@ -3,6 +3,7 @@ import { type KeyboardEvent, type MouseEvent, useCallback, useEffect, useRef, us
 import type { WorkspaceEntry, WorkspaceWorktree } from "../src/workspace.js";
 import type { WorldSnapshot } from "../src/world.js";
 import type { FileReferenceTarget } from "./file-reference-paths.js";
+import { useCodeAsks } from "./workplace-code-asks.js";
 import { useWorkplaceMenu } from "./workplace-context-menu.js";
 import { Select } from "./workplace-fields.js";
 import { GitDiffText, type GitDiffView, GitPane } from "./workplace-git.js";
@@ -208,6 +209,14 @@ export function WorkplaceCode({
 	const savingRef = useRef(false);
 	const saveRef = useRef<() => void>(() => {});
 	const current = selected ? buffers.current.get(selected) : undefined;
+	const [editorInstance, setEditorInstance] = useState<editor.IStandaloneCodeEditor>();
+	const asks = useCodeAsks({
+		instance: editorInstance,
+		file: current && !diff ? { root: current.root, path: current.path } : undefined,
+		world,
+		visible: active,
+		onOpenReviews: () => setShowReviews(true),
+	});
 	const dirty = current !== undefined && current.text !== current.base;
 	const repositoryList = [...new Set([...roots, root].filter(Boolean))];
 	const openBuffers = [...buffers.current.entries()].filter(([, buffer]) => buffer.root === root);
@@ -347,6 +356,7 @@ export function WorkplaceCode({
 			fixedOverflowWidgets: true,
 		});
 		instance.current = created;
+		setEditorInstance(created);
 		created.addCommand(loaded.monaco.KeyMod.CtrlCmd | loaded.monaco.KeyCode.KeyS, () => saveRef.current());
 		created.addAction({
 			id: "workplace.toggleWordWrap",
@@ -359,6 +369,7 @@ export function WorkplaceCode({
 		});
 		return () => {
 			observer.disconnect();
+			setEditorInstance(undefined);
 			created.dispose();
 			instance.current = undefined;
 			for (const buffer of buffers.current.values()) {
@@ -764,6 +775,7 @@ export function WorkplaceCode({
 				</div>
 			)}
 			<WorkplaceReviews root={root} active={visible && showReviews} world={world} />
+			{asks}
 			<div
 				hidden={showReviews}
 				ref={panes}

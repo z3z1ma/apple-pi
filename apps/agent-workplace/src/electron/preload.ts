@@ -8,6 +8,7 @@ import type {
 	CanvasList,
 	CanvasRead,
 	CanvasSaved,
+	CodeAuthor,
 	CommandReceipt,
 	CommandResult,
 	ConversationPage,
@@ -225,6 +226,7 @@ const api: AgentWorkplaceApi = {
 	},
 	openFile: (href, base) => ipcRenderer.invoke("world:open-file", href, base) as Promise<CommandResult>,
 	openLink: (url) => ipcRenderer.invoke("world:open-link", url) as Promise<CommandResult>,
+	codeAuthor: (path) => ipcRenderer.invoke("world:code-author", path) as Promise<CodeAuthor | null>,
 	...places(),
 };
 

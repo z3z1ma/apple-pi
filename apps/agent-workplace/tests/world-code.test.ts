@@ -22,7 +22,7 @@ beforeAll(async () => {
 });
 afterAll(() => browser?.close());
 
-async function openCode() {
+async function openCode(options: { desk?: boolean } = {}) {
 	const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, colorScheme: "light" });
 	page.setDefaultTimeout(7000);
 	const errors: string[] = [];
@@ -43,7 +43,7 @@ async function openCode() {
 		return route.fulfill({ body: readFileSync(file), contentType: contentType(file) });
 	});
 	await page.addInitScript(
-		({ root, linked }) => {
+		({ root, linked, desk }) => {
 			const w = window as any;
 			const snapshot: WorldSnapshot = {
 				connected: true,
@@ -53,6 +53,7 @@ async function openCode() {
 				mail: [],
 				operatorMail: [],
 				workplace: { threads: [], tasks: [], escalations: [] },
+				...(desk ? { desk: { thread: "t-desk", person: "desk-1" } } : {}),
 			};
 			w.workspaceCalls = {
 				repositories: 0,
@@ -171,7 +172,7 @@ async function openCode() {
 				},
 			};
 		},
-		{ root: ROOT, linked: LINKED_ROOT },
+		{ root: ROOT, linked: LINKED_ROOT, desk: options.desk ?? false },
 	);
 	await page.goto(`${ORIGIN}/index.html`);
 	await page.getByRole("button", { name: "Chat", exact: true }).waitFor();
@@ -759,6 +760,154 @@ test("word wrap toggles from the editor's command palette, and Files and Git can
 		await page.close();
 	}
 }, 45_000);
+
+test("editor actions reach agents with the selected code and show their replies inline, beside the lines", async () => {
+	const { page, errors } = await openCode({ desk: true });
+	try {
+		await openMain(page);
+		await page.evaluate(() => {
+			const w = window as any;
+			w.askCalls = { mail: [], posts: [], previews: [], enqueues: [], authors: [] };
+			w.threadMessages = {};
+			w.agentWorkplace.codeAuthor = async (path: string) => {
+				w.askCalls.authors.push(path);
+				return path.endsWith("main.ts") ? { id: "author-1", name: "Niamh", editedAt: 1 } : null;
+			};
+			w.agentWorkplace.communications = {
+				sendMail: async (request: any) => {
+					w.askCalls.mail.push(structuredClone(request));
+					return {
+						attempt: request.attempt,
+						outcome: "applied",
+						effect: { thread: { id: `t-${w.askCalls.mail.length}` } },
+					};
+				},
+				readThread: async (request: any) => ({
+					ok: true,
+					page: { messages: w.threadMessages[request.thread] ?? [], window_through: 0 },
+				}),
+				post: async (request: any) => {
+					w.askCalls.posts.push(structuredClone(request));
+					return { attempt: request.attempt, outcome: "applied" };
+				},
+			};
+			w.agentWorkplace.reviews = {
+				...w.agentWorkplace.reviews,
+				preview: async (request: any) => {
+					w.askCalls.previews.push(structuredClone(request));
+					return { digest: "digest-1", changedPaths: 1, lines: [] };
+				},
+				enqueue: async (request: any) => {
+					w.askCalls.enqueues.push(structuredClone(request));
+					return { id: "review-1", ownerName: "Desk" };
+				},
+				read: async (request: any) =>
+					request.part === "summary"
+						? { state: "running" }
+						: {
+								total: 1,
+								page: {
+									rows: [
+										{
+											finding: { title: "Off by one", path: "src/main.ts", line: 1, severity: "high" },
+											validation: { disposition: "confirmed" },
+										},
+									],
+								},
+							},
+			};
+		});
+		const calls = () => page.evaluate(() => (window as any).askCalls);
+		const palette = async (label: string) => {
+			await editor(page).click({ position: { x: 240, y: 16 } });
+			await page.keyboard.press("F1");
+			await page.keyboard.type(label);
+			await page.getByRole("option", { name: new RegExp(label) }).waitFor();
+			await page.keyboard.press("Enter");
+		};
+		await editor(page).click();
+		await page.keyboard.press("Meta+ArrowUp");
+		await page.keyboard.press("Shift+End");
+		await editor(page).click({ button: "right", position: { x: 120, y: 12 } });
+		const item = page.getByRole("menuitem", { name: /Agents: Ask the Desk/ });
+		await item.waitFor();
+		await new Promise((resolve) => setTimeout(resolve, 600));
+		await item.click();
+		const deskAsk = page.getByRole("region", { name: "Ask the Desk: lines 1-1", exact: true });
+		await deskAsk.getByRole("textbox").fill("Why is this exported?");
+		await deskAsk.getByRole("button", { name: "Ask the desk", exact: true }).click();
+		await vi.waitFor(async () => expect((await calls()).mail).toHaveLength(1));
+		const [desk] = (await calls()).mail;
+		expect(desk.to).toEqual(["desk-1"]);
+		expect(desk.subject).toBe("Code question: src/main.ts:1-1");
+		expect(desk.body).toContain("`/fixture/project/src/main.ts` lines 1-1");
+		expect(desk.body).toContain("Why is this exported?");
+		expect(desk.body).toContain('```typescript\nexport const message = "original";\n```');
+		await page.evaluate(() => {
+			(window as any).threadMessages["t-1"] = [
+				{ id: "m1", from: "operator", fromName: "You", body: "Why is this exported?" },
+				{ id: "m2", from: "desk-1", fromName: "Nana", body: "Other modules import it." },
+			];
+		});
+		await deskAsk.getByText("Other modules import it.", { exact: true }).waitFor({ timeout: 8000 });
+		await deskAsk.getByRole("textbox", { name: "Reply" }).fill("Which ones?");
+		await deskAsk.getByRole("button", { name: "Reply", exact: true }).click();
+		await vi.waitFor(async () =>
+			expect((await calls()).posts).toEqual([expect.objectContaining({ thread: "t-1", body: "Which ones?" })]),
+		);
+
+		await palette("Agents: Ask Whoever Wrote This");
+		const authorAsk = page.getByRole("region", { name: "Ask Whoever Wrote This: lines 1-2", exact: true });
+		await authorAsk.getByRole("textbox").fill("What was the intent?");
+		await authorAsk.getByRole("button", { name: "Ask the author", exact: true }).click();
+		await authorAsk.getByText(/Niamh/).waitFor();
+		expect((await calls()).authors).toEqual(["/fixture/project/src/main.ts"]);
+		expect((await calls()).mail[1]).toMatchObject({ to: ["author-1"] });
+		expect((await calls()).mail[1].body).not.toContain("```");
+
+		await palette("Agents: Review This");
+		const reviewAsk = page.getByRole("region", { name: "Review This: lines 1-2", exact: true });
+		await reviewAsk.getByRole("textbox").fill("Check the export");
+		await reviewAsk.getByRole("button", { name: "Start review", exact: true }).click();
+		await reviewAsk.getByRole("button", { name: /Off by one/ }).waitFor({ timeout: 8000 });
+		expect((await calls()).previews[0]).toMatchObject({
+			cwd: "/fixture/project",
+			target: { kind: "working-tree", base: "HEAD" },
+			paths: ["src/main.ts"],
+		});
+		expect((await calls()).enqueues[0]).toMatchObject({ expectedDigest: "digest-1", owner: "desk-1" });
+
+		await palette("Agents: Fix or Change This");
+		const fixAsk = page.getByRole("region", { name: "Fix or Change This: lines 1-2", exact: true });
+		await fixAsk.getByRole("textbox").fill("Rename message to greeting");
+		await fixAsk.getByRole("button", { name: "Hand to an engineer", exact: true }).click();
+		await vi.waitFor(async () => expect((await calls()).mail).toHaveLength(3));
+		expect((await calls()).mail[2]).toMatchObject({ to: ["desk-1"], subject: "Change request: src/main.ts:1-2" });
+		await shot(page, "asks-inline");
+
+		await page
+			.getByRole("complementary", { name: "Files", exact: true })
+			.getByRole("button", { name: "README.md", exact: true })
+			.click();
+		await vi.waitFor(async () => expect(await editorText(page)).toContain("Fixture project"));
+		expect(await page.locator(".wp-code-ask").count()).toBe(0);
+		await palette("Agents: Ask Whoever Wrote This");
+		const missing = page.getByRole("region", { name: "Ask Whoever Wrote This: lines 1-2", exact: true });
+		await missing.getByRole("textbox").fill("Who wrote this?");
+		await missing.getByRole("button", { name: "Ask the author", exact: true }).click();
+		await missing
+			.getByRole("alert")
+			.getByText(/No agent session has edited this file/)
+			.waitFor();
+		await page.getByRole("tab", { name: /main.ts/ }).click();
+		await vi.waitFor(async () => expect(await page.locator(".wp-code-ask").count()).toBe(4));
+		await deskAsk.getByText("Other modules import it.", { exact: true }).waitFor();
+		expect(await page.evaluate(() => (window as any).workspaceCalls.saves)).toEqual([]);
+		expect(errors).toEqual([]);
+	} finally {
+		await page.close();
+	}
+}, 60_000);
 
 test("conflict recovery preserves the draft, writes only after Save, and still rejects a newer disk version", async () => {
 	const { page, errors } = await openCode();

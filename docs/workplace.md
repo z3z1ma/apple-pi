@@ -173,6 +173,15 @@ Use the file-search action or Cmd+P/Ctrl+P while Code is active for **Quick Open
 
 Use **Save** or Cmd+S/Ctrl+S to write the selected file. Saves compare the disk version with the version you read. If another process changed it, saving is blocked and your draft stays intact. **Review disk version** shows the competing content. **Keep my draft** accepts that reviewed disk version as the comparison base while retaining your text; it writes nothing. A later **Save** can replace that version, but still refuses any newer disk change. **Discard draft and use disk version** instead replaces the draft with the reviewed content. A refresh or focus check can load disk changes when the buffer is clean. Symlink/path checks keep access within the chosen workspace, and saving through a symlink is refused. The editor handles existing text files; its controls do not create or delete files.
 
+**Files** and **Git** in the toolbar show or hide the file tree and the changes panel. The editor's own command palette (F1) holds editor commands such as **View: Toggle Word Wrap** (Alt+Z; wrap starts off). It also holds four agent actions, which are on the right-click menu too:
+
+- **Agents: Ask the Desk** mails your question to the desk person.
+- **Agents: Ask Whoever Wrote This** mails the agent session that last edited or wrote the file and is still in the organization, found from recorded tool calls. A person at home reads it when called back in.
+- **Agents: Review This** captures a working-tree review scoped to the file, owned by the desk person, with your text as intent.
+- **Agents: Fix or Change This** mails the desk person a change request to hand to an engineer.
+
+Each action sends the file path and line range, plus the selected code when there is a selection. Its thread opens inline under those lines: replies (or the review's findings) appear there, you can reply in place, and the same thread is in Mail. Inline threads stay with their file while Workplace runs.
+
 The **Repository changes** panel is read-only Git status and diff inspection: staged, unstaged and untracked paths, with explicit refresh. Git inspection requires the repository's top-level directory. It does not stage, commit, discard, push or execute arbitrary commands.
 
 ### Captured reviews

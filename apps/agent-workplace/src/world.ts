@@ -508,4 +508,11 @@ export interface AgentWorkplaceApi extends IntegrationsApi {
 	onNotepad(listener: (change: NotepadChange) => void): () => void;
 	openFile(href: string, base: string): Promise<CommandResult>;
 	openLink(url: string): Promise<CommandResult>;
+	codeAuthor(path: string): Promise<CodeAuthor | null>;
+}
+
+export interface CodeAuthor {
+	id: string;
+	name: string;
+	editedAt: number;
 }

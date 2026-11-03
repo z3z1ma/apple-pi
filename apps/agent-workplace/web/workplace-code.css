@@ -486,3 +486,132 @@
 		grid-template-columns: minmax(0, 1fr);
 	}
 }
+.wp-code-ask-layer {
+	position: absolute;
+	inset: 0;
+	overflow: hidden;
+	pointer-events: none;
+	z-index: 5;
+}
+.wp-code-ask-slot {
+	position: absolute;
+	pointer-events: auto;
+}
+.wp-code-ask {
+	max-width: 760px;
+	border: 1px solid var(--wp-border);
+	border-left: 3px solid var(--wp-accent);
+	border-radius: 6px;
+	background: var(--wp-panel);
+	color: var(--wp-text);
+	font: 13px / 1.45 var(--wp-font, system-ui, sans-serif);
+	white-space: normal;
+}
+.wp-code-ask header {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 6px 8px 6px 12px;
+	border-bottom: 1px solid var(--wp-border);
+}
+.wp-code-ask header span {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	color: var(--wp-muted);
+	font-size: 12px;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.wp-code-ask-compose {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding: 8px 12px;
+}
+.wp-code-ask-compose textarea {
+	min-height: 52px;
+	resize: vertical;
+	padding: 6px 8px;
+	border: 1px solid var(--wp-border);
+	border-radius: 6px;
+	background: var(--wp-bg);
+	color: var(--wp-text);
+	font: inherit;
+}
+.wp-code-ask-actions {
+	display: flex;
+	justify-content: flex-end;
+	gap: 6px;
+}
+.wp-code-ask-error {
+	margin: 0;
+	color: var(--wp-danger);
+}
+.wp-code-ask-status {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: 0;
+	padding: 8px 12px;
+	color: var(--wp-muted);
+}
+.wp-code-ask-messages {
+	margin: 0;
+	padding: 6px 12px;
+	list-style: none;
+}
+.wp-code-ask-messages li {
+	padding: 6px 0;
+}
+.wp-code-ask-messages li + li {
+	border-top: 1px solid var(--wp-border);
+}
+.wp-code-ask-messages li > strong {
+	display: block;
+	font-size: 12px;
+}
+.wp-code-ask-messages li.is-mine > strong {
+	color: var(--wp-muted);
+}
+.wp-code-ask-waiting {
+	color: var(--wp-muted);
+	font-style: italic;
+}
+.wp-code-ask-findings {
+	margin: 0;
+	padding: 0 6px 8px;
+	list-style: none;
+}
+.wp-code-ask-findings button {
+	display: grid;
+	grid-template-columns: auto minmax(0, 1fr) auto;
+	align-items: baseline;
+	gap: 8px;
+	width: 100%;
+	padding: 4px 6px;
+	border: 0;
+	border-radius: 4px;
+	background: none;
+	color: inherit;
+	text-align: left;
+}
+.wp-code-ask-findings button:hover {
+	background: var(--wp-hover);
+}
+.wp-code-ask-findings small {
+	color: var(--wp-muted);
+}
+.wp-code-ask-severity {
+	font-size: 11px;
+	font-weight: 600;
+	text-transform: uppercase;
+	color: var(--wp-muted);
+}
+.wp-code-ask-severity.is-critical,
+.wp-code-ask-severity.is-high {
+	color: var(--wp-danger);
+}
+.wp-code-ask-severity.is-medium {
+	color: var(--wp-warning);
+}

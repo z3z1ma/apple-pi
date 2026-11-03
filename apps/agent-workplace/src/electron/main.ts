@@ -4,6 +4,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { app, BrowserWindow, dialog, ipcMain, net, protocol, shell } from "electron";
 import { agentDir, statePaths } from "../../../../components/session-state/src/paths.js";
 import { appFile } from "../app-files.js";
+import { lastEditor } from "../backend/code-authors.js";
 import { openCommands } from "../backend/commands.js";
 import { openCommunications } from "../backend/communications.js";
 import { searchConversations } from "../backend/conversation-search.js";
@@ -354,6 +355,9 @@ function start() {
 	ipcMain.handle("world:close-notepad", () => notepads.close());
 	wireIntegrations({ stateDir: statePaths().dir, snapshot: () => world.snapshot(), commands, toWindow });
 	ipcMain.handle("world:open-link", (_event, url: unknown) => openLink(url, (href) => shell.openExternal(href)));
+	ipcMain.handle("world:code-author", (_event, path: unknown) =>
+		typeof path === "string" ? lastEditor(statePaths().db, path) : null,
+	);
 	ipcMain.handle("world:open-file", (_event, href: unknown, base: unknown) =>
 		openFileLink(
 			href,
