@@ -1,4 +1,3 @@
-/** Reject values JSON would silently coerce, omit, or structurally change. */
 export function serializeJsonValue(value: unknown, subject: string): string {
 	const seen = new Set<object>();
 	const validate = (nested: unknown): void => {
@@ -42,7 +41,6 @@ export function serializeJsonValue(value: unknown, subject: string): string {
 	return JSON.stringify(value);
 }
 
-/** Convert a value from Monty into plain JSON data. Host arguments may already be plain objects; program results may not. */
 export function fromPythonValue(value: unknown, hostArguments = false, seen = new Set<object>()): unknown {
 	if (
 		!hostArguments &&

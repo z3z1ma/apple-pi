@@ -219,7 +219,6 @@ export class ReviewPanel implements Component {
 		}
 		if (matchesKey(data, "h")) {
 			this.hideAddressed = !this.hideAddressed;
-			// The selection may vanish with the filter; the reader then shows the last page that still has reviews.
 			this.refresh();
 		} else if (matchesKey(data, Key.enter)) this.focusDetail = !this.focusDetail;
 		else if (matchesKey(data, "]") || matchesKey(data, "[")) this.page(matchesKey(data, "]") ? 1 : -1);
@@ -252,7 +251,6 @@ export class ReviewPanel implements Component {
 		const hide = this.hideAddressed ? "h show addressed" : "h hide addressed";
 		const fullKeys = `Tab view  Enter pane  a actions  ${hide}  [ ] page  Esc editor  q close`;
 		const keys = width >= fullKeys.length + 4 ? [fullKeys] : ["Tab view  Enter pane  a actions", `${hide}  q close`];
-		// Frame, strip and rules; the narrow layout adds a rule between queue and evidence.
 		const chrome = (width >= 100 ? 5 : 6) + keys.length;
 		if (width < Math.max(...keys.map((line) => line.length)) + 4 || height < chrome + 5)
 			return [truncateToWidth("Reviews: enlarge terminal; q closes", Math.max(0, width), "")];
@@ -367,7 +365,6 @@ export class ReviewPanel implements Component {
 		return this.theme.fg("muted", label[1]!) + this.theme.fg(color, label[2]!);
 	}
 
-	/** One line per review: what changed on the left, elapsed, cost and outcome in fixed columns on the right. */
 	private master(width: number): string[] {
 		const lines: string[] = [];
 		const now = Date.now();

@@ -17,7 +17,6 @@ export interface SkillCatalogOptions {
 	includeDefaults?: boolean;
 }
 
-/** Packaged `package.json#pi.skills` directories, resolved from this package root. */
 export function packagedSkillPaths(): string[] {
 	try {
 		const manifest = JSON.parse(readFileSync(join(PACKAGE_ROOT, "package.json"), "utf8")) as {

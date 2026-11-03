@@ -45,7 +45,6 @@ function boundSummary(value: unknown): Args {
 	}
 }
 
-/** Bound data belongs in the task's files, never in an activity row or an operation trace. */
 export function peerOperationArgs(args: Args): Args {
 	return {
 		...Object.fromEntries(["key", "role", "name", "task"].filter((key) => key in args).map((key) => [key, args[key]])),
@@ -72,7 +71,6 @@ function contextFile(person: string, value: unknown): string {
 	return path;
 }
 
-/** Invocation-local handles. Python keeps only their keys; this owner keeps and disposes the actual resources. */
 export function createPeerCalls(ctx: ExtensionToolContext, attachments: Record<string, string> = {}): PeerCalls {
 	const canManage = managesPeople(ctx);
 	if (!canManage && Object.keys(attachments).length)

@@ -17,7 +17,6 @@ interface DisplayState {
 	lines: WeakMap<BashExecutionComponent, string[]>;
 }
 
-/** Pi strips ANSI before its UI callback. Carry styles only through that synchronous callback. */
 export function withUserBashStyle(styled: string, emitPlain: () => void): void {
 	const prototype = BashExecutionComponent.prototype;
 	const patched = prototype as typeof prototype & { [PATCH]?: DisplayState };
@@ -55,8 +54,6 @@ function installDisplayPatch(state: DisplayState): void {
 		update.call(this);
 		const styled = state.lines.get(this as unknown as BashExecutionComponent);
 		if (!styled) return;
-		// Let Pi own status, loader, and truncation notices. Replace only its output child,
-		// using the same plain-text truncation so ANSI bytes never consume the output budget.
 		const tail = truncateTail(this.outputLines.join("\n"));
 		if (!tail.content) return;
 		const kept = tail.content.split("\n").length;

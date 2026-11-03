@@ -6,7 +6,6 @@ export interface ProgramEnvelope {
 	timeoutSeconds: number;
 }
 
-/** Hard caps for optional `pi_exec` `limits`. Defaults stay derived from program shape. */
 export const PROGRAM_ENVELOPE_MAXIMA: ProgramEnvelope = {
 	callBudget: 2048,
 	concurrency: 32,
@@ -28,7 +27,6 @@ function clampLimit(value: number | undefined, fallback: number, min: number, ma
 	return Math.min(max, Math.max(min, Math.trunc(value)));
 }
 
-/** Default envelope from program shape. Optional limits scale capacity up to package maxima. */
 export function deriveProgramEnvelope(code: string, limits: ProgramEnvelopeLimits = {}): ProgramEnvelope {
 	const hasPeers = /\b(?:agent(?:_run)?|peer)\s*\(|\.run\s*\(/.test(code);
 	const hasFanout = /\basyncio\.gather\s*\(/.test(code);

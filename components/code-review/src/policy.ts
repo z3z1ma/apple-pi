@@ -35,12 +35,6 @@ export function configurationSummary(configuration: ReviewConfiguration | undefi
 
 export type ReviewDepth = "standard" | "deep";
 
-/**
- * A pass's depth, not its role, chooses the model tier of a role that names a profile: deep uses the deep profile,
- * standard keeps the role's own profile unless that is deep, which steps down to balanced. Profiles map tiers to any
- * provider. A role with only concrete models keeps them at either depth, and the role's recommendations stay the
- * fallback when the profile file lacks a profile.
- */
 function rolePolicy(role: Role, depth: ReviewDepth, profiles?: Record<string, ModelProfile>) {
 	const text = readFileSync(role.path, "utf8");
 	const own = isInferenceProfileName(role.models[0]!) ? role.models[0]! : undefined;

@@ -5,10 +5,6 @@ import { killProcessTree } from "./process-killer.js";
 import { TerminalTranscript } from "./terminal-transcript.js";
 import { withUserBashStyle } from "./ui/user-bash.js";
 
-/**
- * Runs the operator's `!` commands on the same pseudo-terminal as the Bash tool, without RTK, and
- * passes Pi each line's final plain text as soon as the line ends.
- */
 export function terminalShellOperations(ctx: ExtensionContext): BashOperations {
 	return {
 		async exec(command, cwd, { onData, signal, timeout }) {

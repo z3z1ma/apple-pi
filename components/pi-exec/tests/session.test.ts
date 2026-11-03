@@ -241,9 +241,12 @@ describe("pi_exec Monty session tree", () => {
 		expect(isOwnedMontyWorker(undefined)).toBe(false);
 		expect(isOwnedMontyWorker(-1)).toBe(false);
 		expect(isOwnedMontyWorker(0)).toBe(false);
-		expect(isOwnedMontyWorker(1)).toBe(false); // PID 1 (init/launchd)
-		expect(isOwnedMontyWorker(process.pid)).toBe(false); // Our own process (not a child subprocess)
-		expect(isOwnedMontyWorker(999_999_999)).toBe(false); // Non-existent PID
+		const launchdPid = 1;
+		const ownPid = process.pid;
+		const missingPid = 999_999_999;
+		expect(isOwnedMontyWorker(launchdPid)).toBe(false);
+		expect(isOwnedMontyWorker(ownPid)).toBe(false);
+		expect(isOwnedMontyWorker(missingPid)).toBe(false);
 		const live = await createProgramSession(guestPythonStubs(process.cwd(), []));
 		const pid = live.session.workerPid;
 		try {

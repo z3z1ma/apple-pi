@@ -84,7 +84,6 @@ const POLL_MS = 1000;
 
 type Update = ((update: { content: { type: "text"; text: string }[]; details: undefined }) => void) | undefined;
 
-/** Waits by reading recorded state, so a reader who is not the owner (and gets no mail) can wait too. */
 async function settledReview(actor: string, review: string, signal: AbortSignal | undefined, update: Update) {
 	const id = database((db) => readReview(db, actor, review)).id;
 	const stop = startReviewWait(id);
@@ -142,7 +141,6 @@ async function settledReview(actor: string, review: string, signal: AbortSignal 
 	}
 }
 
-/** A mutation that admitted or resumed a review, followed by its settled outcome when the caller asked to wait. */
 async function andWait(
 	admitted: ReturnType<typeof result>,
 	shouldWait: boolean | undefined,

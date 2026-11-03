@@ -1,4 +1,3 @@
-// Trusted guest prelude: schema compilation is pure Python, so it consumes no host calls or Monty suspensions.
 export const PYTHON_SCHEMA_PRELUDE = `import math
 
 def schema(shape):

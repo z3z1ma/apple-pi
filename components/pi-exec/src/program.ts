@@ -65,7 +65,6 @@ export async function createProgramSession(
 	}
 }
 
-/** Run one Python feed against the root session's live Monty interpreter. */
 export async function executeProgram(
 	session: MontySession,
 	code: string,

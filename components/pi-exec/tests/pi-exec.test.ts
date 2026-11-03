@@ -101,7 +101,6 @@ describe("pi_exec skills", () => {
 	});
 });
 
-/** Pi's tool context: the callable tools and a nested-call pipeline that never rejects for tool failures. */
 function toolContext(ctx: any, calls: string[] = []) {
 	const tools = ctx.tools ?? [];
 	return {

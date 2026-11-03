@@ -11,7 +11,6 @@ export interface ExecInvocation {
 
 const displayText = (text: string): string => safeText(text).replace(/\s+/g, " ").trim();
 
-/** One passive unit per running program; its host calls and model workers stay inside that unit. */
 function renderProgram(activity: ExecActivitySnapshot, width: number, theme: ActiveWorkTheme, frame: string): string[] {
 	const calls = activity.calls;
 	const done = calls.filter((call) => call.status !== "queued" && call.status !== "running").length;

@@ -5,7 +5,6 @@ import { captureReview } from "./capture.js";
 import { configurationSummary } from "./policy.js";
 import type { ReviewRequest } from "./types.js";
 
-/** Preview identity without retaining a second source store or starting model work. */
 export async function previewReview(request: ReviewRequest, signal?: AbortSignal) {
 	const directory = await mkdtemp(join(tmpdir(), "apple-pi-review-preview-"));
 	try {

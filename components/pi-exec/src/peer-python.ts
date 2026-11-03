@@ -1,4 +1,3 @@
-/** Pure Python handles survive checkpoints without retaining a host object or an execution context. */
 export const PEER_PYTHON_PRELUDE = `
 from typing import Any
 

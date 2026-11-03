@@ -21,7 +21,6 @@ const organization = (pi: ExtensionAPI) => {
 	pi.registerFlag("role", { type: "string", description: "role" });
 	pi.registerFlag("reports-to", { type: "string", description: "manager" });
 	installOrganization(pi);
-	// The session-state work tools own `finish_task`; reflection only needs its name.
 	pi.registerTool(
 		defineTool({
 			name: "finish_task",
@@ -72,7 +71,7 @@ test("a failed draw leaves the person without a soul until a later start draws o
 	expect(run.prompt()).not.toContain("Your soul:");
 
 	vi.unstubAllGlobals();
-	await run.session.bindExtensions({}); // a later start
+	await run.session.bindExtensions({});
 	await run.session.prompt("again");
 	expect(run.prompt()).toContain("Your soul:");
 });
@@ -114,7 +113,6 @@ test("finishing a task starts a reflection whose self joins the conversation now
 	expect(content).toContain('"content":"Self: Wrote my first self.');
 	expect(JSON.parse(content).content).toContain(`## What I hold myself to\n${self.commitments}`);
 
-	// The prompt prefix holds: the system prompt keeps its self until the compaction rebuilds the context.
 	await run.session.prompt("Next.");
 	expect(selfSection(run.prompt())).toContain("You have not written your self yet.");
 	await run.session.compact();

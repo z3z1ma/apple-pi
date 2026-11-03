@@ -1,8 +1,5 @@
 import type { ManagedTask, MonitorEvent } from "./types.js";
 
-/**
- * Format a task notification message for the session transcript and agent wake-up.
- */
 export function formatTaskNotification(task: ManagedTask): string {
 	const startedAt = task.kind === "command" ? (task.startedAt ?? task.createdAt) : task.createdAt;
 	const durationMs = (task.endedAt ?? Date.now()) - startedAt;

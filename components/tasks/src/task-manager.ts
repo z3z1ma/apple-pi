@@ -169,7 +169,6 @@ export class TaskManager {
 		});
 	}
 
-	/** Discards every task without terminal notifications: the owning session is ending. */
 	reset(): void {
 		for (const control of this.controls.values()) {
 			if (!control.settled) this.stop(control);
