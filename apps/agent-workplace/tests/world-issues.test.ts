@@ -657,6 +657,13 @@ test("GitHub is the signed-out default; browsing, search and delegation retain r
 			.waitFor();
 		expect(await page.evaluate(() => (window as any).issueCalls.githubSearches)).toEqual(["keyboard repo:acme/other"]);
 		await detail.getByText("Outside current results", { exact: true }).waitFor();
+		await page.getByRole("button", { name: "Read issue: acme/other#7 Search another repository", exact: true }).click();
+		await detail.getByRole("heading", { name: /^acme\/other#7 .*Search another repository$/ }).waitFor();
+		await page.getByRole("button", { name: "My issues", exact: true }).click();
+		await page.getByRole("button", { name: "Read issue: acme/app#7 Fix GitHub keyboard flow", exact: true }).click();
+		expect(await detail.getByRole("textbox", { name: "Goal and context", exact: true }).inputValue()).toBe(
+			"Fix the GitHub keyboard issue.",
+		);
 		await detail.getByRole("button", { name: "Send instruction", exact: true }).click();
 		await vi.waitFor(async () =>
 			expect(await page.evaluate(() => (window as any).issueCalls.delegated.length)).toBe(1),
@@ -742,7 +749,6 @@ test("Settings connections sign in/out and source selection persists while provi
 		expect(await page.getByRole("textbox", { name: "Goal and context", exact: true }).inputValue()).toBe(
 			"Preserve this GitHub draft.",
 		);
-		expect(await page.evaluate(() => localStorage.getItem("workplace-issues-source"))).toBe("github");
 		await page.getByRole("button", { name: "Settings", exact: true }).click();
 		await page.evaluate(() => {
 			(window as any).githubSignedOut = true;

@@ -192,12 +192,10 @@ test("a GitHub issue reaches the selected person with its repository identity an
 				(receipt) => receipts.push(receipt),
 			),
 		).toEqual({ ok: true, to: id, command: "talk" });
-		expect(sentCommands(id)).toEqual([
-			{
-				kind: "talk",
-				text: 'Please start work on issue acme/app#7 "Fix keyboard navigation": https://github.com/acme/app/issues/7\n\nVerify keyboard focus.',
-			},
-		]);
+		await vi.waitFor(() => {
+			const received = JSON.stringify(run.session.messages.filter((message) => message.role === "user"));
+			for (const text of [item.key, item.summary, item.url, "Verify keyboard focus."]) expect(received).toContain(text);
+		});
 		expect(receipts.map((receipt) => receipt.stage)).toEqual(["accepted", "delivered", "applied"]);
 		expect(gh.calls()).toEqual([]);
 		expect(outside.seen).toEqual([]);

@@ -593,14 +593,7 @@ function IssuesReader({ world, active, openDM, source }: IssuesProps & { source:
 					{error}
 				</p>
 			)}
-			{signedOut && (
-				<AtlassianSignIn
-					onDone={() => {
-						setRefresh((value) => value + 1);
-						window.dispatchEvent(new Event(CONNECTIONS_CHANGED));
-					}}
-				/>
-			)}
+			{signedOut && <AtlassianSignIn onDone={() => window.dispatchEvent(new Event(CONNECTIONS_CHANGED))} />}
 			<div
 				ref={layout}
 				style={detailWidth.style}
