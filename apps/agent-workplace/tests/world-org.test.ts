@@ -187,7 +187,6 @@ function world(): WorldSnapshot {
 	};
 }
 
-// Built UI over an isolated preload fixture. Runtime suites own authorization and durable work/channel invariants.
 async function openOrg(appearance: "light" | "dark" = "light", snapshot: WorldSnapshot = world()) {
 	const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, colorScheme: appearance });
 	page.setDefaultTimeout(5000);
@@ -325,7 +324,6 @@ async function openOrg(appearance: "light" | "dark" = "light", snapshot: WorldSn
 	return { page, errors };
 }
 
-/** The character drawn over a DM row's presence dot: `"z"` for idle, `""` for a plain dot. */
 function presenceMark(row: ReturnType<Page["locator"]>) {
 	return row.locator(".wp-avatar-tile").evaluate((tile) => getComputedStyle(tile, "::after").content);
 }

@@ -7,8 +7,6 @@ import { appFile, contentType } from "../src/app-files.js";
 import type { Character, CharacterFacts, WorldSnapshot } from "../src/world.js";
 import { installWorkplaceCommunications } from "./helpers/workplace-communications.js";
 
-// The workplace in the built world UI over a fixture backend. The backend suites prove that these calls reach the
-// runtime; this proves where the operator finds them and what the UI sends.
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const ORIGIN = "http://localhost";
 const appDir = fileURLToPath(new URL("..", import.meta.url));
@@ -275,7 +273,6 @@ describe.each(PACKS)("%s", (id) => {
 			await dialog.locator("strong", { hasText: "the guide" }).waitFor({ timeout: 5000 });
 			await dialog.getByRole("button", { name: text["carry-task"] }).click();
 			await page.getByRole("complementary", { name: text["carrying-task"] }).waitFor({ timeout: 5000 });
-			// Picking a goal up assigns it to nobody; only handing it over does.
 			expect((await calls(page)).assigned).toEqual([]);
 
 			const docs = (await view<{ id: string; x: number; y: number }[]>(page, "figures()")).find(

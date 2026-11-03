@@ -647,7 +647,6 @@ test("Mail keeps addressed replies and plain text while its draft survives Chat 
 		expect(await page.locator(".wp-message-body b").count()).toBe(0);
 		const latest = (await page.getByRole("button", { name: "Search this conversation", exact: true }).boundingBox())!;
 		const actions = (await page.getByLabel("Conversation actions", { exact: true }).boundingBox())!;
-		// One row: the icon button and the Actions control share a vertical center.
 		expect(Math.abs(actions.y + actions.height / 2 - (latest.y + latest.height / 2))).toBeLessThanOrEqual(2);
 		expect(actions.x).toBeGreaterThanOrEqual(latest.x + latest.width);
 		expect(actions.x + actions.width).toBeLessThanOrEqual(page.viewportSize()!.width);

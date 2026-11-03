@@ -398,7 +398,6 @@ test("Code reviews show retained evidence and explicit capture consent without l
 									],
 									regions: ["r0"],
 								},
-								// A plan recorded before scopes were paths: regions only, no paths or risks.
 								{
 									id: "legacy",
 									title: "Legacy scope",
@@ -580,7 +579,6 @@ test("Code reviews show retained evidence and explicit capture consent without l
 			for (const [tab, text] of Object.entries(tabs)) {
 				await reviews.getByRole("tab", { name: tab, exact: true }).click();
 				await reviews.getByText(text).first().waitFor();
-				// Evidence is designed for reading: no view falls back to raw text or JSON in a code block.
 				expect(await reviews.locator(".wp-review-body pre").count()).toBe(0);
 				await shot(page, `reviews-tab-${tab.toLowerCase()}-${theme}`);
 			}
