@@ -1,5 +1,8 @@
 ## file
 
+`installSelf` skips reflection when `reflects` is false, including a program's temporary peer.
+Why: a temporary peer has no future to carry a self into.
+
 The self's record is the session's own transcript (`organization-self` custom entries holding all four fields, the latest on the branch wins); the `self` column of `sessions` in the state database is a projection for the views (the fields rendered as `##` sections), reported in the hello and after each `update_self` over the `organization:self` events channel.
 Why: the spec places the self with the person, and the transcript is the one record that follows a session through reopen, resume, fork, and a runtime whose database was deleted; a database-only self would vanish with the database and would need a read at start that the runtime may not yet serve.
 

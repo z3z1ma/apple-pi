@@ -1,5 +1,4 @@
 export interface TranscriptLine {
-	/** Text with SGR color and style sequences only; each line closes its own styling. */
 	styled: string;
 	plain: string;
 }
@@ -43,12 +42,6 @@ interface Screen {
 
 const ALT_SCREEN_MODES = new Set(["?47", "?1047", "?1049"]);
 
-/**
- * Turns the output a program writes to a terminal into transcript lines. The last `rows` lines stay
- * editable, as on a terminal screen, so carriage returns, erasures, and cursor movement redraw them
- * (progress bars) instead of adding a line per frame. Lines that scroll above the screen are final.
- * SGR colors and styles are kept; every other control sequence is applied or dropped.
- */
 export class TerminalTranscript {
 	private main: Screen = { lines: [new Line()], row: 0, col: 0 };
 	private alternate?: Screen;
@@ -93,18 +86,10 @@ export class TerminalTranscript {
 		}
 	}
 
-	/**
-	 * Lines still on screen, which later output can change. The last one has no line break yet; it is
-	 * empty when the output so far ends with one.
-	 */
 	screenLines(): TranscriptLine[] {
 		return this.screen.lines.map((line) => line.render());
 	}
 
-	/**
-	 * Emits every line that ends with a line break as final and keeps the unterminated last line, which
-	 * stays the only screen line. An unfinished escape sequence is dropped.
-	 */
 	finish(): void {
 		this.pending = "";
 		const lines = this.screen.lines;
@@ -142,7 +127,6 @@ export class TerminalTranscript {
 		}
 	}
 
-	/** Returns how many characters the sequence at `start` uses, or 0 when it is still incomplete. */
 	private escape(input: string, start: number): number {
 		const kind = input[start + 1];
 		if (kind === undefined) return 0;
@@ -290,7 +274,6 @@ export class TerminalTranscript {
 			for (let row = 0; row < screen.row; row++) screen.lines[row] = new Line();
 			this.eraseInLine(line, 1);
 		} else {
-			// A cleared screen keeps what it showed in the transcript, as terminal scrollback does.
 			if (!this.alternate) {
 				for (const kept of screen.lines) if (kept.chars.length > 0) this.onFinalLine(kept.render());
 			}

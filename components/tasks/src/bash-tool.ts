@@ -54,7 +54,6 @@ function resolveShellEnv(ctx?: ExtensionContext): NodeJS.ProcessEnv {
 			env.PI_REASONING_LEVEL = ctx.thinkingLevel;
 		}
 	}
-	// A worktree fork keeps its temporary files in its own directory, which is deleted when it settles.
 	const tmp = forkTmpDir();
 	if (tmp) env.TMPDIR = env.TMP = env.TEMP = tmp;
 	return env;
@@ -64,7 +63,6 @@ export interface PreparedShellCommand {
 	readonly command: string;
 	readonly cwd: string;
 	readonly isRtk: boolean;
-	/** Why the last start ran on pipes although a terminal was requested. */
 	readonly terminalUnavailable?: string;
 	start(): ShellProcess;
 }
@@ -138,7 +136,6 @@ export async function prepareShellCommand(
 				if (terminal) closeTerminal(terminal);
 				throw error;
 			}
-			// Detached, so the child leads its own process group; a fork kills it, and anything it left behind, on settle.
 			if (process.platform !== "win32") {
 				const release = trackForkProcessGroup(child.pid);
 				child.once("close", release);
@@ -189,7 +186,6 @@ async function executeBashImpl(
 ): Promise<AgentToolResult<any>> {
 	const { command, timeout } = params;
 	const run_in_background = "run_in_background" in params ? Boolean(params.run_in_background) : false;
-	// Commands the operator reads get RTK and a terminal; program-read output (pi_exec) stays exact and piped.
 	const prepared = await prepareShellCommand(cwd, params, signal, ctx, shownToOperator, shownToOperator);
 	const { cwd: effectiveCwd, isRtk } = prepared;
 
@@ -286,7 +282,6 @@ async function executeBashImpl(
 		resolveDetach = res;
 	});
 
-	// Intercept Ctrl+B to background the running command
 	const unsubscribeInput =
 		taskManager && ctx?.ui?.onTerminalInput
 			? ctx.ui.onTerminalInput((data) => {
@@ -394,7 +389,6 @@ async function executeBashImpl(
 		const surprise = surpriseNote((params as BashParameters).expect, failed);
 		if (surprise) notes.push(surprise);
 
-		// Failures are results rather than thrown errors so the styled output in details survives.
 		return {
 			content: [{ type: "text", text: withNotes(snapshot.content || "(no output)") }],
 			details: {

@@ -1,14 +1,3 @@
-/**
- * A person's self: four fields, each one kind of claim about itself and the people it works with, held to its own
- * standard of evidence. The person rewrites it only in reflection: a headless fork of its own conversation the harness
- * starts after it finishes a task and before its context is compacted. The self is recorded as a custom entry in the
- * person's own transcript (the latest on the branch wins) and reported to the session-state runtime for the views.
- *
- * The `<self>` system prompt section shows the self as it stood at the session's start or its last compaction. A
- * reflection's new self reaches the conversation as an appended message instead, so the cached prompt prefix holds
- * until the next compaction rebuilds it anyway.
- */
-
 import { defineTool, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { inForkedContinuation } from "../../shared/src/fork-context.js";
@@ -18,7 +7,6 @@ import { setSystemPromptSection } from "../../shared/src/system-prompt-section.j
 export const SELF_ENTRY = "organization-self";
 export const SELF_SYSTEM_PROMPT_TAG = "self";
 export const SELF_REFLECTION_MESSAGE_TYPE = "organization-self-reflection";
-/** The `pi.events` channel on which a changed self is announced; the session-state bridge reports it as a fact. */
 export const SELF_CHANNEL = "organization:self";
 
 export interface SelfChange {
@@ -92,11 +80,9 @@ export function reflectionPrompt(juncture: Juncture, firstSelf: boolean): string
 		.join("\n\n");
 }
 
-/** The self latest written, and the self the system prompt shows, by session id. */
 const latest = new Map<string, Self | undefined>();
 const shown = new Map<string, Self | undefined>();
 
-/** The self of the session `ctx` runs, as Markdown, or undefined when it has never written one. */
 export function sessionSelf(ctx: ExtensionContext): string | undefined {
 	const self = latest.get(ctx.sessionManager.getSessionId());
 	return self && renderSelf(self);
@@ -109,12 +95,10 @@ function storedSelf(ctx: ExtensionContext): Self | undefined {
 	return self;
 }
 
-/** `reflects` is false for a person with no future to carry a self into, such as a program's temporary peer. */
 export function installSelf(pi: ExtensionAPI, { reflects }: { reflects: boolean }): void {
 	let reflecting = false;
 	let rewritten = false;
 
-	// Pi restores the active tool set from the transcript, which lacks this tool in sessions older than it.
 	const activate = () => {
 		const active = pi.getActiveTools();
 		if (!active.includes("update_self")) pi.setActiveTools([...active, "update_self"]);
@@ -201,7 +185,6 @@ export function installSelf(pi: ExtensionAPI, { reflects }: { reflects: boolean 
 		finishedTask = false;
 		start(ctx, "task");
 	});
-	// The fork copies the conversation as it stands, before the compaction removes the detail it reflects on.
 	pi.on("session_before_compact", (_event, ctx) => {
 		start(ctx, "compaction");
 	});

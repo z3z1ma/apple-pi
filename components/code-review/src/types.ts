@@ -29,7 +29,6 @@ export interface ChangeRegion {
 }
 
 export interface ReviewConfiguration {
-	/** Captures before parallel validation have no duplicate-linking instruction. */
 	instructions: { planning: string; inspection: string; validation: string; duplicates?: string };
 	roleReferences: { role: string; models: string[] }[];
 	catalogIssues: number;
@@ -49,7 +48,6 @@ export interface ReviewArtifact {
 	baseRevision: string;
 	headRevision: string;
 	files: Pick<SourceEntry, "path" | "mode" | "blob">[];
-	/** The captured index tree; manifests before Git-native capture retain their entry list. */
 	index: string | { path: string; mode: string; blob: string }[] | null;
 	intent: { origin: string; text: string; hash: string } | null;
 	configuration?: ReviewConfiguration;
@@ -59,15 +57,11 @@ export interface ReviewArtifact {
 	patchHash: string;
 	startedAt: number;
 	capturedAt: number;
-	/** What a person recognizes the change by; display only, outside the digest. Absent on older captures. */
 	label?: ReviewLabel;
 }
 
 export interface ReviewLabel {
-	/** The checkout's branch at capture, null when detached. */
 	branch: string | null;
-	/** Subject of the head commit for commit, range and branch targets. */
 	subject: string | null;
-	/** Commits between base and head for range and branch targets. */
 	commits: number | null;
 }

@@ -17,10 +17,6 @@ export interface HostCallsOptions {
 	onChange(): void;
 }
 
-/**
- * Serve one program run's host calls: enforce the call, agent, and concurrency budgets, run the host function,
- * and keep the operation trace, activity rows, and model-worker usage.
- */
 export function createHostCalls(options: HostCallsOptions) {
 	const { ctx, toolCallId, envelope, onChange } = options;
 	const peers = createPeerCalls(ctx, options.peers);
@@ -72,7 +68,6 @@ export function createHostCalls(options: HostCallsOptions) {
 		operation,
 		changed: onChange,
 		setChildren(next) {
-			// A settled call's worker detail is final; a late child-process update cannot reopen it.
 			if (!pending.has(operation)) return;
 			children.set(operation, next);
 			onChange();
@@ -101,7 +96,6 @@ export function createHostCalls(options: HostCallsOptions) {
 				ctx,
 			);
 		},
-		// Pi validates, runs tool_call/tool_result hooks, and adds nested usage to pi_exec's own result.
 		executeTool: (name, args) => ctx.executeTool(name, args, { signal, onUpdate: progress(operation) }),
 	});
 
@@ -123,7 +117,6 @@ export function createHostCalls(options: HostCallsOptions) {
 		let acquired = false;
 		try {
 			signal.throwIfAborted();
-			// Closing must be able to cancel a turn that holds the last work slot.
 			if (ref !== "peer.close") {
 				await acquire(signal);
 				acquired = true;
@@ -156,7 +149,6 @@ export function createHostCalls(options: HostCallsOptions) {
 		hostCall,
 		peerBindings: peers.bindings,
 		close: () => peers.close(),
-		/** Calls the program attempted, including calls refused by the call budget. */
 		attempted: () => attempted,
 		completedOperations: () => operations.filter((operation) => !pending.has(operation)),
 		activityCalls: (): ExecActivityCall[] =>
@@ -171,7 +163,6 @@ export function createHostCalls(options: HostCallsOptions) {
 				...(operation.error ? { error: operation.error } : {}),
 				...(children.has(operation) ? { children: structuredClone(children.get(operation)) } : {}),
 			})),
-		/** Settle calls still in flight after the program ended and return a detached copy of the trace. */
 		finish(outcome: ExecutionOutcome): ExecutionOperation[] {
 			if (outcome !== "succeeded") {
 				for (const operation of pending) {
