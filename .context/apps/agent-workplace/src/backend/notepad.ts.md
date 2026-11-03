@@ -4,6 +4,9 @@ The renderer names only a coordinator id; the file path is always derived here f
 Why: the window shows untrusted transcript text, so a renderer-supplied path would let it read or write any file the main process can.
 Coupled: apps/agent-workplace/src/electron/main.ts
 
+The watcher is on the directory, not the file. Editors and agents often replace `NOTES.md`, which ends a watch on the file itself.
+Why: a file watch would go silent after the first external save and the panel would miss later changes.
+
 `save` writes only when the file still holds `base`, and a save of ours updates the watched text so the watcher does not report it back. The panel depends on both: it replaces its text on a change only when it has no unsaved edits, and otherwise shows "Load the file / Keep mine".
 Why: agents edit `NOTES.md` while the operator types; without the base check an autosave would silently overwrite an agent's update, and an echoed own save would read as a change on disk.
 Coupled: apps/agent-workplace/web/overlay/places/notepad.tsx

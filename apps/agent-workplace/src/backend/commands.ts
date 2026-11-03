@@ -1,27 +1,19 @@
-// The command client: sends session-state commands over the runtime's socket and reports each receipt stage as it
-// arrives (accepted, delivered, applied, failed; `docs/session-state.md`, Commands). It keeps one connection of its
-// own, opened on first use and again after the runtime went away; it never starts a runtime. Any Agent Workplace module
-// that acts on a session (the conversation panel's instructions, waking, mail) sends through it.
 import { randomUUID } from "node:crypto";
 import { createConnection, type Socket } from "node:net";
 import { isDeepStrictEqual } from "node:util";
 import type { Command } from "../../../../components/session-state/src/protocol.js";
 import type { CommandResult, ReceiptStage } from "../world.js";
 
-/** The runtime answers `accepted` at once; without it this soon, it is not answering. */
 const ACCEPT_TIMEOUT_MS = 5000;
 const GONE = "The session runtime is not answering.";
 const LOST = "The session runtime went away before the command finished; it may still have been applied.";
 
 export interface SendOptions {
-	/** The command's id; a new one by default. Sending an id again applies nothing and reports the stage it reached. */
 	commandId?: string;
-	/** Called with each stage the runtime reports, in order; `failed` comes with its reason. */
 	onReceipt?: (stage: ReceiptStage, reason?: string) => void;
 }
 
 export interface Commands {
-	/** Send `command` to the session; resolves once it is applied or has failed, with the runtime's reason. */
 	send(sessionId: string, command: Command, options?: SendOptions): Promise<CommandResult>;
 	close(): void;
 }

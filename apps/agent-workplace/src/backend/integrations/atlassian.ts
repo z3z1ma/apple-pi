@@ -1,5 +1,3 @@
-// Atlassian Cloud's REST APIs (Jira v3 and Confluence) with the operator's email and API token as HTTP basic auth.
-// Every request names the site's origin from the stored sign-in; tests point it at a loopback fake server.
 import type { Refusal } from "../../integrations.js";
 import type { AtlassianCredentials } from "./credentials.js";
 
@@ -7,10 +5,6 @@ export type Fetch = typeof fetch;
 
 const TIMEOUT_MS = 20_000;
 
-/**
- * The site's origin from what the operator typed: `acme`, `acme.atlassian.net`, or a full address. Plain http is
- * allowed only on loopback (the tests' fake servers); undefined when it is no usable address.
- */
 export function atlassianSite(site: string): string | undefined {
 	let text = site.trim().replace(/\/+$/, "");
 	if (!text) return undefined;
@@ -34,7 +28,6 @@ export const NOT_SIGNED_IN: Refusal = {
 
 export type AtlassianResponse = { ok: true; status: number; json: unknown } | Refusal;
 
-/** Call `path` on the site; non-2xx answers become a refusal that says what went wrong in plain words. */
 export async function atlassianRequest(
 	credentials: AtlassianCredentials | undefined,
 	path: string,
@@ -74,7 +67,6 @@ export async function atlassianRequest(
 	return { ok: false, reason: atlassianError(response.status, json) };
 }
 
-/** Jira and Confluence error bodies (`errorMessages`, `errors`, `message`) as one sentence. */
 function atlassianError(status: number, json: unknown): string {
 	const body = (json ?? {}) as { errorMessages?: unknown; errors?: unknown; message?: unknown };
 	const messages = [
@@ -88,7 +80,6 @@ function atlassianError(status: number, json: unknown): string {
 	return `Atlassian answered ${status}.`;
 }
 
-/** Quote text for a JQL or CQL string: Lucene's operators become spaces, quotes and backslashes are escaped. */
 export function queryText(text: string): string {
 	return text
 		.replace(/[+\-&|!(){}[\]^~*?:/]/g, " ")
@@ -97,7 +88,6 @@ export function queryText(text: string): string {
 		.trim();
 }
 
-/** Plain text from HTML: tags dropped, common entities decoded, whitespace folded. */
 export function htmlText(html: string): string {
 	return html
 		.replace(/<(br|\/p|\/div|\/li|\/h\d)[^>]*>/gi, "\n")

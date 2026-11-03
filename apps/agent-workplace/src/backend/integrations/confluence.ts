@@ -1,6 +1,3 @@
-// The library's Confluence: CQL text search across every space (v1 GET /wiki/rest/api/search, which v2 has no
-// equivalent of), a page's rendered body (v2 GET /wiki/api/v2/pages/{id}?body-format=view), and a local list of pages
-// opened recently, kept in a private file beside the credentials. Read-only: Agent Workplace never writes to Confluence.
 import { existsSync, readFileSync } from "node:fs";
 import type { ConfluencePage, ConfluencePageRef, Outcome, RecentPage } from "../../integrations.js";
 import { atlassianRequest, type Fetch, htmlText, queryText } from "./atlassian.js";
@@ -11,7 +8,6 @@ const RECENT_MAX = 30;
 
 export interface Confluence {
 	search(text: string): Promise<Outcome<{ pages: ConfluencePageRef[] }>>;
-	/** Read a page; once read it heads the recent list. */
 	page(id: string): Promise<Outcome<{ page: ConfluencePage }>>;
 	recent(): RecentPage[];
 }

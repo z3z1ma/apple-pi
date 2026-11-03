@@ -1,6 +1,3 @@
-// Delegating from a function place (decision 25): ask an agent to work on a pull request, issue, page, or thread. It
-// is an ordinary instruction through the command path (`instructions.ts`): `talk` to an idle agent, `follow_up` to a
-// busy one so its turn is not interrupted. It names the item and never writes outside; the agent works through Pi.
 import type { Delegation, DelegationItem, Outcome } from "../../integrations.js";
 import type { Character, ReceiptStage, WorldSnapshot } from "../../world.js";
 import type { Commands } from "../commands.js";
@@ -8,7 +5,6 @@ import { instruct } from "../instructions.js";
 
 const NOTE_MAX = 4000;
 
-/** The awake character a delegation goes to: a named one, or `coordinator` (the one `near` reports to, else the first). */
 export function delegationTarget(snapshot: WorldSnapshot, to: string, near?: string): Character | undefined {
 	const awake = (id: string | null | undefined) => (id ? snapshot.characters.find((c) => c.id === id) : undefined);
 	if (to !== "coordinator") return awake(to);
@@ -37,7 +33,6 @@ function itemName(item: DelegationItem): string {
 	}
 }
 
-/** The instruction's words: what is asked, the item with its address, then the operator's own note. */
 export function delegationText(delegation: Delegation): string {
 	const { item, ask } = delegation;
 	const name = itemName(item);
@@ -49,7 +44,6 @@ export function delegationText(delegation: Delegation): string {
 		update: `Please update ${name}`,
 		"look-into": `Please look into ${name}`,
 	}[ask];
-	// Reading Slack for the operator is not posting in it.
 	const privately = item.kind === "thread" ? "\nReport back to me here; do not post in Slack." : "";
 	const note = delegation.note?.trim() ? `\n\n${delegation.note.trim().slice(0, NOTE_MAX)}` : "";
 	return `${asked}${privately}${note}`;
@@ -58,7 +52,6 @@ export function delegationText(delegation: Delegation): string {
 const ASKS = new Set(["address-review", "get-reviewed", "start-work", "summarise", "update", "look-into"]);
 const text = (value: unknown) => typeof value === "string" && value.length > 0 && value.length < 2000;
 
-/** The delegation as given over IPC, checked field by field; undefined when it is not one. */
 export function checkDelegation(given: unknown): Delegation | undefined {
 	const value = (given ?? {}) as Partial<Delegation> & { item?: Record<string, unknown> };
 	if (!text(value.to) || !ASKS.has(String(value.ask)) || !value.item) return undefined;
@@ -82,7 +75,6 @@ export function checkDelegation(given: unknown): Delegation | undefined {
 	return fits ? (value as Delegation) : undefined;
 }
 
-/** Send a delegation; receipts reach `onReceipt` with the character they are for. */
 export async function delegate(
 	commands: Commands,
 	snapshot: WorldSnapshot,
