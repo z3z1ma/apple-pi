@@ -138,6 +138,7 @@ If a correct seam exists:
 3. Apply the fix.
 4. Watch it pass.
 5. Re-run the Phase 1 feedback loop against the original (un-minimised) scenario.
+6. Ask whether a machine could have caught this mistake before it ran: a code pattern or a shell command. If so, add a repository rule in `.pi/rules/` with samples that show it flagging the bug's pattern, so the mistake cannot come back anywhere in the repository. Where the repository has no `.pi/rules/`, offer it to the user instead.
 
 ## Phase 6: Cleanup
 

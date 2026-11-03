@@ -31,7 +31,7 @@ apple-pi opts in to the harness's repository rules (`components/repo-rules`) wit
 every `edit` and `write` against them before the change lands, and every shell command against the action rules;
 `npm run lint` runs the same GritQL rules through `biome.json` overrides.
 
-- `policy.json`: `"comments": "forbid"`, the GritQL rules with the paths they apply to, and the action rules.
+- `policy.json`: `"comments": "forbid"`, the GritQL rules with the paths they apply to, and the action rules, each with `fires` and `passes` samples (see `docs/repo-rules.md`).
 - `no-native-select.grit`: Workplace uses `Select` and `Recipients`, not native dropdowns.
 - `workplace-palette.grit`: Workplace stylesheets take colors from `--wp-*` theme variables; white and black overlays
   are allowed. `workplace.css` is excluded because it defines the house palette itself.

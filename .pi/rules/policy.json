@@ -1,33 +1,53 @@
 {
   "comments": "forbid",
   "rules": [
-    { "plugin": "hot-bounded-io.grit", "includes": ["**/*.hot.ts"] },
-    { "plugin": "no-native-select.grit", "includes": ["apps/agent-workplace/web/workplace*.tsx"] },
+    {
+      "plugin": "hot-bounded-io.grit",
+      "includes": ["**/*.hot.ts"],
+      "fires": "import { readFileSync } from \"node:fs\";\nexport const load = (path: string) => readFileSync(path, \"utf8\");\n",
+      "passes": "import { open } from \"node:fs/promises\";\nexport const load = (path: string) => open(path, \"r\");\n"
+    },
+    {
+      "plugin": "no-native-select.grit",
+      "includes": ["apps/agent-workplace/web/workplace*.tsx"],
+      "fires": "export const Picker = () => <select value=\"a\"><option>a</option></select>;\n",
+      "passes": "export const Picker = () => <Select value=\"a\" options={[]} />;\n"
+    },
     {
       "plugin": "workplace-palette.grit",
-      "includes": ["apps/agent-workplace/web/workplace*.css", "!apps/agent-workplace/web/workplace.css"]
+      "includes": ["apps/agent-workplace/web/workplace*.css", "!apps/agent-workplace/web/workplace.css"],
+      "fires": ".badge {\n  color: #3b82f6;\n}\n",
+      "passes": ".badge {\n  color: var(--wp-accent);\n  background: #fff;\n}\n"
     }
   ],
   "actions": [
     {
       "id": "bsd-sed-in-place",
       "pattern": "\\bsed\\s+(-[a-zA-Z]*\\s+)*-i\\s*''",
-      "reason": "sed here is GNU sed, so `sed -i ''` fails. Use the edit tool."
+      "reason": "sed here is GNU sed, so `sed -i ''` fails. Use the edit tool.",
+      "fires": "sed -i '' 's/a/b/' file.txt",
+      "passes": "sed -n '1,5p' file.txt"
     },
     {
       "id": "git-rm-mv",
       "pattern": "\\bgit\\s+(rm|mv)\\b",
-      "reason": "`git rm` and `git mv` stage at once, so the change rides along in someone else's commit in this shared checkout. Use plain rm or mv and stage the change with the commit it belongs to."
+      "reason": "`git rm` and `git mv` stage at once, so the change rides along in someone else's commit in this shared checkout. Use plain rm or mv and stage the change with the commit it belongs to.",
+      "fires": "git mv old.ts new.ts",
+      "passes": "git status --short"
     },
     {
       "id": "kill-by-pattern",
       "pattern": "\\b(pkill|killall)\\b",
-      "reason": "Killing by pattern can stop other lanes' runs in this shared checkout. Kill only PIDs you started, or cancel your own background task."
+      "reason": "Killing by pattern can stop other lanes' runs in this shared checkout. Kill only PIDs you started, or cancel your own background task.",
+      "fires": "pkill -f vitest",
+      "passes": "kill 12345"
     },
     {
       "id": "full-test-suite",
       "pattern": "(^|[;&|]\\s*)npm\\s+(run\\s+)?test\\s*($|[;&|])",
-      "reason": "Full-suite runs need an explicit operator request and overload this machine. Run the test files relevant to the change with --maxWorkers=1."
+      "reason": "Full-suite runs need an explicit operator request and overload this machine. Run the test files relevant to the change with --maxWorkers=1.",
+      "fires": "npm test",
+      "passes": "npx vitest run components/repo-rules --maxWorkers=1"
     }
   ]
 }

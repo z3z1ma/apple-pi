@@ -222,6 +222,7 @@ try {
 		"wiki_lint",
 		"wiki_references",
 		"context_lint",
+		"repo_rules",
 		"task",
 		"bash",
 		"search_branches",

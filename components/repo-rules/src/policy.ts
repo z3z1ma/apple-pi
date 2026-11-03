@@ -7,11 +7,20 @@ export interface ActionRule {
 	id: string;
 	pattern: string;
 	reason: string;
+	fires?: string;
+	passes?: string;
+}
+
+export interface CodeRule {
+	plugin: string;
+	includes?: string[];
+	fires?: string;
+	passes?: string;
 }
 
 export interface RulePolicy {
 	comments?: "forbid";
-	rules?: { plugin: string; includes?: string[] }[];
+	rules?: CodeRule[];
 	actions?: ActionRule[];
 }
 
@@ -27,23 +36,29 @@ export function rulesRootOf(path: string): string | undefined {
 	}
 }
 
+export function policyPath(root: string): string {
+	return join(root, RULES_DIR, "policy.json");
+}
+
+export function pluginPath(root: string, rule: CodeRule): string {
+	return join(root, RULES_DIR, rule.plugin);
+}
+
 export function loadRepoRules(root: string): RepoRules {
-	const file = join(root, RULES_DIR, "policy.json");
+	const file = policyPath(root);
 	const policy = existsSync(file) ? (JSON.parse(readFileSync(file, "utf8")) as RulePolicy) : {};
 	return { root, policy };
 }
 
-export function pluginsFor(rules: RepoRules, path: string): string[] {
+export function rulesFor(rules: RepoRules, path: string): CodeRule[] {
 	const relativePath = relative(rules.root, path);
-	return (rules.policy.rules ?? [])
-		.filter((rule) => {
-			const globs = rule.includes ?? [];
-			const wanted = globs.filter((glob) => !glob.startsWith("!"));
-			const unwanted = globs.filter((glob) => glob.startsWith("!")).map((glob) => glob.slice(1));
-			return (
-				(!wanted.length || wanted.some((glob) => matchesGlob(relativePath, glob))) &&
-				!unwanted.some((glob) => matchesGlob(relativePath, glob))
-			);
-		})
-		.map((rule) => join(rules.root, RULES_DIR, rule.plugin));
+	return (rules.policy.rules ?? []).filter((rule) => {
+		const globs = rule.includes ?? [];
+		const wanted = globs.filter((glob) => !glob.startsWith("!"));
+		const unwanted = globs.filter((glob) => glob.startsWith("!")).map((glob) => glob.slice(1));
+		return (
+			(!wanted.length || wanted.some((glob) => matchesGlob(relativePath, glob))) &&
+			!unwanted.some((glob) => matchesGlob(relativePath, glob))
+		);
+	});
 }

@@ -1,18 +1,26 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { Type } from "typebox";
 import { setSystemPromptSection } from "../../shared/src/system-prompt-section.js";
 import { resolveToolPath } from "../../shared/src/tool-path.js";
+import { ruleFileRefusal } from "./checks.js";
 import { addedComments } from "./comments.js";
-import { ruleViolations } from "./grit.js";
-import { loadRepoRules, pluginsFor, RULES_DIR, rulesRootOf } from "./policy.js";
+import { firingsIn, recordFirings } from "./firings.js";
+import { runRule } from "./grit.js";
+import { loadRepoRules, pluginPath, RULES_DIR, rulesFor, rulesRootOf } from "./policy.js";
 
 export const REPO_RULES_PROMPT_TAG = "repo-rules";
+export const REPO_RULES_TOOL_NAME = "repo_rules";
+const COMMENT_RULE = "comments";
 
-const PROMPT = `This repository keeps its rules in \`.pi/rules/\`, and the harness checks every edit and write against them before the change lands; a refusal names the rule, so fix the change and retry.
+const OPTED_IN = `This repository keeps its rules in \`.pi/rules/\`, and the harness checks every edit and write against them before the change lands; a refusal names the rule, so fix the change and retry.
 - \`policy.json\` lists the GritQL rules (\`*.grit\`, Biome plugin syntax) with the paths they apply to, the action rules for shell commands, and whether source comments are forbidden.
 - When comments are forbidden, put what a comment would say elsewhere: rationale, invariants and hazards in \`.context/<path>.md\`, intent in a better name, behavior in a test.
-- When you find a mistake a machine can detect (in review, while fixing a bug, or from a lesson), add a rule instead of prose: write the \`.grit\` file, list it in \`policy.json\` with its paths, show it firing on a small sample, and fix what it flags. A command pattern becomes an entry in \`actions\`.`;
+- Add rules liberally: whenever you meet a mistake a machine can detect (in review, while fixing a bug, from a lesson or a user correction), write a rule instead of prose. Write the \`.grit\` file, then list it in \`policy.json\` with its paths, a \`fires\` sample it must flag and a \`passes\` sample it must allow; the harness refuses a rule that does not load or does not behave on its samples. A shell-command pattern becomes an \`actions\` entry with \`fires\` and \`passes\` commands. Then fix what the new rule flags.
+- \`repo_rules\` lists each rule with how often it fired; narrow a rule that blocks good code and question one that never fires.`;
+
+const NOT_OPTED_IN = `The harness can enforce repository rules: a repository that has \`.pi/rules/\` gets every edit checked against its GritQL rules and comment policy, and every shell command against its action rules. This repository has none. When you meet a mistake a machine could detect, tell the user it could become a rule and offer to set up \`.pi/rules/\`; create it only when they agree, because the rules are committed for everyone who works here.`;
 
 const COMMITS = /\bgit\s+(add|commit)\b/;
 
@@ -50,17 +58,30 @@ export async function editRefusal(
 	if (after === undefined) return undefined;
 	const rules = loadRepoRules(root);
 	const problems: string[] = [];
+	const fired: string[] = [];
 	if (rules.policy.comments === "forbid") {
 		const before = existsSync(path) ? readFileSync(path, "utf8") : "";
-		for (const comment of addedComments(path, before, after))
+		const comments = addedComments(path, before, after);
+		for (const comment of comments)
 			problems.push(`line ${comment.line}: comment ${JSON.stringify(comment.text.split("\n")[0]!.slice(0, 80))}`);
-		if (problems.length)
+		if (comments.length) {
+			fired.push(COMMENT_RULE);
 			problems.push(
 				"This repository forbids comments in source (.pi/rules/policy.json). Put rationale, invariants and hazards in .context/<path>.md, intent in a better name, behavior in a test.",
 			);
+		}
 	}
-	for (const violation of await ruleViolations(path, after, pluginsFor(rules, path)))
-		problems.push(`line ${violation.line}: ${violation.message}`);
+	const runs = await Promise.all(
+		rulesFor(rules, path).map(async (rule) => ({ rule, run: await runRule(pluginPath(root, rule), path, after) })),
+	);
+	for (const { rule, run } of runs) {
+		if (run.failure) problems.push(`rule ${rule.plugin} could not run: ${run.failure}`);
+		if (run.violations.length) fired.push(rule.plugin);
+		for (const violation of run.violations) problems.push(`line ${violation.line}: ${violation.message}`);
+	}
+	const ruleFile = await ruleFileRefusal(root, path, after);
+	recordFirings(root, fired);
+	if (ruleFile) return problems.length ? `${ruleFile}\n${problems.join("\n")}` : ruleFile;
 	return problems.length ? `Refused by ${RULES_DIR}:\n${problems.join("\n")}` : undefined;
 }
 
@@ -68,14 +89,47 @@ export function commandRefusal(cwd: string, command: string): string | undefined
 	const root = rulesRootOf(join(cwd, "x"));
 	if (!root) return undefined;
 	const rule = (loadRepoRules(root).policy.actions ?? []).find((each) => new RegExp(each.pattern).test(command));
-	return rule ? `Refused by action rule ${rule.id} (${RULES_DIR}/policy.json): ${rule.reason}` : undefined;
+	if (!rule) return undefined;
+	recordFirings(root, [rule.id]);
+	return `Refused by action rule ${rule.id} (${RULES_DIR}/policy.json): ${rule.reason}`;
+}
+
+export function rulesReport(cwd: string): string {
+	const root = rulesRootOf(join(cwd, "x"));
+	if (!root) return `No ${RULES_DIR}/ here; this repository has not opted in to repository rules.`;
+	const { policy } = loadRepoRules(root);
+	const counts = firingsIn(root);
+	const line = (kind: string, id: string) => {
+		const seen = counts.get(id);
+		return `- ${kind} ${id}: ${seen ? `fired ${seen.count} times, last ${seen.last}` : "never fired"}`;
+	};
+	return [
+		`Rules in ${root}/${RULES_DIR}:`,
+		...(policy.comments === "forbid" ? [line("policy", COMMENT_RULE)] : []),
+		...(policy.rules ?? []).map((rule) => line("code", rule.plugin)),
+		...(policy.actions ?? []).map((action) => line("action", action.id)),
+	].join("\n");
+}
+
+function createRulesTool() {
+	return defineTool({
+		name: REPO_RULES_TOOL_NAME,
+		label: "Repository rules",
+		description:
+			"Read-only: list this repository's rules in .pi/rules/ (comment policy, GritQL code rules, action rules) with how many times each has refused a change or command and when it last did. Use it to narrow a rule that blocks good code or retire one that never fires.",
+		parameters: Type.Object({}),
+		async execute(_id, _params, _signal, _update, ctx) {
+			return { content: [{ type: "text" as const, text: rulesReport(ctx.cwd) }], details: undefined };
+		},
+	});
 }
 
 export function installRepoRules(pi: ExtensionAPI): void {
 	const writingBatches = new Set<string>();
+	pi.registerTool(createRulesTool());
 	pi.on("before_agent_start", (event, ctx) => {
-		if (existsSync(join(ctx.cwd, RULES_DIR)))
-			setSystemPromptSection(event.systemPromptOptions, REPO_RULES_PROMPT_TAG, PROMPT);
+		const optedIn = existsSync(join(ctx.cwd, RULES_DIR));
+		setSystemPromptSection(event.systemPromptOptions, REPO_RULES_PROMPT_TAG, optedIn ? OPTED_IN : NOT_OPTED_IN);
 	});
 	pi.on("message_end", (event) => {
 		const message = event.message as { role?: string; content?: unknown };

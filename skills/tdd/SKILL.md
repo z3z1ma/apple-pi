@@ -43,4 +43,5 @@ When the shape of that interface is itself in question—how deep the module is,
 
 - **Red before green.** Write one failing test, run it, and confirm it fails for the intended missing behavior. Then write only enough code to pass it. A test that fails because its setup, import, fixture, or assertion is broken has not established red.
 - **One slice at a time.** One confirmed seam, one test, and one minimal implementation per cycle. Run the test green before selecting the next behavior.
+- **A test guards one behavior; a rule guards a pattern.** When a red test exposes a mistake a machine can detect in the source itself (a forbidden call, an unsafe pattern), also add a repository rule in `.pi/rules/` so the pattern is refused everywhere. Where the repository has no `.pi/rules/`, offer it to the user.
 - **Refactoring is not part of the loop.** It belongs to the later independent `code-review` stage, not the red → green implementation cycle.
