@@ -138,6 +138,11 @@ function places() {
 	const call = (channel) => (...args) => electron.ipcRenderer.invoke(`places:${channel}`, ...args);
 	return {
 		credentialStatus: call("credential-status"),
+		githubStatus: call("github-status"),
+		googleStatus: call("google-status"),
+		githubAssigned: call("github-assigned"),
+		githubSearch: call("github-search"),
+		githubIssue: call("github-issue"),
 		signInAtlassian: call("sign-in-atlassian"),
 		signOutAtlassian: call("sign-out-atlassian"),
 		signInSlack: call("sign-in-slack"),

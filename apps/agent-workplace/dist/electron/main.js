@@ -36,7 +36,8 @@ function statePaths() {
 		socket: join(dir, "apple-pi.sock"),
 		lock: join(dir, "apple-pi-runtime.lock"),
 		pid: join(dir, "apple-pi-runtime.pid"),
-		log: join(dir, "apple-pi-runtime.log")
+		log: join(dir, "apple-pi-runtime.log"),
+		transcriptIndex: join(dir, "transcript-index.db")
 	};
 }
 //#endregion
@@ -11040,7 +11041,7 @@ var quoted = (text) => `"${text.replace(/\s+/g, " ").trim()}"`;
 function itemName(item) {
 	switch (item.kind) {
 		case "pull-request": return `pull request ${item.repo}#${item.number} ${quoted(item.title)}: ${item.url}`;
-		case "issue": return `Jira issue ${item.key} ${quoted(item.summary)}: ${item.url}`;
+		case "issue": return `issue ${item.key} ${quoted(item.summary)}: ${item.url}`;
 		case "page": return `the Confluence page ${quoted(item.title)}: ${item.url}`;
 		case "thread": return `this Slack thread in #${item.channelName}${item.preview ? ` (${quoted(item.preview)})` : ""}: ${item.url ?? `channel ${item.channel}, thread ${item.ts}`}`;
 	}
@@ -11334,6 +11335,7 @@ var LIST_MAX$1 = 50;
 /** `gh pr view` calls in flight at once while filling in searched pull requests. */
 var PARALLEL = 4;
 var REPO = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
+var ISSUE_KEY = /^([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)#([1-9]\d*)$/;
 var ROLLUP_FIELDS = "headRefName,statusCheckRollup,reviewDecision";
 var LIST_FIELDS = `number,title,url,isDraft,updatedAt,author,${ROLLUP_FIELDS}`;
 function runner(env) {
@@ -11524,6 +11526,22 @@ function toPullRequest(raw, involvesYou) {
 		involvesYou
 	};
 }
+function toIssue$1(raw) {
+	const repo = raw.repository?.nameWithOwner ?? /^https:\/\/github\.com\/([^/]+\/[^/]+)\/issues\//.exec(raw.url)?.[1] ?? "";
+	const closed = raw.state?.toLowerCase() === "closed";
+	return {
+		key: `${repo}#${raw.number}`,
+		summary: raw.title ?? "",
+		url: raw.url,
+		status: closed ? "Closed" : "Open",
+		statusCategory: closed ? "done" : "new",
+		assignee: raw.assignees?.map((person) => person.login).filter(Boolean).join(", ") || null,
+		project: repo,
+		type: "Issue",
+		priority: null,
+		updated: raw.updatedAt ?? null
+	};
+}
 function validPullRequest(repo, number) {
 	return typeof repo === "string" && REPO.test(repo) && Number.isSafeInteger(number) && number > 0;
 }
@@ -11580,7 +11598,118 @@ function openGitHub(env) {
 		}));
 		return results;
 	};
-	return {
+	const issues = async (text) => {
+		const answer = await gh([
+			"search",
+			"issues",
+			"--limit",
+			String(LIST_MAX$1),
+			"--sort",
+			"updated",
+			"--order",
+			"desc",
+			"--json",
+			"number,title,url,state,assignees,repository,updatedAt",
+			...text === void 0 ? [
+				"--assignee",
+				"@me",
+				"--state",
+				"open"
+			] : ["--", text]
+		]);
+		if (!answer.ok) return answer;
+		const raw = parse$1(answer.stdout);
+		return Array.isArray(raw) ? {
+			ok: true,
+			issues: raw.map(toIssue$1)
+		} : {
+			ok: false,
+			reason: "gh answered something that is not an issue list."
+		};
+	};
+	const github = {
+		async status() {
+			const status = await gh([
+				"auth",
+				"status",
+				"--active",
+				"--hostname",
+				"github.com"
+			]);
+			if (!status.ok) return status;
+			const user = await gh([
+				"api",
+				"user",
+				"--hostname",
+				"github.com",
+				"--jq",
+				".login"
+			]);
+			if (!user.ok) return user;
+			return user.stdout.trim() ? {
+				ok: true,
+				account: user.stdout.trim()
+			} : {
+				ok: false,
+				reason: "GitHub did not return a signed-in account."
+			};
+		},
+		assigned: () => issues(),
+		async search(text) {
+			const query = text.trim();
+			if (!query) return {
+				ok: true,
+				issues: []
+			};
+			if (!ISSUE_KEY.test(query)) return issues(query);
+			const result = await github.issue(query);
+			return result.ok ? {
+				ok: true,
+				issues: [result.detail.issue]
+			} : result;
+		},
+		async issue(key) {
+			const match = ISSUE_KEY.exec(key);
+			if (!match || !validPullRequest(match[1], Number(match[2]))) return {
+				ok: false,
+				reason: "That is not a GitHub issue key (owner/repo#number)."
+			};
+			const answer = await gh([
+				"issue",
+				"view",
+				match[2],
+				"-R",
+				match[1],
+				"--json",
+				"number,title,url,state,assignees,author,body,createdAt,updatedAt,comments"
+			]);
+			if (!answer.ok) return answer;
+			const raw = parse$1(answer.stdout);
+			if (!raw || typeof raw.url !== "string" || !Number.isSafeInteger(raw.number)) return {
+				ok: false,
+				reason: "gh answered something that is not an issue."
+			};
+			return {
+				ok: true,
+				detail: {
+					issue: toIssue$1({
+						...raw,
+						repository: { nameWithOwner: match[1] }
+					}),
+					reporter: raw.author?.login ?? null,
+					created: raw.createdAt ?? null,
+					descriptionHtml: null,
+					descriptionText: raw.body ?? "",
+					comments: (raw.comments ?? []).map((comment) => ({
+						id: comment.id,
+						author: comment.author?.login ?? null,
+						created: comment.createdAt ?? null,
+						html: null,
+						text: comment.body ?? ""
+					}))
+				}
+			};
+		},
 		async pullRequests(characters) {
 			const [searched, agents] = await Promise.all([gh([
 				"search",
@@ -11715,6 +11844,38 @@ function openGitHub(env) {
 			return answer.ok ? { ok: true } : answer;
 		}
 	};
+	return github;
+}
+//#endregion
+//#region apps/agent-workplace/src/backend/integrations/google.ts
+/** Project only the account: gws status also contains private local credential diagnostics. */
+function googleStatus(env) {
+	return new Promise((resolve) => {
+		execFile("gws", ["auth", "status"], {
+			env: env ?? process.env,
+			timeout: 3e4
+		}, (error, stdout) => {
+			if (error) {
+				resolve({
+					ok: false,
+					reason: error.code === "ENOENT" ? "The Google Workspace CLI (gws) is not installed." : "Google sign-in could not be checked. Run gws auth status in a terminal."
+				});
+				return;
+			}
+			try {
+				const status = JSON.parse(stdout);
+				resolve({
+					ok: true,
+					account: status.auth_method !== "none" && typeof status.user === "string" ? status.user.trim() || null : null
+				});
+			} catch {
+				resolve({
+					ok: false,
+					reason: "gws did not return a valid sign-in status."
+				});
+			}
+		});
+	});
 }
 //#endregion
 //#region apps/agent-workplace/src/backend/integrations/jira.ts
@@ -12633,6 +12794,11 @@ function openIntegrations(options) {
 	}, options.now);
 	return {
 		credentialStatus: () => credentials.status(),
+		githubStatus: () => github.status(),
+		googleStatus: () => googleStatus(options.env),
+		githubAssigned: () => github.assigned(),
+		githubSearch: (text) => github.search(typeof text === "string" ? text : ""),
+		githubIssue: (key) => github.issue(typeof key === "string" ? key : ""),
 		async signInAtlassian(site, email, token) {
 			const origin = typeof site === "string" ? atlassianSite(site) : void 0;
 			if (!origin) return {
@@ -12792,6 +12958,11 @@ function wireIntegrations(options) {
 	const integrations = openIntegrations(options);
 	const handle = (channel, listener) => ipcMain.handle(`places:${channel}`, (_event, ...args) => listener(...args));
 	handle("credential-status", () => integrations.credentialStatus());
+	handle("github-status", () => integrations.githubStatus());
+	handle("google-status", () => integrations.googleStatus());
+	handle("github-assigned", () => integrations.githubAssigned());
+	handle("github-search", (text) => integrations.githubSearch(text));
+	handle("github-issue", (key) => integrations.githubIssue(key));
 	handle("sign-in-atlassian", (site, email, token) => integrations.signInAtlassian(site, email, token));
 	handle("sign-out-atlassian", () => integrations.signOutAtlassian());
 	let signingIn;
