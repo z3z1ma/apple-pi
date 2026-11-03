@@ -303,7 +303,8 @@ export interface Receipt {
 
 export type EntryReply =
 	| { type: "entry"; requestId: string; entry: unknown }
-	| { type: "entry"; requestId: string; error: string };
+	/** `refused`: the caller may not read this entry, as opposed to a failure to read it. */
+	| { type: "entry"; requestId: string; error: string; refused?: true };
 
 /**
  * A page of entries in transcript order. `before` is the cursor for the page before (the first entry's id), or null
