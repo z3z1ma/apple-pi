@@ -263,6 +263,7 @@ describe("sign_off_code tool", () => {
 				{
 					hasUI: true,
 					cwd: bin,
+					sessionManager: { getSessionId: () => "test-session" },
 				},
 			);
 			expect(updates[0]).toMatch(/^Waiting for the review at http:\/\/127\.0\.0\.1:\d+\/\?t=/);

@@ -28,6 +28,7 @@ Verify: apps/agent-workplace/tests/world-conversation.test.ts
 ## symbol:blockVisible
 
 The operator's text-only contract supersedes the earlier forced-warning design: with details off, render only nonblank user text and assistant text parts. Thoughts, mail, notes, tool calls/results (including failures), historical reply errors/stops, and image-only metadata stay hidden, with no empty author rows or tool-only placeholder. Details on restores them; World defaults to details on. Keep all loaded entries and the full result index in either view.
+The one exception is a browser-page tool call (`BROWSER_PAGES`): its page card stays visible in text-only mode when the embedding surface supplies `OpenBrowserPage` (operator request, 2026-11-03). Its fold appears only with details on.
 Why: the switch is a clean conversation view, not a history mutation. Filtering stored entries would break tool/result association across pages and streamed-to-stored replacement; injecting diagnostic substitutes into the text view would violate the operator's explicit request.
 Coupled: apps/agent-workplace/web/overlay/conversation/conversation-panel.tsx
 Verify: apps/agent-workplace/tests/world-conversation.test.ts

@@ -303,6 +303,7 @@ describe("explain_change tool", () => {
 				{
 					hasUI: true,
 					cwd: bin,
+					sessionManager: { getSessionId: () => "test-session" },
 				},
 			);
 			const { url, saved: copy } = result.details;

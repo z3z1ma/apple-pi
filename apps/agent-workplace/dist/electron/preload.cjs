@@ -132,6 +132,7 @@ var api = {
 	openFile: (href, base) => electron.ipcRenderer.invoke("world:open-file", href, base),
 	openLink: (url) => electron.ipcRenderer.invoke("world:open-link", url),
 	codeAuthor: (path) => electron.ipcRenderer.invoke("world:code-author", path),
+	browserPage: (characterId, callId) => electron.ipcRenderer.invoke("world:browser-page", characterId, callId),
 	...places()
 };
 function places() {

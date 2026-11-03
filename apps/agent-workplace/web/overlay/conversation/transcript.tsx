@@ -247,12 +247,39 @@ function replyItems(entries: Assistant[]): Map<string, ReplyItem[]> {
 	return items;
 }
 
+export const BROWSER_PAGES: Record<string, string> = {
+	explain_change: "Explanation",
+	sign_off_code: "Code review",
+	sign_off_document: "Document review",
+	sign_off_task: "Task review",
+};
+
+export const OpenBrowserPage = createContext<((callId: string, label: string) => void) | undefined>(undefined);
+
+function PageCard({ call }: { call: TranscriptToolCall }) {
+	const open = useContext(OpenBrowserPage);
+	if (!open) return null;
+	const label = BROWSER_PAGES[call.name]!;
+	return (
+		<div className="aw-conv-page-card">
+			<span>{label} page</span>
+			<button type="button" onClick={() => open(call.id, label)}>
+				Open here
+			</button>
+		</div>
+	);
+}
+
+const opensPage = (part: Assistant["parts"][number]) => part.kind === "tool" && part.call.name in BROWSER_PAGES;
+
 export function blockVisible(block: Block, showTools: boolean): boolean {
 	if (showTools) return true;
 	if (block.kind === "user") return !!block.entry.text.trim();
 	return (
 		block.kind === "agent" &&
-		block.entries.some((entry) => entry.parts.some((part) => part.kind === "text" && part.text.trim()))
+		block.entries.some((entry) =>
+			entry.parts.some((part) => (part.kind === "text" && part.text.trim()) || opensPage(part)),
+		)
 	);
 }
 
@@ -269,7 +296,11 @@ function AgentBlock({
 }) {
 	const items = replyItems(entries);
 	const visibleEntries = entries.filter(
-		(entry) => showTools || items.get(entry.id)!.some((item) => item.kind === "text"),
+		(entry) =>
+			showTools ||
+			items
+				.get(entry.id)!
+				.some((item) => item.kind === "text" || (item.kind === "tool" && item.call.name in BROWSER_PAGES)),
 	);
 	const words = visibleEntries
 		.flatMap((entry) => items.get(entry.id)!.flatMap((item) => (item.kind === "text" ? [item.text] : [])))
@@ -292,6 +323,13 @@ function AgentBlock({
 				>
 					{items.get(entry.id)!.map((item) => {
 						if (item.kind === "text") return <Markdown key={item.key} text={item.text} />;
+						if (item.kind === "tool" && item.call.name in BROWSER_PAGES)
+							return (
+								<div key={item.key}>
+									<PageCard call={item.call} />
+									{showTools && <ToolCall call={item.call} result={results.get(item.call.id)} />}
+								</div>
+							);
 						if (!showTools) return null;
 						if (item.kind === "thoughts")
 							return (

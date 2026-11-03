@@ -190,7 +190,11 @@ describe("sign_off_task tool", () => {
 				},
 				on: () => {},
 			} as any);
-			const result = await tool.execute("call", { task: ID }, undefined, undefined, { hasUI: true, cwd: repo });
+			const result = await tool.execute("call", { task: ID }, undefined, undefined, {
+				hasUI: true,
+				cwd: repo,
+				sessionManager: { getSessionId: () => "test-session" },
+			});
 			expect(result.content[0].text).toContain(`The reviewer approved the task (.ledger/${ID}).`);
 			const html = readFileSync(result.details.saved, "utf8");
 			const data = JSON.parse(/<script id="page-data" type="application\/json">(.*?)<\/script>/s.exec(html)![1]);

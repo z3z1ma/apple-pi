@@ -38,6 +38,7 @@ import {
 	SIGN_OFF_TASK_TOOL_NAME,
 	serveEvidence,
 } from "./ledger-review.js";
+import { publishLivePage } from "./live-pages.js";
 import {
 	buildMarkdownPage,
 	formatMarkdownResult,
@@ -58,6 +59,8 @@ const text = (value: string) => [{ type: "text" as const, text: value }];
 const NO_USER = "No user is attached to this run, so no review page was opened.";
 
 interface PageRun<P extends PageData, R extends { verdict: string }> {
+	tool: string;
+	toolCallId: string;
 	page: P;
 	template: string;
 	root: string;
@@ -93,6 +96,10 @@ export default function browserPages(pi: ExtensionAPI): void {
 			throw signal.reason ?? new Error("The review was cancelled");
 		}
 		sessions.add(session.close);
+		const unpublish = publishLivePage(ctx.sessionManager.getSessionId(), run.toolCallId, {
+			tool: run.tool,
+			url: session.url,
+		});
 		onUpdate?.({ content: text(`Waiting for the review at ${session.url}`), details: undefined });
 		openInBrowser(session.url);
 		try {
@@ -104,6 +111,7 @@ export default function browserPages(pi: ExtensionAPI): void {
 			);
 			return { content: text(run.format(result, saved)), details: { verdict: result.verdict, saved } };
 		} finally {
+			unpublish();
 			session.close();
 			sessions.delete(session.close);
 		}
@@ -126,7 +134,7 @@ export default function browserPages(pi: ExtensionAPI): void {
 		],
 		parameters: ReviewCodeParamsSchema,
 		executionMode: "sequential",
-		async execute(_toolCallId, params, signal, onUpdate, ctx) {
+		async execute(toolCallId, params, signal, onUpdate, ctx) {
 			if (!ctx.hasUI) return { content: text(NO_USER), details: undefined };
 			const typed = params as ReviewCodeParams;
 			const token = randomBytes(24).toString("hex");
@@ -135,6 +143,8 @@ export default function browserPages(pi: ExtensionAPI): void {
 				: await buildCodeReviewPage(typed, ctx.cwd, token, undefined, signal);
 			return review(
 				{
+					tool: SIGN_OFF_CODE_TOOL_NAME,
+					toolCallId,
 					page,
 					template: await codeReviewTemplate(page),
 					root,
@@ -166,7 +176,7 @@ export default function browserPages(pi: ExtensionAPI): void {
 		],
 		parameters: ReviewMarkdownParamsSchema,
 		executionMode: "sequential",
-		async execute(_toolCallId, params, signal, onUpdate, ctx) {
+		async execute(toolCallId, params, signal, onUpdate, ctx) {
 			if (!ctx.hasUI) return { content: text(NO_USER), details: undefined };
 			const { page, root } = await buildMarkdownPage(
 				params as ReviewMarkdownParams,
@@ -175,6 +185,8 @@ export default function browserPages(pi: ExtensionAPI): void {
 			);
 			return review(
 				{
+					tool: SIGN_OFF_DOCUMENT_TOOL_NAME,
+					toolCallId,
 					page,
 					template: await markdownTemplate(page),
 					root,
@@ -207,7 +219,7 @@ export default function browserPages(pi: ExtensionAPI): void {
 		],
 		parameters: ReviewLedgerTaskParamsSchema,
 		executionMode: "sequential",
-		async execute(_toolCallId, params, signal, onUpdate, ctx) {
+		async execute(toolCallId, params, signal, onUpdate, ctx) {
 			if (!ctx.hasUI) return { content: text(NO_USER), details: undefined };
 			const { page, root, dir } = await buildLedgerPage(
 				params as ReviewLedgerTaskParams,
@@ -216,6 +228,8 @@ export default function browserPages(pi: ExtensionAPI): void {
 			);
 			return review(
 				{
+					tool: SIGN_OFF_TASK_TOOL_NAME,
+					toolCallId,
 					page,
 					template: await ledgerTemplate(page),
 					root,
@@ -252,7 +266,7 @@ export default function browserPages(pi: ExtensionAPI): void {
 		],
 		parameters: ExplainChangeParamsSchema,
 		executionMode: "sequential",
-		async execute(_toolCallId, params, signal, _onUpdate, ctx) {
+		async execute(toolCallId, params, signal, _onUpdate, ctx) {
 			if (!ctx.hasUI)
 				return { content: text("No user is attached to this run, so no explanation was opened."), details: undefined };
 			const token = randomBytes(24).toString("hex");
@@ -301,7 +315,14 @@ export default function browserPages(pi: ExtensionAPI): void {
 					);
 				},
 			});
-			sessions.add(session.close);
+			const unpublish = publishLivePage(ctx.sessionManager.getSessionId(), toolCallId, {
+				tool: EXPLAIN_CHANGE_TOOL_NAME,
+				url: session.url,
+			});
+			sessions.add(() => {
+				unpublish();
+				session.close();
+			});
 			openInBrowser(session.url);
 			const lines = [
 				`Opened the explanation of ${page.ref} at ${session.url}`,

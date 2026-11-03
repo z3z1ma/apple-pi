@@ -1353,6 +1353,84 @@ test("workplace text-only DMs omit session details while preserving messages and
 	}
 }, 30000);
 
+test("a browser-page tool in a DM offers to open its page inline, in place of the transcript, and back", async () => {
+	const signOffs: TranscriptEntry[] = [
+		{
+			kind: "assistant",
+			id: "sign-off",
+			at: at(90),
+			parts: [
+				{ kind: "text", text: "Please review the change." },
+				{ kind: "tool", call: { id: "live-call", name: "sign_off_code", arg: null, input: "{}" } },
+			],
+			error: null,
+			aborted: false,
+		},
+		{
+			kind: "assistant",
+			id: "old-explain",
+			at: at(91),
+			parts: [{ kind: "tool", call: { id: "closed-call", name: "explain_change", arg: null, input: "{}" } }],
+			error: null,
+			aborted: false,
+		},
+	];
+	const { page, errors } = await openWorld(world(), {
+		"pi-tests": [...SUITE, ...signOffs],
+		ledger: [],
+		asker: [],
+		[HQ]: [],
+	});
+	page.setDefaultTimeout(5000);
+	await page.route(`${ORIGIN}/fixture-sign-off`, (route) =>
+		route.fulfill({ body: "<h1>Review fixture</h1>", contentType: "text/html" }),
+	);
+	await page.addInitScript((origin) => {
+		const w = window as any;
+		w.pageLookups = [];
+		w.agentWorkplace.browserPage = async (person: string, callId: string) => {
+			w.pageLookups.push([person, callId]);
+			return callId === "live-call" ? { tool: "sign_off_code", url: `${origin}/fixture-sign-off` } : null;
+		};
+	}, ORIGIN);
+	try {
+		await page.getByRole("link", { name: "Workplace", exact: true }).click();
+		await page.getByRole("button", { name: /^pi-tests/ }).click();
+		await log(page).getByText("Please review the change.").waitFor();
+		await log(page).getByText("Explanation page", { exact: true }).waitFor();
+		await log(page)
+			.locator(".aw-conv-page-card")
+			.filter({ hasText: "Code review page" })
+			.getByRole("button", { name: "Open here" })
+			.click();
+		const inline = page.getByRole("region", { name: "Code review page", exact: true });
+		await inline.waitFor();
+		await page
+			.frameLocator('iframe[title="Code review page"]')
+			.getByRole("heading", { name: "Review fixture" })
+			.waitFor();
+		await shot(page, "inline-page");
+		expect(await log(page).isVisible()).toBe(false);
+		expect(await page.getByRole("textbox").first().isVisible()).toBe(true);
+		await inline.getByRole("button", { name: "Back to conversation" }).click();
+		await inline.waitFor({ state: "detached" });
+		await log(page).getByText("Please review the change.").waitFor();
+		await log(page)
+			.locator(".aw-conv-page-card")
+			.filter({ hasText: "Explanation page" })
+			.getByRole("button", { name: "Open here" })
+			.click();
+		await page.getByText("That explanation page is closed.").waitFor();
+		expect(await page.evaluate(() => (window as any).pageLookups)).toEqual([
+			["pi-tests", "live-call"],
+			["pi-tests", "closed-call"],
+		]);
+		expect(errors).toEqual([]);
+	} finally {
+		await page.close();
+	}
+}, 30000);
+
 test("DM tool activity stays in a truncated lower line and the composer keeps a continuous border", async () => {
 	const longArg = `npm run verify -- ${"long_argument/".repeat(200)}`;
 	const initial = world(

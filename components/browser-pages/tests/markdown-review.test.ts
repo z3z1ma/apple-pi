@@ -187,6 +187,7 @@ describe("sign_off_document tool", () => {
 			const result = await tool.execute("call", { path: "docs/plan.md" }, undefined, undefined, {
 				hasUI: true,
 				cwd: repo,
+				sessionManager: { getSessionId: () => "test-session" },
 			});
 			expect(result.content[0].text).toContain("The reviewer approved the document (docs/plan.md).");
 			const html = readFileSync(result.details.saved, "utf8");

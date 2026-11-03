@@ -2,12 +2,12 @@ import { appendFileSync, chmodSync, closeSync, createReadStream, existsSync, fst
 import { basename, dirname, isAbsolute, join, normalize, parse, posix, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { BrowserWindow, app, dialog, ipcMain, net, protocol, shell } from "electron";
+import { getAgentDir, getPackageDir, parseFrontmatter } from "@earendil-works/pi-coding-agent";
 import { homedir, tmpdir } from "node:os";
 import { DatabaseSync } from "node:sqlite";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { createConnection } from "node:net";
 import { isDeepStrictEqual, promisify } from "node:util";
-import { getAgentDir, getPackageDir, parseFrontmatter } from "@earendil-works/pi-coding-agent";
 import { execFile, spawn } from "node:child_process";
 import { spawn as spawn$1 } from "@lydell/node-pty";
 import { isUtf8 } from "node:buffer";
@@ -18,6 +18,29 @@ import { bundledLanguages, createHighlighter } from "shiki";
 import { marked } from "marked";
 import { createServer } from "node:http";
 import { inflateSync } from "node:zlib";
+//#region components/browser-pages/src/live-pages.ts
+function livePagesFile(sessionId, agentDir = getAgentDir()) {
+	return join(agentDir, "browser-pages", "live", `${sessionId}.json`);
+}
+function read(file) {
+	if (!existsSync(file)) return void 0;
+	try {
+		return JSON.parse(readFileSync(file, "utf8"));
+	} catch {
+		return;
+	}
+}
+function livePage(sessionId, toolCallId, agentDir) {
+	const pages = read(livePagesFile(sessionId, agentDir));
+	if (!pages) return void 0;
+	try {
+		process.kill(pages.pid, 0);
+	} catch {
+		return;
+	}
+	return pages.pages[toolCallId];
+}
+//#endregion
 //#region components/session-state/src/paths.ts
 function agentDir() {
 	const configured = process.env.PI_CODING_AGENT_DIR;
@@ -12886,6 +12909,7 @@ function start() {
 	});
 	ipcMain.handle("world:open-link", (_event, url) => openLink(url, (href) => shell.openExternal(href)));
 	ipcMain.handle("world:code-author", (_event, path) => typeof path === "string" ? lastEditor(statePaths().db, path) : null);
+	ipcMain.handle("world:browser-page", (_event, characterId, callId) => typeof characterId === "string" && typeof callId === "string" ? livePage(characterId, callId, agentDir()) ?? null : null);
 	ipcMain.handle("world:open-file", (_event, href, base) => openFileLink(href, base, (path) => shell.openPath(path), (path) => shell.showItemInFolder(path)));
 	const toUpdate = leaveOutUnchanged();
 	world.subscribe((snapshot) => {

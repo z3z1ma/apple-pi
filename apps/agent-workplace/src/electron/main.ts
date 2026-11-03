@@ -2,6 +2,7 @@ import { writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { app, BrowserWindow, dialog, ipcMain, net, protocol, shell } from "electron";
+import { livePage } from "../../../../components/browser-pages/src/live-pages.js";
 import { agentDir, statePaths } from "../../../../components/session-state/src/paths.js";
 import { appFile } from "../app-files.js";
 import { lastEditor } from "../backend/code-authors.js";
@@ -357,6 +358,11 @@ function start() {
 	ipcMain.handle("world:open-link", (_event, url: unknown) => openLink(url, (href) => shell.openExternal(href)));
 	ipcMain.handle("world:code-author", (_event, path: unknown) =>
 		typeof path === "string" ? lastEditor(statePaths().db, path) : null,
+	);
+	ipcMain.handle("world:browser-page", (_event, characterId: unknown, callId: unknown) =>
+		typeof characterId === "string" && typeof callId === "string"
+			? (livePage(characterId, callId, agentDir()) ?? null)
+			: null,
 	);
 	ipcMain.handle("world:open-file", (_event, href: unknown, base: unknown) =>
 		openFileLink(

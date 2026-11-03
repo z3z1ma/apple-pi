@@ -509,6 +509,7 @@ export interface AgentWorkplaceApi extends IntegrationsApi {
 	openFile(href: string, base: string): Promise<CommandResult>;
 	openLink(url: string): Promise<CommandResult>;
 	codeAuthor(path: string): Promise<CodeAuthor | null>;
+	browserPage(characterId: string, callId: string): Promise<{ tool: string; url: string } | null>;
 }
 
 export interface CodeAuthor {

@@ -227,6 +227,8 @@ const api: AgentWorkplaceApi = {
 	openFile: (href, base) => ipcRenderer.invoke("world:open-file", href, base) as Promise<CommandResult>,
 	openLink: (url) => ipcRenderer.invoke("world:open-link", url) as Promise<CommandResult>,
 	codeAuthor: (path) => ipcRenderer.invoke("world:code-author", path) as Promise<CodeAuthor | null>,
+	browserPage: (characterId, callId) =>
+		ipcRenderer.invoke("world:browser-page", characterId, callId) as Promise<{ tool: string; url: string } | null>,
 	...places(),
 };
 

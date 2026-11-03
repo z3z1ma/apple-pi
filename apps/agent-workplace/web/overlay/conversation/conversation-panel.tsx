@@ -15,7 +15,16 @@ import { shortArg } from "../tool-line.js";
 import { type History, useHistory } from "./history.js";
 import { useLiveReplies } from "./live-reply.js";
 import { type ConversationApi, conversationPanel } from "./panel-state.js";
-import { BlockView, blockAt, blockKey, blocksOf, blockVisible, dayName, WorkingDirectory } from "./transcript.js";
+import {
+	BlockView,
+	blockAt,
+	blockKey,
+	blocksOf,
+	blockVisible,
+	dayName,
+	OpenBrowserPage,
+	WorkingDirectory,
+} from "./transcript.js";
 
 const LOAD_MARGIN = 400;
 
@@ -95,6 +104,56 @@ function useReadPosition(history: History, pulse: string, facts: Character["fact
 	};
 }
 
+function useInlinePage(person: string) {
+	const [opened, setOpened] = useState<{ person: string; url: string; label: string }>();
+	const [note, setNote] = useState<{ person: string; text: string }>();
+	const openPage = async (callId: string, label: string) => {
+		const live = await window.agentWorkplace.browserPage?.(person, callId);
+		setNote(live ? undefined : { person, text: `That ${label.toLowerCase()} page is closed.` });
+		if (live) setOpened({ person, url: live.url, label });
+	};
+	return {
+		page: opened?.person === person ? opened : undefined,
+		pageNote: note?.person === person ? note.text : undefined,
+		openPage,
+		closePage: () => setOpened(undefined),
+	};
+}
+
+function InlinePage({
+	page,
+	note,
+	onClose,
+}: {
+	page?: { url: string; label: string };
+	note?: string;
+	onClose(): void;
+}) {
+	return (
+		<>
+			{note && (
+				<p className="aw-conv-warn" role="status">
+					{note}
+				</p>
+			)}
+			{page && (
+				<section className="aw-conv-page" aria-label={`${page.label} page`}>
+					<header>
+						<button type="button" onClick={onClose}>
+							Back to conversation
+						</button>
+						<strong>{page.label}</strong>
+						<button type="button" onClick={() => void window.agentWorkplace.openLink?.(page.url)}>
+							Open in browser
+						</button>
+					</header>
+					<iframe title={`${page.label} page`} src={page.url} />
+				</section>
+			)}
+		</>
+	);
+}
+
 function Panel({
 	opened,
 	world,
@@ -135,6 +194,7 @@ function Panel({
 	const position = useReadPosition(history, pulse, facts, embedded);
 	const seenNote = useSeenConversation(api, opened.id, facts?.needsYouSince ?? null, position.ready);
 	const [sentCount, setSentCount] = useState(0);
+	const { page, pageNote, openPage, closePage } = useInlinePage(character.id);
 
 	const panelRef = useRef<HTMLDivElement>(null);
 	useEffect(() => {
@@ -307,18 +367,23 @@ function Panel({
 							{seenNote}
 						</p>
 					)}
-					<WorkingDirectory.Provider value={facts?.cwd}>
-						<Transcript
-							history={history}
-							live={streaming}
-							name={character.name}
-							sent={sentCount}
-							onLink={openLink}
-							showTools={showTools}
-							unreadSince={position.unreadSince}
-							onAtLatest={position.onAtLatest}
-						/>
-					</WorkingDirectory.Provider>
+					<InlinePage page={page} note={pageNote} onClose={closePage} />
+					<div className="aw-conv-transcript-slot" hidden={!!page}>
+						<WorkingDirectory.Provider value={facts?.cwd}>
+							<OpenBrowserPage.Provider value={embedded ? (callId, label) => void openPage(callId, label) : undefined}>
+								<Transcript
+									history={history}
+									live={streaming}
+									name={character.name}
+									sent={sentCount}
+									onLink={openLink}
+									showTools={showTools}
+									unreadSince={position.unreadSince}
+									onAtLatest={position.onAtLatest}
+								/>
+							</OpenBrowserPage.Provider>
+						</WorkingDirectory.Provider>
+					</div>
 					{embedded && live && facts?.run && facts.run !== "idle" && !facts.asking && (
 						<div className="wp-typing" role="status">
 							<span className="wp-typing-dots" aria-hidden="true">

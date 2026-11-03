@@ -214,6 +214,14 @@
 	font-size: 12.5px;
 }
 
+.aw-conv-transcript-slot {
+	display: contents;
+}
+
+.aw-conv-transcript-slot[hidden] {
+	display: none;
+}
+
 .aw-conv-wake {
 	margin: 0;
 	font-size: 12.5px;
