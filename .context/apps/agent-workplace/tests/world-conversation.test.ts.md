@@ -1,5 +1,8 @@
 ## file
 
+Working uses the thinking portrait, asking the worried one, idle the neutral one, and a finished turn keeps the happy portrait while the conversation stays open. The reply box has focus on opening so typing does not walk the world or toggle the walk grid. Stop asks first; Escape sends nothing. A question has no reply box. Tool calls fold their result onto one line and omit the working-directory `cd`. Missing transcript entries are one quiet note. After Escape, G pressed and released in the same frame must keep the walk grid shown.
+Why: Phaser handles its key queue again for each new key event within a frame, so G's press was handled a second time on release and the grid went back off.
+
 These browser checks load built Agent Workplace assets and replace the preload API with an in-memory bridge. Build after production-source edits; keep replies in the fixture's returned history so a successful post must become visible through the real reader. Channel membership tests here check the UI's command choices and response handling; the runtime and backend suites own authorization, persistence, read cursors, and crash recovery.
 Why: a fixture that accepts a command without updating its next read can falsely report a lost message. Conversely, a permissive browser fixture cannot prove runtime permission or delivery behavior.
 Coupled: apps/agent-workplace/web/workplace.tsx, apps/agent-workplace/web/overlay/conversation/transcript.tsx, apps/agent-workplace/tests/channel-membership.test.ts, components/session-state/tests/channel-membership.test.ts

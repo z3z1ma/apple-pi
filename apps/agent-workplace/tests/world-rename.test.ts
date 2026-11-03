@@ -6,14 +6,9 @@ import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
 import { appFile, contentType } from "../src/app-files.js";
 import type { Character, CharacterFacts, ThemeChoice, WorldSnapshot } from "../src/world.js";
 
-// Seam 2 for ticket 12: the committed, built world UI in headless Chrome over a fixture backend. Renaming an agent from
-// its right-click menu or its side-panel row opens a small form with its current name; saving sends `rename` and shows
-// the receipt, and the new name is on the figure, the side panel, and the conversation panel; a blank name sends
-// nothing. The recruiting form's fields stay inside it at every window size, in every pack.
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const ORIGIN = "http://localhost";
 const appDir = fileURLToPath(new URL("..", import.meta.url));
-// AGENT_WORLD_SHOTS=<dir> saves screenshots there as aw-12-<theme>-*.png.
 const SHOTS = process.env.AGENT_WORLD_SHOTS;
 const PACKS = ["fantasy", "tech-office", "anime-school"] as const;
 const SIZES = [
@@ -66,7 +61,6 @@ const ORLA: Character = {
 	startedAt: NOW - 9_000_000,
 	facts: facts({ reportsTo: null, tmux: { socket: "/tmp/tmux", pane: "%1", session: "home", window: 1 } }),
 };
-// A repository with a long path, so the recruit form's select has a long option to fit.
 const LONG = "/Users/operator/code_projects/personal/a-repository-with-a-rather-long-name-indeed";
 const WANDERER: Character = {
 	id: "wanderer",
@@ -101,7 +95,6 @@ const world = (theme: string): WorldSnapshot => ({
 
 const good = (id: string, name: string): ThemeChoice => ({ id, name, description: null, problems: [] });
 
-/** Open the world over a fixture backend; `window.renames` records each rename it was asked for. */
 async function openWorld(theme: string, size: readonly [number, number] = [1280, 800]) {
 	const page = await browser.newPage({ viewport: { width: size[0], height: size[1] } });
 	const errors: string[] = [];
@@ -169,7 +162,6 @@ async function openWorld(theme: string, size: readonly [number, number] = [1280,
 				async rename(characterId: string, name: string) {
 					w.renames.push({ characterId, name });
 					await new Promise((resolve) => setTimeout(resolve, 200));
-					// The bridge applied it: the session's name is the character's.
 					push({
 						...current,
 						characters: current.characters.map((c: any) => (c.id === characterId ? { ...c, name } : c)),
@@ -185,7 +177,7 @@ async function openWorld(theme: string, size: readonly [number, number] = [1280,
 		timeout: 20000,
 	});
 	await vi.waitFor(async () => expect(await view(page, "avatar()")).toBeTruthy(), { timeout: 15000 });
-	await page.waitForTimeout(500); // the arrival fade
+	await page.waitForTimeout(500);
 	return { page, errors };
 }
 
@@ -207,7 +199,6 @@ async function shot(page: Page, name: string) {
 	await page.screenshot({ path: join(SHOTS, `${name}.png`), animations: "disabled" });
 }
 
-/** Right-click the coordinator in the world. */
 async function rightClickOrla(page: Page) {
 	const orla = (await view<{ id: string; x: number; y: number }[]>(page, "figures()")).find((f) => f.id === HQ)!;
 	const [ox, oy] = await screen(page, orla.x, orla.y - 0.8);
@@ -234,7 +225,6 @@ describe.each(PACKS)("%s", (id) => {
 			expect(await name.inputValue()).toBe("Orla");
 			const save = form.getByRole("button", { name: "Rename", exact: true });
 
-			// A blank name is refused: the button rests, and Enter sends nothing.
 			await name.fill("   ");
 			expect(await save.isDisabled()).toBe(true);
 			await name.press("Enter");
@@ -250,7 +240,6 @@ describe.each(PACKS)("%s", (id) => {
 			await form.getByRole("button", { name: "Close", exact: true }).last().click();
 			await form.waitFor({ state: "detached", timeout: 3000 });
 
-			// The figure, the side panel's row, and the conversation panel all say Juno.
 			await vi.waitFor(async () => expect(await view(page, "characters()")).toContain("Juno"), { timeout: 3000 });
 			expect(await view(page, "characters()")).not.toContain("Orla");
 			const rows = await page.locator(".aw-row-name").allTextContents();
@@ -294,7 +283,6 @@ describe.each(PACKS)("%s", (id) => {
 			await form.getByText("That session is not running.").waitFor({ timeout: 5000 });
 			expect(await renames(page)).toEqual([{ characterId: "wanderer", name: "Scout" }]);
 			await shot(page, `aw-12-${id}-rename-failed`);
-			// Try again goes back to the form with the name as typed.
 			await form.getByRole("button", { name: "Try again" }).click();
 			expect(await form.getByLabel("Name").inputValue()).toBe("Scout");
 			expect(errors).toEqual([]);
@@ -338,7 +326,6 @@ describe.each(PACKS)("%s", (id) => {
 				.getByRole("button", { name: /^wanderer/ })
 				.first()
 				.waitFor({ state: "visible" });
-			// Only a later authoritative snapshot removes it; permanent departure creates no dormant identity.
 			await page.evaluate(() => (window as any).completeDeparture("wanderer"));
 			await vi.waitFor(async () => expect(await page.getByRole("button", { name: /^wanderer/ }).count()).toBe(0));
 			await page.getByRole("tab", { name: "Places", exact: true }).click();
@@ -370,7 +357,6 @@ describe.each(PACKS)("%s", (id) => {
 			await clickable(page);
 			const form = page.getByRole("dialog", { name: say("recruit-worker-title", { coordinator: "Orla" }) });
 			await form.waitFor({ timeout: 25_000 });
-			// The longest option chosen, then a typed directory: every field shows.
 			await form.getByLabel("Repository").selectOption(LONG);
 			await form.getByLabel("Name").fill("a-very-long-name-for-an-agent-that-goes-on-and-on");
 			await form.getByLabel("Repository").selectOption("");

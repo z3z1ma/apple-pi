@@ -6,12 +6,9 @@ import { afterAll, beforeAll, expect, test, vi } from "vitest";
 import { appFile, contentType } from "../src/app-files.js";
 import type { Character, CharacterFacts, FeedLine, PlaceRef, WorldSnapshot } from "../src/world.js";
 
-// Seam 2 for the interface (minimap, orbs, side panel, chatbox): the committed, built world UI in headless Chrome,
-// with the preload API replaced by a fixture backend that records what the interface asks of it.
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const ORIGIN = "http://localhost";
 const appDir = fileURLToPath(new URL("..", import.meta.url));
-// AGENT_WORLD_SHOTS=<dir> saves screenshots of each tab and the chatbox there, as aw-08-*.png.
 const SHOTS = process.env.AGENT_WORLD_SHOTS;
 
 let browser: Browser;
@@ -20,7 +17,6 @@ beforeAll(async () => {
 });
 afterAll(() => browser?.close());
 
-/** Open the world over a fixture backend; `push` and `pushFeed` send it news, `terminals` lists terminal requests. */
 async function openWorld(first: WorldSnapshot, backlog: FeedLine[] = []) {
 	const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
 	const errors: string[] = [];
@@ -80,7 +76,6 @@ const place = (page: Page) => page.evaluate(() => (window as any).agentWorldView
 const intents = (page: Page) => page.evaluate(() => (window as any).agentWorldInterface.intents() as unknown[]);
 const terminals = (page: Page) => page.evaluate(() => (window as any).terminals as string[]);
 
-/** The open tab's groups: each heading with the names of its rows, in order. */
 const groups = (page: Page) =>
 	page.$$eval(".aw-panel-body section", (sections) =>
 		sections.map((section) => ({
@@ -98,9 +93,7 @@ async function shot(page: Page, name: string) {
 	await page.screenshot({ path: join(SHOTS, `aw-08-${name}.png`), animations: "disabled" });
 }
 
-// A fixture world: Orla coordinates; her workers are in two wings and the common room; solo is in the square.
 const HQ = "orla";
-// Minutes since an hour ago, so times read as they would live ("waiting 30m").
 const T0 = Date.now() - 3_600_000;
 const at = (n: number) => T0 + n * 60_000;
 function facts(over: Partial<CharacterFacts> = {}): CharacterFacts {
@@ -190,7 +183,6 @@ function world(characters = CAST): WorldSnapshot {
 test("the orbs count who needs you and who is working, leave a slot for Slack, and open their tabs", async () => {
 	const { page, push, errors } = await openWorld(world());
 	try {
-		// Needs you: two questions and one finished; working: two.
 		await expect(orb(page, "Needs you").getAttribute("aria-label")).resolves.toBe("Needs you: 3");
 		await expect(orb(page, "Working").getAttribute("aria-label")).resolves.toBe("Working: 2");
 		await expect(page.locator(".aw-orb-slack").count()).resolves.toBe(1);
@@ -202,7 +194,6 @@ test("the orbs count who needs you and who is working, leave a slot for Slack, a
 		await expect(page.getByRole("tab", { name: "Agents", exact: true }).getAttribute("aria-selected")).resolves.toBe(
 			"true",
 		);
-		// Counts follow the world.
 		await push(world(CAST.map((c) => (c.id === "ledger" ? { ...c, facts: facts({ task: RETRY_TASK }) } : c))));
 		await vi.waitFor(async () => expect(await orb(page, "Needs you").getAttribute("aria-label")).toBe("Needs you: 2"), {
 			timeout: 2000,
@@ -219,7 +210,6 @@ test("a finished character that starts working again shows as working at once, w
 	try {
 		const row = () => page.locator(".aw-row").filter({ hasText: "ledger" });
 		await expect(row().locator(".aw-sr").first().textContent()).resolves.toBe(", Finished, unseen: ");
-		// Mail starts a run without the operator: the earlier settle is still unseen, and needs_you_since is kept.
 		const again = (f: Partial<CharacterFacts>) =>
 			world(CAST.map((c) => (c.id === "ledger" ? { ...c, facts: { ...c.facts!, ...f } } : c)));
 		await push(again({ ...working("bash", "git fetch -q origin main"), unseen: true }));
@@ -229,7 +219,6 @@ test("a finished character that starts working again shows as working at once, w
 		);
 		await expect(row().locator(".aw-pip-working .aw-pip-mark").count()).resolves.toBe(1);
 		await expect(row().textContent()).resolves.toContain("bash \u00b7 git fetch -q origin main");
-		// It waits for nobody while it works: it leaves Needs you and counts as working.
 		await expect(orb(page, "Needs you").getAttribute("aria-label")).resolves.toBe("Needs you: 2");
 		await expect(orb(page, "Working").getAttribute("aria-label")).resolves.toBe("Working: 3");
 		await tab(page, "Needs you");
@@ -241,7 +230,6 @@ test("a finished character that starts working again shows as working at once, w
 		await expect(card.locator(".aw-card-status").textContent()).resolves.toContain("Working");
 		await expect(card.locator(".aw-card-unseen").textContent()).resolves.toBe("An earlier result unseen for 40m");
 		await shot(page, "working-unseen");
-		// When that run settles too, it is finished and unseen again, waiting since its first unseen settle.
 		await push(again({ run: "idle", status: "idle", tool: null, unseen: true }));
 		await vi.waitFor(
 			async () => expect(await row().locator(".aw-sr").first().textContent()).toBe(", Finished, unseen: "),
@@ -270,7 +258,6 @@ test("Agents groups everyone by place; Needs you lists questions first, then fin
 		]);
 		await shot(page, "tab-agents");
 		await tab(page, "Needs you");
-		// Questions, the longest-waiting first; then finished and unseen. Working and idle agents are not listed.
 		expect(await groups(page)).toEqual([
 			{ title: "Questions", names: ["pi-tests", "solo"] },
 			{ title: "Finished, unseen", names: ["ledger"] },
@@ -289,7 +276,6 @@ test("Agents groups everyone by place; Needs you lists questions first, then fin
 			"in-progress",
 		);
 		await shot(page, "tab-work");
-		// Clicking the open tab folds the panel to its tabs; clicking again opens it.
 		await tab(page, "Work");
 		await expect(page.locator(".aw-panel-body").count()).resolves.toBe(0);
 		await tab(page, "Work");
@@ -306,7 +292,6 @@ test("every row offers Talk to, Examine, Go to, and Go to its terminal, which wo
 		expect(await place(page)).toBe(`headquarters:${HQ}`);
 		await page.getByRole("button", { name: /^ledger/ }).click();
 		const actions = page.getByRole("group", { name: "Actions on ledger" });
-		// ledger holds a role, so it can retire, in the theme's words; the operator's own sessions cannot.
 		await expect(actions.getByRole("button").allTextContents()).resolves.toEqual([
 			"Talk to",
 			"Examine",
@@ -319,16 +304,13 @@ test("every row offers Talk to, Examine, Go to, and Go to its terminal, which wo
 		await expect(page.getByRole("button", { name: "Retire Orla" }).count()).resolves.toBe(0);
 		await shot(page, "row-actions");
 		await actions.getByRole("button", { name: "Talk to ledger" }).click();
-		// Talking opens the conversation over everything; Escape closes it.
 		await page.getByRole("dialog", { name: "Conversation with ledger" }).waitFor({ timeout: 2000 });
 		await page.keyboard.press("Escape");
 		await actions.getByRole("button", { name: "Go to ledger's terminal" }).click();
 		await vi.waitFor(async () => expect(await terminals(page)).toEqual(["ledger"]), { timeout: 2000 });
-		// Nothing so far moved the view: the operator is still in the hall.
 		expect(await place(page)).toBe(`headquarters:${HQ}`);
 		await page.getByRole("log").getByText("You go to ledger's terminal.").waitFor({ timeout: 2000 });
 
-		// Examining shows the observed facts.
 		await actions.getByRole("button", { name: "Examine ledger" }).click();
 		const card = page.getByRole("dialog", { name: "Examine ledger" });
 		await card.waitFor({ timeout: 2000 });
@@ -348,19 +330,16 @@ test("every row offers Talk to, Examine, Go to, and Go to its terminal, which wo
 			"Teammates \u00b7 Who has done what",
 		])
 			expect(text).toContain(fact);
-		// The record is completed assignments, not files touched.
 		expect(text).toContain("RecordDocument invoice retries");
 		await shot(page, "examine");
 		await card.getByRole("button", { name: "Close" }).click();
 		await card.waitFor({ state: "detached", timeout: 2000 });
 
-		// A failed terminal says why.
 		await tab(page, "Needs you");
 		await page.getByRole("button", { name: /^solo/ }).click();
 		await page.getByRole("button", { name: "Go to solo's terminal" }).click();
 		await page.getByRole("log").getByText("No terminal is attached to solo's tmux server.").waitFor({ timeout: 2000 });
 
-		// Go to travels to the character's place.
 		await page.getByRole("button", { name: "Go to solo", exact: true }).click();
 		await vi.waitFor(async () => expect(await place(page)).toBe("square"), { timeout: 3000 });
 		expect(await intents(page)).toEqual([
@@ -426,7 +405,6 @@ test("runtime events appear in the chatbox within a second, and the filters hide
 		await shot(page, "chatbox-filtered");
 		await toggle("All");
 		expect(new Set(await kinds())).toEqual(new Set(["game", "agents", "mail", "commands"]));
-		// A name in a line examines that character.
 		await log.getByRole("button", { name: "ledger" }).first().click();
 		await page.getByRole("dialog", { name: "Examine ledger" }).waitFor({ timeout: 2000 });
 		expect(errors).toEqual([]);
@@ -511,7 +489,6 @@ test("the minimap shows the place with a dot for each character and the avatar, 
 				]),
 			{ timeout: 3000 },
 		);
-		// pi-tests asks: its dot calls.
 		await expect(page.locator('.aw-dot[data-id="pi-tests"]').getAttribute("class")).resolves.toContain(
 			"aw-dot-calling",
 		);
@@ -522,7 +499,6 @@ test("the minimap shows the place with a dot for each character and the avatar, 
 		expect(walk.place).toBe(`wing:${HQ}:/r/apple-pi`);
 		const painted = await page.evaluate(() => (window as any).agentWorldView.painting());
 		expect(painted).toBe("wing-small");
-		// The centre of the map is the centre of the place, within half a tile.
 		const { cols, rows } = JSON.parse(readFileSync(join(appDir, "themes/fantasy/places/wing-small.json"), "utf8"));
 		expect(Math.abs(walk.at[0] - cols / 2)).toBeLessThanOrEqual(0.5);
 		expect(Math.abs(walk.at[1] - rows / 2)).toBeLessThanOrEqual(0.5);
@@ -539,7 +515,6 @@ test("the chatbox is compact (five lines), shows more on demand, and folds to it
 	try {
 		const chatLog = page.getByRole("log", { name: "World events" });
 		await chatLog.getByText("pi-docs line 14.").waitFor({ timeout: 2000 });
-		// Five lines show, the newest at the bottom; the world keeps the rest of the window.
 		const shown = () =>
 			chatLog.evaluate((el) => {
 				const box = el.getBoundingClientRect();
@@ -562,7 +537,6 @@ test("the chatbox is compact (five lines), shows more on demand, and folds to it
 		await page.getByRole("button", { name: "Open the chatbox" }).click();
 		await expect(shown()).resolves.toBe(5);
 
-		// The side panel folds to its tabs from its header; a tab opens it again.
 		await page.getByRole("button", { name: "Fold the side panel" }).click();
 		await expect(page.locator(".aw-panel-body").count()).resolves.toBe(0);
 		await expect(page.getByRole("tab", { name: "Agents", exact: true }).getAttribute("title")).resolves.toBe(
@@ -710,7 +684,6 @@ test("the Places tab lists every function place as open, the inn with who sleeps
 		await expect(outside.getByRole("button", { name: /^The rookery/ }).textContent()).resolves.toContain(
 			"1 letter waits",
 		);
-		// Every function place is open now: nothing waits under "Not open yet".
 		expect(await page.getByRole("region", { name: "Not open yet" }).count()).toBe(0);
 		await outside.getByRole("button", { name: /^The rookery/ }).click();
 		await vi.waitFor(async () => expect(await place(page)).toBe("rookery"), { timeout: 3000 });

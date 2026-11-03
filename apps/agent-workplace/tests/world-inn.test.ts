@@ -7,12 +7,9 @@ import { appFile, contentType } from "../src/app-files.js";
 import type { Character, CharacterFacts, DormantAgent, WorldSnapshot } from "../src/world.js";
 import type { PlaceData } from "../web/theme.js";
 
-// Seam 2 for the inn (ticket 15): the committed, built world UI in headless Chrome over a fixture backend that records
-// what the world asks of it (wakes, ended sessions) and answers with receipts.
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const ORIGIN = "http://localhost";
 const appDir = fileURLToPath(new URL("..", import.meta.url));
-// AGENT_WORLD_SHOTS=<dir> saves screenshots there as aw-15-*.png.
 const SHOTS = process.env.AGENT_WORLD_SHOTS;
 const INN: PlaceData = JSON.parse(
 	readFileSync(fileURLToPath(new URL("../themes/fantasy/places/inn.json", import.meta.url)), "utf8"),
@@ -24,7 +21,6 @@ beforeAll(async () => {
 });
 afterAll(() => browser?.close());
 
-/** Open the world over a fixture backend; `push` sends a new snapshot; `window.calls` records what it was asked. */
 async function openWorld(first: WorldSnapshot) {
 	const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
 	const errors: string[] = [];
@@ -42,7 +38,6 @@ async function openWorld(first: WorldSnapshot) {
 		let current = snapshot;
 		const w = window as any;
 		w.calls = [];
-		// What the next call of each kind answers; a test changes it before acting.
 		w.answers = {
 			wake: { ok: true, stage: "applied" },
 			endSession: { ok: true, stage: "applied" },
@@ -94,7 +89,7 @@ async function openWorld(first: WorldSnapshot) {
 	await page.goto(`${ORIGIN}/index.html?world`);
 	const push = (snapshot: WorldSnapshot) => page.evaluate((s) => (window as any).pushSnapshot(s), snapshot);
 	await vi.waitFor(async () => expect(await view(page, "avatar()")).toBeTruthy(), { timeout: 15000 });
-	await page.waitForTimeout(400); // the arrival fade
+	await page.waitForTimeout(400);
 	return { page, push, errors };
 }
 
@@ -116,7 +111,6 @@ const calls = (page: Page) => page.evaluate(() => (window as any).calls) as Prom
 const screen = (page: Page, x: number, y: number) =>
 	page.evaluate(([a, b]) => (window as any).agentWorldView.toScreen(a, b), [x, y]) as Promise<[number, number]>;
 const tab = (page: Page, name: string) => page.getByRole("tab", { name, exact: true }).click();
-/** Clicks reach the world through the interface's panels (they still draw for screenshots). */
 const clickThrough = (page: Page) =>
 	page.addStyleTag({ content: ".aw-interface, .aw-interface * { pointer-events: none !important; }" });
 
@@ -127,12 +121,10 @@ async function shot(page: Page, name: string) {
 	await page.screenshot({ path: join(SHOTS, `${name}.png`), animations: "disabled" });
 }
 
-/** Travel to the inn from the Places tab, and wait until everyone is at their spot. */
 async function toInn(page: Page) {
 	await tab(page, "Places");
 	await page.getByRole("button", { name: /^The inn/ }).click();
 	await vi.waitFor(async () => expect(await view(page, "place()")).toBe("inn"), { timeout: 5000 });
-	// Zoom out with the wheel, as far as it goes, so the whole room shows.
 	await page.mouse.move(640, 300);
 	for (let i = 0; i < 4; i++) await page.mouse.wheel(0, 400);
 	await page.waitForTimeout(800);
@@ -179,7 +171,6 @@ const worker = (id: string, over: Partial<CharacterFacts> = {}): Character => ({
 	facts: facts(over),
 });
 const NAMES = ["docs-writer", "test-fixer", "ci-watcher", "pr-review", "notch-polish", "sidebar"];
-/** Twelve stopped sessions, the most recently stopped first. */
 const SLEEPERS: DormantAgent[] = Array.from({ length: 12 }, (_, i) => ({
 	id: `s-${i}`,
 	name: i < NAMES.length ? NAMES[i] : `sleeper-${i}`,
@@ -191,7 +182,6 @@ const SLEEPERS: DormantAgent[] = Array.from({ length: 12 }, (_, i) => ({
 	stoppedAt: NOW - (i + 1) * 3_600_000,
 	stopReason: "quit",
 	startedAt: NOW - 20_000_000 + i,
-	// The second sleeper is a former member: it retired, and the register marks it so.
 	...(i === 1
 		? { title: "Scientific Skeptic", retiredAt: NOW - 2 * 3_600_000, retiredReason: "the burst passed" }
 		: {}),
@@ -223,14 +213,12 @@ test("the newest dormant agents sleep at the inn's tables and in its beds, each 
 		await toInn(page);
 		expect(await view(page, "painting()")).toBe("inn");
 		const sleeping = await figures(page);
-		// As many as the inn has spots, the most recently stopped first, each on its spot.
 		expect(sleeping.map((f) => f.id)).toEqual(SLEEPERS.slice(0, INN.spots.length).map((s) => s.id));
 		const beds = new Set(INN.overlaySlots.filter((slot) => slot.kind === "bed").map((slot) => slot.spot));
 		sleeping.forEach((f, i) => {
 			expect(f.pose).toBe(beds.has(i) ? "in-bed" : "dozing");
 			expect(f.bark).toBe("z");
 		});
-		// The innkeeper stands behind the bar.
 		expect(await view(page, "host()")).toMatchObject({ name: "Innkeeper", look: "innkeeper" });
 		await shot(page, "aw-15-inn");
 		expect(errors).toEqual([]);
@@ -246,14 +234,12 @@ test("an update that leaves out an unchanged inn keeps the sleepers; one that ca
 		await toInn(page);
 		const shown = SLEEPERS.slice(0, INN.spots.length).map((s) => s.id);
 		expect(await sleeping()).toEqual(shown);
-		// A worker starts elsewhere: the update leaves the inn and the mail out, as the main process sends it.
 		const { dormant: _inn, ...rest } = world([ORLA, worker("w-new")]);
 		await push({ ...rest, unchanged: ["dormant", "mail"] } as WorldSnapshot);
 		await tab(page, "Agents");
 		await vi.waitFor(async () => expect(await page.getByRole("button", { name: /^w-new/ }).count()).toBeGreaterThan(0));
 		await page.waitForTimeout(500);
 		expect(await sleeping()).toEqual(shown);
-		// The newest sleeper wakes: the inn comes whole, and the room follows it.
 		await push(world([ORLA, worker("w-new")], SLEEPERS.slice(1)));
 		await vi.waitFor(async () => expect((await sleeping())[0]).toBe(SLEEPERS[1].id), { timeout: 5000 });
 		expect(errors).toEqual([]);
@@ -295,7 +281,6 @@ test("the innkeeper's register lists every dormant agent, newest first, with its
 		await page.keyboard.press("Escape");
 		await register.waitFor({ state: "detached", timeout: 2000 });
 
-		// Right-clicking an inn table asks the innkeeper too.
 		const [tx, ty, tw, th] = INN.furniture![0].rect;
 		const [cx, cy] = await screen(page, tx + tw / 2, ty + th / 2);
 		await page.mouse.click(cx, cy, { button: "right" });
@@ -311,7 +296,7 @@ test("waking from the register shows the receipt, and the woken character gets u
 	const { page, push, errors } = await openWorld(world([ORLA]));
 	try {
 		await toInn(page);
-		await tab(page, "Places"); // fold the panel out of the way of the register
+		await tab(page, "Places");
 		await clickThrough(page);
 		const [x, y] = INN.host!.at;
 		const [sx, sy] = await screen(page, x, y - 1.2);
@@ -324,7 +309,6 @@ test("waking from the register shows the receipt, and the woken character gets u
 		expect(await calls(page)).toContainEqual(["wake", "s-2"]);
 		await shot(page, "aw-15-woken-receipt");
 
-		// The runtime reports it awake in its wing: it stands up and walks out by the door.
 		const woken = { ...worker("s-2"), name: "ci-watcher" };
 		await push(
 			world(
@@ -339,14 +323,12 @@ test("waking from the register shows the receipt, and the woken character gets u
 		const departing = await view<FigureView[]>(page, "departing()");
 		expect(departing.map((f) => f.id)).toContain("s-2");
 		expect(departing.find((f) => f.id === "s-2")?.moving).toBe(true);
-		// The next sleeper from upstairs takes the free spot.
 		expect((await figures(page)).map((f) => f.id)).toContain("s-10");
 		await shot(page, "aw-15-woken-walks-out");
 		await vi.waitFor(async () => expect(await view<FigureView[]>(page, "departing()")).toEqual([]), {
 			timeout: 15000,
 		});
 
-		// A failed wake says why.
 		await page.evaluate(() => {
 			(window as any).answers.wake = { ok: false, reason: "No terminal is attached to tmux." };
 		});
@@ -377,7 +359,6 @@ test("a sleeper's menu reads its last conversation in the conversation panel, or
 		await page.getByRole("dialog", { name: "Conversation with docs-writer" }).waitFor({ timeout: 8000 });
 		await page.getByText("Write the style guide.").waitFor({ timeout: 3000 });
 		expect(await calls(page)).toContainEqual(["conversation", "s-0"]);
-		// Asleep, it has no terminal to go to: the panel offers to wake it instead, and says how it wakes.
 		const panel = page.getByRole("dialog", { name: "Conversation with docs-writer" });
 		await expect(panel.getByRole("button", { name: "Go to its terminal" }).count()).resolves.toBe(0);
 		await expect(panel.textContent()).resolves.toContain("Asleep at the inn");
@@ -432,7 +413,6 @@ test("ending a session: an idle one at once, a busy one only after a themed conf
 	const idle = worker("pi-idle");
 	const { page, push, errors } = await openWorld(world([ORLA, busy, idle]));
 	try {
-		// The Agents tab is open from the start.
 		await page.getByRole("button", { name: /^pi-idle/ }).click();
 		await page.getByRole("button", { name: "End pi-idle's session" }).click();
 		await vi.waitFor(async () => expect(await calls(page)).toContainEqual(["endSession", "pi-idle", false]), {
@@ -457,7 +437,6 @@ test("ending a session: an idle one at once, a busy one only after a themed conf
 			timeout: 3000,
 		});
 
-		// In the inn, the ended session's character comes in by the door and sits down to sleep.
 		await toInn(page);
 		const asleep = { ...SLEEPERS[0], id: "pi-idle", name: "pi-idle", stoppedAt: Date.now() };
 		await push(world([ORLA, busy], [asleep, ...SLEEPERS]));
@@ -467,7 +446,6 @@ test("ending a session: an idle one at once, a busy one only after a themed conf
 		const [doorX, doorY] = INN.doors[0].standAt;
 		const first = (await arriving())!;
 		expect(Math.hypot(first.x - doorX, first.y - doorY)).toBeLessThan(1.5);
-		// The oldest sleeper shown goes upstairs to make room; the newcomer takes its spot and dozes off.
 		expect((await figures(page)).map((f) => f.id)).not.toContain("s-9");
 		await vi.waitFor(async () => expect(await arriving()).toMatchObject({ moving: false, pose: "dozing" }), {
 			timeout: 15000,

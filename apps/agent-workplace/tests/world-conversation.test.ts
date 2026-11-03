@@ -8,14 +8,10 @@ import type { Character, CharacterFacts, MailThread, TranscriptEntry, WorldSnaps
 import { addRecipient, recipients } from "./helpers/select.js";
 import { installWorkplaceCommunications } from "./helpers/workplace-communications.js";
 
-// Seam 2 for the conversation panel: the committed, built world UI in headless Chrome, with the preload API replaced by
-// a fixture backend that pages fixture transcripts and records what the panel asks of it.
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const ORIGIN = "http://localhost";
 const appDir = fileURLToPath(new URL("..", import.meta.url));
-// AGENT_WORLD_SHOTS=<dir> saves screenshots of the panel there, as aw-<ticket>-*.png.
 const SHOTS = process.env.AGENT_WORLD_SHOTS;
-/** Entries per page in the fixture backend, as the real one pages them. */
 const PAGE = 50;
 
 let browser: Browser;
@@ -114,7 +110,6 @@ const world = (characters = CAST): WorldSnapshot => ({
 	characters,
 });
 
-/** A real-looking session: a request, a reply with Markdown and code, tool calls and their results, and mail. */
 const SUITE: TranscriptEntry[] = [
 	{
 		kind: "user",
@@ -188,7 +183,6 @@ const SUITE: TranscriptEntry[] = [
 	},
 ];
 
-/** A long session: `count` turns of the operator and the agent, numbered from the start. */
 function longSession(count: number): TranscriptEntry[] {
 	const entries: TranscriptEntry[] = [];
 	for (let i = 0; i < count; i++)
@@ -367,7 +361,6 @@ async function openWorld(
 				},
 				async conversation(id: string, before?: string) {
 					w.pages.push([id, before ?? null]);
-					// A page takes a moment, as reading a long transcript does.
 					await new Promise((resolve) => setTimeout(resolve, 120));
 					if (!before && w.holdHistory === id) {
 						w.holdHistory = null;
@@ -386,11 +379,9 @@ async function openWorld(
 						ok: true,
 						entries: all.slice(start, end),
 						before: start > 0 ? (all[start] as any).id : null,
-						// Entries the runtime indexed that the transcript no longer holds, reported with the newest page.
 						missing: before ? 0 : (w.missing?.[id] ?? 0),
 					};
 				},
-				// Links open in the system browser through the main process; here they are recorded.
 				async openLink(url: string) {
 					w.links.push(url);
 					return { ok: true };
@@ -400,8 +391,6 @@ async function openWorld(
 					return { ok: true };
 				},
 				workspace: { resolvePaths: async () => ({ ok: true, files: [] }) },
-				// Instructions answer with the runtime's receipt stages, a moment apart; `refuse` fails the next one at once
-				// (as the backend refuses an unconfirmed Stop), `failNext` after it was delivered.
 				async instruct(id: string, commandId: string, instruction: unknown) {
 					w.commands.push([id, instruction]);
 					const stage = (name: string, reason?: string) => {
@@ -471,7 +460,6 @@ const log = (page: Page) => page.getByRole("log", { name: "Transcript" });
 const pages = (page: Page) => page.evaluate(() => (window as any).pages as [string, string | null][]);
 const seen = (page: Page) => page.evaluate(() => (window as any).seen as string[]);
 
-/** Talk to a character from the side panel's Agents tab. */
 async function talkTo(page: Page, name: string) {
 	await page.getByRole("button", { name: new RegExp(`^${name}`) }).click();
 	await page.getByRole("button", { name: `Talk to ${name}`, exact: true }).click();
@@ -502,26 +490,21 @@ test("Talk to opens the conversation over the dimmed world: portrait by state, n
 			"npx vitest run components/session-state",
 		])
 			expect(text).toContain(fact);
-		// Working: the thinking portrait (expressions 0 neutral, 1 happy, 2 thinking, 3 worried).
 		await expect(side.getByRole("img").getAttribute("src")).resolves.toMatch(/characters\/[a-z-]+-portrait-2\.png$/);
 		await expect(page.locator(".aw-conv-veil").count()).resolves.toBe(1);
 		expect(await pages(page)).toEqual([["pi-tests", null]]);
 		await log(page).getByText("Raising the timeouts now.").waitFor({ timeout: 3000 });
 		await shot(page, "panel");
-		// Go to its terminal is always there.
 		await side.getByRole("button", { name: "Go to its terminal" }).click();
 		await vi.waitFor(async () => expect(await page.evaluate(() => (window as any).terminals)).toEqual(["pi-tests"]));
-		// Escape closes it.
 		await page.keyboard.press("Escape");
 		await panel.waitFor({ state: "detached", timeout: 2000 });
 
-		// Asking: worried; the coordinator, idle: neutral.
 		await talkTo(page, "asker");
 		await expect(book(page).getByRole("complementary").getByRole("img").getAttribute("src")).resolves.toMatch(
 			/-portrait-3\.png$/,
 		);
 		await expect(book(page).getByRole("complementary").textContent()).resolves.toContain("Which branch?");
-		// Clicking the dimmed world closes it.
 		await page.mouse.click(30, 400);
 		await book(page).waitFor({ state: "detached", timeout: 2000 });
 		await talkTo(page, "Orla");
@@ -554,7 +537,6 @@ test("the transcript renders Markdown and code, tells the operator, the agent, a
 		);
 		await expect(transcript.locator(".aw-conv-mail").textContent()).resolves.toContain("orla");
 
-		// Each tool call is one line with its tool and main argument; its result folds with it, not on its own.
 		const bash = transcript.getByRole("button", { name: /bash.*npx vitest run components\/session-state/ });
 		await expect(bash.getAttribute("aria-expanded")).resolves.toBe("false");
 		await expect(transcript.getByText("2 failed | 40 passed", { exact: false }).count()).resolves.toBe(0);
@@ -584,7 +566,6 @@ test("a long conversation opens at its newest entry and loads older pages on scr
 		await transcript.getByText(`Reply number ${long.length - 1}.`).waitFor({ timeout: 3000 });
 		const scroll = () =>
 			transcript.evaluate((el) => ({ top: el.scrollTop, height: el.scrollHeight, client: el.clientHeight }));
-		// Opens at the bottom: the newest entry is in view.
 		await vi.waitFor(async () => {
 			const s = await scroll();
 			expect(s.height - s.client - s.top).toBeLessThan(4);
@@ -592,7 +573,6 @@ test("a long conversation opens at its newest entry and loads older pages on scr
 		const count = () => transcript.locator("[data-entry]").count();
 		expect(await count()).toBe(PAGE);
 
-		// Count animation frames while older pages load: the world keeps drawing.
 		await page.evaluate(() => {
 			const w = window as any;
 			w.frameGaps = [];
@@ -605,7 +585,6 @@ test("a long conversation opens at its newest entry and loads older pages on scr
 			requestAnimationFrame(tick);
 		});
 		for (let loaded = PAGE; loaded < long.length; ) {
-			// The entry at the top of the view stays exactly where it is when the page before it arrives.
 			const anchor = `e${long.length - loaded}`;
 			await transcript.evaluate((el) => {
 				el.scrollTop = 0;
@@ -622,7 +601,6 @@ test("a long conversation opens at its newest entry and loads older pages on scr
 		expect((await pages(page)).map(([, before]) => before)).toEqual([null, "e110", "e60", "e10"]);
 		await transcript.getByText("The beginning of the conversation").waitFor({ timeout: 2000 });
 		await transcript.getByText("Question number 0?").waitFor({ timeout: 2000 });
-		// Finish the frame sample even when paging completes before 21 frames have elapsed.
 		await page.waitForFunction(() => (window as any).frameGaps.length > 20, undefined, { timeout: 3000 });
 		const gaps = await page.evaluate(() => (window as any).frameGaps as number[]);
 		expect(gaps.length).toBeGreaterThan(20);
@@ -639,7 +617,6 @@ test("opening a character that needs you marks it seen, so the orbs and lists ag
 	try {
 		await expect(needsYou()).resolves.toBe("Needs you: 2");
 		await talkTo(page, "ledger");
-		// Finished: the happy portrait, kept while the conversation stays open.
 		await expect(book(page).getByRole("complementary").getByRole("img").getAttribute("src")).resolves.toMatch(
 			/-portrait-1\.png$/,
 		);
@@ -694,7 +671,6 @@ test("while the conversation is open, what the character says next appears at th
 			aborted: false,
 		};
 		await page.evaluate((entry) => (window as any).append("pi-tests", entry), reply);
-		// The turn settles: the runtime's state changes, and the panel reads the newest page again.
 		const settled = world(
 			CAST.map((c) =>
 				c.id === "pi-tests"
@@ -707,15 +683,12 @@ test("while the conversation is open, what the character says next appears at th
 		const s = await log(page).evaluate((el) => el.scrollHeight - el.clientHeight - el.scrollTop);
 		expect(s).toBeLessThan(4);
 		expect(await log(page).locator("[data-entry]").count()).toBe(5);
-		// Seen while the operator watches it finish.
 		await vi.waitFor(async () => expect(await seen(page)).toEqual(["pi-tests"]), { timeout: 2000 });
 		expect(errors).toEqual([]);
 	} finally {
 		await page.close();
 	}
 }, 30000);
-
-// Ticket 13: instructing an agent from the panel.
 
 const commands = (page: Page) => page.evaluate(() => (window as any).commands as [string, Record<string, unknown>][]);
 const box = (page: Page) => book(page).getByRole("textbox");
@@ -726,12 +699,10 @@ test("idle: a Reply box; Enter sends talk, Shift+Enter starts a line, the box ke
 	try {
 		await talkTo(page, "ledger");
 		const panel = book(page);
-		// Idle: only Reply; no busy actions.
 		await expect(panel.getByRole("button", { name: "Reply", exact: true }).count()).resolves.toBe(1);
 		for (const name of ["Redirect now", "Tell it after this", "Stop"])
 			await expect(panel.getByRole("button", { name, exact: true }).count()).resolves.toBe(0);
 		await expect(box(page).getAttribute("aria-label")).resolves.toBe("Reply to ledger");
-		// The box has the focus on opening, so typing goes there and the world does not walk.
 		await vi.waitFor(async () => expect(await box(page).evaluate((el) => el === document.activeElement)).toBe(true));
 		await page.keyboard.type("Retry the billing job");
 		await page.keyboard.press("Shift+Enter");
@@ -746,7 +717,6 @@ test("idle: a Reply box; Enter sends talk, Shift+Enter starts a line, the box ke
 		);
 		await expect(box(page).inputValue()).resolves.toBe("");
 		expect(await box(page).evaluate((el) => el === document.activeElement)).toBe(true);
-		// Its receipt: accepted, delivered, applied.
 		const line = receipts(page).getByRole("listitem");
 		await vi.waitFor(async () => expect(await line.getAttribute("data-stage")).toBe("applied"), { timeout: 3000 });
 		const text = await line.textContent();
@@ -754,16 +724,13 @@ test("idle: a Reply box; Enter sends talk, Shift+Enter starts a line, the box ke
 			expect(text).toContain(part);
 		await expect(line.locator(".aw-conv-stage.aw-on").count()).resolves.toBe(3);
 		await shot(page, "idle-sent", "13");
-		// Reply by click; nothing is sent while the box is empty.
 		await expect(panel.getByRole("button", { name: "Reply", exact: true }).isDisabled()).resolves.toBe(true);
 		expect(await commands(page)).toHaveLength(1);
 		await box(page).fill("Thanks.");
 		await panel.getByRole("button", { name: "Reply", exact: true }).click();
 		await vi.waitFor(async () => expect(await commands(page)).toHaveLength(2));
 		expect(await box(page).evaluate((el) => el === document.activeElement)).toBe(true);
-		// The world never walked while the operator typed.
 		expect(await page.evaluate(() => (window as any).agentWorldView.avatar()?.path?.length ?? 0)).toBeLessThan(2);
-		// Nor did "g" in "billing" toggle the walk grid.
 		expect(await page.evaluate(() => (window as any).agentWorldView.walkGrid())).toBe(false);
 		expect(errors).toEqual([]);
 	} finally {
@@ -825,7 +792,6 @@ test("busy: Redirect now (Enter), Tell it after this, and Stop, which asks first
 		await expect(receipts(page).textContent()).resolves.toContain("After this");
 		await shot(page, "busy-sent", "13");
 
-		// Stop asks first; Let it work (or Escape) sends nothing and leaves the panel open.
 		await panel.getByRole("button", { name: "Stop", exact: true }).click();
 		const confirm = page.getByRole("alertdialog", { name: "Stop pi-tests?" });
 		await confirm.waitFor({ timeout: 2000 });
@@ -841,7 +807,6 @@ test("busy: Redirect now (Enter), Tell it after this, and Stop, which asks first
 		await page.waitForTimeout(200);
 		expect(await commands(page)).toHaveLength(2);
 
-		// Confirmed: abort, sent as confirmed.
 		await panel.getByRole("button", { name: "Stop", exact: true }).click();
 		await confirm.getByRole("button", { name: "Stop it" }).click();
 		await vi.waitFor(async () =>
@@ -890,7 +855,6 @@ test("the open conversation streams the reply as it is written, then settles on 
 					(window as any).reply({ kind: "delta", characterId: "pi-tests", streamId: "s1", seq, delta: text }),
 				[words[i], i + 1] as const,
 			);
-		// Another character's stream never shows here.
 		await page.evaluate(() =>
 			(window as any).reply({ kind: "delta", characterId: "ledger", streamId: "x", seq: 1, delta: "Not for you." }),
 		);
@@ -899,7 +863,6 @@ test("the open conversation streams the reply as it is written, then settles on 
 		await delta(2);
 		const writing = log(page).locator(".aw-conv-writing");
 		await vi.waitFor(async () => expect((await writing.textContent())?.trim()).toBe("All 42 pass"));
-		// It joins the agent's turn under its heading, at the bottom, in view.
 		await expect(log(page).locator(".aw-conv-assistant").count()).resolves.toBe(2);
 		await shot(page, "streaming", "13");
 		for (let i = 3; i < words.length; i++) await delta(i);
@@ -913,7 +876,6 @@ test("the open conversation streams the reply as it is written, then settles on 
 		expect(gap).toBeLessThan(4);
 		const before = await writing.locator("p").last().boundingBox();
 
-		// The stream ends with its stored entry (the same words); the history reads it too.
 		const stored: TranscriptEntry = {
 			kind: "assistant",
 			id: "a3",
@@ -934,7 +896,6 @@ test("the open conversation streams the reply as it is written, then settles on 
 		const after = await settled.locator("p").last().boundingBox();
 		expect(Math.abs(after!.y - before!.y)).toBeLessThan(2);
 		expect(Math.abs(after!.height - before!.height)).toBeLessThan(2);
-		// Read once more from the history, and drawn once.
 		await vi.waitFor(async () => expect((await pages(page)).length).toBeGreaterThan(pagesBefore));
 		await page.waitForTimeout(300);
 		await expect(log(page).getByText("only problem.").count()).resolves.toBe(1);
@@ -943,7 +904,6 @@ test("the open conversation streams the reply as it is written, then settles on 
 		await expect(log(page).getByText("Not for you.").count()).resolves.toBe(0);
 		await shot(page, "settled", "13");
 
-		// Closing stops watching.
 		await page.keyboard.press("Escape");
 		await vi.waitFor(async () =>
 			expect(await page.evaluate(() => (window as any).watched)).toEqual([["pi-tests"], []]),
@@ -953,8 +913,6 @@ test("the open conversation streams the reply as it is written, then settles on 
 		await page.close();
 	}
 }, 40000);
-
-// Ticket 14: answering questions in the world.
 
 const QUESTIONNAIRE = {
 	id: "call-ask-1",
@@ -1022,25 +980,22 @@ test("an open questionnaire shows as a themed form: each option with its descrip
 	try {
 		await talkTo(page, "asker");
 		await form(page).waitFor({ timeout: 3000 });
-		// No reply box while it asks: the form is the way to answer.
 		await expect(book(page).getByRole("textbox", { name: "Reply to asker" }).count()).resolves.toBe(0);
 		await expect(form(page).getByRole("group").count()).resolves.toBe(3);
 		const first = question(page, 0);
 		await expect(first.textContent()).resolves.toContain("Which branch should the fix go on?");
 		await expect(first.textContent()).resolves.toContain("Branch");
 		await expect(first.textContent()).resolves.toContain("Straight onto main; the suite is green there.");
-		await expect(first.getByRole("radio").count()).resolves.toBe(3); // two options and words of your own
+		await expect(first.getByRole("radio").count()).resolves.toBe(3);
 		await expect(question(page, 1).getByRole("checkbox").count()).resolves.toBe(4);
 		await expect(question(page, 1).textContent()).resolves.toContain("A line for the release notes.");
 		const send = form(page).getByRole("button", { name: "Send answer" });
 		await expect(send.isDisabled()).resolves.toBe(true);
 		await shot(page, "form", "14");
 
-		// One choice: a second click moves it.
 		await first.getByRole("radio", { name: /^main/ }).click();
 		await first.getByRole("radio", { name: /^retry/ }).click();
 		await expect(first.getByRole("radio", { name: /^main/ }).isChecked()).resolves.toBe(false);
-		// Many: Tests and Changelog; then words of your own replace the choices, and a choice replaces the words.
 		const extras = question(page, 1);
 		await extras.getByRole("checkbox", { name: /^Tests/ }).click();
 		await extras.getByRole("checkbox", { name: /^Changelog/ }).click();
@@ -1050,12 +1005,11 @@ test("an open questionnaire shows as a themed form: each option with its descrip
 		await extras.getByRole("checkbox", { name: /^Docs/ }).click();
 		await expect(extras.getByRole("checkbox", { name: /own words/ }).isChecked()).resolves.toBe(false);
 		await extras.getByRole("checkbox", { name: /^Tests/ }).click();
-		// Words of your own for the last question.
 		const last = question(page, 2);
 		await last.getByRole("radio", { name: /own words/ }).click();
 		const words = last.getByRole("textbox");
 		await vi.waitFor(async () => expect(await words.evaluate((el) => el === document.activeElement)).toBe(true));
-		await expect(send.isDisabled()).resolves.toBe(true); // words not written yet
+		await expect(send.isDisabled()).resolves.toBe(true);
 		await page.keyboard.type("Rebase on main first.");
 		await expect(send.isDisabled()).resolves.toBe(false);
 		await shot(page, "form-filled", "14");
@@ -1076,7 +1030,6 @@ test("an open questionnaire shows as a themed form: each option with its descrip
 		await vi.waitFor(async () => expect(await line.getAttribute("data-stage")).toBe("applied"), { timeout: 3000 });
 		await expect(line.textContent()).resolves.toContain("Answer");
 
-		// The question closes in the world: the form gives way to the busy actions, and says it was answered here.
 		await page.evaluate((next) => (window as any).push(next), ANSWERED);
 		await form(page).waitFor({ state: "detached", timeout: 2000 });
 		await expect(book(page).getByRole("button", { name: "Redirect now" }).count()).resolves.toBe(1);
@@ -1126,7 +1079,6 @@ test("a dialog only the terminal can answer shows a notice with Go to its termin
 	}
 }, 30000);
 
-/** A real-looking turn: hidden and written thoughts between the agent's words and a tool whose output pads itself. */
 const THINKER: TranscriptEntry[] = [
 	{ kind: "user", id: "t1", at: at(50), text: "Check the [guide](https://example.com/guide) links.", images: 0 },
 	{
@@ -1195,7 +1147,6 @@ test("thoughts read quietly: hidden ones are left out and a run of them folds in
 		});
 		await talkTo(page, "pi-tests");
 		await log(page).getByText("Both docs are there.").waitFor({ timeout: 3000 });
-		// Two runs of written thoughts (before the words; after the tool, across two replies), hidden ones dropped.
 		const thoughts = log(page).locator(".aw-conv-thought");
 		await expect(thoughts.count()).resolves.toBe(2);
 		await expect(thoughts.locator(".aw-conv-fold-label").allTextContents()).resolves.toEqual([
@@ -1212,13 +1163,10 @@ test("thoughts read quietly: hidden ones are left out and a run of them folds in
 			"Both are there.",
 			"Nothing else to check.",
 		]);
-		// The tool line leaves out the `cd` into the working directory and the directory itself from paths.
 		const tool = log(page).locator(".aw-conv-tool").filter({ hasText: "bash" });
 		await expect(tool.locator(".aw-conv-fold-arg").textContent()).resolves.toBe("ls docs");
 		await tool.getByRole("button").first().click();
-		// Its output without the blank lines around it (the first line's indent kept).
 		await expect(tool.locator("pre").nth(1).textContent()).resolves.toBe("  README.md\n  guide.md");
-		// One quiet note for the entries the transcript no longer holds.
 		const note = log(page).locator(".aw-conv-missing");
 		await expect(note.count()).resolves.toBe(1);
 		await expect(note.textContent()).resolves.toBe("3 entries are no longer in its transcript file.");
@@ -1240,7 +1188,6 @@ test("web links in a transcript open in the system browser and file links in the
 		await vi.waitFor(async () =>
 			expect(await page.evaluate(() => (window as any).links)).toEqual(["https://example.com/guide", "https://pi.dev"]),
 		);
-		// Links to files open through the main process too, with the agent's directory for relative paths.
 		await log(page).getByRole("link", { name: "file:///etc/hosts" }).click();
 		await log(page).getByRole("link", { name: "the run" }).click();
 		const cwd = "/Users/op/code/apple-pi";
@@ -1250,10 +1197,8 @@ test("web links in a transcript open in the system browser and file links in the
 				["file", "docs/run.md:3", cwd],
 			]),
 		);
-		// A link of any other scheme is no link at all: its target shows on hover only.
 		await expect(log(page).getByRole("link", { name: "vscode://file/x" }).count()).resolves.toBe(0);
 		await expect(log(page).locator(".aw-md-link-dead").getAttribute("title")).resolves.toBe("vscode://file/x");
-		// The keyboard opens a link too.
 		await log(page).getByRole("link", { name: "guide" }).focus();
 		await page.keyboard.press("Enter");
 		await vi.waitFor(async () => expect(await page.evaluate(() => (window as any).links.length)).toBe(5));
@@ -2180,7 +2125,6 @@ test("a group is read while its end is in view; posts that arrive while he reads
 			.locator("xpath=following-sibling::article[1]")
 			.getByText("The first unread incoming post.", { exact: true })
 			.waitFor();
-		// Like Slack: looking at the end of the conversation reads it; the divider stays where he left off.
 		await vi.waitFor(async () => expect(await channel.getAttribute("data-unread")).toBe("false"));
 		await divider.waitFor();
 		expect(
@@ -2271,9 +2215,6 @@ test("Tab keeps to the open book, and Escape gives the keys back to the world", 
 		await page.keyboard.press("Escape");
 		await book(page).waitFor({ state: "detached", timeout: 2000 });
 		await expect(page.evaluate(() => document.activeElement?.id)).resolves.toBe("game");
-		// The world's keys work again at once: G, pressed and released in the same frame as Escape's release, shows the
-		// walk grid and keeps it shown. (Phaser handles its key queue again for each new key event within a frame, so G's
-		// press was handled a second time on its release and the grid went back off: the key "lost" after closing.)
 		await page.evaluate(() => {
 			const key = (type: string, key: string, code: string, keyCode: number) =>
 				window.dispatchEvent(new KeyboardEvent(type, { key, code, keyCode, bubbles: true }));
