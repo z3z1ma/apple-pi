@@ -1,5 +1,8 @@
 ## file
 
+A role is one Markdown file: front matter for title, mind, posture, and whether it manages, and a body that is the obligation. Catalog directories override in order: the package `roles/`, then `~/.pi/agent/roles/`, then `<cwd>/.pi/roles/`. A later file of the same name replaces an earlier one. `dispatches` means the person only routes work: no shell, file-writing, or program tools.
+Why: a project role must be able to replace the package role without a second catalog, and a dispatcher must not gain the tools it exists to avoid.
+
 After changing role frontmatter and its parser together in a live checkout, reload the calling Pi session before hiring against the updated format. Preserve available colleagues until the reload is authorized. The role parser belongs to the Pi session; this boundary needs a session reload rather than a runtime-daemon restart.
 Why: a running session can apply its old parser to new role files and report an empty catalog or an unknown role even though the files remain present.
 Coupled: components/organization/src/session-role.ts

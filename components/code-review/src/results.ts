@@ -44,13 +44,10 @@ export interface ReviewSummary {
 	coverage: {
 		completedQuestions: number;
 		requiredQuestions: number;
-		/** Regions a legacy plan declared as gaps; current plans never leave regions unassigned. */
 		unassignedRegions: number;
-		/** Regions outside every focused scope, reviewed only by the whole-change integration pass. */
 		integrationOnlyRegions: number;
 		additionalRequests: number;
 	} | null;
-	/** What was reviewed, as a person names it; label fields are null on captures made before labels. */
 	label: {
 		repository: string;
 		branch: string | null;
@@ -63,10 +60,8 @@ export interface ReviewSummary {
 		reported: number;
 		confirmed: number;
 		unresolved: number;
-		/** Confirmed findings with an owner response. */
 		responded: number;
 	};
-	/** Settled with nothing left to act on: completed, no-changes or cancelled, every confirmed finding answered. */
 	addressed: boolean;
 	cost: {
 		reportedDollars: number | null;
@@ -74,7 +69,6 @@ export interface ReviewSummary {
 		totalAttempts: number;
 		tokens: { input: number; output: number; cacheRead: number };
 	};
-	/** When the last attempt of a settled review finished; null while work remains. */
 	settledAt: number | null;
 	approval: { record: ReviewApproval; matchesAssessment: boolean } | null;
 	reason: string | null;
@@ -85,7 +79,6 @@ export interface ReviewSummary {
 export interface ReviewQueue {
 	total: number;
 	states: Partial<Record<ReviewState, number>>;
-	/** Reviewer passes running now across the queue, against the concurrency bound. */
 	passes: { running: number; limit: number };
 	page: { offset: number; nextOffset: number | null; rows: ReviewSummary[] } | null;
 }
@@ -139,16 +132,13 @@ export interface ReviewAttemptLog {
 export interface ReviewAnalytics {
 	reviews: number;
 	settled: number;
-	/** Reported cost; null when the sum is not finite. Attempts without a cost observation are counted, not priced. */
 	dollars: number | null;
 	unreported: number;
 	confirmed: number;
-	/** Review wall time from admission to the last attempt, over settled reviews. */
 	medianMinutes: number | null;
 	byModel: {
 		model: string;
 		attempts: number;
-		/** Attempts with a cost observation; averages divide by this, not by every attempt. */
 		reported: number;
 		dollars: number | null;
 		minutes: number;

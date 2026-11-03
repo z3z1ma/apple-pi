@@ -25,7 +25,6 @@ export function targetLabel(target: ReviewTarget): string {
 	}
 }
 
-/** The ref a person knows the change by: the branch or requested comparison. */
 export function refLabel(review: Pick<ReviewSummary, "target" | "label">): string {
 	const { target, label } = review;
 	if (target.kind === "branch") return target.head;
@@ -33,13 +32,11 @@ export function refLabel(review: Pick<ReviewSummary, "target" | "label">): strin
 	return label.branch ?? (target.kind === "commit" ? target.commit : "detached");
 }
 
-/** What was reviewed, in one line: head commit and subject, or the uncommitted change. */
 export function changeLabel(review: Pick<ReviewSummary, "target" | "label">): string {
 	const { target, label } = review;
 	const files = label.files === null ? "" : ` (${label.files} ${label.files === 1 ? "file" : "files"})`;
 	if (target.kind === "working-tree") return `uncommitted changes${files}`;
 	if (target.kind === "staged") return `staged changes${files}`;
-	// Captures from before labels carry only their ref, which the row already shows.
 	if (!label.subject) return "";
 	const more = label.commits && label.commits > 1 ? ` (+${label.commits - 1} more)` : "";
 	return `${label.head?.slice(0, 7) ?? ""} ${label.subject}${more}`.trim();
@@ -65,7 +62,6 @@ export function tokensLabel(cost: ReviewSummary["cost"]): string {
 	return `in ${compact(cost.tokens.input)} \u00b7 out ${compact(cost.tokens.output)} \u00b7 cached ${compact(cost.tokens.cacheRead)}`;
 }
 
-/** Glanceable outcome: confirmed findings, never a pass/fail verdict, which stays the operator's sign-off. */
 export function resultLabel(review: ReviewSummary): string {
 	if (["queued", "capturing"].includes(review.state)) return "waiting";
 	if (review.state === "running")
@@ -86,7 +82,6 @@ export function whenLabel(at: number, now = Date.now()): string {
 	return new Date(at).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
-/** The queue at a glance: work by state and reviewer passes in use. */
 export function queueStrip(queue: Pick<ReviewQueue, "states" | "passes">): string {
 	const states = queue.states;
 	const done = (states.completed ?? 0) + (states.incomplete ?? 0) + (states["no-changes"] ?? 0);
@@ -121,12 +116,10 @@ export function logLines(logs: ReviewAttemptLog[]): string[] {
 	]);
 }
 
-/** An average over the observations that exist; unknown when the total or every observation is unknown. */
 export function perLabel(dollars: number | null, count: number): string {
 	return dollars === null || !count ? "--" : dollarsLabel(dollars / count);
 }
 
-/** Says how many attempts have no cost observation, so a total is read as a lower bound. */
 export function unreportedLabel(attempts: number, reported: number): string {
 	return attempts > reported ? ` (${attempts - reported} without cost)` : "";
 }
@@ -317,7 +310,6 @@ export function findingLines(entry: ReviewAssessment["findings"][number]): strin
 	];
 }
 
-/** Progressive evidence keeps its field names, including uncertainty and provenance. */
 export function evidenceLines(value: unknown, depth = 0): string[] {
 	const indent = "  ".repeat(depth);
 	if (value === null || value === undefined) return [`${indent}not recorded`];

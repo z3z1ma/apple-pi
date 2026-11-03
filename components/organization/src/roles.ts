@@ -1,9 +1,3 @@
-/**
- * The role catalog: one Markdown file per role, with front matter for the role's title, mind, posture, and whether
- * it manages, and a body that is the role's obligation. The package's `roles/` directory holds the catalog; a file of
- * the same name under `~/.pi/agent/roles/` or `<cwd>/.pi/roles/` replaces it, later directories winning.
- */
-
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -16,18 +10,12 @@ import {
 } from "../../shared/src/model-profiles.js";
 
 export interface Role {
-	/** The file name without `.md`; the name a hire or `--role` uses. */
 	name: string;
 	title: string;
-	/** One line a manager hires by: what the role is for. */
 	mandate: string;
-	/** Optional leading profile, then ordered `provider/id:effort` recommendations. */
 	models: string[];
-	/** Whether the person keeps the built-in `edit` and `write` tools. */
 	writes: boolean;
-	/** Whether the person gets the manager tools and charter. */
 	manages: boolean;
-	/** Whether the person only routes work: no shell, file-writing or program tools, so it delegates instead of doing. */
 	dispatches: boolean;
 	body: string;
 	path: string;
@@ -35,13 +23,11 @@ export interface Role {
 
 export interface RoleCatalog {
 	roles: Map<string, Role>;
-	/** Files skipped, each named with its reason. */
 	problems: string[];
 }
 
 export const PACKAGE_ROLES_DIR = fileURLToPath(new URL("../../../roles/", import.meta.url));
 
-/** The catalog directories in override order: the package, then the user, then the project. */
 export function roleDirectories(cwd: string): string[] {
 	return [PACKAGE_ROLES_DIR, join(getAgentDir(), "roles"), join(cwd, ".pi", "roles")];
 }
@@ -65,7 +51,6 @@ export function loadRoles(cwd: string): RoleCatalog {
 
 const MODEL_ID = /^[a-z0-9-]+\/[a-z0-9][a-z0-9.:-]*$/i;
 
-/** The final colon separates effort from a model identity, which can itself contain colons. */
 export function parseRoleModel(value: string): ModelProfileCandidate | undefined {
 	const colon = value.lastIndexOf(":");
 	if (colon < 0) return undefined;
@@ -75,7 +60,6 @@ export function parseRoleModel(value: string): ModelProfileCandidate | undefined
 	return { model, thinking };
 }
 
-/** One role file, or the reason it is skipped. */
 export function readRole(path: string, name: string): Role | string {
 	let parsed: { frontmatter: Record<string, unknown>; body: string };
 	try {

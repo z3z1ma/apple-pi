@@ -6,7 +6,6 @@ import type { Readable, Writable } from "node:stream";
 import tty from "node:tty";
 import { fileURLToPath } from "node:url";
 
-/** The part of a child process the shell tools use; a terminal-backed process provides the same. */
 export interface ShellProcess {
 	readonly pid?: number;
 	readonly stdin: Writable | null;
@@ -22,10 +21,8 @@ export interface TerminalSize {
 	rows: number;
 }
 
-/** Columns the transcript indents command output by. */
 const TRANSCRIPT_INDENT = 4;
 
-/** Pi's terminal less the transcript indent, so command output fits where it is shown. */
 export function terminalSize(): TerminalSize {
 	const { columns, rows } = process.stdout;
 	if (!process.stdout.isTTY || !columns || !rows) return { cols: 80, rows: 24 };
@@ -47,7 +44,6 @@ function loadNativePty(): NativePty {
 	if (nativePty === undefined) {
 		try {
 			if (process.platform === "win32") throw new Error("pseudo-terminals for commands are not supported on Windows");
-			// The package's own spawn gives the child a controlling terminal; opening pairs keeps Node's spawn.
 			const loaded = createRequire(import.meta.url)("@lydell/node-pty/requireBinary.js").requireBinary("pty.node");
 			if (typeof loaded?.open !== "function") throw new Error("@lydell/node-pty has no open()");
 			nativePty = loaded as NativePty;
@@ -63,10 +59,6 @@ export interface Terminal extends PtyPair {
 	size: TerminalSize;
 }
 
-/**
- * Opens the pseudo-terminal a command writes stdout and stderr to, or throws when none can be opened.
- * One terminal for both keeps their order, as in the operator's terminal.
- */
 export function openTerminal(): Terminal {
 	const size = terminalSize();
 	return { ...loadNativePty().open(size.cols, size.rows), size };
@@ -83,7 +75,6 @@ export function terminalEnvironment(env: NodeJS.ProcessEnv, size: TerminalSize):
 		TERM: "xterm-256color",
 		COLUMNS: String(size.cols),
 		LINES: String(size.rows),
-		// A pager waits for keys that never come.
 		PAGER: "cat",
 		GIT_PAGER: "cat",
 		BASH_ENV: COLOR_WRAPPERS,
@@ -93,15 +84,8 @@ export function terminalEnvironment(env: NodeJS.ProcessEnv, size: TerminalSize):
 
 const COLOR_WRAPPERS = fileURLToPath(new URL("./terminal-bash-env.sh", import.meta.url));
 
-/** Pi's own wait after a shell exits for output a lingering descendant still writes (`waitForChildProcess`). */
 const EXIT_OUTPUT_GRACE_MS = 100;
 
-/**
- * A child whose stdout and stderr share a pseudo-terminal, read as `stdout`. The parent's copy of the
- * terminal's child end is closed here; `close` fires once the child exited and the terminal reached
- * the end of its output, or fell quiet: a descendant left running in the background (`cmd &`) keeps
- * the terminal open and must not hold the command.
- */
 export class TerminalProcess extends EventEmitter implements ShellProcess {
 	readonly stdout: tty.ReadStream;
 	readonly stderr = null;
@@ -116,7 +100,6 @@ export class TerminalProcess extends EventEmitter implements ShellProcess {
 		super();
 		closeSync(terminal.slave);
 		this.stdout = new tty.ReadStream(terminal.master);
-		// Linux reports the end of a pseudo-terminal's output as EIO once every writer has closed it.
 		this.stdout.on("error", () => this.stdout.destroy());
 		this.stdout.once("end", () => this.stdout.destroy());
 		this.stdout.once("close", () => {
