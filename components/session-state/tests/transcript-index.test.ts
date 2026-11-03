@@ -157,6 +157,15 @@ test("the runtime indexes a session's transcript and answers searches over its s
 				timeout: 10_000,
 			},
 		);
+		// A hit names the transcript it came from and its #N, and the reply counts every match for paging.
+		const both = await search("albatross");
+		expect(both.total).toBe(2);
+		expect(both.hits.map((hit: any) => [hit.entry, hit.ordinal, hit.file])).toEqual(
+			expect.arrayContaining([
+				["e1", 0, file],
+				["e2", 1, file],
+			]),
+		);
 	} finally {
 		bridge.socket.destroy();
 	}
