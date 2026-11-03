@@ -20,7 +20,6 @@ const events = (id: string, type: string) =>
 		type,
 	).map((row) => JSON.parse(row.data));
 
-/** A tool that runs until the test releases it, reporting progress on the way. */
 function heldTool() {
 	let release = () => {};
 	const done = new Promise<void>((resolve) => {
@@ -70,7 +69,6 @@ test("a running tool shows its name, main argument, and start, then a start and 
 		expect(events(id, "tool_ended")).toEqual([
 			expect.objectContaining({ name: "slow_build", isError: false, durationMs: expect.any(Number) }),
 		]);
-		// five progress updates, no event for any of them
 		const types = query<{ type: string }>(
 			state.dbPath,
 			"select distinct type from events where session_id = ?",
@@ -191,8 +189,7 @@ test("model, thinking level, context use, cost, and configuration are recorded a
 		await vi.waitFor(() => expect(session(id).cost).toBe(0.25));
 		expect(JSON.parse(session(id).config as string).activeTools).toEqual(
 			expect.arrayContaining(["read", "directory", "update_self"]),
-		); // refreshed when the run starts
-		// read after the turn was saved, so it matches what the session itself reports now
+		);
 		expect(session(id).context_tokens).toBe(run.session.getContextUsage()?.tokens ?? null);
 		expect(JSON.parse(session(id).config as string).flags).toEqual(expect.any(Array));
 		expect(events(id, "cost_changed").at(-1)).toMatchObject({ from: 0, to: 0.25 });
@@ -210,7 +207,6 @@ test("tools running at the same time each get an end event, and the one still ru
 	const twoTools: ExtensionFactory = (pi) => {
 		first.factory(pi);
 	};
-	// The second held tool is registered under another name.
 	const secondNamed: ExtensionFactory = (pi) => {
 		pi.registerTool({
 			name: "slow_test",
@@ -274,7 +270,7 @@ test("steers are delivered before follow-ups, so the queue drops a steer first e
 		await run.session.prompt("same words", { streamingBehavior: "steer" });
 		await vi.waitFor(() => expect(JSON.parse(session(id).queue as string)).toMatchObject({ steers: 1, followUps: 1 }));
 		holds[0](fauxAssistantMessage("first"));
-		await vi.waitFor(() => expect(holds).toHaveLength(2)); // the steer went out with the next request
+		await vi.waitFor(() => expect(holds).toHaveLength(2));
 		await vi.waitFor(() => expect(JSON.parse(session(id).queue as string)).toMatchObject({ steers: 0, followUps: 1 }));
 		holds[1](fauxAssistantMessage("second"));
 		await vi.waitFor(() => expect(holds).toHaveLength(3));

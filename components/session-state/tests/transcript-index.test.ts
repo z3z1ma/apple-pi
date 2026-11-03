@@ -63,7 +63,6 @@ test("an index follows a transcript as it grows and when it is replaced, and sea
 		searchIndex(db, { query, fields }).map((hit) => hit.entry);
 	expect(ids("pelican").sort()).toEqual(["r1", "u1"]);
 	expect(ids("pelican", "words")).toEqual(["u1"]);
-	// Any word may match; entries holding more of them rank first.
 	expect(ids("npm build")[0]).toBe("a1");
 	expect(ids("pelican missing")).toEqual(["r1", "u1"]);
 
@@ -71,7 +70,6 @@ test("an index follows a transcript as it grows and when it is replaced, and sea
 	await indexTranscript(db, "s1", file);
 	expect(ids("heron")).toEqual(["a2"]);
 
-	// A rewritten file starts over rather than keeping rows for entries it no longer holds.
 	rmSync(file);
 	writeFileSync(file, user("u9", 9, "A fresh start about herons."));
 	await indexTranscript(db, "s1", file);
@@ -82,7 +80,6 @@ test("an index follows a transcript as it grows and when it is replaced, and sea
 
 test("hits carry #N ordinals counted as load-messages counts them, and eligibility applies before paging", async () => {
 	const file = join(dir, "ordinal.jsonl");
-	// An assistant message with no text still takes an ordinal; a custom message does not.
 	writeFileSync(
 		file,
 		user("m0", 1, "heron one") +
@@ -108,7 +105,6 @@ test("hits carry #N ordinals counted as load-messages counts them, and eligibili
 	await indexTranscript(db, "s2", file);
 	const all = searchIndex(db, { query: "heron", limit: 10 });
 	expect(Object.fromEntries(all.map((hit) => [hit.entry, hit.ordinal]))).toEqual({ m0: 0, c0: null, m2: 2, m3: 3 });
-	// Each hit's offset and length are exactly its line, so a reader can fetch the body without scanning.
 	const text = readFileSync(file);
 	for (const hit of all)
 		expect(JSON.parse(text.subarray(hit.offset, hit.offset + hit.length).toString()).id).toBe(hit.entry);
@@ -206,7 +202,6 @@ test("the runtime indexes a session's transcript and answers searches over its s
 				timeout: 10_000,
 			},
 		);
-		// A hit names the transcript it came from and its #N, and the reply counts every match for paging.
 		const both = await search("albatross");
 		expect(both.total).toBe(2);
 		expect(both.hits.map((hit: any) => [hit.entry, hit.ordinal, hit.file])).toEqual(

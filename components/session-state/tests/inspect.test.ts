@@ -8,7 +8,6 @@ import { migrate } from "../src/schema.js";
 
 const HOUR = 3_600_000;
 
-/** An organization: boss with reports ada (awake, idle), bo (at home), cy (let go); all working in one repository. */
 function organization() {
 	const dir = mkdtempSync(join(tmpdir(), "apple-pi-inspect-"));
 	const repo = join(dir, "repo");
@@ -126,7 +125,6 @@ test("experience uses touch-time membership and cutoff outcomes, with current av
 	}
 });
 
-/** Waits in the organization: ada's two tasks wait on bo's decision, and boss's task waits on ada's task. */
 function waiting() {
 	const { db, repo } = organization();
 	const task = (id: string, holder: string | null) => {
@@ -186,7 +184,6 @@ test("open waits are grouped by what they wait on, the most-waited-on first, wit
 
 test("a wait across teams is marked, and a window lists the waits resolved in it", () => {
 	const { db, repo } = waiting();
-	// A second lead under boss takes bo: ada (under boss) and bo (under lea) are now on different teams.
 	db.prepare(
 		"insert into sessions (id, kind, cwd, name, run_state, generation, source, updated_at, reports_to) values ('lea', 'root', ?, 'Lea', 'idle', 1, 'test', 0, 'boss')",
 	).run(repo);
@@ -234,7 +231,6 @@ test("a past view keeps the holders it had then, and a resolved wait shows how l
 
 test("the waiter is whoever held the waiting task, not whoever recorded the wait", () => {
 	const { db, repo } = waiting();
-	// bo manages ed, so bo and ed are one team; ada, who holds the waiting task, is on boss's team.
 	db.prepare(
 		"insert into links (id, from_kind, from_id, to_kind, to_id, relation, recorded_by, inferred, created_at) values ('w5', 'task', 'api', 'person', 'ed', 'requires_decision', 'bo', 0, ?)",
 	).run(HOUR);
@@ -246,7 +242,6 @@ test("the waiter is whoever held the waiting task, not whoever recorded the wait
 
 test("a subtree view as of a past moment keeps the people who were in that subtree then", () => {
 	const { db, repo } = waiting();
-	// ada sat under boss until 5h, when she moved under bo; a 4h view of boss's subtree still holds her waits.
 	db.prepare(
 		"insert into events (at, source, session_id, type, data) values (?, 'client', 'ada', 'transferred', ?)",
 	).run(5 * HOUR, JSON.stringify({ from: "boss", to: "bo", by: "boss" }));

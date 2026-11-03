@@ -8,7 +8,6 @@ import bridge from "../src/index.js";
 import { killPane } from "../src/tmux.js";
 import { close, query, startRuntime, stopRuntime, tempStateDir } from "./helpers.js";
 
-// tmux puts -L servers under $TMUX_TMPDIR, so the runtime sees only these scratch servers, never the operator's.
 const tmuxDir = mkdtempSync(join(tmpdir(), "apt-"));
 const state = tempStateDir();
 vi.stubEnv("TMUX_TMPDIR", tmuxDir);
@@ -18,7 +17,6 @@ function tmux(server: string, ...args: string[]): string {
 	servers.add(server);
 	return execFileSync("tmux", ["-L", server, "-f", "/dev/null", ...args], { encoding: "utf8" }).trim();
 }
-// The path tmux was asked for (through macOS's /var alias) and the resolved path the runtime keys servers by.
 const rawSocketOf = (server: string) => join(tmuxDir, `tmux-${process.getuid?.()}`, server);
 const socketOf = (server: string) => realpathSync(rawSocketOf(server));
 
@@ -96,7 +94,7 @@ test("two live servers with the same pane id stay distinct", async () => {
 	tmux("other", "new-session", "-d");
 	const mainFirst = tmux("main", "display-message", "-p", "-t", "alpha:0.0", "#{pane_id}");
 	const otherFirst = tmux("other", "display-message", "-p", "#{pane_id}");
-	expect(otherFirst).toBe(mainFirst); // both servers number their first pane %0
+	expect(otherFirst).toBe(mainFirst);
 	await vi.waitFor(() =>
 		expect(rows("select socket from tmux_panes where id = ? order by socket", otherFirst)).toEqual(
 			[socketOf("main"), socketOf("other")].sort().map((socket) => ({ socket })),
@@ -108,7 +106,7 @@ test("a Pi session in a tmux pane has its incarnation bound to that pane", async
 	const socket = socketOf("main");
 	const pane = tmux("main", "display-message", "-p", "-t", "beta", "#{pane_id}");
 	const tty = tmux("main", "display-message", "-p", "-t", "beta", "#{pane_tty}");
-	vi.stubEnv("TMUX", `${rawSocketOf("main")},1,0`); // an alias of the server's socket path
+	vi.stubEnv("TMUX", `${rawSocketOf("main")},1,0`);
 	vi.stubEnv("TMUX_PANE", pane);
 	const run = await fauxSession([bridge], [], []);
 	try {
@@ -206,7 +204,7 @@ test("a server that stops answering does not hold up the others", async () => {
 				),
 			{ timeout: 4000 },
 		);
-		expect(rows("select id from tmux_panes where socket = ?", socketOf("stuck"))).toHaveLength(1); // kept, not removed
+		expect(rows("select id from tmux_panes where socket = ?", socketOf("stuck"))).toHaveLength(1);
 	} finally {
 		process.kill(stuckPid, "SIGCONT");
 	}

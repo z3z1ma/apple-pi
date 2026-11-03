@@ -31,10 +31,9 @@ test("a session keeps working through a runtime outage, its state comes back, an
 		const killed = runtimePid(state.pidPath)!;
 		const killedAt = Date.now();
 		process.kill(killed, "SIGKILL");
-		await run.session.prompt("second"); // the session does not depend on the runtime
+		await run.session.prompt("second");
 		expect(run.session.messages.at(-1)).toMatchObject({ role: "assistant" });
 
-		// The bridge starts a new runtime and sends its whole current state.
 		await vi.waitFor(() => expect(runtimePid(state.pidPath)).not.toBe(killed), { timeout: 15000 });
 		await vi.waitFor(
 			() => expect(query<Row>(state.dbPath, "select cost from sessions where id = ?", id)[0].cost).toBe(0.75),
@@ -48,10 +47,8 @@ test("a session keeps working through a runtime outage, its state comes back, an
 			id,
 		).map((row) => JSON.parse(row.data));
 		expect(gaps).toHaveLength(1);
-		// The gap covers the outage: it starts no later than the kill and ends after it.
 		expect(gaps[0].since).toBeLessThanOrEqual(killedAt);
 		expect(gaps[0].until).toBeGreaterThan(killedAt);
-		// The second turn's run-state changes happened while nothing listened; they are not in the history.
 		const during = query<Row>(
 			state.dbPath,
 			"select type from events where session_id = ? and type = 'run_state' and at > ? and at < ?",
@@ -60,7 +57,6 @@ test("a session keeps working through a runtime outage, its state comes back, an
 			gaps[0].until,
 		);
 		expect(during).toEqual([]);
-		// History from before the outage is intact.
 		const kept = query<{ seq: number }>(
 			state.dbPath,
 			"select seq from events where session_id = ? and seq <= ? order by seq",
@@ -68,7 +64,6 @@ test("a session keeps working through a runtime outage, its state comes back, an
 			before.at(-1)!.seq,
 		);
 		expect(kept).toEqual(before);
-		// The bridge started this runtime itself; when it dies too, the bridge starts another.
 		const second = runtimePid(state.pidPath)!;
 		process.kill(second, "SIGKILL");
 		await vi.waitFor(() => expect([undefined, second]).not.toContain(runtimePid(state.pidPath)), { timeout: 15000 });
