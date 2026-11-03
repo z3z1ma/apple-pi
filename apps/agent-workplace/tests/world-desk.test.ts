@@ -249,6 +249,10 @@ async function openDesk(appearance: "light" | "dark", width = 1440, desk = true)
 			};
 			w.work = [];
 			w.agentWorkplace = {
+				// Settings shows the connected accounts; none are signed in here.
+				credentialStatus: async () => ({ atlassian: null, slack: null }),
+				githubStatus: async () => ({ ok: true, account: null }),
+				googleStatus: async () => ({ ok: true, account: null }),
 				assignTask: async (person: string, task: string) => {
 					w.work.push(["assign", person, task]);
 					return { ok: true, stage: "applied" };
@@ -1141,7 +1145,7 @@ test("a theme from Settings repaints the whole app, in light and dark, and stays
 			return {
 				theme: app.dataset.theme,
 				bg: style.getPropertyValue("--wp-bg").trim(),
-				body: getComputedStyle(document.querySelector(".wp-rail")!).backgroundColor,
+				rail: getComputedStyle(document.querySelector(".wp-rail")!).backgroundColor,
 			};
 		});
 	try {
@@ -1149,7 +1153,7 @@ test("a theme from Settings repaints the whole app, in light and dark, and stays
 		await page.getByRole("button", { name: "Settings", exact: true }).click();
 		const themes = page.getByRole("group", { name: "Theme", exact: true });
 		await themes.getByText("Gruvbox", { exact: true }).click();
-		expect(await palette()).toMatchObject({ theme: "gruvbox", bg: "#fbf1c7", body: "rgb(60, 56, 54)" });
+		expect(await palette()).toMatchObject({ theme: "gruvbox", bg: "#fbf1c7", rail: "rgb(60, 56, 54)" });
 		expect(await themes.getByRole("radio", { name: "Gruvbox", exact: true }).isChecked()).toBe(true);
 		await page.getByRole("button", { name: "Dark", exact: true }).click();
 		expect(await palette()).toMatchObject({ theme: "gruvbox", bg: "#282828" });
@@ -1161,7 +1165,8 @@ test("a theme from Settings repaints the whole app, in light and dark, and stays
 		await page.getByRole("menuitem", { name: "Slacker", exact: true }).click();
 		expect((await palette()).theme).toBe("slacker");
 		await themes.getByText("Workplace", { exact: true }).click();
-		expect((await page.locator(".wp-app").getAttribute("style")) ?? "").toBe("");
+		// Back on the house palette (light: the fixture opens every load in light mode).
+		expect(await palette()).toMatchObject({ theme: "workplace", bg: "#fff" });
 		expect(errors).toEqual([]);
 	} finally {
 		await page.close();

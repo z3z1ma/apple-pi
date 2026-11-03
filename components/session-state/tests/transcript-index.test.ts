@@ -58,7 +58,7 @@ test("an index follows a transcript as it grows and when it is replaced, and sea
 			result("r1", 3, "error: pelican module missing"),
 	);
 	const db = openIndex(join(dir, "grow.db"));
-	expect(await indexTranscript(db, "s1", file)).toBe(3);
+	await indexTranscript(db, "s1", file);
 	const ids = (query: string, fields: "words" | "all" = "all") =>
 		searchIndex(db, { query, fields }).map((hit) => hit.entry);
 	expect(ids("pelican").sort()).toEqual(["r1", "u1"]);
@@ -68,7 +68,7 @@ test("an index follows a transcript as it grows and when it is replaced, and sea
 	expect(ids("pelican missing")).toEqual(["r1", "u1"]);
 
 	appendFileSync(file, assistant("a2", 4, "The pelican module was renamed to heron."));
-	expect(await indexTranscript(db, "s1", file)).toBe(1);
+	await indexTranscript(db, "s1", file);
 	expect(ids("heron")).toEqual(["a2"]);
 
 	// A rewritten file starts over rather than keeping rows for entries it no longer holds.

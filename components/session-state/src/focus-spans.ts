@@ -17,8 +17,8 @@ export interface FocusSpan {
  * Spans for the focus history before spans were recorded, replayed from retained work changes and their task posts.
  * Runs once, while the table is empty. A gap in that history is a gap in spans, not a guess.
  */
-export function reconstructSpans(db: DatabaseSync, now: number): number {
-	if (db.prepare("select 1 from focus_spans limit 1").get()) return 0;
+export function reconstructSpans(db: DatabaseSync, now: number): void {
+	if (db.prepare("select 1 from focus_spans limit 1").get()) return;
 	const rows = db
 		.prepare(`select w.person, w.task_id, w.action, m.at from work_changes w
 			join thread_messages m on m.id = w.command_id || ':post' order by m.at, m.seq`)
@@ -55,7 +55,6 @@ export function reconstructSpans(db: DatabaseSync, now: number): number {
 		"insert into focus_spans (person, task_id, started_at, ended_at, reconstructed) values (?, ?, ?, ?, 1)",
 	);
 	for (const span of spans) insert.run(span.person, span.task, span.from, span.to);
-	return spans.length;
 }
 
 /** The spans of these tasks, oldest first. */

@@ -100,9 +100,8 @@ const CHUNK_BYTES = 4 << 20;
  * Bring one session's rows up to date with its transcript: append what was written since the last read, or start over
  * when the file was replaced or shrank. Yields between chunks so a long backfill never holds the thread.
  */
-export async function indexTranscript(db: DatabaseSync, sessionId: string, file: string): Promise<number> {
+export async function indexTranscript(db: DatabaseSync, sessionId: string, file: string): Promise<void> {
 	const handle = await open(file, "r");
-	let added = 0;
 	try {
 		const { size, ino } = await handle.stat();
 		const known = db.prepare("select file, inode, bytes from files where session_id = ?").get(sessionId) as
@@ -147,7 +146,6 @@ export async function indexTranscript(db: DatabaseSync, sessionId: string, file:
 					}
 					if (!entry || !(entry.words || entry.calls || entry.results)) continue;
 					insert.run(entry.words, entry.calls, entry.results, sessionId, entry.entryId, entry.at, entry.role);
-					added++;
 				}
 				mark.run(sessionId, file, ino, consumed);
 				db.exec("commit");
@@ -162,7 +160,6 @@ export async function indexTranscript(db: DatabaseSync, sessionId: string, file:
 	} finally {
 		await handle.close();
 	}
-	return added;
 }
 
 export interface SearchRequest {
