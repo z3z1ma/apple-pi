@@ -4,8 +4,6 @@ import type { BtwViewState } from "../src/session.js";
 const { visibleWidth } = await import("@earendil-works/pi-tui");
 const { BtwViewer, defaultFormatBtwPrompt, BTW_VIEWPORT_HEIGHT_PCT } = await import("../src/ui/viewer.js");
 
-// ── Test Helpers ────────────────────────────────────────────────────────
-
 function mockTui(rows = 40, columns = 80) {
 	return {
 		terminal: { rows, columns },
@@ -241,11 +239,9 @@ describe("BtwViewer", () => {
 				{ onInjectLatestAnswer },
 			);
 
-			// Press 'i'
 			viewer.handleInput("i");
 			expect(onInjectLatestAnswer).toHaveBeenCalledWith("Final target answer");
 
-			// Press Alt+I (meta-i sequence \x1bi)
 			viewer.handleInput("\x1bi");
 			expect(onInjectLatestAnswer).toHaveBeenCalledTimes(2);
 			expect(onInjectLatestAnswer).toHaveBeenLastCalledWith("Final target answer");
@@ -258,7 +254,7 @@ describe("BtwViewer", () => {
 				onClearConversation,
 			});
 
-			viewer.handleInput("\x1bx"); // Alt+X
+			viewer.handleInput("\x1bx");
 			expect(onClearConversation).toHaveBeenCalledTimes(1);
 			expect(done).toHaveBeenCalledTimes(1);
 		});
@@ -272,14 +268,13 @@ describe("BtwViewer", () => {
 
 			expect(viewer.render(80).join("\n")).toContain("Enter ask");
 
-			viewer.handleInput("\r"); // Open composer
+			viewer.handleInput("\r");
 			expect(viewer.render(80).join("\n")).toContain("? ask BTW");
 
 			for (const ch of "  What is this error?  ") {
 				viewer.handleInput(ch);
 			}
-			viewer.handleInput("\r"); // Submit
-
+			viewer.handleInput("\r");
 			expect(onSubmitQuestion).toHaveBeenCalledWith("What is this error?");
 			expect(viewer.render(80).join("\n")).not.toContain("? ask BTW");
 		});
@@ -299,11 +294,11 @@ describe("BtwViewer", () => {
 
 			expect(viewer.render(80).join("\n")).toContain("x stop");
 
-			viewer.handleInput("x"); // Arm
+			viewer.handleInput("x");
 			expect(onStop).not.toHaveBeenCalled();
 			expect(viewer.render(80).join("\n")).toContain("x again to STOP");
 
-			viewer.handleInput("x"); // Confirm
+			viewer.handleInput("x");
 			expect(onStop).toHaveBeenCalledTimes(1);
 		});
 	});

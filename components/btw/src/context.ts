@@ -55,7 +55,6 @@ function renderParentBlock(entry: BtwBranchEntry): string | undefined {
 	return undefined;
 }
 
-/** Append only the parent entries added since the last overlay visit. */
 export function buildBtwParentSnapshot(branch: BtwBranchEntry[], afterEntryId?: string): BtwParentSnapshot {
 	const cursor = branch.at(-1)?.id;
 	const previousIndex = afterEntryId ? branch.findIndex((entry) => entry.id === afterEntryId) : -1;

@@ -49,15 +49,12 @@ describe("PromptStash", () => {
 		expect(stash.push("two")).toEqual({ evicted: undefined, size: 2 });
 		expect(stash.push("three")).toEqual({ evicted: undefined, size: 3 });
 
-		// 4th prompt should evict "one"
 		const result4 = stash.push("four");
 		expect(result4).toEqual({ evicted: "one", size: 3 });
 		expect(stash.size()).toBe(3);
 
-		// Remaining items in FIFO order should be "two", "three", "four"
 		expect(stash.list().map((i) => i.text)).toEqual(["two", "three", "four"]);
 
-		// 5th prompt should evict "two"
 		const result5 = stash.push("five");
 		expect(result5).toEqual({ evicted: "two", size: 3 });
 		expect(stash.list().map((i) => i.text)).toEqual(["three", "four", "five"]);
@@ -100,12 +97,10 @@ describe("PromptStash", () => {
 		stash.push("beta");
 		stash.push("gamma");
 
-		// Drop middle item at index 1 ("beta")
 		expect(stash.drop(1)).toBe("beta");
 		expect(stash.size()).toBe(2);
 		expect(stash.list().map((i) => i.text)).toEqual(["alpha", "gamma"]);
 
-		// Drop invalid indices
 		expect(stash.drop(-1)).toBeUndefined();
 		expect(stash.drop(10)).toBeUndefined();
 		expect(stash.size()).toBe(2);
@@ -136,7 +131,6 @@ describe("PromptStash", () => {
 		const list = stash.list();
 		expect(list).toHaveLength(1);
 
-		// Mutating the returned array should not affect internal storage
 		(list as unknown as unknown[]).pop();
 		expect(stash.size()).toBe(1);
 	});

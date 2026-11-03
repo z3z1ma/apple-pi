@@ -1,11 +1,3 @@
-/**
- * btw-viewer.ts — Dedicated answer-first conversation overlay for /btw.
- *
- * Renders Markdown assistant answers, hides parent-context envelopes,
- * displays compact read-only tool names without result bodies, and supports
- * question composition, answer injection, clearing, and stopping.
- */
-
 import { type AgentSession, getMarkdownTheme } from "@earendil-works/pi-coding-agent";
 import {
 	type Component,
@@ -22,32 +14,20 @@ import { extractText } from "../context.js";
 import type { BtwViewState } from "../session.js";
 import { fgPreservingNestedStyles, formatDuration, formatSessionTokens, type Theme } from "./presentation.js";
 
-/** Base lines consumed by chrome: top border + header + header sep + footer sep + footer + bottom border. */
 const CHROME_LINES_BASE = 6;
 const MIN_VIEWPORT = 3;
 
-/** Short drop-down height shared by the overlay's maxHeight and the viewer's padded viewport. */
 export const BTW_VIEWPORT_HEIGHT_PCT = 50;
 
 export interface BtwViewerActions {
-	/** Submit a new question or follow-up to BTW. */
 	onSubmitQuestion?: (question: string) => void;
-	/** Copy the latest completed assistant answer to the clipboard. */
 	onCopyLatestAnswer?: (answer: string) => void;
-	/** Inject the latest completed assistant answer back to the main conversation. */
 	onInjectLatestAnswer?: (answer: string) => void;
-	/** Clear the current BTW conversation session, then close overlay. */
 	onClearConversation?: () => void;
-	/** Stop/abort the currently running BTW turn. */
 	onStop?: () => void;
-	/**
-	 * Convert internal child user prompt text (e.g. envelope with parent context)
-	 * into user-visible question text. Return undefined or empty string to hide it.
-	 */
 	formatUserPrompt?: (prompt: string) => string | undefined;
 }
 
-/** Fail closed if an internal BTW envelope reaches the viewer without its formatter. */
 export function defaultFormatBtwPrompt(prompt: string): string | undefined {
 	const marker = "<btw-question>";
 	const start = prompt.lastIndexOf(marker);
@@ -101,7 +81,6 @@ export class BtwViewer implements Component {
 			return;
 		}
 
-		// Alt+X / ⌥X: Clear conversation and close
 		if (matchesKey(data, "alt+x")) {
 			this.stopArmed = false;
 			this.actions.onClearConversation?.();
@@ -110,7 +89,6 @@ export class BtwViewer implements Component {
 			return;
 		}
 
-		// Use pi's configured message-copy binding (Ctrl+X by default).
 		if (this.keys.copyMessage(data)) {
 			this.stopArmed = false;
 			const latestAnswer = this.getLatestCompletedAnswer();
@@ -121,7 +99,6 @@ export class BtwViewer implements Component {
 			return;
 		}
 
-		// 'i' or Alt+I / ⌥I: Inject latest answer into main conversation
 		if (matchesKey(data, "i") || matchesKey(data, "alt+i")) {
 			this.stopArmed = false;
 			const latestAnswer = this.getLatestCompletedAnswer();
@@ -132,14 +109,12 @@ export class BtwViewer implements Component {
 			return;
 		}
 
-		// Enter opens the question composer
 		if (matchesKey(data, "enter") && this.canAsk()) {
 			this.stopArmed = false;
 			this.openComposer();
 			return;
 		}
 
-		// Stop/abort: Two-press 'x'
 		if (matchesKey(data, "x")) {
 			if (this.isStoppable()) {
 				if (this.stopArmed) {
@@ -182,7 +157,7 @@ export class BtwViewer implements Component {
 	render(width: number): string[] {
 		if (width < 6) return [];
 		const th = this.theme;
-		const innerW = width - 4; // border + padding
+		const innerW = width - 4;
 		this.lastInnerW = innerW;
 		const lines: string[] = [];
 
@@ -204,7 +179,6 @@ export class BtwViewer implements Component {
 		const hrBot = th.fg("border", `╰${"─".repeat(width - 2)}╯`);
 		const hrMid = row(th.fg("dim", "─".repeat(innerW)));
 
-		// Header
 		lines.push(hrTop);
 		const statusIcon =
 			this.record.status === "running"
@@ -237,7 +211,6 @@ export class BtwViewer implements Component {
 		if (invocationLine) lines.push(row(invocationLine));
 		lines.push(hrMid);
 
-		// Content area
 		const contentLines = this.buildContentLines(innerW);
 		const viewportHeight = this.viewportHeight();
 		const maxScroll = Math.max(0, contentLines.length - viewportHeight);
@@ -253,7 +226,6 @@ export class BtwViewer implements Component {
 			lines.push(row(visible[i] ?? ""));
 		}
 
-		// Footer
 		lines.push(hrMid);
 		if (this.composer) {
 			lines.push(row(this.composer.render(innerW)[0] ?? ""));
@@ -305,8 +277,6 @@ export class BtwViewer implements Component {
 			this.unsubscribe = undefined;
 		}
 	}
-
-	// ---- State Helpers ----
 
 	private isStoppable(): boolean {
 		return !!this.actions.onStop && this.record.status === "running";
@@ -448,7 +418,6 @@ export class BtwViewer implements Component {
 			// Skip toolResult bodies entirely for a clean answer-first UI
 		}
 
-		// Streaming assistant message
 		if (
 			streaming &&
 			messages.at(-1) !== streaming &&
@@ -483,7 +452,6 @@ export class BtwViewer implements Component {
 			lines.push(...wrapTextWithAnsi(this.record.error, width).map((line) => th.fg("error", line)));
 		}
 
-		// Live generating indicator
 		if (this.record.status === "running") {
 			const act = this.record.activity === "thinking" ? "thinking\u2026" : this.record.activity;
 			lines.push("");

@@ -24,7 +24,6 @@ export async function showStashPicker(stash: PromptStash, ctx: ExtensionContext)
 	const options: string[] = [];
 	const originalIndices: number[] = [];
 
-	// Present newest first (item at end of stack is index 1)
 	for (let i = items.length - 1; i >= 0; i--) {
 		const item = items[i];
 		if (!item) continue;
@@ -127,7 +126,6 @@ export function handleStashPop(stash: PromptStash, ctx: ExtensionContext): void 
 export default function installPromptStash(pi: ExtensionAPI): void {
 	const stash = new PromptStash(DEFAULT_STASH_CAPACITY);
 
-	// Shortcuts for stashing the current prompt
 	pi.registerShortcut("ctrl+s", {
 		description: "Stash the current editor prompt",
 		handler: (ctx) => handleStashPush(stash, ctx),
@@ -137,7 +135,6 @@ export default function installPromptStash(pi: ExtensionAPI): void {
 		handler: (ctx) => handleStashPush(stash, ctx),
 	});
 
-	// Shortcuts for popping the top stashed prompt
 	pi.registerShortcut("ctrl+shift+s", {
 		description: "Pop the most recent prompt from stash into the editor",
 		handler: (ctx) => handleStashPop(stash, ctx),
@@ -147,13 +144,11 @@ export default function installPromptStash(pi: ExtensionAPI): void {
 		handler: (ctx) => handleStashPop(stash, ctx),
 	});
 
-	// Shortcut for pulling up the stash picker
 	pi.registerShortcut("ctrl+alt+s", {
 		description: "Open the prompt stash picker",
 		handler: (ctx) => showStashPicker(stash, ctx),
 	});
 
-	// Shortcuts for opening the current prompt in $EDITOR
 	pi.registerShortcut("ctrl+e", {
 		description: "Open current prompt in external editor ($EDITOR)",
 		handler: (ctx) => handleExternalEditor(ctx),
@@ -163,7 +158,6 @@ export default function installPromptStash(pi: ExtensionAPI): void {
 		handler: (ctx) => handleExternalEditor(ctx),
 	});
 
-	// Command: /stash
 	pi.registerCommand("stash", {
 		description: "Manage stashed editor prompts (list, pop, drop, clear, push)",
 		handler: async (args, ctx) => {
@@ -199,7 +193,6 @@ export default function installPromptStash(pi: ExtensionAPI): void {
 						ctx.ui.notify(`Invalid index: "${restArgs}". Valid indices are 1 to ${stash.size()}.`, "error");
 						return;
 					}
-					// 1 is the most recent (top of stack)
 					targetIdx = stash.size() - parsed;
 				}
 				const dropped = stash.drop(targetIdx);
@@ -226,7 +219,6 @@ export default function installPromptStash(pi: ExtensionAPI): void {
 		},
 	});
 
-	// Command: /edit-prompt
 	pi.registerCommand("edit-prompt", {
 		description: "Open the current editor prompt in external editor ($EDITOR)",
 		handler: async (_args, ctx) => {

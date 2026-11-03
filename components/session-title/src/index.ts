@@ -1,11 +1,9 @@
-/** Human names for root people, drawn without a model. Explicit task assignments own what people work on. */
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { livePeers } from "../../session-state/src/peers.js";
 import { pickName } from "./names.js";
 
 export const SESSION_TITLE_ENTRY = "session-title";
 
-/** Earlier topic-title stages are replaced by a human name on the next start. */
 type Stage = "name" | "provisional" | "refined" | "ledger";
 export type SessionTitleEntry = { title: string; stage: Stage } | { stopped: true };
 

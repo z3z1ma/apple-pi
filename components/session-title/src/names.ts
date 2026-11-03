@@ -1,10 +1,4 @@
-/**
- * Curated human names for sessions: first names and family names from many cultures, playful but believable. A
- * session's name is one of each, so it reads like a person in the tmux sidebar and Agent Workplace.
- */
-
 export const FIRST_NAMES: readonly string[] = [
-	// English, Irish, Scottish, Welsh
 	"Ada",
 	"Agatha",
 	"Alfie",
@@ -70,7 +64,6 @@ export const FIRST_NAMES: readonly string[] = [
 	"Wilbur",
 	"Winifred",
 	"Wren",
-	// French
 	"Amelie",
 	"Bastien",
 	"Camille",
@@ -86,7 +79,6 @@ export const FIRST_NAMES: readonly string[] = [
 	"Solenne",
 	"Thibault",
 	"Yvette",
-	// Italian, Spanish, Portuguese
 	"Alessandro",
 	"Beatrice",
 	"Bruna",
@@ -112,7 +104,6 @@ export const FIRST_NAMES: readonly string[] = [
 	"Soledad",
 	"Tiago",
 	"Valentina",
-	// German, Dutch, Nordic
 	"Anneliese",
 	"Anouk",
 	"Astrid",
@@ -145,7 +136,6 @@ export const FIRST_NAMES: readonly string[] = [
 	"Ulf",
 	"Wim",
 	"Wolfgang",
-	// Slavic and Eastern European
 	"Agnieszka",
 	"Bogdan",
 	"Dasha",
@@ -166,7 +156,6 @@ export const FIRST_NAMES: readonly string[] = [
 	"Vesna",
 	"Yuri",
 	"Zofia",
-	// Greek
 	"Calliope",
 	"Despina",
 	"Eleni",
@@ -175,7 +164,6 @@ export const FIRST_NAMES: readonly string[] = [
 	"Theo",
 	"Xanthe",
 	"Yiannis",
-	// Turkish, Arabic, Persian, Hebrew
 	"Amira",
 	"Avi",
 	"Aylin",
@@ -203,7 +191,6 @@ export const FIRST_NAMES: readonly string[] = [
 	"Yael",
 	"Yasmin",
 	"Zeynep",
-	// African
 	"Abebe",
 	"Adaeze",
 	"Ama",
@@ -232,7 +219,6 @@ export const FIRST_NAMES: readonly string[] = [
 	"Yaw",
 	"Zola",
 	"Zuri",
-	// South Asian
 	"Aarav",
 	"Anil",
 	"Anjali",
@@ -259,7 +245,6 @@ export const FIRST_NAMES: readonly string[] = [
 	"Tara",
 	"Vikram",
 	"Zara",
-	// East and Southeast Asian
 	"Aiko",
 	"Akiko",
 	"Bao",
@@ -290,7 +275,6 @@ export const FIRST_NAMES: readonly string[] = [
 	"Wei",
 	"Xiu",
 	"Yuki",
-	// Pacific and Filipino
 	"Josefina",
 	"Kai",
 	"Leilani",
@@ -298,7 +282,6 @@ export const FIRST_NAMES: readonly string[] = [
 	"Mana",
 	"Paolo",
 	"Tavita",
-	// Latin American
 	"Catalina",
 	"Diego",
 	"Emiliano",
@@ -311,7 +294,6 @@ export const FIRST_NAMES: readonly string[] = [
 	"Teodoro",
 	"Ximena",
 	"Yolanda",
-	// North American and playful
 	"Beau",
 	"Birdie",
 	"Bo",
@@ -330,7 +312,6 @@ export const FIRST_NAMES: readonly string[] = [
 ];
 
 export const FAMILY_NAMES: readonly string[] = [
-	// English, Irish, Scottish, Welsh
 	"Ashdown",
 	"Bellweather",
 	"Blackwood",
@@ -374,7 +355,6 @@ export const FAMILY_NAMES: readonly string[] = [
 	"Whitlock",
 	"Wigglesworth",
 	"Winterbottom",
-	// French
 	"Beaumont",
 	"Boulanger",
 	"Chevalier",
@@ -389,7 +369,6 @@ export const FAMILY_NAMES: readonly string[] = [
 	"Rousseau",
 	"Toussaint",
 	"Vasseur",
-	// Italian, Spanish, Portuguese
 	"Almeida",
 	"Barbieri",
 	"Bellini",
@@ -417,7 +396,6 @@ export const FAMILY_NAMES: readonly string[] = [
 	"Serrano",
 	"Valente",
 	"Zanetti",
-	// German, Dutch, Nordic
 	"Andersen",
 	"Bakker",
 	"Bergstrom",
@@ -444,7 +422,6 @@ export const FAMILY_NAMES: readonly string[] = [
 	"Vogel",
 	"Weissmann",
 	"Zimmermann",
-	// Slavic and Eastern European
 	"Babic",
 	"Dvorak",
 	"Horvath",
@@ -463,7 +440,6 @@ export const FAMILY_NAMES: readonly string[] = [
 	"Volkov",
 	"Wisniewski",
 	"Zielinski",
-	// Greek
 	"Andreou",
 	"Christodoulou",
 	"Georgiou",
@@ -471,7 +447,6 @@ export const FAMILY_NAMES: readonly string[] = [
 	"Pappas",
 	"Papadopoulos",
 	"Stavros",
-	// Turkish, Arabic, Persian, Hebrew
 	"Abboud",
 	"Aksoy",
 	"Al-Amin",
@@ -494,7 +469,6 @@ export const FAMILY_NAMES: readonly string[] = [
 	"Shapiro",
 	"Tehrani",
 	"Yildiz",
-	// African
 	"Achebe",
 	"Adeyemi",
 	"Asante",
@@ -517,7 +491,6 @@ export const FAMILY_NAMES: readonly string[] = [
 	"Owusu",
 	"Tesfaye",
 	"Wanjiku",
-	// South Asian
 	"Agarwal",
 	"Banerjee",
 	"Bhattacharya",
@@ -539,7 +512,6 @@ export const FAMILY_NAMES: readonly string[] = [
 	"Sen",
 	"Siddiqui",
 	"Venkataraman",
-	// East and Southeast Asian
 	"Choi",
 	"Fujimoto",
 	"Hashimoto",
@@ -561,7 +533,6 @@ export const FAMILY_NAMES: readonly string[] = [
 	"Yoon",
 	"Zhang",
 	"Zhou",
-	// Pacific and Filipino
 	"Aquino",
 	"Bautista",
 	"Dela Cruz",
@@ -569,7 +540,6 @@ export const FAMILY_NAMES: readonly string[] = [
 	"Kahananui",
 	"Mendiola",
 	"Tuilagi",
-	// Latin American
 	"Altamirano",
 	"Cardenas",
 	"Echeverria",
@@ -580,7 +550,6 @@ export const FAMILY_NAMES: readonly string[] = [
 	"Quiroga",
 	"Villanueva",
 	"Zamora",
-	// North American and playful
 	"Applewhite",
 	"Buckley",
 	"Butterfield",
@@ -596,7 +565,6 @@ export const FAMILY_NAMES: readonly string[] = [
 	"Stormcrow",
 	"Tinker",
 	"Whitaker",
-	// More from everywhere
 	"Abernathy",
 	"Ashworth",
 	"Bancroft",
@@ -645,11 +613,6 @@ export const FAMILY_NAMES: readonly string[] = [
 	"Zaragoza",
 ];
 
-/**
- * A first name and a family name, picked at random until the pair differs from every name in `taken` (compared
- * without case). After many collisions the last pick is kept: with tens of thousands of pairs that is vanishingly
- * rare, and a shared name is better than none.
- */
 export function pickName(taken: Iterable<string>, random: () => number = Math.random): string {
 	const used = new Set([...taken].map((name) => name.toLowerCase()));
 	const pick = <T>(list: readonly T[]) => list[Math.floor(random() * list.length)] as T;

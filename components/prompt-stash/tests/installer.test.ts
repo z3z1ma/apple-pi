@@ -160,9 +160,6 @@ describe("stash picker", () => {
 		stash.push("Oldest task");
 		stash.push("Newest task");
 
-		// List options are formatted newest-first:
-		// [1] Newest task (11 chars)
-		// [2] Oldest task (11 chars)
 		const { ctx, notifications, getEditorText } = createMockContext({
 			selectChoice: "[2] Oldest task (11 chars)",
 		});
@@ -208,36 +205,28 @@ describe("/stash command", () => {
 
 		const { ctx, notifications, getEditorText } = createMockContext();
 
-		// /stash push
 		await stashCommand?.handler("push prompt alpha", ctx);
 		expect(notifications.at(-1)?.message).toContain("Prompt stashed");
 
-		// /stash push second
 		await stashCommand?.handler("push prompt beta", ctx);
 		expect(notifications.at(-1)?.message).toContain("Prompt stashed");
 
-		// /stash pop
 		await stashCommand?.handler("pop", ctx);
 		expect(getEditorText()).toBe("prompt beta");
 
-		// /stash drop
 		await stashCommand?.handler("drop", ctx);
 		expect(notifications.at(-1)?.message).toContain("Dropped prompt from stash");
 
-		// /stash drop on empty
 		await stashCommand?.handler("drop", ctx);
 		expect(notifications.at(-1)?.message).toContain("Stash is empty");
 
-		// /stash clear
 		await stashCommand?.handler("push test", ctx);
 		await stashCommand?.handler("clear", ctx);
 		expect(notifications.at(-1)?.message).toContain("Stash cleared");
 
-		// /stash help
 		await stashCommand?.handler("help", ctx);
 		expect(notifications.at(-1)?.message).toContain("Usage:");
 
-		// /stash unknown
 		await stashCommand?.handler("xyz", ctx);
 		expect(notifications.at(-1)?.message).toContain("Unknown stash subcommand");
 	});

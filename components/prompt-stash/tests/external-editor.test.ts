@@ -63,7 +63,6 @@ describe("openInExternalEditor execution", () => {
 			},
 		};
 
-		// Node inline script that reads the file and appends edited content
 		const nodeEditor = `${process.execPath} -e "const fs = require('fs'); const file = process.argv[1]; const c = fs.readFileSync(file, 'utf8'); fs.writeFileSync(file, c + ' edited via vim\\n');"`;
 
 		const result = await openInExternalEditor({

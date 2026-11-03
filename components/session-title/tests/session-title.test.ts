@@ -27,7 +27,6 @@ afterEach(() => {
 	rmSync(agentDir, { recursive: true, force: true });
 });
 
-/** Live root sessions in the state database, as the runtime records them. */
 function liveSessions(names: string[]): void {
 	mkdirSync(join(agentDir, "state"), { recursive: true });
 	const db = new DatabaseSync(join(agentDir, "state", "apple-pi.db"));
@@ -120,7 +119,6 @@ describe("session names", () => {
 
 		await run.session.prompt("The CSV parser crashes on quoted commas.");
 		await settle();
-		// Only the operator's turn calls the model; neither the name nor the work is guessed.
 		expect(run.requests).toHaveLength(1);
 		expect(run.warnings).toEqual([]);
 		expect(run.name()).toBe(name);
@@ -152,14 +150,13 @@ describe("session names", () => {
 		const renamed = await harness({ cwd, sessionManager: SessionManager.create(cwd, join(cwd, "sessions")) });
 		renamed.session.setSessionName("Operator name");
 		await renamed.session.prompt("Fix the parser.");
-		await renamed.session.bindExtensions({}); // a reload starts the session again
+		await renamed.session.bindExtensions({});
 		expect(renamed.name()).toBe("Operator name");
 		const renamedFile = renamed.session.sessionManager.getSessionFile()!;
 		renamed.dispose();
 		const reopened = await harness({ cwd, sessionManager: SessionManager.open(renamedFile) });
 		expect(reopened.name()).toBe("Operator name");
 
-		// A session started with a name (`pi --name`) keeps it.
 		const manager = SessionManager.inMemory(cwd);
 		manager.appendSessionInfo("Given name");
 		const given = await harness({ cwd, sessionManager: manager });

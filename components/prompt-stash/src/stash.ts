@@ -10,9 +10,6 @@ export interface StashedPrompt {
 
 export const DEFAULT_STASH_CAPACITY = 20;
 
-/**
- * In-memory bounded stack for stashed editor prompts with FIFO eviction.
- */
 export class PromptStash {
 	private readonly capacity: number;
 	private items: StashedPrompt[] = [];

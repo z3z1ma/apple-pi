@@ -94,7 +94,6 @@ export function install(pi: ExtensionAPI): void {
 		const previous = owned;
 		owned = undefined;
 		parentCursor = undefined;
-		// The command reports creation errors; a failed creation has no session to close.
 		const release = previous?.then(
 			(conversation) => conversation.close(),
 			() => undefined,
