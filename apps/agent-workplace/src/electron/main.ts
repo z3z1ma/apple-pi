@@ -1,9 +1,3 @@
-// Agent Workplace's Electron main process: one window over the world UI, wired to the backend through IPC. It reads, and
-// acts only when asked (Go to its terminal switches the operator's tmux client); closing the window quits the app and
-// changes nothing in tmux or Pi. Built with the preload into
-// dist/electron/ (`npm run build:workplace`), since Electron runs no TypeScript.
-//
-// AGENT_WORLD_CAPTURE=<file.png> writes a screenshot of the window once the world has drawn, then quits.
 import { writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -43,26 +37,18 @@ import { wireIntegrations } from "./integrations-ipc.js";
 import { wireReviews } from "./reviews-ipc.js";
 import { wireTerminals } from "./terminal-ipc.js";
 
-// This file runs as dist/electron/main.js, two levels below the app directory.
 const appDir = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-/** How long the capture waits for a place to draw, and then for its art to settle. */
 const CAPTURE_WAIT_MS = 20_000;
 const CAPTURE_DELAY_MS = 1500;
 
 app.setName("Agent Workplace");
-// Electron's own data stays under Pi's agent directory; the single-instance lock lives there too.
 app.setPath("userData", join(agentDir(), "agent-workplace", "electron-data"));
 protocol.registerSchemesAsPrivileged([
 	{ scheme: "app", privileges: { standard: true, secure: true, supportFetchAPI: true } },
 ]);
 
 if (app.requestSingleInstanceLock()) start();
-else app.quit(); // a second /world: the first instance focuses its window
-
-/**
- * The capture hook: once a place scene has drawn its painting (or after `CAPTURE_WAIT_MS`), write the window as a
- * PNG, print which place it shows, and quit.
- */
+else app.quit();
 async function captureWhenDrawn(window: BrowserWindow, file: string) {
 	const drawn = `(() => { const v = window.agentWorldView; const p = v && v.place(); return p && v.painting() ? p : ""; })()`;
 	const until = Date.now() + CAPTURE_WAIT_MS;
@@ -154,7 +140,6 @@ function start() {
 	ipcMain.handle("world:avatar-look", (_event, look: unknown) =>
 		typeof look === "string" ? world.setAvatarLook(look) : { ok: false, reason: "No look was named." },
 	);
-	// Settings: the theme packs, each checked as the window asks, and the one chosen.
 	ipcMain.handle("world:themes", () => listThemes(join(appDir, "themes")));
 	ipcMain.handle("world:set-theme", (_event, id: unknown) => {
 		if (typeof id !== "string") return { ok: false, reason: "No theme was named." };
@@ -179,7 +164,6 @@ function start() {
 		conversations.watch(Array.isArray(characterIds) ? characterIds.filter((id) => typeof id === "string") : []),
 	);
 	conversations.onReply((event) => toWindow("world:reply", event));
-	// The inn, the rookery, and ending a session.
 	const lifecycle = openLifecycle({ ...statePaths(), agentDir: agentDir() }, commands, () => world.snapshot());
 	const org = openOrg({ ...statePaths(), agentDir: agentDir() }, commands, () => world.snapshot());
 	org.onOrgStart((progress) => toWindow("world:org-progress", progress));
@@ -330,7 +314,6 @@ function start() {
 			? workplace.setChannelMembership(thread, joined)
 			: { ok: false, reason: "A channel and whether to join are required." },
 	);
-	// Recruiting a new agent: a worker at its coordinator's desk, an independent one at the square's recruiter.
 	ipcMain.handle("world:recruit", (_event, request: unknown) => {
 		const { name, cwd, brief, reportsTo, role, specialization } = (request ?? {}) as Record<string, unknown>;
 		if (typeof name !== "string" || typeof cwd !== "string" || (brief !== undefined && typeof brief !== "string"))
@@ -355,7 +338,6 @@ function start() {
 	ipcMain.handle("world:rename", (_event, characterId: unknown, name: unknown) =>
 		typeof characterId === "string" && typeof name === "string" ? lifecycle.rename(characterId, name) : unnamed,
 	);
-	// The coordinator's notepad in its headquarters: NOTES.md in its directory, named here by the coordinator only.
 	const notepads = openNotepads(
 		() => world.snapshot(),
 		(change) => toWindow("world:notepad", change),
@@ -370,11 +352,8 @@ function start() {
 			: noCoordinator,
 	);
 	ipcMain.handle("world:close-notepad", () => notepads.close());
-	// The function places: GitHub, Jira, Confluence, Slack, the outside-write gate, and delegation.
 	wireIntegrations({ stateDir: statePaths().dir, snapshot: () => world.snapshot(), commands, toWindow });
-	// Links in transcripts open in the system browser, web links only.
 	ipcMain.handle("world:open-link", (_event, url: unknown) => openLink(url, (href) => shell.openExternal(href)));
-	// Links to files open in the operator's default app; one that could run is shown in Finder instead.
 	ipcMain.handle("world:open-file", (_event, href: unknown, base: unknown) =>
 		openFileLink(
 			href,
@@ -383,8 +362,6 @@ function start() {
 			(path) => shell.showItemInFolder(path),
 		),
 	);
-	// Each update leaves out the inn and the mail while they are unchanged: with thousands asleep, sending them on every
-	// update was most of the IPC traffic (ticket 31). The renderer's store keeps its own (`web/world-store.ts`).
 	const toUpdate = leaveOutUnchanged();
 	world.subscribe((snapshot) => {
 		if (window && !window.isDestroyed()) window.webContents.send("world:update", toUpdate(snapshot));
@@ -418,7 +395,6 @@ function start() {
 			width: 1280,
 			height: 800,
 			title: "Agent Workplace",
-			// The chosen theme's backdrop, so the window opens in the colour its world will draw.
 			backgroundColor: themeBackdrop(join(appDir, "themes"), world.snapshot().theme),
 			webPreferences: {
 				preload: join(appDir, "dist", "electron", "preload.cjs"),
@@ -447,11 +423,9 @@ function start() {
 				cancelId: 0,
 				noLink: true,
 			});
-			// Electron's event cancels the renderer's veto, so preventing it permits unloading.
 			if (choice === 1) event.preventDefault();
 		});
 		window.webContents.on("will-navigate", (event, url) => {
-			// Only the app's own view links may navigate.
 			if (
 				![
 					"app://world/index.html",

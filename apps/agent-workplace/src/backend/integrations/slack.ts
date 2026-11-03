@@ -1,12 +1,3 @@
-// The town square's Slack, as the operator (the credential decision in ticket 27): the web client's session token
-// (`xoxc-`) in each form body plus its `d` cookie as a `Cookie` header, against the workspace's own `api/` address as
-// the web client calls it. Unread channels come from `client.counts` (the web client's method), named from
-// `users.conversations`, counted from `conversations.history` since each one's `last_read`; the crier searches
-// messages with `search.messages` and channel names in `conversations.list` and `users.conversations`, and lists every
-// conversation from `users.conversations`; threads read through `conversations.replies`; a reply posts with
-// `chat.postMessage`, which only the outside-write gate calls, as it does `conversations.mark` and
-// `subscriptions.thread.mark` (Mark read). Reading never marks anything read. Sources are cited in this file's context
-// file.
 import type {
 	Outcome,
 	Refusal,
@@ -20,25 +11,18 @@ import type { Fetch } from "./atlassian.js";
 import type { SlackCredentials } from "./credentials.js";
 
 const TIMEOUT_MS = 20_000;
-/** Unread channels whose messages are counted on one listing; the rest show as unread, uncounted. */
 export const COUNTED_MAX = 30;
-/** Most messages counted per channel; beyond it `more` is set. */
 const COUNT_LIMIT = 100;
 const CHANNEL_MESSAGES = 50;
 const THREAD_MESSAGES = 200;
 const FOUND_MAX = 50;
-/** Messages per page of a search (Slack's own default; its most is 100), and the last page Slack serves. */
 const SEARCH_COUNT = 20;
 const SEARCH_PAGES_MAX = 100;
-/** A search hit's excerpt: at most this many characters, starting this many before the first match. */
 const EXCERPT_MAX = 240;
 const EXCERPT_BEFORE = 80;
-/** Opened at a message: this many up to it, and up to this many after it (all of them, or none: see `channel`). */
 const AROUND_BEFORE = 25;
 const AROUND_AFTER = 50;
-/** People named at once (`users.info`) when every direct message is listed. */
 const NAMING_AT_ONCE = 6;
-/** How long the lists of channels are kept before they are read again. */
 const LIST_TTL_MS = 10 * 60_000;
 const SIGN_IN_ERRORS = new Set(["invalid_auth", "not_authed", "token_revoked", "token_expired", "account_inactive"]);
 
@@ -57,7 +41,6 @@ interface ConversationRow {
 	is_user_deleted?: boolean;
 }
 
-/** One match of `search.messages`; for a direct message `type` is `im` and `channel.name` is the other person's id. */
 interface SearchMatch {
 	type?: string;
 	channel?: { id: string; name?: string; is_private?: boolean; is_mpim?: boolean; is_im?: boolean };
@@ -85,43 +68,33 @@ interface MessageRow {
 	bot_profile?: { name?: string };
 	text?: string;
 	reply_count?: number;
-	/** On a thread's parent, for a thread the operator follows: the newest reply read. */
 	last_read?: string;
 }
 
 export interface Slack {
-	/** Check a captured session with `auth.test`: the workspace's name and address, and the operator's name. */
 	check(session: {
 		token: string;
 		cookie: string;
 	}): Promise<Outcome<{ team: string | null; url: string | null; user: string | null }>>;
 	unread(): Promise<Outcome<{ channels: SlackChannel[] }>>;
-	/** Channels named like `text` first (page 1 only), then one page of Slack's message search. */
 	search(text: string, page?: number): Promise<Outcome<SlackSearch>>;
-	/** Every conversation the operator belongs to, read afresh, with what `client.counts` says is unread. */
 	conversations(): Promise<Outcome<{ channels: SlackChannel[] }>>;
-	/** A channel's latest messages, or with `at` the messages around that one. */
 	channel(id: string, at?: string): Promise<Outcome<{ thread: SlackThread }>>;
 	thread(id: string, ts: string): Promise<Outcome<{ thread: SlackThread }>>;
-	/** A channel's name for descriptions (`#name`, or a person's name). */
 	channelName(id: string): Promise<string>;
-	/** A write: only the gate calls it. */
 	reply(channel: string, threadTs: string, text: string): Promise<Outcome<{ url: string | null }>>;
-	/** Mark a channel read up to `ts`, or with `threadTs` that thread; only the gate calls it. */
 	markRead(channel: string, ts: string, threadTs?: string): Promise<Outcome<{ url: string | null }>>;
 }
 
 const ID = /^[A-Z0-9]+$/;
 const TS = /^\d+\.\d+$/;
 
-/** A message link in the workspace: `<url>archives/<channel>/p<ts without the dot>`. */
 export function slackLink(base: string | null, channel: string, ts?: string): string | null {
 	if (!base) return null;
 	const root = base.endsWith("/") ? base : `${base}/`;
 	return `${root}archives/${channel}${ts ? `/p${ts.replace(".", "")}` : ""}`;
 }
 
-/** A group's name as Slack shows it: `mpdm-ann--ben--me-1` is "ann, ben" for `me`. */
 export function groupName(name: string, me?: string | null): string {
 	const people = /^mpdm-(.+)-\d+$/.exec(name)?.[1]?.split("--");
 	if (!people) return name;
@@ -129,10 +102,6 @@ export function groupName(name: string, me?: string | null): string {
 	return (others.length ? others : people).join(", ");
 }
 
-/**
- * A search hit's text (Slack's highlight markers U+E000 and U+E001 around each match) as an excerpt in parts: on one
- * line, cut to `EXCERPT_MAX` characters around the first match, with an ellipsis where it was cut.
- */
 export function excerptOf(text: string): SlackHit["excerpt"] {
 	const parts: SlackHit["excerpt"] = [];
 	let match = false;
@@ -171,7 +140,6 @@ export function excerptOf(text: string): SlackHit["excerpt"] {
 	return cut;
 }
 
-/** Run `work` over `items`, at most `limit` at a time, keeping their order. */
 async function atMost<T, R>(items: T[], limit: number, work: (item: T) => Promise<R>): Promise<R[]> {
 	const out: R[] = new Array(items.length);
 	let next = 0;
@@ -185,7 +153,6 @@ async function atMost<T, R>(items: T[], limit: number, work: (item: T) => Promis
 	return out;
 }
 
-/** Slack timestamps (`1700000000.000100`) in order; as strings, since they have more digits than a double keeps. */
 const byTs = (a: { ts: string }, b: { ts: string }) => (a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0);
 
 export function openSlack(
@@ -197,7 +164,6 @@ export function openSlack(
 	let members: { at: number; rows: ConversationRow[] } | undefined;
 	let everything: { at: number; rows: ConversationRow[] } | undefined;
 	const names = new Map<string, ConversationRow>();
-	/** Where the operator last read each channel, as the last unread listing or Mark read left it. */
 	const lastRead = new Map<string, string>();
 
 	const call = async (
@@ -232,7 +198,6 @@ export function openSlack(
 		return { ok: false, reason: `Slack said ${error}.` };
 	};
 
-	/** Every page of a cursor-paged list method. */
 	const pages = async (
 		method: string,
 		params: Record<string, string>,
@@ -289,7 +254,6 @@ export function openSlack(
 		return info?.name ?? id;
 	};
 
-	/** Slack's message markup as plain text: people, channels, and links by name; entities decoded. */
 	const plain = async (text: string): Promise<string> => {
 		const mentioned = [...new Set([...text.matchAll(/<@([A-Z0-9]+)(?:\|[^>]*)?>/g)].map((match) => match[1]))];
 		for (const id of mentioned) await userName(id);
@@ -320,7 +284,6 @@ export function openSlack(
 	const teamUrl = () => credentials()?.url ?? null;
 	const badChannel: Refusal = { ok: false, reason: "That is not a Slack channel." };
 
-	/** Channels named like `text`: every public and private channel (`conversations.list`) and every one he is in. */
 	const findChannels = async (text: string): Promise<Outcome<{ channels: SlackChannel[] }>> => {
 		const wanted = text.trim().replace(/^#/, "").toLowerCase();
 		if (!wanted) return { ok: true, channels: [] };
@@ -364,7 +327,6 @@ export function openSlack(
 		};
 	};
 
-	/** A `search.messages` match as a hit: its conversation named (a direct message by its person), its thread found. */
 	const hitOf = async (match: SearchMatch & { channel: { id: string }; ts: string }): Promise<SlackHit> => {
 		const where = match.channel;
 		let row = names.get(where.id);
@@ -378,7 +340,6 @@ export function openSlack(
 			};
 			names.set(where.id, row);
 		}
-		// A reply's permalink names its thread (`?thread_ts=`), as korotovsky/slack-mcp-server reads it.
 		let thread = match.thread_ts ?? null;
 		if (!thread && match.permalink)
 			try {
@@ -422,7 +383,7 @@ export function openSlack(
 			unreadRows.sort(
 				(a, b) => (b.mention_count ?? 0) - (a.mention_count ?? 0) || Number(b.latest ?? 0) - Number(a.latest ?? 0),
 			);
-			await memberRows(); // names and kinds, cached; a failure only leaves ids to look up one by one
+			await memberRows();
 			const channels = await Promise.all(
 				unreadRows.map(async (row, index): Promise<SlackChannel> => {
 					const known = names.get(row.id);
@@ -480,7 +441,6 @@ export function openSlack(
 			const hits = await Promise.all(matches.map(hitOf));
 			return {
 				ok: true,
-				// A failed channel listing leaves the channel matches out; the messages found still show.
 				channels: named?.ok ? named.channels : [],
 				hits,
 				page: box?.paging?.page ?? at,
@@ -490,7 +450,7 @@ export function openSlack(
 		},
 
 		async conversations() {
-			members = undefined; // the operator asked for the list: read it afresh
+			members = undefined;
 			const listed = await memberRows();
 			if (!listed.ok) return listed;
 			const counts = await call("client.counts", {
@@ -532,9 +492,6 @@ export function openSlack(
 			let rows: MessageRow[];
 			let newer: boolean | undefined;
 			if (at) {
-				// Up to the message (Slack gives the newest in range), and after it. Whether Slack answers an `oldest`-only
-				// read from `oldest` forward or with the newest is not documented, so the later messages are shown only when
-				// all of them came: never a gap between the message and what follows it.
 				const [before, after] = await Promise.all([
 					call("conversations.history", { channel: id, latest: at, inclusive: "true", limit: String(AROUND_BEFORE) }),
 					call("conversations.history", { channel: id, oldest: at, limit: String(AROUND_AFTER) }),
@@ -552,7 +509,6 @@ export function openSlack(
 				if (!history.ok) return history;
 				rows = [...((history.json.messages as MessageRow[] | undefined) ?? [])].reverse();
 			}
-			// Where it was last read: as the unread listing said, else as conversations.info says (a read-only call).
 			let read = lastRead.get(id);
 			if (read === undefined) {
 				const info = await call("conversations.info", { channel: id });
@@ -600,7 +556,6 @@ export function openSlack(
 
 		async markRead(channel, ts, threadTs) {
 			if (!ID.test(channel) || !TS.test(ts) || (threadTs !== undefined && !TS.test(threadTs))) return badChannel;
-			// The web client's calls: a thread through its subscription, a channel through conversations.mark.
 			const marked = threadTs
 				? await call("subscriptions.thread.mark", { channel, thread_ts: threadTs, ts, read: "1" })
 				: await call("conversations.mark", { channel, ts });

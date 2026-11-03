@@ -1,35 +1,23 @@
-// The world projection: who is a character, what role each has, and where each one is. Pure, so the rules read in
-// one place; the backend feeds it rows from the session-state database and the wings it remembers.
 import { basename } from "node:path";
 import { type Character, type Headquarters, isOutside, type PlaceRef, type Role, type Workplace } from "../world.js";
 
-/** One top-level session as the projection needs it. */
 export interface SessionRow {
 	id: string;
 	name: string | null;
 	cwd: string;
-	/** The coordinator it reports to (`--reports-to`). */
 	reportsTo: string | null;
-	/** Its git repository (the main checkout's directory); null outside a repository. */
 	repository: string | null;
-	/** Holds a managing role (its `manages` fact). */
 	manages: boolean;
-	/** The title of its role, or null without one. */
 	title: string | null;
-	/** Retired: it left the organization. */
 	retiredAt: number | null;
 	retiredReason: string | null;
-	/** Its current incarnation is alive. */
 	awake: boolean;
-	/** When it first started (ms), or undefined when it never had an incarnation. */
 	firstStartedAt: number | undefined;
 	hiredAt?: number | null;
 	specialization?: string | null;
-	/** When its current incarnation ended (ms); undefined while it runs or when unknown. */
 	stoppedAt?: number;
 }
 
-/** A stopped session as the projection places it: asleep at the inn. */
 export interface Sleeper {
 	id: string;
 	name: string;
@@ -43,22 +31,17 @@ export interface Sleeper {
 	retiredReason: string | null;
 }
 
-/** The key of a manager's team room among a headquarters' wings. */
 export const teamRoom = (manager: string) => `team:${manager}`;
 
-/** Remembered wings: repositories by coordinator id, in first-seen order. */
 export type RememberedWings = Record<string, string[]>;
 
 export interface Projection {
 	headquarters: Headquarters[];
 	characters: Character[];
-	/** Each shown headquarters' wings, remembered ones first, then repositories seen for the first time. */
 	wings: RememberedWings;
-	/** Stopped sessions, asleep at the inn: the most recently stopped first. */
 	dormant: Sleeper[];
 }
 
-/** The organization each person belongs to, including sleepers; missing parents and cycles end the walk. */
 export function organizationRoots(people: { id: string; reportsTo: string | null }[]): Map<string, string> {
 	const parents = new Map(people.map((person) => [person.id, person.reportsTo]));
 	return new Map(
@@ -82,14 +65,6 @@ const byStart = (a: { firstStartedAt?: number; id: string }, b: { firstStartedAt
 	(a.firstStartedAt ?? Number.MAX_SAFE_INTEGER) - (b.firstStartedAt ?? Number.MAX_SAFE_INTEGER) ||
 	(a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 
-/**
- * The organization is a tree of managers: a session reports to the one named by `reportsTo`, and the tree ends at a
- * root. A root with a managing role or anyone under it (awake or asleep) is a coordinator and keeps the headquarters,
- * standing in its hall; a person it manages directly stands in the wing of its repository, or the common room outside
- * one; a manager below the root, and everyone reporting to that manager, stand in the manager's team room off the same
- * headquarters. A root with nobody under it and no managing role is independent, in the square. Dormant sessions
- * sleep at the inn, the most recently stopped first, each in the role it had, a retired one marked so.
- */
 export function projectWorld(sessions: SessionRow[], remembered: RememberedWings): Projection {
 	const byId = new Map(sessions.map((session) => [session.id, session]));
 	const managerOf = (session: SessionRow) =>
@@ -108,7 +83,6 @@ export function projectWorld(sessions: SessionRow[], remembered: RememberedWings
 	const roleOf = (session: SessionRow): Role =>
 		managers.has(session.id) ? "coordinator" : managerOf(session) ? "worker" : "independent";
 	const nameOf = (session: SessionRow) => session.name || basename(session.cwd) || session.id;
-	/** Where a session stands or would stand: a root in its hall, a direct report of the root in a repository wing or the common room, anyone else in its nearest manager's team room. */
 	const placeOf = (session: SessionRow): PlaceRef => {
 		const manager = managerOf(session);
 		if (!manager)
@@ -165,7 +139,6 @@ export function projectWorld(sessions: SessionRow[], remembered: RememberedWings
 		);
 		const inRoom = (repository: string) =>
 			inRooms.filter((character) => (character.place as { repository: string }).repository === repository);
-		// Team rooms exist while their manager is in the organization, awake or asleep; repository wings are remembered.
 		const teams = sessions
 			.filter(
 				(session) => managers.has(session.id) && !session.retiredAt && rootOf(session).id === id && session.id !== id,
@@ -207,7 +180,6 @@ export function projectWorld(sessions: SessionRow[], remembered: RememberedWings
 	return { headquarters, characters, wings, dormant };
 }
 
-/** Meetings and escalations change where a person is drawn, not its role, manager, or assignments. */
 export function placeWorkplace(world: Projection, sessions: SessionRow[], workplace: Workplace): Projection {
 	const people = new Map(sessions.map((person) => [person.id, person]));
 	const headquarters = new Map(world.headquarters.map((hq) => [hq.id, hq]));
@@ -217,7 +189,6 @@ export function placeWorkplace(world: Projection, sessions: SessionRow[], workpl
 		if (!headquarters.has(id)) headquarters.set(id, { id, name: owner.name || basename(owner.cwd) || id, wings: [] });
 		return true;
 	};
-	// Work keeps its board reachable even when its whole organization sleeps.
 	for (const task of workplace.tasks) roomFor(task.headquarters);
 	const places = new Map<string, PlaceRef>();
 	for (const meeting of [...workplace.threads].sort(

@@ -1,8 +1,3 @@
-// The forge's GitHub, through the `gh` CLI and its own sign-in (decision 07), always with JSON output. Lists open pull
-// requests involving the operator (`gh search prs --involves @me`) and those of his awake agents' branches (`gh pr
-// list --head`), rolls their checks up to one CI state, links each to the agent whose repository and branch it comes
-// from, reads one with its diff for the review page, and sends reviews (`gh pr review`) for the outside-write gate.
-// `gh` is found on PATH from the environment given, so tests put a fake first.
 import { execFile } from "node:child_process";
 import type {
 	CiState,
@@ -21,7 +16,6 @@ import type { Character } from "../../world.js";
 
 const TIMEOUT_MS = 30_000;
 const LIST_MAX = 50;
-/** `gh pr view` calls in flight at once while filling in searched pull requests. */
 const PARALLEL = 4;
 const REPO = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 const ISSUE_KEY = /^([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)#([1-9]\d*)$/;
@@ -60,13 +54,12 @@ const parse = <T>(text: string): T | undefined => {
 
 type CheckState = "passing" | "failing" | "running" | "skipped";
 
-/** One entry of `statusCheckRollup`: a check run (status and conclusion) or a commit status (state). */
 export function checkState(check: unknown): CheckState {
 	const { status, conclusion, state } = (check ?? {}) as Record<string, unknown>;
 	if (typeof state === "string") {
 		if (state === "SUCCESS") return "passing";
 		if (state === "FAILURE" || state === "ERROR") return "failing";
-		return "running"; // PENDING, EXPECTED
+		return "running";
 	}
 	if (status !== "COMPLETED") return "running";
 	switch (conclusion) {
@@ -77,11 +70,10 @@ export function checkState(check: unknown): CheckState {
 		case "STALE":
 			return "skipped";
 		default:
-			return "failing"; // FAILURE, TIMED_OUT, CANCELLED, ACTION_REQUIRED, STARTUP_FAILURE
+			return "failing";
 	}
 }
 
-/** A pull request's checks rolled up: any failed is failing, else any unfinished is running, else passing. */
 export function ciRollup(rollup: unknown): { ci: CiState; checks: PullRequest["checks"] } {
 	const states = (Array.isArray(rollup) ? rollup : []).map(checkState);
 	const count = (state: CheckState) => states.filter((one) => one === state).length;
@@ -98,12 +90,10 @@ export function ciRollup(rollup: unknown): { ci: CiState; checks: PullRequest["c
 export interface AgentBranch {
 	id: string;
 	name: string;
-	/** `owner/name` of its repository on GitHub. */
 	repo: string;
 	branch: string;
 }
 
-/** Link each pull request to the agent whose repository and branch it comes from (repository names ignore case). */
 export function linkPullRequests<T extends { repo: string; branch: string | null }>(
 	pullRequests: T[],
 	agents: AgentBranch[],
@@ -116,7 +106,6 @@ export function linkPullRequests<T extends { repo: string; branch: string | null
 
 const unquote = (path: string) => path.replace(/^"(.*)"$/, "$1");
 
-/** Read one line of a file's extended header (before its first hunk) into `file`. */
 function fileHeader(file: DiffFile, line: string) {
 	if (line.startsWith("new file mode")) file.status = "added";
 	else if (line.startsWith("deleted file mode")) file.status = "deleted";
@@ -130,7 +119,6 @@ function fileHeader(file: DiffFile, line: string) {
 	else if (line.startsWith("+++ ") && line !== "+++ /dev/null") file.path = unquote(line.slice(4).replace(/^b\//, ""));
 }
 
-/** A unified diff (`gh pr diff`) as files and hunks with line numbers on both sides; cut after `max` lines. */
 export function parseDiff(patch: string, max = DIFF_LINES_MAX): { files: DiffFile[]; cut: boolean } {
 	const files: DiffFile[] = [];
 	let file: DiffFile | undefined;
@@ -184,7 +172,6 @@ export function parseDiff(patch: string, max = DIFF_LINES_MAX): { files: DiffFil
 	return { files, cut };
 }
 
-/** The `owner/name` in a pull request's address. */
 const repoOf = (url: string) => /github\.com\/([^/]+\/[^/]+)\/pull\//.exec(url)?.[1] ?? "";
 
 type RawPr = {
@@ -263,7 +250,6 @@ export interface GitHub {
 	issue(key: string): Promise<Outcome<{ detail: IssueDetail }>>;
 	pullRequests(characters: Character[]): Promise<Outcome<{ pullRequests: PullRequest[] }>>;
 	pullRequest(repo: string, number: number, characters: Character[]): Promise<Outcome<{ detail: PullRequestDetail }>>;
-	/** A write: only the gate calls it. */
 	review(repo: string, number: number, event: ReviewEvent, body: string): Promise<Outcome<object>>;
 }
 
@@ -273,14 +259,13 @@ export function validPullRequest(repo: unknown, number: unknown): boolean {
 
 export function openGitHub(env?: NodeJS.ProcessEnv): GitHub {
 	const gh = runner(env);
-	// Each repository directory's GitHub name and default branch; kept for the app's life (a remote rarely moves).
 	const repos = new Map<string, Promise<{ repo: string; defaultBranch: string | null } | undefined>>();
 	const repoAt = (directory: string) => {
 		let known = repos.get(directory);
 		if (!known) {
 			known = gh(["repo", "view", "--json", "nameWithOwner,defaultBranchRef"], directory).then((answer) => {
 				if (!answer.ok) {
-					repos.delete(directory); // try again next time: gh may have been signed out
+					repos.delete(directory);
 					return undefined;
 				}
 				const value = parse<{ nameWithOwner?: string; defaultBranchRef?: { name?: string } }>(answer.stdout);
@@ -293,7 +278,6 @@ export function openGitHub(env?: NodeJS.ProcessEnv): GitHub {
 		return known;
 	};
 
-	/** The awake agents on a branch of a GitHub repository other than its default branch. */
 	const agentBranches = async (characters: Character[]): Promise<AgentBranch[]> => {
 		const found = await Promise.all(
 			characters.map(async (character): Promise<AgentBranch | undefined> => {
@@ -307,7 +291,6 @@ export function openGitHub(env?: NodeJS.ProcessEnv): GitHub {
 		return found.filter((agent): agent is AgentBranch => agent !== undefined);
 	};
 
-	/** Run `work` over `items`, `PARALLEL` at a time. */
 	const inParallel = async <T, R>(items: T[], work: (item: T) => Promise<R>): Promise<R[]> => {
 		const results: R[] = new Array(items.length);
 		let next = 0;
@@ -413,7 +396,6 @@ export function openGitHub(env?: NodeJS.ProcessEnv): GitHub {
 				agentBranches(characters),
 			]);
 			if (!searched.ok) return searched;
-			// The agents' branches: one list per repository and branch.
 			const branchKeys = [...new Map(agents.map((agent) => [`${agent.repo}\n${agent.branch}`, agent])).values()];
 			const fromBranches = (
 				await inParallel(branchKeys, (agent) =>
@@ -422,7 +404,6 @@ export function openGitHub(env?: NodeJS.ProcessEnv): GitHub {
 			).flatMap((answer) => (answer.ok ? (parse<RawPr[]>(answer.stdout) ?? []) : []));
 			const mine = parse<RawPr[]>(searched.stdout) ?? [];
 			const byUrl = new Map(fromBranches.map((raw) => [raw.url, raw]));
-			// Search results carry no branch or checks; read those for each one not already listed by branch.
 			const filled = await inParallel(mine, async (raw): Promise<RawPr> => {
 				const listed = byUrl.get(raw.url);
 				if (listed) return { ...listed, ...raw, headRefName: listed.headRefName };
