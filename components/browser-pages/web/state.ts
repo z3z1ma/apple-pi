@@ -1,4 +1,5 @@
 import type { CommentKind, ReviewComment, ReviewResult, Verdict } from "../src/page-data";
+import { initialTheme } from "./initial-theme";
 import { type Model, UNPLACED } from "./model";
 
 export interface Composer {
@@ -57,7 +58,6 @@ export interface State {
 }
 
 export function initialState(result: ReviewResult | undefined): State {
-	const dark = typeof matchMedia === "function" && matchMedia("(prefers-color-scheme: dark)").matches;
 	return {
 		lens: "story",
 		page: "overview",
@@ -80,7 +80,7 @@ export function initialState(result: ReviewResult | undefined): State {
 		summary: result?.summary ?? "",
 		acceptLimits: result?.capture?.acceptLimits ?? false,
 		modal: null,
-		theme: dark ? "dark" : "light",
+		theme: initialTheme(),
 		submit: result ? "sent" : "idle",
 		scrollTo: null,
 		scrollSeq: 0,

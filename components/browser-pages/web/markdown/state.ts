@@ -1,4 +1,5 @@
 import type { MarkdownAnnotation, MarkdownLabel, Verdict } from "../../src/page-data";
+import { initialTheme } from "../initial-theme";
 import type { Selected } from "./marks";
 
 export type Annotation = MarkdownAnnotation & { id: string; file: string };
@@ -70,7 +71,6 @@ export const VERDICTS = [
 ] as const;
 
 export function initial(result: SavedReview | undefined, file: string): State {
-	const dark = typeof matchMedia === "function" && matchMedia("(prefers-color-scheme: dark)").matches;
 	return {
 		annotations: (result?.annotations ?? []).map((a, i) => ({ ...a, file: a.file ?? file, id: `r${i}` })),
 		edits: Object.fromEntries((result?.edits ?? []).map((e) => [blockKey(e.file ?? file, e.block), e.after])),
@@ -81,7 +81,7 @@ export function initial(result: SavedReview | undefined, file: string): State {
 		modal: null,
 		submit: result ? "sent" : "idle",
 		panel: !!result,
-		theme: dark ? "dark" : "light",
+		theme: initialTheme(),
 		noteHidden: false,
 		toolbar: null,
 		pop: null,

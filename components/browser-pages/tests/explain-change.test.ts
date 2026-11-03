@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -15,6 +15,7 @@ import {
 } from "../src/explain-change.js";
 import { readCapturedChange } from "../src/git-diff.js";
 import browserPages from "../src/index.js";
+import { recordWorkplaceFocus } from "../src/live-pages.js";
 import type { CodeExcerpt, ExplainPart } from "../src/page-data.js";
 
 let repo: string;
@@ -337,6 +338,52 @@ describe("explain_change tool", () => {
 			for (const close of shutdown) close();
 			await expect(call("/health")).rejects.toThrow();
 		} finally {
+			process.env.PATH = saved.path;
+			if (saved.agent === undefined) delete process.env.PI_CODING_AGENT_DIR;
+			else process.env.PI_CODING_AGENT_DIR = saved.agent;
+			rmSync(bin, { recursive: true, force: true });
+			rmSync(agentDir, { recursive: true, force: true });
+		}
+	});
+
+	it("leaves the system browser alone while Agent Workplace has focus, and says where the page is", {
+		timeout: 30_000,
+	}, async () => {
+		const bin = mkdtempSync(join(tmpdir(), "browser-pages-bin-"));
+		const agentDir = mkdtempSync(join(tmpdir(), "browser-pages-agent-"));
+		for (const name of ["open", "xdg-open"]) {
+			writeFileSync(join(bin, name), `#!/bin/sh\ntouch "${join(bin, "opened")}"\n`);
+			chmodSync(join(bin, name), 0o755);
+		}
+		const saved = { path: process.env.PATH, agent: process.env.PI_CODING_AGENT_DIR };
+		process.env.PATH = `${bin}:${saved.path}`;
+		process.env.PI_CODING_AGENT_DIR = agentDir;
+		recordWorkplaceFocus(true, agentDir);
+		const shutdown: (() => void)[] = [];
+		try {
+			let tool: any;
+			browserPages({
+				registerTool: (definition: any) => {
+					if (definition.name === "explain_change") tool = definition;
+				},
+				on: (event: string, handler: () => void) => {
+					if (event === "session_shutdown") shutdown.push(handler);
+				},
+				sendMessage: () => {},
+			} as any);
+			const result = await tool.execute(
+				"call",
+				params({ cwd: repo, target: { kind: "commit", commit: "HEAD" } }),
+				undefined,
+				undefined,
+				{ hasUI: true, cwd: bin, sessionManager: { getSessionId: () => "test-session" } },
+			);
+			expect(result.content[0].text).toContain("Agent Workplace has focus");
+			await new Promise((resolve) => setTimeout(resolve, 300));
+			expect(existsSync(join(bin, "opened"))).toBe(false);
+			for (const close of shutdown) close();
+		} finally {
+			recordWorkplaceFocus(false, agentDir);
 			process.env.PATH = saved.path;
 			if (saved.agent === undefined) delete process.env.PI_CODING_AGENT_DIR;
 			else process.env.PI_CODING_AGENT_DIR = saved.agent;

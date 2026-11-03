@@ -110,7 +110,11 @@ function useInlinePage(person: string) {
 	const openPage = async (callId: string, label: string) => {
 		const live = await window.agentWorkplace.browserPage?.(person, callId);
 		setNote(live ? undefined : { person, text: `That ${label.toLowerCase()} page is closed.` });
-		if (live) setOpened({ person, url: live.url, label });
+		if (!live) return;
+		const url = new URL(live.url);
+		const appearance = document.querySelector(".wp-app")?.getAttribute("data-appearance");
+		if (appearance === "light" || appearance === "dark") url.searchParams.set("theme", appearance);
+		setOpened({ person, url: url.href, label });
 	};
 	return {
 		page: opened?.person === person ? opened : undefined,

@@ -121,7 +121,7 @@ A direct conversation is the person's actual Pi session. Its transcript, streame
 
 The DM header's [person menu](#person-actions) also exposes Send home, Call in and eligible permanent departure without leaving the conversation.
 
-When a person opens a browser page (`explain_change`, `sign_off_code`, `sign_off_document`, `sign_off_task`), its DM shows a small page card with **Open here**, even with tool calls off. **Open here** shows the live page in place of the transcript, with **Back to conversation** and **Open in browser**, while the rest of Workplace stays as it is. A page that has closed (a sign-off that was submitted, or an explanation whose session ended) says so instead.
+When a person opens a browser page (`explain_change`, `sign_off_code`, `sign_off_document`, `sign_off_task`), its DM shows a small page card with **Open here**, even with tool calls off. **Open here** shows the live page in place of the transcript, with **Back to conversation** and **Open in browser**, while the rest of Workplace stays as it is. The page opens in Workplace's light or dark appearance. A page that has closed (a sign-off that was submitted, or an explanation whose session ended) says so instead. While Workplace has focus, these tools do not also open the system browser.
 
 **Tool calls off** shows only written assistant/user text. Thoughts, calls/results, mail, notifications and historical diagnostics remain in the underlying history and are available with details on. Current operation failures still appear where you can act on them. The compact activity line shows tool detail only while a tool actually runs; a retained old command is not current activity.
 

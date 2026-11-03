@@ -1382,7 +1382,7 @@ test("a browser-page tool in a DM offers to open its page inline, in place of th
 		[HQ]: [],
 	});
 	page.setDefaultTimeout(5000);
-	await page.route(`${ORIGIN}/fixture-sign-off`, (route) =>
+	await page.route(`${ORIGIN}/fixture-sign-off*`, (route) =>
 		route.fulfill({ body: "<h1>Review fixture</h1>", contentType: "text/html" }),
 	);
 	await page.addInitScript((origin) => {
@@ -1410,6 +1410,9 @@ test("a browser-page tool in a DM offers to open its page inline, in place of th
 			.getByRole("heading", { name: "Review fixture" })
 			.waitFor();
 		await shot(page, "inline-page");
+		expect(await page.locator('iframe[title="Code review page"]').getAttribute("src")).toMatch(
+			/^http:\/\/localhost\/fixture-sign-off\?theme=(light|dark)$/,
+		);
 		expect(await log(page).isVisible()).toBe(false);
 		expect(await page.getByRole("textbox").first().isVisible()).toBe(true);
 		await inline.getByRole("button", { name: "Back to conversation" }).click();

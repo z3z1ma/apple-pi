@@ -49,13 +49,40 @@ export function publishLivePage(sessionId: string, toolCallId: string, page: Liv
 	};
 }
 
+function alive(pid: number): boolean {
+	try {
+		process.kill(pid, 0);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
 export function livePage(sessionId: string, toolCallId: string, agentDir?: string): LivePage | undefined {
 	const pages = read(livePagesFile(sessionId, agentDir));
-	if (!pages) return undefined;
-	try {
-		process.kill(pages.pid, 0);
-	} catch {
-		return undefined;
+	return pages && alive(pages.pid) ? pages.pages[toolCallId] : undefined;
+}
+
+function focusFile(agentDir: string): string {
+	return join(agentDir, "agent-workplace", "focus.json");
+}
+
+export function recordWorkplaceFocus(focused: boolean, agentDir: string): void {
+	const file = focusFile(agentDir);
+	if (!focused) {
+		rmSync(file, { force: true });
+		return;
 	}
-	return pages.pages[toolCallId];
+	mkdirSync(dirname(file), { recursive: true });
+	writeFileSync(file, JSON.stringify({ pid: process.pid }));
+}
+
+export function workplaceFocused(agentDir = getAgentDir()): boolean {
+	const file = focusFile(agentDir);
+	if (!existsSync(file)) return false;
+	try {
+		return alive((JSON.parse(readFileSync(file, "utf8")) as { pid: number }).pid);
+	} catch {
+		return false;
+	}
 }

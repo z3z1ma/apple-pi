@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
-import { livePage, livePagesFile, publishLivePage } from "../src/live-pages.js";
+import { livePage, livePagesFile, publishLivePage, recordWorkplaceFocus, workplaceFocused } from "../src/live-pages.js";
 
 const agent = mkdtempSync(join(tmpdir(), "live-pages-"));
 beforeAll(() => vi.stubEnv("PI_CODING_AGENT_DIR", agent));
@@ -24,6 +24,18 @@ test("a page is findable by its session and tool call while it is open, and gone
 	expect(livePage("session-a", "call-2", agent)?.tool).toBe("explain_change");
 	closeExplain();
 	expect(livePage("session-a", "call-2", agent)).toBeUndefined();
+});
+
+test("Workplace counts as focused only while its window says so and its process lives", () => {
+	expect(workplaceFocused(agent)).toBe(false);
+	recordWorkplaceFocus(true, agent);
+	expect(workplaceFocused(agent)).toBe(true);
+	recordWorkplaceFocus(false, agent);
+	expect(workplaceFocused(agent)).toBe(false);
+	const file = join(agent, "agent-workplace", "focus.json");
+	writeFileSync(file, JSON.stringify({ pid: 2 ** 22 + 7 }));
+	expect(workplaceFocused(agent)).toBe(false);
+	rmSync(file);
 });
 
 test("pages left behind by a process that has exited are not offered", () => {

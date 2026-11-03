@@ -30,15 +30,29 @@ function read(file) {
 		return;
 	}
 }
+function alive(pid) {
+	try {
+		process.kill(pid, 0);
+		return true;
+	} catch {
+		return false;
+	}
+}
 function livePage(sessionId, toolCallId, agentDir) {
 	const pages = read(livePagesFile(sessionId, agentDir));
-	if (!pages) return void 0;
-	try {
-		process.kill(pages.pid, 0);
-	} catch {
+	return pages && alive(pages.pid) ? pages.pages[toolCallId] : void 0;
+}
+function focusFile(agentDir) {
+	return join(agentDir, "agent-workplace", "focus.json");
+}
+function recordWorkplaceFocus(focused, agentDir) {
+	const file = focusFile(agentDir);
+	if (!focused) {
+		rmSync(file, { force: true });
 		return;
 	}
-	return pages.pages[toolCallId];
+	mkdirSync(dirname(file), { recursive: true });
+	writeFileSync(file, JSON.stringify({ pid: process.pid }));
 }
 //#endregion
 //#region components/session-state/src/paths.ts
@@ -12926,6 +12940,7 @@ function start() {
 	});
 	app.on("window-all-closed", () => app.quit());
 	app.on("will-quit", () => {
+		recordWorkplaceFocus(false, agentDir());
 		reviews.close();
 		departures.close();
 		terminals.dispose();
@@ -12952,9 +12967,12 @@ function start() {
 			}
 		});
 		window.on("closed", () => {
+			recordWorkplaceFocus(false, agentDir());
 			terminals.closeAll();
 			window = void 0;
 		});
+		window.on("focus", () => recordWorkplaceFocus(true, agentDir()));
+		window.on("blur", () => recordWorkplaceFocus(false, agentDir()));
 		window.webContents.on("did-frame-navigate", (_event, _url, _code, _status, isMainFrame) => {
 			if (isMainFrame) terminals.closeAll();
 		});

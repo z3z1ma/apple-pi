@@ -38,7 +38,7 @@ import {
 	SIGN_OFF_TASK_TOOL_NAME,
 	serveEvidence,
 } from "./ledger-review.js";
-import { publishLivePage } from "./live-pages.js";
+import { publishLivePage, workplaceFocused } from "./live-pages.js";
 import {
 	buildMarkdownPage,
 	formatMarkdownResult,
@@ -57,6 +57,13 @@ import { embedPage, savePage } from "./saved-page.js";
 
 const text = (value: string) => [{ type: "text" as const, text: value }];
 const NO_USER = "No user is attached to this run, so no review page was opened.";
+const IN_WORKPLACE = "Agent Workplace has focus, so the page waits in this session's DM there instead of the browser.";
+
+function present(url: string): string | undefined {
+	if (workplaceFocused()) return IN_WORKPLACE;
+	openInBrowser(url);
+	return undefined;
+}
 
 interface PageRun<P extends PageData, R extends { verdict: string }> {
 	tool: string;
@@ -100,8 +107,11 @@ export default function browserPages(pi: ExtensionAPI): void {
 			tool: run.tool,
 			url: session.url,
 		});
-		onUpdate?.({ content: text(`Waiting for the review at ${session.url}`), details: undefined });
-		openInBrowser(session.url);
+		const where = present(session.url);
+		onUpdate?.({
+			content: text(`Waiting for the review at ${session.url}${where ? `\n${where}` : ""}`),
+			details: undefined,
+		});
 		try {
 			const result = await session.result;
 			const saved = await savePage(
@@ -323,9 +333,10 @@ export default function browserPages(pi: ExtensionAPI): void {
 				unpublish();
 				session.close();
 			});
-			openInBrowser(session.url);
+			const where = present(session.url);
 			const lines = [
 				`Opened the explanation of ${page.ref} at ${session.url}`,
+				...(where ? [where] : []),
 				`Saved a shareable copy (attach it to a pull request or a page): ${saved}`,
 			];
 			if (warnings.length) lines.push("", "Code references the page could not show:", ...warnings.map((w) => `- ${w}`));

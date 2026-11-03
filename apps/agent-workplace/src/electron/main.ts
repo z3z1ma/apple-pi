@@ -2,7 +2,7 @@ import { writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { app, BrowserWindow, dialog, ipcMain, net, protocol, shell } from "electron";
-import { livePage } from "../../../../components/browser-pages/src/live-pages.js";
+import { livePage, recordWorkplaceFocus } from "../../../../components/browser-pages/src/live-pages.js";
 import { agentDir, statePaths } from "../../../../components/session-state/src/paths.js";
 import { appFile } from "../app-files.js";
 import { lastEditor } from "../backend/code-authors.js";
@@ -387,6 +387,7 @@ function start() {
 	});
 	app.on("window-all-closed", () => app.quit());
 	app.on("will-quit", () => {
+		recordWorkplaceFocus(false, agentDir());
 		reviews.close();
 		departures.close();
 		terminals.dispose();
@@ -414,9 +415,12 @@ function start() {
 			},
 		});
 		window.on("closed", () => {
+			recordWorkplaceFocus(false, agentDir());
 			terminals.closeAll();
 			window = undefined;
 		});
+		window.on("focus", () => recordWorkplaceFocus(true, agentDir()));
+		window.on("blur", () => recordWorkplaceFocus(false, agentDir()));
 		window.webContents.on("did-frame-navigate", (_event, _url, _code, _status, isMainFrame) => {
 			if (isMainFrame) terminals.closeAll();
 		});

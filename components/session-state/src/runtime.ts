@@ -111,6 +111,7 @@ import {
 type WorkRecord = Extract<Command, { kind: "task_opened" | "task_moved" | "link_record" | "link_resolve" }>;
 
 const TMUX_POLL_MS = 1000;
+const PAGE_TOOLS = "'explain_change', 'sign_off_code', 'sign_off_document', 'sign_off_task'";
 
 type Fields = Record<string, string | number>;
 
@@ -3233,19 +3234,22 @@ export class Runtime {
 			if (!cursor) return void reply({ error: "unknown cursor" });
 		}
 
-		const words = request.textOnly ? "and role in ('user', 'assistant') and size > 0" : "";
+		const words = request.textOnly
+			? `and ((role in ('user', 'assistant') and size > 0) or entry_id in (select entry_id from messages where session_id = ? and role = 'tool_call' and tool in (${PAGE_TOOLS})))`
+			: "";
+		const wordsParams = request.textOnly ? [request.sessionId] : [];
 		const rows = (
 			cursor
 				? db
 						.prepare(
 							`select entry_id, at from messages where session_id = ? and part = '' ${words} and (at < ? or (at = ? and rowid < ?)) order by at desc, rowid desc limit ?`,
 						)
-						.all(request.sessionId, cursor.at, cursor.at, cursor.rowid, limit + 1)
+						.all(request.sessionId, ...wordsParams, cursor.at, cursor.at, cursor.rowid, limit + 1)
 				: db
 						.prepare(
 							`select entry_id, at from messages where session_id = ? and part = '' ${words} order by at desc, rowid desc limit ?`,
 						)
-						.all(request.sessionId, limit + 1)
+						.all(request.sessionId, ...wordsParams, limit + 1)
 		) as { entry_id: string; at: number }[];
 		const more = rows.length > limit;
 		const pageRows = rows.slice(0, limit).reverse();

@@ -125,6 +125,32 @@ test("a text-only page skips tool work and mail, paging only written words", asy
 	}
 }, 20000);
 
+test("a text-only page keeps a wordless entry that opened a browser page, and still skips other tool work", async () => {
+	const { entries, rows, text } = transcript(4);
+	const indexed = [
+		...rows.map((row, i) => (i === 1 || i === 3 ? { ...row, size: 0 } : row)),
+		{
+			entryId: "e1",
+			part: "call-page",
+			at: rows[1]!.at,
+			role: "tool_call",
+			tool: "sign_off_code",
+			size: 40,
+			preview: "",
+		},
+		{ entryId: "e3", part: "call-read", at: rows[3]!.at, role: "tool_call", tool: "read", size: 40, preview: "" },
+	];
+	const file = join(dir, "pages.jsonl");
+	writeFileSync(file, text);
+	const bridge = await indexedSession("pages", file, indexed);
+	try {
+		const page = await readEntries({ sessionId: "pages", limit: 10, textOnly: true });
+		expect(page.entries.map((entry: { id: string }) => entry.id)).toEqual(["e0", "e1", "e2"]);
+	} finally {
+		bridge.socket.destroy();
+	}
+}, 20000);
+
 test("a page names indexed entries the transcript no longer holds, and bad requests answer with an error", async () => {
 	const { entries, rows, text } = transcript(3);
 	const file = join(dir, "gone.jsonl");
