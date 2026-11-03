@@ -1,5 +1,9 @@
 ## file
 
+This module has no Node or DOM imports. Each reader supplies files through `PackReader`, so the same check runs in the backend, the `check-theme` CLI, and the world UI.
+Why: a Node or DOM import would make one of those three readers unable to load the contract.
+Coupled: apps/agent-workplace/src/backend/theme-packs.ts, apps/agent-workplace/src/check-theme.ts, apps/agent-workplace/web/theme.ts
+
 One check serves three readers: the backend (`backend/theme-packs.ts`, which reads files and decodes sheets' alpha itself), the `check-theme` CLI, and the world UI (`web/theme.ts`, over HTTP, PNG sizes from their headers). The world UI runs it with `pixels: false`: decoding every sheet in the window on each switch is slow, and a sheet off its baseline draws wrong without breaking anything. The backend's list (`themes()`) runs it with pixels.
 Coupled: apps/agent-workplace/src/backend/theme-packs.ts, apps/agent-workplace/web/theme.ts, apps/agent-workplace/themes/README.md
 Verify: apps/agent-workplace/tests/theme-pack.test.ts, apps/agent-workplace/tests/world-themes.test.ts
