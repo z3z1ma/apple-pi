@@ -15,6 +15,7 @@ export default defineConfig({
 			"components/vroom/tests/**/*.test.ts",
 			"components/anthropic-watchdog/tests/**/*.test.ts",
 			"components/home-search-guard/tests/**/*.test.ts",
+			"components/action-rules/tests/**/*.test.ts",
 			"components/ask-user-question/tests/**/*.test.ts",
 			"components/shared/tests/**/*.test.ts",
 			"components/notebook/tests/**/*.test.ts",

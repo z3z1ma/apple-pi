@@ -27,7 +27,7 @@
 	border: 1px solid var(--wp-border);
 	border-radius: 8px;
 	background: var(--wp-bg);
-	box-shadow: 0 2px 6px #2113291a;
+	box-shadow: 0 2px 6px rgb(0 0 0 / 0.1);
 }
 .wp-actionable:hover > .wp-message-actions,
 .wp-actionable:focus-within > .wp-message-actions {

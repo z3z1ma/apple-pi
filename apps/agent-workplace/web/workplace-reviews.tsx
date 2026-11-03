@@ -798,7 +798,7 @@ function ReviewCapture({
 						Lasting owner ID{" "}
 						<input
 							required
-							list="wp-review-owners"
+							placeholder={owners.slice(0, 3).map((person) => person.id).join(", ")}
 							value={owner}
 							onChange={(event) => {
 								setOwner(event.target.value);
@@ -807,11 +807,6 @@ function ReviewCapture({
 						/>
 					</label>
 					<label>
-						<datalist id="wp-review-owners">
-							{owners.map((owner) => (
-								<option key={owner.id} value={owner.id} label={owner.name} />
-							))}
-						</datalist>
 						Approved intent (optional){" "}
 						<textarea
 							value={intent}

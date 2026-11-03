@@ -44,6 +44,14 @@
         "indentStyle": "space",
         "indentWidth": 2
       }
+    },
+    {
+      "includes": ["apps/agent-workplace/web/workplace*.tsx"],
+      "plugins": ["./lint/rules/no-native-select.grit"]
+    },
+    {
+      "includes": ["apps/agent-workplace/web/workplace*.css", "!apps/agent-workplace/web/workplace.css"],
+      "plugins": ["./lint/rules/workplace-palette.grit"]
     }
   ]
 }

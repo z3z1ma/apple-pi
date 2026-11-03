@@ -471,9 +471,6 @@
 	border-radius: 12px;
 	box-shadow: var(--wp-shadow);
 }
-.wp-issues-confirm::backdrop {
-	background: #17101b88;
-}
 .wp-issues-confirm h2 {
 	font-size: 21px;
 	margin-bottom: 12px;

@@ -1,0 +1,7 @@
+language css
+
+`$value` where {
+  $value <: r"#[0-9a-fA-F]{3,8}",
+  $value <: not r"#(?:fff|000)(?:[0-9a-fA-F]|fff|000|[0-9a-fA-F]{2}|fff[0-9a-fA-F]{2}|000[0-9a-fA-F]{2})?",
+  register_diagnostic(span=$value, message="Use a --wp-* theme variable: a hard-coded color does not follow the theme (lint/README.md).")
+}

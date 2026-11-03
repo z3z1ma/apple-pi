@@ -1,0 +1,8 @@
+language js
+
+or {
+  `<select $attrs>$children</select>`,
+  `<datalist $attrs>$children</datalist>`
+} as $element where {
+  register_diagnostic(span=$element, message="Use Select or Recipients from workplace-fields.tsx; native dropdowns look out of place in Workplace (operator, 2026-11-02).")
+}
