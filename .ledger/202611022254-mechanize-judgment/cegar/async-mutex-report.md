@@ -2,6 +2,8 @@
 
 Repository: https://github.com/DirtyHairy/async-mutex
 
+Status: not filed. The operator approved filing, but a check on 2026-11-03 found the defect already reported as [#94](https://github.com/DirtyHairy/async-mutex/issues/94) (2026-10-12). The maintainer acknowledged it, and fix PR [#95](https://github.com/DirtyHairy/async-mutex/pull/95), with a test, is open. Nothing more is needed from us. The counterexample-to-test experiment ([cegar-log.md](../cegar-log.md)) found this defect independently, so the finding is real but not new. The report below is kept as written for upstream.
+
 Verified revision: `b0bb4c5aa0e42eb5ffc8d9342e56bb6de1b95554` (`async-mutex` 0.5.0).
 Environment: Node 22.23.4, Mocha 10.3.0, ts-node 10.9.2, TypeScript 5.4.2, tslib 2.6.2; macOS.
 
@@ -55,5 +57,3 @@ The retained [two-test reproduction](async-mutex-cancel-unlock-observer.ts) also
 After cancellation removes the acquisition queue, notify newly eligible unlock observers using the existing waiter-draining logic. Preserve the available value and currently held permits. Add this case beside the existing cancellation and unlock-observer tests. **This suggested fix has not been applied or validated.**
 
 A source-derived finite model found the same five-step ordering: initial value 1 -> queue weight 2 -> register observer weight 1 -> cancel acquisition -> fresh observer completes while the earlier observer remains pending. The implementation test, rather than the abstract model alone, establishes the reported behavior.
-
-Upstream status (checked 2026-11-03 before filing, which the operator approved): this defect is already reported as [#94](https://github.com/DirtyHairy/async-mutex/issues/94) (2026-10-12). The maintainer acknowledged it, and fix PR [#95](https://github.com/DirtyHairy/async-mutex/pull/95), which includes a test, is open. We filed nothing, to avoid a duplicate. The loop found it independently, so the finding is real, but it is not new.

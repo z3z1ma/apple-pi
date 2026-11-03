@@ -2,21 +2,22 @@ import { expect, test } from "vitest";
 import { lineReader } from "../src/protocol.js";
 
 test("lineReader holds partial messages until a newline and drains complete messages in order", () => {
-	const lines: string[] = [];
-	const read = lineReader((line) => lines.push(line));
+	const messages: unknown[] = [];
+	const read = lineReader((line) => messages.push(JSON.parse(line)));
 	read(Buffer.from('{"type":"heart'));
-	expect(lines).toEqual([]);
+	expect(messages).toEqual([]);
 	read('beat"}\n{"type":"run"');
-	expect(lines).toEqual(['{"type":"heartbeat"}']);
-	read(Buffer.from(',"run":"idle"}\n{"type":"shutdown"}\npartial'));
-	expect(lines).toEqual(['{"type":"heartbeat"}', '{"type":"run","run":"idle"}', '{"type":"shutdown"}']);
-	read("\n");
-	expect(lines.at(-1)).toBe("partial");
+	expect(messages).toEqual([{ type: "heartbeat" }]);
+	read(Buffer.from(',"run":"idle"}\n{"type":"shutdown","reason":"quit"}\n{"type":"run","run":"thinking"'));
+	const completed = [{ type: "heartbeat" }, { type: "run", run: "idle" }, { type: "shutdown", reason: "quit" }];
+	expect(messages).toEqual(completed);
+	read("}\n");
+	expect(messages).toEqual([...completed, { type: "run", run: "thinking" }]);
 });
 
-test("lineReader skips blank lines and preserves nonempty payload whitespace", () => {
-	const lines: string[] = [];
-	const read = lineReader((line) => lines.push(line));
+test("lineReader accepts JSON whitespace and ignores blank lines", () => {
+	const messages: unknown[] = [];
+	const read = lineReader((line) => messages.push(JSON.parse(line)));
 	read('\n \t\n {"type":"heartbeat"} \n\n');
-	expect(lines).toEqual([' {"type":"heartbeat"} ']);
+	expect(messages).toEqual([{ type: "heartbeat" }]);
 });

@@ -1,3 +1,6 @@
+Historical expected failure before the production fix, 2026-11-03 06:40 UTC.
+Command: npx vitest run components/session-state/tests/review-cancel-race.test.ts --maxWorkers=1
+The older cancellation overwrote newly authorized work. This archived failure and its line numbers describe the pre-fix test, not the expected current result. Current reproduction steps and the subsequent public-reader oracle are in ../cegar-log.md.
 
  RUN  v4.1.10 /Users/alexanderbut/code_projects/personal/apple-pi
 

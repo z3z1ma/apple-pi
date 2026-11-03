@@ -1,3 +1,6 @@
+Historical positive controls, 2026-11-03 06:52 UTC.
+Command: npx vitest run components/session-state/tests/departure-lifecycle.test.ts components/session-state/tests/departures.test.ts --maxWorkers=1 -t 'a shutdown receipt|a responsibility arriving|an observed SDK replacement|file cleanup checks|a mismatched transcript header'
+Scope: six existing process/responsibility/header controls; not a full suite or translation of a departure counterexample. See ../cegar-log.md for model bounds and reproduction steps.
 
  RUN  v4.1.10 /Users/alexanderbut/code_projects/personal/apple-pi
 

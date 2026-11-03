@@ -5,6 +5,7 @@ import { DatabaseSync } from "node:sqlite";
 import { expect, test, vi } from "vitest";
 import { captureReview } from "../../code-review/src/capture.js";
 import { sendCommand } from "../src/client.js";
+import { readReview } from "../src/review-read.js";
 import { tempStateDir } from "./helpers.js";
 
 test("an older cancellation cannot cancel newly authorized review work", async () => {
@@ -66,12 +67,8 @@ test("an older cancellation cannot cancel newly authorized review work", async (
 		db.prepare("delete from program_scopes where id = 'previous-reviewer'").run();
 		child.send({ type: "release", index: cleanupWaits[0] });
 		expect(await first).toMatchObject({ stage: "applied" });
-		const cancelled = db.prepare("select state, revision, generation from review_jobs where id = 'review'").get() as {
-			state: string;
-			revision: number;
-			generation: number;
-		};
-		expect(cancelled).toMatchObject({ state: "cancelled", generation: 1 });
+		const cancelled = readReview(db, "owner", "review");
+		expect(cancelled.state).toBe("cancelled");
 		const extension = await sendCommand(
 			"owner",
 			{
@@ -90,10 +87,12 @@ test("an older cancellation cannot cancel newly authorized review work", async (
 			{ socketPath: state.socketPath, commandId: "extend" },
 		);
 		expect(extension).toMatchObject({ stage: "applied" });
-		const assessment = () =>
-			db!.prepare("select state, generation, revision, additional_work from review_jobs where id = 'review'").get();
+		const assessment = () => readReview(db!, "owner", "review");
 		const authorized = assessment();
-		expect(authorized).toMatchObject({ state: "queued", generation: 2 });
+		expect(authorized).toMatchObject({
+			state: "queued",
+			additionalWork: [{ id: "extend", question: "Does the new value preserve the exported API?" }],
+		});
 		child.send({ type: "release", index: cleanupWaits[1] });
 		expect(await second).toMatchObject({ stage: "applied" });
 		expect(errors).toBe("");

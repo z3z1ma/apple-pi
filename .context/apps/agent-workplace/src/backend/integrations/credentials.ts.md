@@ -2,5 +2,7 @@
 
 The Atlassian and Slack secrets live only in `agent-workplace-credentials.json` in the session-state directory, written whole through a 0600 temporary file and a rename (`writePrivate`); a file found wider is narrowed before it is read. `status` is the only view the renderer gets: site, email, and workspace name, never a token or cookie. Nothing here or in the adapters logs.
 Why: decision 07 and ticket 24 ("never in the renderer, logs, or themes"); the test checks every answer the renderer can get and every console call for the secrets.
-Coupled: apps/agent-workplace/src/integrations.ts
+The session-state runtime imports this file by path for outside-thread polling. Keep it free of Electron and of syntax Node cannot strip.
+Why: the daemon loads these helpers directly. An Electron import here would stop the runtime, not only Workplace.
+Coupled: components/session-state/src/activity-sources.ts, components/session-state/src/activity-poller.ts, components/session-state/src/external-threads.ts, apps/agent-workplace/src/integrations.ts
 Verify: apps/agent-workplace/tests/integrations/atlassian.test.ts, apps/agent-workplace/tests/integrations/slack.test.ts

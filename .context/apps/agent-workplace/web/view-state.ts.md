@@ -5,9 +5,9 @@ Why: useSyncExternalStore subscribers detect changed snapshot identity, not muta
 
 ## symbol:WorldIntent
 
-Intents are a broadcast: the interface handles `examine` and `terminal` itself (whoever sends them, so the world's right-click menu can send them too); the world must handle `walk-to`, `travel`, `go-to`, `talk-to`, and `walk-grid`. `main.tsx` wires the world's side until the game subscribes itself: `travel` and `go-to` through `PlaceScene.travel`, `talk-to` through `conversations.open` (no walking), `walk-grid` through a synthetic G key, and `walk-to` not at all yet.
-Why: ticket 06 owned the game while ticket 08 built the interface; the intents keep the two apart, and a kind nobody handles does nothing.
-Coupled: apps/agent-workplace/web/main.tsx, apps/agent-workplace/web/overlay/interface/interface.tsx
+Intents broadcast to every subscriber. `PlaceScene.intended` owns `walk-to`, `go-to` (including travel to another place), and `walk-grid`. `main.tsx` owns `travel`, `talk-to` (opening a conversation without walking), and `choose-theme`; the interface owns `examine`, `terminal`, and `open-tab`.
+Why: broadcast does not select a single handler. Duplicating a scene-owned intent in main can travel twice or toggle the walk grid back off.
+Coupled: apps/agent-workplace/web/main.tsx, apps/agent-workplace/web/game/place-scene.ts, apps/agent-workplace/web/overlay/interface/interface.tsx
 Verify: apps/agent-workplace/tests/world-interface.test.ts
 
 `choose-theme` (Settings) is carried out by `main.tsx`: it checks the pack, switches live, and only then keeps the choice through `store.setTheme`, so a broken pack is never stored as the operator's theme. A snapshot whose `theme` differs from the one worn (chosen elsewhere) switches too, except to a pack already found broken in this window.
