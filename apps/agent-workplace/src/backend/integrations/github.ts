@@ -6,8 +6,11 @@
 import { execFile } from "node:child_process";
 import type {
 	CiState,
+	CliStatus,
 	DiffFile,
 	DiffHunk,
+	IssueDetail,
+	IssueSummary,
 	Outcome,
 	PullRequest,
 	PullRequestDetail,
@@ -21,6 +24,7 @@ const LIST_MAX = 50;
 /** `gh pr view` calls in flight at once while filling in searched pull requests. */
 const PARALLEL = 4;
 const REPO = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
+const ISSUE_KEY = /^([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)#([1-9]\d*)$/;
 const ROLLUP_FIELDS = "headRefName,statusCheckRollup,reviewDecision";
 const LIST_FIELDS = `number,title,url,isDraft,updatedAt,author,${ROLLUP_FIELDS}`;
 
@@ -216,7 +220,47 @@ function toPullRequest(raw: RawPr, involvesYou: boolean): Omit<PullRequest, "age
 
 export type ReviewEvent = "comment" | "approve" | "request-changes";
 
+type RawIssue = {
+	number: number;
+	title?: string;
+	url: string;
+	state?: string;
+	updatedAt?: string;
+	createdAt?: string;
+	body?: string;
+	author?: { login?: string } | null;
+	assignees?: { login?: string }[];
+	repository?: { nameWithOwner?: string };
+	comments?: { id: string; author?: { login?: string } | null; createdAt?: string; body?: string }[];
+};
+
+function toIssue(raw: RawIssue): IssueSummary {
+	const repo =
+		raw.repository?.nameWithOwner ?? /^https:\/\/github\.com\/([^/]+\/[^/]+)\/issues\//.exec(raw.url)?.[1] ?? "";
+	const closed = raw.state?.toLowerCase() === "closed";
+	return {
+		key: `${repo}#${raw.number}`,
+		summary: raw.title ?? "",
+		url: raw.url,
+		status: closed ? "Closed" : "Open",
+		statusCategory: closed ? "done" : "new",
+		assignee:
+			raw.assignees
+				?.map((person) => person.login)
+				.filter(Boolean)
+				.join(", ") || null,
+		project: repo,
+		type: "Issue",
+		priority: null,
+		updated: raw.updatedAt ?? null,
+	};
+}
+
 export interface GitHub {
+	status(): Promise<CliStatus>;
+	assigned(): Promise<Outcome<{ issues: IssueSummary[] }>>;
+	search(text: string): Promise<Outcome<{ issues: IssueSummary[] }>>;
+	issue(key: string): Promise<Outcome<{ detail: IssueDetail }>>;
 	pullRequests(characters: Character[]): Promise<Outcome<{ pullRequests: PullRequest[] }>>;
 	pullRequest(repo: string, number: number, characters: Character[]): Promise<Outcome<{ detail: PullRequestDetail }>>;
 	/** A write: only the gate calls it. */
@@ -278,7 +322,80 @@ export function openGitHub(env?: NodeJS.ProcessEnv): GitHub {
 		return results;
 	};
 
-	return {
+	const issues = async (text?: string): Promise<Outcome<{ issues: IssueSummary[] }>> => {
+		const answer = await gh([
+			"search",
+			"issues",
+			"--limit",
+			String(LIST_MAX),
+			"--sort",
+			"updated",
+			"--order",
+			"desc",
+			"--json",
+			"number,title,url,state,assignees,repository,updatedAt",
+			...(text === undefined ? ["--assignee", "@me", "--state", "open"] : ["--", text]),
+		]);
+		if (!answer.ok) return answer;
+		const raw = parse<RawIssue[]>(answer.stdout);
+		return Array.isArray(raw)
+			? { ok: true, issues: raw.map(toIssue) }
+			: { ok: false, reason: "gh answered something that is not an issue list." };
+	};
+
+	const github: GitHub = {
+		async status() {
+			const status = await gh(["auth", "status", "--active", "--hostname", "github.com"]);
+			if (!status.ok) return status;
+			const user = await gh(["api", "user", "--hostname", "github.com", "--jq", ".login"]);
+			if (!user.ok) return user;
+			return user.stdout.trim()
+				? { ok: true, account: user.stdout.trim() }
+				: { ok: false, reason: "GitHub did not return a signed-in account." };
+		},
+		assigned: () => issues(),
+		async search(text) {
+			const query = text.trim();
+			if (!query) return { ok: true, issues: [] };
+			if (!ISSUE_KEY.test(query)) return issues(query);
+			const result = await github.issue(query);
+			return result.ok ? { ok: true, issues: [result.detail.issue] } : result;
+		},
+		async issue(key) {
+			const match = ISSUE_KEY.exec(key);
+			if (!match || !validPullRequest(match[1], Number(match[2])))
+				return { ok: false, reason: "That is not a GitHub issue key (owner/repo#number)." };
+			const answer = await gh([
+				"issue",
+				"view",
+				match[2],
+				"-R",
+				match[1],
+				"--json",
+				"number,title,url,state,assignees,author,body,createdAt,updatedAt,comments",
+			]);
+			if (!answer.ok) return answer;
+			const raw = parse<RawIssue>(answer.stdout);
+			if (!raw || typeof raw.url !== "string" || !Number.isSafeInteger(raw.number))
+				return { ok: false, reason: "gh answered something that is not an issue." };
+			return {
+				ok: true,
+				detail: {
+					issue: toIssue({ ...raw, repository: { nameWithOwner: match[1] } }),
+					reporter: raw.author?.login ?? null,
+					created: raw.createdAt ?? null,
+					descriptionHtml: null,
+					descriptionText: raw.body ?? "",
+					comments: (raw.comments ?? []).map((comment) => ({
+						id: comment.id,
+						author: comment.author?.login ?? null,
+						created: comment.createdAt ?? null,
+						html: null,
+						text: comment.body ?? "",
+					})),
+				},
+			};
+		},
 		async pullRequests(characters) {
 			const [searched, agents] = await Promise.all([
 				gh([
@@ -373,4 +490,5 @@ export function openGitHub(env?: NodeJS.ProcessEnv): GitHub {
 			return answer.ok ? { ok: true } : answer;
 		},
 	};
+	return github;
 }

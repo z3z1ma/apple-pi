@@ -18,6 +18,11 @@ export function wireIntegrations(options: {
 		ipcMain.handle(`places:${channel}`, (_event, ...args) => listener(...args));
 
 	handle("credential-status", () => integrations.credentialStatus());
+	handle("github-status", () => integrations.githubStatus());
+	handle("google-status", () => integrations.googleStatus());
+	handle("github-assigned", () => integrations.githubAssigned());
+	handle("github-search", (text) => integrations.githubSearch(text));
+	handle("github-issue", (key) => integrations.githubIssue(key));
 	handle("sign-in-atlassian", (site, email, token) => integrations.signInAtlassian(site, email, token));
 	handle("sign-out-atlassian", () => integrations.signOutAtlassian());
 	let signingIn: Promise<unknown> | undefined;

@@ -22,6 +22,9 @@ export interface CredentialStatus {
 	slack: { team: string | null; url: string | null; user: string | null } | null;
 }
 
+/** Read-only CLI identity. Null means the CLI has no signed-in user. */
+export type CliStatus = Outcome<{ account: string | null }>;
+
 // GitHub (the forge)
 
 /** A pull request's CI, rolled up from its checks: any failed is failing, else any unfinished is running. */
@@ -89,7 +92,8 @@ export const DIFF_LINES_MAX = 20_000;
 
 // Jira (the quest office)
 
-export interface JiraIssue {
+/** The issue fields shared by the Jira and GitHub readers. */
+export interface IssueSummary {
 	key: string;
 	summary: string;
 	status: string | null;
@@ -103,6 +107,8 @@ export interface JiraIssue {
 	url: string;
 }
 
+export type JiraIssue = IssueSummary;
+
 export interface JiraComment {
 	id: string;
 	author: string | null;
@@ -112,8 +118,8 @@ export interface JiraComment {
 	text: string;
 }
 
-export interface JiraIssueDetail {
-	issue: JiraIssue;
+export interface IssueDetail {
+	issue: IssueSummary;
 	reporter: string | null;
 	created: string | null;
 	/** The description as Jira renders it (untrusted HTML), and as plain text. */
@@ -121,6 +127,8 @@ export interface JiraIssueDetail {
 	descriptionText: string;
 	comments: JiraComment[];
 }
+
+export type JiraIssueDetail = IssueDetail;
 
 /** A move Jira allows for an issue now. */
 export interface JiraTransition {
@@ -291,6 +299,12 @@ export interface IntegrationsApi {
 	signInAtlassian(site: string, email: string, token: string): Promise<Outcome<{ name: string | null }>>;
 	signOutAtlassian(): Promise<Outcome<object>>;
 	/** Open Slack's sign-in window; resolves once the session is captured and kept, or the window was closed. */
+	githubStatus(): Promise<CliStatus>;
+	googleStatus(): Promise<CliStatus>;
+	githubAssigned(): Promise<Outcome<{ issues: IssueSummary[] }>>;
+	githubSearch(text: string): Promise<Outcome<{ issues: IssueSummary[] }>>;
+	/** A GitHub issue key is owner/repo#number. */
+	githubIssue(key: string): Promise<Outcome<{ detail: IssueDetail }>>;
 	signInSlack(): Promise<Outcome<{ team: string | null }>>;
 	signOutSlack(): Promise<Outcome<object>>;
 

@@ -20,7 +20,7 @@ beforeAll(async () => {
 });
 afterAll(() => browser?.close());
 
-async function openIssues(signedIn = true) {
+async function openIssues(signedIn = true, source?: "jira" | "github") {
 	const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, colorScheme: "light" });
 	page.setDefaultTimeout(7000);
 	const errors: string[] = [];
@@ -33,199 +33,287 @@ async function openIssues(signedIn = true) {
 		if (!file || !existsSync(file)) return route.fulfill({ status: 404 });
 		return route.fulfill({ body: readFileSync(file), contentType: contentType(file) });
 	});
-	await page.addInitScript((authenticated) => {
-		const w = window as any;
-		let signedIn = authenticated;
-		let progressed = false;
-		const receipts = new Set<(receipt: Receipt) => void>();
-		const now = Date.now();
-		const snapshot: WorldSnapshot = {
-			connected: true,
-			headquarters: [{ id: "ada", name: "Ada", wings: [] }],
-			dormant: [],
-			mail: [],
-			operatorMail: [],
-			workplace: { threads: [], tasks: [], escalations: [] },
-			characters: [
-				{
-					id: "ada",
-					name: "Ada",
-					role: "coordinator",
-					place: { kind: "headquarters", headquarters: "ada" },
-					startedAt: now,
-					hiredAt: now,
-					facts: {
-						run: "idle",
-						status: "idle",
-						asking: null,
-						needsYouSince: null,
-						unseen: false,
-						seenAt: now,
-						settledAt: now,
-						tool: null,
-						task: null,
-						git: null,
-						cwd: "/fixture/project",
-						reportsTo: null,
-						title: "Coordinator",
-						model: "fixture-model",
-						contextTokens: 0,
-						contextWindow: 200000,
-						cost: 0,
-						tmux: null,
+	await page.addInitScript(
+		({ authenticated, source }) => {
+			const w = window as any;
+			if (source && localStorage.getItem("workplace-issues-source") === null)
+				localStorage.setItem("workplace-issues-source", source);
+			let signedIn = authenticated;
+			let slackConnected = false;
+			let progressed = false;
+			const receipts = new Set<(receipt: Receipt) => void>();
+			const now = Date.now();
+			const snapshot: WorldSnapshot = {
+				connected: true,
+				headquarters: [{ id: "ada", name: "Ada", wings: [] }],
+				dormant: [],
+				mail: [],
+				operatorMail: [],
+				workplace: { threads: [], tasks: [], escalations: [] },
+				characters: [
+					{
+						id: "ada",
+						name: "Ada",
+						role: "coordinator",
+						place: { kind: "headquarters", headquarters: "ada" },
+						startedAt: now,
+						hiredAt: now,
+						facts: {
+							run: "idle",
+							status: "idle",
+							asking: null,
+							needsYouSince: null,
+							unseen: false,
+							seenAt: now,
+							settledAt: now,
+							tool: null,
+							task: null,
+							git: null,
+							cwd: "/fixture/project",
+							reportsTo: null,
+							title: "Coordinator",
+							model: "fixture-model",
+							contextTokens: 0,
+							contextWindow: 200000,
+							cost: 0,
+							tmux: null,
+						},
 					},
+				],
+			};
+			const issue = (key: string): JiraIssue => ({
+				key,
+				summary: key === "APP-1" ? "Fix report totals" : "Review keyboard workflow",
+				status: key === "APP-1" && progressed ? "In Progress" : "To Do",
+				statusCategory: key === "APP-1" && progressed ? "indeterminate" : "new",
+				type: "Task",
+				priority: "High",
+				project: "APP",
+				assignee: key === w.unassignedIssueKey ? null : "Operator",
+				updated: new Date(now).toISOString(),
+				url: `https://fixture.atlassian.net/browse/${key}`,
+			});
+			const githubIssue = (key: string): JiraIssue => {
+				const [repo, number] = key.split("#");
+				return {
+					...issue(key),
+					summary: key === "acme/app#7" ? "Fix GitHub keyboard flow" : "Search another repository",
+					project: repo,
+					type: "Issue",
+					status: "Open",
+					statusCategory: "new",
+					priority: null,
+					url: `https://github.com/${repo}/issues/${number}`,
+				};
+			};
+			w.issueCalls = {
+				credentials: 0,
+				githubAssigned: 0,
+				githubSearches: [],
+				githubDetails: [],
+				githubStatus: 0,
+				googleStatus: 0,
+				slackSignIns: 0,
+				slackSignOuts: 0,
+				atlassianSignOuts: 0,
+				assigned: 0,
+				searches: [],
+				details: [],
+				transitions: [],
+				described: [],
+				confirmed: [],
+				delegated: [],
+				links: [],
+				conversations: [],
+				signIns: [],
+			};
+			w.receiptIssue = (receipt: Receipt) => {
+				for (const listener of receipts) listener(receipt);
+			};
+			w.agentWorkplace = {
+				snapshot: async () => snapshot,
+				onUpdate: () => () => {},
+				feed: async () => [],
+				onFeed: () => () => {},
+				onReceipt: (listener: (receipt: Receipt) => void) => {
+					receipts.add(listener);
+					return () => receipts.delete(listener);
 				},
-			],
-		};
-		const issue = (key: string): JiraIssue => ({
-			key,
-			summary: key === "APP-1" ? "Fix report totals" : "Review keyboard workflow",
-			status: key === "APP-1" && progressed ? "In Progress" : "To Do",
-			statusCategory: key === "APP-1" && progressed ? "indeterminate" : "new",
-			type: "Task",
-			priority: "High",
-			project: "APP",
-			assignee: key === w.unassignedIssueKey ? null : "Operator",
-			updated: new Date(now).toISOString(),
-			url: `https://fixture.atlassian.net/browse/${key}`,
-		});
-		w.issueCalls = {
-			credentials: 0,
-			assigned: 0,
-			searches: [],
-			details: [],
-			transitions: [],
-			described: [],
-			confirmed: [],
-			delegated: [],
-			links: [],
-			conversations: [],
-			signIns: [],
-		};
-		w.receiptIssue = (receipt: Receipt) => {
-			for (const listener of receipts) listener(receipt);
-		};
-		w.agentWorkplace = {
-			snapshot: async () => snapshot,
-			onUpdate: () => () => {},
-			feed: async () => [],
-			onFeed: () => () => {},
-			onReceipt: (listener: (receipt: Receipt) => void) => {
-				receipts.add(listener);
-				return () => receipts.delete(listener);
-			},
-			onReply: () => () => {},
-			watchReplies: async () => {},
-			onNotepad: () => () => {},
-			markSeen: async () => ({ ok: true }),
-			conversation: async (id: string) => {
-				w.issueCalls.conversations.push(id);
-				return { ok: true, entries: [], before: null, missing: 0 };
-			},
-			credentialStatus: async () => {
-				w.issueCalls.credentials++;
-				return {
-					atlassian: signedIn ? { site: "https://fixture.atlassian.net", email: "operator@example.test" } : null,
-					slack: null,
-				};
-			},
-			signInAtlassian: async (site: string, email: string, token: string) => {
-				w.issueCalls.signIns.push({ site, email, token });
-				signedIn = true;
-				return { ok: true, name: "Operator" };
-			},
-			jiraAssigned: async () => {
-				w.issueCalls.assigned++;
-				return {
-					ok: true,
-					issues: w.issueListCount
-						? Array.from({ length: w.issueListCount }, (_, i) => issue(`APP-${i + 1}`))
-						: [issue("APP-1"), issue("APP-2")],
-				};
-			},
-			jiraSearch: async (query: string) => {
-				w.issueCalls.searches.push(query);
-				return { ok: true, issues: (w.issueSearchKeys ?? ["APP-2"]).map(issue) };
-			},
-			jiraIssue: async (key: string) => {
-				w.issueCalls.details.push(key);
-				return {
-					ok: true,
-					detail: {
-						issue: issue(key),
-						reporter: "Reporter",
-						created: new Date(now).toISOString(),
-						descriptionHtml: `${(
-							w.issueDescription ?? "Reproduce the total mismatch, then verify the corrected result."
-						)
-							.split("\n\n")
-							.map((paragraph: string) => `<p>${paragraph}</p>`)
-							.join(
-								"",
-							)}<p><a href="https://fixture.atlassian.net/wiki/rounding">Rounding guide</a></p><script>window.unsafeIssueHtml=true</script><a href="javascript:window.unsafeIssueHtml=true">Unsafe link</a>`,
-						descriptionText: `${w.issueDescription ?? "Reproduce the total mismatch, then verify the corrected result."}\n\nRounding guide`,
-						comments: [
-							{
-								id: "comment-1",
-								author: "Reviewer",
-								created: new Date(now).toISOString(),
-								html: "<p>Keep the existing rounding rule.</p><script>window.unsafeIssueHtml=true</script>",
-								text: "Keep the existing rounding rule.",
-							},
-						],
-					},
-				};
-			},
-			jiraTransitions: async (key: string) => {
-				w.issueCalls.transitions.push(key);
-				return {
-					ok: true,
-					transitions: [{ id: "31", name: "Start progress", to: "In Progress", toCategory: "indeterminate" }],
-				};
-			},
-			describeWrite: async (intent: OutsideWriteIntent) => {
-				w.issueCalls.described.push(structuredClone(intent));
-				return {
-					ok: true,
-					token: `fixture-confirmation-${w.issueCalls.described.length}`,
-					description: {
-						what: "Change Jira status",
-						where: "APP-1",
-						text: "Move to In Progress",
-						url: "https://fixture.atlassian.net/browse/APP-1",
-					},
-				};
-			},
-			confirmWrite: async (intent: OutsideWriteIntent, token: string) => {
-				w.issueCalls.confirmed.push({ intent: structuredClone(intent), token });
-				await new Promise((resolve) => {
-					w.releaseIssueWrite = resolve;
-				});
-				progressed = true;
-				return {
-					ok: true,
-					entry: {
-						at: Date.now(),
-						kind: intent.kind,
-						what: "Change Jira status",
-						where: "APP-1",
-						text: "Move to In Progress",
-						url: "https://fixture.atlassian.net/browse/APP-1",
+				onReply: () => () => {},
+				watchReplies: async () => {},
+				onNotepad: () => () => {},
+				markSeen: async () => ({ ok: true }),
+				conversation: async (id: string) => {
+					w.issueCalls.conversations.push(id);
+					return { ok: true, entries: [], before: null, missing: 0 };
+				},
+				credentialStatus: async () => {
+					w.issueCalls.credentials++;
+					return {
+						atlassian: signedIn ? { site: "https://fixture.atlassian.net", email: "operator@example.test" } : null,
+						slack: slackConnected
+							? { team: "Fixture team", user: "fixture-user", url: "https://fixture.slack.com" }
+							: null,
+					};
+				},
+				githubStatus: async () => {
+					w.issueCalls.githubStatus++;
+					return { ok: true, account: w.githubSignedOut ? null : "fixture-github" };
+				},
+				googleStatus: async () => {
+					w.issueCalls.googleStatus++;
+					return { ok: true, account: w.googleSignedOut ? null : "fixture-google@example.test" };
+				},
+				signOutAtlassian: async () => {
+					signedIn = false;
+					w.issueCalls.atlassianSignOuts++;
+					return { ok: true };
+				},
+				signInSlack: async () => {
+					slackConnected = true;
+					w.issueCalls.slackSignIns++;
+					return { ok: true, team: "Fixture team" };
+				},
+				signOutSlack: async () => {
+					slackConnected = false;
+					w.issueCalls.slackSignOuts++;
+					return { ok: true };
+				},
+				githubAssigned: async () => {
+					w.issueCalls.githubAssigned++;
+					return {
 						ok: true,
-						line: "Changed APP-1 status",
-					},
-				};
-			},
-			delegate: async (commandId: string, delegation: Delegation) => {
-				w.issueCalls.delegated.push({ commandId, delegation: structuredClone(delegation) });
-				return { ok: true, to: delegation.to, command: "talk" };
-			},
-			openLink: async (url: string) => {
-				w.issueCalls.links.push(url);
-				return { ok: true };
-			},
-		};
-	}, signedIn);
+						issues: [githubIssue("acme/app#7")],
+					};
+				},
+				githubSearch: async (query: string) => {
+					w.issueCalls.githubSearches.push(query);
+					return {
+						ok: true,
+						issues: [githubIssue("acme/other#7")],
+					};
+				},
+				githubIssue: async (key: string) => {
+					w.issueCalls.githubDetails.push(key);
+					return {
+						ok: true,
+						detail: {
+							issue: githubIssue(key),
+							reporter: "reporter",
+							created: new Date(now).toISOString(),
+							descriptionHtml: null,
+							descriptionText: "GitHub body <script>window.unsafeIssueHtml=true</script>",
+							comments: [
+								{
+									id: "IC_1",
+									author: "Reviewer",
+									created: new Date(now).toISOString(),
+									html: null,
+									text: "Keep GitHub comment text <img src=remote>",
+								},
+							],
+						},
+					};
+				},
+				signInAtlassian: async (site: string, email: string, token: string) => {
+					w.issueCalls.signIns.push({ site, email, token });
+					signedIn = true;
+					return { ok: true, name: "Operator" };
+				},
+				jiraAssigned: async () => {
+					w.issueCalls.assigned++;
+					return {
+						ok: true,
+						issues: w.issueListCount
+							? Array.from({ length: w.issueListCount }, (_, i) => issue(`APP-${i + 1}`))
+							: [issue("APP-1"), issue("APP-2")],
+					};
+				},
+				jiraSearch: async (query: string) => {
+					w.issueCalls.searches.push(query);
+					return { ok: true, issues: (w.issueSearchKeys ?? ["APP-2"]).map(issue) };
+				},
+				jiraIssue: async (key: string) => {
+					w.issueCalls.details.push(key);
+					return {
+						ok: true,
+						detail: {
+							issue: issue(key),
+							reporter: "Reporter",
+							created: new Date(now).toISOString(),
+							descriptionHtml: `${(
+								w.issueDescription ?? "Reproduce the total mismatch, then verify the corrected result."
+							)
+								.split("\n\n")
+								.map((paragraph: string) => `<p>${paragraph}</p>`)
+								.join(
+									"",
+								)}<p><a href="https://fixture.atlassian.net/wiki/rounding">Rounding guide</a></p><script>window.unsafeIssueHtml=true</script><a href="javascript:window.unsafeIssueHtml=true">Unsafe link</a>`,
+							descriptionText: `${w.issueDescription ?? "Reproduce the total mismatch, then verify the corrected result."}\n\nRounding guide`,
+							comments: [
+								{
+									id: "comment-1",
+									author: "Reviewer",
+									created: new Date(now).toISOString(),
+									html: "<p>Keep the existing rounding rule.</p><script>window.unsafeIssueHtml=true</script>",
+									text: "Keep the existing rounding rule.",
+								},
+							],
+						},
+					};
+				},
+				jiraTransitions: async (key: string) => {
+					w.issueCalls.transitions.push(key);
+					return {
+						ok: true,
+						transitions: [{ id: "31", name: "Start progress", to: "In Progress", toCategory: "indeterminate" }],
+					};
+				},
+				describeWrite: async (intent: OutsideWriteIntent) => {
+					w.issueCalls.described.push(structuredClone(intent));
+					return {
+						ok: true,
+						token: `fixture-confirmation-${w.issueCalls.described.length}`,
+						description: {
+							what: "Change Jira status",
+							where: "APP-1",
+							text: "Move to In Progress",
+							url: "https://fixture.atlassian.net/browse/APP-1",
+						},
+					};
+				},
+				confirmWrite: async (intent: OutsideWriteIntent, token: string) => {
+					w.issueCalls.confirmed.push({ intent: structuredClone(intent), token });
+					await new Promise((resolve) => {
+						w.releaseIssueWrite = resolve;
+					});
+					progressed = true;
+					return {
+						ok: true,
+						entry: {
+							at: Date.now(),
+							kind: intent.kind,
+							what: "Change Jira status",
+							where: "APP-1",
+							text: "Move to In Progress",
+							url: "https://fixture.atlassian.net/browse/APP-1",
+							ok: true,
+							line: "Changed APP-1 status",
+						},
+					};
+				},
+				delegate: async (commandId: string, delegation: Delegation) => {
+					w.issueCalls.delegated.push({ commandId, delegation: structuredClone(delegation) });
+					return { ok: true, to: delegation.to, command: "talk" };
+				},
+				openLink: async (url: string) => {
+					w.issueCalls.links.push(url);
+					return { ok: true };
+				},
+			};
+		},
+		{ authenticated: signedIn, source },
+	);
 	await page.goto(`${ORIGIN}/index.html`);
 	await page.getByRole("button", { name: "Chat", exact: true }).waitFor();
 	expect(
@@ -519,8 +607,9 @@ test("long issue list and detail scroll independently without growing the app or
 }, 45_000);
 
 test("signed-out Issues requests no Jira data before an explicit account connection", async () => {
-	const { page, errors } = await openIssues(false);
+	const { page, errors } = await openIssues(false, "jira");
 	try {
+		await page.setViewportSize({ width: 760, height: 560 });
 		const form = page.getByRole("form", { name: "Connect Jira", exact: true });
 		await form.waitFor();
 		expect(await page.evaluate(() => (window as any).issueCalls.assigned)).toBe(0);
@@ -542,3 +631,139 @@ test("signed-out Issues requests no Jira data before an explicit account connect
 		await page.close();
 	}
 }, 45_000);
+
+test("GitHub is the signed-out default; browsing, search and delegation retain repository identity", async () => {
+	const { page, errors } = await openIssues(false);
+	try {
+		await page.getByRole("button", { name: "Read issue: acme/app#7 Fix GitHub keyboard flow", exact: true }).click();
+		await page.getByText("Keep GitHub comment text <img src=remote>", { exact: true }).waitFor();
+		await shot(page, "github-detail");
+		expect(await page.evaluate(() => (window as any).unsafeIssueHtml)).toBeUndefined();
+		expect(await page.getByRole("button", { name: "Change status", exact: true }).count()).toBe(0);
+		await page.getByRole("button", { name: "Open in GitHub", exact: false }).click();
+		expect(await page.evaluate(() => (window as any).issueCalls.links)).toEqual([
+			"https://github.com/acme/app/issues/7",
+		]);
+		const detail = page.getByRole("region", { name: "Issue detail", exact: true });
+		await detail.locator("summary").filter({ hasText: "Delegate" }).click();
+		await choose(detail.getByRole("combobox", { name: "Person or team head", exact: true }), "ada");
+		await detail.getByRole("textbox", { name: "Goal and context", exact: true }).fill("Fix the GitHub keyboard issue.");
+		const query = page.getByRole("searchbox", { name: "Search issues", exact: true });
+		await query.fill("keyboard repo:acme/other");
+		expect(await page.evaluate(() => (window as any).issueCalls.githubSearches)).toEqual([]);
+		await query.press("Enter");
+		await page
+			.getByRole("button", { name: "Read issue: acme/other#7 Search another repository", exact: true })
+			.waitFor();
+		expect(await page.evaluate(() => (window as any).issueCalls.githubSearches)).toEqual(["keyboard repo:acme/other"]);
+		await detail.getByText("Outside current results", { exact: true }).waitFor();
+		await detail.getByRole("button", { name: "Send instruction", exact: true }).click();
+		await vi.waitFor(async () =>
+			expect(await page.evaluate(() => (window as any).issueCalls.delegated.length)).toBe(1),
+		);
+		const sent = await page.evaluate(() => (window as any).issueCalls.delegated[0]);
+		expect(sent.delegation).toMatchObject({
+			to: "ada",
+			item: { kind: "issue", key: "acme/app#7", url: "https://github.com/acme/app/issues/7" },
+			note: "Fix the GitHub keyboard issue.",
+		});
+		await page.evaluate(
+			(id) => (window as any).receiptIssue({ commandId: id, characterId: "ada", stage: "applied" }),
+			sent.commandId,
+		);
+		await detail
+			.getByText("Ada received the instruction. Work completion is not yet known.", { exact: true })
+			.waitFor();
+		expect(
+			await page.evaluate(() => ({
+				jira: (window as any).issueCalls.assigned,
+				transitions: (window as any).issueCalls.transitions,
+				confirmed: (window as any).issueCalls.confirmed,
+			})),
+		).toEqual({ jira: 0, transitions: [], confirmed: [] });
+		expect(errors).toEqual([]);
+	} finally {
+		await page.close();
+	}
+}, 45_000);
+
+test("Settings connections sign in/out and source selection persists while provider drafts stay independent", async () => {
+	const { page, errors } = await openIssues();
+	try {
+		await openFirst(page);
+		const jiraDetail = page.getByRole("region", { name: "Issue detail", exact: true });
+		await jiraDetail.locator("summary").filter({ hasText: "Delegate" }).click();
+		await jiraDetail.getByRole("textbox", { name: "Goal and context", exact: true }).fill("Preserve this Jira draft.");
+		await page.getByRole("button", { name: "Settings", exact: true }).click();
+		const source = page.getByRole("combobox", { name: "Issues source", exact: true });
+		await source.waitFor();
+		expect(await chosen(source)).toBe("jira");
+		await page
+			.getByRole("region", { name: "GitHub connection", exact: true })
+			.getByText("fixture-github", { exact: true })
+			.waitFor();
+		await page
+			.getByRole("region", { name: "Google connection", exact: true })
+			.getByText("fixture-google@example.test", { exact: true })
+			.waitFor();
+		const slack = page.getByRole("region", { name: "Slack connection", exact: true });
+		await slack.getByRole("button", { name: "Sign in to Slack", exact: true }).click();
+		await slack.getByText("Signed in to Fixture team as fixture-user", { exact: true }).waitFor();
+		await slack.getByRole("button", { name: "Sign out of Slack", exact: true }).click();
+		await slack.getByRole("button", { name: "Sign in to Slack", exact: true }).waitFor();
+		const atlassian = page.getByRole("region", { name: "Atlassian connection", exact: true });
+		await atlassian.getByRole("button", { name: "Sign out of Atlassian", exact: true }).click();
+		const form = atlassian.getByRole("form", { name: "Connect Jira", exact: true });
+		await form.getByLabel("Atlassian site", { exact: true }).fill("fixture.atlassian.net");
+		await form.getByLabel("Email", { exact: true }).fill("operator@example.test");
+		await form.getByLabel("API token", { exact: true }).fill("fixture-settings-token");
+		await form.getByRole("button", { name: "Connect Jira", exact: true }).click();
+		await atlassian.getByText("operator@example.test", { exact: true }).waitFor();
+		await source.scrollIntoViewIfNeeded();
+		await shot(page, "connections");
+		await choose(source, "github");
+		await page.getByRole("button", { name: "Issues", exact: true }).click();
+		await page.getByRole("button", { name: "Read issue: acme/app#7 Fix GitHub keyboard flow", exact: true }).click();
+		const githubDetail = page.getByRole("region", { name: "Issue detail", exact: true });
+		await githubDetail.locator("summary").filter({ hasText: "Delegate" }).click();
+		expect(await githubDetail.getByRole("textbox", { name: "Goal and context", exact: true }).inputValue()).toBe("");
+		await githubDetail
+			.getByRole("textbox", { name: "Goal and context", exact: true })
+			.fill("Preserve this GitHub draft.");
+		await page.getByRole("button", { name: "Settings", exact: true }).click();
+		await choose(source, "jira");
+		await page.getByRole("button", { name: "Issues", exact: true }).click();
+		expect(await page.getByRole("textbox", { name: "Goal and context", exact: true }).inputValue()).toBe(
+			"Preserve this Jira draft.",
+		);
+		await page.getByRole("button", { name: "Settings", exact: true }).click();
+		await choose(source, "github");
+		await page.getByRole("button", { name: "Issues", exact: true }).click();
+		expect(await page.getByRole("textbox", { name: "Goal and context", exact: true }).inputValue()).toBe(
+			"Preserve this GitHub draft.",
+		);
+		expect(await page.evaluate(() => localStorage.getItem("workplace-issues-source"))).toBe("github");
+		await page.getByRole("button", { name: "Settings", exact: true }).click();
+		await page.evaluate(() => {
+			(window as any).githubSignedOut = true;
+			(window as any).googleSignedOut = true;
+		});
+		await page.getByRole("button", { name: "Refresh connections", exact: true }).click();
+		await page
+			.getByRole("region", { name: "GitHub connection", exact: true })
+			.getByText("gh auth login", { exact: true })
+			.waitFor();
+		await page
+			.getByRole("region", { name: "Google connection", exact: true })
+			.getByText("gws auth login", { exact: true })
+			.waitFor();
+		await page.getByRole("region", { name: "Google connection", exact: true }).scrollIntoViewIfNeeded();
+		await shot(page, "connections-cli-signed-out");
+		await page.reload();
+		await page.getByRole("button", { name: "Issues", exact: true }).click();
+		await page.getByRole("button", { name: "Read issue: acme/app#7 Fix GitHub keyboard flow", exact: true }).waitFor();
+		expect(errors).toEqual([]);
+	} finally {
+		await page.close();
+	}
+}, 60_000);

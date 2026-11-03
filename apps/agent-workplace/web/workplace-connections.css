@@ -1,0 +1,50 @@
+.wp-connections {
+	display: grid;
+	gap: 16px;
+	max-width: 760px;
+}
+.wp-connections > header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 16px;
+}
+.wp-connections :where(h2, h3, p) {
+	margin: 0;
+}
+.wp-connections > section {
+	display: grid;
+	gap: 12px;
+	padding: 20px;
+	border: 1px solid var(--wp-border);
+	border-radius: 12px;
+	background: var(--wp-panel);
+}
+.wp-connections p {
+	color: var(--wp-muted);
+	line-height: 1.5;
+	overflow-wrap: anywhere;
+}
+.wp-connections strong {
+	color: var(--wp-text);
+}
+.wp-connections [role="alert"],
+.wp-connections-signin [role="alert"] {
+	color: var(--wp-danger);
+}
+.wp-connections :where(.wp-button, .wp-select) {
+	justify-self: start;
+}
+.wp-connections-signin {
+	display: grid;
+	gap: 14px;
+	max-width: 520px;
+	padding: 20px;
+}
+.wp-connections > section > .wp-connections-signin {
+	padding: 0;
+}
+.wp-connections-signin p {
+	color: var(--wp-muted);
+	line-height: 1.5;
+}

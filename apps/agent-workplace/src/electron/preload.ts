@@ -240,6 +240,11 @@ function places(): IntegrationsApi {
 			>;
 	return {
 		credentialStatus: call<"credentialStatus">("credential-status"),
+		githubStatus: call<"githubStatus">("github-status"),
+		googleStatus: call<"googleStatus">("google-status"),
+		githubAssigned: call<"githubAssigned">("github-assigned"),
+		githubSearch: call<"githubSearch">("github-search"),
+		githubIssue: call<"githubIssue">("github-issue"),
 		signInAtlassian: call<"signInAtlassian">("sign-in-atlassian"),
 		signOutAtlassian: call<"signOutAtlassian">("sign-out-atlassian"),
 		signInSlack: call<"signInSlack">("sign-in-slack"),

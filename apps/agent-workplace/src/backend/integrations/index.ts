@@ -17,6 +17,7 @@ import { integrationFiles, openCredentials } from "./credentials.js";
 import { delegate } from "./delegation.js";
 import { type Gate, openGate } from "./gate.js";
 import { type GitHub, openGitHub, validPullRequest } from "./github.js";
+import { googleStatus } from "./google.js";
 import { issueKey, type Jira, openJira } from "./jira.js";
 import { openSlack, type Slack } from "./slack.js";
 
@@ -161,6 +162,11 @@ export function openIntegrations(options: IntegrationOptions) {
 
 	return {
 		credentialStatus: (): CredentialStatus => credentials.status(),
+		githubStatus: () => github.status(),
+		googleStatus: () => googleStatus(options.env),
+		githubAssigned: () => github.assigned(),
+		githubSearch: (text: unknown) => github.search(typeof text === "string" ? text : ""),
+		githubIssue: (key: unknown) => github.issue(typeof key === "string" ? key : ""),
 
 		async signInAtlassian(site: unknown, email: unknown, token: unknown): Promise<Outcome<{ name: string | null }>> {
 			const origin = typeof site === "string" ? atlassianSite(site) : undefined;

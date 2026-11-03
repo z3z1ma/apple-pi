@@ -1,92 +1,23 @@
 import { useEffect, useRef, useState } from "react";
-import type { JiraIssue, JiraIssueDetail, JiraTransition } from "../src/integrations.js";
+import type { IssueSummary, JiraIssue, JiraTransition, IssueDetail as ReadIssueDetail } from "../src/integrations.js";
 import type { WorldSnapshot } from "../src/world.js";
 import { useOutsideWrite, type WriteState } from "./overlay/places/outside-write.js";
 import { RichView } from "./overlay/places/rich-view.js";
+import { AtlassianSignIn } from "./workplace-connections.js";
 import { Select } from "./workplace-fields.js";
 import { Icon } from "./workplace-icon.js";
+import { CONNECTIONS_CHANGED, type IssuesSource, useIssuesSource } from "./workplace-issues-source.js";
 import { usePaneResize } from "./workplace-resize.js";
 import "./workplace-issues.css";
 
 const failure = (error: unknown) => (error instanceof Error ? error.message : String(error));
-
-function JiraSignIn({ onDone }: { onDone: () => void }) {
-	const [site, setSite] = useState("");
-	const [email, setEmail] = useState("");
-	const [token, setToken] = useState("");
-	const [busy, setBusy] = useState(false);
-	const [error, setError] = useState("");
-	return (
-		<form
-			className="wp-issues-signin"
-			aria-label="Connect Jira"
-			onSubmit={async (event) => {
-				event.preventDefault();
-				if (busy) return;
-				setBusy(true);
-				setError("");
-				try {
-					const result = await window.agentWorkplace.signInAtlassian(site.trim(), email.trim(), token.trim());
-					if (result.ok) onDone();
-					else setError(result.reason);
-				} catch (error) {
-					setError(failure(error));
-				} finally {
-					setToken("");
-					setBusy(false);
-				}
-			}}
-		>
-			<h2>Connect Jira</h2>
-			<p>Use your existing Atlassian account. Your token is checked and kept by Agent Workplace, not this page.</p>
-			<label>
-				Atlassian site
-				<input
-					required
-					value={site}
-					onChange={(event) => setSite(event.target.value)}
-					placeholder="your-team.atlassian.net"
-					autoComplete="url"
-				/>
-			</label>
-			<label>
-				Email
-				<input
-					required
-					type="email"
-					value={email}
-					onChange={(event) => setEmail(event.target.value)}
-					autoComplete="username"
-				/>
-			</label>
-			<label>
-				API token
-				<input
-					required
-					type="password"
-					value={token}
-					onChange={(event) => setToken(event.target.value)}
-					autoComplete="off"
-				/>
-			</label>
-			<button
-				type="submit"
-				className="wp-issues-primary"
-				disabled={busy || !site.trim() || !email.trim() || !token.trim()}
-			>
-				{busy ? "Checking account..." : "Connect Jira"}
-			</button>
-			{error && <p role="alert">{error}</p>}
-		</form>
-	);
-}
 
 function DelegateIssue({
 	issue,
 	world,
 	openDM,
 }: {
-	issue: JiraIssue;
+	issue: IssueSummary;
 	world: WorldSnapshot;
 	openDM: (id: string) => void;
 }) {
@@ -161,7 +92,7 @@ function DelegateIssue({
 			}}
 		>
 			<h3>Delegate to your team</h3>
-			<p>This sends an instruction, not a Jira assignment.</p>
+			<p>This sends an instruction, not an assignment in the issue tracker.</p>
 			<div className="wp-field">
 				<span>Person or team head</span>
 				<Select
@@ -335,6 +266,7 @@ function IssueTransitions({ issue, active, onChanged }: { issue: JiraIssue; acti
 }
 
 function IssueDetail({
+	source,
 	issueKey,
 	world,
 	active,
@@ -343,6 +275,7 @@ function IssueDetail({
 	onChanged,
 	outsideResults,
 }: {
+	source: IssuesSource;
 	issueKey: string;
 	world: WorldSnapshot;
 	active: boolean;
@@ -351,7 +284,7 @@ function IssueDetail({
 	onChanged: () => void;
 	outsideResults: boolean;
 }) {
-	const [detail, setDetail] = useState<JiraIssueDetail>();
+	const [detail, setDetail] = useState<ReadIssueDetail>();
 	const [error, setError] = useState("");
 	const [refresh, setRefresh] = useState(0);
 	const [loading, setLoading] = useState(true);
@@ -360,8 +293,9 @@ function IssueDetail({
 		let current = true;
 		setLoading(true);
 		setError("");
-		void window.agentWorkplace
-			.jiraIssue(issueKey)
+		const reading =
+			source === "github" ? window.agentWorkplace.githubIssue(issueKey) : window.agentWorkplace.jiraIssue(issueKey);
+		void reading
 			.then((result) => {
 				if (!current) return;
 				if (result.ok) setDetail(result.detail);
@@ -376,7 +310,7 @@ function IssueDetail({
 		return () => {
 			current = false;
 		};
-	}, [issueKey, refresh]);
+	}, [source, issueKey, refresh]);
 	const openLink = (url: string) => {
 		void window.agentWorkplace
 			.openLink(url)
@@ -434,16 +368,18 @@ function IssueDetail({
 					</div>
 					<div className="wp-issues-actions">
 						<button type="button" onClick={() => openLink(detail.issue.url)}>
-							Open in Jira ↗
+							Open in {source === "github" ? "GitHub" : "Jira"} {"\u2197"}
 						</button>
-						<IssueTransitions
-							issue={detail.issue}
-							active={active}
-							onChanged={() => {
-								setRefresh((value) => value + 1);
-								onChanged();
-							}}
-						/>
+						{source === "jira" && (
+							<IssueTransitions
+								issue={detail.issue}
+								active={active}
+								onChanged={() => {
+									setRefresh((value) => value + 1);
+									onChanged();
+								}}
+							/>
+						)}
 					</div>
 					<details className="wp-issues-delegate-disclosure">
 						<summary>Delegate</summary>
@@ -488,20 +424,30 @@ function IssueDetail({
 	);
 }
 
-export function WorkplaceIssues({
-	world,
-	active,
-	openDM,
-}: {
-	world: WorldSnapshot;
-	active: boolean;
-	openDM: (id: string) => void;
-}) {
+type IssuesProps = { world: WorldSnapshot; active: boolean; openDM: (id: string) => void };
+
+export function WorkplaceIssues(props: IssuesProps) {
+	const [started, setStarted] = useState(props.active);
+	useEffect(() => {
+		if (props.active) setStarted(true);
+	}, [props.active]);
+	const { source, error } = useIssuesSource(started);
+	return (
+		<>
+			{error && props.active && <p role="alert">{error}</p>}
+			<IssuesReader {...props} source="jira" active={props.active && source === "jira"} />
+			<IssuesReader {...props} source="github" active={props.active && source === "github"} />
+		</>
+	);
+}
+
+function IssuesReader({ world, active, openDM, source }: IssuesProps & { source: IssuesSource }) {
+	const provider = source === "github" ? "GitHub" : "Jira";
 	const [query, setQuery] = useState("");
 	const [search, setSearch] = useState("");
 	const [scope, setScope] = useState<"mine" | "all">("mine");
 	const searchInput = useRef<HTMLInputElement>(null);
-	const [issues, setIssues] = useState<JiraIssue[]>([]);
+	const [issues, setIssues] = useState<IssueSummary[]>([]);
 	const [selected, setSelected] = useState<string>();
 	const layout = useRef<HTMLDivElement>(null);
 	const detailWidth = usePaneResize({
@@ -530,19 +476,27 @@ export function WorkplaceIssues({
 		setError("");
 		void (async () => {
 			try {
-				const status = await window.agentWorkplace.credentialStatus();
-				if (!current) return;
-				setSignedOut(!status.atlassian);
-				if (!status.atlassian) {
-					setIssues([]);
-					return;
+				if (source === "jira") {
+					const status = await window.agentWorkplace.credentialStatus();
+					if (!current) return;
+					setSignedOut(!status.atlassian);
+					if (!status.atlassian) {
+						setIssues([]);
+						return;
+					}
 				}
 				if (scope === "all" && !search) {
 					setIssues([]);
 					return;
 				}
 				const result =
-					scope === "all" ? await window.agentWorkplace.jiraSearch(search) : await window.agentWorkplace.jiraAssigned();
+					source === "github"
+						? scope === "all"
+							? await window.agentWorkplace.githubSearch(search)
+							: await window.agentWorkplace.githubAssigned()
+						: scope === "all"
+							? await window.agentWorkplace.jiraSearch(search)
+							: await window.agentWorkplace.jiraAssigned();
 				if (!current) return;
 				if (result.ok) setIssues(result.issues);
 				else {
@@ -559,13 +513,18 @@ export function WorkplaceIssues({
 		return () => {
 			current = false;
 		};
-	}, [started, scope, search, refresh]);
+	}, [source, started, scope, search, refresh]);
+	useEffect(() => {
+		const changed = () => setRefresh((value) => value + 1);
+		window.addEventListener(CONNECTIONS_CHANGED, changed);
+		return () => window.removeEventListener(CONNECTIONS_CHANGED, changed);
+	}, []);
 	return (
 		<section className="wp-issues" aria-label="Issues" hidden={!active}>
 			<header className="wp-issues-header">
 				<div>
 					<h1>Issues</h1>
-					<span className="wp-issues-source">Jira</span>
+					<span className="wp-issues-source">{provider}</span>
 				</div>
 				<button
 					type="button"
@@ -614,7 +573,7 @@ export function WorkplaceIssues({
 						type="search"
 						ref={searchInput}
 						aria-label="Search issues"
-						placeholder="Search all Jira issues by title or key"
+						placeholder={`Search all ${provider} issues by title or key`}
 						value={query}
 						onChange={(event) => setQuery(event.target.value)}
 					/>
@@ -622,7 +581,7 @@ export function WorkplaceIssues({
 						type="submit"
 						className="wp-icon-button"
 						aria-label="Search"
-						title="Search all Jira issues"
+						title={`Search all ${provider} issues`}
 						disabled={!query.trim() || loading}
 					>
 						<Icon name="search" />
@@ -634,7 +593,14 @@ export function WorkplaceIssues({
 					{error}
 				</p>
 			)}
-			{signedOut && <JiraSignIn onDone={() => setRefresh((value) => value + 1)} />}
+			{signedOut && (
+				<AtlassianSignIn
+					onDone={() => {
+						setRefresh((value) => value + 1);
+						window.dispatchEvent(new Event(CONNECTIONS_CHANGED));
+					}}
+				/>
+			)}
 			<div
 				ref={layout}
 				style={detailWidth.style}
@@ -643,7 +609,9 @@ export function WorkplaceIssues({
 			>
 				<div className="wp-issues-list">
 					<div className="wp-issues-list-heading">
-						<h2>{search ? `Results for “${search}”` : scope === "all" ? "All Jira issues" : "Assigned to you"}</h2>
+						<h2>
+							{search ? `Results for “${search}”` : scope === "all" ? `All ${provider} issues` : "Assigned to you"}
+						</h2>
 						<span>
 							{issues.length} {issues.length === 1 ? "issue" : "issues"}
 						</span>
@@ -660,13 +628,15 @@ export function WorkplaceIssues({
 					)}
 					{!loading && !error && !issues.length && (
 						<div className="wp-issues-empty">
-							<h3>{search ? "No matching issues" : scope === "all" ? "Search across Jira" : "You're all caught up"}</h3>
+							<h3>
+								{search ? "No matching issues" : scope === "all" ? `Search across ${provider}` : "You're all caught up"}
+							</h3>
 							<p>
 								{search
 									? "Try an issue key or a different search."
 									: scope === "all"
 										? "Find an issue by title, phrase or key, regardless of assignee."
-										: "No unfinished Jira issues are assigned to you. Search all to find other work."}
+										: `No unfinished ${provider} issues are assigned to you. Search all to find other work.`}
 							</p>
 						</div>
 					)}
@@ -700,6 +670,7 @@ export function WorkplaceIssues({
 				<div className="wp-issues-detail-slot" ref={detailWidth.ref} hidden={!selected}>
 					{opened.map((key) => (
 						<IssueDetail
+							source={source}
 							key={key}
 							issueKey={key}
 							world={world}

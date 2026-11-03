@@ -29,7 +29,7 @@ function itemName(item: DelegationItem): string {
 		case "pull-request":
 			return `pull request ${item.repo}#${item.number} ${quoted(item.title)}: ${item.url}`;
 		case "issue":
-			return `Jira issue ${item.key} ${quoted(item.summary)}: ${item.url}`;
+			return `issue ${item.key} ${quoted(item.summary)}: ${item.url}`;
 		case "page":
 			return `the Confluence page ${quoted(item.title)}: ${item.url}`;
 		case "thread":

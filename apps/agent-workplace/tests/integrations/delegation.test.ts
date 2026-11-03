@@ -90,7 +90,7 @@ test("the instruction names the item and what is asked", () => {
 			note: "Start with the CI rollup.",
 		}),
 	).toBe(
-		'Please start work on Jira issue APP-1 "Build the forge": https://acme.atlassian.net/browse/APP-1\n\nStart with the CI rollup.',
+		'Please start work on issue APP-1 "Build the forge": https://acme.atlassian.net/browse/APP-1\n\nStart with the CI rollup.',
 	);
 	expect(
 		delegationText({
@@ -167,6 +167,38 @@ test("asking an idle builder sends talk naming the pull request, and writes noth
 			["aw-delegate-1", id, "delivered"],
 			["aw-delegate-1", id, "applied"],
 		]);
+		expect(gh.calls()).toEqual([]);
+		expect(outside.seen).toEqual([]);
+		expect(await api.outsideWrites()).toEqual([]);
+	} finally {
+		await close(run);
+	}
+}, 40000);
+
+test("a GitHub issue reaches the selected person with its repository identity and no external write", async () => {
+	const { run, id } = await awake([fauxAssistantMessage("Received the GitHub issue.")]);
+	try {
+		const receipts: Receipt[] = [];
+		const item = {
+			kind: "issue",
+			key: "acme/app#7",
+			summary: "Fix keyboard navigation",
+			url: "https://github.com/acme/app/issues/7",
+		} as const;
+		expect(
+			await api.delegate(
+				"wp-github-issue",
+				{ to: id, item, ask: "start-work", note: "Verify keyboard focus." },
+				(receipt) => receipts.push(receipt),
+			),
+		).toEqual({ ok: true, to: id, command: "talk" });
+		expect(sentCommands(id)).toEqual([
+			{
+				kind: "talk",
+				text: 'Please start work on issue acme/app#7 "Fix keyboard navigation": https://github.com/acme/app/issues/7\n\nVerify keyboard focus.',
+			},
+		]);
+		expect(receipts.map((receipt) => receipt.stage)).toEqual(["accepted", "delivered", "applied"]);
 		expect(gh.calls()).toEqual([]);
 		expect(outside.seen).toEqual([]);
 		expect(await api.outsideWrites()).toEqual([]);

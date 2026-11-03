@@ -16,7 +16,7 @@ Closing the window quits Agent Workplace without stopping or marking tmux/Pi ses
 
 ## Workplace
 
-The app opens in Workplace's **Chat** view. Chat connects to real Pi conversations and team channels; Mail exposes operator correspondence, Sent and Activity. Org displays named organizations, profiles and recorded work, changes reporting and prepares task-specific teams. Code edits existing local UTF-8 files with explicit Save and conflict detection, filename/path Quick Open, existing linked-worktree navigation, read-only Git status/diffs and explicitly created local terminals. Issues reads Jira and sends selected agents instructions; status changes require confirmation as you.
+The app opens in Workplace's **Chat** view. Chat connects to real Pi conversations and team channels; Mail exposes operator correspondence, Sent and Activity. Org displays named organizations, profiles and recorded work, changes reporting and prepares task-specific teams. Code edits existing local UTF-8 files with explicit Save and conflict detection, filename/path Quick Open, existing linked-worktree navigation, read-only Git status/diffs and explicitly created local terminals. Issues reads Jira or GitHub, chosen in Settings, and sends selected agents instructions; Jira status changes require confirmation as you.
 
 Workspace and organization display names are device-local preferences, not person or runtime identity changes. Specialization is an optional lifetime focus assigned when creating a person, separate from their fixed role. **World** is a tab inside Workplace: the left rail stays available, and switching to Chat or any other tab keeps World loaded and preserves drafts and embedded terminals. Terminal content uses a fixed high-contrast dark palette in both app appearances, while its surrounding controls follow the app theme. Unsaved Code buffers, retained setup plans and live embedded terminals share one prompt before a full renderer reload or app close; accepting the leave discards memory-only drafts and hangs up those terminals. It does not remove Pi people or their assigned work.
 
@@ -100,7 +100,9 @@ A theme pack is a directory of files, not code: a manifest, a stylesheet, painti
 
 ## Signing in
 
-GitHub works through the `gh` CLI with its own sign-in (`gh auth login`); Agent Workplace keeps no GitHub credential.
+Workplace's **Settings > Connections** shows Atlassian, Slack, GitHub and Google status and chooses the Issues source (Jira or GitHub). Use **Refresh connections** after changing a CLI sign-in.
+
+GitHub works through the `gh` CLI with its own sign-in (`gh auth login`); Agent Workplace checks the active github.com account and keeps no GitHub credential. Google status comes from `gws auth status`, the same CLI used by the runtime's calendar/email sources; sign in with `gws auth login` in a terminal. Only the CLI account identity reaches the page, not credential files or diagnostic fields. These statuses describe the configured sign-ins, not proof that every service permission is available.
 
 Atlassian (Jira and Confluence) and Slack are signed in from **Settings**:
 
@@ -128,7 +130,7 @@ Agent Workplace owns no record of your work. Everything it shows comes from the 
 | The record of writes outside | `~/.pi/agent/state/agent-workplace-outside-writes.jsonl` |
 | Pages read lately in the library | `~/.pi/agent/state/agent-workplace-library-recent.json` |
 | Electron | `~/.pi/agent/agent-workplace/electron-44.9.0/` |
-| Workplace appearance, workspace name and per-head organization display names | The page's local storage in Electron's data directory |
+| Workplace appearance, Issues source, workspace name and per-head organization display names | The page's local storage in Electron's data directory |
 | Unsent Workplace drafts, team plans, Code buffers and issue-delegation forms | Renderer memory only; cleared on reload/close after any leave confirmation |
 | Electron's own data (window state, the Slack sign-in window's cookies, the last good theme) | `~/.pi/agent/agent-workplace/electron-data/` |
 | Why the app failed to start | `~/.pi/agent/agent-workplace/electron.log` |
