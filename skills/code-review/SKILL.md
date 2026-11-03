@@ -29,6 +29,8 @@ For each material allegation, establish the triggering path, broken invariant, i
 
 Rejection needs counterevidence. Accepted risk needs evidence, authority and explicit scope. Record a proposed or unverified fix as a claim; a verified fix names a completed, unchallenged question on another captured target. A later correction does not repair the earlier snapshot. Changes to source, intent or policy require new review work rather than inherited approval.
 
+When a confirmed finding is a pattern a machine can detect, the fix includes a rule: in a repository with `.pi/rules/`, a GritQL rule file there listed with its paths in `.pi/rules/policy.json`, or an `actions` entry for a shell-command pattern. The harness then checks every edit and command against it. A finding that recurs after a rule exists means the rule is too narrow; widen it.
+
 Use `manage_review` for cancellation, same-target recovery, priority, reassignment or an explicit fresh rerun. Keep failed, interrupted, incomplete and missing work visible. Finish when the authorized obligations have evidence, or report exactly what remains unresolved and who owns the next action.
 
 ## Report and consult

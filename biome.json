@@ -47,11 +47,11 @@
     },
     {
       "includes": ["apps/agent-workplace/web/workplace*.tsx"],
-      "plugins": ["./lint/rules/no-native-select.grit"]
+      "plugins": ["./.pi/rules/no-native-select.grit"]
     },
     {
       "includes": ["apps/agent-workplace/web/workplace*.css", "!apps/agent-workplace/web/workplace.css"],
-      "plugins": ["./lint/rules/workplace-palette.grit"]
+      "plugins": ["./.pi/rules/workplace-palette.grit"]
     }
   ]
 }

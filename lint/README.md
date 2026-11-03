@@ -25,15 +25,14 @@ Run it with `node lint/no-comments.mjs [paths...]`. With no paths it checks ever
 
 ## Rules
 
-Code rules are Biome GritQL plugins in `rules/`, each applied to its paths by an `overrides` entry in `biome.json`:
+apple-pi opts in to the harness's repository rules (`components/repo-rules`) with `.pi/rules/`. The harness checks
+every `edit` and `write` against them before the change lands, and every shell command against the action rules;
+`npm run lint` runs the same GritQL rules through `biome.json` overrides.
 
+- `policy.json`: `"comments": "forbid"`, the GritQL rules with the paths they apply to, and the action rules.
 - `no-native-select.grit`: Workplace uses `Select` and `Recipients`, not native dropdowns.
 - `workplace-palette.grit`: Workplace stylesheets take colors from `--wp-*` theme variables; white and black overlays
   are allowed. `workplace.css` is excluded because it defines the house palette itself.
-
-Agent-action rules live in `components/action-rules`: a `tool_call` hook refuses commands that hurt a shared checkout
-(`git rm`/`git mv`, `pkill`/`killall`, `sed -i ''`, a plain full `npm test`) and a `git add`/`git commit` issued in
-the same message as an `edit` or `write`.
 
 Writing GritQL: regex capture groups bind variables and fail to compile, so use `(?:...)`. Matching a node by regex
 works (`$v where { $v <: r"..." }`).

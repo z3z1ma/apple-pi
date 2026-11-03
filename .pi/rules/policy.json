@@ -1,0 +1,32 @@
+{
+  "comments": "forbid",
+  "rules": [
+    { "plugin": "no-native-select.grit", "includes": ["apps/agent-workplace/web/workplace*.tsx"] },
+    {
+      "plugin": "workplace-palette.grit",
+      "includes": ["apps/agent-workplace/web/workplace*.css", "!apps/agent-workplace/web/workplace.css"]
+    }
+  ],
+  "actions": [
+    {
+      "id": "bsd-sed-in-place",
+      "pattern": "\\bsed\\s+(-[a-zA-Z]*\\s+)*-i\\s*''",
+      "reason": "sed here is GNU sed, so `sed -i ''` fails. Use the edit tool."
+    },
+    {
+      "id": "git-rm-mv",
+      "pattern": "\\bgit\\s+(rm|mv)\\b",
+      "reason": "`git rm` and `git mv` stage at once, so the change rides along in someone else's commit in this shared checkout. Use plain rm or mv and stage the change with the commit it belongs to."
+    },
+    {
+      "id": "kill-by-pattern",
+      "pattern": "\\b(pkill|killall)\\b",
+      "reason": "Killing by pattern can stop other lanes' runs in this shared checkout. Kill only PIDs you started, or cancel your own background task."
+    },
+    {
+      "id": "full-test-suite",
+      "pattern": "(^|[;&|]\\s*)npm\\s+(run\\s+)?test\\s*($|[;&|])",
+      "reason": "Full-suite runs need an explicit operator request and overload this machine. Run the test files relevant to the change with --maxWorkers=1."
+    }
+  ]
+}

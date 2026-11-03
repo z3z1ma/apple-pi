@@ -3,7 +3,7 @@ import { type Reflection, reflectionToSummaryLine } from "./session-ledger/index
 const DISTILL_INSTRUCTION = `Distill the open learnings of this session. Decide for each one:
 
 - **Durable:** it will help future work in this project. Place it by how a future agent finds it, then retire it with update_notebook, unless it still guides the current work.
-  - A rule, first, whenever a machine can detect the mistake: a rule checks every time, prose only sometimes. Code patterns become a GritQL rule in \`lint/rules/\`, wired to its paths in \`biome.json\` overrides (see \`lint/README.md\`); agent actions (commands, tool-call patterns) become an action rule in \`components/action-rules/src/index.ts\`. Add a test or fixture that shows the rule firing, fix what it flags, and keep no prose copy of the lesson.
+  - A rule, first, whenever a machine can detect the mistake: a rule checks every time, prose only sometimes. In a repository with \`.pi/rules/\`, a code pattern becomes a GritQL rule file there listed with its paths in \`.pi/rules/policy.json\`, and a shell-command pattern becomes an entry in its \`actions\`; the harness then checks every edit and command against it. Show the rule firing on a small sample, fix what it flags, and keep no prose copy of the lesson.
   - \`.pi/LEARNINGS.md\` loads into every session, like AGENTS.md. Keep it to short instructions that should change behavior on every turn.
   - A \`.wiki/\` page is found only by search. Use it for project knowledge, under a name a search would match.
   - A ledger task's \`retrospective.md\` is read when someone works on a related task. Use it for lessons about that undertaking.
