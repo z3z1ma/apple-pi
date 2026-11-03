@@ -279,8 +279,10 @@ export class ReviewJobs {
 				this.live();
 				this.commit(commandId, job.id, () =>
 					this.db
-						.prepare("update review_jobs set state = 'cancelled', revision = revision + 1, updated_at = ? where id = ?")
-						.run(Date.now(), job.id),
+						.prepare(
+							"update review_jobs set state = 'cancelled', revision = revision + 1, updated_at = ? where id = ? and generation = ?",
+						)
+						.run(Date.now(), job.id, job.generation),
 				);
 			} else this.commit(commandId, job.id, () => {});
 		} else if (operation.action === "resume") {

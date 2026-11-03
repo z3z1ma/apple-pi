@@ -1,0 +1,36 @@
+
+ RUN  v4.1.10 /Users/alexanderbut/code_projects/personal/apple-pi
+
+ ❯ components/session-state/tests/review-cancel-race.test.ts (1 test | 1 failed) 2343ms
+   × an older cancellation cannot cancel newly authorized review work 2342ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  components/session-state/tests/review-cancel-race.test.ts > an older cancellation cannot cancel newly authorized review work
+AssertionError: expected { state: 'cancelled', generation: 2 } to deeply equal { state: 'queued', generation: 2 }
+
+- Expected
++ Received
+
+  {
+    "generation": 2,
+-   "state": "queued",
++   "state": "cancelled",
+  }
+
+ ❯ components/session-state/tests/review-cancel-race.test.ts:98:93
+     96|   expect(await second).toMatchObject({ stage: "applied" });
+     97|   expect(errors).toBe("");
+     98|   expect(db.prepare("select state, generation from review_jobs where i…
+       |                                                                                             ^
+     99|    state: "queued",
+    100|    generation: 2,
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  23:40:27
+   Duration  3.56s (transform 71ms, setup 13ms, import 1.13s, tests 2.34s, environment 0ms)
+
