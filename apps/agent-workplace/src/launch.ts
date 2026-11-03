@@ -1,5 +1,3 @@
-// Starts Agent Workplace from a Pi session: installs Electron under Pi's agent directory on first use (it is not a
-// dependency of apple-pi), then runs the built app detached, so it outlives the session that opened it.
 import { spawn } from "node:child_process";
 import {
 	closeSync,
@@ -18,10 +16,6 @@ import { agentDir } from "../../../components/session-state/src/paths.js";
 
 export const ELECTRON_VERSION = "44.9.0";
 
-/**
- * The app's directory under Pi's agent directory (Electron, its data, its log). The app was called Agent World; its
- * old directory is moved here once, keeping Electron and the window's saved state, while no app runs from it.
- */
 export function appDir(): string {
 	const dir = join(agentDir(), "agent-workplace");
 	const old = join(agentDir(), "agent-world");
@@ -31,16 +25,13 @@ export function appDir(): string {
 
 const MAIN = fileURLToPath(new URL("../dist/electron/main.js", import.meta.url));
 const STEP_TIMEOUT_MS = 10 * 60_000;
-/** How long a started app is watched for an early exit before it counts as open. */
 const START_WATCH_MS = 2000;
 const OUTPUT_KEPT = 4000;
 
-/** One directory per Electron version, so a new pin installs beside the old one instead of over it. */
 export function electronDir(): string {
 	return join(appDir(), `electron-${ELECTRON_VERSION}`);
 }
 
-/** The Electron binary, once installed and downloaded. */
 export function installedElectron(dir = electronDir()): string | undefined {
 	const pathFile = join(dir, "node_modules", "electron", "path.txt");
 	if (!existsSync(pathFile)) return undefined;
@@ -48,13 +39,11 @@ export function installedElectron(dir = electronDir()): string | undefined {
 	return existsSync(binary) ? binary : undefined;
 }
 
-/** A step of the first-run install, as the status line shows it. */
 export type InstallStep =
 	| { stage: "installing" }
 	| { stage: "downloading"; percent: number | null }
 	| { stage: "unpacking" };
 
-/** Why an install failed, in words for the operator; `network` when a connection could not be made. */
 export class InstallError extends Error {
 	readonly network: boolean;
 	readonly output: string;
@@ -67,7 +56,6 @@ export class InstallError extends Error {
 
 const NETWORK = /ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ECONNRESET|ETIMEDOUT|ENETUNREACH|EHOSTUNREACH|fetch failed|network/i;
 
-/** The line of a tool's output that best says what went wrong. */
 function detailOf(output: string): string {
 	const lines = output
 		.split("\n")
@@ -79,7 +67,6 @@ function detailOf(output: string): string {
 
 type Step = "npm" | "download" | "unpack";
 
-/** Turn a failed step's output into an `InstallError` that says why. */
 function failure(step: Step, output: string, spawnError?: NodeJS.ErrnoException): InstallError {
 	if (spawnError?.code === "ENOENT" && step === "npm")
 		return new InstallError(
@@ -98,7 +85,6 @@ function failure(step: Step, output: string, spawnError?: NodeJS.ErrnoException)
 	return new InstallError(detail ? `${what}: ${detail}` : what, output, false);
 }
 
-/** Run one step, passing each stdout line to `onLine`; rejects with an `InstallError` when it fails. */
 function runStep(
 	step: Step,
 	command: string,
@@ -139,8 +125,6 @@ function runStep(
 	});
 }
 
-// Downloads Electron's zip into its cache with `@electron/get`, as the package's install.js does, but printing
-// progress (install.js draws a progress bar only on a terminal). install.js then finds the zip cached and unpacks it.
 const DOWNLOAD = `
 import { createRequire } from "node:module";
 import { readFileSync } from "node:fs";
@@ -176,7 +160,6 @@ const pidAlive = (pid: number) => {
 	}
 };
 
-/** Remove the staging directories of installs whose process died midway. */
 function removeStaleStaging(dir: string) {
 	const parent = dirname(dir);
 	const prefix = `${basename(dir)}.installing-`;
@@ -187,12 +170,6 @@ function removeStaleStaging(dir: string) {
 	}
 }
 
-/**
- * Install Electron with npm, then download its binary with progress and unpack it with the package's own installer,
- * run explicitly (npm may skip install scripts). Everything happens in a staging directory beside `dir` that is
- * renamed into place only once it holds the binary, so a failed or interrupted install never leaves a half-installed
- * `dir` behind, and the next `/workplace` simply starts again.
- */
 export async function installElectron(
 	dir = electronDir(),
 	onStep: (step: InstallStep) => void = () => {},
@@ -227,8 +204,6 @@ export async function installElectron(
 		await runStep("unpack", process.execPath, [join(staging, "node_modules", "electron", "install.js")], staging);
 		if (!installedElectron(staging))
 			throw new InstallError("Electron's installer finished but left no Electron binary", "", false);
-		// Another session may have finished the same install first; then keep its copy. A directory without a binary
-		// (left by an earlier version of this code that stopped midway) is replaced.
 		if (!installedElectron(dir)) {
 			rmSync(dir, { recursive: true, force: true });
 			renameSync(staging, dir);
@@ -243,15 +218,10 @@ export async function installElectron(
 
 export type StartResult = { ok: true } | { ok: false; reason: string };
 
-/** The app's stderr from its latest start, kept to say why a start failed. */
 export function startLog(): string {
 	return join(appDir(), "electron.log");
 }
 
-/**
- * Start the app detached. A second start hands over to the running one, which focuses its window, and quits.
- * Resolves once the app has run for `watchMs`, or with the reason when it quits at once with an error.
- */
 export function startAgentWorkplace(electron: string, watchMs = START_WATCH_MS): Promise<StartResult> {
 	const env = { ...process.env };
 	delete env.ELECTRON_RUN_AS_NODE;

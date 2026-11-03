@@ -9,6 +9,9 @@ Replies are matched by `requestId` (pages) or `commandId` (receipts); `markSeen`
 Why: the runtime answers both on the same connection, one line each, in any order.
 Verify: apps/agent-workplace/tests/conversation.test.ts
 
+A page can be one line of megabytes arriving in many chunks. Each chunk is searched once and joined only when its line ends.
+Why: rescanning the whole buffer on every chunk made long transcript pages stall the reader.
+
 Live replies use a third connection that only subscribes (`watch` replaces the list; an empty list ends it) and resubscribes a second after it closes while anything is watched; each `reply_end` naming an entry is read back with `read_entry` on the main connection before its `end` event goes out.
 Why: the runtime replaces a connection's subscription on every `subscribe`, and streamed text is lost with its connection, so the stream must not share the reader's connection or depend on a page read finishing; the panel needs the stored entry itself to swap it in without a jump.
 Coupled: components/session-state/src/runtime.ts, apps/agent-workplace/web/overlay/conversation/live-reply.ts

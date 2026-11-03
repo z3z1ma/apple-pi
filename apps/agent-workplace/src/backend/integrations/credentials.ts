@@ -1,6 +1,3 @@
-// The operator's sign-ins for Atlassian and Slack: one private (0600) JSON file under the session-state directory,
-// accessed through this module by Electron's main process and the runtime's read-only external poller. Nothing logs here, and `status` is
-// the only view of it the renderer gets: no token, cookie, or password ever leaves the backend.
 import {
 	chmodSync,
 	closeSync,
@@ -17,19 +14,15 @@ import { dirname, join } from "node:path";
 import type { CredentialStatus } from "../../integrations.js";
 
 export interface AtlassianCredentials {
-	/** The site's origin, `https://acme.atlassian.net`. */
 	site: string;
 	email: string;
 	token: string;
 }
 
 export interface SlackCredentials {
-	/** The web client's session token, `xoxc-...`. */
 	token: string;
-	/** The `d` cookie's value, sent as `Cookie: d=<value>`. */
 	cookie: string;
 	team: string | null;
-	/** The workspace address, `https://acme.slack.com/`; its `api/` serves the Web API. */
 	url: string | null;
 	user: string | null;
 }
@@ -39,7 +32,6 @@ export interface StoredCredentials {
 	slack?: SlackCredentials;
 }
 
-/** The files Agent Workplace keeps beside the runtime's state; ones kept under the old Agent World names move once. */
 export function integrationFiles(stateDir: string) {
 	const kept = (name: string) => {
 		const file = join(stateDir, `agent-workplace-${name}`);
@@ -56,12 +48,10 @@ export function integrationFiles(stateDir: string) {
 
 export interface CredentialStore {
 	read(): StoredCredentials;
-	/** Replace one account's sign-in, or remove it with `undefined`. */
 	set<K extends keyof StoredCredentials>(account: K, value: StoredCredentials[K] | undefined): void;
 	status(): CredentialStatus;
 }
 
-/** Write `text` to `file` readable by its owner only, replacing it whole. */
 export function writePrivate(file: string, text: string) {
 	mkdirSync(dirname(file), { recursive: true, mode: 0o700 });
 	const temporary = `${file}.${process.pid}.tmp`;
@@ -71,14 +61,13 @@ export function writePrivate(file: string, text: string) {
 	} finally {
 		closeSync(fd);
 	}
-	chmodSync(temporary, 0o600); // an existing temporary file keeps its mode through `open`
+	chmodSync(temporary, 0o600);
 	renameSync(temporary, file);
 }
 
 export function openCredentials(file: string): CredentialStore {
 	const read = (): StoredCredentials => {
 		if (!existsSync(file)) return {};
-		// A file someone widened is narrowed again before it is read.
 		if ((statSync(file).mode & 0o077) !== 0) chmodSync(file, 0o600);
 		try {
 			const value = JSON.parse(readFileSync(file, "utf8")) as unknown;

@@ -1,9 +1,3 @@
-// What the operator does to a session from the inn, the rookery, and a character's actions: wake a dormant one
-// (`start`), end an awake one (`close`, confirmed only while it is busy, decision 13), mail anyone as himself
-// (threaded mail, owned by mail.ts), hire a new person (`start` for a new id, with a role from the catalog), rename an awake one (`rename`),
-// and request permanent departure (`retire`: accepted handoff and cleanup continue in the runtime). Commands go through the
-// command client (`commands.ts`); each resolves with the receipt stage that answers the operator's question (is it
-// awake, is it ended, did the letter arrive or does it wait), not necessarily the last.
 import { randomUUID } from "node:crypto";
 import { statSync } from "node:fs";
 import { homedir } from "node:os";
@@ -26,10 +20,8 @@ import { operatorPane } from "./inn.js";
 import { type Mailbox, openMailbox } from "./mail.js";
 import { loadRoleChoices } from "./roles.js";
 
-/** A woken session joins once Pi has started in its window; a slow start still says the window opened. */
 const WAKE_MS = 30_000;
 const CLOSE_MS = 10_000;
-/** A rename is applied as soon as the bridge has it. */
 const RENAME_MS = 8000;
 
 export interface Lifecycle extends Mailbox {
@@ -42,7 +34,6 @@ export interface Lifecycle extends Mailbox {
 	retire(characterId: string, reason: string, handoff?: boolean): Promise<CommandReceipt>;
 }
 
-/** A directory as the operator typed it: `~` is his home. */
 const expandHome = (path: string) =>
 	path === "~" ? homedir() : path.startsWith("~/") ? join(homedir(), path.slice(2)) : path;
 
@@ -54,7 +45,6 @@ const isDirectory = (path: string) => {
 	}
 };
 
-/** Send `command` and resolve at the first stage `enough` accepts, or with the last stage reached after `ms`. */
 function follow(
 	commands: Commands,
 	sessionId: string,
@@ -74,7 +64,7 @@ function follow(
 			resolve(receipt);
 		};
 		const timer = setTimeout(() => {
-			if (!last || last.stage === "failed") return; // the send itself settles these
+			if (!last || last.stage === "failed") return;
 			settle({ ok: true, stage: last.stage, note: late(last.stage) });
 		}, ms);
 		void commands
@@ -124,7 +114,6 @@ export function openLifecycle(
 			const command: Command = {
 				kind: "start",
 				tmux: pane,
-				// Pi gets its coordinator only from the command line, so a worker wakes still reporting to it.
 				...(sleeper.reportsTo ? { reportsTo: sleeper.reportsTo } : {}),
 			};
 			return follow(
@@ -158,7 +147,6 @@ export function openLifecycle(
 		},
 
 		async recruit(request) {
-			// One line: it is also the tmux window's name.
 			const name = request.name.replace(/\s+/g, " ").trim();
 			const cwd = expandHome(request.cwd.trim());
 			const brief = request.brief?.trim();
@@ -185,7 +173,6 @@ export function openLifecycle(
 			}
 			let pane: { socket: string; pane: string } | undefined;
 			if (request.reportsTo) {
-				// A new person's window opens beside its manager's, where the manager's own new sessions open.
 				const coordinator = snapshot().characters.find((character) => character.id === request.reportsTo);
 				if (!coordinator) return { ok: false, reason: "That manager is not running." };
 				const db = new DatabaseSync(paths.db);
@@ -245,7 +232,6 @@ export function openLifecycle(
 		},
 
 		async rename(characterId, given) {
-			// One line, as the recruit form names a new agent.
 			const name = given.replace(/\s+/g, " ").trim();
 			if (!name) return { ok: false, reason: "Give it a name." };
 			if (name.length > NAME_MAX)

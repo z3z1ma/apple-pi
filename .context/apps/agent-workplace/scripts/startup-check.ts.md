@@ -1,6 +1,6 @@
 ## file
 
-This diagnostic sets AGENT_WORLD_CAPTURE in an isolated Electron environment. The main process uses that setting to select the explicit ?world route, then reports a painted place and saves the capture before quitting. Ordinary launches without the setting open Workplace Chat instead.
+This diagnostic sets AGENT_WORLD_CAPTURE in an isolated Electron environment with its own session-state runtime and one stand-in coordinator. It never touches the operator's runtime, sessions, or a running Agent Workplace. It needs Electron and a display, so it is not part of `npm test`. The main process uses that setting to select the explicit ?world route, then reports a painted place and saves the capture before quitting. Ordinary launches without the setting open Workplace Chat instead.
 Why: this check verifies the World renderer and its painting, not the app's default landing page. Changing the default must not make a Workplace screenshot count as World-render proof; the maintained workplace-electron-check owns real default-entry and round-trip navigation checks.
 
 Coupled: apps/agent-workplace/src/electron/main.ts, apps/agent-workplace/web/entry.ts, apps/agent-workplace/scripts/workplace-electron-check.mjs

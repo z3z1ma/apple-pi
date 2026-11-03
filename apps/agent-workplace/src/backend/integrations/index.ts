@@ -1,6 +1,3 @@
-// The function places' backend: GitHub, Jira, Confluence, and Slack adapters behind one object, with the stored
-// sign-ins, the outside-write gate, and delegation. A plain Node module with no Electron import: Electron's main
-// process wires it to IPC (`src/electron/main.ts`), tests call it directly with fakes at the edges.
 import type {
 	CredentialStatus,
 	Outcome,
@@ -22,14 +19,11 @@ import { issueKey, type Jira, openJira } from "./jira.js";
 import { openSlack, type Slack } from "./slack.js";
 
 export interface IntegrationOptions {
-	/** The session-state directory (`statePaths().dir`); the private files live beside the runtime's. */
 	stateDir: string;
 	snapshot: () => WorldSnapshot;
 	commands: Commands;
-	/** The environment `gh` runs with (tests put a fake first on PATH). */
 	env?: NodeJS.ProcessEnv;
 	fetch?: Fetch;
-	/** The Slack Web API's address, instead of the workspace's own (tests). */
 	slackApi?: string;
 	now?: () => number;
 }
@@ -54,7 +48,6 @@ export function openIntegrations(options: IntegrationOptions) {
 	});
 	const characters = () => options.snapshot().characters;
 
-	/** Mark read, described for the record: the channel, or the thread by who started it. */
 	const describeMarkRead = async (
 		intent: Extract<OutsideWriteIntent, { kind: "slack-mark-read" }>,
 	): Promise<Outcome<{ description: WriteDescription }>> => {
@@ -111,7 +104,6 @@ export function openIntegrations(options: IntegrationOptions) {
 						const url = `${signedIn.site}/browse/${key}`;
 						if (intent.kind === "jira-comment")
 							return { ok: true, description: { what: "Comment on Jira issue", where, text: intent.body, url } };
-						// Only a move Jira offers for the issue now.
 						const allowed = await jira.transitions(key);
 						if (!allowed.ok) return allowed;
 						const move = allowed.transitions.find((transition) => transition.id === intent.transition);
@@ -122,7 +114,6 @@ export function openIntegrations(options: IntegrationOptions) {
 					case "slack-reply": {
 						const signedIn = credentials.read().slack;
 						if (!signedIn) return { ok: false, reason: "Sign in to Slack in Settings first.", signIn: "slack" };
-						// Name the thread by who started it and how it starts, so the operator sees where it goes.
 						const parent = await slack.thread(intent.channel, intent.threadTs);
 						if (!parent.ok) return parent;
 						const first = parent.thread.messages[0];
@@ -175,7 +166,6 @@ export function openIntegrations(options: IntegrationOptions) {
 				return { ok: false, reason: "That is not an email address." };
 			if (typeof token !== "string" || !token.trim()) return { ok: false, reason: "Paste the API token first." };
 			const trying = { site: origin, email: email.trim(), token: token.trim() };
-			// Kept only once the site accepts it, so a typo never sits in the file.
 			const me = await openJira(() => trying, options.fetch).myself();
 			if (!me.ok) return me;
 			credentials.set("atlassian", trying);
@@ -185,7 +175,6 @@ export function openIntegrations(options: IntegrationOptions) {
 			credentials.set("atlassian", undefined);
 			return { ok: true };
 		},
-		/** Keep a Slack session captured from the sign-in window, once `auth.test` accepts it. */
 		async storeSlackSession(session: { token: string; cookie: string }): Promise<Outcome<{ team: string | null }>> {
 			if (!session.token.startsWith("xoxc-") || !session.cookie)
 				return { ok: false, reason: "Slack's sign-in did not finish." };
@@ -226,7 +215,6 @@ export function openIntegrations(options: IntegrationOptions) {
 		slackConversations: () => slack.conversations(),
 		slackChannel: (id: unknown, at?: unknown) => slack.channel(String(id ?? ""), at == null ? undefined : String(at)),
 		slackThread: (id: unknown, ts: unknown) => slack.thread(String(id ?? ""), String(ts ?? "")),
-		/** Mark read: the button is the operator's choice, so the gate sends it unconfirmed but records it. */
 		slackMarkRead: (id: unknown, ts: unknown, threadTs?: unknown) =>
 			gate.act({ kind: "slack-mark-read", channel: id, ts, ...(threadTs == null ? {} : { threadTs }) }),
 
@@ -235,7 +223,6 @@ export function openIntegrations(options: IntegrationOptions) {
 		outsideWrites: async (): Promise<OutsideWriteEntry[]> => gate.recent(),
 		onOutsideWrite: (listener: (entry: OutsideWriteEntry) => void) => gate.onWrite(listener),
 
-		/** Delegate an item to an agent; each receipt stage reaches `onReceipt`. */
 		delegate: (commandId: unknown, delegation: unknown, onReceipt: (receipt: Receipt) => void = () => {}) =>
 			typeof commandId === "string" && commandId
 				? delegate(options.commands, options.snapshot(), commandId, delegation, (characterId, stage, reason) =>

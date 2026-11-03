@@ -1,12 +1,3 @@
-// The start-up check (`npm run check:workplace-start`): starts the built app with the installed Electron, or the one
-// named by AGENT_WORLD_ELECTRON. AGENT_WORLD_CAPTURE selects the explicit ?world diagnostic route, waits for its painting, and
-// fails unless the capture shows a rendered world: not blank, not one colour, not mostly the window's background.
-//
-// It runs everything in a scratch agent directory with its own session-state runtime and one stand-in coordinator
-// session, so it never touches the operator's runtime, sessions, or a running Agent Workplace. Electron's window shows
-// on screen for a few seconds. Not part of `npm test`: it needs Electron installed and a display.
-//
-//   node --import ./components/session-state/src/register.mjs apps/agent-workplace/scripts/startup-check.ts [out.png]
 import { type ChildProcess, execFileSync, spawn } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { createConnection, type Socket } from "node:net";
@@ -19,10 +10,6 @@ import { themeBackdrop } from "../src/backend/theme-packs.js";
 const repo = resolve(fileURLToPath(new URL("../../..", import.meta.url)));
 const appDir = join(repo, "apps", "agent-workplace");
 const START_TIMEOUT_MS = 60_000;
-/**
- * The window's background colour, which an empty window shows: `themeBackdrop` as src/electron/main.ts uses it, for the
- * scratch agent directory's world, which has chosen no theme.
- */
 const BACKGROUND = (themeBackdrop(join(appDir, "themes"), null).match(/[0-9a-f]{2}/gi) ?? []).map((hex) =>
 	Number.parseInt(hex, 16),
 );
@@ -31,7 +18,6 @@ function fail(message: string): never {
 	throw new Error(message);
 }
 
-/** The byte a PNG filter predicts from the bytes left (a), above (b), and above-left (c). */
 function predicted(filter: number, a: number, b: number, c: number): number {
 	if (filter === 1) return a;
 	if (filter === 2) return b;
@@ -44,7 +30,6 @@ function predicted(filter: number, a: number, b: number, c: number): number {
 	return pa <= pb && pa <= pc ? a : pb <= pc ? b : c;
 }
 
-/** Undo the per-line filters of a PNG's inflated image data. */
 function unfilter(raw: Buffer, width: number, height: number, channels: number): Buffer {
 	const stride = width * channels;
 	const pixels = Buffer.alloc(height * stride);
@@ -62,7 +47,6 @@ function unfilter(raw: Buffer, width: number, height: number, channels: number):
 	return pixels;
 }
 
-/** Decode an 8-bit RGBA or RGB, non-interlaced PNG (what Electron's `toPNG` writes) into its pixels. */
 export function decodePng(png: Buffer): { width: number; height: number; channels: number; pixels: Buffer } {
 	if (png.readUInt32BE(0) !== 0x89504e47) throw new Error("not a PNG");
 	let offset = 8;
@@ -88,7 +72,6 @@ export function decodePng(png: Buffer): { width: number; height: number; channel
 	return { width, height, channels, pixels };
 }
 
-/** How varied a capture is: distinct colours (4 bits a channel), the commonest one's share, the background's share. */
 export function colourStats(image: ReturnType<typeof decodePng>) {
 	const counts = new Map<number, number>();
 	let background = 0;
@@ -119,7 +102,6 @@ async function main() {
 		TMUX: "",
 		TMUX_PANE: "",
 	};
-	// launch.ts reads the agent directory when called, so it finds Electron before the scratch directory is set.
 	const { installedElectron } = await import("../src/launch.js");
 	const electron = process.env.AGENT_WORLD_ELECTRON || installedElectron();
 	if (!electron || !existsSync(electron))
@@ -142,7 +124,6 @@ async function main() {
 		rmSync(scratch, { recursive: true, force: true });
 	};
 	try {
-		// A runtime of its own, started as a bridge starts one, and a stand-in coordinator so the world has a hall.
 		const runtime = join(repo, "components", "session-state", "src", "runtime-main.ts");
 		const register = join(repo, "components", "session-state", "src", "register.mjs");
 		spawn(process.execPath, ["--import", register, runtime], { detached: true, stdio: "ignore", env }).unref();

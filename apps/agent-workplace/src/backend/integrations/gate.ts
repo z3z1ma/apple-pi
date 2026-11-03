@@ -1,7 +1,3 @@
-// The outside-write gate (decision 13): every write outside as the operator (a pull request review, a Jira comment or
-// transition, a Slack reply) goes through `write`, and only with the token `describe` gave for that same intent after
-// the UI showed its description. Without it nothing is sent. Each sent write appends one JSON line to the private,
-// append-only local record and is announced to the chatbox, whether it succeeded or failed.
 import { randomUUID } from "node:crypto";
 import { appendFileSync, chmodSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname } from "node:path";
@@ -14,15 +10,11 @@ import type {
 	WriteResult,
 } from "../../integrations.js";
 
-/** How long a description stays good for confirming. */
 const TOKEN_TTL_MS = 15 * 60_000;
-/** Longest text one write may carry. */
 const TEXT_MAX = 30_000;
-/** Entries `recent` returns. */
 const RECENT_MAX = 100;
 const PREVIEW = 100;
 
-/** The intent as given over IPC, checked and trimmed of anything else; a reason when it is not one. */
 export function checkIntent(given: unknown): OutsideWriteIntent | string {
 	const value = (given ?? {}) as Record<string, unknown>;
 	const words = (key: string) => (typeof value[key] === "string" ? (value[key] as string) : undefined);
@@ -71,7 +63,6 @@ export function checkIntent(given: unknown): OutsideWriteIntent | string {
 	return "Agent Workplace does not write that.";
 }
 
-/** One string per intent, the same for the same write whatever order its keys came in. */
 const canonical = (intent: OutsideWriteIntent) =>
 	JSON.stringify(Object.fromEntries(Object.entries(intent).sort(([a], [b]) => a.localeCompare(b))));
 
@@ -80,7 +71,6 @@ const preview = (text: string) => {
 	return flat.length > PREVIEW ? `${flat.slice(0, PREVIEW - 1)}\u2026` : flat;
 };
 
-/** The chatbox line for a write: what the operator did, or that it failed. */
 export function writeLine(intent: OutsideWriteIntent, description: WriteDescription, failed?: string): string {
 	const said = description.text ? `: ${preview(description.text)}` : "";
 	switch (intent.kind) {
@@ -105,7 +95,6 @@ export function writeLine(intent: OutsideWriteIntent, description: WriteDescript
 			return failed ? `Your reply in ${where} failed: ${failed}` : `You replied in ${where}${said}`;
 		}
 		case "slack-mark-read": {
-			// `#releases`, or `#releases, in Ann's thread` for a thread: said as "Ann's thread in #releases".
 			const [place, thread] = description.where.split(", in ");
 			const what = thread ? `${thread} in ${place}` : place;
 			return failed ? `Marking ${what} read failed: ${failed}` : `You marked ${what} read in Slack.`;
@@ -113,23 +102,16 @@ export function writeLine(intent: OutsideWriteIntent, description: WriteDescript
 	}
 }
 
-/**
- * Writes the operator asks for with a button that says exactly what it does (Mark read), which change nothing anyone
- * else reads: sent without the confirmation, but recorded and announced like every other.
- */
 const UNCONFIRMED = new Set<OutsideWriteIntent["kind"]>(["slack-mark-read"]);
 
 export interface GateAdapters {
-	/** What the confirmation shows for an intent, or why it cannot be done (looked up outside where needed). */
 	describe(intent: OutsideWriteIntent): Promise<Outcome<{ description: WriteDescription }>>;
-	/** Send it; the address it can be seen at when known. */
 	send(intent: OutsideWriteIntent): Promise<Outcome<{ url?: string | null }>>;
 }
 
 export interface Gate {
 	describe(intent: unknown): Promise<DescribedWrite>;
 	write(intent: unknown, token: unknown): Promise<WriteResult>;
-	/** Send a write that needs no confirmation (`UNCONFIRMED`); refuses every other. */
 	act(intent: unknown): Promise<WriteResult>;
 	recent(): OutsideWriteEntry[];
 	onWrite(listener: (entry: OutsideWriteEntry) => void): () => void;
@@ -149,7 +131,6 @@ export function openGate(recordFile: string, adapters: GateAdapters, now: () => 
 		for (const listener of listeners) listener(entry);
 	};
 
-	/** Send a write as described, then record and announce it, sent or failed. */
 	const send = async (intent: OutsideWriteIntent, description: WriteDescription): Promise<WriteResult> => {
 		const sent = await adapters.send(intent);
 		const { what, where, text } = description;

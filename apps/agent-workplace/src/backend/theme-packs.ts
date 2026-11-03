@@ -1,6 +1,3 @@
-// The theme packs on disk: list them for Settings and check them (`checkPack`) with a reader over the file system.
-// PNGs are read here without an image library: their size from the header, and for character sheets their alpha
-// channel, decoded from the IDAT stream (8-bit, non-interlaced, which is what the art pipeline writes).
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, normalize, sep } from "node:path";
 import { inflateSync } from "node:zlib";
@@ -17,7 +14,6 @@ function paeth(a: number, b: number, c: number): number {
 	return pa <= pb && pa <= pc ? a : pb <= pc ? b : c;
 }
 
-/** Undo each scanline's PNG filter, handing every row of samples to `row` in order. */
 function unfilter(
 	raw: Buffer,
 	width: number,
@@ -52,7 +48,6 @@ function unfilter(
 	}
 }
 
-/** A PNG's size, and with `pixels` its alpha channel; undefined when the file is not a PNG it can read. */
 export function readPng(data: Buffer, pixels = false): PackImage | undefined {
 	if (data.length < 33 || !data.subarray(0, 8).equals(SIGNATURE) || data.toString("latin1", 12, 16) !== "IHDR")
 		return undefined;
@@ -96,7 +91,6 @@ export function readPng(data: Buffer, pixels = false): PackImage | undefined {
 	return { width, height, alpha };
 }
 
-/** A reader over a pack's directory: paths stay inside it. */
 export function packReader(dir: string): PackReader {
 	const file = (path: string): string | undefined => {
 		const full = normalize(join(dir, path));
@@ -115,19 +109,13 @@ export function packReader(dir: string): PackReader {
 	};
 }
 
-/** Check the pack in `dir`, named by its directory. */
 export function checkThemePack(dir: string, options?: { pixels?: boolean }): Promise<PackProblem[]> {
 	const id = normalize(dir).split(sep).filter(Boolean).pop() ?? "";
 	return checkPack(packReader(dir), id, options);
 }
 
-/** The window's colour when no pack's backdrop can be read: a neutral dark near every theme's own. */
 export const NEUTRAL_BACKDROP = "#121216";
 
-/**
- * The colour the window shows before the page draws (and around it while it resizes): the backdrop (`world.backdrop`,
- * a `#rrggbb` colour) of the theme `id`, else of the pack the world opens in by default, else a neutral dark.
- */
 export function themeBackdrop(themesDir: string, id: string | null | undefined): string {
 	for (const each of [id, "fantasy"]) {
 		if (!each || !/^[a-z0-9][a-z0-9-]*$/.test(each)) continue;
@@ -142,7 +130,6 @@ export function themeBackdrop(themesDir: string, id: string | null | undefined):
 	return NEUTRAL_BACKDROP;
 }
 
-/** Every pack under `themesDir` (a directory with a theme.json), checked, in name order with fantasy first. */
 export async function listThemes(themesDir: string, options?: { pixels?: boolean }): Promise<ThemeChoice[]> {
 	const ids = existsSync(themesDir)
 		? readdirSync(themesDir, { withFileTypes: true })

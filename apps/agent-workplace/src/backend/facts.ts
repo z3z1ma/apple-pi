@@ -1,10 +1,7 @@
-// Observed facts about each character, read from its `sessions` row the way the tmux sidebar reads them
-// (`components/tmux-sessions/sidebar/model.py`), so every view agrees on who is asking, working, or finished.
 import { readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import type { CharacterFacts, Question, RunState } from "../world.js";
 
-/** The `sessions` columns, with its current pane, that the facts come from. */
 export interface FactsRow {
 	cwd: string;
 	reportsTo: string | null;
@@ -31,10 +28,6 @@ export interface FactsRow {
 	windowIndex: number | null;
 }
 
-/**
- * The facts columns for the current incarnation. A runtime predating explicit work has no focused task;
- * its old inferred ledger touch and intent are not substitutes for an assignment.
- */
 export const factsColumns = (work: boolean) => `s.run_state as runState, s.prompt, s.needs_you_since as needsYouSince,
 	s.seen_at as seenAt, s.settled_at as settledAt, s.current_tool as currentTool, s.current_tool_arg as currentToolArg,
 	s.current_tool_since as currentToolSince,
@@ -46,7 +39,6 @@ export const factsColumns = (work: boolean) => `s.run_state as runState, s.promp
 	(select l.window_index from tmux_window_links l
 		where l.socket = p.socket and l.window_id = p.window_id order by l.window_index limit 1) as windowIndex`;
 
-/** Joins for `factsColumns`: the session's current incarnation `i` and its pane `p`. */
 export const FACTS_JOINS = `left join incarnations i on i.session_id = s.id and i.generation = s.generation
 left join tmux_panes p on p.socket = i.tmux_socket and p.id = i.pane_id`;
 
@@ -62,10 +54,6 @@ function parse<T>(json: string | null): T | undefined {
 const PARSED_KEPT = 20_000;
 const parsed = new Map<string, unknown>();
 
-/**
- * `JSON.parse` for column values that repeat from read to read (`git`, `config`, `current_task`), parsed once each.
- * The values are shared between readers: never change one.
- */
 export function parseShared<T>(json: string | null | undefined): T | undefined {
 	if (!json) return undefined;
 	if (parsed.has(json)) return parsed.get(json) as T | undefined;
@@ -77,7 +65,6 @@ export function parseShared<T>(json: string | null | undefined): T | undefined {
 
 const text = (value: unknown) => (typeof value === "string" && value.trim() ? value.trim() : null);
 
-/** The questions of an `ask_user_question` prompt, as the panel's form needs them; undefined when they do not parse. */
 function questionsOf(value: unknown): Question[] | undefined {
 	if (!Array.isArray(value) || !value.length) return undefined;
 	const questions: Question[] = [];
@@ -95,10 +82,6 @@ function questionsOf(value: unknown): Question[] | undefined {
 	return questions;
 }
 
-/**
- * The open prompt's kind and what it asks: its title, or else its first question. A questionnaire also carries its id
- * and questions, so the conversation panel can answer it.
- */
 function asking(prompt: string | null): CharacterFacts["asking"] {
 	if (prompt === null) return null;
 	const open = parse<{ kind?: unknown; id?: unknown; title?: unknown; questions?: unknown }>(prompt);
@@ -110,10 +93,6 @@ function asking(prompt: string | null): CharacterFacts["asking"] {
 	return questions && id ? { ...shown, questionnaire: { id, questions } } : shown;
 }
 
-/**
- * Reads ledger tasks' `task.md`, again only when the file changed. With `recheck` false, a file read before is not
- * even checked for changes: the inn's thousands of sleepers are checked only on the backend's task rereads.
- */
 export function taskReader(): (currentTask: string | null, recheck?: boolean) => CharacterFacts["task"] {
 	const cache = new Map<
 		string,
@@ -134,7 +113,6 @@ export function taskReader(): (currentTask: string | null, recheck?: boolean) =>
 		try {
 			const mtime = statSync(file).mtimeMs;
 			if (read?.mtime !== mtime) {
-				// As the sidebar reads it: the first `# ` heading and the first `Status:` line.
 				let title: string | null = null;
 				let status: string | null = null;
 				for (const line of readFileSync(file, "utf8").split("\n")) {
@@ -145,7 +123,6 @@ export function taskReader(): (currentTask: string | null, recheck?: boolean) =>
 				cache.set(file, read);
 			}
 		} catch {
-			// Gone, as after the task is archived: remembered as unread, so the next check stats it again.
 			read = { mtime: -1, title: null, status: null, goalMissing: true };
 			cache.set(file, read);
 		}
@@ -158,7 +135,6 @@ export function taskReader(): (currentTask: string | null, recheck?: boolean) =>
 	};
 }
 
-/** The headings of a self document: what the person keeps notes under. */
 export const selfHeadings = (self: string | null): string[] =>
 	(self ?? "")
 		.split("\n")
