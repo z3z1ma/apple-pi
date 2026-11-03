@@ -8,12 +8,10 @@ import { readValuation } from "./valuation.js";
 
 const HOUR = 3_600_000;
 
-/** One fact the evaluator adds up; `source` names what produced it, such as `task:<id>` or `person:<id>`. */
 export type EconomicEvent =
 	| { kind: "value" | "compute" | "impact"; at: number; amount: number; source: string }
 	| { kind: "delay"; from: number; to: number; perHour: number; source: string; state?: DelayState };
 
-/** Why work waited: nobody had it and nothing blocked it, an open wait blocked it, or someone was working on it. */
 export type DelayState = "queued" | "waiting" | "inProgress";
 const noDelay = (): Record<DelayState, number> => ({ queued: 0, waiting: 0, inProgress: 0 });
 
@@ -26,13 +24,8 @@ export interface Contribution {
 	impact: number;
 }
 
-/** The wait relations as an SQL list; `links.ts` owns which relations are waits. */
 const WAIT_LIST = WAITS.map((relation) => `'${relation}'`).join(", ");
 
-/**
- * The pure evaluator U: sums what falls in `[from, to)`. Every event is a point or an interval charged by its overlap,
- * so any split of a window adds up to the whole.
- */
 export function evaluate(events: EconomicEvent[], from: number, to: number) {
 	const parts = new Map<string, Contribution>();
 	const part = (source: string) => {
@@ -70,9 +63,7 @@ interface TaskRow {
 	close_status: string | null;
 }
 
-/** The history adapter: an organization's recorded tasks as economic events, valued by their current task.md. */
 function historyEvents(db: DatabaseSync, organization: string, from: number, until: number) {
-	// A task only temporary pi_exec peers hold is a step inside their caller's work, the same set their disposal deletes.
 	const ownership = taskOwnership(db, organization);
 	const temporary = temporaryCallers(db);
 	const tasks = (
@@ -100,7 +91,6 @@ function historyEvents(db: DatabaseSync, organization: string, from: number, unt
 		return owned.length || ownedAtClose ? [{ task, owned, ownedAtClose }] : [];
 	});
 	const valued = relevant.map(({ task, owned, ownedAtClose }) => {
-		// A goal file that has gone counts as unvalued, which marks the result incomplete.
 		const goal = join(task.bundle, "task.md");
 		const valuation = readValuation(existsSync(goal) ? readFileSync(goal, "utf8") : "");
 		const source = `task:${task.id}`;
@@ -118,7 +108,6 @@ function historyEvents(db: DatabaseSync, organization: string, from: number, unt
 	return { events, valued, eligibleTasks: new Set(tasks.map((task) => task.id)) };
 }
 
-/** A task's delay interval cut where its state changed: an assignment began or ended, or a wait on it opened or closed. */
 function delayStates(db: DatabaseSync, task: string, from: number, to: number) {
 	const held = db
 		.prepare("select assigned_at as start, ended_at as stop from assignments where task_id = ?")
@@ -149,14 +138,6 @@ interface Recorded {
 	data: string | null;
 }
 
-/**
- * Who belonged to the organization, replayed from the runtime's events in the order it recorded them (`seq`): a hello
- * seeding a manager (`reports_to_changed`), a move (`transferred`), a departure (`retired`), and a rehire
- * (`rehired`). A person is a member while its manager chain reaches the organization and it has not been let go; a
- * temporary pi_exec peer never is, even after cleanup. Before its first recorded change a person had the manager
- * that change replaced, and a person with none has its current manager throughout. So a later join or move, even in the
- * same millisecond, never rewrites who belonged earlier.
- */
 export function membership(db: DatabaseSync, organization: string) {
 	const peers = temporaryCallers(db);
 	const accountingPerson = (person: string): string | undefined => {
@@ -189,7 +170,7 @@ export function membership(db: DatabaseSync, organization: string) {
 			if (peers.get(row.session_id) !== null) seeds.set(row.session_id, JSON.parse(row.data ?? "{}").from ?? null);
 		}
 	const structural = stream.filter((row) => row.type !== "cost_changed" && row.type !== "prompt_opened");
-	/** Replays every event recorded at or before `until`, calling `visit` after each with membership at that point. */
+
 	const replay = (
 		until: number,
 		visit?: (row: Recorded, data: Record<string, unknown>, isMember: (person: string) => boolean) => void,
@@ -219,12 +200,11 @@ export function membership(db: DatabaseSync, organization: string) {
 		replay,
 		accountingPerson,
 		memberAt: (person: string, at: number) => replay(at).isMember(person),
-		/** The manager a person had at a moment, as recorded. */
+
 		managerAt: (person: string, at: number) => replay(at).managerOf(person),
 	};
 }
 
-/** Task ownership follows structural ancestry; retiring a person does not discard its organization's obligations. */
 export function taskOwnership(db: DatabaseSync, organization: string) {
 	const { managerAt } = membership(db, organization);
 	const anchors = new Map(
@@ -260,11 +240,6 @@ export function taskOwnership(db: DatabaseSync, organization: string) {
 	};
 }
 
-/**
- * Each lasting member's spend, including its temporary creation descendants, at the moment it was recorded.
- * A cost change marked `hello` is spend the transcript already held
- * before any cost was recorded for the session: a baseline.
- */
 function computeEvents(db: DatabaseSync, organization: string): EconomicEvent[] {
 	const events: EconomicEvent[] = [];
 	const members = membership(db, organization);
@@ -277,7 +252,6 @@ function computeEvents(db: DatabaseSync, organization: string): EconomicEvent[] 
 	return events;
 }
 
-/** Waits still open at the window's end, from the organization's tasks or recorded by a member at that time. */
 export function openWaits(db: DatabaseSync, organization: string, at: number, eligibleTasks?: ReadonlySet<string>) {
 	const { memberAt } = membership(db, organization);
 	const { owns } = taskOwnership(db, organization);
@@ -307,10 +281,6 @@ export function openWaits(db: DatabaseSync, organization: string, at: number, el
 		.map((link) => ({ ...link, ageHours: (at - link.created_at) / HOUR }));
 }
 
-/**
- * Demands on the operator: questions opened, and messages sent in mail threads the operator is in, by people who were
- * members when they did it.
- */
 function interruptions(db: DatabaseSync, organization: string, from: number, to: number): number {
 	const { replay, memberAt, accountingPerson } = membership(db, organization);
 	let questions = 0;
@@ -335,7 +305,6 @@ function interruptions(db: DatabaseSync, organization: string, from: number, to:
 	return questions + mail;
 }
 
-/** Everyone at or below `person` in the reporting tree. */
 export function subtreeOf(db: DatabaseSync, person: string): Set<string> {
 	const members = new Set([person]);
 	for (let grew = true; grew; ) {
@@ -369,7 +338,6 @@ interface Finding {
 	resolution: string | null;
 }
 
-/** Link assertions are evidence, not verified facts. Explicit ownership wins over endpoint or recorder fallbacks. */
 export function linkOwnership(db: DatabaseSync, organization: string) {
 	const { managerAt, memberAt } = membership(db, organization);
 	const { owns } = taskOwnership(db, organization);
@@ -437,7 +405,6 @@ interface DroppedSpend {
 	supersededBy: string[];
 }
 
-/** Explains already-counted spend; current outcomes annotate history without changing its economic events. */
 function droppedSpend(
 	db: DatabaseSync,
 	organization: string,
@@ -511,7 +478,6 @@ function droppedSpend(
 	};
 }
 
-/** Realized fitness of one organization over `[from, to)`, recomputed from recorded facts and current valuations. */
 export function realizedFitness(
 	db: DatabaseSync,
 	organization: string,
@@ -579,7 +545,7 @@ export function realizedFitness(
 		incomplete: unvalued > 0,
 		openWaits: openWaits(db, organization, to, eligibleTasks),
 		interruptions: interruptions(db, organization, from, to),
-		// The operator's time is part of the model, but nothing measures it honestly yet; waiting for him is already delay.
+
 		attention: { pricePerMinute: 1, measured: false },
 		excludes:
 			"temporary pi_exec peers with unknown legacy callers or ancestry, and assignment spans already deleted before retention",

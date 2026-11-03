@@ -1,5 +1,8 @@
 ## file
 
+Operator time has no measured economic event yet; waiting for the operator already contributes task delay.
+Why: assigning an invented operator-time price would add unsupported cost to the recorded model.
+
 `evaluate` is the pure evaluator U: it knows only economic events and a window, never the database, scenarios, or roles. Every event is a point charged when `from <= at < to`, or an interval charged by its overlap, which is what makes any split of a window add up (partition invariance). The history adapter turns recorded facts into events; later a scenario adapter feeds the same evaluator, so realized and expected fitness stay one function.
 Why: the spec requires expected fitness to be the same arithmetic as realized fitness; a second calculator for scenarios would drift. An earlier draft charged a task's whole delay at completion, which double-counted delay across windows.
 The adapter reads current valuations only for tasks with owned obligation overlap or an owned completion in the requested window (repricing restates history, as the operator ruled). It establishes this relevance before accessing `task.md`; errors in relevant files remain errors. Opens and closes come from runtime records, so archiving a bundle does not change past windows. Tasks without an `opened_at` are not obligations.
