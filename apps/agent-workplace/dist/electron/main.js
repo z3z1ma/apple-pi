@@ -201,14 +201,7 @@ function departureOf(db, person) {
 }
 //#endregion
 //#region components/session-state/src/threads.ts
-/**
-* Threads: every exchange between people is a thread with a subject, participants, and ordered messages, stored by
-* the runtime (the only writer). A participant is pushed new messages (each arrives as mail, a turn) or pulls them
-* (they wait until it reads the thread). Readers in sessions open the database read-only.
-*/
-/** The operator, as a participant and an address. */
 var OPERATOR$1 = "operator";
-/** Read the state database read-only; undefined when it or its thread tables do not exist yet. */
 function withThreads(read) {
 	const path = statePaths().db;
 	if (!existsSync(path)) return void 0;
@@ -220,7 +213,6 @@ function withThreads(read) {
 		db.close();
 	}
 }
-/** A participant's display name: its session name, else its id; the operator is "the operator". */
 function nameOf$1(db, id) {
 	if (id === "operator") return "the operator";
 	if (id === "harness") return "the harness";
@@ -3108,13 +3100,7 @@ function openOrg(paths, commands, snapshot) {
 }
 //#endregion
 //#region components/shared/src/git.ts
-/** Time between asking a stopped Git process group to exit and killing it. */
 var KILL_GRACE_MS = 2e3;
-/**
-* Exact bytes for blobs, patches and NUL-delimited paths; the text helper intentionally trims. The command runs in
-* its own process group, and every failure path (exit, abort, deadline, output limit) settles only after the
-* process has exited, so callers can remove the directories it was using.
-*/
 function gitBytes(cwd, args, options = {}) {
 	return new Promise((resolvePromise, reject) => {
 		if (options.signal?.aborted) {
@@ -3178,7 +3164,6 @@ function gitBytes(cwd, args, options = {}) {
 		}
 	});
 }
-/** Kill what remains of a stopped command's process group and wait until none of it is left. */
 async function groupGone(pid) {
 	if (!pid || process.platform === "win32") return;
 	for (;;) {
@@ -3224,7 +3209,6 @@ var WORKING_TREE = {
 	kind: "working-tree",
 	base: "HEAD"
 };
-/** Isolate commands from ambient repository redirection, user configuration, hooks and fsmonitor daemons. */
 var ENV = {
 	GIT_DIR: void 0,
 	GIT_WORK_TREE: void 0,
@@ -3240,7 +3224,6 @@ var ENV = {
 	GIT_NO_LAZY_FETCH: "1",
 	GIT_TERMINAL_PROMPT: "0"
 };
-/** For reading the author's effective settings (config and attributes only, never filters or hooks): user and system config count. */
 var AUTHOR_SETTINGS = {
 	GIT_CONFIG_GLOBAL: process.env.GIT_CONFIG_GLOBAL,
 	GIT_CONFIG_NOSYSTEM: process.env.GIT_CONFIG_NOSYSTEM
@@ -3266,7 +3249,6 @@ var EMPTY_TREE = {
 	sha1: "4b825dc642cb6eb9a060e54bf8d69288fbee4904",
 	sha256: "6ef19b41225c5369f1c104d45d8d85efa9b057b53b14b4b9b939dd74decc5321"
 };
-/** Exact bytes on disk: no attributes from any source, no autocrlf, explicit filesystem capabilities. */
 var rawFlags = (objectFormat) => [
 	`--attr-source=${EMPTY_TREE[objectFormat]}`,
 	"-c",
@@ -3290,7 +3272,6 @@ function gitRun(cwd, args, options = {}) {
 async function gitLine(cwd, args, options) {
 	return (await gitRun(cwd, args, options)).toString("utf8").replace(/\n$/, "");
 }
-/** 2.45.1 is the first release whose promisor fetch honours GIT_NO_LAZY_FETCH; older Git can run a promisor remote's command. */
 var MINIMUM_GIT = [
 	2,
 	45,
@@ -3304,12 +3285,10 @@ async function requireGit(signal) {
 	if ((MINIMUM_GIT.map((part, index) => (found[index] ?? 0) - part).find((difference) => difference !== 0) ?? 0) < 0) throw new Error(`Git ${MINIMUM_GIT.join(".")} or newer is required; found: ${output}`);
 	gitChecked = true;
 }
-/** Git's quoted path-list entry, so a colon or quote inside the path is not read as a separator. */
 function quotedListEntry(path) {
 	if (!/[:"\\\n\t]/.test(path)) return path;
 	return `"${path.replace(/[\\"]/g, "\\$&").replace(/\n/g, "\\n").replace(/\t/g, "\\t")}"`;
 }
-/** A Git blob identity computed in-process; OpenSSL hashing is several times faster than spawning Git for it. */
 function blobId(objectFormat, data) {
 	return createHash(objectFormat).update(`blob ${data.length}\0`).update(data).digest("hex");
 }
@@ -3319,7 +3298,6 @@ async function fileBlobId(objectFormat, path, signal) {
 	for await (const chunk of createReadStream(path, { signal })) hash.update(chunk);
 	return hash.digest("hex");
 }
-/** Length-delimited `cat-file --batch -Z`: blob bytes may contain newlines, NULs and invalid UTF-8. */
 function objectReader(cwd, env = {}, signal) {
 	const child = spawn("git", [
 		...FLAGS,
@@ -3420,14 +3398,12 @@ function objectReader(cwd, env = {}, signal) {
 		return type === "blob" ? data : void 0;
 	};
 	return {
-		/** One object at a time, in request order; `<tree>:<path>` reads a path inside an immutable tree. */
 		read(spec) {
 			if (closing) return Promise.reject(/* @__PURE__ */ new Error("The Git object reader is closed"));
 			const next = queue.then(() => request(spec));
 			queue = next.catch(() => {});
 			return next;
 		},
-		/** Stops new requests, ends Git (failing any read still waiting) and resolves once it has exited. */
 		async close() {
 			closing = true;
 			signal?.removeEventListener("abort", abort);
@@ -3439,14 +3415,12 @@ function objectReader(cwd, env = {}, signal) {
 	};
 }
 var OBJECT_ID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
-/** Like Promise.all, but every command has exited before the first failure propagates. */
 async function settledAll(work) {
 	const results = await Promise.allSettled(work);
 	const failed = results.find((result) => result.status === "rejected");
 	if (failed) throw failed.reason;
 	return results.map((result) => result.value);
 }
-/** Paths come from separate queries (they may contain newlines); revisions are one batch of validated object IDs. */
 async function locate$1(cwd, target, signal) {
 	const names = [target.kind === "commit" ? target.commit : target.kind === "range" || target.kind === "branch" ? target.head : "HEAD", ...target.kind === "commit" ? target.parent ? [target.parent] : [] : target.kind === "staged" ? [] : [target.base]];
 	const path = (args, from = cwd) => gitLine(from, [
@@ -3524,10 +3498,6 @@ async function resolveBase(root, target, located, signal) {
 		baseTree: await gitLine(root, ["rev-parse", `${bases[0]}^{tree}`], { signal })
 	};
 }
-/**
-* Copy an index with its modification time: racy-git detection compares entries with the index file's own
-* timestamp, so a fresh timestamp would hide same-second edits that the original index still re-checks.
-*/
 async function copyIndex(source, target) {
 	try {
 		await copyFile(source, target);
@@ -3537,11 +3507,6 @@ async function copyIndex(source, target) {
 		if (error.code !== "ENOENT") throw error;
 	}
 }
-/**
-* A private Git directory for one change: no repository config, attributes, hooks or filter definitions, the
-* author's worktree as its work tree, and the author's objects as an alternate. Every command that reads the
-* worktree or renders a diff runs here, so nothing configured in the author's repository runs or transforms bytes.
-*/
 async function isolatedContext(located, objects) {
 	const directory = await mkdtemp(join(tmpdir(), "git-change-"));
 	const gitDir = join(directory, "git");
@@ -3563,7 +3528,6 @@ async function isolatedContext(located, objects) {
 		}
 	};
 }
-/** Index, ignore and path-spelling settings that decide which worktree paths exist; never filters or hooks. */
 async function pathSettings(root, signal) {
 	return (await gitRun(root, [
 		"config",
@@ -3578,10 +3542,6 @@ async function pathSettings(root, signal) {
 		return ["-c", `${record.slice(0, split)}=${record.slice(split + 1)}`];
 	});
 }
-/**
-* Tracked paths whose index blob may differ from their bytes on disk although Git's stat cache calls them clean:
-* the author's attributes or autocrlf converted them when they were staged. Only these are read and compared.
-*/
 async function convertedPaths(root, entries, signal) {
 	const files = entries.filter((entry) => entry.mode.startsWith("100"));
 	if (!files.length) return [];
@@ -3625,12 +3585,6 @@ function parseEntries(output) {
 		};
 	});
 }
-/**
-* Snapshot staged and working-tree state the way `git stash create` does, in the isolated context: a copy of the
-* author's index absorbs changes with `git add -A`, so Git's stat cache hashes only changed files. The copy first
-* drops assume-unchanged and skip-worktree promises and forgets the cached stat of entries that conversion could
-* have made differ from the disk, so the snapshot holds exactly the bytes on disk. The author's index is untouched.
-*/
 async function snapshot$1(located, env, working, signal) {
 	const { repository: root, objectFormat } = located;
 	const index = join(env.GIT_DIR, "index");
@@ -3703,11 +3657,6 @@ async function snapshot$1(located, env, working, signal) {
 		headTree: (await run(["write-tree"])).toString("utf8").trim()
 	};
 }
-/**
-* Resolve a target to immutable trees. Mutable targets write their new blobs and trees to `objects` (private
-* unless supplied). Every later command runs in the change's isolated context; close it to stop its Git processes
-* and remove private state.
-*/
 async function openGitChange(cwd, target, options = {}) {
 	const { signal } = options;
 	await requireGit(signal);
@@ -3744,11 +3693,6 @@ async function openGitChange(cwd, target, options = {}) {
 		throw error;
 	}
 }
-/**
-* Reads two immutable trees, such as a retained review capture. Diffs resolve attributes from the head tree only.
-* Close is terminal: it cancels Git commands still running, waits for them and the object reader to exit, and only
-* then removes owned state, so a failing parallel consumer cannot pull storage from under its siblings.
-*/
 function openTrees(root, baseTree, headTree, options = {}) {
 	const env = options.env ?? {};
 	const stop = new AbortController();
@@ -3797,7 +3741,6 @@ function openTrees(root, baseTree, headTree, options = {}) {
 }
 //#endregion
 //#region components/shared/src/real-path.ts
-/** True when `path` is `dir` or lies under it, compared as given. */
 function within$2(path, dir) {
 	const rel = relative(dir, path);
 	return rel === "" || rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel);
@@ -3806,15 +3749,6 @@ var MAX_LINKS = 40;
 function components(path) {
 	return path.split(sep).filter((part) => part !== "" && part !== ".");
 }
-/**
-* The path with symlinks resolved the way the kernel resolves it for a write: components left to
-* right, `..` moving to the parent of the resolved directory so far, and a symlink replaced by its
-* target's components (from the root when the target is absolute). Resolving `..` lexically
-* first would let `pivot/../x` stay inside a directory while `pivot` leads out of it. Once a
-* component does not exist, the rest resolves lexically, since writing creates it there; a
-* dangling symlink therefore resolves to the target a write would create. Any other failure to
-* inspect a component, and more than MAX_LINKS links, throws, as the kernel would fail the write.
-*/
 function canonical$1(path) {
 	const absolute = isAbsolute(path) ? path : `${process.cwd()}${sep}${path}`;
 	const root = parse(absolute).root;
@@ -3920,7 +3854,6 @@ function parseCandidate(path, label, raw) {
 		thinking: candidate.thinking
 	};
 }
-/** Read and validate the complete user-global model profile authority. */
 function loadModelProfiles(options = {}) {
 	const path = modelProfilesPath();
 	let source;
@@ -4604,7 +4537,6 @@ async function captureReview(request, destination, signal) {
 }
 //#endregion
 //#region components/session-state/src/protocol.ts
-/** Split a byte stream into complete lines; a partial final line waits for its newline. */
 function lineReader(onLine) {
 	let buffer = "";
 	return (chunk) => {
@@ -5160,11 +5092,6 @@ function reviewQueue(db, actor, options = {}) {
 		};
 	});
 }
-/**
-* The selected head's project roles laid out as capture's full checkout has them: every tree entry that role loading
-* passes through (ancestors, linked directories, link chains) keeps its mode, and links keep their own text, so a link
-* that leaves the tree stays as unfrozen here as it is in the capture.
-*/
 async function targetConfiguration(change) {
 	const directory = await mkdtemp(join(tmpdir(), "review-roles-"));
 	const entries = /* @__PURE__ */ new Map();
@@ -5186,7 +5113,6 @@ async function targetConfiguration(change) {
 		return entries.get(path);
 	};
 	const place = async (path) => mkdir(dirname(join(directory, path)), { recursive: true });
-	/** Materializes the path and returns the in-tree path it resolves to, or undefined outside or absent from the tree. */
 	const realize = async (path, seen = /* @__PURE__ */ new Set()) => {
 		const parts = path.split("/");
 		for (let index = 0, real = ""; index < parts.length; index++) {
@@ -5434,14 +5360,12 @@ function readReviewPart(db, actor, id, options = {}) {
 		}
 	});
 }
-/** The review's mail thread: milestones the runtime posted and comments people added. */
 function reviewThread(db, review) {
 	return db.prepare("select seq, sender, body, at from thread_messages where thread_id = ? order by seq").all(`review:${review}`).map((message) => ({
 		...message,
 		senderName: nameOf$1(db, message.sender)
 	}));
 }
-/** Enough of a transcript's end to show what a pass is doing now; older entries stay in the full session file. */
 var LOG_TAIL_BYTES = 524288;
 function transcriptTail(file) {
 	let descriptor;
@@ -5497,7 +5421,6 @@ function transcriptTail(file) {
 		closeSync(descriptor);
 	}
 }
-/** Recent transcript of one attempt, or by default of every running attempt (the latest attempt when none runs). */
 function reviewLogs(db, review, options) {
 	const columns = "id, pass_id as pass, kind, state, model, session_file as sessionFile";
 	let rows;
@@ -5516,10 +5439,6 @@ function reviewLogs(db, review, options) {
 		entries: sessionFile ? transcriptTail(sessionFile).slice(-limit) : []
 	}));
 }
-/**
-* Cost and yield across the reviews an actor can see: by model, by phase and per review. Recorded primary-turn usage,
-* not provider invoices; confirmed findings are attributed to the model of the inspection that reported them.
-*/
 function reviewAnalytics(db, actor, options = {}) {
 	return snapshot(db, () => {
 		const summaries = reviewQueue(db, actor, {
@@ -5594,7 +5513,6 @@ function reviewAnalytics(db, actor, options = {}) {
 		};
 	});
 }
-/** A sum that becomes unavailable (null) rather than infinite, as review cost does. */
 function finiteSum(sum, value) {
 	if (sum === null) return null;
 	const total = sum + value;
@@ -5680,7 +5598,6 @@ var HUNK_HEADER = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/;
 function stripPrefix(path) {
 	return path.replace(/^[ab]\//, "").replace(/\t$/, "");
 }
-/** Parses `git diff` output into files and hunks with old and new line numbers. */
 function parseUnifiedDiff(text) {
 	const files = [];
 	let file;
@@ -5763,10 +5680,6 @@ function label(target, change) {
 		};
 	}
 }
-/**
-* Patch headers C-quote unusual filenames, so file identities come from the NUL-delimited status listing, which
-* shares the patch's order. A type change (T) is the one status Git writes as two sections for the same path.
-*/
 function assignPaths(files, status) {
 	const records = status.toString("utf8").split("\0").filter(Boolean);
 	const identities = [];
@@ -5789,10 +5702,6 @@ function assignPaths(files, status) {
 		file.oldPath = identities[i].oldPath;
 	}
 }
-/**
-* Git diffs non-UTF8 text line by line, and decoding it would silently replace bytes. Such a file is shown as binary,
-* as a capture records it, rather than as altered text.
-*/
 function markUndecodable(files, patch) {
 	const starts = [];
 	for (let at = 0; at < patch.length;) {
@@ -5810,7 +5719,6 @@ function markUndecodable(files, patch) {
 		}];
 	}
 }
-/** Parse one tree-to-tree patch and serve exact bytes from either side; the caller closes it. */
 async function readTrees(trees, labels, paths = []) {
 	try {
 		const diff = (...args) => trees.git([
@@ -5839,7 +5747,6 @@ async function readTrees(trees, labels, paths = []) {
 		throw error;
 	}
 }
-/** The selected change, from the same Git snapshot every change-selection tool uses. */
 async function readChange(cwd, target, signal) {
 	const change = await openGitChange(cwd, target, { signal });
 	const subject = target.kind === "commit" ? (await change.git([
@@ -5854,10 +5761,6 @@ async function readChange(cwd, target, signal) {
 		subject
 	}, label(target, change));
 }
-/**
-* A retained review capture: its own repository and trees. Sign-off limits the diff to the reviewed paths;
-* explanations show the whole capture, so changed context is never labelled unchanged.
-*/
 async function readCapturedChange(artifact, options = {}) {
 	await verifyCapturedSource(artifact, options.signal);
 	const trees = openTrees(artifact.source, artifact.baseTree, artifact.headTree, { signal: options.signal });
@@ -5886,7 +5789,6 @@ var LOCKFILES = /* @__PURE__ */ new Set([
 	"Gemfile.lock",
 	"composer.lock"
 ]);
-/** Lockfiles and paths marked `linguist-generated` by the head tree's `.gitattributes`. */
 async function generatedPaths(diff, paths) {
 	const generated = new Set(paths.filter((path) => LOCKFILES.has(path.slice(path.lastIndexOf("/") + 1))));
 	if (paths.length === 0) return generated;
@@ -5919,7 +5821,6 @@ function languageOf(path) {
 	const ext = name.includes(".") ? name.slice(name.lastIndexOf(".") + 1).toLowerCase() : "";
 	return ext in bundledLanguages ? ext : void 0;
 }
-/** Token segments for every line of `code`, with light and dark colors. Unknown languages come back plain. */
 async function highlightLines(code, path) {
 	const lines = code.replace(/\n$/, "").split("\n");
 	const lang = languageOf(path);
@@ -5948,7 +5849,6 @@ async function highlightLines(code, path) {
 		};
 	}));
 }
-/** Splits segments at the `[from, to)` character range and flags the pieces inside it. */
 function markRange(segments, from, to) {
 	const out = [];
 	let pos = 0;
@@ -5981,11 +5881,9 @@ function markRange(segments, from, to) {
 var PAGE_DATA_MARKER = "<script id=\"page-data\" type=\"application/json\">null<\/script>";
 //#endregion
 //#region components/browser-pages/src/saved-page.ts
-/** The built single-file app for one kind of page. */
 function readTemplate(kind) {
 	return readFile(fileURLToPath(new URL(`../dist/${kind}.html`, new URL("../../../../components/browser-pages/src/saved-page.ts", import.meta.url).href)), "utf8");
 }
-/** Inlines page data into the app, escaped so the JSON cannot close its script element. */
 function embedPage(template, data) {
 	if (!template.includes("<script id=\"page-data\" type=\"application/json\">null<\/script>")) throw new Error("The page template has no data marker.");
 	const json = JSON.stringify(data).replace(/</g, "\\u003c").replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");
@@ -5994,7 +5892,6 @@ function embedPage(template, data) {
 function slug(text) {
 	return text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80).replace(/-+$/, "") || "page";
 }
-/** Writes a self-contained page to `<agent dir>/artifacts/<project>/<date>-<slug>.html` and returns its path. */
 async function savePage(html, root, title, when = /* @__PURE__ */ new Date()) {
 	const dir = join(getAgentDir(), "artifacts", basename(root));
 	await mkdir(dir, { recursive: true });
@@ -6015,7 +5912,6 @@ Type.Object({
 	path: Type.String({ description: "The Markdown file to review, relative to the working directory" }),
 	note: Type.Optional(Type.String({ description: "One sentence shown above the document: what you need from the reviewer" }))
 });
-/** Splits the file into top-level blocks with source lines; code fences come highlighted. */
 async function blocksOf(source) {
 	const blocks = [];
 	let line = 1;
@@ -6047,7 +5943,6 @@ async function blocksOf(source) {
 	return blocks;
 }
 var MERMAID = fileURLToPath(new URL("../dist/mermaid.min.js", new URL("../../../../components/browser-pages/src/markdown-review.ts", import.meta.url).href));
-/** A page app, with Mermaid inlined only when its documents have a diagram: Mermaid is most of a page's weight. */
 async function withDiagrams(template, blocks) {
 	if (!blocks.some((b) => b.mermaid)) return template;
 	const mermaid = (await readFile(MERMAID, "utf8")).replace(/<\/script/gi, "<\\/script");
@@ -6151,11 +6046,6 @@ function renameOf(a, b) {
 	const to = y.slice(p, y.length - s);
 	return /^[a-z][a-z0-9_]+$/.test(from) && /^[a-z][a-z0-9_]+$/.test(to) ? [from, to] : void 0;
 }
-/**
-* A hint, not proof of equal behaviour: true when `other` differs from `example` only by one consistent name
-* substitution (invoice → tax, in any case form) taken from the file names, or from the first differing name
-* when both share a file. Keywords, literals, numbers, and operators never count as a rename.
-*/
 function renamedFrom(example, other, text) {
 	if (example.lines.length !== other.lines.length) return false;
 	const pairs = [];
@@ -6184,7 +6074,6 @@ function renamedFrom(example, other, text) {
 	return pairs.every(([a, b]) => forms.reduce((acc, [f, t]) => acc.split(f).join(t), a) === b);
 }
 var lineText = (line) => "text" in line ? line.text : line.s.map((seg) => seg.t).join("");
-/** Common prefix and suffix after each line's own indentation, so a re-indented line marks only real edits. */
 function similarity(a, b) {
 	const ia = a.length - a.trimStart().length;
 	const ib = b.length - b.trimStart().length;
@@ -6205,7 +6094,6 @@ function similarText(a, b) {
 		score: (p + s) / Math.max(a.length, b.length, 1)
 	};
 }
-/** Marks the changed middle of each removed line and the added line most like it in the same run. */
 function wordMarks(lines) {
 	let i = 0;
 	while (i < lines.length) {
@@ -6280,7 +6168,6 @@ function islandsOf(file, status, lines, block, note) {
 	}
 	return out;
 }
-/** Splits a run of added lines, such as a new file, at the given first lines of new pieces. */
 function splitAdded(run, starts) {
 	if (!starts || run.e <= run.s || run.lines.slice(run.s, run.e + 1).some((l) => l.t !== "+")) return [run];
 	const pieces = [];
@@ -6298,7 +6185,6 @@ function splitAdded(run, starts) {
 	pieces.push(piece(start, run.e));
 	return pieces;
 }
-/** Cuts git hunks where the owner changes, so each piece holds exactly what one chapter entry placed. */
 function cutHunks(islands, hunks, order) {
 	const blocks = /* @__PURE__ */ new Map();
 	for (const island of islands) blocks.set(island.block, [...blocks.get(island.block) ?? [], island]);
@@ -6336,15 +6222,10 @@ function cutHunks(islands, hunks, order) {
 		});
 	}
 }
-/** The former base/head arguments must fail loudly rather than silently review the default target. */
 function rejectRemovedSelection(params) {
 	const removed = ["base", "head"].filter((key) => key in params);
 	if (removed.length) throw new Error(`${removed.join(" and ")} ${removed.length === 1 ? "was" : "were"} replaced by target, for example {"kind": "branch", "base": "main", "head": "feature"} or {"kind": "commit", "commit": "abc123"}.`);
 }
-/**
-* Builds the page from the agent's structure and the selected change. Code always comes from Git objects:
-* the live target's snapshot, or a supplied retained diff. The page owns and closes the diff.
-*/
 async function buildCodeReviewPage(params, cwd, token, captured, signal) {
 	rejectRemovedSelection(params);
 	cwd = resolve(cwd, params.cwd ?? ".");
@@ -6589,8 +6470,6 @@ var KINDS = /* @__PURE__ */ new Set([
 	"praise"
 ]);
 var isObject$1 = (v) => typeof v === "object" && v !== null;
-/** A question about lines the page actually shows, or undefined. */
-/** The page app, with Mermaid inlined only when the agent's prose has a diagram. */
 async function codeReviewTemplate(page) {
 	return withDiagrams(await readTemplate("code-review"), [
 		...page.intent,
@@ -6612,7 +6491,6 @@ function parseQuestion(body, page) {
 		question: body.question.trim()
 	};
 }
-/** Validates the page's submission against the page it was served. Anything malformed is rejected whole. */
 function parseReviewResult(body, page) {
 	if (!isObject$1(body) || !VERDICTS.has(body.verdict)) return void 0;
 	if (!Array.isArray(body.comments) || !Array.isArray(body.decisions) || !Array.isArray(body.seen)) return void 0;
@@ -6678,17 +6556,6 @@ function send(res, status, body, type = "text/plain; charset=utf-8") {
 	});
 	res.end(body);
 }
-/**
-* Serves one page on 127.0.0.1 until the reviewer submits or the session closes. Every request must carry the
-* session token (query `t` for the page, header `x-page-token` for posts) and address the server by its
-* loopback host, so other local origins cannot read the page or answer for the reviewer.
-*
-* `ask` answers questions posted to `/ask` while the page is open. It returns the answer, or undefined for a
-* malformed question; its signal aborts when the page stops waiting or the session closes. `file` answers
-* `GET /file?path=…` with JSON, or undefined for a path the page may not read. `note` takes what the page posts
-* to `/note`. `GET /health` answers `health()` while the server runs, so a page knows whether its agent features can work. A page
-* without `parse` takes no submission, and its `result` never settles.
-*/
 async function openPageSession(html, token, parse, options = {}) {
 	const { signal, ask, file, note, health } = options;
 	const asking = new AbortController();
@@ -6903,7 +6770,6 @@ function capturedSubmission(body, page) {
 		}
 	};
 }
-/** Human submission is committed by the sole writer before the page receives success. */
 async function submitCapturedReview(body, page, commit = commitApproval) {
 	const result = capturedSubmission(body, page);
 	if (!result?.capture) return void 0;
