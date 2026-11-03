@@ -13,6 +13,7 @@ import {
 	type ReviewCodeParams,
 } from "../src/code-review.js";
 import browserPages from "../src/index.js";
+import { livePage } from "../src/live-pages.js";
 
 let repo: string;
 const write = (path: string, text: string) => {
@@ -255,11 +256,15 @@ describe("sign_off_code tool", () => {
 				on: () => {},
 			} as any);
 			const updates: string[] = [];
+			const listed: unknown[] = [];
 			const result = await tool.execute(
 				"call",
 				params({ cwd: repo }),
 				undefined,
-				(u: any) => updates.push(u.content[0].text),
+				(u: any) => {
+					updates.push(u.content[0].text);
+					listed.push(livePage("test-session", "call", agentDir));
+				},
 				{
 					hasUI: true,
 					cwd: bin,
@@ -267,6 +272,8 @@ describe("sign_off_code tool", () => {
 				},
 			);
 			expect(updates[0]).toMatch(/^Waiting for the review at http:\/\/127\.0\.0\.1:\d+\/\?t=/);
+			expect(listed).toEqual([{ tool: "sign_off_code", url: updates[0]!.replace("Waiting for the review at ", "") }]);
+			expect(livePage("test-session", "call", agentDir)).toBeUndefined();
 			expect(result.content[0].text).toContain("The reviewer approved.");
 			expect(result.content[0].text).toContain("Summary: Ship it.");
 			expect(result.details.saved.startsWith(join(agentDir, "artifacts"))).toBe(true);

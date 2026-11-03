@@ -5,4 +5,4 @@ Why: Agent Workplace runs in another process and only knows a DM's session id an
 
 Each entry is written when the page server opens and removed when it closes: in `finally` for sign-offs, and at session shutdown for explanations.
 Coupled: components/browser-pages/src/index.ts, apps/agent-workplace/src/electron/main.ts, apps/agent-workplace/web/overlay/conversation/conversation-panel.tsx
-Verify: components/browser-pages/tests/live-pages.test.ts
+Verify: components/browser-pages/tests/live-pages.test.ts, components/browser-pages/tests/code-review.test.ts
