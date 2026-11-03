@@ -1,6 +1,6 @@
 # Indexed recall evaluation
 
-Status: baseline reproduced; independent task set frozen; candidate unexecuted.
+Status: local-prefix candidate comparison complete; relevance judging and actual-tool integration gates pending.
 
 ## Frozen setup
 
@@ -21,6 +21,25 @@ All twelve baseline displayed responses are byte-for-byte identical to the retai
 The previous experiment stopped after a mandatory episode loss and never completed the previous held-out precision/display labels. That absence remains explicit. The new comparison cannot claim complete non-inferiority from those partial labels.
 
 Latency case selected before candidate results: Q3, largest NL-query prefix among the old twelve, 110,294,070 normalized JSONL bytes. First full current-tool call 404.57 ms; 20 sequential warm full-tool calls p95=407.61 ms. OS cache state is uncontrolled. These are local API calls through a manager facade, not provider/tool-dispatch or live-runtime end-to-end latency.
+
+## Local-prefix candidate observation
+
+Frozen candidate `f026f6f1`, original queries, top five, eligible lineage corpus, `fields: all`:
+
+| Set / route | Baseline bounded-episode sources | Hybrid bounded-episode sources |
+| --- | --- | --- |
+| Frozen six, indexed NL only | 1 | 1 |
+| Frozen six, unchanged regex only | 6 | 6 |
+| Frozen six, combined | 7/19 | 7/19 |
+| Previous held-out six, indexed NL only | 4 | 7 |
+| Previous held-out six, unchanged regex only | 2 | 2 |
+| Previous held-out six, combined | 6/20 | 9/20 |
+
+Per-question changes: Q1 gains one episode source, Q4 loses its sole episode source; H4 gains two and H5 gains one. All other episode numerators are unchanged. These aggregate episode counts meet non-inferiority, so they do not justify stopping the inquiry. Q4's regression is retained rather than hidden by the aggregate. General relevance still has six novel frozen hits and incomplete previous held-out labels. No precision or actual-display pass is claimed. Ciaran owns independent source judging under the frozen criteria.
+
+Q3 indexed warm query p95=8.63 ms over 20 sequential repetitions, against full current-tool p95=407.61 ms (47.2x faster). First indexed query 8.55 ms; index construction 734.91 ms; temporary database+WAL+SHM 58,274,176 bytes. This passes the low-level local latency threshold only. It excludes persistent-index construction as predeclared and does not establish production multi-person or end-to-end latency.
+
+Concurrent maintainer reflection changed adapter setup cleanup and removed unused option properties, without changing retrieval. Kofi reran all twelve candidate cases after inspecting that diff: complete private response records are byte-for-byte identical to the initial candidate run. No adverse output was tuned away. Original and check runs, code hashes and timing samples remain privately retained. The five current-engine public tests also passed in Kofi's own rerun.
 
 ## Task-set timing and limits
 
@@ -62,8 +81,8 @@ node --import ./components/session-state/src/register.mjs \
   .ledger/202611021905-task-scoped-recall/engine-replay.test.mjs
 ```
 
-The initial three adapter tests passed. Maintainer reflection replaced helper-structure assertions with five replay-level behavioral checks: default historical recovery, all-branch recovery, supplementary relevance labels, frozen-evidence rejection, and failed-setup cleanup. They exercise the current engine only; candidate behavior remains unverified until execution. No full suite, provider run, runtime restart or live backfill ran in this evaluation lane.
+The initial three adapter tests passed. Maintainer reflection replaced helper-structure assertions with five replay-level behavioral checks: default historical recovery, all-branch recovery, supplementary relevance labels, frozen-evidence rejection, and failed-setup cleanup. All five passed serially against the detached baseline; rerunning both private sets after the adapter cleanup change preserved all twelve complete response records exactly. The public tests exercise the current engine only; the private candidate observations above are separate evidence, not coverage from those tests. No full suite, provider run, runtime restart or live backfill ran in this evaluation lane.
 
 ## Next step
 
-Freeze and verify Ciaran's private task-scoped artifact, then run the exact detached candidate against the old sets. Report indexed NL and unchanged-path regex separately. If the ID-level gate survives, complete missing relevance judgments and evaluate actual integrated display and latency before recommending replacement.
+Complete missing source relevance and baseline previous-held-out display judgments. Fiona owns a separate-branch actual tool candidate with SQL eligibility before top-k and the existing formatter. Evaluate its frozen actual output, intended-corpus ranking and end-to-end latency before recommending replacement. Build the explicit multi-source task-corpus control before inspecting task outputs; all four non-inferiority criteria apply separately there, and unknown task permissions cannot satisfy the separate authorization gate.

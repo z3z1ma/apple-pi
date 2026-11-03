@@ -174,11 +174,11 @@ export async function replay({
 	const judgmentsBytes = judgmentsPath ? readFileSync(judgmentsPath) : undefined;
 	const judgments = judgmentsBytes ? JSON.parse(judgmentsBytes) : undefined;
 	mkdirSync(output, { recursive: true, mode: 0o700 });
-	const scratch = mkdtempSync(join(output, "prefixes-"));
 	const baselineIdentity = sourceIdentity(baselineRoot, "components/session-search/src");
 	const candidateIdentity =
 		engine === "hybrid" ? sourceIdentity(sourceRoot, "components/session-state/src") : undefined;
 	const currentSearch = await currentEngine(baselineRoot);
+	const scratch = mkdtempSync(join(output, "prefixes-"));
 	const rows = [];
 	const privateRows = [];
 	try {
@@ -200,7 +200,7 @@ export async function replay({
 				}
 				const searchFile = indexed ? projectedFile : file;
 				const search = indexed?.search ?? currentSearch;
-				const options = { question, ...prepared, limit: 5, fields };
+				const options = { question, prefix: prepared.prefix, branch: prepared.branch, limit: 5, fields };
 				const started = performance.now();
 				const result = await search(searchFile, question.params.query, options);
 				const firstMs = performance.now() - started;
