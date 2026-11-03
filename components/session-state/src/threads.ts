@@ -1,8 +1,3 @@
-/**
- * Threads: every exchange between people is a thread with a subject, participants, and ordered messages, stored by
- * the runtime (the only writer). A participant is pushed new messages (each arrives as mail, a turn) or pulls them
- * (they wait until it reads the thread). Readers in sessions open the database read-only.
- */
 import { existsSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { departureOf } from "./departures.js";
@@ -11,24 +6,18 @@ import { statePaths } from "./paths.js";
 export type ThreadKind = "mail" | "escalation" | "channel" | "meeting" | "task";
 export type Delivery = "push" | "pull";
 
-/** The operator, as a participant and an address. */
 export const OPERATOR = "operator";
 
-/** Automatic runtime notices are not messages authored by a person or the operator. */
 export const HARNESS = "harness";
 
-/** What a `thread_post` command asks the runtime to do. */
 export interface ThreadPost {
 	thread: string;
 	body: string;
-	/** For a new thread: its subject, kind, and recipients (session ids, or the operator). */
 	subject?: string;
 	threadKind?: ThreadKind;
 	to?: string[];
 	cc?: string[];
-	/** Explicit attention targets; names in prose are ordinary text. */
 	notify?: string[];
-	/** The organizer ends a meeting by posting its summary and closing it together. */
 	closeMeeting?: boolean;
 }
 
@@ -36,14 +25,12 @@ export interface Posted {
 	thread: string;
 	subject: string;
 	seq: number;
-	/** Participants to push the message to, besides the sender. */
 	push: string[];
 }
 
 const known = (db: DatabaseSync, id: string) =>
 	id === OPERATOR || db.prepare("select 1 from sessions where id = ?").get(id) !== undefined;
 
-/** Change access and its audience-history fact atomically, including when called without an outer transaction. */
 export function participateIn(
 	db: DatabaseSync,
 	thread: string,
@@ -76,7 +63,6 @@ export function participateIn(
 	}
 }
 
-/** Audience at a timestamp, separate from today's access and read cursors. */
 export function audienceAt(db: DatabaseSync, thread: string, at: number): string[] {
 	const people = new Set<string>();
 	const events = db
@@ -91,7 +77,6 @@ export function audienceAt(db: DatabaseSync, thread: string, at: number): string
 	return [...people].sort();
 }
 
-/** Store one message (creating its thread when new); returns what to push, or why the post is refused. */
 export function postToThread(
 	db: DatabaseSync,
 	sender: string,
@@ -155,7 +140,6 @@ export function isParticipant(db: DatabaseSync, thread: string, participant: str
 	);
 }
 
-/** A participant has read the thread up to message `seq`. */
 export function markRead(db: DatabaseSync, thread: string, participant: string, seq: number): void {
 	db.prepare(
 		"update thread_participants set read_up_to = max(read_up_to, ?) where thread_id = ? and participant = ?",
@@ -181,7 +165,6 @@ export interface ThreadMessage {
 	at: number;
 }
 
-/** Read the state database read-only; undefined when it or its thread tables do not exist yet. */
 export function withThreads<T>(read: (db: DatabaseSync) => T): T | undefined {
 	const path = statePaths().db;
 	if (!existsSync(path)) return undefined;
@@ -194,7 +177,6 @@ export function withThreads<T>(read: (db: DatabaseSync) => T): T | undefined {
 	}
 }
 
-/** A participant's display name: its session name, else its id; the operator is "the operator". */
 export function nameOf(db: DatabaseSync, id: string): string {
 	if (id === OPERATOR) return "the operator";
 	if (id === HARNESS) return "the harness";
@@ -209,7 +191,6 @@ export function nameOf(db: DatabaseSync, id: string): string {
 	return row?.name || departureOf(db, id)?.name || discarded?.name || id;
 }
 
-/** The threads `participant` is in, newest activity first; with `unreadOnly`, only those with unread messages. */
 export function threadsOf(db: DatabaseSync, participant: string, unreadOnly: boolean): ThreadSummary[] {
 	const rows = db
 		.prepare(
@@ -249,7 +230,6 @@ export function threadsOf(db: DatabaseSync, participant: string, unreadOnly: boo
 		});
 }
 
-/** Every message of a thread, in order. */
 export function messagesOf(db: DatabaseSync, thread: string): ThreadMessage[] {
 	const rows = db
 		.prepare("select seq, id, sender, body, at from thread_messages where thread_id = ? order by seq")

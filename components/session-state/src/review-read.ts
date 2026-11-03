@@ -287,7 +287,6 @@ export function reviewQueue(
 		state?: ReviewState;
 		cwd?: string;
 		around?: string;
-		/** Leave out reviews with nothing left to act on (see ReviewSummary.addressed). */
 		hideAddressed?: boolean;
 	} = {},
 ): ReviewQueue {
@@ -330,7 +329,6 @@ export function reviewQueue(
 		const passes = { running, limit: REVIEW_PASS_CONCURRENCY };
 		const order =
 			"case when state in ('capturing', 'running', 'cancelling') then 0 when state = 'queued' then 1 else 2 end, case when state = 'queued' then priority end desc, case when state = 'queued' then created_at end asc, case when state = 'queued' then rowid end asc, updated_at desc, rowid desc";
-		// Addressed is derived from each assessment, so the filter applies after ordering rather than in SQL.
 		const visible = options.hideAddressed
 			? (db.prepare(`select id from review_jobs ${filter} order by ${order}`).all(...args) as { id: string }[])
 					.map(({ id }) => reviewSummary(db, actor, id))
@@ -339,7 +337,6 @@ export function reviewQueue(
 		const total = visible?.length ?? groups.reduce((sum, row) => sum + row.count, 0);
 		if (options.limit === undefined) return { total, states, passes, page: null };
 		let offset = options.offset ?? 0;
-		// A filter or a shrinking queue can leave a requested page past the end; show the last page instead of nothing.
 		if (offset >= total && total > 0) offset = Math.floor((total - 1) / options.limit) * options.limit;
 		if (visible) {
 			if (options.around) {
@@ -402,11 +399,6 @@ export interface ReviewReadOptions {
 
 export type ReviewStore = <T>(read: (db: DatabaseSync) => T) => T;
 
-/**
- * The selected head's project roles laid out as capture's full checkout has them: every tree entry that role loading
- * passes through (ancestors, linked directories, link chains) keeps its mode, and links keep their own text, so a link
- * that leaves the tree stays as unfrozen here as it is in the capture.
- */
 async function targetConfiguration(change: GitChange) {
 	const directory = await mkdtemp(join(tmpdir(), "review-roles-"));
 	const entries = new Map<string, { mode: string; type: string } | undefined>();
@@ -419,7 +411,6 @@ async function targetConfiguration(change: GitChange) {
 		return entries.get(path);
 	};
 	const place = async (path: string) => mkdir(dirname(join(directory, path)), { recursive: true });
-	/** Materializes the path and returns the in-tree path it resolves to, or undefined outside or absent from the tree. */
 	const realize = async (path: string, seen = new Set<string>()): Promise<string | undefined> => {
 		const parts = path.split("/");
 		for (let index = 0, real = ""; index < parts.length; index++) {
@@ -485,7 +476,6 @@ export async function readReviewFreshness(
 	let checkout: Match = "unavailable";
 	let policy: Match = "unavailable";
 	try {
-		// Every captured region and file list derives from these Git identities; configuration and intent complete it.
 		const current = await openGitChange(job.request.cwd, job.request.target, { signal });
 		let same: boolean;
 		try {
@@ -729,7 +719,6 @@ export function readReviewPart(db: DatabaseSync, actor: string, id: string, opti
 	});
 }
 
-/** The review's mail thread: milestones the runtime posted and comments people added. */
 function reviewThread(db: DatabaseSync, review: string): ReviewThreadMessage[] {
 	return (
 		db
@@ -738,7 +727,6 @@ function reviewThread(db: DatabaseSync, review: string): ReviewThreadMessage[] {
 	).map((message) => ({ ...message, senderName: nameOf(db, message.sender) }));
 }
 
-/** Enough of a transcript's end to show what a pass is doing now; older entries stay in the full session file. */
 const LOG_TAIL_BYTES = 512 * 1024;
 
 function transcriptTail(file: string): ReviewLogEntry[] {
@@ -763,7 +751,6 @@ function transcriptTail(file: string): ReviewLogEntry[] {
 			} catch {
 				return [];
 			}
-			// A record that is not an object is skipped like a malformed line; it must not hide the rest of the log.
 			if (!entry || typeof entry !== "object") return [];
 			const message = entry.message;
 			if (entry.type !== "message" || !message || typeof message !== "object") return [];
@@ -794,7 +781,6 @@ function transcriptTail(file: string): ReviewLogEntry[] {
 	}
 }
 
-/** Recent transcript of one attempt, or by default of every running attempt (the latest attempt when none runs). */
 function reviewLogs(db: DatabaseSync, review: string, options: ReviewReadOptions): ReviewAttemptLog[] {
 	const columns = "id, pass_id as pass, kind, state, model, session_file as sessionFile";
 	type Row = Omit<ReviewAttemptLog, "attempt" | "entries"> & { id: string; sessionFile: string | null };
@@ -826,10 +812,6 @@ function reviewLogs(db: DatabaseSync, review: string, options: ReviewReadOptions
 	}));
 }
 
-/**
- * Cost and yield across the reviews an actor can see: by model, by phase and per review. Recorded primary-turn usage,
- * not provider invoices; confirmed findings are attributed to the model of the inspection that reported them.
- */
 export function reviewAnalytics(db: DatabaseSync, actor: string, options: { cwd?: string } = {}): ReviewAnalytics {
 	return snapshot(db, () => {
 		const queue = reviewQueue(db, actor, { cwd: options.cwd, limit: Number.MAX_SAFE_INTEGER });
@@ -851,7 +833,6 @@ export function reviewAnalytics(db: DatabaseSync, actor: string, options: { cwd?
 				finishedAt: number | null;
 			}[];
 			for (const attempt of attempts) {
-				// Missing or invalid observations stay unreported rather than counting as free.
 				const observed: unknown = attempt.cost === null ? undefined : JSON.parse(attempt.cost);
 				const reported = typeof observed === "number" && Number.isFinite(observed) && observed >= 0;
 				const minutes = attempt.finishedAt ? (attempt.finishedAt - attempt.createdAt) / 60000 : 0;
@@ -930,7 +911,6 @@ export function reviewAnalytics(db: DatabaseSync, actor: string, options: { cwd?
 	});
 }
 
-/** A sum that becomes unavailable (null) rather than infinite, as review cost does. */
 function finiteSum(sum: number | null, value: number): number | null {
 	if (sum === null) return null;
 	const total = sum + value;
