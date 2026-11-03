@@ -6,12 +6,10 @@ import { getAgentDir } from "@earendil-works/pi-coding-agent";
 
 import { PAGE_DATA_MARKER, type PageData } from "./page-data.js";
 
-/** The built single-file app for one kind of page. */
 export function readTemplate(kind: PageData["kind"]): Promise<string> {
 	return readFile(fileURLToPath(new URL(`../dist/${kind}.html`, import.meta.url)), "utf8");
 }
 
-/** Inlines page data into the app, escaped so the JSON cannot close its script element. */
 export function embedPage(template: string, data: unknown): string {
 	if (!template.includes(PAGE_DATA_MARKER)) throw new Error("The page template has no data marker.");
 	const json = JSON.stringify(data)
@@ -32,7 +30,6 @@ function slug(text: string): string {
 	);
 }
 
-/** Writes a self-contained page to `<agent dir>/artifacts/<project>/<date>-<slug>.html` and returns its path. */
 export async function savePage(html: string, root: string, title: string, when = new Date()): Promise<string> {
 	const dir = join(getAgentDir(), "artifacts", basename(root));
 	await mkdir(dir, { recursive: true });

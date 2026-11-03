@@ -6,14 +6,12 @@ const READ_ONLY_TOOLS = new Set(["read", "grep", "find", "ls"]);
 const FRAME = `You are an ephemeral read-only fork of the agent that opened a review page for the user. The user is reviewing your work in that page and asks about the passage below. Answer the question directly and briefly, grounded in this conversation, the files, and the repository. You can use read, grep, find, and ls; every other tool is blocked. Say plainly when you are not sure.
 Your answer appears next to that passage in the page. It is not a message in the main conversation and it changes no files. The review call is still waiting for the user's verdict.`;
 
-/** What a question is about: where it is, the text itself, and optional context such as the chapter. */
 export interface Passage {
 	where: string;
 	excerpt: string;
 	context?: string;
 }
 
-/** A prompt for a read-only fork: what to answer, what a still-running tool call should read, and the usage label. */
 export interface ForkPrompt {
 	prompt: string;
 	pending: string;
@@ -21,11 +19,6 @@ export interface ForkPrompt {
 	root: string;
 }
 
-/**
- * Answers from a read-only fork of the live conversation: the fork shares the session's
- * request prefix, a still-running tool call gets a placeholder result, and only the answer leaves the fork. Its
- * usage is recorded in the session under `label`.
- */
 export async function askFork(
 	ctx: ExtensionContext,
 	{ prompt, pending, label, root }: ForkPrompt,
@@ -63,7 +56,6 @@ export async function askFork(
 	}
 }
 
-/** Answers a reviewer's question about a passage of the page they are reviewing. */
 export function askAgent(ctx: ExtensionContext, passage: Passage, question: string, signal: AbortSignal, root: string) {
 	const where = `${passage.where}${passage.context ? ` (${passage.context})` : ""}`;
 	return askFork(

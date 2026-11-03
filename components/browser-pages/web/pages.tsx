@@ -22,7 +22,6 @@ import {
 } from "./state";
 import { AttBars, baseName, CodeLine, Diamond, dirName, Icon, Kbd, Md, pad, plain, plural } from "./ui";
 
-/** The agent's Markdown (lists, tables, code, Mermaid) rendered the way the document pages render it. */
 const Prose = memo(function Prose({ blocks, className }: { blocks: MarkdownBlock[]; className: string }) {
 	const { s } = useReview();
 	useEffect(() => {

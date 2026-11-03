@@ -6,7 +6,6 @@ import { viteSingleFile } from "vite-plugin-singlefile";
 
 const here = import.meta.dirname;
 
-// The mode names the page to build. Each kind is its own self-contained file, so only the Markdown page carries Mermaid.
 export default defineConfig(({ mode }) => ({
 	root: here,
 	plugins: [react(), viteSingleFile()],

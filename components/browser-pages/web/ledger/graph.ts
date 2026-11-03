@@ -5,17 +5,11 @@ export const NODE = { w: 236, h: 108, gx: 76, gy: 16 };
 export interface Edge {
 	from: number;
 	to: number;
-	/** SVG path of the curve and of its arrowhead. */
 	d: string;
 	head: string;
-	/** `bad` for an edge that runs backwards or to a later blocker; `done` once the blocker is done. */
 	kind: "" | "done" | "bad";
 }
 
-/**
- * Places each ticket in a column by its dependency depth, ordering each column by where its blockers sit so edges
- * cross as little as possible. A cycle cannot be layered; its back edge loops under the graph.
- */
 export function layout(tickets: Ticket[]) {
 	const byId = new Map(tickets.map((t) => [t.id, t]));
 	const depth = new Map<number, number>();
@@ -75,7 +69,6 @@ export function edges(tickets: Ticket[], pos: Map<number, { x: number; y: number
 	);
 }
 
-/** Every ticket `id` waits on, directly or not, and every ticket that waits on it; `id` is in both. */
 export function chain(tickets: Ticket[], id: number): { up: Set<number>; down: Set<number> } {
 	const up = new Set([id]);
 	const down = new Set([id]);

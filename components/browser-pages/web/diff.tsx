@@ -2,8 +2,8 @@ import type { MouseEvent } from "react";
 
 import type { CommentKind, Decision, Hunk as HunkData, Note as NoteData } from "../src/page-data";
 import { useReview } from "./context";
-import { anchorLabel, ATT_LABEL, hunkRange } from "./model";
-import { isOpen, markPatternSeen, saveComposer, type State } from "./state";
+import { ATT_LABEL, anchorLabel, hunkRange } from "./model";
+import { isOpen, markPatternSeen, type State, saveComposer } from "./state";
 import { Answer, baseName, CodeLine, Diamond, dirName, Icon, Kbd, Md, plural } from "./ui";
 
 export const COMMENT_KINDS: Record<CommentKind, string> = {
@@ -20,7 +20,6 @@ const PLACEHOLDER: Record<CommentKind, string> = {
 	nit: "A small thing…",
 	praise: "What is good here?",
 };
-/** Hunks longer than this start folded to their first FOLD_SHOW lines. */
 const FOLD_AT = 80;
 const FOLD_SHOW = 40;
 
@@ -54,7 +53,6 @@ function Comment({ comment }: { comment: State["comments"][number] }) {
 	);
 }
 
-/** Keeps focus in the composer's text when a mode or kind button is pressed, so typing continues there. */
 const keepTyping = (e: MouseEvent) => e.preventDefault();
 
 export function Composer() {
@@ -696,7 +694,6 @@ function PatternCard({ pid, force }: { pid: string; force?: boolean }) {
 	);
 }
 
-/** Hunks grouped for display: a repeated change as one card, everything else by file, in the given order. */
 export function Units({ ids, pageKey, force }: { ids: string[]; pageKey: string; force?: boolean }) {
 	const { m } = useReview();
 	const units: ({ pattern: string } | { file: string; ids: string[] })[] = [];

@@ -9,7 +9,6 @@ const Block = memo(function Block({ html }: { html: string }) {
 	return <div className="ex-block" dangerouslySetInnerHTML={{ __html: html }} />;
 });
 
-/** Agent-written text that is not a block: escaped first, then given inline Markdown. */
 export function Inline({ text, as: Tag = "span" }: { text: string; as?: "span" | "p" }) {
 	// biome-ignore lint/security/noDangerouslySetInnerHtml: inlineMarkdown escapes the text before adding tags.
 	return <Tag dangerouslySetInnerHTML={{ __html: inlineMarkdown(text) }} />;
@@ -60,7 +59,6 @@ export function CodeCard({ code }: { code: CodeExcerpt }) {
 	);
 }
 
-/** Figures are agent-written HTML. They run sandboxed, with no network and no access to this page. */
 const FIGURE_POLICY =
 	"default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:";
 const TOKENS = [
@@ -98,7 +96,6 @@ export function Figure({ n, caption, html, theme }: { n: number; caption: string
 	const frame = useRef<HTMLIFrameElement>(null);
 	const [height, setHeight] = useState(320);
 	const [doc, setDoc] = useState("");
-	// Built after the theme reaches the page, so the figure takes the colours the reader sees.
 	useEffect(() => setDoc(figureDocument(html, theme)), [html, theme]);
 	useEffect(() => {
 		const onMessage = (e: MessageEvent) => {
@@ -164,7 +161,6 @@ const KINDS: [string, (path: string) => boolean][] = [
 	["Built files", (p) => /\bdist\//.test(p)],
 	["Docs, config, and everything else", () => true],
 ];
-/** A long path keeps its first folder and its last two parts. */
 const shortPath = (p: string) => {
 	const parts = p.split("/");
 	return parts.length > 4 && p.length > 60 ? `${parts[0]}/…/${parts.slice(-2).join("/")}` : p;

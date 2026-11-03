@@ -5,7 +5,7 @@ import { DocReviewContext } from "../markdown/context";
 import { Block, Panel } from "../markdown/parts";
 import { Banner, Floats, READER_KEYS, TopBar, useReader } from "../markdown/review";
 import { blockKey, splitKey } from "../markdown/state";
-import { type Bundle, EvidenceBody, type Loaded, Overview, TicketChip, TicketFlow, titleOf, Tree } from "./parts";
+import { type Bundle, EvidenceBody, type Loaded, Overview, TicketChip, TicketFlow, Tree, titleOf } from "./parts";
 
 const KEYS: [string, string][] = [
 	["G", "Overview and ticket graph"],
@@ -24,7 +24,6 @@ export function LedgerReview({ page }: { page: LedgerReviewPage }) {
 	const evidence = page.evidence.find((e) => e.path === view);
 	const file = doc || evidence ? view : "";
 
-	// Every block's place in the review: documents in reading order, then evidence files, each line by line.
 	const files = useMemo(() => [...page.documents.map((d) => d.path), ...page.evidence.map((e) => e.path)], [page]);
 	const blockIndex = useMemo(
 		() => new Map(page.documents.flatMap((d) => d.blocks.map((b, i) => [blockKey(d.path, b.id), i] as const))),
@@ -70,7 +69,6 @@ export function LedgerReview({ page }: { page: LedgerReviewPage }) {
 	});
 	const { s } = reader;
 
-	// An evidence file loads when first opened; a saved page shows only the files the reviewer opened.
 	useEffect(() => {
 		if (!evidence || loaded[evidence.path] || !live) return;
 		const path = evidence.path;

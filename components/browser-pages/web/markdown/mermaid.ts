@@ -8,7 +8,6 @@ declare global {
 
 let theme = "";
 
-/** Draws every Mermaid block not yet drawn, in the page's colours; redraws all of them when the theme changes. */
 export async function drawDiagrams(currentTheme: string): Promise<void> {
 	const css = getComputedStyle(document.documentElement);
 	const v = (name: string) => css.getPropertyValue(name).trim();
@@ -20,7 +19,6 @@ export async function drawDiagrams(currentTheme: string): Promise<void> {
 		}
 	}
 	const nodes = [...document.querySelectorAll<HTMLElement>("pre.mermaid:not([data-processed])")];
-	// The server inlines Mermaid only into pages whose document has a diagram.
 	const mermaid = window.mermaid;
 	if (!nodes.length || !mermaid) return;
 	for (const node of nodes) node.dataset.source ??= node.textContent ?? "";
@@ -30,7 +28,6 @@ export async function drawDiagrams(currentTheme: string): Promise<void> {
 		theme: "base",
 		fontFamily: v("--font-ui"),
 		flowchart: { useMaxWidth: false, nodeSpacing: 36, rankSpacing: 46, padding: 14, curve: "basis" },
-		// By default a sequence diagram takes `width: 100%`, which a centred box turns into 300px of unreadable text.
 		sequence: {
 			useMaxWidth: false,
 			wrap: true,
@@ -60,6 +57,5 @@ export async function drawDiagrams(currentTheme: string): Promise<void> {
 			noteBorderColor: v("--line-2"),
 		},
 	});
-	// A diagram that does not parse shows Mermaid's error in its place; the rest still draw.
 	await mermaid.run({ nodes, suppressErrors: true });
 }

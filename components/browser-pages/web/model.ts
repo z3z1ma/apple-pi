@@ -9,14 +9,12 @@ export const ATT_LABEL: Record<Attention, string> = { high: "Read closely", medi
 export const KIND_LABEL = { core: "Core", consequence: "Consequence", support: "Support" } as const;
 export const UNPLACED = "unplaced";
 
-/** One step in the attention lens: a repeated change counts once, every other hunk is its own unit. */
 export interface Unit {
 	rep: string;
 	ids: string[];
 	pattern?: string;
 }
 
-/** Derived, read-only structure over the page data. */
 export function buildModel(page: CodeReviewPage) {
 	const chapterOf: Record<string, Chapter> = {};
 	const change: Record<string, ChapterChange> = {};

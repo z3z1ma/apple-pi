@@ -3,7 +3,6 @@ import type { AddressInfo } from "node:net";
 
 export interface PageSession<R> {
 	url: string;
-	/** Settles with the reviewer's submission, or rejects when the session is aborted or closed first. */
 	result: Promise<R>;
 	close(): void;
 }
@@ -19,17 +18,6 @@ function send(res: ServerResponse, status: number, body: string, type = "text/pl
 	res.end(body);
 }
 
-/**
- * Serves one page on 127.0.0.1 until the reviewer submits or the session closes. Every request must carry the
- * session token (query `t` for the page, header `x-page-token` for posts) and address the server by its
- * loopback host, so other local origins cannot read the page or answer for the reviewer.
- *
- * `ask` answers questions posted to `/ask` while the page is open. It returns the answer, or undefined for a
- * malformed question; its signal aborts when the page stops waiting or the session closes. `file` answers
- * `GET /file?path=…` with JSON, or undefined for a path the page may not read. `note` takes what the page posts
- * to `/note`. `GET /health` answers `health()` while the server runs, so a page knows whether its agent features can work. A page
- * without `parse` takes no submission, and its `result` never settles.
- */
 export async function openPageSession<R>(
 	html: string,
 	token: string,
@@ -48,7 +36,6 @@ export async function openPageSession<R>(
 	const result = new Promise<R>((resolve, reject) => {
 		settle = { resolve, reject };
 	});
-	// A session closed before anyone awaits it must not surface as an unhandled rejection.
 	result.catch(() => {});
 	let done = false;
 	let submitting = false;

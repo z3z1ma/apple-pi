@@ -5,7 +5,6 @@ import type { Attention, Segment } from "../src/page-data";
 const escapeHtml = (s: string) =>
 	s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c] ?? c);
 
-/** Inline Markdown only: code, bold, italics. Text is escaped first. */
 export function inlineMarkdown(text: string): string {
 	return escapeHtml(text)
 		.replace(/`([^`]+)`/g, "<code>$1</code>")
@@ -15,7 +14,6 @@ export function inlineMarkdown(text: string): string {
 
 export const plain = (text: string) => text.replace(/[`*]/g, "");
 
-/** Block Markdown for agent answers: fenced code, lists, headings as bold lines, and paragraphs. Escapes first. */
 export function blockMarkdown(text: string): string {
 	const out: string[] = [];
 	const lines = text.replace(/\r\n/g, "\n").split("\n");
@@ -158,7 +156,6 @@ function SegmentText({ seg }: { seg: Segment }) {
 	);
 }
 
-/** One line of highlighted code; consecutive word-level marks share one `<mark>`. */
 export function CodeLine({ segments }: { segments: Segment[] }) {
 	const groups: { mark: boolean; segs: Segment[] }[] = [];
 	for (const seg of segments) {

@@ -23,7 +23,6 @@ const words = (parts: ExplainPart[]) =>
 		0,
 	);
 
-/** Scrolls the stage so `el` sits near the top; long jumps land at once. */
 function scrollStage(stage: HTMLElement | null, el: Element | null) {
 	if (!stage || !el) return;
 	const to = el.getBoundingClientRect().top - stage.getBoundingClientRect().top + stage.scrollTop - 24;
@@ -99,7 +98,6 @@ export function ExplainChange({ page }: { page: ExplainChangePage }) {
 	const answered = Object.keys(answers).length;
 	const totals = page.stats.reduce((t, f) => ({ add: t.add + f.add, del: t.del + f.del }), { add: 0, del: 0 });
 
-	// A layout effect runs before every passive one, so figures read the new theme's colours when they rebuild.
 	useLayoutEffect(() => {
 		document.documentElement.dataset.theme = theme;
 	}, [theme]);
@@ -107,7 +105,6 @@ export function ExplainChange({ page }: { page: ExplainChangePage }) {
 		void drawDiagrams(theme);
 	}, [theme]);
 
-	// What the reader found hard goes back to the agent, once they leave the page.
 	useEffect(() => {
 		if (!ai) return;
 		const send = () => {

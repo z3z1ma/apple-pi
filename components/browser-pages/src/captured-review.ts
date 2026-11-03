@@ -47,7 +47,6 @@ export async function buildCapturedReview(
 	return { page, root: artifact.repository };
 }
 
-/** A captured review's retained change, for pages that explain rather than decide. */
 export function capturedChange(actor: string, review: string, signal?: AbortSignal, store: ReviewStore = withReviews) {
 	const job = store((db) => reviewAssessment(db, actor, review)).job;
 	if (!job.artifact) throw new Error("The review has no captured target");
@@ -133,7 +132,6 @@ export function capturedSubmission(body: unknown, page: CodeReviewPage): ReviewR
 	return { ...result, capture: { ...expected, acceptLimits: capture.acceptLimits } };
 }
 
-/** Human submission is committed by the sole writer before the page receives success. */
 export async function submitCapturedReview(
 	body: unknown,
 	page: CodeReviewPage,

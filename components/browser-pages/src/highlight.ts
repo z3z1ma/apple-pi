@@ -1,4 +1,4 @@
-import { bundledLanguages, createHighlighter, type BundledLanguage, type Highlighter } from "shiki";
+import { type BundledLanguage, bundledLanguages, createHighlighter, type Highlighter } from "shiki";
 
 import type { Segment } from "./page-data.js";
 
@@ -14,7 +14,6 @@ export function languageOf(path: string): BundledLanguage | undefined {
 	return ext in bundledLanguages ? (ext as BundledLanguage) : undefined;
 }
 
-/** Token segments for every line of `code`, with light and dark colors. Unknown languages come back plain. */
 export async function highlightLines(code: string, path: string): Promise<Segment[][]> {
 	const lines = code.replace(/\n$/, "").split("\n");
 	const lang = languageOf(path);
@@ -36,7 +35,6 @@ export async function highlightLines(code: string, path: string): Promise<Segmen
 	);
 }
 
-/** Splits segments at the `[from, to)` character range and flags the pieces inside it. */
 export function markRange(segments: Segment[], from: number, to: number): Segment[] {
 	const out: Segment[] = [];
 	let pos = 0;
