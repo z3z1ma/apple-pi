@@ -36,7 +36,6 @@ export interface TurnResult {
 	changes: FileChange[];
 }
 
-/** Observe one run, whether its events arrive from Pi's SDK or a one-shot process's JSON stream. */
 export function createTurnObserver(cwd: string, onProgress: (progress: TurnProgress) => void = () => {}) {
 	const files = createFileChangeTracker(cwd);
 	const calls = new Map<string, ObservedCall>();

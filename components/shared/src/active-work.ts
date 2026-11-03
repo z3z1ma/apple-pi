@@ -44,12 +44,6 @@ interface ActiveWorkEvents {
 
 const surfaces = new WeakMap<object, ActiveWorkSurface>();
 
-/**
- * The one active-work surface for a Pi runtime. Pi gives each extension its own API object and
- * event facade over a shared bus, so the first installer answers a synchronous owner request on
- * that bus and later installers join its surface. The answering subscription belongs to the
- * installer's runtime and ends with it, so a reloaded runtime creates a fresh owner.
- */
 export function getActiveWorkSurface(owner: { events?: ActiveWorkEvents }): ActiveWorkSurface {
 	const known = surfaces.get(owner);
 	if (known) return known;

@@ -78,11 +78,6 @@ export function activeExclusiveLease(kind: string, projectRootInput: string): Ex
 	return owner && processLive(owner.pid) ? owner : undefined;
 }
 
-/**
- * Hold a SQLite write transaction for the lease lifetime. The operating system
- * releases SQLite's file lock when a process exits, so crash recovery never
- * removes a pathname that a replacement owner may already hold.
- */
 export function acquireExclusiveLease(
 	kind: string,
 	projectRootInput: string,

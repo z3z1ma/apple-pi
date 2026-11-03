@@ -40,7 +40,6 @@ function countPatch(patch: string): { added: number; removed: number } {
 	return { added, removed };
 }
 
-/** Attributes one agent's edit/write tool calls to files from its session events. */
 export function createFileChangeTracker(cwd: string, displayRoot = cwd) {
 	const files = new Map<string, FileChange & { existed: boolean }>();
 	const pending = new Map<string, { file: FileChange & { existed: boolean }; content?: string }>();

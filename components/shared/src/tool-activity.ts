@@ -1,4 +1,3 @@
-/** The argument that identifies a tool call's work, shared by runtime facts and one-shot worker activity. */
 export function mainToolArgument(args: unknown): string | undefined {
 	if (!args || typeof args !== "object") return undefined;
 	for (const key of ["command", "path", "pattern", "query", "description", "question", "task", "name", "code"]) {

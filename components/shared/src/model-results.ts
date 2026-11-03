@@ -2,7 +2,6 @@ import type { Usage } from "@earendil-works/pi-ai";
 
 const MAX_TRACE_RESULT_CHARS = 4_000;
 
-/** Text of a Pi tool result; images become a `[mime/type]` placeholder. */
 export function resultText(result: any): string {
 	if (!Array.isArray(result?.content)) return "";
 	return result.content

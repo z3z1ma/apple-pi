@@ -1,4 +1,3 @@
-/** Await a promise until it settles or the caller cancels, without aborting the underlying work. */
 export function abortable<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
 	if (!signal) return promise;
 	if (signal.aborted) {
