@@ -708,15 +708,23 @@ test("real Monaco retains dirty files across file and app switches, then saves e
 	}
 }, 45_000);
 
-test("long lines wrap, and Files and Git can each be hidden without losing the draft", async () => {
+test("word wrap toggles from the editor's command palette, and Files and Git can each be hidden without losing the draft", async () => {
 	const { page, errors } = await openCode();
 	try {
 		await openMain(page);
 		const long = `export const message = "${"wrapped words ".repeat(40)}";\n`;
 		await replaceText(page, long);
-		await vi.waitFor(async () =>
-			expect(await page.locator(".wp-code-editor-pane .view-line").count()).toBeGreaterThan(2),
-		);
+		const rows = () => page.locator(".wp-code-editor-pane .view-line").count();
+		await vi.waitFor(async () => expect(await rows()).toBe(2));
+		const toggleWrap = async () => {
+			await page.keyboard.press("F1");
+			await page.keyboard.type("Toggle Word Wrap");
+			await page.getByRole("option", { name: /View: Toggle Word Wrap/ }).waitFor();
+			await page.keyboard.press("Enter");
+		};
+		await toggleWrap();
+		await vi.waitFor(async () => expect(await rows()).toBeGreaterThan(2));
+		await shot(page, "wrapped");
 		const panes = page.locator(".wp-code-panes");
 		const files = page.getByRole("complementary", { name: "Files", exact: true });
 		const git = page.getByRole("complementary", { name: "Repository changes", exact: true });
@@ -736,6 +744,9 @@ test("long lines wrap, and Files and Git can each be hidden without losing the d
 		await files.waitFor();
 		await git.waitFor();
 		expect(await editorText(page)).toContain("wrapped words");
+		await editor(page).click();
+		await toggleWrap();
+		await vi.waitFor(async () => expect(await rows()).toBe(2));
 		expect(await page.evaluate(() => (window as any).workspaceCalls.saves)).toEqual([]);
 		expect(errors).toEqual([]);
 	} finally {

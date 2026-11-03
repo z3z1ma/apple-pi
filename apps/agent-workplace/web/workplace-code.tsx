@@ -330,13 +330,21 @@ export function WorkplaceCode({
 			minimap: { enabled: false },
 			fontSize: 13,
 			scrollBeyondLastLine: false,
-			wordWrap: "on",
 			padding: { top: 12 },
 			renderWhitespace: "selection",
 			fixedOverflowWidgets: true,
 		});
 		instance.current = created;
 		created.addCommand(loaded.monaco.KeyMod.CtrlCmd | loaded.monaco.KeyCode.KeyS, () => saveRef.current());
+		created.addAction({
+			id: "workplace.toggleWordWrap",
+			label: "View: Toggle Word Wrap",
+			keybindings: [loaded.monaco.KeyMod.Alt | loaded.monaco.KeyCode.KeyZ],
+			run: (target) =>
+				target.updateOptions({
+					wordWrap: target.getOption(loaded.monaco.editor.EditorOption.wordWrap) === "off" ? "on" : "off",
+				}),
+		});
 		return () => {
 			observer.disconnect();
 			created.dispose();
