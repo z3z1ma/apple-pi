@@ -5,8 +5,8 @@ These cases exercise built Workplace assets in headless Chrome against an in-mem
 The preload fixture supplies workspace.resolvePaths even when it validates no file destinations; return an explicit empty successful result for that scenario. Inspect rendered failure notices alongside pageerror/console errors, and retain positive canonical-file and Code activation checks in world-file-links.test.ts.
 Why: a missing fixture method produced a locally caught File links unavailable notice despite clean browser error listeners and passing interactions. Correct the incomplete fixture rather than adding a production fallback.
 
-Paging, search and pin-range scenarios assert the visible returned evidence as well as their requests. Earlier messages extends the loaded history in sequence order; searching and opening a pin range replace that view. Search for a different message from the already-visible page, and make the fixture honor range bounds and the default catch-up view.
-Why: a correct request alone would still pass if the reader left stale messages on screen; a fixture that treats omitted views as inspection would hide a real acknowledgment error.
+Paging, search and pin-range scenarios assert the visible returned evidence as well as their requests. Earlier messages extends the loaded history in sequence order; searching and opening a pin range replace that view. Search for a different message from the already-visible page, and make the fixture honor range bounds.
+Why: a correct request alone would still pass if the reader left stale messages on screen.
 
 The held publication commits its fixture effect before losing the visible result. It is released while Mail is active; the test observes settlement without new hidden reads, then returns to the original draft and recovers through status with the original attempt and only one post. This controls post acceptance versus reader disposal, not real socket timing or process startup. Ordinary names in prose and explicit notify IDs are asserted separately; a permissive fixture does not prove audience access.
 

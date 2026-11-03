@@ -2125,7 +2125,7 @@ test("DM unread updates survive another conversation, older reading and window b
 	}
 }, 30000);
 
-test("channel inspections preserve the unread cursor; explicit catch-up and selected-reader refresh recover from a read failure", async () => {
+test("a group is read while its end is in view; posts that arrive while he reads older ones stay unread until he jumps back", async () => {
 	const id = "team:unread";
 	const participants = [
 		{ id: "operator", name: "You" },

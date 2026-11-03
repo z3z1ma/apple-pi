@@ -618,9 +618,6 @@ test("looking at the end of a conversation marks it read; searching or reading e
 		await vi.waitFor(async () => expect((await calls(page, "markRead")).length).toBeGreaterThan(0));
 		const marked = await calls(page, "markRead");
 		expect(marked.at(-1)).toMatchObject({ seq: expect.any(Number) });
-		expect((await calls(page, "readThread")).every((read: any) => read.view !== "catch_up")).toBe(true);
-		expect(await page.getByRole("button", { name: "Catch up", exact: true }).count()).toBe(0);
-		expect(await page.getByRole("button", { name: "Read latest", exact: true }).count()).toBe(0);
 		await page.getByRole("button", { name: "Search this conversation", exact: true }).click();
 		await page.getByRole("textbox", { name: "Search conversation" }).fill("Evidence 11");
 		await page.getByRole("button", { name: "Search", exact: true }).click();

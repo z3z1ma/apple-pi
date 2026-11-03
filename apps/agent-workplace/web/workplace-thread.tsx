@@ -122,33 +122,10 @@ export function ThreadPane({
 			setError("Choose a positive whole-number page size.");
 			return;
 		}
-		const entry =
-			options.view === "catch_up"
-				? ({ id: crypto.randomUUID(), label: "Catch up" } as NonNullable<ReturnType<typeof attempts.get>>)
-				: undefined;
-		if (entry) {
-			attempts.set(options.thread, entry);
-			setAttempt(entry);
-		}
 		setPending(true);
 		setError("");
 		try {
-			const result = await api.communications.readThread({ ...options, ...(entry ? { attempt: entry.id } : {}) });
-			if (entry) {
-				if (result.ok && !["failed", "uncertain"].includes(result.page.acknowledgment)) {
-					attempts.delete(options.thread);
-					if (mounted.current) setAttempt(undefined);
-				} else {
-					entry.result = {
-						attempt: entry.id,
-						outcome: "uncertain",
-						reason: result.ok
-							? (result.page.acknowledgment_reason ?? "Catch-up acknowledgment not confirmed.")
-							: result.reason,
-					};
-					if (mounted.current) setAttempt({ ...entry });
-				}
-			}
+			const result = await api.communications.readThread(options);
 			if (!mounted.current) return;
 			if (!result.ok) {
 				setError(result.reason);
@@ -172,16 +149,8 @@ export function ThreadPane({
 			);
 			setView(returned.view);
 			setSearch(undefined);
-			if (returned.acknowledgment === "failed" || returned.acknowledgment === "uncertain")
-				setError(
-					`Catch-up acknowledgment ${returned.acknowledgment}: ${returned.acknowledgment_reason ?? "Read position was not confirmed."} Last confirmed sequence: ${returned.last_confirmed_cursor}.`,
-				);
 		} catch (failure) {
-			if (entry) entry.result = { attempt: entry.id, outcome: "uncertain", reason: String(failure) };
-			if (mounted.current) {
-				if (entry) setAttempt({ ...entry });
-				setError(String(failure));
-			}
+			if (mounted.current) setError(String(failure));
 		} finally {
 			if (mounted.current) setPending(false);
 		}
@@ -650,7 +619,7 @@ export function ThreadPane({
 					page?.next_cursor && (
 						<button
 							type="button"
-							disabled={pending || (view === "catch_up" && unresolved)}
+							disabled={pending}
 							onClick={() => {
 								followLatest.current = false;
 								void read({ ...(readOptions.current ?? { thread: id, view, limit }), cursor: page.next_cursor }, true);
