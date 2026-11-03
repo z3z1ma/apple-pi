@@ -1,3 +1,17 @@
+## file
+
+Process start observations from ps have one-second resolution; an unavailable process check is unknown, not proof of death. Reconnect gaps begin at the bridge's last reported event, not later runtime liveness checks; hello restores the current snapshot without inventing outage events. Parent/predecessor file references resolve once the corresponding session is known and resolve again when the reference changes.
+Why: observed liveness and reporting history have different precision and provenance; treating runtime checks as session activity would hide outages.
+
+Transient reply events reach only subscribers of the current generation and never enter the database. Every tool end is still recorded even if a different overlapping tool is currently displayed. Tmux supplies bound-pane tty facts; linked windows have separate indices per session. Polling removes a missing launch window only if it existed before that read began, and client visibility marks only settlements preceding the client read as seen.
+Why: overlapping activity and asynchronous topology reads must not overwrite newer execution or erase a window created during a poll.
+
+Due schedule messages include their due time in their identity before advancing the schedule. Channel listeners wake for their channel even without the ordinary on-call flag. Deferred wakes recheck that unbound mail survived its originating transaction; startup reconstructs pending on-call/listener wakes from queued mail. A source newly enabled is polled immediately.
+Why: crash/replay and rollback can otherwise duplicate a scheduled firing, lose an in-memory wake, or launch a person for mail that never committed.
+
+Review comments commit their post before the command result pointer; a stored comment proves publication during recovery. The harness owns review threads even if a person comments first, while the owner receives push and authorized commenters join. This shares normal thread/outbox semantics rather than creating another notification store.
+Why: a first comment must not prevent later milestones or disappear when the result pointer was lost.
+
 ## symbol:Runtime.checkFriction
 
 Startup and the existing liveness timer observe committed structural changes. Connection closure still checks process liveness but does not replay coordination history for every command socket. Its journal watermark is only a cheap trigger filter; the planner and durable raised/cleared entries remain authoritative. Include delivered/failed work because assignment persistence can precede a failed wake. Tool/cost/run-state chatter and alert mail receipts do not trigger graph replay. No extra polling timer, age threshold or process-local notification authority is introduced.

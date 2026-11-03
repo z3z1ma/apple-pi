@@ -31,7 +31,6 @@ import {
 	type Tool,
 } from "./protocol.js";
 
-/** Where each fact lives in `sessions`; object-valued facts are stored as JSON. */
 const FACT_COLUMNS: Record<keyof Facts, string> = {
 	model: "model",
 	thinkingLevel: "thinking_level",
@@ -109,15 +108,12 @@ import {
 	type WorkCommand,
 } from "./work.js";
 
-/** Commands that only record facts about work, applied in one transaction and replayed after a restart. */
 type WorkRecord = Extract<Command, { kind: "task_opened" | "task_moved" | "link_record" | "link_resolve" }>;
 
-/** How often the runtime reads tmux, and how long one server may take to answer before the read counts as failed. */
 const TMUX_POLL_MS = 1000;
 
 type Fields = Record<string, string | number>;
 
-/** The columns each tmux table keeps beside `socket` and `id`, and how to read them from a pane row. */
 const TOPOLOGY = [
 	{
 		table: "tmux_sessions",
@@ -131,7 +127,7 @@ const TOPOLOGY = [
 		key: (p: PaneRow) => p.windowId,
 		fields: (p: PaneRow): Fields => ({ name: p.windowName }),
 	},
-	// A window can be linked into several sessions, at a different index in each.
+
 	{
 		table: "tmux_window_links",
 		kind: "tmux_window_link",
@@ -177,7 +173,7 @@ interface SessionLaunch {
 	name?: string;
 	reportsTo?: string;
 	role?: string;
-	/** Inference profile for a new person's first mind, in place of the role's own. */
+
 	profile?: string;
 	prompt?: string;
 	tmux?: Hello["tmux"];
@@ -200,7 +196,6 @@ interface IncarnationRow {
 	ended_at: number | null;
 }
 
-/** Start times from `ps` have one-second resolution; the bridge's own estimate is close to it. */
 const START_TOLERANCE_MS = 2000;
 
 function sameStart(a: number, b: number): boolean {
@@ -209,10 +204,6 @@ function sameStart(a: number, b: number): boolean {
 
 export type ProcessCheck = "running" | "gone" | "unknown";
 
-/**
- * Whether the process with this pid is still the one that started at `startedAt` (a pid-reuse guard).
- * "unknown" means the check itself failed; it never counts as proof that the process is gone.
- */
 export function checkProcess(pid: number, startedAt: number): ProcessCheck {
 	try {
 		process.kill(pid, 0);
@@ -239,10 +230,6 @@ function processStart(pid: number): number | "gone" | "unknown" {
 	return Number.isNaN(time) ? "unknown" : time;
 }
 
-/**
- * The one writer of the session state database. Bridges connect over the Unix socket; the runtime records
- * what they report and decides liveness from their connection and heartbeats, then from the process itself.
- */
 export class Runtime {
 	private db?: DatabaseSync;
 	private reviews?: ReviewJobs;
@@ -259,19 +246,19 @@ export class Runtime {
 	private friction: { sequence?: number; error?: string } = {};
 	private polling = false;
 	private readonly stopping = new AbortController();
-	/** Servers whose last read failed, so a failure is logged and recorded once rather than every second. */
+
 	private readonly failingServers = new Set<string>();
-	/** The client that sent each command still in flight, so its receipts reach it. */
+
 	private readonly commandClients = new Map<string, Connection>();
-	/** Receipt observers do not own a correlated turn, its stream, or cancellation. */
+
 	private readonly receiptWaiters = new Map<string, Set<Connection>>();
-	/** The status-line options last written to each tmux server, so they are written only when they change. */
+
 	private readonly attentionShown = new Map<string, string>();
-	/** Sessions this runtime opened a window for, until their bridge connects or the window closes. */
+
 	private readonly starting = new Map<string, SessionStart>();
-	/** On-call people whose wake is scheduled or launching, so a burst of mail wakes each once. */
+
 	private readonly waking = new Set<string>();
-	/** Manager-tool hires this process created, until that start connects or fails. A restart does not recover the set. */
+
 	private readonly newHires = new Set<string>();
 	private readonly headless = new Map<string, ChildProcess>();
 	private readonly retiring = new Map<string, { person: string }>();
@@ -282,7 +269,7 @@ export class Runtime {
 	private readonly signalled = new Map<string, Set<string>>();
 	private programTimer?: NodeJS.Timeout;
 	private cleaningPrograms = false;
-	/** The bridge connection each unsettled command was handed to. */
+
 	private readonly dispatched = new Map<string, Connection>();
 	private readonly connections = new Set<Connection>();
 	private readonly failedChecks = new Set<string>();
@@ -292,7 +279,6 @@ export class Runtime {
 		this.paths = paths;
 	}
 
-	/** False when another runtime holds the lock. */
 	async start(): Promise<boolean> {
 		mkdirSync(this.paths.dir, { recursive: true, mode: 0o700 });
 		if (!this.takeLock()) return false;
@@ -302,7 +288,7 @@ export class Runtime {
 		migrate(this.db);
 		reconstructSpans(this.db, Date.now());
 		this.transcripts = new TranscriptIndexer(this.paths.transcriptIndex);
-		// Bring every transcript's index up to date in the background; afterwards each `index` report extends it.
+
 		for (const row of this.db
 			.prepare("select id, session_file from sessions where session_file is not null order by updated_at desc")
 			.all() as { id: string; session_file: string }[])
@@ -330,7 +316,7 @@ export class Runtime {
 		this.recoverRetirements();
 		for (const row of this.db.prepare("select session_id as id from program_peers").all() as { id: string }[])
 			this.discarding.add(row.id);
-		rmSync(this.paths.socket, { force: true }); // we hold the lock, so any socket file is stale
+		rmSync(this.paths.socket, { force: true });
 		const server = createServer((socket) => this.accept(socket));
 		this.server = server;
 		await new Promise<void>((resolve, reject) => {
@@ -373,12 +359,11 @@ export class Runtime {
 		rmSync(this.paths.socket, { force: true });
 		rmSync(this.paths.pid, { force: true });
 		const db = this.db;
-		this.db = undefined; // in-flight work sees the runtime stopped instead of a closed database
+		this.db = undefined;
 		db?.close();
 		this.lock?.close();
 	}
 
-	/** An exclusive SQLite lock: one holder at a time, released by the OS however the holder exits. */
 	private takeLock(): boolean {
 		const lock = new DatabaseSync(this.paths.lock);
 		try {
@@ -409,7 +394,6 @@ export class Runtime {
 				try {
 					this.handle(connection, message);
 				} catch (error) {
-					// One bad message must not take the runtime down with every other session.
 					console.error(`message from a bridge failed: ${(error as Error).stack ?? error}`);
 				}
 			}),
@@ -489,7 +473,6 @@ export class Runtime {
 		const { sessionId, generation } = connection;
 		if (sessionId === undefined || generation === undefined) return;
 		if (message.type === "reply_delta" || message.type === "reply_end") {
-			// Transient: relayed to subscribers of the current generation, never written to the database.
 			if (this.isCurrent(sessionId, generation))
 				relayReply(this.connections, { ...message, sessionId } as ReplyDelta | ReplyEnd);
 			return;
@@ -502,7 +485,6 @@ export class Runtime {
 		else if (message.type === "facts") this.applyFacts(sessionId, generation, message.facts);
 		else if (message.type === "tool_start") this.startTool(sessionId, generation, message.tool);
 		else if (message.type === "tool_end") {
-			// Every end is recorded, even of a tool that was not the one shown; the session then shows the tool still running.
 			const { id, name, durationMs, isError, current } = message;
 			if (this.isCurrent(sessionId, generation)) {
 				this.event("bridge", sessionId, generation, "tool_ended", { id, name, durationMs, isError });
@@ -590,12 +572,11 @@ export class Runtime {
 			latest.pid === proc.pid &&
 			sameStart(latest.process_started_at, proc.startedAt)
 		) {
-			generation = latest.generation; // the same process reconnecting, for example after /reload
+			generation = latest.generation;
 			this.recordGap(connection, session.id, generation);
 			this.setProcessState(session.id, generation, "alive", "bridge");
 		} else {
 			if (latest && latest.ended_at === null) {
-				// The old process may still run; it stays under liveness tracking until it is gone.
 				const check = checkProcess(latest.pid, latest.process_started_at);
 				this.endIncarnation(
 					session.id,
@@ -647,7 +628,7 @@ export class Runtime {
 		connection.sessionId = session.id;
 		connection.generation = generation;
 		this.setRunState(session.id, generation, hello.run);
-		// The runtime owns the tree once a session is in it: a transfer outlives the flag the session was started with.
+
 		const { reportsTo, ...facts } = hello.facts;
 		const stored = db.prepare("select reports_to from sessions where id = ?").get(session.id) as {
 			reports_to: string | null;
@@ -656,20 +637,20 @@ export class Runtime {
 			db.prepare("select 1 from manager_changes where session_id = ?").get(session.id) ||
 				db.prepare("select 1 from events where session_id = ? and type = 'transferred'").get(session.id),
 		);
-		// A launch flag seeds the manager only on first admission. A later null is an intentional split.
+
 		const seedManager = stored.reports_to === null && Boolean(reportsTo) && !latest && !reportingRecorded;
 		this.applyFacts(session.id, generation, seedManager ? { ...facts, reportsTo } : facts, true);
 		if (hello.execution)
 			this.event("bridge", session.id, generation, "execution", { ...hello.execution, phase: "resume" });
-		// A bridge started with a stale flag learns its manager from the record, including none.
+
 		if (!seedManager && reportsTo !== undefined && (stored.reports_to ?? null) !== (reportsTo || null))
 			this.issue(connection, { kind: "transfer", manager: stored.reports_to ?? "", by: "runtime" });
 		syncChannels(db, now);
 		this.resolveParents();
-		// A (re)connecting bridge reports the tool it runs now; one that ended while the bridge was away just clears.
+
 		if (hello.tool) this.startTool(session.id, generation, hello.tool);
 		else this.clearTool(session.id, generation);
-		// Replay unread deliveries before startup work; a committed retirement's close stays bound to its incarnation.
+
 		const pending = db
 			.prepare(
 				`select command_id, command from commands where session_id = ? and stage in ('accepted', 'delivered')
@@ -690,11 +671,6 @@ export class Runtime {
 		}
 	}
 
-	/**
-	 * Record a client's command and hand it to the target incarnation's bridge. A repeated `commandId` only reports
-	 * how far the first one got. Without a live incarnation (or a bound one that is no longer current) it fails at once,
-	 * except unbound mail, which waits for the session's next bridge.
-	 */
 	private command(client: Connection, request: CommandRequest): void {
 		const db = this.db!;
 		const { commandId, sessionId, generation, command } = request;
@@ -800,7 +776,7 @@ export class Runtime {
 				).run(command.key, JSON.stringify(command.value), Date.now());
 				this.event("client", null, null, "preference_set", { key: command.key, value: command.value });
 				this.setCommandStage(commandId, "applied");
-				// A source just turned on is read now, not at the next minute.
+
 				if (command.key === "activity-triage") void this.activity?.poll();
 			}
 			return;
@@ -905,7 +881,6 @@ export class Runtime {
 		return true;
 	}
 
-	/** One transaction per record; every kind is idempotent, so startup replays any that stayed accepted. */
 	private workRecord(commandId: string, sender: string, command: WorkRecord, now: number, replay = false): void {
 		const db = this.db!;
 		try {
@@ -1245,7 +1220,6 @@ export class Runtime {
 		);
 	}
 
-	/** Why unbound mail for a session that is not connected waits, waking it first when it is on call. */
 	private waitingMail(sessionId: string, known: boolean): string {
 		if (!known) return "unknown; the mail waits until a session with this id opens";
 		return this.wakeOnCall(sessionId)
@@ -1287,7 +1261,6 @@ export class Runtime {
 		});
 	}
 
-	/** Durable standing arrangements: schedules and channel charters. */
 	private standingCommand(
 		commandId: string,
 		sender: string,
@@ -1339,10 +1312,6 @@ export class Runtime {
 		}
 	}
 
-	/**
-	 * Tell an agent, without starting a turn, that the operator reacted to something it said in its DM. A person at home
-	 * is not told; the reaction stays on the record either way.
-	 */
 	private async reactionNotice(message: string, emoji: string): Promise<void> {
 		const entry = /^entry:([^:]+):(.+)$/.exec(message);
 		const db = this.db;
@@ -1386,10 +1355,6 @@ export class Runtime {
 		else this.setCommandStage(commandId, "failed", "not running");
 	}
 
-	/**
-	 * Send every due schedule as a harness post on the schedule's own thread, then move it on. The message id carries
-	 * the due time, so a crash between the post and the move cannot send one firing twice.
-	 */
 	private fireSchedules(): void {
 		const db = this.db;
 		if (!db) return;
@@ -1427,7 +1392,6 @@ export class Runtime {
 		}
 	}
 
-	/** Review milestones go to the owner as ordinary mail on one thread per review; replays add nothing. */
 	private reviewNotice(notice: Parameters<ReviewNotify>[0]): void {
 		const db = this.db;
 		if (!db) return;
@@ -1439,8 +1403,6 @@ export class Runtime {
 		this.atomically(() => {
 			const now = Date.now();
 			if (sender !== HARNESS) {
-				// The review's thread belongs to the harness and the owner even when a comment arrives first, so later
-				// milestones can still post; a commenter joins it, since reading the review already authorized them.
 				if (!db.prepare("select 1 from threads where id = ?").get(thread)) {
 					db.prepare(
 						"insert into threads (id, kind, subject, created_by, created_at, closed_at) values (?, 'mail', ?, ?, ?, null)",
@@ -1644,7 +1606,6 @@ export class Runtime {
 			this.communicationCommand(row.command_id, row.session_id, JSON.parse(row.command), row.created_at);
 	}
 
-	/** Store a thread message and push it as mail to each pushed participant; the receipt names who is at home. */
 	private threadPost(
 		commandId: string,
 		sessionId: string,
@@ -1671,10 +1632,6 @@ export class Runtime {
 		);
 	}
 
-	/**
-	 * Join or leave an existing team channel as the operator. The row and its audience event commit together; a repeat
-	 * join does not move the cursor. `invited` keeps the operator through the next channel reconciliation.
-	 */
 	private channelMembership(
 		commandId: string,
 		sessionId: string,
@@ -1714,7 +1671,6 @@ export class Runtime {
 		this.setCommandStage(commandId, "applied");
 	}
 
-	/** Finish a membership command accepted before a crash. Join and leave are both idempotent. */
 	private recoverChannelMembership(): void {
 		const pending = this.db!.prepare(
 			"select command_id, session_id, command, created_at from commands where kind = 'channel_membership' and stage = 'accepted' order by created_at",
@@ -1723,7 +1679,6 @@ export class Runtime {
 			this.channelMembership(row.command_id, row.session_id, JSON.parse(row.command), row.created_at);
 	}
 
-	/** Complete posts accepted before a crash. A stored message means its full outbox committed with it. */
 	private recoverThreadPosts(): void {
 		const db = this.db!;
 		const pending = db
@@ -1738,13 +1693,12 @@ export class Runtime {
 		}
 	}
 
-	/** Persist an outgoing delivery in the post's transaction; its bridge is notified only after commit. */
 	private queueDelivery(
 		commandId: string,
 		recipient: string,
 		command: Extract<Command, { kind: "mail" | "close" | "notice" }>,
 		generation?: number,
-		/** A channel's listener is on duty for it, so its mail wakes the listener even when it is not on call. */
+
 		onDuty = false,
 	): Connection | undefined {
 		const db = this.db!;
@@ -1776,10 +1730,6 @@ export class Runtime {
 		return target;
 	}
 
-	/**
-	 * Wake an on-call person at home so waiting mail reaches it: beside a live pane of the tmux server it last ran in,
-	 * or headless when none is attached. Runs after the current transaction; the mail itself waits as usual.
-	 */
 	private wakeOnCall(person: string, onDuty = false): boolean {
 		const db = this.db!;
 		const row = db.prepare("select on_call, retired_at, kind from sessions where id = ?").get(person) as
@@ -1791,7 +1741,7 @@ export class Runtime {
 		this.waking.add(person);
 		setImmediate(() => {
 			if (this.db !== db || this.starting.has(person)) return void this.waking.delete(person);
-			// The mail that asked for this wake may have rolled back with its transaction; wake only for mail that waits.
+
 			if (!this.hasWaitingMail(person)) return void this.waking.delete(person);
 			const live = db
 				.prepare(`select 1 from sessions s join incarnations i on i.session_id = s.id and i.generation = s.generation
@@ -1804,7 +1754,7 @@ export class Runtime {
 				where p.dead = 0 order by i.generation is null, i.generation desc, p.active desc, p.updated_at desc limit 1`)
 				.get(person) as { socket: string; pane: string } | undefined;
 			const commandId = `wake:${randomUUID()}`;
-			// Replayed mail only rides a turn; an empty prompt would leave the woken person idle with its mail unread.
+
 			const command: Extract<Command, { kind: "start" }> = {
 				kind: "start",
 				prompt: "You were woken because mail arrived while you were away. Read it and act on it.",
@@ -1833,10 +1783,6 @@ export class Runtime {
 		);
 	}
 
-	/**
-	 * After a restart, wake every on-call person, or channel listener, whose mail still waits: the wake that the mail
-	 * scheduled before the restart was in memory and is gone.
-	 */
 	private wakeForWaitingMail(): void {
 		const db = this.db!;
 		const rows = db
@@ -1853,10 +1799,6 @@ export class Runtime {
 		for (const [person, duty] of onDuty) this.wakeOnCall(person, duty);
 	}
 
-	/**
-	 * Move a person under another manager: both must be root sessions of one organization, and the new manager must
-	 * not be the person or anyone under it, so the tree stays a tree. Returns the reason a move is refused.
-	 */
 	private transfer(sessionId: string, command: Extract<Command, { kind: "transfer" }>): string | undefined {
 		const db = this.db!;
 		if (typeof command.manager !== "string" || !command.manager || typeof command.by !== "string" || !command.by)
@@ -1925,7 +1867,6 @@ export class Runtime {
 		}
 	}
 
-	/** The operator moves a branch across organizations, or splits it when `manager` is null. */
 	private organizationMove(
 		sessionId: string,
 		command: Extract<Command, { kind: "organization_move" }>,
@@ -2084,7 +2025,7 @@ export class Runtime {
 			)
 			.all() as { command_id: string; command: string; result: string | null; artifact: string | null }[]) {
 			const command = JSON.parse(row.command) as Extract<Command, { kind: "review" }>;
-			// A comment's post commits before its result pointer; a stored message means it was published.
+
 			const commented =
 				command.operation.action === "comment" &&
 				(
@@ -2201,7 +2142,6 @@ export class Runtime {
 		return ids;
 	}
 
-	/** A program may end between process creation and hello, so the launch record is independent of incarnations. */
 	private async stopProgramPeer(
 		id: string,
 		db: DatabaseSync,
@@ -2224,7 +2164,6 @@ export class Runtime {
 			const panes = servers.get(launch.socket)!;
 			if (panes !== "absent") pane = panes.find((p) => (launch.pane ? p.paneId === launch.pane : isLaunch(p)));
 			if (pane && launch.pid === null && !pane.dead) {
-				// The initial command survives a window rename before the daemon records the pane or receives hello.
 				const started = processStart(pane.pid);
 				if (started === "gone") return false;
 				if (started === "unknown") throw new Error(`Cannot identify the process in temporary peer ${id}'s pane`);
@@ -2267,7 +2206,7 @@ export class Runtime {
 			}
 		}
 		if (waiting) return false;
-		// Remove a dead program pane too (servers may keep exited panes); leave a pane the operator respawned.
+
 		if (pane && (pane.pid === launch.pid || (launch.pid === null && isLaunch(pane)))) {
 			await killPane(
 				launch.socket!,
@@ -2641,7 +2580,6 @@ export class Runtime {
 		}
 	}
 
-	/** Queued in the new person's assignment transaction, before its first bridge or model turn. */
 	private queueTeamHistory(commandId: string, person: string, manager: string | undefined): void {
 		const db = this.db!;
 		syncChannels(db, Date.now());
@@ -2703,7 +2641,6 @@ export class Runtime {
 		};
 	}
 
-	/** The bridge connecting applies a launch, whether it opened a terminal or a headless RPC process. */
 	private async startSession(
 		commandId: string,
 		sessionId: string,
@@ -2750,7 +2687,7 @@ export class Runtime {
 		if (!directory) return fail("unknown session; give a directory to start it in");
 		const cwd = realpathSync(directory);
 		const name = command.name ?? row?.name ?? undefined;
-		// A recorded manager, including an intentional null, wins over the caller's flag.
+
 		const reportsTo = row ? row.reports_to : command.reportsTo;
 		if (reportsTo && departureOf(db, reportsTo))
 			return fail("A permanently departed person cannot receive new reports.");
@@ -2887,7 +2824,7 @@ export class Runtime {
 			prompt,
 			...(launch.tmux ? { socket: canonicalSocket(launch.tmux.socket) } : {}),
 		};
-		this.starting.set(sessionId, start); // the bridge may connect before the launch returns
+		this.starting.set(sessionId, start);
 		if (!launch.tmux) {
 			const startedAt = Date.now();
 			const child = spawn(pi[0]!, pi.slice(1), {
@@ -2941,7 +2878,6 @@ export class Runtime {
 		}
 	}
 
-	/** A command of the runtime's own to a running bridge, recorded like a client's but with nobody waiting on it. */
 	private issue(target: Connection, command: Command): void {
 		const commandId = randomUUID();
 		const now = Date.now();
@@ -2961,7 +2897,6 @@ export class Runtime {
 		this.dispatch(target, commandId, command);
 	}
 
-	/** Hand a command to a bridge, binding it to that bridge's incarnation; only that incarnation may report on it. */
 	private dispatch(target: Connection, commandId: string, command: Command, replay = false): void {
 		this.db!.prepare("update commands set generation = ? where command_id = ?").run(
 			target.generation ?? null,
@@ -2979,10 +2914,6 @@ export class Runtime {
 		);
 	}
 
-	/**
-	 * A closed connection gets no more receipts. Commands handed to a bridge that went away fail, since nobody can say
-	 * whether they were applied; mail stays, and the session's next bridge gets it again.
-	 */
 	private dropCommandsOf(connection: Connection): void {
 		for (const [id, waiters] of this.receiptWaiters) {
 			waiters.delete(connection);
@@ -3012,7 +2943,6 @@ export class Runtime {
 		}
 	}
 
-	/** A slow program reader retains only the latest snapshot per run, never a growing stream of snapshots. */
 	private turnProgress(client: Connection, message: Extract<BridgeMessage, { type: "turn_progress" }>): void {
 		if (client.socket.destroyed || this.commandClients.get(message.commandId) !== client) return;
 		if (client.socket.writableNeedDrain) {
@@ -3032,7 +2962,6 @@ export class Runtime {
 		client.socket.write(`${JSON.stringify(message)}\n`);
 	}
 
-	/** A bridge reports progress only for commands handed to its own incarnation. */
 	private commandProgress(
 		bridge: Connection,
 		commandId: string,
@@ -3072,7 +3001,7 @@ export class Runtime {
 		const hire = stage === "applied" && row.kind === "start" && this.newHires.delete(row.session_id);
 		const write = () => {
 			if (hire) this.stampHire(row.session_id);
-			// Mail of a thread that reached the transcript has been read there.
+
 			if (stage === "applied" && row.kind === "mail") {
 				const mail = JSON.parse(row.command) as { thread?: string; seq?: number };
 				if (mail.thread && typeof mail.seq === "number") {
@@ -3093,7 +3022,7 @@ export class Runtime {
 				...(reason ? { reason } : {}),
 			});
 		};
-		// A hire date commits with the applied stage, or not at all. The receipt follows the commit.
+
 		if (hire) this.atomically(write);
 		else write();
 		const client = this.commandClients.get(commandId);
@@ -3115,12 +3044,10 @@ export class Runtime {
 		}
 	}
 
-	/** Drop a hire whose start failed before it connected, so a later call-in does not record a date. */
 	private abandonHire(sessionId: string): void {
 		this.newHires.delete(sessionId);
 	}
 
-	/** The connect time already stored for this hello. The caller commits it with the start becoming applied. */
 	private stampHire(sessionId: string): void {
 		const db = this.db!;
 		const started = db
@@ -3132,24 +3059,17 @@ export class Runtime {
 		db.prepare("update sessions set hired_at = ? where id = ? and hired_at is null").run(started.started_at, sessionId);
 	}
 
-	/**
-	 * A bridge reconnecting to an open incarnation that had no live connection was unheard for a while (the runtime
-	 * or the bridge was down). What happened then is lost: record the gap, from the last thing recorded, instead of
-	 * inventing events. The hello's snapshot then brings current state back.
-	 */
 	private recordGap(connection: Connection, sessionId: string, generation: number): void {
 		for (const other of this.connections)
 			if (other !== connection && !other.shutdown && other.sessionId === sessionId && other.generation === generation)
 				return;
-		// From the last thing the bridge itself reported: the runtime's own liveness checks after a restart are not
-		// observations of the session, and starting there would hide the outage.
+
 		const { since } = this.db!.prepare(
 			"select max(at) as since from events where session_id = ? and generation = ? and source = 'bridge'",
 		).get(sessionId, generation) as { since: number | null };
 		this.event("runtime", sessionId, generation, "gap", { since, until: Date.now() });
 	}
 
-	/** Completed conversation, indexed once: a row already present is ignored, a new one is also an event. */
 	private index(sessionId: string, generation: number, rows: IndexRow[]): void {
 		const db = this.db!;
 		const insert = db.prepare(
@@ -3183,19 +3103,17 @@ export class Runtime {
 			db.exec("rollback");
 			throw error;
 		}
-		// The transcript now holds entries the full-text index has not read.
+
 		const file = db.prepare("select session_file from sessions where id = ?").get(sessionId) as
 			| { session_file: string | null }
 			| undefined;
 		if (file?.session_file) this.transcripts?.update(sessionId, file.session_file);
 	}
 
-	/** Ranked transcript entries from the full-text index. */
 	private searchTranscripts(connection: Connection, request: SearchTranscripts): void {
 		const reply = (
 			body:
 				| { hits: (SearchHit & { task?: string; file: string | null; name: string | null })[]; total: number }
-				// `refused`: a decided refusal (permission), as opposed to a failure to search.
 				| { error: string; refused?: true },
 		) =>
 			connection.socket.write(
@@ -3237,7 +3155,7 @@ export class Runtime {
 				...(Number.isInteger(request.limit) ? { limit: request.limit } : {}),
 				...(Number.isInteger(request.offset) ? { offset: request.offset } : {}),
 			});
-			// Each hit with its transcript file and person, and the task it was written under.
+
 			const session = db.prepare("select session_file, name from sessions where id = ?");
 			reply({
 				hits: hits.map((hit) => {
@@ -3259,13 +3177,11 @@ export class Runtime {
 		}
 	}
 
-	/** Each id's indexed time, or undefined for an entry not indexed yet. */
 	private entryTimes(sessionId: string, ids: string[]): Map<string, number | undefined> {
 		const at = this.db?.prepare("select at from messages where session_id = ? and entry_id = ? and part = ''");
 		return new Map(ids.map((id) => [id, (at?.get(sessionId, id) as { at: number } | undefined)?.at]));
 	}
 
-	/** One entry of a session's transcript, read from Pi's own JSONL file, which stays the source of truth. */
 	private async readEntry(connection: Connection, request: ReadEntry): Promise<void> {
 		const reply = (body: { entry: unknown } | { error: string; refused?: true }) =>
 			connection.socket.write(
@@ -3279,7 +3195,7 @@ export class Runtime {
 		if (!row) return void reply({ error: "unknown session" });
 		if (!row.session_file) return void reply({ error: "session has no transcript file" });
 		const times = this.entryTimes(request.sessionId, [request.entryId]);
-		// A person reading another's entry (recall drill-down) needs a task span they may search that covers it.
+
 		if (
 			typeof request.caller === "string" &&
 			!mayReadEntry(this.db!, request.caller, request.sessionId, times.get(request.entryId))
@@ -3295,7 +3211,6 @@ export class Runtime {
 		reply({ error: "entry not found" });
 	}
 
-	/** A page of a session's entries, in the order its `messages` index holds them, newest page first. */
 	private async readEntries(connection: Connection, request: ReadEntries): Promise<void> {
 		const reply = (body: Omit<EntriesReply, "type" | "requestId">) =>
 			connection.socket.write(
@@ -3309,7 +3224,7 @@ export class Runtime {
 		if (!row) return void reply({ error: "unknown session" });
 		if (!row.session_file) return void reply({ error: "session has no transcript file" });
 		const limit = Number.isInteger(request.limit) && request.limit! > 0 ? request.limit! : 50;
-		// The page is the `limit` entries before the cursor in (`at`, rowid) order, plus one to learn whether more remain.
+
 		let cursor: { at: number; rowid: number } | undefined;
 		if (request.before !== undefined) {
 			cursor = db
@@ -3317,7 +3232,7 @@ export class Runtime {
 				.get(request.sessionId, request.before) as { at: number; rowid: number } | undefined;
 			if (!cursor) return void reply({ error: "unknown cursor" });
 		}
-		// A text-only view draws only written words; the index's `size` is the length of a message's text.
+
 		const words = request.textOnly ? "and role in ('user', 'assistant') and size > 0" : "";
 		const rows = (
 			cursor
@@ -3335,7 +3250,7 @@ export class Runtime {
 		const more = rows.length > limit;
 		const pageRows = rows.slice(0, limit).reverse();
 		const page = pageRows.map((r) => r.entry_id);
-		// One backward read of the transcript per page, from its end to the page's oldest entry.
+
 		let found: Map<string, unknown>;
 		try {
 			found = (await readTranscriptEntries(row.session_file, new Map(pageRows.map((r) => [r.entry_id, r.at])))).found;
@@ -3356,10 +3271,6 @@ export class Runtime {
 		});
 	}
 
-	/**
-	 * A forked or cloned session names its parent by file, and a session that followed another in the same process
-	 * names that one by file; resolve each to a session id once that session is known.
-	 */
 	private resolveParents(): void {
 		this.db!.exec(
 			`update sessions set parent_session_id = (
@@ -3371,18 +3282,10 @@ export class Runtime {
 		);
 	}
 
-	/** The current generation's facts, each change an event of its own. */
-	/**
-	 * A hello's cost is spend the transcript already held when no cost was ever recorded for the session: it is marked so
-	 * fitness takes it as a baseline. Once a cost is recorded, a reconnect after an outage reports real spend.
-	 */
 	private applyFacts(sessionId: string, generation: number, facts: Partial<Facts>, atHello = false): void {
-		// A snapshot change and its event commit together: a crash between them would lose the event for good, because the
-		// next report finds the snapshot already equal.
 		this.atomically(() => this.writeFacts(sessionId, generation, facts, atHello));
 	}
 
-	/** Run inside the current transaction, or in a new one. */
 	private atomically(write: () => void): void {
 		const db = this.db!;
 		if (db.isTransaction) {
@@ -3422,13 +3325,12 @@ export class Runtime {
 			);
 			const before =
 				JSON_FACTS.has(key) && typeof row[column] === "string" ? JSON.parse(row[column] as string) : row[column];
-			// A changed parent or predecessor file needs resolving to a session id again.
+
 			if (key === "parentSessionFile")
 				db.prepare("update sessions set parent_session_id = null where id = ?").run(sessionId);
 			if (key === "previousSession")
 				db.prepare("update sessions set previous_session_id = null where id = ?").run(sessionId);
-			// An open prompt needs the operator; once it closes, only a settle they have not seen still does. Rows left by
-			// older child sessions never need them.
+
 			if (key === "prompt" && value)
 				db.prepare(
 					"update sessions set needs_you_since = coalesce(needs_you_since, ?) where id = ? and kind = 'root'",
@@ -3448,7 +3350,7 @@ export class Runtime {
 					: {}),
 			});
 		}
-		// The name has its own column, which a rename must change too.
+
 		if (facts.config && facts.config.name !== row.name)
 			db.prepare("update sessions set name = ? where id = ?").run(facts.config.name, sessionId);
 		if (
@@ -3466,7 +3368,6 @@ export class Runtime {
 		return row?.generation === generation;
 	}
 
-	/** Show `tool` as the session's current tool, without an event: it already started. */
 	private showTool(sessionId: string, tool: Tool): void {
 		this.db!.prepare(
 			`update sessions set current_tool = ?, current_tool_id = ?, current_tool_arg = ?, current_tool_since = ?,
@@ -3487,7 +3388,6 @@ export class Runtime {
 		});
 	}
 
-	/** Clear the current tool (only `id`, when given); true when a tool was cleared. */
 	private clearTool(sessionId: string, generation: number, id?: string): boolean {
 		const db = this.db!;
 		const row = db.prepare("select generation, current_tool_id from sessions where id = ?").get(sessionId) as
@@ -3502,7 +3402,6 @@ export class Runtime {
 		return true;
 	}
 
-	/** Only the session's current generation reports its activity; a superseded process's messages are ignored. */
 	private setRunState(sessionId: string, generation: number, run: RunState): void {
 		const db = this.db!;
 		const row = db.prepare("select run_state, generation from sessions where id = ?").get(sessionId) as
@@ -3516,7 +3415,6 @@ export class Runtime {
 		);
 		this.event("bridge", sessionId, generation, "run_state", { from: row.run_state, to: run });
 		if (run === "idle" && row.run_state !== "compacting") {
-			// A program consumes its temporary person's reply; only lasting roots need the operator to see a settle.
 			const now = Date.now();
 			db.prepare(
 				"update sessions set settled_at = ?, needs_you_since = case when kind = 'root' and not exists (select 1 from program_peers p where p.session_id = sessions.id) then coalesce(needs_you_since, ?) end where id = ?",
@@ -3524,7 +3422,6 @@ export class Runtime {
 		}
 	}
 
-	/** The operator saw the session, in its pane or through a command; only an open prompt still needs them. */
 	private seen(sessionId: string, via: "pane" | "command"): void {
 		this.db!.prepare(
 			"update sessions set seen_at = ?, needs_you_since = case when prompt is null then null else needs_you_since end where id = ?",
@@ -3558,10 +3455,6 @@ export class Runtime {
 		if (ended.changes) this.event(source, sessionId, generation, "incarnation_ended", { reason });
 	}
 
-	/**
-	 * Bridges first: a live, recently heard connection means alive. Without one, the process decides, for the
-	 * current incarnation and for superseded ones whose process may still run.
-	 */
 	private checkLiveness(): void {
 		const db = this.db;
 		if (!db) return;
@@ -3594,7 +3487,6 @@ export class Runtime {
 		}
 	}
 
-	/** Publish changed coordination evidence through the existing transactional mail outbox. */
 	private checkFriction(): void {
 		const db = this.db;
 		if (!db || db.isTransaction) return;
@@ -3652,7 +3544,6 @@ export class Runtime {
 		for (const post of pending) for (const { target, id, mail } of post.deliveries) this.dispatch(target, id, mail);
 	}
 
-	/** Read every live tmux server and bring the topology tables up to date, one transaction per pass. */
 	private async pollTmux(): Promise<void> {
 		if (this.polling || !this.db) return;
 		this.polling = true;
@@ -3668,16 +3559,16 @@ export class Runtime {
 			for (const row of known) sockets.add(row.socket);
 			for (const start of this.starting.values()) if (start.socket) sockets.add(start.socket);
 			const options = { timeout: TMUX_POLL_MS, signal: this.stopping.signal };
-			// Only a start whose window existed before this read began can be missing from it.
+
 			const startsBeforeRead = new Set([...this.starting.values()].filter((start) => start.pane));
-			// A client showing a pane saw only what had settled before the clients were read.
+
 			const readStartedAt = Date.now();
 			const reads = [...sockets].map(async (socket) => {
 				const panes = await listPanes(socket, options);
 				return { socket, panes, clients: panes === "absent" ? [] : await listClients(socket, options) };
 			});
 			const servers = await Promise.allSettled(reads);
-			if (this.db !== db) return; // stopped while tmux answered
+			if (this.db !== db) return;
 			db.exec("begin");
 			try {
 				[...sockets].forEach((socket, index) => {
@@ -3691,7 +3582,6 @@ export class Runtime {
 							readStartedAt,
 						);
 					} else if (!this.failingServers.has(socket)) {
-						// A failed read proves nothing: the server keeps its rows until a read succeeds.
 						this.failingServers.add(socket);
 						const message = (result.reason as Error).message;
 						console.error(`tmux read failed for ${socket}: ${message}`);
@@ -3711,14 +3601,12 @@ export class Runtime {
 				else await this.showAttention(result.value.socket, result.value.clients);
 			}
 		} catch (error) {
-			// A failed pass changes nothing; the next one tries again. The error goes to the runtime log.
 			console.error(`tmux poll failed: ${(error as Error).stack ?? error}`);
 		} finally {
 			this.polling = false;
 		}
 	}
 
-	/** A session whose pane a client shows has been seen, once it settled after the last time it was. */
 	private seeShownPanes(socket: string, shown: string[], readStartedAt: number): void {
 		if (shown.length === 0) return;
 		const rows = this.db!.prepare(
@@ -3729,10 +3617,6 @@ export class Runtime {
 		for (const { id } of rows) this.seen(id, "pane");
 	}
 
-	/**
-	 * Write a server's status-line summary (`@pi_agents`) and jump target (`@pi_jump_target`) when they change,
-	 * from the live top-level sessions in its panes.
-	 */
 	private async showAttention(socket: string, clients: { name: string; pane: string }[]): Promise<void> {
 		const rows = (
 			this.db!.prepare(
@@ -3765,7 +3649,6 @@ export class Runtime {
 		}
 	}
 
-	/** A socket where tmux says no server runs (none ever ran there, or it exited) has no rows. */
 	private syncServer(socket: string, read: PaneRow[] | "absent", startsBeforeRead: Set<unknown>): void {
 		const db = this.db!;
 		const panes = read === "absent" ? undefined : read;
@@ -3831,7 +3714,6 @@ export class Runtime {
 		}
 	}
 
-	/** A bound incarnation learns its pane's tty from tmux once the topology has the pane; tmux is that fact's source. */
 	private bindPaneTtys(): void {
 		const db = this.db!;
 		const unbound = db
