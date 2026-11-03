@@ -1,13 +1,3 @@
-/**
- * A root session's role: taken from `--role` at its first start, recorded as a custom entry in its own transcript, and
- * re-applied at every later start (the stored role wins over a later flag). Applying a role sets the session's mind
- * (selected once and retained in that entry), its posture (`writes: false`
- * drops the built-in `edit` and `write` tools, which Pi restores from the transcript on every start, so posture is
- * re-applied before each run), and a `<role>` system prompt section. The first start with a role also draws the
- * person's soul, stored in the same entry and rendered under the role body; a start whose draw fails warns and draws
- * again at the next start.
- */
-
 import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import {
@@ -40,15 +30,12 @@ interface Person {
 	soul: Soul | undefined;
 }
 
-/** Each session's role and soul as resolved at its start, by session id; a session in it without one is unroled. */
 const resolved = new Map<string, Person | undefined>();
 const mindFailures = new Map<string, string>();
 
-/** The role of the session `ctx` runs, resolved at its start; undefined for an unroled session. */
 export function sessionRole(ctx: ExtensionContext): Role | undefined {
 	const id = ctx.sessionManager.getSessionId();
 	if (resolved.has(id)) return resolved.get(id)?.role;
-	// Separate extension-loader graphs do not share this cache; the transcript carries the role across them.
 	const stored = storedRole(ctx);
 	if (!stored) return undefined;
 	const role = loadRoles(ctx.cwd).roles.get(stored.role);
@@ -56,7 +43,6 @@ export function sessionRole(ctx: ExtensionContext): Role | undefined {
 	return role;
 }
 
-/** The one-line soul of the session `ctx` runs, for the directory; undefined without a role. */
 export function sessionSoulLine(ctx: ExtensionContext): string | undefined {
 	const soul = resolved.get(ctx.sessionManager.getSessionId())?.soul;
 	return soul && soulLine(soul);
@@ -84,7 +70,6 @@ function storedRole(ctx: ExtensionContext): RoleEntry | undefined {
 	return stored;
 }
 
-/** Tools that do work rather than route it; a dispatching person keeps reading, communication and management. */
 const EXECUTION_TOOLS = new Set(["bash", "edit", "write", "pi_exec", "search_branches", "monitor"]);
 
 function applyPosture(pi: ExtensionAPI, role: Role): void {
@@ -114,7 +99,6 @@ async function applyMind(
 ): Promise<Mind | undefined> {
 	if (stored) return applySelectedMind(pi, ctx, stored);
 	const first = role.models[0]!;
-	// A launcher may choose the tier (review depth) of a role that names a profile; concrete-only roles keep theirs.
 	const profileName = isInferenceProfileName(first)
 		? override && isInferenceProfileName(override)
 			? override
@@ -146,7 +130,6 @@ async function applyMind(
 	if (ctx.model) return { model: `${ctx.model.provider}/${ctx.model.id}`, thinking: pi.getThinkingLevel() };
 }
 
-/** Installs the role of root sessions. The `role` flag is registered by the caller, with its other flags. */
 export function installSessionRole(pi: ExtensionAPI): void {
 	pi.on("session_start", async (_event, ctx) => {
 		const sessionId = ctx.sessionManager.getSessionId();
@@ -190,8 +173,6 @@ export function installSessionRole(pi: ExtensionAPI): void {
 		resolved.set(sessionId, { role, soul });
 		applyPosture(pi, role);
 	});
-	// A model or thinking level chosen after the role resolved (Pi's selector, or the operator through the runtime) is
-	// the person's mind from now on, so the next start keeps it instead of restoring the stored one.
 	const remember = (ctx: ExtensionContext, model?: string) => {
 		if (!resolved.get(ctx.sessionManager.getSessionId())) return;
 		const stored = storedRole(ctx);

@@ -2,13 +2,11 @@ import { type Static, type TSchema, Type } from "typebox";
 import { Value } from "typebox/value";
 import type { ChangeRegion } from "./types.js";
 
-/** The operator's chosen bound on concurrent reviewer passes; reviews themselves run one at a time. */
 export const REVIEW_PASS_CONCURRENCY = 8;
 
 const text = Type.String({ minLength: 1, pattern: "\\S" });
 const object = { additionalProperties: false } as const;
 const question = Type.Object({ id: text, question: text, verification: text }, object);
-/** Standard runs the role on the balanced inference profile; deep runs it on the deep profile at several times the cost. */
 const depth = Type.Union([Type.Literal("standard"), Type.Literal("deep")]);
 const pass = Type.Object(
 	{
@@ -57,7 +55,6 @@ export const ReviewPlanSchema = Type.Object(
 	},
 	object,
 );
-/** Plans recorded before scopes were paths name region IDs per chunk and list unowned regions as gaps. */
 type LegacyPlan = { chunks: { regions?: string[] }[]; gaps?: { region: string; reason: string }[] };
 export type ReviewPlan = Static<typeof ReviewPlanSchema> & LegacyPlan;
 export type PlannedPass = Static<typeof pass> & {
@@ -153,7 +150,6 @@ export const FindingValidationSchema = Type.Object(
 );
 export type FindingValidation = Static<typeof FindingValidationSchema>;
 
-/** A scope path names a file or a directory prefix; "." names the whole change. */
 function inScope(paths: readonly string[], file: string): boolean {
 	return paths.some((path) => {
 		const prefix = path.replace(/\/+$/, "");
@@ -161,12 +157,10 @@ function inScope(paths: readonly string[], file: string): boolean {
 	});
 }
 
-/** The runtime, not the planner, maps changed regions to scopes. */
 export function chunkRegions(chunk: ReviewPlan["chunks"][number], regions: readonly ChangeRegion[]): string[] {
 	return chunk.regions ?? regions.filter((region) => inScope(chunk.paths, region.path)).map((region) => region.id);
 }
 
-/** Regions no focused scope covers; the integration pass, which reads the whole change, still covers them. */
 export function unscopedRegions(plan: ReviewPlan, regions: readonly ChangeRegion[]): string[] {
 	const scoped = new Set(plan.chunks.flatMap((chunk) => chunkRegions(chunk, regions)));
 	return regions.filter((region) => !scoped.has(region.id)).map((region) => region.id);
@@ -189,10 +183,6 @@ export function planPasses(plan: ReviewPlan, regions: readonly ChangeRegion[]): 
 	];
 }
 
-/**
- * Structural checks only: identities, roles and the operator's requested lenses. How many passes a scope needs is
- * the planner's judgment of risk, not a rule the runtime enforces.
- */
 export function validatePlan(
 	value: unknown,
 	artifact: string,
@@ -302,7 +292,6 @@ export function validateFindings(value: unknown, artifact: string, reports: Revi
 	return result;
 }
 
-/** One report's validation. A validator that sees a single report may name its findings by their bare IDs. */
 export function validateShard(value: unknown, artifact: string, report: ReviewReport): FindingValidation {
 	const result = checkShape(FindingValidationSchema, value);
 	const keys = new Map(report.findings.map((finding) => [finding.id, findingKey(report.pass, finding.id)]));
@@ -330,17 +319,12 @@ export const DuplicateLinksSchema = Type.Object(
 	object,
 );
 
-/**
- * Parallel validators each settle one report; a short merge then links duplicates across them. The merged result is
- * one validation, checked against every report as a single validator's would be.
- */
 export function combineValidation(
 	value: unknown,
 	artifact: string,
 	reports: ReviewReport[],
 	shards: FindingValidation[],
 ): FindingValidation {
-	// A reused merge attempt stores its combined result; check it again as the single validation it is.
 	if (value && typeof value === "object" && "findings" in value) return validateFindings(value, artifact, reports);
 	const links = checkShape(DuplicateLinksSchema, value);
 	if (links.artifact !== artifact) throw new Error("Duplicate links name a different artifact");

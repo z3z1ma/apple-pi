@@ -22,7 +22,6 @@ manages: false
 You are the test role.
 `;
 
-/** The organization extension on its own, with the flags the session-state bridge registers in production. */
 const organization = (pi: ExtensionAPI) => {
 	pi.registerFlag("role", { type: "string", description: "role" });
 	pi.registerFlag("reports-to", { type: "string", description: "manager" });
@@ -30,7 +29,6 @@ const organization = (pi: ExtensionAPI) => {
 	installOrganization(pi);
 };
 
-// The organization reads the session-state database; a temporary agent directory keeps tests off the operator's.
 vi.stubEnv("PI_CODING_AGENT_DIR", mkdtempSync(join(tmpdir(), "apo-agent-")));
 
 const dirs: string[] = [];
@@ -44,12 +42,10 @@ afterEach(() => {
 	rmSync(modelProfilesPath(), { force: true });
 });
 
-/** The session's model registry, which `ctx.modelRegistry.find` reads; private to Pi's runner, so reached untyped. */
 const registryOf = (run: Awaited<ReturnType<typeof fauxSession>>) =>
 	(run.session.extensionRunner as unknown as { modelRegistry: { find: (provider: string, id: string) => unknown } })
 		.modelRegistry;
 
-/** Restart a faux session with `--role <name>`: a new session_start reads the flag. */
 async function restartWithRole(run: Awaited<ReturnType<typeof fauxSession>>, role: string) {
 	run.session.extensionRunner.setFlagValue("role", role);
 	await run.session.bindExtensions({});
@@ -97,7 +93,6 @@ test("a role without writes loses edit and write, gets the role section, and kee
 		expect(run.session.getActiveToolNames()).toEqual(["read", "update_self"]);
 		expect(run.session.agent.state.systemPrompt).toContain("<role>\nYou are a Staff Software Engineer");
 
-		// A later start with another role keeps the one the session already holds.
 		await restartWithRole(run, "implementation-engineer");
 		await run.session.prompt("again");
 		expect(run.session.getActiveToolNames()).toEqual(["read", "update_self"]);
@@ -108,7 +103,6 @@ test("a role without writes loses edit and write, gets the role section, and kee
 });
 
 test("a dispatching role keeps reading and loses the shell, file writing and program tools", async () => {
-	// Production installs pi_exec before organization resolves the role, so the posture must remove an active pi_exec.
 	const run = await fauxSession(
 		[piExec, organization],
 		[fauxAssistantMessage("ok")],
@@ -294,7 +288,7 @@ test("a resumed session takes its role from its transcript, with no flag", async
 		sessionManager: SessionManager.create(cwd, sessionDir),
 	});
 	await restartWithRole(first, "staff-engineer-simplicity");
-	await first.session.prompt("hi"); // writes the session file
+	await first.session.prompt("hi");
 	const file = first.session.sessionManager.getSessionFile()!;
 	first.dispose();
 
@@ -306,7 +300,6 @@ test("a resumed session takes its role from its transcript, with no flag", async
 		await resumed.session.prompt("back");
 		expect(resumed.session.getActiveToolNames()).toEqual(["read", "update_self"]);
 		expect(resumed.session.agent.state.systemPrompt).toContain("<role>\nYou are a Staff Software Engineer");
-		// The soul drawn at the first start is the one the resumed session has.
 		const soulOf = (prompt: string) => prompt.match(/\*\*Article \d+\*\*/g);
 		expect(soulOf(resumed.session.agent.state.systemPrompt)).toEqual(soulOf(first.session.agent.state.systemPrompt));
 		expect(soulOf(resumed.session.agent.state.systemPrompt)).toHaveLength(3);
@@ -357,7 +350,6 @@ test.each([
 		const reporting = vi
 			.spyOn(reportingState, "reportingOf")
 			.mockImplementation((id) => (parent === undefined ? undefined : { id, reportsTo: parent }));
-		// Production installs pi_exec before organization resolves the session's role.
 		const run = await fauxSession([piExec, organization], [fauxAssistantMessage("ok")], ["pi_exec"]);
 		const model = run.session.model;
 		const thinking = run.session.thinkingLevel;
@@ -625,7 +617,6 @@ test("a profile selects once, retains its effective thinking across resume, and 
 	await first.session.prompt("save");
 	const file = first.session.sessionManager.getSessionFile()!;
 	first.dispose();
-	// Even malformed configuration is irrelevant once the chosen mind is retained.
 	writeFileSync(modelProfilesPath(), "malformed");
 	const resumed = await fauxSession([installer], [], ["read"], { cwd, sessionManager: SessionManager.open(file) });
 	try {

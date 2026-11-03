@@ -1,5 +1,8 @@
 ## file
 
+The organization extension is installed on its own, with the flags the session-state bridge registers in production. A temporary agent directory keeps the test off the operator's database. Production installs pi_exec before organization resolves the role, so posture must remove an already active pi_exec. A retained mind makes even malformed configuration irrelevant.
+Why: a test that installs organization first, or that reads the operator's agent directory, would not exercise the production order and could touch private state.
+
 Profile-priority and resume scenarios need distinct profile/default model IDs, reasoning-capable fixtures, and registry lookups that honor the requested identity. Observe the resulting session model, effort, and completed or aborted response across lifecycle events rather than the number of custom entries appended.
 Why: a registry fake that returns one model for every identity can let a broken profile/default selection pass; counting transcript writes couples persistence tests to serialization without proving that the person's mind survives a reopen.
 Catalog flags, model-visible delegation, and actual writing are separate capability claims. The four new management jobs keep independent expected names, and their writing cases execute native write/edit calls and inspect the resulting artifact after the real role lifecycle runs.
