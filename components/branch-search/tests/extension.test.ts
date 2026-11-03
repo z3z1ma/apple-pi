@@ -74,11 +74,6 @@ const SEARCH_CALL = "search-1";
 
 const SIBLING_CALL = "sibling-1";
 
-/**
- * The parent's scripted turns: "Search now." calls `search_branches` (with a sibling `read` when
- * asked); the call's own result ends the turn. Fork prompts start with "Branch search: ", which no
- * result the parent receives does.
- */
 function searchingParent(
 	withSibling = false,
 	other?: (context: Context) => Reply | "until-aborted" | undefined,
@@ -99,7 +94,6 @@ function searchingParent(
 	};
 }
 
-/** The `search_branches` results in the parent session. */
 function searchResults(messages: readonly object[]) {
 	return messages.filter(
 		(
@@ -109,7 +103,6 @@ function searchResults(messages: readonly object[]) {
 	);
 }
 
-/** The text of each `search_branches` progress update, in order. */
 function toolUpdates(session: AgentSession): string[] {
 	const updates: string[] = [];
 	session.subscribe((event) => {
@@ -147,7 +140,6 @@ describe("search_branches", { timeout: 30_000 }, () => {
 		expect(result?.isError).toBe(false);
 		expect(record.goal).toBe("Make value equal 2.");
 		expect(readFileSync(join(run.cwd, "app.ts"), "utf8")).toBe("export const value = 2;\n");
-		// The parent gained its prompt, the call, its result, and its reply: no report message (I7).
 		expect(run.session.messages.slice(before).map((m) => m.role)).toEqual([
 			"user",
 			"assistant",
@@ -156,7 +148,6 @@ describe("search_branches", { timeout: 30_000 }, () => {
 		]);
 		expect(run.session.messages.filter((m) => m.role === "custom")).toEqual([]);
 
-		// Every role fork and root starts with the parent's request through the call, then answers the call with its prompt (I4).
 		const parentNext = run.requests.find((r) => text(r.messages.at(-1)) === report) as Context;
 		const shared = parentNext.messages.length - 1;
 		const opening = run.requests.filter((r) => {
@@ -174,10 +165,8 @@ describe("search_branches", { timeout: 30_000 }, () => {
 			expect(request.systemPrompt).toEqual(parentNext.systemPrompt);
 			expect(request.tools).toEqual(parentNext.tools);
 		}
-		// No fork request carries a custom prompt after the call.
 		expect(run.requests.filter((r) => r.messages[shared]?.role === "user" && r.messages.length > shared)).toEqual([]);
 
-		// Progress streams through tool updates in the status format; the UI status line stays untouched.
 		expect(updates).toEqual(
 			expect.arrayContaining(["branching enumerate", "branching run", "branching score", "branching apply"]),
 		);
@@ -262,7 +251,6 @@ describe("search_branches", { timeout: 30_000 }, () => {
 		const record = recordOf(text(searchResults(run.session.messages)[0] as never));
 		expect(record.judges).toEqual([JUDGE]);
 		expect(record.gates).toEqual([GATE]);
-		// One request without the parent's conversation; it chose a3 over a2's better number.
 		expect(choices).toHaveLength(1);
 		expect(choices[0]?.messages).toHaveLength(1);
 		expect(record.winner).toBe("a3");
@@ -313,7 +301,6 @@ describe("search_branches", { timeout: 30_000 }, () => {
 		const [result] = searchResults(run.session.messages);
 		expect(result?.isError).toBe(true);
 		expect(text(result as never)).toContain("Call search_branches on its own");
-		// The sibling still ran, and only the parent's own two requests were sent.
 		const sibling = run.session.messages.find((m) => m.role === "toolResult" && m.toolCallId === SIBLING_CALL);
 		expect(sibling).toMatchObject({ isError: false });
 		expect(run.requests).toHaveLength(before + 2);
@@ -353,7 +340,6 @@ describe("search_branches", { timeout: 30_000 }, () => {
 		expect(text(blocked)).toContain("not available");
 		expect(readdirSync(join(run.cwd, ".git", "apple-pi", "branch-search"))).toHaveLength(1);
 
-		// A fork outside branch search (a reflection) reaches the tool, which refuses it.
 		const reflection = await startFork(run.session, {
 			messages: run.session.sessionManager.buildSessionProjection().messages,
 			append: { role: "custom", customType: "test", content: "Reflect.", display: false, timestamp: Date.now() },

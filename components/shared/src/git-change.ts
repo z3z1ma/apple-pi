@@ -24,7 +24,6 @@ export const GitTargetSchema = Type.Union(
 export type GitTarget = Static<typeof GitTargetSchema>;
 export const WORKING_TREE: GitTarget = { kind: "working-tree", base: "HEAD" };
 
-/** Isolate commands from ambient repository redirection, user configuration, hooks and fsmonitor daemons. */
 const ENV: NodeJS.ProcessEnv = {
 	GIT_DIR: undefined,
 	GIT_WORK_TREE: undefined,
@@ -40,7 +39,6 @@ const ENV: NodeJS.ProcessEnv = {
 	GIT_NO_LAZY_FETCH: "1",
 	GIT_TERMINAL_PROMPT: "0",
 };
-/** For reading the author's effective settings (config and attributes only, never filters or hooks): user and system config count. */
 const AUTHOR_SETTINGS: NodeJS.ProcessEnv = {
 	GIT_CONFIG_GLOBAL: process.env.GIT_CONFIG_GLOBAL,
 	GIT_CONFIG_NOSYSTEM: process.env.GIT_CONFIG_NOSYSTEM,
@@ -62,7 +60,6 @@ const EMPTY_TREE: Record<string, string> = {
 	sha256: "6ef19b41225c5369f1c104d45d8d85efa9b057b53b14b4b9b939dd74decc5321",
 };
 
-/** Exact bytes on disk: no attributes from any source, no autocrlf, explicit filesystem capabilities. */
 export const rawFlags = (objectFormat: string) => [
 	`--attr-source=${EMPTY_TREE[objectFormat]}`,
 	"-c",
@@ -82,7 +79,6 @@ export async function gitLine(cwd: string, args: string[], options?: GitOptions)
 	return (await gitRun(cwd, args, options)).toString("utf8").replace(/\n$/, "");
 }
 
-/** 2.45.1 is the first release whose promisor fetch honours GIT_NO_LAZY_FETCH; older Git can run a promisor remote's command. */
 const MINIMUM_GIT = [2, 45, 1];
 let gitChecked = false;
 async function requireGit(signal?: AbortSignal): Promise<void> {
@@ -95,13 +91,11 @@ async function requireGit(signal?: AbortSignal): Promise<void> {
 	gitChecked = true;
 }
 
-/** Git's quoted path-list entry, so a colon or quote inside the path is not read as a separator. */
 function quotedListEntry(path: string): string {
 	if (!/[:"\\\n\t]/.test(path)) return path;
 	return `"${path.replace(/[\\"]/g, "\\$&").replace(/\n/g, "\\n").replace(/\t/g, "\\t")}"`;
 }
 
-/** A Git blob identity computed in-process; OpenSSL hashing is several times faster than spawning Git for it. */
 export function blobId(objectFormat: string, data: Buffer): string {
 	return createHash(objectFormat).update(`blob ${data.length}\0`).update(data).digest("hex");
 }
@@ -112,7 +106,6 @@ export async function fileBlobId(objectFormat: string, path: string, signal?: Ab
 	return hash.digest("hex");
 }
 
-/** Length-delimited `cat-file --batch -Z`: blob bytes may contain newlines, NULs and invalid UTF-8. */
 export function objectReader(cwd: string, env: NodeJS.ProcessEnv = {}, signal?: AbortSignal) {
 	const child = spawn("git", [...FLAGS, "cat-file", "--batch", "-Z"], {
 		cwd,
@@ -143,7 +136,6 @@ export function objectReader(cwd: string, env: NodeJS.ProcessEnv = {}, signal?: 
 	};
 	signal?.addEventListener("abort", abort, { once: true });
 	if (signal?.aborted) abort();
-	// Received chunks stay separate until a caller takes bytes, so a large blob is copied once, not once per chunk.
 	const chunks: Buffer[] = [];
 	let buffered = 0;
 	child.stdout.on("data", (chunk: Buffer) => {
@@ -196,7 +188,6 @@ export function objectReader(cwd: string, env: NodeJS.ProcessEnv = {}, signal?: 
 			.subarray(0, end)
 			.toString("utf8");
 		const [, type, length, ...rest] = header.split(" ");
-		// "<name> missing", "<oid> submodule" and similar replies carry no object body.
 		if (length === undefined || rest.length || !/^\d+$/.test(length)) return undefined;
 		const size = Number(length);
 		await available(size + 1);
@@ -205,19 +196,16 @@ export function objectReader(cwd: string, env: NodeJS.ProcessEnv = {}, signal?: 
 		return type === "blob" ? data : undefined;
 	};
 	return {
-		/** One object at a time, in request order; `<tree>:<path>` reads a path inside an immutable tree. */
 		read(spec: string): Promise<Buffer | undefined> {
 			if (closing) return Promise.reject(new Error("The Git object reader is closed"));
 			const next = queue.then(() => request(spec));
 			queue = next.catch(() => {});
 			return next;
 		},
-		/** Stops new requests, ends Git (failing any read still waiting) and resolves once it has exited. */
 		async close(): Promise<void> {
 			closing = true;
 			signal?.removeEventListener("abort", abort);
 			child.stdin.end();
-			// cat-file holds no state worth a graceful exit, and one that ignores TERM must not hold cleanup pending.
 			if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
 			await exited;
 			await queue;
@@ -234,12 +222,9 @@ export interface GitChange {
 	headCommit: string;
 	baseTree: string;
 	headTree: string;
-	/** The index tree when the target is staged or working-tree; null for committed targets. */
 	indexTree: string | null;
-	/** Stage-0 index entries, including intent-to-add entries that write-tree omits; null for committed targets. */
 	indexEntries: IndexEntry[] | null;
 	git(args: string[], options?: GitOptions): Promise<Buffer>;
-	/** Exact bytes at one side of the change, or undefined when the path is absent there. */
 	read(side: "before" | "after", path: string): Promise<Buffer | undefined>;
 	close(): Promise<void>;
 }
@@ -251,7 +236,6 @@ export interface IndexEntry {
 
 const OBJECT_ID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
 
-/** Like Promise.all, but every command has exited before the first failure propagates. */
 export async function settledAll<T extends readonly unknown[]>(work: { [K in keyof T]: Promise<T[K]> }): Promise<T> {
 	const results = await Promise.allSettled(work);
 	const failed = results.find((result) => result.status === "rejected");
@@ -259,7 +243,6 @@ export async function settledAll<T extends readonly unknown[]>(work: { [K in key
 	return results.map((result) => (result as PromiseFulfilledResult<unknown>).value) as unknown as T;
 }
 
-/** Paths come from separate queries (they may contain newlines); revisions are one batch of validated object IDs. */
 async function locate(cwd: string, target: GitTarget, signal?: AbortSignal) {
 	const head =
 		target.kind === "commit"
@@ -333,10 +316,6 @@ async function resolveBase(root: string, target: GitTarget, located: Located, si
 	return { baseCommit: bases[0]!, baseTree: await gitLine(root, ["rev-parse", `${bases[0]}^{tree}`], { signal }) };
 }
 
-/**
- * Copy an index with its modification time: racy-git detection compares entries with the index file's own
- * timestamp, so a fresh timestamp would hide same-second edits that the original index still re-checks.
- */
 export async function copyIndex(source: string, target: string): Promise<void> {
 	try {
 		await copyFile(source, target);
@@ -347,11 +326,6 @@ export async function copyIndex(source: string, target: string): Promise<void> {
 	}
 }
 
-/**
- * A private Git directory for one change: no repository config, attributes, hooks or filter definitions, the
- * author's worktree as its work tree, and the author's objects as an alternate. Every command that reads the
- * worktree or renders a diff runs here, so nothing configured in the author's repository runs or transforms bytes.
- */
 async function isolatedContext(located: Located, objects: string | undefined) {
 	const directory = await mkdtemp(join(tmpdir(), "git-change-"));
 	const gitDir = join(directory, "git");
@@ -366,7 +340,6 @@ async function isolatedContext(located: Located, objects: string | undefined) {
 			? "[core]\n\trepositoryformatversion = 0\n\tbare = false\n"
 			: `[core]\n\trepositoryformatversion = 1\n\tbare = false\n[extensions]\n\tobjectformat = ${located.objectFormat}\n`,
 	);
-	// Ignore rules are part of what "untracked" means; split-index shared files are needed to read a copied index.
 	await copyFile(join(located.commonDirectory, "info", "exclude"), join(gitDir, "info", "exclude")).catch(() => {});
 	for (const name of await readdir(located.gitDirectory).catch(() => [] as string[]))
 		if (name.startsWith("sharedindex.")) await copyFile(join(located.gitDirectory, name), join(gitDir, name));
@@ -379,7 +352,6 @@ async function isolatedContext(located: Located, objects: string | undefined) {
 	return { directory, env };
 }
 
-/** Index, ignore and path-spelling settings that decide which worktree paths exist; never filters or hooks. */
 async function pathSettings(root: string, signal?: AbortSignal): Promise<string[]> {
 	const output = await gitRun(
 		root,
@@ -396,10 +368,6 @@ async function pathSettings(root: string, signal?: AbortSignal): Promise<string[
 		});
 }
 
-/**
- * Tracked paths whose index blob may differ from their bytes on disk although Git's stat cache calls them clean:
- * the author's attributes or autocrlf converted them when they were staged. Only these are read and compared.
- */
 async function convertedPaths(root: string, entries: IndexEntry[], signal?: AbortSignal): Promise<string[]> {
 	const files = entries.filter((entry) => entry.mode.startsWith("100"));
 	if (!files.length) return [];
@@ -432,12 +400,6 @@ function parseEntries(output: Buffer): IndexEntry[] {
 		});
 }
 
-/**
- * Snapshot staged and working-tree state the way `git stash create` does, in the isolated context: a copy of the
- * author's index absorbs changes with `git add -A`, so Git's stat cache hashes only changed files. The copy first
- * drops assume-unchanged and skip-worktree promises and forgets the cached stat of entries that conversion could
- * have made differ from the disk, so the snapshot holds exactly the bytes on disk. The author's index is untouched.
- */
 async function snapshot(located: Located, env: NodeJS.ProcessEnv, working: boolean, signal?: AbortSignal) {
 	const { repository: root, objectFormat } = located;
 	const index = join(env.GIT_DIR!, "index");
@@ -448,8 +410,6 @@ async function snapshot(located: Located, env: NodeJS.ProcessEnv, working: boole
 	const indexEntries = parseEntries(await run(["ls-files", "--stage", "-z"]));
 	const indexTree = (await run(["write-tree"])).toString("utf8").trim();
 	if (!working) return { indexTree, indexEntries, headTree: indexTree };
-	// `ls-files -v` tags: lowercase = assume-unchanged, S/s = skip-worktree. update-index applies only one of
-	// these options to paths read from stdin, so each flag is cleared by its own command.
 	const tagged = (await run(["ls-files", "-v", "-z"])).toString("utf8").split("\0").filter(Boolean);
 	for (const [option, flagged] of [
 		["--no-assume-unchanged", tagged.filter((record) => /^[a-z]/.test(record))],
@@ -468,13 +428,11 @@ async function snapshot(located: Located, env: NodeJS.ProcessEnv, working: boole
 		const present = await lstat(file).catch(() => undefined);
 		if (present?.isFile() && (await fileBlobId(objectFormat, file)) !== entry.blob) stale.push(entry);
 	}
-	// Re-adding an entry without stat data makes `git add` hash its raw bytes.
 	if (stale.length)
 		await run(["update-index", "-z", "--index-info"], {
 			input: stale.map((entry) => `${entry.mode} ${entry.blob} 0\t${entry.path}\0`).join(""),
 		});
 	const settings = await pathSettings(root, signal);
-	// bigFileThreshold=1 streams every new blob into one pack (bulk check-in) instead of one loose file each.
 	await run([
 		...settings,
 		"-c",
@@ -489,11 +447,6 @@ async function snapshot(located: Located, env: NodeJS.ProcessEnv, working: boole
 	return { indexTree, indexEntries, headTree: (await run(["write-tree"])).toString("utf8").trim() };
 }
 
-/**
- * Resolve a target to immutable trees. Mutable targets write their new blobs and trees to `objects` (private
- * unless supplied). Every later command runs in the change's isolated context; close it to stop its Git processes
- * and remove private state.
- */
 export async function openGitChange(
 	cwd: string,
 	target: GitTarget,
@@ -533,11 +486,6 @@ export async function openGitChange(
 	}
 }
 
-/**
- * Reads two immutable trees, such as a retained review capture. Diffs resolve attributes from the head tree only.
- * Close is terminal: it cancels Git commands still running, waits for them and the object reader to exit, and only
- * then removes owned state, so a failing parallel consumer cannot pull storage from under its siblings.
- */
 export function openTrees(
 	root: string,
 	baseTree: string,

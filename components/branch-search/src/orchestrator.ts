@@ -40,7 +40,6 @@ import {
 	snapshotBase,
 } from "./workspace.js";
 
-/** Tools no search fork may run. They stay in the tool list so the request prefix stays the parent's. */
 export const SEARCH_BLOCKED_TOOLS: ReadonlySet<string> = new Set([
 	"search_branches",
 	"ask_user_question",
@@ -48,7 +47,6 @@ export const SEARCH_BLOCKED_TOOLS: ReadonlySet<string> = new Set([
 	"revisit_note",
 	"ledger_add",
 	"ledger_status",
-	// These tools act on the parent's workplace or run outside the candidate worktree.
 	"explore",
 	"research",
 	"send_mail",
@@ -71,7 +69,6 @@ export const SEARCH_BLOCKED_TOOLS: ReadonlySet<string> = new Set([
 	"finish_task",
 	"promote_task",
 	"update_self",
-	// Reading a thread consumes the parent's unread marker.
 	"read_thread",
 	"remind_me",
 	"monitor",
@@ -79,38 +76,24 @@ export const SEARCH_BLOCKED_TOOLS: ReadonlySet<string> = new Set([
 	"pi_exec",
 ]);
 
-/** The custom message type of search prompts in forks. */
 export const BRANCH_SEARCH_MESSAGE_TYPE = "branch-search";
 
 export interface SearchOptions {
-	/** The live parent session; its current projection is the fork point. */
 	session: AgentSession;
 	cwd: string;
-	/** The loaded, not yet validated, configuration. */
 	config: unknown;
 	goal: string;
-	/** At least one. */
 	judges: Judge[];
 	gates: Gate[];
-	/** Repository-relative files or directories put back to their base content before scoring. */
 	protect: string[];
-	/**
-	 * Wraps a prompt appended to the fork point (the enumerator's first turn and every attempt).
-	 * Without it, the prompt is a hidden custom message. The tool answers its pending
-	 * `search_branches` call with it, so the fork point ends with that call.
-	 */
 	forkPointPrompt?: (prompt: string) => AgentMessage;
-	/** Sends the judge model's request when `judge.profile` is set. */
 	profileRequest?: ProfileRequest;
 	signal: AbortSignal;
-	/** Receives `branching <phase>`, and `undefined` once cleanup is done. */
 	onStatus: (text: string | undefined) => void;
 }
 
 export interface SearchResult {
-	/** `applied`, `ready`, `no winner`, `aborted: <reason>`, or `not configured`. */
 	outcome: string;
-	/** The report body, or the configuration problems. */
 	report: string;
 	recordPath?: string;
 }
@@ -141,16 +124,11 @@ function replyText(messages: AgentMessage[]): string {
 		.trim();
 }
 
-/** Wait for every task, then fail with the first error, so nothing still runs in a worktree that cleanup removes. */
 async function settleAll(tasks: Promise<unknown>[]): Promise<void> {
 	const failed = (await Promise.allSettled(tasks)).find((result) => result.status === "rejected");
 	if (failed) throw failed.reason;
 }
 
-/**
- * Run one search: snapshot the base, enumerate approaches, run attempts in parallel worktrees, score
- * them with the gates and judges, pick the winner, apply it, report, and clean up.
- */
 export async function runBranchSearch(options: SearchOptions): Promise<SearchResult> {
 	const validated = validateBranchSearchConfig(options.config);
 	if (!validated.ok) return { outcome: "not configured", report: validated.text };
@@ -174,10 +152,8 @@ class Search {
 	readonly id = searchId(new Date());
 	readonly stateDir: string;
 	readonly recordPath: string;
-	/** Pre-fork copies of the cloned ignored directories that overlap a protected path. */
 	readonly protectedClones: string;
 	readonly record: SearchRecord;
-	/** Fork point: the parent's conversation when the search starts. */
 	readonly forkPoint: AgentMessage[];
 	readonly forks = new Set<ForkHandle>();
 	readonly worktrees = new Set<string>();
@@ -250,7 +226,6 @@ class Search {
 		const base = await snapshotBase(this.root, this.id);
 		this.record.base = base;
 		this.save();
-		// Protected cloned directories are restored from this copy, taken before any fork can write.
 		await cloneIgnoredDirs(
 			this.root,
 			this.protectedClones,
@@ -260,7 +235,6 @@ class Search {
 		this.status("enumerate");
 		const candidates = (await this.enumerate(base.commit)).slice(0, this.config.attempts);
 
-		// Every worktree exists before any attempt starts, so none clones what a running attempt wrote.
 		const worktrees: string[] = [];
 		for (const i of candidates.keys()) worktrees.push(await this.worktree(`a${i + 1}`, base.commit));
 		this.options.signal.throwIfAborted();
@@ -269,13 +243,11 @@ class Search {
 		await settleAll(runs);
 		this.options.signal.throwIfAborted();
 		const scorable: LiveAttempt[] = [];
-		/** Each scorable worktree's protected state once restored; scoring must leave it so. */
 		const restored = new Map<string, string>();
 		const { protect } = this.options;
 		for (const attempt of this.attempts) {
 			const { record, worktree } = attempt;
 			record.commit = await commitWorktree(this.root, worktree, this.id, record.key);
-			// What is scored, and applied if it wins, is the attempt with its protected paths at base.
 			try {
 				record.protectedChanged = await restoreProtected(
 					this.protectedClones,
@@ -295,7 +267,6 @@ class Search {
 		}
 		this.save();
 
-		// One command at a time, so a judge that measures time or memory is not skewed by the others.
 		this.status("score");
 		const scores = await score(
 			scorable.map(({ worktree }) => worktree),
@@ -332,10 +303,6 @@ class Search {
 		this.record.outcome = this.record.apply.applied ? "applied" : "ready";
 	}
 
-	/**
-	 * With `judge.profile`, one request on that profile chooses among the qualifying attempts. A failed
-	 * request or an unusable reply leaves the judge numbers' order, and the record and report say why.
-	 */
 	private async choose(ranked: AttemptRecord[], base: string): Promise<string> {
 		const profile = this.config.judge?.profile;
 		const best = ranked[0]?.key as string;
@@ -370,7 +337,6 @@ class Search {
 		return choice.winner ?? best;
 	}
 
-	/** The enumerator: a fork of the parent at the fork point in its own base worktree, asked once more after an unusable reply. */
 	private async enumerate(base: string): Promise<Candidate[]> {
 		const path = await this.worktree("enumerate", base);
 		try {
@@ -399,7 +365,6 @@ class Search {
 		}
 	}
 
-	/** One attempt: a fork of the parent at the fork point, bound to its own worktree, under the per-attempt limits. */
 	private runAttempt(key: string, candidate: Candidate, worktree: string): Promise<void> {
 		const record: AttemptRecord = {
 			key,
@@ -444,13 +409,11 @@ class Search {
 		});
 	}
 
-	/** A prompt appended to the fork point itself; continuations of a fork's own conversation use `customPrompt`. */
 	private atForkPoint(prompt: string): AgentMessage {
 		return (this.options.forkPointPrompt ?? customPrompt)(prompt);
 	}
 
 	private fork(request: ForkRequest): ForkHandle {
-		// The abort handler stops only forks that exist, so none may start after it fired.
 		this.options.signal.throwIfAborted();
 		const handle = startFork(this.options.session, { blockedTools: SEARCH_BLOCKED_TOOLS, ...request });
 		this.forks.add(handle);
@@ -458,7 +421,6 @@ class Search {
 		return handle;
 	}
 
-	/** A fork's binding to its worktree, with a private temporary directory beside the worktrees. */
 	private forkWorktree(root: string): ForkWorktree {
 		return { root, parentRoot: this.root, tmp: join(this.stateDir, "tmp", basename(root)) };
 	}
@@ -470,7 +432,6 @@ class Search {
 		return path;
 	}
 
-	/** Git worktree commands run one at a time. */
 	private serial<T>(task: () => Promise<T>): Promise<T> {
 		const run = this.gitQueue.then(task);
 		this.gitQueue = run.then(
@@ -489,7 +450,6 @@ class Search {
 		writeRecord(this.recordPath, this.record);
 	}
 
-	/** Stop every fork, remove every worktree and every search ref but a ready winner's; keep the record files. */
 	private async cleanup(): Promise<void> {
 		const problems: string[] = [];
 		const attempt = async (step: () => Promise<unknown> | unknown) => {
@@ -503,7 +463,6 @@ class Search {
 		for (const fork of forks) fork.abort();
 		await Promise.allSettled(forks.map((fork) => fork.result));
 		await attempt(() => removeWorktrees(this.root, this.worktrees));
-		// Only a winner that was not applied keeps its ref, for the report's merge command.
 		const keep = this.record.outcome === "ready" && this.record.winner ? [this.record.winner] : [];
 		await attempt(() => pruneRefs(this.root, this.id, keep));
 		await attempt(() => rmSync(join(this.stateDir, "wt"), { recursive: true, force: true }));

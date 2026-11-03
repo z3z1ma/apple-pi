@@ -6,17 +6,8 @@ import { cloneIgnoredDirs, git } from "../../shared/src/git.js";
 import { canonical, within } from "../../shared/src/real-path.js";
 import { relativePathsProblem } from "../../shared/src/relative-paths.js";
 
-/**
- * Git plumbing for one search: the base snapshot, worktrees, attempt commits, refs, apply, and
- * cleanup. Nothing here writes the user's index.
- */
-
 const COMMITTER = ["-c", "user.name=apple-pi", "-c", "user.email=apple-pi@localhost", "-c", "commit.gpgsign=false"];
 
-/**
- * Flags for every `git diff` whose output the search parses or applies: a configured external diff
- * or textconv driver would otherwise replace the real content changes.
- */
 export const PLAIN_DIFF = ["--no-ext-diff", "--no-textconv"];
 
 export function refPrefix(id: string): string {
@@ -44,7 +35,6 @@ export async function gitCommonDir(cwd: string): Promise<string> {
 	return resolve(cwd, await git(cwd, ["rev-parse", "--git-common-dir"]));
 }
 
-/** The tree of the workspace as it stands, built in a temporary index. */
 export async function snapshotTree(root: string): Promise<string> {
 	const dir = mkdtempSync(join(tmpdir(), "apple-pi-branch-index-"));
 	const env = { GIT_INDEX_FILE: join(dir, "index") };
@@ -57,7 +47,6 @@ export async function snapshotTree(root: string): Promise<string> {
 	}
 }
 
-/** Commit the workspace, uncommitted and untracked non-ignored files included, as the search base. */
 export async function snapshotBase(root: string, id: string): Promise<{ commit: string; tree: string }> {
 	const tree = await snapshotTree(root);
 	const commit = await git(root, [...COMMITTER, "commit-tree", tree, "-p", "HEAD", "-m", `branch-search ${id} base`]);
@@ -65,14 +54,12 @@ export async function snapshotBase(root: string, id: string): Promise<{ commit: 
 	return { commit, tree };
 }
 
-/** A detached worktree at `commit`, with the listed ignored directories cloned from the parent. */
 export async function addWorktree(root: string, path: string, commit: string, cloneIgnored: string[]): Promise<void> {
 	mkdirSync(dirname(path), { recursive: true });
 	await git(root, ["worktree", "add", "--detach", "-q", path, commit]);
 	await cloneIgnoredDirs(root, path, cloneIgnored);
 }
 
-/** Why `paths` cannot be protected in `root`, or undefined when each stays inside it, symlinks resolved. */
 export function protectProblem(root: string, paths: readonly string[]): string | undefined {
 	const lexical = relativePathsProblem(paths);
 	if (lexical !== undefined) return lexical;
@@ -85,7 +72,6 @@ export function protectProblem(root: string, paths: readonly string[]): string |
 		}
 	});
 	if (outside !== undefined) return `must hold paths inside the workspace ("${outside}" resolves outside it)`;
-	// Restoring a link would leave the file it points to unprotected.
 	for (const path of paths) {
 		const parts = path.split("/");
 		const linked = parts.some((_, i) => isSymlink(join(root, ...parts.slice(0, i + 1))));
@@ -103,12 +89,6 @@ function isSymlink(path: string): boolean {
 	}
 }
 
-/**
- * Put the protected paths of the worktree's committed attempt back to their base content: changed
- * files restored, added files removed, and ignored files left there removed too. A cloned ignored
- * directory that overlaps a protected path is cloned again from `snapshot`, its copy taken before
- * any attempt ran. Returns what the attempt changed there; the caller commits the result.
- */
 export async function restoreProtected(
 	snapshot: string,
 	path: string,
@@ -118,8 +98,6 @@ export async function restoreProtected(
 ): Promise<string[]> {
 	if (protect.length === 0) return [];
 	const overlapping = protectedClones(protect, cloneIgnored);
-	// The attempt may have replaced an ancestor with a symlink; removing or cloning through it would
-	// write outside the worktree, so nothing is touched unless every target stays inside.
 	const top = canonical(path);
 	for (const entry of overlapping)
 		if (!within(canonical(dirname(join(path, entry))), top))
@@ -149,7 +127,6 @@ export async function restoreProtected(
 		.filter(Boolean);
 	if (changed.length > 0)
 		await git(path, [...literal, "restore", `--source=${base}`, "--staged", "--worktree", "--", ...changed]);
-	// With -x, only the -e patterns still exclude: the cloned dependency directories stay.
 	const keep = cloneIgnored.flatMap((entry) => ["-e", `/${entry}`]);
 	const cleaned = (await git(path, [...literal, "clean", "-ffdx", ...keep, "--", ...protect]))
 		.split("\n")
@@ -157,12 +134,6 @@ export async function restoreProtected(
 	return [...changed, ...cleaned, ...recloned].sort();
 }
 
-/**
- * The state of the protected paths: the worktree's HEAD, which a command that commits a change
- * would move, and their tracked content and untracked files as git sees them. Ignored files stay
- * aside, because scoring commands write caches there (for example `__pycache__` under tests).
- * Equal states mean those paths are unchanged.
- */
 export async function protectedState(path: string, protect: readonly string[]): Promise<string> {
 	const head = await git(path, ["rev-parse", "HEAD"]);
 	const status = await git(path, [
@@ -177,13 +148,11 @@ export async function protectedState(path: string, protect: readonly string[]): 
 	return `${head}\n${status}`;
 }
 
-/** The cloned ignored directories that overlap a protected path, either way. */
 export function protectedClones(protect: readonly string[], cloneIgnored: readonly string[]): string[] {
 	const inside = (a: string, b: string) => within(join("/", a), join("/", b));
 	return cloneIgnored.filter((entry) => protect.some((p) => inside(entry, p) || inside(p, entry)));
 }
 
-/** Whether two directories differ; a comparison that cannot finish counts as a difference. */
 function differs(a: string, b: string): Promise<boolean> {
 	if (!existsSync(a) && !existsSync(b)) return Promise.resolve(false);
 	return new Promise((resolvePromise) => {
@@ -191,7 +160,6 @@ function differs(a: string, b: string): Promise<boolean> {
 	});
 }
 
-/** Commit everything in the worktree and point the attempt's ref at it. */
 export async function commitWorktree(root: string, path: string, id: string, key: string): Promise<string> {
 	await git(path, ["add", "-A"]);
 	await git(path, [...COMMITTER, "commit", "--no-verify", "--allow-empty", "-q", "-m", `branch-search ${id} ${key}`]);
@@ -200,15 +168,10 @@ export async function commitWorktree(root: string, path: string, id: string, key
 	return commit;
 }
 
-/**
- * Remove each worktree, locked or dirty, then prune git's records of them. Every path is attempted;
- * a worktree whose directory or git record remains is reported in the thrown error.
- */
 export async function removeWorktrees(root: string, worktrees: Iterable<string>): Promise<void> {
 	const paths = [...worktrees];
 	const failures: string[] = [];
 	for (const path of paths) {
-		// A second --force removes a locked worktree too.
 		const removed = await git(root, ["worktree", "remove", "--force", "--force", path]).then(
 			() => undefined,
 			(error: Error) => error.message,
@@ -232,7 +195,6 @@ export async function removeWorktrees(root: string, worktrees: Iterable<string>)
 	if (failures.length > 0) throw new Error(`Could not remove worktrees: ${failures.join("; ")}`);
 }
 
-/** Delete every ref of the search except the named keys. */
 export async function pruneRefs(root: string, id: string, keep: string[]): Promise<void> {
 	const refs = await git(root, ["for-each-ref", "--format=%(refname)", refPrefix(id)]);
 	const kept = new Set(keep.map((key) => branchRef(id, key)));
@@ -243,25 +205,16 @@ export async function pruneRefs(root: string, id: string, keep: string[]): Promi
 
 export interface ApplyResult {
 	applied: boolean;
-	/** The workspace tree when apply was decided, compared with the base tree. */
 	workspaceTree: string;
-	/** Why the winner was not applied. */
 	reason?: string;
 }
 
-/**
- * Apply the winner to the workspace only when the workspace still holds the base tree. The binary diff from base to winner goes to `patchPath`, which outlives
- * cleanup, and `git apply` lands it in the working tree without touching the user's index. `git apply`
- * checks the patch before writing but does not undo a write that fails partway, so a failure
- * restores to base every path the patch wrote that still holds what it wrote (see `restoreOwned`).
- */
 export async function applyWinner(
 	root: string,
 	options: {
 		base: { commit: string; tree: string };
 		winner: string;
 		patchPath: string;
-		/** Checked last before the patch lands, so a cancelled search leaves the workspace as it was. */
 		signal?: AbortSignal;
 	},
 ): Promise<ApplyResult> {
@@ -270,7 +223,6 @@ export async function applyWinner(
 		return { applied: false, workspaceTree, reason: "the workspace changed during the search" };
 	const { base, winner, patchPath } = options;
 	await git(root, ["diff", ...PLAIN_DIFF, "--binary", `--output=${patchPath}`, base.commit, winner]);
-	// A winner with the base tree changes nothing, and git apply refuses an empty patch.
 	if ((await git(root, ["rev-parse", `${winner}^{tree}`])) === base.tree) return { applied: true, workspaceTree };
 	options.signal?.throwIfAborted();
 	try {
@@ -290,14 +242,12 @@ export async function applyWinner(
 	return { applied: true, workspaceTree };
 }
 
-/** What a path holds in the working tree: its blob id, or undefined when it is absent. */
 async function workingBlob(root: string, path: string): Promise<string | undefined> {
 	const target = join(root, path);
 	let stat: ReturnType<typeof lstatSync>;
 	try {
 		stat = lstatSync(target);
 	} catch (error) {
-		// Only absence counts as absent; a path that cannot be inspected is not shown to be owned.
 		const code = (error as NodeJS.ErrnoException).code;
 		if (code === "ENOENT" || code === "ENOTDIR") return undefined;
 		throw error;
@@ -307,14 +257,6 @@ async function workingBlob(root: string, path: string): Promise<string | undefin
 	return git(root, ["hash-object", "--", path]);
 }
 
-/**
- * Roll back a failed apply: put back to base only the paths the apply still owns, those that hold
- * exactly what the winner has (its content, or absence for a path the winner deletes). A path that
- * holds anything else was changed by someone else meanwhile and is left alone; so is a path that
- * already holds its base content. Returns the paths left alone because someone else changed them.
- * A temporary index holding the base entries of the owned paths checks them out; the user's index
- * is never read or written.
- */
 export async function restoreOwned(root: string, base: string, winner: string): Promise<string[]> {
 	const split = (output: string) => output.split("\0").filter(Boolean);
 	const touched = split(await git(root, ["diff", ...PLAIN_DIFF, "--no-renames", "--name-only", "-z", base, winner]));
@@ -358,7 +300,6 @@ export interface DiffStat {
 	files: number;
 }
 
-/** `git diff --numstat` totals; binary rows count as 0 lines. */
 export async function diffStat(root: string, from: string, to: string): Promise<DiffStat> {
 	const rows = (await git(root, ["diff", ...PLAIN_DIFF, "--numstat", from, to])).split("\n").filter(Boolean);
 	const count = (value: string | undefined) => (value === undefined || value === "-" ? 0 : Number(value));

@@ -16,14 +16,14 @@ import type { Context } from "@earendil-works/pi-ai";
 import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai/compat";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { fauxSession, type Reply } from "../../../tests/helpers/faux-session.js";
+import type { ProfileRequest } from "../../shared/src/model-profiles.js";
 import registerTasks from "../../tasks/src/index.js";
 import type { Gate, Judge } from "../src/judge.js";
-import type { ProfileRequest } from "../../shared/src/model-profiles.js";
 import { runBranchSearch, type SearchOptions, type SearchResult } from "../src/orchestrator.js";
 import type { SearchRecord } from "../src/record.js";
 import {
-	barrier,
 	type Behavior,
+	barrier,
 	DONE,
 	FIX,
 	GATE,
@@ -125,13 +125,10 @@ function choiceReply(text: string): ProfileRequest {
 	return async () => ({ text, usage: { ...fauxAssistantMessage("").usage, input: 7, output: 3 } });
 }
 
-// Each case drives real git and several forks; under full-suite load that exceeds the 5s default.
 describe("branch search", { timeout: 30_000 }, () => {
 	it("applies the attempt with the best judge number among those that pass every gate", async () => {
-		// No attempt's first reply arrives until all three attempts have asked: they run in parallel.
 		const together = barrier(3, FIX);
 		const run = await fixture({
-			// The best number of all, but it fails the gate.
 			c1: [together, WRONG, scoreOf("1", "s1"), DONE],
 			c2: [together, scoreOf("5", "s2"), DONE],
 			c3: [together, scoreOf("3", "s3"), withOutput(DONE, 11)],
@@ -142,7 +139,6 @@ describe("branch search", { timeout: 30_000 }, () => {
 		expect(result.outcome).toBe("applied");
 		const winner = attemptOf(record, "c3");
 		expect(record.winner).toBe(winner.key);
-		// An attempt that fails a gate is not judged.
 		expect(attemptOf(record, "c1").scores).toEqual({
 			gates: [{ command: GATE, pass: false }],
 			judges: [],
@@ -155,7 +151,6 @@ describe("branch search", { timeout: 30_000 }, () => {
 		expect(readFileSync(join(run.cwd, ".git", "index"))).toEqual(index);
 		expect(record.apply).toEqual({ applied: true, workspaceTree: record.base?.tree });
 
-		// Every attempt ran, each in its own commit off the base, and saw the gates and judges it is scored by.
 		expect(record.attempts.map((attempt) => attempt.stop)).toEqual(["done", "done", "done"]);
 		for (const attempt of record.attempts)
 			expect(gitOut(run.cwd, "rev-parse", `${attempt.commit}^`)).toBe(record.base?.commit);
@@ -182,14 +177,12 @@ describe("branch search", { timeout: 30_000 }, () => {
 
 	it("ranks by the median of repeated judge runs, interleaved across the gate-passing attempts", async () => {
 		const run = await fixture({
-			// The best single run of all, but the worst median.
 			c1: [FIX, scoreOf("1\n9\n8", "s1"), DONE],
 			c2: [FIX, scoreOf("5\n6\n4", "s2"), DONE],
 			c3: [WRONG, scoreOf("0\n0\n0", "s3"), DONE],
 		});
 		const log = join(realpathSync(mkdtempSync(join(tmpdir(), "apple-pi-branch-log-"))), "runs");
 		cleanup.push(() => rmSync(join(log, ".."), { recursive: true, force: true }));
-		// Each run prints the next line of score.txt and logs which attempt ran.
 		const judge: Judge = {
 			command: `n=$(( $(cat .n 2>/dev/null || echo 0) + 1 )); echo $n > .n; echo "$(basename "$PWD")" >> ${log}; sed -n "\${n}p" score.txt`,
 			better: "lower",
@@ -197,7 +190,6 @@ describe("branch search", { timeout: 30_000 }, () => {
 		};
 		const { result, record } = await search(run, { config: { attempts: 3 }, judges: [judge] });
 
-		// Run 1 of every gate-passing attempt, then run 2, then run 3; the gate-failing a3 is not judged.
 		expect(readFileSync(log, "utf8").split("\n").filter(Boolean)).toEqual(["a1", "a2", "a1", "a2", "a1", "a2"]);
 		expect(attemptOf(record, "c1").scores?.judges).toEqual([{ command: judge.command, value: 8, runs: [1, 9, 8] }]);
 		expect(attemptOf(record, "c2").scores?.judges).toEqual([{ command: judge.command, value: 5, runs: [5, 6, 4] }]);
@@ -301,7 +293,6 @@ describe("branch search", { timeout: 30_000 }, () => {
 		writeFileSync(join(run.cwd, "tests", "gate.sh"), "grep -q 'value = 2' app.ts\n");
 		const { result, record } = await search(run, { gates: ["bash tests/gate.sh"], protect: ["tests"] });
 
-		// c1 passes only because its broken gate is restored; c2 weakened the gate to pass with the wrong value, and the base gate fails it.
 		expect(attemptOf(record, "c2").scores?.gates).toEqual([{ command: "bash tests/gate.sh", pass: false }]);
 		expect(attemptOf(record, "c1").protectedChanged).toEqual(["tests/extra.sh", "tests/gate.sh"]);
 		expect(record.winner).toBe(attemptOf(record, "c1").key);
@@ -330,7 +321,6 @@ describe("branch search", { timeout: 30_000 }, () => {
 		writeFileSync(join(run.cwd, "tests", "gate.sh"), "test ! -e tests/node_modules && grep -q 'value = 2' app.ts\n");
 		const { result, record } = await search(run, { gates: ["bash tests/gate.sh"], protect: ["tests"] });
 
-		// The symlink is replaced by the base directory, whose gate fails the wrong value.
 		const cheat = attemptOf(record, "c1");
 		expect(cheat.protectedChanged).toEqual(["tests", "tests/gate.sh"]);
 		expect(cheat.scores?.gates).toEqual([{ command: "bash tests/gate.sh", pass: false }]);
@@ -343,7 +333,6 @@ describe("branch search", { timeout: 30_000 }, () => {
 
 	it("clones a protected ignored directory again before scoring, from its copy taken before the forks", async () => {
 		let parent = "";
-		// c1 also rewrites the parent's copy, which a shell reaches through a path the fork does not map to its worktree.
 		const reach = () =>
 			fauxAssistantMessage(
 				fauxToolCall(
@@ -499,7 +488,6 @@ describe("branch search", { timeout: 30_000 }, () => {
 	it("fails an attempt whose judge prints no number or exits non-zero", async () => {
 		const run = await fixture({
 			c1: [FIX, scoreOf("fast", "s1"), DONE],
-			// No score.txt: cat exits 1.
 			c2: [FIX, DONE],
 			c3: [FIX, scoreOf("9", "s3"), DONE],
 		});
@@ -525,7 +513,6 @@ describe("branch search", { timeout: 30_000 }, () => {
 		];
 		const { record } = await search(run, { config: { attempts: 3 }, judges });
 
-		// c1 and c2 tie on both judges; c2's diff is smaller.
 		expect(record.winner).toBe(attemptOf(record, "c2").key);
 	});
 
@@ -547,7 +534,6 @@ describe("branch search", { timeout: 30_000 }, () => {
 		});
 
 		expect(profiles).toEqual(["deep"]);
-		// Only the gate-passers, best number first, with their diffs and judge values.
 		const [prompt] = prompts;
 		expect(prompt?.indexOf("## Attempt a1")).toBeLessThan(prompt?.indexOf("## Attempt a2") as number);
 		expect(prompt).not.toContain("## Attempt a3");
@@ -652,7 +638,6 @@ describe("branch search", { timeout: 30_000 }, () => {
 	});
 
 	it("cleans up after an error and reports its reason", async () => {
-		// A lock left in the attempt's index makes committing its work fail.
 		const lock = fauxAssistantMessage(
 			fauxToolCall(
 				"bash",

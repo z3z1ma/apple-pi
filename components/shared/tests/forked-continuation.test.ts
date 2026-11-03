@@ -36,7 +36,6 @@ function lastText(context: Context): string {
 	return typeof last.content === "string" ? last.content : JSON.stringify(last.content);
 }
 
-/** Replies by the fork's own prompt: the scripted tool call first, then a final answer after its result. */
 function byPrompt(script: Script) {
 	return (context: Context): Reply | "until-aborted" => {
 		if (context.messages.at(-1)?.role === "toolResult") return fauxAssistantMessage("fork done");
@@ -54,7 +53,6 @@ function toolResult(messages: AgentMessage[], id: string) {
 	return { isError: result.isError, text: JSON.stringify(result.content) };
 }
 
-/** A settled parent session; `script(cwd)` maps each fork prompt to its first reply. */
 async function settledSession(script: Script | ((cwd: string) => Script), extensions: ExtensionFactory[] = []) {
 	let replies: Script = {};
 	const run = await fauxSession([registerTasks, ...extensions], (context) => byPrompt(replies)(context), [
@@ -76,7 +74,6 @@ function worktree(): string {
 	return root;
 }
 
-/** A worktree binding with its own private temporary directory. */
 function bind(root: string, parentRoot: string): ForkWorktree {
 	return { root, parentRoot, tmp: join(worktree(), "tmp") };
 }
@@ -124,7 +121,6 @@ describe("worktree forks", () => {
 				"bash-1",
 			),
 		}));
-		// Branch search keeps worktrees inside the parent's git directory.
 		const root = join(cwd, ".git", "wt");
 		mkdirSync(root, { recursive: true });
 		await fork(session, cwd, "fork shell", { worktree: bind(root, cwd) }).result;
@@ -373,7 +369,6 @@ describe("worktree forks", () => {
 		const root = join(cwd, ".git", "wt");
 		mkdirSync(join(cwd, "child"), { recursive: true });
 		mkdirSync(root, { recursive: true });
-		// pivot leads into the parent workspace; gate.sh's .. applies after following it.
 		symlinkSync(join(cwd, "child"), join(root, "pivot"));
 		symlinkSync("pivot/../hidden.sh", join(root, "gate.sh"));
 		const { messages } = await fork(session, cwd, "fork pivot", { worktree: bind(root, cwd) }).result;
@@ -404,7 +399,6 @@ describe("worktree forks", () => {
 		const { session, cwd } = await settledSession({
 			"fork subdir": call("bash", { command: "pwd -P > where.txt", verbatim: true }, "bash-subdir"),
 		});
-		// The parent session runs in a subdirectory of its repository.
 		const repository = dirname(cwd);
 		const root = worktree();
 		mkdirSync(join(root, basename(cwd)));
