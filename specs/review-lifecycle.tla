@@ -7,7 +7,8 @@ vars == <<state, generation, pending, extended, staleCancellation>>
 
 (* ReviewJobs.execute(cancel): each request reads the current job, switches
    it to cancelling, awaits active work and waitCleanup, then commits. Two
-   requests may wait on the same attempt/program scopes independently. *)
+   requests may wait on the same attempt/program scopes independently.
+   Pending 0 is not started; 3 is settled. An identity starts only once. *)
 Init ==
     /\ state = "incomplete"
     /\ generation = 1
@@ -26,10 +27,10 @@ BeginCancel(c) ==
    A completion superseded by an authorized extension changes no job state.
    No resources remain when this action resumes from waitCleanup. *)
 FinishCancel(c) ==
-    /\ pending[c] # 0
+    /\ pending[c] \in {1, 2}
     /\ IF pending[c] = generation THEN state' = "cancelled" ELSE UNCHANGED state
     /\ staleCancellation' = (staleCancellation \/ (pending[c] # generation /\ state' # state))
-    /\ pending' = [pending EXCEPT ![c] = 0]
+    /\ pending' = [pending EXCEPT ![c] = 3]
     /\ UNCHANGED <<generation, extended>>
 
 (* A cancelled review is settled. A new, authorized revision/digest-bound
@@ -47,7 +48,7 @@ Spec == Init /\ [][Next]_vars
 TypeOK ==
     /\ state \in {"incomplete", "cancelling", "cancelled", "queued"}
     /\ generation \in {1, 2}
-    /\ pending \in [Cancels -> 0..2]
+    /\ pending \in [Cancels -> 0..3]
     /\ extended \in BOOLEAN /\ staleCancellation \in BOOLEAN
 
 NoStaleCancellation == ~staleCancellation

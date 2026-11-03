@@ -33,4 +33,3 @@ AssertionError: expected { state: 'cancelled', generation: 2 } to deeply equal {
       Tests  1 failed (1)
    Start at  23:40:27
    Duration  3.56s (transform 71ms, setup 13ms, import 1.13s, tests 2.34s, environment 0ms)
-

@@ -1,0 +1,25 @@
+TLC 1.7.4: /Users/alexanderbut/code_projects/personal/apple-pi/specs/departure-lifecycle.tla (/Users/alexanderbut/code_projects/personal/apple-pi/specs/departure-lifecycle.cfg), 1 worker
+TLC2 Version 2.19 of 08 August 2024 (rev: 5a47802)
+Running breadth-first search Model-Checking with fp 4 and seed 1817586231630801072 with 1 worker on 18 cores with 5461MB heap and 64MB offheap memory [pid: 47540] (Mac OS X 26.7.2 aarch64, Azul Systems, Inc. 21.0.4 x86_64, MSBDiskFPSet, DiskStateQueue).
+Parsing file /private/var/folders/m0/1lt4df1s78xgj4s6yk5c9wp00000gp/T/apple-pi-tlc-8GsT3Z/DepartureLifecycle.tla
+Parsing file /private/var/folders/m0/1lt4df1s78xgj4s6yk5c9wp00000gp/T/Naturals.tla
+Parsing file /private/var/folders/m0/1lt4df1s78xgj4s6yk5c9wp00000gp/T/FiniteSets.tla
+Parsing file /private/var/folders/m0/1lt4df1s78xgj4s6yk5c9wp00000gp/T/Sequences.tla
+Semantic processing of module Naturals
+Semantic processing of module Sequences
+Semantic processing of module FiniteSets
+Semantic processing of module DepartureLifecycle
+Starting... (2026-11-02 23:52:03)
+Computing initial states...
+Computed 2 initial states...
+Computed 4 initial states...
+Computed 8 initial states...
+Finished computing initial states: 16 distinct states generated at 2026-11-02 23:52:03.
+Model checking completed. No error has been found.
+  Estimates of the probability that TLC did not check all reachable states
+  because two distinct states had the same fingerprint:
+  calculated (optimistic):  val = 3.5E-12
+18172 states generated, 4944 distinct states found, 0 states left on queue.
+The depth of the complete state graph search is 18.
+The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 6 and the 95th percentile is 4).
+Finished in 01s at (2026-11-02 23:52:04)
