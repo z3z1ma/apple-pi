@@ -133,7 +133,6 @@ var api = {
 	openLink: (url) => electron.ipcRenderer.invoke("world:open-link", url),
 	...places()
 };
-/** The function places' calls: each `places:<name>` channel, typed by `IntegrationsApi`. */
 function places() {
 	const call = (channel) => (...args) => electron.ipcRenderer.invoke(`places:${channel}`, ...args);
 	return {

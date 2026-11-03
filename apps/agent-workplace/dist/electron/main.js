@@ -19,7 +19,6 @@ import { marked } from "marked";
 import { createServer } from "node:http";
 import { inflateSync } from "node:zlib";
 //#region components/session-state/src/paths.ts
-/** Pi's own rule for `PI_CODING_AGENT_DIR`: a leading `~` means the home directory. */
 function agentDir() {
 	const configured = process.env.PI_CODING_AGENT_DIR;
 	if (!configured) return join(homedir(), ".pi", "agent");
@@ -27,7 +26,6 @@ function agentDir() {
 	if (configured.startsWith("~/")) return join(homedir(), configured.slice(2));
 	return resolve(configured);
 }
-/** Where the runtime keeps its files; read at call time so tests can redirect it. */
 function statePaths() {
 	const dir = join(agentDir(), "state");
 	return {
@@ -42,10 +40,6 @@ function statePaths() {
 }
 //#endregion
 //#region apps/agent-workplace/src/app-files.ts
-/**
-* The file for a URL path: `/themes/...` from the theme packs, anything else from the built UI. Undefined for a
-* path that would leave those directories.
-*/
 function appFile(appDir, pathname) {
 	const path = normalize(decodeURIComponent(pathname)).replace(/^[/\\]+/, "");
 	if (path.split(sep).includes("..")) return void 0;
@@ -54,7 +48,6 @@ function appFile(appDir, pathname) {
 }
 //#endregion
 //#region apps/agent-workplace/src/backend/commands.ts
-/** The runtime answers `accepted` at once; without it this soon, it is not answering. */
 var ACCEPT_TIMEOUT_MS = 5e3;
 var GONE$1 = "The session runtime is not answering.";
 var LOST = "The session runtime went away before the command finished; it may still have been applied.";
@@ -202,7 +195,6 @@ var CLOSED_STATUSES = ["done", "cancelled"];
 [...LIVE_STATUSES, ...CLOSED_STATUSES];
 //#endregion
 //#region components/session-state/src/departures.ts
-/** A permanent identity fact, not a claim that process and filesystem cleanup has finished. */
 function departureOf(db, person) {
 	const row = db.prepare("select data from events where session_id = ? and type = 'person_departed' order by seq desc limit 1").get(person);
 	return row ? JSON.parse(row.data) : void 0;
@@ -238,7 +230,6 @@ function nameOf$1(db, id) {
 }
 //#endregion
 //#region components/session-state/src/tree.ts
-/** The root of the organization `person` belongs to, following recorded managers up; a missing manager ends the climb. */
 function rootOf$1(db, person) {
 	const seen = /* @__PURE__ */ new Set();
 	let root = person;
@@ -257,7 +248,6 @@ new RegExp(String.raw`^Value:\s*${AMOUNT}(?:\s*\(estimated by (.+)\))?\s*$`, "m"
 new RegExp(String.raw`^Cost of delay:\s*${AMOUNT}\s*/\s*(hour|day)\s*$`, "m");
 //#endregion
 //#region components/session-state/src/program-peers.ts
-/** Temporary identity survives person/launch cleanup; a discarded legacy caller may be unknown. */
 function temporaryCallers(db) {
 	const callers = /* @__PURE__ */ new Map();
 	for (const row of db.prepare("select session_id, type, data from events where type in ('program_peer_created', 'program_peer_observed', 'person_discarded') order by seq").all()) {
@@ -269,9 +259,7 @@ function temporaryCallers(db) {
 }
 //#endregion
 //#region components/session-state/src/reactions.ts
-/** Databases known to have the table; one opened before the migration keeps checking until it appears. */
 var known = /* @__PURE__ */ new WeakSet();
-/** A message's reactions, each emoji with who chose it, in the order first chosen; empty before the table exists. */
 function reactionsOf(db, message) {
 	if (!known.has(db)) {
 		if (!db.prepare("select 1 from sqlite_master where type = 'table' and name = 'message_reactions'").get()) return [];
@@ -546,7 +534,6 @@ function people(value) {
 	if (!Array.isArray(value) || !value.every((person) => typeof person === "string" && person.trim())) throw new Error("Recipients must be a list of person IDs.");
 	return value;
 }
-/** Read-only views and operator commands over the runtime's existing communication journal. */
 function openCommunications(path, commands) {
 	function read(query) {
 		const db = new DatabaseSync(path, { readOnly: true });
@@ -790,7 +777,6 @@ function openCommunications(path, commands) {
 }
 //#endregion
 //#region apps/agent-workplace/src/world.ts
-/** The places outside any headquarters. */
 var OUTSIDE_KINDS = [
 	"square",
 	"street",
@@ -800,14 +786,11 @@ var OUTSIDE_KINDS = [
 	"quest-office",
 	"library"
 ];
-/** The label mail from the operator carries as its sender (`from`), so agents can tell it from mail between them. */
 var OPERATOR = "operator";
 var MAIL_BODY_MAX = 4e3;
-/** A place outside any headquarters: the square, or a place off it. */
 function isOutside(place) {
 	return OUTSIDE_KINDS.includes(place.kind);
 }
-/** Longest text of one transcript field sent to the world UI. */
 var TRANSCRIPT_TEXT_MAX = 2e4;
 var OUTSIDE_SOURCES = [
 	"slack",
@@ -818,9 +801,7 @@ var OUTSIDE_SOURCES = [
 ];
 //#endregion
 //#region apps/agent-workplace/src/backend/transcript.ts
-/** The custom message type of delivered mail (`components/session-state/src/mail.ts`). */
 var MAIL$1 = "apple-pi.mailbox-message";
-/** The argument a tool call is known by, in the bridge's order (`components/session-state/src/bridge.ts`). */
 var MAIN_ARGS = [
 	"command",
 	"path",
@@ -849,7 +830,6 @@ function cut(text) {
 	};
 }
 var clip = (text) => cut(text).text;
-/** The text of a message's content (a string, or text and image parts), and how many images it holds. */
 function contentOf(content) {
 	if (typeof content === "string") return {
 		text: content,
@@ -864,7 +844,6 @@ function contentOf(content) {
 		images
 	};
 }
-/** The mail's body: from its details, else the text inside the `<mailbox-message>` wrapper. */
 function mailOf(entry) {
 	const details = entry.details;
 	const raw = contentOf(entry.content).text;
@@ -894,7 +873,6 @@ function partsOf(content) {
 	});
 	return parts;
 }
-/** One transcript entry for the panel; undefined for entries it does not show. */
 function transcriptEntry(raw) {
 	if (!raw || typeof raw !== "object") return void 0;
 	const entry = raw;
@@ -954,7 +932,6 @@ function transcriptEntry(raw) {
 }
 //#endregion
 //#region apps/agent-workplace/src/backend/conversation-search.ts
-/** Matches kept per transcript before parsing; a person's DM rarely needs more to show the newest. */
 var PER_FILE = 50;
 function sessionFiles(db) {
 	const reader = new DatabaseSync(db, { readOnly: true });
@@ -1037,17 +1014,11 @@ async function searchConversations(db, query, limit) {
 		hits: hits.sort((a, b) => b.at - a.at).slice(0, limit)
 	};
 }
-/** A page of a long transcript can take a while to read; a command is answered at once. */
 var PAGE_TIMEOUT_MS = 2e4;
 var COMMAND_TIMEOUT_MS = 5e3;
 var GONE = "The session runtime is not answering.";
-/** How long a subscription waits for the runtime to confirm it, and how soon a lost one is made again. */
 var SUBSCRIBE_TIMEOUT_MS = 3e3;
 var RESUBSCRIBE_MS = 1e3;
-/**
-* Complete lines from a socket's chunks. A page can be one line of megabytes arriving in many chunks; each chunk is
-* searched once and joined only when its line ends, rather than rescanning everything held so far.
-*/
 function lineReader$1() {
 	let held = [];
 	return (chunk) => {
@@ -1105,7 +1076,6 @@ function openConversations(socketPath) {
 		});
 		return connecting;
 	};
-	/** Write `message` and wait for `settle` to turn a reply about `key` into a result. */
 	async function ask(key, message, timeoutMs, settle, failed) {
 		if (closed) return failed(GONE);
 		let open;
@@ -1135,7 +1105,6 @@ function openConversations(socketPath) {
 			open.write(`${JSON.stringify(message)}\n`);
 		});
 	}
-	/** The stored entry a stream's end names, shaped for the panel; null when it cannot be read. */
 	const readEntry = (sessionId, entryId) => {
 		const requestId = `agent-workplace-${randomUUID()}`;
 		return ask(requestId, {
@@ -1184,7 +1153,6 @@ function openConversations(socketPath) {
 			}));
 		}
 	};
-	/** Open the streams connection if needed, and send it the watched list. */
 	const subscribe = () => new Promise((resolve) => {
 		const ids = JSON.stringify(watched);
 		const timer = setTimeout(() => finish(), SUBSCRIBE_TIMEOUT_MS);
@@ -1601,7 +1569,6 @@ function openEmbeddedTerminals() {
 }
 //#endregion
 //#region apps/agent-workplace/src/backend/instructions.ts
-/** The longest text an instruction may carry; Pi takes any, but the panel is for messages, not files. */
 var TEXT_MAX$1 = 1e5;
 var reply = (value) => {
 	if (!value || typeof value !== "object") return void 0;
@@ -1609,7 +1576,6 @@ var reply = (value) => {
 	if (typeof custom === "string") return { custom };
 	if (Array.isArray(selected) && selected.every((label) => typeof label === "string")) return { selected };
 };
-/** The command an instruction sends to `character`, or why it is refused (and nothing is sent). */
 function instructionCommand(character, instruction) {
 	if (!character) return { refused: "No such character is awake." };
 	const given = instruction ?? {};
@@ -1646,10 +1612,6 @@ function instructionCommand(character, instruction) {
 	}
 	return { refused: "The conversation panel cannot send that." };
 }
-/**
-* Send an instruction to an awake character through `commands`, reporting each receipt stage. A refused instruction
-* reports `failed` with its reason and sends nothing.
-*/
 async function instruct(commands, character, commandId, instruction, onReceipt) {
 	const made = instructionCommand(character, instruction);
 	if ("refused" in made) {
@@ -1679,10 +1641,6 @@ function isCallInRequest(value) {
 }
 //#endregion
 //#region apps/agent-workplace/src/backend/facts.ts
-/**
-* The facts columns for the current incarnation. A runtime predating explicit work has no focused task;
-* its old inferred ledger touch and intent are not substitutes for an assignment.
-*/
 var factsColumns = (work) => `s.run_state as runState, s.prompt, s.needs_you_since as needsYouSince,
 	s.seen_at as seenAt, s.settled_at as settledAt, s.current_tool as currentTool, s.current_tool_arg as currentToolArg,
 	s.current_tool_since as currentToolSince,
@@ -1693,7 +1651,6 @@ var factsColumns = (work) => `s.run_state as runState, s.prompt, s.needs_you_sin
 		where l.socket = p.socket and l.window_id = p.window_id order by l.window_index limit 1) as tmuxSession,
 	(select l.window_index from tmux_window_links l
 		where l.socket = p.socket and l.window_id = p.window_id order by l.window_index limit 1) as windowIndex`;
-/** Joins for `factsColumns`: the session's current incarnation `i` and its pane `p`. */
 var FACTS_JOINS = `left join incarnations i on i.session_id = s.id and i.generation = s.generation
 left join tmux_panes p on p.socket = i.tmux_socket and p.id = i.pane_id`;
 function parse$4(json) {
@@ -1706,10 +1663,6 @@ function parse$4(json) {
 }
 var PARSED_KEPT = 2e4;
 var parsed = /* @__PURE__ */ new Map();
-/**
-* `JSON.parse` for column values that repeat from read to read (`git`, `config`, `current_task`), parsed once each.
-* The values are shared between readers: never change one.
-*/
 function parseShared(json) {
 	if (!json) return void 0;
 	if (parsed.has(json)) return parsed.get(json);
@@ -1719,7 +1672,6 @@ function parseShared(json) {
 	return value;
 }
 var text$5 = (value) => typeof value === "string" && value.trim() ? value.trim() : null;
-/** The questions of an `ask_user_question` prompt, as the panel's form needs them; undefined when they do not parse. */
 function questionsOf(value) {
 	if (!Array.isArray(value) || !value.length) return void 0;
 	const questions = [];
@@ -1739,10 +1691,6 @@ function questionsOf(value) {
 	}
 	return questions;
 }
-/**
-* The open prompt's kind and what it asks: its title, or else its first question. A questionnaire also carries its id
-* and questions, so the conversation panel can answer it.
-*/
 function asking(prompt) {
 	if (prompt === null) return null;
 	const open = parse$4(prompt);
@@ -1762,10 +1710,6 @@ function asking(prompt) {
 		}
 	} : shown;
 }
-/**
-* Reads ledger tasks' `task.md`, again only when the file changed. With `recheck` false, a file read before is not
-* even checked for changes: the inn's thousands of sleepers are checked only on the backend's task rereads.
-*/
 function taskReader() {
 	const cache = /* @__PURE__ */ new Map();
 	return (currentTask, recheck = true) => {
@@ -1810,7 +1754,6 @@ function taskReader() {
 		};
 	};
 }
-/** The headings of a self document: what the person keeps notes under. */
 var selfHeadings = (self) => (self ?? "").split("\n").filter((line) => /^#{1,6}\s+\S/.test(line)).map((line) => line.replace(/^#+\s+/, "").trim());
 function factsOf(row, readTask, tasks = []) {
 	const open = asking(row.prompt);
@@ -1858,13 +1801,7 @@ var run$2 = promisify(execFile);
 var TMUX_TIMEOUT_MS$1 = 2e3;
 var sameAgent = (a, b) => Object.keys(a).every((key) => key === "task" ? a.task === b.task || a.task?.title === b.task?.title && a.task?.status === b.task?.status && a.task?.bundle === b.task?.bundle : a[key] === b[key]);
 var sameSleeper = (agent, sleeper) => Object.keys(sleeper).every((key) => agent[key] === sleeper[key]);
-/** The row each agent was made from, so an agent whose row object is unchanged can be kept as it is. */
 var madeFrom = /* @__PURE__ */ new WeakMap();
-/**
-* The inn's sleepers with their observed facts, the most recently stopped first. When nothing changed since
-* `previous`, returns `previous` itself, so the backend can tell an unchanged inn without comparing it. With `keep`,
-* an agent made from the same row object as before is kept without reading its task again.
-*/
 function dormantAgents(sleepers, rows, readTask, previous = [], keep = false) {
 	const before = keep ? new Map(previous.map((agent) => [agent.id, agent])) : void 0;
 	const next = sleepers.map((sleeper) => {
@@ -1891,10 +1828,6 @@ function made(sleeper, row, readTask) {
 	madeFrom.set(agent, row);
 	return agent;
 }
-/**
-* The pane of the operator's most recently active tmux client, across the servers the runtime knows. Undefined when
-* no terminal is attached to any of them.
-*/
 async function operatorPane(path) {
 	if (!existsSync(path)) return void 0;
 	const db = new DatabaseSync(path);
@@ -2226,7 +2159,6 @@ where m.id in (select id from mail order by sent_at desc limit 120)
 	or m.stage in ('accepted', 'delivered')
 order by m.sent_at desc, m.id`;
 var nameOf = (db, id, name, cwd) => name || (cwd ? cwd.split("/").filter(Boolean).pop() : void 0) || (id === "operator" ? id : nameOf$1(db, id));
-/** A display label for a thread author: the operator, the runtime, a live person or a departed person's retained name. */
 function personName(db, id) {
 	if (id === "operator") return "You";
 	if (id === "harness") return "Pi";
@@ -2234,7 +2166,6 @@ function personName(db, id) {
 	return nameOf(db, id, row?.name ?? null, row?.cwd ?? null);
 }
 var hasThreads = (db) => db.prepare("select 1 from sqlite_master where type = 'table' and name = 'thread_messages'").get() !== void 0;
-/** The operator is not a session row: its needs-you state is its unread thread cursor. */
 function readOperatorMail(db) {
 	if (!hasThreads(db)) return [];
 	const follows = db.prepare("pragma table_info(thread_participants)").all().some((column) => column.name === "following");
@@ -2253,7 +2184,6 @@ function readOperatorMail(db) {
 		participants: (row.participants ?? "").split(",").filter(Boolean)
 	}));
 }
-/** Read a thread only if the operator participates. The caller marks the returned sequence read through the runtime. */
 function readOperatorThread(db, id) {
 	if (!hasThreads(db)) return void 0;
 	const follows = db.prepare("pragma table_info(thread_participants)").all().some((column) => column.name === "following");
@@ -2266,7 +2196,6 @@ function readOperatorThread(db, id) {
 		readUpTo: participant.read_up_to
 	} : void 0;
 }
-/** The stored conversation. Its caller decides whether this is a participant read or a shared-board observation. */
 function readStoredThread(db, id) {
 	const row = db.prepare("select subject, closed_at from threads where id = ?").get(id);
 	if (!row) return void 0;
@@ -2286,7 +2215,6 @@ function readStoredThread(db, id) {
 		messages
 	};
 }
-/** The mail the world shows now. */
 function readMail(db) {
 	return db.prepare(MAIL).all().map((row) => {
 		const from = row.sender ?? "someone";
@@ -2308,7 +2236,6 @@ function readMail(db) {
 //#endregion
 //#region apps/agent-workplace/src/backend/roles.ts
 var PACKAGE_ROLES = fileURLToPath(new URL("../../../../roles/", import.meta.url));
-/** The front matter's scalar fields, `key: value` one per line between the `---` fences. */
 function frontMatter(text) {
 	const match = /^---\r?\n([\s\S]*?)\r?\n---/.exec(text);
 	if (!match) return void 0;
@@ -2344,12 +2271,9 @@ function loadRoleChoices(agentDir) {
 }
 //#endregion
 //#region apps/agent-workplace/src/backend/lifecycle.ts
-/** A woken session joins once Pi has started in its window; a slow start still says the window opened. */
 var WAKE_MS = 3e4;
 var CLOSE_MS = 1e4;
-/** A rename is applied as soon as the bridge has it. */
 var RENAME_MS = 8e3;
-/** A directory as the operator typed it: `~` is his home. */
 var expandHome = (path) => path === "~" ? homedir() : path.startsWith("~/") ? join(homedir(), path.slice(2)) : path;
 var isDirectory = (path) => {
 	try {
@@ -2358,7 +2282,6 @@ var isDirectory = (path) => {
 		return false;
 	}
 };
-/** Send `command` and resolve at the first stage `enough` accepts, or with the last stage reached after `ms`. */
 function follow(commands, sessionId, command, ms, enough, late, commandId) {
 	return new Promise((resolve) => {
 		let last;
@@ -2582,9 +2505,7 @@ function openLifecycle(paths, commands, snapshot) {
 }
 //#endregion
 //#region apps/agent-workplace/src/backend/links.ts
-/** The longest link Agent Workplace hands to the browser. */
 var LINK_MAX = 8192;
-/** The link as a full http or https URL, or undefined for anything else. */
 function webLink(url) {
 	if (typeof url !== "string" || !url || url.length > LINK_MAX) return void 0;
 	let parsed;
@@ -2595,7 +2516,6 @@ function webLink(url) {
 	}
 	return parsed.protocol === "http:" || parsed.protocol === "https:" ? parsed.href : void 0;
 }
-/** Open a web link with `open` (Electron's `shell.openExternal`); anything but http and https is refused unopened. */
 async function openLink(url, open) {
 	const href = webLink(url);
 	if (!href) return {
@@ -2612,16 +2532,7 @@ async function openLink(url, open) {
 		};
 	}
 }
-/**
-* Kinds of file that macOS runs, installs, or scripts when opened. A link to one, like any file with an execute bit, is
-* shown in Finder instead of opened: a transcript is untrusted, and a click must not run a program.
-*/
 var LAUNCHES = /\.(app|command|tool|terminal|pkg|mpkg|workflow|action|scpt|scptd|applescript|jar|sh|bash|zsh|py|rb|pl)$/i;
-/**
-* The file a transcript's link names, as an absolute path on disk: a `file:` URL, an absolute or `~` path, or a path
-* relative to `base` (the agent's directory). A `:12`, `:12:3`, or `#L12` line suffix is dropped when the path with it
-* does not exist. Undefined for a web link, another scheme, or a file that does not exist.
-*/
 function fileLink(href, base) {
 	if (typeof href !== "string" || !href.trim() || href.length > LINK_MAX) return void 0;
 	let path = href.trim();
@@ -2643,10 +2554,6 @@ function fileLink(href, base) {
 	}
 	for (const candidate of [path, path.replace(/(:\d+){1,2}$|#L\d+(-L?\d+)?$/, "")]) if (existsSync(candidate)) return candidate;
 }
-/**
-* Open a file a transcript links to with the operator's default app for it (`open`, Electron's `shell.openPath`, which
-* resolves with an error message or ""), or show it in Finder (`reveal`) when opening could run something.
-*/
 async function openFileLink(href, base, open, reveal) {
 	const path = fileLink(href, base);
 	if (!path) return {
@@ -2686,7 +2593,6 @@ var readText = (path) => {
 };
 function openNotepads(snapshot, onChange) {
 	let watcher;
-	/** The watched file and its text as last read or saved here, so a save of ours is not reported back as a change. */
 	let watched;
 	const locate = (coordinatorId) => {
 		const cwd = snapshot().characters.find((c) => c.id === coordinatorId && c.role === "coordinator")?.facts?.cwd;
@@ -2808,7 +2714,6 @@ function rootOf(id, parents) {
 	}
 	return id;
 }
-/** Operator planning over the runtime's existing people, command receipts and thread authority. */
 function openOrg(paths, commands, snapshot) {
 	const listeners = /* @__PURE__ */ new Set();
 	const running = /* @__PURE__ */ new Map();
@@ -4061,13 +3966,7 @@ function loadModelProfiles(options = {}) {
 }
 //#endregion
 //#region components/organization/src/roles.ts
-/**
-* The role catalog: one Markdown file per role, with front matter for the role's title, mind, posture, and whether
-* it manages, and a body that is the role's obligation. The package's `roles/` directory holds the catalog; a file of
-* the same name under `~/.pi/agent/roles/` or `<cwd>/.pi/roles/` replaces it, later directories winning.
-*/
 var PACKAGE_ROLES_DIR = fileURLToPath(new URL("../../../roles/", new URL("../../../../components/organization/src/roles.ts", import.meta.url).href));
-/** The catalog directories in override order: the package, then the user, then the project. */
 function roleDirectories(cwd) {
 	return [
 		PACKAGE_ROLES_DIR,
@@ -4092,7 +3991,6 @@ function loadRoles(cwd) {
 	};
 }
 var MODEL_ID = /^[a-z0-9-]+\/[a-z0-9][a-z0-9.:-]*$/i;
-/** The final colon separates effort from a model identity, which can itself contain colons. */
 function parseRoleModel(value) {
 	const colon = value.lastIndexOf(":");
 	if (colon < 0) return void 0;
@@ -4104,7 +4002,6 @@ function parseRoleModel(value) {
 		thinking
 	};
 }
-/** One role file, or the reason it is skipped. */
 function readRole(path, name) {
 	let parsed;
 	try {
@@ -4186,12 +4083,6 @@ function configurationSummary(configuration) {
 		catalogIssues: configuration.catalogIssues
 	} : null;
 }
-/**
-* A pass's depth, not its role, chooses the model tier of a role that names a profile: deep uses the deep profile,
-* standard keeps the role's own profile unless that is deep, which steps down to balanced. Profiles map tiers to any
-* provider. A role with only concrete models keeps them at either depth, and the role's recommendations stay the
-* fallback when the profile file lacks a profile.
-*/
 function rolePolicy(role, depth, profiles) {
 	const text = readFileSync(role.path, "utf8");
 	const own = isInferenceProfileName(role.models[0]) ? role.models[0] : void 0;
@@ -4282,7 +4173,6 @@ function scopedPatch(artifact, signal) {
 		...artifact.request.paths ?? []
 	], { signal });
 }
-/** Manifest, refs and comparison identity: enough to browse retained objects without the materialized copy. */
 async function verifyCapturedSource(artifact, signal) {
 	if (artifactDigest(artifact) !== artifact.digest) throw new Error("Review manifest identity changed");
 	if (hash$1(await readFile(join(dirname(artifact.source), "change.patch"))) !== artifact.patchHash) throw new Error("Captured patch changed");
@@ -4294,13 +4184,7 @@ async function verifyCapturedSource(artifact, signal) {
 	if (head !== artifact.headRevision || base !== artifact.baseRevision) throw new Error("Captured Git revisions changed");
 	if (hash$1(await scopedPatch(artifact, signal)) !== artifact.patchHash) throw new Error("Captured comparison changed");
 }
-/** Measured on this checkout's first verification after capture: 1 reader 8.6 s, 8 readers 3.8 s, 32 and 128 no faster. */
 var VERIFY_READERS = 8;
-/**
-* Full integrity before recovery and decisions: every retained object, and every materialized path's mode and bytes
-* hashed against the retained head tree. This reads the files themselves rather than the checkout's index or
-* config, which reviewers' ordinary Git use can change (index flags, stat data, core.worktree).
-*/
 async function verifyArtifact(artifact, signal) {
 	await verifyCapturedSource(artifact, signal);
 	await text$4(artifact.source, [
@@ -4394,7 +4278,6 @@ async function absent(error) {
 async function treeReferences(root, tree, signal, path) {
 	return (await treeListing(root, tree, signal, path)).map(({ size: _, ...entry }) => entry);
 }
-/** `ls-tree -l` reports blob sizes, so pointer detection reads only small blobs. */
 async function treeListing(root, tree, signal, path) {
 	return paths(await bytes(root, [
 		"--literal-pathspecs",
@@ -4414,11 +4297,6 @@ async function treeListing(root, tree, signal, path) {
 		};
 	});
 }
-/**
-* Copy exactly the objects both trees reach into one pack in the capture, so it does not depend on the author's
-* repository. pack-objects reuses stored deltas without searching for new ones (--window=0 halved this step here) and writes
-* the index itself; fsck checks the result later.
-*/
 async function transferObjects(change, source, signal) {
 	await change.git([
 		"pack-objects",
@@ -4432,10 +4310,6 @@ async function transferObjects(change, source, signal) {
 	});
 	await text$4(source, ["prune-packed"], { signal });
 }
-/**
-* One patch for all regions. `--name-status` and the patch share Git's path order; a type change (T) is the one
-* status Git writes as two sections (deletion, then addition) for the same path.
-*/
 async function changedRegions(source, base, head, signal) {
 	const [names, output] = await settledAll([bytes(source, [
 		...DIFF,
@@ -4530,10 +4404,6 @@ var identity = (change) => JSON.stringify([
 	change.indexTree,
 	change.indexEntries
 ]);
-/**
-* Build a self-contained review repository. Git snapshots the target into the capture's own object store,
-* a pack copies the reachable objects, and checkout-index materializes the head tree for reviewers.
-*/
 async function captureReview(request, destination, signal) {
 	request = structuredClone(request);
 	if (request.paths) request.paths = [...new Set(request.paths.map((path) => safePath(path.replace(/\/$/, ""))))].sort();
@@ -4748,12 +4618,8 @@ function lineReader(onLine) {
 }
 //#endregion
 //#region components/session-state/src/client.ts
-var RUNTIME_MAIN = fileURLToPath(new URL("./runtime-main.ts", import.meta.url));
+var RUNTIME_MAIN = fileURLToPath(new URL("./runtime-main.runtime.ts", import.meta.url));
 var REGISTER = new URL("./register.mjs", import.meta.url).href;
-/**
-* Start a runtime detached from the caller; it keeps running after the caller ends. Its output goes to the
-* runtime log, and a failed start is reported through `warn` (exit 0 only means another runtime runs).
-*/
 function spawnRuntime(warn) {
 	const paths = statePaths();
 	let log;
@@ -4807,7 +4673,6 @@ function open(path, signal) {
 		});
 	});
 }
-/** Connect to the runtime, starting one when none answers. An explicit socket connects without starting a daemon. */
 async function connectRuntime(signal, socketPath) {
 	if (socketPath !== void 0) return open(socketPath, signal);
 	let started = false;
@@ -4829,10 +4694,6 @@ async function connectRuntime(signal, socketPath) {
 		}
 	}
 }
-/**
-* Send one command and return the receipt that settles it for the sender: with `until: "accepted"` the first one
-* (the runtime has stored it, which is enough for mail), otherwise applied or failed.
-*/
 async function sendCommand(sessionId, command, options = {}) {
 	const commandId = options.commandId ?? randomUUID();
 	options.signal?.throwIfAborted();
@@ -4875,7 +4736,6 @@ var question = Type.Object({
 	question: text$3,
 	verification: text$3
 }, object$4);
-/** Standard runs the role on the balanced inference profile; deep runs it on the deep profile at several times the cost. */
 var depth = Type.Union([Type.Literal("standard"), Type.Literal("deep")]);
 var pass = Type.Object({
 	id: text$3,
@@ -4983,18 +4843,15 @@ Type.Object({
 	}, object$4)),
 	limitations: Type.Array(text$3)
 }, object$4);
-/** A scope path names a file or a directory prefix; "." names the whole change. */
 function inScope(paths, file) {
 	return paths.some((path) => {
 		const prefix = path.replace(/\/+$/, "");
 		return prefix === "." || prefix === "" || file === prefix || file.startsWith(`${prefix}/`);
 	});
 }
-/** The runtime, not the planner, maps changed regions to scopes. */
 function chunkRegions(chunk, regions) {
 	return chunk.regions ?? regions.filter((region) => inScope(chunk.paths, region.path)).map((region) => region.id);
 }
-/** Regions no focused scope covers; the integration pass, which reads the whole change, still covers them. */
 function unscopedRegions(plan, regions) {
 	const scoped = new Set(plan.chunks.flatMap((chunk) => chunkRegions(chunk, regions)));
 	return regions.filter((region) => !scoped.has(region.id)).map((region) => region.id);
@@ -7225,7 +7082,6 @@ function previewLines(preview) {
 }
 //#endregion
 //#region components/code-review/src/preview.ts
-/** Preview identity without retaining a second source store or starting model work. */
 async function previewReview(request, signal) {
 	const directory = await mkdtemp(join(tmpdir(), "apple-pi-review-preview-"));
 	try {
@@ -7258,7 +7114,6 @@ async function previewReview(request, signal) {
 }
 //#endregion
 //#region apps/agent-workplace/src/backend/reviews.ts
-/** On-demand operator views; every mutation still belongs to the runtime. */
 function openReviews(path, commands) {
 	function store(read) {
 		const db = new DatabaseSync(path, { readOnly: true });
@@ -7359,7 +7214,6 @@ function openReviews(path, commands) {
 }
 //#endregion
 //#region apps/agent-workplace/web/game/layout.ts
-/** The walk grid: half-tile cells, true where blocked. A cell is blocked when its centre is inside a blocked rect. */
 function walkGrid(place) {
 	const cols = Math.round(place.cols * 2);
 	const rows = Math.round(place.rows * 2);
@@ -7377,12 +7231,9 @@ function walkGrid(place) {
 }
 //#endregion
 //#region apps/agent-workplace/web/game/pathing.ts
-/** Cells per tile: the walk grid is twice as fine as the tiles. */
 var CELLS = 2;
 var CELL = 1 / CELLS;
-/** Clearance is measured only this far; beyond it, the floor is simply open. */
 var CLEARANCE_CAP = 1.5;
-/** A place's walk grid, with other characters standing at `occupants` (their feet), each covering its own footprint. */
 function gridFor(place, occupants = []) {
 	const base = walkGrid(place);
 	const blocked = Uint8Array.from(base.blocked, (b) => b ? 1 : 0);
@@ -7396,7 +7247,6 @@ function gridFor(place, occupants = []) {
 		clearance: /* @__PURE__ */ new Float32Array(0)
 	});
 }
-/** The cells a standing character's feet cover: those whose centres lie within half a tile across, a third deep. */
 function footprint(x, y, cols, rows) {
 	const cells = [];
 	for (let row = Math.floor((y - .35) * CELLS); row <= Math.floor((y + .35) * CELLS); row++) for (let col = Math.floor((x - .5) * CELLS); col <= Math.floor((x + .5) * CELLS); col++) {
@@ -7418,14 +7268,11 @@ var cellOf = (grid, [x, y]) => {
 	const row = Math.floor(y * CELLS);
 	return col < 0 || row < 0 || col >= grid.cols || row >= grid.rows ? -1 : row * grid.cols + col;
 };
-/** Whether a cell has furniture or someone standing on it. */
 var taken = (grid, cell) => grid.blocked[cell] === 1 || grid.occupied[cell] === 1;
-/** Open floor: no furniture, and nobody standing there. */
 var isOpen = (grid, point) => {
 	const cell = cellOf(grid, point);
 	return cell >= 0 && !taken(grid, cell);
 };
-/** Distance in tiles from `point` to the nearest furniture (and with `people`, footprint) or the edge, capped. */
 function distance(grid, [x, y], people) {
 	let best = Math.min(CLEARANCE_CAP, x, y, grid.cols * CELL - x, grid.rows * CELL - y);
 	if (best <= 0) return 0;
@@ -7445,10 +7292,6 @@ function distance(grid, [x, y], people) {
 	}
 	return best;
 }
-/**
-* Frames in a look's idle sheet (`<look>-idle.png`, optional): standing poses played now and then by someone standing
-* about, in this order.
-*/
 var IDLE_POSES = [
 	"look-left",
 	"look-right",
@@ -7459,14 +7302,12 @@ var IDLE_POSES = [
 	"nod",
 	"yawn"
 ];
-/** The four painted expressions every look has, in the order of their files (`<look>-portrait-0..3.png`). */
 var EXPRESSIONS = [
 	"neutral",
 	"happy",
 	"thinking",
 	"worried"
 ];
-/** Every place a pack paints, by data file. */
 var PLACE_FILES = [
 	"headquarters",
 	"common-room",
@@ -7481,7 +7322,6 @@ var PLACE_FILES = [
 	"quest-office",
 	"library"
 ];
-/** What the world calls each kind of place: every pack names them all (`wing` follows a repository's name). */
 var PLACE_LABELS = [
 	"headquarters",
 	"common-room",
@@ -7496,7 +7336,6 @@ var PLACE_LABELS = [
 	"inn",
 	"rookery"
 ];
-/** Roles every pack names: the three kinds of character, and each place's host and the townsfolk. */
 var ROLE_LABELS = [
 	"coordinator",
 	"worker",
@@ -7510,7 +7349,6 @@ var ROLE_LABELS = [
 	"townsfolk",
 	"recruiter"
 ];
-/** Every look role a pack must wear, with how many looks at least (agents need a few to tell apart). */
 var LOOK_ROLES = {
 	agent: 3,
 	coordinator: 1,
@@ -7523,10 +7361,6 @@ var LOOK_ROLES = {
 	librarian: 1,
 	crier: 1
 };
-/**
-* Overlays every pack draws: doors in three states, the wing banner, the birds that carry mail, and the pointer's art
-* (the cursor's hand pointing, tapping, and as a fist, and the yellow and red click markers).
-*/
 var REQUIRED_OVERLAYS = [
 	"cursor-point",
 	"cursor-tap",
@@ -7542,10 +7376,6 @@ var REQUIRED_OVERLAYS = [
 	"bird-2",
 	"bird-3"
 ];
-/**
-* Overlays a pack needs only when one of its places has a slot of that kind: ambient animation is optional, and an inn
-* may seat its sleepers at tables rather than in beds.
-*/
 var SLOT_OVERLAYS = {
 	fire: [
 		"fire-0",
@@ -7573,18 +7403,7 @@ var SLOT_OVERLAYS = {
 		"notice-done"
 	]
 };
-/**
-* Fidget objects (decision 27): pure play in a place's `fidget` slots, never work. Each kind names its sprites and its
-* plays, the first of which is what a left click does (a toggle offers the one that fits its state). A pack that
-* places a kind draws its sprites and names it in `theme.json`'s `fidgets` (its name, an Examine line, and a verb for
-* each play); a pack that places none needs neither. `w` is how wide it stands, in tiles, unless the pack or the slot
-* says otherwise.
-*/
 var FIDGETS = {
-	/**
-	* A pet (a cat, a dog, an owl): four poses (`FidgetStyle.frames`). A slot's `look` draws one of the pack's other
-	* pets (`pet-<look>-0..3`) instead of these.
-	*/
 	pet: {
 		art: [
 			"pet-0",
@@ -7595,7 +7414,6 @@ var FIDGETS = {
 		plays: ["pet", "play"],
 		w: .95
 	},
-	/** A globe, a spinner, a goldfish bowl: four frames of one loop. */
 	spin: {
 		art: [
 			"spin-0",
@@ -7606,50 +7424,42 @@ var FIDGETS = {
 		plays: ["spin", "nudge"],
 		w: .65
 	},
-	/** A bell on a stand, still and ringing. */
 	bell: {
 		art: ["bell-still", "bell-ringing"],
 		plays: ["ring", "peal"],
 		w: .6
 	},
-	/** A bell in the hand, rung by swinging it. */
 	handbell: {
 		art: ["bell"],
 		plays: ["ring", "peal"],
 		w: .32
 	},
-	/** A candelabra, a lamp, a lantern: off and on, with a glow. */
 	light: {
 		art: ["light-off", "light-on"],
 		plays: ["on", "off"],
 		w: .5
 	},
-	/** A music box, an espresso machine, a bento: closed and open. */
 	box: {
 		art: ["box-closed", "box-open"],
 		plays: ["open", "close"],
 		w: .7
 	},
-	/** A pet curled up asleep. */
 	sleeper: {
 		art: ["cat-sleeping"],
 		plays: ["pet", "boop"],
 		w: .95
 	},
-	/** A lit candle or lamp that stays lit. */
 	candle: {
 		art: ["candle"],
 		plays: ["blow", "cup"],
 		w: .36
 	},
-	/** A book, a tablet, a notebook: leafed through, it shows a line. */
 	tome: {
 		art: ["tome"],
 		plays: ["leaf"],
 		w: .75
 	}
 };
-/** The little drawn things a play gives off. */
 var FIDGET_PARTICLES = [
 	"hearts",
 	"notes",
@@ -7659,10 +7469,6 @@ var FIDGET_PARTICLES = [
 	"smoke",
 	"zzz"
 ];
-/**
-* What a pet's sprites show, one each: sitting (how it rests), petted with its eyes closed, a playful pose, stretching,
-* and curled up asleep. A pet has four, `sit`, `petted`, and `play` among them.
-*/
 var PET_FRAMES = [
 	"sit",
 	"petted",
@@ -7670,24 +7476,18 @@ var PET_FRAMES = [
 	"stretch",
 	"sleep"
 ];
-/** The order of a pet's sprites where its style does not say. */
 var PET_FRAME_ORDER = [
 	"sit",
 	"petted",
 	"play",
 	"sleep"
 ];
-/** A pet's four sprites: the kind's own (`pet-0..3`), or those of one of the pack's other pets (`pet-<look>-0..3`). */
 var petArt = (look) => look ? [
 	0,
 	1,
 	2,
 	3
 ].map((frame) => `pet-${look}-${frame}`) : [...FIDGETS.pet.art];
-/**
-* A fidget slot's style: for a pet with a `look`, that look's own name, Examine line, size, frames, and reactions over
-* the kind's (its verbs fall back to the kind's, play by play).
-*/
 function slotStyle(style, slot) {
 	const own = slot.look ? style.looks?.[slot.look] : void 0;
 	if (!own) return style;
@@ -7702,7 +7502,6 @@ function slotStyle(style, slot) {
 		looks: void 0
 	};
 }
-/** The idles a cast member may play as its gesture when it reacts (the world's idles, `character-life.ts`). */
 var AMBIENT_GESTURES = [
 	"look-around",
 	"stretch",
@@ -7712,10 +7511,6 @@ var AMBIENT_GESTURES = [
 	"nod",
 	"yawn"
 ];
-/**
-* What a place must have beyond the shared format: its host's look role, slots it cannot do without, a recruiter (and
-* why), and furniture by its `use` (and why).
-*/
 var PLACE_NEEDS = {
 	forge: {
 		host: "smith",
@@ -7735,10 +7530,6 @@ var PLACE_NEEDS = {
 		notes: "the operator's notepad opens there"
 	} }
 };
-/**
-* Theme-flavoured lines the world says, by key; `{name}`, `{count}`, and the like are filled in. Everything else the
-* world says is plain and the same in every theme.
-*/
 var TEXT_KEYS = [
 	"banner-reads",
 	"headquarters-empty",
@@ -7821,11 +7612,6 @@ var TEXT_KEYS = [
 	"task-giving",
 	"task-given"
 ];
-/**
-* Style tokens every pack sets: CSS custom properties put on the page's root, which the pack's skin and the world
-* UI's own CSS read. Fonts, the inks, the accent, and the main surfaces of the interface frame and the conversation
-* panel. A value may name a file in the pack with `url(...)`, relative to the pack.
-*/
 var STYLE_TOKENS = [
 	"--aw-font-body",
 	"--aw-font-display",
@@ -7845,10 +7631,6 @@ var STYLE_TOKENS = [
 	"--aw-panel-page",
 	"--aw-veil"
 ];
-/**
-* The side panel's tabs whose icon a pack may draw: an optional style token `--aw-icon-<tab>` naming an SVG in the pack
-* (`url(interface/icons/work.svg)`), drawn in the tab's ink through a mask. A tab without one wears the world's own.
-*/
 var TAB_ICONS = [
 	"agents",
 	"needs-you",
@@ -7858,10 +7640,6 @@ var TAB_ICONS = [
 	"places",
 	"settings"
 ];
-/**
-* Classes a skin must style: the interface's frames and surfaces, its tabs and buttons, the conversation panel and
-* its panes, the places' panels, and the pointer's menu. A skin that leaves one out draws a bare browser widget.
-*/
 var SKIN_CLASSES = [
 	"aw-interface",
 	"aw-frame",
@@ -7885,7 +7663,6 @@ var SKIN_CLASSES = [
 	"place-title",
 	"notice"
 ];
-/** The kinds of atmosphere a place may have (`Atmosphere`). */
 var ATMOSPHERE_KINDS = [
 	"motes",
 	"fall",
@@ -7897,7 +7674,6 @@ var ATMOSPHERE_KINDS = [
 	"shimmer",
 	"lights"
 ];
-/** What a `fall` lets fall and what crosses a `sky`. */
 var ATMOSPHERE_WHAT = {
 	fall: ["leaves", "petals"],
 	sky: ["birds", "plane"]
@@ -7909,12 +7685,9 @@ var isRect = (value) => Array.isArray(value) && value.length === 4 && value.ever
 var isColour = (value) => typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value);
 var isFraction = (value) => isNumber(value) && value >= 0 && value <= 1;
 var fmt = (p) => `[${p.join(", ")}]`;
-/** How far an image's sides may stray from the place's tile grid before the grid no longer lies on the painting. */
 var ASPECT_TOLERANCE = .02;
-/** How far a frame's feet may be from the look's baseline, and its standing height from `STANDING_HEIGHT` (px). */
 var BASELINE_TOLERANCE = 1;
 var HEIGHT_TOLERANCE = 3;
-/** Alpha at or above this counts as drawn. */
 var OPAQUE = 128;
 async function json(reader, file, problems) {
 	const text = await reader.text(file);
@@ -7935,7 +7708,6 @@ async function json(reader, file, problems) {
 		return;
 	}
 }
-/** Files a CSS value names with `url(...)`, other than data URLs, relative to where the value lives. */
 function urls(css) {
 	const found = [];
 	const plain = css.replace(/url\(\s*(["'])data:.*?\1\s*\)/gs, "");
@@ -7945,7 +7717,6 @@ function urls(css) {
 	}
 	return found;
 }
-/** A path inside the pack, from `dir` (pack-relative, '' for its root) and a relative reference. */
 function within$1(dir, ref) {
 	const parts = dir ? dir.split("/") : [];
 	for (const part of ref.split("/")) if (part === "..") {
@@ -8044,7 +7815,6 @@ function checkManifest(value, id, problems) {
 }
 var isText = (value) => typeof value === "string" && value.trim().length > 0;
 var isFidget = (kind) => typeof kind === "string" && Object.hasOwn(FIDGETS, kind);
-/** The manifest's `fidgets`, when there: each a known kind with its name, Examine line, and a verb for every play. */
 function checkFidgetStyles(fidgets, fault) {
 	if (fidgets === void 0) return;
 	if (!isObject(fidgets)) return fault("fidgets is not an object of fidget kinds");
@@ -8068,7 +7838,6 @@ function checkFidgetStyles(fidgets, fault) {
 		if (kind === "pet") checkPetStyles(style, fault);
 	}
 }
-/** A pet's height and frames, and each of its other looks: a name, an Examine line, and verbs only for its plays. */
 function checkPetStyles(style, fault) {
 	checkPetLook("fidgets.pet", style, fault);
 	if (style.looks === void 0) return;
@@ -8091,7 +7860,6 @@ function checkPetStyles(style, fault) {
 		checkPetLook(where, own, fault);
 	}
 }
-/** A pet's height (a share of a standing character's) and its four frames, when given. */
 function checkPetLook(where, style, fault) {
 	if (style.height !== void 0 && !(isNumber(style.height) && style.height > 0 && style.height <= 1.2)) fault(`${where}.height is not a share of a standing character's height (above 0, at most 1.2)`);
 	if (style.frames === void 0) return;
@@ -8103,11 +7871,6 @@ function checkPetLook(where, style, fault) {
 		"play"
 	].every((frame) => frames.includes(frame))) fault(`${where}.frames is not four different frames of ${PET_FRAMES.join(", ")}, with sit, petted, and play`);
 }
-/**
-* Fewer pets, each its own: a place holds at most one pet (a curled-up sleeper counts), no two places share a pet's
-* look (nor two hold a sleeper), each look is one the pack names, and an asleep pet has a sleep frame. Returns the
-* sprites the placed looks need.
-*/
 function checkPets(placed, pet, problems) {
 	const style = isObject(pet) ? pet : void 0;
 	const perPlace = /* @__PURE__ */ new Map();
@@ -8147,13 +7910,11 @@ function checkPets(placed, pet, problems) {
 	}
 	return art;
 }
-/** A door's sign board, when it has one: a rect inside the grid. */
 function checkSign(door, rectInside, fault) {
 	if (door.sign === void 0) return;
 	if (!isObject(door.sign) || !isRect(door.sign.rect)) fault(`door ${door.name}'s sign has no rect [x, y, w, h]`);
 	else if (!rectInside(door.sign.rect)) fault(`door ${door.name}'s sign ${fmt(door.sign.rect)} lies outside its grid`);
 }
-/** A bed names a spot the place has; a `fidget` slot names a known kind, and a width in tiles if it gives one. */
 function checkSlot(slot, place, fault) {
 	if (slot.kind === "bed" && slot.spot !== void 0 && !place.spots[slot.spot]) fault(`a bed at ${fmt(slot.at)} names spot ${slot.spot}, which it does not have`);
 	if (slot.kind !== "fidget") return;
@@ -8161,10 +7922,6 @@ function checkSlot(slot, place, fault) {
 	else if (slot.w !== void 0 && !(isNumber(slot.w) && slot.w > 0)) fault(`a fidget slot at ${fmt(slot.at)} has a width (w) that is not a number of tiles`);
 	if ((slot.look !== void 0 || slot.asleep !== void 0) && slot.fidget !== "pet") fault(`a fidget slot at ${fmt(slot.at)} gives a look or asleep, which only a pet has`);
 }
-/**
-* Recruiting (ticket 10): a recruiter stands on open floor, and a place that needs one (the square) has it; a place
-* that needs furniture of a `use` (the headquarters' recruiting desk) has a piece of it.
-*/
 function checkRecruiting(place, needs, fault, onFloor) {
 	if (place.recruiter === void 0) {
 		if (needs?.recruiter) fault(`has no recruiter; ${needs.recruiter}`);
@@ -8229,7 +7986,6 @@ function checkPlace(name, value, painting, problems) {
 		if (![...Object.values(layouts ?? {}).flat(), repeat].every((s) => Array.isArray(s) && s.length === 2 && s[0] >= 0 && s[1] <= place.cols && s[0] < s[1])) fault("cuts its painting into strips outside its grid");
 	}
 }
-/** A place's atmosphere (ticket 11): each entry a known kind, inside the grid, naming what it may. */
 function checkAtmosphere(place, rectInside, inside, fault) {
 	if (place.atmosphere === void 0) return;
 	if (!Array.isArray(place.atmosphere)) return fault("has an atmosphere that is not a list");
@@ -8256,10 +8012,6 @@ function checkAtmosphere(place, rectInside, inside, fault) {
 		if (wrong.length) fault(`${what} has colours that are not #rrggbb: ${wrong.map((c) => JSON.stringify(c)).join(", ")}`);
 	}
 }
-/**
-* A look's idle sheet, when looks.json names one: its strip of `IDLE_POSES` frames in the size it gives, each on its
-* baseline (with pixels).
-*/
 async function checkIdle(reader, name, idle, pixels, problems) {
 	const file = `characters/${name}-idle.png`;
 	if (!isObject(idle) || !isPoint(idle.frame) || !isNumber(idle.baseline)) return problems.push({
@@ -8292,10 +8044,6 @@ async function checkIdle(reader, name, idle, pixels, problems) {
 		fault: `idle frames ${off.map((o) => o.frame).join(", ")} stand off the baseline ${baseline} (feet at rows ${off.map((o) => o.row + 1).join(", ")})`
 	});
 }
-/**
-* A place's points of interest: each named, on open floor inside its grid, a tile clear of every door's stand point and
-* every entry (a wanderer never stands in a doorway), and clear of every spot, the host, and the recruiter.
-*/
 function checkInterest(place, grid, fault) {
 	if (place.interest === void 0) return;
 	if (!Array.isArray(place.interest)) return fault("has points of interest that are not a list");
@@ -8355,7 +8103,6 @@ function checkInterest(place, grid, fault) {
 		for (const [other, at, least] of clear) if (near(point.at, at, least)) fault(`${what} is within ${least === 1 ? "a tile" : `${least} tiles`} of ${other}`);
 	}
 }
-/** The manifest's ambient cast (ticket 08), when there: each a cast name with its name, look, Examine line, and lines. */
 function checkCast(ambient, fault) {
 	if (ambient === void 0) return;
 	if (!isObject(ambient)) return fault("ambient is not an object of cast members");
@@ -8377,10 +8124,6 @@ function checkCast(ambient, fault) {
 		if (member.crew !== void 0 && typeof member.crew !== "boolean") fault(`${where}.crew is not true or false`);
 	}
 }
-/**
-* Where a place's cast members stand: each names one, on open floor inside the grid, a tile clear of every door's stand
-* point and entry, and clear of every spot, the host, the recruiter, the points of interest, and one another.
-*/
 function checkAmbientPlaces(place, grid, fault) {
 	if (place.ambient === void 0) return;
 	if (!Array.isArray(place.ambient)) return fault("has ambient characters that are not a list");
@@ -8426,28 +8169,19 @@ function checkAmbientPlaces(place, grid, fault) {
 		]);
 	}
 }
-/** Rooms the world shows once per coordinator or per wing: a cast member there would stand in every copy. */
 var REPEATING_ROOMS = [
 	"headquarters",
 	"common-room",
 	"wing-small",
 	"wing-large"
 ].map((name) => `places/${name}.json`);
-/** Where the headquarters crew stands (in every coordinator's copy), and the looks it may wear. */
 var CREW_ROOMS = ["headquarters", "common-room"].map((name) => `places/${name}.json`);
 var CREW_LOOK_ROLES = ["townsfolk", "ambient"];
-/**
-* The cast against its places and looks: every member stands in exactly one place (one person, one place), every one
-* standing is a member, each wears a look of the `ambient` role, and no two in one place wear the same look. The
-* headquarters crew (`crew`) stands only in the headquarters or its common room, which repeat per coordinator, in an
-* `ambient` or `townsfolk` look that no one outside the crew wears; everyone else stays out of rooms that repeat.
-*/
 function checkCastPlaced(manifest, looks, placed, problems) {
 	const cast = isObject(manifest.ambient) ? manifest.ambient : {};
 	const isCrew = (name) => isObject(cast[name]) && cast[name].crew === true;
 	const lookOf = (name) => isObject(cast[name]) && isText(cast[name].look) ? cast[name].look : void 0;
 	const first = /* @__PURE__ */ new Map();
-	/** Who wears which look, per place file. */
 	const wornIn = /* @__PURE__ */ new Map();
 	for (const { file, cast: name } of placed) {
 		if (!Object.hasOwn(cast, name)) {
@@ -8490,7 +8224,6 @@ function checkCastPlaced(manifest, looks, placed, problems) {
 	for (const name of Object.keys(cast)) if (!first.has(name)) fault(`ambient.${name} stands in no place`);
 	if (isObject(looks)) checkCastLooks(cast, looks, isCrew, fault);
 }
-/** Each cast member's look: an `ambient` one, or for the crew a townsperson's too, never one the rest of the cast wears. */
 function checkCastLooks(cast, looks, isCrew, fault) {
 	const town = /* @__PURE__ */ new Map();
 	for (const [name, member] of Object.entries(cast)) if (!isCrew(name) && isObject(member) && isText(member.look) && !town.has(member.look)) town.set(member.look, name);
@@ -8504,7 +8237,6 @@ function checkCastLooks(cast, looks, isCrew, fault) {
 		else if (crew && town.has(member.look)) fault(`ambient.${name} wears ${member.look}, which ambient.${town.get(member.look)} wears too`);
 	}
 }
-/** Where each frame's feet are: the lowest drawn row, per frame. */
 function feetRows(image, frameWidth, frames) {
 	const alpha = image.alpha;
 	const rows = [];
@@ -8597,12 +8329,6 @@ async function checkLooks(reader, value, hosts, pixels, problems) {
 		}
 	}));
 }
-/**
-* Check the pack `id` read through `reader`: its manifest and skin, every place over its painting, every look's sheet
-* and portraits, and the overlays it needs. `pixels` also checks each sheet's frames stand on its baseline at the
-* standing height (it reads every sheet's pixels). Returns every problem found, in a stable order; none means good.
-*/
-/** The skin's stylesheet: there, styling every class a skin must, and naming only files the pack has. */
 async function checkSkin(reader, manifest, problems) {
 	const skin = within$1("", manifest.skin);
 	const css = skin && await reader.text(skin);
@@ -8631,15 +8357,11 @@ async function checkSkin(reader, manifest, problems) {
 		});
 	}
 }
-/** Every place over its painting; returns the looks its hosts wear and the kinds of overlay slot it has. */
 async function checkPlaces(reader, problems) {
 	const hosts = [];
-	/** Each place's host look, by place. */
 	const hostOf = {};
-	/** The look each place's recruiter names, by place. */
 	const recruiterOf = {};
 	const slotKinds = /* @__PURE__ */ new Set();
-	/** The kinds of fidget object placed, and the first place file placing each. */
 	const fidgets = /* @__PURE__ */ new Map();
 	const pets = [];
 	const cast = [];
@@ -8696,11 +8418,6 @@ async function checkPlaces(reader, problems) {
 		cast
 	};
 }
-/**
-* Check the pack `id` read through `reader`: its manifest and skin, every place over its painting, every look's sheet
-* and portraits, and the overlays it needs. `pixels` also checks each sheet's frames stand on its baseline at the
-* standing height (it reads every sheet's pixels). Returns every problem found, in a stable order; none means good.
-*/
 async function checkPack(reader, id, { pixels = true } = {}) {
 	const problems = [];
 	const manifest = checkManifest(await json(reader, "theme.json", problems), id, problems);
@@ -8767,7 +8484,6 @@ function paeth(a, b, c) {
 	const pc = Math.abs(p - c);
 	return pa <= pb && pa <= pc ? a : pb <= pc ? b : c;
 }
-/** Undo each scanline's PNG filter, handing every row of samples to `row` in order. */
 function unfilter(raw, width, height, channels, row) {
 	const stride = width * channels;
 	const current = new Uint8Array(stride);
@@ -8786,7 +8502,6 @@ function unfilter(raw, width, height, channels, row) {
 		previous = Uint8Array.from(current);
 	}
 }
-/** A PNG's size, and with `pixels` its alpha channel; undefined when the file is not a PNG it can read. */
 function readPng(data, pixels = false) {
 	if (data.length < 33 || !data.subarray(0, 8).equals(SIGNATURE) || data.toString("latin1", 12, 16) !== "IHDR") return void 0;
 	const width = data.readUInt32BE(16);
@@ -8841,7 +8556,6 @@ function readPng(data, pixels = false) {
 		alpha
 	};
 }
-/** A reader over a pack's directory: paths stay inside it. */
 function packReader(dir) {
 	const file = (path) => {
 		const full = normalize(join(dir, path));
@@ -8859,17 +8573,11 @@ function packReader(dir) {
 		}
 	};
 }
-/** Check the pack in `dir`, named by its directory. */
 function checkThemePack(dir, options) {
 	const id = normalize(dir).split(sep).filter(Boolean).pop() ?? "";
 	return checkPack(packReader(dir), id, options);
 }
-/** The window's colour when no pack's backdrop can be read: a neutral dark near every theme's own. */
 var NEUTRAL_BACKDROP = "#121216";
-/**
-* The colour the window shows before the page draws (and around it while it resizes): the backdrop (`world.backdrop`,
-* a `#rrggbb` colour) of the theme `id`, else of the pack the world opens in by default, else a neutral dark.
-*/
 function themeBackdrop(themesDir, id) {
 	for (const each of [id, "fantasy"]) {
 		if (!each || !/^[a-z0-9][a-z0-9-]*$/.test(each)) continue;
@@ -8880,7 +8588,6 @@ function themeBackdrop(themesDir, id) {
 	}
 	return NEUTRAL_BACKDROP;
 }
-/** Every pack under `themesDir` (a directory with a theme.json), checked, in name order with fantasy first. */
 async function listThemes(themesDir, options) {
 	const ids = existsSync(themesDir) ? readdirSync(themesDir, { withFileTypes: true }).filter((entry) => entry.isDirectory() && existsSync(join(themesDir, entry.name, "theme.json"))).map((entry) => entry.name).sort((a, b) => a === "fantasy" ? -1 : b === "fantasy" ? 1 : a.localeCompare(b)) : [];
 	return Promise.all(ids.map(async (id) => {
@@ -8986,7 +8693,6 @@ var summary = (row) => ({
 	pinned: row.pinned === 1
 });
 var canvasesAvailable = (db) => Boolean(db.prepare("select 1 from sqlite_master where name = 'canvases'").get());
-/** Canvases newest first, pinned ones before the rest; bodies stay unread except for a short preview. */
 function listCanvases(db, filter) {
 	const where = ["1 = 1"];
 	const args = [];
@@ -9021,7 +8727,6 @@ var note = (row) => ({
 	updatedAt: row.updated_at
 });
 var notesAvailable = (db) => Boolean(db.prepare("select 1 from sqlite_master where name = 'notes'").get());
-/** Notes newest first; `words` must all appear in the title, body or topics, `ref` among its refs. */
 function readNotes(db, filter) {
 	const where = ["1 = 1"];
 	const args = [];
@@ -9037,9 +8742,7 @@ function readNotes(db, filter) {
 }
 //#endregion
 //#region apps/agent-workplace/src/backend/projection.ts
-/** The key of a manager's team room among a headquarters' wings. */
 var teamRoom = (manager) => `team:${manager}`;
-/** The organization each person belongs to, including sleepers; missing parents and cycles end the walk. */
 function organizationRoots(people) {
 	const parents = new Map(people.map((person) => [person.id, person.reportsTo]));
 	return new Map(people.map(({ id }) => {
@@ -9053,14 +8756,6 @@ function organizationRoots(people) {
 	}));
 }
 var byStart = (a, b) => (a.firstStartedAt ?? Number.MAX_SAFE_INTEGER) - (b.firstStartedAt ?? Number.MAX_SAFE_INTEGER) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
-/**
-* The organization is a tree of managers: a session reports to the one named by `reportsTo`, and the tree ends at a
-* root. A root with a managing role or anyone under it (awake or asleep) is a coordinator and keeps the headquarters,
-* standing in its hall; a person it manages directly stands in the wing of its repository, or the common room outside
-* one; a manager below the root, and everyone reporting to that manager, stand in the manager's team room off the same
-* headquarters. A root with nobody under it and no managing role is independent, in the square. Dormant sessions
-* sleep at the inn, the most recently stopped first, each in the role it had, a retired one marked so.
-*/
 function projectWorld(sessions, remembered) {
 	const byId = new Map(sessions.map((session) => [session.id, session]));
 	const managerOf = (session) => session.reportsTo && session.reportsTo !== session.id && byId.has(session.reportsTo) ? byId.get(session.reportsTo) : void 0;
@@ -9074,7 +8769,6 @@ function projectWorld(sessions, remembered) {
 	}
 	const roleOf = (session) => managers.has(session.id) ? "coordinator" : managerOf(session) ? "worker" : "independent";
 	const nameOf = (session) => session.name || basename(session.cwd) || session.id;
-	/** Where a session stands or would stand: a root in its hall, a direct report of the root in a repository wing or the common room, anyone else in its nearest manager's team room. */
 	const placeOf = (session) => {
 		const manager = managerOf(session);
 		if (!manager) return managers.has(session.id) ? {
@@ -9167,7 +8861,6 @@ function projectWorld(sessions, remembered) {
 		dormant
 	};
 }
-/** Meetings and escalations change where a person is drawn, not its role, manager, or assignments. */
 function placeWorkplace(world, sessions, workplace) {
 	const people = new Map(sessions.map((person) => [person.id, person]));
 	const headquarters = new Map(world.headquarters.map((hq) => [hq.id, hq]));
@@ -9206,7 +8899,6 @@ function placeWorkplace(world, sessions, workplace) {
 //#endregion
 //#region apps/agent-workplace/src/backend/workplace.ts
 var hasTable = (db, name) => Boolean(db.prepare("select 1 from sqlite_master where type = 'table' and name = ?").get(name));
-/** Same scope as the native directory: live bundles in this directory's ancestors, never a recursive search. */
 function visibleBundles(directory) {
 	if (!existsSync(directory)) return [];
 	const result = [];
@@ -9221,7 +8913,6 @@ function visibleBundles(directory) {
 		current = parent;
 	}
 }
-/** Each task thread's size, latest message and the operator's unread count, for the Threads list. */
 function readTaskActivity(db) {
 	const rows = db.prepare(`select m.thread_id as thread, count(*) as messages, max(m.at) as lastAt,
 		(select l.sender from thread_messages l where l.thread_id = m.thread_id order by l.seq desc limit 1) as lastFrom,
@@ -9232,7 +8923,6 @@ function readTaskActivity(db) {
 		group by m.thread_id`).all();
 	return Object.fromEntries(rows.map(({ thread, ...row }) => [thread, row]));
 }
-/** Messages that work came from: a recorded `message produced task` link, as message id to the task's thread. */
 function readMessageTasks(db) {
 	if (!hasTable(db, "links") || !hasTable(db, "work_tasks")) return {};
 	const rows = db.prepare(`select l.from_id as message, w.thread as thread from links l join work_tasks w on w.id = l.to_id
@@ -9306,7 +8996,6 @@ function taskHistory(row, goal, participants) {
 		participants
 	};
 }
-/** Files are rediscovered on the backend's task reread, not on each tool or streaming event. */
 function workplaceReader(readTask) {
 	let directoryKey;
 	const bundles = /* @__PURE__ */ new Map();
@@ -9401,7 +9090,6 @@ function workplaceReader(readTask) {
 		};
 	};
 }
-/** The operator observes shared workplace conversations; only a participant marks them read or replies. */
 function openWorkplace(path, commands, snapshot) {
 	const mailbox = openMailbox(path, commands);
 	const findTask = (id) => snapshot().workplace?.tasks.find((task) => task.id === id || task.bundle === id);
@@ -10064,7 +9752,6 @@ function openWorkspace(snapshot) {
 		})
 	};
 }
-/** New events of `FEED_TYPES` after a sequence number, with their session's name; `?` is the last seq read. */
 var FEED_SINCE = `select e.seq, e.at, e.session_id as sessionId, e.generation, e.type, e.data,
 	s.name, s.cwd, s.kind as sessionKind
 from events e left join sessions s on s.id = e.session_id
@@ -10079,7 +9766,6 @@ where e.seq > ? and e.type in (${[
 	"command_failed"
 ].map((type) => `'${type}'`).join(", ")})
 order by e.seq limit 500`;
-/** How a command reads in a line, as "<label> for <name>". Commands the views send for themselves have none. */
 var LABELS = {
 	talk: "Message",
 	steer: "Redirect",
@@ -10106,14 +9792,12 @@ function parse$3(json) {
 		return {};
 	}
 }
-/** What a command says beyond its label: the text it carries. */
 function detail(command) {
 	if (command.kind === "rename") return preview$2(command.name);
 	if (command.kind === "set_model") return preview$2(command.id);
 	if (command.kind === "set_thinking") return preview$2(command.level);
 	return preview$2(command.text ?? command.prompt);
 }
-/** The line for one event, or undefined when it is not one the operator follows. */
 function feedLine(row, lookup) {
 	if (row.sessionKind === "child") return void 0;
 	const name = row.name || (row.cwd ? basename(row.cwd) : null) || row.sessionId;
@@ -10172,7 +9856,6 @@ async function tmux(socket, args) {
 	});
 	return stdout;
 }
-/** Switch the most recently active client of the server at `socket` to `pane`; `name` is the character's. */
 async function switchToPane(socket, pane, name) {
 	let clients;
 	try {
@@ -10213,10 +9896,6 @@ async function switchToPane(socket, pane, name) {
 }
 //#endregion
 //#region apps/agent-workplace/src/backend/world-backend.ts
-/**
-* Turns each published snapshot into the update one receiver (the window) is sent: the inn and the mail are left out
-* while they are the same arrays as in the snapshot before, which `publish` keeps them as while unchanged.
-*/
 function leaveOutUnchanged() {
 	const sent = {};
 	return (snapshot) => {
@@ -10230,24 +9909,14 @@ function leaveOutUnchanged() {
 		return update;
 	};
 }
-/** How often new `events` rows are looked for; updates must reach the world within a second. */
 var POLL_MS$1 = 200;
 var RECONNECT_MS = 1e3;
-/** Polls between rereads of the world while no event arrives, so edited `task.md` files show. */
 var TASK_REREAD_POLLS = 10;
-/** Polls between reads of every session row; between them only the rows events name (and awake ones) are read. */
 var FULL_REREAD_POLLS = 150;
 var FEED_BACKLOG_EVENTS = 5e3;
-/** After a failed preference write, wait this long before sending it again. */
 var RETRY_MS = 5e3;
-/** How long choosing a look waits for the runtime to store it. */
 var STORE_TIMEOUT_MS = 5e3;
-/**
-* The `preferences` key Agent Workplace keeps its choices under:
-* `{ wings: { [coordinator id]: repository[] }, avatar: look, theme: id }`.
-*/
 var PREFERENCE_KEY = "agent-world";
-/** The `preferences` key of the desk, `{ thread, person }`; the runtime routes unfollowed outside activity there. */
 var DESK_KEY = "desk";
 function readDesk(database) {
 	const value = parse$2(database.prepare("select value from preferences where key = ?").get(DESK_KEY)?.value);
@@ -10331,13 +10000,11 @@ function sessionRow(row) {
 		stoppedAt: row.stoppedAt ?? void 0
 	};
 }
-/** Each coordinator's wings: those in `first`, then any in `then` not among them, in order. */
 function mergeWings(first, then) {
 	const merged = {};
 	for (const id of /* @__PURE__ */ new Set([...Object.keys(first), ...Object.keys(then)])) merged[id] = [.../* @__PURE__ */ new Set([...first[id] ?? [], ...then[id] ?? []])];
 	return merged;
 }
-/** The operator's choices kept in the preference beside the wings. */
 var CHOICES = ["avatar", "theme"];
 function openWorldBackend(paths) {
 	const listeners = /* @__PURE__ */ new Set();
@@ -10409,10 +10076,6 @@ function openWorldBackend(paths) {
 		const value = parse$2(database.prepare("select value from preferences where key = ?").get(PREFERENCE_KEY)?.value);
 		return value && typeof value === "object" && !Array.isArray(value) ? value : {};
 	};
-	/**
-	* Send the wings, the chosen avatar look, and the chosen theme to the runtime when they differ from what it stored,
-	* keeping the preference's other keys.
-	*/
 	const remember = (preference, storedWings, wings) => {
 		const next = mergeWings(storedWings, wings);
 		for (const key of CHOICES) {
@@ -10451,7 +10114,6 @@ function openWorldBackend(paths) {
 			command
 		})}\n`);
 	};
-	/** `rereadTasks`: check the sleepers' task files for changes too (awake characters' are checked on every read). */
 	const read = (rereadTasks) => {
 		openDb();
 		if (!db) return void 0;
@@ -10513,7 +10175,6 @@ function openWorldBackend(paths) {
 			return;
 		}
 	};
-	/** New feed lines since the last read; the first read starts with a short backlog. */
 	const readFeed = () => {
 		if (!db) return;
 		const database = db;
@@ -10619,7 +10280,6 @@ function openWorldBackend(paths) {
 	connect();
 	const timer = setInterval(poll, POLL_MS$1).unref();
 	poll();
-	/** Keep a choice: the snapshot shows it at once; resolves once the runtime stored it (or why not). */
 	const choose = (key, value) => {
 		chosen[key] = value;
 		const storing = new Promise((resolve) => {
@@ -10776,10 +10436,6 @@ function wireCommunications(api) {
 //#endregion
 //#region apps/agent-workplace/src/backend/integrations/atlassian.ts
 var TIMEOUT_MS$2 = 2e4;
-/**
-* The site's origin from what the operator typed: `acme`, `acme.atlassian.net`, or a full address. Plain http is
-* allowed only on loopback (the tests' fake servers); undefined when it is no usable address.
-*/
 function atlassianSite(site) {
 	let text = site.trim().replace(/\/+$/, "");
 	if (!text) return void 0;
@@ -10799,7 +10455,6 @@ var NOT_SIGNED_IN$1 = {
 	reason: "Sign in to Atlassian in Settings first.",
 	signIn: "atlassian"
 };
-/** Call `path` on the site; non-2xx answers become a refusal that says what went wrong in plain words. */
 async function atlassianRequest(credentials, path, options = {}) {
 	if (!credentials) return NOT_SIGNED_IN$1;
 	const auth = Buffer.from(`${credentials.email}:${credentials.token}`).toString("base64");
@@ -10843,7 +10498,6 @@ async function atlassianRequest(credentials, path, options = {}) {
 		reason: atlassianError(response.status, json)
 	};
 }
-/** Jira and Confluence error bodies (`errorMessages`, `errors`, `message`) as one sentence. */
 function atlassianError(status, json) {
 	const body = json ?? {};
 	const messages = [
@@ -10856,17 +10510,14 @@ function atlassianError(status, json) {
 	if (status === 404) return "Atlassian found nothing there.";
 	return `Atlassian answered ${status}.`;
 }
-/** Quote text for a JQL or CQL string: Lucene's operators become spaces, quotes and backslashes are escaped. */
 function queryText(text) {
 	return text.replace(/[+\-&|!(){}[\]^~*?:/]/g, " ").replace(/[\\"]/g, "\\$&").replace(/\s+/g, " ").trim();
 }
-/** Plain text from HTML: tags dropped, common entities decoded, whitespace folded. */
 function htmlText(html) {
 	return html.replace(/<(br|\/p|\/div|\/li|\/h\d)[^>]*>/gi, "\n").replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, "\"").replace(/&#39;/g, "'").replace(/&amp;/g, "&").replace(/[ \t]+/g, " ").replace(/\n\s*\n\s*/g, "\n\n").trim();
 }
 //#endregion
 //#region apps/agent-workplace/src/backend/integrations/credentials.ts
-/** The files Agent Workplace keeps beside the runtime's state; ones kept under the old Agent World names move once. */
 function integrationFiles(stateDir) {
 	const kept = (name) => {
 		const file = join(stateDir, `agent-workplace-${name}`);
@@ -10880,7 +10531,6 @@ function integrationFiles(stateDir) {
 		recentPages: kept("library-recent.json")
 	};
 }
-/** Write `text` to `file` readable by its owner only, replacing it whole. */
 function writePrivate(file, text) {
 	mkdirSync(dirname(file), {
 		recursive: true,
@@ -11025,7 +10675,6 @@ function openConfluence(credentials, recentFile, fetchImpl, now = Date.now) {
 //#endregion
 //#region apps/agent-workplace/src/backend/integrations/delegation.ts
 var NOTE_MAX = 4e3;
-/** The awake character a delegation goes to: a named one, or `coordinator` (the one `near` reports to, else the first). */
 function delegationTarget(snapshot, to, near) {
 	const awake = (id) => id ? snapshot.characters.find((c) => c.id === id) : void 0;
 	if (to !== "coordinator") return awake(to);
@@ -11046,7 +10695,6 @@ function itemName(item) {
 		case "thread": return `this Slack thread in #${item.channelName}${item.preview ? ` (${quoted(item.preview)})` : ""}: ${item.url ?? `channel ${item.channel}, thread ${item.ts}`}`;
 	}
 }
-/** The instruction's words: what is asked, the item with its address, then the operator's own note. */
 function delegationText(delegation) {
 	const { item, ask } = delegation;
 	const name = itemName(item);
@@ -11068,7 +10716,6 @@ var ASKS = /* @__PURE__ */ new Set([
 	"look-into"
 ]);
 var text = (value) => typeof value === "string" && value.length > 0 && value.length < 2e3;
-/** The delegation as given over IPC, checked field by field; undefined when it is not one. */
 function checkDelegation(given) {
 	const value = given ?? {};
 	if (!text(value.to) || !ASKS.has(String(value.ask)) || !value.item) return void 0;
@@ -11077,7 +10724,6 @@ function checkDelegation(given) {
 	const item = value.item;
 	return item.kind === "pull-request" && text(item.repo) && Number.isSafeInteger(item.number) && typeof item.title === "string" && text(item.url) || item.kind === "issue" && text(item.key) && typeof item.summary === "string" && text(item.url) || item.kind === "page" && text(item.id) && typeof item.title === "string" && text(item.url) || item.kind === "thread" && text(item.channel) && typeof item.channelName === "string" && text(item.ts) && (item.url === null || text(item.url)) && (item.preview === void 0 || typeof item.preview === "string") ? value : void 0;
 }
-/** Send a delegation; receipts reach `onReceipt` with the character they are for. */
 async function delegate(commands, snapshot, commandId, given, onReceipt) {
 	const delegation = checkDelegation(given);
 	if (!delegation) return {
@@ -11102,12 +10748,9 @@ async function delegate(commands, snapshot, commandId, given, onReceipt) {
 }
 //#endregion
 //#region apps/agent-workplace/src/backend/integrations/gate.ts
-/** How long a description stays good for confirming. */
 var TOKEN_TTL_MS = 9e5;
-/** Longest text one write may carry. */
 var TEXT_MAX = 3e4;
 var PREVIEW$1 = 100;
-/** The intent as given over IPC, checked and trimmed of anything else; a reason when it is not one. */
 function checkIntent(given) {
 	const value = given ?? {};
 	const words = (key) => typeof value[key] === "string" ? value[key] : void 0;
@@ -11179,13 +10822,11 @@ function checkIntent(given) {
 	}
 	return "Agent Workplace does not write that.";
 }
-/** One string per intent, the same for the same write whatever order its keys came in. */
 var canonical = (intent) => JSON.stringify(Object.fromEntries(Object.entries(intent).sort(([a], [b]) => a.localeCompare(b))));
 var preview$1 = (text) => {
 	const flat = text.replace(/\s+/g, " ").trim();
 	return flat.length > PREVIEW$1 ? `${flat.slice(0, 99)}\u2026` : flat;
 };
-/** The chatbox line for a write: what the operator did, or that it failed. */
 function writeLine(intent, description, failed) {
 	const said = description.text ? `: ${preview$1(description.text)}` : "";
 	switch (intent.kind) {
@@ -11213,10 +10854,6 @@ function writeLine(intent, description, failed) {
 		}
 	}
 }
-/**
-* Writes the operator asks for with a button that says exactly what it does (Mark read), which change nothing anyone
-* else reads: sent without the confirmation, but recorded and announced like every other.
-*/
 var UNCONFIRMED = /* @__PURE__ */ new Set(["slack-mark-read"]);
 function openGate(recordFile, adapters, now = Date.now) {
 	const waiting = /* @__PURE__ */ new Map();
@@ -11234,7 +10871,6 @@ function openGate(recordFile, adapters, now = Date.now) {
 		if (fresh) chmodSync(recordFile, 384);
 		for (const listener of listeners) listener(entry);
 	};
-	/** Send a write as described, then record and announce it, sent or failed. */
 	const send = async (intent, description) => {
 		const sent = await adapters.send(intent);
 		const { what, where, text } = description;
@@ -11332,7 +10968,6 @@ var DIFF_LINES_MAX = 2e4;
 //#region apps/agent-workplace/src/backend/integrations/github.ts
 var TIMEOUT_MS$1 = 3e4;
 var LIST_MAX$1 = 50;
-/** `gh pr view` calls in flight at once while filling in searched pull requests. */
 var PARALLEL = 4;
 var REPO = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 var ISSUE_KEY = /^([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)#([1-9]\d*)$/;
@@ -11375,7 +11010,6 @@ var parse$1 = (text) => {
 		return;
 	}
 };
-/** One entry of `statusCheckRollup`: a check run (status and conclusion) or a commit status (state). */
 function checkState(check) {
 	const { status, conclusion, state } = check ?? {};
 	if (typeof state === "string") {
@@ -11392,7 +11026,6 @@ function checkState(check) {
 		default: return "failing";
 	}
 }
-/** A pull request's checks rolled up: any failed is failing, else any unfinished is running, else passing. */
 function ciRollup(rollup) {
 	const states = (Array.isArray(rollup) ? rollup : []).map(checkState);
 	const count = (state) => states.filter((one) => one === state).length;
@@ -11407,7 +11040,6 @@ function ciRollup(rollup) {
 		checks
 	};
 }
-/** Link each pull request to the agent whose repository and branch it comes from (repository names ignore case). */
 function linkPullRequests(pullRequests, agents) {
 	return pullRequests.map((pr) => {
 		const agent = agents.find((one) => one.branch === pr.branch && one.repo.toLowerCase() === pr.repo.toLowerCase());
@@ -11421,7 +11053,6 @@ function linkPullRequests(pullRequests, agents) {
 	});
 }
 var unquote = (path) => path.replace(/^"(.*)"$/, "$1");
-/** Read one line of a file's extended header (before its first hunk) into `file`. */
 function fileHeader(file, line) {
 	if (line.startsWith("new file mode")) file.status = "added";
 	else if (line.startsWith("deleted file mode")) file.status = "deleted";
@@ -11433,7 +11064,6 @@ function fileHeader(file, line) {
 	else if (line.startsWith("--- ") && line !== "--- /dev/null") file.oldPath = unquote(line.slice(4).replace(/^a\//, ""));
 	else if (line.startsWith("+++ ") && line !== "+++ /dev/null") file.path = unquote(line.slice(4).replace(/^b\//, ""));
 }
-/** A unified diff (`gh pr diff`) as files and hunks with line numbers on both sides; cut after `max` lines. */
 function parseDiff(patch, max = DIFF_LINES_MAX) {
 	const files = [];
 	let file;
@@ -11507,7 +11137,6 @@ function parseDiff(patch, max = DIFF_LINES_MAX) {
 		cut
 	};
 }
-/** The `owner/name` in a pull request's address. */
 var repoOf = (url) => /github\.com\/([^/]+\/[^/]+)\/pull\//.exec(url)?.[1] ?? "";
 function toPullRequest(raw, involvesYou) {
 	const { ci, checks } = ciRollup(raw.statusCheckRollup);
@@ -11571,7 +11200,6 @@ function openGitHub(env) {
 		}
 		return known;
 	};
-	/** The awake agents on a branch of a GitHub repository other than its default branch. */
 	const agentBranches = async (characters) => {
 		return (await Promise.all(characters.map(async (character) => {
 			const git = character.facts?.git;
@@ -11586,7 +11214,6 @@ function openGitHub(env) {
 			};
 		}))).filter((agent) => agent !== void 0);
 	};
-	/** Run `work` over `items`, `PARALLEL` at a time. */
 	const inParallel = async (items, work) => {
 		const results = new Array(items.length);
 		let next = 0;
@@ -11848,7 +11475,6 @@ function openGitHub(env) {
 }
 //#endregion
 //#region apps/agent-workplace/src/backend/integrations/google.ts
-/** Project only the account: gws status also contains private local credential diagnostics. */
 function googleStatus(env) {
 	return new Promise((resolve) => {
 		execFile("gws", ["auth", "status"], {
@@ -11917,7 +11543,6 @@ function toIssue(site, raw) {
 		url: `${site}/browse/${issue.key}`
 	};
 }
-/** Atlassian Document Format to plain text: paragraphs and list items on their own lines. */
 function adfText(node) {
 	const walk = (value) => {
 		if (!value || typeof value !== "object") return "";
@@ -11941,7 +11566,6 @@ function adfText(node) {
 	};
 	return walk(node).replace(/\n{3,}/g, "\n\n").trim();
 }
-/** Plain text as an ADF document: blank lines part paragraphs, single newlines become hard breaks. */
 function textAdf(text) {
 	return {
 		type: "doc",
@@ -12094,23 +11718,17 @@ function openJira(credentials, fetchImpl) {
 //#endregion
 //#region apps/agent-workplace/src/backend/integrations/slack.ts
 var TIMEOUT_MS = 2e4;
-/** Most messages counted per channel; beyond it `more` is set. */
 var COUNT_LIMIT = 100;
 var CHANNEL_MESSAGES = 50;
 var THREAD_MESSAGES = 200;
 var FOUND_MAX = 50;
-/** Messages per page of a search (Slack's own default; its most is 100), and the last page Slack serves. */
 var SEARCH_COUNT = 20;
 var SEARCH_PAGES_MAX = 100;
-/** A search hit's excerpt: at most this many characters, starting this many before the first match. */
 var EXCERPT_MAX = 240;
 var EXCERPT_BEFORE = 80;
-/** Opened at a message: this many up to it, and up to this many after it (all of them, or none: see `channel`). */
 var AROUND_BEFORE = 25;
 var AROUND_AFTER = 50;
-/** People named at once (`users.info`) when every direct message is listed. */
 var NAMING_AT_ONCE = 6;
-/** How long the lists of channels are kept before they are read again. */
 var LIST_TTL_MS = 6e5;
 var SIGN_IN_ERRORS = /* @__PURE__ */ new Set([
 	"invalid_auth",
@@ -12126,22 +11744,16 @@ var NOT_SIGNED_IN = {
 };
 var ID = /^[A-Z0-9]+$/;
 var TS = /^\d+\.\d+$/;
-/** A message link in the workspace: `<url>archives/<channel>/p<ts without the dot>`. */
 function slackLink(base, channel, ts) {
 	if (!base) return null;
 	return `${base.endsWith("/") ? base : `${base}/`}archives/${channel}${ts ? `/p${ts.replace(".", "")}` : ""}`;
 }
-/** A group's name as Slack shows it: `mpdm-ann--ben--me-1` is "ann, ben" for `me`. */
 function groupName(name, me) {
 	const people = /^mpdm-(.+)-\d+$/.exec(name)?.[1]?.split("--");
 	if (!people) return name;
 	const others = people.filter((person) => person !== me);
 	return (others.length ? others : people).join(", ");
 }
-/**
-* A search hit's text (Slack's highlight markers U+E000 and U+E001 around each match) as an excerpt in parts: on one
-* line, cut to `EXCERPT_MAX` characters around the first match, with an ellipsis where it was cut.
-*/
 function excerptOf(text) {
 	const parts = [];
 	let match = false;
@@ -12185,7 +11797,6 @@ function excerptOf(text) {
 	};
 	return cut;
 }
-/** Run `work` over `items`, at most `limit` at a time, keeping their order. */
 async function atMost(items, limit, work) {
 	const out = new Array(items.length);
 	let next = 0;
@@ -12198,7 +11809,6 @@ async function atMost(items, limit, work) {
 	await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
 	return out;
 }
-/** Slack timestamps (`1700000000.000100`) in order; as strings, since they have more digits than a double keeps. */
 var byTs = (a, b) => a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0;
 function openSlack(credentials, options = {}) {
 	const now = options.now ?? Date.now;
@@ -12206,7 +11816,6 @@ function openSlack(credentials, options = {}) {
 	let members;
 	let everything;
 	const names = /* @__PURE__ */ new Map();
-	/** Where the operator last read each channel, as the last unread listing or Mark read left it. */
 	const lastRead = /* @__PURE__ */ new Map();
 	const call = async (method, params, session = credentials()) => {
 		if (!session) return NOT_SIGNED_IN;
@@ -12259,7 +11868,6 @@ function openSlack(credentials, options = {}) {
 			reason: `Slack said ${error}.`
 		};
 	};
-	/** Every page of a cursor-paged list method. */
 	const pages = async (method, params) => {
 		const rows = [];
 		let cursor = "";
@@ -12317,7 +11925,6 @@ function openSlack(credentials, options = {}) {
 		if (info?.is_mpim && info.name) return groupName(info.name, me());
 		return info?.name ?? id;
 	};
-	/** Slack's message markup as plain text: people, channels, and links by name; entities decoded. */
 	const plain = async (text) => {
 		const mentioned = [...new Set([...text.matchAll(/<@([A-Z0-9]+)(?:\|[^>]*)?>/g)].map((match) => match[1]))];
 		for (const id of mentioned) await userName(id);
@@ -12337,7 +11944,6 @@ function openSlack(credentials, options = {}) {
 		ok: false,
 		reason: "That is not a Slack channel."
 	};
-	/** Channels named like `text`: every public and private channel (`conversations.list`) and every one he is in. */
 	const findChannels = async (text) => {
 		const wanted = text.trim().replace(/^#/, "").toLowerCase();
 		if (!wanted) return {
@@ -12373,7 +11979,6 @@ function openSlack(credentials, options = {}) {
 			}))
 		};
 	};
-	/** A `search.messages` match as a hit: its conversation named (a direct message by its person), its thread found. */
 	const hitOf = async (match) => {
 		const where = match.channel;
 		let row = names.get(where.id);
@@ -12669,7 +12274,6 @@ function openIntegrations(options) {
 		now: options.now
 	});
 	const characters = () => options.snapshot().characters;
-	/** Mark read, described for the record: the channel, or the thread by who started it. */
 	const describeMarkRead = async (intent) => {
 		const ts = /^\d+\.\d+$/;
 		if (!/^[A-Z0-9]+$/.test(intent.channel) || !ts.test(intent.ts) || intent.threadTs !== void 0 && !ts.test(intent.threadTs)) return {
@@ -12830,7 +12434,6 @@ function openIntegrations(options) {
 			credentials.set("atlassian", void 0);
 			return { ok: true };
 		},
-		/** Keep a Slack session captured from the sign-in window, once `auth.test` accepts it. */
 		async storeSlackSession(session) {
 			if (!session.token.startsWith("xoxc-") || !session.cookie) return {
 				ok: false,
@@ -12874,7 +12477,6 @@ function openIntegrations(options) {
 		slackConversations: () => slack.conversations(),
 		slackChannel: (id, at) => slack.channel(String(id ?? ""), at == null ? void 0 : String(at)),
 		slackThread: (id, ts) => slack.thread(String(id ?? ""), String(ts ?? "")),
-		/** Mark read: the button is the operator's choice, so the gate sends it unconfirmed but records it. */
 		slackMarkRead: (id, ts, threadTs) => gate.act({
 			kind: "slack-mark-read",
 			channel: id,
@@ -12885,7 +12487,6 @@ function openIntegrations(options) {
 		confirmWrite: (intent, token) => gate.write(intent, token),
 		outsideWrites: async () => gate.recent(),
 		onOutsideWrite: (listener) => gate.onWrite(listener),
-		/** Delegate an item to an agent; each receipt stage reaches `onReceipt`. */
 		delegate: (commandId, delegation, onReceipt = () => {}) => typeof commandId === "string" && commandId ? delegate(options.commands, options.snapshot(), commandId, delegation, (characterId, stage, reason) => onReceipt({
 			commandId,
 			characterId,
@@ -12902,9 +12503,7 @@ function openIntegrations(options) {
 //#region apps/agent-workplace/src/backend/integrations/slack-sign-in.ts
 var SLACK_SIGN_IN_URL = "https://app.slack.com/";
 var POLL_MS = 1e3;
-/** The operator has this long to finish signing in (SSO and two-factor included). */
 var SIGN_IN_MS = 9e5;
-/** Runs in the Slack page: the current team's token from the web client's local configuration, or null. */
 var READ_TOKEN = `(() => {
 	try {
 		const config = JSON.parse(localStorage.getItem("localConfig_v2") || "null");
@@ -12917,10 +12516,6 @@ var READ_TOKEN = `(() => {
 		return null;
 	}
 })()`;
-/**
-* Wait until the window holds a signed-in Slack web session, then close it and resolve with the token and `d`
-* cookie; undefined when the operator closed the window first or the time ran out.
-*/
 function captureSlackSession(window) {
 	return new Promise((resolve) => {
 		let done = false;
@@ -13070,7 +12665,6 @@ function wireTerminals(terminals, owner) {
 //#endregion
 //#region apps/agent-workplace/src/electron/main.ts
 var appDir = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-/** How long the capture waits for a place to draw, and then for its art to settle. */
 var CAPTURE_WAIT_MS = 2e4;
 var CAPTURE_DELAY_MS = 1500;
 app.setName("Agent Workplace");
@@ -13085,10 +12679,6 @@ protocol.registerSchemesAsPrivileged([{
 }]);
 if (app.requestSingleInstanceLock()) start();
 else app.quit();
-/**
-* The capture hook: once a place scene has drawn its painting (or after `CAPTURE_WAIT_MS`), write the window as a
-* PNG, print which place it shows, and quit.
-*/
 async function captureWhenDrawn(window, file) {
 	const drawn = `(() => { const v = window.agentWorldView; const p = v && v.place(); return p && v.painting() ? p : ""; })()`;
 	const until = Date.now() + CAPTURE_WAIT_MS;
