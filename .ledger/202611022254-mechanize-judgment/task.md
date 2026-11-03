@@ -52,7 +52,16 @@ Lanes assigned 2026-11-03. Landed so far:
   - The comment checker (`lint/no-comments.mjs`), not yet in `npm run lint`.
   - The distill and code-review instructions now put rules before prose.
   - Learnings the action rules enforce are retired from `.pi/LEARNINGS.md`.
-- **Comment ban:** batches are landing per lane; `node lint/no-comments.mjs | tail -1` shows the remaining count (6,067 at the start).
+- **Harness rules engine (`7686406e`, operator redirect, see `harness-direction.md`):**
+  - `components/repo-rules` replaces `components/action-rules`. Any repository with `.pi/rules/` has every edit/write checked against its `policy.json` (comment ban, GritQL rules per path) and every shell command against its `actions`. A commit in the same message as an edit is refused in every repository.
+  - The apple-pi rules moved from `lint/rules/` to `.pi/rules/`.
+- **TLA+:**
+  - Niamh's skill, runner and command-journal model landed (`6cdcb032`, no violation).
+  - The counterexample-to-test experiment is running (`work-42e81213`, log in `cegar-log.md`). The first lead is a stale review cancel racing an extend; it is not confirmed yet.
+- **Comment ban:**
+  - Lanes are landing batches; `node lint/no-comments.mjs | tail -1` shows the remaining count (6,067 at the start, 1,574 now).
+  - Ezra and Hye-jin are done (Hye-jin's build is pending).
+  - Deniz has session-state `src` after Rahul's renames (`5345bdcf`).
 - **Next:**
   - Add the comment checker to `npm run lint` at zero.
   - Restart the runtime after Rahul's renames and Deniz's session-state pass.
