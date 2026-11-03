@@ -8,7 +8,6 @@ import { expect, it } from "vitest";
 
 const app = (path: string) => fileURLToPath(new URL(`../${path}`, import.meta.url));
 
-/** Every file under `dir`, by relative path, with its contents. */
 function tree(dir: string): Record<string, string> {
 	const files: Record<string, string> = {};
 	for (const entry of readdirSync(dir, { recursive: true, withFileTypes: true }))
@@ -19,12 +18,10 @@ function tree(dir: string): Record<string, string> {
 	return files;
 }
 
-// Git installs omit dev dependencies, so the package ships the built app. It must match its source.
 it("the committed dist/ matches a fresh build of the world UI, main process, and preload (run npm run build:workplace)", {
 	timeout: 120_000,
 }, async () => {
 	const outDir = mkdtempSync(join(tmpdir(), "agent-workplace-build-"));
-	// Vitest sets NODE_ENV=test, which would select React's development build.
 	const env = process.env.NODE_ENV;
 	process.env.NODE_ENV = "production";
 	try {
