@@ -22,7 +22,6 @@ export interface Peer {
 	focus: string | null;
 }
 
-/** Live top-level sessions other than `self`, read from the state database. */
 export function livePeers(self: string | null): Peer[] {
 	const path = statePaths().db;
 	if (!existsSync(path)) return [];
@@ -60,7 +59,6 @@ export function livePeers(self: string | null): Peer[] {
 	}
 }
 
-/** Restore newly registered person tools when resume loads an older transcript's tool set. */
 const PERSON_TOOLS = ["directory", ...COMMUNICATION_TOOLS];
 const statuses = ["working", "idle", "asking the operator", "at home"] as const;
 export interface DirectoryOptions {
@@ -143,7 +141,6 @@ function compactDirectory(organization: Organization) {
 	return { root: organization.root, members };
 }
 
-/** Compact shared projection; the pair uses the main person's identity. */
 export function readDirectory(self: string) {
 	return compactDirectory(organizationOf(self, true));
 }
@@ -181,7 +178,6 @@ const response = <T>(lines: string[], details: T) => ({
 	details,
 });
 
-/** Native and pair tools share schema, selection, paging and compact result payloads. */
 export function directoryView(
 	self: string,
 	options: DirectoryOptions = {},

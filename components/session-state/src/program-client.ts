@@ -23,14 +23,12 @@ export interface PeerProgram {
 			commandId?: string;
 			signal?: AbortSignal;
 			progress?: (value: TurnProgress) => void;
-			/** Observe final usage and changes even when cancellation rejects the command. */
 			result?: (value: TurnResult) => void;
 		},
 	): Promise<Receipt>;
 	close(): Promise<void>;
 }
 
-/** One connection owns a program's temporary people. Existing people are only the targets of run commands. */
 export async function openPeerProgram(
 	caller: string,
 	signal?: AbortSignal,
@@ -67,7 +65,7 @@ export async function openPeerProgram(
 		closed = resolve;
 		failedClosed = reject;
 	});
-	void closure.catch(() => {}); // A disconnection can precede the owner's finally block; close() still observes it.
+	void closure.catch(() => {});
 	let acknowledgedClose = false;
 	let ending: Promise<void> | undefined;
 	let remoteError: Error | undefined;
@@ -128,7 +126,6 @@ export async function openPeerProgram(
 				await closure;
 			} catch (error) {
 				if (remoteError || !lost) throw error;
-				// Losing a connection closes the scope, and a restarted daemon closes every abandoned scope.
 				const connection = await connectRuntime(undefined, options.paths?.socket);
 				connection.on("error", () => {});
 				connection.destroy();

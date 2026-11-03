@@ -30,7 +30,6 @@ export interface FrictionChanges {
 	cleared: FrictionIdentity[];
 }
 
-/** Plan publication against the journal; observing a pattern does not acknowledge its delivery. */
 export function frictionIn(db: DatabaseSync): FrictionChanges {
 	const active = new Map<string, FrictionIdentity>();
 	const records = db
@@ -51,7 +50,6 @@ export function frictionIn(db: DatabaseSync): FrictionChanges {
 	};
 }
 
-/** Current recorded coordination patterns, not inactivity scores, diagnoses or instructions. */
 function detectFriction(db: DatabaseSync): FrictionNotice[] {
 	const people = db
 		.prepare("select id, reports_to, role, manages, retired_at from sessions where kind = 'root'")
@@ -68,7 +66,6 @@ function detectFriction(db: DatabaseSync): FrictionNotice[] {
 	const notices: FrictionNotice[] = [];
 	for (const organization of roots) {
 		if (!candidates.has(organization)) continue;
-		// All committed transitions, not a forecast. Elapsed-age fields are deliberately unused.
 		const snapshot = Number.POSITIVE_INFINITY;
 		const { isMember } = membership(db, organization).replay(snapshot);
 		const members = new Map(
@@ -221,7 +218,6 @@ function waitingOrganizations(db: DatabaseSync, roots: Set<string>): Set<string>
 	);
 }
 
-/** Strongly connected components keep a single cyclic dependency group together. */
 export function waitComponents(waits: Pick<Wait, "from" | "to">[]): string[][] {
 	const edges = new Map<string, string[]>();
 	for (const wait of waits) {

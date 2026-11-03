@@ -32,7 +32,6 @@ const EXTERNAL_MANAGER_TOOLS = ["watch_repository"];
 const INSIGHT_TOOLS = ["economics", "predictions", "experience", "bottlenecks", "progress", "coordination"];
 const UNITS: Record<string, number> = { m: 60_000, h: 3_600_000, d: 86_400_000 };
 
-/** A time as a span back from now (`30m`, `8h`, `7d`) or a date. */
 function pointInTime(text: string, now: number): number {
 	const span = text.trim().match(/^(\d+(?:\.\d+)?)\s*([mhd])$/);
 	if (span) return now - Number(span[1]) * UNITS[span[2]];
@@ -46,7 +45,6 @@ export const goalTitle = Type.String({
 	minLength: 1,
 	description: "A short title for the goal, a few words, as it shows in lists. Required with goal.",
 });
-/** What a new goal is worth, written into its task.md as the writer's estimate. */
 export const goalWorth = {
 	value: Type.Optional(
 		Type.Number({
@@ -71,7 +69,6 @@ const goalOrTask = {
 	...goalWorth,
 };
 
-/** A goal needs its own short title: the goal's text is too long to name the task wherever it is listed. */
 export function requireTitle(goal: string | undefined, title: string | undefined): void {
 	if (goal && !title?.trim()) throw new Error("Give a short title with the goal.");
 }
@@ -219,7 +216,6 @@ function readExpertise(
 	};
 }
 
-/** One optional scope for an inspection: a person's subtree, a person, or a task. */
 function scopeOf(
 	ctx: ExtensionContext,
 	args: { subtree?: string; person?: string; task?: string },

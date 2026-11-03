@@ -12,7 +12,6 @@ interface Person {
 	program_parent: string | null;
 }
 
-/** Temporary identity survives person/launch cleanup; a discarded legacy caller may be unknown. */
 export function temporaryCallers(db: DatabaseSync): Map<string, string | null> {
 	const callers = new Map<string, string | null>();
 	for (const row of db
@@ -31,7 +30,6 @@ export function temporaryCallers(db: DatabaseSync): Map<string, string | null> {
 	return callers;
 }
 
-/** Include temporary people created by these people, even if someone moved them to another team. */
 export function programDescendants(db: DatabaseSync, roots: Iterable<string>): Set<string> {
 	const people = db.prepare("select session_id as id, created_by as program_parent from program_peers").all() as Pick<
 		Person,
@@ -45,7 +43,6 @@ export function programDescendants(db: DatabaseSync, roots: Iterable<string>): S
 	return result;
 }
 
-/** All processes are proven gone before this runs. Keep shared work and lasting people; keep every Pi transcript. */
 export function discardProgramPeople(
 	db: DatabaseSync,
 	stateDir: string,
@@ -177,7 +174,6 @@ export function discardProgramPeople(
 		db.exec("rollback");
 		throw error;
 	}
-	// Reuse the work journal's crash-safe file cleanup: a crash after the commit leaves a retryable path.
 	cleanMovedBundles(db);
 	const pending = db
 		.prepare(

@@ -1,6 +1,3 @@
-// Reads each followed source once a minute, keeps its new items and cursor in one transaction, and in the same
-// transaction posts the items the desk should triage to the coordinator's activity thread. A failed read records its
-// reason on the source and keeps the cursor, so the next read covers the gap.
 import type { DatabaseSync } from "node:sqlite";
 import {
 	integrationFiles,
@@ -38,7 +35,6 @@ type Read = (
 	signal: AbortSignal,
 ) => Promise<SourceRead>;
 
-/** The real sources, with the credentials Workplace keeps beside the runtime's state. */
 export const readSource =
 	(stateDir: string): Read =>
 	(source, cursor, now, signal) => {
