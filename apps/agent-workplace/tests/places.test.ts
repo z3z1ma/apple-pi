@@ -6,9 +6,6 @@ import { composeStrips, stripsFor } from "../web/game/layout.js";
 import { findPath, gridFor, isOpen } from "../web/game/pathing.js";
 import { PLACE_FILES, type PlaceData, type Point } from "../web/theme.js";
 
-// Every theme pack's hand-traced place data, checked the way the avatar uses it: from every way in, it can walk to
-// every spot and every door, and every overlay slot sits inside its painting. Each pack is checked on the place files
-// it has so far, so a pack being traced is checked file by file as they land.
 const themesDir = fileURLToPath(new URL("../themes/", import.meta.url));
 const themes = readdirSync(themesDir).filter((theme) => existsSync(`${themesDir}${theme}/places`));
 const placeFiles = (theme: string): string[] =>
@@ -20,12 +17,10 @@ const load = (theme: string, name: string): PlaceData =>
 	JSON.parse(readFileSync(`${themesDir}${theme}/places/${name}.json`, "utf8"));
 const fantasy = (name: string): PlaceData => load("fantasy", name);
 
-/** Each place as drawn: the gallery with seven niches (two repeats of its painted section). */
 const asDrawn = (name: string, place: PlaceData): [string, PlaceData] => {
 	if (!place.niches) return [name, place];
 	const strips = stripsFor(place.niches, 7);
 	const composed = composeStrips(place, strips);
-	// The wing doors stand in the niches; where one stands to use each door.
 	const niches = strips.flatMap((strip, i) =>
 		place
 			.niches!.at.filter((x) => x >= strip.from && (x < strip.to || i === strips.length - 1))
@@ -79,8 +74,6 @@ describe.each(places)("%s", (_name, place) => {
 		}
 	});
 
-	// Fidget objects (ticket 29): a cat on the floor stands in the way like a small body, so it keeps clear of where
-	// characters stand and come in, and nobody is ever walled in by one; every fidget can be walked up to.
 	it("keeps fidgets on the floor clear of spots, entries, doors, and the host, and lets the avatar reach every fidget", () => {
 		const floor = floorFidgets(place);
 		const keepClear = [
@@ -118,7 +111,6 @@ describe.each(places)("%s", (_name, place) => {
 		for (const { rect, feet } of place.foreground ?? []) {
 			const [x, y, w, h] = rect;
 			expect(x >= 0 && y >= 0 && x + w <= place.cols && y + h <= place.rows, `${rect}`).toBe(true);
-			// A piece stands on the floor along its bottom edge.
 			expect(Math.abs(y + h - feet), `${rect}`).toBeLessThan(0.15);
 		}
 	});
@@ -153,12 +145,10 @@ describe.each(themes)("the %s pack", (theme) => {
 	it("gives every building in the square a sign board, inside the painting and above its door", () => {
 		if (!has("square")) return;
 		const square = load(theme, "square");
-		// The way on to the street (ticket 09 of the alive pass) is open ground, not a building.
 		for (const door of square.doors.filter((d) => d.to !== "street")) {
 			expect(door.sign, door.name).toBeDefined();
 			const [x, y, w, h] = door.sign!.rect;
 			expect(x >= 0 && y >= 0 && x + w <= square.cols && y + h <= square.rows, door.name).toBe(true);
-			// Over the building's front, near its door, and wide enough for a name.
 			expect(y + h, door.name).toBeLessThanOrEqual(door.standAt[1]);
 			expect(Math.abs(x + w / 2 - (door.rect[0] + door.rect[2] / 2)), door.name).toBeLessThan(3);
 			expect(w, door.name).toBeGreaterThan(h);
@@ -173,7 +163,6 @@ it("gives the inn a hearth fire, its innkeeper behind the bar, beds whose sleepe
 	const beds = inn.overlaySlots.filter((slot) => slot.kind === "bed");
 	expect(beds.length).toBeGreaterThan(0);
 	for (const bed of beds) {
-		// Each bed's sleeper takes a spot beside it.
 		const spot = inn.spots[bed.spot!];
 		expect(spot, `bed at ${bed.at}`).toBeDefined();
 		expect(Math.hypot(spot[0] - bed.at[0], spot[1] - (bed.at[1] - 1))).toBeLessThan(2.5);

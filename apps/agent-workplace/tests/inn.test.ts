@@ -18,14 +18,9 @@ import { openWorkplace } from "../src/backend/workplace.js";
 import { openWorldBackend, type WorldBackend } from "../src/backend/world-backend.js";
 import type { WorldSnapshot } from "../src/world.js";
 
-// Seam 1 for the inn (ticket 15): the backend API over a real session-state runtime. Stopped sessions sleep at the
-// inn with their last task; waking one sends `start`, which the runtime carries out in a scratch tmux server whose
-// windows find a fake `pi` first on PATH (never the operator's tmux or Pi); ending a session sends `close`, confirmed
-// only while it is busy.
 const state = tempStateDir();
 const fakeDir = mkdtempSync(join(tmpdir(), "aw-inn-bin-"));
 const piLog = join(fakeDir, "starts.jsonl");
-// A window gets the PATH of the tmux client that opened it: the runtime, which inherits this one.
 vi.stubEnv("PATH", `${fakeDir}:${process.env.PATH}`);
 vi.stubEnv("FAKE_PI_LOG", piLog);
 writeFileSync(
@@ -92,7 +87,6 @@ const soon = (check: () => void, timeout = 5000) => vi.waitFor(check, { timeout 
 const sleeper = (id: string) => latest().dormant?.find((agent) => agent.id === id);
 const awake = (id: string) => latest().characters.find((character) => character.id === id);
 
-/** A ledger task bundle whose `task.md` names it. */
 function task(slug: string, title: string, status: string) {
 	const bundle = join(state.agentDir, ".ledger", slug);
 	mkdirSync(bundle, { recursive: true });
@@ -100,10 +94,6 @@ function task(slug: string, title: string, status: string) {
 	return { bundle, taskId: slug };
 }
 
-/**
- * A top-level session on a fake bridge kept alive by heartbeats. It answers every command it is handed as applied
- * (a `close` also ends it, the way Pi quits); `stop` ends it the way Pi quits on its own.
- */
 async function session(id: string, facts: Record<string, unknown> = {}, cwd = workDir) {
 	const stand = standInProcess();
 	processes.push(stand);
@@ -179,7 +169,6 @@ test("stopped sessions sleep at the inn, the most recently stopped first, with t
 	});
 	expect(sleeper("w-docs")?.stoppedAt).toBeTypeOf("number");
 	expect(sleeper("w-tests")?.task).toBeNull();
-	// Asleep is not awake: they are in no awake place, and the coordinator is not at the inn.
 	expect(awake("w-docs")).toBeUndefined();
 	expect(sleeper("lead")).toBeUndefined();
 }, 30000);
@@ -194,7 +183,6 @@ test("waking needs a terminal to open the window beside", async () => {
 	expect(existsSync(piLog)).toBe(false);
 }, 20000);
 
-/** Attach a client to the scratch server's `home` session through a pseudo-terminal, as a terminal app would. */
 async function attachClient() {
 	const script = [
 		"import os, pty, sys",
@@ -216,7 +204,6 @@ test("waking starts a new incarnation in a new tmux window after the operator's 
 	const before = tmux("list-windows", "-t", "home", "-F", "#{window_index}").split("\n");
 	expect(await lifecycle.wake("w-docs")).toEqual({ ok: true, stage: "applied" });
 
-	// `pi --session-id` reopens the same session, with its name and the coordinator it reported to.
 	const [start] = readFileSync(piLog, "utf8")
 		.trim()
 		.split("\n")
@@ -228,7 +215,6 @@ test("waking starts a new incarnation in a new tmux window after the operator's 
 			"select command from commands where session_id = 'w-docs' and kind = 'steer'",
 		).map((row) => JSON.parse(row.command)),
 	).toEqual([{ kind: "steer", text: "You have assigned work. Begin with your focused task." }]);
-	// The new window opens right after the window the operator's client shows (window 1 of `home`).
 	const windows = tmux("list-windows", "-t", "home", "-F", "#{window_index}:#{window_name}").split("\n");
 	expect(windows).toHaveLength(before.length + 1);
 	expect(windows[2]).toBe("2:w-docs");

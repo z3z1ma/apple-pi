@@ -19,10 +19,6 @@ import { listThemes } from "../src/backend/theme-packs.js";
 import { openWorldBackend, type WorldBackend } from "../src/backend/world-backend.js";
 import { FIDGETS, type FidgetKind } from "../src/theme-pack.js";
 
-// Seam 1 for fidget objects (ticket 29): the built world UI wired to the real backend API over a real session-state
-// runtime, the way the Electron preload wires it. Playing with every fidget in the room (each play, from the click and
-// from the menu, and Examine) sends the runtime no command, writes nothing to its database, calls no function place's
-// integrations, and fetches nothing from anywhere: a fidget is presentation only.
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const ORIGIN = "http://localhost";
 const appDir = fileURLToPath(new URL("..", import.meta.url));
@@ -32,7 +28,6 @@ let world: WorldBackend;
 let commands: Commands;
 let browser: Browser;
 let run: Awaited<ReturnType<typeof fauxSession>>;
-/** Commands sent to the runtime and calls made to the integrations (`places:*`), by name. */
 const sent: string[] = [];
 const outside: string[] = [];
 beforeAll(async () => {
@@ -58,14 +53,12 @@ afterAll(async () => {
 	await stopRuntime(state);
 });
 
-/** The rows a fidget would change if it reached the runtime: commands, events, and stored preferences. */
 const runtimeRows = () => ({
 	commands: query(state.dbPath, "select * from commands"),
 	events: query<{ n: number }>(state.dbPath, "select count(*) as n from events")[0].n,
 	preferences: query(state.dbPath, "select * from preferences"),
 });
 
-/** The world UI with `window.agentWorkplace` calling the real backend through one exposed function, as the preload does. */
 async function openWorld(): Promise<{ page: Page; requests: string[]; errors: string[] }> {
 	const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
 	const requests: string[] = [];
@@ -88,7 +81,6 @@ async function openWorld(): Promise<{ page: Page; requests: string[]; errors: st
 			outside.push(name);
 			return { ok: false, reason: "not in this test" };
 		}
-		// Everything else acts on a session or the runtime: through the counted command client.
 		const id = String(args[0] ?? world.snapshot().characters[0].id);
 		await commands.send(id, { kind: "follow_up", text: `(${name})` }).catch(() => {});
 		return { ok: true, stage: "applied" };
@@ -137,7 +129,6 @@ test("playing with every fidget in the room sends no command and makes no outsid
 	timeout: 180_000,
 }, async () => {
 	const { page, requests, errors } = await openWorld();
-	// Only what the fidgets do counts: whatever the world did while opening is set aside.
 	sent.length = 0;
 	outside.length = 0;
 	requests.length = 0;
@@ -147,7 +138,6 @@ test("playing with every fidget in the room sends no command and makes no outsid
 	const at = async (f: Shown) => screen(page, f.x, f.y - Math.min(f.h / 2, 0.4));
 	let played = 0;
 	for (const f of shown) {
-		// The default play on a left click (after the walk up), then each menu line, Examine last.
 		const [x, y] = await at(f);
 		await page.mouse.click(x, y);
 		await page.waitForTimeout(2500);
@@ -168,7 +158,6 @@ test("playing with every fidget in the room sends no command and makes no outsid
 		}
 	}
 	expect(played).toBeGreaterThan(shown.length * 2);
-	// Nothing reached the backend's acting side or the outside world, and the runtime's rows are as they were.
 	expect(sent).toEqual([]);
 	expect(outside).toEqual([]);
 	expect(requests).toEqual([]);

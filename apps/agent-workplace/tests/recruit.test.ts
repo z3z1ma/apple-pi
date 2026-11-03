@@ -25,17 +25,11 @@ import { type Lifecycle, openLifecycle } from "../src/backend/lifecycle.js";
 import { openWorldBackend, type WorldBackend } from "../src/backend/world-backend.js";
 import type { WorldSnapshot } from "../src/world.js";
 
-// Seam 1 for recruiting (ticket 10): the backend API over a real session-state runtime. Recruiting sends `start` for a
-// new session, which the runtime carries out in a scratch tmux server whose windows find a fake `pi` first on PATH
-// (never the operator's tmux or Pi): a worker opens after its coordinator's pane and reports to it; an independent
-// agent opens after the pane of the operator's most recently active client and reports to nobody.
 const state = tempStateDir();
 const fakeDir = mkdtempSync(join(tmpdir(), "aw-recruit-bin-"));
 const piLog = join(fakeDir, "starts.jsonl");
-// A window gets the PATH of the tmux client that opened it: the runtime and this file, which share it.
 vi.stubEnv("PATH", `${fakeDir}:${process.env.PATH}`);
 vi.stubEnv("FAKE_PI_LOG", piLog);
-// The fake Pi joins the runtime the way Pi's bridge does: in its directory, as its own repository, with its flags.
 writeFileSync(
 	join(fakeDir, "pi"),
 	`#!${process.execPath}
@@ -109,7 +103,6 @@ const starts = () =>
 				.map((line) => JSON.parse(line) as { args: string[]; cwd: string })
 		: [];
 
-/** Attach a client to the scratch server's first window through a pseudo-terminal, as a terminal app would. */
 async function attachClient() {
 	const script = [
 		"import os, pty, sys",
@@ -127,7 +120,6 @@ async function attachClient() {
 }
 
 test("the coordinator runs in its own tmux window, in the headquarters", async () => {
-	// Window 1 of `home`; the operator's client will show window 0, so a worker opening after window 1 is the coordinator's.
 	tmux(
 		"new-window",
 		"-t",
@@ -162,7 +154,6 @@ test("recruiting refuses what Pi could not start, and sends nothing", async () =
 			`${join(workDir, "missing")} is not a directory.`,
 		],
 		[{ name: "docs", cwd: workDir, brief: "", reportsTo: "nobody" }, "That manager is not running."],
-		// No client is attached yet, so an independent agent has nowhere to open.
 		[
 			{ name: "scout", cwd: workDir, brief: "" },
 			"No terminal is attached to tmux, so there is nowhere to open scout's window.",
@@ -216,7 +207,6 @@ test("recruiting a worker sends start reporting to the coordinator; its window o
 		).map((row) => JSON.parse(row.command)),
 	).toEqual([{ kind: "steer", text: "You have assigned work. Begin with your focused task." }]);
 	expect(realpathSync(start.cwd)).toBe(workDir);
-	// After the coordinator's window (1), not after the window the operator's client shows (0).
 	expect(windows().slice(1)).toEqual(["1:lead", "2:docs"]);
 
 	await soon(() =>
@@ -245,7 +235,6 @@ test("recruiting an independent agent sends start reporting to nobody, after the
 	expect(sent).toHaveProperty("prompt", "");
 	expect(sent).not.toHaveProperty("goal");
 	expect(starts().at(-1)!.args).toEqual(["--session-id", id, "--name", "scout"]);
-	// Right after window 0, which the operator's client shows.
 	expect(windows().slice(1)).toEqual(["1:scout", "2:lead", "3:docs"]);
 	await soon(() => expect(awake(id)).toMatchObject({ name: "scout", role: "independent", place: { kind: "square" } }));
 }, 40000);
