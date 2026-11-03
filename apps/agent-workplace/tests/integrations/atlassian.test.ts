@@ -6,7 +6,6 @@ import { openIntegrations } from "../../src/backend/integrations/index.js";
 import type { OutsideWriteEntry } from "../../src/integrations.js";
 import { type FakeServer, fakeServer, type Seen } from "./fakes.js";
 
-// Seam 1 for the quest office and the library: the backend API against a fake Jira and Confluence.
 const EMAIL = "op@acme.test";
 const TOKEN = "ATATT-secret-api-token";
 const stateDir = mkdtempSync(join(tmpdir(), "aw-atlassian-state-"));
@@ -353,7 +352,6 @@ test("the library searches every space and reads a page, which joins the recent 
 	await api.confluencePage("11");
 	expect(api.libraryRecent().map((recent) => recent.id)).toEqual(["11", "22"]);
 	expect(statSync(join(stateDir, "agent-workplace-library-recent.json")).mode & 0o777).toBe(0o600);
-	// Agent Workplace never writes to Confluence.
 	expect(site.seen.filter((request) => request.path.startsWith("/wiki") && request.method !== "GET")).toEqual([]);
 });
 

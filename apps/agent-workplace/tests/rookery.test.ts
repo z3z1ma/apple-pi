@@ -16,9 +16,6 @@ import { type Lifecycle, openLifecycle } from "../src/backend/lifecycle.js";
 import { openWorldBackend, type WorldBackend } from "../src/backend/world-backend.js";
 import type { FeedLine, MailItem } from "../src/world.js";
 
-// Seam 1 for the rookery (ticket 16): the backend API over a real session-state runtime, with faux Pi sessions that
-// mail each other through the bridge's `send_mail`, a stopped session whose mail waits, and the operator's own
-// letters sent as `mail` commands with their receipts.
 const state = tempStateDir();
 let world: WorldBackend;
 let commands: Commands;
@@ -47,7 +44,6 @@ const mailTo = (to: string, message: string): Reply =>
 const mailItem = (body: string): MailItem | undefined => world.snapshot().mail?.find((item) => item.body === body);
 const nameOf = (id: string) => world.snapshot().characters.find((c) => c.id === id)?.name;
 
-/** A faux session that answers every turn with "noted", awake in the world. */
 async function listener() {
 	const run = await fauxSession([bridge], () => fauxAssistantMessage("noted"), []);
 	runs.push(run);

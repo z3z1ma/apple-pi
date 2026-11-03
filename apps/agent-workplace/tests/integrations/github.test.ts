@@ -8,7 +8,6 @@ import type { OutsideWriteEntry } from "../../src/integrations.js";
 import type { Character, WorldSnapshot } from "../../src/world.js";
 import { fakeGh } from "./fakes.js";
 
-// Seam 1 for the forge: the backend API in Node against a fake `gh` on PATH.
 const stateDir = mkdtempSync(join(tmpdir(), "aw-forge-state-"));
 const repoApp = mkdtempSync(join(tmpdir(), "aw-forge-app-"));
 const gh = fakeGh();
@@ -167,7 +166,6 @@ test("the forge lists the operator's and his agents' open pull requests with CI,
 		checks: { passing: 1, running: 1, failing: 0, total: 2 },
 	});
 	expect(listed.pullRequests[2].draft).toBe(true);
-	// The default branch is nobody's pull request; it is not looked up.
 	expect(gh.calls().some((call) => call.args.includes("--head") && call.args.includes("main"))).toBe(false);
 });
 
@@ -301,7 +299,6 @@ test("a review is sent through gh only with the confirmation for that exact revi
 	if (!described.ok) return;
 	const before = recordLines().length;
 
-	// Declined (never confirmed), a made-up token, or the token of another write: nothing is sent.
 	expect(await api.confirmWrite(approve, "not-a-token")).toMatchObject({ ok: false });
 	const other = { ...approve, event: "request-changes", body: "Please split it." } as const;
 	expect(await api.confirmWrite(other, described.token)).toMatchObject({ ok: false });
@@ -321,7 +318,6 @@ test("a review is sent through gh only with the confirmation for that exact revi
 	expect(announced.at(-1)?.line).toBe("You approved acme/app#12.");
 	expect((await api.outsideWrites()).at(-1)?.line).toBe("You approved acme/app#12.");
 
-	// A token is good once.
 	expect(await api.confirmWrite(approve, described.token)).toMatchObject({ ok: false });
 	expect(reviewCalls().length).toBe(1);
 });

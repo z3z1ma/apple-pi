@@ -55,7 +55,6 @@ test("World retains temporary people and exposes their durable identity while aw
 			db.close();
 		}
 		await vi.waitFor(() => expect(metadata()).toEqual(expected), { timeout: 10000 });
-		// A lasting person reporting to a temporary manager keeps its own identity.
 		expect(world.snapshot().characters.find((person) => person.id === "lasting-report")?.facts?.reportsTo).toBe(
 			"created",
 		);

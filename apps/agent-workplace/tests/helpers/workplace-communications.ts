@@ -1,6 +1,5 @@
 import type { CommunicationsApi, ConversationInfo } from "../../src/communications.js";
 
-/** Installed after each browser fixture's legacy World API; retains its observable traces and held operations. */
 export function installWorkplaceCommunications() {
 	if (window !== window.top) return;
 	const w = window as any;

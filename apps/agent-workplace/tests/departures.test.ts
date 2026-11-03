@@ -89,7 +89,6 @@ test.each(["accepted", "delivered"] as const)(
 		).toEqual(["leaf", "manager", "other"]);
 		expect(result.finished).toBe(true);
 		expect(result.people.every((person) => person.state === "applied")).toBe(true);
-		// Earlier publications remain snapshots, not references mutated into success.
 		expect(updates.find((update) => update.people.some((person) => person.state === stage))).toBeDefined();
 	},
 );

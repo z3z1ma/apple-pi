@@ -5,7 +5,6 @@ import type { Character, CharacterFacts } from "../src/world.js";
 import { avatarLookIn, avatarLooks, expressionFor, lookFor, portraitFor } from "../web/looks.js";
 import type { Look, Theme } from "../web/theme.js";
 
-// The looks and portraits the world and the conversation panel share, over the fantasy pack's own looks.json.
 const looks: Record<string, Look> = JSON.parse(
 	readFileSync(fileURLToPath(new URL("../themes/fantasy/characters/looks.json", import.meta.url)), "utf8"),
 );
@@ -52,7 +51,6 @@ test("portraitFor names the character's own look's portrait file for the express
 	expect(portraitFor(theme, { ...docs, role: "coordinator" }, "neutral")).toBe(
 		"themes/fantasy/characters/coordinator-portrait-0.png",
 	);
-	// The same session wears the same look whatever its state.
 	expect(lookFor(theme, character("pi-docs", { status: "asking" }))).toBe(look);
 });
 

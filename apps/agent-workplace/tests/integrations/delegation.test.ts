@@ -20,8 +20,6 @@ import { openWorldBackend, type WorldBackend } from "../../src/backend/world-bac
 import type { Receipt, WorldSnapshot } from "../../src/world.js";
 import { type FakeServer, fakeGh, fakeServer } from "./fakes.js";
 
-// Seam 1 for delegation: the backend API over a real session-state runtime with faux Pi sessions; GitHub, Jira, and
-// Slack are fakes that must see nothing.
 const state = tempStateDir();
 const cwd = mkdtempSync(join(tmpdir(), "aw-delegate-"));
 writeFileSync(join(cwd, "app.ts"), "export const value = 1;\n");
@@ -222,7 +220,6 @@ test("asking a busy agent sends follow_up, so its turn is not interrupted", asyn
 		} as const;
 		const delegating = api.delegate("aw-delegate-2", { to: id, item: thread, ask: "look-into" });
 		await vi.waitFor(() => expect(sentCommands(id).map((command) => command.kind)).toEqual(["follow_up"]));
-		// The session holds the follow-up until the current run ends, then sends it as the next turn.
 		holds[0]!(fauxAssistantMessage("done with that"));
 		expect(await delegating).toEqual({ ok: true, to: id, command: "follow_up" });
 		await vi.waitFor(() => expect(holds).toHaveLength(2));

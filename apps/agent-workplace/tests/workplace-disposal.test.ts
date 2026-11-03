@@ -54,7 +54,6 @@ test("disposal removes a cached sleeper and refreshes its lasting report's manag
 				).toEqual(["lasting", "temporary"]),
 			{ timeout: 10000 },
 		);
-		// Seed the ownership journal, then use the production cleanup transaction after the process has gone.
 		const db = new DatabaseSync(state.dbPath);
 		try {
 			const task = query<{ task_id: string }>(
