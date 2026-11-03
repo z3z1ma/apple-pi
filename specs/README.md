@@ -1,11 +1,13 @@
 # Lifecycle models
 
-Run the command journal model with Java 21 and Node:
+From a development checkout, run the command journal model with Java 21 and Node:
 
 ```bash
 node scripts/run-tlc.mjs
 npx vitest run tests/formal-verification.test.ts --maxWorkers=1
 ```
+
+The runner and specs also ship in installed packages; the Vitest test and dev dependencies stay checkout-only. From `skills/formal-verification/` in an installed package, use `node ../../scripts/run-tlc.mjs ../../specs/command-journal.tla`.
 
 The runner pins [TLA+ tools v1.7.4](https://github.com/tlaplus/tlaplus/releases/tag/v1.7.4), checks the JAR's SHA-256 on every invocation and downloads it on first use. The cache is `$XDG_CACHE_HOME/apple-pi/tla2tools/1.7.4/` or `~/.cache/apple-pi/tla2tools/1.7.4/`. No JAR or TLC state directory is written into the checkout. The first invocation needs network access to GitHub; a verified cached JAR works offline. A mismatching cache fails explicitly; remove that cached JAR to redownload it.
 

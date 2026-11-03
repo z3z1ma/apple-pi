@@ -30,7 +30,13 @@ node scripts/run-tlc.mjs specs/command-journal.tla
 npx vitest run tests/formal-verification.test.ts --maxWorkers=1
 ```
 
-From an installed package, resolve those paths relative to this skill's directory. An optional second runner argument selects another `.cfg`. The runner supports one module plus the standard TLA+ libraries; it stages the declared module name so kebab-case repository paths remain valid. See the [command journal model](../../specs/README.md) for a worked source mapping and proof boundary.
+The Vitest command requires a development checkout; tests and dev dependencies are not shipped. In an installed package, run from this skill's directory instead:
+
+```bash
+node ../../scripts/run-tlc.mjs ../../specs/command-journal.tla
+```
+
+An optional second runner argument selects another `.cfg`. The runner supports one module plus the standard TLA+ libraries; it stages the declared module name so kebab-case repository paths remain valid. See the [command journal model](../../specs/README.md) for a worked source mapping and proof boundary.
 
 Require a completed state-space search with no remaining queue and successful exit, not merely a parsed spec or a timed-out search. Retain the command, configuration, tool version, state counts and result. A deliberately broken model should produce a failing exit and trace; this checks that the test can detect violations rather than accept every invocation.
 
