@@ -67,7 +67,7 @@ function check(file, hot) {
 	};
 	if (extname(file) === ".tsx") report(source, "Daemon and worker imports stay outside JSX/DOM modules.");
 	const dependency = (specifier, node, inHotPath = hot) => {
-		if (/^(?:electron|react|react-dom|react-native)(?:\/|$)|\.(?:css|html|svg)$/.test(specifier))
+		if (/^(?:electron|react|react-dom|react-native|happy-dom)(?:\/|$)|\.(?:css|html|svg)$/.test(specifier))
 			return report(node, "Daemon and worker code use Node modules and plain shared data, not UI imports.");
 		if (!specifier.startsWith(".")) return;
 		const target = resolve(dirname(file), specifier);

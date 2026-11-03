@@ -45,7 +45,7 @@ test.each([
 	expect(result.stderr).toMatch(/helper\.ts.*(?:erasable|parameter properties)/);
 });
 
-test.each(["electron", "react", "react/jsx-runtime", "react-dom/client", "./view.css"])(
+test.each(["electron", "react", "react/jsx-runtime", "react-dom/client", "happy-dom", "./view.css"])(
 	"daemon closure refuses UI import %s",
 	(module) => {
 		const result = check({ "components/example/main.runtime.ts": `import '${module}';` });
