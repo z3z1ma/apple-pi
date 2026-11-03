@@ -7,10 +7,6 @@ import { checkThemePack } from "../src/backend/theme-packs.js";
 import { describeProblems, PLACE_FILES } from "../src/theme-pack.js";
 import type { PlaceData } from "../web/theme.js";
 
-// The aliveness pass (ticket 11 of the alive pass): every place in every pack has ambient motion that is not a
-// character (`atmosphere`: dust motes in the light, falling leaves or petals, birds or a plane crossing the sky, steam,
-// sparks, blinking lights, screens, glints on water, lit windows at night). The pack check holds what a pack names to
-// the format; this test holds the built-in packs to having it everywhere.
 const themesDir = fileURLToPath(new URL("../themes/", import.meta.url));
 const packs = readdirSync(themesDir).filter((id) => existsSync(join(themesDir, id, "theme.json")));
 const load = (id: string, name: string): PlaceData =>
@@ -30,9 +26,7 @@ const editJson = (file: string, change: (value: any) => void) => {
 	writeFileSync(file, JSON.stringify(value));
 };
 
-/** What moves in the air of each kind of place, besides the characters. */
 const MOVING = ["motes", "fall", "sky", "steam", "sparks", "blink", "screens", "shimmer"];
-/** What falls out of doors in each pack: autumn leaves in fantasy, cherry petals in the anime school. */
 const FALLING: Record<string, string | undefined> = { fantasy: "leaves", "anime-school": "petals" };
 
 describe.each(packs)("%s", (id) => {

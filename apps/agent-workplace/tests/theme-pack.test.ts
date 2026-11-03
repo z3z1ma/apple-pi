@@ -8,8 +8,6 @@ import { afterAll, describe, expect, it } from "vitest";
 import { checkThemePack, listThemes, NEUTRAL_BACKDROP, themeBackdrop } from "../src/backend/theme-packs.js";
 import { describeProblems, type PackProblem } from "../src/theme-pack.js";
 
-// Seam 1 for the pack check: the backend module (and its CLI) over the real packs, and over copies of the fantasy
-// pack with one fault each, as a theme author would make them. Each fault is named by its file and what is wrong.
 const appDir = fileURLToPath(new URL("..", import.meta.url));
 const themesDir = join(appDir, "themes");
 const repoDir = join(appDir, "../..");
@@ -17,7 +15,6 @@ const scratch = mkdtempSync(join(tmpdir(), "aw-packs-"));
 afterAll(() => rmSync(scratch, { recursive: true, force: true }));
 
 let copies = 0;
-/** A copy of the fantasy pack, broken by `fault`, under a directory named `id`. */
 function brokenPack(fault: (dir: string) => void, id = "fantasy"): string {
 	const dir = join(scratch, String(++copies), id);
 	cpSync(join(themesDir, "fantasy"), dir, { recursive: true });
@@ -43,7 +40,6 @@ describe("the real packs", () => {
 	});
 });
 
-// Each test copies and checks a whole pack: alone well under a second, but slow while the headless suites run.
 describe("the window's colour before the page draws", () => {
 	it("is the chosen pack's backdrop, else the default pack's, else a neutral dark", () => {
 		const packs = readdirSync(themesDir, { withFileTypes: true }).filter((entry) => entry.isDirectory());
@@ -271,7 +267,6 @@ describe("a broken pack names the file and the fault", { timeout: 30_000 }, () =
 	});
 });
 
-// Fidget objects (ticket 29) are optional pieces: a pack without any passes, but one a place holds is checked.
 describe("fidget objects are optional but checked where a place holds them", { timeout: 30_000 }, () => {
 	const noFidgets = (d: string) => {
 		for (const file of readdirSync(join(d, "places")).filter((f) => f.endsWith(".json")))
@@ -283,7 +278,6 @@ describe("fidget objects are optional but checked where a place holds them", { t
 		});
 	};
 
-	// At least one each: with fewer pets (alive pass, ticket 03), a quiet room may hold a single thing to play with.
 	it("every real pack places fidget objects in every place", () => {
 		for (const theme of ["fantasy", "tech-office", "anime-school"])
 			for (const file of readdirSync(join(themesDir, theme, "places")).filter((f) => f.endsWith(".json"))) {

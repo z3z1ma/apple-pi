@@ -16,18 +16,11 @@ import {
 import { fidgetScale, fidgetSlots } from "../web/game/fidget-spots.js";
 import { PERSON_TILES } from "../web/game/walker.js";
 
-// Pets varied and to scale (alive pass, ticket 03), over the real packs as the scene sizes them: fewer pets, each its
-// own look (no place holds two, no two places share one), and each drawn to its kind's size beside a standing
-// character, whatever size its art was painted. The pack check holds every pack to the first part.
 const appDir = fileURLToPath(new URL("..", import.meta.url));
 const themesDir = join(appDir, "themes");
 const THEMES = ["fantasy", "tech-office", "anime-school"] as const;
 const read = <T>(path: string): T => JSON.parse(readFileSync(join(themesDir, path), "utf8"));
 
-/**
- * How tall each pet sits beside a standing character, by what it is: a cat about a third, a dog about half, a small
- * animal or bird less than a cat, a parrot on its perch stand about a cat and a half.
- */
 const SIZES = {
 	cat: [0.28, 0.38],
 	dog: [0.4, 0.56],
@@ -57,7 +50,6 @@ describe.each(THEMES)("the %s pack's pets", (theme) => {
 		const looks = placed.map(({ slot }) => (slot.fidget === "sleeper" ? "sleeper" : (slot.look ?? "")));
 		expect(new Set(looks).size, looks.join(", ")).toBe(looks.length);
 		expect(looks.sort()).toEqual(["", ...Object.keys(pet.looks ?? {})].sort());
-		// At most one pet per pack lies curled up asleep (a sleeper, or a pet resting on its sleep frame).
 		expect(placed.filter(({ slot }) => slot.asleep || slot.fidget === "sleeper").length).toBeLessThanOrEqual(1);
 	});
 
@@ -76,7 +68,6 @@ describe.each(THEMES)("the %s pack's pets", (theme) => {
 			).toBeGreaterThanOrEqual(low);
 			expect(share, `${style.name} in ${name} (a ${animal})`).toBeLessThanOrEqual(high);
 		}
-		// Smaller kinds are drawn smaller than the pack's cats and dogs.
 		const heights = Object.fromEntries(
 			placed.map(({ slot }) => [slot.look ?? "", slotStyle(pet, slot).height ?? 0] as const),
 		);

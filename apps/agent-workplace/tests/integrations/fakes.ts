@@ -1,5 +1,3 @@
-// Fakes at the edges for the integration adapters: a loopback HTTP server that records every request (Jira,
-// Confluence, Slack), and a fake `gh` on PATH that answers from rules and logs its arguments.
 import { chmodSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import { tmpdir } from "node:os";
@@ -22,7 +20,6 @@ export interface FakeServer {
 	close(): Promise<void>;
 }
 
-/** A server answering with the first route that answers; 404 otherwise. */
 export async function fakeServer(): Promise<FakeServer> {
 	const routes: Route[] = [];
 	const seen: Seen[] = [];
@@ -64,9 +61,7 @@ export async function fakeServer(): Promise<FakeServer> {
 }
 
 export interface GhRule {
-	/** Every one of these must appear, in order, in the arguments. */
 	args: string[];
-	/** Optional working directory the call must run in. */
 	cwd?: string;
 	stdout?: unknown;
 	stderr?: string;
@@ -75,14 +70,11 @@ export interface GhRule {
 
 export interface FakeGh {
 	dir: string;
-	/** The environment to run with: the fake first on PATH. */
 	env: NodeJS.ProcessEnv;
 	rules(rules: GhRule[]): void;
-	/** Every call so far: its arguments and working directory. */
 	calls(): { args: string[]; cwd: string }[];
 }
 
-/** A `gh` script on PATH: answers with the last matching rule's output as JSON (or text), and logs each call. */
 export function fakeGh(): FakeGh {
 	const dir = mkdtempSync(join(tmpdir(), "aw-fake-gh-"));
 	const rulesFile = join(dir, "rules.json");

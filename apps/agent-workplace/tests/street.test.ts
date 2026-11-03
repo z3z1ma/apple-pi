@@ -7,20 +7,14 @@ import { checkThemePack } from "../src/backend/theme-packs.js";
 import { describeProblems, type PlaceData, type ThemeManifest } from "../src/theme-pack.js";
 import { findPath, gridFor } from "../web/game/pathing.js";
 
-// A second exterior (ticket 09 of the alive pass): each pack paints one more place out of doors, joined to the square
-// (the fantasy harbour lane, the tech office's shop street, the anime school's shopping street). It is a place every
-// pack must have, reached by an exit from the square and left by a way back, and the square paints more spots so more
-// townsfolk stand there.
 const themesDir = fileURLToPath(new URL("../themes/", import.meta.url));
 const packs = readdirSync(themesDir).filter((id) => existsSync(join(themesDir, id, "theme.json")));
 const load = (id: string, name: string): PlaceData =>
 	JSON.parse(readFileSync(join(themesDir, id, "places", `${name}.json`), "utf8"));
 const manifest = (id: string): ThemeManifest => JSON.parse(readFileSync(join(themesDir, id, "theme.json"), "utf8"));
 
-/** How many townsfolk spots each square painted before this ticket. */
 const SQUARE_SPOTS_BEFORE = 10;
 
-/** A painting's width in px, from its PNG header. */
 const paintingWidth = (id: string, place: PlaceData) =>
 	readFileSync(join(themesDir, id, "places", place.painting)).readUInt32BE(16);
 
@@ -56,9 +50,7 @@ describe.each(packs)("%s", (id) => {
 		const back = street.doors.find((door) => door.to === "square");
 		expect(back, "the street's way back to the square").toBeDefined();
 		expect(street.entries.square, "where the avatar arrives in the street from the square").toBeDefined();
-		// Townsfolk and the ambient cast come and go by the way back.
 		expect(street.enterBy).toBe(back!.name);
-		// Coming in from the other place, the avatar can walk to the exit back.
 		const there = findPath(gridFor(street), street.entries.square, [back!.standAt]);
 		expect(there && near(there.goal, back!.standAt)).toBe(true);
 		const here = findPath(gridFor(square), square.entries.street, [exit!.standAt]);
